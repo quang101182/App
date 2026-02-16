@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bloc-Notes Express</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>Bloc-Notes Express</h1>
+            <div class="header-actions">
+                <button id="btn-settings" class="btn-icon" title="Paramètres Google Drive">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Paramètres Google Drive</h2>
+                    <button id="btn-close-settings" class="btn-icon">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="input-client-id">Client ID OAuth 2.0</label>
+                        <input type="text" id="input-client-id" placeholder="xxxx.apps.googleusercontent.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="input-api-key">Clé API</label>
+                        <input type="text" id="input-api-key" placeholder="AIzaSy...">
+                    </div>
+                    <div class="form-group">
+                        <label for="input-folder-id">ID du dossier Google Drive (optionnel)</label>
+                        <input type="text" id="input-folder-id" placeholder="ID du dossier de destination">
+                        <small>Laissez vide pour sauvegarder à la racine de Drive</small>
+                    </div>
+                    <button id="btn-save-settings" class="btn btn-primary">Sauvegarder les paramètres</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Left Panel: Editor -->
+            <section class="editor-panel">
+                <div class="panel-header">
+                    <h2>Saisie</h2>
+                </div>
+
+                <!-- Quick Action Buttons -->
+                <div class="quick-actions">
+                    <button id="btn-cut" class="btn btn-action" title="Couper (Ctrl+X)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+                        Couper
+                    </button>
+                    <button id="btn-copy" class="btn btn-action" title="Copier (Ctrl+C)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        Copier
+                    </button>
+                    <button id="btn-paste" class="btn btn-action" title="Coller (Ctrl+V)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                        Coller
+                    </button>
+                    <button id="btn-clear" class="btn btn-action btn-danger" title="Effacer tout">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        Effacer tout
+                    </button>
+                </div>
+
+                <!-- Textarea -->
+                <textarea id="text-input" placeholder="Tapez ou collez votre texte ici..."></textarea>
+
+                <!-- Options bar -->
+                <div class="options-bar">
+                    <div class="option-group">
+                        <label for="line-breaks">Sauts de ligne après insertion :</label>
+                        <div class="number-input">
+                            <button id="btn-lb-minus" class="btn-small">-</button>
+                            <input type="number" id="line-breaks" value="2" min="0" max="20">
+                            <button id="btn-lb-plus" class="btn-small">+</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Validate Button -->
+                <button id="btn-validate" class="btn btn-validate">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    Valider &mdash; Insérer en haut du fichier
+                </button>
+            </section>
+
+            <!-- Right Panel: File Preview -->
+            <section class="file-panel">
+                <div class="panel-header">
+                    <h2>Fichier</h2>
+                </div>
+
+                <!-- File name -->
+                <div class="file-name-bar">
+                    <input type="text" id="file-name" value="fichier.txt" placeholder="Nom du fichier">
+                    <button id="btn-rename" class="btn btn-small-action" title="Renommer">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    </button>
+                </div>
+
+                <!-- Google Drive actions -->
+                <div class="drive-actions">
+                    <button id="btn-drive-connect" class="btn btn-drive" title="Connecter Google Drive">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 19.5h20L12 2z"/></svg>
+                        Connecter Drive
+                    </button>
+                    <button id="btn-drive-open" class="btn btn-drive hidden" title="Ouvrir depuis Drive">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        Ouvrir
+                    </button>
+                    <button id="btn-drive-save" class="btn btn-drive hidden" title="Sauvegarder sur Drive">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                        Sauvegarder
+                    </button>
+                    <button id="btn-drive-sync" class="btn btn-drive hidden" title="Synchroniser avec Drive">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                        Sync
+                    </button>
+                    <span id="drive-status" class="drive-status hidden"></span>
+                </div>
+
+                <!-- File content preview -->
+                <div id="file-content-wrapper">
+                    <pre id="file-content" class="file-content" contenteditable="true"></pre>
+                    <div id="file-empty-state" class="empty-state">
+                        <p>Le fichier est vide.</p>
+                        <p>Tapez du texte dans la zone de saisie et cliquez "Valider" pour commencer.</p>
+                    </div>
+                </div>
+
+                <!-- File actions -->
+                <div class="file-actions">
+                    <button id="btn-download" class="btn btn-secondary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Télécharger
+                    </button>
+                    <button id="btn-clear-file" class="btn btn-secondary btn-danger">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        Vider le fichier
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Toast notification -->
+        <div id="toast" class="toast hidden"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
