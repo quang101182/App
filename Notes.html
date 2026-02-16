@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Bloc-Notes Express</title>
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+    <style>
+        /* ================= CSS MOBILE CORRIGÉ ================= */
+        :root {
+            --bg-primary: #12141c;
+            --bg-secondary: #1b1e2b;
+            --bg-tertiary: #2a2e3f;
+            --accent: #7c5cff;
+            --text-primary: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --danger: #ef4444;
+            --nav-height: 70px; /* Menu plus haut pour être sûr */
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        
+        body { 
+            background-color: var(--bg-primary); 
+            color: var(--text-primary); 
+            font-family: -apple-system, system-ui, sans-serif;
+            height: 100vh;
+            /* Support moderne pour hauteur mobile réelle */
+            height: 100dvh; 
+            display: flex; 
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* HEADER */
+        .app-header {
+            height: 50px; 
+            background: var(--bg-secondary); 
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between; padding: 0 15px;
+            flex-shrink: 0; z-index: 10;
+        }
+        .app-header h1 { font-size: 1rem; color: var(--accent); font-weight: 700; }
+
+        /* CONTENU PRINCIPAL */
+        .main-content { 
+            flex: 1; position: relative; overflow: hidden; 
+        }
+
+        section { 
+            position: absolute; inset: 0; bottom: var(--nav-height); /* Laisse la place au menu */
+            padding: 15px; overflow-y: auto; display: none; flex-direction: column;
+        }
+        section.active { display: flex; }
+
+        /* BARRE D'OUTILS (Boutons rétablis) */
+        .quick-actions { 
+            display: flex; gap: 8px; margin-bottom: 10px; overflow-x: auto; padding-bottom: 5px;
+        }
+        .btn-action { 
+            background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); 
+            padding: 10px 14px; border-radius: 8px; font-size: 0.9rem; flex-shrink: 0;
+        }
+        .btn-danger { color: var(--danger); border-color: rgba(239, 68, 68, 0.3); }
+
+        /* ZONE DE TEXTE */
+        textarea { 
+            flex: 1; background: var(--bg-secondary); border: 1px solid var(--border); color: white; 
+            padding: 15px; border-radius: 8px; resize: none; font-size: 16px; outline: none; width: 100%;
+        }
+        textarea:focus { border-color: var(--accent); }
+
+        /* BAS DE PAGE ÉDITEUR */
+        .editor-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+        .number-input { display: flex; background: var(--bg-tertiary); border-radius: 8px; align-items: center; }
+        .number-input button { width: 35px; height: 35px; background: none; border: none; color: white; font-size: 1.2rem; }
+        .number-input span { width: 25px; text-align: center; }
+
+        .btn-validate { 
+            background: var(--accent); color: white; border: none; padding: 12px 20px; 
+            border-radius: 30px; font-weight: 600; display: flex; align-items: center; gap: 8px;
+        }
+
+        /* MENU DU BAS (Fixé) */
+        .mobile-nav {
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            height: var(--nav-height);
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            display: flex; justify-content: space-around; align-items: center;
+            z-index: 1000;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .nav-item {
+            background: none; border: none; color: var(--text-muted);
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            width: 100%; height: 100%; justify-content: center;
+        }
+        .nav-item.active { color: var(--accent); }
+        
+        /* Boutons Fichiers */
+        .big-buttons-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .btn-big { 
+            background: var(--bg-tertiary); border: 1px solid var(--border); color: white;
+            padding: 20px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 10px;
+        }
+
+        /* Utils */
+        .hidden { display: none !important; }
+        .toast { 
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-150%);
+            background: #333; color: white; padding: 10px 20px; border-radius: 20px; 
+            transition: 0.3s; opacity: 0; z-index: 2000; border: 1px solid var(--accent);
+        }
+        .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+        
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 3000; display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: var(--bg-secondary); width: 90%; padding: 20px; border-radius: 12px; }
+        .form-group input { width: 100%; padding: 12px; background: var(--bg-primary); border: 1px solid var(--border); color: white; border-radius: 6px; margin-top: 5px; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+
+    <header class="app-header">
+        <h1>Bloc-Notes <span style="font-size:0.7em; opacity:0.7">v3.0</span></h1>
+        <button id="btn-settings" style="background:none; border:none; color:white; padding:10px;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+    </header>
+
+    <div class="main-content">
+        <section id="tab-editor" class="active">
+            <div class="quick-actions">
+                <button id="btn-cut" class="btn-action">Couper</button>
+                <button id="btn-copy" class="btn-action">Copier</button>
+                <button id="btn-paste" class="btn-action">Coller</button>
+                <button id="btn-clear" class="btn-action btn-danger">Effacer tout</button>
+            </div>
+            
+            <textarea id="text-input" placeholder="Tapez ici..."></textarea>
+            
+            <div class="editor-footer">
+                <div class="number-input">
+                    <button id="btn-lb-minus">-</button>
+                    <span id="lb-display">2</span>
+                    <button id="btn-lb-plus">+</button>
+                </div>
+                <button id="btn-validate" class="btn-validate">
+                    Insérer (Haut) <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+                </button>
+            </div>
+        </section>
+
+        <section id="tab-files">
+            <input type="text" id="file-name" value="fichier.txt" style="width:100%; padding:15px; background:var(--bg-secondary); border:1px solid var(--border); color:white; border-radius:8px; margin-bottom:20px;">
+            
+            <div class="big-buttons-grid">
+                <button id="btn-local-open" class="btn-big"><span>Ouvrir Local</span></button>
+                <button id="btn-local-save" class="btn-big"><span>Sauver Local</span></button>
+            </div>
+            <input type="file" id="file-input-hidden" style="display:none" accept=".txt">
+
+            <div style="border-top:1px solid var(--border); padding-top:20px; margin-top:10px;">
+                <button id="btn-drive-connect" style="width:100%; padding:15px; background:#4285F4; color:white; border:none; border-radius:8px; font-weight:bold; margin-bottom:15px;">Connexion Drive</button>
+                <div id="drive-controls" class="big-buttons-grid hidden">
+                    <button id="btn-drive-open" class="btn-big" style="border-color:#4285F4"><span>Ouvrir Drive</span></button>
+                    <button id="btn-drive-save" class="btn-big" style="border-color:#4285F4"><span>Sauver Drive</span></button>
+                </div>
+                <div style="text-align:center; color:var(--text-muted); font-size:0.8rem;" id="status-text">Déconnecté</div>
+            </div>
+
+            <div style="margin-top:20px;">
+                <pre id="file-content" style="background:var(--bg-secondary); padding:10px; border-radius:8px; max-height:150px; overflow:auto; font-size:0.8rem; color:#888;"></pre>
+                <button id="btn-clear-file" style="width:100%; padding:10px; margin-top:10px; background:none; border:1px solid var(--danger); color:var(--danger); border-radius:8px;">Vider le fichier</button>
+            </div>
+        </section>
+
+        <div id="settings-modal" class="modal hidden">
+            <div class="modal-content">
+                <h2 style="margin-bottom:20px; color:white;">Configuration</h2>
+                <div class="form-group"><label style="color:#aaa; font-size:0.8rem">Client ID</label><input type="text" id="input-client-id"></div>
+                <div class="form-group"><label style="color:#aaa; font-size:0.8rem">API Key</label><input type="text" id="input-api-key"></div>
+                <div class="form-group"><label style="color:#aaa; font-size:0.8rem">Folder ID</label><input type="text" id="input-folder-id"></div>
+                <div style="display:flex; justify-content:space-between; margin-top:20px;">
+                    <button id="btn-close-settings" style="padding:10px; background:none; border:none; color:#aaa;">Fermer</button>
+                    <button id="btn-save-settings" style="padding:10px 20px; background:var(--accent); border:none; color:white; border-radius:6px;">Sauvegarder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <nav class="mobile-nav">
+        <button class="nav-item active" data-target="tab-editor">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <span style="font-size:0.7rem">Éditeur</span>
+        </button>
+        <button class="nav-item" data-target="tab-files">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            <span style="font-size:0.7rem">Fichiers</span>
+        </button>
+    </nav>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        (function () {
+            'use strict';
+            let state = { text: '', fileName: 'fichier.txt', lineBreaks: 2, driveFileId: null, localFileHandle: null };
+            let driveConfig = { clientId: '', apiKey: '', folderId: '' };
+            let driveSession = { tokenClient: null, accessToken: null, isConnected: false };
+
+            // --- NAVIGATION ---
+            const tabs = document.querySelectorAll('.nav-item');
+            const sections = document.querySelectorAll('section');
+            tabs.forEach(tab => tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                sections.forEach(s => s.classList.remove('active'));
+                document.getElementById(tab.dataset.target).classList.add('active');
+            }));
+
+            // --- ELEMENTS ---
+            const el = {
+                input: document.getElementById('text-input'),
+                content: document.getElementById('file-content'),
+                fileName: document.getElementById('file-name'),
+                lbDisplay: document.getElementById('lb-display'),
+                btnDriveConnect: document.getElementById('btn-drive-connect'),
+                driveControls: document.getElementById('drive-controls'),
+                toast: document.getElementById('toast'),
+                modal: document.getElementById('settings-modal'),
+                inputClientId: document.getElementById('input-client-id'),
+                inputApiKey: document.getElementById('input-api-key'),
+                inputFolderId: document.getElementById('input-folder-id')
+            };
+
+            init();
+
+            function init() {
+                loadSettings();
+                loadState();
+                bindEvents();
+                render();
+            }
+
+            // --- EVENTS (CORRECTION BOUTONS) ---
+            function bindEvents() {
+                // Boutons d'édition (COUPER, COPIER, COLLER, EFFACER)
+                document.getElementById('btn-copy').addEventListener('click', () => { 
+                    navigator.clipboard.writeText(el.input.value); 
+                    showToast('Copié !'); 
+                });
+                
+                document.getElementById('btn-cut').addEventListener('click', () => { 
+                    navigator.clipboard.writeText(el.input.value); 
+                    el.input.value = ''; 
+                    showToast('Coupé !'); 
+                });
+
+                document.getElementById('btn-paste').addEventListener('click', async () => {
+                    try {
+                        const text = await navigator.clipboard.readText();
+                        // Insère le texte à la position du curseur
+                        const start = el.input.selectionStart;
+                        const end = el.input.selectionEnd;
+                        const val = el.input.value;
+                        el.input.value = val.substring(0, start) + text + val.substring(end);
+                        el.input.selectionStart = el.input.selectionEnd = start + text.length;
+                        showToast('Collé !');
+                    } catch (err) {
+                        showToast('Erreur permission ou presse-papier vide');
+                    }
+                });
+
+                document.getElementById('btn-clear').addEventListener('click', () => {
+                    if(confirm('Tout effacer ?')) el.input.value = ''; 
+                });
+
+                document.getElementById('btn-validate').addEventListener('click', insertText);
+
+                // Settings
+                document.getElementById('btn-settings').addEventListener('click', () => el.modal.classList.remove('hidden'));
+                document.getElementById('btn-close-settings').addEventListener('click', () => el.modal.classList.add('hidden'));
+                document.getElementById('btn-save-settings').addEventListener('click', () => {
+                    driveConfig.clientId = el.inputClientId.value.trim();
+                    driveConfig.apiKey = el.inputApiKey.value.trim();
+                    driveConfig.folderId = el.inputFolderId.value.trim();
+                    localStorage.setItem('bn_settings', JSON.stringify(driveConfig));
+                    el.modal.classList.add('hidden');
+                    state.driveFileId = null; 
+                    showToast('Config sauvegardée');
+                });
+
+                // File System Local
+                document.getElementById('btn-local-open').addEventListener('click', openLocalFile);
+                document.getElementById('btn-local-save').addEventListener('click', saveLocalDisk);
+                document.getElementById('file-input-hidden').addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if(!file) return;
+                    const r = new FileReader();
+                    r.onload = (ev) => { state.text = ev.target.result; state.fileName = file.name; render(); saveState(); tabs[0].click(); };
+                    r.readAsText(file);
+                });
+
+                // Drive
+                el.btnDriveConnect.addEventListener('click', initDriveConnection);
+                document.getElementById('btn-drive-open').addEventListener('click', openFromDrive);
+                document.getElementById('btn-drive-save').addEventListener('click', saveToDrive);
+                
+                // Utils
+                document.getElementById('btn-clear-file').addEventListener('click', () => { if(confirm('Vider fichier ?')) { state.text=''; render(); saveState(); } });
+                document.getElementById('btn-lb-minus').addEventListener('click', () => { state.lineBreaks = Math.max(0, state.lineBreaks-1); render(); saveState(); });
+                document.getElementById('btn-lb-plus').addEventListener('click', () => { state.lineBreaks = Math.min(10, state.lineBreaks+1); render(); saveState(); });
+                el.fileName.addEventListener('input', () => saveState());
+            }
+
+            // --- FONCTIONS ---
+            function loadState() {
+                try {
+                    const saved = localStorage.getItem('bn_state');
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        state.text = parsed.text || '';
+                        state.fileName = parsed.fileName || 'fichier.txt';
+                        state.lineBreaks = parsed.lineBreaks ?? 2;
+                        state.driveFileId = parsed.driveFileId;
+                    }
+                } catch(e) {}
+            }
+            function saveState() {
+                localStorage.setItem('bn_state', JSON.stringify({
+                    text: state.text, fileName: el.fileName.value, lineBreaks: state.lineBreaks, driveFileId: state.driveFileId
+                }));
+            }
+            function loadSettings() {
+                const saved = localStorage.getItem('bn_settings');
+                if (saved) {
+                    driveConfig = { ...driveConfig, ...JSON.parse(saved) };
+                    el.inputClientId.value = driveConfig.clientId;
+                    el.inputApiKey.value = driveConfig.apiKey;
+                    el.inputFolderId.value = driveConfig.folderId;
+                }
+            }
+            function render() {
+                el.content.textContent = state.text || '(Vide)';
+                el.lbDisplay.textContent = state.lineBreaks;
+                el.fileName.value = state.fileName;
+            }
+            function insertText() {
+                const newTxt = el.input.value.trim();
+                if (!newTxt) return;
+                state.text = newTxt + '\n'.repeat(state.lineBreaks) + state.text;
+                el.input.value = '';
+                render(); saveState();
+                showToast('Inséré en haut');
+            }
+            function showToast(msg) {
+                el.toast.textContent = msg;
+                el.toast.classList.add('show');
+                setTimeout(() => el.toast.classList.remove('show'), 2000);
+            }
+
+            // --- DRIVE & LOCAL ---
+            async function openLocalFile() {
+                if ('showOpenFilePicker' in window) {
+                    try {
+                        const [handle] = await showOpenFilePicker({ types: [{ accept: { 'text/plain': ['.txt'] } }] });
+                        state.localFileHandle = handle;
+                        const file = await handle.getFile();
+                        state.text = await file.text();
+                        state.fileName = file.name;
+                        render(); saveState(); tabs[0].click();
+                    } catch(e) {}
+                } else { document.getElementById('file-input-hidden').click(); }
+            }
+            async function saveLocalDisk() {
+                if (state.localFileHandle) {
+                    try {
+                        const w = await state.localFileHandle.createWritable();
+                        await w.write(state.text); await w.close(); showToast('Sauvegardé !'); return;
+                    } catch(e) { state.localFileHandle = null; }
+                }
+                const blob = new Blob([state.text], {type:'text/plain'});
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob); a.download = el.fileName.value; a.click();
+            }
+
+            function initDriveConnection() {
+                if(!driveConfig.clientId || !driveConfig.apiKey) return showToast('Config manquante !');
+                gapi.load('client', async () => {
+                    await gapi.client.init({ apiKey: driveConfig.apiKey, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] });
+                    driveSession.tokenClient = google.accounts.oauth2.initTokenClient({
+                        client_id: driveConfig.clientId, scope: 'https://www.googleapis.com/auth/drive.file',
+                        callback: (resp) => {
+                            if(resp.error) return;
+                            driveSession.accessToken = resp.access_token;
+                            driveSession.isConnected = true;
+                            el.btnDriveConnect.classList.add('hidden');
+                            el.driveControls.classList.remove('hidden');
+                            document.getElementById('status-text').textContent = 'Connecté';
+                            document.getElementById('status-text').style.color = '#10b981';
+                        }
+                    });
+                    driveSession.tokenClient.requestAccessToken({prompt: ''});
+                });
+            }
+
+            async function openFromDrive() {
+                if(!driveSession.isConnected) return driveSession.tokenClient.requestAccessToken();
+                showToast('Recherche...');
+                try {
+                    let q = `name = '${el.fileName.value}' and mimeType = 'text/plain' and trashed = false`;
+                    if(driveConfig.folderId) q += ` and '${driveConfig.folderId}' in parents`;
+                    const res = await gapi.client.drive.files.list({ q, fields: 'files(id)', pageSize: 1 });
+                    if(res.result.files?.length > 0) {
+                        state.driveFileId = res.result.files[0].id;
+                        const content = await gapi.client.drive.files.get({ fileId: state.driveFileId, alt: 'media' });
+                        state.text = content.body; render(); saveState(); tabs[0].click();
+                        showToast('Chargé !');
+                    } else showToast('Introuvable');
+                } catch(e) { showToast('Erreur Drive'); }
+            }
+
+            async function saveToDrive() {
+                if(!driveSession.isConnected) return driveSession.tokenClient.requestAccessToken();
+                showToast('Envoi...');
+                const blob = new Blob([state.text], { type: 'text/plain' });
+                const meta = { name: el.fileName.value, mimeType: 'text/plain' };
+                if(driveConfig.folderId) meta.parents = [driveConfig.folderId];
+                
+                try {
+                    if(state.driveFileId) {
+                        const r = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${state.driveFileId}?uploadType=media`, {
+                            method: 'PATCH', headers: { 'Authorization': `Bearer ${driveSession.accessToken}` }, body: blob
+                        });
+                        if(r.ok) showToast('Mis à jour !'); else throw new Error();
+                    } else {
+                        const form = new FormData();
+                        form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+                        form.append('file', blob);
+                        const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                            method: 'POST', headers: { 'Authorization': `Bearer ${driveSession.accessToken}` }, body: form
+                        });
+                        if(r.ok) { const d = await r.json(); state.driveFileId = d.id; saveState(); showToast('Créé !'); }
+                    }
+                } catch(e) { showToast('Erreur Sauvegarde'); }
+            }
+        })();
+    </script>
+</body>
+</html>
