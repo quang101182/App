@@ -1044,61 +1044,69 @@
             return false;
         }
 
-                const handleBackup = async () => {
+                        const handleBackup = async () => {
             cleanupEmptyPerformances();
             
             const dateString = new Date().toISOString().slice(0, 10);
             const filename = `backup_fitness_${dateString}.json`;
             const jsonContent = JSON.stringify(state, null, 2);
 
-            // Fonction de secours (Téléchargement classique)
-            const triggerDownload = (content, name, reason) => {
+            // Fonction de secours améliorée (Double Téléchargement)
+            const triggerDownload = (content, name1, name2, reason) => {
                 console.warn(`Mode Secours activé : ${reason}`);
-                const blob = new Blob([content], {type: 'application/json'});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = name;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                state.activeFileName = name;
+                showToast(`Mode Secours : Téléchargement des 2 fichiers...`, false);
+
+                const downloadFile = (fileName) => {
+                    const blob = new Blob([content], {type: 'application/json'});
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                };
+
+                // 1. Télécharge le fichier daté (Priorité Historique)
+                downloadFile(name1);
+
+                // 2. Télécharge le fichier last_backup.json (Priorité Système) avec délai
+                // Le délai est CRUCIAL pour que Chrome/Safari ne bloque pas le 2ème fichier comme "spam"
+                setTimeout(() => {
+                    downloadFile(name2);
+                    showToast("Les deux fichiers ont été envoyés.", false);
+                }, 1500); // 1.5 secondes de délai
+
+                state.activeFileName = name1;
                 state.isDirty = false;
                 renderHeader();
-                showToast(`Backup téléchargé (${reason})`, false);
             };
 
-            // TENTATIVE 1 : VOTRE DOSSIER DÉFINI
+            // TENTATIVE 1 : DOSSIER (Idéal)
             if ('showDirectoryPicker' in window) {
                 try {
                     let handle = backupDirectoryHandle;
-
-                    // Si on a perdu la connexion au dossier (fréquent sur GitHub Pages), on la redemande
                     if (!handle) {
-                        // On demande explicitement à l'utilisateur de re-choisir le dossier
                         handle = await window.showDirectoryPicker();
                     } else {
-                        // On vérifie juste la permission si on a déjà le handle
                         const permission = await handle.queryPermission({ mode: 'readwrite' });
                         if (permission !== 'granted') {
                             const request = await handle.requestPermission({ mode: 'readwrite' });
-                            if (request !== 'granted') throw new Error("Permission refusée par l'utilisateur");
+                            if (request !== 'granted') throw new Error("Permission refusée");
                         }
                     }
 
-                    // Enregistrement du handle valide
                     await saveDirectoryHandle(handle);
                     backupDirectoryHandle = handle;
 
-                    // Écriture du fichier daté
+                    // Écriture 1
                     const fileHandle = await handle.getFileHandle(filename, { create: true });
                     const writable = await fileHandle.createWritable();
                     await writable.write(jsonContent);
                     await writable.close();
 
-                    // Écriture du fichier "last_backup.json" (écrasement)
+                    // Écriture 2 (last_backup)
                     const staticFileHandle = await handle.getFileHandle('last_backup.json', { create: true });
                     const staticWritable = await staticFileHandle.createWritable();
                     await staticWritable.write(jsonContent);
@@ -1107,16 +1115,15 @@
                     state.isDirty = false;
                     state.activeFileName = filename;
                     renderHeader();
-                    showToast(`Backup validé dans votre dossier cible.`);
+                    showToast(`Backup complet (Daté + last_backup) validé.`);
 
                 } catch (err) {
-                    // Si l'utilisateur annule ou si le navigateur bloque l'accès dossier
-                    // On bascule automatiquement sur le téléchargement pour ne pas perdre les données
-                    triggerDownload(jsonContent, filename, "Accès dossier bloqué ou annulé");
+                    // Fallback vers Double Téléchargement
+                    triggerDownload(jsonContent, filename, 'last_backup.json', "Accès dossier bloqué");
                 }
             } else {
-                // Pour Mobile / Safari / Firefox qui n'ont pas cette technologie
-                triggerDownload(jsonContent, filename, "Navigateur non compatible dossier");
+                // Fallback Mobile / Firefox
+                triggerDownload(jsonContent, filename, 'last_backup.json', "Navigateur incompatible");
             }
         };
         
