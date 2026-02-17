@@ -36,13 +36,19 @@
 
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
+        html, body {
+            height: 100%;
+            /* Sur mobile : éviter que le viewport change avec le clavier */
+            position: fixed;
+            width: 100%;
+            overflow: hidden;
+        }
+
         body {
             background: var(--bg-0);
             color: var(--text-1);
             font-family: 'Space Grotesk', sans-serif;
-            height: 100dvh;
             display: flex; flex-direction: column;
-            overflow: hidden;
         }
 
         /* ════════════════════════════
@@ -135,19 +141,15 @@
         }
 
         /* ════════════════════════════
-           TOOLBAR (boutons d'action — FIXE, toujours visible même avec clavier mobile)
+           TOOLBAR (boutons d'action — reste visible avec body fixed)
         ════════════════════════════ */
         .toolbar {
-            position: fixed;
-            top: calc(var(--header-h) + var(--banner-h));
-            left: 0; right: 0;
             height: var(--toolbar-h);
-            background: rgba(15,18,32,0.97);
-            backdrop-filter: blur(20px);
+            background: var(--bg-1);
             border-bottom: 1px solid var(--border);
             display: flex; align-items: center; gap: 8px;
             padding: 0 12px;
-            z-index: 100;
+            flex-shrink: 0; z-index: 15;
         }
 
         /* Bouton CHARGER */
@@ -228,8 +230,7 @@
             padding: 10px 12px 8px;
             gap: 8px;
             position: relative; z-index: 1;
-            /* Décaler pour la toolbar fixed */
-            margin-top: var(--toolbar-h);
+            min-height: 0;
         }
 
         .input-wrap {
@@ -401,9 +402,9 @@
 
         /* PC */
         @media (min-width: 600px) {
-            .toolbar { left: 50%; transform: translateX(-50%); width: 700px; max-width: 100%; }
-            .main, .bottom-bar { max-width: 700px; width: 100%; margin-left: auto; margin-right: auto; }
-            .bottom-bar { padding-left: 0; padding-right: 0; }
+            html, body { position: static; }
+            .main, .toolbar, .bottom-bar { max-width: 700px; width: 100%; margin-left: auto; margin-right: auto; }
+            .toolbar, .bottom-bar { padding-left: 0; padding-right: 0; }
         }
     </style>
 </head>
@@ -815,12 +816,12 @@ async function fetchFileContent(id) {
 
 /* ══════════════════════════════════════════
    ACTION PRINCIPALE : INSÉRER & SAUVER
-   1. Vérifie qu'un contenu Drive est chargé
+   Workflow strict :
+   1. RELOAD depuis Drive (vérité source fraîche)
    2. Insère le texte en haut
-   3. PATCH immédiat sur Drive
-   4. RECHARGE depuis Drive pour sync
-   5. Vide la textarea
-   6. Met à jour la preview
+   3. PATCH sur Drive
+   4. Met à jour driveContent avec le contenu patché
+   5. Vide textarea + UI
 ══════════════════════════════════════════ */
 async function handleInsert() {
     const newText = textarea.value.trim();
@@ -830,7 +831,7 @@ async function handleInsert() {
         toast('Drive non connecté', 'err');
         return;
     }
-    if (driveContent === null) {
+    if (driveContent === null || !drv.fileId) {
         toast('Charge le fichier Drive d\'abord ▲', 'warn');
         btnLoad.classList.add('needed');
         return;
@@ -838,19 +839,24 @@ async function handleInsert() {
 
     setBtnIns('loading');
 
-    // Construire le nouveau contenu
-    const sep      = '\n'.repeat(lineBreaks);
-    const newContent = newText + sep + driveContent;
-
     try {
+        // ÉTAPE 1 : Recharger la vérité source depuis Drive AVANT toute modification
+        console.log('[INSERT] Reload fresh content from Drive...');
+        const freshBase = await fetchFileContent(drv.fileId);
+        console.log('[INSERT] Fresh base size:', freshBase.length);
+        
+        // ÉTAPE 2 : Construire le nouveau contenu
+        const sep = '\n'.repeat(lineBreaks);
+        const newContent = newText + sep + freshBase;
+        console.log('[INSERT] New content size:', newContent.length);
+        
+        // ÉTAPE 3 : PATCH sur Drive
         await patchFile(drv.fileId, newContent);
         
-        // CRITIQUE : Recharger depuis Drive pour être sûr
-        // Sinon si l'utilisateur a supprimé des blocs manuellement sur Drive,
-        // ils réapparaissent à la prochaine insertion car on garde la RAM
-        const freshContent = await fetchFileContent(drv.fileId);
-        driveContent = freshContent;
+        // ÉTAPE 4 : Mettre à jour la RAM avec le contenu qu'on vient de patcher
+        driveContent = newContent;
         
+        // ÉTAPE 5 : UI
         textarea.value = '';
         charCount.textContent = '0 car.';
         renderPreview();
@@ -864,7 +870,7 @@ async function handleInsert() {
             handleExpired(handleInsert);
         } else {
             toast('Erreur Drive — texte non perdu', 'err');
-            console.error('insert error', e);
+            console.error('[INSERT] Error:', e);
         }
         setTimeout(() => setBtnIns('idle'), 3000);
     }
