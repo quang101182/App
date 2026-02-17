@@ -204,6 +204,13 @@
         .btn-ins.success { background: linear-gradient(135deg,var(--green),#059669); box-shadow:0 3px 14px rgba(16,185,129,0.3); }
         .btn-ins.error   { background: linear-gradient(135deg,var(--red),#b91c1c); box-shadow:0 3px 14px rgba(239,68,68,0.3); }
         .btn-ins.disabled { background: var(--bg-3); color: var(--text-3); box-shadow:none; pointer-events:none; border: 1px solid var(--border); }
+        .btn-ins.blink {
+            animation: blink-btn 0.8s ease-in-out 3;
+        }
+        @keyframes blink-btn {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.02); box-shadow: 0 4px 20px rgba(124,92,255,0.6); }
+        }
 
         .bi-icon { font-size: 1rem; flex-shrink: 0; }
         .bi-label { font-size: 0.8rem; }
@@ -695,8 +702,19 @@ function setBtnIns(state) {
    EVENTS
 ══════════════════════════════════════════ */
 function bindEvents() {
+    let blinkTimeout;
     textarea.addEventListener('input', () => {
         charCount.textContent = textarea.value.length + ' car.';
+        
+        // Si du texte est présent ET que le bouton n'est pas disabled → blink
+        if (textarea.value.trim() && !btnIns.classList.contains('disabled')) {
+            btnIns.classList.remove('blink');
+            clearTimeout(blinkTimeout);
+            // Force reflow pour relancer l'animation
+            void btnIns.offsetWidth;
+            btnIns.classList.add('blink');
+            blinkTimeout = setTimeout(() => btnIns.classList.remove('blink'), 2400);
+        }
     });
     $('lb-minus').addEventListener('click', () => { lineBreaks = Math.max(0, lineBreaks-1); renderLB(); savePrefs(); });
     $('lb-plus').addEventListener('click',  () => { lineBreaks = Math.min(10,lineBreaks+1); renderLB(); savePrefs(); });
@@ -1025,9 +1043,6 @@ function toast(msg, type = '') {
    et ajuster le body en conséquence
 ══════════════════════════════════════════ */
 if (window.visualViewport) {
-    const topFixed = document.querySelector('.top-fixed');
-    const mainEl = document.querySelector('.main');
-    
     function adjustForKeyboard() {
         const vvh = window.visualViewport.height;
         const wh = window.innerHeight;
@@ -1035,24 +1050,23 @@ if (window.visualViewport) {
         // Si visualViewport < innerHeight → clavier ouvert
         if (vvh < wh) {
             // Forcer le body à la hauteur du visualViewport
+            // SANS changer position de top-fixed (rester en sticky)
             document.body.style.height = vvh + 'px';
-            // Assurer que top-fixed reste en haut
-            if (topFixed) {
-                topFixed.style.position = 'fixed';
-                topFixed.style.top = '0';
-            }
         } else {
             // Clavier fermé — retour à la normale
             document.body.style.height = '100%';
-            if (topFixed) {
-                topFixed.style.position = 'sticky';
-                topFixed.style.top = '0';
-            }
         }
     }
     
     window.visualViewport.addEventListener('resize', adjustForKeyboard);
     window.visualViewport.addEventListener('scroll', adjustForKeyboard);
+    
+    // Focus sur textarea : scroll vers le bas pour garder la zone visible
+    textarea.addEventListener('focus', () => {
+        setTimeout(() => {
+            textarea.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }, 300);
+    });
 }
 
 })();
