@@ -135,15 +135,19 @@
         }
 
         /* ════════════════════════════
-           TOOLBAR (boutons d'action — toujours visible au-dessus du clavier)
+           TOOLBAR (boutons d'action — FIXE, toujours visible même avec clavier mobile)
         ════════════════════════════ */
         .toolbar {
+            position: fixed;
+            top: calc(var(--header-h) + var(--banner-h));
+            left: 0; right: 0;
             height: var(--toolbar-h);
-            background: var(--bg-1);
+            background: rgba(15,18,32,0.97);
+            backdrop-filter: blur(20px);
             border-bottom: 1px solid var(--border);
             display: flex; align-items: center; gap: 8px;
             padding: 0 12px;
-            flex-shrink: 0; z-index: 15;
+            z-index: 100;
         }
 
         /* Bouton CHARGER */
@@ -220,8 +224,12 @@
         ════════════════════════════ */
         .main {
             flex: 1; display: flex; flex-direction: column;
-            overflow: hidden; padding: 10px 12px 8px; gap: 8px;
+            overflow: hidden;
+            padding: 10px 12px 8px;
+            gap: 8px;
             position: relative; z-index: 1;
+            /* Décaler pour la toolbar fixed */
+            margin-top: var(--toolbar-h);
         }
 
         .input-wrap {
@@ -393,8 +401,9 @@
 
         /* PC */
         @media (min-width: 600px) {
-            .main, .toolbar, .bottom-bar { max-width: 700px; width: 100%; margin-left: auto; margin-right: auto; }
-            .toolbar, .bottom-bar { padding-left: 0; padding-right: 0; }
+            .toolbar { left: 50%; transform: translateX(-50%); width: 700px; max-width: 100%; }
+            .main, .bottom-bar { max-width: 700px; width: 100%; margin-left: auto; margin-right: auto; }
+            .bottom-bar { padding-left: 0; padding-right: 0; }
         }
     </style>
 </head>
@@ -809,8 +818,9 @@ async function fetchFileContent(id) {
    1. Vérifie qu'un contenu Drive est chargé
    2. Insère le texte en haut
    3. PATCH immédiat sur Drive
-   4. Vide la textarea
-   5. Met à jour la preview
+   4. RECHARGE depuis Drive pour sync
+   5. Vide la textarea
+   6. Met à jour la preview
 ══════════════════════════════════════════ */
 async function handleInsert() {
     const newText = textarea.value.trim();
@@ -834,8 +844,13 @@ async function handleInsert() {
 
     try {
         await patchFile(drv.fileId, newContent);
-        // Succès : mettre à jour la RAM et l'UI
-        driveContent = newContent;
+        
+        // CRITIQUE : Recharger depuis Drive pour être sûr
+        // Sinon si l'utilisateur a supprimé des blocs manuellement sur Drive,
+        // ils réapparaissent à la prochaine insertion car on garde la RAM
+        const freshContent = await fetchFileContent(drv.fileId);
+        driveContent = freshContent;
+        
         textarea.value = '';
         charCount.textContent = '0 car.';
         renderPreview();
@@ -909,14 +924,38 @@ function handleExpired(retry) {
 }
 
 async function handlePaste() {
-    try {
-        const t = await navigator.clipboard.readText();
-        if (!t) { toast('Presse-papier vide', 'err'); return; }
-        textarea.value = t;
-        charCount.textContent = t.length + ' car.';
-        textarea.focus();
-        toast('Collé ✓');
-    } catch(e) { toast('Permission presse-papier refusée', 'err'); }
+    // Stratégie 1 : API Clipboard moderne (fonctionne sur PC et certains mobiles HTTPS)
+    if (navigator.clipboard && navigator.clipboard.readText) {
+        try {
+            const t = await navigator.clipboard.readText();
+            if (!t) { toast('Presse-papier vide', 'err'); return; }
+            textarea.value = t;
+            charCount.textContent = t.length + ' car.';
+            textarea.focus();
+            toast('Collé ✓');
+            return;
+        } catch(e) {
+            // Erreur silencieuse — essayer fallback
+        }
+    }
+
+    // Stratégie 2 : Focus textarea + paste event (mobile-friendly)
+    // L'utilisateur voit le clavier et peut faire un paste manuel
+    textarea.focus();
+    toast('Fais un appui long sur la zone et choisis "Coller"', 'warn');
+    
+    // Écouter un paste manuel
+    const onPaste = (e) => {
+        const t = e.clipboardData?.getData('text');
+        if (t) {
+            e.preventDefault();
+            textarea.value = t;
+            charCount.textContent = t.length + ' car.';
+            toast('Collé ✓');
+        }
+        textarea.removeEventListener('paste', onPaste);
+    };
+    textarea.addEventListener('paste', onPaste, { once: true });
 }
 
 function handleSaveLocal() {
