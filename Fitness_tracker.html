@@ -225,8 +225,9 @@
 <body class="antialiased">
 
     <div id="app" class="flex flex-col min-h-screen">
-        <header class="shadow-md p-4 sticky top-0 z-20 border-b">
+        <header class="shadow-md px-4 pt-3 pb-2 sticky top-0 z-20 border-b">
             <div class="max-w-4xl mx-auto">
+                <!-- Ligne 1 : titre + sélecteur + icônes utilitaires -->
                 <div class="flex flex-wrap justify-between items-center gap-x-4 gap-y-2">
                     <div id="app-title-container">
                         <h1 id="app-title" class="text-xl font-bold">Fitness Tracker</h1>
@@ -238,15 +239,27 @@
                         <button id="expand-all-btn" class="p-2 rounded-full icon-btn" title="Tout déplier"><i class="fa-solid fa-expand fa-fw"></i></button>
                         <button id="clear-all-perf-btn" class="p-2 rounded-full icon-btn" title="Effacer les réalisations du jour"><i class="fa-solid fa-eraser fa-fw"></i></button>
                         <button id="global-stats-btn" class="p-2 rounded-full icon-btn" title="Statistiques Globales"><i class="fa-solid fa-chart-pie fa-fw"></i></button>
-                        <button data-action="header-backup" class="p-2 rounded-full icon-btn" title="Sauvegarder local (Backup)"><i class="fa-solid fa-cloud-arrow-up fa-fw"></i></button>
-                        <button data-action="header-import" class="p-2 rounded-full icon-btn" title="Importer local (Remplacer)"><i class="fa-solid fa-cloud-arrow-down fa-fw"></i></button>
-                        <button data-action="header-drive-save" class="p-2 rounded-full icon-btn" title="Sauvegarder sur Google Drive"><i class="fa-brands fa-google-drive fa-fw"></i></button>
-                        <button data-action="header-drive-load" class="p-2 rounded-full icon-btn" title="Charger depuis Google Drive"><i class="fa-solid fa-folder-open fa-fw"></i></button>
                         <button id="manage-programs-btn" class="p-2 rounded-full icon-btn" title="Gérer les programmes"><i class="fa-solid fa-cogs fa-fw"></i></button>
                         <button id="theme-toggle-btn" class="p-2 rounded-full icon-btn" title="Changer de thème"><i id="theme-icon" class="fa-solid fa-sun fa-fw"></i></button>
                     </div>
                 </div>
-                <p id="active-backup-name" class="text-xs text-secondary mt-1 truncate hidden"></p>
+                <!-- Ligne 2 : boutons backup/import + Drive + bannière fichier actif -->
+                <div class="flex items-center justify-between mt-1 pt-1 border-t border-border-color">
+                    <div class="flex items-center gap-1">
+                        <!-- Local -->
+                        <span class="text-xs text-secondary mr-1 hidden sm:inline">Local :</span>
+                        <button data-action="header-backup" class="p-2 rounded-full icon-btn" title="Sauvegarder local (Backup)"><i class="fa-solid fa-cloud-arrow-up fa-fw"></i></button>
+                        <button data-action="header-import" class="p-2 rounded-full icon-btn" title="Importer local (Remplacer)"><i class="fa-solid fa-cloud-arrow-down fa-fw"></i></button>
+                        <!-- Séparateur -->
+                        <span class="mx-1 text-border-color opacity-40">|</span>
+                        <!-- Drive -->
+                        <span class="text-xs text-secondary mr-1 hidden sm:inline">Drive :</span>
+                        <button data-action="header-drive-save" class="p-2 rounded-full icon-btn" title="Sauvegarder sur Google Drive"><i class="fa-brands fa-google-drive fa-fw"></i></button>
+                        <button data-action="header-drive-load" class="p-2 rounded-full icon-btn" title="Charger depuis Google Drive"><i class="fa-solid fa-folder-open fa-fw"></i></button>
+                    </div>
+                    <!-- Bannière fichier actif — toujours visible dans le sticky -->
+                    <p id="active-backup-name" class="text-xs text-secondary truncate hidden ml-2 italic"></p>
+                </div>
             </div>
         </header>
 
@@ -417,7 +430,11 @@
                     await driveUpsertFile(dailyFilename, jsonContent);
                     await driveUpsertFile(lastFilename, jsonContent);
 
-                    showToast(`Drive : ${dailyFilename} + last_backup ✓`);
+                    state.isDirty = false;
+                    state.activeFileName = dailyFilename;
+                    saveState();
+                    renderHeader(`☁️ Drive : ${dailyFilename} ✓`);
+                    showToast(`☁️ Drive : ${dailyFilename} + last_backup ✓`);
                 } catch(e) {
                     console.error('Erreur Drive save:', e);
                     showToast('Erreur sauvegarde Drive.', true);
@@ -497,10 +514,11 @@
                         state.isDirty = false;
                         saveState();
                         refreshAll();
+                        renderHeader(`☁️ Chargé : ${fileName}`);
                         // Fermer la modale
                         driveModalContainer.classList.remove('visible');
                         setTimeout(() => { driveModalContainer.style.display = 'none'; }, 200);
-                        showToast(`${fileName} importé avec succès !`);
+                        showToast(`☁️ ${fileName} chargé avec succès !`);
                     } else {
                         throw new Error('Format de fichier invalide.');
                     }
@@ -664,11 +682,16 @@
             }
         };
 
-        const renderHeader = () => {
-            if (state.activeFileName) {
-                activeBackupNameDisplay.textContent = `Fichier actif : ${state.activeFileName}${state.isDirty ? '*' : ''}`;
+        const renderHeader = (overrideLabel = null) => {
+            if (overrideLabel) {
+                activeBackupNameDisplay.textContent = overrideLabel;
                 activeBackupNameDisplay.classList.remove('hidden');
-            } else { activeBackupNameDisplay.classList.add('hidden'); }
+            } else if (state.activeFileName) {
+                activeBackupNameDisplay.textContent = `💾 ${state.activeFileName}${state.isDirty ? ' *' : ' ✓'}`;
+                activeBackupNameDisplay.classList.remove('hidden');
+            } else {
+                activeBackupNameDisplay.classList.add('hidden');
+            }
         };
 
         const renderProgram = (options = {}) => {
@@ -1302,46 +1325,51 @@
         // Backup local — uniquement le fichier daté (sans last_backup.json)
         const handleBackup = async () => {
             cleanupEmptyPerformances();
-
-            // Fallback pour navigateurs non supportés (téléchargement simple)
-            if (!isFileSystemAccessAPISupported) {
-                const a = document.createElement('a');
-                const file = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
-                a.href = URL.createObjectURL(file);
-                a.download = `backup_fitness_${new Date().toISOString().slice(0,10)}.json`;
-                a.click(); URL.revokeObjectURL(a.href);
-                return;
-            }
-
-            // Via File System Access API
-            let handle = backupDirectoryHandle;
-            if (!handle) handle = await promptAndSetDirectory();
-            if (!handle || !(await verifyPermission(handle))) return;
-            backupDirectoryHandle = handle;
-
             const dateString = new Date().toISOString().slice(0, 10);
             const filename = `backup_fitness_${dateString}.json`;
+            const backupState = { ...state, isDirty: false };
+            const jsonContent = JSON.stringify(backupState, null, 2);
 
-            try {
-                const backupState = { ...state };
-                if (!state.isDirty) { backupState.isDirty = false; }
-                const jsonContent = JSON.stringify(backupState, null, 2);
+            // Tenter File System Access API (Chrome desktop/Android)
+            // Si indisponible OU bloqué (GitHub Pages, Safari), fallback téléchargement
+            if (isFileSystemAccessAPISupported) {
+                try {
+                    let handle = backupDirectoryHandle;
+                    if (!handle) handle = await promptAndSetDirectory();
+                    if (!handle) { throw new Error('no-handle'); }
+                    if (!(await verifyPermission(handle))) { throw new Error('no-permission'); }
+                    backupDirectoryHandle = handle;
 
-                // Écriture du fichier daté uniquement
-                const fileHandle = await handle.getFileHandle(filename, { create: true });
-                const writable = await fileHandle.createWritable();
-                await writable.write(jsonContent);
-                await writable.close();
+                    const fileHandle = await handle.getFileHandle(filename, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(jsonContent);
+                    await writable.close();
 
-                state.isDirty = false;
-                state.activeFileName = filename;
-                renderHeader();
-                showToast(`Backup local : ${filename}`);
-
-            } catch (err) {
-                console.error("Erreur d'écriture du backup :", err);
-                showToast("Erreur d'enregistrement du backup.", true);
+                    state.isDirty = false;
+                    state.activeFileName = filename;
+                    saveState();
+                    renderHeader();
+                    showToast(`💾 Backup local : ${filename}`);
+                    return;
+                } catch (err) {
+                    if (err.message === 'no-handle' || err.message === 'no-permission') return;
+                    // Autre erreur (API bloquée sur GitHub Pages) → fallback
+                    console.warn('File System API indisponible, fallback téléchargement :', err);
+                }
             }
+
+            // Fallback téléchargement (GitHub Pages, Safari, Firefox)
+            const a = document.createElement('a');
+            const blob = new Blob([jsonContent], { type: 'application/json' });
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            state.isDirty = false;
+            state.activeFileName = filename;
+            saveState();
+            renderHeader();
+            showToast(`💾 Téléchargement : ${filename}`);
         };
 
         const handleImport = async (isMerge = false) => {
@@ -1354,17 +1382,17 @@
                     };
                     const fileHandles = await window.showOpenFilePicker(pickerOpts);
                     await processFiles(fileHandles, isMerge, true);
+                    return;
                 } catch (err) {
-                    if (err.name !== 'AbortError') {
-                        console.error("Erreur d'importation (API) :", err);
-                        showToast("Erreur lors de l'importation.", true);
-                    }
+                    if (err.name === 'AbortError') return; // Annulé par l'utilisateur
+                    // API bloquée (GitHub Pages, Safari) → fallback input[file]
+                    console.warn('showOpenFilePicker indisponible, fallback input[file] :', err);
                 }
-            } else {
-                fileInput.multiple = isMerge;
-                fileInput.dataset.isMerge = isMerge;
-                fileInput.click();
             }
+            // Fallback universel (GitHub Pages, Firefox, Safari)
+            fileInput.multiple = isMerge;
+            fileInput.dataset.isMerge = isMerge;
+            fileInput.click();
         };
 
         async function processFiles(files, isMerge, areHandles = false) {
