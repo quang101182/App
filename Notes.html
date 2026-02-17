@@ -38,7 +38,7 @@
 
         html, body {
             height: 100%;
-            /* Sur mobile : éviter que le viewport change avec le clavier */
+            /* Mobile : fixer le viewport pour éviter resize avec clavier */
             position: fixed;
             width: 100%;
             overflow: hidden;
@@ -52,6 +52,16 @@
         }
 
         /* ════════════════════════════
+           TOP FIXED ZONE (header + banner + toolbar) — ne bouge jamais
+        ════════════════════════════ */
+        .top-fixed {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 200;
+            background: var(--bg-0);
+        }
+
+        /* ════════════════════════════
            HEADER
         ════════════════════════════ */
         .header {
@@ -60,7 +70,6 @@
             border-bottom: 1px solid var(--border);
             display: flex; align-items: center; justify-content: space-between;
             padding: 0 14px;
-            flex-shrink: 0; z-index: 20;
         }
         .header-left { display: flex; align-items: center; gap: 10px; }
         .logo {
@@ -118,7 +127,6 @@
             padding: 0 14px;
             height: var(--banner-h);
             display: flex; align-items: center; gap: 8px;
-            flex-shrink: 0;
         }
         .fb-dot {
             width: 5px; height: 5px; border-radius: 50%;
@@ -141,19 +149,14 @@
         }
 
         /* ════════════════════════════
-           TOOLBAR — FIXE en haut, jamais cachée par le clavier mobile
+           TOOLBAR — dans le wrapper fixed
         ════════════════════════════ */
         .toolbar {
-            position: fixed;
-            top: calc(var(--header-h) + var(--banner-h));
-            left: 0; right: 0;
             height: var(--toolbar-h);
-            background: rgba(15,18,32,0.98);
-            backdrop-filter: blur(20px);
+            background: var(--bg-1);
             border-bottom: 1px solid var(--border);
             display: flex; align-items: center; gap: 8px;
             padding: 0 12px;
-            z-index: 100;
         }
 
         /* Bouton CHARGER */
@@ -226,7 +229,7 @@
         }
 
         /* ════════════════════════════
-           ZONE TEXTAREA + PREVIEW
+           ZONE TEXTAREA + PREVIEW — scrollable
         ════════════════════════════ */
         .main {
             flex: 1; display: flex; flex-direction: column;
@@ -235,8 +238,8 @@
             gap: 8px;
             position: relative; z-index: 1;
             min-height: 0;
-            /* Compenser la toolbar fixed */
-            margin-top: var(--toolbar-h);
+            /* Décaler pour la zone top fixed (header + banner + toolbar) */
+            margin-top: calc(var(--header-h) + var(--banner-h) + var(--toolbar-h));
         }
 
         .input-wrap {
@@ -408,56 +411,63 @@
 
         /* PC */
         @media (min-width: 600px) {
-            html, body { position: static; }
-            .toolbar {
-                left: 50%; transform: translateX(-50%);
-                width: 700px; max-width: 100%;
+            html, body { position: static; height: 100vh; }
+            .top-fixed { position: static; }
+            .header, .file-banner, .toolbar {
+                max-width: 700px; margin: 0 auto;
             }
-            .main, .bottom-bar { max-width: 700px; width: 100%; margin-left: auto; margin-right: auto; }
+            .main, .bottom-bar {
+                max-width: 700px; width: 100%;
+                margin-left: auto; margin-right: auto;
+            }
+            .main { margin-top: 0; }
             .bottom-bar { padding-left: 0; padding-right: 0; }
         }
     </style>
 </head>
 <body>
 
-<!-- HEADER -->
-<header class="header">
-    <div class="header-left">
-        <div class="logo">LOG</div>
-        <span class="title">Logs <span>Express</span></span>
+<!-- TOP FIXED ZONE — ne bouge jamais, même avec clavier mobile -->
+<div class="top-fixed">
+    <!-- HEADER -->
+    <header class="header">
+        <div class="header-left">
+            <div class="logo">LOG</div>
+            <span class="title">Logs <span>Express</span></span>
+        </div>
+        <div class="header-right">
+            <button class="drive-pill" id="drive-pill">
+                <span class="dot"></span>
+                <span id="pill-txt">Drive</span>
+            </button>
+            <button class="icon-btn" id="btn-settings">⚙️</button>
+        </div>
+    </header>
+
+    <!-- FILE BANNER -->
+    <div class="file-banner" id="file-banner">
+        <span class="fb-dot"></span>
+        <span class="fb-name" id="fb-name">Aucun fichier connecté</span>
+        <span class="fb-loc" id="fb-loc"></span>
     </div>
-    <div class="header-right">
-        <button class="drive-pill" id="drive-pill">
-            <span class="dot"></span>
-            <span id="pill-txt">Drive</span>
+
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+        <button class="btn-load needed" id="btn-load" title="Se connecter à Drive et charger le fichier">
+            📂 Connecter & Charger
         </button>
-        <button class="icon-btn" id="btn-settings">⚙️</button>
+        <button class="btn-ins disabled" id="btn-ins">
+            <span class="bi-icon">⬆️</span>
+            <span class="bi-label">Insérer &amp; Sauver</span>
+            <div class="spinner"></div>
+        </button>
+        <div class="lb-ctrl">
+            <button id="lb-minus">−</button>
+            <span id="lb-val">2</span>
+            <button id="lb-plus">+</button>
+        </div>
     </div>
-</header>
-
-<!-- FILE BANNER -->
-<div class="file-banner" id="file-banner">
-    <span class="fb-dot"></span>
-    <span class="fb-name" id="fb-name">Aucun fichier connecté</span>
-    <span class="fb-loc" id="fb-loc"></span>
-</div>
-
-<!-- TOOLBAR — toujours visible, au-dessus du clavier -->
-<div class="toolbar">
-    <button class="btn-load needed" id="btn-load" title="Se connecter à Drive et charger le fichier">
-        📂 Connecter & Charger
-    </button>
-    <button class="btn-ins disabled" id="btn-ins">
-        <span class="bi-icon">⬆️</span>
-        <span class="bi-label">Insérer &amp; Sauver</span>
-        <div class="spinner"></div>
-    </button>
-    <div class="lb-ctrl">
-        <button id="lb-minus">−</button>
-        <span id="lb-val">2</span>
-        <button id="lb-plus">+</button>
-    </div>
-</div>
+</div><!-- fin .top-fixed -->
 
 <!-- MAIN -->
 <main class="main">
@@ -816,11 +826,6 @@ async function handleLoad() {
         if (e.message === 'TOKEN_EXPIRED') { handleExpired(handleLoad); return; }
         toast('Erreur chargement', 'err');
         console.error('[LOAD] Error:', e);
-    }
-}
-        if (e.message === 'TOKEN_EXPIRED') { handleExpired(handleLoad); return; }
-        toast('Erreur chargement', 'err');
-        console.error('load error', e);
     }
 }
 
