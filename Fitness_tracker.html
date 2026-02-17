@@ -1044,70 +1044,75 @@
             return false;
         }
 
-                        const handleBackup = async () => {
+                const handleBackup = async () => {
             cleanupEmptyPerformances();
             
             const dateString = new Date().toISOString().slice(0, 10);
             const filename = `backup_fitness_${dateString}.json`;
+            const staticFilename = 'last_backup.json';
             const jsonContent = JSON.stringify(state, null, 2);
 
-            // Fonction de secours améliorée (Double Téléchargement)
-            const triggerDownload = (content, name1, name2, reason) => {
-                console.warn(`Mode Secours activé : ${reason}`);
-                showToast(`Mode Secours : Téléchargement des 2 fichiers...`, false);
+            // Fonction de secours (Double Téléchargement Temporisé)
+            const triggerFallbackDownload = () => {
+                console.warn("Mode Secours activé : Téléchargement classique.");
+                showToast("Mode Secours : Autorisez le téléchargement multiple !", false);
 
-                const downloadFile = (fileName) => {
-                    const blob = new Blob([content], {type: 'application/json'});
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = fileName;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
+                const downloadOneFile = (name, delay) => {
+                    setTimeout(() => {
+                        const blob = new Blob([jsonContent], {type: 'application/json'});
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = name;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }, delay);
                 };
 
-                // 1. Télécharge le fichier daté (Priorité Historique)
-                downloadFile(name1);
+                // Séquençage pour éviter le blocage anti-spam des navigateurs mobiles
+                // 1. Le fichier daté part immédiatement
+                downloadOneFile(filename, 0);
 
-                // 2. Télécharge le fichier last_backup.json (Priorité Système) avec délai
-                // Le délai est CRUCIAL pour que Chrome/Safari ne bloque pas le 2ème fichier comme "spam"
-                setTimeout(() => {
-                    downloadFile(name2);
-                    showToast("Les deux fichiers ont été envoyés.", false);
-                }, 1500); // 1.5 secondes de délai
+                // 2. Le fichier last_backup part 1.5 seconde plus tard
+                // C'est ici que vous devrez cliquer sur "AUTORISER" (Image 1)
+                downloadOneFile(staticFilename, 1500);
 
-                state.activeFileName = name1;
+                state.activeFileName = filename;
                 state.isDirty = false;
                 renderHeader();
             };
 
-            // TENTATIVE 1 : DOSSIER (Idéal)
+            // TENTATIVE 1 : ACCÈS DOSSIER (API Moderne)
+            // Note : Échouera si une "Superposition d'écran" est détectée (Image 2)
             if ('showDirectoryPicker' in window) {
                 try {
                     let handle = backupDirectoryHandle;
-                    if (!handle) {
-                        handle = await window.showDirectoryPicker();
-                    } else {
+                    
+                    // Vérification préliminaire des permissions
+                    if (handle) {
                         const permission = await handle.queryPermission({ mode: 'readwrite' });
                         if (permission !== 'granted') {
-                            const request = await handle.requestPermission({ mode: 'readwrite' });
-                            if (request !== 'granted') throw new Error("Permission refusée");
+                             // Ceci déclenchera l'erreur "Overlay" (Image 2) si une bulle est active
+                             const request = await handle.requestPermission({ mode: 'readwrite' });
+                             if (request !== 'granted') throw new Error("Permission refusée");
                         }
+                    } else {
+                        // Ceci déclenchera aussi l'erreur "Overlay"
+                        handle = await window.showDirectoryPicker();
                     }
 
                     await saveDirectoryHandle(handle);
                     backupDirectoryHandle = handle;
 
-                    // Écriture 1
+                    // Écriture Disque Directe (Silencieuse)
                     const fileHandle = await handle.getFileHandle(filename, { create: true });
                     const writable = await fileHandle.createWritable();
                     await writable.write(jsonContent);
                     await writable.close();
 
-                    // Écriture 2 (last_backup)
-                    const staticFileHandle = await handle.getFileHandle('last_backup.json', { create: true });
+                    const staticFileHandle = await handle.getFileHandle(staticFilename, { create: true });
                     const staticWritable = await staticFileHandle.createWritable();
                     await staticWritable.write(jsonContent);
                     await staticWritable.close();
@@ -1115,15 +1120,16 @@
                     state.isDirty = false;
                     state.activeFileName = filename;
                     renderHeader();
-                    showToast(`Backup complet (Daté + last_backup) validé.`);
+                    showToast(`Backup enregistré dans le dossier.`);
 
                 } catch (err) {
-                    // Fallback vers Double Téléchargement
-                    triggerDownload(jsonContent, filename, 'last_backup.json', "Accès dossier bloqué");
+                    console.error("Erreur API File System (probablement Overlay ou Mobile) :", err);
+                    // BASCULE AUTOMATIQUE VERS LE TÉLÉCHARGEMENT
+                    triggerFallbackDownload();
                 }
             } else {
-                // Fallback Mobile / Firefox
-                triggerDownload(jsonContent, filename, 'last_backup.json', "Navigateur incompatible");
+                // Navigateurs incompatibles (Firefox Android, vieux Safari, Webview)
+                triggerFallbackDownload();
             }
         };
         
