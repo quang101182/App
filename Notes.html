@@ -657,21 +657,35 @@
                 previewDate.textContent = '—';
                 return;
             }
-            // Extraire le premier bloc ### LOG
-            const blocks = state.lastContent.split(/\n(?=###\s)/);
-            const first  = blocks.find(b => b.trim().startsWith('###')) || blocks[0];
-            if (!first) return;
+            // Extraire le PREMIER bloc ### LOG (le plus récent, inséré en haut)
+            const blocks = state.lastContent.split(/(?=^###\s)/m);
+            const first  = blocks.find(b => b.trim().startsWith('###')) || '';
+            if (!first) {
+                // Pas de bloc ###, afficher les premières lignes telles quelles
+                const lines = state.lastContent.split('\n').filter(l => l.trim()).slice(0, 5);
+                previewBody.textContent = lines.join('\n');
+                previewTag.textContent = '—';
+                previewDate.textContent = '—';
+                return;
+            }
 
-            // Extraire tag section et horodatage
-            const sectionMatch = first.match(/Section cible\s*:\*\*\s*([^\n]+)/i);
-            const dateMatch    = first.match(/Horodatage\s*:\*\*\s*([^\n]+)/i)
-                              || first.match(/Horodatage\s*:\s*([^\n]+)/i);
+            // Regex robuste : "Section cible" suivi de : ou :** avec ou sans espaces
+            const sectionMatch = first.match(/Section cible\s*[:\*]+\s*([^#\n\*]+)/i);
+            // Horodatage : chercher la date au format JJ/MM ou DD mois YYYY ou timestamp
+            const dateMatch = first.match(/Horodatage\s*[:\*]+\s*([^\n\*]+)/i)
+                           || first.match(/(\d{1,2}[\s\/]\w+[\s\/]\d{2,4}[^\n]*)/);
 
-            previewTag.textContent  = sectionMatch ? sectionMatch[1].replace(/[#*]/g,'').trim() : '—';
-            previewDate.textContent = dateMatch     ? dateMatch[1].replace(/[*]/g,'').trim()     : '—';
+            previewTag.textContent  = sectionMatch
+                ? sectionMatch[1].replace(/[#*]/g,'').trim().replace(/^#\s*/, '')
+                : '—';
+            previewDate.textContent = dateMatch
+                ? dateMatch[1].replace(/[*]/g,'').trim()
+                : '—';
 
-            // Afficher les ~5 premières lignes non vides
-            const lines = first.split('\n').filter(l => l.trim()).slice(0, 6);
+            // Afficher les premières lignes significatives (pas les ### LOG ni les lignes vides)
+            const lines = first.split('\n')
+                .filter(l => l.trim() && !l.startsWith('###'))
+                .slice(0, 5);
             previewBody.textContent = lines.join('\n');
         }
 
@@ -725,6 +739,9 @@
             if (status === 'connecting') {
                 drivePill.classList.add('connecting');
                 pillText.textContent = '...';
+            } else if (status === 'ready') {
+                // gapi initialisé, en attente du clic utilisateur
+                pillText.textContent = 'Drive';
             } else if (drive.connected) {
                 drivePill.classList.add('connected');
                 pillText.textContent = 'Drive ✓';
@@ -762,7 +779,8 @@
         // ── DRIVE CONNECT ──
         function silentConnect() {
             if (!config.clientId || !config.apiKey) return;
-            updateDrivePill('connecting');
+            // Initialiser gapi + tokenClient SANS déclencher le popup
+            // Le popup sera déclenché manuellement par l'utilisateur (pill) ou par une action
             gapi.load('client', async () => {
                 try {
                     await gapi.client.init({
@@ -773,16 +791,22 @@
                         client_id: config.clientId,
                         scope: 'https://www.googleapis.com/auth/drive.file',
                         callback: (resp) => {
-                            if (resp.error) { updateDrivePill(); return; }
+                            if (resp.error) {
+                                updateDrivePill();
+                                toast('Connexion Drive annulée', 'err');
+                                return;
+                            }
                             drive.accessToken = resp.access_token;
                             drive.connected   = true;
                             updateDrivePill();
                             toast('Drive connecté ✓', 'ok');
+                            // Auto-charger le fileId si pas encore connu
+                            if (!drive.fileId) resolveFileId();
                         }
                     });
-                    // Sur file:// le prompt silencieux échoue — on demande toujours le consentement
-                    const isFile = location.protocol === 'file:';
-                    drive.tokenClient.requestAccessToken({ prompt: isFile ? 'consent' : '' });
+                    // gapi prêt — pill reste gris mais tokenClient est prêt
+                    // L'utilisateur clique sur pill pour lancer le popup OAuth
+                    updateDrivePill('ready');
                 } catch(e) { updateDrivePill(); toast('Erreur init Drive', 'err'); }
             });
         }
@@ -790,9 +814,54 @@
         function handleDriveConnect() {
             if (drive.connected) { toast('Drive déjà connecté ✓', 'ok'); return; }
             if (!config.clientId || !config.apiKey) { overlay.classList.add('open'); return; }
-            if (!drive.tokenClient) { silentConnect(); return; }
+            if (!drive.tokenClient) {
+                // gapi pas encore chargé — charger puis ouvrir le popup
+                gapi.load('client', async () => {
+                    try {
+                        await gapi.client.init({
+                            apiKey: config.apiKey,
+                            discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']
+                        });
+                        drive.tokenClient = google.accounts.oauth2.initTokenClient({
+                            client_id: config.clientId,
+                            scope: 'https://www.googleapis.com/auth/drive.file',
+                            callback: (resp) => {
+                                if (resp.error) { updateDrivePill(); toast('Connexion annulée', 'err'); return; }
+                                drive.accessToken = resp.access_token;
+                                drive.connected   = true;
+                                updateDrivePill();
+                                toast('Drive connecté ✓', 'ok');
+                                if (!drive.fileId) resolveFileId();
+                            }
+                        });
+                        updateDrivePill('connecting');
+                        drive.tokenClient.requestAccessToken({ prompt: 'consent' });
+                    } catch(e) { updateDrivePill(); toast('Erreur init Drive', 'err'); }
+                });
+                return;
+            }
             updateDrivePill('connecting');
             drive.tokenClient.requestAccessToken({ prompt: 'consent' });
+        }
+
+        // Résoudre le fileId sans charger le contenu (juste trouver l'ID)
+        async function resolveFileId() {
+            if (drive.fileId) { updateFileBanner(); return; }
+            try {
+                let q = `name = '${config.fileName}' and mimeType = 'text/plain' and trashed = false`;
+                if (config.folderId) q += ` and '${config.folderId}' in parents`;
+                const res = await fetch(
+                    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`,
+                    { headers: { 'Authorization': `Bearer ${drive.accessToken}` } }
+                );
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.files?.length > 0) {
+                    drive.fileId = data.files[0].id;
+                    saveState();
+                    updateFileBanner();
+                }
+            } catch(e) {}
         }
 
         // ── PASTE ──
@@ -927,20 +996,57 @@
 
         async function pushToDrive(content) {
             const id = drive.fileId || await findOrCreateFile(true);
-            const blob = new Blob([content], { type: 'text/plain' });
+            if (!id) throw new Error('NO_FILE_ID');
+
+            const blob = new Blob([content], { type: 'text/plain; charset=utf-8' });
+
+            // PATCH multipart pour plus de robustesse (notamment mobile)
+            const boundary = '-------boundary_' + Date.now();
+            const delimiter = '\r\n--' + boundary + '\r\n';
+            const closeDelimiter = '\r\n--' + boundary + '--';
+
+            const metaPart = delimiter +
+                'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+                JSON.stringify({ mimeType: 'text/plain' });
+
+            // Construire body multipart manuellement
+            const encoder = new TextEncoder();
+            const metaBytes = encoder.encode(metaPart);
+            const fileHeader = encoder.encode(
+                '\r\n--' + boundary + '\r\n' +
+                'Content-Type: text/plain; charset=UTF-8\r\n\r\n'
+            );
+            const fileBytes = encoder.encode(content);
+            const closeBytes = encoder.encode(closeDelimiter);
+
+            const body = new Uint8Array(
+                metaBytes.length + fileHeader.length + fileBytes.length + closeBytes.length
+            );
+            let offset = 0;
+            for (const chunk of [metaBytes, fileHeader, fileBytes, closeBytes]) {
+                body.set(chunk, offset);
+                offset += chunk.length;
+            }
+
             const res = await fetch(
-                `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`,
+                `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=multipart`,
                 {
                     method: 'PATCH',
                     headers: {
                         'Authorization': `Bearer ${drive.accessToken}`,
-                        'Content-Type': 'text/plain'
+                        'Content-Type': `multipart/related; boundary="${boundary}"`
                     },
-                    body: blob
+                    body: body
                 }
             );
+
             if (res.status === 401) throw new Error('TOKEN_EXPIRED');
-            if (!res.ok) throw new Error('PUSH_FAILED');
+            if (!res.ok) {
+                const errText = await res.text().catch(() => '');
+                console.error('Drive push failed:', res.status, errText);
+                throw new Error('PUSH_FAILED');
+            }
+            console.log('Drive push OK, fileId:', id);
         }
 
         // ── TOKEN EXPIRED ──
