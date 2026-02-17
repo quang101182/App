@@ -413,6 +413,36 @@
             padding: 10px 14px;
         }
 
+        /* ── FILE BANNER ── */
+        .file-banner {
+            background: var(--bg-1);
+            border-bottom: 1px solid var(--border);
+            padding: 5px 16px;
+            display: flex; align-items: center; gap: 8px;
+            flex-shrink: 0; z-index: 9;
+            min-height: 28px;
+        }
+        .file-banner-dot {
+            width: 5px; height: 5px; border-radius: 50%;
+            background: var(--text-3); flex-shrink: 0;
+            transition: background 0.3s;
+        }
+        .file-banner.active .file-banner-dot { background: var(--green); box-shadow: 0 0 5px var(--green); }
+        .file-banner-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem; color: var(--text-3);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            flex: 1; transition: color 0.3s;
+        }
+        .file-banner.active .file-banner-name { color: var(--cyan); }
+        .file-banner-folder {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.62rem; color: var(--text-3);
+            background: var(--bg-3); border: 1px solid var(--border);
+            padding: 1px 6px; border-radius: 4px; flex-shrink: 0;
+            max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+
         /* ── RESPONSIVE PC ── */
         @media (min-width: 600px) {
             .main { max-width: 680px; margin: 0 auto; width: 100%; padding: 16px 20px 12px; }
@@ -438,6 +468,13 @@
             <button class="icon-btn" id="btn-settings" title="Paramètres">⚙️</button>
         </div>
     </header>
+
+    <!-- FILE BANNER -->
+    <div class="file-banner" id="file-banner">
+        <span class="file-banner-dot"></span>
+        <span class="file-banner-name" id="file-banner-name">Aucun fichier connecté</span>
+        <span class="file-banner-folder" id="file-banner-folder" style="display:none"></span>
+    </div>
 
     <!-- MAIN -->
     <main class="main">
@@ -676,6 +713,7 @@
                 saveConfig();
                 drive.connected = false; drive.accessToken = null; drive.fileId = null;
                 updateDrivePill();
+                updateFileBanner();
                 overlay.classList.remove('open');
                 toast('Config sauvegardée', 'ok');
             });
@@ -692,6 +730,32 @@
                 pillText.textContent = 'Drive ✓';
             } else {
                 pillText.textContent = 'Drive';
+            }
+            updateFileBanner();
+        }
+
+        function updateFileBanner() {
+            const banner     = $('file-banner');
+            const bannerName = $('file-banner-name');
+            const bannerFolder = $('file-banner-folder');
+
+            if (!drive.connected) {
+                banner.classList.remove('active');
+                bannerName.textContent = 'Aucun fichier connecté';
+                bannerFolder.style.display = 'none';
+                return;
+            }
+
+            banner.classList.add('active');
+            // Nom du fichier
+            bannerName.textContent = config.fileName || 'Gemini_memory.txt';
+            // Dossier si défini
+            if (config.folderId) {
+                bannerFolder.style.display = 'block';
+                bannerFolder.textContent   = 'folder: ' + config.folderId.slice(0, 12) + '…';
+            } else {
+                bannerFolder.style.display = 'block';
+                bannerFolder.textContent   = 'Mon Drive (racine)';
             }
         }
 
@@ -760,6 +824,7 @@
                 state.lastContent = content;
                 saveState();
                 renderPreview();
+                updateFileBanner();
                 toast('Chargé ✓', 'ok');
             } catch(e) { toast('Erreur chargement', 'err'); }
         }
@@ -819,11 +884,15 @@
 
         // ── DRIVE UPSERT ──
         async function findOrCreateFile(create = true) {
+            // Si on connaît déjà le fileId (chargé précédemment), on l'utilise directement
+            if (drive.fileId) return drive.fileId;
+
+            // Sinon chercher par nom + dossier (comme avant, logique originale qui marchait)
             let q = `name = '${config.fileName}' and mimeType = 'text/plain' and trashed = false`;
             if (config.folderId) q += ` and '${config.folderId}' in parents`;
 
             const res = await fetch(
-                `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`,
+                `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=1`,
                 { headers: { 'Authorization': `Bearer ${drive.accessToken}` } }
             );
             if (res.status === 401) throw new Error('TOKEN_EXPIRED');
@@ -831,11 +900,13 @@
 
             if (data.files?.length > 0) {
                 drive.fileId = data.files[0].id;
+                saveState();
+                updateFileBanner();
                 return drive.fileId;
             }
             if (!create) return null;
 
-            // Créer le fichier
+            // Créer le fichier seulement si vraiment introuvable
             const meta = { name: config.fileName, mimeType: 'text/plain' };
             if (config.folderId) meta.parents = [config.folderId];
             const form = new FormData();
@@ -850,6 +921,7 @@
             const d = await cr.json();
             drive.fileId = d.id;
             saveState();
+            updateFileBanner();
             return drive.fileId;
         }
 
