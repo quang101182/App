@@ -169,7 +169,12 @@
         #manage-programs-btn { color: var(--glow-yellow); }
         #global-stats-btn { color: var(--icon-stats-color); }
         #theme-toggle-btn { color: var(--icon-color); }
-        button[data-action="header-backup"] { color: var(--icon-backup-color); }
+        button[data-action="header-backup"] { color: var(--icon-backup-color); transition: color 0.3s, text-shadow 0.3s; }
+        button[data-action="header-backup"].is-dirty { color: var(--glow-orange); animation: dirty-pulse 2s ease-in-out infinite; }
+        @keyframes dirty-pulse {
+            0%, 100% { text-shadow: 0 0 4px var(--glow-orange); }
+            50% { text-shadow: 0 0 12px var(--glow-orange), 0 0 20px var(--glow-orange); }
+        }
         button[data-action="header-import"] { color: var(--icon-import-color); }
         button[data-action="header-drive-save"] { color: var(--icon-drive-save-color); }
         button[data-action="header-drive-load"] { color: var(--icon-drive-load-color); }
@@ -380,38 +385,48 @@
             }
         }
 
-        // Sauvegarde Google Drive — écrase ou crée le fichier
+        // Réinitialise la session expirée et relance l'auth, puis rappelle le callback
+        function refreshDriveToken(callback) {
+            console.warn('Token Drive expiré (401) — reconnexion automatique...');
+            driveSession.isConnected = false;
+            driveSession.accessToken = null;
+            updateDriveStatusDot();
+            initDriveConnection(callback);
+        }
+
+        // Sauvegarde Google Drive — écrase ou crée le fichier, détecte le 401
         async function driveUpsertFile(filename, content) {
             const blob = new Blob([content], { type: 'application/json' });
-            // Chercher si le fichier existe déjà
             let q = `name = '${filename}' and mimeType = 'application/json' and trashed = false`;
             if (driveConfig.folderId) q += ` and '${driveConfig.folderId}' in parents`;
             const searchRes = await gapi.client.drive.files.list({ q, fields: 'files(id)', pageSize: 1 });
+            if (searchRes.status === 401) throw new Error('TOKEN_EXPIRED');
             const existingId = searchRes.result.files?.[0]?.id;
 
+            let response;
             if (existingId) {
-                // Mise à jour du fichier existant
-                await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=media`, {
+                response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=media`, {
                     method: 'PATCH',
                     headers: { 'Authorization': `Bearer ${driveSession.accessToken}`, 'Content-Type': 'application/json' },
                     body: blob
                 });
             } else {
-                // Création d'un nouveau fichier
                 const meta = { name: filename, mimeType: 'application/json' };
                 if (driveConfig.folderId) meta.parents = [driveConfig.folderId];
                 const form = new FormData();
                 form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
                 form.append('file', blob);
-                await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${driveSession.accessToken}` },
                     body: form
                 });
             }
+            if (response && response.status === 401) throw new Error('TOKEN_EXPIRED');
+            if (response && !response.ok) throw new Error(`Erreur Drive HTTP ${response.status}`);
         }
 
-        const handleDriveSave = () => {
+        const handleDriveSave = (isRetry = false) => {
             ensureDriveConnected(async () => {
                 showToast('Envoi vers Drive...');
                 cleanupEmptyPerformances();
@@ -431,13 +446,17 @@
                     renderHeader(`☁️ ${dailyFilename.replace('backup_fitness_','').replace('.json','')} ✓`);
                     showToast(`☁️ Drive : ${dailyFilename} + last_backup ✓`);
                 } catch(e) {
-                    console.error('Erreur Drive save:', e);
-                    showToast('Erreur sauvegarde Drive.', true);
+                    if (e.message === 'TOKEN_EXPIRED' && !isRetry) {
+                        refreshDriveToken(() => handleDriveSave(true));
+                    } else {
+                        console.error('Erreur Drive save:', e);
+                        showToast('Erreur sauvegarde Drive.', true);
+                    }
                 }
             });
         };
 
-        const handleDriveLoad = () => {
+        const handleDriveLoad = (isRetry = false) => {
             ensureDriveConnected(async () => {
                 showToast('Récupération des fichiers...');
                 try {
@@ -449,11 +468,16 @@
                         orderBy: 'modifiedTime desc',
                         pageSize: 50
                     });
+                    if (res.status === 401) throw new Error('TOKEN_EXPIRED');
                     const files = res.result.files || [];
                     renderDriveLoadModal(files);
                 } catch(e) {
-                    console.error('Erreur Drive list:', e);
-                    showToast('Erreur lecture Drive.', true);
+                    if (e.message === 'TOKEN_EXPIRED' && !isRetry) {
+                        refreshDriveToken(() => handleDriveLoad(true));
+                    } else {
+                        console.error('Erreur Drive list:', e);
+                        showToast('Erreur lecture Drive.', true);
+                    }
                 }
             });
         };
@@ -493,34 +517,42 @@
             driveModalContainer.style.display = 'flex';
             setTimeout(() => driveModalContainer.classList.add('visible'), 10);
 
-            // Événements de sélection de fichier
+            // Événements de sélection de fichier avec gestion 401 + retry
             document.getElementById('drive-file-list')?.addEventListener('click', async (e) => {
                 const item = e.target.closest('.drive-file-item');
                 if (!item) return;
                 const fileId = item.dataset.fileId;
                 const fileName = item.dataset.fileName;
-                showToast(`Chargement de ${fileName}...`);
-                try {
-                    const res = await gapi.client.drive.files.get({ fileId, alt: 'media' });
-                    const importedState = JSON.parse(res.body);
-                    if (importedState.programs && importedState.performance) {
-                        state = importedState;
-                        state.activeFileName = fileName;
-                        state.isDirty = false;
-                        saveState();
-                        refreshAll();
-                        renderHeader(`☁️ ${fileName.replace('backup_fitness_','').replace('.json','')}`);
-                        // Fermer la modale
-                        driveModalContainer.classList.remove('visible');
-                        setTimeout(() => { driveModalContainer.style.display = 'none'; }, 200);
-                        showToast(`☁️ ${fileName} chargé avec succès !`);
-                    } else {
-                        throw new Error('Format de fichier invalide.');
+
+                const doLoad = async (isRetry = false) => {
+                    showToast(`Chargement de ${fileName}...`);
+                    try {
+                        const res = await gapi.client.drive.files.get({ fileId, alt: 'media' });
+                        if (res.status === 401) throw new Error('TOKEN_EXPIRED');
+                        const importedState = JSON.parse(res.body);
+                        if (importedState.programs && importedState.performance) {
+                            state = importedState;
+                            state.activeFileName = fileName;
+                            state.isDirty = false;
+                            saveState();
+                            refreshAll();
+                            renderHeader(`☁️ ${fileName.replace('backup_fitness_','').replace('.json','')}`);
+                            driveModalContainer.classList.remove('visible');
+                            setTimeout(() => { driveModalContainer.style.display = 'none'; }, 200);
+                            showToast(`☁️ ${fileName} chargé avec succès !`);
+                        } else {
+                            throw new Error('Format de fichier invalide.');
+                        }
+                    } catch(e) {
+                        if (e.message === 'TOKEN_EXPIRED' && !isRetry) {
+                            refreshDriveToken(() => doLoad(true));
+                        } else {
+                            console.error('Erreur Drive load file:', e);
+                            showToast(e.message || 'Erreur lors du chargement.', true);
+                        }
                     }
-                } catch(e) {
-                    console.error('Erreur Drive load file:', e);
-                    showToast(e.message || 'Erreur lors du chargement.', true);
-                }
+                };
+                doLoad();
             });
         }
 
@@ -678,11 +710,14 @@
         };
 
         const renderHeader = (overrideLabel = null) => {
+            // Indicateur isDirty sur le bouton backup
+            const backupBtn = document.querySelector('button[data-action="header-backup"]');
+            if (backupBtn) backupBtn.classList.toggle('is-dirty', !!state.isDirty);
+
             if (overrideLabel) {
                 activeBackupNameDisplay.textContent = overrideLabel;
                 activeBackupNameDisplay.classList.remove('hidden');
             } else if (state.activeFileName) {
-                // Raccourcir le nom : supprimer le préfixe "backup_fitness_" pour gagner de la place
                 const shortName = state.activeFileName
                     .replace('backup_fitness_', '')
                     .replace('.json', '');
