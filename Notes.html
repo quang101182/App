@@ -3,451 +3,908 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Bloc-Notes Express</title>
+    <title>Logs Express</title>
     <script src="https://apis.google.com/js/api.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
 
     <style>
-        /* ================= CSS MOBILE CORRIGÉ ================= */
         :root {
-            --bg-primary: #12141c;
-            --bg-secondary: #1b1e2b;
-            --bg-tertiary: #2a2e3f;
+            --bg-0: #090b12;
+            --bg-1: #0f1220;
+            --bg-2: #161b2e;
+            --bg-3: #1e2540;
             --accent: #7c5cff;
-            --text-primary: #e2e8f0;
-            --text-muted: #94a3b8;
-            --border: #334155;
-            --danger: #ef4444;
-            --nav-height: 70px; /* Menu plus haut pour être sûr */
+            --accent-dim: rgba(124,92,255,0.15);
+            --accent-border: rgba(124,92,255,0.35);
+            --cyan: #22d3ee;
+            --cyan-dim: rgba(34,211,238,0.12);
+            --green: #10b981;
+            --green-dim: rgba(16,185,129,0.15);
+            --orange: #f97316;
+            --red: #ef4444;
+            --text-1: #e2e8f0;
+            --text-2: #94a3b8;
+            --text-3: #4b5a6e;
+            --border: rgba(148,163,184,0.1);
+            --border-bright: rgba(148,163,184,0.2);
+            --nav-h: 64px;
+            --header-h: 54px;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-        
-        body { 
-            background-color: var(--bg-primary); 
-            color: var(--text-primary); 
-            font-family: -apple-system, system-ui, sans-serif;
-            height: 100vh;
-            /* Support moderne pour hauteur mobile réelle */
-            height: 100dvh; 
-            display: flex; 
-            flex-direction: column;
+
+        body {
+            background: var(--bg-0);
+            color: var(--text-1);
+            font-family: 'Space Grotesk', sans-serif;
+            height: 100vh; height: 100dvh;
+            display: flex; flex-direction: column;
             overflow: hidden;
         }
 
-        /* HEADER */
-        .app-header {
-            height: 50px; 
-            background: var(--bg-secondary); 
+        /* ── NOISE OVERLAY ── */
+        body::before {
+            content: '';
+            position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+            opacity: 0.5;
+        }
+
+        /* ── HEADER ── */
+        .header {
+            height: var(--header-h);
+            background: rgba(15,18,32,0.95);
             border-bottom: 1px solid var(--border);
-            display: flex; align-items: center; justify-content: space-between; padding: 0 15px;
-            flex-shrink: 0; z-index: 10;
-        }
-        .app-header h1 { font-size: 1rem; color: var(--accent); font-weight: 700; }
-
-        /* CONTENU PRINCIPAL */
-        .main-content { 
-            flex: 1; position: relative; overflow: hidden; 
+            backdrop-filter: blur(20px);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 16px;
+            flex-shrink: 0; z-index: 10; position: relative;
         }
 
-        section { 
-            position: absolute; inset: 0; bottom: var(--nav-height); /* Laisse la place au menu */
-            padding: 15px; overflow-y: auto; display: none; flex-direction: column;
-        }
-        section.active { display: flex; }
+        .header-left { display: flex; align-items: center; gap: 10px; }
 
-        /* BARRE D'OUTILS (Boutons rétablis) */
-        .quick-actions { 
-            display: flex; gap: 8px; margin-bottom: 10px; overflow-x: auto; padding-bottom: 5px;
-        }
-        .btn-action { 
-            background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); 
-            padding: 10px 14px; border-radius: 8px; font-size: 0.9rem; flex-shrink: 0;
-        }
-        .btn-danger { color: var(--danger); border-color: rgba(239, 68, 68, 0.3); }
-
-        /* ZONE DE TEXTE */
-        textarea { 
-            flex: 1; background: var(--bg-secondary); border: 1px solid var(--border); color: white; 
-            padding: 15px; border-radius: 8px; resize: none; font-size: 16px; outline: none; width: 100%;
-        }
-        textarea:focus { border-color: var(--accent); }
-
-        /* BAS DE PAGE ÉDITEUR */
-        .editor-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
-        .number-input { display: flex; background: var(--bg-tertiary); border-radius: 8px; align-items: center; }
-        .number-input button { width: 35px; height: 35px; background: none; border: none; color: white; font-size: 1.2rem; }
-        .number-input span { width: 25px; text-align: center; }
-
-        .btn-validate { 
-            background: var(--accent); color: white; border: none; padding: 12px 20px; 
-            border-radius: 30px; font-weight: 600; display: flex; align-items: center; gap: 8px;
+        .header-logo {
+            width: 30px; height: 30px;
+            background: linear-gradient(135deg, var(--accent), var(--cyan));
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem; font-weight: 700; color: white;
         }
 
-        /* MENU DU BAS (Fixé) */
-        .mobile-nav {
-            position: fixed; bottom: 0; left: 0; width: 100%;
-            height: var(--nav-height);
-            background: var(--bg-secondary);
-            border-top: 1px solid var(--border);
-            display: flex; justify-content: space-around; align-items: center;
+        .header-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem; font-weight: 600;
+            color: var(--text-1);
+            letter-spacing: 0.05em;
+        }
+        .header-title span { color: var(--accent); }
+
+        .header-right { display: flex; align-items: center; gap: 6px; }
+
+        .icon-btn {
+            background: none; border: 1px solid var(--border); color: var(--text-2);
+            width: 34px; height: 34px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s; font-size: 1rem;
+        }
+        .icon-btn:hover { border-color: var(--accent-border); color: var(--accent); background: var(--accent-dim); }
+
+        /* Drive status pill */
+        .drive-pill {
+            display: flex; align-items: center; gap: 6px;
+            padding: 5px 10px; border-radius: 20px;
+            border: 1px solid var(--border);
+            font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em;
+            cursor: pointer; transition: all 0.25s;
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-2);
+        }
+        .drive-pill .dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--text-3); transition: background 0.3s;
+        }
+        .drive-pill.connected { border-color: var(--green-dim); color: var(--green); }
+        .drive-pill.connected .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .drive-pill.connecting { border-color: rgba(249,115,22,0.3); color: var(--orange); }
+        .drive-pill.connecting .dot { background: var(--orange); animation: blink 1s infinite; }
+
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+        /* ── MAIN ── */
+        .main {
+            flex: 1; overflow: hidden; position: relative; z-index: 1;
+            display: flex; flex-direction: column;
+            padding: 12px 14px 10px;
+            gap: 10px;
+        }
+
+        /* ── INPUT ZONE ── */
+        .input-section {
+            flex: 1; display: flex; flex-direction: column;
+            background: var(--bg-1);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+            transition: border-color 0.25s, box-shadow 0.25s;
+        }
+        .input-section:focus-within {
+            border-color: var(--accent-border);
+            box-shadow: 0 0 0 3px var(--accent-dim), 0 4px 24px rgba(124,92,255,0.1);
+        }
+
+        .input-header {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+
+        .input-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem; font-weight: 600;
+            color: var(--text-3); letter-spacing: 0.08em; text-transform: uppercase;
+        }
+
+        .lb-control {
+            display: flex; align-items: center; gap: 0;
+            background: var(--bg-2); border: 1px solid var(--border);
+            border-radius: 8px; overflow: hidden;
+        }
+        .lb-control button {
+            background: none; border: none; color: var(--text-2);
+            width: 26px; height: 26px; cursor: pointer;
+            font-size: 0.9rem; transition: all 0.15s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .lb-control button:hover { color: var(--accent); background: var(--accent-dim); }
+        .lb-control span {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem; color: var(--text-2);
+            min-width: 22px; text-align: center;
+        }
+
+        textarea {
+            flex: 1; background: transparent; border: none; color: var(--text-1);
+            padding: 14px; resize: none; outline: none;
+            font-size: 0.88rem; line-height: 1.65;
+            font-family: 'Space Grotesk', sans-serif;
+            width: 100%;
+        }
+        textarea::placeholder { color: var(--text-3); }
+
+        .char-count {
+            padding: 4px 12px 6px;
+            text-align: right;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem; color: var(--text-3);
+        }
+
+        /* ── ACTION BUTTON ── */
+        .btn-main {
+            width: 100%;
+            background: linear-gradient(135deg, var(--accent) 0%, #5b3fd4 100%);
+            color: white; border: none; border-radius: 14px;
+            padding: 15px 20px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.95rem; font-weight: 600;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            cursor: pointer;
+            transition: all 0.25s;
+            box-shadow: 0 4px 20px rgba(124,92,255,0.3);
+            flex-shrink: 0;
+            position: relative; overflow: hidden;
+        }
+        .btn-main:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 28px rgba(124,92,255,0.45);
+        }
+        .btn-main:active { transform: translateY(1px); box-shadow: 0 2px 10px rgba(124,92,255,0.2); }
+        .btn-main.loading {
+            background: linear-gradient(135deg, #3d2d7c, #2a1f54);
+            pointer-events: none;
+        }
+        .btn-main.success {
+            background: linear-gradient(135deg, var(--green), #059669);
+            box-shadow: 0 4px 20px rgba(16,185,129,0.3);
+        }
+        .btn-main.error {
+            background: linear-gradient(135deg, var(--red), #b91c1c);
+            box-shadow: 0 4px 20px rgba(239,68,68,0.3);
+        }
+
+        .btn-main::after {
+            content: '';
+            position: absolute; inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+            opacity: 0; transition: opacity 0.2s;
+        }
+        .btn-main:hover::after { opacity: 1; }
+
+        .btn-icon { font-size: 1.1rem; }
+        .spinner {
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: none;
+        }
+        .btn-main.loading .spinner { display: block; }
+        .btn-main.loading .btn-icon,
+        .btn-main.loading .btn-label { display: none; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── LAST LOG PREVIEW ── */
+        .preview-section {
+            background: var(--bg-1);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+            flex-shrink: 0;
+            max-height: 130px;
+        }
+
+        .preview-header {
+            padding: 7px 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+
+        .preview-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.66rem; font-weight: 600;
+            color: var(--text-3); letter-spacing: 0.08em; text-transform: uppercase;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .preview-label .tag {
+            background: var(--cyan-dim); color: var(--cyan);
+            border: 1px solid rgba(34,211,238,0.2);
+            padding: 1px 6px; border-radius: 4px;
+            font-size: 0.62rem;
+        }
+
+        .preview-date {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem; color: var(--text-3);
+        }
+
+        .preview-body {
+            padding: 8px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem; line-height: 1.6;
+            color: var(--text-2);
+            overflow: hidden;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .preview-empty { color: var(--text-3); font-style: italic; }
+
+        /* ── SETTINGS MODAL ── */
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(8px);
             z-index: 1000;
+            display: flex; align-items: flex-end;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.25s;
+        }
+        .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+        .modal {
+            background: var(--bg-2);
+            border: 1px solid var(--border-bright);
+            border-radius: 20px 20px 0 0;
+            width: 100%; padding: 20px;
+            transform: translateY(20px);
+            transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+            max-height: 80vh; overflow-y: auto;
+        }
+        .modal-overlay.open .modal { transform: translateY(0); }
+
+        .modal-handle {
+            width: 36px; height: 4px; border-radius: 2px;
+            background: var(--border-bright);
+            margin: 0 auto 18px;
+        }
+
+        .modal-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem; font-weight: 700;
+            color: var(--text-1); margin-bottom: 16px;
+            letter-spacing: 0.05em;
+        }
+
+        .field-group { margin-bottom: 14px; }
+        .field-label {
+            font-size: 0.72rem; color: var(--text-2);
+            margin-bottom: 5px; display: block;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.04em;
+        }
+        .field-input {
+            width: 100%; padding: 10px 12px;
+            background: var(--bg-1); border: 1px solid var(--border);
+            color: var(--text-1); border-radius: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem; outline: none;
+            transition: border-color 0.2s;
+        }
+        .field-input:focus { border-color: var(--accent-border); }
+
+        .modal-filename {
+            background: var(--bg-3); border: 1px solid var(--accent-border);
+            border-radius: 10px; padding: 10px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem; color: var(--accent);
+            margin-bottom: 14px; word-break: break-all;
+        }
+
+        .modal-actions {
+            display: flex; gap: 8px; margin-top: 18px;
+        }
+        .btn-cancel {
+            flex: 1; padding: 12px;
+            background: none; border: 1px solid var(--border);
+            color: var(--text-2); border-radius: 10px;
+            font-family: 'Space Grotesk', sans-serif; font-size: 0.85rem;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn-cancel:hover { border-color: var(--border-bright); color: var(--text-1); }
+        .btn-save {
+            flex: 2; padding: 12px;
+            background: var(--accent); border: none;
+            color: white; border-radius: 10px;
+            font-family: 'Space Grotesk', sans-serif; font-size: 0.85rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn-save:hover { background: #6a4de0; }
+
+        /* ── TOAST ── */
+        .toast {
+            position: fixed; bottom: calc(var(--nav-h) + 12px); left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: var(--bg-3); color: var(--text-1);
+            border: 1px solid var(--border-bright);
+            padding: 9px 18px; border-radius: 20px;
+            font-size: 0.82rem; font-weight: 500;
+            z-index: 2000; opacity: 0;
+            transition: all 0.25s cubic-bezier(0.34,1.56,0.64,1);
+            white-space: nowrap; pointer-events: none;
+            backdrop-filter: blur(10px);
+        }
+        .toast.show {
+            opacity: 1; transform: translateX(-50%) translateY(0);
+        }
+        .toast.ok { border-color: rgba(16,185,129,0.4); color: var(--green); }
+        .toast.err { border-color: rgba(239,68,68,0.4); color: var(--red); }
+
+        /* ── BOTTOM NAV ── */
+        .bottom-bar {
+            height: var(--nav-h);
+            background: rgba(15,18,32,0.97);
+            border-top: 1px solid var(--border);
+            backdrop-filter: blur(20px);
+            display: flex; align-items: center;
+            padding: 0 14px; gap: 8px;
+            flex-shrink: 0; z-index: 10; position: relative;
             padding-bottom: env(safe-area-inset-bottom);
         }
-        .nav-item {
-            background: none; border: none; color: var(--text-muted);
-            display: flex; flex-direction: column; align-items: center; gap: 4px;
-            width: 100%; height: 100%; justify-content: center;
+
+        .btn-secondary {
+            flex: 1; padding: 8px 4px;
+            background: var(--bg-2); border: 1px solid var(--border);
+            color: var(--text-2); border-radius: 10px;
+            font-family: 'Space Grotesk', sans-serif; font-size: 0.72rem;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+            cursor: pointer; transition: all 0.2s; min-width: 0;
         }
-        .nav-item.active { color: var(--accent); }
-        
-        /* Boutons Fichiers */
-        .big-buttons-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
-        .btn-big { 
-            background: var(--bg-tertiary); border: 1px solid var(--border); color: white;
-            padding: 20px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 10px;
+        .btn-secondary:hover { border-color: var(--border-bright); color: var(--text-1); }
+        .btn-secondary .s-icon { font-size: 1.1rem; }
+        .btn-secondary .s-label { font-size: 0.65rem; white-space: nowrap; }
+
+        /* ── ACTION BAR sticky ── */
+        .action-bar-wrap {
+            background: rgba(15,18,32,0.97);
+            border-top: 1px solid var(--border);
+            backdrop-filter: blur(20px);
+            flex-shrink: 0; z-index: 11;
+            padding: 10px 14px;
         }
 
-        /* Utils */
-        .hidden { display: none !important; }
-        .toast { 
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-150%);
-            background: #333; color: white; padding: 10px 20px; border-radius: 20px; 
-            transition: 0.3s; opacity: 0; z-index: 2000; border: 1px solid var(--accent);
+        /* ── RESPONSIVE PC ── */
+        @media (min-width: 600px) {
+            .main { max-width: 680px; margin: 0 auto; width: 100%; padding: 16px 20px 12px; }
+            .preview-section { max-height: 160px; }
+            .action-bar-wrap { display: flex; justify-content: center; }
+            .action-bar-wrap .btn-main { max-width: 680px; }
         }
-        .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-        
-        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 3000; display: flex; align-items: center; justify-content: center; }
-        .modal-content { background: var(--bg-secondary); width: 90%; padding: 20px; border-radius: 12px; }
-        .form-group input { width: 100%; padding: 12px; background: var(--bg-primary); border: 1px solid var(--border); color: white; border-radius: 6px; margin-top: 5px; margin-bottom: 15px; }
     </style>
 </head>
 <body>
 
-    <header class="app-header">
-        <h1>Bloc-Notes <span style="font-size:0.7em; opacity:0.7">v3.0</span></h1>
-        <button id="btn-settings" style="background:none; border:none; color:white; padding:10px;">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.32 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </button>
+    <!-- HEADER -->
+    <header class="header">
+        <div class="header-left">
+            <div class="header-logo">LOG</div>
+            <span class="header-title">Logs <span>Express</span></span>
+        </div>
+        <div class="header-right">
+            <button class="drive-pill" id="drive-pill" title="Drive">
+                <span class="dot"></span>
+                <span id="drive-pill-text">Drive</span>
+            </button>
+            <button class="icon-btn" id="btn-settings" title="Paramètres">⚙️</button>
+        </div>
     </header>
 
-    <div class="main-content">
-        <section id="tab-editor" class="active">
-            <div class="quick-actions">
-                <button id="btn-cut" class="btn-action">Couper</button>
-                <button id="btn-copy" class="btn-action">Copier</button>
-                <button id="btn-paste" class="btn-action">Coller</button>
-                <button id="btn-clear" class="btn-action btn-danger">Effacer tout</button>
-            </div>
-            
-            <textarea id="text-input" placeholder="Tapez ici..."></textarea>
-            
-            <div class="editor-footer">
-                <div class="number-input">
-                    <button id="btn-lb-minus">-</button>
-                    <span id="lb-display">2</span>
-                    <button id="btn-lb-plus">+</button>
+    <!-- MAIN -->
+    <main class="main">
+
+        <!-- Zone de saisie -->
+        <div class="input-section" id="input-section">
+            <div class="input-header">
+                <span class="input-label">Nouvelle entrée</span>
+                <div class="lb-control">
+                    <button id="lb-minus" title="Moins de sauts">−</button>
+                    <span id="lb-val">2</span>
+                    <button id="lb-plus" title="Plus de sauts">+</button>
                 </div>
-                <button id="btn-validate" class="btn-validate">
-                    Insérer (Haut) <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
-                </button>
             </div>
-        </section>
+            <textarea id="text-input" placeholder="Colle ta synthèse Gemini ici…" spellcheck="false"></textarea>
+            <div class="char-count" id="char-count">0 car.</div>
+        </div>
 
-        <section id="tab-files">
-            <input type="text" id="file-name" value="fichier.txt" style="width:100%; padding:15px; background:var(--bg-secondary); border:1px solid var(--border); color:white; border-radius:8px; margin-bottom:20px;">
-            
-            <div class="big-buttons-grid">
-                <button id="btn-local-open" class="btn-big"><span>Ouvrir Local</span></button>
-                <button id="btn-local-save" class="btn-big"><span>Sauver Local</span></button>
+        <!-- Aperçu dernier log -->
+        <div class="preview-section" id="preview-section">
+            <div class="preview-header">
+                <span class="preview-label">
+                    Dernier log
+                    <span class="tag" id="preview-tag">—</span>
+                </span>
+                <span class="preview-date" id="preview-date">—</span>
             </div>
-            <input type="file" id="file-input-hidden" style="display:none" accept=".txt">
-
-            <div style="border-top:1px solid var(--border); padding-top:20px; margin-top:10px;">
-                <button id="btn-drive-connect" style="width:100%; padding:15px; background:#4285F4; color:white; border:none; border-radius:8px; font-weight:bold; margin-bottom:15px;">Connexion Drive</button>
-                <div id="drive-controls" class="big-buttons-grid hidden">
-                    <button id="btn-drive-open" class="btn-big" style="border-color:#4285F4"><span>Ouvrir Drive</span></button>
-                    <button id="btn-drive-save" class="btn-big" style="border-color:#4285F4"><span>Sauver Drive</span></button>
-                </div>
-                <div style="text-align:center; color:var(--text-muted); font-size:0.8rem;" id="status-text">Déconnecté</div>
-            </div>
-
-            <div style="margin-top:20px;">
-                <pre id="file-content" style="background:var(--bg-secondary); padding:10px; border-radius:8px; max-height:150px; overflow:auto; font-size:0.8rem; color:#888;"></pre>
-                <button id="btn-clear-file" style="width:100%; padding:10px; margin-top:10px; background:none; border:1px solid var(--danger); color:var(--danger); border-radius:8px;">Vider le fichier</button>
-            </div>
-        </section>
-
-        <div id="settings-modal" class="modal hidden">
-            <div class="modal-content">
-                <h2 style="margin-bottom:20px; color:white;">Configuration</h2>
-                <div class="form-group"><label style="color:#aaa; font-size:0.8rem">Client ID</label><input type="text" id="input-client-id"></div>
-                <div class="form-group"><label style="color:#aaa; font-size:0.8rem">API Key</label><input type="text" id="input-api-key"></div>
-                <div class="form-group"><label style="color:#aaa; font-size:0.8rem">Folder ID</label><input type="text" id="input-folder-id"></div>
-                <div style="display:flex; justify-content:space-between; margin-top:20px;">
-                    <button id="btn-close-settings" style="padding:10px; background:none; border:none; color:#aaa;">Fermer</button>
-                    <button id="btn-save-settings" style="padding:10px 20px; background:var(--accent); border:none; color:white; border-radius:6px;">Sauvegarder</button>
-                </div>
+            <div class="preview-body" id="preview-body">
+                <span class="preview-empty">Aucun contenu chargé</span>
             </div>
         </div>
-    </div>
-    <nav class="mobile-nav">
-        <button class="nav-item active" data-target="tab-editor">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            <span style="font-size:0.7rem">Éditeur</span>
+
+    </main>
+
+    <!-- BOUTON PRINCIPAL — sticky, résiste au clavier mobile -->
+    <div class="action-bar-wrap">
+        <button class="btn-main" id="btn-main" style="width:100%;">
+            <span class="btn-icon">⬆️</span>
+            <span class="btn-label">Insérer & Sauver sur Drive</span>
+            <div class="spinner"></div>
         </button>
-        <button class="nav-item" data-target="tab-files">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-            <span style="font-size:0.7rem">Fichiers</span>
+    </div>
+
+    <!-- BOTTOM BAR -->
+    <nav class="bottom-bar">
+        <button class="btn-secondary" id="btn-paste-clipboard">
+            <span class="s-icon">📋</span><span class="s-label">Coller</span>
+        </button>
+        <button class="btn-secondary" id="btn-load-drive">
+            <span class="s-icon">📂</span><span class="s-label">Charger Drive</span>
+        </button>
+        <button class="btn-secondary" id="btn-save-local">
+            <span class="s-icon">💾</span><span class="s-label">Sauver local</span>
+        </button>
+        <button class="btn-secondary" id="btn-clear">
+            <span class="s-icon">🗑️</span><span class="s-label">Vider</span>
         </button>
     </nav>
 
-    <div id="toast" class="toast"></div>
+    <!-- SETTINGS MODAL -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal">
+            <div class="modal-handle"></div>
+            <div class="modal-title">⚙ Configuration Drive</div>
+
+            <div class="field-group">
+                <label class="field-label">Client ID OAuth</label>
+                <input class="field-input" type="text" id="input-client-id" placeholder="xxx.apps.googleusercontent.com">
+            </div>
+            <div class="field-group">
+                <label class="field-label">API Key</label>
+                <input class="field-input" type="password" id="input-api-key" placeholder="AIza...">
+            </div>
+            <div class="field-group">
+                <label class="field-label">Folder ID Drive (optionnel)</label>
+                <input class="field-input" type="text" id="input-folder-id" placeholder="1BxiMVs0XRA...">
+            </div>
+            <div class="field-group">
+                <label class="field-label">Nom du fichier cible</label>
+                <div class="modal-filename" id="filename-display">Gemini_memory.txt</div>
+                <input class="field-input" type="text" id="input-filename" placeholder="Gemini_memory.txt" value="Gemini_memory.txt">
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-cancel" id="btn-close-modal">Fermer</button>
+                <button class="btn-save" id="btn-save-settings">Sauvegarder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div class="toast" id="toast"></div>
 
     <script>
-        (function () {
-            'use strict';
-            let state = { text: '', fileName: 'fichier.txt', lineBreaks: 2, driveFileId: null, localFileHandle: null };
-            let driveConfig = { clientId: '', apiKey: '', folderId: '' };
-            let driveSession = { tokenClient: null, accessToken: null, isConnected: false };
+    (function () {
+        'use strict';
 
-            // --- NAVIGATION ---
-            const tabs = document.querySelectorAll('.nav-item');
-            const sections = document.querySelectorAll('section');
-            tabs.forEach(tab => tab.addEventListener('click', () => {
-                tabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                sections.forEach(s => s.classList.remove('active'));
-                document.getElementById(tab.dataset.target).classList.add('active');
+        // ── STATE ──
+        let config = { clientId: '', apiKey: '', folderId: '', fileName: 'Gemini_memory.txt' };
+        let drive = { tokenClient: null, accessToken: null, connected: false, fileId: null };
+        let state = { text: '', lineBreaks: 2 };
+
+        // ── ELEMENTS ──
+        const $ = id => document.getElementById(id);
+        const textarea   = $('text-input');
+        const charCount  = $('char-count');
+        const lbVal      = $('lb-val');
+        const btnMain    = $('btn-main');
+        const btnPaste   = $('btn-paste-clipboard');
+        const btnLoad    = $('btn-load-drive');
+        const btnClear   = $('btn-clear');
+        const btnSettings= $('btn-settings');
+        const btnCloseM  = $('btn-close-modal');
+        const btnSaveSet = $('btn-save-settings');
+        const drivePill  = $('drive-pill');
+        const pillText   = $('drive-pill-text');
+        const overlay    = $('modal-overlay');
+        const toastEl    = $('toast');
+        const previewBody= $('preview-body');
+        const previewTag = $('preview-tag');
+        const previewDate= $('preview-date');
+        const filenameDsp= $('filename-display');
+
+        // ── INIT ──
+        init();
+        function init() {
+            loadConfig();
+            loadState();
+            renderLB();
+            renderPreview();
+            bindEvents();
+            if (config.clientId && config.apiKey) {
+                setTimeout(silentConnect, 800);
+            }
+        }
+
+        // ── PERSISTENCE ──
+        function loadConfig() {
+            try {
+                const s = localStorage.getItem('log_config');
+                if (s) config = { ...config, ...JSON.parse(s) };
+                $('input-client-id').value = config.clientId;
+                $('input-api-key').value   = config.apiKey;
+                $('input-folder-id').value = config.folderId;
+                $('input-filename').value  = config.fileName;
+                filenameDsp.textContent    = config.fileName;
+            } catch(e) {}
+        }
+        function saveConfig() {
+            localStorage.setItem('log_config', JSON.stringify(config));
+        }
+        function loadState() {
+            try {
+                const s = localStorage.getItem('log_state');
+                if (s) {
+                    const p = JSON.parse(s);
+                    state.text        = p.text        || '';
+                    state.lineBreaks  = p.lineBreaks  ?? 2;
+                    drive.fileId      = p.driveFileId || null;
+                    if (p.lastContent) state.lastContent = p.lastContent;
+                }
+            } catch(e) {}
+        }
+        function saveState() {
+            localStorage.setItem('log_state', JSON.stringify({
+                text: state.text,
+                lineBreaks: state.lineBreaks,
+                driveFileId: drive.fileId,
+                lastContent: state.lastContent || ''
             }));
+        }
 
-            // --- ELEMENTS ---
-            const el = {
-                input: document.getElementById('text-input'),
-                content: document.getElementById('file-content'),
-                fileName: document.getElementById('file-name'),
-                lbDisplay: document.getElementById('lb-display'),
-                btnDriveConnect: document.getElementById('btn-drive-connect'),
-                driveControls: document.getElementById('drive-controls'),
-                toast: document.getElementById('toast'),
-                modal: document.getElementById('settings-modal'),
-                inputClientId: document.getElementById('input-client-id'),
-                inputApiKey: document.getElementById('input-api-key'),
-                inputFolderId: document.getElementById('input-folder-id')
-            };
+        // ── RENDER ──
+        function renderLB() { lbVal.textContent = state.lineBreaks; }
 
-            init();
-
-            function init() {
-                loadSettings();
-                loadState();
-                bindEvents();
-                render();
+        function renderPreview() {
+            if (!state.lastContent) {
+                previewBody.innerHTML = '<span class="preview-empty">Aucun contenu chargé</span>';
+                previewTag.textContent = '—';
+                previewDate.textContent = '—';
+                return;
             }
+            // Extraire le premier bloc ### LOG
+            const blocks = state.lastContent.split(/\n(?=###\s)/);
+            const first  = blocks.find(b => b.trim().startsWith('###')) || blocks[0];
+            if (!first) return;
 
-            // --- EVENTS (CORRECTION BOUTONS) ---
-            function bindEvents() {
-                // Boutons d'édition (COUPER, COPIER, COLLER, EFFACER)
-                document.getElementById('btn-copy').addEventListener('click', () => { 
-                    navigator.clipboard.writeText(el.input.value); 
-                    showToast('Copié !'); 
-                });
-                
-                document.getElementById('btn-cut').addEventListener('click', () => { 
-                    navigator.clipboard.writeText(el.input.value); 
-                    el.input.value = ''; 
-                    showToast('Coupé !'); 
-                });
+            // Extraire tag section et horodatage
+            const sectionMatch = first.match(/Section cible\s*:\*\*\s*([^\n]+)/i);
+            const dateMatch    = first.match(/Horodatage\s*:\*\*\s*([^\n]+)/i)
+                              || first.match(/Horodatage\s*:\s*([^\n]+)/i);
 
-                document.getElementById('btn-paste').addEventListener('click', async () => {
-                    try {
-                        const text = await navigator.clipboard.readText();
-                        // Insère le texte à la position du curseur
-                        const start = el.input.selectionStart;
-                        const end = el.input.selectionEnd;
-                        const val = el.input.value;
-                        el.input.value = val.substring(0, start) + text + val.substring(end);
-                        el.input.selectionStart = el.input.selectionEnd = start + text.length;
-                        showToast('Collé !');
-                    } catch (err) {
-                        showToast('Erreur permission ou presse-papier vide');
-                    }
-                });
+            previewTag.textContent  = sectionMatch ? sectionMatch[1].replace(/[#*]/g,'').trim() : '—';
+            previewDate.textContent = dateMatch     ? dateMatch[1].replace(/[*]/g,'').trim()     : '—';
 
-                document.getElementById('btn-clear').addEventListener('click', () => {
-                    if(confirm('Tout effacer ?')) el.input.value = ''; 
-                });
+            // Afficher les ~5 premières lignes non vides
+            const lines = first.split('\n').filter(l => l.trim()).slice(0, 6);
+            previewBody.textContent = lines.join('\n');
+        }
 
-                document.getElementById('btn-validate').addEventListener('click', insertText);
+        // ── EVENTS ──
+        function bindEvents() {
+            textarea.addEventListener('input', () => {
+                charCount.textContent = textarea.value.length + ' car.';
+            });
 
-                // Settings
-                document.getElementById('btn-settings').addEventListener('click', () => el.modal.classList.remove('hidden'));
-                document.getElementById('btn-close-settings').addEventListener('click', () => el.modal.classList.add('hidden'));
-                document.getElementById('btn-save-settings').addEventListener('click', () => {
-                    driveConfig.clientId = el.inputClientId.value.trim();
-                    driveConfig.apiKey = el.inputApiKey.value.trim();
-                    driveConfig.folderId = el.inputFolderId.value.trim();
-                    localStorage.setItem('bn_settings', JSON.stringify(driveConfig));
-                    el.modal.classList.add('hidden');
-                    state.driveFileId = null; 
-                    showToast('Config sauvegardée');
-                });
+            $('lb-minus').addEventListener('click', () => {
+                state.lineBreaks = Math.max(0, state.lineBreaks - 1);
+                renderLB(); saveState();
+            });
+            $('lb-plus').addEventListener('click', () => {
+                state.lineBreaks = Math.min(10, state.lineBreaks + 1);
+                renderLB(); saveState();
+            });
 
-                // File System Local
-                document.getElementById('btn-local-open').addEventListener('click', openLocalFile);
-                document.getElementById('btn-local-save').addEventListener('click', saveLocalDisk);
-                document.getElementById('file-input-hidden').addEventListener('change', (e) => {
-                    const file = e.target.files[0];
-                    if(!file) return;
-                    const r = new FileReader();
-                    r.onload = (ev) => { state.text = ev.target.result; state.fileName = file.name; render(); saveState(); tabs[0].click(); };
-                    r.readAsText(file);
-                });
+            btnMain.addEventListener('click', handleInsertAndSave);
+            btnPaste.addEventListener('click', handlePaste);
+            btnLoad.addEventListener('click', handleLoadDrive);
+            $('btn-save-local').addEventListener('click', handleSaveLocal);
+            btnClear.addEventListener('click', () => { textarea.value = ''; charCount.textContent = '0 car.'; });
+            drivePill.addEventListener('click', handleDriveConnect);
 
-                // Drive
-                el.btnDriveConnect.addEventListener('click', initDriveConnection);
-                document.getElementById('btn-drive-open').addEventListener('click', openFromDrive);
-                document.getElementById('btn-drive-save').addEventListener('click', saveToDrive);
-                
-                // Utils
-                document.getElementById('btn-clear-file').addEventListener('click', () => { if(confirm('Vider fichier ?')) { state.text=''; render(); saveState(); } });
-                document.getElementById('btn-lb-minus').addEventListener('click', () => { state.lineBreaks = Math.max(0, state.lineBreaks-1); render(); saveState(); });
-                document.getElementById('btn-lb-plus').addEventListener('click', () => { state.lineBreaks = Math.min(10, state.lineBreaks+1); render(); saveState(); });
-                el.fileName.addEventListener('input', () => saveState());
+            btnSettings.addEventListener('click', () => overlay.classList.add('open'));
+            btnCloseM.addEventListener('click',   () => overlay.classList.remove('open'));
+            overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
+
+            $('input-filename').addEventListener('input', () => {
+                filenameDsp.textContent = $('input-filename').value || 'Gemini_memory.txt';
+            });
+
+            btnSaveSet.addEventListener('click', () => {
+                config.clientId  = $('input-client-id').value.trim();
+                config.apiKey    = $('input-api-key').value.trim();
+                config.folderId  = $('input-folder-id').value.trim();
+                config.fileName  = $('input-filename').value.trim() || 'Gemini_memory.txt';
+                saveConfig();
+                drive.connected = false; drive.accessToken = null; drive.fileId = null;
+                updateDrivePill();
+                overlay.classList.remove('open');
+                toast('Config sauvegardée', 'ok');
+            });
+        }
+
+        // ── DRIVE STATUS ──
+        function updateDrivePill(status) {
+            drivePill.className = 'drive-pill';
+            if (status === 'connecting') {
+                drivePill.classList.add('connecting');
+                pillText.textContent = '...';
+            } else if (drive.connected) {
+                drivePill.classList.add('connected');
+                pillText.textContent = 'Drive ✓';
+            } else {
+                pillText.textContent = 'Drive';
             }
+        }
 
-            // --- FONCTIONS ---
-            function loadState() {
+        // ── DRIVE CONNECT ──
+        function silentConnect() {
+            if (!config.clientId || !config.apiKey) return;
+            updateDrivePill('connecting');
+            gapi.load('client', async () => {
                 try {
-                    const saved = localStorage.getItem('bn_state');
-                    if (saved) {
-                        const parsed = JSON.parse(saved);
-                        state.text = parsed.text || '';
-                        state.fileName = parsed.fileName || 'fichier.txt';
-                        state.lineBreaks = parsed.lineBreaks ?? 2;
-                        state.driveFileId = parsed.driveFileId;
-                    }
-                } catch(e) {}
-            }
-            function saveState() {
-                localStorage.setItem('bn_state', JSON.stringify({
-                    text: state.text, fileName: el.fileName.value, lineBreaks: state.lineBreaks, driveFileId: state.driveFileId
-                }));
-            }
-            function loadSettings() {
-                const saved = localStorage.getItem('bn_settings');
-                if (saved) {
-                    driveConfig = { ...driveConfig, ...JSON.parse(saved) };
-                    el.inputClientId.value = driveConfig.clientId;
-                    el.inputApiKey.value = driveConfig.apiKey;
-                    el.inputFolderId.value = driveConfig.folderId;
-                }
-            }
-            function render() {
-                el.content.textContent = state.text || '(Vide)';
-                el.lbDisplay.textContent = state.lineBreaks;
-                el.fileName.value = state.fileName;
-            }
-            function insertText() {
-                const newTxt = el.input.value.trim();
-                if (!newTxt) return;
-                state.text = newTxt + '\n'.repeat(state.lineBreaks) + state.text;
-                el.input.value = '';
-                render(); saveState();
-                showToast('Inséré en haut');
-            }
-            function showToast(msg) {
-                el.toast.textContent = msg;
-                el.toast.classList.add('show');
-                setTimeout(() => el.toast.classList.remove('show'), 2000);
-            }
-
-            // --- DRIVE & LOCAL ---
-            async function openLocalFile() {
-                if ('showOpenFilePicker' in window) {
-                    try {
-                        const [handle] = await showOpenFilePicker({ types: [{ accept: { 'text/plain': ['.txt'] } }] });
-                        state.localFileHandle = handle;
-                        const file = await handle.getFile();
-                        state.text = await file.text();
-                        state.fileName = file.name;
-                        render(); saveState(); tabs[0].click();
-                    } catch(e) {}
-                } else { document.getElementById('file-input-hidden').click(); }
-            }
-            async function saveLocalDisk() {
-                if (state.localFileHandle) {
-                    try {
-                        const w = await state.localFileHandle.createWritable();
-                        await w.write(state.text); await w.close(); showToast('Sauvegardé !'); return;
-                    } catch(e) { state.localFileHandle = null; }
-                }
-                const blob = new Blob([state.text], {type:'text/plain'});
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob); a.download = el.fileName.value; a.click();
-            }
-
-            function initDriveConnection() {
-                if(!driveConfig.clientId || !driveConfig.apiKey) return showToast('Config manquante !');
-                gapi.load('client', async () => {
-                    await gapi.client.init({ apiKey: driveConfig.apiKey, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] });
-                    driveSession.tokenClient = google.accounts.oauth2.initTokenClient({
-                        client_id: driveConfig.clientId, scope: 'https://www.googleapis.com/auth/drive.file',
+                    await gapi.client.init({
+                        apiKey: config.apiKey,
+                        discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']
+                    });
+                    drive.tokenClient = google.accounts.oauth2.initTokenClient({
+                        client_id: config.clientId,
+                        scope: 'https://www.googleapis.com/auth/drive.file',
                         callback: (resp) => {
-                            if(resp.error) return;
-                            driveSession.accessToken = resp.access_token;
-                            driveSession.isConnected = true;
-                            el.btnDriveConnect.classList.add('hidden');
-                            el.driveControls.classList.remove('hidden');
-                            document.getElementById('status-text').textContent = 'Connecté';
-                            document.getElementById('status-text').style.color = '#10b981';
+                            if (resp.error) { updateDrivePill(); return; }
+                            drive.accessToken = resp.access_token;
+                            drive.connected   = true;
+                            updateDrivePill();
+                            toast('Drive connecté ✓', 'ok');
                         }
                     });
-                    driveSession.tokenClient.requestAccessToken({prompt: ''});
+                    // Sur file:// le prompt silencieux échoue — on demande toujours le consentement
+                    const isFile = location.protocol === 'file:';
+                    drive.tokenClient.requestAccessToken({ prompt: isFile ? 'consent' : '' });
+                } catch(e) { updateDrivePill(); toast('Erreur init Drive', 'err'); }
+            });
+        }
+
+        function handleDriveConnect() {
+            if (drive.connected) { toast('Drive déjà connecté ✓', 'ok'); return; }
+            if (!config.clientId || !config.apiKey) { overlay.classList.add('open'); return; }
+            if (!drive.tokenClient) { silentConnect(); return; }
+            updateDrivePill('connecting');
+            drive.tokenClient.requestAccessToken({ prompt: 'consent' });
+        }
+
+        // ── PASTE ──
+        async function handlePaste() {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (!text) { toast('Presse-papier vide', 'err'); return; }
+                textarea.value = text;
+                charCount.textContent = text.length + ' car.';
+                textarea.focus();
+                toast('Collé ✓');
+            } catch(e) {
+                toast('Permission refusée', 'err');
+            }
+        }
+
+        // ── LOAD FROM DRIVE ──
+        async function handleLoadDrive() {
+            if (!drive.connected) { handleDriveConnect(); return; }
+            toast('Chargement…');
+            try {
+                const id = await findOrCreateFile(false);
+                if (!id) { toast('Fichier introuvable', 'err'); return; }
+                const res = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, {
+                    headers: { 'Authorization': `Bearer ${drive.accessToken}` }
                 });
+                if (res.status === 401) { handleTokenExpired(handleLoadDrive); return; }
+                const content = await res.text();
+                state.lastContent = content;
+                saveState();
+                renderPreview();
+                toast('Chargé ✓', 'ok');
+            } catch(e) { toast('Erreur chargement', 'err'); }
+        }
+
+        // ── MAIN ACTION : INSERT & SAVE ──
+        async function handleInsertAndSave() {
+            const newText = textarea.value.trim();
+            if (!newText) { toast('Zone de saisie vide', 'err'); return; }
+
+            if (!drive.connected) {
+                toast('Drive non connecté — clique sur le pill Drive', 'err');
+                return;
             }
 
-            async function openFromDrive() {
-                if(!driveSession.isConnected) return driveSession.tokenClient.requestAccessToken();
-                showToast('Recherche...');
-                try {
-                    let q = `name = '${el.fileName.value}' and mimeType = 'text/plain' and trashed = false`;
-                    if(driveConfig.folderId) q += ` and '${driveConfig.folderId}' in parents`;
-                    const res = await gapi.client.drive.files.list({ q, fields: 'files(id)', pageSize: 1 });
-                    if(res.result.files?.length > 0) {
-                        state.driveFileId = res.result.files[0].id;
-                        const content = await gapi.client.drive.files.get({ fileId: state.driveFileId, alt: 'media' });
-                        state.text = content.body; render(); saveState(); tabs[0].click();
-                        showToast('Chargé !');
-                    } else showToast('Introuvable');
-                } catch(e) { showToast('Erreur Drive'); }
-            }
+            setBtnState('loading');
 
-            async function saveToDrive() {
-                if(!driveSession.isConnected) return driveSession.tokenClient.requestAccessToken();
-                showToast('Envoi...');
-                const blob = new Blob([state.text], { type: 'text/plain' });
-                const meta = { name: el.fileName.value, mimeType: 'text/plain' };
-                if(driveConfig.folderId) meta.parents = [driveConfig.folderId];
-                
-                try {
-                    if(state.driveFileId) {
-                        const r = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${state.driveFileId}?uploadType=media`, {
-                            method: 'PATCH', headers: { 'Authorization': `Bearer ${driveSession.accessToken}` }, body: blob
-                        });
-                        if(r.ok) showToast('Mis à jour !'); else throw new Error();
-                    } else {
-                        const form = new FormData();
-                        form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
-                        form.append('file', blob);
-                        const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-                            method: 'POST', headers: { 'Authorization': `Bearer ${driveSession.accessToken}` }, body: form
-                        });
-                        if(r.ok) { const d = await r.json(); state.driveFileId = d.id; saveState(); showToast('Créé !'); }
-                    }
-                } catch(e) { showToast('Erreur Sauvegarde'); }
+            // Insérer en haut
+            const sep     = '\n'.repeat(state.lineBreaks);
+            const current = state.lastContent || '';
+            state.lastContent = newText + sep + current;
+
+            try {
+                await pushToDrive(state.lastContent);
+                textarea.value = '';
+                charCount.textContent = '0 car.';
+                saveState();
+                renderPreview();
+                setBtnState('success');
+                toast('Inséré & sauvé sur Drive ✓', 'ok');
+                setTimeout(() => setBtnState('idle'), 2500);
+            } catch(e) {
+                // Annuler l'insertion en mémoire si Drive a échoué
+                state.lastContent = current;
+                if (e.message === 'TOKEN_EXPIRED') {
+                    handleTokenExpired(() => handleInsertAndSave());
+                    setBtnState('idle');
+                } else {
+                    setBtnState('error');
+                    toast('Erreur Drive — texte non perdu, réessaie', 'err');
+                    setTimeout(() => setBtnState('idle'), 3000);
+                }
             }
-        })();
+        }
+
+        // ── SAUVER LOCAL (bouton dédié) ──
+        function handleSaveLocal() {
+            const content = state.lastContent;
+            if (!content) { toast('Aucun contenu à sauvegarder', 'err'); return; }
+            saveFallback(content, config.fileName);
+            toast('Téléchargement local lancé ✓', 'ok');
+        }
+
+        function setBtnState(s) {
+            btnMain.className = 'btn-main';
+            if (s !== 'idle') btnMain.classList.add(s);
+        }
+
+        // ── DRIVE UPSERT ──
+        async function findOrCreateFile(create = true) {
+            let q = `name = '${config.fileName}' and mimeType = 'text/plain' and trashed = false`;
+            if (config.folderId) q += ` and '${config.folderId}' in parents`;
+
+            const res = await fetch(
+                `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`,
+                { headers: { 'Authorization': `Bearer ${drive.accessToken}` } }
+            );
+            if (res.status === 401) throw new Error('TOKEN_EXPIRED');
+            const data = await res.json();
+
+            if (data.files?.length > 0) {
+                drive.fileId = data.files[0].id;
+                return drive.fileId;
+            }
+            if (!create) return null;
+
+            // Créer le fichier
+            const meta = { name: config.fileName, mimeType: 'text/plain' };
+            if (config.folderId) meta.parents = [config.folderId];
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+            form.append('file', new Blob([''], { type: 'text/plain' }));
+            const cr = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${drive.accessToken}` },
+                body: form
+            });
+            if (!cr.ok) throw new Error('CREATE_FAILED');
+            const d = await cr.json();
+            drive.fileId = d.id;
+            saveState();
+            return drive.fileId;
+        }
+
+        async function pushToDrive(content) {
+            const id = drive.fileId || await findOrCreateFile(true);
+            const blob = new Blob([content], { type: 'text/plain' });
+            const res = await fetch(
+                `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${drive.accessToken}`,
+                        'Content-Type': 'text/plain'
+                    },
+                    body: blob
+                }
+            );
+            if (res.status === 401) throw new Error('TOKEN_EXPIRED');
+            if (!res.ok) throw new Error('PUSH_FAILED');
+        }
+
+        // ── TOKEN EXPIRED ──
+        function handleTokenExpired(retry) {
+            drive.connected = false; drive.accessToken = null;
+            updateDrivePill('connecting');
+            toast('Token expiré — reconnexion…');
+            if (!drive.tokenClient) { silentConnect(); return; }
+            drive.tokenClient.requestAccessToken({ prompt: '' });
+            // Retry après reconnexion
+            const orig = drive.tokenClient.callback;
+            drive.tokenClient.callback = (resp) => {
+                orig && orig(resp);
+                if (!resp.error && retry) setTimeout(retry, 300);
+            };
+        }
+
+        // ── FALLBACK LOCAL ──
+        function saveFallback(content, fileName) {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+
+        // ── TOAST ──
+        function toast(msg, type = '') {
+            toastEl.textContent = msg;
+            toastEl.className   = 'toast' + (type ? ' ' + type : '');
+            toastEl.classList.add('show');
+            clearTimeout(toastEl._t);
+            toastEl._t = setTimeout(() => toastEl.classList.remove('show'), 2800);
+        }
+
+    })();
     </script>
 </body>
 </html>
