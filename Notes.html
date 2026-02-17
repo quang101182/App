@@ -141,15 +141,19 @@
         }
 
         /* ════════════════════════════
-           TOOLBAR (boutons d'action — reste visible avec body fixed)
+           TOOLBAR — FIXE en haut, jamais cachée par le clavier mobile
         ════════════════════════════ */
         .toolbar {
+            position: fixed;
+            top: calc(var(--header-h) + var(--banner-h));
+            left: 0; right: 0;
             height: var(--toolbar-h);
-            background: var(--bg-1);
+            background: rgba(15,18,32,0.98);
+            backdrop-filter: blur(20px);
             border-bottom: 1px solid var(--border);
             display: flex; align-items: center; gap: 8px;
             padding: 0 12px;
-            flex-shrink: 0; z-index: 15;
+            z-index: 100;
         }
 
         /* Bouton CHARGER */
@@ -226,11 +230,13 @@
         ════════════════════════════ */
         .main {
             flex: 1; display: flex; flex-direction: column;
-            overflow: hidden;
+            overflow: auto;
             padding: 10px 12px 8px;
             gap: 8px;
             position: relative; z-index: 1;
             min-height: 0;
+            /* Compenser la toolbar fixed */
+            margin-top: var(--toolbar-h);
         }
 
         .input-wrap {
@@ -403,8 +409,12 @@
         /* PC */
         @media (min-width: 600px) {
             html, body { position: static; }
-            .main, .toolbar, .bottom-bar { max-width: 700px; width: 100%; margin-left: auto; margin-right: auto; }
-            .toolbar, .bottom-bar { padding-left: 0; padding-right: 0; }
+            .toolbar {
+                left: 50%; transform: translateX(-50%);
+                width: 700px; max-width: 100%;
+            }
+            .main, .bottom-bar { max-width: 700px; width: 100%; margin-left: auto; margin-right: auto; }
+            .bottom-bar { padding-left: 0; padding-right: 0; }
         }
     </style>
 </head>
@@ -434,8 +444,8 @@
 
 <!-- TOOLBAR — toujours visible, au-dessus du clavier -->
 <div class="toolbar">
-    <button class="btn-load needed" id="btn-load" title="Charger le fichier Drive">
-        📂 Charger
+    <button class="btn-load needed" id="btn-load" title="Se connecter à Drive et charger le fichier">
+        📂 Connecter & Charger
     </button>
     <button class="btn-ins disabled" id="btn-ins">
         <span class="bi-icon">⬆️</span>
@@ -730,11 +740,11 @@ function onTokenReceived(resp) {
     }
     drv.token     = resp.access_token;
     drv.connected = true;
-    drv.fileId    = null; // Toujours résoudre fresh — pas de fileId en cache
+    drv.fileId    = null;
     setPill('ok'); updateBanner();
-    toast('Drive connecté ✓', 'ok');
-    // Résoudre fileId en arrière-plan (pas de chargement de contenu)
-    resolveFileId();
+    toast('Drive connecté — chargement auto…', 'ok');
+    // Auto-charger le fichier après connexion Drive
+    setTimeout(() => handleLoad(), 600);
 }
 
 /* ══════════════════════════════════════════
@@ -777,7 +787,12 @@ async function resolveFileId() {
    DRIVE — CHARGER (lit le contenu réel)
 ══════════════════════════════════════════ */
 async function handleLoad() {
-    if (!drv.connected) { handleConnectDrive(); return; }
+    if (!drv.connected) {
+        // Déclencher connexion Drive qui auto-chargera après
+        toast('Connexion Drive requise…', 'warn');
+        handleConnectDrive();
+        return;
+    }
     toast('Chargement…');
     btnLoad.classList.remove('needed');
     try {
@@ -798,6 +813,11 @@ async function handleLoad() {
         toast('Chargé ✓ — ' + cfg.fileName, 'ok');
     } catch(e) {
         btnLoad.classList.add('needed');
+        if (e.message === 'TOKEN_EXPIRED') { handleExpired(handleLoad); return; }
+        toast('Erreur chargement', 'err');
+        console.error('[LOAD] Error:', e);
+    }
+}
         if (e.message === 'TOKEN_EXPIRED') { handleExpired(handleLoad); return; }
         toast('Erreur chargement', 'err');
         console.error('load error', e);
