@@ -690,10 +690,14 @@
         
         const saveState = () => {
             try {
-                if (!state.isDirty) { state.isDirty = true; renderHeader(); }
                 cleanupEmptyPerformances();
                 localStorage.setItem('fitnessTrackerState', JSON.stringify(state));
             } catch (e) { console.error("Error saving state to localStorage:", e); showToast("Erreur: Impossible de sauvegarder les données.", true); }
+        };
+
+        const markDirty = () => {
+            if (!state.isDirty) { state.isDirty = true; renderHeader(); }
+            saveState();
         };
 
         const loadState = () => {
@@ -1460,7 +1464,7 @@
                         Object.values(prog).forEach(exoHistory => exoHistory.sort((a,b) => new Date(a.date) - new Date(b.date)));
                     });
                     if(mergedCount > 0) {
-                        saveState(); refreshAll();
+                        markDirty(); refreshAll();
                         showToast(`${mergedCount} fichier(s) fusionné(s) !`);
                     }
                 } else {
@@ -1470,7 +1474,7 @@
                     if (importedState.programs && importedState.performance) {
                         state = importedState;
                         state.activeFileName = file.name; state.isDirty = false;
-                        saveState(); refreshAll();
+                        markDirty(); refreshAll();
                         showToast('Backup importé avec succès !');
                     } else { throw new Error("Format de fichier invalide."); }
                 }
@@ -1552,7 +1556,7 @@
             const newExercise = { "Groupe": "", "Exercice": "", "Séries": "4", "Répétitions": "10", "Repos": "60", "Notes d'exécution": "", "Objectif charge/reps": "" };
             if (!state.programs[programName].exercises) state.programs[programName].exercises = [];
             state.programs[programName].exercises.push(newExercise);
-            saveState();
+            markDirty();
             renderProgram({ newlyAddedIndex: state.programs[programName].exercises.length - 1 });
             setTimeout(() => {
                 const newCard = document.querySelector('.newly-added');
@@ -1576,7 +1580,7 @@
                         todayEntry.sets = [{}, {}, {}, {}];
                     }
                 });
-                saveState();
+                markDirty();
                 renderProgram();
                 showToast('Séances du jour créées et réinitialisées.');
             }
@@ -1669,7 +1673,7 @@
                             });
                         }
 
-                        saveState();
+                        markDirty();
                         renderProgram();
                         
                         setTimeout(() => {
@@ -1709,7 +1713,7 @@
                                 delete state.performance[programName][exerciseNameToDelete];
                                 showToast('Exercice et statistiques associées supprimés.', false);
                             }
-                            saveState();
+                            markDirty();
                             renderProgram();
                         }, 400); 
                     }
@@ -1729,7 +1733,7 @@
                     newExercise.Exercice = newName;
                     const newIndex = index + 1;
                     exercises.splice(newIndex, 0, newExercise);
-                    saveState();
+                    markDirty();
                     renderProgram({ newlyAddedIndex: newIndex });
                     showToast('Exercice dupliqué.');
                     setTimeout(() => {
@@ -1748,7 +1752,7 @@
                         const tempId = `glow-${Date.now()}`;
                         [exercises[index], exercises[newIndex]] = [exercises[newIndex], exercises[index]];
                         exercises[newIndex].tempId = tempId;
-                        saveState();
+                        markDirty();
                         renderProgram();
                         setTimeout(() => {
                             const cardToGlow = document.getElementById(tempId);
@@ -1782,7 +1786,7 @@
                     const exerciseName = target.dataset.exerciseName;
                     const todayEntry = getOrCreateTodayEntry(programName, exerciseName);
                     todayEntry.sets.push({});
-                    saveState();
+                    markDirty();
                     renderProgram();
                     break;
                 }
@@ -1791,7 +1795,7 @@
                     const todayEntry = getOrCreateTodayEntry(programName, exerciseName);
                     if (todayEntry.sets.length > 1) {
                        todayEntry.sets.splice(parseInt(setIndex, 10), 1);
-                       saveState();
+                       markDirty();
                        renderProgram();
                     } else {
                        showToast("Vous ne pouvez pas supprimer la dernière série.", true);
@@ -1802,7 +1806,7 @@
                     const exerciseName = target.dataset.exerciseName;
                     const todayEntry = getOrCreateTodayEntry(programName, exerciseName);
                     todayEntry.sets = [{}, {}, {}, {}];
-                    saveState();
+                    markDirty();
                     renderProgram();
                     break;
                 }
@@ -1828,7 +1832,7 @@
                             const entryIndex = perfHistory.findIndex(e => e.date === date);
                             if (entryIndex > -1) {
                                 perfHistory.splice(entryIndex, 1);
-                                saveState();
+                                markDirty();
                                 showToast('Entrée supprimée.');
                                 renderHistoryModal(exerciseName, document.querySelector('#history-modal .filter-btn.active')?.dataset.period || '3m');
                             }
@@ -1883,7 +1887,7 @@
                         if (state.currentProgram === name) {
                             state.currentProgram = state.programOrder[0] || null;
                         }
-                        saveState();
+                        markDirty();
                         renderProgramEditor();
                         refreshAll();
                     }
@@ -1899,7 +1903,7 @@
                     state.programs[newName] = JSON.parse(JSON.stringify(state.programs[name]));
                     const index = state.programOrder.indexOf(name);
                     state.programOrder.splice(index + 1, 0, newName);
-                    saveState();
+                    markDirty();
                     renderProgramEditor();
                     populateSelector();
                     showToast('Programme dupliqué.');
@@ -1929,7 +1933,7 @@
                     } else if (direction === 'down' && index < state.programOrder.length - 1) {
                         [state.programOrder[index], state.programOrder[index + 1]] = [state.programOrder[index + 1], state.programOrder[index]];
                     }
-                    saveState();
+                    markDirty();
                     renderProgramEditor();
                     populateSelector();
                     break;
@@ -1948,7 +1952,7 @@
                     state.programOrder.push(newName);
                     if (!state.currentProgram) state.currentProgram = newName;
                     programModalContainer.querySelector('#new-program-name').value = '';
-                    saveState();
+                    markDirty();
                     renderProgramEditor();
                     refreshAll();
                     showToast('Programme ajouté !');
@@ -1978,7 +1982,7 @@
                     if (state.currentProgram === oldName) state.currentProgram = newName;
                     if(state.programs[newName].name) { state.programs[newName].name = newName; }
                     input.dataset.oldName = newName;
-                    saveState();
+                    markDirty();
                     populateSelector();
                     showToast('Programme renommé.');
                 } else if (newName !== oldName) {
