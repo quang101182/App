@@ -1,1 +1,1080 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Logs Express</title>
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
 
+    <style>
+        :root {
+            --bg-0: #090b12;
+            --bg-1: #0f1220;
+            --bg-2: #161b2e;
+            --bg-3: #1e2540;
+            --accent: #7c5cff;
+            --accent-dim: rgba(124,92,255,0.15);
+            --accent-border: rgba(124,92,255,0.35);
+            --cyan: #22d3ee;
+            --cyan-dim: rgba(34,211,238,0.12);
+            --green: #10b981;
+            --green-dim: rgba(16,185,129,0.15);
+            --orange: #f97316;
+            --red: #ef4444;
+            --text-1: #e2e8f0;
+            --text-2: #94a3b8;
+            --text-3: #4b5a6e;
+            --border: rgba(148,163,184,0.1);
+            --border-hi: rgba(148,163,184,0.22);
+            --header-h: 54px;
+            --banner-h: 28px;
+            --toolbar-h: 58px;
+            --bottom-h: 56px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+        html {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            background: var(--bg-0);
+            color: var(--text-1);
+            font-family: 'Space Grotesk', sans-serif;
+            height: 100%;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ════════════════════════════
+           TOP FIXED ZONE — sticky en haut, toujours visible
+        ════════════════════════════ */
+        .top-fixed {
+            position: sticky;
+            top: 0;
+            z-index: 200;
+            background: var(--bg-0);
+            flex-shrink: 0;
+        }
+
+        /* ════════════════════════════
+           HEADER
+        ════════════════════════════ */
+        .header {
+            height: var(--header-h);
+            background: var(--bg-1);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 14px;
+        }
+        .header-left { display: flex; align-items: center; gap: 10px; }
+        .logo {
+            width: 30px; height: 30px;
+            background: linear-gradient(135deg, var(--accent), var(--cyan));
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem; font-weight: 700; color: #fff;
+            flex-shrink: 0;
+        }
+        .title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem; font-weight: 600; color: var(--text-1);
+            letter-spacing: 0.05em;
+        }
+        .title span { color: var(--accent); }
+        .header-right { display: flex; align-items: center; gap: 6px; }
+
+        .drive-pill {
+            display: flex; align-items: center; gap: 6px;
+            padding: 5px 10px; border-radius: 20px;
+            border: 1px solid var(--border);
+            font-size: 0.7rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-2); color: var(--text-2);
+            flex-shrink: 0;
+        }
+        .drive-pill .dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--text-3); transition: background 0.3s; flex-shrink: 0;
+        }
+        .drive-pill.connecting { border-color: rgba(249,115,22,0.35); color: var(--orange); }
+        .drive-pill.connecting .dot { background: var(--orange); animation: blink 0.8s infinite; }
+        .drive-pill.ok { border-color: rgba(16,185,129,0.35); color: var(--green); }
+        .drive-pill.ok .dot { background: var(--green); box-shadow: 0 0 5px var(--green); }
+
+        .icon-btn {
+            background: none; border: 1px solid var(--border); color: var(--text-2);
+            width: 34px; height: 34px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.15s; font-size: 1rem;
+        }
+        .icon-btn:hover { border-color: var(--accent-border); color: var(--accent); background: var(--accent-dim); }
+
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+        /* ════════════════════════════
+           FILE BANNER
+        ════════════════════════════ */
+        .file-banner {
+            background: var(--bg-0);
+            border-bottom: 1px solid var(--border);
+            padding: 0 14px;
+            height: var(--banner-h);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .fb-dot {
+            width: 5px; height: 5px; border-radius: 50%;
+            background: var(--text-3); flex-shrink: 0; transition: all 0.3s;
+        }
+        .file-banner.ok .fb-dot { background: var(--green); box-shadow: 0 0 4px var(--green); }
+        .fb-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.67rem; color: var(--text-3);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+            transition: color 0.3s;
+        }
+        .file-banner.ok .fb-name { color: var(--cyan); }
+        .fb-loc {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem; color: var(--text-3);
+            background: var(--bg-2); border: 1px solid var(--border);
+            padding: 1px 6px; border-radius: 4px; flex-shrink: 0;
+            max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+
+        /* ════════════════════════════
+           TOOLBAR — dans le wrapper fixed
+        ════════════════════════════ */
+        .toolbar {
+            height: var(--toolbar-h);
+            background: var(--bg-1);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 8px;
+            padding: 0 12px;
+        }
+
+        /* Bouton CHARGER */
+        .btn-load {
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            padding: 9px 14px; border-radius: 10px;
+            border: 1px solid var(--border-hi);
+            background: var(--bg-2); color: var(--text-2);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.8rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+            flex: 0 0 auto; min-width: 100px;
+            white-space: nowrap;
+        }
+        .btn-load:hover { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim); }
+        .btn-load.needed {
+            border-color: var(--orange);
+            color: var(--orange);
+            animation: pulse-orange 1.2s ease-in-out infinite;
+        }
+        @keyframes pulse-orange {
+            0%,100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); }
+            50% { box-shadow: 0 0 0 4px rgba(249,115,22,0.2); }
+        }
+
+        /* Bouton SAUVER */
+        .btn-ins {
+            flex: 1;
+            display: flex; align-items: center; justify-content: center; gap: 7px;
+            padding: 9px 12px; border-radius: 10px;
+            border: none;
+            background: linear-gradient(135deg, var(--accent) 0%, #5b3fd4 100%);
+            color: #fff;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.8rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+            box-shadow: 0 3px 14px rgba(124,92,255,0.3);
+            position: relative; overflow: hidden;
+            white-space: nowrap;
+            min-width: 100px;
+        }
+        .btn-ins:hover { transform: translateY(-1px); box-shadow: 0 5px 20px rgba(124,92,255,0.45); }
+        .btn-ins:active { transform: translateY(1px); }
+        .btn-ins.loading { background: linear-gradient(135deg,#3d2d7c,#2a1f54); pointer-events:none; }
+        .btn-ins.success { background: linear-gradient(135deg,var(--green),#059669); box-shadow:0 3px 14px rgba(16,185,129,0.3); }
+        .btn-ins.error   { background: linear-gradient(135deg,var(--red),#b91c1c); box-shadow:0 3px 14px rgba(239,68,68,0.3); }
+        .btn-ins.disabled { background: var(--bg-3); color: var(--text-3); box-shadow:none; pointer-events:none; border: 1px solid var(--border); }
+        .btn-ins.blink {
+            animation: blink-btn 0.8s ease-in-out 3;
+        }
+        @keyframes blink-btn {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.02); box-shadow: 0 4px 20px rgba(124,92,255,0.6); }
+        }
+
+        .bi-icon { font-size: 1rem; flex-shrink: 0; }
+        .bi-label { font-size: 0.8rem; }
+
+        /* Mobile : texte plus court */
+        @media (max-width: 380px) {
+            .btn-ins { font-size: 0.75rem; padding: 9px 8px; gap: 5px; }
+            .bi-icon { font-size: 0.9rem; }
+            .bi-label { font-size: 0.72rem; }
+        }
+
+        .spinner {
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
+            border-radius: 50%; animation: spin 0.7s linear infinite; display: none;
+        }
+        .btn-ins.loading .spinner { display: block; }
+        .btn-ins.loading .bi-icon, .btn-ins.loading .bi-label { display: none; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Compteur sauts de ligne */
+        .lb-ctrl {
+            display: flex; align-items: center;
+            background: var(--bg-2); border: 1px solid var(--border);
+            border-radius: 8px; overflow: hidden; flex-shrink: 0;
+        }
+        .lb-ctrl button {
+            background: none; border: none; color: var(--text-2);
+            width: 28px; height: 38px; cursor: pointer; font-size: 1rem;
+            transition: all 0.15s;
+        }
+        .lb-ctrl button:hover { color: var(--accent); background: var(--accent-dim); }
+        .lb-ctrl span {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem; color: var(--text-2); min-width: 20px; text-align: center;
+        }
+
+        /* ════════════════════════════
+           ZONE TEXTAREA + PREVIEW — scrollable
+        ════════════════════════════ */
+        .main {
+            flex: 1; display: flex; flex-direction: column;
+            overflow: auto;
+            padding: 10px 12px 8px;
+            gap: 8px;
+            position: relative;
+            min-height: 0;
+        }
+
+        .input-wrap {
+            flex: 0 1 auto;
+            max-height: 180px;
+            background: var(--bg-1); border: 1px solid var(--border);
+            border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            min-height: 120px;
+        }
+        .input-wrap:focus-within {
+            border-color: var(--accent-border);
+            box-shadow: 0 0 0 3px var(--accent-dim);
+        }
+
+        .input-top {
+            padding: 6px 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .input-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.66rem; font-weight: 600; color: var(--text-3);
+            letter-spacing: 0.08em; text-transform: uppercase;
+        }
+        .char-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem; color: var(--text-3);
+        }
+
+        textarea {
+            flex: 1; background: transparent; border: none; color: var(--text-1);
+            padding: 10px 12px; resize: none; outline: none;
+            font-size: 0.85rem; line-height: 1.6;
+            font-family: 'Space Grotesk', sans-serif;
+            width: 100%; min-height: 0;
+        }
+        textarea::placeholder { color: var(--text-3); }
+
+        /* PREVIEW dernier log */
+        .preview {
+            background: var(--bg-1); border: 1px solid var(--border);
+            border-radius: 12px; overflow: hidden;
+            flex: 1;
+            display: flex; flex-direction: column;
+            min-height: 0;
+        }
+        .preview-head {
+            padding: 5px 12px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .preview-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.63rem; font-weight: 600; color: var(--text-3);
+            letter-spacing: 0.08em; text-transform: uppercase;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .preview-tag {
+            background: var(--cyan-dim); color: var(--cyan);
+            border: 1px solid rgba(34,211,238,0.2);
+            padding: 1px 6px; border-radius: 4px; font-size: 0.6rem;
+        }
+        .preview-date { font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; color: var(--text-3); }
+        .preview-body {
+            padding: 6px 12px; font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem; line-height: 1.55; color: var(--text-2);
+            white-space: pre-wrap; word-break: break-word;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .preview-empty { color: var(--text-3); font-style: italic; }
+
+        /* ════════════════════════════
+           BOTTOM BAR
+        ════════════════════════════ */
+        .bottom-bar {
+            height: var(--bottom-h);
+            background: var(--bg-1);
+            border-top: 1px solid var(--border);
+            display: flex; align-items: center;
+            padding: 0 10px; gap: 6px;
+            flex-shrink: 0; z-index: 15;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .btn-sec {
+            flex: 1; padding: 7px 4px;
+            background: var(--bg-2); border: 1px solid var(--border);
+            color: var(--text-2); border-radius: 9px;
+            font-family: 'Space Grotesk', sans-serif;
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            cursor: pointer; transition: all 0.15s; min-width: 0;
+        }
+        .btn-sec:hover { border-color: var(--border-hi); color: var(--text-1); }
+        .btn-sec .si { font-size: 1rem; }
+        .btn-sec .sl { font-size: 0.6rem; white-space: nowrap; }
+
+        /* ════════════════════════════
+           MODAL SETTINGS
+        ════════════════════════════ */
+        .modal-ov {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.82); backdrop-filter: blur(8px);
+            z-index: 1000; display: flex; align-items: flex-end;
+            opacity: 0; pointer-events: none; transition: opacity 0.22s;
+        }
+        .modal-ov.open { opacity: 1; pointer-events: all; }
+        .modal {
+            background: var(--bg-2); border: 1px solid var(--border-hi);
+            border-radius: 20px 20px 0 0; width: 100%; padding: 18px 18px 28px;
+            transform: translateY(16px);
+            transition: transform 0.28s cubic-bezier(0.34,1.4,0.64,1);
+            max-height: 80dvh; overflow-y: auto;
+        }
+        .modal-ov.open .modal { transform: translateY(0); }
+        .modal-handle {
+            width: 36px; height: 4px; border-radius: 2px;
+            background: var(--border-hi); margin: 0 auto 16px;
+        }
+        .modal-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem; font-weight: 700; color: var(--text-1);
+            margin-bottom: 14px; letter-spacing: 0.05em;
+        }
+        .fg { margin-bottom: 13px; }
+        .fl {
+            font-size: 0.7rem; color: var(--text-2); margin-bottom: 4px;
+            display: block; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.03em;
+        }
+        .fi {
+            width: 100%; padding: 9px 11px;
+            background: var(--bg-1); border: 1px solid var(--border);
+            color: var(--text-1); border-radius: 9px;
+            font-family: 'JetBrains Mono', monospace; font-size: 0.77rem; outline: none;
+            transition: border-color 0.2s;
+        }
+        .fi:focus { border-color: var(--accent-border); }
+        .fn-display {
+            background: var(--bg-3); border: 1px solid var(--accent-border);
+            border-radius: 9px; padding: 9px 11px; margin-bottom: 10px;
+            font-family: 'JetBrains Mono', monospace; font-size: 0.77rem; color: var(--accent);
+            word-break: break-all;
+        }
+        .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+        .btn-cancel {
+            flex: 1; padding: 11px; background: none; border: 1px solid var(--border);
+            color: var(--text-2); border-radius: 9px;
+            font-family: 'Space Grotesk', sans-serif; font-size: 0.83rem; cursor: pointer;
+        }
+        .btn-save {
+            flex: 2; padding: 11px; background: var(--accent); border: none;
+            color: #fff; border-radius: 9px;
+            font-family: 'Space Grotesk', sans-serif; font-size: 0.83rem; font-weight: 600; cursor: pointer;
+        }
+
+        /* ════════════════════════════
+           TOAST
+        ════════════════════════════ */
+        .toast {
+            position: fixed; top: calc(var(--header-h) + var(--banner-h) + 10px); left: 50%;
+            transform: translateX(-50%) translateY(-10px);
+            background: var(--bg-3); color: var(--text-1);
+            border: 1px solid var(--border-hi);
+            padding: 8px 16px; border-radius: 18px;
+            font-size: 0.8rem; font-weight: 500;
+            z-index: 3000; opacity: 0;
+            transition: all 0.22s cubic-bezier(0.34,1.4,0.64,1);
+            white-space: nowrap; pointer-events: none;
+            backdrop-filter: blur(10px); max-width: 90vw;
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast.ok  { border-color: rgba(16,185,129,0.4); color: var(--green); }
+        .toast.err { border-color: rgba(239,68,68,0.4);  color: var(--red);   }
+        .toast.warn{ border-color: rgba(249,115,22,0.4); color: var(--orange); }
+
+        /* PC */
+        @media (min-width: 600px) {
+            html, body { height: 100vh; }
+            .top-fixed { position: sticky; }
+            .header, .file-banner, .toolbar {
+                max-width: 700px; margin: 0 auto;
+            }
+            .main, .bottom-bar {
+                max-width: 700px; width: 100%;
+                margin-left: auto; margin-right: auto;
+            }
+            .bottom-bar { padding-left: 0; padding-right: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- TOP FIXED ZONE — ne bouge jamais, même avec clavier mobile -->
+<div class="top-fixed">
+    <!-- HEADER -->
+    <header class="header">
+        <div class="header-left">
+            <div class="logo">LOG</div>
+            <span class="title">Logs <span>Express</span></span>
+        </div>
+        <div class="header-right">
+            <button class="drive-pill" id="drive-pill">
+                <span class="dot"></span>
+                <span id="pill-txt">Drive</span>
+            </button>
+            <button class="icon-btn" id="btn-settings">⚙️</button>
+        </div>
+    </header>
+
+    <!-- FILE BANNER -->
+    <div class="file-banner" id="file-banner">
+        <span class="fb-dot"></span>
+        <span class="fb-name" id="fb-name">Aucun fichier connecté</span>
+        <span class="fb-loc" id="fb-loc"></span>
+    </div>
+
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+        <button class="btn-load needed" id="btn-load" title="Se connecter à Drive et charger le fichier">
+            📂 Charger
+        </button>
+        <button class="btn-ins disabled" id="btn-ins">
+            <span class="bi-icon">⬆️</span>
+            <span class="bi-label">Sauver</span>
+            <div class="spinner"></div>
+        </button>
+        <div class="lb-ctrl">
+            <button id="lb-minus">−</button>
+            <span id="lb-val">2</span>
+            <button id="lb-plus">+</button>
+        </div>
+    </div>
+</div><!-- fin .top-fixed -->
+
+<!-- MAIN -->
+<main class="main">
+    <div class="input-wrap">
+        <div class="input-top">
+            <span class="input-label">Nouvelle entrée</span>
+            <span class="char-count" id="char-count">0 car.</span>
+        </div>
+        <textarea id="textarea" placeholder="Colle ta synthèse Gemini ici…" spellcheck="false"></textarea>
+    </div>
+
+    <!-- Aperçu dernier log chargé -->
+    <div class="preview" id="preview">
+        <div class="preview-head">
+            <span class="preview-label">
+                Dernier log chargé
+                <span class="preview-tag" id="prev-tag">—</span>
+            </span>
+            <span class="preview-date" id="prev-date">—</span>
+        </div>
+        <div class="preview-body" id="prev-body">
+            <span class="preview-empty">Pas encore chargé depuis Drive</span>
+        </div>
+    </div>
+</main>
+
+<!-- BOTTOM BAR -->
+<nav class="bottom-bar">
+    <button class="btn-sec" id="btn-paste">
+        <span class="si">📋</span><span class="sl">Coller</span>
+    </button>
+    <button class="btn-sec" id="btn-save-local">
+        <span class="si">💾</span><span class="sl">Local</span>
+    </button>
+    <button class="btn-sec" id="btn-clear">
+        <span class="si">🗑️</span><span class="sl">Vider</span>
+    </button>
+</nav>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-ov" id="modal-ov">
+    <div class="modal">
+        <div class="modal-handle"></div>
+        <div class="modal-title">⚙ Configuration Drive</div>
+        <div class="fg">
+            <label class="fl">Client ID OAuth</label>
+            <input class="fi" type="text" id="in-clientid" placeholder="xxx.apps.googleusercontent.com">
+        </div>
+        <div class="fg">
+            <label class="fl">API Key</label>
+            <input class="fi" type="password" id="in-apikey" placeholder="AIza…">
+        </div>
+        <div class="fg">
+            <label class="fl">Folder ID Drive (optionnel)</label>
+            <input class="fi" type="text" id="in-folderid" placeholder="1BxiMVs0XRA…">
+        </div>
+        <div class="fg">
+            <label class="fl">Nom du fichier cible</label>
+            <div class="fn-display" id="fn-display">Gemini_memory.txt</div>
+            <input class="fi" type="text" id="in-filename" value="Gemini_memory.txt">
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" id="btn-close-modal">Fermer</button>
+            <button class="btn-save" id="btn-save-cfg">Sauvegarder</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+'use strict';
+
+/* ══════════════════════════════════════════
+   CONFIG & STATE
+   Pas de mémoire tampon du contenu Drive.
+   Le fileId n'est PAS persisté → résolu à chaque session.
+   Seuls config + lineBreaks sont en localStorage.
+══════════════════════════════════════════ */
+let cfg = { clientId:'', apiKey:'', folderId:'', fileName:'Gemini_memory.txt' };
+let drv = { tokenClient:null, token:null, connected:false, fileId:null };
+// driveContent = contenu chargé depuis Drive cette session (RAM uniquement)
+let driveContent = null;
+let lineBreaks = 2;
+
+/* ── DOM ── */
+const $ = id => document.getElementById(id);
+const textarea    = $('textarea');
+const charCount   = $('char-count');
+const lbVal       = $('lb-val');
+const btnLoad     = $('btn-load');
+const btnIns      = $('btn-ins');
+const btnPaste    = $('btn-paste');
+const btnSaveLoc  = $('btn-save-local');
+const btnClear    = $('btn-clear');
+const btnSettings = $('btn-settings');
+const drivePill   = $('drive-pill');
+const pillTxt     = $('pill-txt');
+const toastEl     = $('toast');
+const modalOv     = $('modal-ov');
+
+/* ══════════════════════════════════════════
+   INIT
+══════════════════════════════════════════ */
+init();
+function init() {
+    loadCfg();
+    loadPrefs();
+    renderLB();
+    renderPreview();
+    bindEvents();
+    // Pré-initialiser gapi sans ouvrir de popup
+    if (cfg.clientId && cfg.apiKey) initGapi();
+}
+
+/* ══════════════════════════════════════════
+   PERSISTENCE (config + prefs seulement)
+══════════════════════════════════════════ */
+function loadCfg() {
+    try {
+        const s = localStorage.getItem('log_cfg');
+        if (s) cfg = { ...cfg, ...JSON.parse(s) };
+    } catch(e) {}
+    $('in-clientid').value = cfg.clientId;
+    $('in-apikey').value   = cfg.apiKey;
+    $('in-folderid').value = cfg.folderId;
+    $('in-filename').value = cfg.fileName;
+    $('fn-display').textContent = cfg.fileName;
+}
+function saveCfg() {
+    localStorage.setItem('log_cfg', JSON.stringify(cfg));
+}
+function loadPrefs() {
+    try {
+        const s = localStorage.getItem('log_prefs');
+        if (s) { const p = JSON.parse(s); lineBreaks = p.lb ?? 2; }
+    } catch(e) {}
+}
+function savePrefs() {
+    localStorage.setItem('log_prefs', JSON.stringify({ lb: lineBreaks }));
+}
+
+/* ══════════════════════════════════════════
+   RENDER
+══════════════════════════════════════════ */
+function renderLB() { lbVal.textContent = lineBreaks; }
+
+function renderPreview() {
+    const prevTag  = $('prev-tag');
+    const prevDate = $('prev-date');
+    const prevBody = $('prev-body');
+
+    if (!driveContent) {
+        prevBody.innerHTML = '<span class="preview-empty">Pas encore chargé depuis Drive</span>';
+        prevTag.textContent  = '—';
+        prevDate.textContent = '—';
+        return;
+    }
+    // Trouver le premier bloc ### LOG
+    const blocks = driveContent.split(/(?=^###\s)/m);
+    const first  = blocks.find(b => b.trim().startsWith('###')) || '';
+    if (!first) {
+        const lines = driveContent.split('\n').filter(l=>l.trim()).slice(0,4);
+        prevBody.textContent = lines.join('\n');
+        return;
+    }
+    const secM  = first.match(/Section cible\s*[:\*]+\s*([^#\n\*]+)/i);
+    const dateM = first.match(/Horodatage\s*[:\*]+\s*([^\n\*]+)/i)
+               || first.match(/(\d{1,2}[\s\/]\w+[\s\/]\d{2,4}[^\n]*)/);
+    prevTag.textContent  = secM  ? secM[1].replace(/[#*]/g,'').trim() : '—';
+    prevDate.textContent = dateM ? dateM[1].replace(/[*]/g,'').trim() : '—';
+    // Afficher beaucoup plus de lignes maintenant que la preview est grande
+    const lines = first.split('\n').filter(l=>l.trim()&&!l.startsWith('###')).slice(0,20);
+    prevBody.textContent = lines.join('\n');
+}
+
+function updateBanner() {
+    const banner = $('file-banner');
+    const fbName = $('fb-name');
+    const fbLoc  = $('fb-loc');
+    if (!drv.connected) {
+        banner.classList.remove('ok');
+        fbName.textContent = 'Non connecté — cliquer sur Drive';
+        fbLoc.textContent  = '';
+        return;
+    }
+    banner.classList.add('ok');
+    fbName.textContent = driveContent !== null
+        ? cfg.fileName + (drv.fileId ? ' ✓' : '')
+        : cfg.fileName + ' (non chargé)';
+    fbLoc.textContent = cfg.folderId ? cfg.folderId.slice(0,14)+'…' : 'Mon Drive';
+}
+
+function setPill(state) {
+    drivePill.className = 'drive-pill';
+    if (state === 'connecting') {
+        drivePill.classList.add('connecting');
+        pillTxt.textContent = '...';
+    } else if (state === 'ok') {
+        drivePill.classList.add('ok');
+        pillTxt.textContent = 'Drive ✓';
+    } else {
+        pillTxt.textContent = 'Drive';
+    }
+}
+
+function setBtnIns(state) {
+    // states: disabled | idle | loading | success | error
+    btnIns.className = 'btn-ins';
+    if (state !== 'idle') btnIns.classList.add(state);
+}
+
+/* ══════════════════════════════════════════
+   EVENTS
+══════════════════════════════════════════ */
+function bindEvents() {
+    let blinkTimeout;
+    textarea.addEventListener('input', () => {
+        charCount.textContent = textarea.value.length + ' car.';
+        
+        // Si du texte est présent ET que le bouton n'est pas disabled → blink
+        if (textarea.value.trim() && !btnIns.classList.contains('disabled')) {
+            btnIns.classList.remove('blink');
+            clearTimeout(blinkTimeout);
+            // Force reflow pour relancer l'animation
+            void btnIns.offsetWidth;
+            btnIns.classList.add('blink');
+            blinkTimeout = setTimeout(() => btnIns.classList.remove('blink'), 2400);
+        }
+    });
+    $('lb-minus').addEventListener('click', () => { lineBreaks = Math.max(0, lineBreaks-1); renderLB(); savePrefs(); });
+    $('lb-plus').addEventListener('click',  () => { lineBreaks = Math.min(10,lineBreaks+1); renderLB(); savePrefs(); });
+
+    drivePill.addEventListener('click', handleConnectDrive);
+    btnLoad.addEventListener('click',   handleLoad);
+    btnIns.addEventListener('click',    handleInsert);
+    btnPaste.addEventListener('click',  handlePaste);
+    btnSaveLoc.addEventListener('click',handleSaveLocal);
+    btnClear.addEventListener('click',  () => { textarea.value = ''; charCount.textContent = '0 car.'; });
+
+    btnSettings.addEventListener('click', () => modalOv.classList.add('open'));
+    $('btn-close-modal').addEventListener('click', () => modalOv.classList.remove('open'));
+    modalOv.addEventListener('click', e => { if (e.target === modalOv) modalOv.classList.remove('open'); });
+
+    $('in-filename').addEventListener('input', () => {
+        $('fn-display').textContent = $('in-filename').value || 'Gemini_memory.txt';
+    });
+
+    $('btn-save-cfg').addEventListener('click', () => {
+        cfg.clientId  = $('in-clientid').value.trim();
+        cfg.apiKey    = $('in-apikey').value.trim();
+        cfg.folderId  = $('in-folderid').value.trim();
+        cfg.fileName  = $('in-filename').value.trim() || 'Gemini_memory.txt';
+        saveCfg();
+        // Reset session complète
+        drv.connected = false; drv.token = null; drv.fileId = null;
+        drv.tokenClient = null; driveContent = null;
+        setPill(''); updateBanner(); renderPreview();
+        setBtnIns('disabled'); btnLoad.classList.add('needed');
+        modalOv.classList.remove('open');
+        toast('Config sauvegardée — reconnecte Drive', 'ok');
+        if (cfg.clientId && cfg.apiKey) initGapi();
+    });
+}
+
+/* ══════════════════════════════════════════
+   GAPI INIT (sans popup)
+══════════════════════════════════════════ */
+function initGapi() {
+    if (!window.gapi) { setTimeout(initGapi, 300); return; }
+    gapi.load('client', async () => {
+        try {
+            await gapi.client.init({
+                apiKey: cfg.apiKey,
+                discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']
+            });
+            drv.tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: cfg.clientId,
+                scope: 'https://www.googleapis.com/auth/drive.file',
+                callback: onTokenReceived
+            });
+        } catch(e) { console.error('gapi init error', e); }
+    });
+}
+
+function onTokenReceived(resp) {
+    if (resp.error) {
+        setPill(''); updateBanner();
+        toast('Connexion Drive annulée', 'err');
+        return;
+    }
+    drv.token     = resp.access_token;
+    drv.connected = true;
+    drv.fileId    = null;
+    setPill('ok'); updateBanner();
+    toast('Drive connecté — chargement auto…', 'ok');
+    // Auto-charger le fichier après connexion Drive
+    setTimeout(() => handleLoad(), 600);
+}
+
+/* ══════════════════════════════════════════
+   DRIVE — CONNEXION
+══════════════════════════════════════════ */
+function handleConnectDrive() {
+    if (drv.connected) { toast('Drive déjà connecté ✓', 'ok'); return; }
+    if (!cfg.clientId || !cfg.apiKey) { modalOv.classList.add('open'); return; }
+    if (!drv.tokenClient) { toast('Initialisation en cours…', 'warn'); initGapi(); return; }
+    setPill('connecting');
+    drv.tokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+/* ══════════════════════════════════════════
+   DRIVE — RÉSOUDRE LE FILE ID
+   Cherche le fichier par nom + folderId exact
+   Sans créer de nouveau fichier
+══════════════════════════════════════════ */
+async function resolveFileId() {
+    if (drv.fileId) return drv.fileId;
+    try {
+        let q = `name = '${cfg.fileName}' and mimeType = 'text/plain' and trashed = false`;
+        if (cfg.folderId) q += ` and '${cfg.folderId}' in parents`;
+        const r = await apiFetch(
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=1`
+        );
+        if (r.files && r.files.length > 0) {
+            drv.fileId = r.files[0].id;
+            updateBanner();
+            return drv.fileId;
+        }
+        return null;
+    } catch(e) {
+        if (e.message === 'TOKEN_EXPIRED') handleExpired(resolveFileId);
+        return null;
+    }
+}
+
+/* ══════════════════════════════════════════
+   DRIVE — CHARGER (lit le contenu réel)
+══════════════════════════════════════════ */
+async function handleLoad() {
+    if (!drv.connected) {
+        // Déclencher connexion Drive qui auto-chargera après
+        toast('Connexion Drive requise…', 'warn');
+        handleConnectDrive();
+        return;
+    }
+    toast('Chargement…');
+    btnLoad.classList.remove('needed');
+    try {
+        // Toujours résoudre l'ID fresh (pas de cache fileId)
+        drv.fileId = null;
+        const id = await resolveFileId();
+        if (!id) {
+            toast('Fichier introuvable : ' + cfg.fileName, 'err');
+            btnLoad.classList.add('needed');
+            return;
+        }
+        const content = await fetchFileContent(id);
+        driveContent = content;
+        renderPreview();
+        updateBanner();
+        // Activer le bouton Insérer & Sauver
+        setBtnIns('idle');
+        toast('Chargé ✓ — ' + cfg.fileName, 'ok');
+    } catch(e) {
+        btnLoad.classList.add('needed');
+        if (e.message === 'TOKEN_EXPIRED') { handleExpired(handleLoad); return; }
+        toast('Erreur chargement', 'err');
+        console.error('[LOAD] Error:', e);
+    }
+}
+
+async function fetchFileContent(id) {
+    const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${id}?alt=media`,
+        { headers: { 'Authorization': 'Bearer ' + drv.token } }
+    );
+    if (res.status === 401) throw new Error('TOKEN_EXPIRED');
+    if (!res.ok) throw new Error('FETCH_CONTENT_FAILED ' + res.status);
+    return await res.text();
+}
+
+/* ══════════════════════════════════════════
+   ACTION PRINCIPALE : INSÉRER & SAUVER
+   Workflow strict :
+   1. RELOAD depuis Drive (vérité source fraîche)
+   2. Insère le texte en haut
+   3. PATCH sur Drive
+   4. Met à jour driveContent avec le contenu patché
+   5. Vide textarea + UI
+══════════════════════════════════════════ */
+async function handleInsert() {
+    const newText = textarea.value.trim();
+    if (!newText) { toast('Zone de saisie vide', 'err'); return; }
+
+    if (!drv.connected) {
+        toast('Drive non connecté', 'err');
+        return;
+    }
+    if (driveContent === null || !drv.fileId) {
+        toast('Charge le fichier Drive d\'abord ▲', 'warn');
+        btnLoad.classList.add('needed');
+        return;
+    }
+
+    setBtnIns('loading');
+
+    try {
+        // ÉTAPE 1 : Recharger la vérité source depuis Drive AVANT toute modification
+        console.log('[INSERT] Reload fresh content from Drive...');
+        const freshBase = await fetchFileContent(drv.fileId);
+        console.log('[INSERT] Fresh base size:', freshBase.length);
+        
+        // ÉTAPE 2 : Construire le nouveau contenu
+        const sep = '\n'.repeat(lineBreaks);
+        const newContent = newText + sep + freshBase;
+        console.log('[INSERT] New content size:', newContent.length);
+        
+        // ÉTAPE 3 : PATCH sur Drive
+        await patchFile(drv.fileId, newContent);
+        
+        // ÉTAPE 4 : Mettre à jour la RAM avec le contenu qu'on vient de patcher
+        driveContent = newContent;
+        
+        // ÉTAPE 5 : UI
+        textarea.value = '';
+        charCount.textContent = '0 car.';
+        renderPreview();
+        updateBanner();
+        setBtnIns('success');
+        toast('Inséré & sauvé ✓', 'ok');
+        setTimeout(() => setBtnIns('idle'), 2200);
+    } catch(e) {
+        setBtnIns('error');
+        if (e.message === 'TOKEN_EXPIRED') {
+            handleExpired(handleInsert);
+        } else {
+            toast('Erreur Drive — texte non perdu', 'err');
+            console.error('[INSERT] Error:', e);
+        }
+        setTimeout(() => setBtnIns('idle'), 3000);
+    }
+}
+
+/* ══════════════════════════════════════════
+   DRIVE — PATCH (simple media upload)
+   Utilise le fileId déjà connu (issu du charger)
+══════════════════════════════════════════ */
+async function patchFile(id, content) {
+    if (!id) throw new Error('NO_FILE_ID');
+    const res = await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`,
+        {
+            method: 'PATCH',
+            headers: {
+                'Authorization': 'Bearer ' + drv.token,
+                'Content-Type':  'text/plain; charset=utf-8'
+            },
+            body: content
+        }
+    );
+    if (res.status === 401) throw new Error('TOKEN_EXPIRED');
+    if (!res.ok) {
+        const msg = await res.text().catch(() => res.status);
+        console.error('patchFile failed', res.status, msg);
+        throw new Error('PATCH_FAILED ' + res.status);
+    }
+    console.log('✓ Drive patched, fileId:', id, 'size:', content.length);
+}
+
+/* ══════════════════════════════════════════
+   HELPERS
+══════════════════════════════════════════ */
+async function apiFetch(url, opts = {}) {
+    const res = await fetch(url, {
+        ...opts,
+        headers: { 'Authorization': 'Bearer ' + drv.token, ...(opts.headers || {}) }
+    });
+    if (res.status === 401) throw new Error('TOKEN_EXPIRED');
+    if (!res.ok) throw new Error('API_ERROR ' + res.status);
+    return await res.json();
+}
+
+function handleExpired(retry) {
+    drv.connected = false; drv.token = null;
+    setPill(''); updateBanner();
+    toast('Session expirée — reconnecte Drive', 'warn');
+    if (drv.tokenClient) {
+        const origCb = drv.tokenClient.callback;
+        drv.tokenClient.callback = (resp) => {
+            origCb(resp);
+            if (!resp.error && retry) setTimeout(retry, 200);
+        };
+        drv.tokenClient.requestAccessToken({ prompt: '' });
+    }
+}
+
+async function handlePaste() {
+    // Stratégie 1 : API Clipboard moderne (fonctionne sur PC et certains mobiles HTTPS)
+    if (navigator.clipboard && navigator.clipboard.readText) {
+        try {
+            const t = await navigator.clipboard.readText();
+            if (!t) { toast('Presse-papier vide', 'err'); return; }
+            textarea.value = t;
+            charCount.textContent = t.length + ' car.';
+            textarea.focus();
+            toast('Collé ✓');
+            return;
+        } catch(e) {
+            // Erreur silencieuse — essayer fallback
+        }
+    }
+
+    // Stratégie 2 : Focus textarea + paste event (mobile-friendly)
+    // L'utilisateur voit le clavier et peut faire un paste manuel
+    textarea.focus();
+    toast('Fais un appui long sur la zone et choisis "Coller"', 'warn');
+    
+    // Écouter un paste manuel
+    const onPaste = (e) => {
+        const t = e.clipboardData?.getData('text');
+        if (t) {
+            e.preventDefault();
+            textarea.value = t;
+            charCount.textContent = t.length + ' car.';
+            toast('Collé ✓');
+        }
+        textarea.removeEventListener('paste', onPaste);
+    };
+    textarea.addEventListener('paste', onPaste, { once: true });
+}
+
+function handleSaveLocal() {
+    const content = driveContent;
+    if (!content) { toast('Aucun contenu chargé depuis Drive', 'err'); return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+    a.download = cfg.fileName;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Téléchargement lancé ✓', 'ok');
+}
+
+function toast(msg, type = '') {
+    toastEl.textContent = msg;
+    toastEl.className = 'toast' + (type ? ' ' + type : '');
+    toastEl.classList.add('show');
+    clearTimeout(toastEl._t);
+    toastEl._t = setTimeout(() => toastEl.classList.remove('show'), 3000);
+}
+
+/* ══════════════════════════════════════════
+   FIX CLAVIER MOBILE — forcer .top-fixed visible
+   Utilise visualViewport pour détecter le resize du clavier
+   et ajuster le body en conséquence
+══════════════════════════════════════════ */
+if (window.visualViewport) {
+    function adjustForKeyboard() {
+        const vvh = window.visualViewport.height;
+        const wh = window.innerHeight;
+        
+        // Si visualViewport < innerHeight → clavier ouvert
+        if (vvh < wh) {
+            // Forcer le body à la hauteur du visualViewport
+            // SANS changer position de top-fixed (rester en sticky)
+            document.body.style.height = vvh + 'px';
+        } else {
+            // Clavier fermé — retour à la normale
+            document.body.style.height = '100%';
+        }
+    }
+    
+    window.visualViewport.addEventListener('resize', adjustForKeyboard);
+    window.visualViewport.addEventListener('scroll', adjustForKeyboard);
+    
+    // Focus sur textarea : scroll vers le bas pour garder la zone visible
+    textarea.addEventListener('focus', () => {
+        setTimeout(() => {
+            textarea.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }, 300);
+    });
+}
+
+})();
+</script>
+</body>
+</html>
