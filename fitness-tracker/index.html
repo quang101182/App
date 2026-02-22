@@ -1,1 +1,2017 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fitness Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <!-- Google Drive API -->
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        :root {
+            /* Palette Générale */
+            --bg-main-1: #020617; --bg-main-2: #0f172a; --bg-main-3: #130b2a; --bg-main-4: #1e293b;
+            --text-main: #e2e8f0; --text-secondary: #94a3b8;
+            --border-color: rgba(148, 163, 184, 0.2); --border-hover: rgba(165, 180, 252, 0.5);
 
+            /* Couleurs d'accent et lueurs */
+            --glow-app-title: #facc15;
+            --glow-exo-title: #22d3ee;
+            --glow-orange: #f97316;
+            --glow-magenta: #ec4899;
+            --glow-teal: #2dd4bf;
+            --glow-yellow: #facc15;
+            --glow-violet: #8b5cf6;
+            --glow-red: #ef4444;
+            --glow-green: #22c55e;
+
+            /* --- STYLES SPÉCIFIQUES --- */
+            --bg-card-start: #1e293b; --bg-card-end: #0f172a;
+            --card-border-top: rgba(203, 213, 225, 0.2); --card-border-bottom: rgba(2, 6, 23, 0.4);
+            --bg-secondary: rgba(15, 23, 42, 0.7);
+
+            /* Boutons */
+            --btn-backup-start: var(--glow-exo-title); --btn-backup-end: var(--glow-violet);
+            --btn-import-start: var(--glow-violet); --btn-import-end: var(--glow-magenta);
+            --btn-merge-start: var(--glow-teal); --btn-merge-end: var(--glow-exo-title);
+            --btn-add-start: #22c55e; --btn-add-end: #16a34a;
+
+            /* Icônes */
+            --icon-color: #a5b4fc;
+            --icon-delete-color: var(--glow-magenta);
+            --icon-timer-color: var(--glow-violet);
+            --icon-history-color: var(--glow-teal);
+            --icon-stats-color: var(--glow-teal);
+            --icon-backup-color: var(--glow-green);
+            --icon-import-color: var(--glow-violet);
+            --icon-drive-save-color: #4285F4;
+            --icon-drive-load-color: #34A853;
+        }
+
+        html:not(.dark) {
+            --bg-main-1: #f1f5f9; --bg-main-2: #e2e8f0; --bg-main-3: #f0f3ff; --bg-main-4: #e5eaf9;
+            --text-main: #1e293b; --text-secondary: #475569;
+            --border-color: rgba(71, 85, 105, 0.2); --border-hover: rgba(99, 102, 241, 0.6);
+            --glow-app-title: #ca8a04;
+            --glow-exo-title: #0891b2;
+            --glow-orange: #ea580c;
+            --glow-magenta: #be185d;
+            --glow-teal: #0d9488;
+            --glow-yellow: #ca8a04;
+            --glow-violet: #7c3aed;
+            --glow-red: #dc2626;
+            --glow-green: #16a34a;
+            --bg-card-start: #ffffff; --bg-card-end: #eef2ff;
+            --card-border-top: rgba(255, 255, 255, 0.9); --card-border-bottom: rgba(203, 213, 225, 0.8);
+            --bg-secondary: rgba(248, 250, 252, 0.7);
+            --btn-add-start: #22c55e; --btn-add-end: #15803d;
+            --icon-color: #4f46e5;
+            --icon-backup-color: var(--glow-green);
+            --icon-import-color: var(--glow-violet);
+            --icon-drive-save-color: #1a73e8;
+            --icon-drive-load-color: #188038;
+        }
+
+        @keyframes background-pan { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        @keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes title-glow { 0% { text-shadow: 0 0 8px var(--glow-app-title), 0 0 10px #fff; } 70% { text-shadow: 0 0 15px var(--glow-app-title), 0 0 25px #fff; } 100% { text-shadow: 0 0 8px var(--glow-app-title), 0 0 10px #fff; } }
+        @keyframes pulse-border { 0% { box-shadow: 0 0 0 0px var(--glow-red), 0 0 15px rgba(0,0,0,0.5); } 50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4), 0 0 30px rgba(0,0,0,0.7); } 100% { box-shadow: 0 0 0 0px var(--glow-red), 0 0 15px rgba(0,0,0,0.5); } }
+        @keyframes number-glow { 0%, 100% { text-shadow: 0 0 6px var(--program-color, var(--glow-green)), 0 0 10px #fff, 0 0 14px #fff; } 50% { text-shadow: 0 0 12px var(--program-color, var(--glow-green)), 0 0 20px #fff, 0 0 28px #fff; } }
+        @keyframes icon-glow-pulse { 0%, 100% { opacity: 1; transform: scale(1); text-shadow: 0 0 8px var(--glow-violet), 0 0 10px #fff, 0 0 15px #fff; } 50% { opacity: 1; transform: scale(1.05); text-shadow: 0 0 16px var(--glow-violet), 0 0 20px #fff, 0 0 35px #fff; } 90% { opacity: 1; transform: scale(1); } 95% { opacity: 0; transform: scale(0.9); } }
+        
+        /* --- Final Animation Polish --- */
+        .icon-btn, #add-exercise-btn, .footer-btn, button[data-action="set-pdc"] { transition: transform 0.1s ease; }
+        .icon-btn:active, #add-exercise-btn:active, .footer-btn:active, button[data-action="set-pdc"]:active { transform: scale(0.95); }
+
+        .modal-container { transition: opacity 0.2s ease, transform 0.2s ease; opacity: 0; transform: scale(0.98); pointer-events: none; }
+        .modal-container.visible { opacity: 1; transform: scale(1); pointer-events: auto; }
+        
+        #exercise-list { transition: opacity 0.2s ease-in-out; }
+
+        .collapse-icon { transition: transform 0.3s ease; }
+        .is-collapsed { transform: rotate(-180deg); }
+        
+        @keyframes flash-success-triple {
+            0%, 100% { background-color: transparent; }
+            15%, 45%, 75% { background-color: rgba(34, 197, 94, 0.5); }
+            30%, 60%, 90% { background-color: transparent; }
+        }
+        .input-bg { position: relative; }
+        .flash-animation::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            border-radius: 0.375rem;
+            animation: flash-success-triple 1.2s ease-in-out;
+            pointer-events: none;
+        }
+
+        @keyframes border-glow-green-triple {
+             0%, 100% { box-shadow: inset 0 0 0 2px var(--program-color, transparent), 0 4px 10px rgba(0,0,0,0.2), inset 0 1px 1px var(--card-border-top), inset 0 -1px 1px var(--card-border-bottom); }
+             15%, 45%, 75% { box-shadow: inset 0 0 10px 3px var(--glow-green), 0 4px 10px rgba(0,0,0,0.2), inset 0 1px 1px var(--card-border-top), inset 0 -1px 1px var(--card-border-bottom); }
+             30%, 60%, 90% { box-shadow: inset 0 0 0 2px var(--program-color, transparent), 0 4px 10px rgba(0,0,0,0.2), inset 0 1px 1px var(--card-border-top), inset 0 -1px 1px var(--card-border-bottom); }
+        }
+        .card-glow-animation {
+            animation: border-glow-green-triple 1.5s ease-in-out !important;
+        }
+        
+        .newly-added {
+            animation: fade-in-up 0.4s ease-out, border-glow-green-triple 1.5s ease-in-out;
+        }
+        @keyframes pulse-glow { 0% { box-shadow: 0 4px 10px rgba(0,0,0,0.2), 0 0 8px rgba(45, 212, 191, 0.3), inset 0 1px 1px var(--card-border-top), inset 0 -1px 1px var(--card-border-bottom); } 50% { box-shadow: 0 4px 10px rgba(0,0,0,0.2), 0 0 18px rgba(45, 212, 191, 0.6), inset 0 1px 1px var(--card-border-top), inset 0 -1px 1px var(--card-border-bottom); } 100% { box-shadow: 0 4px 10px rgba(0,0,0,0.2), 0 0 8px rgba(45, 212, 191, 0.3), inset 0 1px 1px var(--card-border-top), inset 0 -1px 1px var(--card-border-bottom); } }
+        @keyframes slide-out-left { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-100%); opacity: 0; } }
+        .exercise-card.deleting { animation: slide-out-left 0.4s ease-out forwards; }
+        
+        .program-editor-item:focus-within { background-color: var(--border-hover); }
+
+        body { font-family: 'Roboto', sans-serif; background: linear-gradient(135deg, var(--bg-main-1), var(--bg-main-2), var(--bg-main-3), var(--bg-main-4)); background-size: 400% 400%; animation: background-pan 25s ease infinite; color: var(--text-main); -webkit-tap-highlight-color: transparent; }
+        header { background-color: var(--bg-secondary); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border-color); }
+        .bg-card { background: linear-gradient(145deg, var(--bg-card-start), var(--bg-card-end)); border: 1px solid var(--card-border-top); box-shadow: 0 4px 10px rgba(0,0,0,0.2), inset 0 1px 1px var(--card-border-top), inset 0 -1px 1px var(--card-border-bottom); transition: transform 0.3s ease, box-shadow 0.3s ease; }
+        .exercise-card {
+            box-shadow: inset 0 0 0 2px var(--program-color, transparent), 0 4px 10px rgba(0,0,0,0.2), inset 0 1px 1px var(--card-border-top), inset 0 -1px 1px var(--card-border-bottom);
+        }
+        .exercise-card:not(.newly-added) {
+             animation: fade-in-up 0.5s ease-out forwards;
+        }
+        .bg-card:hover { transform: translateY(-4px) scale(1.01); box-shadow: 0 12px 25px rgba(0,0,0,0.3), inset 0 1px 1px var(--card-border-top), inset 0 -1px 1px var(--card-border-bottom); }
+        .exercise-card:hover {
+            box-shadow: inset 0 0 0 2px var(--program-color, transparent), 0 12px 25px rgba(0,0,0,0.3), inset 0 1px 1px var(--card-border-top), inset 0 -1px 1px var(--card-border-bottom);
+        }
+        .has-today-perf, .has-today-perf:hover {
+            animation: pulse-glow 3s infinite ease-in-out;
+            box-shadow: inset 0 0 0 2px var(--glow-teal), 0 4px 10px rgba(0,0,0,0.2), inset 0 1px 1px var(--card-border-top), inset 0 -1px 1px var(--card-border-bottom);
+        }
+        .input-bg, select, .filter-btn { background-color: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color); transition: border-color 0.3s, background-color 0.3s; }
+        select:focus, input:focus { border-color: var(--glow-exo-title); }
+        #program-select {
+            border: 2px solid var(--program-color, var(--border-color));
+            box-shadow: 0 4px 12px -2px var(--program-color, transparent);
+            transition: border-color 0.4s ease, box-shadow 0.4s ease;
+            position: relative;
+            z-index: 1;
+        }
+        .filter-btn.active { border-color: var(--glow-exo-title); background-color: rgba(34, 211, 238, 0.2); }
+        #app-title-container { display: flex; align-items: center; gap: 0.75rem; }
+        #app-title { color: var(--glow-app-title); animation: title-glow 4s ease-in-out infinite; font-weight: 700; }
+        #app-icon { color: var(--glow-violet); animation: icon-glow-pulse 6s ease-in-out infinite; }
+        .exercise-title { color: var(--glow-exo-title); }
+        .subtitle-color { color: var(--glow-orange); }
+        .label-color { color: var(--text-secondary); }
+        .exercise-number { font-weight: 700; font-size: 1.75rem; background: linear-gradient(45deg, var(--program-color, var(--glow-green)), #ffffff); -webkit-background-clip: text; background-clip: text; color: transparent; animation: number-glow 3s ease-in-out infinite; filter: saturate(1.5); }
+        .pending-input { border: 1px solid var(--glow-red) !important; background-color: color-mix(in srgb, var(--glow-red) 15%, transparent) !important; }
+        #clear-all-perf-btn, button[data-action="clear-performance"] { color: var(--glow-magenta); }
+        #manage-programs-btn { color: var(--glow-yellow); }
+        #global-stats-btn { color: var(--icon-stats-color); }
+        #theme-toggle-btn { color: var(--icon-color); }
+        button[data-action="header-backup"] { color: var(--icon-backup-color); transition: color 0.3s, text-shadow 0.3s; }
+        button[data-action="header-backup"].is-dirty { color: var(--glow-orange); animation: dirty-pulse 2s ease-in-out infinite; }
+        @keyframes dirty-pulse {
+            0%, 100% { text-shadow: 0 0 4px var(--glow-orange); }
+            50% { text-shadow: 0 0 12px var(--glow-orange), 0 0 20px var(--glow-orange); }
+        }
+        button[data-action="header-import"] { color: var(--icon-import-color); }
+        button[data-action="header-drive-save"] { color: var(--icon-drive-save-color); transition: color 0.3s, text-shadow 0.3s; }
+        button[data-action="header-drive-save"].is-dirty { color: var(--glow-orange); animation: dirty-pulse 2s ease-in-out infinite; }
+        button[data-action="header-drive-load"] { color: var(--icon-drive-load-color); }
+        button[data-action="delete-exercise"], button[data-action="delete-perf-entry"] { color: var(--icon-delete-color); }
+        button[data-action="start-timer"] { color: var(--icon-timer-color); }
+        button[data-action="view-history"] { color: var(--icon-history-color); }
+        button[data-action="duplicate-exercise"] { color: var(--glow-yellow); }
+        button[data-action="delete-set"] { color: var(--glow-red); background-color: rgba(15, 23, 42, 0.8); border-radius: 9999px; width: 1rem; height: 1rem; font-size: 0.65rem; display: flex; align-items: center; justify-content: center; position: absolute; top: -0.25rem; right: -0.25rem; }
+        #remap-backup-path-btn { color: var(--glow-exo-title); }
+        .footer-btn { color: white; font-weight: bold; padding: 0.75rem 1rem; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; border: none; text-shadow: 0 1px 2px rgba(0,0,0,0.3); transition: transform 0.3s, box-shadow 0.3s, background 0.3s; }
+        .footer-btn:hover { transform: scale(1.05); }
+        #add-exercise-btn { background: linear-gradient(45deg, var(--btn-add-start), var(--btn-add-end)); border: none; box-shadow: 0 0 20px var(--btn-add-start); transition: transform 0.3s, box-shadow 0.3s; }
+        #add-exercise-btn:hover { box-shadow: 0 0 30px var(--btn-add-end); }
+        #timer-display { background: radial-gradient(circle, rgba(40,10,10,0.95) 0%, rgba(15,2,2,0.98) 100%); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 2px solid var(--glow-red); animation: pulse-border 2s ease-in-out infinite; }
+        #timer-text { text-shadow: 0 0 10px var(--glow-red), 0 0 20px #fff; }
+        .icon-btn { transition: transform 0.2s, color 0.2s, text-shadow 0.2s; }
+        .icon-btn:hover { transform: scale(1.2); color: var(--glow-exo-title); text-shadow: 0 0 10px var(--glow-exo-title); }
+        .icon-btn:disabled { opacity: 0.3; cursor: not-allowed; transform: none; text-shadow: none; color: var(--text-secondary); }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+        [contenteditable]:empty:before { content: attr(placeholder); pointer-events: none; display: block; color: var(--text-secondary); opacity: 0.6; }
+        [contenteditable="true"] { border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; min-height: 1.5em; cursor: text; transition: all 0.2s ease-in-out; }
+        [contenteditable="true"]:hover { background-color: rgba(148, 163, 184, 0.1); border-color: var(--border-hover); }
+        [contenteditable="false"] { cursor: default; }
+        span[contenteditable="true"] { display: inline-block; min-width: 25px; text-align: center; }
+        [contenteditable="true"]:focus, [contenteditable="true"]:focus-visible { outline: none; border-color: var(--glow-exo-title); background-color: rgba(15, 23, 42, 0.5); box-shadow: 0 0 8px var(--glow-exo-title); }
+        .modal-backdrop { background-color: rgba(10, 5, 20, 0.8); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+        .toast-success { background: linear-gradient(135deg, #16a34a, #22c55e); color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        .toast-error { background: linear-gradient(135deg, #db2777, #ef4444); color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        .collapsible-content { transition: max-height 0.5s ease-in-out, opacity 0.5s ease-in-out, transform 0.5s ease-in-out; max-height: 2000px; opacity: 1; transform: translateY(0); overflow: hidden; }
+        .collapsible-content.hidden { max-height: 0; opacity: 0; transform: translateY(-10px); }
+        :is(button, a, select, [contenteditable="true"]):focus-visible { outline: 3px solid var(--glow-exo-title); outline-offset: 2px; box-shadow: 0 0 15px var(--glow-exo-title); }
+        #stats-calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+        .calendar-day { text-align: center; padding: 4px; border-radius: 4px; background-color: rgba(255,255,255,0.05); }
+        .calendar-day-header { font-weight: bold; color: var(--text-secondary); }
+        .calendar-day.active-day { background-color: var(--glow-teal); color: var(--bg-main-1); font-weight: bold; }
+        .calendar-day.empty { background-color: transparent; }
+
+        /* Drive file list modal */
+        .drive-file-item { cursor: pointer; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-color); transition: background 0.2s, border-color 0.2s; display: flex; align-items: center; gap: 10px; }
+        .drive-file-item:hover { background-color: rgba(34,211,238,0.1); border-color: var(--glow-exo-title); }
+        .drive-file-item i { color: var(--glow-exo-title); flex-shrink: 0; }
+
+        /* Drive connected indicator */
+        #drive-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--glow-red); display: inline-block; margin-right: 4px; transition: background 0.3s; }
+        #drive-status-dot.connected { background: var(--glow-green); }
+
+        @media print { body { background: none; color: #000; } header, footer, #add-exercise-btn, .icon-btn, button[data-action] { display: none; } main { padding-top: 0; } .bg-card { box-shadow: none; border: 1px solid #ccc; margin-bottom: 1rem; page-break-inside: avoid; } .collapsible-content { display: block !important; max-height: none !important; opacity: 1 !important; transform: none !important; } [contenteditable="true"] { border: none; } #app-title { color: #000; text-shadow: none; animation: none; } .exercise-title, .subtitle-color { color: #333; } }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div id="app" class="flex flex-col min-h-screen">
+        <header class="shadow-md px-3 pt-2 pb-1 sticky top-0 z-20 border-b">
+            <div class="max-w-4xl mx-auto" style="display:flex; flex-direction:column; gap:4px; isolation:isolate;">
+                <!-- Ligne 1 : titre + icônes utilitaires -->
+                <div class="flex items-center justify-between" style="position:relative; z-index:3;">
+                    <div id="app-title-container">
+                        <h1 id="app-title" class="text-base font-bold leading-tight">Fitness Tracker</h1>
+                        <span id="app-icon" class="text-base"><i class="fa-solid fa-dumbbell"></i></span>
+                    </div>
+                    <div class="flex items-center gap-0.5" style="position:relative; z-index:3;">
+                        <button id="collapse-all-btn" class="p-1.5 rounded-full icon-btn" title="Tout replier"><i class="fa-solid fa-compress fa-fw text-sm"></i></button>
+                        <button id="expand-all-btn" class="p-1.5 rounded-full icon-btn" title="Tout déplier"><i class="fa-solid fa-expand fa-fw text-sm"></i></button>
+                        <button id="clear-all-perf-btn" class="p-1.5 rounded-full icon-btn" title="Effacer les réalisations du jour"><i class="fa-solid fa-eraser fa-fw text-sm"></i></button>
+                        <button id="global-stats-btn" class="p-1.5 rounded-full icon-btn" title="Statistiques Globales"><i class="fa-solid fa-chart-pie fa-fw text-sm"></i></button>
+                        <button id="manage-programs-btn" class="p-1.5 rounded-full icon-btn" title="Gérer les programmes"><i class="fa-solid fa-cogs fa-fw text-sm"></i></button>
+                        <button id="theme-toggle-btn" class="p-1.5 rounded-full icon-btn" title="Changer de thème"><i id="theme-icon" class="fa-solid fa-sun fa-fw text-sm"></i></button>
+                    </div>
+                </div>
+                <!-- Ligne 2 : sélecteur programme pleine largeur -->
+                <select id="program-select" class="input-bg border-border-color text-main text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 w-full p-2" style="position:relative; z-index:2;"></select>
+                <!-- Ligne 3 : boutons backup/drive + bannière inline -->
+                <div class="flex items-center border-t border-border-color pt-1" style="position:relative; z-index:3; gap:4px;">
+                    <button data-action="header-backup" class="p-1.5 rounded-full icon-btn flex-shrink-0" title="Backup local"><i class="fa-solid fa-cloud-arrow-up fa-fw text-sm"></i></button>
+                    <button data-action="header-import" class="p-1.5 rounded-full icon-btn flex-shrink-0" title="Importer local"><i class="fa-solid fa-cloud-arrow-down fa-fw text-sm"></i></button>
+                    <span class="opacity-30 text-xs flex-shrink-0">|</span>
+                    <button data-action="header-drive-save" class="p-1.5 rounded-full icon-btn flex-shrink-0" title="Sauvegarder Drive"><i class="fa-brands fa-google-drive fa-fw text-sm"></i></button>
+                    <button data-action="header-drive-load" class="p-1.5 rounded-full icon-btn flex-shrink-0" title="Charger Drive"><i class="fa-solid fa-folder-open fa-fw text-sm"></i></button>
+                    <!-- Bannière fichier actif — juste après les boutons Drive -->
+                    <p id="active-backup-name" class="text-xs text-secondary hidden italic" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1;"></p>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-grow px-4 md:px-6 max-w-4xl mx-auto w-full pb-24 pt-4">
+            <div id="exercise-list" class="space-y-4"></div>
+        </main>
+
+        <button id="add-exercise-btn" class="fixed bottom-5 right-5 text-white rounded-full p-4 shadow-lg z-30 transition-transform transform hover:scale-110"><i class="fa-solid fa-plus"></i></button>
+
+        <div id="toast" class="fixed top-5 right-4 py-2 px-5 rounded-lg shadow-xl opacity-0 transform -translate-y-4 transition-all duration-300 z-50 flex items-center space-x-2" style="pointer-events:none;">
+            <i id="toast-icon" class="fas"></i><span id="toast-text"></span>
+        </div>
+
+        <div id="timer-display" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white py-4 px-8 rounded-lg z-50 hidden items-center gap-4 font-mono">
+            <span id="timer-text" class="text-4xl"></span>
+            <button id="timer-close-btn" class="text-2xl font-bold">&times;</button>
+        </div>
+
+        <div id="program-modal" class="modal-container fixed inset-0 z-40 items-center justify-center hidden"></div>
+        <div id="history-modal" class="modal-container fixed inset-0 z-40 items-center justify-center hidden"></div>
+        <div id="global-stats-modal" class="modal-container fixed inset-0 z-40 items-center justify-center hidden"></div>
+        <!-- Modale Drive -->
+        <div id="drive-modal" class="modal-container fixed inset-0 z-40 items-center justify-center hidden"></div>
+        <input type="file" id="file-input" class="hidden" accept=".json" multiple>
+    </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const app = document.getElementById('app');
+        const mainContent = document.querySelector('main');
+        const programSelect = document.getElementById('program-select');
+        const exerciseList = document.getElementById('exercise-list');
+        const collapseAllBtn = document.getElementById('collapse-all-btn');
+        const expandAllBtn = document.getElementById('expand-all-btn');
+        const toast = document.getElementById('toast');
+        const toastIcon = document.getElementById('toast-icon');
+        const toastText = document.getElementById('toast-text');
+        const manageProgramsBtn = document.getElementById('manage-programs-btn');
+        const globalStatsBtn = document.getElementById('global-stats-btn');
+        const programModalContainer = document.getElementById('program-modal');
+        const historyModalContainer = document.getElementById('history-modal');
+        const globalStatsModalContainer = document.getElementById('global-stats-modal');
+        const driveModalContainer = document.getElementById('drive-modal');
+        const addExerciseBtn = document.getElementById('add-exercise-btn');
+        const clearAllPerfBtn = document.getElementById('clear-all-perf-btn');
+        const activeBackupNameDisplay = document.getElementById('active-backup-name');
+        const themeToggleBtn = document.getElementById('theme-toggle-btn');
+        const themeIcon = document.getElementById('theme-icon');
+        const timerDisplay = document.getElementById('timer-display');
+        const timerText = document.getElementById('timer-text');
+        const timerCloseBtn = document.getElementById('timer-close-btn');
+        const fileInput = document.getElementById('file-input');
+
+        let state = {
+            currentProgram: null, programOrder: [], programs: {},
+            performance: {}, activeFileName: null, isDirty: false, theme: 'dark'
+        };
+        let timerInterval = null;
+        let audioCtx;
+        let backupDirectoryHandle = null;
+        let chartInstances = {};
+        let originalExerciseName = null;
+        const isFileSystemAccessAPISupported = 'showDirectoryPicker' in window;
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        // =============================================
+        // GOOGLE DRIVE — Variables et configuration
+        // =============================================
+        let driveConfig = { clientId: '', apiKey: '', folderId: '' };
+        let driveSession = { tokenClient: null, accessToken: null, isConnected: false };
+
+        function loadDriveConfig() {
+            const saved = localStorage.getItem('fitnessDriveConfig');
+            if (saved) {
+                try { driveConfig = { ...driveConfig, ...JSON.parse(saved) }; } catch(e) {}
+            }
+        }
+
+        function saveDriveConfig() {
+            localStorage.setItem('fitnessDriveConfig', JSON.stringify(driveConfig));
+        }
+
+        function updateDriveStatusDot() {
+            const dot = document.getElementById('drive-status-dot');
+            if (dot) dot.classList.toggle('connected', driveSession.isConnected);
+        }
+
+        function initDriveConnection(callback) {
+            if (!driveConfig.clientId || !driveConfig.apiKey) {
+                showToast('Config Drive manquante ! Ouvrez les réglages.', true);
+                return;
+            }
+            gapi.load('client', async () => {
+                await gapi.client.init({
+                    apiKey: driveConfig.apiKey,
+                    discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']
+                });
+                driveSession.tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: driveConfig.clientId,
+                    scope: 'https://www.googleapis.com/auth/drive.file',
+                    callback: (resp) => {
+                        if (resp.error) {
+                            showToast('Erreur d\'authentification Google.', true);
+                            return;
+                        }
+                        driveSession.accessToken = resp.access_token;
+                        driveSession.isConnected = true;
+                        updateDriveStatusDot();
+                        showToast('Connecté à Google Drive');
+                        if (typeof callback === 'function') callback();
+                    }
+                });
+                driveSession.tokenClient.requestAccessToken({ prompt: '' });
+            });
+        }
+
+        function ensureDriveConnected(callback) {
+            if (driveSession.isConnected && driveSession.accessToken) {
+                callback();
+            } else {
+                initDriveConnection(callback);
+            }
+        }
+
+        // Réinitialise la session expirée et relance l'auth, puis rappelle le callback
+        function refreshDriveToken(callback) {
+            console.warn('Token Drive expiré (401) — reconnexion automatique...');
+            driveSession.isConnected = false;
+            driveSession.accessToken = null;
+            updateDriveStatusDot();
+            initDriveConnection(callback);
+        }
+
+        // Sauvegarde Google Drive — écrase ou crée le fichier, détecte le 401
+        async function driveUpsertFile(filename, content) {
+            const blob = new Blob([content], { type: 'application/json' });
+            let q = `name = '${filename}' and mimeType = 'application/json' and trashed = false`;
+            if (driveConfig.folderId) q += ` and '${driveConfig.folderId}' in parents`;
+            const searchRes = await gapi.client.drive.files.list({ q, fields: 'files(id)', pageSize: 1 });
+            if (searchRes.status === 401) throw new Error('TOKEN_EXPIRED');
+            const existingId = searchRes.result.files?.[0]?.id;
+
+            let response;
+            if (existingId) {
+                response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=media`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `Bearer ${driveSession.accessToken}`, 'Content-Type': 'application/json' },
+                    body: blob
+                });
+            } else {
+                const meta = { name: filename, mimeType: 'application/json' };
+                if (driveConfig.folderId) meta.parents = [driveConfig.folderId];
+                const form = new FormData();
+                form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+                form.append('file', blob);
+                response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${driveSession.accessToken}` },
+                    body: form
+                });
+            }
+            if (response && response.status === 401) throw new Error('TOKEN_EXPIRED');
+            if (response && !response.ok) throw new Error(`Erreur Drive HTTP ${response.status}`);
+        }
+
+        const handleDriveSave = (isRetry = false) => {
+            ensureDriveConnected(async () => {
+                showToast('Envoi vers Drive...');
+                cleanupEmptyPerformances();
+                try {
+                    const backupState = { ...state, isDirty: false };
+                    const jsonContent = JSON.stringify(backupState, null, 2);
+                    const dateString = new Date().toISOString().slice(0, 10);
+                    const dailyFilename = `backup_fitness_${dateString}.json`;
+                    const lastFilename = 'fitness_last_backup.json';
+
+                    await driveUpsertFile(dailyFilename, jsonContent);
+                    await driveUpsertFile(lastFilename, jsonContent);
+
+                    state.isDirty = false;
+                    state.activeFileName = dailyFilename;
+                    saveState();
+                    renderHeader(`☁️ ${dailyFilename.replace('backup_fitness_','').replace('.json','')} ✓`);
+                    showToast(`☁️ Drive : ${dailyFilename} + last_backup ✓`);
+                } catch(e) {
+                    if (e.message === 'TOKEN_EXPIRED' && !isRetry) {
+                        refreshDriveToken(() => handleDriveSave(true));
+                    } else {
+                        console.error('Erreur Drive save:', e);
+                        showToast('Erreur sauvegarde Drive.', true);
+                    }
+                }
+            });
+        };
+
+        const handleDriveLoad = (isRetry = false) => {
+            ensureDriveConnected(async () => {
+                showToast('Récupération des fichiers...');
+                try {
+                    let q = `mimeType = 'application/json' and trashed = false`;
+                    if (driveConfig.folderId) q += ` and '${driveConfig.folderId}' in parents`;
+                    const res = await gapi.client.drive.files.list({
+                        q,
+                        fields: 'files(id, name, modifiedTime)',
+                        orderBy: 'modifiedTime desc',
+                        pageSize: 50
+                    });
+                    if (res.status === 401) throw new Error('TOKEN_EXPIRED');
+                    const files = res.result.files || [];
+                    renderDriveLoadModal(files);
+                } catch(e) {
+                    if (e.message === 'TOKEN_EXPIRED' && !isRetry) {
+                        refreshDriveToken(() => handleDriveLoad(true));
+                    } else {
+                        console.error('Erreur Drive list:', e);
+                        showToast('Erreur lecture Drive.', true);
+                    }
+                }
+            });
+        };
+
+        function renderDriveLoadModal(files) {
+            let filesHTML = '';
+            if (files.length === 0) {
+                filesHTML = `<p class="text-secondary text-center py-6">Aucun fichier JSON trouvé dans ce dossier.</p>`;
+            } else {
+                filesHTML = files.map(f => {
+                    const date = new Date(f.modifiedTime).toLocaleString('fr-FR');
+                    return `<div class="drive-file-item" data-file-id="${f.id}" data-file-name="${f.name}">
+                        <i class="fa-solid fa-file-code"></i>
+                        <div class="flex-grow min-w-0">
+                            <p class="font-semibold truncate">${f.name}</p>
+                            <p class="text-xs text-secondary">${date}</p>
+                        </div>
+                        <i class="fa-solid fa-download text-secondary"></i>
+                    </div>`;
+                }).join('');
+            }
+
+            driveModalContainer.innerHTML = `
+                <div class="modal-backdrop absolute inset-0" data-action="close-drive-modal"></div>
+                <div class="bg-card rounded-lg shadow-xl w-full max-w-md m-4 p-6 relative flex flex-col max-h-[80vh] border border-border-hover">
+                    <div class="flex justify-between items-center mb-4 pb-4 border-b border-border-color">
+                        <h2 class="text-xl font-bold exercise-title">
+                            <i class="fa-brands fa-google-drive mr-2"></i>Charger depuis Drive
+                        </h2>
+                        <button data-action="close-drive-modal" class="p-1 text-2xl icon-btn">&times;</button>
+                    </div>
+                    <p class="text-xs text-secondary mb-3">Sélectionnez un fichier à importer (remplace les données actuelles) :</p>
+                    <div class="flex-grow overflow-y-auto space-y-2 pr-1" id="drive-file-list">
+                        ${filesHTML}
+                    </div>
+                </div>`;
+            driveModalContainer.style.display = 'flex';
+            setTimeout(() => driveModalContainer.classList.add('visible'), 10);
+
+            // Événements de sélection de fichier avec gestion 401 + retry
+            document.getElementById('drive-file-list')?.addEventListener('click', async (e) => {
+                const item = e.target.closest('.drive-file-item');
+                if (!item) return;
+                const fileId = item.dataset.fileId;
+                const fileName = item.dataset.fileName;
+
+                const doLoad = async (isRetry = false) => {
+                    showToast(`Chargement de ${fileName}...`);
+                    try {
+                        const res = await gapi.client.drive.files.get({ fileId, alt: 'media' });
+                        if (res.status === 401) throw new Error('TOKEN_EXPIRED');
+                        const importedState = JSON.parse(res.body);
+                        if (importedState.programs && importedState.performance) {
+                            state = importedState;
+                            state.activeFileName = fileName;
+                            state.isDirty = false;
+                            saveState();
+                            refreshAll();
+                            renderHeader(`☁️ ${fileName.replace('backup_fitness_','').replace('.json','')}`);
+                            driveModalContainer.classList.remove('visible');
+                            setTimeout(() => { driveModalContainer.style.display = 'none'; }, 200);
+                            showToast(`☁️ ${fileName} chargé avec succès !`);
+                        } else {
+                            throw new Error('Format de fichier invalide.');
+                        }
+                    } catch(e) {
+                        if (e.message === 'TOKEN_EXPIRED' && !isRetry) {
+                            refreshDriveToken(() => doLoad(true));
+                        } else {
+                            console.error('Erreur Drive load file:', e);
+                            showToast(e.message || 'Erreur lors du chargement.', true);
+                        }
+                    }
+                };
+                doLoad();
+            });
+        }
+
+        // =============================================
+        // FIN GOOGLE DRIVE
+        // =============================================
+
+        const dbRequest = indexedDB.open('FitnessTrackerDB', 1);
+        dbRequest.onupgradeneeded = event => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains('settings')) {
+                db.createObjectStore('settings', { keyPath: 'key' });
+            }
+        };
+
+        function saveDirectoryHandle(handle) {
+            return new Promise((resolve, reject) => {
+                const db = dbRequest.result;
+                const transaction = db.transaction(['settings'], 'readwrite');
+                const store = transaction.objectStore('settings');
+                store.put({ key: 'backupDirectory', handle: handle });
+                transaction.oncomplete = () => resolve();
+                transaction.onerror = event => reject(event.target.error);
+            });
+        }
+
+        function getDirectoryHandle() {
+            return new Promise((resolve, reject) => {
+                if (!dbRequest.result || !dbRequest.result.objectStoreNames.contains('settings')) {
+                    return resolve(null);
+                }
+                const transaction = dbRequest.result.transaction(['settings'], 'readonly');
+                const store = transaction.objectStore('settings');
+                const request = store.get('backupDirectory');
+                request.onsuccess = event => resolve(event.target.result ? event.target.result.handle : null);
+                request.onerror = event => reject(event.target.error);
+            });
+        }
+
+        function playSound() {
+            if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { console.error("Web Audio API is not supported"); return; } }
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 1);
+        }
+
+        function startTimer(durationInSeconds) {
+            clearInterval(timerInterval);
+            let remaining = durationInSeconds;
+            timerDisplay.classList.remove('hidden');
+            timerDisplay.classList.add('flex');
+            const update = () => {
+                const minutes = Math.floor(remaining / 60);
+                const seconds = remaining % 60;
+                timerText.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                if (remaining <= 0) { clearInterval(timerInterval); playSound(); }
+                remaining--;
+            };
+            update();
+            timerInterval = setInterval(update, 1000);
+        }
+
+        timerCloseBtn.addEventListener('click', () => {
+            clearInterval(timerInterval);
+            timerDisplay.classList.add('hidden');
+            timerDisplay.classList.remove('flex');
+        });
+
+        const applyTheme = () => {
+            document.documentElement.classList.toggle('dark', state.theme === 'dark');
+            themeIcon.className = state.theme === 'dark' ? 'fa-solid fa-sun fa-fw' : 'fa-solid fa-moon fa-fw';
+        };
+        themeToggleBtn.addEventListener('click', () => { state.theme = state.theme === 'dark' ? 'light' : 'dark'; applyTheme(); saveState(); });
+
+        const showToast = (message, isError = false) => {
+            toastText.textContent = message;
+            toast.className = `fixed top-5 right-4 py-2 px-5 rounded-lg shadow-xl opacity-0 transform -translate-y-4 transition-all duration-300 z-50 flex items-center space-x-2 ${isError ? 'toast-error' : 'toast-success'}`;
+            toastIcon.className = isError ? 'fas fa-exclamation-circle' : 'fas fa-check-circle';
+            toast.style.pointerEvents = 'none'; // jamais bloquant
+            toast.classList.remove('opacity-0', '-translate-y-4');
+            setTimeout(() => toast.classList.add('opacity-0', '-translate-y-4'), 3000);
+        };
+
+        const cleanupEmptyPerformances = () => {
+            const today = new Date().toISOString().split('T')[0];
+            for (const progName in state.performance) {
+                for (const exoName in state.performance[progName]) {
+                    const cleanedHistory = state.performance[progName][exoName].filter(entry => {
+                        if (entry.date === today) { return true; }
+                        return (entry.sets || []).some(set =>
+                            (set.poids && set.poids.toString().trim() !== '') ||
+                            (set.reps && set.reps.toString().trim() !== '')
+                        );
+                    });
+                    if (cleanedHistory.length === 0) {
+                        delete state.performance[progName][exoName];
+                    } else {
+                        state.performance[progName][exoName] = cleanedHistory;
+                    }
+                }
+            }
+        };
+        
+        const cleanupOrphanedData = () => {
+            console.log("Lancement du nettoyage des données orphelines...");
+            const existingPrograms = new Set(Object.keys(state.programs));
+            const validExercises = new Set();
+            for (const progName of existingPrograms) {
+                (state.programs[progName].exercises || []).forEach(exo => {
+                    if (exo.Exercice) validExercises.add(`${progName}|${exo.Exercice.trim()}`);
+                });
+            }
+            for (const progName in state.performance) {
+                if (!existingPrograms.has(progName)) {
+                    console.log(`Programme orphelin trouvé et supprimé : ${progName}`);
+                    delete state.performance[progName];
+                    continue;
+                }
+                for (const exoName in state.performance[progName]) {
+                    if (!validExercises.has(`${progName}|${exoName.trim()}`)) {
+                        console.log(`Exercice orphelin trouvé et supprimé : ${progName} > ${exoName}`);
+                        delete state.performance[progName][exoName];
+                    }
+                }
+            }
+            console.log("Nettoyage terminé.");
+        };
+        
+        const saveState = () => {
+            try {
+                cleanupEmptyPerformances();
+                localStorage.setItem('fitnessTrackerState', JSON.stringify(state));
+            } catch (e) { console.error("Error saving state to localStorage:", e); showToast("Erreur: Impossible de sauvegarder les données.", true); }
+        };
+
+        const markDirty = () => {
+            if (!state.isDirty) { state.isDirty = true; renderHeader(); }
+            saveState();
+        };
+
+        const loadState = () => {
+            const savedState = localStorage.getItem('fitnessTrackerState');
+            if (savedState) { state = JSON.parse(savedState); }
+            state.programs = state.programs || {};
+            state.performance = state.performance || {};
+            state.programOrder = state.programOrder || Object.keys(state.programs);
+            state.activeFileName = state.activeFileName || null;
+            state.isDirty = state.isDirty || false;
+            state.theme = state.theme || 'dark';
+            if (!state.currentProgram || !state.programs[state.currentProgram]) {
+                state.currentProgram = state.programOrder[0] || null;
+            }
+        };
+
+        const renderHeader = (overrideLabel = null) => {
+            // Indicateur isDirty sur les boutons backup local et Drive save
+            const backupBtn = document.querySelector('button[data-action="header-backup"]');
+            const driveSaveBtn = document.querySelector('button[data-action="header-drive-save"]');
+            if (backupBtn) backupBtn.classList.toggle('is-dirty', !!state.isDirty);
+            if (driveSaveBtn) driveSaveBtn.classList.toggle('is-dirty', !!state.isDirty);
+
+            if (overrideLabel) {
+                activeBackupNameDisplay.textContent = overrideLabel;
+                activeBackupNameDisplay.classList.remove('hidden');
+            } else if (state.activeFileName) {
+                const shortName = state.activeFileName
+                    .replace('backup_fitness_', '')
+                    .replace('.json', '');
+                const dirty = state.isDirty ? ' *' : ' ✓';
+                activeBackupNameDisplay.textContent = `💾 ${shortName}${dirty}`;
+                activeBackupNameDisplay.classList.remove('hidden');
+            } else {
+                activeBackupNameDisplay.classList.add('hidden');
+            }
+        };
+
+        const renderProgram = (options = {}) => {
+            const programName = state.currentProgram;
+            let programColor = 'transparent';
+            if (programName) {
+                let hue = 0;
+                for (let i = 0; i < programName.length; i++) {
+                    hue = (hue + programName.charCodeAt(i) * 37) % 360;
+                }
+                programColor = `hsl(${hue}, 85%, 65%)`;
+            }
+            document.documentElement.style.setProperty('--program-color', programColor);
+            exerciseList.innerHTML = '';
+            const program = programName ? state.programs[programName] : null;
+            const exercises = program ? program.exercises || [] : [];
+            const areExercisesPresent = exercises.length > 0;
+            collapseAllBtn.style.display = areExercisesPresent ? 'inline-block' : 'none';
+            expandAllBtn.style.display = areExercisesPresent ? 'inline-block' : 'none';
+            if (!areExercisesPresent) {
+                exerciseList.innerHTML = `<div class="text-center text-secondary mt-8 p-8 bg-card rounded-lg shadow-lg"><i class="fa-solid fa-rocket text-4xl text-cyan-400 mb-4"></i><h3 class="font-bold text-xl mb-2">Bienvenue !</h3><p>${programName ? 'Ce programme est vide.' : 'Aucun programme sélectionné.'}</p><p class="mt-2">Créez un programme ou ajoutez des exercices.</p><button id="create-first-program" class="mt-4 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-lg">Gérer les programmes</button></div>`;
+                document.getElementById('create-first-program')?.addEventListener('click', () => manageProgramsBtn.click());
+                return;
+            }
+
+            exercises.forEach((exercise, index) => {
+                const card = document.createElement('div');
+                if (exercise.tempId) {
+                    card.id = exercise.tempId;
+                    delete exercise.tempId;
+                }
+                card.className = "bg-card rounded-xl p-4 relative exercise-card";
+                card.dataset.index = index;
+                if (options.newlyAddedIndex === index) { card.classList.add("newly-added"); } else { card.classList.add("fade-in-up"); }
+                
+                const today = new Date().toISOString().split('T')[0];
+                const perfHistory = state.performance[programName]?.[exercise.Exercice] || [];
+                const todayPerfEntry = perfHistory.find(e => e.date === today);
+                const hasTodayData = todayPerfEntry && (todayPerfEntry.sets || []).some(s => (s.poids && s.poids.toString().trim() !== '') || (s.reps && s.reps.toString().trim() !== ''));
+
+                if (hasTodayData) { card.classList.add('has-today-perf'); }
+                
+                const previousPerfs = perfHistory.filter(p => p.date < today);
+                const latestPerf = previousPerfs.length > 0 ? previousPerfs[previousPerfs.length - 1] : null;
+                const showCopyButton = !todayPerfEntry && latestPerf && (latestPerf.sets || []).some(s => s.poids || s.reps);
+                const displayPerf = todayPerfEntry || latestPerf;
+
+                let performanceDateHTML = '';
+                if (displayPerf && displayPerf.date) {
+                    const formattedDate = new Date(displayPerf.date).toLocaleDateString('fr-FR');
+                    performanceDateHTML = `<span class="flex items-center text-xs text-secondary font-normal"><i class="fa-solid fa-calendar-day mr-2"></i>${formattedDate}</span>`;
+                }
+                
+                const realisationData = (todayPerfEntry?.sets) || (latestPerf?.sets) || [{}, {}, {}, {}];
+                const isEditable = !!todayPerfEntry;
+
+                let setsHTML = '<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-1">';
+                realisationData.forEach((set, i) => {
+                    const isComplete = set.poids && set.poids.toString().trim() !== '' && set.reps && set.reps.toString().trim() !== '';
+                    const isPending = isEditable && !isComplete;
+                    const containerClasses = isPending ? 'pending-input' : '';
+                    const safeExoName = exercise.Exercice.replace(/[^a-zA-Z0-9]/g, '');
+                    const poidsInputId = `poids-${i}-${safeExoName}`;
+                    setsHTML += `<div class="input-bg p-2 rounded-lg relative ${containerClasses}">
+                        ${isEditable ? `<button data-action="delete-set" data-exercise-name="${exercise.Exercice}" data-set-index="${i}" class="icon-btn" title="Supprimer la série">&times;</button>` : ''}
+                        <div class="flex justify-between items-center mb-1 pr-4">
+                            <label class="text-xs font-medium text-secondary">Série ${i + 1}</label>
+                            ${isEditable ? `<button data-action="set-pdc" data-target-id="${poidsInputId}" class="text-xs font-bold text-cyan-400 border border-cyan-400 rounded px-1 py-0.5 hover:bg-cyan-900 transition-colors leading-none" title="Remplir Poids du Corps">PDC</button>`: ''}
+                        </div>
+                        <div class="flex gap-2">
+                            <input type="text" inputmode="decimal" class="editable-perf w-1/2 bg-card rounded-md text-center" id="${poidsInputId}" data-exercise="${exercise.Exercice}" data-set-index="${i}" data-sub-field="poids" placeholder="Poids" value="${set.poids || ''}" ${!isEditable ? 'disabled' : ''}>
+                            <input type="text" inputmode="decimal" class="editable-perf w-1/2 bg-card rounded-md text-center" data-exercise="${exercise.Exercice}" data-set-index="${i}" data-sub-field="reps" placeholder="Reps" value="${set.reps || ''}" ${!isEditable ? 'disabled' : ''}>
+                        </div>
+                    </div>`;
+                });
+                setsHTML += '</div>';
+
+                const copyButtonsHTML = showCopyButton ? `
+                    <div class="flex items-center gap-3">
+                        <button data-action="copy-last-perf" data-exercise-name="${exercise.Exercice}" class="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1" title="Copier toute la séance"><i class="fa-solid fa-copy pointer-events-none"></i></button>
+                        <button data-action="copy-last-weights" data-exercise-name="${exercise.Exercice}" class="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1" title="Copier les poids"><i class="fa-solid fa-weight-hanging"></i></button>
+                        <button data-action="copy-last-reps" data-exercise-name="${exercise.Exercice}" class="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1" title="Copier les répétitions"><i class="fa-solid fa-repeat"></i></button>
+                    </div>
+                ` : '';
+
+                card.innerHTML = `
+                    <div class="exercise-number absolute top-2 left-3 pointer-events-none">${index + 1}</div>
+                    <button data-action="duplicate-exercise" class="absolute top-2 right-10 p-1 icon-btn" title="Dupliquer l'exercice"><i class="fa-solid fa-copy pointer-events-none"></i></button>
+                    <button data-action="delete-exercise" class="absolute top-2 right-2 p-1 icon-btn" title="Supprimer l'exercice"><i class="fa-solid fa-trash-can pointer-events-none"></i></button>
+                    <div class="flex items-start gap-2 pr-16 pl-10">
+                        <div class="flex flex-col mt-1">
+                            <button data-action="move-exercise" data-direction="up" class="p-1 icon-btn" title="Monter" ${index === 0 ? 'disabled' : ''}><i class="fa-solid fa-chevron-up text-xs pointer-events-none"></i></button>
+                            <button data-action="move-exercise" data-direction="down" class="p-1 icon-btn" title="Descendre" ${index === exercises.length - 1 ? 'disabled' : ''}><i class="fa-solid fa-chevron-down text-xs pointer-events-none"></i></button>
+                        </div>
+                        <div class="flex-grow">
+                            <div contenteditable="true" class="editable font-bold text-lg exercise-title" data-index="${index}" data-field="Exercice" placeholder="Ex: Développé couché">${exercise.Exercice || ''}</div>
+                            <div class="flex justify-between items-center mt-1">
+                                <div contenteditable="true" class="editable text-sm subtitle-color" data-index="${index}" data-field="Groupe" placeholder="Ex: Pectoraux">${exercise.Groupe || ''}</div>
+                                ${performanceDateHTML}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-3 pt-3 border-t border-border-color">
+                        <div class="flex items-center gap-3 text-sm flex-wrap">
+                            <div class="input-bg px-3 py-1 rounded-md"><span class="font-semibold">${realisationData.length}</span> séries</div>
+                            <div class="input-bg px-3 py-1 rounded-md"><input type="text" inputmode="decimal" class="editable font-semibold bg-transparent w-12 text-center focus:bg-slate-700 rounded-md" data-index="${index}" data-field="Répétitions" value="${exercise.Répétitions || ''}"> reps</div>
+                            <div class="input-bg px-3 py-1 rounded-md flex items-center gap-2">
+                                <input type="text" inputmode="decimal" class="editable font-semibold bg-transparent w-12 text-center focus:bg-slate-700 rounded-md" data-index="${index}" data-field="Repos" value="${exercise.Repos || ''}">s
+                                <button data-action="start-timer" class="icon-btn" title="Lancer le timer"><i class="fa-solid fa-play pointer-events-none"></i></button>
+                            </div>
+                        </div>
+                        <button data-action="toggle-collapse" class="icon-btn text-lg" title="Réduire/Agrandir"><i class="fa-solid fa-chevron-up collapse-icon ${exercise.isCollapsed ? 'is-collapsed' : ''} pointer-events-none"></i></button>
+                    </div>
+                    <div class="collapsible-content ${exercise.isCollapsed ? 'hidden' : ''}">
+                        <div class="space-y-3 pt-3">
+                            <div>
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-2">
+                                        <label class="text-xs font-medium text-secondary">Réalisation :</label>
+                                        ${isEditable ? `<button data-action="add-set" data-exercise-name="${exercise.Exercice}" class="p-1 icon-btn" title="Ajouter une série"><i class="fa-solid fa-plus-square pointer-events-none"></i></button>` : ''}
+                                        <button data-action="clear-performance" data-exercise-name="${exercise.Exercice}" class="p-1 icon-btn" title="Effacer cette réalisation"><i class="fa-solid fa-eraser pointer-events-none"></i></button>
+                                        <button data-action="view-history" data-exercise-name="${exercise.Exercice}" class="p-1 icon-btn" title="Voir l'historique"><i class="fa-solid fa-chart-line pointer-events-none"></i></button>
+                                    </div>
+                                    ${copyButtonsHTML}
+                                </div>
+                                ${setsHTML}
+                            </div>
+                            <div class="grid md:grid-cols-2 gap-4">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <label class="text-xs font-medium label-color">Notes d'exécution :</label>
+                                        <button data-action="copy-text" data-target-field="Notes d'exécution" class="p-1 icon-btn text-xs" title="Copier les notes"><i class="fa-solid fa-copy pointer-events-none"></i></button>
+                                    </div>
+                                    <div contenteditable="true" class="editable text-sm mt-1 p-2 rounded-md input-bg" data-index="${index}" data-field="Notes d'exécution" placeholder="Détails...">${exercise["Notes d'exécution"] || ''}</div>
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <label class="text-xs font-medium label-color">Objectif :</label>
+                                        <button data-action="copy-text" data-target-field="Objectif charge/reps" class="p-1 icon-btn text-xs" title="Copier l'objectif"><i class="fa-solid fa-copy pointer-events-none"></i></button>
+                                    </div>
+                                    <div contenteditable="true" class="editable text-sm mt-1 p-2 rounded-md input-bg" data-index="${index}" data-field="Objectif charge/reps" placeholder="Objectif...">${exercise["Objectif charge/reps"] || ''}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                exerciseList.appendChild(card);
+            });
+        };
+
+        const populateSelector = () => {
+            programSelect.innerHTML = '';
+            if (state.programOrder.length === 0) {
+                const option = document.createElement('option');
+                option.textContent = "Aucun programme"; programSelect.appendChild(option); programSelect.disabled = true;
+            } else {
+                programSelect.disabled = false;
+                state.programOrder.forEach(name => {
+                    const option = document.createElement('option');
+                    option.value = name; option.textContent = name;
+                    programSelect.appendChild(option);
+                });
+                if (state.currentProgram) programSelect.value = state.currentProgram;
+            }
+        };
+
+        const renderProgramEditor = () => {
+            // Récupérer la config Drive actuelle
+            const cfg = driveConfig;
+            let editorHTML = `<div class="modal-backdrop absolute inset-0" data-action="close-modal"></div>
+            <div class="bg-card rounded-lg shadow-xl w-full max-w-md m-4 p-6 relative flex flex-col max-h-[80vh] border border-border-hover">
+                <div class="flex justify-between items-center mb-4 pb-4 border-b border-border-color"><h2 class="text-xl font-bold exercise-title">Gérer les Programmes</h2><button data-action="close-modal" class="p-1 rounded-full text-2xl icon-btn">&times;</button></div>
+                
+                <div class="mb-4">
+                    <h3 class="font-semibold mb-2 text-secondary">Dossier des backups locaux</h3>
+                    <button id="remap-backup-path-btn" class="w-full flex items-center justify-center gap-2 text-sm font-semibold p-2 rounded-md input-bg">
+                        <i class="fa-solid fa-folder-open"></i>
+                        Changer le dossier
+                    </button>
+                </div>
+
+                <div class="mb-4 border-t border-border-color pt-4">
+                    <h3 class="font-semibold mb-2 text-secondary">
+                        <i class="fa-brands fa-google-drive mr-1" style="color: #4285F4"></i>
+                        Cloud Google Drive
+                        <span id="drive-status-dot" class="${driveSession.isConnected ? 'connected' : ''}" style="margin-left:6px;"></span>
+                    </h3>
+                    <div class="space-y-2">
+                        <div>
+                            <label class="text-xs text-secondary">Client ID</label>
+                            <input type="text" id="drive-client-id" value="${cfg.clientId}" placeholder="xxxx.apps.googleusercontent.com" class="w-full mt-1 p-2 rounded-md input-bg text-sm focus:outline-none focus:border-cyan-500">
+                        </div>
+                        <div>
+                            <label class="text-xs text-secondary">API Key</label>
+                            <input type="text" id="drive-api-key" value="${cfg.apiKey}" placeholder="AIzaSy..." class="w-full mt-1 p-2 rounded-md input-bg text-sm focus:outline-none focus:border-cyan-500">
+                        </div>
+                        <div>
+                            <label class="text-xs text-secondary">Folder ID</label>
+                            <input type="text" id="drive-folder-id" value="${cfg.folderId}" placeholder="ID du dossier Drive cible" class="w-full mt-1 p-2 rounded-md input-bg text-sm focus:outline-none focus:border-cyan-500">
+                        </div>
+                        <button id="save-drive-config-btn" class="w-full p-2 rounded-md text-sm font-semibold mt-1" style="background: linear-gradient(45deg, #4285F4, #34A853); color: white; border: none;">
+                            <i class="fa-solid fa-floppy-disk mr-1"></i>Sauvegarder config Drive
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mb-4 border-t border-border-color pt-4">
+                    <h3 class="font-semibold mb-2 text-secondary">Données</h3>
+                    <button data-action="merge-import" class="footer-btn w-full" style="background: linear-gradient(45deg, var(--btn-merge-start), var(--btn-merge-end)); box-shadow: 0 0 15px color-mix(in srgb, var(--btn-merge-start) 50%, var(--btn-merge-end) 50%);">
+                        <i class="fa-solid fa-layer-group"></i>
+                        <span>Importer & Fusionner</span>
+                    </button>
+                </div>
+
+                <div class="mb-4 border-t border-border-color pt-4">
+                    <h3 class="font-semibold mb-2 text-secondary">Ajouter un programme</h3>
+                    <div class="flex gap-2">
+                        <input type="text" id="new-program-name" placeholder="Nom du nouveau programme" class="flex-grow input-bg border-border-color rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                        <button id="add-program-btn" class="main-btn bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md">Ajouter</button>
+                    </div>
+                </div>
+                <div class="flex-grow overflow-y-auto pr-2">
+                    <h3 class="font-semibold mb-2 text-secondary">Programmes existants</h3>
+                    <div class="space-y-2">`;
+            state.programOrder.forEach((name, index) => {
+                editorHTML += `<div class="flex items-center justify-between bg-secondary p-2 rounded-md program-editor-item"><input type="text" value="${name}" class="program-name-input bg-transparent font-semibold flex-grow focus:outline-none" data-old-name="${name}"><div class="flex items-center"><button data-action="move-program" data-direction="up" data-index="${index}" class="p-1 icon-btn ${index === 0 ? 'opacity-25' : ''}" title="Monter"><i class="fa-solid fa-arrow-up pointer-events-none"></i></button><button data-action="move-program" data-direction="down" data-index="${index}" class="p-1 icon-btn ${index === state.programOrder.length - 1 ? 'opacity-25' : ''}" title="Descendre"><i class="fa-solid fa-arrow-down pointer-events-none"></i></button><button data-action="duplicate-program" data-name="${name}" class="p-1 icon-btn" title="Dupliquer"><i class="fa-solid fa-copy pointer-events-none"></i></button><button data-action="delete-program" data-name="${name}" class="p-1 icon-btn" title="Supprimer"><i class="fa-solid fa-trash-can pointer-events-none"></i></button></div></div>`;
+            });
+            editorHTML += `</div></div></div>`;
+            programModalContainer.innerHTML = editorHTML;
+
+            // Bind bouton save config Drive
+            document.getElementById('save-drive-config-btn')?.addEventListener('click', () => {
+                driveConfig.clientId = document.getElementById('drive-client-id').value.trim();
+                driveConfig.apiKey = document.getElementById('drive-api-key').value.trim();
+                driveConfig.folderId = document.getElementById('drive-folder-id').value.trim();
+                saveDriveConfig();
+                driveSession.isConnected = false;
+                driveSession.accessToken = null;
+                driveSession.tokenClient = null;
+                updateDriveStatusDot();
+                showToast('Config Drive sauvegardée');
+            });
+        };
+
+        const renderHistoryModal = (exerciseName, period = '3m') => {
+            let history = state.performance[state.currentProgram]?.[exerciseName] || [];
+            if (!Array.isArray(history)) history = [];
+
+            const now = new Date();
+            let startDate = new Date();
+            if (period === '3m') startDate.setMonth(now.getMonth() - 3);
+            else if (period === '6m') startDate.setMonth(now.getMonth() - 6);
+            else if (period === '1y') startDate.setFullYear(now.getFullYear() - 1);
+            else startDate = new Date(0);
+
+            const filteredHistory = history.filter(e => new Date(e.date) >= startDate);
+
+            let listHTML = '<p class="text-secondary">Aucun historique pour cette période.</p>';
+            if (filteredHistory.length > 0) {
+                const groupedByMonth = filteredHistory.slice().reverse().reduce((acc, entry) => {
+                    const month = new Date(entry.date).toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
+                    if (!acc[month]) acc[month] = [];
+                    acc[month].push(entry);
+                    return acc;
+                }, {});
+
+                listHTML = Object.entries(groupedByMonth).map(([month, entries]) => {
+                    const entriesHTML = entries.map(entry => {
+                        const sets = (entry.sets || []).filter(s => s.poids || s.reps).map(s => `${s.poids || '-'}kg x ${s.reps || '-'}`).join(' / ');
+                        return `<div class="p-2 bg-secondary rounded-md flex justify-between items-center">
+                            <div>
+                                <p class="font-semibold">${new Date(entry.date).toLocaleDateString('fr-FR')}</p>
+                                <p class="text-sm text-secondary">${sets}</p>
+                            </div>
+                            <button data-action="delete-perf-entry" data-date="${entry.date}" data-exercise-name="${exerciseName}" class="icon-btn text-sm" title="Supprimer cette entrée"><i class="fa-solid fa-trash-can"></i></button>
+                        </div>`;
+                    }).join('');
+                    return `<div class="mb-3"><h4 class="font-bold text-secondary mb-2">${month.charAt(0).toUpperCase() + month.slice(1)}</h4><div class="space-y-2">${entriesHTML}</div></div>`;
+                }).join('');
+            }
+
+            const periodFilters = [
+                { label: '3 Mois', value: '3m' }, { label: '6 Mois', value: '6m' },
+                { label: '1 An', value: '1y' }, { label: 'Tout', value: 'all' }
+            ];
+            const filterHTML = periodFilters.map(f => 
+                `<button class="filter-btn text-xs px-3 py-1 rounded-md ${period === f.value ? 'active' : ''}" data-action="filter-history" data-period="${f.value}" data-exercise-name="${exerciseName}">${f.label}</button>`
+            ).join('');
+
+            historyModalContainer.innerHTML = `<div class="modal-backdrop absolute inset-0" data-action="close-modal"></div>
+            <div class="bg-card rounded-lg shadow-xl w-full max-w-2xl m-4 p-6 relative flex flex-col max-h-[80vh] border border-border-hover">
+                <div class="flex justify-between items-center mb-4 pb-4 border-b border-border-color">
+                    <h2 class="text-xl font-bold exercise-title truncate pr-4">${exerciseName}</h2>
+                    <button data-action="close-modal" class="p-1 text-2xl icon-btn">&times;</button>
+                </div>
+                <div class="flex items-center justify-between mb-3">
+                    <h3 id="chart-title" class="font-semibold text-secondary"></h3>
+                    <div class="flex gap-2">${filterHTML}</div>
+                </div>
+                <div class="bg-secondary rounded-lg p-2 h-48 mb-4"><canvas id="performance-chart"></canvas></div>
+                <h3 class="font-semibold mt-4 mb-2 text-secondary">Historique des Séances</h3>
+                <div class="flex-grow overflow-y-auto space-y-2 pr-2">${listHTML}</div>
+            </div>`;
+            historyModalContainer.style.display = 'flex';
+            
+            const allWeights = filteredHistory
+                .flatMap(e => (e.sets || []).map(s => s.poids))
+                .filter(p => p && p.toString().trim() !== '');
+
+            let isBodyweight = false;
+            if (allWeights.length > 0) {
+                isBodyweight = allWeights.every(p => isNaN(parseFloat(p)));
+            }
+
+            const chartTitle = document.getElementById('chart-title');
+            chartTitle.textContent = isBodyweight ? 'Évolution des Répétitions' : 'Évolution du Volume (kg)';
+
+            const chartData = filteredHistory.map(e => ({
+                x: e.date,
+                y: (e.sets || []).reduce((acc, s) => {
+                    const reps = parseInt(s.reps) || 0;
+                    if (isBodyweight) return acc + reps;
+                    const poids = parseFloat(s.poids) || 0;
+                    return acc + (poids * reps);
+                }, 0)
+            })).filter(d => d.y > 0);
+
+            if (chartInstances['performance']) chartInstances['performance'].destroy();
+            const canvas = document.getElementById('performance-chart');
+
+            if (chartData.length === 0) {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.font = "14px Roboto";
+                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
+                ctx.textAlign = "center";
+                ctx.fillText('Pas de données pour le graphique.', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            chartInstances['performance'] = new Chart(canvas.getContext('2d'), {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: isBodyweight ? 'Répétitions' : 'Volume (kg)',
+                        data: chartData,
+                        borderColor: getComputedStyle(document.documentElement).getPropertyValue('--glow-exo-title').trim(),
+                        backgroundColor: 'rgba(34, 211, 238, 0.1)',
+                        borderWidth: 2, fill: true, tension: 0.3,
+                        pointBackgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--glow-magenta').trim()
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { type: 'time', time: { unit: 'day' }, grid: { color: 'rgba(129, 140, 248, 0.1)' }, ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() } },
+                        y: { beginAtZero: true, grid: { color: 'rgba(129, 140, 248, 0.1)' }, ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() } }
+                    }
+                }
+            });
+        };
+
+        const renderGlobalStatsModal = (period = 'month') => {
+            const exerciseToGroupMap = {};
+            Object.values(state.programs).forEach(program => {
+                (program.exercises || []).forEach(exercise => {
+                    if(exercise.Exercice && exercise.Groupe) {
+                        exerciseToGroupMap[exercise.Exercice] = exercise.Groupe;
+                    }
+                });
+            });
+
+            const now = new Date();
+            let startDate = new Date(0);
+            if (period === 'week') {
+                const dayOfWeek = now.getDay();
+                const offset = (dayOfWeek === 0) ? 6 : dayOfWeek - 1;
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset);
+            } else if (period === 'month') {
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            } else if (period === 'year') {
+                startDate = new Date(now.getFullYear(), 0, 1);
+            }
+            startDate.setHours(0,0,0,0);
+            
+            const allPerfsInPeriod = [];
+            Object.entries(state.performance).forEach(([progName, exercises]) => {
+                Object.entries(exercises).forEach(([exoName, history]) => {
+                    history.forEach(entry => {
+                        if (new Date(entry.date) >= startDate) {
+                            allPerfsInPeriod.push({ ...entry, exerciseName: exoName });
+                        }
+                    });
+                });
+            });
+
+            const allPerfDates = new Set(Object.values(state.performance).flatMap(p => Object.values(p).flat()).map(e => e.date));
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = today.getMonth();
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            let calendarHTML = '<div class="calendar-day-header">L</div><div class="calendar-day-header">M</div><div class="calendar-day-header">M</div><div class="calendar-day-header">J</div><div class="calendar-day-header">V</div><div class="calendar-day-header">S</div><div class="calendar-day-header">D</div>';
+            const offset = (firstDay === 0) ? 6 : firstDay - 1;
+            for(let i=0; i<offset; i++) calendarHTML += '<div class="calendar-day empty"></div>';
+            for(let day=1; day<=daysInMonth; day++) {
+                const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                const isActive = allPerfDates.has(dateStr);
+                calendarHTML += `<div class="calendar-day ${isActive ? 'active-day' : ''}">${day}</div>`;
+            }
+            
+            const sessionsInPeriod = new Set(allPerfsInPeriod.map(p => p.date)).size;
+            const totalVolumeInPeriod = allPerfsInPeriod.reduce((total, p) => total + (p.sets || []).reduce((acc, s) => acc + ((parseFloat(s.poids)||0) * (parseInt(s.reps)||0)), 0), 0);
+            
+            const muscleCounts = {};
+            allPerfsInPeriod.forEach(p => {
+                const group = exerciseToGroupMap[p.exerciseName] || 'N/A';
+                const setCount = (p.sets || []).filter(s => s.reps).length;
+                muscleCounts[group] = (muscleCounts[group] || 0) + setCount;
+            });
+            
+            const prs = {};
+            for (const [progName, program] of Object.entries(state.programs)) {
+                for (const exo of (program.exercises || [])) {
+                    if (!exo.Groupe || !state.performance[progName]?.[exo.Exercice]) continue;
+                    const bestSet = state.performance[progName][exo.Exercice]
+                        .flatMap(e => (e.sets || []).map(s => ({...s, date: e.date})))
+                        .filter(s => s.poids && s.reps && !isNaN(parseFloat(s.poids)) && s.poids.toString().trim().toLowerCase() !== 'pdc')
+                        .reduce((best, current) => {
+                            if (!best.poids) return current;
+                            const bestScore = (parseFloat(best.poids) || 0) * (1 + (parseInt(best.reps) || 0) / 30);
+                            const currentScore = (parseFloat(current.poids) || 0) * (1 + (parseInt(current.reps) || 0) / 30);
+                            return currentScore > bestScore ? current : best;
+                        }, {});
+                    if(bestSet && bestSet.poids) {
+                        const existingPrScore = prs[exo.Groupe] ? (parseFloat(prs[exo.Groupe].poids) * (1 + parseInt(prs[exo.Groupe].reps) / 30)) : 0;
+                        const newPrScore = (parseFloat(bestSet.poids) * (1 + parseInt(bestSet.reps) / 30));
+                        if (newPrScore > existingPrScore) {
+                           prs[exo.Groupe] = { ...bestSet, name: exo.Exercice };
+                        }
+                    }
+                }
+            }
+            
+            let prHTML = Object.entries(prs).map(([group, pr]) => `
+                <div class="p-2 bg-secondary rounded-md text-sm">
+                    <p class="font-bold text-secondary">${group}</p>
+                    <p class="font-semibold text-main">${pr.name}</p>
+                    <p class="text-cyan-400">${pr.poids}kg x ${pr.reps} reps <span class="text-xs text-secondary">(${new Date(pr.date).toLocaleDateString('fr-FR')})</span></p>
+                </div>
+            `).join('');
+            if (!prHTML) prHTML = `<p class="text-sm text-secondary">Aucun record trouvé.</p>`;
+
+            const periodFilters = [
+                { label: 'Semaine', value: 'week' }, { label: 'Mois', value: 'month' },
+                { label: 'Année', value: 'year' }, { label: 'Tout', value: 'all' }
+            ];
+            const filterHTML = periodFilters.map(f => 
+                `<button class="filter-btn text-xs px-3 py-1 rounded-md ${period === f.value ? 'active' : ''}" data-action="filter-stats" data-period="${f.value}">${f.label}</button>`
+            ).join('');
+
+            globalStatsModalContainer.innerHTML = `<div class="modal-backdrop absolute inset-0" data-action="close-modal"></div>
+            <div class="bg-card rounded-lg shadow-xl w-full max-w-4xl m-4 p-6 relative flex flex-col max-h-[80vh] border border-border-hover">
+                <div class="flex justify-between items-center mb-4 pb-4 border-b border-border-color">
+                    <h2 class="text-xl font-bold exercise-title">Tableau de Bord Global</h2>
+                    <div class="flex gap-2">${filterHTML}</div>
+                    <button data-action="close-modal" class="p-1 text-2xl icon-btn">&times;</button>
+                </div>
+                <div class="flex-grow overflow-y-auto pr-2 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="font-semibold mb-2 text-secondary">Activité</h3>
+                        <div class="p-3 bg-secondary rounded-lg ${period !== 'month' ? 'hidden' : ''}" id="stats-calendar-container">
+                            <h4 class="text-center font-bold mb-2">${new Date().toLocaleString('fr-FR', {month:'long', year:'numeric'})}</h4>
+                            <div id="stats-calendar">${calendarHTML}</div>
+                        </div>
+                         <div class="grid grid-cols-2 gap-4 ${period === 'month' ? 'mt-4' : ''} text-center">
+                            <div class="p-3 bg-secondary rounded-lg"><p class="text-2xl font-bold">${sessionsInPeriod}</p><p class="text-xs text-secondary">Séances</p></div>
+                            <div class="p-3 bg-secondary rounded-lg"><p class="text-2xl font-bold">${(totalVolumeInPeriod/1000).toFixed(1)}</p><p class="text-xs text-secondary">Tonnes soulevées</p></div>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold mb-2 text-secondary">Équilibre Musculaire (par séries)</h3>
+                        <div class="p-3 bg-secondary rounded-lg h-64"><canvas id="muscle-chart"></canvas></div>
+                    </div>
+                    <div class="lg:col-span-2">
+                         <h3 class="font-semibold mb-2 mt-4 lg:mt-0 text-secondary">Records Personnels (Top 1RM Est.)</h3>
+                         <div class="space-y-2">${prHTML}</div>
+                    </div>
+                </div>
+            </div>`;
+            globalStatsModalContainer.style.display = 'flex';
+            
+            if (chartInstances['muscle']) chartInstances['muscle'].destroy();
+            chartInstances['muscle'] = new Chart(document.getElementById('muscle-chart').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(muscleCounts),
+                    datasets: [{
+                        data: Object.values(muscleCounts),
+                        backgroundColor: ['#22d3ee', '#8b5cf6', '#ec4899', '#f97316', '#2dd4bf', '#facc15'],
+                        borderColor: 'var(--bg-card-start)',
+                        borderWidth: 2,
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() } } } }
+            });
+        };
+
+        const getOrCreateTodayEntry = (programName, exerciseName) => {
+            const today = new Date().toISOString().split('T')[0];
+            if (!state.performance[programName]) state.performance[programName] = {};
+            let perfHistory = state.performance[programName][exerciseName];
+            if (!perfHistory) {
+                perfHistory = [];
+                state.performance[programName][exerciseName] = perfHistory;
+            }
+            let todayEntry = perfHistory.find(e => e.date === today);
+            if (!todayEntry) {
+                todayEntry = { date: today, sets: [{}, {}, {}, {}] };
+                perfHistory.push(todayEntry);
+                perfHistory.sort((a,b) => new Date(a.date) - new Date(b.date));
+            }
+            return todayEntry;
+        };
+
+        const updateStateFromInput = (e) => {
+            const target = e.target;
+            const programName = state.currentProgram;
+            if (target.classList.contains('editable')) {
+                const card = target.closest('.exercise-card');
+                const index = parseInt(card.dataset.index, 10);
+                const field = target.dataset.field;
+                const value = target.tagName.toLowerCase() === 'input' ? target.value : target.innerText;
+                const exercises = state.programs[programName]?.exercises;
+                if (exercises && exercises[index]) {
+                    exercises[index][field] = value;
+                }
+            } else if (target.classList.contains('editable-perf')) {
+                const exerciseName = target.dataset.exercise;
+                const value = target.value;
+                
+                const isFirstEditOfToday = !state.performance[programName]?.[exerciseName]?.find(e => e.date === new Date().toISOString().split('T')[0]);
+                const todayEntry = getOrCreateTodayEntry(programName, exerciseName);
+                
+                if(isFirstEditOfToday) {
+                    renderProgram();
+                    const newTarget = document.querySelector(`[data-exercise="${exerciseName}"][data-set-index="${target.dataset.setIndex}"][data-sub-field="${target.dataset.subField}"]`);
+                    if(newTarget) {
+                       newTarget.focus();
+                       newTarget.setSelectionRange(newTarget.value.length, newTarget.value.length);
+                    }
+                }
+
+                const setIndex = parseInt(target.dataset.setIndex, 10);
+                const subField = target.dataset.subField;
+                while (todayEntry.sets.length <= setIndex) todayEntry.sets.push({});
+                if (!todayEntry.sets[setIndex]) todayEntry.sets[setIndex] = {};
+                todayEntry.sets[setIndex][subField] = value;
+
+                const fieldElement = target.closest('.input-bg');
+                if((todayEntry.sets[setIndex].poids && todayEntry.sets[setIndex].poids.trim() !== '') && 
+                   (todayEntry.sets[setIndex].reps && todayEntry.sets[setIndex].reps.trim() !== '')) {
+                   fieldElement.classList.remove('pending-input');
+                }
+
+                const card = target.closest('.exercise-card');
+                if (card && !card.classList.contains('has-today-perf')) {
+                    card.classList.add('has-today-perf');
+                }
+            }
+        };
+
+        const handleBlur = (e) => {
+            const target = e.target;
+            const field = target.dataset.field;
+
+            if (field === 'Exercice' && originalExerciseName && originalExerciseName.trim() !== target.innerText.trim()) {
+                const newName = target.innerText.trim();
+                const programName = state.currentProgram;
+                const index = parseInt(target.closest('.exercise-card').dataset.index, 10);
+
+                const isDuplicate = state.programs[programName].exercises.some(
+                    (ex, idx) => ex.Exercice.trim() === newName && idx !== index
+                );
+
+                if (isDuplicate) {
+                    showToast("Ce nom d'exercice est déjà utilisé.", true);
+                    target.innerText = originalExerciseName;
+                    state.programs[programName].exercises[index].Exercice = originalExerciseName;
+                } else {
+                    if (state.performance[programName] && state.performance[programName][originalExerciseName]) {
+                        state.performance[programName][newName] = state.performance[programName][originalExerciseName];
+                        delete state.performance[programName][originalExerciseName];
+                        showToast('Exercice renommé et données transférées.', false);
+                    }
+                }
+            }
+            originalExerciseName = null;
+            saveState();
+            
+            if (field === 'Exercice') {
+                renderProgram();
+            }
+        };
+
+        async function promptAndSetDirectory() {
+            try {
+                const handle = await window.showDirectoryPicker();
+                await saveDirectoryHandle(handle);
+                backupDirectoryHandle = handle;
+                showToast("Dossier de sauvegarde sélectionné !");
+                return handle;
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error("Erreur lors de la sélection du dossier:", err);
+                    showToast("Impossible de sélectionner ce dossier.", true);
+                }
+                return null;
+            }
+        }
+
+        async function verifyPermission(handle) {
+            if (!handle) return false;
+            const options = { mode: 'readwrite' };
+            if (await handle.queryPermission(options) === 'granted') return true;
+            if (await handle.requestPermission(options) === 'granted') return true;
+            showToast("La permission d'accès au dossier a été refusée.", true);
+            return false;
+        }
+
+        // Backup local — uniquement le fichier daté (sans last_backup.json)
+        const handleBackup = async () => {
+            cleanupEmptyPerformances();
+            const dateString = new Date().toISOString().slice(0, 10);
+            const filename = `backup_fitness_${dateString}.json`;
+            const backupState = { ...state, isDirty: false };
+            const jsonContent = JSON.stringify(backupState, null, 2);
+
+            // Tenter File System Access API (Chrome desktop/Android)
+            // Si indisponible OU bloqué (GitHub Pages, Safari), fallback téléchargement
+            if (isFileSystemAccessAPISupported) {
+                try {
+                    let handle = backupDirectoryHandle;
+                    if (!handle) handle = await promptAndSetDirectory();
+                    if (!handle) { throw new Error('no-handle'); }
+                    if (!(await verifyPermission(handle))) { throw new Error('no-permission'); }
+                    backupDirectoryHandle = handle;
+
+                    const fileHandle = await handle.getFileHandle(filename, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(jsonContent);
+                    await writable.close();
+
+                    state.isDirty = false;
+                    state.activeFileName = filename;
+                    saveState();
+                    renderHeader();
+                    showToast(`💾 Backup local : ${filename}`);
+                    return;
+                } catch (err) {
+                    if (err.message === 'no-handle' || err.message === 'no-permission') return;
+                    // Autre erreur (API bloquée sur GitHub Pages) → fallback
+                    console.warn('File System API indisponible, fallback téléchargement :', err);
+                }
+            }
+
+            // Fallback téléchargement (GitHub Pages, Safari, Firefox)
+            const a = document.createElement('a');
+            const blob = new Blob([jsonContent], { type: 'application/json' });
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            state.isDirty = false;
+            state.activeFileName = filename;
+            saveState();
+            renderHeader();
+            showToast(`💾 Téléchargement : ${filename}`);
+        };
+
+        const handleImport = async (isMerge = false) => {
+            if (isFileSystemAccessAPISupported) {
+                try {
+                    const pickerOpts = {
+                        types: [{ description: 'Fichiers JSON', accept: { 'application/json': ['.json'] } }],
+                        multiple: isMerge,
+                        startIn: backupDirectoryHandle || 'downloads'
+                    };
+                    const fileHandles = await window.showOpenFilePicker(pickerOpts);
+                    await processFiles(fileHandles, isMerge, true);
+                    return;
+                } catch (err) {
+                    if (err.name === 'AbortError') return; // Annulé par l'utilisateur
+                    // API bloquée (GitHub Pages, Safari) → fallback input[file]
+                    console.warn('showOpenFilePicker indisponible, fallback input[file] :', err);
+                }
+            }
+            // Fallback universel (GitHub Pages, Firefox, Safari)
+            fileInput.multiple = isMerge;
+            fileInput.dataset.isMerge = isMerge;
+            fileInput.click();
+        };
+
+        async function processFiles(files, isMerge, areHandles = false) {
+           try {
+                if (isMerge) {
+                    let mergedCount = 0;
+                    for (const fileOrHandle of files) {
+                        const file = areHandles ? await fileOrHandle.getFile() : fileOrHandle;
+                        const content = await file.text();
+                        const importedState = JSON.parse(content);
+                        if (importedState.performance) {
+                            Object.keys(importedState.performance).forEach(progName => {
+                                if (!state.performance[progName]) state.performance[progName] = {};
+                                Object.keys(importedState.performance[progName]).forEach(exoName => {
+                                    if (!state.performance[progName][exoName]) state.performance[progName][exoName] = [];
+                                    const existingDates = new Set(state.performance[progName][exoName].map(e => e.date));
+                                    const newEntries = importedState.performance[progName][exoName].filter(e => e && e.date && !existingDates.has(e.date));
+                                    if (newEntries.length > 0) {
+                                        state.performance[progName][exoName].push(...newEntries);
+                                    }
+                                });
+                            });
+                        }
+                        mergedCount++;
+                    }
+                    Object.values(state.performance).forEach(prog => {
+                        Object.values(prog).forEach(exoHistory => exoHistory.sort((a,b) => new Date(a.date) - new Date(b.date)));
+                    });
+                    if(mergedCount > 0) {
+                        markDirty(); refreshAll();
+                        showToast(`${mergedCount} fichier(s) fusionné(s) !`);
+                    }
+                } else {
+                    const file = areHandles ? await files[0].getFile() : files[0];
+                    const content = await file.text();
+                    const importedState = JSON.parse(content);
+                    if (importedState.programs && importedState.performance) {
+                        state = importedState;
+                        state.activeFileName = file.name; state.isDirty = false;
+                        markDirty(); refreshAll();
+                        showToast('Backup importé avec succès !');
+                    } else { throw new Error("Format de fichier invalide."); }
+                }
+            } catch (err) {
+                 console.error("Erreur de traitement du fichier :", err);
+                 showToast(err.message || "Erreur lors de l'importation.", true);
+            }
+        }
+
+        function handleSwipe() {
+            if (!state.programOrder || state.programOrder.length < 2) return;
+            const deltaX = touchEndX - touchStartX;
+            const minSwipeDistance = 100;
+            const currentIndex = state.programOrder.indexOf(state.currentProgram);
+            if (currentIndex === -1) return;
+            let newIndex = currentIndex;
+            if (deltaX < -minSwipeDistance) {
+                newIndex = (currentIndex + 1) % state.programOrder.length;
+            } else if (deltaX > minSwipeDistance) {
+                newIndex = (currentIndex - 1 + state.programOrder.length) % state.programOrder.length;
+            }
+            if (newIndex !== currentIndex) {
+                state.currentProgram = state.programOrder[newIndex];
+                saveState();
+                refreshAll();
+            }
+        }
+
+        mainContent.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; }, false);
+        mainContent.addEventListener('touchend', e => { touchEndX = e.changedTouches[0].screenX; handleSwipe(); }, false);
+
+        fileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+            const isMerge = e.target.dataset.isMerge === 'true';
+            processFiles(files, isMerge, false);
+            e.target.value = '';
+        });
+
+        const refreshAll = () => { applyTheme(); renderHeader(); populateSelector(); renderProgram(); };
+        programSelect.addEventListener('change', (e) => {
+            exerciseList.style.opacity = 0;
+            setTimeout(() => {
+                state.currentProgram = e.target.value;
+                saveState();
+                renderProgram();
+                exerciseList.style.opacity = 1;
+            }, 200);
+        });
+
+        exerciseList.addEventListener('input', updateStateFromInput);
+        exerciseList.addEventListener('blur', handleBlur, true);
+
+        manageProgramsBtn.addEventListener('click', () => {
+            renderProgramEditor();
+            programModalContainer.style.display = 'flex';
+            setTimeout(() => programModalContainer.classList.add('visible'), 10);
+        });
+        globalStatsBtn.addEventListener('click', () => {
+            renderGlobalStatsModal();
+            globalStatsModalContainer.style.display = 'flex';
+            setTimeout(() => globalStatsModalContainer.classList.add('visible'), 10);
+        });
+
+        const toggleAllExercises = (shouldCollapse) => {
+            const programName = state.currentProgram;
+            if (programName && state.programs[programName] && state.programs[programName].exercises) {
+                state.programs[programName].exercises.forEach(ex => ex.isCollapsed = shouldCollapse);
+                saveState();
+                renderProgram();
+            }
+        };
+        collapseAllBtn.addEventListener('click', () => toggleAllExercises(true));
+        expandAllBtn.addEventListener('click', () => toggleAllExercises(false));
+
+        addExerciseBtn.addEventListener('click', () => {
+            const programName = state.currentProgram;
+            if (!programName) { showToast("Veuillez d'abord sélectionner ou créer un programme.", true); return; }
+            const newExercise = { "Groupe": "", "Exercice": "", "Séries": "4", "Répétitions": "10", "Repos": "60", "Notes d'exécution": "", "Objectif charge/reps": "" };
+            if (!state.programs[programName].exercises) state.programs[programName].exercises = [];
+            state.programs[programName].exercises.push(newExercise);
+            markDirty();
+            renderProgram({ newlyAddedIndex: state.programs[programName].exercises.length - 1 });
+            setTimeout(() => {
+                const newCard = document.querySelector('.newly-added');
+                if (newCard) {
+                    newCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setTimeout(() => newCard.classList.remove('newly-added'), 1500);
+                }
+            }, 50);
+        });
+
+        clearAllPerfBtn.addEventListener('click', () => {
+            const programName = state.currentProgram;
+            if (!programName || !state.programs[programName]) { showToast("Aucun programme à effacer.", true); return; }
+            const program = state.programs[programName];
+            if (!program.exercises) { return; }
+
+            if (confirm(`Voulez-vous créer une séance vide pour aujourd'hui pour tous les exercices de "${programName}" ?`)) {
+                program.exercises.forEach(exercise => {
+                    if (exercise.Exercice) {
+                        const todayEntry = getOrCreateTodayEntry(programName, exercise.Exercice);
+                        todayEntry.sets = [{}, {}, {}, {}];
+                    }
+                });
+                markDirty();
+                renderProgram();
+                showToast('Séances du jour créées et réinitialisées.');
+            }
+        });
+
+        exerciseList.addEventListener('focusin', (e) => {
+            const target = e.target;
+            if (target.dataset.field === 'Exercice') {
+                originalExerciseName = target.innerText.trim();
+            }
+        });
+
+        app.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+
+            if (!target.isContentEditable) { e.preventDefault(); }
+            
+            const action = target.dataset.action;
+            const programName = state.currentProgram;
+            switch (action) {
+                case 'header-backup':
+                    handleBackup();
+                    break;
+                case 'header-import':
+                    handleImport(false);
+                    break;
+                case 'header-drive-save':
+                    handleDriveSave();
+                    break;
+                case 'header-drive-load':
+                    handleDriveLoad();
+                    break;
+                case 'merge-import':
+                    handleImport(true);
+                    programModalContainer.style.display = 'none';
+                    break;
+                case 'close-drive-modal': {
+                    driveModalContainer.classList.remove('visible');
+                    setTimeout(() => { driveModalContainer.style.display = 'none'; }, 200);
+                    break;
+                }
+                case 'copy-last-perf':
+                case 'copy-last-weights':
+                case 'copy-last-reps': {
+                    const exerciseName = target.dataset.exerciseName;
+                    const card = target.closest('.exercise-card');
+                    const today = new Date().toISOString().split('T')[0];
+
+                    if (!state.performance[programName]) state.performance[programName] = {};
+                    let perfHistory = state.performance[programName][exerciseName];
+                    if (!perfHistory) {
+                        perfHistory = [];
+                        state.performance[programName][exerciseName] = perfHistory;
+                    }
+
+                    const previousPerfs = perfHistory.filter(p => p.date < today);
+                    const latestPerf = previousPerfs.length > 0 ? previousPerfs[previousPerfs.length - 1] : null;
+
+                    if (latestPerf) {
+                        const lastSets = JSON.parse(JSON.stringify(latestPerf.sets || []));
+                        let todayEntry = perfHistory.find(e => e.date === today);
+
+                        if (!todayEntry) {
+                            todayEntry = { date: today, sets: [] };
+                            perfHistory.push(todayEntry);
+                            perfHistory.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+                            if (action === 'copy-last-perf') {
+                                todayEntry.sets = lastSets;
+                            } else {
+                                todayEntry.sets = lastSets.map(lastSet => {
+                                    const newSet = {};
+                                    if (action === 'copy-last-weights') newSet.poids = lastSet.poids || '';
+                                    if (action === 'copy-last-reps') newSet.reps = lastSet.reps || '';
+                                    return newSet;
+                                });
+                            }
+                        } else {
+                            todayEntry.sets.forEach((set, i) => {
+                                if (!lastSets[i]) return;
+                                if (action === 'copy-last-perf') {
+                                    set.poids = lastSets[i].poids || '';
+                                    set.reps = lastSets[i].reps || '';
+                                } else if (action === 'copy-last-weights') {
+                                    set.poids = lastSets[i].poids || '';
+                                } else if (action === 'copy-last-reps') {
+                                    set.reps = lastSets[i].reps || '';
+                                }
+                            });
+                        }
+
+                        markDirty();
+                        renderProgram();
+                        
+                        setTimeout(() => {
+                            const updatedCard = document.querySelector(`[data-index="${card.dataset.index}"]`);
+                            if(updatedCard) {
+                                updatedCard.querySelectorAll('.editable-perf').forEach(input => {
+                                    const setIndex = parseInt(input.dataset.setIndex, 10);
+                                    if(!lastSets[setIndex]) return;
+                                    if(action === 'copy-last-perf' || 
+                                       (action === 'copy-last-weights' && lastSets[setIndex].poids) ||
+                                       (action === 'copy-last-reps' && lastSets[setIndex].reps)
+                                    ) {
+                                        const inputBg = input.closest('.input-bg');
+                                        if (inputBg) {
+                                            inputBg.classList.add('flash-animation');
+                                            setTimeout(() => inputBg.classList.remove('flash-animation'), 1200);
+                                        }
+                                    }
+                                });
+                            }
+                        }, 50);
+
+                    } else {
+                        showToast("Aucune performance antérieure à copier.", true);
+                    }
+                    break;
+                }
+                case 'delete-exercise': {
+                    const card = target.closest('.exercise-card');
+                    const index = parseInt(card.dataset.index, 10);
+                    if (confirm('Voulez-vous vraiment supprimer cet exercice ?')) {
+                        card.classList.add('deleting');
+                        setTimeout(() => {
+                            const exerciseNameToDelete = state.programs[programName].exercises[index].Exercice;
+                            state.programs[programName].exercises.splice(index, 1);
+                            if (exerciseNameToDelete && state.performance[programName]?.[exerciseNameToDelete]) {
+                                delete state.performance[programName][exerciseNameToDelete];
+                                showToast('Exercice et statistiques associées supprimés.', false);
+                            }
+                            markDirty();
+                            renderProgram();
+                        }, 400); 
+                    }
+                    break;
+                }
+                case 'duplicate-exercise': {
+                    const card = target.closest('.exercise-card');
+                    const index = parseInt(card.dataset.index, 10);
+                    const exercises = state.programs[programName].exercises;
+                    const exerciseToDuplicate = exercises[index];
+                    let newName = `${exerciseToDuplicate.Exercice} (copie)`;
+                    let i = 2;
+                    while (exercises.some(ex => ex.Exercice === newName)) {
+                        newName = `${exerciseToDuplicate.Exercice} (copie ${i++})`;
+                    }
+                    const newExercise = JSON.parse(JSON.stringify(exerciseToDuplicate));
+                    newExercise.Exercice = newName;
+                    const newIndex = index + 1;
+                    exercises.splice(newIndex, 0, newExercise);
+                    markDirty();
+                    renderProgram({ newlyAddedIndex: newIndex });
+                    showToast('Exercice dupliqué.');
+                    setTimeout(() => {
+                        const newCard = document.querySelector('.newly-added');
+                        if (newCard) { setTimeout(() => newCard.classList.remove('newly-added'), 1500); }
+                    }, 50);
+                    break;
+                }
+                case 'move-exercise': {
+                    const card = target.closest('.exercise-card');
+                    const index = parseInt(card.dataset.index, 10);
+                    const direction = target.dataset.direction;
+                    const exercises = state.programs[programName].exercises;
+                    if ((direction === 'up' && index > 0) || (direction === 'down' && index < exercises.length - 1)) {
+                        const newIndex = direction === 'up' ? index - 1 : index + 1;
+                        const tempId = `glow-${Date.now()}`;
+                        [exercises[index], exercises[newIndex]] = [exercises[newIndex], exercises[index]];
+                        exercises[newIndex].tempId = tempId;
+                        markDirty();
+                        renderProgram();
+                        setTimeout(() => {
+                            const cardToGlow = document.getElementById(tempId);
+                            if (cardToGlow) {
+                                cardToGlow.classList.add('card-glow-animation');
+                                setTimeout(() => cardToGlow.classList.remove('card-glow-animation'), 1500);
+                            }
+                        }, 50);
+                    }
+                    break;
+                }
+                case 'toggle-collapse': {
+                    const card = target.closest('.exercise-card');
+                    const index = parseInt(card.dataset.index, 10);
+                    const exercise = state.programs[programName].exercises[index];
+                    const tempId = `glow-${Date.now()}`;
+                    exercise.tempId = tempId;
+                    exercise.isCollapsed = !exercise.isCollapsed;
+                    saveState();
+                    renderProgram();
+                    setTimeout(() => {
+                        const cardToGlow = document.getElementById(tempId);
+                        if (cardToGlow) {
+                            cardToGlow.classList.add('card-glow-animation');
+                            setTimeout(() => cardToGlow.classList.remove('card-glow-animation'), 1500);
+                        }
+                    }, 50);
+                    break;
+                }
+                case 'add-set': {
+                    const exerciseName = target.dataset.exerciseName;
+                    const todayEntry = getOrCreateTodayEntry(programName, exerciseName);
+                    todayEntry.sets.push({});
+                    markDirty();
+                    renderProgram();
+                    break;
+                }
+                case 'delete-set': {
+                    const { exerciseName, setIndex } = target.dataset;
+                    const todayEntry = getOrCreateTodayEntry(programName, exerciseName);
+                    if (todayEntry.sets.length > 1) {
+                       todayEntry.sets.splice(parseInt(setIndex, 10), 1);
+                       markDirty();
+                       renderProgram();
+                    } else {
+                       showToast("Vous ne pouvez pas supprimer la dernière série.", true);
+                    }
+                    break;
+                }
+                case 'clear-performance': {
+                    const exerciseName = target.dataset.exerciseName;
+                    const todayEntry = getOrCreateTodayEntry(programName, exerciseName);
+                    todayEntry.sets = [{}, {}, {}, {}];
+                    markDirty();
+                    renderProgram();
+                    break;
+                }
+                case 'view-history': {
+                    renderHistoryModal(target.dataset.exerciseName);
+                    historyModalContainer.style.display = 'flex';
+                    setTimeout(() => historyModalContainer.classList.add('visible'), 10);
+                    break;
+                }
+                case 'filter-history': {
+                    renderHistoryModal(target.dataset.exerciseName, target.dataset.period);
+                    break;
+                }
+                case 'filter-stats': {
+                    renderGlobalStatsModal(target.dataset.period);
+                    break;
+                }
+                case 'delete-perf-entry': {
+                    const { date, exerciseName } = target.dataset;
+                    if (confirm(`Voulez-vous vraiment supprimer la séance du ${new Date(date).toLocaleDateString('fr-FR')} pour "${exerciseName}" ?`)) {
+                        const perfHistory = state.performance[programName]?.[exerciseName];
+                        if (perfHistory) {
+                            const entryIndex = perfHistory.findIndex(e => e.date === date);
+                            if (entryIndex > -1) {
+                                perfHistory.splice(entryIndex, 1);
+                                markDirty();
+                                showToast('Entrée supprimée.');
+                                renderHistoryModal(exerciseName, document.querySelector('#history-modal .filter-btn.active')?.dataset.period || '3m');
+                            }
+                        }
+                    }
+                    break;
+                }
+                case 'close-modal': {
+                    const modals = [programModalContainer, historyModalContainer, globalStatsModalContainer];
+                    modals.forEach(modal => {
+                        if(modal.classList.contains('visible')) {
+                            modal.classList.remove('visible');
+                            setTimeout(() => { modal.style.display = 'none'; }, 200);
+                        }
+                    });
+                    break;
+                }
+                case 'start-timer': {
+                    const card = target.closest('.exercise-card');
+                    const index = parseInt(card.dataset.index, 10);
+                    const exercise = state.programs[programName].exercises[index];
+                    const duration = parseInt(exercise.Repos, 10) || 0;
+                    if (duration > 0) {
+                        startTimer(duration);
+                    } else {
+                        showToast("Aucun temps de repos valide défini.", true);
+                    }
+                    break;
+                }
+                case 'copy-text': {
+                    const card = target.closest('.exercise-card');
+                    const fieldName = target.dataset.targetField;
+                    const textField = card.querySelector(`[data-field="${fieldName}"]`);
+                    if (textField && textField.innerText) {
+                        navigator.clipboard.writeText(textField.innerText).then(() => {
+                            showToast('Texte copié !');
+                        }, () => {
+                            showToast('Erreur de copie', true);
+                        });
+                    } else {
+                        showToast('Le champ est vide.', true);
+                    }
+                    break;
+                }
+                case 'delete-program': {
+                    const name = target.dataset.name;
+                    if (confirm(`Voulez-vous vraiment supprimer le programme "${name}" ?`)) {
+                        delete state.programs[name];
+                        delete state.performance[name];
+                        const index = state.programOrder.indexOf(name);
+                        if (index > -1) state.programOrder.splice(index, 1);
+                        if (state.currentProgram === name) {
+                            state.currentProgram = state.programOrder[0] || null;
+                        }
+                        markDirty();
+                        renderProgramEditor();
+                        refreshAll();
+                    }
+                    break;
+                }
+                case 'duplicate-program': {
+                    const name = target.dataset.name;
+                    let newName = `${name} (copie)`;
+                    let i = 2;
+                    while (state.programs[newName]) {
+                        newName = `${name} (copie ${i++})`;
+                    }
+                    state.programs[newName] = JSON.parse(JSON.stringify(state.programs[name]));
+                    const index = state.programOrder.indexOf(name);
+                    state.programOrder.splice(index + 1, 0, newName);
+                    markDirty();
+                    renderProgramEditor();
+                    populateSelector();
+                    showToast('Programme dupliqué.');
+                    break;
+                }
+                case 'set-pdc': {
+                    const targetId = target.dataset.targetId;
+                    const weightInput = document.getElementById(targetId);
+                    if (weightInput) {
+                        weightInput.value = "PDC";
+                        const event = new Event('input', { bubbles: true, cancelable: true });
+                        weightInput.dispatchEvent(event);
+                        const inputBg = weightInput.closest('.input-bg');
+                        if(inputBg) {
+                            inputBg.classList.add('flash-animation');
+                            setTimeout(() => inputBg.classList.remove('flash-animation'), 1200);
+                        }
+                        weightInput.focus();
+                    }
+                    break;
+                }
+                case 'move-program': {
+                    const index = parseInt(target.dataset.index, 10);
+                    const direction = target.dataset.direction;
+                    if (direction === 'up' && index > 0) {
+                        [state.programOrder[index], state.programOrder[index - 1]] = [state.programOrder[index - 1], state.programOrder[index]];
+                    } else if (direction === 'down' && index < state.programOrder.length - 1) {
+                        [state.programOrder[index], state.programOrder[index + 1]] = [state.programOrder[index + 1], state.programOrder[index]];
+                    }
+                    markDirty();
+                    renderProgramEditor();
+                    populateSelector();
+                    break;
+                }
+            }
+        });
+
+        programModalContainer.addEventListener('click', (e) => {
+            const target = e.target.closest('button');
+            if (!target) return;
+            if (target.id === 'remap-backup-path-btn') { promptAndSetDirectory(); }
+            if (target.id === 'add-program-btn') {
+                const newName = programModalContainer.querySelector('#new-program-name').value.trim();
+                if (newName && !state.programs[newName]) {
+                    state.programs[newName] = { exercises: [] };
+                    state.programOrder.push(newName);
+                    if (!state.currentProgram) state.currentProgram = newName;
+                    programModalContainer.querySelector('#new-program-name').value = '';
+                    markDirty();
+                    renderProgramEditor();
+                    refreshAll();
+                    showToast('Programme ajouté !');
+                } else {
+                    showToast('Nom invalide ou déjà existant.', true);
+                }
+            }
+        });
+
+        programModalContainer.addEventListener('change', (e) => {
+             if (e.target.classList.contains('program-name-input')) {
+                const input = e.target;
+                const oldName = input.dataset.oldName;
+                const newName = input.value.trim();
+                if (newName && newName !== oldName && !state.programs[newName]) {
+                    const programData = state.programs[oldName];
+                    delete state.programs[oldName];
+                    state.programs[newName] = programData;
+
+                    if (state.performance[oldName]) {
+                        const perfData = state.performance[oldName];
+                        delete state.performance[oldName];
+                        state.performance[newName] = perfData;
+                    }
+                    const index = state.programOrder.indexOf(oldName);
+                    if(index > -1) state.programOrder[index] = newName;
+                    if (state.currentProgram === oldName) state.currentProgram = newName;
+                    if(state.programs[newName].name) { state.programs[newName].name = newName; }
+                    input.dataset.oldName = newName;
+                    markDirty();
+                    populateSelector();
+                    showToast('Programme renommé.');
+                } else if (newName !== oldName) {
+                    input.value = oldName;
+                    showToast('Nom invalide ou déjà existant.', true);
+                }
+            }
+        });
+
+        async function init() {
+            loadDriveConfig();
+            loadState();
+            refreshAll();
+            if (isFileSystemAccessAPISupported) {
+                dbRequest.onsuccess = async () => {
+                    backupDirectoryHandle = await getDirectoryHandle();
+                    if (backupDirectoryHandle) console.log("Un dossier de backup a été trouvé en mémoire.");
+                    else showToast("Pensez à choisir un dossier pour les backups via les réglages.");
+                };
+                dbRequest.onerror = () => showToast("Impossible d'utiliser la base de données locale.", true);
+            } else {
+                showToast("Le mode de sauvegarde avancé n'est pas supporté par ce navigateur.", true);
+            }
+        }
+
+        init();
+    });
+</script>
+</body>
+</html>
