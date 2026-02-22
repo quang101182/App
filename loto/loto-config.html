@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loto — Configuration</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Segoe UI',sans-serif; background:linear-gradient(135deg,#667eea,#764ba2); min-height:100vh; padding:20px; }
+        .box { max-width:700px; margin:0 auto; background:white; border-radius:20px; padding:30px; box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+        h1 { text-align:center; color:#667eea; margin-bottom:25px; font-size:2.2em; }
+        .section { background:#f8f9fa; border-radius:12px; padding:20px; margin-bottom:20px; }
+        .section h2 { color:#333; margin-bottom:15px; font-size:1.3em; }
+        .row { display:flex; gap:10px; margin-bottom:10px; align-items:center; }
+        .row input[type=text]   { flex:1; padding:12px; border:2px solid #ddd; border-radius:8px; font-size:1em; }
+        .row input[type=number] { width:80px; padding:12px; border:2px solid #ddd; border-radius:8px; font-size:1em; }
+        .row .del { padding:11px 15px; background:#dc3545; color:white; border:none; border-radius:8px; cursor:pointer; font-size:1.1em; font-weight:bold; }
+        .btn { width:100%; padding:14px; border:none; border-radius:10px; cursor:pointer; font-weight:bold; font-size:1.1em; margin-top:8px; }
+        .btn-add   { background:linear-gradient(135deg,#667eea,#764ba2); color:white; }
+        .btn-start { background:linear-gradient(135deg,#f093fb,#f5576c); color:white; font-size:1.3em; padding:18px; margin-top:15px; }
+        .btn-start:disabled { opacity:0.5; cursor:not-allowed; }
+        .lbl { color:#667eea; font-weight:bold; margin-bottom:12px; }
+        .loading { display:none; text-align:center; padding:12px; color:#667eea; font-weight:bold; }
+        .err { display:none; background:#ffebee; border:2px solid #f44336; padding:10px; border-radius:8px; color:#c62828; margin-top:10px; }
+        .hint { font-size:0.85em; color:#888; margin-top:5px; }
+        .col-labels { display:flex; gap:10px; color:#999; font-size:0.85em; margin-bottom:5px; }
+        .col-labels span:first-child { flex:1; }
+        .col-labels span:last-child { width:95px; text-align:center; }
+    </style>
+</head>
+<body>
+<div class="box">
+    <h1>🎰 Jeu de Loto 🎰</h1>
+
+    <div class="section">
+        <h2>🎲 Créer une nouvelle partie</h2>
+        <div class="lbl" id="lbl">Joueurs : 0</div>
+        <div class="col-labels"><span>Nom du joueur</span><span>Nb cartes</span><span></span></div>
+        <div id="players"></div>
+        <button class="btn btn-add" onclick="addPlayer()">+ Ajouter un joueur</button>
+    </div>
+
+    <div class="loading" id="loading">⏳ Création en cours...</div>
+    <div class="err" id="err"></div>
+    <button class="btn btn-start" id="btnStart" onclick="start()" disabled>🎲 Créer la partie</button>
+    <p class="hint" style="text-align:center;margin-top:10px;">Le lien joueur sera affiché après la création</p>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+const db = getDatabase(initializeApp({ databaseURL:"https://weighty-country-411214-default-rtdb.firebaseio.com" }));
+
+// ── Joueurs ─────────────────────────────────────────────────
+const players = [];
+
+window.addPlayer = function() {
+    const idx = players.length;
+    players.push({ name:'Joueur '+(idx+1), cards:1 });
+    renderPlayers();
+};
+
+window.delPlayer = function(i) {
+    players.splice(i, 1);
+    renderPlayers();
+};
+
+function renderPlayers() {
+    const c = document.getElementById('players');
+    c.innerHTML = '';
+    players.forEach((p, i) => {
+        const row = document.createElement('div');
+        row.className = 'row';
+
+        const inp = document.createElement('input');
+        inp.type = 'text'; inp.value = p.name; inp.placeholder = 'Nom';
+        inp.addEventListener('input', e => { players[i].name = e.target.value; });
+
+        const num = document.createElement('input');
+        num.type = 'number'; num.min = 1; num.max = 10; num.value = p.cards;
+        num.addEventListener('input', e => { players[i].cards = Math.max(1, parseInt(e.target.value)||1); });
+
+        const del = document.createElement('button');
+        del.className = 'del'; del.textContent = '✕';
+        del.addEventListener('click', () => window.delPlayer(i));
+
+        row.append(inp, num, del);
+        c.appendChild(row);
+    });
+    document.getElementById('lbl').textContent = `Joueurs : ${players.length}`;
+    document.getElementById('btnStart').disabled = players.length === 0;
+}
+
+// ── Génération cartes ────────────────────────────────────────
+function genCard() {
+    const g = Array(3).fill(null).map(()=>Array(9).fill(null));
+    for (let r=0; r<3; r++) {
+        const pos=[];
+        while(pos.length<5){ const p=Math.floor(Math.random()*9); if(!pos.includes(p)) pos.push(p); }
+        pos.sort((a,b)=>a-b);
+        pos.forEach(c=>{
+            const mn = c===0?1:c===8?80:c*10, mx = c===0?9:c===8?90:c*10+9;
+            let n; do{ n=Math.floor(Math.random()*(mx-mn+1))+mn; } while(g.some(row=>row.includes(n)));
+            g[r][c]=n;
+        });
+    }
+    return g;
+}
+
+// ── Créer la partie ──────────────────────────────────────────
+window.start = async function() {
+    if (!players.length) return;
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('btnStart').disabled = true;
+    document.getElementById('err').style.display = 'none';
+
+    const sid = Math.random().toString(36).substr(2,6).toUpperCase();
+    const croupierToken = Math.random().toString(36).substr(2,16) + Math.random().toString(36).substr(2,16);
+    const cards = [];
+    players.forEach(p => {
+        const pid = 'p_' + Math.random().toString(36).substr(2,8);
+        p.id = pid;
+        for (let i=0; i<p.cards; i++) {
+            cards.push({
+                id: `c_${pid}_${i}`,
+                playerId: pid,
+                playerName: p.name,
+                cardNumber: i+1,
+                grid: genCard(),
+                // marked stocké à plat pour Firebase (pas de nested arrays)
+                marked: Array(27).fill(false)
+            });
+        }
+    });
+
+    const data = {
+        sessionId: sid,
+        croupierToken,
+        players: players.map(p=>({id:p.id, name:p.name, cards:p.cards})),
+        cards,
+        drawing: { drawn: [], available: Array.from({length:90},(_,i)=>i+1) }
+    };
+
+    try {
+        await set(ref(db,'loto/'+sid), data);
+        document.getElementById('loading').style.display = 'none';
+
+        const base = window.location.href.replace('loto-config.html','');
+        const playerUrl = `${base}loto-joueur.html?s=${sid}`;
+        const croupierUrl = `${base}loto-croupier.html?s=${sid}&t=${croupierToken}`;
+
+        // Afficher les liens
+        document.querySelector('.box').innerHTML = `
+            <h1>🎰 Partie créée ! 🎰</h1>
+            <div style="background:#e8f5e9;border-radius:12px;padding:20px;margin-bottom:20px;">
+                <h2 style="color:#2e7d32;margin-bottom:10px;">🎲 Lien Croupier (vous)</h2>
+                <p style="font-size:1.3em;font-weight:bold;color:#1b5e20;margin-bottom:10px;">${croupierUrl}</p>
+                <button onclick="copy('${croupierUrl}')" style="padding:12px 24px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:bold;font-size:1em;">📋 Copier le lien Croupier</button>
+            </div>
+            <div style="background:#e3f2fd;border-radius:12px;padding:20px;margin-bottom:20px;">
+                <h2 style="color:#1565c0;margin-bottom:10px;">👥 Lien Joueurs (à partager)</h2>
+                <p style="font-size:1.3em;font-weight:bold;color:#0d47a1;margin-bottom:5px;">${playerUrl}</p>
+                <p style="color:#666;font-size:0.9em;margin-bottom:10px;">Envoyez ce lien à tous vos joueurs via WhatsApp / SMS</p>
+                <button onclick="copy('${playerUrl}')" style="padding:12px 24px;background:linear-gradient(135deg,#28a745,#20c997);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:bold;font-size:1em;">📋 Copier le lien Joueurs</button>
+            </div>
+            <div style="text-align:center;color:#888;font-size:0.9em;">Code session : <strong>${sid}</strong></div>
+        `;
+    } catch(e) {
+        document.getElementById('loading').style.display='none';
+        document.getElementById('btnStart').disabled=false;
+        document.getElementById('err').style.display='block';
+        document.getElementById('err').textContent='❌ Erreur Firebase : '+e.message;
+    }
+};
+
+window.copy = function(url) {
+    navigator.clipboard.writeText(url)
+        .then(()=>alert('✅ Lien copié !'))
+        .catch(()=>prompt('Copiez ce lien :',url));
+};
+
+// Init
+window.addPlayer(); window.addPlayer();
+</script>
+</body>
+</html>

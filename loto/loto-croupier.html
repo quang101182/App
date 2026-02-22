@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loto — Croupier</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;padding:0 0 70px 0;}
+.sticky-top{position:sticky;top:0;z-index:100;background:linear-gradient(135deg,#667eea,#764ba2);padding:8px 12px;box-shadow:0 3px 15px rgba(0,0,0,.3);}
+.top-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.lang-select{background:rgba(255,255,255,.18);color:white;border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:4px 20px 4px 7px;font-size:.8em;cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='white'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 5px center;}
+.lang-select option{color:#333;background:white;}
+.top-title{color:white;font-size:1.1em;font-weight:bold;flex:1;text-align:center;}
+.sync{background:rgba(255,255,255,.92);padding:4px 10px;border-radius:12px;font-weight:bold;font-size:.75em;}
+.sync.ok{color:#28a745;}.sync.busy{color:#ff9800;}.sync.err{color:#dc3545;}
+.draw-row{display:flex;align-items:center;gap:10px;}
+.mini-ball{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#f093fb,#f5576c);color:white;display:flex;align-items:center;justify-content:center;font-size:1.5em;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,.25);flex-shrink:0;}
+.mini-ball.reveal{animation:reveal .4s cubic-bezier(.175,.885,.32,1.275);}
+@keyframes reveal{0%{transform:scale(.5);opacity:.2}100%{transform:scale(1);opacity:1}}
+.draw-controls{flex:1;display:flex;flex-direction:column;gap:5px;}
+.draw-btns{display:flex;gap:6px;}
+.btn-draw{flex:1;padding:9px;background:linear-gradient(135deg,#f093fb,#f5576c);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:bold;font-size:.95em;}
+.btn-draw:disabled{opacity:.45;cursor:not-allowed;}
+.btn-reset{padding:9px 12px;background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.4);border-radius:8px;cursor:pointer;font-weight:bold;font-size:.9em;}
+.draw-stats{font-size:.82em;color:rgba(255,255,255,.9);font-weight:bold;}
+.drawn-toggle{cursor:pointer;margin-top:5px;color:rgba(255,255,255,.8);font-size:.8em;user-select:none;}
+.drawn-section{display:none;margin-top:6px;}
+.drawn-section.open{display:block;}
+.drawn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(34px,1fr));gap:4px;background:rgba(255,255,255,.1);padding:8px;border-radius:8px;}
+.db{aspect-ratio:1;border-radius:50%;background:rgba(255,255,255,.25);color:white;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:.8em;}
+.db.new{background:linear-gradient(135deg,#f093fb,#f5576c);}
+.content{padding:12px;}
+.cards-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;}
+.cards-toolbar-left{color:white;font-weight:bold;font-size:.95em;}
+.toolbar-btns{display:flex;gap:6px;flex-wrap:wrap;}
+.tbtn{padding:6px 12px;background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.35);border-radius:7px;cursor:pointer;font-size:.82em;font-weight:bold;}
+.tbtn-toggle{padding:6px 12px;border-radius:7px;cursor:pointer;font-size:.82em;font-weight:bold;border:2px solid rgba(255,255,255,.4);}
+.tbtn-toggle.off{background:rgba(255,255,255,.15);color:rgba(255,255,255,.7);}
+.tbtn-toggle.hl-on{background:#ff8c00;color:white;border-color:#ff8c00;}
+.tbtn-toggle.snd-on{background:#28a745;color:white;border-color:#28a745;}
+.monitor{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;max-width:1400px;margin:0 auto;}
+.mcard{background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 15px rgba(0,0,0,.15);}
+.mcard-header{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none;}
+.mtitle{flex:1;color:#667eea;font-weight:bold;font-size:.95em;}
+.mpct{font-size:.85em;color:#888;font-weight:bold;flex-shrink:0;}
+.mexpand{color:#667eea;font-size:.9em;flex-shrink:0;transition:transform .2s;}
+.mcard.open .mexpand{transform:rotate(180deg);}
+.pbar{height:6px;background:#e9ecef;margin:0 14px 10px;}
+.pfill{height:100%;background:linear-gradient(135deg,#f093fb,#f5576c);border-radius:3px;transition:width .4s;}
+.wtag{background:linear-gradient(135deg,#28a745,#20c997);color:white;padding:3px 8px;border-radius:5px;font-size:.75em;font-weight:bold;margin:0 14px 8px;text-align:center;animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+.mcard-grid{display:none;padding:0 10px 10px;}
+.mcard.open .mcard-grid{display:block;}
+.lgrid{display:grid;grid-template-columns:repeat(9,1fr);gap:3px;}
+.cell{aspect-ratio:1;border:2px solid #ddd;border-radius:4px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:.8em;background:#f8f9fa;}
+.cell.marked{background:linear-gradient(135deg,#f093fb,#f5576c);color:white;border-color:#f5576c;}
+.cell.empty{background:#e9ecef;border-color:#e9ecef;}
+.cell.hl{border:3px solid #ff8c00 !important;background:#fff3e0;color:#cc5500;font-weight:900;}
+.cell.marked.hl{background:linear-gradient(135deg,#f093fb,#f5576c);border:3px solid #ff8c00 !important;color:white;}
+.mcard.complete-hl{outline:4px solid #28a745;outline-offset:2px;}
+.chat-bar{position:fixed;bottom:0;left:0;right:0;z-index:300;background:white;box-shadow:0 -4px 20px rgba(0,0,0,.2);transition:height .3s ease;height:52px;overflow:hidden;}
+.chat-bar.open{height:40vh;min-height:240px;max-height:400px;}
+.chat-toggle{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;cursor:pointer;border-bottom:1px solid #eee;user-select:none;height:52px;flex-shrink:0;}
+.chat-label{font-weight:bold;color:#667eea;display:flex;align-items:center;gap:6px;font-size:.95em;flex-shrink:0;}
+.chat-arrow{color:#667eea;transition:transform .3s;flex-shrink:0;}
+.chat-bar.open .chat-arrow{transform:rotate(180deg);}
+.chat-preview{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#888;font-size:.82em;margin:0 10px;min-width:0;}
+.badge{background:#f5576c;color:white;border-radius:50%;width:18px;height:18px;display:none;align-items:center;justify-content:center;font-size:.7em;font-weight:bold;flex-shrink:0;}
+.badge.show{display:inline-flex;}
+.chat-body{display:flex;flex-direction:column;height:calc(100% - 52px);}
+.chat-msgs{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:6px;}
+.msg{max-width:80%;padding:7px 11px;border-radius:12px;font-size:.9em;line-height:1.35;word-break:break-word;}
+.msg.mine{background:linear-gradient(135deg,#667eea,#764ba2);color:white;align-self:flex-end;border-bottom-right-radius:3px;}
+.msg.other{background:#f0f0f0;color:#333;align-self:flex-start;border-bottom-left-radius:3px;}
+.msg .sender{font-size:.75em;font-weight:bold;margin-bottom:2px;opacity:.8;}
+.chat-input-row{display:flex;gap:8px;padding:8px 12px;border-top:1px solid #eee;flex-shrink:0;}
+.chat-input-row input{flex:1;padding:9px 13px;border:2px solid #ddd;border-radius:20px;font-size:.95em;outline:none;}
+.chat-input-row input:focus{border-color:#667eea;}
+.chat-send{padding:9px 16px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:20px;cursor:pointer;font-weight:bold;flex-shrink:0;}
+.loading{position:fixed;inset:0;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;z-index:9999;color:white;font-size:1.5em;font-weight:bold;}
+</style>
+</head>
+<body>
+<div class="loading" id="ls">⏳ Chargement...</div>
+
+<div class="sticky-top">
+  <div class="top-row">
+    <select class="lang-select" id="langSel"></select>
+    <div class="top-title">🎲 <span id="titleTxt">Croupier</span> 🎲</div>
+    <div class="sync ok" id="sync">● Sync</div>
+  </div>
+  <div class="draw-row">
+    <div class="mini-ball" id="ball">-</div>
+    <div class="draw-controls">
+      <div class="draw-btns">
+        <button class="btn-draw" id="btnDraw">🎱 <span id="btnDrawTxt">Tirer</span></button>
+        <button class="btn-reset" id="btnReset">🔄</button>
+      </div>
+      <div class="draw-stats">Tirés : <strong id="cnt">0</strong>/90 — Restants : <strong id="rem">90</strong></div>
+    </div>
+  </div>
+  <div class="drawn-toggle" id="drawnToggle"><span id="drawnToggleTxt">▼ Numéros tirés</span></div>
+  <div class="drawn-section" id="drawnSection"><div class="drawn-grid" id="dg"></div></div>
+</div>
+
+<div class="content">
+  <div class="cards-toolbar">
+    <span class="cards-toolbar-left" id="sessionTxt">Session : ...</span>
+    <div class="toolbar-btns">
+      <button class="tbtn" id="btnExpand">⬇ <span id="btnExpandTxt">Tout déplier</span></button>
+      <button class="tbtn" id="btnCollapse">⬆ <span id="btnCollapseTxt">Tout replier</span></button>
+      <button class="tbtn-toggle hl-on" id="btnHighlight">👁 <span id="btnHlTxt">Vérif ON</span></button>
+      <button class="tbtn-toggle snd-on" id="btnSound">🔊 <span id="btnSoundTxt">Son ON</span></button>
+    </div>
+  </div>
+  <div class="monitor" id="monitor"></div>
+</div>
+
+<div class="chat-bar" id="chatBar">
+  <div class="chat-toggle" id="chatToggle">
+    <div class="chat-label">💬 <span id="chatLabelTxt">Chat</span> <span class="badge" id="badge"></span></div>
+    <span class="chat-preview" id="chatPreview"></span>
+    <span class="chat-arrow">▲</span>
+  </div>
+  <div class="chat-body">
+    <div class="chat-msgs" id="chatMsgs"></div>
+    <div class="chat-input-row">
+      <input type="text" id="chatInput" maxlength="200">
+      <button class="chat-send" id="btnSend">▶</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getDatabase, ref, onValue, onChildAdded, update, push, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+const LANGS={
+  fr:{title:'Croupier',draw:'Tirer',chat:'Chat',ph:'Message ou emoji...',ann:'Numéro',expand:'Tout déplier',collapse:'Tout replier',dshow:'▼ Numéros tirés',dhide:'▲ Cacher',winner:'🎉 GAGNANT !',card:'Carte',reset:'Réinitialiser ?',allDrawn:'Tous les numéros ont été tirés !',verif:'Vérif',verifOn:'Vérif ON',son:'Son ON',sonOff:'Son OFF',voice:'fr-FR'},
+  en:{title:'Dealer',draw:'Draw',chat:'Chat',ph:'Message or emoji...',ann:'Number',expand:'Expand all',collapse:'Collapse all',dshow:'▼ Drawn numbers',dhide:'▲ Hide',winner:'🎉 WINNER!',card:'Card',reset:'Reset?',allDrawn:'All numbers drawn!',verif:'Check',verifOn:'Check ON',son:'Sound ON',sonOff:'Sound OFF',voice:'en-GB'},
+  es:{title:'Crupier',draw:'Sacar',chat:'Chat',ph:'Mensaje...',ann:'Número',expand:'Expandir todo',collapse:'Colapsar todo',dshow:'▼ Números sacados',dhide:'▲ Ocultar',winner:'🎉 ¡GANADOR!',card:'Carta',reset:'¿Reiniciar?',allDrawn:'¡Todos los números!',verif:'Verif',verifOn:'Verif ON',son:'Sonido ON',sonOff:'Sonido OFF',voice:'es-ES'},
+  it:{title:'Croupier',draw:'Estrai',chat:'Chat',ph:'Messaggio...',ann:'Numero',expand:'Espandi tutto',collapse:'Comprimi tutto',dshow:'▼ Numeri estratti',dhide:'▲ Nascondi',winner:'🎉 VINCITORE!',card:'Carta',reset:'Reimpostare?',allDrawn:'Tutti i numeri!',verif:'Verif',verifOn:'Verif ON',son:'Suono ON',sonOff:'Suono OFF',voice:'it-IT'},
+  pt:{title:'Crupiê',draw:'Sortear',chat:'Chat',ph:'Mensagem...',ann:'Número',expand:'Expandir tudo',collapse:'Recolher tudo',dshow:'▼ Números sorteados',dhide:'▲ Ocultar',winner:'🎉 VENCEDOR!',card:'Carta',reset:'Reiniciar?',allDrawn:'Todos os números!',verif:'Verif',verifOn:'Verif ON',son:'Som ON',sonOff:'Som OFF',voice:'pt-BR'},
+  de:{title:'Croupier',draw:'Ziehen',chat:'Chat',ph:'Nachricht...',ann:'Nummer',expand:'Alle öffnen',collapse:'Alle schließen',dshow:'▼ Gezogene Zahlen',dhide:'▲ Ausblenden',winner:'🎉 GEWINNER!',card:'Karte',reset:'Zurücksetzen?',allDrawn:'Alle Nummern gezogen!',verif:'Prüfen',verifOn:'Prüfen ON',son:'Ton ON',sonOff:'Ton OFF',voice:'de-DE'},
+  ru:{title:'Крупье',draw:'Тянуть',chat:'Чат',ph:'Сообщение...',ann:'Номер',expand:'Раскрыть всё',collapse:'Свернуть всё',dshow:'▼ Вытащенные',dhide:'▲ Скрыть',winner:'🎉 ПОБЕДИТЕЛЬ!',card:'Карта',reset:'Сбросить?',allDrawn:'Все номера вытащены!',verif:'Проверка',verifOn:'Проверка ВКЛ',son:'Звук ВКЛ',sonOff:'Звук ВЫКЛ',voice:'ru-RU'},
+  ar:{title:'المراقب',draw:'سحب',chat:'دردشة',ph:'رسالة...',ann:'رقم',expand:'توسيع الكل',collapse:'طي الكل',dshow:'▼ الأرقام المسحوبة',dhide:'▲ إخفاء',winner:'🎉 فائز!',card:'بطاقة',reset:'إعادة؟',allDrawn:'كل الأرقام!',verif:'تحقق',verifOn:'تحقق ON',son:'صوت ON',sonOff:'صوت OFF',voice:'ar-SA'},
+  zh:{title:'荷官',draw:'抽号',chat:'聊天',ph:'消息...',ann:'号码',expand:'全部展开',collapse:'全部收起',dshow:'▼ 已抽号码',dhide:'▲ 隐藏',winner:'🎉 赢家！',card:'卡',reset:'重置？',allDrawn:'所有号码已抽！',verif:'验证',verifOn:'验证 ON',son:'声音 ON',sonOff:'声音 OFF',voice:'zh-CN'},
+  ja:{title:'クルーピエ',draw:'引く',chat:'チャット',ph:'メッセージ...',ann:'番号',expand:'全て開く',collapse:'全て閉じる',dshow:'▼ 引いた番号',dhide:'▲ 非表示',winner:'🎉 優勝！',card:'カード',reset:'リセット？',allDrawn:'全番号引いた！',verif:'確認',verifOn:'確認 ON',son:'音 ON',sonOff:'音 OFF',voice:'ja-JP'},
+};
+const LANG_KEYS=['fr','en','es','it','pt','de','ru','ar','zh','ja'];
+const LANG_FLAGS={fr:'🇫🇷',en:'🇬🇧',es:'🇪🇸',it:'🇮🇹',pt:'🇧🇷',de:'🇩🇪',ru:'🇷🇺',ar:'🇸🇦',zh:'🇨🇳',ja:'🇯🇵'};
+
+const sel=document.getElementById('langSel');
+LANG_KEYS.forEach(k=>{const o=document.createElement('option');o.value=k;o.textContent=LANG_FLAGS[k]+' '+k.toUpperCase();sel.appendChild(o);});
+
+let lang=localStorage.getItem('lotoLang')||'fr';
+function L(){return LANGS[lang]||LANGS.fr;}
+function myName(){return '🎲 '+L().title;}
+
+let gd=null, drawing=false, drawnOpen=false;
+let chatOpen=false, seenCount=0, lastCount=0;
+const cardStates={};
+let highlightMode=true;
+let soundMode=true;
+
+function applyLang(){
+  sel.value=lang;
+  document.getElementById('titleTxt').textContent=L().title;
+  document.getElementById('btnDrawTxt').textContent=L().draw;
+  document.getElementById('chatLabelTxt').textContent=L().chat;
+  document.getElementById('chatInput').placeholder=L().ph;
+  document.getElementById('btnExpandTxt').textContent=L().expand;
+  document.getElementById('btnCollapseTxt').textContent=L().collapse;
+  document.getElementById('drawnToggleTxt').textContent=drawnOpen?L().dhide:L().dshow;
+  document.getElementById('btnHlTxt').textContent=highlightMode?L().verifOn:L().verif;
+  document.getElementById('btnSoundTxt').textContent=soundMode?L().son:L().sonOff;
+}
+applyLang();
+
+sel.addEventListener('change',()=>{lang=sel.value;localStorage.setItem('lotoLang',lang);applyLang();if(gd)renderMonitor();});
+document.getElementById('btnDraw').addEventListener('click',draw);
+document.getElementById('btnReset').addEventListener('click',resetDraw);
+document.getElementById('drawnToggle').addEventListener('click',toggleDrawn);
+document.getElementById('btnExpand').addEventListener('click',()=>{(gd.cards||[]).forEach(c=>{cardStates[c.id]=true;});renderMonitor();});
+document.getElementById('btnCollapse').addEventListener('click',()=>{(gd.cards||[]).forEach(c=>{cardStates[c.id]=false;});renderMonitor();});
+document.getElementById('chatToggle').addEventListener('click',toggleChat);
+document.getElementById('btnSend').addEventListener('click',sendMsg);
+document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendMsg();});
+
+document.getElementById('btnHighlight').addEventListener('click',()=>{
+  highlightMode=!highlightMode;
+  document.getElementById('btnHighlight').className='tbtn-toggle '+(highlightMode?'hl-on':'off');
+  document.getElementById('btnHlTxt').textContent=highlightMode?L().verifOn:L().verif;
+  if(gd) renderMonitor();
+});
+
+document.getElementById('btnSound').addEventListener('click',()=>{
+  soundMode=!soundMode;
+  document.getElementById('btnSound').className='tbtn-toggle '+(soundMode?'snd-on':'off');
+  document.getElementById('btnSoundTxt').textContent=soundMode?L().son:L().sonOff;
+});
+
+const db=getDatabase(initializeApp({databaseURL:"https://weighty-country-411214-default-rtdb.firebaseio.com"}));
+const sid=new URLSearchParams(window.location.search).get('s');
+const croupierToken=new URLSearchParams(window.location.search).get('t');
+if(!sid){alert('Session manquante');window.location.href='loto-config.html';}
+if(!croupierToken){alert('Token croupier manquant — utilisez le lien fourni lors de la création');window.location.href='loto-config.html';}
+document.getElementById('sessionTxt').textContent='Session : '+sid;
+
+onValue(ref(db,'loto/'+sid),snap=>{
+  const d=snap.val();
+  if(!d){alert('Session introuvable');window.location.href='loto-config.html';return;}
+  gd=d;
+  if(!gd.drawing) gd.drawing={};
+  gd.drawing.drawn=Object.values(gd.drawing.drawn||{});
+  gd.drawing.available=Object.values(gd.drawing.available||Array.from({length:90},(_,i)=>i+1));
+  gd.cards=Object.values(gd.cards||{}).map(c=>({...c,marked:Object.values(c.marked||{})}));
+  document.getElementById('ls').style.display='none';
+  renderDrawing(); renderMonitor(); setSyncStatus('ok');
+});
+
+const chatArr=[];
+onChildAdded(query(ref(db,'loto/'+sid+'/chat'),limitToLast(50)),snap=>{
+  const msg={key:snap.key,...snap.val()};
+  if(!chatArr.find(m=>m.key===msg.key)) chatArr.push(msg);
+  renderChat(chatArr);
+  lastCount=chatArr.length;
+  if(!chatOpen){
+    const b=document.getElementById('badge');
+    b.textContent=chatArr.length-seenCount; b.classList.add('show');
+  }
+  document.getElementById('chatPreview').textContent=msg.name+' : '+msg.text;
+});
+
+function renderDrawing(){
+  const drawn=gd.drawing.drawn;
+  document.getElementById('cnt').textContent=drawn.length;
+  document.getElementById('rem').textContent=90-drawn.length;
+  if(drawn.length&&!drawing) document.getElementById('ball').textContent=drawn[drawn.length-1];
+  const dg=document.getElementById('dg'); dg.innerHTML='';
+  [...drawn].reverse().forEach((n,i)=>{
+    const d=document.createElement('div'); d.className='db'+(i===0?' new':''); d.textContent=n; dg.appendChild(d);
+  });
+}
+
+function renderMonitor(){
+  const m=document.getElementById('monitor'); m.innerHTML='';
+  const drawnSet=new Set(gd.drawing.drawn);
+  (gd.cards||[]).forEach(card=>{
+    const flatNums=card.grid.flat();
+    const total=flatNums.filter(n=>n!==null).length;
+    const marked=card.marked.filter(Boolean).length;
+    const pct=Math.round(marked/total*100);
+    const done=marked===total;
+    const isOpen=cardStates[card.id]===true;
+    const isComplete=done&&flatNums.every((num,fi)=>num===null||!card.marked[fi]||drawnSet.has(num));
+    const div=document.createElement('div');
+    div.className='mcard'+(isOpen?' open':'')+(highlightMode&&isComplete?' complete-hl':'');
+    const hdr=document.createElement('div'); hdr.className='mcard-header';
+    hdr.innerHTML='<div class="mtitle">'+card.playerName+' — '+L().card+' '+card.cardNumber+'</div><div class="mpct">'+pct+'%</div><div class="mexpand">▼</div>';
+    hdr.addEventListener('click',()=>{cardStates[card.id]=!cardStates[card.id]; renderMonitor();});
+    const pbar=document.createElement('div'); pbar.className='pbar';
+    pbar.innerHTML='<div class="pfill" style="width:'+pct+'%"></div>';
+    div.appendChild(hdr);
+    if(done){const w=document.createElement('div');w.className='wtag';w.textContent=L().winner;div.appendChild(w);}
+    div.appendChild(pbar);
+    const grid=document.createElement('div'); grid.className='mcard-grid';
+    const lg=document.createElement('div'); lg.className='lgrid';
+    card.grid.forEach((row,ri)=>row.forEach((num,ci)=>{
+      const cell=document.createElement('div'); const fi=ri*9+ci;
+      if(num===null){cell.className='cell empty';}
+      else{
+        let cls='cell';
+        if(card.marked[fi]) cls+=' marked';
+        if(highlightMode&&drawnSet.has(num)) cls+=' hl';
+        cell.className=cls; cell.textContent=num;
+      }
+      lg.appendChild(cell);
+    }));
+    grid.appendChild(lg); div.appendChild(grid); m.appendChild(div);
+  });
+}
+
+function renderChat(msgs){
+  const mn=myName();
+  const c=document.getElementById('chatMsgs'); c.innerHTML='';
+  msgs.forEach(msg=>{
+    const d=document.createElement('div');
+    d.className='msg '+(msg.name===mn?'mine':'other');
+    d.innerHTML='<div class="sender">'+esc(msg.name)+'</div>'+esc(msg.text);
+    c.appendChild(d);
+  });
+  c.scrollTop=c.scrollHeight;
+}
+
+async function draw(){
+  if(!gd||drawing) return;
+  const avail=[...gd.drawing.available];
+  if(!avail.length){alert(L().allDrawn);return;}
+  drawing=true; document.getElementById('btnDraw').disabled=true;
+  const idx=Math.floor(Math.random()*avail.length);
+  const num=avail.splice(idx,1)[0];
+  const drawn=[...gd.drawing.drawn,num];
+  const ball=document.getElementById('ball');
+  try{await update(ref(db,'loto/'+sid+'/drawing'),{spinning:true,_t:croupierToken});}catch(e){}
+  const fast=setInterval(()=>{ball.textContent=Math.floor(Math.random()*90)+1;ball.style.transform=`scale(${.92+Math.random()*.16})`;},75);
+  await sleep(1500); clearInterval(fast);
+  for(const d of [130,170,210,270,330,420]){ball.textContent=Math.floor(Math.random()*90)+1;ball.style.transform='scale(1)';await sleep(d);}
+  ball.style.transform=''; ball.textContent=num;
+  ball.classList.remove('reveal'); void ball.offsetWidth; ball.classList.add('reveal');
+  if(soundMode) speak(L().ann+' '+num);
+  drawing=false; document.getElementById('btnDraw').disabled=false;
+  try{setSyncStatus('busy');await update(ref(db,'loto/'+sid+'/drawing'),{available:avail,drawn,spinning:false,_t:croupierToken});setSyncStatus('ok');}catch(e){setSyncStatus('err');}
+}
+
+async function resetDraw(){
+  if(!confirm(L().reset)) return;
+  document.getElementById('ball').textContent='-';
+  try{setSyncStatus('busy');await update(ref(db,'loto/'+sid+'/drawing'),{available:Array.from({length:90},(_,i)=>i+1),drawn:[],spinning:false,_t:croupierToken});setSyncStatus('ok');}catch(e){setSyncStatus('err');}
+}
+
+function toggleDrawn(){
+  drawnOpen=!drawnOpen;
+  document.getElementById('drawnToggleTxt').textContent=drawnOpen?L().dhide:L().dshow;
+  document.getElementById('drawnSection').classList.toggle('open',drawnOpen);
+}
+
+async function sendMsg(){
+  const inp=document.getElementById('chatInput');
+  const text=inp.value.trim(); if(!text) return; inp.value='';
+  try{await push(ref(db,'loto/'+sid+'/chat'),{name:myName(),text,ts:Date.now()});}catch(e){}
+}
+
+function toggleChat(){
+  chatOpen=!chatOpen;
+  document.getElementById('chatBar').classList.toggle('open',chatOpen);
+  if(chatOpen){seenCount=lastCount;document.getElementById('badge').classList.remove('show');setTimeout(()=>{document.getElementById('chatMsgs').scrollTop=9999;},320);}
+}
+
+function speak(text){
+  if(!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const doSpeak=()=>{
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang=L().voice; u.rate=0.85; u.pitch=1;
+    const voices=window.speechSynthesis.getVoices();
+    const match=voices.find(v=>v.lang.startsWith(L().voice.split('-')[0]));
+    if(match) u.voice=match;
+    window.speechSynthesis.speak(u);
+  };
+  if(window.speechSynthesis.getVoices().length) doSpeak();
+  else window.speechSynthesis.onvoiceschanged=()=>{doSpeak(); window.speechSynthesis.onvoiceschanged=null;};
+}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function setSyncStatus(s){const el=document.getElementById('sync');el.className='sync '+s;el.textContent=s==='ok'?'● Sync':s==='busy'?'● ...':'● Err';}
+</script>
+</body>
+</html>
