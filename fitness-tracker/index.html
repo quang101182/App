@@ -2,6 +2,7 @@
 <html lang="fr" class="dark">
 <head>
     <meta charset="UTF-8">
+    <!-- deploy test 2026-02-22 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fitness Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -387,7 +388,6 @@
             }
         }
 
-        // Réinitialise la session expirée et relance l'auth, puis rappelle le callback
         function refreshDriveToken(callback) {
             console.warn('Token Drive expiré (401) — reconnexion automatique...');
             driveSession.isConnected = false;
@@ -396,7 +396,6 @@
             initDriveConnection(callback);
         }
 
-        // Sauvegarde Google Drive — écrase ou crée le fichier, détecte le 401
         async function driveUpsertFile(filename, content) {
             const blob = new Blob([content], { type: 'application/json' });
             let q = `name = '${filename}' and mimeType = 'application/json' and trashed = false`;
@@ -519,7 +518,6 @@
             driveModalContainer.style.display = 'flex';
             setTimeout(() => driveModalContainer.classList.add('visible'), 10);
 
-            // Événements de sélection de fichier avec gestion 401 + retry
             document.getElementById('drive-file-list')?.addEventListener('click', async (e) => {
                 const item = e.target.closest('.drive-file-item');
                 if (!item) return;
@@ -640,7 +638,7 @@
             toastText.textContent = message;
             toast.className = `fixed top-5 right-4 py-2 px-5 rounded-lg shadow-xl opacity-0 transform -translate-y-4 transition-all duration-300 z-50 flex items-center space-x-2 ${isError ? 'toast-error' : 'toast-success'}`;
             toastIcon.className = isError ? 'fas fa-exclamation-circle' : 'fas fa-check-circle';
-            toast.style.pointerEvents = 'none'; // jamais bloquant
+            toast.style.pointerEvents = 'none';
             toast.classList.remove('opacity-0', '-translate-y-4');
             setTimeout(() => toast.classList.add('opacity-0', '-translate-y-4'), 3000);
         };
@@ -717,7 +715,6 @@
         };
 
         const renderHeader = (overrideLabel = null) => {
-            // Indicateur isDirty sur les boutons backup local et Drive save
             const backupBtn = document.querySelector('button[data-action="header-backup"]');
             const driveSaveBtn = document.querySelector('button[data-action="header-drive-save"]');
             if (backupBtn) backupBtn.classList.toggle('is-dirty', !!state.isDirty);
@@ -902,7 +899,6 @@
         };
 
         const renderProgramEditor = () => {
-            // Récupérer la config Drive actuelle
             const cfg = driveConfig;
             let editorHTML = `<div class="modal-backdrop absolute inset-0" data-action="close-modal"></div>
             <div class="bg-card rounded-lg shadow-xl w-full max-w-md m-4 p-6 relative flex flex-col max-h-[80vh] border border-border-hover">
@@ -965,7 +961,6 @@
             editorHTML += `</div></div></div>`;
             programModalContainer.innerHTML = editorHTML;
 
-            // Bind bouton save config Drive
             document.getElementById('save-drive-config-btn')?.addEventListener('click', () => {
                 driveConfig.clientId = document.getElementById('drive-client-id').value.trim();
                 driveConfig.apiKey = document.getElementById('drive-api-key').value.trim();
@@ -1366,7 +1361,6 @@
             return false;
         }
 
-        // Backup local — uniquement le fichier daté (sans last_backup.json)
         const handleBackup = async () => {
             cleanupEmptyPerformances();
             const dateString = new Date().toISOString().slice(0, 10);
@@ -1374,8 +1368,6 @@
             const backupState = { ...state, isDirty: false };
             const jsonContent = JSON.stringify(backupState, null, 2);
 
-            // Tenter File System Access API (Chrome desktop/Android)
-            // Si indisponible OU bloqué (GitHub Pages, Safari), fallback téléchargement
             if (isFileSystemAccessAPISupported) {
                 try {
                     let handle = backupDirectoryHandle;
@@ -1397,12 +1389,10 @@
                     return;
                 } catch (err) {
                     if (err.message === 'no-handle' || err.message === 'no-permission') return;
-                    // Autre erreur (API bloquée sur GitHub Pages) → fallback
                     console.warn('File System API indisponible, fallback téléchargement :', err);
                 }
             }
 
-            // Fallback téléchargement (GitHub Pages, Safari, Firefox)
             const a = document.createElement('a');
             const blob = new Blob([jsonContent], { type: 'application/json' });
             a.href = URL.createObjectURL(blob);
@@ -1428,12 +1418,10 @@
                     await processFiles(fileHandles, isMerge, true);
                     return;
                 } catch (err) {
-                    if (err.name === 'AbortError') return; // Annulé par l'utilisateur
-                    // API bloquée (GitHub Pages, Safari) → fallback input[file]
+                    if (err.name === 'AbortError') return;
                     console.warn('showOpenFilePicker indisponible, fallback input[file] :', err);
                 }
             }
-            // Fallback universel (GitHub Pages, Firefox, Safari)
             fileInput.multiple = isMerge;
             fileInput.dataset.isMerge = isMerge;
             fileInput.click();
