@@ -301,6 +301,9 @@ const INV_BULLET_SPEED = 4;
 const MAX_LIVES = 3;
 const MAX_WAVES = 5;
 
+// Référence temporelle : 60fps = 16.667ms/frame
+const TARGET_FRAME_MS = 1000 / 60;
+
 let player, bullets, invBullets, invaders, barriers;
 let score, lives, wave;
 let invDir, invSpeed;
@@ -446,22 +449,39 @@ function drawBullet(b,color) {
 
 function update(dt) {
   if (state!==STATE.PLAYING) return;
-  if (waveFlashTimer>0) { waveFlashTimer-=dt; if(waveFlashTimer<=0) document.getElementById('wave-flash').classList.remove('show'); }
-  starfield.forEach(s=>{s.y+=s.speed;if(s.y>canvas.height){s.y=0;s.x=Math.random()*canvas.width;}});
-  if (keys.left) player.x=Math.max(0,player.x-PLAYER_SPEED);
-  if (keys.right) player.x=Math.min(canvas.width-PLAYER_W,player.x+PLAYER_SPEED);
-  if (fireCooldown>0) fireCooldown-=dt;
+
+  // ── FIX DELTA-TIME : normalisation 60fps ──────────────────────────────────
+  // Cap à 50ms pour éviter les sauts si onglet en arrière-plan
+  const dtCapped = Math.min(dt, 50);
+  const f = dtCapped / TARGET_FRAME_MS; // facteur multiplicateur (1.0 = 60fps)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  if (waveFlashTimer>0) { waveFlashTimer-=dtCapped; if(waveFlashTimer<=0) document.getElementById('wave-flash').classList.remove('show'); }
+
+  // Stars — frame-rate independent
+  starfield.forEach(s=>{s.y+=s.speed*f;if(s.y>canvas.height){s.y=0;s.x=Math.random()*canvas.width;}});
+
+  // Player movement — frame-rate independent
+  if (keys.left)  player.x=Math.max(0,player.x-PLAYER_SPEED*f);
+  if (keys.right) player.x=Math.min(canvas.width-PLAYER_W,player.x+PLAYER_SPEED*f);
+
+  // Fire cooldown reste en ms — déjà correct
+  if (fireCooldown>0) fireCooldown-=dtCapped;
   if (keys.fire) playerShoot();
 
+  // Player bullets — frame-rate independent
   bullets=bullets.filter(b=>{
-    b.y+=b.vy;if(b.y<0) return false;
+    b.y+=b.vy*f;
+    if(b.y<0) return false;
     for(let i=0;i<invaders.length;i++){const inv=invaders[i];if(!inv.alive)continue;if(rectHit(b,inv)){inv.alive=false;spawnExplosion(inv.x+inv.w/2,inv.y+inv.h/2,inv.type===2?'#ff4444':inv.type===1?'#00d4ff':'#00ff64');score+=(inv.type+1)*10;updateHUD();return false;}}
     for(let i=barriers.length-1;i>=0;i--){if(rectHit(b,barriers[i])){barriers[i].hp--;if(barriers[i].hp<=0)barriers.splice(i,1);return false;}}
     return true;
   });
 
+  // Invader bullets — frame-rate independent
   invBullets=invBullets.filter(b=>{
-    b.y+=b.vy;if(b.y>canvas.height) return false;
+    b.y+=b.vy*f;
+    if(b.y>canvas.height) return false;
     if(rectHit(b,player)){spawnExplosion(player.x+PLAYER_W/2,player.y+PLAYER_H/2,'#00ff64');lives--;updateHUD();player.x=canvas.width/2-PLAYER_W/2;if(lives<=0){endGame(false);return false;}return false;}
     for(let i=barriers.length-1;i>=0;i--){if(rectHit(b,barriers[i])){barriers[i].hp--;if(barriers[i].hp<=0)barriers.splice(i,1);return false;}}
     return true;
@@ -469,11 +489,35 @@ function update(dt) {
 
   const alive=invaders.filter(i=>i.alive);
   if(!alive.length){nextWave();return;}
+
   let minX=Infinity,maxX=-Infinity;
-  alive.forEach(inv=>{minX=Math.min(minX,inv.x);maxX=Math.max(maxX,inv.x+inv.w);inv.x+=invDir*invSpeed;inv.anim+=0.02*invSpeed;if(inv.y+inv.h>=player.y)endGame(false);});
-  if(maxX+invDir*invSpeed>=canvas.width||minX+invDir*invSpeed<=0){invDir*=-1;alive.forEach(inv=>{inv.y+=12;});}
-  invShootTimer-=dt;if(invShootTimer<=0){invaderShoot();invShootTimer=invShootInterval;}
-  particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.05;p.life-=p.decay;});
+  alive.forEach(inv=>{minX=Math.min(minX,inv.x);maxX=Math.max(maxX,inv.x+inv.w);});
+
+  // Invader movement — frame-rate independent
+  const nextMinX = minX + invDir*invSpeed*f;
+  const nextMaxX = maxX + invDir*invSpeed*f;
+  if(nextMaxX>=canvas.width||nextMinX<=0){
+    invDir*=-1;
+    alive.forEach(inv=>{inv.y+=12*f;if(inv.y+inv.h>=player.y)endGame(false);});
+  } else {
+    alive.forEach(inv=>{
+      inv.x+=invDir*invSpeed*f;
+      inv.anim+=0.02*invSpeed*f;
+      if(inv.y+inv.h>=player.y)endGame(false);
+    });
+  }
+
+  // Invader shoot timer — en ms, déjà correct
+  invShootTimer-=dtCapped;
+  if(invShootTimer<=0){invaderShoot();invShootTimer=invShootInterval;}
+
+  // Particles — frame-rate independent
+  particles.forEach(p=>{
+    p.x+=p.vx*f;
+    p.y+=p.vy*f;
+    p.vy+=0.05*f;
+    p.life-=p.decay*f;
+  });
   particles=particles.filter(p=>p.life>0);
 }
 
@@ -491,7 +535,13 @@ function draw() {
   particles.forEach(p=>{ctx.save();ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=6;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();ctx.restore();});
 }
 
-function loop(ts) { const dt=ts-lastTime;lastTime=ts;update(dt);draw();requestAnimationFrame(loop); }
+function loop(ts) {
+  const dt = ts - lastTime;
+  lastTime = ts;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
 
 function endGame(win) {
   state=win?STATE.WIN:STATE.OVER;
