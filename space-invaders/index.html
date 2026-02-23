@@ -295,19 +295,27 @@ const BULLET_W = 3, BULLET_H = 14;
 const INV_COLS = 8, INV_ROWS = 4;
 const INV_W = 28, INV_H = 20;
 const INV_PAD_X = 10, INV_PAD_Y = 14;
-const PLAYER_SPEED = 3;
-const BULLET_SPEED = 6;
-const INV_BULLET_SPEED = 2.5;
 const MAX_LIVES = 3;
 const MAX_WAVES = 5;
 
-const TARGET_FRAME_MS = 1000 / 60;
+// ── FIXED TIMESTEP (pattern Isaac Sukin / MainLoop.js) ───────────────────────
+// La physique tourne TOUJOURS à 60 pas/s virtuels, peu importe le framerate réel.
+// 30fps mobile → while() tourne 2x par frame. 120Hz → tourne 0-1x. Résultat identique.
+const TIMESTEP    = 1000 / 60;  // 16.667ms par pas physique
+const MAX_UPDATES = 5;          // anti spiral-of-death (onglet background)
+// Toutes les vitesses en px/pas — 1 pas = 1/60s virtuel, déterministe
+const PLAYER_SPD  = 2.8;   // px/pas → 168 px/s
+const BULLET_SPD  = 7;     // px/pas → 420 px/s
+const INV_BSPED   = 2;     // px/pas → 120 px/s wave1
+// ─────────────────────────────────────────────────────────────────────────────
 
 let player, bullets, invBullets, invaders, barriers;
 let score, lives, wave;
-let invDir, invSpeed;
+let invDir, invSpeed, invStepPas;
+let invMovePas = 0;
 let invShootTimer, invShootInterval;
 let lastTime = -1;
+let accumulator = 0;
 let keys = { left: false, right: false, fire: false };
 let fireCooldown = 0;
 let waveFlashTimer = 0;
@@ -344,8 +352,10 @@ function initInvaders() {
     invaders.push({x:startX+c*(INV_W+INV_PAD_X),y:startY+r*(INV_H+INV_PAD_Y),w:INV_W,h:INV_H,type:r<1?2:r<3?1:0,anim:0,alive:true});
   }
   invDir=1;
-  invSpeed=0.6+wave*0.1;
-  invShootInterval=Math.max(800,2200-wave*200);
+  invSpeed=3;                              // px par step horizontal
+  invStepPas=Math.round(20-wave*2);        // pas entre steps (wave1=18 ≈ 3.3 steps/s)
+  invMovePas=0;
+  invShootInterval=Math.round(Math.max(48,132-wave*12)); // pas (wave1=120 ≈ 2s entre tirs)
   invShootTimer=invShootInterval;
 }
 
@@ -368,7 +378,7 @@ function showWaveFlash(text) {
   const wf=document.getElementById('wave-flash');
   document.getElementById('wave-text').textContent=text;
   wf.classList.add('show');
-  waveFlashTimer=1800;
+  waveFlashTimer=108; // 108 pas ≈ 1800ms
 }
 
 function nextWave() {
@@ -391,15 +401,15 @@ function rectHit(a,b) { return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.
 
 function playerShoot() {
   if (fireCooldown>0) return;
-  bullets.push({x:player.x+PLAYER_W/2-BULLET_W/2,y:player.y-BULLET_H,w:BULLET_W,h:BULLET_H,vy:-BULLET_SPEED});
-  fireCooldown=220;
+  bullets.push({x:player.x+PLAYER_W/2-BULLET_W/2,y:player.y-BULLET_H,w:BULLET_W,h:BULLET_H,vy:-BULLET_SPD});
+  fireCooldown=13; // 13 pas ≈ 220ms
 }
 
 function invaderShoot() {
   const alive=invaders.filter(i=>i.alive);
   if (!alive.length) return;
   const s=alive[Math.floor(Math.random()*alive.length)];
-  invBullets.push({x:s.x+s.w/2-BULLET_W/2,y:s.y+s.h,w:BULLET_W,h:BULLET_H,vy:INV_BULLET_SPEED+wave*0.3});
+  invBullets.push({x:s.x+s.w/2-BULLET_W/2,y:s.y+s.h,w:BULLET_W,h:BULLET_H,vy:INV_BSPED+wave*0.3});
 }
 
 function drawPlayer(x,y,w,h) {
@@ -446,24 +456,21 @@ function drawBullet(b,color) {
   ctx.fillRect(b.x,b.y,b.w,b.h);ctx.restore();
 }
 
-function update(dt) {
+// update() reçoit toujours TIMESTEP — jamais de dt variable
+function update() {
   if (state!==STATE.PLAYING) return;
 
-  const dtCapped = Math.min(dt, 50);
-  const f = dtCapped / TARGET_FRAME_MS;
+  if (waveFlashTimer>0) { waveFlashTimer--; if(waveFlashTimer<=0) document.getElementById('wave-flash').classList.remove('show'); }
 
-  if (waveFlashTimer>0) { waveFlashTimer-=dtCapped; if(waveFlashTimer<=0) document.getElementById('wave-flash').classList.remove('show'); }
+  starfield.forEach(s=>{s.y+=s.speed;if(s.y>canvas.height){s.y=0;s.x=Math.random()*canvas.width;}});
 
-  starfield.forEach(s=>{s.y+=s.speed*f;if(s.y>canvas.height){s.y=0;s.x=Math.random()*canvas.width;}});
-
-  if (keys.left)  player.x=Math.max(0,player.x-PLAYER_SPEED*f);
-  if (keys.right) player.x=Math.min(canvas.width-PLAYER_W,player.x+PLAYER_SPEED*f);
-
-  if (fireCooldown>0) fireCooldown-=dtCapped;
+  if (keys.left)  player.x=Math.max(0,player.x-PLAYER_SPD);
+  if (keys.right) player.x=Math.min(canvas.width-PLAYER_W,player.x+PLAYER_SPD);
+  if (fireCooldown>0) fireCooldown--;
   if (keys.fire) playerShoot();
 
   bullets=bullets.filter(b=>{
-    b.y+=b.vy*f;
+    b.y+=b.vy;
     if(b.y<0) return false;
     for(let i=0;i<invaders.length;i++){const inv=invaders[i];if(!inv.alive)continue;if(rectHit(b,inv)){inv.alive=false;spawnExplosion(inv.x+inv.w/2,inv.y+inv.h/2,inv.type===2?'#ff4444':inv.type===1?'#00d4ff':'#00ff64');score+=(inv.type+1)*10;updateHUD();return false;}}
     for(let i=barriers.length-1;i>=0;i--){if(rectHit(b,barriers[i])){barriers[i].hp--;if(barriers[i].hp<=0)barriers.splice(i,1);return false;}}
@@ -471,7 +478,7 @@ function update(dt) {
   });
 
   invBullets=invBullets.filter(b=>{
-    b.y+=b.vy*f;
+    b.y+=b.vy;
     if(b.y>canvas.height) return false;
     if(rectHit(b,player)){spawnExplosion(player.x+PLAYER_W/2,player.y+PLAYER_H/2,'#00ff64');lives--;updateHUD();player.x=canvas.width/2-PLAYER_W/2;if(lives<=0){endGame(false);return false;}return false;}
     for(let i=barriers.length-1;i>=0;i--){if(rectHit(b,barriers[i])){barriers[i].hp--;if(barriers[i].hp<=0)barriers.splice(i,1);return false;}}
@@ -481,31 +488,27 @@ function update(dt) {
   const alive=invaders.filter(i=>i.alive);
   if(!alive.length){nextWave();return;}
 
-  let minX=Infinity,maxX=-Infinity;
-  alive.forEach(inv=>{minX=Math.min(minX,inv.x);maxX=Math.max(maxX,inv.x+inv.w);});
-
-  const nextMinX = minX + invDir*invSpeed*f;
-  const nextMaxX = maxX + invDir*invSpeed*f;
-  if(nextMaxX>=canvas.width||nextMinX<=0){
-    invDir*=-1;
-    alive.forEach(inv=>{inv.y+=4*f;if(inv.y+inv.h>=player.y)endGame(false);});
-  } else {
-    alive.forEach(inv=>{
-      inv.x+=invDir*invSpeed*f;
-      inv.anim+=0.02*invSpeed*f;
-      if(inv.y+inv.h>=player.y)endGame(false);
-    });
+  invMovePas++;
+  if(invMovePas>=invStepPas){
+    invMovePas=0;
+    let minX=Infinity,maxX=-Infinity;
+    alive.forEach(inv=>{minX=Math.min(minX,inv.x);maxX=Math.max(maxX,inv.x+inv.w);});
+    if(maxX+invDir*invSpeed>=canvas.width||minX+invDir*invSpeed<=0){
+      invDir*=-1;
+      alive.forEach(inv=>{inv.y+=5;if(inv.y+inv.h>=player.y)endGame(false);});
+    } else {
+      alive.forEach(inv=>{
+        inv.x+=invDir*invSpeed;
+        inv.anim+=0.5;
+        if(inv.y+inv.h>=player.y)endGame(false);
+      });
+    }
   }
 
-  invShootTimer-=dtCapped;
+  invShootTimer--;
   if(invShootTimer<=0){invaderShoot();invShootTimer=invShootInterval;}
 
-  particles.forEach(p=>{
-    p.x+=p.vx*f;
-    p.y+=p.vy*f;
-    p.vy+=0.05*f;
-    p.life-=p.decay*f;
-  });
+  particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.05;p.life-=p.decay;});
   particles=particles.filter(p=>p.life>0);
 }
 
@@ -525,9 +528,18 @@ function draw() {
 
 function loop(ts) {
   if (lastTime < 0) { lastTime = ts; requestAnimationFrame(loop); return; }
-  const dt = ts - lastTime;
+
+  // Fixed timestep accumulator — indépendant du framerate réel
+  accumulator += Math.min(ts - lastTime, TIMESTEP * MAX_UPDATES);
   lastTime = ts;
-  update(dt);
+
+  let steps = 0;
+  while (accumulator >= TIMESTEP && steps < MAX_UPDATES) {
+    update();
+    accumulator -= TIMESTEP;
+    steps++;
+  }
+
   draw();
   requestAnimationFrame(loop);
 }
