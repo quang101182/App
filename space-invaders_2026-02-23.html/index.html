@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>SPACE INVADERS</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
+
+  body {
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100dvh;
+    overflow: hidden;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  #hud {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    background: rgba(0,255,100,0.05);
+    border-bottom: 1px solid rgba(0,255,100,0.2);
+  }
+
+  .hud-item {
+    color: #00ff64;
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .hud-val {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  #lives-display span {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background: #00ff64;
+    clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+    margin: 0 2px;
+  }
+
+  #canvas-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    flex: 1;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+  }
+
+  .screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.88);
+    z-index: 10;
+  }
+
+  .screen.hidden { display: none; }
+
+  .screen h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(28px, 8vw, 52px);
+    font-weight: 900;
+    color: #00ff64;
+    letter-spacing: 4px;
+    text-shadow: 0 0 20px #00ff6480, 0 0 60px #00ff6440;
+    margin-bottom: 8px;
+  }
+
+  .screen p {
+    color: #888;
+    font-size: 13px;
+    letter-spacing: 2px;
+    margin-bottom: 40px;
+  }
+
+  .btn {
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    padding: 14px 40px;
+    border: 2px solid #00ff64;
+    background: transparent;
+    color: #00ff64;
+    cursor: pointer;
+    text-transform: uppercase;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s;
+  }
+
+  .btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: #00ff64;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.2s;
+    z-index: -1;
+  }
+
+  .btn:hover::before, .btn:active::before { transform: scaleX(1); }
+  .btn:hover, .btn:active { color: #000; }
+
+  #score-final {
+    font-family: 'Orbitron', monospace;
+    font-size: 32px;
+    font-weight: 900;
+    color: #fff;
+    margin-bottom: 6px;
+  }
+
+  #level-final {
+    color: #00ff64;
+    font-size: 13px;
+    letter-spacing: 3px;
+    margin-bottom: 32px;
+  }
+
+  #controls {
+    width: 100%;
+    max-width: 480px;
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: rgba(0,255,100,0.03);
+    border-top: 1px solid rgba(0,255,100,0.15);
+    gap: 12px;
+  }
+
+  .ctrl-zone {
+    display: flex;
+    gap: 10px;
+  }
+
+  .ctrl-btn {
+    width: 58px;
+    height: 58px;
+    border: 2px solid rgba(0,255,100,0.4);
+    background: rgba(0,255,100,0.08);
+    border-radius: 8px;
+    color: #00ff64;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.1s, border-color 0.1s;
+  }
+
+  .ctrl-btn:active, .ctrl-btn.pressed {
+    background: rgba(0,255,100,0.25);
+    border-color: #00ff64;
+  }
+
+  #btn-fire {
+    width: 74px;
+    height: 74px;
+    border-radius: 50%;
+    border: 3px solid #00ff64;
+    background: rgba(0,255,100,0.12);
+    font-size: 26px;
+    box-shadow: 0 0 20px rgba(0,255,100,0.3);
+  }
+
+  #btn-fire:active, #btn-fire.pressed {
+    background: rgba(0,255,100,0.35);
+    box-shadow: 0 0 40px rgba(0,255,100,0.6);
+  }
+
+  #scanlines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    z-index: 5;
+  }
+
+  #wave-flash {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 8;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  #wave-flash.show { opacity: 1; }
+
+  #wave-flash span {
+    font-family: 'Orbitron', monospace;
+    font-size: 36px;
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 30px #00ff64, 0 0 60px #00ff64;
+    letter-spacing: 6px;
+  }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div class="hud-item">SCORE<br><span class="hud-val" id="hud-score">0</span></div>
+  <div class="hud-item" style="text-align:center">WAVE<br><span class="hud-val" id="hud-wave">1</span></div>
+  <div class="hud-item" style="text-align:right">VIES<br><div id="lives-display"></div></div>
+</div>
+
+<div id="canvas-wrap">
+  <canvas id="c"></canvas>
+  <div id="scanlines"></div>
+  <div id="wave-flash"><span id="wave-text">VAGUE 1</span></div>
+
+  <div class="screen" id="screen-menu">
+    <h1>SPACE<br>INVADERS</h1>
+    <p>MOBILE EDITION</p>
+    <button class="btn" id="btn-start">JOUER</button>
+  </div>
+
+  <div class="screen hidden" id="screen-over">
+    <h1 style="font-size:clamp(22px,6vw,38px);margin-bottom:16px">GAME OVER</h1>
+    <div id="score-final">0</div>
+    <div id="level-final">VAGUE 1</div>
+    <button class="btn" id="btn-restart">REJOUER</button>
+  </div>
+
+  <div class="screen hidden" id="screen-win">
+    <h1 style="color:#ffe000;text-shadow:0 0 30px #ffe00080">VICTOIRE</h1>
+    <div id="win-score" style="font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:#fff;margin:12px 0 4px"></div>
+    <div id="win-level" style="color:#ffe000;font-size:13px;letter-spacing:3px;margin-bottom:32px"></div>
+    <button class="btn" style="border-color:#ffe000;color:#ffe000" id="btn-win-restart">REJOUER</button>
+  </div>
+</div>
+
+<div id="controls">
+  <div class="ctrl-zone">
+    <div class="ctrl-btn" id="btn-left">◀</div>
+    <div class="ctrl-btn" id="btn-right">▶</div>
+  </div>
+  <div class="ctrl-btn" id="btn-fire">🔥</div>
+</div>
+
+<script>
+const STATE = { MENU: 'MENU', PLAYING: 'PLAYING', OVER: 'OVER', WIN: 'WIN' };
+let state = STATE.MENU;
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const wrap = document.getElementById('canvas-wrap');
+
+function resize() { canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight; }
+resize();
+window.addEventListener('resize', resize);
+
+const PLAYER_W = 36, PLAYER_H = 20;
+const BULLET_W = 3, BULLET_H = 14;
+const INV_COLS = 9, INV_ROWS = 4;
+const INV_W = 28, INV_H = 20;
+const INV_PAD_X = 14, INV_PAD_Y = 14;
+const PLAYER_SPEED = 5;
+const BULLET_SPEED = 9;
+const INV_BULLET_SPEED = 4;
+const MAX_LIVES = 3;
+const MAX_WAVES = 5;
+
+let player, bullets, invBullets, invaders, barriers;
+let score, lives, wave;
+let invDir, invSpeed;
+let invShootTimer, invShootInterval;
+let lastTime = 0;
+let keys = { left: false, right: false, fire: false };
+let fireCooldown = 0;
+let waveFlashTimer = 0;
+let particles = [];
+let starfield = [];
+
+function initStars() {
+  starfield = [];
+  for (let i = 0; i < 80; i++) {
+    starfield.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, r: Math.random()*1.5+0.3, speed: Math.random()*0.4+0.1, alpha: Math.random()*0.7+0.3 });
+  }
+}
+
+function createBarrier(cx, cy) {
+  const bw=40,bh=28,bs=5,cols=Math.floor(bw/bs),rows=Math.floor(bh/bs),blocks=[];
+  for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) {
+    const inCutout = r>=rows-2 && c>=Math.floor(cols*0.3) && c<Math.floor(cols*0.7);
+    if (!inCutout) blocks.push({x:cx-bw/2+c*bs,y:cy+r*bs,w:bs,h:bs,hp:3});
+  }
+  return blocks;
+}
+
+function initBarriers() {
+  barriers=[];
+  const spacing=canvas.width/5, by=canvas.height-110;
+  for (let i=0;i<4;i++) createBarrier(spacing*(i+1),by).forEach(b=>barriers.push(b));
+}
+
+function initInvaders() {
+  invaders=[];
+  const totalW=INV_COLS*(INV_W+INV_PAD_X)-INV_PAD_X;
+  const startX=(canvas.width-totalW)/2, startY=60;
+  for (let r=0;r<INV_ROWS;r++) for (let c=0;c<INV_COLS;c++) {
+    invaders.push({x:startX+c*(INV_W+INV_PAD_X),y:startY+r*(INV_H+INV_PAD_Y),w:INV_W,h:INV_H,type:r<1?2:r<3?1:0,anim:0,alive:true});
+  }
+  invDir=1;
+  invSpeed=0.8+wave*0.3;
+  invShootInterval=Math.max(800,2200-wave*200);
+  invShootTimer=invShootInterval;
+}
+
+function initGame() {
+  score=0;lives=MAX_LIVES;wave=1;particles=[];
+  player={x:canvas.width/2-PLAYER_W/2,y:canvas.height-70,w:PLAYER_W,h:PLAYER_H};
+  bullets=[];invBullets=[];
+  initStars();initInvaders();initBarriers();updateHUD();
+}
+
+function updateHUD() {
+  document.getElementById('hud-score').textContent=score;
+  document.getElementById('hud-wave').textContent=wave;
+  const ld=document.getElementById('lives-display');
+  ld.innerHTML='';
+  for (let i=0;i<lives;i++) ld.innerHTML+='<span></span>';
+}
+
+function showWaveFlash(text) {
+  const wf=document.getElementById('wave-flash');
+  document.getElementById('wave-text').textContent=text;
+  wf.classList.add('show');
+  waveFlashTimer=1800;
+}
+
+function nextWave() {
+  wave++;
+  if (wave>MAX_WAVES) { endGame(true); return; }
+  bullets=[];invBullets=[];particles=[];
+  player.x=canvas.width/2-PLAYER_W/2;
+  initInvaders();initBarriers();updateHUD();
+  showWaveFlash('VAGUE '+wave);
+}
+
+function spawnExplosion(x,y,color) {
+  for (let i=0;i<16;i++) {
+    const a=Math.random()*Math.PI*2,s=Math.random()*3+1;
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,decay:Math.random()*0.04+0.02,r:Math.random()*4+1,color});
+  }
+}
+
+function rectHit(a,b) { return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y; }
+
+function playerShoot() {
+  if (fireCooldown>0) return;
+  bullets.push({x:player.x+PLAYER_W/2-BULLET_W/2,y:player.y-BULLET_H,w:BULLET_W,h:BULLET_H,vy:-BULLET_SPEED});
+  fireCooldown=220;
+}
+
+function invaderShoot() {
+  const alive=invaders.filter(i=>i.alive);
+  if (!alive.length) return;
+  const s=alive[Math.floor(Math.random()*alive.length)];
+  invBullets.push({x:s.x+s.w/2-BULLET_W/2,y:s.y+s.h,w:BULLET_W,h:BULLET_H,vy:INV_BULLET_SPEED+wave*0.3});
+}
+
+function drawPlayer(x,y,w,h) {
+  ctx.save();ctx.fillStyle='#00ff64';ctx.shadowColor='#00ff64';ctx.shadowBlur=10;
+  ctx.fillRect(x+w*0.3,y+h*0.4,w*0.4,h*0.6);
+  ctx.fillRect(x+w*0.38,y+h*0.1,w*0.24,h*0.4);
+  ctx.fillRect(x,y+h*0.6,w*0.32,h*0.3);
+  ctx.fillRect(x+w*0.68,y+h*0.6,w*0.32,h*0.3);
+  ctx.fillRect(x+w*0.45,y,w*0.1,h*0.2);
+  ctx.restore();
+}
+
+function drawInvader(inv) {
+  if (!inv.alive) return;
+  const {x,y,w,h,type,anim}=inv,f=Math.floor(anim)%2;
+  ctx.save();ctx.shadowBlur=8;
+  if (type===2) {
+    ctx.fillStyle='#ff4444';ctx.shadowColor='#ff4444';
+    ctx.beginPath();ctx.ellipse(x+w/2,y+h/2,w/2,h/3,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';
+    ctx.fillRect(x+w*0.2,y+h*0.3,w*0.15,h*0.2);ctx.fillRect(x+w*0.65,y+h*0.3,w*0.15,h*0.2);
+    if(f===0){ctx.fillRect(x+w*0.1,y+h*0.55,w*0.15,h*0.2);ctx.fillRect(x+w*0.75,y+h*0.55,w*0.15,h*0.2);}
+    else{ctx.fillRect(x+w*0.2,y+h*0.6,w*0.2,h*0.2);ctx.fillRect(x+w*0.6,y+h*0.6,w*0.2,h*0.2);}
+  } else if (type===1) {
+    ctx.fillStyle='#00d4ff';ctx.shadowColor='#00d4ff';
+    ctx.fillRect(x+w*0.25,y,w*0.5,h*0.3);ctx.fillRect(x,y+h*0.2,w,h*0.5);
+    ctx.fillRect(x+w*0.15,y+h*0.65,w*0.25,h*0.35);ctx.fillRect(x+w*0.6,y+h*0.65,w*0.25,h*0.35);
+    if(f===0){ctx.fillRect(x-w*0.15,y+h*0.3,w*0.2,h*0.25);ctx.fillRect(x+w*0.95,y+h*0.3,w*0.2,h*0.25);}
+    else{ctx.fillRect(x-w*0.1,y+h*0.45,w*0.15,h*0.2);ctx.fillRect(x+w*0.95,y+h*0.45,w*0.15,h*0.2);}
+  } else {
+    ctx.fillStyle='#00ff64';ctx.shadowColor='#00ff64';
+    ctx.fillRect(x+w*0.3,y,w*0.4,h*0.25);ctx.fillRect(x+w*0.1,y+h*0.2,w*0.8,h*0.4);
+    ctx.fillRect(x,y+h*0.55,w*0.25,h*0.3);ctx.fillRect(x+w*0.75,y+h*0.55,w*0.25,h*0.3);
+    if(f===0){ctx.fillRect(x+w*0.15,y+h*0.8,w*0.2,h*0.2);ctx.fillRect(x+w*0.65,y+h*0.8,w*0.2,h*0.2);}
+    else{ctx.fillRect(x+w*0.05,y+h*0.75,w*0.2,h*0.25);ctx.fillRect(x+w*0.75,y+h*0.75,w*0.2,h*0.25);}
+    ctx.fillStyle='#000';
+    ctx.fillRect(x+w*0.25,y+h*0.25,w*0.15,h*0.15);ctx.fillRect(x+w*0.6,y+h*0.25,w*0.15,h*0.15);
+  }
+  ctx.restore();
+}
+
+function drawBullet(b,color) {
+  ctx.save();ctx.fillStyle=color;ctx.shadowColor=color;ctx.shadowBlur=8;
+  ctx.fillRect(b.x,b.y,b.w,b.h);ctx.restore();
+}
+
+function update(dt) {
+  if (state!==STATE.PLAYING) return;
+  if (waveFlashTimer>0) { waveFlashTimer-=dt; if(waveFlashTimer<=0) document.getElementById('wave-flash').classList.remove('show'); }
+  starfield.forEach(s=>{s.y+=s.speed;if(s.y>canvas.height){s.y=0;s.x=Math.random()*canvas.width;}});
+  if (keys.left) player.x=Math.max(0,player.x-PLAYER_SPEED);
+  if (keys.right) player.x=Math.min(canvas.width-PLAYER_W,player.x+PLAYER_SPEED);
+  if (fireCooldown>0) fireCooldown-=dt;
+  if (keys.fire) playerShoot();
+
+  bullets=bullets.filter(b=>{
+    b.y+=b.vy;if(b.y<0) return false;
+    for(let i=0;i<invaders.length;i++){const inv=invaders[i];if(!inv.alive)continue;if(rectHit(b,inv)){inv.alive=false;spawnExplosion(inv.x+inv.w/2,inv.y+inv.h/2,inv.type===2?'#ff4444':inv.type===1?'#00d4ff':'#00ff64');score+=(inv.type+1)*10;updateHUD();return false;}}
+    for(let i=barriers.length-1;i>=0;i--){if(rectHit(b,barriers[i])){barriers[i].hp--;if(barriers[i].hp<=0)barriers.splice(i,1);return false;}}
+    return true;
+  });
+
+  invBullets=invBullets.filter(b=>{
+    b.y+=b.vy;if(b.y>canvas.height) return false;
+    if(rectHit(b,player)){spawnExplosion(player.x+PLAYER_W/2,player.y+PLAYER_H/2,'#00ff64');lives--;updateHUD();player.x=canvas.width/2-PLAYER_W/2;if(lives<=0){endGame(false);return false;}return false;}
+    for(let i=barriers.length-1;i>=0;i--){if(rectHit(b,barriers[i])){barriers[i].hp--;if(barriers[i].hp<=0)barriers.splice(i,1);return false;}}
+    return true;
+  });
+
+  const alive=invaders.filter(i=>i.alive);
+  if(!alive.length){nextWave();return;}
+  let minX=Infinity,maxX=-Infinity;
+  alive.forEach(inv=>{minX=Math.min(minX,inv.x);maxX=Math.max(maxX,inv.x+inv.w);inv.x+=invDir*invSpeed;inv.anim+=0.02*invSpeed;if(inv.y+inv.h>=player.y)endGame(false);});
+  if(maxX+invDir*invSpeed>=canvas.width||minX+invDir*invSpeed<=0){invDir*=-1;alive.forEach(inv=>{inv.y+=12;});}
+  invShootTimer-=dt;if(invShootTimer<=0){invaderShoot();invShootTimer=invShootInterval;}
+  particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.05;p.life-=p.decay;});
+  particles=particles.filter(p=>p.life>0);
+}
+
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
+  starfield.forEach(s=>{ctx.save();ctx.globalAlpha=s.alpha;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();ctx.restore();});
+  if(state!==STATE.PLAYING) return;
+  ctx.strokeStyle='rgba(0,255,100,0.3)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,canvas.height-60);ctx.lineTo(canvas.width,canvas.height-60);ctx.stroke();
+  barriers.forEach(b=>{const colors=['#1a4d1a','#2d8c2d','#00ff64'];ctx.fillStyle=colors[b.hp-1]||'#00ff64';ctx.fillRect(b.x,b.y,b.w,b.h);});
+  invaders.forEach(inv=>drawInvader(inv));
+  bullets.forEach(b=>drawBullet(b,'#00ff64'));
+  invBullets.forEach(b=>drawBullet(b,'#ff4444'));
+  drawPlayer(player.x,player.y,PLAYER_W,PLAYER_H);
+  particles.forEach(p=>{ctx.save();ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=6;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();ctx.restore();});
+}
+
+function loop(ts) { const dt=ts-lastTime;lastTime=ts;update(dt);draw();requestAnimationFrame(loop); }
+
+function endGame(win) {
+  state=win?STATE.WIN:STATE.OVER;
+  if(win){document.getElementById('win-score').textContent=score;document.getElementById('win-level').textContent='VAGUE '+wave+' COMPLÉTÉE';document.getElementById('screen-win').classList.remove('hidden');}
+  else{document.getElementById('score-final').textContent=score;document.getElementById('level-final').textContent='VAGUE '+wave;document.getElementById('screen-over').classList.remove('hidden');}
+  document.getElementById('wave-flash').classList.remove('show');
+}
+
+function bindControls() {
+  function bindBtn(id,keyName){const el=document.getElementById(id);el.addEventListener('pointerdown',e=>{e.preventDefault();keys[keyName]=true;el.classList.add('pressed');});el.addEventListener('pointerup',e=>{e.preventDefault();keys[keyName]=false;el.classList.remove('pressed');});el.addEventListener('pointerleave',()=>{keys[keyName]=false;el.classList.remove('pressed');});}
+  bindBtn('btn-left','left');bindBtn('btn-right','right');bindBtn('btn-fire','fire');
+  document.addEventListener('keydown',e=>{if(e.key==='ArrowLeft')keys.left=true;if(e.key==='ArrowRight')keys.right=true;if(e.key===' '||e.key==='ArrowUp'){e.preventDefault();keys.fire=true;}});
+  document.addEventListener('keyup',e=>{if(e.key==='ArrowLeft')keys.left=false;if(e.key==='ArrowRight')keys.right=false;if(e.key===' '||e.key==='ArrowUp')keys.fire=false;});
+  let touchStartX=null;
+  canvas.addEventListener('touchstart',e=>{touchStartX=e.touches[0].clientX;},{passive:true});
+  canvas.addEventListener('touchmove',e=>{if(touchStartX===null||state!==STATE.PLAYING)return;const dx=e.touches[0].clientX-touchStartX;if(Math.abs(dx)>8){keys.left=dx<0;keys.right=dx>0;}},{passive:true});
+  canvas.addEventListener('touchend',()=>{touchStartX=null;keys.left=false;keys.right=false;},{passive:true});
+}
+
+function startGame() {
+  document.getElementById('screen-menu').classList.add('hidden');
+  document.getElementById('screen-over').classList.add('hidden');
+  document.getElementById('screen-win').classList.add('hidden');
+  state=STATE.PLAYING;initGame();showWaveFlash('VAGUE 1');
+}
+
+document.getElementById('btn-start').addEventListener('click',startGame);
+document.getElementById('btn-restart').addEventListener('click',startGame);
+document.getElementById('btn-win-restart').addEventListener('click',startGame);
+
+bindControls();initStars();
+requestAnimationFrame(ts=>{lastTime=ts;requestAnimationFrame(loop);});
+</script>
+</body>
+</html>
