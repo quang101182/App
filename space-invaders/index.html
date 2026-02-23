@@ -295,9 +295,9 @@ const BULLET_W = 3, BULLET_H = 14;
 const INV_COLS = 9, INV_ROWS = 4;
 const INV_W = 28, INV_H = 20;
 const INV_PAD_X = 14, INV_PAD_Y = 14;
-const PLAYER_SPEED = 5;
-const BULLET_SPEED = 9;
-const INV_BULLET_SPEED = 4;
+const PLAYER_SPEED = 3;
+const BULLET_SPEED = 6;
+const INV_BULLET_SPEED = 2.5;
 const MAX_LIVES = 3;
 const MAX_WAVES = 5;
 
@@ -308,7 +308,7 @@ let player, bullets, invBullets, invaders, barriers;
 let score, lives, wave;
 let invDir, invSpeed;
 let invShootTimer, invShootInterval;
-let lastTime = 0;
+let lastTime = -1;
 let keys = { left: false, right: false, fire: false };
 let fireCooldown = 0;
 let waveFlashTimer = 0;
@@ -345,7 +345,7 @@ function initInvaders() {
     invaders.push({x:startX+c*(INV_W+INV_PAD_X),y:startY+r*(INV_H+INV_PAD_Y),w:INV_W,h:INV_H,type:r<1?2:r<3?1:0,anim:0,alive:true});
   }
   invDir=1;
-  invSpeed=0.8+wave*0.3;
+  invSpeed=0.4+wave*0.15;
   invShootInterval=Math.max(800,2200-wave*200);
   invShootTimer=invShootInterval;
 }
@@ -450,26 +450,21 @@ function drawBullet(b,color) {
 function update(dt) {
   if (state!==STATE.PLAYING) return;
 
-  // ── FIX DELTA-TIME : normalisation 60fps ──────────────────────────────────
-  // Cap à 50ms pour éviter les sauts si onglet en arrière-plan
+  // ── DELTA-TIME normalisé 60fps ────────────────────────────────────────────
   const dtCapped = Math.min(dt, 50);
-  const f = dtCapped / TARGET_FRAME_MS; // facteur multiplicateur (1.0 = 60fps)
+  const f = dtCapped / TARGET_FRAME_MS;
   // ─────────────────────────────────────────────────────────────────────────
 
   if (waveFlashTimer>0) { waveFlashTimer-=dtCapped; if(waveFlashTimer<=0) document.getElementById('wave-flash').classList.remove('show'); }
 
-  // Stars — frame-rate independent
   starfield.forEach(s=>{s.y+=s.speed*f;if(s.y>canvas.height){s.y=0;s.x=Math.random()*canvas.width;}});
 
-  // Player movement — frame-rate independent
   if (keys.left)  player.x=Math.max(0,player.x-PLAYER_SPEED*f);
   if (keys.right) player.x=Math.min(canvas.width-PLAYER_W,player.x+PLAYER_SPEED*f);
 
-  // Fire cooldown reste en ms — déjà correct
   if (fireCooldown>0) fireCooldown-=dtCapped;
   if (keys.fire) playerShoot();
 
-  // Player bullets — frame-rate independent
   bullets=bullets.filter(b=>{
     b.y+=b.vy*f;
     if(b.y<0) return false;
@@ -478,7 +473,6 @@ function update(dt) {
     return true;
   });
 
-  // Invader bullets — frame-rate independent
   invBullets=invBullets.filter(b=>{
     b.y+=b.vy*f;
     if(b.y>canvas.height) return false;
@@ -493,7 +487,6 @@ function update(dt) {
   let minX=Infinity,maxX=-Infinity;
   alive.forEach(inv=>{minX=Math.min(minX,inv.x);maxX=Math.max(maxX,inv.x+inv.w);});
 
-  // Invader movement — frame-rate independent
   const nextMinX = minX + invDir*invSpeed*f;
   const nextMaxX = maxX + invDir*invSpeed*f;
   if(nextMaxX>=canvas.width||nextMinX<=0){
@@ -507,11 +500,9 @@ function update(dt) {
     });
   }
 
-  // Invader shoot timer — en ms, déjà correct
   invShootTimer-=dtCapped;
   if(invShootTimer<=0){invaderShoot();invShootTimer=invShootInterval;}
 
-  // Particles — frame-rate independent
   particles.forEach(p=>{
     p.x+=p.vx*f;
     p.y+=p.vy*f;
@@ -536,6 +527,7 @@ function draw() {
 }
 
 function loop(ts) {
+  if (lastTime < 0) { lastTime = ts; requestAnimationFrame(loop); return; }
   const dt = ts - lastTime;
   lastTime = ts;
   update(dt);
@@ -573,7 +565,7 @@ document.getElementById('btn-restart').addEventListener('click',startGame);
 document.getElementById('btn-win-restart').addEventListener('click',startGame);
 
 bindControls();initStars();
-requestAnimationFrame(ts=>{lastTime=ts;requestAnimationFrame(loop);});
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
