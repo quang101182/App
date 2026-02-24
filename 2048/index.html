@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>2048</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --cell-size: clamp(64px, 18vw, 100px);
+    --gap: clamp(8px, 2vw, 14px);
+    --grid-size: calc(4 * var(--cell-size) + 5 * var(--gap));
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0a0a0f;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Orbitron', monospace;
+    overflow: hidden;
+    position: relative;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,170,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,170,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    top: -200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(0,255,170,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .glass {
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .score-box {
+    background: rgba(0,255,170,0.08);
+    border: 1px solid rgba(0,255,170,0.2);
+    border-radius: 12px;
+    padding: 8px 18px;
+    text-align: center;
+    min-width: 90px;
+  }
+
+  .score-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: rgba(0,255,170,0.6);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .score-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: #00ffaa;
+    line-height: 1.2;
+  }
+
+  .grid-container {
+    width: var(--grid-size);
+    height: var(--grid-size);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: var(--gap);
+    display: grid;
+    grid-template-columns: repeat(4, var(--cell-size));
+    grid-template-rows: repeat(4, var(--cell-size));
+    gap: var(--gap);
+    position: relative;
+  }
+
+  .cell-bg {
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  #tile-layer {
+    position: absolute;
+    top: var(--gap);
+    left: var(--gap);
+    width: calc(4 * var(--cell-size) + 3 * var(--gap));
+    height: calc(4 * var(--cell-size) + 3 * var(--gap));
+    pointer-events: none;
+  }
+
+  .tile {
+    position: absolute;
+    width: var(--cell-size);
+    height: var(--cell-size);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Orbitron', monospace;
+    font-weight: 900;
+    transition: left 0.12s ease, top 0.12s ease;
+    will-change: transform, left, top;
+  }
+
+  .tile.spawn {
+    animation: tileSpawn 0.18s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  }
+
+  .tile.merge {
+    animation: tileMerge 0.18s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  }
+
+  @keyframes tileSpawn {
+    from { transform: scale(0); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+
+  @keyframes tileMerge {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.18); }
+    100% { transform: scale(1); }
+  }
+
+  .t2    { background: rgba(255,255,255,0.08); color: #e0e0e0; border: 1px solid rgba(255,255,255,0.12); font-size: clamp(22px,5vw,36px); }
+  .t4    { background: rgba(0,200,255,0.12); color: #66d9ff; border: 1px solid rgba(0,200,255,0.25); font-size: clamp(22px,5vw,36px); }
+  .t8    { background: rgba(0,255,170,0.15); color: #00ffaa; border: 1px solid rgba(0,255,170,0.3); font-size: clamp(22px,5vw,36px); }
+  .t16   { background: rgba(0,255,100,0.18); color: #00ff64; border: 1px solid rgba(0,255,100,0.35); font-size: clamp(20px,4.5vw,32px); }
+  .t32   { background: rgba(100,255,0,0.18); color: #80ff00; border: 1px solid rgba(100,255,0,0.35); font-size: clamp(20px,4.5vw,32px); }
+  .t64   { background: rgba(255,200,0,0.18); color: #ffc800; border: 1px solid rgba(255,200,0,0.35); font-size: clamp(20px,4.5vw,32px); }
+  .t128  { background: rgba(255,140,0,0.22); color: #ff8c00; border: 1px solid rgba(255,140,0,0.4); font-size: clamp(16px,3.8vw,26px); text-shadow: 0 0 12px rgba(255,140,0,0.5); }
+  .t256  { background: rgba(255,80,0,0.22); color: #ff5000; border: 1px solid rgba(255,80,0,0.4); font-size: clamp(16px,3.8vw,26px); text-shadow: 0 0 12px rgba(255,80,0,0.5); }
+  .t512  { background: rgba(255,20,80,0.22); color: #ff1450; border: 1px solid rgba(255,20,80,0.4); font-size: clamp(16px,3.8vw,26px); text-shadow: 0 0 14px rgba(255,20,80,0.6); }
+  .t1024 { background: rgba(200,0,255,0.22); color: #cc00ff; border: 1px solid rgba(200,0,255,0.4); font-size: clamp(13px,3vw,20px); text-shadow: 0 0 16px rgba(200,0,255,0.7); }
+  .t2048 { background: linear-gradient(135deg, rgba(255,215,0,0.3), rgba(255,140,0,0.3)); color: #ffd700; border: 1px solid rgba(255,215,0,0.6); font-size: clamp(13px,3vw,20px); text-shadow: 0 0 20px rgba(255,215,0,0.9); box-shadow: 0 0 30px rgba(255,215,0,0.3); }
+  .thigh { background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(200,200,255,0.2)); color: #ffffff; border: 1px solid rgba(255,255,255,0.5); font-size: clamp(11px,2.5vw,17px); text-shadow: 0 0 20px white; }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    background: rgba(10,10,15,0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    z-index: 10;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .overlay.show {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .overlay-title {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(20px, 6vw, 32px);
+    font-weight: 900;
+    letter-spacing: 4px;
+  }
+
+  .btn-retry {
+    font-family: 'Orbitron', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    padding: 10px 28px;
+    border-radius: 8px;
+    border: 1px solid rgba(0,255,170,0.4);
+    background: rgba(0,255,170,0.1);
+    color: #00ffaa;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-retry:hover {
+    background: rgba(0,255,170,0.2);
+    border-color: rgba(0,255,170,0.7);
+    box-shadow: 0 0 20px rgba(0,255,170,0.2);
+  }
+
+  .btn-new {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    padding: 9px 20px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-new:hover {
+    background: rgba(255,255,255,0.1);
+    color: white;
+  }
+
+  .score-flash {
+    animation: scoreFlash 0.4s ease;
+  }
+
+  @keyframes scoreFlash {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); color: #ffffff; }
+  }
+
+  .hint {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 1px;
+    text-align: center;
+  }
+
+  .btn-tuto {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    padding: 9px 16px;
+    border-radius: 8px;
+    border: 1px solid rgba(0,200,255,0.25);
+    background: rgba(0,200,255,0.07);
+    color: rgba(0,200,255,0.7);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-tuto:hover {
+    background: rgba(0,200,255,0.15);
+    border-color: rgba(0,200,255,0.5);
+    color: #66d9ff;
+    box-shadow: 0 0 16px rgba(0,200,255,0.15);
+  }
+
+  #tuto-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(5,5,12,0.88);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+    padding: 20px;
+  }
+
+  #tuto-backdrop.show {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  #tuto-panel {
+    background: rgba(12,12,22,0.95);
+    border: 1px solid rgba(0,200,255,0.2);
+    border-radius: 20px;
+    padding: clamp(20px, 5vw, 36px);
+    width: 100%;
+    max-width: 420px;
+    position: relative;
+    box-shadow: 0 0 60px rgba(0,200,255,0.08), 0 0 0 1px rgba(255,255,255,0.04);
+    transform: scale(0.93);
+    transition: transform 0.25s cubic-bezier(0.34,1.4,0.64,1);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  #tuto-backdrop.show #tuto-panel {
+    transform: scale(1);
+  }
+
+  .tuto-title {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(14px, 4vw, 20px);
+    font-weight: 900;
+    color: #66d9ff;
+    letter-spacing: 3px;
+    margin-bottom: 4px;
+  }
+
+  .tuto-sub {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: rgba(0,200,255,0.4);
+    letter-spacing: 2px;
+    margin-bottom: 24px;
+  }
+
+  .tuto-section {
+    margin-bottom: 20px;
+  }
+
+  .tuto-section-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: rgba(0,255,170,0.5);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .tuto-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .tuto-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(0,200,255,0.08);
+    border: 1px solid rgba(0,200,255,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    color: #66d9ff;
+  }
+
+  .tuto-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.6;
+    padding-top: 6px;
+  }
+
+  .tuto-text strong {
+    color: rgba(255,255,255,0.9);
+    font-weight: normal;
+  }
+
+  .tile-strip {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+
+  .tile-preview {
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .key-badge {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.7);
+  }
+
+  .tuto-close {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 18px;
+    color: rgba(255,255,255,0.25);
+    cursor: pointer;
+    background: none;
+    border: none;
+    line-height: 1;
+    transition: color 0.2s;
+    padding: 4px 6px;
+  }
+
+  .tuto-close:hover { color: rgba(255,255,255,0.7); }
+
+  .tuto-footer-btn {
+    width: 100%;
+    margin-top: 20px;
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    padding: 11px;
+    border-radius: 10px;
+    border: 1px solid rgba(0,255,170,0.3);
+    background: rgba(0,255,170,0.07);
+    color: #00ffaa;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .tuto-footer-btn:hover {
+    background: rgba(0,255,170,0.15);
+    box-shadow: 0 0 20px rgba(0,255,170,0.15);
+  }
+</style>
+</head>
+<body>
+
+<div style="display:flex; flex-direction:column; align-items:center; gap:clamp(12px,3vw,24px); padding: 20px; width:100%; max-width:520px;">
+
+  <div style="display:flex; align-items:center; justify-content:space-between; width:var(--grid-size);">
+    <div>
+      <div style="font-size:clamp(28px,8vw,48px); font-weight:900; color:#00ffaa; letter-spacing:4px; line-height:1;">2048</div>
+      <div style="font-family:'Share Tech Mono',monospace; font-size:10px; color:rgba(0,255,170,0.4); letter-spacing:2px; margin-top:2px;">MERGE TO WIN</div>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <div class="score-box">
+        <div class="score-label">SCORE</div>
+        <div class="score-value" id="score-display">0</div>
+      </div>
+      <div class="score-box">
+        <div class="score-label">BEST</div>
+        <div class="score-value" id="best-display">0</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; width:var(--grid-size); justify-content:flex-end; gap:8px;">
+    <button class="btn-tuto" onclick="openTuto()">? TUTO</button>
+    <button class="btn-new" onclick="newGame()">↺ NEW GAME</button>
+  </div>
+
+  <div class="grid-container" id="grid">
+    <div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div>
+    <div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div>
+    <div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div>
+    <div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div><div class="cell-bg"></div>
+    <div id="tile-layer"></div>
+    <div class="overlay" id="overlay">
+      <div class="overlay-title" id="overlay-title">GAME OVER</div>
+      <div style="font-family:'Share Tech Mono',monospace; font-size:13px; color:rgba(255,255,255,0.5);" id="overlay-sub"></div>
+      <button class="btn-retry" onclick="newGame()">REJOUER</button>
+    </div>
+  </div>
+
+  <div class="hint">↑ ↓ ← →  /  WASD  /  SWIPE</div>
+</div>
+
+<script>
+let board = [];
+let score = 0;
+let best = parseInt(localStorage.getItem('2048_best') || '0');
+let won = false;
+let over = false;
+let animating = false;
+
+function spawnTile() {
+  const empty = [];
+  for (let r=0; r<4; r++)
+    for (let c=0; c<4; c++)
+      if (board[r][c] === 0) empty.push({r,c});
+  if (!empty.length) return false;
+  const {r,c} = empty[Math.floor(Math.random() * empty.length)];
+  board[r][c] = Math.random() < 0.9 ? 2 : 4;
+  return {r,c};
+}
+
+function getTileClass(v) {
+  if (v === 2)    return 't2';
+  if (v === 4)    return 't4';
+  if (v === 8)    return 't8';
+  if (v === 16)   return 't16';
+  if (v === 32)   return 't32';
+  if (v === 64)   return 't64';
+  if (v === 128)  return 't128';
+  if (v === 256)  return 't256';
+  if (v === 512)  return 't512';
+  if (v === 1024) return 't1024';
+  if (v === 2048) return 't2048';
+  return 'thigh';
+}
+
+let tileMap = new Map();
+let nextId = 0;
+let idBoard = Array.from({length:4}, () => Array(4).fill(null));
+
+function renderTiles(animate = true, spawned = null) {
+  const layer = document.getElementById('tile-layer');
+  const activeIds = new Set();
+  for (let r=0; r<4; r++)
+    for (let c=0; c<4; c++)
+      if (idBoard[r][c] !== null) activeIds.add(idBoard[r][c]);
+
+  for (const [id, data] of tileMap) {
+    if (!activeIds.has(id)) {
+      data.el.remove();
+      tileMap.delete(id);
+    }
+  }
+
+  for (let r=0; r<4; r++) {
+    for (let c=0; c<4; c++) {
+      const id = idBoard[r][c];
+      if (id === null) continue;
+      const val = board[r][c];
+      if (!tileMap.has(id)) {
+        const el = document.createElement('div');
+        el.className = `tile ${getTileClass(val)}`;
+        el.style.cssText = `left:calc(${c} * (var(--cell-size) + var(--gap)));top:calc(${r} * (var(--cell-size) + var(--gap)));width:var(--cell-size);height:var(--cell-size);`;
+        el.textContent = val;
+        layer.appendChild(el);
+        tileMap.set(id, {el, r, c, value: val});
+        if (spawned && spawned.r === r && spawned.c === c) el.classList.add('spawn');
+      } else {
+        const data = tileMap.get(id);
+        data.el.style.left = `calc(${c} * (var(--cell-size) + var(--gap)))`;
+        data.el.style.top  = `calc(${r} * (var(--cell-size) + var(--gap)))`;
+        if (data.value !== val) {
+          data.el.className = `tile ${getTileClass(val)}`;
+          data.el.textContent = val;
+          data.value = val;
+          data.el.classList.add('merge');
+          data.el.addEventListener('animationend', () => data.el.classList.remove('merge'), {once:true});
+        }
+        data.r = r; data.c = c;
+      }
+    }
+  }
+}
+
+function slide(row) {
+  let arr = row.filter(v => v !== 0);
+  let gained = 0;
+  for (let i=0; i<arr.length-1; i++) {
+    if (arr[i] === arr[i+1]) {
+      arr[i] *= 2;
+      gained += arr[i];
+      arr.splice(i+1, 1);
+    }
+  }
+  while (arr.length < 4) arr.push(0);
+  return {arr, gained};
+}
+
+function transposeBoard(b) {
+  return b[0].map((_, c) => b.map(r => r[c]));
+}
+
+function move(dir) {
+  if (animating || over) return;
+  let moved = false;
+  let totalGained = 0;
+  let newBoard = board.map(r => [...r]);
+  let newIdBoard = idBoard.map(r => [...r]);
+
+  if (dir === 'left' || dir === 'right') {
+    for (let r=0; r<4; r++) {
+      let row = dir === 'right' ? [...board[r]].reverse() : [...board[r]];
+      let idRow = dir === 'right' ? [...idBoard[r]].reverse() : [...idBoard[r]];
+      const {arr, gained} = slide(row);
+      let srcIds = idRow.filter((_,i)=>row[i]!==0);
+      let newIdRow = Array(4).fill(null);
+      let srcIdx = 0;
+      for (let c=0; c<4; c++) {
+        if (arr[c] !== 0) { newIdRow[c] = srcIds[srcIdx] !== undefined ? srcIds[srcIdx] : null; srcIdx++; }
+      }
+      if (dir === 'right') { newBoard[r] = arr.reverse(); newIdBoard[r] = newIdRow.reverse(); }
+      else { newBoard[r] = arr; newIdBoard[r] = newIdRow; }
+      totalGained += gained;
+      if (JSON.stringify(newBoard[r]) !== JSON.stringify(board[r])) moved = true;
+    }
+  } else {
+    let tb = transposeBoard(board);
+    let tib = transposeBoard(idBoard);
+    for (let r=0; r<4; r++) {
+      let row = dir === 'down' ? [...tb[r]].reverse() : [...tb[r]];
+      let idRow = dir === 'down' ? [...tib[r]].reverse() : [...tib[r]];
+      const {arr, gained} = slide(row);
+      let srcIds = idRow.filter((_,i)=>row[i]!==0);
+      let newIdRow = Array(4).fill(null);
+      let srcIdx = 0;
+      for (let c=0; c<4; c++) {
+        if (arr[c] !== 0) { newIdRow[c] = srcIds[srcIdx] !== undefined ? srcIds[srcIdx] : null; srcIdx++; }
+      }
+      if (dir === 'down') { tb[r] = arr.reverse(); tib[r] = newIdRow.reverse(); }
+      else { tb[r] = arr; tib[r] = newIdRow; }
+      totalGained += gained;
+    }
+    newBoard = transposeBoard(tb);
+    newIdBoard = transposeBoard(tib);
+    if (JSON.stringify(newBoard) !== JSON.stringify(board)) moved = true;
+  }
+
+  if (!moved) return;
+  board = newBoard;
+  idBoard = newIdBoard;
+  score += totalGained;
+  if (score > best) { best = score; localStorage.setItem('2048_best', best); }
+  updateScoreUI(totalGained > 0);
+  renderTiles(true);
+
+  setTimeout(() => {
+    const sp = spawnTile();
+    if (sp) {
+      const id = nextId++;
+      idBoard[sp.r][sp.c] = id;
+      renderTilesSpawn(sp);
+    }
+    checkWin();
+    if (!won && !over) checkGameOver();
+  }, 130);
+}
+
+function renderTilesSpawn(spawned) {
+  const layer = document.getElementById('tile-layer');
+  const {r, c} = spawned;
+  const val = board[r][c];
+  const id = idBoard[r][c];
+  const el = document.createElement('div');
+  el.className = `tile ${getTileClass(val)} spawn`;
+  el.style.cssText = `left:calc(${c} * (var(--cell-size) + var(--gap)));top:calc(${r} * (var(--cell-size) + var(--gap)));width:var(--cell-size);height:var(--cell-size);`;
+  el.textContent = val;
+  layer.appendChild(el);
+  tileMap.set(id, {el, r, c, value: val});
+  el.addEventListener('animationend', () => el.classList.remove('spawn'), {once:true});
+}
+
+function checkWin() {
+  if (won) return;
+  for (let r=0; r<4; r++)
+    for (let c=0; c<4; c++)
+      if (board[r][c] === 2048) { won = true; showOverlay('🏆 2048 !', `Score : ${score}`); return; }
+}
+
+function checkGameOver() {
+  for (let r=0; r<4; r++)
+    for (let c=0; c<4; c++)
+      if (board[r][c] === 0) return;
+  for (let r=0; r<4; r++)
+    for (let c=0; c<4; c++) {
+      if (c < 3 && board[r][c] === board[r][c+1]) return;
+      if (r < 3 && board[r][c] === board[r+1][c]) return;
+    }
+  over = true;
+  showOverlay('GAME OVER', `Score final : ${score}`);
+}
+
+function showOverlay(title, sub) {
+  document.getElementById('overlay-title').textContent = title;
+  document.getElementById('overlay-sub').textContent = sub;
+  document.getElementById('overlay').classList.add('show');
+}
+
+function updateScoreUI(flash = false) {
+  const el = document.getElementById('score-display');
+  el.textContent = score;
+  document.getElementById('best-display').textContent = best;
+  if (flash) { el.classList.remove('score-flash'); void el.offsetWidth; el.classList.add('score-flash'); }
+}
+
+document.addEventListener('keydown', e => {
+  const map = {
+    ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down',
+    a:'left', d:'right', w:'up', s:'down',
+    A:'left', D:'right', W:'up', S:'down'
+  };
+  if (map[e.key]) { e.preventDefault(); move(map[e.key]); }
+});
+
+let touchStart = null;
+const grid = document.getElementById('grid');
+grid.addEventListener('touchstart', e => {
+  touchStart = {x: e.touches[0].clientX, y: e.touches[0].clientY};
+}, {passive: true});
+grid.addEventListener('touchend', e => {
+  if (!touchStart) return;
+  const dx = e.changedTouches[0].clientX - touchStart.x;
+  const dy = e.changedTouches[0].clientY - touchStart.y;
+  const absDx = Math.abs(dx), absDy = Math.abs(dy);
+  if (Math.max(absDx, absDy) < 20) return;
+  if (absDx > absDy) move(dx > 0 ? 'right' : 'left');
+  else               move(dy > 0 ? 'down'  : 'up');
+  touchStart = null;
+}, {passive: true});
+
+function fullRenderFromScratch() {
+  const layer = document.getElementById('tile-layer');
+  layer.innerHTML = '';
+  tileMap.clear();
+  for (let r=0; r<4; r++) {
+    for (let c=0; c<4; c++) {
+      if (board[r][c] !== 0) {
+        const id = nextId++;
+        idBoard[r][c] = id;
+        const val = board[r][c];
+        const el = document.createElement('div');
+        el.className = `tile ${getTileClass(val)} spawn`;
+        el.style.cssText = `left:calc(${c} * (var(--cell-size) + var(--gap)));top:calc(${r} * (var(--cell-size) + var(--gap)));width:var(--cell-size);height:var(--cell-size);`;
+        el.textContent = val;
+        layer.appendChild(el);
+        tileMap.set(id, {el, r, c, value: val});
+        setTimeout(() => el.classList.remove('spawn'), 200);
+      }
+    }
+  }
+}
+
+function newGame() {
+  board = Array.from({length:4}, () => Array(4).fill(0));
+  idBoard = Array.from({length:4}, () => Array(4).fill(null));
+  nextId = 0;
+  score = 0;
+  won = false;
+  over = false;
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('tile-layer').innerHTML = '';
+  tileMap.clear();
+  updateScoreUI();
+  spawnTile();
+  spawnTile();
+  fullRenderFromScratch();
+}
+
+newGame();
+</script>
+
+<div id="tuto-backdrop">
+  <div id="tuto-panel">
+    <button class="tuto-close" onclick="closeTuto()">✕</button>
+    <div class="tuto-title">COMMENT JOUER</div>
+    <div class="tuto-sub">// GUIDE RAPIDE</div>
+
+    <div class="tuto-section">
+      <div class="tuto-section-label">OBJECTIF</div>
+      <div class="tuto-row">
+        <div class="tuto-icon">🎯</div>
+        <div class="tuto-text">Fusionner les tuiles pour atteindre <strong>2048</strong>.<br>Deux tuiles identiques adjacentes fusionnent en une seule valeur doublée.</div>
+      </div>
+    </div>
+
+    <div class="tuto-section">
+      <div class="tuto-section-label">CONTRÔLES</div>
+      <div class="tuto-row">
+        <div class="tuto-icon">⌨️</div>
+        <div class="tuto-text"><strong>Clavier</strong> — Flèches directionnelles ou <span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span></div>
+      </div>
+      <div class="tuto-row">
+        <div class="tuto-icon">👆</div>
+        <div class="tuto-text"><strong>Mobile</strong> — Glisser (swipe) dans n'importe quelle direction sur la grille</div>
+      </div>
+    </div>
+
+    <div class="tuto-section">
+      <div class="tuto-section-label">RÈGLES</div>
+      <div class="tuto-row">
+        <div class="tuto-icon">↔️</div>
+        <div class="tuto-text">Chaque coup déplace <strong>toutes</strong> les tuiles dans la direction choisie. Elles glissent jusqu'au bord ou jusqu'à une tuile différente.</div>
+      </div>
+      <div class="tuto-row">
+        <div class="tuto-icon">⚡</div>
+        <div class="tuto-text">Une tuile ne peut fusionner qu'<strong>une seule fois</strong> par coup. La valeur de fusion s'ajoute au score.</div>
+      </div>
+      <div class="tuto-row">
+        <div class="tuto-icon">➕</div>
+        <div class="tuto-text">Après chaque coup, une nouvelle tuile <strong>2</strong> ou <strong>4</strong> apparaît aléatoirement sur une case vide.</div>
+      </div>
+      <div class="tuto-row">
+        <div class="tuto-icon">💀</div>
+        <div class="tuto-text"><strong>Game Over</strong> quand la grille est pleine et qu'aucune fusion n'est possible.</div>
+      </div>
+    </div>
+
+    <div class="tuto-section">
+      <div class="tuto-section-label">PROGRESSION DES TUILES</div>
+      <div class="tile-strip">
+        <div class="tile-preview t2" style="border-radius:6px;padding:4px 7px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;">2</div>
+        <div style="color:rgba(255,255,255,0.2);font-size:10px;">→</div>
+        <div class="tile-preview t8" style="border-radius:6px;padding:4px 7px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;">8</div>
+        <div style="color:rgba(255,255,255,0.2);font-size:10px;">→</div>
+        <div class="tile-preview t64" style="border-radius:6px;padding:4px 7px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;">64</div>
+        <div style="color:rgba(255,255,255,0.2);font-size:10px;">→</div>
+        <div class="tile-preview t512" style="border-radius:6px;padding:4px 7px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;">512</div>
+        <div style="color:rgba(255,255,255,0.2);font-size:10px;">→</div>
+        <div class="tile-preview t2048" style="border-radius:6px;padding:4px 7px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;">2048</div>
+      </div>
+    </div>
+
+    <button class="tuto-footer-btn" onclick="closeTuto()">C'EST COMPRIS — JOUER</button>
+  </div>
+</div>
+
+<script>
+function openTuto() { document.getElementById('tuto-backdrop').classList.add('show'); }
+function closeTuto() { document.getElementById('tuto-backdrop').classList.remove('show'); }
+document.getElementById('tuto-backdrop').addEventListener('click', e => {
+  if (e.target === document.getElementById('tuto-backdrop')) closeTuto();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTuto(); });
+</script>
+
+</body>
+</html>
