@@ -574,9 +574,15 @@
 
       <div class="card" id="ocr-lang-card">
         <div class="card-title">Langue</div>
-        <div class="btn-row">
+        <div class="btn-row" style="margin-bottom:16px;">
           <button class="btn btn-primary" id="lang-fr" onclick="setLang('fra',this)">🇫🇷 Français</button>
           <button class="btn btn-ghost" id="lang-en" onclick="setLang('eng',this)">🇬🇧 English</button>
+        </div>
+        <div class="card-title">Mode de segmentation</div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="psm-3" onclick="setPSM('3',this)" title="Détection auto — recommandé pour photos">Auto</button>
+          <button class="btn btn-ghost" id="psm-6" onclick="setPSM('6',this)" title="Bloc de texte uniforme — documents A4">Bloc</button>
+          <button class="btn btn-ghost" id="psm-11" onclick="setPSM('11',this)" title="Texte épars — étiquettes, affiches">Épars</button>
         </div>
       </div>
 
@@ -995,6 +1001,13 @@ function resetCompress() {
 
 // ===== OCR =====
 let ocrLang = 'fra';
+let ocrPSM = '3'; // PSM 3 = auto (meilleur pour photos mobiles générales)
+
+function setPSM(psm, btn) {
+  ocrPSM = psm;
+  document.querySelectorAll('#ocr-lang-card .btn[id^="psm-"]').forEach(b => b.className = 'btn btn-ghost');
+  btn.className = 'btn btn-primary';
+}
 
 setupDrop($('iz-ocr'), $('file-ocr'), startOCR);
 $('file-ocr-photo').addEventListener('change', () => {
@@ -1063,8 +1076,8 @@ async function startOCR(file) {
         }
       }
     });
-    // PSM 6 = bloc de texte uniforme — meilleur sur photos mobiles de documents
-    await worker.setParameters({ tessedit_pageseg_mode: '6' });
+    // PSM 3 = auto (défaut) — PSM 6 = bloc uniforme — PSM 11 = texte épars
+    await worker.setParameters({ tessedit_pageseg_mode: ocrPSM });
     $('ocr-bar').style.width = '60%';
     $('ocr-status').textContent = 'Traitement…';
     // Passer le canvas (déjà orienté correctement) à Tesseract
@@ -1277,8 +1290,9 @@ function decodeBarcode(file) {
   }).catch(() => toast('Erreur lecture image', '⚠'));
 }
 
-// @zxing/browser expose ZXingBrowser.BrowserMultiFormatReader
-// decodeFromCanvas() est l'API correcte pour passer un canvas — pas RGBLuminanceSource
+// @zxing/browser — BrowserMultiFormatReader
+// Hints : TRY_HARDER + POSSIBLE_FORMATS pour maximiser le taux de détection
+// decodeFromImageElement > decodeFromCanvas (flux interne plus fiable)
 // getBarcodeFormat() retourne un entier enum — mapping vers labels lisibles
 const ZXING_FORMAT_LABELS = {
   0:'AZTEC', 1:'CODABAR', 2:'CODE_39', 3:'CODE_93', 4:'CODE_128',
@@ -1286,10 +1300,52 @@ const ZXING_FORMAT_LABELS = {
   10:'PDF_417', 11:'QR_CODE', 12:'RSS_14', 13:'RSS_EXPANDED',
   14:'UPC_A', 15:'UPC_E', 16:'UPC_EAN_EXTENSION'
 };
+
+// Initialiser les hints ZXing une seule fois (réutilisé par toutes les instances)
+function _buildZXingHints() {
+  const ZXing = window.ZXingBrowser ? window.ZXingBrowser : null;
+  if (!ZXing || !ZXing.DecodeHintType) return null;
+  const hints = new Map();
+  // TRY_HARDER = optimiser pour la précision, pas la vitesse
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  // POSSIBLE_FORMATS = liste explicite évite les faux négatifs sur formats rares
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+    ZXing.BarcodeFormat.QR_CODE,
+    ZXing.BarcodeFormat.DATA_MATRIX,
+    ZXing.BarcodeFormat.AZTEC,
+    ZXing.BarcodeFormat.PDF_417,
+    ZXing.BarcodeFormat.CODE_128,
+    ZXing.BarcodeFormat.CODE_39,
+    ZXing.BarcodeFormat.CODE_93,
+    ZXing.BarcodeFormat.EAN_13,
+    ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.UPC_A,
+    ZXing.BarcodeFormat.UPC_E,
+    ZXing.BarcodeFormat.ITF,
+    ZXing.BarcodeFormat.CODABAR
+  ]);
+  return hints;
+}
+
 async function zxingDecode(canvas, cb) {
   try {
-    const codeReader = new ZXingBrowser.BrowserMultiFormatReader();
-    const result = await codeReader.decodeFromCanvas(canvas);
+    const hints = _buildZXingHints();
+    const codeReader = new ZXingBrowser.BrowserMultiFormatReader(hints);
+
+    // decodeFromImageElement est plus fiable que decodeFromCanvas :
+    // on crée un <img> temporaire à partir du blob URL du canvas
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    const blobURL = URL.createObjectURL(blob);
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = blobURL; });
+
+    let result;
+    try {
+      result = await codeReader.decodeFromImageElement(img);
+    } finally {
+      URL.revokeObjectURL(blobURL); // libérer la mémoire
+    }
+
     const fmtInt = result.getBarcodeFormat();
     const fmtLabel = ZXING_FORMAT_LABELS[fmtInt] || ('FORMAT_' + fmtInt);
     cb({ text: result.getText(), format: fmtLabel });
