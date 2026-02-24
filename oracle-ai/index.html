@@ -239,10 +239,33 @@
         <div class="text-xs" style="color:var(--c-muted)">Décide. Détecte.</div>
       </div>
     </div>
-    <p class="text-sm mb-6" style="color:var(--c-muted); line-height:1.7">
-      Clé API Claude (Anthropic) requise. Stockée localement, jamais transmise.
-    </p>
-    <label class="block text-xs mb-2" style="color:var(--c-muted); letter-spacing:0.1em">ANTHROPIC API KEY</label>
+
+    <!-- PROVIDER SELECTOR -->
+    <div class="text-xs mb-3" style="color:var(--c-muted); letter-spacing:0.12em">PROVIDER IA</div>
+    <div class="grid grid-cols-3 gap-2 mb-5" id="providerGrid">
+      <button onclick="selectProvider('anthropic')" id="btn-anthropic"
+        class="provider-btn py-3 rounded-xl text-xs font-bold syne flex flex-col items-center gap-1 transition-all"
+        style="border:1px solid rgba(240,165,0,0.6); color:#f0a500; background:rgba(240,165,0,0.1)">
+        <span class="text-base">🟠</span>Claude
+      </button>
+      <button onclick="selectProvider('openai')" id="btn-openai"
+        class="provider-btn py-3 rounded-xl text-xs font-bold syne flex flex-col items-center gap-1 transition-all"
+        style="border:1px solid rgba(255,255,255,0.08); color:var(--c-muted); background:transparent">
+        <span class="text-base">⚫</span>OpenAI
+      </button>
+      <button onclick="selectProvider('gemini')" id="btn-gemini"
+        class="provider-btn py-3 rounded-xl text-xs font-bold syne flex flex-col items-center gap-1 transition-all"
+        style="border:1px solid rgba(255,255,255,0.08); color:var(--c-muted); background:transparent">
+        <span class="text-base">🔵</span>Gemini
+      </button>
+    </div>
+
+    <!-- KEY HINT -->
+    <div id="keyHint" class="text-xs mb-2 px-1" style="color:var(--c-muted)">
+      console.anthropic.com → API Keys
+    </div>
+
+    <label class="block text-xs mb-2" style="color:var(--c-muted); letter-spacing:0.1em">API KEY</label>
     <input id="apiKeyInput" type="password" placeholder="sk-ant-..." class="inp w-full rounded-lg px-4 py-3 text-sm mb-4">
     <label class="block text-xs mb-2" style="color:var(--c-muted); letter-spacing:0.1em">TON PSEUDO</label>
     <input id="pseudoInput" type="text" placeholder="ex: ghost_42" class="inp w-full rounded-lg px-4 py-3 text-sm mb-6" maxlength="20">
@@ -529,6 +552,7 @@
 // ===================== STATE =====================
 let STATE = {
   apiKey: '',
+  provider: 'anthropic', // 'anthropic' | 'openai' | 'gemini'
   pseudo: '',
   tab: 'oracle',
   // Oracle
@@ -552,10 +576,51 @@ let STATE = {
   leaderboard: []
 };
 
+// ===================== PROVIDER CONFIG =====================
+const PROVIDERS = {
+  anthropic: {
+    label: 'Claude',
+    placeholder: 'sk-ant-api03-...',
+    hint: 'console.anthropic.com → API Keys',
+    models: { default: 'claude-sonnet-4-20250514' }
+  },
+  openai: {
+    label: 'OpenAI',
+    placeholder: 'sk-...',
+    hint: 'platform.openai.com → API keys',
+    models: { default: 'gpt-4o-mini' }
+  },
+  gemini: {
+    label: 'Gemini',
+    placeholder: 'AIza...',
+    hint: 'aistudio.google.com → Get API key',
+    models: { default: 'gemini-2.0-flash' }
+  }
+};
+
+function selectProvider(p) {
+  STATE.provider = p;
+  const colors = { anthropic: '#f0a500', openai: '#ffffff', gemini: '#4285f4' };
+  const emojis = { anthropic: '🟠', openai: '⚫', gemini: '🔵' };
+  ['anthropic','openai','gemini'].forEach(id => {
+    const btn = document.getElementById('btn-'+id);
+    const active = id === p;
+    btn.style.borderColor = active ? colors[id] : 'rgba(255,255,255,0.08)';
+    btn.style.color = active ? colors[id] : 'var(--c-muted)';
+    btn.style.background = active ? `${colors[id]}18` : 'transparent';
+  });
+  const cfg = PROVIDERS[p];
+  document.getElementById('apiKeyInput').placeholder = cfg.placeholder;
+  document.getElementById('keyHint').textContent = cfg.hint;
+}
+
 // ===================== INIT =====================
 function init() {
   const k = localStorage.getItem('oracle_apikey');
+  const prov = localStorage.getItem('oracle_provider') || 'anthropic';
   const p = localStorage.getItem('oracle_pseudo');
+  STATE.provider = prov;
+  selectProvider(prov);
   if (k && p) {
     STATE.apiKey = k;
     STATE.pseudo = p;
@@ -575,6 +640,7 @@ function saveSetup() {
   STATE.pseudo = p;
   localStorage.setItem('oracle_apikey', k);
   localStorage.setItem('oracle_pseudo', p);
+  localStorage.setItem('oracle_provider', STATE.provider);
   loadUserData();
   showApp();
 }
@@ -1144,9 +1210,22 @@ function renderLbContent() {
   `).join('') || '<div class="text-center text-sm py-4" style="color:var(--c-muted)">Aucun joueur</div>';
 }
 
-// ===================== CLAUDE API =====================
+// ===================== MULTI-PROVIDER AI =====================
 async function callClaude(prompt, maxTokens = 500) {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  return callAI(prompt, maxTokens);
+}
+
+async function callAI(prompt, maxTokens = 500) {
+  switch (STATE.provider) {
+    case 'anthropic': return await callAnthropic(prompt, maxTokens);
+    case 'openai':    return await callOpenAI(prompt, maxTokens);
+    case 'gemini':    return await callGemini(prompt, maxTokens);
+    default: throw new Error('Provider inconnu: ' + STATE.provider);
+  }
+}
+
+async function callAnthropic(prompt, maxTokens) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -1160,14 +1239,43 @@ async function callClaude(prompt, maxTokens = 500) {
       messages: [{ role: 'user', content: prompt }]
     })
   });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || 'Anthropic error'); }
+  const d = await res.json();
+  return d.content[0].text.trim();
+}
 
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error?.message || 'API error');
-  }
+async function callOpenAI(prompt, maxTokens) {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${STATE.apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || 'OpenAI error'); }
+  const d = await res.json();
+  return d.choices[0].message.content.trim();
+}
 
-  const data = await response.json();
-  return data.content[0].text.trim();
+async function callGemini(prompt, maxTokens) {
+  const model = 'gemini-2.0-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${STATE.apiKey}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: maxTokens }
+    })
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || 'Gemini error'); }
+  const d = await res.json();
+  return d.candidates[0].content.parts[0].text.trim();
 }
 
 // ===================== BOOTSTRAP =====================
