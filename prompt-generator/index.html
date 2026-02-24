@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt Generator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c12;
+    --surface: #0d1420;
+    --surface2: #131c2e;
+    --border: rgba(99,179,237,0.12);
+    --border-active: rgba(99,179,237,0.45);
+    --accent: #3b82f6;
+    --accent2: #06b6d4;
+    --accent3: #a78bfa;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --success: #10b981;
+    --warn: #f59e0b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    top: -200px; left: -200px;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(59,130,246,0.06) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    bottom: -100px; right: -100px;
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(167,139,250,0.05) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: rgba(99,179,237,0.2); border-radius: 2px; }
+
+  /* LAYOUT */
+  .app-header {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(8,12,18,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo {
+    font-size: 18px; font-weight: 800; letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #3b82f6, #06b6d4);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .main-layout {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    height: calc(100vh - 57px);
+    position: relative; z-index: 1;
+  }
+  .panel-left {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .panel-right {
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* DOMAIN TABS */
+  .domain-tabs {
+    display: flex; gap: 4px;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .domain-tabs::-webkit-scrollbar { display: none; }
+  .domain-tab {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    color: var(--muted);
+  }
+  .domain-tab:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+  .domain-tab.active {
+    color: var(--text);
+    background: rgba(59,130,246,0.15);
+    border-color: rgba(59,130,246,0.4);
+  }
+
+  /* FORM FIELDS */
+  .fields-container {
+    flex: 1;
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .field-group label {
+    display: block;
+    font-size: 11px; font-weight: 600; letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .field-group label span.req {
+    color: var(--accent);
+    margin-left: 2px;
+  }
+  .field-input, .field-select, .field-textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    padding: 9px 12px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .field-input:focus, .field-select:focus, .field-textarea:focus {
+    border-color: var(--border-active);
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.08);
+  }
+  .field-textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
+  .field-select { cursor: pointer; }
+  option { background: #131c2e; }
+
+  /* TAGS INPUT */
+  .tags-container {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    min-height: 42px;
+    cursor: text;
+  }
+  .tag {
+    display: flex; align-items: center; gap: 4px;
+    background: rgba(59,130,246,0.15);
+    border: 1px solid rgba(59,130,246,0.3);
+    color: #93c5fd;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px; font-weight: 500;
+  }
+  .tag-remove { cursor: pointer; opacity: 0.6; font-size: 14px; line-height: 1; }
+  .tag-remove:hover { opacity: 1; }
+  .tags-input {
+    background: none; border: none; outline: none;
+    color: var(--text); font-size: 13px; font-family: 'Syne', sans-serif;
+    min-width: 100px; flex: 1;
+  }
+
+  /* QUALITY SCORE */
+  .score-bar-container {
+    padding: 12px 16px;
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .score-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px;
+    font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+  }
+  .score-value { font-size: 18px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+  .score-bar-track {
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .score-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease, background 0.3s ease;
+  }
+  .score-indicators {
+    display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;
+  }
+  .score-dot {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 10px; color: var(--muted);
+  }
+  .score-dot .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--muted);
+  }
+  .score-dot.filled .dot { background: var(--success); }
+
+  /* ACTION BUTTONS */
+  .actions-bar {
+    padding: 12px 16px;
+    display: flex; gap: 8px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    font-family: 'Syne', sans-serif;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #2563eb, #0ea5e9);
+    color: white;
+    border-color: rgba(59,130,246,0.5);
+  }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.3); }
+  .btn-ghost {
+    background: var(--surface2);
+    color: var(--text);
+    border-color: var(--border);
+  }
+  .btn-ghost:hover { border-color: var(--border-active); background: rgba(255,255,255,0.04); }
+  .btn-accent {
+    background: rgba(167,139,250,0.12);
+    color: #c4b5fd;
+    border-color: rgba(167,139,250,0.3);
+  }
+  .btn-accent:hover { background: rgba(167,139,250,0.2); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+  /* RIGHT PANEL */
+  .output-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface);
+  }
+  .output-title {
+    font-size: 12px; font-weight: 600; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .output-actions { display: flex; gap: 8px; }
+  .output-area {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+  }
+  .prompt-display {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; line-height: 1.8;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 200px;
+  }
+  .prompt-display .var-highlight {
+    background: rgba(245,158,11,0.15);
+    border: 1px solid rgba(245,158,11,0.3);
+    color: #fbbf24;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 12px;
+  }
+  .prompt-display .section-label {
+    color: var(--muted);
+    font-size: 11px; letter-spacing: 1px;
+    font-family: 'Syne', sans-serif;
+  }
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%;
+    color: var(--muted);
+    gap: 12px;
+  }
+  .empty-icon { font-size: 48px; opacity: 0.3; }
+  .empty-text { font-size: 13px; text-align: center; max-width: 240px; line-height: 1.6; }
+
+  /* API KEY MODAL */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(6px);
+    z-index: 200;
+    display: none; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--surface);
+    border: 1px solid var(--border-active);
+    border-radius: 16px;
+    width: 480px; max-width: 95vw;
+    padding: 28px;
+    display: flex; flex-direction: column; gap: 20px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+    position: relative;
+  }
+  .modal-title {
+    font-size: 16px; font-weight: 800; letter-spacing: -0.3px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .modal-close {
+    position: absolute; top: 16px; right: 16px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--muted);
+    width: 28px; height: 28px; cursor: pointer;
+    font-size: 16px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .modal-close:hover { color: var(--text); border-color: var(--border-active); }
+  .provider-tabs {
+    display: flex; gap: 6px;
+  }
+  .provider-tab {
+    flex: 1; padding: 8px; border-radius: 8px;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.3px;
+    cursor: pointer; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--muted);
+    transition: all 0.15s; text-align: center;
+  }
+  .provider-tab:hover { color: var(--text); }
+  .provider-tab.active {
+    color: var(--text); border-color: var(--border-active);
+    background: rgba(59,130,246,0.12);
+  }
+  .provider-tab.active.gemini { border-color: rgba(52,211,153,0.5); background: rgba(52,211,153,0.1); }
+  .provider-tab.active.openai { border-color: rgba(167,139,250,0.5); background: rgba(167,139,250,0.1); }
+  .api-key-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    padding: 10px 14px;
+    outline: none;
+    width: 100%;
+    transition: border-color 0.15s;
+  }
+  .api-key-input:focus { border-color: var(--border-active); }
+  .provider-hint {
+    font-size: 11px; color: var(--muted); line-height: 1.6;
+    background: var(--surface2); border-radius: 8px;
+    padding: 10px 12px; border-left: 3px solid var(--border-active);
+  }
+  .key-status {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 600;
+  }
+  .key-status .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+  }
+  .key-status.saved .dot { background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .key-status.empty .dot { background: var(--muted); }
+  .ai-badge {
+    background: rgba(167,139,250,0.15);
+    border: 1px solid rgba(167,139,250,0.3);
+    color: #c4b5fd;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px; font-weight: 600; letter-spacing: 1px;
+  }
+
+  /* LIBRARY PANEL */
+  .library-panel {
+    position: fixed; top: 57px; right: 0;
+    width: 340px; height: calc(100vh - 57px);
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 40;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    display: flex; flex-direction: column;
+  }
+  .library-panel.open { transform: translateX(0); }
+  .library-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px; font-weight: 700;
+  }
+  .library-list {
+    flex: 1; overflow-y: auto;
+    padding: 12px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .library-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .library-item:hover { border-color: var(--border-active); }
+  .library-item-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .library-item-meta {
+    font-size: 11px; color: var(--muted);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .library-item-domain {
+    background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.2);
+    color: #60a5fa;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+  }
+  .library-empty {
+    text-align: center; color: var(--muted);
+    font-size: 12px; padding: 32px 16px; line-height: 1.7;
+  }
+
+  /* TOAST */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 12px; font-weight: 600;
+    z-index: 100;
+    transition: transform 0.25s ease;
+    display: flex; align-items: center; gap: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: rgba(16,185,129,0.4); color: #6ee7b7; }
+  .toast.error { border-color: rgba(239,68,68,0.4); color: #fca5a5; }
+
+  /* LOADER */
+  .ai-loading {
+    display: none;
+    align-items: center; gap: 8px;
+    font-size: 12px; color: var(--accent3);
+    font-style: italic;
+  }
+  .ai-loading.show { display: flex; }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(167,139,250,0.2);
+    border-top-color: var(--accent3);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* COPY FLASH */
+  @keyframes copyFlash {
+    0% { background: rgba(16,185,129,0.2); }
+    100% { background: transparent; }
+  }
+  .copy-flash { animation: copyFlash 0.5s ease; }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    .main-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .panel-left { height: auto; max-height: 50vh; }
+    .library-panel { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- API KEY MODAL -->
+<div class="modal-overlay" id="apiModal" onclick="handleModalClick(event)">
+  <div class="modal-box" id="apiModalBox">
+    <button class="modal-close" onclick="closeApiModal()">×</button>
+    <div class="modal-title">
+      🔑 Configuration API
+      <span class="ai-badge">MULTI-PROVIDER</span>
+    </div>
+
+    <!-- PROVIDER TABS -->
+    <div class="provider-tabs">
+      <div class="provider-tab active" id="tab_claude" onclick="selectProvider('claude')">
+        Claude<br><span style="font-size:10px;font-weight:400;opacity:0.7">Anthropic</span>
+      </div>
+      <div class="provider-tab gemini" id="tab_gemini" onclick="selectProvider('gemini')">
+        Gemini<br><span style="font-size:10px;font-weight:400;opacity:0.7">Google</span>
+      </div>
+      <div class="provider-tab openai" id="tab_openai" onclick="selectProvider('openai')">
+        GPT<br><span style="font-size:10px;font-weight:400;opacity:0.7">OpenAI</span>
+      </div>
+    </div>
+
+    <!-- KEY INPUT -->
+    <div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">
+        Clé API <span id="providerLabel">Claude</span>
+      </div>
+      <input type="password" class="api-key-input" id="apiKeyInput"
+        placeholder="sk-ant-api03-..."
+        oninput="saveApiKey(this.value)"
+        autocomplete="off">
+    </div>
+
+    <!-- STATUS -->
+    <div id="keyStatus" class="key-status empty">
+      <div class="dot"></div>
+      <span id="keyStatusText">Aucune clé configurée</span>
+    </div>
+
+    <!-- HINT -->
+    <div class="provider-hint" id="providerHint">
+      Clé stockée uniquement dans LocalStorage de ton navigateur.<br>
+      Jamais transmise ailleurs que vers l'API du provider sélectionné.
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="clearApiKey()" style="font-size:12px">🗑 Effacer</button>
+      <button class="btn btn-primary" onclick="closeApiModal()" style="flex:1;justify-content:center">
+        ✓ Confirmer
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header class="app-header">
+  <div class="logo">⚡ PROMPT FORGE</div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <div class="ai-loading" id="globalLoader">
+      <div class="spinner"></div>
+      <span>Amélioration IA...</span>
+    </div>
+    <button class="btn btn-ghost" onclick="openApiModal()" style="font-size:12px" id="apiBtn">
+      🔑 API <span id="apiKeyIndicator" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;margin-left:4px;vertical-align:middle"></span>
+    </button>
+    <button class="btn btn-ghost" onclick="toggleLibrary()" style="font-size:12px">
+      📚 Bibliothèque <span id="libCount" style="color:var(--accent);margin-left:2px"></span>
+    </button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<div class="main-layout">
+
+  <!-- LEFT PANEL -->
+  <div class="panel-left">
+
+    <!-- DOMAIN TABS -->
+    <div class="domain-tabs" id="domainTabs"></div>
+
+    <!-- FIELDS -->
+    <div class="fields-container" id="fieldsContainer"></div>
+
+    <!-- SCORE BAR -->
+    <div class="score-bar-container">
+      <div class="score-header">
+        <span style="color:var(--muted)">QUALITÉ DU PROMPT</span>
+        <span class="score-value" id="scoreValue">0%</span>
+      </div>
+      <div class="score-bar-track">
+        <div class="score-bar-fill" id="scoreBarFill" style="width:0%;background:#334155"></div>
+      </div>
+      <div class="score-indicators" id="scoreIndicators"></div>
+    </div>
+
+    <!-- ACTIONS -->
+    <div class="actions-bar">
+      <button class="btn btn-primary" onclick="generatePrompt()" id="genBtn">
+        ⚡ Générer
+      </button>
+      <button class="btn btn-accent" onclick="improveWithAI()" id="improveBtn" disabled>
+        ✨ Améliorer IA
+      </button>
+      <button class="btn btn-ghost" onclick="saveToLibrary()" id="saveBtn" disabled>
+        💾 Sauver
+      </button>
+      <button class="btn btn-ghost" onclick="resetFields()" style="margin-left:auto">
+        ↺ Reset
+      </button>
+    </div>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="panel-right">
+    <div class="output-header">
+      <span class="output-title">Prompt Généré</span>
+      <div class="output-actions">
+        <button class="btn btn-ghost" onclick="copyPrompt()" id="copyBtn" disabled style="font-size:11px">
+          📋 Copier
+        </button>
+        <button class="btn btn-ghost" onclick="exportPrompt()" id="exportBtn" disabled style="font-size:11px">
+          ↓ Export
+        </button>
+      </div>
+    </div>
+    <div class="output-area" id="outputArea">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">⚡</div>
+        <div class="empty-text">Remplis les champs à gauche et génère ton prompt structuré</div>
+      </div>
+      <div class="prompt-display" id="promptDisplay" style="display:none"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- LIBRARY PANEL -->
+<div class="library-panel" id="libraryPanel">
+  <div class="library-header">
+    <span>Bibliothèque</span>
+    <button class="btn btn-ghost" onclick="toggleLibrary()" style="padding:4px 8px;font-size:11px">✕</button>
+  </div>
+  <div class="library-list" id="libraryList"></div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ================================================================
+// CONFIG DOMAINES
+// ================================================================
+const DOMAINS = {
+  code: {
+    label: '💻 Code',
+    icon: '💻',
+    fields: [
+      { id: 'role', label: 'Rôle IA', type: 'select', req: true,
+        options: ['Expert Senior Full-Stack', 'Architecte Logiciel', 'Expert Sécurité', 'Expert DevOps', 'Reviewer de Code', 'Expert Performance'] },
+      { id: 'task', label: 'Tâche', type: 'text', req: true, placeholder: 'ex: Créer une API REST avec auth JWT' },
+      { id: 'lang', label: 'Langage / Stack', type: 'text', req: true, placeholder: 'ex: Python, FastAPI, PostgreSQL' },
+      { id: 'constraints', label: 'Contraintes', type: 'text', placeholder: 'ex: Performance < 200ms, sans dépendances tierces' },
+      { id: 'format', label: 'Format de sortie', type: 'select',
+        options: ['Code complet commenté', 'Code + explication étapes', 'Pseudocode + implémentation', 'Revue critique uniquement'] },
+      { id: 'context', label: 'Contexte additionnel', type: 'textarea', placeholder: 'Architecture existante, contraintes legacy...' },
+    ],
+    template: (f) => `Tu es un ${f.role || '{{RÔLE}}'}.
+
+MISSION :
+${f.task || '{{TÂCHE}}'}
+
+STACK TECHNIQUE :
+${f.lang || '{{LANGAGE/STACK}}'}${f.constraints ? `\n\nCONTRAINTES :\n${f.constraints}` : ''}${f.context ? `\n\nCONTEXTE :\n${f.context}` : ''}
+
+FORMAT DE RÉPONSE :
+- ${f.format || 'Code complet commenté'}
+- Code production-ready, sans raccourcis
+- Explique les choix architecturaux non évidents
+- Signale les edge cases et points de vigilance`
+  },
+
+  marketing: {
+    label: '📣 Marketing',
+    icon: '📣',
+    fields: [
+      { id: 'role', label: 'Rôle IA', type: 'select', req: true,
+        options: ['Expert Copywriter', 'Stratège Marketing Digital', 'Expert SEO/Content', 'Expert Conversion CRO', 'Brand Strategist'] },
+      { id: 'product', label: 'Produit / Service', type: 'text', req: true, placeholder: 'ex: Application SaaS de gestion de projet' },
+      { id: 'audience', label: 'Audience cible', type: 'text', req: true, placeholder: 'ex: PME, directeurs IT, 30-50 ans' },
+      { id: 'deliverable', label: 'Livrable', type: 'select',
+        options: ['Email de prospection', 'Landing page (copy)', 'Post LinkedIn viral', 'Ad Facebook/Instagram', 'Article SEO', 'Script vidéo courte'] },
+      { id: 'tone', label: 'Ton', type: 'select',
+        options: ['Professionnel & Direct', 'Chaleureux & Engageant', 'Urgence & Scarcité', 'Storytelling émotionnel', 'Expertise technique'] },
+      { id: 'usp', label: 'Avantage différenciant (USP)', type: 'text', placeholder: 'ex: 10x plus rapide, ROI en 30 jours' },
+    ],
+    template: (f) => `Tu es un ${f.role || '{{RÔLE}}'}.
+
+MISSION :
+Créer un(e) ${f.deliverable || '{{LIVRABLE}}'} pour :
+Produit/Service : ${f.product || '{{PRODUIT}}'}
+
+AUDIENCE CIBLE :
+${f.audience || '{{AUDIENCE}}'}
+
+PROPOSITION DE VALEUR UNIQUE :
+${f.usp || '{{USP — À DÉFINIR}}'}
+
+TON ET STYLE :
+${f.tone || 'Professionnel & Direct'}
+
+EXIGENCES :
+- Accroche impactante dans les 3 premières secondes
+- 1 CTA clair et mesurable
+- Adapté au format ${f.deliverable || 'demandé'}
+- Zéro jargon creux, chaque mot justifié`
+  },
+
+  analyse: {
+    label: '🔍 Analyse',
+    icon: '🔍',
+    fields: [
+      { id: 'role', label: 'Rôle IA', type: 'select', req: true,
+        options: ['Expert Analyste Stratégique', 'Consultant Data & Business', 'Expert Recherche UX', 'Analyste Financier', 'Expert Risk Management'] },
+      { id: 'subject', label: 'Sujet à analyser', type: 'text', req: true, placeholder: 'ex: Marché des outils IA B2B en Europe 2025' },
+      { id: 'objective', label: 'Objectif de l\'analyse', type: 'text', req: true, placeholder: 'ex: Identifier les opportunités de niche sous-exploitées' },
+      { id: 'framework', label: 'Cadre analytique', type: 'select',
+        options: ['SWOT', 'Porter 5 forces', 'PESTEL', 'Jobs-to-be-done', 'Analyse comparative', 'Libre (expert)'] },
+      { id: 'depth', label: 'Niveau de profondeur', type: 'select',
+        options: ['Synthèse exécutive (1 page)', 'Analyse intermédiaire (3-5 points)', 'Deep-dive exhaustif', 'Rapport structuré avec recommandations'] },
+      { id: 'constraints', label: 'Contraintes / Hypothèses', type: 'textarea', placeholder: 'ex: Focus Europe uniquement, données 2023-2025...' },
+    ],
+    template: (f) => `Tu es un ${f.role || '{{RÔLE}}'}.
+
+SUJET :
+${f.subject || '{{SUJET}}'}
+
+OBJECTIF :
+${f.objective || '{{OBJECTIF}}'}
+
+CADRE ANALYTIQUE :
+${f.framework || 'Libre (expert)'}${f.constraints ? `\n\nHYPOTHÈSES / CONTRAINTES :\n${f.constraints}` : ''}
+
+FORMAT ATTENDU :
+${f.depth || 'Analyse intermédiaire (3-5 points)'}
+
+EXIGENCES QUALITÉ :
+- Distinguer clairement faits, inférences et hypothèses
+- Quantifier quand possible (chiffres, %, tendances)
+- Conclusion avec recommandations actionnables prioritisées
+- Signaler explicitement les limites de l'analyse`
+  },
+
+  redaction: {
+    label: '✍️ Rédaction',
+    icon: '✍️',
+    fields: [
+      { id: 'role', label: 'Rôle IA', type: 'select', req: true,
+        options: ['Expert Rédacteur Technique', 'Journaliste Senior', 'Ghostwriter Exécutif', 'Expert Documentation', 'Formateur / Pédagogue'] },
+      { id: 'type', label: 'Type de contenu', type: 'select', req: true,
+        options: ['Article de blog', 'Documentation technique', 'Email professionnel', 'Rapport exécutif', 'Newsletter', 'Guide utilisateur', 'Synthèse de réunion'] },
+      { id: 'topic', label: 'Sujet / Titre', type: 'text', req: true, placeholder: 'ex: Comment implémenter une stratégie RAG efficace' },
+      { id: 'audience', label: 'Audience', type: 'text', req: true, placeholder: 'ex: Développeurs mid-level, familiers avec Python' },
+      { id: 'length', label: 'Longueur cible', type: 'select',
+        options: ['Court (< 300 mots)', 'Moyen (500-800 mots)', 'Long (1000-1500 mots)', 'Exhaustif (2000+ mots)'] },
+      { id: 'keywords', label: 'Mots-clés / Termes imposés', type: 'tags', placeholder: 'Tapez et appuyez Entrée' },
+    ],
+    template: (f) => `Tu es un ${f.role || '{{RÔLE}}'}.
+
+TYPE DE CONTENU : ${f.type || '{{TYPE}}'}
+SUJET : ${f.topic || '{{SUJET}}'}
+
+AUDIENCE :
+${f.audience || '{{AUDIENCE}}'}${f.keywords && f.keywords.length ? `\n\nMOTS-CLÉS À INTÉGRER :\n${f.keywords.join(', ')}` : ''}
+
+LONGUEUR : ${f.length || 'Moyen (500-800 mots)'}
+
+CONTRAINTES RÉDACTIONNELLES :
+- Style adapté à l'audience décrite
+- Structure claire : intro accroche / corps / conclusion avec valeur ajoutée
+- Voix active privilégiée
+- Aucun padding ou remplissage — chaque phrase apporte de la valeur
+- Ton cohérent du début à la fin`
+  },
+
+  rh: {
+    label: '👥 RH',
+    icon: '👥',
+    fields: [
+      { id: 'role', label: 'Rôle IA', type: 'select', req: true,
+        options: ['Expert RH Senior', 'Coach Professionnel', 'Recruteur Technique', 'Expert Développement Talent', 'Consultant Organisationnel'] },
+      { id: 'task', label: 'Tâche RH', type: 'select', req: true,
+        options: ['Rédiger une offre d\'emploi', 'Préparer questions d\'entretien', 'Plan d\'onboarding', 'Évaluation de performance', 'Gestion de conflit', 'Plan de formation', 'Politique interne'] },
+      { id: 'context', label: 'Contexte entreprise', type: 'text', req: true, placeholder: 'ex: Startup tech, 50 personnes, full-remote, secteur SaaS B2B' },
+      { id: 'target', label: 'Poste / Profil ciblé', type: 'text', placeholder: 'ex: Senior Backend Engineer, 5+ ans, Python/AWS' },
+      { id: 'specifics', label: 'Spécificités / Contraintes', type: 'textarea', placeholder: 'Culture d\'entreprise, valeurs, enjeux particuliers...' },
+    ],
+    template: (f) => `Tu es un ${f.role || '{{RÔLE}}'}.
+
+MISSION : ${f.task || '{{TÂCHE}}'}
+
+CONTEXTE ENTREPRISE :
+${f.context || '{{CONTEXTE}}'}${f.target ? `\n\nPROFIL CIBLÉ :\n${f.target}` : ''}${f.specifics ? `\n\nSPÉCIFICITÉS :\n${f.specifics}` : ''}
+
+EXIGENCES :
+- Concret et directement utilisable
+- Adapté à la culture décrite
+- Conforme aux bonnes pratiques RH actuelles
+- Sans jargon RH générique — spécifique au contexte donné`
+  },
+
+  custom: {
+    label: '🛠 Libre',
+    icon: '🛠',
+    fields: [
+      { id: 'role', label: 'Rôle IA', type: 'text', req: true, placeholder: 'ex: Expert Senior en Cybersécurité' },
+      { id: 'context', label: 'Contexte', type: 'textarea', req: true, placeholder: 'Décris le contexte de ta demande...' },
+      { id: 'mission', label: 'Mission / Objectif', type: 'textarea', req: true, placeholder: 'Que doit accomplir l\'IA exactement ?' },
+      { id: 'constraints', label: 'Contraintes', type: 'textarea', placeholder: 'Limites, format, style, exclusions...' },
+      { id: 'output', label: 'Format de sortie attendu', type: 'text', placeholder: 'ex: Liste numérotée, JSON, texte structuré...' },
+      { id: 'examples', label: 'Exemples (few-shot)', type: 'textarea', placeholder: 'Exemples d\'entrée/sortie pour guider l\'IA...' },
+    ],
+    template: (f) => `${f.role ? `Tu es un ${f.role}.\n\n` : ''}${f.context ? `CONTEXTE :\n${f.context}\n\n` : ''}${f.mission ? `MISSION :\n${f.mission}\n\n` : ''}${f.constraints ? `CONTRAINTES :\n${f.constraints}\n\n` : ''}${f.output ? `FORMAT DE SORTIE :\n${f.output}\n\n` : ''}${f.examples ? `EXEMPLES :\n${f.examples}` : ''}`.trim()
+  }
+};
+
+// ================================================================
+// STATE
+// ================================================================
+let currentDomain = 'code';
+let currentPrompt = '';
+let fieldTags = {};
+
+// ================================================================
+// ================================================================
+// PROVIDER CONFIG
+// ================================================================
+const PROVIDERS = {
+  claude: {
+    label: 'Claude',
+    placeholder: 'sk-ant-api03-...',
+    hint: 'Clé disponible sur <b>console.anthropic.com</b>. Modèle utilisé : claude-opus-4-6.<br>Stockée uniquement en LocalStorage, jamais transmise ailleurs.',
+    storageKey: 'pf_apikey_claude',
+    tabClass: ''
+  },
+  gemini: {
+    label: 'Gemini',
+    placeholder: 'AIzaSy...',
+    hint: 'Clé disponible sur <b>aistudio.google.com</b>. Modèle utilisé : gemini-2.0-flash.<br>Stockée uniquement en LocalStorage, jamais transmise ailleurs.',
+    storageKey: 'pf_apikey_gemini',
+    tabClass: 'gemini'
+  },
+  openai: {
+    label: 'GPT',
+    placeholder: 'sk-proj-...',
+    hint: 'Clé disponible sur <b>platform.openai.com</b>. Modèle utilisé : gpt-4o-mini.<br>Stockée uniquement en LocalStorage, jamais transmise ailleurs.',
+    storageKey: 'pf_apikey_openai',
+    tabClass: 'openai'
+  }
+};
+
+let currentProvider = 'claude';
+
+function openApiModal() {
+  currentProvider = 'claude';
+  selectProvider('claude');
+  document.getElementById('apiModal').classList.add('open');
+}
+
+function closeApiModal() {
+  document.getElementById('apiModal').classList.remove('open');
+}
+
+function handleModalClick(e) {
+  if (e.target === document.getElementById('apiModal')) closeApiModal();
+}
+
+function selectProvider(provider) {
+  currentProvider = provider;
+  // Update tabs
+  Object.keys(PROVIDERS).forEach(p => {
+    const tab = document.getElementById(`tab_${p}`);
+    tab.className = `provider-tab ${PROVIDERS[p].tabClass} ${p === provider ? 'active' : ''}`.trim();
+  });
+  const cfg = PROVIDERS[provider];
+  document.getElementById('providerLabel').textContent = cfg.label;
+  document.getElementById('apiKeyInput').placeholder = cfg.placeholder;
+  document.getElementById('providerHint').innerHTML = cfg.hint;
+  // Load saved key
+  const saved = localStorage.getItem(cfg.storageKey) || '';
+  document.getElementById('apiKeyInput').value = saved;
+  updateKeyStatus(saved);
+}
+
+function saveApiKey(val) {
+  const cfg = PROVIDERS[currentProvider];
+  if (val) localStorage.setItem(cfg.storageKey, val);
+  else localStorage.removeItem(cfg.storageKey);
+  updateKeyStatus(val);
+  updateApiIndicator();
+}
+
+function clearApiKey() {
+  const cfg = PROVIDERS[currentProvider];
+  localStorage.removeItem(cfg.storageKey);
+  document.getElementById('apiKeyInput').value = '';
+  updateKeyStatus('');
+  updateApiIndicator();
+  showToast('🗑 Clé supprimée', 'success');
+}
+
+function updateKeyStatus(val) {
+  const status = document.getElementById('keyStatus');
+  const text = document.getElementById('keyStatusText');
+  if (val && val.length > 6) {
+    status.className = 'key-status saved';
+    text.textContent = `Clé configurée — ${val.substring(0,8)}${'•'.repeat(8)}`;
+  } else {
+    status.className = 'key-status empty';
+    text.textContent = 'Aucune clé configurée';
+  }
+}
+
+function updateApiIndicator() {
+  const hasAny = Object.values(PROVIDERS).some(p => !!localStorage.getItem(p.storageKey));
+  const dot = document.getElementById('apiKeyIndicator');
+  dot.style.background = hasAny ? 'var(--success)' : 'var(--muted)';
+  dot.style.boxShadow = hasAny ? '0 0 6px var(--success)' : 'none';
+}
+
+function getActiveApiKey() {
+  // Return first available key and its provider
+  for (const [name, cfg] of Object.entries(PROVIDERS)) {
+    const key = localStorage.getItem(cfg.storageKey);
+    if (key) return { provider: name, key };
+  }
+  return null;
+}
+
+// ================================================================
+// INIT
+// ================================================================
+function init() {
+  renderDomainTabs();
+  loadDomain('code');
+  renderLibrary();
+  updateLibCount();
+  updateApiIndicator();
+  // ESC closes modal
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeApiModal(); });
+}
+
+// ================================================================
+// DOMAIN TABS
+// ================================================================
+function renderDomainTabs() {
+  const container = document.getElementById('domainTabs');
+  container.innerHTML = Object.entries(DOMAINS).map(([key, d]) =>
+    `<div class="domain-tab${key === currentDomain ? ' active' : ''}" onclick="loadDomain('${key}')">${d.label}</div>`
+  ).join('');
+}
+
+function loadDomain(domainKey) {
+  currentDomain = domainKey;
+  fieldTags = {};
+  renderDomainTabs();
+  renderFields();
+  document.getElementById('promptDisplay').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'flex';
+  currentPrompt = '';
+  document.getElementById('copyBtn').disabled = true;
+  document.getElementById('exportBtn').disabled = true;
+  document.getElementById('saveBtn').disabled = true;
+  document.getElementById('improveBtn').disabled = true;
+  updateScore();
+}
+
+// ================================================================
+// FIELDS RENDERING
+// ================================================================
+function renderFields() {
+  const domain = DOMAINS[currentDomain];
+  const container = document.getElementById('fieldsContainer');
+  container.innerHTML = domain.fields.map(field => renderField(field)).join('');
+  // Attach tag listeners
+  domain.fields.filter(f => f.type === 'tags').forEach(f => {
+    fieldTags[f.id] = [];
+    const input = document.getElementById(`tags_input_${f.id}`);
+    if (input) {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ',') {
+          e.preventDefault();
+          addTag(f.id, input.value.trim());
+          input.value = '';
+        } else if (e.key === 'Backspace' && !input.value && fieldTags[f.id].length) {
+          removeTag(f.id, fieldTags[f.id].length - 1);
+        }
+      });
+    }
+  });
+  // Attach change listeners for score
+  document.querySelectorAll('#fieldsContainer input, #fieldsContainer select, #fieldsContainer textarea')
+    .forEach(el => el.addEventListener('input', updateScore));
+  updateScore();
+}
+
+function renderField(field) {
+  const reqMark = field.req ? '<span class="req">*</span>' : '';
+  switch(field.type) {
+    case 'select':
+      return `<div class="field-group">
+        <label>${field.label}${reqMark}</label>
+        <select class="field-select" id="field_${field.id}" onchange="updateScore()">
+          <option value="">— Sélectionner</option>
+          ${field.options.map(o => `<option value="${o}">${o}</option>`).join('')}
+        </select>
+      </div>`;
+    case 'textarea':
+      return `<div class="field-group">
+        <label>${field.label}${reqMark}</label>
+        <textarea class="field-textarea" id="field_${field.id}" placeholder="${field.placeholder || ''}" oninput="updateScore()"></textarea>
+      </div>`;
+    case 'tags':
+      return `<div class="field-group">
+        <label>${field.label}${reqMark}</label>
+        <div class="tags-container" id="tags_container_${field.id}" onclick="document.getElementById('tags_input_${field.id}').focus()">
+          <span id="tags_list_${field.id}"></span>
+          <input type="text" class="tags-input" id="tags_input_${field.id}" placeholder="${field.placeholder || ''}">
+        </div>
+      </div>`;
+    default:
+      return `<div class="field-group">
+        <label>${field.label}${reqMark}</label>
+        <input type="text" class="field-input" id="field_${field.id}" placeholder="${field.placeholder || ''}" oninput="updateScore()">
+      </div>`;
+  }
+}
+
+// ================================================================
+// TAGS
+// ================================================================
+function addTag(fieldId, value) {
+  if (!value || fieldTags[fieldId].includes(value)) return;
+  fieldTags[fieldId].push(value);
+  renderTags(fieldId);
+  updateScore();
+}
+
+function removeTag(fieldId, index) {
+  fieldTags[fieldId].splice(index, 1);
+  renderTags(fieldId);
+  updateScore();
+}
+
+function renderTags(fieldId) {
+  const container = document.getElementById(`tags_list_${fieldId}`);
+  if (!container) return;
+  container.innerHTML = fieldTags[fieldId].map((tag, i) =>
+    `<span class="tag">${tag}<span class="tag-remove" onclick="removeTag('${fieldId}',${i})">×</span></span>`
+  ).join('');
+}
+
+// ================================================================
+// SCORE
+// ================================================================
+function updateScore() {
+  const domain = DOMAINS[currentDomain];
+  const reqFields = domain.fields.filter(f => f.req);
+  const allFields = domain.fields;
+
+  let filled = 0;
+  const indicators = [];
+
+  allFields.forEach(f => {
+    let val = '';
+    if (f.type === 'tags') val = (fieldTags[f.id] || []).join(',');
+    else { const el = document.getElementById(`field_${f.id}`); val = el ? el.value.trim() : ''; }
+    const isFilled = val.length > 0;
+    if (isFilled) filled++;
+    indicators.push({ label: f.label, filled: isFilled, req: f.req });
+  });
+
+  const score = Math.round((filled / allFields.length) * 100);
+  document.getElementById('scoreValue').textContent = score + '%';
+
+  const fill = document.getElementById('scoreBarFill');
+  fill.style.width = score + '%';
+  fill.style.background = score < 30 ? '#ef4444' : score < 60 ? '#f59e0b' : score < 85 ? '#3b82f6' : '#10b981';
+
+  const indContainer = document.getElementById('scoreIndicators');
+  indContainer.innerHTML = indicators.map(ind =>
+    `<div class="score-dot ${ind.filled ? 'filled' : ''}">
+      <div class="dot"></div>
+      <span>${ind.label}${ind.req ? '*' : ''}</span>
+    </div>`
+  ).join('');
+}
+
+// ================================================================
+// GET FIELD VALUES
+// ================================================================
+function getFieldValues() {
+  const domain = DOMAINS[currentDomain];
+  const values = {};
+  domain.fields.forEach(f => {
+    if (f.type === 'tags') values[f.id] = fieldTags[f.id] || [];
+    else {
+      const el = document.getElementById(`field_${f.id}`);
+      values[f.id] = el ? el.value.trim() : '';
+    }
+  });
+  return values;
+}
+
+// ================================================================
+// GENERATE PROMPT
+// ================================================================
+function generatePrompt() {
+  const values = getFieldValues();
+  const domain = DOMAINS[currentDomain];
+  const prompt = domain.template(values);
+  currentPrompt = prompt;
+
+  document.getElementById('emptyState').style.display = 'none';
+  const display = document.getElementById('promptDisplay');
+  display.style.display = 'block';
+  display.innerHTML = highlightPrompt(prompt);
+
+  document.getElementById('copyBtn').disabled = false;
+  document.getElementById('exportBtn').disabled = false;
+  document.getElementById('saveBtn').disabled = false;
+  document.getElementById('improveBtn').disabled = false;
+
+  // Animate
+  display.style.opacity = '0';
+  setTimeout(() => { display.style.transition = 'opacity 0.3s'; display.style.opacity = '1'; }, 10);
+}
+
+function highlightPrompt(text) {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\{\{([^}]+)\}\}/g, '<span class="var-highlight">{{$1}}</span>')
+    .replace(/^([A-Z][A-ZÀ-Ÿ\s\/\-]{2,}) :/gm, '<span class="section-label">$1 :</span>');
+}
+
+// ================================================================
+// COPY
+// ================================================================
+function copyPrompt() {
+  if (!currentPrompt) return;
+  navigator.clipboard.writeText(currentPrompt).then(() => {
+    const display = document.getElementById('promptDisplay');
+    display.classList.add('copy-flash');
+    setTimeout(() => display.classList.remove('copy-flash'), 500);
+    showToast('✓ Copié dans le presse-papier', 'success');
+  });
+}
+
+// ================================================================
+// EXPORT
+// ================================================================
+function exportPrompt() {
+  if (!currentPrompt) return;
+  const blob = new Blob([currentPrompt], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `prompt_${currentDomain}_${Date.now()}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ================================================================
+// IMPROVE WITH AI — MULTI-PROVIDER
+// ================================================================
+async function improveWithAI() {
+  const activeKey = getActiveApiKey();
+  if (!activeKey) {
+    showToast('Clé API manquante — clique sur 🔑 API', 'error');
+    openApiModal();
+    return;
+  }
+  if (!currentPrompt) { showToast('Génère d\'abord un prompt', 'error'); return; }
+
+  const loader = document.getElementById('globalLoader');
+  const btn = document.getElementById('improveBtn');
+  loader.classList.add('show');
+  btn.disabled = true;
+
+  const systemMsg = `Tu es un expert en prompt engineering. Tu améliores les prompts pour les rendre plus précis, structurés et efficaces.
+Règles :
+- Conserve la structure et les intentions originales
+- Ajoute de la précision là où c'est vague
+- Améliore le format pour maximiser la qualité des réponses IA
+- Réponds UNIQUEMENT avec le prompt amélioré, sans commentaires`;
+
+  try {
+    let improved = '';
+
+    if (activeKey.provider === 'claude') {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': activeKey.key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-opus-4-6',
+          max_tokens: 2000,
+          system: systemMsg,
+          messages: [{ role: 'user', content: `Améliore ce prompt :\n\n${currentPrompt}` }]
+        })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+      improved = data.content[0].text;
+
+    } else if (activeKey.provider === 'openai') {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${activeKey.key}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          max_tokens: 2000,
+          messages: [
+            { role: 'system', content: systemMsg },
+            { role: 'user', content: `Améliore ce prompt :\n\n${currentPrompt}` }
+          ]
+        })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+      improved = data.choices[0].message.content;
+
+    } else if (activeKey.provider === 'gemini') {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${activeKey.key}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{ text: `${systemMsg}\n\nAméliore ce prompt :\n\n${currentPrompt}` }]
+            }],
+            generationConfig: { maxOutputTokens: 2000 }
+          })
+        }
+      );
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+      improved = data.candidates[0].content.parts[0].text;
+    }
+
+    currentPrompt = improved;
+    const display = document.getElementById('promptDisplay');
+    display.innerHTML = highlightPrompt(improved);
+    const providerLabel = PROVIDERS[activeKey.provider].label;
+    showToast(`✨ Prompt amélioré via ${providerLabel}`, 'success');
+
+  } catch(e) {
+    showToast('Erreur API : ' + e.message.substring(0, 60), 'error');
+  } finally {
+    loader.classList.remove('show');
+    btn.disabled = false;
+  }
+}
+
+// ================================================================
+// LIBRARY
+// ================================================================
+function saveToLibrary() {
+  if (!currentPrompt) return;
+  const name = prompt('Nom de ce prompt :');
+  if (!name) return;
+  const lib = getLibrary();
+  lib.unshift({
+    id: Date.now(),
+    name,
+    domain: currentDomain,
+    prompt: currentPrompt,
+    fields: getFieldValues(),
+    savedAt: new Date().toISOString()
+  });
+  localStorage.setItem('pf_library', JSON.stringify(lib));
+  renderLibrary();
+  updateLibCount();
+  showToast('💾 Sauvegardé dans la bibliothèque', 'success');
+}
+
+function getLibrary() {
+  try { return JSON.parse(localStorage.getItem('pf_library') || '[]'); }
+  catch(e) { return []; }
+}
+
+function renderLibrary() {
+  const lib = getLibrary();
+  const container = document.getElementById('libraryList');
+  if (!lib.length) {
+    container.innerHTML = '<div class="library-empty">Aucun prompt sauvegardé.<br>Génère et sauvegarde des prompts<br>pour les retrouver ici.</div>';
+    return;
+  }
+  container.innerHTML = lib.map((item, i) => `
+    <div class="library-item" onclick="loadFromLibrary(${i})">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div class="library-item-name">${item.name}</div>
+        <button onclick="deleteFromLibrary(event,${i})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;flex-shrink:0;padding:0;line-height:1">×</button>
+      </div>
+      <div class="library-item-meta">
+        <span class="library-item-domain">${DOMAINS[item.domain]?.icon || '?'} ${item.domain}</span>
+        <span>${new Date(item.savedAt).toLocaleDateString('fr-FR')}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function loadFromLibrary(index) {
+  const lib = getLibrary();
+  const item = lib[index];
+  if (!item) return;
+  loadDomain(item.domain);
+  setTimeout(() => {
+    // Restore field values
+    const domain = DOMAINS[item.domain];
+    domain.fields.forEach(f => {
+      if (f.type === 'tags') {
+        fieldTags[f.id] = item.fields[f.id] || [];
+        renderTags(f.id);
+      } else {
+        const el = document.getElementById(`field_${f.id}`);
+        if (el) el.value = item.fields[f.id] || '';
+      }
+    });
+    currentPrompt = item.prompt;
+    document.getElementById('emptyState').style.display = 'none';
+    const display = document.getElementById('promptDisplay');
+    display.style.display = 'block';
+    display.innerHTML = highlightPrompt(item.prompt);
+    document.getElementById('copyBtn').disabled = false;
+    document.getElementById('exportBtn').disabled = false;
+    document.getElementById('saveBtn').disabled = false;
+    document.getElementById('improveBtn').disabled = false;
+    updateScore();
+    toggleLibrary();
+    showToast('📂 Prompt chargé', 'success');
+  }, 50);
+}
+
+function deleteFromLibrary(e, index) {
+  e.stopPropagation();
+  const lib = getLibrary();
+  lib.splice(index, 1);
+  localStorage.setItem('pf_library', JSON.stringify(lib));
+  renderLibrary();
+  updateLibCount();
+}
+
+function updateLibCount() {
+  const count = getLibrary().length;
+  document.getElementById('libCount').textContent = count ? `(${count})` : '';
+}
+
+// ================================================================
+// UI HELPERS
+// ================================================================
+function toggleLibrary() {
+  document.getElementById('libraryPanel').classList.toggle('open');
+}
+
+function saveApiKey(val) {
+  const cfg = PROVIDERS[currentProvider];
+  if (val) localStorage.setItem(cfg.storageKey, val);
+  else localStorage.removeItem(cfg.storageKey);
+  updateKeyStatus(val);
+  updateApiIndicator();
+}
+
+function resetFields() {
+  fieldTags = {};
+  renderFields();
+  document.getElementById('promptDisplay').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'flex';
+  currentPrompt = '';
+  document.getElementById('copyBtn').disabled = true;
+  document.getElementById('exportBtn').disabled = true;
+  document.getElementById('saveBtn').disabled = true;
+  document.getElementById('improveBtn').disabled = true;
+}
+
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ================================================================
+// START
+// ================================================================
+init();
+</script>
+</body>
+</html>
