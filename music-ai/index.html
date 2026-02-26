@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>music·ai — Discovery Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg: #060609;
+    --bg2: #0d0d14;
+    --card: rgba(255,255,255,0.04);
+    --card-hover: rgba(255,255,255,0.07);
+    --border: rgba(255,255,255,0.07);
+    --border-bright: rgba(255,255,255,0.14);
+    --accent: #7c3aed;
+    --accent2: #06b6d4;
+    --accent3: #f59e0b;
+    --text: #e8e8f0;
+    --muted: #52526e;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { height: 100%; }
+  body {
+    height: 100%; overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    margin: 0;
+    touch-action: manipulation;
+  }
+  .ambient {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 10%, rgba(124,58,237,0.12) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 50% at 80% 80%, rgba(6,182,212,0.08) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 30% at 60% 40%, rgba(245,158,11,0.04) 0%, transparent 60%);
+  }
+  /* App shell */
+  #app {
+    position: relative; z-index: 2;
+    height: 100vh; height: 100dvh;
+    display: flex; flex-direction: column;
+    max-width: 480px; margin: 0 auto;
+    overflow: hidden;
+  }
+  /* Screen system */
+  .screen {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    transition: opacity 0.3s, transform 0.3s;
+  }
+  .screen.hidden { opacity: 0; pointer-events: none; transform: translateY(12px); }
+  .screen.active { opacity: 1; pointer-events: all; transform: translateY(0); }
+  /* Buttons */
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #5b21b6);
+    border: none; border-radius: 50px;
+    padding: 14px 28px; font-family: inherit; font-size: 15px; font-weight: 600;
+    color: white; cursor: pointer;
+    box-shadow: 0 0 30px rgba(124,58,237,0.35);
+    transition: all 0.2s;
+  }
+  .btn-primary:active { transform: scale(0.97); }
+  .btn-ghost {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 50px; padding: 11px 22px;
+    font-family: inherit; font-size: 14px; color: var(--text);
+    cursor: pointer; transition: all 0.2s;
+  }
+  /* Glass */
+  .glass {
+    background: var(--card); border: 1px solid var(--border);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-radius: 20px;
+  }
+  /* Pulse */
+  @keyframes pulse-ring {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(1.5); opacity: 0; }
+  }
+  .pulse-ring { position: absolute; inset: -12px; border-radius: 50%; border: 2px solid var(--accent); animation: pulse-ring 2s ease-out infinite; }
+  .pulse-ring-2 { position: absolute; inset: -24px; border-radius: 50%; border: 1px solid var(--accent); animation: pulse-ring 2s ease-out 0.7s infinite; }
+  /* One-tap */
+  .onetap-btn {
+    width: 120px; height: 120px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent) 0%, #5b21b6 50%, #06b6d4 100%);
+    border: none; cursor: pointer; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 60px rgba(124,58,237,0.4);
+    transition: transform 0.15s; font-size: 2.5rem; color: white;
+  }
+  .onetap-btn:active { transform: scale(0.93); }
+  /* Music card */
+  .music-card {
+    background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(6,182,212,0.08));
+    border: 1px solid rgba(124,58,237,0.3);
+    border-radius: 24px; padding: 20px;
+  }
+  @keyframes card-in {
+    from { opacity: 0; transform: scale(0.88) translateY(16px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .music-card.appear { animation: card-in 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+  /* Feedback */
+  .feedback-btn {
+    width: 44px; height: 44px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--card);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem; transition: all 0.2s;
+  }
+  .feedback-btn.liked { border-color: #22c55e; background: rgba(34,197,94,0.15); }
+  .feedback-btn.disliked { border-color: #ef4444; background: rgba(239,68,68,0.15); }
+  .feedback-btn.saved { border-color: var(--accent3); background: rgba(245,158,11,0.15); }
+  /* Chips */
+  .mood-chip {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 12px 8px;
+    cursor: pointer; text-align: center; transition: all 0.2s;
+    font-size: 0.78rem; font-weight: 500;
+  }
+  .mood-chip.selected { border-color: var(--accent); background: rgba(124,58,237,0.18); }
+  .genre-chip {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 50px; padding: 9px 16px; cursor: pointer;
+    font-size: 13px; font-weight: 500; transition: all 0.2s;
+    display: inline-flex; align-items: center; gap: 6px;
+    white-space: nowrap;
+  }
+  .genre-chip.selected { border-color: var(--accent); background: rgba(124,58,237,0.18); color: white; }
+  .provider-pill {
+    padding: 8px 14px; border-radius: 50px; border: 1px solid var(--border);
+    background: var(--card); cursor: pointer; font-size: 13px; font-weight: 600;
+    transition: all 0.2s; color: var(--muted); font-family: inherit;
+  }
+  .provider-pill.active { border-color: var(--accent); background: rgba(124,58,237,0.2); color: white; }
+  /* Mode chips */
+  .mode-chip {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 50px; padding: 9px 16px;
+    font-family: inherit; font-size: 13px; font-weight: 600;
+    color: var(--muted); cursor: pointer; white-space: nowrap; transition: all 0.2s; flex-shrink: 0;
+  }
+  .mode-chip.active { border-color: var(--accent); background: rgba(124,58,237,0.18); color: white; }
+  /* Tab bar */
+  .tab-bar {
+    display: flex; background: rgba(6,6,9,0.95);
+    border-top: 1px solid var(--border);
+    backdrop-filter: blur(20px); padding: 8px 4px env(safe-area-inset-bottom, 8px);
+    flex-shrink: 0;
+  }
+  .tab-item {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    gap: 3px; cursor: pointer; padding: 6px; border-radius: 12px;
+    transition: all 0.2s; font-size: 10px; font-weight: 500; color: var(--muted);
+    border: none; background: none; font-family: inherit;
+  }
+  .tab-item.active { color: var(--accent); }
+  .tab-item .ti { font-size: 1.25rem; }
+  /* Progress */
+  .progress-bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 2px; transition: width 0.4s; }
+  /* Dots */
+  .dot-typing span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); margin: 0 2px; animation: dot-b 1.2s infinite; }
+  .dot-typing span:nth-child(2) { animation-delay: 0.2s; }
+  .dot-typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes dot-b { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+  /* Chat */
+  .chat-bubble { border-radius: 18px; padding: 11px 15px; max-width: 85%; font-size: 14px; line-height: 1.5; }
+  .chat-bubble.user { background: rgba(124,58,237,0.22); border: 1px solid rgba(124,58,237,0.3); align-self: flex-end; }
+  .chat-bubble.ai { background: var(--card); border: 1px solid var(--border); align-self: flex-start; }
+  .chat-input-area {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 50px; display: flex; align-items: center;
+    padding: 6px 6px 6px 16px; gap: 8px; flex-shrink: 0;
+  }
+  .chat-input { flex: 1; background: none; border: none; color: var(--text); font-family: inherit; font-size: 14px; outline: none; }
+  .chat-input::placeholder { color: var(--muted); }
+  /* History */
+  .history-item { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+  .action-badge { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; flex-shrink: 0; }
+  /* Disc bar */
+  .disc-bar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+  .disc-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--accent2), var(--accent3)); }
+  /* Scroll */
+  .scroll-y { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .scroll-y::-webkit-scrollbar { width: 2px; }
+  .scroll-y::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+  /* Onboarding step transitions */
+  .ob-step { display: none; flex-direction: column; flex: 1; }
+  .ob-step.active { display: flex; }
+  /* Syne */
+  .syne { font-family: 'Syne', sans-serif; }
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%) translateY(0);
+    background: rgba(20,20,35,0.97); border: 1px solid var(--border-bright);
+    padding: 10px 20px; border-radius: 50px; font-size: 13px; font-weight: 500;
+    z-index: 200; transition: opacity 0.3s, transform 0.3s; pointer-events: none;
+    backdrop-filter: blur(20px); white-space: nowrap;
+  }
+  #toast.hidden { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  /* Input common */
+  .field {
+    background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 16px; color: var(--text);
+    font-family: inherit; font-size: 14px; width: 100%; outline: none;
+    transition: border-color 0.2s;
+  }
+  .field:focus { border-color: var(--accent); }
+  .field::placeholder { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="ambient"></div>
+<div id="toast" class="hidden"></div>
+<div id="app">
+
+  <!-- ══════════════ ONBOARDING ══════════════ -->
+  <div id="screen-onboard" class="screen active" style="background:var(--bg2);">
+    <div style="display:flex;flex-direction:column;height:100%;padding:24px 20px 20px;overflow:hidden;">
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span class="syne" style="font-size:1.2rem;font-weight:800;">music·ai</span>
+        <span id="ob-label" style="font-size:12px;color:var(--muted);">1 / 5</span>
+      </div>
+      <div class="progress-bar" style="margin-bottom:28px;">
+        <div class="progress-fill" id="ob-progress" style="width:20%"></div>
+      </div>
+
+      <!-- STEP 1 — Genres -->
+      <div class="ob-step active" id="ob1">
+        <h2 class="syne" style="font-size:1.6rem;font-weight:800;margin:0 0 6px;">Tes genres <span style="color:var(--accent)">préférés</span></h2>
+        <p style="color:var(--muted);font-size:13px;margin:0 0 18px;">Sélectionne tout ce qui te parle</p>
+        <div id="genre-chips" class="scroll-y" style="flex:1;display:flex;flex-wrap:wrap;gap:10px;align-content:flex-start;padding-bottom:8px;"></div>
+      </div>
+
+      <!-- STEP 2 — Artists -->
+      <div class="ob-step" id="ob2">
+        <h2 class="syne" style="font-size:1.6rem;font-weight:800;margin:0 0 6px;">Artistes que tu <span style="color:var(--accent2)">aimes</span></h2>
+        <p style="color:var(--muted);font-size:13px;margin:0 0 18px;">Un nom par ligne — laisse vide si tu veux</p>
+        <textarea id="artist-input" class="field scroll-y" placeholder="Radiohead&#10;Daft Punk&#10;Bon Iver&#10;Stromae..." style="flex:1;resize:none;line-height:1.9;min-height:160px;"></textarea>
+      </div>
+
+      <!-- STEP 3 — Contexts -->
+      <div class="ob-step" id="ob3">
+        <h2 class="syne" style="font-size:1.6rem;font-weight:800;margin:0 0 6px;">Tu écoutes surtout <span style="color:var(--accent3)">quand ?</span></h2>
+        <p style="color:var(--muted);font-size:13px;margin:0 0 18px;">Plusieurs choix possibles</p>
+        <div id="context-chips" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"></div>
+      </div>
+
+      <!-- STEP 4 — Adventurousness -->
+      <div class="ob-step" id="ob4">
+        <h2 class="syne" style="font-size:1.6rem;font-weight:800;margin:0 0 6px;">Ton niveau <span style="color:var(--accent)">d'aventure</span></h2>
+        <p style="color:var(--muted);font-size:13px;margin:0 0 28px;">Entre confort total et découverte radicale</p>
+        <input type="range" id="adventure-slider" min="0" max="100" value="40"
+          style="width:100%;accent-color:var(--accent);cursor:pointer;">
+        <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:12px;color:var(--muted);">
+          <span>🛋️ Valeurs sûres</span><span>🚀 Tout découvrir</span>
+        </div>
+        <div id="adventure-label" class="syne" style="text-align:center;margin-top:28px;font-size:2rem;font-weight:800;">Équilibré</div>
+      </div>
+
+      <!-- STEP 5 — API Config -->
+      <div class="ob-step" id="ob5">
+        <h2 class="syne" style="font-size:1.6rem;font-weight:800;margin:0 0 6px;">Connecte ton <span style="color:var(--accent2)">IA</span></h2>
+        <p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Clé stockée uniquement dans ton navigateur</p>
+
+        <div style="display:flex;gap:8px;margin-bottom:14px;" id="ob-provider-pills">
+          <button class="provider-pill active" data-p="claude">Claude</button>
+          <button class="provider-pill" data-p="gemini">Gemini</button>
+          <button class="provider-pill" data-p="openai">OpenAI</button>
+        </div>
+
+        <label style="font-size:12px;color:var(--muted);margin-bottom:6px;display:block;">Clé API</label>
+        <input type="password" id="api-key-onboard" class="field" placeholder="Colle ta clé API ici..." style="margin-bottom:12px;" autocomplete="off">
+
+        <label style="font-size:12px;color:var(--muted);margin-bottom:6px;display:block;">Modèle</label>
+        <select id="ob-model-select" class="field" style="margin-bottom:14px;cursor:pointer;appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2352526e' d='M1 1l5 5 5-5'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;"></select>
+
+        <p style="color:var(--muted);font-size:11px;line-height:1.7;margin:0;">
+          🔒 Clé non transmise à des tiers. Utilisée uniquement pour les appels API directs depuis ton navigateur.
+        </p>
+      </div>
+
+      <!-- Nav -->
+      <div style="display:flex;gap:10px;margin-top:auto;padding-top:16px;flex-shrink:0;">
+        <button class="btn-ghost" id="ob-back" onclick="obNav(-1)" style="display:none;">← Retour</button>
+        <button class="btn-primary" id="ob-next" onclick="obNav(1)" style="flex:1;">Continuer →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ MAIN APP ══════════════ -->
+  <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 10px;flex-shrink:0;">
+      <div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai</div>
+        <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
+      </div>
+      <button onclick="showScreen('settings')"
+        style="background:var(--card);border:1px solid var(--border);border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;">⚙️</button>
+    </div>
+
+    <!-- Tab panels container -->
+    <div id="tab-content" style="flex:1;overflow:hidden;position:relative;">
+
+      <!-- TAB HOME -->
+      <div id="tab-home" class="tab-panel scroll-y" style="position:absolute;inset:0;padding:0 20px 12px;">
+        <!-- Mode bar -->
+        <div style="display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;-webkit-overflow-scrolling:touch;">
+          <button class="mode-chip active" data-mode="onetap" onclick="setMode('onetap')">✨ One-Tap</button>
+          <button class="mode-chip" data-mode="mood" onclick="setMode('mood')">🎭 Humeur</button>
+          <button class="mode-chip" data-mode="activity" onclick="setMode('activity')">🏃 Activité</button>
+          <button class="mode-chip" data-mode="discovery" onclick="setMode('discovery')">🔭 Découverte</button>
+        </div>
+
+        <!-- Zone One-Tap -->
+        <div id="zone-onetap">
+          <div style="display:flex;flex-direction:column;align-items:center;padding:20px 0 28px;">
+            <div style="position:relative;width:120px;height:120px;margin-bottom:28px;">
+              <div class="pulse-ring"></div>
+              <div class="pulse-ring-2"></div>
+              <button class="onetap-btn" id="onetap-btn" onclick="getRecommendation('onetap')">
+                <span id="onetap-icon">♪</span>
+              </button>
+            </div>
+            <div style="font-size:13px;color:var(--muted);text-align:center;">
+              Appuie pour une reco parfaite<br>
+              <span style="font-size:11px;">basée sur ton profil</span>
+            </div>
+          </div>
+          <div id="result-onetap" style="display:none;"></div>
+        </div>
+
+        <!-- Zone Mood -->
+        <div id="zone-mood" style="display:none;">
+          <p style="font-size:13px;color:var(--muted);margin:0 0 12px;">Comment tu te sens ?</p>
+          <div id="mood-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;"></div>
+          <button class="btn-primary" id="mood-go" onclick="getRecommendation('mood')"
+            style="width:100%;display:none;">Trouver ma musique →</button>
+          <div id="result-mood" style="display:none;margin-top:16px;"></div>
+        </div>
+
+        <!-- Zone Activity -->
+        <div id="zone-activity" style="display:none;">
+          <p style="font-size:13px;color:var(--muted);margin:0 0 12px;">Qu'est-ce que tu fais ?</p>
+          <div id="activity-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;"></div>
+          <button class="btn-primary" id="activity-go" onclick="getRecommendation('activity')"
+            style="width:100%;display:none;">Trouver ma musique →</button>
+          <div id="result-activity" style="display:none;margin-top:16px;"></div>
+        </div>
+
+        <!-- Zone Discovery -->
+        <div id="zone-discovery" style="display:none;">
+          <div class="music-card" style="text-align:center;padding:28px 20px;">
+            <div style="font-size:2.5rem;margin-bottom:12px;">🔭</div>
+            <div class="syne" style="font-size:1.05rem;font-weight:800;margin-bottom:8px;">Mode Pépite</div>
+            <p style="font-size:13px;color:var(--muted);margin:0 0 20px;">L'IA te propose une pépite hors de ta zone de confort.</p>
+            <button class="btn-primary" onclick="getRecommendation('discovery')">Surprends-moi 🎲</button>
+          </div>
+          <div id="result-discovery" style="display:none;margin-top:16px;"></div>
+        </div>
+      </div>
+
+      <!-- TAB CHAT -->
+      <div id="tab-chat" class="tab-panel" style="display:none;flex-direction:column;position:absolute;inset:0;padding:0 20px 12px;">
+        <div id="chat-messages" class="scroll-y" style="flex:1;display:flex;flex-direction:column;gap:10px;padding-bottom:12px;"></div>
+        <div class="chat-input-area">
+          <input class="chat-input" id="chat-input"
+            placeholder="Ex: mélancolique comme Radiohead mais en français..."
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}">
+          <button class="btn-primary" onclick="sendChat()" style="padding:10px 18px;font-size:14px;flex-shrink:0;">→</button>
+        </div>
+      </div>
+
+      <!-- TAB HISTORY -->
+      <div id="tab-history" class="tab-panel scroll-y" style="display:none;position:absolute;inset:0;padding:0 20px 12px;">
+        <h3 class="syne" style="font-size:1rem;font-weight:700;margin:12px 0 14px;">Historique</h3>
+        <div id="history-list"></div>
+      </div>
+    </div>
+
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+      <button class="tab-item active" data-tab="home" onclick="switchTab('home')">
+        <span class="ti">🎵</span><span>Discover</span>
+      </button>
+      <button class="tab-item" data-tab="chat" onclick="switchTab('chat')">
+        <span class="ti">💬</span><span>Chat IA</span>
+      </button>
+      <button class="tab-item" data-tab="history" onclick="switchTab('history')">
+        <span class="ti">📋</span><span>Historique</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════ SETTINGS ══════════════ -->
+  <div id="screen-settings" class="screen hidden">
+    <div style="display:flex;flex-direction:column;height:100%;">
+      <div style="display:flex;align-items:center;gap:12px;padding:18px 20px 12px;flex-shrink:0;">
+        <button onclick="showScreen('main')" class="btn-ghost" style="padding:8px 16px;">← Retour</button>
+        <span class="syne" style="font-size:1rem;font-weight:800;">Paramètres</span>
+      </div>
+      <div class="scroll-y" style="flex:1;padding:0 20px 24px;">
+
+        <!-- API Config -->
+        <div class="glass" style="padding:18px;margin-bottom:14px;">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;">Fournisseur IA</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;" id="cfg-provider-pills">
+            <button class="provider-pill" data-p="claude">Claude</button>
+            <button class="provider-pill" data-p="gemini">Gemini</button>
+            <button class="provider-pill" data-p="openai">OpenAI</button>
+          </div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">Clé API</label>
+          <input type="password" id="cfg-apikey" class="field" placeholder="Colle ta clé ici..." style="margin-bottom:12px;" autocomplete="off">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">Modèle</label>
+          <select id="cfg-model" class="field" style="margin-bottom:14px;cursor:pointer;appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2352526e' d='M1 1l5 5 5-5'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;"></select>
+          <button class="btn-primary" onclick="saveSettings()" style="width:100%;font-size:14px;">Sauvegarder</button>
+        </div>
+
+        <!-- Profile -->
+        <div class="glass" style="padding:18px;margin-bottom:14px;">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;">Profil musical</div>
+          <div id="profile-summary" style="font-size:13px;line-height:2;color:var(--text);"></div>
+
+          <!-- Modify artists inline -->
+          <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">Modifier les artistes</label>
+            <textarea id="cfg-artists" class="field scroll-y" rows="4"
+              style="resize:none;line-height:1.9;margin-bottom:10px;" placeholder="Un artiste par ligne..."></textarea>
+            <button onclick="saveArtists()" class="btn-ghost" style="width:100%;font-size:13px;">Mettre à jour les artistes</button>
+          </div>
+
+          <button onclick="resetOnboarding()" class="btn-ghost"
+            style="width:100%;margin-top:10px;font-size:13px;color:#ef4444;border-color:rgba(239,68,68,0.4);">
+            Réinitialiser tout le profil
+          </button>
+        </div>
+
+        <!-- Stats -->
+        <div class="glass" style="padding:18px;">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;">Stats</div>
+          <div id="stats-display" style="font-size:13px;color:var(--text);line-height:2.2;"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+<script>
+// ═══════════════════════════════════════════
+// STORAGE
+// ═══════════════════════════════════════════
+const LS_PROFILE  = 'music_ai_profile';
+const LS_CONFIG   = 'music_ai_config';
+const LS_HISTORY  = 'music_ai_history';
+
+function getProfile() {
+  try { return JSON.parse(localStorage.getItem(LS_PROFILE)); } catch(e) { return null; }
+}
+function saveProfile(p) { localStorage.setItem(LS_PROFILE, JSON.stringify(p)); }
+
+function getConfig() {
+  try {
+    const c = JSON.parse(localStorage.getItem(LS_CONFIG));
+    return c || { provider:'claude', model:'claude-opus-4-6', apiKey:'' };
+  } catch(e) { return { provider:'claude', model:'claude-opus-4-6', apiKey:'' }; }
+}
+function saveConfig(c) { localStorage.setItem(LS_CONFIG, JSON.stringify(c)); }
+
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem(LS_HISTORY)) || []; } catch(e) { return []; }
+}
+function pushHistory(entry) {
+  const h = getHistory();
+  h.unshift({ ...entry, ts: Date.now() });
+  if(h.length > 120) h.length = 120;
+  localStorage.setItem(LS_HISTORY, JSON.stringify(h));
+}
+
+// ═══════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════
+const GENRES = [
+  {id:'pop',label:'🎤 Pop'},{id:'rock',label:'🎸 Rock'},{id:'electro',label:'🎛️ Electronic'},
+  {id:'jazz',label:'🎷 Jazz'},{id:'classique',label:'🎻 Classique'},{id:'hip-hop',label:'🎤 Hip-Hop'},
+  {id:'rnb',label:'🎵 R&B'},{id:'indie',label:'🌿 Indie'},{id:'metal',label:'🤘 Metal'},
+  {id:'folk',label:'🪕 Folk'},{id:'soul',label:'💛 Soul'},{id:'reggae',label:'🌴 Reggae'},
+  {id:'latin',label:'💃 Latin'},{id:'ambient',label:'🌫️ Ambient'},{id:'funk',label:'🕺 Funk'},
+  {id:'blues',label:'🎸 Blues'},{id:'country',label:'🤠 Country'},{id:'afrobeat',label:'🥁 Afrobeat'}
+];
+const CONTEXTS = [
+  {id:'work',label:'Travail',emoji:'💻'},{id:'sport',label:'Sport',emoji:'🏃'},
+  {id:'detente',label:'Détente',emoji:'🛋️'},{id:'soiree',label:'Soirée',emoji:'🎉'},
+  {id:'voyage',label:'Voyage',emoji:'🚗'},{id:'sommeil',label:'Endormissement',emoji:'😴'}
+];
+const MOODS = [
+  {id:'energique',label:'Énergie',emoji:'⚡'},{id:'melancolique',label:'Mélancolie',emoji:'🌧️'},
+  {id:'heureux',label:'Bonheur',emoji:'☀️'},{id:'focus',label:'Focus',emoji:'🎯'},
+  {id:'romantique',label:'Romance',emoji:'💜'},{id:'intensite',label:'Intensité',emoji:'🔥'},
+  {id:'chill',label:'Chill',emoji:'🌊'},{id:'nostalgie',label:'Nostalgie',emoji:'📻'}
+];
+const ACTIVITIES = [
+  {id:'running',label:'🏃 Running'},{id:'gym',label:'💪 Gym'},
+  {id:'coding',label:'💻 Coding'},{id:'cuisine',label:'🍳 Cuisine'},
+  {id:'conduite',label:'🚗 Conduite'},{id:'meditation',label:'🧘 Méditation'}
+];
+const MODELS = {
+  claude:  ['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001'],
+  gemini:  ['gemini-2.0-flash','gemini-1.5-pro','gemini-1.5-flash'],
+  openai:  ['gpt-4o','gpt-4o-mini','gpt-4-turbo']
+};
+const ADVENTURE_LABELS = [[0,'Confort absolu'],[25,'Plutôt classique'],[40,'Équilibré'],[60,'Curieux'],[80,'Aventurier'],[100,'Explorateur']];
+
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let ST = {
+  obStep: 1,
+  obProvider: 'claude',
+  selGenres: [],
+  selContexts: [],
+  selMood: null,
+  selActivity: null,
+  mode: 'onetap',
+  tab: 'home',
+  isLoading: false,
+  cfgProvider: 'claude'
+};
+
+// ═══════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════
+let _toastTimer = null;
+function toast(msg, dur=2400) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.add('hidden'), dur);
+}
+
+// ═══════════════════════════════════════════
+// ONBOARDING
+// ═══════════════════════════════════════════
+function initOnboarding() {
+  // Genre chips
+  document.getElementById('genre-chips').innerHTML =
+    GENRES.map(g => `<button class="genre-chip" data-id="${g.id}" onclick="toggleGenre('${g.id}',this)">${g.label}</button>`).join('');
+
+  // Context chips
+  document.getElementById('context-chips').innerHTML =
+    CONTEXTS.map(c => `<button class="mood-chip" data-id="${c.id}" onclick="toggleCtx('${c.id}',this)">
+      <div style="font-size:1.4rem;margin-bottom:4px;">${c.emoji}</div>
+      <div style="font-size:11px;">${c.label}</div>
+    </button>`).join('');
+
+  // Adventure slider
+  document.getElementById('adventure-slider').addEventListener('input', function() {
+    const v = parseInt(this.value);
+    const entry = [...ADVENTURE_LABELS].reverse().find(([t]) => v >= t);
+    document.getElementById('adventure-label').textContent = entry ? entry[1] : 'Équilibré';
+  });
+
+  // Provider pills onboarding
+  document.querySelectorAll('#ob-provider-pills .provider-pill').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('#ob-provider-pills .provider-pill').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      ST.obProvider = this.dataset.p;
+      fillModelSelect('ob-model-select', this.dataset.p);
+    });
+  });
+  fillModelSelect('ob-model-select', 'claude');
+
+  // Init chat welcome message
+  const msgs = document.getElementById('chat-messages');
+  if(msgs && !msgs.children.length) {
+    msgs.innerHTML = `<div class="chat-bubble ai">
+      💬 Décris ce que tu veux écouter.<br>
+      <span style="color:var(--muted);font-size:12px;">Ex: "quelque chose de mélancolique comme Radiohead mais en français"</span>
+    </div>`;
+  }
+}
+
+function toggleGenre(id, el) {
+  if(ST.selGenres.includes(id)) {
+    ST.selGenres = ST.selGenres.filter(x => x !== id);
+    el.classList.remove('selected');
+  } else {
+    ST.selGenres.push(id);
+    el.classList.add('selected');
+  }
+}
+
+function toggleCtx(id, el) {
+  if(ST.selContexts.includes(id)) {
+    ST.selContexts = ST.selContexts.filter(x => x !== id);
+    el.classList.remove('selected');
+  } else {
+    ST.selContexts.push(id);
+    el.classList.add('selected');
+  }
+}
+
+function fillModelSelect(selectId, provider) {
+  const sel = document.getElementById(selectId);
+  if(!sel) return;
+  const models = MODELS[provider] || [];
+  sel.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+}
+
+function obNav(dir) {
+  const cur = ST.obStep;
+
+  // Validations forward
+  if(dir === 1) {
+    if(cur === 1 && ST.selGenres.length === 0) { toast('Sélectionne au moins un genre 🎵'); return; }
+    if(cur === 5) { finishOnboarding(); return; }
+  }
+
+  const next = cur + dir;
+  if(next < 1 || next > 5) return;
+
+  // Hide current, show next
+  document.getElementById(`ob${cur}`).classList.remove('active');
+  document.getElementById(`ob${next}`).classList.add('active');
+
+  ST.obStep = next;
+  document.getElementById('ob-label').textContent = `${next} / 5`;
+  document.getElementById('ob-progress').style.width = `${next * 20}%`;
+  document.getElementById('ob-back').style.display = next > 1 ? 'inline-flex' : 'none';
+  document.getElementById('ob-next').textContent = next === 5 ? 'Démarrer ✓' : 'Continuer →';
+}
+
+function finishOnboarding() {
+  const apiKey = document.getElementById('api-key-onboard').value.trim();
+  if(!apiKey) { toast('⚠️ Clé API requise'); return; }
+
+  const model = document.getElementById('ob-model-select').value;
+  const artistRaw = document.getElementById('artist-input').value;
+  const artists = artistRaw.split('\n').map(x => x.trim()).filter(Boolean);
+  const adventure = parseInt(document.getElementById('adventure-slider').value) / 100;
+
+  saveProfile({
+    genres: ST.selGenres,
+    artists,
+    contexts: ST.selContexts,
+    adventurousness: adventure,
+    disliked: [],
+    interactions: 0,
+    completedOnboarding: true
+  });
+  saveConfig({ provider: ST.obProvider, model, apiKey });
+
+  showScreen('main');
+  initMainApp();
+}
+
+// ═══════════════════════════════════════════
+// MAIN APP
+// ═══════════════════════════════════════════
+function initMainApp() {
+  // Greeting
+  const h = new Date().getHours();
+  document.getElementById('greeting-text').textContent =
+    h < 12 ? 'Bonne matinée ☀️' : h < 18 ? 'Bonne après-midi' : 'Bonne soirée 🌙';
+
+  // Mood grid
+  document.getElementById('mood-grid').innerHTML = MOODS.map(m =>
+    `<button class="mood-chip" data-id="${m.id}" onclick="selectMood('${m.id}',this)">
+      <div style="font-size:1.3rem;margin-bottom:3px;">${m.emoji}</div>
+      <div style="font-size:10px;">${m.label}</div>
+    </button>`
+  ).join('');
+
+  // Activity grid
+  document.getElementById('activity-grid').innerHTML = ACTIVITIES.map(a =>
+    `<button class="mood-chip" data-id="${a.id}" onclick="selectActivity('${a.id}',this)"
+      style="font-size:13px;padding:14px 10px;">${a.label}</button>`
+  ).join('');
+
+  // Ensure chat welcome
+  const msgs = document.getElementById('chat-messages');
+  if(msgs && !msgs.children.length) {
+    msgs.innerHTML = `<div class="chat-bubble ai">
+      💬 Décris ce que tu veux écouter.<br>
+      <span style="color:var(--muted);font-size:12px;">Ex: "quelque chose de mélancolique comme Radiohead mais en français"</span>
+    </div>`;
+  }
+
+  setMode('onetap');
+}
+
+function selectMood(id, el) {
+  document.querySelectorAll('#mood-grid .mood-chip').forEach(x => x.classList.remove('selected'));
+  el.classList.add('selected');
+  ST.selMood = id;
+  document.getElementById('mood-go').style.display = 'block';
+}
+
+function selectActivity(id, el) {
+  document.querySelectorAll('#activity-grid .mood-chip').forEach(x => x.classList.remove('selected'));
+  el.classList.add('selected');
+  ST.selActivity = id;
+  document.getElementById('activity-go').style.display = 'block';
+}
+
+function setMode(mode) {
+  ST.mode = mode;
+  document.querySelectorAll('.mode-chip').forEach(x =>
+    x.classList.toggle('active', x.dataset.mode === mode)
+  );
+  ['onetap','mood','activity','discovery'].forEach(z => {
+    document.getElementById(`zone-${z}`).style.display = z === mode ? 'block' : 'none';
+  });
+}
+
+// ═══════════════════════════════════════════
+// AI ENGINE
+// ═══════════════════════════════════════════
+function buildSystemPrompt(mode) {
+  const p = getProfile() || {};
+  const ctx = ST.selActivity || (p.contexts && p.contexts[0]) || 'général';
+  const mood = ST.selMood || 'neutre';
+  const isDisc = mode === 'discovery';
+
+  return `Tu es un expert mondial en recommandation musicale. Connaissance encyclopédique de tous genres et cultures.
+
+PROFIL UTILISATEUR :
+- Genres préférés : ${(p.genres||[]).join(', ') || 'non définis'}
+- Artistes aimés : ${(p.artists||[]).join(', ') || 'non définis'}
+- Contextes d'écoute habituels : ${(p.contexts||[]).join(', ') || 'général'}
+- Genres/styles à éviter : ${(p.disliked||[]).join(', ') || 'aucun'}
+- Niveau d'aventure (0=confort total, 1=exploration radicale) : ${p.adventurousness ?? 0.4}
+- Contexte actuel : ${ctx}
+- Humeur actuelle : ${mood}
+${isDisc ? '- MODE DÉCOUVERTE : propose une pépite RADICALEMENT différente de ses habitudes habituelles, quelque chose d\'inattendu' : ''}
+
+RÈGLE ABSOLUE : Réponds UNIQUEMENT avec un objet JSON valide. Zéro texte avant ou après. Zéro backtick. Zéro markdown.
+Format exact :
+{"title":"...","artist":"...","genre":"...","year":2010,"mood":"...","why":"Explication max 20 mots","youtube_query":"artiste titre audio","discovery_score":0.0}
+
+discovery_score : 0.0 = très proche des goûts connus, 1.0 = totalement inattendu.`;
+}
+
+async function callAI(systemPrompt, userMsg) {
+  const cfg = getConfig();
+  const { provider, model, apiKey } = cfg;
+  if(!apiKey) throw new Error('Clé API manquante — ouvre ⚙️ Paramètres');
+
+  let url, headers, body;
+
+  if(provider === 'claude') {
+    url = 'https://api.anthropic.com/v1/messages';
+    headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    };
+    body = JSON.stringify({ model, max_tokens: 512, system: systemPrompt, messages:[{role:'user',content:userMsg}] });
+
+  } else if(provider === 'gemini') {
+    url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    headers = { 'Content-Type': 'application/json' };
+    body = JSON.stringify({
+      contents: [{ role:'user', parts:[{ text: systemPrompt + '\n\n' + userMsg }] }],
+      generationConfig: { maxOutputTokens: 512, temperature: 0.9 }
+    });
+
+  } else if(provider === 'openai') {
+    url = 'https://api.openai.com/v1/chat/completions';
+    headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+    body = JSON.stringify({ model, max_tokens: 512, messages:[{role:'system',content:systemPrompt},{role:'user',content:userMsg}] });
+  }
+
+  const res = await fetch(url, { method:'POST', headers, body });
+  if(!res.ok) {
+    let msg = `Erreur HTTP ${res.status}`;
+    try { const e = await res.json(); msg = e?.error?.message || e?.message || msg; } catch(_) {}
+    throw new Error(msg);
+  }
+  const data = await res.json();
+
+  if(provider === 'claude')  return data.content?.[0]?.text || '';
+  if(provider === 'gemini')  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  if(provider === 'openai')  return data.choices?.[0]?.message?.content || '';
+  return '';
+}
+
+function parseJSON(raw) {
+  // Greedy match of outermost JSON object
+  const m = raw.match(/\{[\s\S]*\}/);
+  if(!m) throw new Error('Réponse IA non parseable — réessaie');
+  try { return JSON.parse(m[0]); }
+  catch(e) { throw new Error('JSON malformé : ' + e.message); }
+}
+
+async function getRecommendation(mode) {
+  if(ST.isLoading) return;
+  ST.isLoading = true;
+
+  const resultId = `result-${mode}`;
+  const resultEl = document.getElementById(resultId);
+
+  // Show loading card
+  resultEl.style.display = 'block';
+  resultEl.className = 'music-card';
+  resultEl.innerHTML = `<div style="display:flex;align-items:center;gap:10px;color:var(--muted);">
+    <div class="dot-typing"><span></span><span></span><span></span></div> L'IA cherche...
+  </div>`;
+
+  if(mode === 'onetap') document.getElementById('onetap-icon').textContent = '⏳';
+
+  const msgMap = {
+    onetap: 'Recommande-moi une chanson parfaite pour maintenant.',
+    mood: `Je me sens ${ST.selMood||'neutre'}. Recommande-moi une chanson.`,
+    activity: `Je fais : ${ST.selActivity||'quelque chose'}. Recommande-moi une chanson.`,
+    discovery: 'Mode découverte : recommande-moi une vraie pépite inattendue.'
+  };
+
+  try {
+    const raw = await callAI(buildSystemPrompt(mode), msgMap[mode] || msgMap.onetap);
+    const rec = parseJSON(raw);
+    renderCard(resultEl, rec);
+    pushHistory({ title:rec.title, artist:rec.artist, genre:rec.genre, action:'suggest', context:mode });
+    const p = getProfile();
+    if(p) { p.interactions = (p.interactions||0)+1; saveProfile(p); }
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:#ef4444;font-size:13px;">⚠️ ${esc(e.message)}</div>`;
+  }
+
+  if(mode === 'onetap') document.getElementById('onetap-icon').textContent = '♪';
+  ST.isLoading = false;
+}
+
+function renderCard(container, rec) {
+  const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(rec.youtube_query || rec.artist + ' ' + rec.title)}`;
+  const discPct = Math.round((parseFloat(rec.discovery_score)||0) * 100);
+  // Store title/artist safely as data attributes to avoid inline JS escaping issues
+  const id = 'card_' + Date.now();
+
+  container.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;">
+      <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">🎵</div>
+      <div style="flex:1;min-width:0;">
+        <div class="syne" style="font-weight:800;font-size:1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(rec.title)}</div>
+        <div style="color:var(--muted);font-size:13px;">${esc(rec.artist)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px;">${esc(rec.genre||'')}${rec.year?' · '+rec.year:''}</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.5;">💡 ${esc(rec.why||'')}</div>
+    ${discPct > 0 ? `<div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px;"><span>Découverte</span><span>${discPct}%</span></div>
+      <div class="disc-bar"><div class="disc-fill" style="width:${discPct}%"></div></div>
+    </div>` : ''}
+    <div style="display:flex;align-items:center;justify-content:space-between;" id="${id}-actions">
+      <div style="display:flex;gap:8px;">
+        <button class="feedback-btn" id="${id}-like" title="J'aime">👍</button>
+        <button class="feedback-btn" id="${id}-dislike" title="Pas pour moi">👎</button>
+        <button class="feedback-btn" id="${id}-save" title="Sauvegarder">🔖</button>
+      </div>
+      <a href="${ytUrl}" target="_blank" rel="noopener" style="text-decoration:none;">
+        <button class="btn-primary" style="padding:10px 16px;font-size:13px;">▶ Écouter</button>
+      </a>
+    </div>`;
+
+  container.className = 'music-card appear';
+
+  // Bind feedback via JS (avoids inline onclick with escaped strings)
+  const title  = rec.title  || '';
+  const artist = rec.artist || '';
+  document.getElementById(`${id}-like`).onclick    = () => doFeedback(`${id}-like`,    'like',    title, artist);
+  document.getElementById(`${id}-dislike`).onclick = () => doFeedback(`${id}-dislike`, 'dislike', title, artist);
+  document.getElementById(`${id}-save`).onclick    = () => doFeedback(`${id}-save`,    'save',    title, artist);
+}
+
+function doFeedback(btnId, action, title, artist) {
+  const btn = document.getElementById(btnId);
+  if(!btn) return;
+  const cls = {like:'liked', dislike:'disliked', save:'saved'};
+  btn.classList.add(cls[action]);
+  btn.style.transform = 'scale(1.3)';
+  setTimeout(() => { if(btn) btn.style.transform = ''; }, 200);
+  pushHistory({ title, artist, action, context: ST.mode });
+  const msgs = {like:'👍 Pris en compte', dislike:'👎 Noté', save:'🔖 Sauvegardé'};
+  toast(msgs[action]);
+}
+
+// ═══════════════════════════════════════════
+// CHAT
+// ═══════════════════════════════════════════
+async function sendChat() {
+  if(ST.isLoading) return;
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if(!msg) return;
+  input.value = '';
+
+  const msgs = document.getElementById('chat-messages');
+
+  const userBubble = document.createElement('div');
+  userBubble.className = 'chat-bubble user';
+  userBubble.textContent = msg;
+  msgs.appendChild(userBubble);
+
+  const aiBubble = document.createElement('div');
+  aiBubble.className = 'chat-bubble ai';
+  aiBubble.innerHTML = '<div class="dot-typing"><span></span><span></span><span></span></div>';
+  msgs.appendChild(aiBubble);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  ST.isLoading = true;
+  try {
+    const raw = await callAI(buildSystemPrompt('chat'), `L'utilisateur veut: "${msg}". Recommande une chanson adaptée.`);
+    const rec = parseJSON(raw);
+    const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(rec.youtube_query || rec.artist + ' ' + rec.title)}`;
+    aiBubble.innerHTML = `
+      <div style="margin-bottom:6px;"><strong class="syne">${esc(rec.title)}</strong> — ${esc(rec.artist)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">${esc(rec.why||'')}</div>
+      <a href="${ytUrl}" target="_blank" rel="noopener" style="text-decoration:none;">
+        <button class="btn-primary" style="padding:8px 14px;font-size:12px;">▶ Écouter</button>
+      </a>`;
+    pushHistory({ title:rec.title, artist:rec.artist, action:'chat', context:'chat' });
+  } catch(e) {
+    aiBubble.innerHTML = `<span style="color:#ef4444;font-size:13px;">⚠️ ${esc(e.message)}</span>`;
+  }
+  msgs.scrollTop = msgs.scrollHeight;
+  ST.isLoading = false;
+}
+
+// ═══════════════════════════════════════════
+// HISTORY
+// ═══════════════════════════════════════════
+function renderHistory() {
+  const h = getHistory();
+  const el = document.getElementById('history-list');
+  if(!el) return;
+  if(!h.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:40px 0;">Aucune écoute pour l\'instant</p>';
+    return;
+  }
+  const aIco   = {like:'👍',dislike:'👎',save:'🔖',suggest:'🎵',chat:'💬'};
+  const aColor = {like:'rgba(34,197,94,.2)',dislike:'rgba(239,68,68,.2)',save:'rgba(245,158,11,.2)',suggest:'rgba(124,58,237,.2)',chat:'rgba(6,182,212,.2)'};
+  el.innerHTML = h.slice(0,50).map(item => {
+    const d    = new Date(item.ts||Date.now());
+    const time = d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    const date = d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
+    return `<div class="history-item">
+      <div class="action-badge" style="background:${aColor[item.action]||aColor.suggest};">${aIco[item.action]||'🎵'}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(item.title||'—')}</div>
+        <div style="color:var(--muted);font-size:12px;">${esc(item.artist||'')}</div>
+      </div>
+      <div style="text-align:right;font-size:10px;color:var(--muted);flex-shrink:0;">${time}<br>${date}</div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════
+function loadSettingsUI() {
+  const cfg = getConfig();
+  ST.cfgProvider = cfg.provider || 'claude';
+
+  // Provider pills — rebuild clean (avoid listener accumulation)
+  const pillsEl = document.getElementById('cfg-provider-pills');
+  pillsEl.innerHTML = ['claude','gemini','openai'].map(p =>
+    `<button class="provider-pill${ST.cfgProvider===p?' active':''}" data-p="${p}">${p.charAt(0).toUpperCase()+p.slice(1)}</button>`
+  ).join('');
+  pillsEl.querySelectorAll('.provider-pill').forEach(btn => {
+    btn.addEventListener('click', function() {
+      ST.cfgProvider = this.dataset.p;
+      pillsEl.querySelectorAll('.provider-pill').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      fillModelSelect('cfg-model', ST.cfgProvider);
+    });
+  });
+
+  document.getElementById('cfg-apikey').value = cfg.apiKey || '';
+  fillModelSelect('cfg-model', cfg.provider || 'claude');
+  // Set current model
+  const sel = document.getElementById('cfg-model');
+  if(sel && cfg.model) {
+    [...sel.options].forEach(o => { o.selected = o.value === cfg.model; });
+  }
+
+  // Profile summary
+  const p = getProfile();
+  if(p) {
+    document.getElementById('profile-summary').innerHTML =
+      `<span style="color:var(--muted);font-size:11px;">Genres</span><br>${(p.genres||[]).join(', ')||'—'}<br>` +
+      `<span style="color:var(--muted);font-size:11px;">Contextes</span><br>${(p.contexts||[]).join(', ')||'—'}<br>` +
+      `<span style="color:var(--muted);font-size:11px;">Aventure</span><br>${Math.round((p.adventurousness||0)*100)}%`;
+
+    // Prefill artists textarea
+    const ta = document.getElementById('cfg-artists');
+    if(ta) ta.value = (p.artists||[]).join('\n');
+  }
+
+  // Stats
+  const h = getHistory();
+  document.getElementById('stats-display').innerHTML =
+    `Interactions : ${p?.interactions||0}<br>` +
+    `Likes : ${h.filter(x=>x.action==='like').length}<br>` +
+    `Dislikes : ${h.filter(x=>x.action==='dislike').length}<br>` +
+    `Recos générées : ${h.filter(x=>x.action==='suggest'||x.action==='chat').length}`;
+}
+
+function saveSettings() {
+  const apiKey = document.getElementById('cfg-apikey').value.trim();
+  if(!apiKey) { toast('⚠️ Clé API requise'); return; }
+  const model = document.getElementById('cfg-model').value;
+  saveConfig({ provider: ST.cfgProvider, model, apiKey });
+  toast('✅ Paramètres sauvegardés');
+}
+
+function saveArtists() {
+  const p = getProfile();
+  if(!p) { toast('⚠️ Profil introuvable'); return; }
+  const raw = document.getElementById('cfg-artists').value;
+  p.artists = raw.split('\n').map(x => x.trim()).filter(Boolean);
+  saveProfile(p);
+  toast('✅ Artistes mis à jour');
+  // Refresh summary
+  document.getElementById('profile-summary').innerHTML =
+    `<span style="color:var(--muted);font-size:11px;">Genres</span><br>${(p.genres||[]).join(', ')||'—'}<br>` +
+    `<span style="color:var(--muted);font-size:11px;">Contextes</span><br>${(p.contexts||[]).join(', ')||'—'}<br>` +
+    `<span style="color:var(--muted);font-size:11px;">Aventure</span><br>${Math.round((p.adventurousness||0)*100)}%`;
+}
+
+function resetOnboarding() {
+  if(!confirm('Réinitialiser tout le profil et l\'historique ?\nCette action est irréversible.')) return;
+  localStorage.removeItem(LS_PROFILE);
+  localStorage.removeItem(LS_CONFIG);
+  localStorage.removeItem(LS_HISTORY);
+  location.reload();
+}
+
+// ═══════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active');
+    s.classList.add('hidden');
+  });
+  const t = document.getElementById(`screen-${name}`);
+  if(t) { t.classList.remove('hidden'); t.classList.add('active'); }
+  if(name === 'settings') loadSettingsUI();
+}
+
+function switchTab(tab) {
+  ST.tab = tab;
+  // Hide all panels
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    p.style.display = 'none';
+  });
+  // Show target
+  const target = document.getElementById(`tab-${tab}`);
+  if(target) {
+    target.style.display = tab === 'chat' ? 'flex' : 'block';
+  }
+  document.querySelectorAll('.tab-item').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === tab)
+  );
+  if(tab === 'history') renderHistory();
+  if(tab === 'chat') {
+    const msgs = document.getElementById('chat-messages');
+    if(msgs) setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 50);
+  }
+}
+
+// ═══════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════
+function esc(s='') {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ═══════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════
+function boot() {
+  const profile = getProfile();
+  const config  = getConfig();
+  if(profile?.completedOnboarding && config?.apiKey) {
+    showScreen('main');
+    initMainApp();
+  } else {
+    showScreen('onboard');
+    initOnboarding();
+  }
+}
+
+boot();
+</script>
+</body>
+</html>
