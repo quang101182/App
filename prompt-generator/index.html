@@ -1178,17 +1178,14 @@ const Controller = (() => {
     Renderer.setScore(document.getElementById('score-in-bar'),document.getElementById('score-in-val'),document.getElementById('score-in-bar-wrap'),scoreIn,'original');
     Renderer.setScore(document.getElementById('score-out-bar'),document.getElementById('score-out-val'),document.getElementById('score-out-bar-wrap'),entry.scoreOut,'amélioré');
     const tab=State.get().outputTab;
-    const entryOutput=(entry.outputRaw!==undefined&&entry.outputRaw!=='')?entry.outputRaw:null;
-    if(entry.sections||entryOutput){
-      Renderer.renderOutput(entry.sections,entry.sections?null:(entryOutput||''),tab,entry.raw,entryOutput||'');
-      State.set({inputValue:entry.raw,outputRaw:entryOutput||'',outputSections:entry.sections,scoreIn,scoreOut:entry.scoreOut});
-      const hasOutput=!!(entryOutput);
-      document.getElementById('btn-copy').disabled=!hasOutput;
-      document.getElementById('btn-share').disabled=!hasOutput;
-      document.getElementById('btn-txt').disabled=!hasOutput;
-      document.getElementById('btn-iterate').disabled=false;
-      Renderer.updateOutCharCount(entryOutput||'');
-    }
+    const entryOutput=(entry.outputRaw!==undefined&&entry.outputRaw!=='')?entry.outputRaw:entry.raw;
+    Renderer.renderOutput(entry.sections,entry.sections?null:entryOutput,tab,entry.raw,entryOutput);
+    State.set({inputValue:entry.raw,outputRaw:entryOutput,outputSections:entry.sections,scoreIn,scoreOut:entry.scoreOut});
+    document.getElementById('btn-copy').disabled=false;
+    document.getElementById('btn-share').disabled=false;
+    document.getElementById('btn-txt').disabled=false;
+    document.getElementById('btn-iterate').disabled=false;
+    Renderer.updateOutCharCount(entryOutput);
     if(entry.targetProvider){State.set({targetProvider:entry.targetProvider});Renderer.updateTargetUI(entry.targetProvider)}
     Renderer.setStatus(`Historique chargé — ${entry.date}${entry.aiMode?' (IA)':''}${entry.targetProvider&&entry.targetProvider!=='universal'?' → '+entry.targetProvider:''}`);
     Toast.show('Entrée chargée','info');
@@ -1205,7 +1202,22 @@ const Controller = (() => {
     const savedLang=Store.read('lang','fr');State.set({lang:savedLang});Renderer.updateLangUI(savedLang);
     const savedTarget=Store.read('targetProvider','universal');State.set({targetProvider:savedTarget});Renderer.updateTargetUI(savedTarget);
 
-    const history=HistoryData.getAll();State.set({history});Renderer.renderHistory(history);
+    let history=HistoryData.getAll();
+    // Migration : backfill outputRaw manquant depuis sections ou raw
+    let migrated=false;
+    history=history.map(e=>{
+      if(e.outputRaw===undefined||e.outputRaw===''){
+        let out='';
+        if(e.sections){
+          const s=e.sections;
+          out=['# RÔLE\n'+(s.role||''),'# CONTEXTE\n'+(s.context||''),'# MISSION\n'+(s.mission||''),'# CONTRAINTES\n'+(s.constraints||''),'# FORMAT DE SORTIE\n'+(s.format||'')].join('\n\n');
+        }
+        if(out){migrated=true;return{...e,outputRaw:out}}
+      }
+      return e;
+    });
+    if(migrated){Store.write('history',history)}
+    State.set({history});Renderer.renderHistory(history);
     document.getElementById('btn-export').disabled=!history.length;
 
     if(ApiKeys.hasAnyKey()){const p=ApiKeys.firstKeyProvider();State.set({activeProvider:p,mode:'ai'});Renderer.updateModeUI('ai');Renderer.updateApiButton(p)}
