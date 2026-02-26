@@ -851,9 +851,9 @@ const HistoryData = (() => {
   const MAX=20;
   function load(){return Store.read('history',[])}
   function save(h){Store.write('history',h)}
-  function add(raw,scoreIn,scoreOut,sections,aiMode,targetProvider){
+  function add(raw,scoreIn,scoreOut,sections,aiMode,targetProvider,outputRaw){
     const h=load();
-    h.unshift({id:Date.now(),date:new Date().toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'}),preview:raw.replace(/\s+/g,' ').trim().slice(0,80),raw,sections,scoreIn,scoreOut,aiMode:!!aiMode,targetProvider:targetProvider||'universal'});
+    h.unshift({id:Date.now(),date:new Date().toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'}),preview:raw.replace(/\s+/g,' ').trim().slice(0,80),raw,outputRaw:outputRaw||'',sections,scoreIn,scoreOut,aiMode:!!aiMode,targetProvider:targetProvider||'universal'});
     if(h.length>MAX) h.length=MAX;
     save(h);return h;
   }
@@ -861,15 +861,13 @@ const HistoryData = (() => {
   function getAll(){return load()}
   function exportJson(){
     const h=load();
-    const blob=new Blob([JSON.stringify(h,null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);
+    const encoded='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(h,null,2));
     const a=document.createElement('a');
-    a.href=url;
+    a.href=encoded;
     a.download=`promptforge-history-${new Date().toISOString().slice(0,10)}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   return{add,remove,getAll,exportJson};
 })();
@@ -1046,7 +1044,7 @@ const Controller = (() => {
         const targetChip=targetProvider!=='universal'?[{text:`🎯 ${targetProvider}`,type:'target'}]:[];
         const chips=[...targetChip,{text:`⚡ ${provider} / ${aiResult.model?.split('/').pop()||aiResult.model}`,type:'ai'},{text:'+ Optimisé par LLM',type:'added'}];
         const sections=aiResult.raw_fallback?null:aiResult.sections;
-        const history=HistoryData.add(promptText,scoreIn,scoreOut,sections,true,targetProvider);
+        const history=HistoryData.add(promptText,scoreIn,scoreOut,sections,true,targetProvider,aiResult.raw);
         State.set({inputValue:promptText,outputRaw:aiResult.raw,outputSections:sections,scoreIn,scoreOut,chips,loading:false,history});
         _applyResults(scoreIn,scoreOut,sections,aiResult.raw,chips,promptText,true);
         Renderer.setStatus(`IA (${provider}) → ${targetProvider} — score : ${scoreIn} → ${scoreOut}`,'ai');
@@ -1060,7 +1058,7 @@ const Controller = (() => {
       await new Promise(r=>setTimeout(r,350));
       const result=LocalEngine.transform(promptText,lang,targetProvider);
       const scoreOut=result?Scorer.score(result.raw):0;
-      const history=HistoryData.add(promptText,scoreIn,scoreOut,result?result.sections:null,false,targetProvider);
+      const history=HistoryData.add(promptText,scoreIn,scoreOut,result?result.sections:null,false,targetProvider,result?result.raw:'');
       State.set({inputValue:promptText,outputRaw:result?result.raw:'',outputSections:result?result.sections:null,scoreIn,scoreOut,chips:result?result.chips:[],loading:false,history});
       _applyResults(scoreIn,scoreOut,result?result.sections:null,result?result.raw:null,result?result.chips:[],promptText,false);
       Renderer.setStatus(`Local → ${targetProvider} — score : ${scoreIn} → ${scoreOut}`,'active');
@@ -1126,13 +1124,11 @@ const Controller = (() => {
 
   function exportTxt(){
     const raw=State.get().outputRaw;if(!raw) return;
-    const blob=new Blob([raw],{type:'text/plain;charset=utf-8'});
-    const url=URL.createObjectURL(blob);
+    const encoded='data:text/plain;charset=utf-8,'+encodeURIComponent(raw);
     const a=document.createElement('a');
-    a.href=url;
+    a.href=encoded;
     a.download=`prompt-${new Date().toISOString().slice(0,10)}.txt`;
     document.body.appendChild(a);a.click();document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url),1000);
     Toast.show('Fichier TXT téléchargé','success');
   }
 
@@ -1182,11 +1178,12 @@ const Controller = (() => {
     Renderer.setScore(document.getElementById('score-in-bar'),document.getElementById('score-in-val'),document.getElementById('score-in-bar-wrap'),scoreIn,'original');
     Renderer.setScore(document.getElementById('score-out-bar'),document.getElementById('score-out-val'),document.getElementById('score-out-bar-wrap'),entry.scoreOut,'amélioré');
     const tab=State.get().outputTab;
-    if(entry.sections||entry.raw){
-      Renderer.renderOutput(entry.sections,entry.sections?null:entry.raw,tab,entry.raw,entry.raw);
-      State.set({outputRaw:entry.raw,outputSections:entry.sections,scoreIn,scoreOut:entry.scoreOut});
+    const entryOutput=entry.outputRaw||entry.raw;
+    if(entry.sections||entryOutput){
+      Renderer.renderOutput(entry.sections,entry.sections?null:entryOutput,tab,entry.raw,entryOutput);
+      State.set({inputValue:entry.raw,outputRaw:entryOutput,outputSections:entry.sections,scoreIn,scoreOut:entry.scoreOut});
       document.getElementById('btn-copy').disabled=false;document.getElementById('btn-share').disabled=false;document.getElementById('btn-txt').disabled=false;document.getElementById('btn-iterate').disabled=false;
-      Renderer.updateOutCharCount(entry.raw);
+      Renderer.updateOutCharCount(entryOutput);
     }
     if(entry.targetProvider){State.set({targetProvider:entry.targetProvider});Renderer.updateTargetUI(entry.targetProvider)}
     Renderer.setStatus(`Historique chargé — ${entry.date}${entry.aiMode?' (IA)':''}${entry.targetProvider&&entry.targetProvider!=='universal'?' → '+entry.targetProvider:''}`);
