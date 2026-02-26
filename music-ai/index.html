@@ -351,7 +351,7 @@ const MODELS={claude:['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20
 const ADVENTURE_LABELS=[[0,'Confort absolu'],[25,'Plutôt classique'],[40,'Équilibré'],[60,'Curieux'],[80,'Aventurier'],[100,'Explorateur']];
 const RADIO_MS=4*60*1000;
 
-let ST={obStep:1,obProvider:'claude',selGenres:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,radioMode:false,radioTimer:null};
+let ST={obStep:1,obProvider:'claude',selGenres:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,radioMode:false,radioTimer:null,sessionThread:[],sessionStart:Date.now()};
 
 let _tt=null;
 function toast(msg,dur=2400){const el=document.getElementById('toast');el.textContent=msg;el.classList.remove('hidden');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.add('hidden'),dur)}
@@ -469,10 +469,32 @@ function buildSystemPrompt(mode){
   const p=getProfile()||{};
   const ctx=ST.selActivity||(p.contexts&&p.contexts[0])||'général';
   const mood=ST.selMood||'neutre';
-  return`Tu es un expert mondial en recommandation musicale.
-PROFIL: genres=${((p.genres||[]).join(',')||'nd')}, artistes=${((p.artists||[]).join(',')||'nd')}, contextes=${((p.contexts||[]).join(',')||'nd')}, éviter=${((p.disliked||[]).join(',')||'aucun')}, aventure=${p.adventurousness??0.4}, ctx_actuel=${ctx}, humeur=${mood}${mode==='discovery'?'\nMODE DÉCOUVERTE: propose une pépite RADICALEMENT différente.':''}
-RÈGLE ABSOLUE: JSON uniquement, zéro texte, zéro backtick.
-{"title":"...","artist":"...","genre":"...","year":2010,"mood":"...","why":"max 20 mots","youtube_query":"artiste titre official audio","discovery_score":0.0}`
+  const now=new Date();
+  const h=now.getHours();
+  const dow=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'][now.getDay()];
+  const timeSlot=h<6?'nuit profonde':h<9?'petit matin':h<12?'matinée':h<14?'déjeuner':h<17?'après-midi':h<20?'fin de journée':h<23?'soirée':'nuit';
+  const hist=getHistory().filter(x=>x.action==='suggest'||x.action==='chat').slice(0,15);
+  const recentTitles=[...new Set([...ST.sessionThread.map(x=>x.title+' — '+x.artist),...hist.map(x=>x.title+' — '+x.artist)])].slice(0,20);
+  const threadDesc=ST.sessionThread.length>0
+    ?'PROGRESSION SESSION: '+ST.sessionThread.map((x,i)=>`${i+1}.${x.title}(${x.mood||'?'})`).join(' → ')
+    :'Début de session.';
+  const modeInstr=mode==='discovery'?'MODE DÉCOUVERTE: pépite RADICALEMENT inattendue — artiste inconnu, genre non représenté, époque différente. Surprise absolue.':
+    mode==='onetap'?'ONE-TAP: reco parfaite pour CE moment précis. Variété maximale vs sessions précédentes.':'';
+  const antiRepeat=recentTitles.length>0?'ANTI-RÉPÉTITION — NE JAMAIS proposer: '+recentTitles.join(' | '):'';
+  return `Tu es un expert mondial en recommandation musicale — connaissance encyclopédique de TOUS genres, époques, cultures, sous-cultures.
+
+PROFIL: genres=${(p.genres||[]).join(', ')||'nd'} | artistes=${(p.artists||[]).join(', ')||'nd'} | contextes=${(p.contexts||[]).join(', ')||'nd'} | éviter=${(p.disliked||[]).join(', ')||'aucun'} | aventure=${p.adventurousness??0.4} | ctx=${ctx} | humeur=${mood}
+
+MOMENT: ${dow} ${timeSlot} (${h}h) — influence l'énergie et l'atmosphère.
+
+${threadDesc}
+
+${antiRepeat}
+
+${modeInstr}
+
+RÈGLE ABSOLUE: JSON UNIQUEMENT. Zéro texte avant/après. Zéro backtick.
+{"title":"...","artist":"...","genre":"...","year":2010,"mood":"...","why":"explication émotionnelle max 20 mots","story":"2-3 phrases: contexte création, anecdote, ce que Spotify ne dira jamais","now_reason":"1 phrase: pourquoi MAINTENANT ce ${timeSlot} de ${dow}","youtube_query":"artiste titre official audio","discovery_score":0.0}`;
 }
 async function callAI(sys,msg){
   const cfg=getConfig();const{provider,model,apiKey}=cfg;
@@ -502,6 +524,8 @@ async function getRecommendation(mode){
     const rec=parseJSON(raw);
     renderCard(resultEl,rec);
     pushHistory({title:rec.title,artist:rec.artist,genre:rec.genre,action:'suggest',context:mode});
+    ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre});
+    if(ST.sessionThread.length>8)ST.sessionThread.shift();
     const p=getProfile();if(p){p.interactions=(p.interactions||0)+1;saveProfile(p)}
   }catch(e){resultEl.innerHTML=`<div style="color:#ef4444;font-size:13px;">⚠️ ${esc(e.message)}</div>`}
   if(mode==='onetap')document.getElementById('onetap-icon').textContent='♪';
@@ -523,7 +547,9 @@ function renderCard(container,rec){
         <div style="font-size:11px;color:var(--muted);margin-top:1px;">${esc(rec.genre||'')}${rec.year?' · '+rec.year:''}</div>
       </div>
     </div>
-    <div style="font-size:12px;color:var(--muted);background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.5;">💡 ${esc(rec.why||'')}</div>
+    <div style="font-size:12px;color:var(--muted);background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;margin-bottom:10px;line-height:1.5;">💡 ${esc(rec.why||'')}</div>
+    ${rec.now_reason?`<div style="font-size:11px;color:var(--accent2);background:rgba(6,182,212,0.07);border:1px solid rgba(6,182,212,0.15);border-radius:10px;padding:8px 12px;margin-bottom:10px;line-height:1.5;">🕐 ${esc(rec.now_reason)}</div>`:''}
+    ${rec.story?`<button id="story-btn-${id}" style="width:100%;margin-bottom:8px;padding:8px 12px;border-radius:10px;background:none;border:1px solid var(--border);color:var(--muted);font-family:inherit;font-size:12px;cursor:pointer;text-align:left;" onclick="toggleStory('${id}')">📖 Raconte-moi l'histoire →</button><div id="story-${id}" style="display:none;font-size:12px;color:var(--text);background:rgba(255,255,255,0.03);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:10px 12px;margin-bottom:10px;line-height:1.7;">${esc(rec.story)}</div>`:''}
     ${discPct>0?`<div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px;"><span>Découverte</span><span>${discPct}%</span></div><div class="disc-bar"><div class="disc-fill" style="width:${discPct}%"></div></div></div>`:''}
     <div style="display:flex;align-items:center;justify-content:space-between;">
       <div style="display:flex;gap:8px;">
@@ -545,6 +571,14 @@ function renderCard(container,rec){
   if(hasYT&&document.getElementById(`${id}-q`))
     document.getElementById(`${id}-q`).onclick=()=>{if(!ST.queue.find(t=>t.ytQuery===track.ytQuery)){ST.queue.push({...track});toast('🎵 Ajouté à la file');renderQueueList()}else toast('Déjà dans la file')};
 }
+function toggleStory(id){
+  const el=document.getElementById('story-'+id);
+  const btn=document.getElementById('story-btn-'+id);
+  if(!el||!btn)return;
+  const shown=el.style.display!=='none';
+  el.style.display=shown?'none':'block';
+  btn.textContent=shown?"📖 Raconte-moi l'histoire →":"📖 Refermer ↑";
+}
 function doFeedback(btnId,action,title,artist){const btn=document.getElementById(btnId);if(!btn)return;btn.classList.add({like:'liked',dislike:'disliked',save:'saved'}[action]);btn.style.transform='scale(1.3)';setTimeout(()=>{if(btn)btn.style.transform=''},200);pushHistory({title,artist,action,context:ST.mode});toast({like:'👍 Pris en compte',dislike:'👎 Noté',save:'🔖 Sauvegardé'}[action])}
 
 // ── CHAT ──
@@ -562,10 +596,12 @@ async function sendChat(){
     const ytUrl=`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQuery)}`;
     const track={title:rec.title||'',artist:rec.artist||'',ytQuery,ytUrl};
     const hasYT=!!getYtKey();const bid='cb_'+Date.now();
-    ab.innerHTML=`<div style="margin-bottom:6px;"><strong class="syne">${esc(rec.title)}</strong> — ${esc(rec.artist)}</div><div style="font-size:12px;color:var(--muted);margin-bottom:8px;">${esc(rec.why||'')}</div><div style="display:flex;gap:6px;"><button id="${bid}-p" class="btn-primary" style="padding:8px 14px;font-size:12px;">${hasYT?'▶ In-app':'▶ Écouter'}</button>${hasYT?`<button id="${bid}-q" style="padding:8px 14px;border-radius:50px;background:var(--card);border:1px solid var(--border);cursor:pointer;font-size:12px;color:var(--text);font-family:inherit;">+ File</button>`:''}</div>`;
+    ab.innerHTML=`<div style="margin-bottom:6px;"><strong class="syne">${esc(rec.title)}</strong> — ${esc(rec.artist)}</div><div style="font-size:12px;color:var(--muted);margin-bottom:6px;">${esc(rec.why||'')}</div>${rec.now_reason?`<div style="font-size:11px;color:var(--accent2);margin-bottom:6px;">🕐 ${esc(rec.now_reason)}</div>`:''} ${rec.story?`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.6;border-left:2px solid var(--accent);padding-left:8px;">${esc(rec.story)}</div>`:''}<div style="display:flex;gap:6px;"><button id="${bid}-p" class="btn-primary" style="padding:8px 14px;font-size:12px;">${hasYT?'▶ In-app':'▶ Écouter'}</button>${hasYT?`<button id="${bid}-q" style="padding:8px 14px;border-radius:50px;background:var(--card);border:1px solid var(--border);cursor:pointer;font-size:12px;color:var(--text);font-family:inherit;">+ File</button>`:''}</div>`;
     document.getElementById(`${bid}-p`).onclick=()=>hasYT?ytPlay(track):window.open(ytUrl,'_blank','noopener');
     if(hasYT&&document.getElementById(`${bid}-q`))document.getElementById(`${bid}-q`).onclick=()=>{if(!ST.queue.find(t=>t.ytQuery===track.ytQuery)){ST.queue.push({...track});toast('🎵 Ajouté à la file');renderQueueList()}else toast('Déjà dans la file')};
     pushHistory({title:rec.title,artist:rec.artist,action:'chat',context:'chat'});
+    ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre});
+    if(ST.sessionThread.length>8)ST.sessionThread.shift();
   }catch(e){ab.innerHTML=`<span style="color:#ef4444;font-size:13px;">⚠️ ${esc(e.message)}</span>`}
   msgs.scrollTop=msgs.scrollHeight;ST.isLoading=false;
 }
@@ -600,7 +636,7 @@ function loadSettingsUI(){
     const ta=document.getElementById('cfg-artists');if(ta)ta.value=(p.artists||[]).join('\n');
   }
   const h=getHistory();
-  document.getElementById('stats-display').innerHTML=`Interactions : ${p?.interactions||0}<br>Likes : ${h.filter(x=>x.action==='like').length}<br>Dislikes : ${h.filter(x=>x.action==='dislike').length}<br>Recos : ${h.filter(x=>x.action==='suggest'||x.action==='chat').length}<br>File : ${ST.queue.length} titre(s)<br>Clé YouTube : ${getYtKey()?'✅ configurée':'❌ non configurée'}<br>Radio : ${ST.radioMode?'📻 ON':'OFF'}`;
+  document.getElementById('stats-display').innerHTML=`Interactions : ${p?.interactions||0}<br>Likes : ${h.filter(x=>x.action==='like').length}<br>Dislikes : ${h.filter(x=>x.action==='dislike').length}<br>Recos : ${h.filter(x=>x.action==='suggest'||x.action==='chat').length}<br>File : ${ST.queue.length} titre(s)<br>Fil de session : ${ST.sessionThread.length} titre(s)<br>Clé YouTube : ${getYtKey()?'✅ configurée':'❌ non configurée'}<br>Radio : ${ST.radioMode?'📻 ON':'OFF'}`;
 }
 function saveSettings(){const k=document.getElementById('cfg-apikey').value.trim();if(!k){toast('⚠️ Clé API requise');return}const m=document.getElementById('cfg-model').value;saveConfig({provider:ST.cfgProvider,model:m,apiKey:k});toast('✅ Config IA sauvegardée')}
 function saveYtKey(){const k=document.getElementById('cfg-ytkey').value.trim();setYtKey(k);toast(k?'✅ Clé YouTube sauvegardée':'⚠️ Clé YT effacée')}
