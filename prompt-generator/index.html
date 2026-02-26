@@ -176,6 +176,12 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .btn-export:not(:disabled):hover{border-color:var(--gold);color:var(--gold)}
 .btn-danger{background:transparent;border-color:var(--warn);color:var(--warn)}
 .btn-danger:not(:disabled):hover{background:var(--warn-dim);border-color:var(--warn)}
+.btn-share{background:transparent;border-color:#6644ff;color:#aa88ff}
+.btn-share:not(:disabled):hover{background:#6644ff22;border-color:#aa88ff}
+.btn-txt{background:transparent;border-color:var(--border-accent);color:var(--text-secondary)}
+.btn-txt:not(:disabled):hover{border-color:var(--accent);color:var(--accent)}
+.btn-import{background:transparent;border-color:var(--border);color:var(--text-muted)}
+.btn-import:hover{border-color:var(--gold);color:var(--gold)}
 .btn-icon{font-size:1rem;line-height:1}
 .spinner{display:none;width:14px;height:14px;border:2px solid var(--bg-base);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
 .loading .spinner{display:block}
@@ -386,6 +392,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
     </article>
   </section>
 
+  <input type="file" id="file-import" accept=".json" style="display:none">
   <div class="actions">
     <button class="btn btn-primary" id="btn-forge">
       <span class="spinner"></span>
@@ -396,9 +403,21 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
       <span class="btn-icon" id="copy-icon">⎘</span>
       <span class="btn-label">Copier</span>
     </button>
-    <button class="btn btn-export" id="btn-export" disabled title="Exporter l'historique JSON">
+    <button class="btn btn-share" id="btn-share" disabled title="Partager le prompt (natif mobile)">
+      <span class="btn-icon">↗</span>
+      <span class="btn-label">Partager</span>
+    </button>
+    <button class="btn btn-txt" id="btn-txt" disabled title="Télécharger le prompt en .txt">
       <span class="btn-icon">⬇</span>
+      <span class="btn-label">TXT</span>
+    </button>
+    <button class="btn btn-export" id="btn-export" disabled title="Exporter l'historique JSON">
+      <span class="btn-icon">📦</span>
       <span class="btn-label">Export JSON</span>
+    </button>
+    <button class="btn btn-import" id="btn-import" title="Importer un historique JSON">
+      <span class="btn-icon">⬆</span>
+      <span class="btn-label">Import JSON</span>
     </button>
     <button class="btn btn-danger" id="btn-clear">
       <span class="btn-icon">✕</span>
@@ -1057,6 +1076,8 @@ const Controller = (() => {
     Renderer.renderChips(chips);Renderer.renderHistory(State.get().history);Renderer.setLoading(false);
     Renderer.updateOutCharCount(outputRaw);
     document.getElementById('btn-copy').disabled=!outputRaw;
+    document.getElementById('btn-share').disabled=!outputRaw;
+    document.getElementById('btn-txt').disabled=!outputRaw;
     document.getElementById('btn-export').disabled=!State.get().history.length;
     document.getElementById('btn-iterate').disabled=!outputRaw;
   }
@@ -1084,13 +1105,72 @@ const Controller = (() => {
     }catch{Toast.show('Échec copie','error')}
   }
 
+  async function sharePrompt(){
+    const raw=State.get().outputRaw;if(!raw) return;
+    if(navigator.share){
+      try{
+        await navigator.share({title:'Prompt optimisé',text:raw});
+        Toast.show('Partagé','success');
+      }catch(e){
+        if(e.name!=='AbortError') Toast.show('Erreur partage : '+e.message.slice(0,40),'error');
+      }
+    } else {
+      // Fallback clipboard
+      try{
+        if(navigator.clipboard&&window.isSecureContext) await navigator.clipboard.writeText(raw);
+        else{const ta=document.createElement('textarea');ta.value=raw;ta.style.cssText='position:fixed;opacity:0;';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');document.body.removeChild(ta)}
+        Toast.show('Partage non supporté — copié dans le presse-papier','info');
+      }catch{Toast.show('Échec','error')}
+    }
+  }
+
+  function exportTxt(){
+    const raw=State.get().outputRaw;if(!raw) return;
+    const blob=new Blob([raw],{type:'text/plain;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`prompt-${new Date().toISOString().slice(0,10)}.txt`;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    Toast.show('Fichier TXT téléchargé','success');
+  }
+
+  function importJson(){
+    document.getElementById('file-import').click();
+  }
+
+  function handleImport(e){
+    const file=e.target.files[0];if(!file) return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      try{
+        const data=JSON.parse(ev.target.result);
+        if(!Array.isArray(data)) throw new Error('Format invalide');
+        // Validate entries have required fields
+        const valid=data.filter(entry=>entry.raw&&entry.date&&typeof entry.scoreOut==='number');
+        if(!valid.length) throw new Error('Aucune entrée valide');
+        Store.write('history',valid.slice(0,20));
+        const history=HistoryData.getAll();
+        State.set({history});Renderer.renderHistory(history);
+        document.getElementById('btn-export').disabled=!history.length;
+        Toast.show(`${valid.length} entrée(s) importée(s)`,'success');
+      }catch(err){
+        Toast.show('Import échoué : '+err.message.slice(0,40),'error');
+      }finally{
+        e.target.value=''; // reset input for re-import
+      }
+    };
+    reader.readAsText(file);
+  }
+
   function clear(){
     document.getElementById('input-prompt').value='';
     Renderer.setScore(document.getElementById('score-in-bar'),document.getElementById('score-in-val'),document.getElementById('score-in-bar-wrap'),0,'original');
     Renderer.setScore(document.getElementById('score-out-bar'),document.getElementById('score-out-val'),document.getElementById('score-out-bar-wrap'),0,'amélioré');
     Renderer.renderOutput(null,null,'result',null,null);Renderer.renderChips([]);
     Renderer.updateCharCount(0);Renderer.updateOutCharCount(null);Renderer.setStatus('Prêt');
-    document.getElementById('btn-copy').disabled=true;document.getElementById('btn-iterate').disabled=true;
+    document.getElementById('btn-copy').disabled=true;document.getElementById('btn-share').disabled=true;document.getElementById('btn-txt').disabled=true;document.getElementById('btn-iterate').disabled=true;
     State.set({inputValue:'',outputRaw:'',outputSections:null,scoreIn:0,scoreOut:0,chips:[]});
   }
 
@@ -1132,8 +1212,12 @@ const Controller = (() => {
 
     document.getElementById('btn-forge').addEventListener('click',forge);
     document.getElementById('btn-copy').addEventListener('click',copy);
+    document.getElementById('btn-share').addEventListener('click',sharePrompt);
+    document.getElementById('btn-txt').addEventListener('click',exportTxt);
     document.getElementById('btn-clear').addEventListener('click',clear);
     document.getElementById('btn-export').addEventListener('click',HistoryData.exportJson);
+    document.getElementById('btn-import').addEventListener('click',importJson);
+    document.getElementById('file-import').addEventListener('change',handleImport);
     document.getElementById('btn-iterate').addEventListener('click',iterate);
     document.getElementById('theme-toggle').addEventListener('click',Theme.toggle);
     document.getElementById('mode-local').addEventListener('click',()=>setMode('local'));
