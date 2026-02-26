@@ -1094,8 +1094,22 @@ const Controller = (() => {
     await runForge(outputRaw);
   }
 
+  function getEffectiveOutput(){
+    const s=State.get();
+    if(s.outputRaw&&s.outputRaw!=='') return s.outputRaw;
+    if(s.outputSections){
+      const sec=s.outputSections;
+      const tp=s.targetProvider||'universal';
+      if(tp==='claude') return `<role>\n${sec.role||''}\n</role>\n\n<context>\n${sec.context||''}\n</context>\n\n<instructions>\n${sec.mission||''}\n</instructions>\n\n<constraints>\n${sec.constraints||''}\n</constraints>\n\n<output_format>\n${sec.format||''}\n</output_format>`;
+      if(tp==='openai') return `--- SYSTEM ---\n${sec.role||''}\n\n--- USER ---\nContexte : ${sec.context||''}\n\nTâche : ${sec.mission||''}\n\nContraintes :\n${sec.constraints||''}\n\nFormat attendu :\n${sec.format||''}`;
+      if(tp==='gemini') return `CONTEXT: ${sec.role||''} ${sec.context||''}\n\nTASK: ${sec.mission||''}\n\nDETAILS: ${sec.constraints||''}\n\nOUTPUT: ${sec.format||''}`;
+      return ['# RÔLE\n'+(sec.role||''),'# CONTEXTE\n'+(sec.context||''),'# MISSION\n'+(sec.mission||''),'# CONTRAINTES\n'+(sec.constraints||''),'# FORMAT DE SORTIE\n'+(sec.format||'')].join('\n\n');
+    }
+    return '';
+  }
+
   async function copy(){
-    const raw=State.get().outputRaw;if(!raw) return;
+    const raw=getEffectiveOutput();if(!raw) return;
     try{
       if(navigator.clipboard&&window.isSecureContext)await navigator.clipboard.writeText(raw);
       else{const ta=document.createElement('textarea');ta.value=raw;ta.style.cssText='position:fixed;opacity:0;';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');document.body.removeChild(ta)}
@@ -1104,10 +1118,22 @@ const Controller = (() => {
   }
 
   async function sharePrompt(){
-    const raw=State.get().outputRaw;if(!raw) return;
+    const raw=getEffectiveOutput();if(!raw) return;
+    // Stratégie 1 : file-based share (fiable iOS Safari — text seul tronqué par l'OS)
+    if(navigator.canShare){
+      try{
+        const blob=new Blob([raw],{type:'text/plain'});
+        const file=new File([blob],'prompt.txt',{type:'text/plain'});
+        if(navigator.canShare({files:[file]})){
+          await navigator.share({files:[file]});
+          Toast.show('Partagé','success');return;
+        }
+      }catch(e){if(e.name==='AbortError') return;}
+    }
+    // Stratégie 2 : share text (Android/desktop Chrome)
     if(navigator.share){
       try{
-        await navigator.share({title:'Prompt optimisé',text:raw});
+        await navigator.share({title:'Prompt optimisé — PromptForge AI',text:raw});
         Toast.show('Partagé','success');
       }catch(e){
         if(e.name!=='AbortError') Toast.show('Erreur partage : '+e.message.slice(0,40),'error');
@@ -1123,7 +1149,7 @@ const Controller = (() => {
   }
 
   function exportTxt(){
-    const raw=State.get().outputRaw;if(!raw) return;
+    const raw=getEffectiveOutput();if(!raw) return;
     const encoded='data:text/plain;charset=utf-8,'+encodeURIComponent(raw);
     const a=document.createElement('a');
     a.href=encoded;
@@ -1178,10 +1204,18 @@ const Controller = (() => {
     Renderer.setScore(document.getElementById('score-in-bar'),document.getElementById('score-in-val'),document.getElementById('score-in-bar-wrap'),scoreIn,'original');
     Renderer.setScore(document.getElementById('score-out-bar'),document.getElementById('score-out-val'),document.getElementById('score-out-bar-wrap'),entry.scoreOut,'amélioré');
     const tab=State.get().outputTab;
-    const entryOutput=(entry.outputRaw&&entry.outputRaw!=='')?entry.outputRaw:null;
+    let entryOutput=(entry.outputRaw&&entry.outputRaw!=='')?entry.outputRaw:null;
+    // Reconstruire outputRaw depuis sections si absent (entrées legacy)
+    if(!entryOutput&&entry.sections){
+      const sec=entry.sections;const tp=entry.targetProvider||'universal';
+      if(tp==='claude') entryOutput=`<role>\n${sec.role||''}\n</role>\n\n<context>\n${sec.context||''}\n</context>\n\n<instructions>\n${sec.mission||''}\n</instructions>\n\n<constraints>\n${sec.constraints||''}\n</constraints>\n\n<output_format>\n${sec.format||''}\n</output_format>`;
+      else if(tp==='openai') entryOutput=`--- SYSTEM ---\n${sec.role||''}\n\n--- USER ---\nContexte : ${sec.context||''}\n\nTâche : ${sec.mission||''}\n\nContraintes :\n${sec.constraints||''}\n\nFormat attendu :\n${sec.format||''}`;
+      else if(tp==='gemini') entryOutput=`CONTEXT: ${sec.role||''} ${sec.context||''}\n\nTASK: ${sec.mission||''}\n\nDETAILS: ${sec.constraints||''}\n\nOUTPUT: ${sec.format||''}`;
+      else entryOutput=['# RÔLE\n'+(sec.role||''),'# CONTEXTE\n'+(sec.context||''),'# MISSION\n'+(sec.mission||''),'# CONTRAINTES\n'+(sec.constraints||''),'# FORMAT DE SORTIE\n'+(sec.format||'')].join('\n\n');
+    }
     Renderer.renderOutput(entry.sections,entry.sections?null:(entryOutput||''),tab,entry.raw,entryOutput||'');
     State.set({inputValue:entry.raw,outputRaw:entryOutput||'',outputSections:entry.sections,scoreIn,scoreOut:entry.scoreOut});
-    const hasOutput=!!entryOutput;
+    const hasOutput=!!(entryOutput&&entryOutput!=='');
     document.getElementById('btn-copy').disabled=!hasOutput;
     document.getElementById('btn-share').disabled=!hasOutput;
     document.getElementById('btn-txt').disabled=!hasOutput;
