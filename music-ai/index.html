@@ -225,16 +225,21 @@
         <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai</div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        
-        <button onclick="showScreen('settings')" style="background:var(--card);border:1px solid var(--border);border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;">⚙️</button>
+      <div style="display:flex;align-items:center;gap:5px;">
+        <div onclick="showScreen('settings')" title="Statut API IA" style="display:flex;align-items:center;gap:3px;padding:3px 7px;border-radius:50px;background:var(--card);border:1px solid var(--border);cursor:pointer;">
+          <span style="font-size:10px;">🤖</span><span id="api-dot-ai" style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0;transition:background 0.3s;"></span>
+        </div>
+        <div onclick="showScreen('settings')" title="Quota YouTube" style="display:flex;align-items:center;gap:3px;padding:3px 7px;border-radius:50px;background:var(--card);border:1px solid var(--border);cursor:pointer;">
+          <span style="font-size:10px;">▶</span><span id="api-dot-yt" style="width:6px;height:6px;border-radius:50%;background:#ef4444;flex-shrink:0;transition:background 0.3s;"></span><span id="yt-quota-display" style="font-size:9px;color:var(--muted);margin-left:2px;">0/100</span>
+        </div>
+        <button onclick="showScreen('settings')" style="background:var(--card);border:1px solid var(--border);border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;">⚙️</button>
       </div>
     </div>
 
     <div id="tab-content" style="flex:1;overflow:hidden;position:relative;">
       <!-- HOME -->
       <div id="tab-home" class="tab-panel scroll-y" style="position:absolute;inset:0;padding:0 20px 12px;">
-        <div style="display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;-webkit-overflow-scrolling:touch;">
+        <div style="display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x;">
           <button class="mode-chip active" data-mode="onetap" onclick="setMode('onetap')">✨ One-Tap</button>
           <button class="mode-chip" data-mode="mood" onclick="setMode('mood')">🎭 Humeur</button>
           <button class="mode-chip" data-mode="activity" onclick="setMode('activity')">🏃 Activité</button>
@@ -477,6 +482,10 @@ async function ytPlay(track){
   updateMiniPlayer(track.title,track.artist);
   const key=getYtKey();
   if(!key){ytShowFallbackToast(track);return}
+  // MOBILE AUTOPLAY: playVideo()+mute() AVANT tout await pour rester dans le user-gesture stack
+  if(ST.ytPlayerReady&&ST.ytPlayer){
+    try{ST.ytPlayer.mute();ST.ytPlayer.setVolume(0);ST.ytPlayer.playVideo();}catch(e){}
+  }
   toast('🔍 Recherche…');
   const q=track.ytQuery||track.youtube_query||`${track.artist} ${track.title} official audio`;
   const vid=await ytSearch(q);
@@ -486,10 +495,14 @@ async function ytPlay(track){
   ST.currentTrack.thumb=_thumb;
   updateMiniPlayerArtwork(_thumb);
   if(ST.ytPlayerReady&&ST.ytPlayer&&ST.ytPlayer.loadVideoById){
-    ST.ytPlayer.mute();ST.ytPlayer.setVolume(0);
     ST.ytPlayer.loadVideoById(vid);
-    ST.ytPlayer.playVideo();
-    setTimeout(()=>{if(ST.ytPlayer&&ST.ytPlayer.unMute){ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume||80);}},800);
+    setTimeout(()=>{
+      if(ST.ytPlayer&&ST.ytPlayer.unMute){
+        ST.ytPlayer.unMute();
+        ST.ytPlayer.setVolume(ST.volume||80);
+        ST.ytPlayer.playVideo();
+      }
+    },600);
   }else{
     document.getElementById('yt-bg-iframe').innerHTML=`<iframe src="https://www.youtube.com/embed/${vid}?autoplay=1&playsinline=1&enablejsapi=1&rel=0" allow="autoplay;encrypted-media" style="width:1px;height:1px;opacity:0.01;border:none;"></iframe>`;
   }
@@ -685,11 +698,11 @@ function finishOnboarding(){
   const adventure=parseInt(document.getElementById('adventure-slider').value)/100;
   saveProfile({genres:ST.selGenres,eras:ST.selEras,artists,contexts:ST.selContexts,adventurousness:adventure,disliked:[],interactions:0,completedOnboarding:true});
   saveConfig({provider:ST.obProvider,model,apiKey});
-  showScreen('main');initMainApp();
+  showScreen('main');initMainApp();setTimeout(updateApiStatus,200);
 }
 
 // ── MAIN ──
-function initMainApp(){
+function initMainApp(){updateApiStatus();
   const h=new Date().getHours();
   document.getElementById('greeting-text').textContent=h<12?'Bonne matinée ☀️':h<18?'Bonne après-midi':'Bonne soirée 🌙';
   document.getElementById('mood-grid').innerHTML=MOODS.map(m=>`<button class="mood-chip" data-id="${m.id}" onclick="selectMood('${m.id}',this)"><div style="font-size:1.3rem;margin-bottom:3px;">${m.emoji}</div><div style="font-size:10px;">${m.label}</div></button>`).join('');
