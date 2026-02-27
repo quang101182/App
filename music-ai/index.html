@@ -108,7 +108,7 @@
 <div id="yt-bg-player" style="position:fixed;bottom:-1px;right:-1px;width:1px;height:1px;opacity:0.01;pointer-events:none;z-index:-1;"><div id="yt-bg-iframe"></div></div>
 
 <div id="kiosk-overlay" class="hidden" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.92);align-items:center;justify-content:center;flex-direction:column;gap:20px;backdrop-filter:blur(20px);">
-  <div id="ko-art" style="width:120px;height:120px;border-radius:24px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:3rem;box-shadow:0 0 60px rgba(124,58,237,0.4);">🎵</div>
+  <div id="ko-artwork" style="width:120px;height:120px;border-radius:24px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:3rem;box-shadow:0 0 60px rgba(124,58,237,0.4);background-size:cover;background-position:center;">🎵</div>
   <div style="text-align:center;">
     <div id="ko-title" class="syne" style="font-size:1.4rem;font-weight:800;margin-bottom:4px;"></div>
     <div id="ko-artist" style="color:var(--muted);font-size:14px;"></div>
@@ -226,7 +226,7 @@
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
-        <button id="radio-btn" onclick="toggleRadio()"><div id="radio-dot"></div><span id="radio-label">Radio</span></button>
+        
         <button onclick="showScreen('settings')" style="background:var(--card);border:1px solid var(--border);border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;">⚙️</button>
       </div>
     </div>
@@ -290,15 +290,15 @@
 
     <!-- Mini player V2 -->
     <div id="mini-player" class="hidden">
-      <div id="mp-track-bar" style="display:flex;align-items:center;gap:10px;padding:10px 16px 6px;">
-        <button class="mini-btn" id="mp-playpause" onclick="ytTogglePlay()" title="Play/Pause">⏸</button>
-        <div style="flex:1;min-width:0;">
-          <div id="mini-player-title" style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</div>
-          <div id="mini-player-artist" style="font-size:11px;color:var(--muted);">—</div>
+      <div id="mp-track-bar" style="display:flex;align-items:center;gap:8px;padding:8px 12px 4px;">
+        <div id="mp-artwork" onclick="enterKiosk()" title="Mode kiosque" style="width:38px;height:38px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem;background-size:cover;background-position:center;cursor:pointer;">🎵</div>
+        <div style="flex:1;min-width:0;overflow:hidden;">
+          <div id="mini-player-title" style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</div>
+          <div id="mini-player-artist" style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</div>
         </div>
+        <button class="mini-btn" id="mp-playpause" onclick="ytTogglePlay()" title="Play/Pause">⏸</button>
         <button class="mini-btn" onclick="ytPrev()" title="Précédent">⏮</button>
         <button class="mini-btn" onclick="ytNext()" title="Suivant">⏭</button>
-        <button class="mini-btn" onclick="enterKiosk()" title="Mode kiosque" style="font-size:0.85rem;">⛶</button>
         <button class="mini-btn" onclick="ytStop()" title="Arrêter">✕</button>
       </div>
       <div style="padding:0 16px 2px;"><div id="mp-progress" onclick="mpSeek(event)" style="width:100%;height:12px;background:transparent;border-radius:6px;cursor:pointer;position:relative;display:flex;align-items:center;" title="Cliquer pour naviguer"><div style="position:absolute;inset:4px 0;background:rgba(255,255,255,0.1);border-radius:2px;pointer-events:none;"></div><div id="mp-progress-fill" style="position:absolute;inset:4px auto 4px 0;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;width:0%;pointer-events:none;transition:width 0.5s linear;"></div></div></div>
@@ -399,7 +399,11 @@
   </div>
 
 <script>
-const LS_PROFILE='music_ai_profile',LS_CONFIG='music_ai_config',LS_HISTORY='music_ai_history',LS_YT_KEY='music_ai_yt_key';
+const LS_PROFILE='music_ai_profile',LS_CONFIG='music_ai_config',LS_HISTORY='music_ai_history',LS_YT_KEY='music_ai_yt_key',LS_YT_QUOTA='music_ai_yt_quota';
+const YT_QUOTA_MAX=100;
+function getQuota(){try{const q=JSON.parse(localStorage.getItem(LS_YT_QUOTA));const today=new Date().toISOString().slice(0,10);if(!q||q.date!==today)return{count:0,date:today};return q;}catch{return{count:0,date:new Date().toISOString().slice(0,10)}}}
+function incQuota(){const q=getQuota();q.count++;localStorage.setItem(LS_YT_QUOTA,JSON.stringify(q));updateQuotaDisplay();return q.count;}
+function updateQuotaDisplay(){const q=getQuota();const c=q.count;const el=document.getElementById('yt-quota-display');if(el){el.textContent=`▶ ${c}/${YT_QUOTA_MAX}`;el.style.color=c>=YT_QUOTA_MAX?'#ef4444':c>=80?'#f59e0b':'var(--muted)';}}
 function getProfile(){try{return JSON.parse(localStorage.getItem(LS_PROFILE))}catch(e){return null}}
 function saveProfile(p){localStorage.setItem(LS_PROFILE,JSON.stringify(p))}
 function getConfig(){try{const c=JSON.parse(localStorage.getItem(LS_CONFIG));return c||{provider:'claude',model:'claude-opus-4-6',apiKey:''}}catch(e){return{provider:'claude',model:'claude-opus-4-6',apiKey:''}}}
@@ -416,9 +420,7 @@ const MOODS=[{id:'energique',label:'Énergie',emoji:'⚡'},{id:'melancolique',la
 const ACTIVITIES=[{id:'running',label:'🏃 Running'},{id:'gym',label:'💪 Gym'},{id:'coding',label:'💻 Coding'},{id:'cuisine',label:'🍳 Cuisine'},{id:'conduite',label:'🚗 Conduite'},{id:'meditation',label:'🧘 Méditation'}];
 const MODELS={claude:['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001'],gemini:['gemini-2.0-flash','gemini-1.5-pro','gemini-1.5-flash'],openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo']};
 const ADVENTURE_LABELS=[[0,'Confort absolu'],[25,'Plutôt classique'],[40,'Équilibré'],[60,'Curieux'],[80,'Aventurier'],[100,'Explorateur']];
-const RADIO_MS=4*60*1000;
-
-let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,radioMode:false,radioTimer:null,sessionThread:[],sessionStart:Date.now()};
+let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,continuousMode:false,volume:80,sleepMinutes:0,sleepTimer:null,sessionThread:[],sessionStart:Date.now()};
 
 let _tt=null;
 function toast(msg,dur=2400){const el=document.getElementById('toast');el.textContent=msg;el.classList.remove('hidden');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.add('hidden'),dur)}
@@ -426,9 +428,15 @@ function toast(msg,dur=2400){const el=document.getElementById('toast');el.textCo
 // ── YOUTUBE ──
 async function ytSearch(query){
   const key=getYtKey();if(!key)return null;
+  const q=getQuota();
+  if(q.count>=YT_QUOTA_MAX){toast('🚫 Quota YT épuisé (100/100) — recharge demain',4000);return null;}
   try{
     const r=await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=${encodeURIComponent(query)}&key=${key}`);
-    if(!r.ok)return null;
+    if(!r.ok){
+      if(r.status===403){toast('🚫 Quota YT Google épuisé ou clé invalide — vérifier ⚙️',5000);}
+      return null;
+    }
+    incQuota();
     const d=await r.json();return d.items?.[0]?.id?.videoId||null;
   }catch(e){return null}
 }
@@ -463,7 +471,6 @@ function onTrackEnded(){
   stopProgressTick();updatePlayPauseUI(false);
   if(ST.continuousMode){toast('🎵 Prochaine reco…');getRecommendation(ST.mode);return}
   if(ST.queue.length>0&&ST.queueIdx<ST.queue.length-1){ytNext();return}
-  if(ST.radioMode){scheduleRadio()}
 }
 async function ytPlay(track){
   ST.currentTrack={...track,videoId:null};
@@ -475,8 +482,14 @@ async function ytPlay(track){
   const vid=await ytSearch(q);
   if(!vid){ytShowFallbackToast(track);return}
   ST.currentTrack.videoId=vid;
+  const _thumb=`https://img.youtube.com/vi/${vid}/mqdefault.jpg`;
+  ST.currentTrack.thumb=_thumb;
+  updateMiniPlayerArtwork(_thumb);
   if(ST.ytPlayerReady&&ST.ytPlayer&&ST.ytPlayer.loadVideoById){
-    ST.ytPlayer.loadVideoById(vid);setTimeout(()=>{if(ST.ytPlayer&&ST.ytPlayer.unMute){ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume);ST.ytPlayer.playVideo();}},300);
+    ST.ytPlayer.mute();ST.ytPlayer.setVolume(0);
+    ST.ytPlayer.loadVideoById(vid);
+    ST.ytPlayer.playVideo();
+    setTimeout(()=>{if(ST.ytPlayer&&ST.ytPlayer.unMute){ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume||80);}},800);
   }else{
     document.getElementById('yt-bg-iframe').innerHTML=`<iframe src="https://www.youtube.com/embed/${vid}?autoplay=1&playsinline=1&enablejsapi=1&rel=0" allow="autoplay;encrypted-media" style="width:1px;height:1px;opacity:0.01;border:none;"></iframe>`;
   }
@@ -491,6 +504,7 @@ function ytStop(){
   stopProgressTick();ST.currentTrack=null;
   const mp=document.getElementById('mini-player');if(mp)mp.classList.add('hidden');
   const pf=document.getElementById('mp-progress-fill');if(pf)pf.style.width='0%';
+  updateMiniPlayerArtwork(null);
   if(ST.continuousMode)toggleContinuous();
 }
 function ytOpenExternal(){
@@ -508,7 +522,7 @@ function ytPrev(){
 }
 function ytNext(){
   if(ST.queue.length>0&&ST.queueIdx<ST.queue.length-1){ST.queueIdx++;ytPlay(ST.queue[ST.queueIdx]);return}
-  if(ST.continuousMode||ST.radioMode){getRecommendation(ST.mode);return}
+  if(ST.continuousMode){getRecommendation(ST.mode);return}
   toast('Fin de la file — active 🔄 Auto ou 📻 Radio');
 }
 function setVolume(v){
@@ -535,6 +549,12 @@ function updateMiniPlayer(title,artist){
   document.getElementById('mini-player').classList.remove('hidden');
   const kt=document.getElementById('ko-title');const ka=document.getElementById('ko-artist');
   if(kt)kt.textContent=title||'—';if(ka)ka.textContent=artist||'—';
+}
+function updateMiniPlayerArtwork(thumb){
+  const el=document.getElementById('mp-artwork');
+  if(el){if(thumb){el.style.backgroundImage=`url(${thumb})`;el.textContent='';}else{el.style.backgroundImage='none';el.textContent='🎵';}}
+  const ko=document.getElementById('ko-artwork');
+  if(ko){if(thumb){ko.style.backgroundImage=`url(${thumb})`;ko.textContent='';}else{ko.style.backgroundImage='none';ko.textContent='🎵';}}
 }
 function ytAddToQueue(){
   if(!ST.currentTrack)return;
@@ -568,14 +588,7 @@ function setSleepTimer(minutes){
   if(btn)btn.textContent=`😴 ${minutes}m`;toast(`😴 Arrêt dans ${minutes} min`);
   ST.sleepTimer=setTimeout(()=>{ytStop();toast('😴 Bonne nuit');ST.sleepMinutes=0;const b=document.getElementById('mp-sleep-btn');if(b)b.textContent='😴'},minutes*60*1000);
 }
-function toggleRadio(){
-  ST.radioMode=!ST.radioMode;
-  const btn=document.getElementById('radio-btn');
-  document.getElementById('radio-label').textContent=ST.radioMode?'Radio ON':'Radio';
-  if(ST.radioMode){btn.classList.add('active');toast('📻 Radio ON — 1ère reco...');getRecommendation(ST.mode);scheduleRadio()}
-  else{btn.classList.remove('active');clearTimeout(ST.radioTimer);ST.radioTimer=null;toast('📻 Radio OFF')}
-}
-function scheduleRadio(){if(!ST.radioMode)return;ST.radioTimer=setTimeout(async()=>{if(!ST.radioMode)return;toast('📻 Radio : nouvelle reco…');await getRecommendation(ST.mode);scheduleRadio()},RADIO_MS)}
+
 const LS_PL='music_ai_playlists';
 function getPlaylists(){try{return JSON.parse(localStorage.getItem(LS_PL))||[]}catch{return[]}}
 function savePlaylists(pl){localStorage.setItem(LS_PL,JSON.stringify(pl))}
@@ -752,6 +765,7 @@ async function getRecommendation(mode){
     ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre});
     if(ST.sessionThread.length>8)ST.sessionThread.shift();
     const p=getProfile();if(p){p.interactions=(p.interactions||0)+1;saveProfile(p)}
+    if(ST.continuousMode&&getYtKey()){const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;ytPlay({title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`});}
   }catch(e){resultEl.innerHTML=`<div style="color:#ef4444;font-size:13px;">⚠️ ${esc(e.message)}</div>`}
   if(mode==='onetap')document.getElementById('onetap-icon').textContent='♪';
   ST.isLoading=false;
@@ -860,16 +874,16 @@ function loadSettingsUI(){
   document.getElementById('cfg-ytkey').value=getYtKey();
   const p=getProfile();
   if(p){
-    document.getElementById('profile-summary').innerHTML=`<span style="color:var(--muted);font-size:11px;">Genres</span><br>${(p.genres||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Contextes</span><br>${(p.contexts||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Aventure</span><br>${Math.round((p.adventurousness||0)*100)}%`;
+    document.getElementById('profile-summary').innerHTML=`<span style="color:var(--muted);font-size:11px;">Genres</span><br>${(p.genres||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Époques</span><br>${(p.eras&&p.eras.length?p.eras.map(id=>{const e=ERAS.find(x=>x.id===id);return e?e.label:id}).join(', '):'Toutes')}<br><span style="color:var(--muted);font-size:11px;">Contextes</span><br>${(p.contexts||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Aventure</span><br>${Math.round((p.adventurousness||0)*100)}%`;
     const ta=document.getElementById('cfg-artists');if(ta)ta.value=(p.artists||[]).join('\n');
   }
   const h=getHistory();
-  document.getElementById('stats-display').innerHTML=`Interactions : ${p?.interactions||0}<br>Likes : ${h.filter(x=>x.action==='like').length}<br>Dislikes : ${h.filter(x=>x.action==='dislike').length}<br>Recos : ${h.filter(x=>x.action==='suggest'||x.action==='chat').length}<br>File : ${ST.queue.length} titre(s)<br>Fil de session : ${ST.sessionThread.length} titre(s)<br>Clé YouTube : ${getYtKey()?'✅ configurée':'❌ non configurée'}<br>Radio : ${ST.radioMode?'📻 ON':'OFF'}`;
+  const _q=getQuota();document.getElementById('stats-display').innerHTML=`Interactions : ${p?.interactions||0}<br>Likes : ${h.filter(x=>x.action==='like').length}<br>Dislikes : ${h.filter(x=>x.action==='dislike').length}<br>Recos : ${h.filter(x=>x.action==='suggest'||x.action==='chat').length}<br>File : ${ST.queue.length} titre(s)<br>Fil de session : ${ST.sessionThread.length} titre(s)<br>API IA : ${getConfig()?.apiKey?'✅':'❌ non configurée'}<br>API YouTube : ${getYtKey()?'✅':'❌ non configurée'}<br>Quota YT : <span style="color:${_q.count>=100?'#ef4444':_q.count>=80?'#f59e0b':'inherit'}">${_q.count}/${YT_QUOTA_MAX} aujourd\'hui</span>`;
 }
-function saveSettings(){const k=document.getElementById('cfg-apikey').value.trim();if(!k){toast('⚠️ Clé API requise');return}const m=document.getElementById('cfg-model').value;saveConfig({provider:ST.cfgProvider,model:m,apiKey:k});toast('✅ Config IA sauvegardée')}
-function saveYtKey(){const k=document.getElementById('cfg-ytkey').value.trim();setYtKey(k);toast(k?'✅ Clé YouTube sauvegardée':'⚠️ Clé YT effacée')}
-function saveArtists(){const p=getProfile();if(!p){toast('⚠️ Profil introuvable');return}p.artists=document.getElementById('cfg-artists').value.split('\n').map(x=>x.trim()).filter(Boolean);saveProfile(p);toast('✅ Artistes mis à jour');document.getElementById('profile-summary').innerHTML=`<span style="color:var(--muted);font-size:11px;">Genres</span><br>${(p.genres||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Contextes</span><br>${(p.contexts||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Aventure</span><br>${Math.round((p.adventurousness||0)*100)}%`}
-function resetOnboarding(){if(!confirm('Réinitialiser tout le profil et l\'historique ?\nAction irréversible.'))return;[LS_PROFILE,LS_CONFIG,LS_HISTORY,LS_YT_KEY].forEach(k=>localStorage.removeItem(k));location.reload()}
+function saveSettings(){const k=document.getElementById('cfg-apikey').value.trim();if(!k){toast('⚠️ Clé API requise');return}const m=document.getElementById('cfg-model').value;saveConfig({provider:ST.cfgProvider,model:m,apiKey:k});toast('✅ Config IA sauvegardée');updateApiStatus()}
+function saveYtKey(){const k=document.getElementById('cfg-ytkey').value.trim();setYtKey(k);toast(k?'✅ Clé YouTube sauvegardée':'⚠️ Clé YT effacée');updateApiStatus()}
+function saveArtists(){const p=getProfile();if(!p){toast('⚠️ Profil introuvable');return}p.artists=document.getElementById('cfg-artists').value.split('\n').map(x=>x.trim()).filter(Boolean);saveProfile(p);toast('✅ Artistes mis à jour');document.getElementById('profile-summary').innerHTML=`<span style="color:var(--muted);font-size:11px;">Genres</span><br>${(p.genres||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Époques</span><br>${(p.eras&&p.eras.length?p.eras.map(id=>{const e=ERAS.find(x=>x.id===id);return e?e.label:id}).join(', '):'Toutes')}<br><span style="color:var(--muted);font-size:11px;">Contextes</span><br>${(p.contexts||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Aventure</span><br>${Math.round((p.adventurousness||0)*100)}%`}
+function resetOnboarding(){if(!confirm('Réinitialiser les préférences et l\'historique ?\nLes clés API seront conservées.'))return;[LS_PROFILE,LS_HISTORY].forEach(k=>localStorage.removeItem(k));location.reload()}
 
 // ── NAV ──
 function showScreen(name){document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');s.classList.add('hidden')});const t=document.getElementById(`screen-${name}`);if(t){t.classList.remove('hidden');t.classList.add('active')}if(name==='settings')loadSettingsUI()}
@@ -880,7 +894,15 @@ function switchTab(tab){ST.tab=tab;document.querySelectorAll('.tab-panel').forEa
 function esc(s=''){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 
 // ── BOOT ──
-function boot(){const p=getProfile();const c=getConfig();if(p?.completedOnboarding&&c?.apiKey){showScreen('main');initMainApp()}else{showScreen('onboard');initOnboarding()}}
+function updateApiStatus(){
+  const cfg=getConfig();const hasAI=!!(cfg&&cfg.apiKey);const hasYT=!!getYtKey();
+  const aiDot=document.getElementById('api-dot-ai');
+  const ytDot=document.getElementById('api-dot-yt');
+  if(aiDot)aiDot.style.background=hasAI?'#22c55e':'#ef4444';
+  if(ytDot)ytDot.style.background=hasYT?'#22c55e':'#ef4444';
+  updateQuotaDisplay();
+}
+function boot(){const p=getProfile();const c=getConfig();if(p?.completedOnboarding&&c?.apiKey){showScreen('main');initMainApp();setTimeout(updateApiStatus,100)}else{showScreen('onboard');initOnboarding();}}
 boot();
 </script>
 </body>
