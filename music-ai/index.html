@@ -94,7 +94,7 @@
   #mini-player.hidden { transform:translateY(100%); opacity:0; pointer-events:none; }
   #mini-player-title { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #mini-player-artist { font-size:11px; color:var(--muted); }
-  .mini-btn { width:36px; height:36px; border-radius:50%; background:var(--card); border:1px solid var(--border); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0; }
+  .mini-btn { width:44px; height:44px; border-radius:50%; background:var(--card); border:1px solid var(--border); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; touch-action:manipulation; }
   /* RADIO */
   #radio-btn { padding:6px 12px; border-radius:50px; background:var(--card); border:1px solid var(--border); font-family:inherit; font-size:12px; font-weight:600; color:var(--muted); cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:5px; }
   #radio-btn.active { border-color:#ef4444; background:rgba(239,68,68,0.15); color:#ef4444; }
@@ -106,7 +106,7 @@
 </head>
 <body>
 <div class="ambient"></div>
-<div id="yt-bg-player" style="position:fixed;bottom:-1px;right:-1px;width:1px;height:1px;opacity:0.01;pointer-events:none;z-index:-1;"><div id="yt-bg-iframe"></div></div>
+<div id="yt-bg-player" style="position:fixed;left:-9999px;top:-9999px;width:320px;height:180px;pointer-events:none;z-index:-1;visibility:hidden;"><div id="yt-bg-iframe"></div></div>
 
 <div id="kiosk-overlay" class="hidden" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.92);align-items:center;justify-content:center;flex-direction:column;gap:20px;backdrop-filter:blur(20px);">
   <div id="ko-artwork" style="width:120px;height:120px;border-radius:24px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:3rem;box-shadow:0 0 60px rgba(124,58,237,0.4);background-size:cover;background-position:center;">🎵</div>
@@ -307,7 +307,7 @@
         <button class="mini-btn" onclick="ytNext()" title="Suivant">⏭</button>
         <button class="mini-btn" onclick="ytStop()" title="Arrêter">✕</button>
       </div>
-      <div style="padding:0 16px 2px;"><div id="mp-progress" onclick="mpSeek(event)" style="width:100%;height:12px;background:transparent;border-radius:6px;cursor:pointer;position:relative;display:flex;align-items:center;" title="Cliquer pour naviguer"><div style="position:absolute;inset:4px 0;background:rgba(255,255,255,0.1);border-radius:2px;pointer-events:none;"></div><div id="mp-progress-fill" style="position:absolute;inset:4px auto 4px 0;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;width:0%;pointer-events:none;transition:width 0.5s linear;"></div></div></div>
+      <div style="padding:0 16px 2px;"><div id="mp-progress" onclick="mpSeek(event)" ontouchstart="mpSeek(event)" ontouchend="mpSeek(event)" style="width:100%;height:20px;background:transparent;border-radius:6px;cursor:pointer;position:relative;display:flex;align-items:center;touch-action:none;" title="Cliquer pour naviguer"><div style="position:absolute;inset:8px 0;background:rgba(255,255,255,0.1);border-radius:2px;pointer-events:none;"></div><div id="mp-progress-fill" style="position:absolute;inset:8px auto 8px 0;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;width:0%;pointer-events:none;transition:width 0.5s linear;"></div></div></div>
             <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 12px 8px;gap:4px;">
         <div style="display:flex;align-items:center;gap:5px;min-width:0;">
           <span style="font-size:0.8rem;flex-shrink:0;">🔈</span>
@@ -426,7 +426,7 @@ const MOODS=[{id:'energique',label:'Énergie',emoji:'⚡'},{id:'melancolique',la
 const ACTIVITIES=[{id:'running',label:'🏃 Running'},{id:'gym',label:'💪 Gym'},{id:'coding',label:'💻 Coding'},{id:'cuisine',label:'🍳 Cuisine'},{id:'conduite',label:'🚗 Conduite'},{id:'meditation',label:'🧘 Méditation'}];
 const MODELS={claude:['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001'],gemini:['gemini-2.0-flash','gemini-1.5-pro','gemini-1.5-flash'],openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo']};
 const ADVENTURE_LABELS=[[0,'Confort absolu'],[25,'Plutôt classique'],[40,'Équilibré'],[60,'Curieux'],[80,'Aventurier'],[100,'Explorateur']];
-let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,continuousMode:false,volume:80,sleepMinutes:0,sleepTimer:null,sessionThread:[],sessionStart:Date.now()};
+let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,continuousMode:false,volume:80,sleepMinutes:0,sleepTimer:null,sessionThread:[],sessionStart:Date.now(),_pendingUnmute:null};
 
 let _tt=null;
 function toast(msg,dur=2400){const el=document.getElementById('toast');el.textContent=msg;el.classList.remove('hidden');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.add('hidden'),dur)}
@@ -448,16 +448,23 @@ async function ytSearch(query){
 }
 window.onYouTubeIframeAPIReady=function(){
   ST.ytPlayer=new YT.Player('yt-bg-iframe',{
-    height:'1',width:'1',
-    playerVars:{autoplay:1,playsinline:1,rel:0,modestbranding:1,enablejsapi:1,mute:0},
+    height:'180',width:'320',
+    playerVars:{autoplay:0,playsinline:1,rel:0,modestbranding:1,enablejsapi:1,mute:0,origin:window.location.origin||''},
     events:{
-      onReady:function(e){ST.ytPlayerReady=true;e.target.setVolume(ST.volume)},
+      onReady:function(e){ST.ytPlayerReady=true;e.target.setVolume(ST.volume);},
       onStateChange:function(e){
-        if(e.data===1){updatePlayPauseUI(true);startProgressTick();if(ST.ytPlayer&&ST.ytPlayer.unMute){ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume);}}
-        if(e.data===2){updatePlayPauseUI(false);stopProgressTick()}
-        if(e.data===0){onTrackEnded()}
+        if(e.data===1){updatePlayPauseUI(true);startProgressTick();
+          // Ensure unmuted after state=playing (mobile autoplay fix)
+          if(ST._pendingUnmute){clearTimeout(ST._pendingUnmute);}
+          ST._pendingUnmute=setTimeout(()=>{
+            try{if(ST.ytPlayer&&ST.ytPlayer.unMute){ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume||80);}}catch(_){}
+            ST._pendingUnmute=null;
+          },200);
+        }
+        if(e.data===2){updatePlayPauseUI(false);stopProgressTick();}
+        if(e.data===0){onTrackEnded();}
       },
-      onError:function(e){if(ST.currentTrack)ytShowFallbackToast(ST.currentTrack)}
+      onError:function(e){if(ST.currentTrack)ytShowFallbackToast(ST.currentTrack);}
     }
   });
 };
@@ -483,29 +490,26 @@ async function ytPlay(track){
   updateMiniPlayer(track.title,track.artist);
   const key=getYtKey();
   if(!key){ytShowFallbackToast(track);return}
-  // MOBILE AUTOPLAY: playVideo()+mute() AVANT tout await pour rester dans le user-gesture stack
+  // MOBILE AUDIO FIX: make player visible during user-gesture stack, then cue silently
+  const bgWrap=document.getElementById('yt-bg-player');
+  if(bgWrap)bgWrap.style.visibility='visible';
+  // Initiate play within gesture stack (before await breaks it)
   if(ST.ytPlayerReady&&ST.ytPlayer){
     try{ST.ytPlayer.mute();ST.ytPlayer.setVolume(0);ST.ytPlayer.playVideo();}catch(e){}
   }
   toast('🔍 Recherche…');
   const q=track.ytQuery||track.youtube_query||`${track.artist} ${track.title} official audio`;
   const vid=await ytSearch(q);
-  if(!vid){ytShowFallbackToast(track);return}
+  if(!vid){if(bgWrap)bgWrap.style.visibility='hidden';ytShowFallbackToast(track);return}
   ST.currentTrack.videoId=vid;
   const _thumb=`https://img.youtube.com/vi/${vid}/mqdefault.jpg`;
   ST.currentTrack.thumb=_thumb;
   updateMiniPlayerArtwork(_thumb);
   if(ST.ytPlayerReady&&ST.ytPlayer&&ST.ytPlayer.loadVideoById){
     ST.ytPlayer.loadVideoById(vid);
-    setTimeout(()=>{
-      if(ST.ytPlayer&&ST.ytPlayer.unMute){
-        ST.ytPlayer.unMute();
-        ST.ytPlayer.setVolume(ST.volume||80);
-        ST.ytPlayer.playVideo();
-      }
-    },600);
+    // unMute handled in onStateChange after state=1 (playing) fires
   }else{
-    document.getElementById('yt-bg-iframe').innerHTML=`<iframe src="https://www.youtube.com/embed/${vid}?autoplay=1&playsinline=1&enablejsapi=1&rel=0" allow="autoplay;encrypted-media" style="width:1px;height:1px;opacity:0.01;border:none;"></iframe>`;
+    document.getElementById('yt-bg-iframe').innerHTML=`<iframe src="https://www.youtube.com/embed/${vid}?autoplay=1&playsinline=1&enablejsapi=1&rel=0" allow="autoplay;encrypted-media" style="width:320px;height:180px;border:none;"></iframe>`;
   }
   updatePlayPauseUI(true);
 }
@@ -519,6 +523,8 @@ function ytStop(){
   const mp=document.getElementById('mini-player');if(mp)mp.classList.add('hidden');
   const pf=document.getElementById('mp-progress-fill');if(pf)pf.style.width='0%';
   updateMiniPlayerArtwork(null);
+  const bgWrap=document.getElementById('yt-bg-player');
+  if(bgWrap)bgWrap.style.visibility='hidden';
   if(ST.continuousMode)toggleContinuous();
 }
 function ytOpenExternal(){
@@ -553,7 +559,8 @@ function mpSeek(e){
   if(!ST.ytPlayerReady||!ST.ytPlayer||!ST.ytPlayer.getDuration)return;
   const bar=document.getElementById('mp-progress');
   const rect=bar.getBoundingClientRect();
-  const pct=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
+  const clientX=e.touches?e.touches[0].clientX:(e.changedTouches?e.changedTouches[0].clientX:e.clientX);
+  const pct=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width));
   const dur=ST.ytPlayer.getDuration()||0;
   if(dur>0){ST.ytPlayer.seekTo(pct*dur,true);const el=document.getElementById('mp-progress-fill');if(el)el.style.width=(pct*100)+'%';}
 }
@@ -722,25 +729,45 @@ function setMode(mode){ST.mode=mode;document.querySelectorAll('.mode-chip').forE
 // ── AI ──
 function buildSystemPrompt(mode){
   const p=getProfile()||{};
-  const ctx=ST.selActivity||(p.contexts&&p.contexts[0])||'général';
+  // ALL contexts, not just first
+  const allContexts=(p.contexts&&p.contexts.length>0?p.contexts:[]).join(', ')||'général';
+  // mood: only use session mood if explicitly set, else 'neutre'
   const mood=ST.selMood||'neutre';
   const now=new Date();
   const h=now.getHours();
   const dow=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'][now.getDay()];
   const timeSlot=h<6?'nuit profonde':h<9?'petit matin':h<12?'matinée':h<14?'déjeuner':h<17?'après-midi':h<20?'fin de journée':h<23?'soirée':'nuit';
   const hist=getHistory().filter(x=>x.action==='suggest'||x.action==='chat').slice(0,15);
-  const recentTitles=[...new Set([...ST.sessionThread.map(x=>x.title+' — '+x.artist),...hist.map(x=>x.title+' — '+x.artist)])].slice(0,20);
+  // Dedup between sessionThread and history
+  const sessionSet=new Set(ST.sessionThread.map(x=>x.title+'|||'+x.artist));
+  const histTitles=hist.filter(x=>!sessionSet.has(x.title+'|||'+x.artist)).map(x=>x.title+' — '+x.artist);
+  const threadTitles=ST.sessionThread.map(x=>x.title+' — '+x.artist);
+  const recentTitles=[...new Set([...threadTitles,...histTitles])].slice(0,20);
   const threadDesc=ST.sessionThread.length>0
-    ?'PROGRESSION SESSION: '+ST.sessionThread.map((x,i)=>`${i+1}.${x.title}(${x.mood||'?'})`).join(' → ')
+    ?'PROGRESSION SESSION: '+ST.sessionThread.map((x,i)=>`${i+1}.${x.title}(${x.mood||'?'},score:${Math.round((x.discovery_score||0)*100)}%)`).join(' → ')
     :'Début de session.';
-  const modeInstr=mode==='discovery'?'MODE DÉCOUVERTE: pépite RADICALEMENT inattendue — artiste inconnu, genre non représenté, époque différente. Surprise absolue.':
+  // Adventure score drives discovery instructions
+  const adv=p.adventurousness??0.4;
+  const advInstr=adv>=0.7?'Aventure élevée: propose des artistes peu connus, sous-genres inattendus.'
+    :adv<=0.3?'Confort: reste proche des artistes référencés, genres principaux.'
+    :'Mix équilibré: varie entre valeurs sûres et découvertes modérées.';
+  const modeInstr=mode==='discovery'?'MODE DÉCOUVERTE: pépite RADICALEMENT inattendue — artiste inconnu, genre non représenté, époque différente. discovery_score > 0.8. Surprise absolue.':
     mode==='onetap'?'ONE-TAP: reco parfaite pour CE moment précis. Variété maximale vs sessions précédentes.':'';
-  const antiRepeat=recentTitles.length>0?'ANTI-RÉPÉTITION — NE JAMAIS proposer: '+recentTitles.join(' | '):'';
+  const antiRepeat=recentTitles.length>0?'ANTI-RÉPÉTITION ABSOLUE — NE JAMAIS proposer ces titres: '+recentTitles.join(' | '):'';
+  const dislikedSection=(p.disliked&&p.disliked.length>0)?'GENRES/ARTISTES À ÉVITER (dislikes utilisateur): '+p.disliked.slice(-20).join(', '):'';
   return `Tu es un expert mondial en recommandation musicale — connaissance encyclopédique de TOUS genres, époques, cultures, sous-cultures.
 
-PROFIL: genres=${(p.genres||[]).join(', ')||'nd'} | époques=${p.eras&&p.eras.length?p.eras.map(id=>{const e=ERAS.find(x=>x.id===id);return e?e.label+' '+e.range:id}).join(', '):'toutes'} | artistes=${(p.artists||[]).join(', ')||'nd'} | contextes=${(p.contexts||[]).join(', ')||'nd'} | éviter=${(p.disliked||[]).join(', ')||'aucun'} | aventure=${p.adventurousness??0.4} | ctx=${ctx} | humeur=${mood}
+PROFIL COMPLET:
+- Genres: ${(p.genres||[]).join(', ')||'non définis'}
+- Époques: ${p.eras&&p.eras.length?p.eras.map(id=>{const e=ERAS.find(x=>x.id===id);return e?e.label+' '+e.range:id}).join(', '):'toutes'}
+- Artistes de référence: ${(p.artists||[]).join(', ')||'non définis'}
+- Contextes d'écoute: ${allContexts}
+- Humeur actuelle: ${mood}
+- Niveau aventure: ${Math.round(adv*100)}% — ${advInstr}
 
-MOMENT: ${dow} ${timeSlot} (${h}h) — influence l'énergie et l'atmosphère.
+${dislikedSection}
+
+MOMENT: ${dow} ${timeSlot} (${h}h) — calibre énergie et atmosphère sur ce créneau.
 
 ${threadDesc}
 
@@ -748,7 +775,7 @@ ${antiRepeat}
 
 ${modeInstr}
 
-RÈGLE ABSOLUE: JSON UNIQUEMENT. Zéro texte avant/après. Zéro backtick.
+RÈGLE ABSOLUE: JSON UNIQUEMENT. Zéro texte avant/après. Zéro backtick. Zéro markdown.
 {"title":"...","artist":"...","genre":"...","year":2010,"mood":"...","why":"explication émotionnelle max 20 mots","story":"2-3 phrases: contexte création, anecdote, ce que Spotify ne dira jamais","now_reason":"1 phrase: pourquoi MAINTENANT ce ${timeSlot} de ${dow}","youtube_query":"artiste titre official audio","discovery_score":0.0}`;
 }
 async function callAI(sys,msg){
@@ -779,7 +806,7 @@ async function getRecommendation(mode){
     const rec=parseJSON(raw);
     renderCard(resultEl,rec);
     pushHistory({title:rec.title,artist:rec.artist,genre:rec.genre,action:'suggest',context:mode});
-    ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre});
+    ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
     if(ST.sessionThread.length>8)ST.sessionThread.shift();
     const p=getProfile();if(p){p.interactions=(p.interactions||0)+1;saveProfile(p)}
     if(ST.continuousMode&&getYtKey()){const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;ytPlay({title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`});}
@@ -820,10 +847,10 @@ function renderCard(container,rec){
       </div>
     </div>`;
   container.className='music-card appear';
-  const title=rec.title||'',artist=rec.artist||'',track={title,artist,ytQuery,ytUrl};
-  document.getElementById(`${id}-like`).onclick=()=>doFeedback(`${id}-like`,'like',title,artist);
-  document.getElementById(`${id}-dislike`).onclick=()=>doFeedback(`${id}-dislike`,'dislike',title,artist);
-  document.getElementById(`${id}-save`).onclick=()=>doFeedback(`${id}-save`,'save',title,artist);
+  const title=rec.title||'',artist=rec.artist||'',genre=rec.genre||'',track={title,artist,ytQuery,ytUrl};
+  document.getElementById(`${id}-like`).onclick=()=>doFeedback(`${id}-like`,'like',title,artist,genre);
+  document.getElementById(`${id}-dislike`).onclick=()=>doFeedback(`${id}-dislike`,'dislike',title,artist,genre);
+  document.getElementById(`${id}-save`).onclick=()=>doFeedback(`${id}-save`,'save',title,artist,genre);
   const _plB=document.getElementById(`${id}-pl`);
   if(_plB)_plB.onclick=()=>addToPlaylist({title:track.title,artist:track.artist,ytQuery:track.ytQuery||track.youtube_query,ytUrl});
   document.getElementById(`${id}-play`).onclick=()=>hasYT?ytPlay(track):window.open(ytUrl,'_blank','noopener');
@@ -838,7 +865,26 @@ function toggleStory(id){
   el.style.display=shown?'none':'block';
   btn.textContent=shown?"📖 Raconte-moi l'histoire →":"📖 Refermer ↑";
 }
-function doFeedback(btnId,action,title,artist){const btn=document.getElementById(btnId);if(!btn)return;btn.classList.add({like:'liked',dislike:'disliked',save:'saved'}[action]);btn.style.transform='scale(1.3)';setTimeout(()=>{if(btn)btn.style.transform=''},200);pushHistory({title,artist,action,context:ST.mode});toast({like:'👍 Pris en compte',dislike:'👎 Noté',save:'🔖 Sauvegardé'}[action])}
+function doFeedback(btnId,action,title,artist,genre){
+  const btn=document.getElementById(btnId);if(!btn)return;
+  btn.classList.add({like:'liked',dislike:'disliked',save:'saved'}[action]);
+  btn.style.transform='scale(1.3)';setTimeout(()=>{if(btn)btn.style.transform=''},200);
+  pushHistory({title,artist,action,context:ST.mode});
+  // Update profile disliked list on thumbs down
+  if(action==='dislike'){
+    const p=getProfile();
+    if(p){
+      if(!p.disliked)p.disliked=[];
+      const entry=genre?`${artist} (${genre})`:artist;
+      if(!p.disliked.includes(entry)){
+        p.disliked.push(entry);
+        if(p.disliked.length>40)p.disliked.shift();
+        saveProfile(p);
+      }
+    }
+  }
+  toast({like:'👍 Pris en compte',dislike:'👎 Noté — profil mis à jour',save:'🔖 Sauvegardé'}[action]);
+}
 
 // ── CHAT ──
 async function sendChat(){
@@ -859,7 +905,7 @@ async function sendChat(){
     document.getElementById(`${bid}-p`).onclick=()=>hasYT?ytPlay(track):window.open(ytUrl,'_blank','noopener');
     if(hasYT&&document.getElementById(`${bid}-q`))document.getElementById(`${bid}-q`).onclick=()=>{if(!ST.queue.find(t=>t.ytQuery===track.ytQuery)){ST.queue.push({...track});toast('🎵 Ajouté à la file');renderQueueList()}else toast('Déjà dans la file')};
     pushHistory({title:rec.title,artist:rec.artist,action:'chat',context:'chat'});
-    ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre});
+    ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
     if(ST.sessionThread.length>8)ST.sessionThread.shift();
   }catch(e){ab.innerHTML=`<span style="color:#ef4444;font-size:13px;">⚠️ ${esc(e.message)}</span>`}
   msgs.scrollTop=msgs.scrollHeight;ST.isLoading=false;
