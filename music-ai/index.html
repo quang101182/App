@@ -106,7 +106,7 @@
 </head>
 <body>
 <div class="ambient"></div>
-<div id="yt-bg-player" style="position:fixed;left:-9999px;top:-9999px;width:320px;height:180px;pointer-events:none;z-index:-1;visibility:hidden;"><div id="yt-bg-iframe"></div></div>
+<div id="yt-bg-player" style="position:fixed;left:0;bottom:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;z-index:-1;"><div id="yt-bg-iframe"></div></div>
 
 <div id="kiosk-overlay" class="hidden" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.92);align-items:center;justify-content:center;flex-direction:column;gap:20px;backdrop-filter:blur(20px);">
   <div id="ko-artwork" style="width:120px;height:120px;border-radius:24px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:3rem;box-shadow:0 0 60px rgba(124,58,237,0.4);background-size:cover;background-position:center;">🎵</div>
@@ -326,7 +326,7 @@
       <button class="tab-item active" data-tab="home" onclick="switchTab('home')"><span class="ti">🎵</span><span>Discover</span></button>
       <button class="tab-item" data-tab="chat" onclick="switchTab('chat')"><span class="ti">💬</span><span>Chat IA</span></button>
       <button class="tab-item" data-tab="history" onclick="switchTab('history')"><span class="ti">📋</span><span>Historique</span></button>
-      <button class="tab-item" data-tab="playlists" onclick="switchTab('playlists')"><span class="ti">💿</span><span>Playlists</span></button>
+      <button class="tab-item" data-tab="playlists" onclick="showScreen('playlists')"><span class="ti">💿</span><span>Playlists</span></button>
     </div>
   </div>
 
@@ -451,7 +451,12 @@ window.onYouTubeIframeAPIReady=function(){
     height:'180',width:'320',
     playerVars:{autoplay:0,playsinline:1,rel:0,modestbranding:1,enablejsapi:1,mute:0,origin:window.location.origin||''},
     events:{
-      onReady:function(e){ST.ytPlayerReady=true;e.target.setVolume(ST.volume);},
+      onReady:function(e){
+          ST.ytPlayerReady=true;e.target.setVolume(ST.volume);
+          // iOS Safari fix: inject allow="autoplay; encrypted-media" on the generated iframe
+          const ifr=document.querySelector('#yt-bg-player iframe');
+          if(ifr){ifr.setAttribute('allow','autoplay; encrypted-media; gyroscope; picture-in-picture');ifr.setAttribute('allowfullscreen','');}
+        },
       onStateChange:function(e){
         if(e.data===1){updatePlayPauseUI(true);startProgressTick();
           // Ensure unmuted after state=playing (mobile autoplay fix)
@@ -490,26 +495,29 @@ async function ytPlay(track){
   updateMiniPlayer(track.title,track.artist);
   const key=getYtKey();
   if(!key){ytShowFallbackToast(track);return}
-  // MOBILE AUDIO FIX: make player visible during user-gesture stack, then cue silently
-  const bgWrap=document.getElementById('yt-bg-player');
-  if(bgWrap)bgWrap.style.visibility='visible';
-  // Initiate play within gesture stack (before await breaks it)
+  // iOS AUDIO FIX: call unMute+playVideo synchronously in gesture stack to unlock audio context,
+  // then immediately mute while we await the search — the audio context stays unlocked
   if(ST.ytPlayerReady&&ST.ytPlayer){
-    try{ST.ytPlayer.mute();ST.ytPlayer.setVolume(0);ST.ytPlayer.playVideo();}catch(e){}
+    try{
+      ST.ytPlayer.unMute();   // ← unlock audio context on iOS (must be first, in gesture stack)
+      ST.ytPlayer.setVolume(0);
+      ST.ytPlayer.mute();
+      ST.ytPlayer.playVideo();
+    }catch(e){}
   }
   toast('🔍 Recherche…');
   const q=track.ytQuery||track.youtube_query||`${track.artist} ${track.title} official audio`;
   const vid=await ytSearch(q);
-  if(!vid){if(bgWrap)bgWrap.style.visibility='hidden';ytShowFallbackToast(track);return}
+  if(!vid){ytShowFallbackToast(track);return}
   ST.currentTrack.videoId=vid;
   const _thumb=`https://img.youtube.com/vi/${vid}/mqdefault.jpg`;
   ST.currentTrack.thumb=_thumb;
   updateMiniPlayerArtwork(_thumb);
   if(ST.ytPlayerReady&&ST.ytPlayer&&ST.ytPlayer.loadVideoById){
     ST.ytPlayer.loadVideoById(vid);
-    // unMute handled in onStateChange after state=1 (playing) fires
+    // unMute handled in onStateChange after state=1 fires
   }else{
-    document.getElementById('yt-bg-iframe').innerHTML=`<iframe src="https://www.youtube.com/embed/${vid}?autoplay=1&playsinline=1&enablejsapi=1&rel=0" allow="autoplay;encrypted-media" style="width:320px;height:180px;border:none;"></iframe>`;
+    document.getElementById('yt-bg-iframe').innerHTML=`<iframe src="https://www.youtube.com/embed/${vid}?autoplay=1&playsinline=1&enablejsapi=1&rel=0" allow="autoplay;encrypted-media" style="width:1px;height:1px;border:none;"></iframe>`;
   }
   updatePlayPauseUI(true);
 }
@@ -523,8 +531,6 @@ function ytStop(){
   const mp=document.getElementById('mini-player');if(mp)mp.classList.add('hidden');
   const pf=document.getElementById('mp-progress-fill');if(pf)pf.style.width='0%';
   updateMiniPlayerArtwork(null);
-  const bgWrap=document.getElementById('yt-bg-player');
-  if(bgWrap)bgWrap.style.visibility='hidden';
   if(ST.continuousMode)toggleContinuous();
 }
 function ytOpenExternal(){
@@ -559,7 +565,9 @@ function mpSeek(e){
   if(!ST.ytPlayerReady||!ST.ytPlayer||!ST.ytPlayer.getDuration)return;
   const bar=document.getElementById('mp-progress');
   const rect=bar.getBoundingClientRect();
-  const clientX=e.touches?e.touches[0].clientX:(e.changedTouches?e.changedTouches[0].clientX:e.clientX);
+  // touches is empty on touchend → use changedTouches; fallback to mouse event
+  const clientX=( (e.touches&&e.touches.length>0) ? e.touches[0].clientX : (e.changedTouches&&e.changedTouches.length>0 ? e.changedTouches[0].clientX : e.clientX) );
+  if(clientX==null||isNaN(clientX))return;
   const pct=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width));
   const dur=ST.ytPlayer.getDuration()||0;
   if(dur>0){ST.ytPlayer.seekTo(pct*dur,true);const el=document.getElementById('mp-progress-fill');if(el)el.style.width=(pct*100)+'%';}
@@ -581,6 +589,19 @@ function ytAddToQueue(){
   if(!ST.currentTrack)return;
   if(!ST.queue.find(t=>t.ytQuery===ST.currentTrack.ytQuery)){ST.queue.push({...ST.currentTrack});toast(`🎵 "${ST.currentTrack.title}" ajouté`)}
   else toast('Déjà dans la file');
+}
+function ytClose(){
+  const m=document.getElementById('yt-modal');if(m)m.classList.add('hidden');
+}
+function ytPlayNext(){ytNext();}
+function renderQueueList(){
+  const el=document.getElementById('yt-queue-panel');if(!el)return;
+  if(!ST.queue.length){el.innerHTML='<p style="color:var(--muted);font-size:12px;text-align:center;padding:24px 0;">File vide</p>';return;}
+  el.innerHTML=ST.queue.map((t,i)=>`<div class="queue-item${i===ST.queueIdx?' playing':''}" onclick="ST.queueIdx=${i};ytPlay(ST.queue[${i}])">
+    <div style="color:var(--muted);font-size:11px;min-width:20px;">${i+1}</div>
+    <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.title||'—')}</div><div style="font-size:11px;color:var(--muted);">${esc(t.artist||'')}</div></div>
+    <button class="queue-item-remove" onclick="event.stopPropagation();ST.queue.splice(${i},1);if(ST.queueIdx>=ST.queue.length)ST.queueIdx=Math.max(0,ST.queue.length-1);renderQueueList();">✕</button>
+  </div>`).join('');
 }
 function toggleContinuous(){
   ST.continuousMode=!ST.continuousMode;
@@ -782,9 +803,9 @@ async function callAI(sys,msg){
   const cfg=getConfig();const{provider,model,apiKey}=cfg;
   if(!apiKey)throw new Error('Clé API manquante — ouvre ⚙️');
   let url,headers,body;
-  if(provider==='claude'){url='https://api.anthropic.com/v1/messages';headers={'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};body=JSON.stringify({model,max_tokens:512,system:sys,messages:[{role:'user',content:msg}]})}
-  else if(provider==='gemini'){url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;headers={'Content-Type':'application/json'};body=JSON.stringify({contents:[{role:'user',parts:[{text:sys+'\n\n'+msg}]}],generationConfig:{maxOutputTokens:512,temperature:0.9}})}
-  else{url='https://api.openai.com/v1/chat/completions';headers={'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`};body=JSON.stringify({model,max_tokens:512,messages:[{role:'system',content:sys},{role:'user',content:msg}]})}
+  if(provider==='claude'){url='https://api.anthropic.com/v1/messages';headers={'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};body=JSON.stringify({model,max_tokens:800,temperature:0.85,system:sys,messages:[{role:'user',content:msg}]})}
+  else if(provider==='gemini'){url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;headers={'Content-Type':'application/json'};body=JSON.stringify({contents:[{role:'user',parts:[{text:sys+'\n\n'+msg}]}],generationConfig:{maxOutputTokens:800,temperature:0.85}})}
+  else{url='https://api.openai.com/v1/chat/completions';headers={'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`};body=JSON.stringify({model,max_tokens:800,temperature:0.85,messages:[{role:'system',content:sys},{role:'user',content:msg}]})}
   const res=await fetch(url,{method:'POST',headers,body});
   if(!res.ok){let m=`Erreur HTTP ${res.status}`;try{const e=await res.json();m=e?.error?.message||e?.message||m}catch(_){}throw new Error(m)}
   const data=await res.json();
@@ -949,7 +970,7 @@ function saveArtists(){const p=getProfile();if(!p){toast('⚠️ Profil introuva
 function resetOnboarding(){if(!confirm('Réinitialiser le profil musical et l\'historique ?\nLes clés API (Claude + YouTube) seront conservées.\nGenres, contextes, artistes favoris seront effacés.'))return;[LS_PROFILE,LS_HISTORY].forEach(k=>localStorage.removeItem(k));location.reload()}
 
 // ── NAV ──
-function showScreen(name){document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');s.classList.add('hidden')});const t=document.getElementById(`screen-${name}`);if(t){t.classList.remove('hidden');t.classList.add('active')}if(name==='settings')loadSettingsUI()}
+function showScreen(name){document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');s.classList.add('hidden')});const t=document.getElementById(`screen-${name}`);if(t){t.classList.remove('hidden');t.classList.add('active')}if(name==='settings')loadSettingsUI();if(name==='playlists')renderPlaylists();}
 function switchTab(tab){ST.tab=tab;document.querySelectorAll('.tab-panel').forEach(p=>{p.style.display='none'});const target=document.getElementById(`tab-${tab}`);if(target)target.style.display=tab==='chat'?'flex':'block';document.querySelectorAll('.tab-item').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='history')renderHistory();if(tab==='chat'){const m=document.getElementById('chat-messages');if(m)setTimeout(()=>{m.scrollTop=m.scrollHeight},50)}
   if(tab==='playlists')renderPlaylists();}
 
