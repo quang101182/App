@@ -114,7 +114,7 @@
   </div>
   <div style="display:flex;gap:16px;align-items:center;">
     <button class="mini-btn" onclick="ytPrev()" style="width:48px;height:48px;font-size:1.3rem;">⏮</button>
-    <button id="ko-playpause" onclick="if(ST.currentTrack){ytModalOpen();}ytTogglePlay();" style="width:56px;height:56px;border-radius:50%;background:var(--accent);border:none;font-size:1.5rem;cursor:pointer;">⏸</button>
+    <button id="ko-playpause" onclick="ytTogglePlay()" style="width:56px;height:56px;border-radius:50%;background:var(--accent);border:none;font-size:1.5rem;cursor:pointer;">⏸</button>
     <button class="mini-btn" onclick="ytNext()" style="width:48px;height:48px;font-size:1.3rem;">⏭</button>
   </div>
   <div style="display:flex;align-items:center;gap:10px;width:280px;max-width:90vw;">
@@ -303,7 +303,7 @@
         <button class="mini-btn" onclick="ytNext()" title="Suivant">⏭</button>
         <button class="mini-btn" onclick="ytStop()" title="Arrêter">✕</button>
       </div>
-      <div style="padding:0 16px 2px;"><div id="mp-progress" onclick="mpSeek(event)" ontouchstart="event.preventDefault();mpSeek(event);" style="width:100%;height:20px;background:transparent;border-radius:6px;cursor:pointer;position:relative;display:flex;align-items:center;touch-action:none;user-select:none;-webkit-user-select:none;" title="Cliquer pour naviguer"><div style="position:absolute;inset:8px 0;background:rgba(255,255,255,0.1);border-radius:2px;pointer-events:none;"></div><div id="mp-progress-fill" style="position:absolute;inset:8px auto 8px 0;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;width:0%;pointer-events:none;"></div></div></div>
+      <div style="padding:0 16px 2px;"><div id="mp-progress" onclick="mpSeek(event)" ontouchstart="event.preventDefault();mpSeek(event);" style="width:100%;height:20px;background:transparent;border-radius:6px;cursor:pointer;position:relative;display:flex;align-items:center;touch-action:none;" title="Cliquer pour naviguer"><div style="position:absolute;inset:8px 0;background:rgba(255,255,255,0.1);border-radius:2px;pointer-events:none;"></div><div id="mp-progress-fill" style="position:absolute;inset:8px auto 8px 0;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;width:0%;pointer-events:none;"></div></div></div>
             <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 12px 8px;gap:4px;">
         <div style="display:flex;align-items:center;gap:5px;min-width:0;">
           <span style="font-size:0.8rem;flex-shrink:0;">🔈</span>
@@ -429,7 +429,7 @@ async function ytSearch(query){
 
 window.onYouTubeIframeAPIReady=function(){
   ST.ytPlayer=new YT.Player('yt-player-iframe',{
-    playerVars:{autoplay:1,playsinline:1,rel:0,enablejsapi:1,modestbranding:1,origin:window.location.origin||''},
+    playerVars:{autoplay:1,mute:1,playsinline:1,rel:0,enablejsapi:1,modestbranding:1,origin:window.location.origin||''},
     events:{
       onReady:function(e){
         ST.ytPlayerReady=true;
@@ -466,9 +466,9 @@ function startProgressTick(){
   _progressTick=setInterval(()=>{
     if(!ST.ytPlayerReady||!ST.ytPlayer||typeof ST.ytPlayer.getDuration!=='function')return;
     const dur=ST.ytPlayer.getDuration()||0,cur=ST.ytPlayer.getCurrentTime()||0;
-    const pct=dur>0?((cur/dur)*100).toFixed(1):0;
+    const pct=dur>0?Math.round((cur/dur)*100):0;
     const el=document.getElementById('mp-progress-fill');if(el)el.style.width=pct+'%';
-  },500);
+  },1000);
 }
 function stopProgressTick(){if(_progressTick){clearInterval(_progressTick);_progressTick=null}}
 
@@ -535,12 +535,8 @@ function ytOpenExternal(){
   window.open(t.ytUrl||`https://www.youtube.com/results?search_query=${encodeURIComponent(t.ytQuery||t.title+' '+t.artist)}`,'_blank','noopener');
 }
 function ytTogglePlay(){
-  if(!ST.ytPlayerReady||!ST.ytPlayer||typeof ST.ytPlayer.getPlayerState!=='function'){
-    if(!ST.currentTrack)return;
-    toast('⏳ Player en cours de chargement…');return;
-  }
+  if(!ST.ytPlayerReady||!ST.ytPlayer||typeof ST.ytPlayer.getPlayerState!=='function'){toast('⏳ Player en cours de chargement…');return;}
   const s=ST.ytPlayer.getPlayerState();
-  if((s===-1||s===5)&&!ST.currentTrack)return;
   if(s===1)ST.ytPlayer.pauseVideo();else ST.ytPlayer.playVideo();
 }
 function ytPrev(){
@@ -556,7 +552,11 @@ function ytNext(){
 function setVolume(v){
   ST.volume=parseInt(v);
   if(ST.ytPlayerReady&&ST.ytPlayer&&typeof ST.ytPlayer.setVolume==='function'){
-    try{ST.ytPlayer.unMute();}catch(_){}
+    if(ST.volume>0&&typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted()){
+      try{ST.ytPlayer.unMute();}catch(_){}
+    }else if(ST.volume===0&&typeof ST.ytPlayer.mute==='function'){
+      try{ST.ytPlayer.mute();}catch(_){}
+    }
     ST.ytPlayer.setVolume(ST.volume);
   }
   ['mp-vol-label','ko-vol-label'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=ST.volume+'%'});
