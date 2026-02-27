@@ -23,7 +23,7 @@
                 radial-gradient(ellipse 50% 50% at 80% 80%, rgba(6,182,212,0.08) 0%, transparent 70%),
                 radial-gradient(ellipse 40% 30% at 60% 40%, rgba(245,158,11,0.04) 0%, transparent 60%); }
   #app { position:relative; z-index:2; height:100vh; height:100dvh; display:flex; flex-direction:column; max-width:480px; margin:0 auto; overflow:hidden; }
-  .screen { position:absolute; inset:0; display:flex; flex-direction:column; transition:opacity 0.3s,transform 0.3s; overflow:hidden; }
+  .screen { position:absolute; inset:0; display:flex; flex-direction:column; transition:opacity 0.3s,transform 0.3s; }
   .screen.hidden { opacity:0; pointer-events:none; transform:translateY(12px); }
   .screen.active { opacity:1; pointer-events:all; transform:translateY(0); }
   .btn-primary { background:linear-gradient(135deg,var(--accent),#5b21b6); border:none; border-radius:50px; padding:14px 28px; font-family:inherit; font-size:15px; font-weight:600; color:white; cursor:pointer; box-shadow:0 0 30px rgba(124,58,237,0.35); transition:all 0.2s; }
@@ -81,13 +81,8 @@
   .field:focus { border-color:var(--accent); }
   .field::placeholder { color:var(--muted); }
   /* YT MODAL */
-  #yt-modal { position:fixed; inset:0; z-index:300; background:rgba(0,0,0,0.93); display:flex; flex-direction:column; transition:opacity 0.3s; visibility:visible; }
-  /* visibility:hidden sur l'élément ET ses enfants (dont l'iframe) → aucun touch capturé.
-     L'iframe conserve son état audio : visibility:hidden ne détruit pas le contexte WebAudio. */
-  #yt-modal.hidden { opacity:0; pointer-events:none; visibility:hidden; }
-  /* Playlists items */
-  .pl-item { display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid var(--border); cursor:pointer; transition:background 0.15s; }
-  .pl-badge { width:42px; height:42px; border-radius:12px; background:linear-gradient(135deg,var(--accent),var(--accent2)); display:flex; align-items:center; justify-content:center; font-size:1.3rem; flex-shrink:0; }
+  #yt-modal { position:fixed; inset:0; z-index:300; background:rgba(0,0,0,0.93); display:flex; flex-direction:column; transition:opacity 0.3s; }
+  #yt-modal.hidden { opacity:0; pointer-events:none; }
   #yt-iframe-wrap { width:100%; aspect-ratio:16/9; background:#000; flex-shrink:0; }
   #yt-iframe-wrap iframe { width:100%; height:100%; border:none; }
   #yt-queue-panel { flex:1; overflow-y:auto; padding:0 20px 16px; }
@@ -111,7 +106,6 @@
 </head>
 <body>
 <div class="ambient"></div>
-<!-- No background hidden player: YT player lives inside #yt-modal which is always display:flex (never display:none) → Android audio works -->
 
 <div id="kiosk-overlay" class="hidden" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.92);align-items:center;justify-content:center;flex-direction:column;gap:20px;backdrop-filter:blur(20px);">
   <div id="ko-artwork" style="width:120px;height:120px;border-radius:24px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:3rem;box-shadow:0 0 60px rgba(124,58,237,0.4);background-size:cover;background-position:center;">🎵</div>
@@ -121,7 +115,7 @@
   </div>
   <div style="display:flex;gap:16px;align-items:center;">
     <button class="mini-btn" onclick="ytPrev()" style="width:48px;height:48px;font-size:1.3rem;">⏮</button>
-    <button id="ko-playpause" onclick="ytTogglePlay()" style="width:56px;height:56px;border-radius:50%;background:var(--accent);border:none;font-size:1.5rem;cursor:pointer;">⏸</button>
+    <button id="ko-playpause" onclick="if(ST.currentTrack){ytModalOpen();}ytTogglePlay();" style="width:56px;height:56px;border-radius:50%;background:var(--accent);border:none;font-size:1.5rem;cursor:pointer;">⏸</button>
     <button class="mini-btn" onclick="ytNext()" style="width:48px;height:48px;font-size:1.3rem;">⏭</button>
   </div>
   <div style="display:flex;align-items:center;gap:10px;width:280px;max-width:90vw;">
@@ -133,7 +127,6 @@
 </div>
 <div id="toast" class="hidden"></div>
 
-<!-- YT MODAL -->
 <div id="yt-modal" class="hidden">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 12px;flex-shrink:0;">
     <div class="syne" style="font-size:1rem;font-weight:700;">▶ Lecture</div>
@@ -143,7 +136,6 @@
     </div>
   </div>
   <div id="yt-iframe-wrap">
-    <!-- Real iframe always in DOM: #yt-modal is display:flex (never display:none), so Chrome Android allows audio even when modal is opacity:0 -->
     <iframe id="yt-player-iframe"
       allow="autoplay; encrypted-media; gyroscope; picture-in-picture"
       allowfullscreen
@@ -163,34 +155,29 @@
 </div>
 
 <div id="app">
-  <!-- ONBOARDING -->
   <div id="screen-onboard" class="screen active" style="background:var(--bg2);">
-    <div style="display:flex;flex-direction:column;height:100%;padding:24px 20px 0;">
+    <div style="display:flex;flex-direction:column;height:100%;padding:24px 20px 0;overflow:hidden;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <span class="syne" style="font-size:1.2rem;font-weight:800;">music·ai</span>
         <span id="ob-label" style="font-size:12px;color:var(--muted);">1 / 5</span>
       </div>
       <div class="progress-bar" style="margin-bottom:28px;"><div class="progress-fill" id="ob-progress" style="width:20%"></div></div>
-      <!-- Step 1 -->
       <div class="ob-step active" id="ob1">
         <h2 class="syne" style="font-size:1.6rem;font-weight:800;margin:0 0 6px;">Tes genres <span style="color:var(--accent)">préférés</span></h2>
         <p style="color:var(--muted);font-size:13px;margin:0 0 18px;">Sélectionne tout ce qui te parle</p>
         <div id="genre-chips" class="scroll-y" style="flex:1;display:flex;flex-wrap:wrap;gap:10px;align-content:flex-start;padding-bottom:8px;"></div>
         <div style="margin-top:12px;"><p style="color:var(--muted);font-size:11px;font-weight:600;letter-spacing:0.05em;margin:0 0 6px;">ÉPOQUE (optionnel)</p><div id="era-chips" style="display:flex;flex-wrap:wrap;gap:6px;"></div></div>
       </div>
-      <!-- Step 2 -->
       <div class="ob-step" id="ob2">
         <h2 class="syne" style="font-size:1.6rem;font-weight:800;margin:0 0 6px;">Artistes que tu <span style="color:var(--accent2)">aimes</span></h2>
         <p style="color:var(--muted);font-size:13px;margin:0 0 18px;">Un nom par ligne</p>
         <textarea id="artist-input" class="field scroll-y" placeholder="Radiohead&#10;Daft Punk&#10;Bon Iver..." style="flex:1;resize:none;line-height:1.9;min-height:160px;"></textarea>
       </div>
-      <!-- Step 3 -->
       <div class="ob-step" id="ob3">
         <h2 class="syne" style="font-size:1.6rem;font-weight:800;margin:0 0 6px;">Tu écoutes surtout <span style="color:var(--accent3)">quand ?</span></h2>
         <p style="color:var(--muted);font-size:13px;margin:0 0 18px;">Plusieurs choix possibles</p>
         <div id="context-chips" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"></div>
       </div>
-      <!-- Step 4 -->
       <div class="ob-step" id="ob4">
         <h2 class="syne" style="font-size:1.6rem;font-weight:800;margin:0 0 6px;">Ton niveau <span style="color:var(--accent)">d'aventure</span></h2>
         <p style="color:var(--muted);font-size:13px;margin:0 0 28px;">Entre confort total et découverte radicale</p>
@@ -198,7 +185,6 @@
         <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:12px;color:var(--muted);"><span>🛋️ Valeurs sûres</span><span>🚀 Tout découvrir</span></div>
         <div id="adventure-label" class="syne" style="text-align:center;margin-top:28px;font-size:2rem;font-weight:800;">Équilibré</div>
       </div>
-      <!-- Step 5 -->
       <div class="ob-step" id="ob5">
         <div class="scroll-y" style="flex:1;">
           <h2 class="syne" style="font-size:1.6rem;font-weight:800;margin:0 0 6px;">Connecte ton <span style="color:var(--accent2)">IA</span></h2>
@@ -229,7 +215,6 @@
     </div>
   </div>
 
-  <!-- MAIN APP -->
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
@@ -248,7 +233,6 @@
     </div>
 
     <div id="tab-content" style="flex:1;overflow:hidden;position:relative;">
-      <!-- HOME -->
       <div id="tab-home" class="tab-panel scroll-y" style="position:absolute;inset:0;padding:0 20px 12px;">
         <div style="display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x;">
           <button class="mode-chip active" data-mode="onetap" onclick="setMode('onetap')">✨ One-Tap</button>
@@ -288,7 +272,6 @@
           <div id="result-discovery" style="display:none;margin-top:16px;"></div>
         </div>
       </div>
-      <!-- CHAT -->
       <div id="tab-chat" class="tab-panel" style="display:none;flex-direction:column;position:absolute;inset:0;padding:0 20px 12px;">
         <div id="chat-messages" class="scroll-y" style="flex:1;display:flex;flex-direction:column;gap:10px;padding-bottom:12px;"></div>
         <div class="chat-input-area">
@@ -297,14 +280,12 @@
           <button class="btn-primary" onclick="sendChat()" style="padding:10px 18px;font-size:14px;flex-shrink:0;">→</button>
         </div>
       </div>
-      <!-- HISTORY -->
       <div id="tab-history" class="tab-panel scroll-y" style="display:none;position:absolute;inset:0;padding:0 20px 12px;">
         <h3 class="syne" style="font-size:1rem;font-weight:700;margin:12px 0 14px;">Historique</h3>
         <div id="history-list"></div>
       </div>
     </div>
 
-    <!-- Mini player V2 -->
     <div id="mini-player" class="hidden">
       <div id="mp-track-bar" style="display:flex;align-items:center;gap:8px;padding:8px 12px 4px;">
         <div id="mp-artwork" onclick="enterKiosk()" title="Mode kiosque" style="width:38px;height:38px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem;background-size:cover;background-position:center;cursor:pointer;">🎵</div>
@@ -317,7 +298,7 @@
         <button class="mini-btn" onclick="ytNext()" title="Suivant">⏭</button>
         <button class="mini-btn" onclick="ytStop()" title="Arrêter">✕</button>
       </div>
-      <div style="padding:0 16px 2px;"><div id="mp-progress" onclick="mpSeek(event)" ontouchstart="event.preventDefault();mpSeek(event);" style="width:100%;height:20px;background:transparent;border-radius:6px;cursor:pointer;position:relative;display:flex;align-items:center;touch-action:none;" title="Cliquer pour naviguer"><div style="position:absolute;inset:8px 0;background:rgba(255,255,255,0.1);border-radius:2px;pointer-events:none;"></div><div id="mp-progress-fill" style="position:absolute;inset:8px auto 8px 0;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;width:0%;pointer-events:none;"></div></div></div>
+      <div style="padding:0 16px 2px;"><div id="mp-progress" onclick="mpSeek(event)" ontouchstart="mpSeek(event)" ontouchend="mpSeek(event)" style="width:100%;height:20px;background:transparent;border-radius:6px;cursor:pointer;position:relative;display:flex;align-items:center;touch-action:none;" title="Cliquer pour naviguer"><div style="position:absolute;inset:8px 0;background:rgba(255,255,255,0.1);border-radius:2px;pointer-events:none;"></div><div id="mp-progress-fill" style="position:absolute;inset:8px auto 8px 0;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;width:0%;pointer-events:none;transition:width 0.5s linear;"></div></div></div>
             <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 12px 8px;gap:4px;">
         <div style="display:flex;align-items:center;gap:5px;min-width:0;">
           <span style="font-size:0.8rem;flex-shrink:0;">🔈</span>
@@ -340,7 +321,6 @@
     </div>
   </div>
 
-  <!-- SETTINGS -->
   <div id="screen-settings" class="screen hidden">
     <div style="display:flex;flex-direction:column;height:100%;">
       <div style="display:flex;align-items:center;gap:12px;padding:18px 20px 12px;flex-shrink:0;">
@@ -385,11 +365,11 @@
       </div>
     </div>
   </div>
-  <!-- PLAYLISTS SCREEN — DOIT être DANS #app pour position:absolute inset:0 fonctionnel -->
-  <div id="screen-playlists" class="screen hidden" style="background:var(--bg);">
-    <div style="padding:18px 20px 10px;display:flex;align-items:center;gap:12px;flex-shrink:0;">
-      <button onclick="showScreen('main')" class="btn-ghost" style="padding:8px 16px;font-size:13px;">← Retour</button>
-      <div class="syne" style="font-size:1.1rem;font-weight:800;flex:1;">💿 Playlists</div>
+
+  <div id="screen-playlists" class="screen hidden" style="display:flex;flex-direction:column;height:100%;position:relative;">
+    <div style="padding:20px 20px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <div class="syne" style="font-size:1.2rem;font-weight:800;">💿 Playlists</div>
+      <button onclick="showScreen('main')" class="btn-ghost" style="padding:8px 14px;font-size:12px;">← Retour</button>
       <button onclick="showCreatePlaylist()" class="btn-primary" style="padding:8px 14px;font-size:12px;">+ Créer</button>
     </div>
     <div id="playlists-list" class="scroll-y" style="flex:1;padding:0 20px 20px;"></div>
@@ -404,7 +384,7 @@
       </div>
     </div>
     <div id="pl-detail-modal" class="hidden" style="position:absolute;inset:0;background:var(--bg2);z-index:201;display:flex;flex-direction:column;">
-      <div style="display:flex;align-items:center;gap:12px;padding:18px 20px 12px;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:12px;padding:20px 20px 12px;flex-shrink:0;">
         <button onclick="document.getElementById('pl-detail-modal').classList.add('hidden')" style="width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);font-size:1.1rem;cursor:pointer;">←</button>
         <div id="pl-detail-name" class="syne" style="font-size:1.1rem;font-weight:800;flex:1;"></div>
         <button onclick="playPlaylist()" class="btn-primary" style="padding:8px 14px;font-size:12px;">▶ Lire tout</button>
@@ -412,8 +392,6 @@
       <div id="pl-detail-tracks" class="scroll-y" style="flex:1;padding:0 20px 20px;"></div>
     </div>
   </div>
-
-</div><!-- END #app -->
 
 <script>
 const LS_PROFILE='music_ai_profile',LS_CONFIG='music_ai_config',LS_HISTORY='music_ai_history',LS_YT_KEY='music_ai_yt_key',LS_YT_QUOTA='music_ai_yt_quota';
@@ -468,7 +446,7 @@ window.onYouTubeIframeAPIReady=function(){
       onStateChange:function(e){
         if(e.data===1){
           updatePlayPauseUI(true);startProgressTick();
-          try{ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume||80);}catch(_){}
+          try{if(ST.ytPlayer&&ST.ytPlayer.setVolume)ST.ytPlayer.setVolume(ST.volume||80);}catch(_){}
         }
         if(e.data===2){updatePlayPauseUI(false);stopProgressTick();}
         if(e.data===0){onTrackEnded();}
@@ -477,19 +455,20 @@ window.onYouTubeIframeAPIReady=function(){
     }
   });
 };
-// === AUDIO UNLOCK — Pattern Gemini ===
-// Premier geste utilisateur → playVideo + pauseVideo(50ms) → AudioContext déverrouillé.
-// Tous les loadVideoById suivants héritent du contexte ouvert → son garanti sur Android.
-let _audioUnlocked=false;
-function unlockAudioContext(){
-  if(_audioUnlocked||!ST.ytPlayerReady||!ST.ytPlayer||!ST.ytPlayer.playVideo)return;
-  try{
+let _audioUnlocked = false;
+function unlockAudioContext() {
+  if (_audioUnlocked || !ST.ytPlayerReady || !ST.ytPlayer || !ST.ytPlayer.playVideo) return;
+  try {
     ST.ytPlayer.playVideo();
-    setTimeout(()=>{ST.ytPlayer.pauseVideo();_audioUnlocked=true;},50);
-  }catch(e){}
+    setTimeout(() => {
+      ST.ytPlayer.pauseVideo();
+      _audioUnlocked = true;
+    }, 50);
+  } catch (e) {}
 }
-document.addEventListener('touchstart',unlockAudioContext,{once:true});
-document.addEventListener('click',unlockAudioContext,{once:true});
+document.addEventListener('touchstart', unlockAudioContext, { once: true });
+document.addEventListener('click', unlockAudioContext, { once: true });
+
 (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s)})();
 let _progressTick=null;
 function startProgressTick(){
@@ -512,7 +491,10 @@ async function ytPlay(track){
   updateMiniPlayer(track.title,track.artist);
   const key=getYtKey();
   if(!key){ytShowFallbackToast(track);return}
-  // PAS d'ouverture modale → lecture en arrière-plan, mini-player uniquement
+  ytModalOpen();
+  const yt=document.getElementById('yt-title');const ya=document.getElementById('yt-artist');
+  if(yt)yt.innerHTML='<div class="dot-typing"><span></span><span></span><span></span></div>';
+  if(ya)ya.textContent='Recherche…';
   toast('🔍 Recherche…');
   const q=track.ytQuery||track.youtube_query||`${track.artist} ${track.title} official audio`;
   const vid=await ytSearch(q);
@@ -521,8 +503,6 @@ async function ytPlay(track){
   const _thumb=`https://img.youtube.com/vi/${vid}/mqdefault.jpg`;
   ST.currentTrack.thumb=_thumb;
   updateMiniPlayerArtwork(_thumb);
-  // Mettre à jour les infos modal (pour accès optionnel via bouton ↗)
-  const yt=document.getElementById('yt-title');const ya=document.getElementById('yt-artist');
   if(yt)yt.textContent=track.title||'—';
   if(ya)ya.textContent=track.artist||'—';
   if(ST.ytPlayerReady&&ST.ytPlayer&&ST.ytPlayer.loadVideoById){
@@ -567,11 +547,7 @@ function ytNext(){
 }
 function setVolume(v){
   ST.volume=parseInt(v);
-  if(ST.ytPlayerReady&&ST.ytPlayer&&ST.ytPlayer.setVolume){
-    if(ST.volume>0&&typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted()){try{ST.ytPlayer.unMute();}catch(_){}}
-    else if(ST.volume===0&&typeof ST.ytPlayer.mute==='function'){try{ST.ytPlayer.mute();}catch(_){}}
-    ST.ytPlayer.setVolume(ST.volume);
-  }
+  if(ST.ytPlayerReady&&ST.ytPlayer&&ST.ytPlayer.setVolume)ST.ytPlayer.setVolume(ST.volume);
   ['mp-vol-label','ko-vol-label'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=ST.volume+'%'});
   ['mp-volume','ko-volume'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=ST.volume});
 }
@@ -583,7 +559,6 @@ function mpSeek(e){
   if(!ST.ytPlayerReady||!ST.ytPlayer||!ST.ytPlayer.getDuration)return;
   const bar=document.getElementById('mp-progress');
   const rect=bar.getBoundingClientRect();
-  // touches is empty on touchend → use changedTouches; fallback to mouse event
   const clientX=( (e.touches&&e.touches.length>0) ? e.touches[0].clientX : (e.changedTouches&&e.changedTouches.length>0 ? e.changedTouches[0].clientX : e.clientX) );
   if(clientX==null||isNaN(clientX))return;
   const pct=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width));
@@ -610,15 +585,9 @@ function ytAddToQueue(){
 }
 function ytModalOpen(){
   const m=document.getElementById('yt-modal');
-  if(m){
-    m.classList.remove('hidden');
-    // visibility:hidden est hérité → doit être réinitialisé explicitement
-    m.style.visibility='visible';
-  }
+  if(m){m.classList.remove('hidden');}
 }
 function ytClose(){
-  // Add .hidden = opacity:0 + pointer-events:none (NOT display:none)
-  // #yt-modal CSS is always display:flex → iframe stays rendered → audio continues
   const m=document.getElementById('yt-modal');
   if(m)m.classList.add('hidden');
 }
@@ -698,7 +667,7 @@ function deletePlaylist(id){savePlaylists(getPlaylists().filter(p=>p.id!==id));r
 function removeFromPlaylist(plId,idx){const pl=getPlaylists();const p=pl.find(x=>x.id===plId);if(!p)return;p.tracks.splice(idx,1);savePlaylists(pl);openPlaylist(plId)}
 function addToPlaylist(track){
   const pl=getPlaylists();
-  if(!pl.length){toast("Crée d'abord une playlist 💿");switchTab('playlists');return}
+  if(!pl.length){toast("Crée d'abord une playlist 💿");showScreen('playlists');return}
   if(pl.length===1){addTrackToPlaylist(pl[0].id,track);return}
   const rows=pl.map(p=>{const td=JSON.stringify(track).replace(/"/g,'&quot;');return`<div class="pl-item" onclick="addTrackToPlaylist('${p.id}',${td});document.getElementById('pl-picker').remove()"><div class="pl-badge">💿</div><div style="flex:1;"><div style="font-size:14px;font-weight:700;">${esc(p.name)}</div><div style="font-size:12px;color:var(--muted);">${p.tracks.length} titre(s)</div></div></div>`}).join('');
   const html=`<div style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:400;display:flex;align-items:flex-end;"><div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;border-top:1px solid var(--border);">
@@ -779,16 +748,13 @@ function setMode(mode){ST.mode=mode;document.querySelectorAll('.mode-chip').forE
 // ── AI ──
 function buildSystemPrompt(mode){
   const p=getProfile()||{};
-  // ALL contexts, not just first
   const allContexts=(p.contexts&&p.contexts.length>0?p.contexts:[]).join(', ')||'général';
-  // mood: only use session mood if explicitly set, else 'neutre'
   const mood=ST.selMood||'neutre';
   const now=new Date();
   const h=now.getHours();
   const dow=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'][now.getDay()];
   const timeSlot=h<6?'nuit profonde':h<9?'petit matin':h<12?'matinée':h<14?'déjeuner':h<17?'après-midi':h<20?'fin de journée':h<23?'soirée':'nuit';
   const hist=getHistory().filter(x=>x.action==='suggest'||x.action==='chat').slice(0,15);
-  // Dedup between sessionThread and history
   const sessionSet=new Set(ST.sessionThread.map(x=>x.title+'|||'+x.artist));
   const histTitles=hist.filter(x=>!sessionSet.has(x.title+'|||'+x.artist)).map(x=>x.title+' — '+x.artist);
   const threadTitles=ST.sessionThread.map(x=>x.title+' — '+x.artist);
@@ -796,14 +762,13 @@ function buildSystemPrompt(mode){
   const threadDesc=ST.sessionThread.length>0
     ?'PROGRESSION SESSION: '+ST.sessionThread.map((x,i)=>`${i+1}.${x.title}(${x.mood||'?'},score:${Math.round((x.discovery_score||0)*100)}%)`).join(' → ')
     :'Début de session.';
-  // Adventure score drives discovery instructions
   const adv=p.adventurousness??0.4;
   const advInstr=adv>=0.7?'Aventure élevée: propose des artistes peu connus, sous-genres inattendus.'
     :adv<=0.3?'Confort: reste proche des artistes référencés, genres principaux.'
     :'Mix équilibré: varie entre valeurs sûres et découvertes modérées.';
   const modeInstr=mode==='discovery'?'MODE DÉCOUVERTE: pépite RADICALEMENT inattendue — artiste inconnu, genre non représenté, époque différente. discovery_score > 0.8. Surprise absolue.':
     mode==='onetap'?'ONE-TAP: reco parfaite pour CE moment précis. Variété maximale vs sessions précédentes.':'';
-  const antiRepeat=recentTitles.length>0?'ANTI-RÉPÉTITION ABSOLUE — NE JAMAIS proposer ces titres: '+recentTitles.join(' | '):'';
+  const antiRepeat=recentTitles.length>0?'RÈGLE DE FILTRAGE STRICTE : Les titres suivants sont formellement proscrits de la sortie générée : '+JSON.stringify(recentTitles):'';
   const dislikedSection=(p.disliked&&p.disliked.length>0)?'GENRES/ARTISTES À ÉVITER (dislikes utilisateur): '+p.disliked.slice(-20).join(', '):'';
   return `Tu es un expert mondial en recommandation musicale — connaissance encyclopédique de TOUS genres, époques, cultures, sous-cultures.
 
@@ -832,9 +797,9 @@ async function callAI(sys,msg){
   const cfg=getConfig();const{provider,model,apiKey}=cfg;
   if(!apiKey)throw new Error('Clé API manquante — ouvre ⚙️');
   let url,headers,body;
-  if(provider==='claude'){url='https://api.anthropic.com/v1/messages';headers={'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};body=JSON.stringify({model,max_tokens:800,temperature:0.85,system:sys,messages:[{role:'user',content:msg}]})}
-  else if(provider==='gemini'){url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;headers={'Content-Type':'application/json'};body=JSON.stringify({contents:[{role:'user',parts:[{text:sys+'\n\n'+msg}]}],generationConfig:{maxOutputTokens:800,temperature:0.85}})}
-  else{url='https://api.openai.com/v1/chat/completions';headers={'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`};body=JSON.stringify({model,max_tokens:800,temperature:0.85,messages:[{role:'system',content:sys},{role:'user',content:msg}]})}
+  if(provider==='claude'){url='https://api.anthropic.com/v1/messages';headers={'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};body=JSON.stringify({model,max_tokens:800,temperature:0.7,system:sys,messages:[{role:'user',content:msg}]})}
+  else if(provider==='gemini'){url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;headers={'Content-Type':'application/json'};body=JSON.stringify({contents:[{role:'user',parts:[{text:sys+'\n\n'+msg}]}],generationConfig:{maxOutputTokens:800,temperature:0.7}})}
+  else{url='https://api.openai.com/v1/chat/completions';headers={'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`};body=JSON.stringify({model,max_tokens:800,temperature:0.7,response_format:{type:"json_object"},messages:[{role:'system',content:sys},{role:'user',content:msg}]})}
   const res=await fetch(url,{method:'POST',headers,body});
   if(!res.ok){let m=`Erreur HTTP ${res.status}`;try{const e=await res.json();m=e?.error?.message||e?.message||m}catch(_){}throw new Error(m)}
   const data=await res.json();
@@ -920,7 +885,6 @@ function doFeedback(btnId,action,title,artist,genre){
   btn.classList.add({like:'liked',dislike:'disliked',save:'saved'}[action]);
   btn.style.transform='scale(1.3)';setTimeout(()=>{if(btn)btn.style.transform=''},200);
   pushHistory({title,artist,action,context:ST.mode});
-  // Update profile disliked list on thumbs down
   if(action==='dislike'){
     const p=getProfile();
     if(p){
