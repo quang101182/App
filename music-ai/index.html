@@ -434,14 +434,13 @@ window.onYouTubeIframeAPIReady=function(){
       onReady:function(e){
         ST.ytPlayerReady=true;
         e.target.setVolume(ST.volume||80);
-        try{e.target.unMute();}catch(_){}
       },
       onStateChange:function(e){
         if(e.data===1){
           updatePlayPauseUI(true);startProgressTick();
           try{ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume||80);}catch(_){}
         }
-        if(e.data===2||e.data===3){updatePlayPauseUI(false);if(e.data===2)stopProgressTick();}
+        if(e.data===2||e.data===3){updatePlayPauseUI(false);stopProgressTick();}
         if(e.data===0){onTrackEnded();}
       },
       onError:function(e){if(ST.currentTrack)ytShowFallbackToast(ST.currentTrack);}
@@ -457,7 +456,8 @@ function unlockAudioContext(){
     setTimeout(()=>{ST.ytPlayer.pauseVideo();_audioUnlocked=true;},50);
   }catch(e){}
 }
-document.addEventListener('touchstart',unlockAudioContext,{once:true,passive:true});
+document.addEventListener('touchstart',unlockAudioContext,{once:true});
+document.addEventListener('click',unlockAudioContext,{once:true});
 (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s)})();
 
 let _progressTick=null;
@@ -540,10 +540,8 @@ function ytTogglePlay(){
     toast('⏳ Player en cours de chargement…');return;
   }
   const s=ST.ytPlayer.getPlayerState();
-  // -1=UNSTARTED, 5=CUED : pas de track active, ignorer silencieusement
   if((s===-1||s===5)&&!ST.currentTrack)return;
-  if(s===1){ST.ytPlayer.pauseVideo();updatePlayPauseUI(false);}
-  else{ST.ytPlayer.playVideo();updatePlayPauseUI(true);}
+  if(s===1)ST.ytPlayer.pauseVideo();else ST.ytPlayer.playVideo();
 }
 function ytPrev(){
   if(ST.queue.length>0&&ST.queueIdx>0){ST.queueIdx--;ytPlay(ST.queue[ST.queueIdx]);return}
@@ -572,21 +570,11 @@ function mpSeek(e){
   if(!ST.ytPlayerReady||!ST.ytPlayer||typeof ST.ytPlayer.getDuration!=='function')return;
   const bar=document.getElementById('mp-progress');
   const rect=bar.getBoundingClientRect();
-  let clientX=null;
-  if(e.touches&&e.touches.length>0)clientX=e.touches[0].clientX;
-  else if(e.changedTouches&&e.changedTouches.length>0)clientX=e.changedTouches[0].clientX;
-  else clientX=e.clientX;
+  const clientX=((e.touches&&e.touches.length>0)?e.touches[0].clientX:(e.changedTouches&&e.changedTouches.length>0?e.changedTouches[0].clientX:e.clientX));
   if(clientX==null||isNaN(clientX))return;
   const pct=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width));
   const dur=ST.ytPlayer.getDuration()||0;
-  if(dur>0){
-    ST.ytPlayer.seekTo(pct*dur,true);
-    const el=document.getElementById('mp-progress-fill');if(el)el.style.width=(pct*100).toFixed(1)+'%';
-    // Restart tick after seek to resync position
-    stopProgressTick();
-    const state=ST.ytPlayer.getPlayerState();
-    if(state===1||state===3)startProgressTick();
-  }
+  if(dur>0){ST.ytPlayer.seekTo(pct*dur,true);const el=document.getElementById('mp-progress-fill');if(el)el.style.width=(pct*100)+'%';}
 }
 function updateMiniPlayer(title,artist){
   document.getElementById('mini-player-title').textContent=title||'—';
