@@ -25,7 +25,7 @@
   #app { position:relative; z-index:2; height:100vh; height:100dvh; display:flex; flex-direction:column; max-width:480px; margin:0 auto; overflow:hidden; }
   .screen { position:absolute; inset:0; display:flex; flex-direction:column; transition:opacity 0.3s,transform 0.3s; overflow:hidden; }
   .screen.hidden { opacity:0; pointer-events:none; transform:translateY(12px); }
-  .screen.active { opacity:1; pointer-events:all; transform:translateY(0); }
+  .screen.active { opacity:1; pointer-events:auto; transform:translateY(0); }
   .btn-primary { background:linear-gradient(135deg,var(--accent),#5b21b6); border:none; border-radius:50px; padding:14px 28px; font-family:inherit; font-size:15px; font-weight:600; color:white; cursor:pointer; box-shadow:0 0 30px rgba(124,58,237,0.35); transition:all 0.2s; }
   .btn-primary:active { transform:scale(0.97); }
   .btn-ghost { background:var(--card); border:1px solid var(--border); border-radius:50px; padding:11px 22px; font-family:inherit; font-size:14px; color:var(--text); cursor:pointer; transition:all 0.2s; }
@@ -317,7 +317,7 @@
         <button class="mini-btn" onclick="ytNext()" title="Suivant">⏭</button>
         <button class="mini-btn" onclick="ytStop()" title="Arrêter">✕</button>
       </div>
-      <div style="padding:0 16px 2px;"><div id="mp-progress" onclick="mpSeek(event)" ontouchstart="mpSeek(event)" ontouchend="mpSeek(event)" style="width:100%;height:20px;background:transparent;border-radius:6px;cursor:pointer;position:relative;display:flex;align-items:center;touch-action:none;" title="Cliquer pour naviguer"><div style="position:absolute;inset:8px 0;background:rgba(255,255,255,0.1);border-radius:2px;pointer-events:none;"></div><div id="mp-progress-fill" style="position:absolute;inset:8px auto 8px 0;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;width:0%;pointer-events:none;transition:width 0.5s linear;"></div></div></div>
+      <div style="padding:0 16px 2px;"><div id="mp-progress" onclick="mpSeek(event)" ontouchend="mpSeek(event)" style="width:100%;height:20px;background:transparent;border-radius:6px;cursor:pointer;position:relative;display:flex;align-items:center;touch-action:none;" title="Cliquer pour naviguer"><div style="position:absolute;inset:8px 0;background:rgba(255,255,255,0.1);border-radius:2px;pointer-events:none;"></div><div id="mp-progress-fill" style="position:absolute;inset:8px auto 8px 0;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;width:0%;pointer-events:none;transition:width 0.5s linear;"></div></div></div>
             <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 12px 8px;gap:4px;">
         <div style="display:flex;align-items:center;gap:5px;min-width:0;">
           <span style="font-size:0.8rem;flex-shrink:0;">🔈</span>
@@ -393,19 +393,19 @@
       <button onclick="showCreatePlaylist()" class="btn-primary" style="padding:8px 14px;font-size:12px;">+ Créer</button>
     </div>
     <div id="playlists-list" class="scroll-y" style="flex:1;padding:0 20px 20px;"></div>
-    <div id="pl-create-modal" class="hidden" style="position:absolute;inset:0;background:rgba(0,0,0,0.85);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;">
+    <div id="pl-create-modal" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,0.85);z-index:200;align-items:center;justify-content:center;padding:20px;">
       <div style="background:var(--bg2);border-radius:20px;padding:24px;width:100%;max-width:320px;border:1px solid var(--border);">
         <div class="syne" style="font-size:1rem;font-weight:800;margin-bottom:16px;">Nouvelle playlist</div>
         <input id="pl-name-input" class="field" placeholder="Nom de la playlist" style="width:100%;margin-bottom:12px;box-sizing:border-box;">
         <div style="display:flex;gap:10px;">
-          <button onclick="document.getElementById('pl-create-modal').classList.add('hidden')" class="btn-ghost" style="flex:1;padding:10px;">Annuler</button>
+          <button onclick="document.getElementById('pl-create-modal').style.display='none'" class="btn-ghost" style="flex:1;padding:10px;">Annuler</button>
           <button onclick="createPlaylist()" class="btn-primary" style="flex:1;padding:10px;">Créer</button>
         </div>
       </div>
     </div>
-    <div id="pl-detail-modal" class="hidden" style="position:absolute;inset:0;background:var(--bg2);z-index:201;display:flex;flex-direction:column;">
+    <div id="pl-detail-modal" style="display:none;position:absolute;inset:0;background:var(--bg2);z-index:201;flex-direction:column;">
       <div style="display:flex;align-items:center;gap:12px;padding:18px 20px 12px;flex-shrink:0;">
-        <button onclick="document.getElementById('pl-detail-modal').classList.add('hidden')" style="width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);font-size:1.1rem;cursor:pointer;">←</button>
+        <button onclick="document.getElementById('pl-detail-modal').style.display='none'" style="width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);font-size:1.1rem;cursor:pointer;">←</button>
         <div id="pl-detail-name" class="syne" style="font-size:1.1rem;font-weight:800;flex:1;"></div>
         <button onclick="playPlaylist()" class="btn-primary" style="padding:8px 14px;font-size:12px;">▶ Lire tout</button>
       </div>
@@ -477,29 +477,37 @@ window.onYouTubeIframeAPIReady=function(){
     }
   });
 };
-// === AUDIO UNLOCK — Pattern Gemini ===
-// Premier geste utilisateur → playVideo + pauseVideo(50ms) → AudioContext déverrouillé.
-// Tous les loadVideoById suivants héritent du contexte ouvert → son garanti sur Android.
+// === AUDIO UNLOCK — touchstart uniquement ===
+// Desktop : iframe allow="autoplay" → pas besoin d'unlock explicite.
+// Android Chrome : touchstart SEUL suffit. Le listener click est SUPPRIMÉ car
+// il fire via event bubbling sur chaque clic bouton (pause, volume, seek) → conflits.
+// _audioUnlocked mis à true AVANT playVideo pour éviter double-call.
 let _audioUnlocked=false;
 function unlockAudioContext(){
-  if(_audioUnlocked||!ST.ytPlayerReady||!ST.ytPlayer||!ST.ytPlayer.playVideo)return;
+  if(_audioUnlocked)return;
+  _audioUnlocked=true;
+  if(!ST.ytPlayerReady||!ST.ytPlayer||!ST.ytPlayer.playVideo)return;
+  // Ne pas jouer si un track est déjà en lecture (état 1)
   try{
-    ST.ytPlayer.playVideo();
-    setTimeout(()=>{ST.ytPlayer.pauseVideo();_audioUnlocked=true;},50);
+    const s=ST.ytPlayer.getPlayerState&&ST.ytPlayer.getPlayerState();
+    if(s!==1)ST.ytPlayer.playVideo();
   }catch(e){}
 }
-document.addEventListener('touchstart',unlockAudioContext,{once:true});
-document.addEventListener('click',unlockAudioContext,{once:true});
+document.addEventListener('touchstart',unlockAudioContext,{once:true,passive:true});
 (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s)})();
 let _progressTick=null;
 function startProgressTick(){
   stopProgressTick();
   _progressTick=setInterval(()=>{
-    if(!ST.ytPlayer||!ST.ytPlayer.getDuration)return;
-    const dur=ST.ytPlayer.getDuration()||0,cur=ST.ytPlayer.getCurrentTime()||0;
-    const pct=dur>0?Math.round((cur/dur)*100):0;
-    const el=document.getElementById('mp-progress-fill');if(el)el.style.width=pct+'%';
-  },1000);
+    if(!ST.ytPlayer||typeof ST.ytPlayer.getDuration!=='function')return;
+    try{
+      const dur=ST.ytPlayer.getDuration()||0;
+      const cur=ST.ytPlayer.getCurrentTime()||0;
+      const pct=dur>0?(cur/dur)*100:0;
+      const el=document.getElementById('mp-progress-fill');
+      if(el)el.style.width=pct.toFixed(1)+'%';
+    }catch(_){}
+  },500);
 }
 function stopProgressTick(){if(_progressTick){clearInterval(_progressTick);_progressTick=null}}
 function onTrackEnded(){
@@ -551,9 +559,13 @@ function ytOpenExternal(){
   window.open(t.ytUrl||`https://www.youtube.com/results?search_query=${encodeURIComponent(t.ytQuery||t.title+' '+t.artist)}`,'_blank','noopener');
 }
 function ytTogglePlay(){
-  if(!ST.ytPlayerReady||!ST.ytPlayer||!ST.ytPlayer.getPlayerState){toast('⏳ Player en cours de chargement…');return;}
+  if(!ST.ytPlayerReady||!ST.ytPlayer||typeof ST.ytPlayer.getPlayerState!=='function'){
+    toast('⏳ Player en cours de chargement…');return;
+  }
   const s=ST.ytPlayer.getPlayerState();
-  if(s===1)ST.ytPlayer.pauseVideo();else ST.ytPlayer.playVideo();
+  if(s===1)ST.ytPlayer.pauseVideo();
+  else if(s===2||s===0||s===-1)ST.ytPlayer.playVideo();
+  // état 3 (buffering) : laisser le player gérer
 }
 function ytPrev(){
   if(ST.queue.length>0&&ST.queueIdx>0){ST.queueIdx--;ytPlay(ST.queue[ST.queueIdx]);return}
@@ -567,7 +579,9 @@ function ytNext(){
 }
 function setVolume(v){
   ST.volume=parseInt(v);
-  if(ST.ytPlayerReady&&ST.ytPlayer&&ST.ytPlayer.setVolume)ST.ytPlayer.setVolume(ST.volume);
+  if(ST.ytPlayerReady&&ST.ytPlayer&&typeof ST.ytPlayer.setVolume==='function'){
+    try{ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume);}catch(_){}
+  }
   ['mp-vol-label','ko-vol-label'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=ST.volume+'%'});
   ['mp-volume','ko-volume'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=ST.volume});
 }
@@ -576,15 +590,22 @@ function updatePlayPauseUI(playing){
   ['mp-playpause','ko-playpause'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=ic});
 }
 function mpSeek(e){
-  if(!ST.ytPlayerReady||!ST.ytPlayer||!ST.ytPlayer.getDuration)return;
+  if(!ST.ytPlayerReady||!ST.ytPlayer||typeof ST.ytPlayer.getDuration!=='function')return;
+  e.preventDefault&&e.preventDefault();
   const bar=document.getElementById('mp-progress');
   const rect=bar.getBoundingClientRect();
-  // touches is empty on touchend → use changedTouches; fallback to mouse event
-  const clientX=( (e.touches&&e.touches.length>0) ? e.touches[0].clientX : (e.changedTouches&&e.changedTouches.length>0 ? e.changedTouches[0].clientX : e.clientX) );
+  const clientX=(e.changedTouches&&e.changedTouches.length>0)?e.changedTouches[0].clientX:
+                (e.touches&&e.touches.length>0)?e.touches[0].clientX:e.clientX;
   if(clientX==null||isNaN(clientX))return;
   const pct=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width));
-  const dur=ST.ytPlayer.getDuration()||0;
-  if(dur>0){ST.ytPlayer.seekTo(pct*dur,true);const el=document.getElementById('mp-progress-fill');if(el)el.style.width=(pct*100)+'%';}
+  try{
+    const dur=ST.ytPlayer.getDuration()||0;
+    if(dur>0){
+      ST.ytPlayer.seekTo(pct*dur,true);
+      const el=document.getElementById('mp-progress-fill');
+      if(el)el.style.width=(pct*100).toFixed(1)+'%';
+    }
+  }catch(_){}
 }
 function updateMiniPlayer(title,artist){
   document.getElementById('mini-player-title').textContent=title||'—';
@@ -660,12 +681,19 @@ const LS_PL='music_ai_playlists';
 function getPlaylists(){try{return JSON.parse(localStorage.getItem(LS_PL))||[]}catch{return[]}}
 function savePlaylists(pl){localStorage.setItem(LS_PL,JSON.stringify(pl))}
 let _currentPlId=null;
-function showCreatePlaylist(){document.getElementById('pl-create-modal').classList.remove('hidden');document.getElementById('pl-name-input').value='';setTimeout(()=>document.getElementById('pl-name-input').focus(),100)}
+function showCreatePlaylist(){
+  const m=document.getElementById('pl-create-modal');
+  m.style.display='flex';
+  document.getElementById('pl-name-input').value='';
+  setTimeout(()=>document.getElementById('pl-name-input').focus(),100);
+}
 function createPlaylist(){
   const name=document.getElementById('pl-name-input').value.trim();
   if(!name){toast('Donne un nom 💿');return}
   const pl=getPlaylists();pl.push({id:Date.now().toString(),name,tracks:[],created:new Date().toISOString()});
-  savePlaylists(pl);document.getElementById('pl-create-modal').classList.add('hidden');renderPlaylists();toast(`💿 "${name}" créée`);
+  savePlaylists(pl);
+  document.getElementById('pl-create-modal').style.display='none';
+  renderPlaylists();toast(`💿 "${name}" créée`);
 }
 function renderPlaylists(){
   const el=document.getElementById('playlists-list');if(!el)return;
@@ -688,7 +716,7 @@ function openPlaylist(id){
     <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.title)}</div><div style="font-size:12px;color:var(--muted);">${esc(t.artist)}</div></div>
     <button onclick="event.stopPropagation();removeFromPlaylist('${id}',${i})" style="width:28px;height:28px;border-radius:50%;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:11px;">✕</button>
   </div>`}).join('')}
-  document.getElementById('pl-detail-modal').classList.remove('hidden');
+  document.getElementById('pl-detail-modal').style.display='flex';
 }
 function deletePlaylist(id){savePlaylists(getPlaylists().filter(p=>p.id!==id));renderPlaylists();toast('Playlist supprimée')}
 function removeFromPlaylist(plId,idx){const pl=getPlaylists();const p=pl.find(x=>x.id===plId);if(!p)return;p.tracks.splice(idx,1);savePlaylists(pl);openPlaylist(plId)}
