@@ -797,24 +797,33 @@ function parseJSON(raw){const m=raw.match(/\{[\s\S]*\}/);if(!m)throw new Error('
 //  RECOMMENDATION FLOW
 // ════════════════════════════════════════
 async function getRecommendation(mode){
-  if(ST.isLoading)return;ST.isLoading=true;
+  if(ST.isLoading){toast('⏳ Chargement en cours…');return;}
+  ST.isLoading=true;
   const resEl=document.getElementById(`res-${mode}`);
   if(!resEl){ST.isLoading=false;return;}
   resEl.style.display='block';
-  resEl.innerHTML=`<div class="music-card" style="display:flex;align-items:center;gap:10px;color:var(--muted2);"><div class="typing"><span></span><span></span><span></span></div> L'IA cherche…</div>`;
-  if(mode==='onetap'){const btn=document.getElementById('onetap-btn');if(btn)btn.style.fontSize='1.5rem';}
-  const msgMap={onetap:'Recommande-moi une chanson parfaite maintenant.',mood:`Je me sens ${ST.selMood||'neutre'}. Reco.`,activity:`Je fais: ${ST.selActivity||'quelque chose'}. Reco.`,discovery:'Mode découverte: pépite inattendue.'};
+  resEl.innerHTML=`<div class="music-card" style="display:flex;align-items:center;gap:10px;color:var(--muted2);"><div class="typing"><span></span><span></span><span></span></div><span style="margin-left:6px;">L'IA cherche…</span></div>`;
+  // Feedback visuel bouton onetap
+  const otBtn=document.getElementById('onetap-btn');
+  if(mode==='onetap'&&otBtn){otBtn.style.opacity='0.5';otBtn.style.transform='scale(0.95)';}
   try{
-    const raw=await callAI(buildPrompt(mode),msgMap[mode]||msgMap.onetap);
+    const cfg=getConfig();
+    if(!cfg?.apiKey)throw new Error('Clé API manquante — ouvre ⚙️');
+    const raw=await callAI(buildPrompt(mode),{onetap:'Recommande-moi une chanson parfaite maintenant.',mood:`Je me sens ${ST.selMood||'neutre'}. Reco.`,activity:`Je fais: ${ST.selActivity||'quelque chose'}. Reco.`,discovery:'Mode découverte: pépite inattendue.'}[mode]||'Recommande-moi une chanson.');
     const rec=parseJSON(raw);
     renderCard(resEl,rec);
     pushHistory({title:rec.title,artist:rec.artist,genre:rec.genre,action:'suggest',context:mode});
     ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
     if(ST.sessionThread.length>8)ST.sessionThread.shift();
     const p=getProfile();if(p){p.interactions=(p.interactions||0)+1;saveProfile(p);}
-  }catch(e){resEl.innerHTML=`<div class="music-card" style="color:var(--danger);font-size:13px;">⚠️ ${esc(e.message)}</div>`}
-  if(mode==='onetap'){const btn=document.getElementById('onetap-btn');if(btn)btn.style.fontSize='2.2rem';}
-  ST.isLoading=false;
+  }catch(e){
+    console.error('[getReco] error:',e);
+    resEl.innerHTML=`<div class="music-card" style="color:var(--danger);font-size:13px;">⚠️ ${esc(e.message)}</div>`;
+  }finally{
+    // TOUJOURS libérer isLoading
+    ST.isLoading=false;
+    if(mode==='onetap'&&otBtn){otBtn.style.opacity='1';otBtn.style.transform='scale(1)';}
+  }
 }
 
 // ════════════════════════════════════════
@@ -930,10 +939,10 @@ async function sendChat(){
   const ab=document.createElement('div');ab.className='bubble ai';
   ab.innerHTML=`<div class="typing"><span></span><span></span><span></span></div>`;
   msgs.appendChild(ab);msgs.scrollTop=msgs.scrollHeight;
-  const sys=buildPrompt('chat');
-  const userMsg=`L'utilisateur dit: "${msg}". Recommande UN titre adapté. Réponds en JSON uniquement.`;
   try{
-    const raw=await callAI(sys,userMsg);
+    const cfg=getConfig();if(!cfg?.apiKey)throw new Error('Clé API manquante — ouvre ⚙️');
+    const sys=buildPrompt('chat');
+    const raw=await callAI(sys,`L'utilisateur dit: "${msg}". Recommande UN titre adapté. Réponds en JSON uniquement.`);
     const rec=parseJSON(raw);
     const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;
     const ytUrl=`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`;
@@ -963,8 +972,13 @@ async function sendChat(){
     pushHistory({title:rec.title,artist:rec.artist,action:'chat'});
     ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
     if(ST.sessionThread.length>8)ST.sessionThread.shift();
-  }catch(e){ab.innerHTML=`<span style="color:var(--danger);font-size:13px;">⚠️ ${esc(e.message)}</span>`}
-  msgs.scrollTop=msgs.scrollHeight;ST.isLoading=false;
+  }catch(e){
+    console.error('[sendChat] error:',e);
+    ab.innerHTML=`<span style="color:var(--danger);font-size:13px;">⚠️ ${esc(e.message)}</span>`;
+  }finally{
+    ST.isLoading=false;
+    msgs.scrollTop=msgs.scrollHeight;
+  }
 }
 
 // ════════════════════════════════════════
