@@ -516,18 +516,19 @@ window.onYouTubeIframeAPIReady=function(){
     events:{
       onReady:function(e){
         ST.ytReady=true;
-        // Mobile : pré-mute pour établir le contexte audio sans son
-        try{e.target.mute();e.target.setVolume(0);}catch(_){}
+        e.target.setVolume(ST.volume);
         console.log('[YT] ready');
       },
       onStateChange:function(e){
-        if(e.data===YT.PlayerState.PLAYING){
+        if(e.data===1){
           updatePPUI(true);startTick();
-          // UnMute ici : contexte audio établi, volume rétabli
-          try{ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume);syncVolUI(ST.volume);}catch(_){}
+          try{
+            if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();
+            ST.ytPlayer.setVolume(ST.volume);syncVolUI(ST.volume);
+          }catch(_){}
         }
-        if(e.data===YT.PlayerState.PAUSED){updatePPUI(false);stopTick();}
-        if(e.data===YT.PlayerState.ENDED){onEnded();}
+        if(e.data===2){updatePPUI(false);stopTick();}
+        if(e.data===0){onEnded();}
       },
       onError:function(e){
         console.warn('[YT] error',e.data);
@@ -537,6 +538,19 @@ window.onYouTubeIframeAPIReady=function(){
     }
   });
 };
+// === AUDIO UNLOCK — copie exacte du pattern Copie ===
+// 1er geste utilisateur (touchstart ou click) → playVideo() synchrone → AudioContext YT ouvert
+// Tous les loadVideoById() suivants héritent du contexte → son garanti Android/iOS
+let _audioUnlocked=false;
+function unlockAudioContext(){
+  if(_audioUnlocked||!ST.ytReady||!ST.ytPlayer||!ST.ytPlayer.playVideo)return;
+  try{
+    ST.ytPlayer.playVideo();
+    setTimeout(()=>{try{ST.ytPlayer.pauseVideo();}catch(_){}  _audioUnlocked=true;},50);
+  }catch(e){}
+}
+document.addEventListener('touchstart',unlockAudioContext,{once:true,passive:true});
+document.addEventListener('click',unlockAudioContext,{once:true});
 (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s)})();
 
 // ── YT Search ──
@@ -563,20 +577,23 @@ async function prefetchVideoId(track,onReady){
 }
 
 // ── ytPlayDirect — appelé DIRECTEMENT depuis onclick (synchrone) ──
-// RÈGLE MOBILE : mute() + loadVideoById() + playVideo() SYNCHRONES dans le même stack que le geste
-// L'unMute se fait dans onStateChange(PLAYING) une fois le contexte audio établi
+// unlockAudioContext() a déjà ouvert le contexte audio au 1er geste
+// loadVideoById() suffit — le contexte est ouvert, autoplay implicite
 function ytPlayDirect(track){
   if(!ST.ytReady||!ST.ytPlayer){toast('⏳ Player en initialisation…');return;}
   if(!track._videoId){toast('⚠️ Vidéo non trouvée');return;}
   ST.currentTrack={...track};
   updateMiniPlayer(track.title,track.artist,track._thumb);
-  // SYNCHRONE — dans le même call stack que le tap utilisateur
   try{
-    ST.ytPlayer.mute();           // 1. mute d'abord (autorise autoplay mobile)
-    ST.ytPlayer.loadVideoById(track._videoId); // 2. charge la vidéo
-    ST.ytPlayer.playVideo();      // 3. déclenche la lecture (toujours muette)
+    ST.ytPlayer.loadVideoById(track._videoId);
+    // Réappliquer volume 800ms après (YT peut resetter)
+    setTimeout(()=>{
+      try{
+        if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();
+        ST.ytPlayer.setVolume(ST.volume);
+      }catch(_){}
+    },800);
   }catch(err){console.warn('[ytPlayDirect]',err);}
-  // unMute géré dans onStateChange(PLAYING)
   updatePPUI(true);
 }
 
@@ -595,9 +612,12 @@ async function ytPlay(track){
   if(!ST.ytReady||!ST.ytPlayer){toast('⏳ Player non prêt');return;}
   ST.currentTrack={...track};
   updateMiniPlayer(track.title,track.artist,track._thumb);
-  // ytPlay est appelé depuis next/prev (pas forcément un geste direct)
-  // mute+load+play : pattern compatible mobile
-  try{ST.ytPlayer.mute();ST.ytPlayer.loadVideoById(vid);ST.ytPlayer.playVideo();}catch(_){}
+  try{
+    ST.ytPlayer.loadVideoById(vid);
+    setTimeout(()=>{
+      try{if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume);}catch(_){}
+    },800);
+  }catch(_){}
   updatePPUI(true);
 }
 
@@ -605,7 +625,7 @@ async function ytPlay(track){
 function ytTogglePlay(){
   if(!ST.ytReady||!ST.ytPlayer||typeof ST.ytPlayer.getPlayerState!=='function'){
     if(ST.currentTrack&&ST.currentTrack._videoId&&ST.ytReady&&ST.ytPlayer){
-      try{ST.ytPlayer.mute();ST.ytPlayer.loadVideoById(ST.currentTrack._videoId);ST.ytPlayer.playVideo();}catch(_){}
+      try{ST.ytPlayer.loadVideoById(ST.currentTrack._videoId);}catch(_){}
       updatePPUI(true);
     }
     return;
@@ -618,7 +638,7 @@ function ytTogglePlay(){
   }
   else if((s===-1||s===0||s===5)&&ST.currentTrack?._videoId){
     // Unstarted/ended/cued → mute+load+play synchrones
-    try{ST.ytPlayer.mute();ST.ytPlayer.loadVideoById(ST.currentTrack._videoId);ST.ytPlayer.playVideo();}catch(_){}
+    try{ST.ytPlayer.loadVideoById(ST.currentTrack._videoId);}catch(_){}
     updatePPUI(true);
   }
 }
