@@ -466,6 +466,7 @@ let ST={
   mode:'onetap', tab:'home',
   isLoading:false, cfgProvider:'claude',
   currentTrack:null, queue:[], queueIdx:-1,
+  continuousMode:false,
   volume:80, sleepMinutes:0, sleepTimer:null,
   sessionThread:[], sessionStart:Date.now(),
   ytReady:false, ytPlayer:null
@@ -512,7 +513,7 @@ function esc(s=''){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').r
 window.onYouTubeIframeAPIReady=function(){
   ST.ytPlayer=new YT.Player('yt-div',{
     width:'320',height:'180',
-    playerVars:{autoplay:0,playsinline:1,rel:0,enablejsapi:1,modestbranding:1,origin:window.location.origin},
+    playerVars:{autoplay:1,playsinline:1,rel:0,enablejsapi:1,modestbranding:1,origin:window.location.origin},
     events:{
       onReady:function(e){
         ST.ytReady=true;
@@ -545,7 +546,11 @@ window.onYouTubeIframeAPIReady=function(){
 let _audioUnlocked=false;
 function unlockAudioContext(){
   if(_audioUnlocked||!ST.ytReady||!ST.ytPlayer||typeof ST.ytPlayer.playVideo!=='function')return;
+  // Ne tenter le déverrouillage que si une vidéo est déjà chargée/en attente (state != -1).
+  // Sur un lecteur vide, playVideo() est un no-op et n'unlock pas l'AudioContext.
   try{
+    const state=typeof ST.ytPlayer.getPlayerState==='function'?ST.ytPlayer.getPlayerState():-1;
+    if(state===-1)return; // lecteur vide — rien à déverrouiller
     ST.ytPlayer.playVideo();
     setTimeout(()=>{
       try{ST.ytPlayer.pauseVideo();}catch(_){}
@@ -605,9 +610,9 @@ function ytPlayDirect(track){
 }
 
 // ── ytPlay — entry point depuis queue/prev/next ──
-// Si _videoId déjà présent → direct. Sinon → fetch puis lance
-// depuis un setTimeout(0) : acceptable pour next/prev
-// (pas de contrainte geste car ce n'est pas la première lecture)
+// Si _videoId déjà présent → direct. Sinon → fetch puis lance.
+// Après un await, on n'est plus dans le geste utilisateur.
+// On appelle playVideo() explicitement pour forcer la lecture sur Android Chrome.
 async function ytPlay(track){
   if(track._videoId){ytPlayDirect(track);return;}
   toast('🔍 Recherche…');
@@ -621,6 +626,7 @@ async function ytPlay(track){
   updateMiniPlayer(track.title,track.artist,track._thumb);
   try{
     ST.ytPlayer.loadVideoById(vid);
+    ST.ytPlayer.playVideo();
     setTimeout(()=>{
       try{if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume);}catch(_){}
     },800);
@@ -899,7 +905,7 @@ function renderCard(container,rec){
   const track={title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl,_videoId:null,_thumb:null};
   const seq=++_cardSeq;
   const bid=`card-${seq}`;
-  const disc=Math.round((parseFloat(rec.discovery_score)||0)*100);
+  const disc=Math.min(100,Math.round((parseFloat(rec.discovery_score)||0)*100));
   const hasYT=!!getYtKey();
 
   container.className='music-card card-appear';
@@ -945,6 +951,7 @@ function renderCard(container,rec){
   document.getElementById(`${bid}-dislike`).onclick=function(){
     this.classList.toggle('disliked');
     const p=getProfile();if(p){if(!p.disliked)p.disliked=[];p.disliked.push(rec.genre||rec.artist);if(p.disliked.length>40)p.disliked.shift();saveProfile(p);}
+    pushHistory({title:rec.title,artist:rec.artist,action:'dislike'});
     toast('👎 Noté, on évite ce style');
   };
   document.getElementById(`${bid}-save`).onclick=function(){
@@ -983,8 +990,6 @@ function renderCard(container,rec){
       };
     }
   });
-
-  pushHistory({title:rec.title,artist:rec.artist,genre:rec.genre,action:'suggest'});
 }
 
 // ════════════════════════════════════════
