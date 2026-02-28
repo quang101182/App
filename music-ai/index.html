@@ -336,7 +336,7 @@
       <button class="tab-item active" data-tab="home" onclick="switchTab('home')"><span class="ti">🎵</span><span>Discover</span></button>
       <button class="tab-item" data-tab="chat" onclick="switchTab('chat')"><span class="ti">💬</span><span>Chat IA</span></button>
       <button class="tab-item" data-tab="history" onclick="switchTab('history')"><span class="ti">📋</span><span>Historique</span></button>
-      <button class="tab-item" data-tab="playlists" onclick="showScreen('playlists')"><span class="ti">💿</span><span>Playlists</span></button>
+      <button class="tab-item" data-tab="playlists" onclick="openPlaylistsOverlay()"><span class="ti">💿</span><span>Playlists</span></button>
     </div>
   </div>
 
@@ -385,36 +385,42 @@
       </div>
     </div>
   </div>
-  <!-- PLAYLISTS SCREEN — DOIT être DANS #app pour position:absolute inset:0 fonctionnel -->
-  <div id="screen-playlists" class="screen hidden" style="background:var(--bg);">
-    <div style="padding:18px 20px 10px;display:flex;align-items:center;gap:12px;flex-shrink:0;">
-      <button onclick="showScreen('main')" class="btn-ghost" style="padding:8px 16px;font-size:13px;">← Retour</button>
-      <div class="syne" style="font-size:1.1rem;font-weight:800;flex:1;">💿 Playlists</div>
-      <button onclick="showCreatePlaylist()" class="btn-primary" style="padding:8px 14px;font-size:12px;">+ Créer</button>
-    </div>
-    <div id="playlists-list" class="scroll-y" style="flex:1;padding:0 20px 20px;"></div>
-    <div id="pl-create-modal" class="hidden" style="position:absolute;inset:0;background:rgba(0,0,0,0.85);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;">
-      <div style="background:var(--bg2);border-radius:20px;padding:24px;width:100%;max-width:320px;border:1px solid var(--border);">
-        <div class="syne" style="font-size:1rem;font-weight:800;margin-bottom:16px;">Nouvelle playlist</div>
-        <input id="pl-name-input" class="field" placeholder="Nom de la playlist" style="width:100%;margin-bottom:12px;box-sizing:border-box;">
-        <div style="display:flex;gap:10px;">
-          <button onclick="document.getElementById('pl-create-modal').classList.add('hidden')" class="btn-ghost" style="flex:1;padding:10px;">Annuler</button>
-          <button onclick="createPlaylist()" class="btn-primary" style="flex:1;padding:10px;">Créer</button>
-        </div>
-      </div>
-    </div>
-    <div id="pl-detail-modal" class="hidden" style="position:absolute;inset:0;background:var(--bg2);z-index:201;display:flex;flex-direction:column;">
-      <div style="display:flex;align-items:center;gap:12px;padding:18px 20px 12px;flex-shrink:0;">
-        <button onclick="document.getElementById('pl-detail-modal').classList.add('hidden')" style="width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);font-size:1.1rem;cursor:pointer;">←</button>
-        <div id="pl-detail-name" class="syne" style="font-size:1.1rem;font-weight:800;flex:1;"></div>
-        <button onclick="showAddFromHistoryPicker()" style="padding:7px 12px;border-radius:50px;background:rgba(124,58,237,0.18);border:1px solid rgba(124,58,237,0.4);color:white;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;">+ Titre</button>
-        <button onclick="playPlaylist()" class="btn-primary" style="padding:8px 14px;font-size:12px;">▶ Lire tout</button>
-      </div>
-      <div id="pl-detail-tracks" class="scroll-y" style="flex:1;padding:0 20px 20px;"></div>
-    </div>
-  </div>
 
 </div><!-- END #app -->
+
+<!-- PLAYLISTS OVERLAY — position:fixed hors de #app, z-index 600, toujours cliquable -->
+<div id="pl-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg);flex-direction:column;max-width:480px;margin:0 auto;">
+  <!-- Liste playlists -->
+  <div id="pl-view-list" style="display:flex;flex-direction:column;height:100%;">
+    <div style="padding:18px 20px 10px;display:flex;align-items:center;gap:12px;flex-shrink:0;border-bottom:1px solid var(--border);">
+      <button id="pl-back-btn" style="width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">←</button>
+      <div class="syne" style="font-size:1.1rem;font-weight:800;flex:1;">💿 Playlists</div>
+      <button id="pl-create-btn" class="btn-primary" style="padding:8px 14px;font-size:12px;">+ Créer</button>
+    </div>
+    <div id="playlists-list" class="scroll-y" style="flex:1;padding:0 20px 20px;"></div>
+  </div>
+  <!-- Détail playlist -->
+  <div id="pl-view-detail" style="display:none;flex-direction:column;height:100%;">
+    <div style="padding:18px 20px 12px;display:flex;align-items:center;gap:12px;flex-shrink:0;border-bottom:1px solid var(--border);">
+      <button id="pl-detail-back-btn" style="width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">←</button>
+      <div id="pl-detail-name" class="syne" style="font-size:1.1rem;font-weight:800;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+      <button id="pl-add-title-btn" style="padding:7px 12px;border-radius:50px;background:rgba(124,58,237,0.18);border:1px solid rgba(124,58,237,0.4);color:white;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;">+ Titre</button>
+      <button id="pl-play-btn" class="btn-primary" style="padding:8px 14px;font-size:12px;flex-shrink:0;">▶ Lire</button>
+    </div>
+    <div id="pl-detail-tracks" class="scroll-y" style="flex:1;padding:0 20px 20px;"></div>
+  </div>
+  <!-- Modal création -->
+  <div id="pl-create-modal" style="display:none;position:fixed;inset:0;z-index:700;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;padding:20px;">
+    <div style="background:var(--bg2);border-radius:20px;padding:24px;width:100%;max-width:320px;border:1px solid var(--border);">
+      <div class="syne" style="font-size:1rem;font-weight:800;margin-bottom:16px;">Nouvelle playlist</div>
+      <input id="pl-name-input" class="field" placeholder="Nom de la playlist" style="width:100%;margin-bottom:12px;box-sizing:border-box;">
+      <div style="display:flex;gap:10px;">
+        <button id="pl-create-cancel-btn" class="btn-ghost" style="flex:1;padding:10px;">Annuler</button>
+        <button id="pl-create-confirm-btn" class="btn-primary" style="flex:1;padding:10px;">Créer</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 const LS_PROFILE='music_ai_profile',LS_CONFIG='music_ai_config',LS_HISTORY='music_ai_history',LS_YT_KEY='music_ai_yt_key',LS_YT_QUOTA='music_ai_yt_quota';
@@ -469,12 +475,12 @@ window.onYouTubeIframeAPIReady=function(){
       onStateChange:function(e){
         if(e.data===1){
           updatePlayPauseUI(true);startProgressTick();
-          // Apply current volume (not hardcoded 80) — YT may reset on new video load
           try{
-            ST.ytPlayer.unMute();
-            ST.ytPlayer.setVolume(ST.volume||80);
-            ['mp-volume','ko-volume'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=ST.volume||80;});
-            ['mp-vol-label','ko-vol-label'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=(ST.volume||80)+'%';});
+            if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();
+            ST.ytPlayer.setVolume(ST.volume);
+            const v=ST.volume;
+            ['mp-volume','ko-volume'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=v;});
+            ['mp-vol-label','ko-vol-label'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=v+'%';});
           }catch(_){}
         }
         if(e.data===2){updatePlayPauseUI(false);stopProgressTick();}
@@ -502,14 +508,14 @@ let _progressTick=null;
 function startProgressTick(){
   stopProgressTick();
   _progressTick=setInterval(()=>{
-    if(!ST.ytPlayer||!ST.ytPlayer.getDuration)return;
+    if(!ST.ytPlayer||typeof ST.ytPlayer.getDuration!=='function')return;
     try{
-      const dur=ST.ytPlayer.getDuration()||0;
+      const dur=ST.ytPlayer.getDuration();
+      if(!dur||dur<=0)return;// buffering, attendre
       const cur=ST.ytPlayer.getCurrentTime()||0;
-      // dur===0 = still buffering, skip silently (don't reset fill)
-      if(dur<=0)return;
-      const pct=Math.min(100,Math.round((cur/dur)*100));
-      const el=document.getElementById('mp-progress-fill');if(el)el.style.width=pct+'%';
+      const pct=Math.min(100,(cur/dur)*100);
+      const el=document.getElementById('mp-progress-fill');
+      if(el)el.style.width=pct.toFixed(1)+'%';
     }catch(_){}
   },500);
 }
@@ -537,19 +543,22 @@ async function ytPlay(track){
   const yt=document.getElementById('yt-title');const ya=document.getElementById('yt-artist');
   if(yt)yt.textContent=track.title||'—';
   if(ya)ya.textContent=track.artist||'—';
-  if(ST.ytPlayerReady&&ST.ytPlayer&&ST.ytPlayer.loadVideoById){
+  if(ST.ytPlayerReady&&ST.ytPlayer&&typeof ST.ytPlayer.loadVideoById==='function'){
     ST.ytPlayer.loadVideoById(vid);
-    // Apply volume after loadVideoById (YT API resets volume context on new load)
+    // Re-appliquer volume après chargement (YT API réinitialise le contexte audio)
     setTimeout(()=>{
       try{
+        if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();
         ST.ytPlayer.setVolume(ST.volume);
-        if(ST.volume>0&&typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();
       }catch(_){}
-    },600);
+    },800);
   }else{
     const ifr=document.getElementById('yt-player-iframe');
-    if(ifr){const o=window.location.origin||'';ifr.src=`https://www.youtube.com/embed/${vid}?autoplay=1&playsinline=1&enablejsapi=1&rel=0`+(o?'&origin='+encodeURIComponent(o):'');}
-    // Fallback: no API events → start tick manually, stop on next ytStop/ytPlay
+    if(ifr){
+      const o=window.location.origin||'';
+      ifr.src=`https://www.youtube.com/embed/${vid}?autoplay=1&playsinline=1&enablejsapi=1&rel=0`+(o?'&origin='+encodeURIComponent(o):'');
+    }
+    // Fallback sans événements API → tick manuel
     startProgressTick();
   }
   updatePlayPauseUI(true);
@@ -572,18 +581,11 @@ function ytOpenExternal(){
   window.open(t.ytUrl||`https://www.youtube.com/results?search_query=${encodeURIComponent(t.ytQuery||t.title+' '+t.artist)}`,'_blank','noopener');
 }
 function ytTogglePlay(){
-  if(!ST.ytPlayerReady||!ST.ytPlayer||!ST.ytPlayer.getPlayerState){toast('⏳ Player en cours de chargement…');return;}
+  if(!ST.ytPlayerReady||!ST.ytPlayer||typeof ST.ytPlayer.getPlayerState!=='function'){toast('⏳ Player en cours de chargement…');return;}
   const s=ST.ytPlayer.getPlayerState();
-  // States: -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
-  if(s===1||s===3){
-    // Playing or buffering → pause
-    ST.ytPlayer.pauseVideo();
-    updatePlayPauseUI(false);
-  }else{
-    // Paused, ended, unstarted, cued → play
-    ST.ytPlayer.playVideo();
-    updatePlayPauseUI(true);
-  }
+  // YT states: -1=unstarted,0=ended,1=playing,2=paused,3=buffering,5=cued
+  if(s===1||s===3){ST.ytPlayer.pauseVideo();}
+  else{ST.ytPlayer.playVideo();}
 }
 function ytPrev(){
   if(ST.queue.length>0&&ST.queueIdx>0){ST.queueIdx--;ytPlay(ST.queue[ST.queueIdx]);return}
@@ -694,109 +696,231 @@ const LS_PL='music_ai_playlists';
 function getPlaylists(){try{return JSON.parse(localStorage.getItem(LS_PL))||[]}catch{return[]}}
 function savePlaylists(pl){localStorage.setItem(LS_PL,JSON.stringify(pl))}
 let _currentPlId=null;
-function showCreatePlaylist(){document.getElementById('pl-create-modal').classList.remove('hidden');document.getElementById('pl-name-input').value='';setTimeout(()=>document.getElementById('pl-name-input').focus(),100)}
-function createPlaylist(){
-  const name=document.getElementById('pl-name-input').value.trim();
-  if(!name){toast('Donne un nom 💿');return}
-  const pl=getPlaylists();pl.push({id:Date.now().toString(),name,tracks:[],created:new Date().toISOString()});
-  savePlaylists(pl);document.getElementById('pl-create-modal').classList.add('hidden');renderPlaylists();toast(`💿 "${name}" créée`);
+
+// ─── OVERLAY PLAYLISTS ───
+function openPlaylistsOverlay(){
+  const o=document.getElementById('pl-overlay');
+  if(!o)return;
+  o.style.display='flex';
+  plShowView('list');
+  renderPlaylists();
 }
+function closePlaylistsOverlay(){
+  const o=document.getElementById('pl-overlay');
+  if(o)o.style.display='none';
+}
+function plShowView(view){
+  // view = 'list' | 'detail'
+  const vl=document.getElementById('pl-view-list');
+  const vd=document.getElementById('pl-view-detail');
+  if(vl)vl.style.display=view==='list'?'flex':'none';
+  if(vd)vd.style.display=view==='detail'?'flex':'none';
+}
+
 function renderPlaylists(){
   const el=document.getElementById('playlists-list');if(!el)return;
   const pl=getPlaylists();
-  if(!pl.length){el.innerHTML='<p style="font-size:13px;color:var(--muted);text-align:center;padding:40px 0;">Aucune playlist<br><span style="font-size:11px;">Crée-en une et sauvegarde tes recos !</span></p>';return}
-  el.innerHTML=pl.map((p,i)=>`<div class="pl-item" onclick="openPlaylist('${p.id}')">
-    <div class="pl-badge">${['🎵','🎸','🔥','💜','🌊','🎹'][i%6]}</div>
-    <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}</div><div style="font-size:12px;color:var(--muted);">${p.tracks.length} titre(s)</div></div>
-    <button onclick="event.stopPropagation();renamePlaylist('${p.id}')" style="width:30px;height:30px;border-radius:50%;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:11px;margin-right:4px;" title="Renommer">✏️</button>
-    <button onclick="event.stopPropagation();deletePlaylist('${p.id}')" style="width:30px;height:30px;border-radius:50%;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:11px;" title="Supprimer">✕</button>
-  </div>`).join('');
+  if(!pl.length){
+    el.innerHTML='<p style="font-size:13px;color:var(--muted);text-align:center;padding:40px 0;">Aucune playlist<br><span style="font-size:11px;">Crée-en une et sauvegarde tes recos !</span></p>';
+    return;
+  }
+  el.innerHTML=pl.map((p,i)=>`
+    <div class="pl-item" data-plid="${p.id}" style="cursor:pointer;">
+      <div class="pl-badge">${['🎵','🎸','🔥','💜','🌊','🎹'][i%6]}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}</div>
+        <div style="font-size:12px;color:var(--muted);">${p.tracks.length} titre(s)</div>
+      </div>
+      <button class="pl-rename-btn" data-plid="${p.id}" style="width:30px;height:30px;border-radius:50%;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:11px;margin-right:4px;flex-shrink:0;">✏️</button>
+      <button class="pl-delete-btn" data-plid="${p.id}" style="width:30px;height:30px;border-radius:50%;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:11px;flex-shrink:0;">✕</button>
+    </div>`).join('');
+
+  // Event delegation sur playlists-list
+  el.onclick=function(ev){
+    const renameBtn=ev.target.closest('.pl-rename-btn');
+    const deleteBtn=ev.target.closest('.pl-delete-btn');
+    const item=ev.target.closest('.pl-item');
+    if(renameBtn){ev.stopPropagation();renamePlaylist(renameBtn.dataset.plid);return;}
+    if(deleteBtn){ev.stopPropagation();deletePlaylist(deleteBtn.dataset.plid);return;}
+    if(item){openPlaylist(item.dataset.plid);}
+  };
 }
+
 function openPlaylist(id){
   const pl=getPlaylists();const p=pl.find(x=>x.id===id);if(!p)return;
   _currentPlId=id;
-  document.getElementById('pl-detail-name').textContent=p.name;
-  const el=document.getElementById('pl-detail-tracks');
-  // Button to add currently playing track
+  const nameEl=document.getElementById('pl-detail-name');
+  if(nameEl)nameEl.textContent=p.name;
+  renderPlaylistDetail(p);
+  plShowView('detail');
+}
+
+function renderPlaylistDetail(p){
+  if(!p)return;
+  const el=document.getElementById('pl-detail-tracks');if(!el)return;
+  // Bouton ajouter titre en cours
   const addCurrentBtn=ST.currentTrack
-    ?`<button onclick="addTrackToPlaylist('${id}',ST.currentTrack);openPlaylist('${id}')" style="width:100%;padding:11px;border-radius:12px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.4);color:white;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:12px;">+ Ajouter "${esc(ST.currentTrack.title)}"</button>`
+    ?`<div data-action="add-current" style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+        <div style="width:36px;height:36px;border-radius:10px;background:rgba(124,58,237,0.2);border:1px solid rgba(124,58,237,0.4);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">+</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Ajouter "${esc(ST.currentTrack.title)}"</div>
+          <div style="font-size:11px;color:var(--muted);">Titre en cours de lecture</div>
+        </div>
+      </div>`
     :'';
-  if(!p.tracks.length){
-    el.innerHTML=addCurrentBtn+'<p style="font-size:13px;color:var(--muted);text-align:center;padding:32px 0;">Playlist vide<br><span style="font-size:11px;">Sauvegarde des titres depuis Discover</span></p>';
-  }else{
-    el.innerHTML=addCurrentBtn+p.tracks.map((t,i)=>{const td=JSON.stringify(t).replace(/"/g,'&quot;');return`<div class="pl-item" onclick="ytPlay(${td})">
-    <div style="color:var(--muted);font-size:12px;min-width:24px;text-align:center;">${i+1}</div>
-    <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.title)}</div><div style="font-size:12px;color:var(--muted);">${esc(t.artist)}</div></div>
-    <button onclick="event.stopPropagation();removeFromPlaylist('${id}',${i})" style="width:28px;height:28px;border-radius:50%;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:11px;">✕</button>
-  </div>`}).join('');
-  }
-  document.getElementById('pl-detail-modal').classList.remove('hidden');
+
+  const tracks=p.tracks.length
+    ?p.tracks.map((t,i)=>`
+      <div class="pl-track-item" data-idx="${i}" style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+        <div style="color:var(--muted);font-size:12px;min-width:24px;text-align:center;flex-shrink:0;">${i+1}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.title)}</div>
+          <div style="font-size:12px;color:var(--muted);">${esc(t.artist)}</div>
+        </div>
+        <button class="pl-track-remove" data-idx="${i}" style="width:28px;height:28px;border-radius:50%;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:11px;flex-shrink:0;">✕</button>
+      </div>`).join('')
+    :'<p style="font-size:13px;color:var(--muted);text-align:center;padding:32px 0;">Playlist vide<br><span style="font-size:11px;">Sauvegarde des titres depuis Discover ou +Titre</span></p>';
+
+  el.innerHTML=addCurrentBtn+tracks;
+
+  el.onclick=function(ev){
+    const removeBtn=ev.target.closest('.pl-track-remove');
+    const addBtn=ev.target.closest('[data-action="add-current"]');
+    const trackItem=ev.target.closest('.pl-track-item');
+    if(removeBtn){ev.stopPropagation();removeFromPlaylist(_currentPlId,parseInt(removeBtn.dataset.idx));return;}
+    if(addBtn){addCurrentTrackToPlaylist(_currentPlId);return;}
+    if(trackItem){
+      const pl2=getPlaylists();const p2=pl2.find(x=>x.id===_currentPlId);
+      if(p2)ytPlay(p2.tracks[parseInt(trackItem.dataset.idx)]);
+    }
+  };
+}
+
+function showCreatePlaylist(){
+  const m=document.getElementById('pl-create-modal');
+  const inp=document.getElementById('pl-name-input');
+  if(m){m.style.display='flex';if(inp){inp.value='';setTimeout(()=>inp.focus(),100);}}
+}
+function createPlaylist(){
+  const name=(document.getElementById('pl-name-input').value||'').trim();
+  if(!name){toast('Donne un nom 💿');return}
+  const pl=getPlaylists();
+  pl.push({id:Date.now().toString(),name,tracks:[],created:new Date().toISOString()});
+  savePlaylists(pl);
+  const m=document.getElementById('pl-create-modal');if(m)m.style.display='none';
+  renderPlaylists();toast(`💿 "${name}" créée`);
 }
 function deletePlaylist(id){
-  const pl=getPlaylists();const p=pl.find(x=>x.id===id);
-  if(!p)return;
+  const pl=getPlaylists();const p=pl.find(x=>x.id===id);if(!p)return;
   if(!confirm(`Supprimer "${p.name}" (${p.tracks.length} titre(s)) ?`))return;
-  savePlaylists(pl.filter(p=>p.id!==id));
-  renderPlaylists();
-  toast('Playlist supprimée');
+  savePlaylists(pl.filter(x=>x.id!==id));renderPlaylists();toast('Playlist supprimée');
 }
 function renamePlaylist(id){
   const pl=getPlaylists();const p=pl.find(x=>x.id===id);if(!p)return;
-  const newName=prompt('Nouveau nom :',p.name);
-  if(!newName||!newName.trim())return;
-  p.name=newName.trim();savePlaylists(pl);renderPlaylists();toast(`💿 Renommée en "${p.name}"`);
+  const n=prompt('Nouveau nom :',p.name);if(!n||!n.trim())return;
+  p.name=n.trim();savePlaylists(pl);renderPlaylists();toast(`💿 Renommée en "${p.name}"`);
 }
-function removeFromPlaylist(plId,idx){const pl=getPlaylists();const p=pl.find(x=>x.id===plId);if(!p)return;p.tracks.splice(idx,1);savePlaylists(pl);openPlaylist(plId)}
+function removeFromPlaylist(plId,idx){
+  const pl=getPlaylists();const p=pl.find(x=>x.id===plId);if(!p)return;
+  p.tracks.splice(idx,1);savePlaylists(pl);renderPlaylistDetail(p);
+}
+function addCurrentTrackToPlaylist(plId){
+  if(!ST.currentTrack)return;
+  addTrackToPlaylist(plId,ST.currentTrack);
+  const pl=getPlaylists();const p=pl.find(x=>x.id===plId);
+  if(p)renderPlaylistDetail(p);
+}
 function addToPlaylist(track){
   const pl=getPlaylists();
-  if(!pl.length){toast("Crée d'abord une playlist 💿");switchTab('playlists');return}
+  if(!pl.length){toast("Crée d'abord une playlist 💿");openPlaylistsOverlay();return}
   if(pl.length===1){addTrackToPlaylist(pl[0].id,track);return}
-  const rows=pl.map(p=>{const td=JSON.stringify(track).replace(/"/g,'&quot;');return`<div class="pl-item" onclick="addTrackToPlaylist('${p.id}',${td});document.getElementById('pl-picker').remove()"><div class="pl-badge">💿</div><div style="flex:1;"><div style="font-size:14px;font-weight:700;">${esc(p.name)}</div><div style="font-size:12px;color:var(--muted);">${p.tracks.length} titre(s)</div></div></div>`}).join('');
-  const html=`<div style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:400;display:flex;align-items:flex-end;"><div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;border-top:1px solid var(--border);">
-    <div class="syne" style="font-size:1rem;font-weight:800;margin-bottom:16px;">Ajouter à une playlist</div>${rows}
-    <button onclick="document.getElementById('pl-picker').remove()" style="width:100%;padding:12px;border-radius:12px;background:var(--card);border:1px solid var(--border);color:var(--muted);font-family:inherit;cursor:pointer;margin-top:12px;">Annuler</button>
-  </div></div>`;
-  const div=document.createElement('div');div.id='pl-picker';div.innerHTML=html;document.body.appendChild(div);
+  // Picker bottom-sheet
+  const rows=pl.map(p=>`
+    <div class="pl-pick-item" data-plid="${p.id}" style="display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+      <div class="pl-badge">💿</div>
+      <div style="flex:1;">
+        <div style="font-size:14px;font-weight:700;">${esc(p.name)}</div>
+        <div style="font-size:12px;color:var(--muted);">${p.tracks.length} titre(s)</div>
+      </div>
+    </div>`).join('');
+  const html=`<div id="pl-picker-overlay" style="position:fixed;inset:0;z-index:900;background:rgba(0,0,0,0.75);display:flex;align-items:flex-end;">
+    <div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;border-top:1px solid var(--border);max-width:480px;margin:0 auto;">
+      <div class="syne" style="font-size:1rem;font-weight:800;margin-bottom:16px;">Ajouter à une playlist</div>
+      <div class="pl-pick-list">${rows}</div>
+      <button id="pl-pick-cancel" style="width:100%;padding:12px;border-radius:12px;background:var(--card);border:1px solid var(--border);color:var(--muted);font-family:inherit;cursor:pointer;margin-top:12px;">Annuler</button>
+    </div></div>`;
+  const div=document.createElement('div');div.innerHTML=html;document.body.appendChild(div.firstElementChild);
+  const picker=document.getElementById('pl-picker-overlay');
+  picker.querySelector('.pl-pick-list').onclick=function(ev){
+    const item=ev.target.closest('.pl-pick-item');
+    if(item){addTrackToPlaylist(item.dataset.plid,track);picker.remove();}
+  };
+  document.getElementById('pl-pick-cancel').onclick=()=>picker.remove();
 }
 function addTrackToPlaylist(plId,track){
   const pl=getPlaylists();const p=pl.find(x=>x.id===plId);if(!p)return;
   if(p.tracks.find(t=>t.title===track.title&&t.artist===track.artist)){toast('Déjà dans la playlist');return}
-  p.tracks.push({title:track.title,artist:track.artist,ytQuery:track.ytQuery||track.youtube_query,ytUrl:track.ytUrl});
+  p.tracks.push({title:track.title,artist:track.artist,ytQuery:track.ytQuery||track.youtube_query||`${track.artist} ${track.title} official audio`,ytUrl:track.ytUrl||''});
   savePlaylists(pl);toast(`💿 Ajouté à "${p.name}"`);
-}
-function showAddFromHistoryPicker(){
-  if(!_currentPlId)return;
-  // Build candidates: currently playing + recent history (suggest/chat actions)
-  const candidates=[];
-  if(ST.currentTrack)candidates.push({...ST.currentTrack,_src:'▶ En cours'});
-  const hist=getHistory().filter(x=>x.action==='suggest'||x.action==='chat'||x.action==='like').slice(0,20);
-  hist.forEach(h=>{
-    if(!candidates.find(c=>c.title===h.title&&c.artist===h.artist))
-      candidates.push({title:h.title,artist:h.artist,ytQuery:`${h.artist} ${h.title} official audio`,_src:'📋 Historique'});
-  });
-  if(!candidates.length){toast('Aucun titre disponible — écoute ou like des titres d\'abord');return;}
-  const rows=candidates.map(t=>{
-    const td=JSON.stringify({title:t.title,artist:t.artist,ytQuery:t.ytQuery||t.youtube_query,ytUrl:t.ytUrl||''}).replace(/"/g,'&quot;');
-    return`<div class="history-item" onclick="addTrackToPlaylist('${_currentPlId}',${td});openPlaylist('${_currentPlId}');document.getElementById('hist-add-picker').remove();" style="cursor:pointer;">
-      <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.title||'—')}</div><div style="font-size:11px;color:var(--muted);">${esc(t.artist||'')} · <span style="color:var(--accent);font-size:10px;">${esc(t._src||'')}</span></div></div>
-      <div style="font-size:18px;color:var(--accent);flex-shrink:0;">+</div>
-    </div>`;
-  }).join('');
-  const html=`<div style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:500;display:flex;align-items:flex-end;">
-    <div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:20px;width:100%;border-top:1px solid var(--border);max-height:70vh;display:flex;flex-direction:column;">
-      <div class="syne" style="font-size:1rem;font-weight:800;margin-bottom:4px;">Ajouter un titre</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">En cours de lecture + historique récent</div>
-      <div class="scroll-y" style="flex:1;overflow-y:auto;">${rows}</div>
-      <button onclick="document.getElementById('hist-add-picker').remove()" style="width:100%;padding:12px;border-radius:12px;background:var(--card);border:1px solid var(--border);color:var(--muted);font-family:inherit;cursor:pointer;margin-top:12px;flex-shrink:0;">Annuler</button>
-    </div>
-  </div>`;
-  const div=document.createElement('div');div.id='hist-add-picker';div.innerHTML=html;document.body.appendChild(div);
 }
 function playPlaylist(){
   const pl=getPlaylists();const p=pl.find(x=>x.id===_currentPlId);if(!p||!p.tracks.length){toast('Playlist vide');return}
   ST.queue=p.tracks.map(t=>({...t}));ST.queueIdx=0;ytPlay(ST.queue[0]);
   if(!ST.continuousMode)toggleContinuous();
   toast(`▶ Lecture de "${p.name}"`);
+}
+function showAddFromHistoryPicker(){
+  // Picker depuis historique — bottom sheet
+  const candidates=[];
+  if(ST.currentTrack)candidates.push({...ST.currentTrack,_src:'▶ En cours'});
+  getHistory().filter(x=>['suggest','chat','like'].includes(x.action)).slice(0,30).forEach(h=>{
+    if(!candidates.find(c=>c.title===h.title&&c.artist===h.artist))
+      candidates.push({title:h.title,artist:h.artist,ytQuery:`${h.artist} ${h.title} official audio`,_src:'📋 Historique'});
+  });
+  if(!candidates.length){toast('Écoute ou like des titres d\'abord');return;}
+  const rows=candidates.map((t,i)=>`
+    <div class="hist-pick-item" data-idx="${i}" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.title||'—')}</div>
+        <div style="font-size:11px;color:var(--muted);">${esc(t.artist||'')} · <span style="color:var(--accent);font-size:10px;">${esc(t._src)}</span></div>
+      </div>
+      <div style="font-size:20px;color:var(--accent);flex-shrink:0;">+</div>
+    </div>`).join('');
+  const html=`<div id="hist-picker-overlay" style="position:fixed;inset:0;z-index:900;background:rgba(0,0,0,0.8);display:flex;align-items:flex-end;">
+    <div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:20px;width:100%;border-top:1px solid var(--border);max-height:70vh;display:flex;flex-direction:column;max-width:480px;margin:0 auto;">
+      <div class="syne" style="font-size:1rem;font-weight:800;margin-bottom:4px;">Ajouter un titre</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Lecture en cours + historique</div>
+      <div class="scroll-y hist-pick-list" style="flex:1;overflow-y:auto;">${rows}</div>
+      <button id="hist-pick-cancel" style="width:100%;padding:12px;border-radius:12px;background:var(--card);border:1px solid var(--border);color:var(--muted);font-family:inherit;cursor:pointer;margin-top:12px;flex-shrink:0;">Annuler</button>
+    </div></div>`;
+  const _candidates=candidates;
+  const div=document.createElement('div');div.innerHTML=html;document.body.appendChild(div.firstElementChild);
+  const picker=document.getElementById('hist-picker-overlay');
+  picker.querySelector('.hist-pick-list').onclick=function(ev){
+    const item=ev.target.closest('.hist-pick-item');
+    if(item&&_currentPlId){
+      const t=_candidates[parseInt(item.dataset.idx)];
+      addTrackToPlaylist(_currentPlId,t);
+      picker.remove();
+      const pl=getPlaylists();const p=pl.find(x=>x.id===_currentPlId);
+      if(p)renderPlaylistDetail(p);
+    }
+  };
+  document.getElementById('hist-pick-cancel').onclick=()=>picker.remove();
+}
+
+// ── Init boutons playlists overlay (appelé une seule fois au boot) ──
+function initPlaylistsOverlay(){
+  const safe=function(id,fn){const el=document.getElementById(id);if(el)el.addEventListener('click',fn);};
+  safe('pl-back-btn',closePlaylistsOverlay);
+  safe('pl-detail-back-btn',()=>plShowView('list'));
+  safe('pl-create-btn',showCreatePlaylist);
+  safe('pl-create-cancel-btn',()=>{const m=document.getElementById('pl-create-modal');if(m)m.style.display='none';});
+  safe('pl-create-confirm-btn',createPlaylist);
+  safe('pl-add-title-btn',showAddFromHistoryPicker);
+  safe('pl-play-btn',playPlaylist);
+  const inp=document.getElementById('pl-name-input');
+  if(inp)inp.addEventListener('keydown',function(e){if(e.key==='Enter')createPlaylist();});
 }
 // ── ONBOARDING ──
 function initOnboarding(){
@@ -1078,24 +1202,8 @@ function saveArtists(){const p=getProfile();if(!p){toast('⚠️ Profil introuva
 function resetOnboarding(){if(!confirm('Réinitialiser le profil musical et l\'historique ?\nLes clés API (Claude + YouTube) seront conservées.\nGenres, contextes, artistes favoris seront effacés.'))return;[LS_PROFILE,LS_HISTORY].forEach(k=>localStorage.removeItem(k));location.reload()}
 
 // ── NAV ──
-function showScreen(name){
-  document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');s.classList.add('hidden')});
-  const t=document.getElementById(`screen-${name}`);
-  if(t){t.classList.remove('hidden');t.classList.add('active')}
-  if(name==='settings')loadSettingsUI();
-  if(name==='playlists')renderPlaylists();
-  // Restore active tab panels when coming back to main
-  if(name==='main'){
-    document.querySelectorAll('.tab-panel').forEach(p=>{p.style.display='none'});
-    const activeTab=ST.tab||'home';
-    const target=document.getElementById(`tab-${activeTab}`);
-    if(target)target.style.display=activeTab==='chat'?'flex':'block';
-    document.querySelectorAll('.tab-item').forEach(b=>b.classList.toggle('active',b.dataset.tab===activeTab));
-    if(activeTab==='history')renderHistory();
-  }
-}
-function switchTab(tab){ST.tab=tab;document.querySelectorAll('.tab-panel').forEach(p=>{p.style.display='none'});const target=document.getElementById(`tab-${tab}`);if(target)target.style.display=tab==='chat'?'flex':'block';document.querySelectorAll('.tab-item').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='history')renderHistory();if(tab==='chat'){const m=document.getElementById('chat-messages');if(m)setTimeout(()=>{m.scrollTop=m.scrollHeight},50)}
-  if(tab==='playlists')renderPlaylists();}
+function showScreen(name){document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');s.classList.add('hidden')});const t=document.getElementById(`screen-${name}`);if(t){t.classList.remove('hidden');t.classList.add('active')}if(name==='settings')loadSettingsUI();}
+function switchTab(tab){ST.tab=tab;document.querySelectorAll('.tab-panel').forEach(p=>{p.style.display='none'});const target=document.getElementById(`tab-${tab}`);if(target)target.style.display=tab==='chat'?'flex':'block';document.querySelectorAll('.tab-item').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(tab==='history')renderHistory();if(tab==='chat'){const m=document.getElementById('chat-messages');if(m)setTimeout(()=>{m.scrollTop=m.scrollHeight},50)}}
 
 // ── UTILS ──
 function esc(s=''){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
@@ -1109,7 +1217,7 @@ function updateApiStatus(){
   if(ytDot)ytDot.style.background=hasYT?'#22c55e':'#ef4444';
   updateQuotaDisplay();
 }
-function boot(){const p=getProfile();const c=getConfig();if(p?.completedOnboarding&&c?.apiKey){showScreen('main');initMainApp();setTimeout(updateApiStatus,100)}else{showScreen('onboard');initOnboarding();}}
+function boot(){const p=getProfile();const c=getConfig();initPlaylistsOverlay();if(p?.completedOnboarding&&c?.apiKey){showScreen('main');initMainApp();setTimeout(updateApiStatus,100)}else{showScreen('onboard');initOnboarding();}}
 boot();
 </script>
 </body>
