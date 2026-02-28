@@ -366,7 +366,8 @@ body{padding-top:var(--safe-top);}
         </div>
         <button class="btn-icon" id="mp-pp" style="width:44px;height:44px;">⏸</button>
         <button class="btn-icon" onclick="ytNext()" style="width:44px;height:44px;">⏭</button>
-        <button class="btn-icon" onclick="ytStop()" style="width:44px;height:44px;font-size:0.9rem;">✕</button>
+        <button class="btn-icon" id="mp-auto" onclick="toggleAuto()" style="width:38px;height:38px;font-size:0.75rem;" title="Mode auto">🔁</button>
+        <button class="btn-icon" onclick="ytStop()" style="width:38px;height:38px;font-size:0.8rem;">✕</button>
       </div>
       <!-- Progress bar — touch seek -->
       <div style="padding:2px 14px 4px;">
@@ -515,25 +516,23 @@ window.onYouTubeIframeAPIReady=function(){
     events:{
       onReady:function(e){
         ST.ytReady=true;
-        e.target.setVolume(ST.volume);
+        // Mobile : pré-mute pour établir le contexte audio sans son
+        try{e.target.mute();e.target.setVolume(0);}catch(_){}
         console.log('[YT] ready');
       },
       onStateChange:function(e){
         if(e.data===YT.PlayerState.PLAYING){
           updatePPUI(true);startTick();
-          try{
-            if(ST.ytPlayer.isMuted())ST.ytPlayer.unMute();
-            ST.ytPlayer.setVolume(ST.volume);
-            syncVolUI(ST.volume);
-          }catch(_){}
+          // UnMute ici : contexte audio établi, volume rétabli
+          try{ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume);syncVolUI(ST.volume);}catch(_){}
         }
         if(e.data===YT.PlayerState.PAUSED){updatePPUI(false);stopTick();}
         if(e.data===YT.PlayerState.ENDED){onEnded();}
       },
       onError:function(e){
         console.warn('[YT] error',e.data);
-        toast('⚠️ Vidéo indisponible, titre suivant…');
-        if(ST.currentTrack)setTimeout(()=>ytNext(),800);
+        toast('⚠️ Vidéo indisponible');
+        if(ST.currentTrack&&ST.continuousMode)setTimeout(()=>ytNext(),800);
       }
     }
   });
@@ -564,17 +563,20 @@ async function prefetchVideoId(track,onReady){
 }
 
 // ── ytPlayDirect — appelé DIRECTEMENT depuis onclick (synchrone) ──
-// videoId déjà disponible sur track._videoId
+// RÈGLE MOBILE : mute() + loadVideoById() + playVideo() SYNCHRONES dans le même stack que le geste
+// L'unMute se fait dans onStateChange(PLAYING) une fois le contexte audio établi
 function ytPlayDirect(track){
   if(!ST.ytReady||!ST.ytPlayer){toast('⏳ Player en initialisation…');return;}
   if(!track._videoId){toast('⚠️ Vidéo non trouvée');return;}
   ST.currentTrack={...track};
   updateMiniPlayer(track.title,track.artist,track._thumb);
-  // ← SYNCHRONE dans le onclick : mobile autorise la lecture
-  ST.ytPlayer.loadVideoById(track._videoId);
-  setTimeout(()=>{
-    try{if(ST.ytPlayer.isMuted())ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume);}catch(_){}
-  },600);
+  // SYNCHRONE — dans le même call stack que le tap utilisateur
+  try{
+    ST.ytPlayer.mute();           // 1. mute d'abord (autorise autoplay mobile)
+    ST.ytPlayer.loadVideoById(track._videoId); // 2. charge la vidéo
+    ST.ytPlayer.playVideo();      // 3. déclenche la lecture (toujours muette)
+  }catch(err){console.warn('[ytPlayDirect]',err);}
+  // unMute géré dans onStateChange(PLAYING)
   updatePPUI(true);
 }
 
@@ -593,27 +595,30 @@ async function ytPlay(track){
   if(!ST.ytReady||!ST.ytPlayer){toast('⏳ Player non prêt');return;}
   ST.currentTrack={...track};
   updateMiniPlayer(track.title,track.artist,track._thumb);
-  ST.ytPlayer.loadVideoById(vid);
-  setTimeout(()=>{try{if(ST.ytPlayer.isMuted())ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume);}catch(_){}},600);
+  // ytPlay est appelé depuis next/prev (pas forcément un geste direct)
+  // mute+load+play : pattern compatible mobile
+  try{ST.ytPlayer.mute();ST.ytPlayer.loadVideoById(vid);ST.ytPlayer.playVideo();}catch(_){}
   updatePPUI(true);
 }
 
 // ── Toggle play/pause ──
 function ytTogglePlay(){
   if(!ST.ytReady||!ST.ytPlayer||typeof ST.ytPlayer.getPlayerState!=='function'){
-    // Player pas encore prêt ET track connue → tenter loadVideoById depuis ce clic
     if(ST.currentTrack&&ST.currentTrack._videoId&&ST.ytReady&&ST.ytPlayer){
-      ST.ytPlayer.loadVideoById(ST.currentTrack._videoId);
+      try{ST.ytPlayer.mute();ST.ytPlayer.loadVideoById(ST.currentTrack._videoId);ST.ytPlayer.playVideo();}catch(_){}
       updatePPUI(true);
     }
     return;
   }
   const s=ST.ytPlayer.getPlayerState();
   if(s===1||s===3){ST.ytPlayer.pauseVideo();}
-  else if(s===2){ST.ytPlayer.playVideo();}
+  else if(s===2){
+    // Reprendre après pause — playVideo() direct depuis geste = OK mobile
+    try{ST.ytPlayer.playVideo();}catch(_){}
+  }
   else if((s===-1||s===0||s===5)&&ST.currentTrack?._videoId){
-    // Unstarted/ended/cued → recharger depuis ce clic (synchrone = trusted gesture mobile)
-    ST.ytPlayer.loadVideoById(ST.currentTrack._videoId);
+    // Unstarted/ended/cued → mute+load+play synchrones
+    try{ST.ytPlayer.mute();ST.ytPlayer.loadVideoById(ST.currentTrack._videoId);ST.ytPlayer.playVideo();}catch(_){}
     updatePPUI(true);
   }
 }
@@ -637,7 +642,37 @@ function ytPrev(){
 
 function onEnded(){
   stopTick();updatePPUI(false);
-  if(ST.queue.length>0&&ST.queueIdx<ST.queue.length-1){ytNext();}
+  if(ST.queue.length>0&&ST.queueIdx<ST.queue.length-1){
+    ytNext();
+  }else if(ST.continuousMode){
+    // Mode auto ON : nouvelle reco IA automatique
+    autoGetNext();
+  }
+}
+async function autoGetNext(){
+  toast('🔄 Mode auto — nouvelle reco…');
+  try{
+    const raw=await callAI(buildPrompt('onetap'),'Recommande-moi une chanson parfaite maintenant.');
+    const rec=parseJSON(raw);
+    const track={title:rec.title,artist:rec.artist,ytQuery:rec.youtube_query||rec.artist+' '+rec.title+' official audio',_videoId:null,_thumb:null};
+    pushHistory({title:rec.title,artist:rec.artist,genre:rec.genre,action:'suggest',context:'auto'});
+    ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
+    if(ST.sessionThread.length>8)ST.sessionThread.shift();
+    const vid=await ytSearch(track.ytQuery);
+    if(vid){track._videoId=vid;track._thumb='https://img.youtube.com/vi/'+vid+'/mqdefault.jpg';}
+    ST.queue.push(track);ST.queueIdx=ST.queue.length-1;
+    ytPlay(track);
+  }catch(e){console.warn('[autoGetNext]',e);toast('⚠️ Auto : '+e.message);}
+}
+function toggleAuto(){
+  ST.continuousMode=!ST.continuousMode;
+  const btn=document.getElementById('mp-auto');
+  if(btn){
+    btn.style.background=ST.continuousMode?'rgba(168,85,247,0.35)':'var(--card)';
+    btn.style.borderColor=ST.continuousMode?'var(--accent)':'var(--border)';
+    btn.title=ST.continuousMode?'Auto ON — clic pour OFF':'Auto OFF — clic pour ON';
+  }
+  toast(ST.continuousMode?'🔁 Mode auto ON':'⏹ Mode auto OFF');
 }
 
 // ── Volume ──
