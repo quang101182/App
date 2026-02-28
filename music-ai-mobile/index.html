@@ -158,7 +158,7 @@ body{padding-top:var(--safe-top);}
      opacity:0.01 ≠ visibility:hidden
      postMessage fonctionne toujours
 ════════════════════════════════════════ -->
-<div id="yt-bg" style="position:fixed;bottom:-9999px;left:-9999px;width:1px;height:1px;overflow:visible;opacity:0.01;pointer-events:none;z-index:-1;">
+<div id="yt-bg" style="position:fixed;bottom:0;left:0;width:1px;height:1px;overflow:hidden;opacity:0.0001;pointer-events:none;z-index:-1;">
   <div id="yt-div" style="width:320px;height:180px;"></div>
 </div>
 
@@ -513,7 +513,7 @@ function esc(s=''){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').r
 window.onYouTubeIframeAPIReady=function(){
   ST.ytPlayer=new YT.Player('yt-div',{
     width:'320',height:'180',
-    playerVars:{autoplay:1,playsinline:1,rel:0,enablejsapi:1,modestbranding:1,origin:window.location.origin},
+    playerVars:{autoplay:0,playsinline:1,rel:0,enablejsapi:1,modestbranding:1,origin:window.location.protocol==='file:'?'':window.location.origin},
     events:{
       onReady:function(e){
         ST.ytReady=true;
@@ -546,11 +546,10 @@ window.onYouTubeIframeAPIReady=function(){
 let _audioUnlocked=false;
 function unlockAudioContext(){
   if(_audioUnlocked||!ST.ytReady||!ST.ytPlayer||typeof ST.ytPlayer.playVideo!=='function')return;
-  // Ne tenter le déverrouillage que si une vidéo est déjà chargée/en attente (state != -1).
-  // Sur un lecteur vide, playVideo() est un no-op et n'unlock pas l'AudioContext.
+  // Appeler playVideo() même sur player vide : le postMessage vers l'iframe YouTube
+  // lui permet d'établir son AudioContext depuis ce geste utilisateur.
+  // Ne PAS vérifier l'état — le but est uniquement d'envoyer le signal à l'iframe.
   try{
-    const state=typeof ST.ytPlayer.getPlayerState==='function'?ST.ytPlayer.getPlayerState():-1;
-    if(state===-1)return; // lecteur vide — rien à déverrouiller
     ST.ytPlayer.playVideo();
     setTimeout(()=>{
       try{ST.ytPlayer.pauseVideo();}catch(_){}
@@ -664,6 +663,7 @@ function ytStop(){
 
 function ytNext(){
   if(ST.queue.length>0&&ST.queueIdx<ST.queue.length-1){ST.queueIdx++;ytPlay(ST.queue[ST.queueIdx]);return;}
+  if(ST.continuousMode){autoGetNext();return;}
   toast('Fin de la file — lance une nouvelle reco');
 }
 function ytPrev(){
