@@ -449,19 +449,35 @@ let _tt=null;
 function toast(msg,dur=2400){const el=document.getElementById('toast');el.textContent=msg;el.classList.remove('hidden');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.add('hidden'),dur)}
 
 // ── YOUTUBE ──
+function parseDuration(iso){if(!iso)return 0;const m=iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);if(!m)return 0;return(parseInt(m[1]||0)*3600)+(parseInt(m[2]||0)*60)+parseInt(m[3]||0);}
+const YT_DUR_MIN=90,YT_DUR_MAX=300; // 1m30 → 5min
 async function ytSearch(query){
   const key=getYtKey();if(!key)return null;
   const q=getQuota();
   if(q.count>=YT_QUOTA_MAX){toast('🚫 Quota YT épuisé (100/100) — recharge demain',4000);return null;}
   try{
-    const r=await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=${encodeURIComponent(query)}&key=${key}`);
+    const r=await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${key}`);
     if(!r.ok){
       if(r.status===403){toast('🚫 Quota YT Google épuisé ou clé invalide — vérifier ⚙️',5000);}
       return null;
     }
     incQuota();
-    const d=await r.json();return d.items?.[0]?.id?.videoId||null;
-  }catch(e){return null}
+    const d=await r.json();
+    const ids=(d.items||[]).map(x=>x.id?.videoId).filter(Boolean);
+    if(!ids.length)return null;
+    // Vérifier durées via videos.list (coût : 1 unité quota)
+    try{
+      const vr=await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${ids.join(',')}&key=${key}`);
+      if(vr.ok){
+        const vd=await vr.json();
+        const valid=(vd.items||[]).find(item=>{const dur=parseDuration(item.contentDetails?.duration);return dur>=YT_DUR_MIN&&dur<=YT_DUR_MAX;});
+        if(valid)return valid.id;
+        // Aucun dans la plage → fallback au premier résultat
+        toast('⚠️ Aucun résultat dans 1m30–5min, fallback',3000);
+      }
+    }catch(_){console.warn('[YT] Duration check failed');}
+    return ids[0]||null;
+  }catch(e){console.warn('[YT] Search error:',e);return null}
 }
 window.onYouTubeIframeAPIReady=function(){
   // On cible le DIV — l'API YT crée elle-même l'iframe dans ce div
@@ -1044,7 +1060,8 @@ async function callAI(sys,msg){
   if(provider==='claude'){url='https://api.anthropic.com/v1/messages';headers={'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};body=JSON.stringify({model,max_tokens:800,temperature:0.85,system:sys,messages:[{role:'user',content:msg}]})}
   else if(provider==='gemini'){url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;headers={'Content-Type':'application/json'};body=JSON.stringify({contents:[{role:'user',parts:[{text:sys+'\n\n'+msg}]}],generationConfig:{maxOutputTokens:800,temperature:0.85}})}
   else{url='https://api.openai.com/v1/chat/completions';headers={'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`};body=JSON.stringify({model,max_tokens:800,temperature:0.85,messages:[{role:'system',content:sys},{role:'user',content:msg}]})}
-  const res=await fetch(url,{method:'POST',headers,body});
+  const controller=new AbortController();const _to=setTimeout(()=>controller.abort(),12000);
+  let res;try{res=await fetch(url,{method:'POST',headers,body,signal:controller.signal});}catch(fe){clearTimeout(_to);if(fe.name==='AbortError')throw new Error('Timeout IA (12s) — réessaie');throw fe;}finally{clearTimeout(_to);}
   if(!res.ok){let m=`Erreur HTTP ${res.status}`;try{const e=await res.json();m=e?.error?.message||e?.message||m}catch(_){}throw new Error(m)}
   const data=await res.json();
   if(provider==='claude')return data.content?.[0]?.text||'';
@@ -1154,7 +1171,7 @@ async function sendChat(){
   const ab=document.createElement('div');ab.className='chat-bubble ai';ab.innerHTML='<div class="dot-typing"><span></span><span></span><span></span></div>';msgs.appendChild(ab);msgs.scrollTop=msgs.scrollHeight;
   ST.isLoading=true;
   try{
-    const raw=await callAI(buildSystemPrompt('chat'),`L'utilisateur veut: "${msg}". Recommande une chanson.`);
+    const raw=await callAI(buildSystemPrompt('chat'),`L'utilisateur veut: ${JSON.stringify(msg)}. Recommande une chanson.`);
     const rec=parseJSON(raw);
     const ytQuery=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;
     const ytUrl=`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQuery)}`;
