@@ -85,6 +85,9 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .modal-save:hover{background:var(--accent-hover)}
 .modal-cancel{font-family:var(--font-display);font-size:.65rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:var(--sp-3) var(--sp-5);border-radius:var(--radius-md);cursor:pointer;background:transparent;border:1px solid var(--border-accent);color:var(--text-secondary);transition:all var(--transition);min-height:44px}
 .modal-cancel:hover{border-color:var(--border-accent);color:var(--text-primary);background:var(--bg-overlay)}
+.modal-test{font-family:var(--font-display);font-size:.65rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:var(--sp-3) var(--sp-5);border-radius:var(--radius-md);cursor:pointer;background:transparent;border:1px solid var(--accent);color:var(--accent);transition:all var(--transition);min-height:44px}
+.modal-test:hover{background:var(--accent-dim)}
+.modal-test:disabled{opacity:.5;cursor:not-allowed}
 /* TEMPLATE TAB */
 .tpl-provider-tabs{display:flex;gap:var(--sp-2);flex-wrap:wrap}
 .tpl-tab{flex:1;min-width:80px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:var(--sp-2) var(--sp-3);border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;font-family:var(--font-display);font-size:.55rem;color:var(--text-muted);letter-spacing:.08em;text-transform:uppercase;background:transparent;transition:all var(--transition)}
@@ -274,6 +277,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
         <span class="modal-label">Clé API <span id="provider-label">Anthropic</span></span>
         <input type="password" class="modal-input" id="api-key-input" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
         <div class="modal-hint" id="key-hint">Stockée localement.</div>
+        <div class="modal-hint" style="color:var(--warn);margin-top:3px">⚠ Clé chiffrée dans votre navigateur — usage local uniquement, ne partagez pas ce fichier</div>
       </div>
       <div>
         <span class="modal-label">Modèle</span>
@@ -281,6 +285,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
       </div>
       <div class="modal-actions">
         <button class="modal-cancel" id="modal-cancel">Annuler</button>
+        <button class="modal-test" id="modal-test">🔍 Tester</button>
         <button class="modal-save" id="modal-save">Enregistrer</button>
       </div>
     </div>
@@ -490,9 +495,9 @@ const ApiKeys = (() => {
     ]},
   };
   return {
-    getKey(p){ return Store.read(`apikey_${p}`,'') },
+    getKey(p){ const r=Store.read(`apikey_${p}`,''); if(!r) return ''; try{return atob(r)}catch{return r} },
     getModel(p){ const s=Store.read(`model_${p}`,''); if(s) return s; const d=PROV[p].models.find(m=>m.default); return d?d.value:PROV[p].models[0].value },
-    save(p,k,m){ Store.write(`apikey_${p}`,k); Store.write(`model_${p}`,m) },
+    save(p,k,m){ Store.write(`apikey_${p}`,k?btoa(k):''); Store.write(`model_${p}`,m) },
     hasKey(p){ return !!this.getKey(p) },
     hasAnyKey(){ return Object.keys(PROV).some(p=>this.hasKey(p)) },
     firstKeyProvider(){ return Object.keys(PROV).find(p=>this.hasKey(p))||null },
@@ -629,7 +634,7 @@ const Differ = (() => {
   }
   function diff(oldStr,newStr){
     const a=tokenize(oldStr||''),b=tokenize(newStr||'');
-    if(a.length>400||b.length>400){const al=oldStr.split('\n'),bl=newStr.split('\n');return lcs(al,bl).map(t=>({...t,val:t.val+'\n'}))}
+    if(a.length>150||b.length>150){const al=oldStr.split('\n'),bl=newStr.split('\n');return lcs(al,bl).map(t=>({...t,val:t.val+'\n'}))}
     return lcs(a,b);
   }
   function toHtml(tokens){
@@ -738,6 +743,10 @@ const AiEngine = (() => {
     const sm=text.match(/---\s*SYSTEM\s*---\s*([\s\S]*?)(?:---\s*USER\s*---)/i);
     const um=text.match(/---\s*USER\s*---\s*([\s\S]*?)$/i);
     if(sm&&um){sections.role=sm[1].trim();sections.mission=um[1].trim();return{sections,raw:text}}
+    // Try Gemini CONTEXT/TASK/DETAILS/OUTPUT format
+    const gmKeys={context:/^CONTEXT:\s*([\s\S]+?)(?=\n(?:TASK|DETAILS|OUTPUT):|\s*$)/m,mission:/^TASK:\s*([\s\S]+?)(?=\n(?:CONTEXT|DETAILS|OUTPUT):|\s*$)/m,constraints:/^DETAILS:\s*([\s\S]+?)(?=\n(?:CONTEXT|TASK|OUTPUT):|\s*$)/m,format:/^OUTPUT:\s*([\s\S]+?)(?=\n(?:CONTEXT|TASK|DETAILS):|\s*$)/m};
+    let gmc=0;for(const[k,rx] of Object.entries(gmKeys)){const gm=text.match(rx);if(gm){sections[k]=gm[1].trim();gmc++}}
+    if(gmc>0) return{sections,raw:text};
     return{sections:null,raw:text};
   }
 
@@ -1029,6 +1038,32 @@ const ApiModal = (() => {
       updateModels(cur);
     });
     document.getElementById('api-key-input').addEventListener('keydown',e=>{if(e.key==='Enter')save();if(e.key==='Escape')close()});
+
+    document.getElementById('modal-test').addEventListener('click',async()=>{
+      const key=document.getElementById('api-key-input').value.trim();
+      const btn=document.getElementById('modal-test');
+      if(!key){Toast.show('Entrez une clé API d\'abord','error');return}
+      btn.disabled=true;btn.textContent='⏳…';
+      try{
+        const MODELS={claude:'claude-haiku-4-5-20251001',openai:'gpt-4o-mini',gemini:'gemini-2.0-flash'};
+        const m=MODELS[cur]||'';
+        if(cur==='claude'){
+          const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:m,max_tokens:5,messages:[{role:'user',content:'Hi'}]})});
+          if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`)}
+        }else if(cur==='openai'){
+          const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},body:JSON.stringify({model:m,max_tokens:5,messages:[{role:'user',content:'Hi'}]})});
+          if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`)}
+        }else if(cur==='gemini'){
+          const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:'Hi'}]}],generationConfig:{maxOutputTokens:5}})});
+          if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`)}
+        }
+        Toast.show(`✓ Clé ${cur} valide`,'success');
+      }catch(err){
+        Toast.show(`✗ ${err.message.slice(0,60)}`,'error');
+      }finally{
+        btn.disabled=false;btn.textContent='🔍 Tester';
+      }
+    });
   }
   return{init,open};
 })();
@@ -1199,6 +1234,7 @@ const Controller = (() => {
     Renderer.setScore(document.getElementById('score-out-bar'),document.getElementById('score-out-val'),document.getElementById('score-out-bar-wrap'),0,'amélioré');
     Renderer.renderOutput(null,null,'result',null,null);Renderer.renderChips([]);
     Renderer.updateCharCount(0);Renderer.updateOutCharCount(null);Renderer.setStatus('Prêt');
+    try{sessionStorage.removeItem('pf_draft')}catch{};
     document.getElementById('btn-copy').disabled=true;document.getElementById('btn-share').disabled=true;document.getElementById('btn-txt').disabled=true;document.getElementById('btn-iterate').disabled=true;
     State.set({inputValue:'',outputRaw:'',outputSections:null,scoreIn:0,scoreOut:0,chips:[]});
   }
@@ -1285,9 +1321,12 @@ const Controller = (() => {
     document.getElementById('input-prompt').addEventListener('input',e=>{
       const v=e.target.value;Renderer.updateCharCount(v.length);
       clearTimeout(_debounce);
-      _debounce=setTimeout(()=>{if(v.trim().length>3){const s=Scorer.score(v);Renderer.setScore(document.getElementById('score-in-bar'),document.getElementById('score-in-val'),document.getElementById('score-in-bar-wrap'),s,'original')}},250);
+      _debounce=setTimeout(()=>{if(v.trim().length>3){const s=Scorer.score(v);Renderer.setScore(document.getElementById('score-in-bar'),document.getElementById('score-in-val'),document.getElementById('score-in-bar-wrap'),s,'original')}try{sessionStorage.setItem('pf_draft',v)}catch{}},250);
     });
     document.getElementById('input-prompt').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();forge()}});
+
+    // Restore draft from previous session
+    try{const draft=sessionStorage.getItem('pf_draft');if(draft){const inp=document.getElementById('input-prompt');inp.value=draft;Renderer.updateCharCount(draft.length);if(draft.trim().length>3){const s=Scorer.score(draft);Renderer.setScore(document.getElementById('score-in-bar'),document.getElementById('score-in-val'),document.getElementById('score-in-bar-wrap'),s,'original')}}}catch{}
   }
 
   return{init,loadHistoryEntry,setMode};
