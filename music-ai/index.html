@@ -317,6 +317,7 @@
         <button class="mini-btn" onclick="ytStop()" title="Arrêter">✕</button>
       </div>
       <div style="padding:0 16px 2px;"><div id="mp-progress" onclick="mpSeek(event)" ontouchstart="event.preventDefault();mpSeek(event);" style="width:100%;height:20px;background:transparent;border-radius:6px;cursor:pointer;position:relative;display:flex;align-items:center;touch-action:none;" title="Cliquer pour naviguer"><div style="position:absolute;inset:8px 0;background:rgba(255,255,255,0.1);border-radius:2px;pointer-events:none;"></div><div id="mp-progress-fill" style="position:absolute;inset:8px auto 8px 0;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;width:0%;pointer-events:none;"></div></div></div>
+      <div style="display:flex;justify-content:space-between;padding:0 18px;font-size:9px;color:var(--muted);margin-top:-4px;"><span id="mp-time-cur">0:00</span><span id="mp-time-dur">—</span></div>
             <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 12px 8px;gap:4px;">
         <div style="display:flex;align-items:center;gap:5px;min-width:0;">
           <span style="font-size:0.8rem;flex-shrink:0;">🔈</span>
@@ -532,6 +533,7 @@ document.addEventListener('click',unlockAudioContext,{once:true});
 let _progressTick=null;
 function startProgressTick(){
   stopProgressTick();
+  const fmtT=s=>{const m=Math.floor(s/60);const ss=Math.floor(s%60);return m+':'+(ss<10?'0':'')+ss;};
   _progressTick=setInterval(()=>{
     if(!ST.ytPlayer||typeof ST.ytPlayer.getDuration!=='function')return;
     try{
@@ -541,6 +543,8 @@ function startProgressTick(){
       const pct=Math.min(100,(cur/dur)*100);
       const el=document.getElementById('mp-progress-fill');
       if(el)el.style.width=pct.toFixed(1)+'%';
+      const tc=document.getElementById('mp-time-cur');if(tc)tc.textContent=fmtT(cur);
+      const td=document.getElementById('mp-time-dur');if(td)td.textContent=fmtT(dur);
     }catch(_){}
   },500);
 }
@@ -578,8 +582,11 @@ async function ytPlay(track){
       }catch(_){}
     },800);
   }else{
-    // Player pas encore prêt — retry dans 1s
-    toast('⏳ Player en initialisation, relance dans 1s…');
+    // Player pas encore prêt — retry dans 1s (max 3)
+    if(!track._retries)track._retries=0;
+    if(track._retries>=3){toast('❌ Player YouTube indisponible — ouvre ⚙️');ytShowFallbackToast(track);return;}
+    track._retries++;
+    toast('⏳ Player en initialisation…');
     setTimeout(()=>ytPlay(track),1000);
     return;
   }
@@ -621,6 +628,7 @@ function ytNext(){
 }
 function setVolume(v){
   ST.volume=parseInt(v);
+  try{localStorage.setItem('music_ai_volume',ST.volume);}catch(_){}
   if(ST.ytPlayerReady&&ST.ytPlayer&&ST.ytPlayer.setVolume){
     if(ST.volume>0&&typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted()){try{ST.ytPlayer.unMute();}catch(_){}}
     else if(ST.volume===0&&typeof ST.ytPlayer.mute==='function'){try{ST.ytPlayer.mute();}catch(_){}}
@@ -714,7 +722,9 @@ function setSleepTimer(minutes){
   ST.sleepTimer=setTimeout(()=>{ytStop();toast('😴 Bonne nuit');ST.sleepMinutes=0;const b=document.getElementById('mp-sleep-btn');if(b)b.textContent='😴'},minutes*60*1000);
 }
 
-const LS_PL='music_ai_playlists';
+const LS_PL='music_ai_playlists',LS_THREAD='music_ai_thread';
+function getPersistedThread(){try{return JSON.parse(localStorage.getItem(LS_THREAD))||[]}catch{return[]}}
+function saveThread(t){try{localStorage.setItem(LS_THREAD,JSON.stringify(t))}catch(_){}}
 function getPlaylists(){try{return JSON.parse(localStorage.getItem(LS_PL))||[]}catch{return[]}}
 function savePlaylists(pl){localStorage.setItem(LS_PL,JSON.stringify(pl))}
 let _currentPlId=null;
@@ -1084,11 +1094,11 @@ async function getRecommendation(mode){
     pushHistory({title:rec.title,artist:rec.artist,genre:rec.genre,action:'suggest',context:mode});
     ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
     if(ST.sessionThread.length>8)ST.sessionThread.shift();
+    saveThread(ST.sessionThread);
     const p=getProfile();if(p){p.interactions=(p.interactions||0)+1;saveProfile(p)}
     if(ST.continuousMode&&getYtKey()){const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;ytPlay({title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`});}
   }catch(e){resultEl.innerHTML=`<div style="color:#ef4444;font-size:13px;">⚠️ ${esc(e.message)}</div>`}
-  if(mode==='onetap')document.getElementById('onetap-icon').textContent='♪';
-  ST.isLoading=false;
+  finally{if(mode==='onetap')document.getElementById('onetap-icon').textContent='♪';ST.isLoading=false;}
 }
 
 function renderCard(container,rec){
@@ -1183,8 +1193,9 @@ async function sendChat(){
     pushHistory({title:rec.title,artist:rec.artist,action:'chat',context:'chat'});
     ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
     if(ST.sessionThread.length>8)ST.sessionThread.shift();
+    saveThread(ST.sessionThread);
   }catch(e){ab.innerHTML=`<span style="color:#ef4444;font-size:13px;">⚠️ ${esc(e.message)}</span>`}
-  msgs.scrollTop=msgs.scrollHeight;ST.isLoading=false;
+  finally{msgs.scrollTop=msgs.scrollHeight;ST.isLoading=false;}
 }
 
 // ── HISTORY ──
@@ -1240,7 +1251,22 @@ function updateApiStatus(){
   if(ytDot)ytDot.style.background=hasYT?'#22c55e':'#ef4444';
   updateQuotaDisplay();
 }
-function boot(){const p=getProfile();const c=getConfig();initPlaylistsOverlay();if(p?.completedOnboarding&&c?.apiKey){showScreen('main');initMainApp();setTimeout(updateApiStatus,100)}else{showScreen('onboard');initOnboarding();}}
+function boot(){
+  const p=getProfile();const c=getConfig();
+  // Restaurer volume persisté
+  const sv=parseInt(localStorage.getItem('music_ai_volume')||'80');
+  ST.volume=sv;
+  ['mp-volume','ko-volume'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=sv});
+  ['mp-vol-label','ko-vol-label'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=sv+'%'});
+  // Restaurer sessionThread (anti-répétition cross-sessions)
+  ST.sessionThread=getPersistedThread();
+  // Listeners réseau
+  window.addEventListener('offline',()=>{toast('📶 Hors ligne',3000);ST.isLoading=false;});
+  window.addEventListener('online',()=>toast('📶 Connexion rétablie ✓',2000));
+  initPlaylistsOverlay();
+  if(p?.completedOnboarding&&c?.apiKey){showScreen('main');initMainApp();setTimeout(updateApiStatus,100)}
+  else{showScreen('onboard');initOnboarding();}
+}
 boot();
 </script>
 <!-- Conteneur player YT PERMANENT — opacity:0 uniquement (jamais visibility:hidden ni display:none)
