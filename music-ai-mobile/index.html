@@ -690,6 +690,13 @@ function tryUnlockAudio(){
     ST.ytPlayer.playVideo();
     setTimeout(()=>{
       try{
+        // If ytPlayDirect already started a real track, DON'T pause it
+        // Just ensure unmuted — the race condition fix
+        if(_audioReady){
+          try{if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();}catch(_){}
+          try{ST.ytPlayer.setVolume(ST.volume);}catch(_){}
+          return;
+        }
         ST.ytPlayer.pauseVideo();
         ST.ytPlayer.unMute();
         ST.ytPlayer.setVolume(ST.volume);
@@ -873,8 +880,12 @@ function ytStop(){
 
 function ytNext(){
   if(ST.queue.length>0&&ST.queueIdx<ST.queue.length-1){ST.queueIdx++;ytPlay(ST.queue[ST.queueIdx]);return;}
-  if(ST.continuousMode){autoGetNext();return;}
-  toast('Fin de la file — lance une nouvelle reco');
+  // Preserve audio gesture context before going async (Android Chrome)
+  _audioReady=true;
+  if(ST.ytReady&&ST.ytPlayer&&typeof ST.ytPlayer.playVideo==='function'){
+    try{ST.ytPlayer.playVideo();}catch(_){} // keeps AudioContext active
+  }
+  autoGetNext();
 }
 function ytPrev(){
   if(ST.queue.length>0&&ST.queueIdx>0){ST.queueIdx--;ytPlay(ST.queue[ST.queueIdx]);return;}
@@ -889,7 +900,7 @@ function onEnded(){
 }
 
 async function autoGetNext(){
-  toast('🔄 Mode auto — nouvelle reco…');
+  toast('🔄 Nouvelle reco en cours…');
   try{
     const raw=await callAI(buildPrompt('onetap'),'Recommande-moi une chanson parfaite maintenant.');
     const rec=parseJSON(raw);
