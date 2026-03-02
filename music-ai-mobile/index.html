@@ -797,26 +797,23 @@ function ytPlayDirect(track){
   updateNowPlayingUI(track);
 
   try{
-    // Unmute + set volume BEFORE loading (prevents muted playback)
-    try{if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();}catch(_){}
-    ST.ytPlayer.setVolume(ST.volume);
+    // KEY FIX: Start MUTED — Chrome always allows muted autoplay on mobile
+    // (even without user gesture propagation to cross-origin iframe)
+    // unMute happens in onStateChange when state=1 (PLAYING) is confirmed
+    ST.ytPlayer.mute();
+    ST.ytPlayer.setVolume(ST.volume); // pre-set volume so unmute plays at right level
 
-    // Load video — this is autoplay-triggering in user gesture context
+    // Load + play — muted so Chrome won't block it
     ST.ytPlayer.loadVideoById(track._videoId);
-
-    // Explicit play call in same synchronous stack (belt + suspenders)
     ST.ytPlayer.playVideo();
 
-    // Retry at multiple delays — handles Android's async AudioContext
-    [200,600,1200,2500].forEach(delay=>{
+    // Retry playVideo only (NOT unMute — that's handled by onStateChange state=1)
+    [300,900,2000].forEach(delay=>{
       setTimeout(()=>{
         if(!ST.ytPlayer||!ST.currentTrack||ST.currentTrack._videoId!==track._videoId)return;
         try{
           const s=ST.ytPlayer.getPlayerState();
-          if(s!==1&&s!==3){ST.ytPlayer.playVideo();}// not playing or buffering → retry
-          if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted()){
-            ST.ytPlayer.unMute();ST.ytPlayer.setVolume(ST.volume);
-          }
+          if(s!==1&&s!==3){ST.ytPlayer.playVideo();}
         }catch(_){}
       },delay);
     });
@@ -840,11 +837,11 @@ async function ytPlay(track){
   updateMiniPlayer(track.title,track.artist,track._thumb);
   updateNowPlayingUI(track);
   try{
-    try{if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();}catch(_){}
+    ST.ytPlayer.mute(); // start muted, onStateChange state=1 will unmute
     ST.ytPlayer.setVolume(ST.volume);
     ST.ytPlayer.loadVideoById(vid);
     ST.ytPlayer.playVideo();
-    [300,900].forEach(d=>setTimeout(()=>{try{ST.ytPlayer.playVideo();}catch(_){}},d));
+    [300,900].forEach(d=>setTimeout(()=>{try{const s=ST.ytPlayer.getPlayerState();if(s!==1&&s!==3)ST.ytPlayer.playVideo();}catch(_){}},d));
   }catch(_){}
   updatePPUI(true);
 }
