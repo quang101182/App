@@ -254,6 +254,7 @@
           <button class="mode-chip" data-mode="mood" onclick="setMode('mood')">🎭 Humeur</button>
           <button class="mode-chip" data-mode="activity" onclick="setMode('activity')">🏃 Activité</button>
           <button class="mode-chip" data-mode="discovery" onclick="setMode('discovery')">🔭 Découverte</button>
+          <button class="mode-chip" data-mode="shuffle" onclick="setMode('shuffle')">🔀 Shuffle</button>
         </div>
         <div id="zone-onetap">
           <div style="display:flex;flex-direction:column;align-items:center;padding:20px 0 28px;">
@@ -285,6 +286,15 @@
             <button class="btn-primary" onclick="getRecommendation('discovery')">Surprends-moi 🎲</button>
           </div>
           <div id="result-discovery" style="display:none;margin-top:16px;"></div>
+        </div>
+        <div id="zone-shuffle" style="display:none;">
+          <div class="music-card" style="text-align:center;padding:28px 20px;">
+            <div style="font-size:2.5rem;margin-bottom:12px;">🔀</div>
+            <div class="syne" style="font-size:1.05rem;font-weight:800;margin-bottom:8px;">Mode Shuffle</div>
+            <p style="font-size:13px;color:var(--muted);margin:0 0 20px;">Genre aléatoire, époque surprise, hors profil. L'IA pioche n'importe où.</p>
+            <button class="btn-primary" onclick="getRecommendation('shuffle')">Lance le dé 🎲</button>
+          </div>
+          <div id="result-shuffle" style="display:none;margin-top:16px;"></div>
         </div>
       </div>
       <!-- CHAT -->
@@ -395,6 +405,8 @@
     <div style="padding:18px 20px 10px;display:flex;align-items:center;gap:12px;flex-shrink:0;border-bottom:1px solid var(--border);">
       <button id="pl-back-btn" style="width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">←</button>
       <div class="syne" style="font-size:1.1rem;font-weight:800;flex:1;">💿 Playlists</div>
+      <button onclick="importPlaylists()" style="padding:6px 10px;border-radius:50px;background:var(--card);border:1px solid var(--border);color:var(--muted);font-family:inherit;font-size:11px;cursor:pointer;" title="Importer JSON">↙</button>
+      <button onclick="exportPlaylists()" style="padding:6px 10px;border-radius:50px;background:var(--card);border:1px solid var(--border);color:var(--muted);font-family:inherit;font-size:11px;cursor:pointer;" title="Exporter JSON">↗</button>
       <button id="pl-create-btn" class="btn-primary" style="padding:8px 14px;font-size:12px;">+ Créer</button>
     </div>
     <div id="playlists-list" class="scroll-y" style="flex:1;padding:0 20px 20px;"></div>
@@ -417,6 +429,17 @@
       <div style="display:flex;gap:10px;">
         <button id="pl-create-cancel-btn" class="btn-ghost" style="flex:1;padding:10px;">Annuler</button>
         <button id="pl-create-confirm-btn" class="btn-primary" style="flex:1;padding:10px;">Créer</button>
+      </div>
+    </div>
+  </div>
+  <!-- Modal renommage -->
+  <div id="pl-rename-modal" style="display:none;position:fixed;inset:0;z-index:700;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;padding:20px;">
+    <div style="background:var(--bg2);border-radius:20px;padding:24px;width:100%;max-width:320px;border:1px solid var(--border);">
+      <div class="syne" style="font-size:1rem;font-weight:800;margin-bottom:16px;">Renommer la playlist</div>
+      <input id="pl-rename-input" class="field" placeholder="Nouveau nom" style="width:100%;margin-bottom:12px;box-sizing:border-box;">
+      <div style="display:flex;gap:10px;">
+        <button id="pl-rename-cancel-btn" class="btn-ghost" style="flex:1;padding:10px;">Annuler</button>
+        <button id="pl-rename-confirm-btn" class="btn-primary" style="flex:1;padding:10px;">Renommer</button>
       </div>
     </div>
   </div>
@@ -444,7 +467,7 @@ const MOODS=[{id:'energique',label:'Énergie',emoji:'⚡'},{id:'melancolique',la
 const ACTIVITIES=[{id:'running',label:'🏃 Running'},{id:'gym',label:'💪 Gym'},{id:'coding',label:'💻 Coding'},{id:'cuisine',label:'🍳 Cuisine'},{id:'conduite',label:'🚗 Conduite'},{id:'meditation',label:'🧘 Méditation'}];
 const MODELS={claude:['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001'],gemini:['gemini-2.0-flash','gemini-1.5-pro','gemini-1.5-flash'],openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo']};
 const ADVENTURE_LABELS=[[0,'Confort absolu'],[25,'Plutôt classique'],[40,'Équilibré'],[60,'Curieux'],[80,'Aventurier'],[100,'Explorateur']];
-let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,continuousMode:false,volume:80,sleepMinutes:0,sleepTimer:null,sessionThread:[],sessionStart:Date.now(),_pendingUnmute:null};
+let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,continuousMode:false,volume:80,sleepMinutes:0,sleepTimer:null,sessionThread:[],chatHistory:[],sessionStart:Date.now(),_pendingUnmute:null};
 
 let _tt=null;
 function toast(msg,dur=2400){const el=document.getElementById('toast');el.textContent=msg;el.classList.remove('hidden');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.add('hidden'),dur)}
@@ -727,6 +750,8 @@ function getPersistedThread(){try{return JSON.parse(localStorage.getItem(LS_THRE
 function saveThread(t){try{localStorage.setItem(LS_THREAD,JSON.stringify(t))}catch(_){}}
 function getPlaylists(){try{return JSON.parse(localStorage.getItem(LS_PL))||[]}catch{return[]}}
 function savePlaylists(pl){localStorage.setItem(LS_PL,JSON.stringify(pl))}
+function exportPlaylists(){const pl=getPlaylists();if(!pl.length){toast('Aucune playlist à exporter');return;}const blob=new Blob([JSON.stringify(pl,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='music_ai_playlists_'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();URL.revokeObjectURL(url);a.remove();toast(`💾 ${pl.length} playlist(s) exportée(s)`);}
+function importPlaylists(){const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=function(){const f=this.files[0];if(!f)return;const reader=new FileReader();reader.onload=function(e){try{const imported=JSON.parse(e.target.result);if(!Array.isArray(imported))throw new Error('Format invalide');const existing=getPlaylists();const merged=[...existing];let added=0;imported.forEach(imp=>{if(!imp.name||!Array.isArray(imp.tracks))return;if(!merged.find(x=>x.name===imp.name)){merged.push({...imp,id:Date.now().toString()+Math.random().toString(36).slice(2)});added++;}});savePlaylists(merged);renderPlaylists();toast(`✅ ${added} playlist(s) importée(s)`);}catch(err){toast('❌ Fichier JSON invalide');}};reader.readAsText(f);};inp.click();}
 let _currentPlId=null;
 
 // ─── OVERLAY PLAYLISTS ───
@@ -847,10 +872,22 @@ function deletePlaylist(id){
   if(!confirm(`Supprimer "${p.name}" (${p.tracks.length} titre(s)) ?`))return;
   savePlaylists(pl.filter(x=>x.id!==id));renderPlaylists();toast('Playlist supprimée');
 }
+let _renamingPlId=null;
 function renamePlaylist(id){
   const pl=getPlaylists();const p=pl.find(x=>x.id===id);if(!p)return;
-  const n=prompt('Nouveau nom :',p.name);if(!n||!n.trim())return;
-  p.name=n.trim();savePlaylists(pl);renderPlaylists();toast(`💿 Renommée en "${p.name}"`);
+  _renamingPlId=id;
+  const inp=document.getElementById('pl-rename-input');
+  const m=document.getElementById('pl-rename-modal');
+  if(inp)inp.value=p.name;
+  if(m){m.style.display='flex';setTimeout(()=>{if(inp)inp.focus();inp.select();},100);}
+}
+function confirmRename(){
+  const name=(document.getElementById('pl-rename-input')?.value||'').trim();
+  if(!name){toast('Donne un nom 💿');return;}
+  const pl=getPlaylists();const p=pl.find(x=>x.id===_renamingPlId);if(!p)return;
+  p.name=name;savePlaylists(pl);
+  const m=document.getElementById('pl-rename-modal');if(m)m.style.display='none';
+  renderPlaylists();toast(`💿 Renommée en "${p.name}"`);
 }
 function removeFromPlaylist(plId,idx){
   const pl=getPlaylists();const p=pl.find(x=>x.id===plId);if(!p)return;
@@ -951,8 +988,12 @@ function initPlaylistsOverlay(){
   safe('pl-create-confirm-btn',createPlaylist);
   safe('pl-add-title-btn',showAddFromHistoryPicker);
   safe('pl-play-btn',playPlaylist);
+  safe('pl-rename-cancel-btn',()=>{const m=document.getElementById('pl-rename-modal');if(m)m.style.display='none';});
+  safe('pl-rename-confirm-btn',confirmRename);
   const inp=document.getElementById('pl-name-input');
   if(inp)inp.addEventListener('keydown',function(e){if(e.key==='Enter')createPlaylist();});
+  const ri=document.getElementById('pl-rename-input');
+  if(ri)ri.addEventListener('keydown',function(e){if(e.key==='Enter')confirmRename();});
 }
 // ── ONBOARDING ──
 function initOnboarding(){
@@ -1009,7 +1050,7 @@ function initMainApp(){updateApiStatus();
 }
 function selectMood(id,el){document.querySelectorAll('#mood-grid .mood-chip').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');ST.selMood=id;document.getElementById('mood-go').style.display='block'}
 function selectActivity(id,el){document.querySelectorAll('#activity-grid .mood-chip').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');ST.selActivity=id;document.getElementById('activity-go').style.display='block'}
-function setMode(mode){ST.mode=mode;document.querySelectorAll('.mode-chip').forEach(x=>x.classList.toggle('active',x.dataset.mode===mode));['onetap','mood','activity','discovery'].forEach(z=>{document.getElementById(`zone-${z}`).style.display=z===mode?'block':'none'})}
+function setMode(mode){ST.mode=mode;document.querySelectorAll('.mode-chip').forEach(x=>x.classList.toggle('active',x.dataset.mode===mode));['onetap','mood','activity','discovery','shuffle'].forEach(z=>{document.getElementById(`zone-${z}`).style.display=z===mode?'block':'none'})}
 
 // ── AI ──
 function buildSystemPrompt(mode){
@@ -1037,7 +1078,9 @@ function buildSystemPrompt(mode){
     :adv<=0.3?'Confort: reste proche des artistes référencés, genres principaux.'
     :'Mix équilibré: varie entre valeurs sûres et découvertes modérées.';
   const modeInstr=mode==='discovery'?'MODE DÉCOUVERTE: pépite RADICALEMENT inattendue — artiste inconnu, genre non représenté, époque différente. discovery_score > 0.8. Surprise absolue.':
-    mode==='onetap'?'ONE-TAP: reco parfaite pour CE moment précis. Variété maximale vs sessions précédentes.':'';
+    mode==='onetap'?'ONE-TAP: reco parfaite pour CE moment précis. Variété maximale vs sessions précédentes.':
+    mode==='shuffle'?'MODE SHUFFLE: ignore TOTALEMENT le profil. Genre, époque, culture 100% aléatoires. discovery_score > 0.9. Peut être n\'importe quoi : bossa nova 1960, metal norvégien, pop coréenne, blues malien...':'';
+  const chatCtx=mode==='chat'&&ST.chatHistory.length>0?'\nCONVERSATION RÉCENTE:\n'+ST.chatHistory.slice(-6).map(m=>(m.role==='user'?'User':'IA')+': '+m.content).join('\n'):'';
   const antiRepeat=recentTitles.length>0?'ANTI-RÉPÉTITION ABSOLUE — NE JAMAIS proposer ces titres: '+recentTitles.join(' | '):'';
   const dislikedSection=(p.disliked&&p.disliked.length>0)?'GENRES/ARTISTES À ÉVITER (dislikes utilisateur): '+p.disliked.slice(-20).join(', '):'';
   return `Tu es un expert mondial en recommandation musicale — connaissance encyclopédique de TOUS genres, époques, cultures, sous-cultures.
@@ -1059,6 +1102,7 @@ ${threadDesc}
 ${antiRepeat}
 
 ${modeInstr}
+${chatCtx}
 
 RÈGLE ABSOLUE: JSON UNIQUEMENT. Zéro texte avant/après. Zéro backtick. Zéro markdown.
 {"title":"...","artist":"...","genre":"...","year":2010,"mood":"...","why":"explication émotionnelle max 20 mots","story":"2-3 phrases: contexte création, anecdote, ce que Spotify ne dira jamais","now_reason":"1 phrase: pourquoi MAINTENANT ce ${timeSlot} de ${dow}","youtube_query":"artiste titre official audio","discovery_score":0.0}`;
@@ -1086,7 +1130,7 @@ async function getRecommendation(mode){
   resultEl.style.display='block';resultEl.className='music-card';
   resultEl.innerHTML=`<div style="display:flex;align-items:center;gap:10px;color:var(--muted);"><div class="dot-typing"><span></span><span></span><span></span></div> L'IA cherche...</div>`;
   if(mode==='onetap')document.getElementById('onetap-icon').textContent='⏳';
-  const msgMap={onetap:'Recommande-moi une chanson parfaite maintenant.',mood:`Je me sens ${ST.selMood||'neutre'}. Reco.`,activity:`Je fais: ${ST.selActivity||'quelque chose'}. Reco.`,discovery:'Mode découverte: pépite inattendue.'};
+  const msgMap={onetap:'Recommande-moi une chanson parfaite maintenant.',mood:`Je me sens ${ST.selMood||'neutre'}. Reco.`,activity:`Je fais: ${ST.selActivity||'quelque chose'}. Reco.`,discovery:'Mode découverte: pépite inattendue.',shuffle:'Mode Shuffle: genre TOTALEMENT aléatoire, hors profil. Ignore mes préférences habituelles. Pioche n\'importe où dans l\'histoire de la musique.'};
   try{
     const raw=await callAI(buildSystemPrompt(mode),msgMap[mode]||msgMap.onetap);
     const rec=parseJSON(raw);
@@ -1101,15 +1145,20 @@ async function getRecommendation(mode){
   finally{if(mode==='onetap')document.getElementById('onetap-icon').textContent='♪';ST.isLoading=false;}
 }
 
+const GENRE_ART={pop:['#ff6b9d','#c44fdb','🎤'],rock:['#f97316','#dc2626','🎸'],electro:['#06b6d4','#7c3aed','🎛️'],jazz:['#f59e0b','#d97706','🎷'],classique:['#8b5cf6','#4c1d95','🎻'],'hip-hop':['#f59e0b','#78350f','🎤'],rnb:['#ec4899','#7c3aed','🎵'],indie:['#22c55e','#06b6d4','🌿'],metal:['#6b7280','#1f2937','🤘'],folk:['#d97706','#92400e','🪕'],soul:['#f59e0b','#ea580c','💛'],reggae:['#22c55e','#facc15','🌴'],latin:['#f97316','#dc2626','💃'],ambient:['#06b6d4','#1e3a5f','🌫️'],funk:['#f59e0b','#7c3aed','🕺'],blues:['#3b82f6','#1e3a8a','🎸'],country:['#d97706','#92400e','🤠'],afrobeat:['#f97316','#16a34a','🥁']};
 function renderCard(container,rec){
   const ytQuery=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;
   const ytUrl=`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQuery)}`;
   const discPct=Math.round((parseFloat(rec.discovery_score)||0)*100);
   const id='card_'+Date.now();
   const hasYT=!!getYtKey();
+  const gk=(rec.genre||'').toLowerCase().split(/[/,\s]/)[0].trim();
+  const ga=GENRE_ART[gk]||[null,null,'🎵'];
+  const artGrad=ga[0]?`linear-gradient(135deg,${ga[0]},${ga[1]})`:'linear-gradient(135deg,var(--accent),var(--accent2))';
+  const artIcon=ga[2];
   container.innerHTML=`
     <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;">
-      <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">🎵</div>
+      <div id="${id}-art" style="width:48px;height:48px;border-radius:12px;background:${artGrad};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.3rem;background-size:cover;background-position:center;">${artIcon}</div>
       <div style="flex:1;min-width:0;">
         <div class="syne" style="font-weight:800;font-size:1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(rec.title)}</div>
         <div style="color:var(--muted);font-size:13px;">${esc(rec.artist)}</div>
@@ -1134,6 +1183,8 @@ function renderCard(container,rec){
     </div>`;
   container.className='music-card appear';
   const title=rec.title||'',artist=rec.artist||'',genre=rec.genre||'',track={title,artist,ytQuery,ytUrl};
+  // Charger la vignette YT en arrière-plan pour l'artwork de la carte
+  if(hasYT){ytSearch(ytQuery).then(vid=>{if(vid){const artEl=document.getElementById(`${id}-art`);if(artEl){artEl.style.backgroundImage=`url(https://img.youtube.com/vi/${vid}/mqdefault.jpg)`;artEl.textContent='';}}}).catch(()=>{});}
   document.getElementById(`${id}-like`).onclick=()=>doFeedback(`${id}-like`,'like',title,artist,genre);
   document.getElementById(`${id}-dislike`).onclick=()=>doFeedback(`${id}-dislike`,'dislike',title,artist,genre);
   document.getElementById(`${id}-save`).onclick=()=>doFeedback(`${id}-save`,'save',title,artist,genre);
@@ -1194,6 +1245,9 @@ async function sendChat(){
     ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
     if(ST.sessionThread.length>8)ST.sessionThread.shift();
     saveThread(ST.sessionThread);
+    ST.chatHistory.push({role:'user',content:msg});
+    ST.chatHistory.push({role:'assistant',content:`${rec.title} — ${rec.artist}: ${rec.why||''}`});
+    if(ST.chatHistory.length>20)ST.chatHistory=ST.chatHistory.slice(-20);
   }catch(e){ab.innerHTML=`<span style="color:#ef4444;font-size:13px;">⚠️ ${esc(e.message)}</span>`}
   finally{msgs.scrollTop=msgs.scrollHeight;ST.isLoading=false;}
 }
