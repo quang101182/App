@@ -135,6 +135,10 @@ footer{margin-top:auto;padding:16px 20px;border-top:1px solid var(--border);disp
     </div>
   </div>
   <div class="crow">
+    <span class="clbl">RÉGION</span>
+    <input type="text" id="azureRegion" placeholder="ex: francecentral, westeurope, eastus...">
+  </div>
+  <div class="crow">
     <span class="clbl">PROXY</span>
     <input type="text" id="deeplxUrl" placeholder="URL DeepLX optionnel (ex: https://...workers.dev)">
   </div>
@@ -275,6 +279,8 @@ function init() {
   document.getElementById('apiKey').addEventListener('change', function() { try { localStorage.setItem('sw_apikey', getApiKey()); } catch(e) {} });
   try { var ak = localStorage.getItem('sw_azurekey'); if (ak) document.getElementById('azureKey').value = ak; } catch(e) {}
   document.getElementById('azureKey').addEventListener('change', function() { try { localStorage.setItem('sw_azurekey', this.value.trim()); } catch(e) {} });
+  try { var ar = localStorage.getItem('sw_azureregion'); if (ar) document.getElementById('azureRegion').value = ar; } catch(e) {}
+  document.getElementById('azureRegion').addEventListener('change', function() { try { localStorage.setItem('sw_azureregion', this.value.trim()); } catch(e) {} });
   try { var dlx = localStorage.getItem('sw_deeplxurl'); if (dlx) document.getElementById('deeplxUrl').value = dlx; } catch(e) {}
   document.getElementById('deeplxUrl').addEventListener('change', function() { try { localStorage.setItem('sw_deeplxurl', this.value.trim()); } catch(e) {} });
   try {
@@ -301,6 +307,7 @@ function init() {
 
 function getApiKey() { return document.getElementById('apiKey').value.trim(); }
 function getAzureKey() { return document.getElementById('azureKey').value.trim(); }
+function getAzureRegion() { return document.getElementById('azureRegion').value.trim(); }
 function getDeeplxUrl() { return document.getElementById('deeplxUrl').value.trim(); }
 
 function toggleKey(inputId, btnId) {
@@ -520,9 +527,12 @@ async function translateSRT(origSrt, sourceLang, targetLang) {
 
 async function azureTranslate(bodyArr, targetLang, azureKey) {
   var url = 'https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&to=' + targetLang;
+  var headers = { 'Ocp-Apim-Subscription-Key': azureKey, 'Content-Type': 'application/json' };
+  var region = getAzureRegion();
+  if (region) headers['Ocp-Apim-Subscription-Region'] = region;
   var resp = await fetch(url, {
     method: 'POST',
-    headers: { 'Ocp-Apim-Subscription-Key': azureKey, 'Content-Type': 'application/json' },
+    headers: headers,
     body: JSON.stringify(bodyArr)
   });
   if (!resp.ok) {
