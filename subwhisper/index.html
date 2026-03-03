@@ -1589,24 +1589,17 @@ async function startMic() {
   if (!apiKey) { showErr('Clé API manquante pour le mic live'); return; }
   try {
     setMicUI('connecting');
-    // Obtenir token temporaire
-    var tokenRes = await fetch('https://api.assemblyai.com/v2/realtime/token', {
-      method: 'POST',
-      headers: { 'authorization': apiKey, 'content-type': 'application/json' },
-      body: JSON.stringify({ expires_in: 480 })
-    });
-    if (!tokenRes.ok) throw new Error('Token realtime ' + tokenRes.status);
-    var tokenData = await tokenRes.json();
-    var token = tokenData.token;
-    // Accès micro
+    // L'endpoint /v2/realtime/token est bloqué par CORS depuis le browser.
+    // On passe directement la clé API comme token dans l'URL WebSocket.
+    // Le WebSocket (wss://) n'est pas soumis au CORS.
     micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     micContext = new AudioContext({ sampleRate: 16000 });
     var src = micContext.createMediaStreamSource(micStream);
     micProcessor = micContext.createScriptProcessor(4096, 1, 1);
     src.connect(micProcessor);
     micProcessor.connect(micContext.destination);
-    // WebSocket
-    micWS = new WebSocket('wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=' + token);
+    // WebSocket avec clé API directement comme token
+    micWS = new WebSocket('wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=' + encodeURIComponent(apiKey));
     micWS.onopen = function() { micActive = true; setMicUI('recording'); };
     micWS.onmessage = function(ev) { handleMicMessage(ev); };
     micWS.onerror = function() { stopMic(); showErr('Erreur WebSocket mic'); };
