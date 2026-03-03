@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
-<title>SubWhisper v4.0</title>
+<title>SubWhisper v5.0</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -672,6 +672,33 @@ body.light .ffmpeg-wrap{background:rgba(0,0,0,.04)}
 }
 .ffmpeg-copy:hover{background:rgba(0,212,170,.2);border-color:var(--success)}
 
+/* ── IMPORT SRT ─────────────────────────────────────────── */
+.dz-or-row{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:18px}
+.dz-or-sep{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px;flex-shrink:0}
+.dz-srt-btn{
+  background:none;
+  border:1px dashed var(--border2);
+  border-radius:9px;
+  color:var(--muted);
+  font-family:var(--mono);
+  font-size:11px;
+  padding:7px 16px;
+  cursor:pointer;
+  letter-spacing:.3px;
+  transition:all .2s;
+}
+.dz-srt-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(124,106,255,.07)}
+
+/* ── FIND & REPLACE MODAL ───────────────────────────────── */
+#frModal{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);align-items:center;justify-content:center}
+#frInner{background:var(--surface2);backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);border:1px solid var(--border2);border-radius:20px;padding:24px;width:min(440px,92vw);display:flex;flex-direction:column;gap:14px}
+#frHdr{font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+.fr-row{display:flex;flex-direction:column;gap:6px}
+.fr-row label{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.fr-row input[type=text]{flex:1;width:100%}
+#frOpts{display:flex;align-items:center;gap:8px}
+#frActions{display:flex;gap:8px;justify-content:flex-end}
+
 /* ── HISTORY ───────────────────────────────────────────── */
 .hist-wrap{margin:0 28px 28px}
 .hist-hdr{
@@ -790,7 +817,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v4.0</span>
+    <span class="ver-badge">v5.0</span>
   </div>
   <div class="hdr-r">
     <button class="icon-btn" id="cfgBtn" onclick="toggleConfig()" title="Paramètres">&#9881;&#65039;</button>
@@ -884,9 +911,11 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     <span class="dz-icon">&#128249;</span>
     <div class="dz-title">Déposer ou sélectionner un fichier</div>
     <div class="dz-sub">MP4 &middot; MKV &middot; MOV &middot; AVI &middot; MP3 &middot; WAV &mdash; jusqu'à 5 GB</div>
+    <div class="dz-or-row"><span class="dz-or-sep">— ou —</span><button class="dz-srt-btn" onclick="event.stopPropagation();openSrtPicker()">&#x1F4C4; Importer un .SRT existant</button></div>
   </div>
 </div>
 <input type="file" id="fi" accept="video/*,audio/*" style="display:none">
+<input type="file" id="srtFi" accept=".srt" style="display:none">
 
 <div class="fp" id="fp">
   <span style="font-size:26px;flex-shrink:0">&#127916;</span>
@@ -894,6 +923,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     <div class="fname" id="fn">—</div>
     <div class="fsz" id="fs">—</div>
   </div>
+  <button class="frm" id="extractBtn" onclick="extractAudio()" title="Extraire l'audio WAV 16kHz (upload plus rapide)" aria-label="Extraire audio" style="display:none">&#x1F3B5;</button>
   <button class="frm" onclick="clearFile()" title="Retirer le fichier" aria-label="Retirer le fichier">&#x2715;</button>
 </div>
 
@@ -932,6 +962,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
   <div class="rh">
     <div class="rt"><span class="rt-dot"></span><span id="rtLbl">Transcription</span></div>
     <div class="rac">
+      <button class="ab" onclick="openFR()" id="frBtn">&#x1F50D; F&amp;R</button>
       <button class="ab" onclick="copySRT()" id="copyBtn">COPIER</button>
       <button class="ab" id="richToggleBtn" onclick="toggleRichView()" disabled title="Données word-level indisponibles">&#x25A7; RICH</button>
       <button class="ab" onclick="dlTXT()">&#x2B07; TXT</button>
@@ -994,7 +1025,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v4.0 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v5.0 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -1068,10 +1099,20 @@ function init() {
   dz.addEventListener('dragleave', function() { dz.classList.remove('over'); });
   dz.addEventListener('drop', function(e) {
     e.preventDefault(); dz.classList.remove('over');
-    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+      var df = e.dataTransfer.files[0];
+      if (/\.srt$/i.test(df.name)) { loadSrtFile(df); } else { handleFile(df); }
+    }
   });
   document.getElementById('fi').addEventListener('change', function() { if (this.files && this.files[0]) handleFile(this.files[0]); });
+  document.getElementById('srtFi').addEventListener('change', function() { if (this.files && this.files[0]) loadSrtFile(this.files[0]); });
   dz.addEventListener('click', function() { openFilePicker(); });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      if (document.getElementById('frModal').style.display !== 'none') closeFR();
+      if (document.getElementById('subEditModal').style.display !== 'none') closeSubEditModal();
+    }
+  });
   renderHistory();
 }
 
@@ -1147,6 +1188,8 @@ function handleFile(f) {
   }
   document.getElementById('fp').classList.add('vis');
   document.getElementById('dropSection').style.display = 'none';
+  var extractBtn = document.getElementById('extractBtn');
+  if (extractBtn) extractBtn.style.display = isAudio ? 'none' : 'inline-block';
   hideErr(); hideRes(); updateSbtn();
 }
 
@@ -1169,7 +1212,10 @@ function clearFile() {
   selFile = null; srtTxt = ''; srtOriginal = '';
   document.getElementById('fp').classList.remove('vis');
   document.getElementById('fi').value = '';
+  document.getElementById('srtFi').value = '';
   document.getElementById('dropSection').style.display = '';
+  var extractBtn = document.getElementById('extractBtn');
+  if (extractBtn) extractBtn.style.display = 'none';
   clearFilePrev();
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   hideRes(); hideErr(); updateSbtn();
@@ -2131,6 +2177,201 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── IMPORT SRT ────────────────────────────────────────────
+function openSrtPicker() {
+  document.getElementById('srtFi').value = '';
+  document.getElementById('srtFi').click();
+}
+
+function loadSrtFile(file) {
+  if (!file) return;
+  if (!/\.srt$/i.test(file.name)) { toast('Sélectionnez un fichier .srt'); return; }
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    var content = ev.target.result;
+    if (!content || !content.trim()) { showErr('Fichier SRT vide.'); return; }
+    var blocks = parseSRT(content);
+    if (!blocks.length) { showErr('SRT invalide — aucun bloc trouvé. Vérifiez le format.'); return; }
+    origName = file.name.replace(/\.srt$/i, '');
+    wordData = []; selFile = null;
+    document.getElementById('fp').classList.remove('vis');
+    document.getElementById('filePrevWrap').classList.remove('vis');
+    var extractBtn = document.getElementById('extractBtn');
+    if (extractBtn) extractBtn.style.display = 'none';
+    hideErr(); hideRes();
+    showRes(content, null, null, false, []);
+    updateSbtn();
+    toast('\u2713 SRT import\u00e9 \u2014 ' + blocks.length + ' blocs');
+  };
+  reader.onerror = function() { showErr('Impossible de lire le fichier SRT.'); };
+  reader.readAsText(file, 'UTF-8');
+}
+
+// ── FIND & REPLACE ────────────────────────────────────────
+function openFR() {
+  if (!srtOriginal) { toast('Aucun SRT charg\u00e9'); return; }
+  document.getElementById('frStat').textContent = '';
+  document.getElementById('frFind').value = '';
+  document.getElementById('frReplace').value = '';
+  document.getElementById('frModal').style.display = 'flex';
+  setTimeout(function() { document.getElementById('frFind').focus(); }, 50);
+}
+
+function closeFR() {
+  document.getElementById('frModal').style.display = 'none';
+}
+
+function buildFRRegex() {
+  var raw = document.getElementById('frFind').value;
+  if (!raw) return null;
+  var caseSensitive = document.getElementById('frCase').checked;
+  var flags = caseSensitive ? 'g' : 'gi';
+  // Support syntaxe /pattern/flags
+  var m = raw.match(/^\/(.+)\/([gimsuy]*)$/);
+  if (m) {
+    try {
+      var f = m[2] || '';
+      if (f.indexOf('g') === -1) f += 'g';
+      return new RegExp(m[1], f);
+    } catch(e) { showErr('Regex invalide : ' + e.message); return null; }
+  }
+  // Texte littéral — échappement des caractères spéciaux
+  var escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(escaped, flags);
+}
+
+function countFR() {
+  var rx = buildFRRegex();
+  if (!rx) { toast('Entrez un terme \u00e0 chercher'); return; }
+  var onlyText = document.getElementById('frOnlyText').checked;
+  var count = 0;
+  if (onlyText) {
+    parseSRT(srtOriginal).forEach(function(b) {
+      var m = b.text.match(new RegExp(rx.source, rx.flags));
+      if (m) count += m.length;
+    });
+  } else {
+    var m = srtOriginal.match(new RegExp(rx.source, rx.flags));
+    count = m ? m.length : 0;
+  }
+  document.getElementById('frStat').textContent = count + ' occurrence' + (count !== 1 ? 's' : '') + ' trouv\u00e9e' + (count !== 1 ? 's' : '');
+}
+
+function applyFR() {
+  var rx = buildFRRegex();
+  if (!rx) { toast('Entrez un terme \u00e0 chercher'); return; }
+  var replacement = document.getElementById('frReplace').value;
+  var onlyText = document.getElementById('frOnlyText').checked;
+  var count = 0;
+  var newSrt;
+  if (onlyText) {
+    var blocks = parseSRT(srtOriginal);
+    blocks = blocks.map(function(b) {
+      var newText = b.text.replace(new RegExp(rx.source, rx.flags), function() { count++; return replacement; });
+      return { id: b.id, timestamp: b.timestamp, text: newText };
+    });
+    newSrt = buildSRT(blocks);
+  } else {
+    newSrt = srtOriginal.replace(new RegExp(rx.source, rx.flags), function() { count++; return replacement; });
+  }
+  if (!count) { document.getElementById('frStat').textContent = 'Aucune occurrence trouv\u00e9e'; return; }
+  srtOriginal = newSrt; srtTxt = newSrt;
+  var withOffset = currentOffset !== 0 ? shiftSRT(srtOriginal, currentOffset) : srtOriginal;
+  document.getElementById('sp').value = withOffset;
+  // Mettre à jour preview VTT si active
+  if (previewVttUrl) {
+    URL.revokeObjectURL(previewVttUrl);
+    var vttBlob = new Blob([srtToVtt(withOffset)], { type: 'text/vtt' });
+    previewVttUrl = URL.createObjectURL(vttBlob);
+    clearTimeout(offsetReloadTimer);
+    offsetReloadTimer = setTimeout(function() {
+      document.getElementById('previewTrack').src = previewVttUrl;
+    }, 50);
+  }
+  var msg = count + ' remplacement' + (count !== 1 ? 's' : '') + ' effectu\u00e9' + (count !== 1 ? 's' : '');
+  document.getElementById('frStat').textContent = msg;
+  toast(msg + ' \u2713');
+}
+
+// ── EXTRACT AUDIO WAV ─────────────────────────────────────
+async function extractAudio() {
+  if (!selFile) { toast('Aucun fichier vid\u00e9o charg\u00e9'); return; }
+  var isAudio = /\.(mp3|wav|aac|flac|m4a|ogg)$/i.test(selFile.name);
+  if (isAudio) { toast('D\u00e9j\u00e0 un fichier audio'); return; }
+  if (selFile.size > 500 * 1024 * 1024) {
+    toast('\u26a0 Fichier > 500MB \u2014 extraction peut \u00eatre lente selon la RAM disponible');
+  }
+  var btn = document.getElementById('extractBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '\u23f3'; }
+  document.getElementById('sb').disabled = true;
+  setProg(true); setLog('Lecture fichier\u2026'); setPct(5, 'Extraction audio');
+  try {
+    var arrayBuf = await selFile.arrayBuffer();
+    setLog('D\u00e9codage audio\u2026'); setPct(25, 'D\u00e9codage');
+    var tmpCtx = new (window.AudioContext || window.webkitAudioContext)();
+    var decoded;
+    try {
+      decoded = await tmpCtx.decodeAudioData(arrayBuf);
+    } catch(decErr) {
+      try { tmpCtx.close(); } catch(e2) {}
+      throw new Error('Format non d\u00e9codable par le navigateur \u2014 essayez MP4/H.264 ou WAV');
+    }
+    try { tmpCtx.close(); } catch(e2) {}
+    setLog('R\u00e9\u00e9chantillonnage 16kHz\u2026'); setPct(55, 'Resample');
+    var targetSR = 16000;
+    var offCtx = new OfflineAudioContext(1, Math.ceil(decoded.duration * targetSR), targetSR);
+    var src = offCtx.createBufferSource();
+    src.buffer = decoded; src.connect(offCtx.destination); src.start(0);
+    var resampled = await offCtx.startRendering();
+    setLog('Encodage WAV\u2026'); setPct(80, 'WAV');
+    var wavBuf = encodeWav(resampled);
+    setPct(100, 'Termin\u00e9');
+    setTimeout(function() {
+      var wavBlob = new Blob([wavBuf], { type: 'audio/wav' });
+      var audioFile = new File([wavBlob], origName + '_audio.wav', { type: 'audio/wav' });
+      selFile = audioFile;
+      setProg(false);
+      document.getElementById('fn').textContent = audioFile.name;
+      document.getElementById('fs').textContent = fmtSz(audioFile.size) + ' \u00b7 WAV 16kHz mono';
+      clearFilePrev();
+      filePrevUrl = URL.createObjectURL(audioFile);
+      var aud = document.getElementById('filePrevAud');
+      var vid = document.getElementById('filePrevVid');
+      aud.src = filePrevUrl; aud.style.display = 'block'; vid.style.display = 'none';
+      document.getElementById('filePrevWrap').classList.add('vis');
+      if (btn) btn.style.display = 'none';
+      updateSbtn();
+      toast('\u2713 Audio extrait \u2014 ' + fmtSz(audioFile.size) + ' (upload optimis\u00e9)');
+    }, 300);
+  } catch(e) {
+    setProg(false);
+    showErr('Extraction audio : ' + (e.message || String(e)));
+    if (btn) { btn.disabled = false; btn.innerHTML = '&#x1F3B5;'; }
+    updateSbtn();
+  }
+}
+
+function encodeWav(audioBuffer) {
+  var sampleRate = audioBuffer.sampleRate;
+  var samples = audioBuffer.getChannelData(0);
+  var int16 = new Int16Array(samples.length);
+  for (var i = 0; i < samples.length; i++) {
+    int16[i] = Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767)));
+  }
+  var dataLen = int16.buffer.byteLength;
+  var buf = new ArrayBuffer(44 + dataLen);
+  var v = new DataView(buf);
+  var ws = function(o, s) { for (var i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, 'RIFF'); v.setUint32(4, 36 + dataLen, true);
+  ws(8, 'WAVE'); ws(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  ws(36, 'data'); v.setUint32(40, dataLen, true);
+  new Uint8Array(buf, 44).set(new Uint8Array(int16.buffer));
+  return buf;
+}
+
 init();
 </script>
 <div id="subEditModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);align-items:center;justify-content:center">
@@ -2140,6 +2381,29 @@ init();
     <div id="subEditActions">
       <button class="ab" onclick="closeSubEditModal()">Annuler</button>
       <button class="ab pri" onclick="saveSubEdit()">Sauvegarder</button>
+    </div>
+  </div>
+</div>
+<div id="frModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);align-items:center;justify-content:center" onclick="if(event.target===this)closeFR()">
+  <div id="frInner">
+    <div id="frHdr">&#x1F50D; Rechercher &amp; Remplacer</div>
+    <div class="fr-row">
+      <label for="frFind">Chercher</label>
+      <input type="text" id="frFind" placeholder="Terme ou /regex/flags…" onkeydown="if(event.key==='Enter')applyFR()">
+    </div>
+    <div class="fr-row">
+      <label for="frReplace">Remplacer par</label>
+      <input type="text" id="frReplace" placeholder="Remplacement (vide = supprimer)…" onkeydown="if(event.key==='Enter')applyFR()">
+    </div>
+    <div id="frOpts">
+      <label class="oitem"><input type="checkbox" id="frCase"><span>Sensible à la casse</span></label>
+      <label class="oitem"><input type="checkbox" id="frOnlyText" checked><span>Texte seul</span></label>
+    </div>
+    <div id="frStat" style="font-family:var(--mono);font-size:10px;color:var(--muted);min-height:16px"></div>
+    <div id="frActions">
+      <button class="ab" onclick="closeFR()">Annuler</button>
+      <button class="ab" onclick="countFR()">Compter</button>
+      <button class="ab pri" onclick="applyFR()">Remplacer tout</button>
     </div>
   </div>
 </div>
