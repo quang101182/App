@@ -115,9 +115,9 @@
         position: relative;
         background-color: #2c3e50;
         color: white;
-        padding: 1rem;
+        padding: 0.5rem 1rem;
         text-align: center;
-        margin-bottom: 10px;
+        margin-bottom: 6px;
         border-radius: 5px;
       }
       .signature {
@@ -133,8 +133,9 @@
       }
       h1, h2, h3, h4 {
         margin-top: 0;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.4rem;
       }
+      header h1 { font-size: 1.5rem; margin-bottom: 0; }
 
       /* ===============================
          Boutons (Enhanced from V1)
@@ -351,12 +352,12 @@ tr.action-surbrillance td:nth-child(12) {
       .tabs {
         background-color: #f8f9fa;
         border-bottom: 2px solid #e9ecef;
-        padding: 5px 5px 0;
-        margin-bottom: 10px;
+        padding: 3px 5px 0;
+        margin-bottom: 6px;
       }
       .tabs a {
         display: inline-block;
-        padding: 12px 16px;
+        padding: 7px 14px;
         margin-right: 3px;
         border: 1px solid transparent;
         border-bottom: none;
@@ -378,13 +379,13 @@ tr.action-surbrillance td:nth-child(12) {
       }
       .tabcontent {
         display: none;
-        padding: 15px; /* Increased padding */
+        padding: 10px 15px;
         background-color: white;
-        border: 1px solid #e0e0e0; /* Added border */
+        border: 1px solid #e0e0e0;
         border-top: none;
-        border-radius: 0 0 5px 5px; /* Rounded bottom corners */
+        border-radius: 0 0 5px 5px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        margin-bottom: 15px;
+        margin-bottom: 10px;
       }
       #tab1 { display: block; } /* Show dashboard by default */
 
@@ -600,7 +601,12 @@ tr.action-surbrillance td:nth-child(12) {
        }
        .form-buttons { margin-top: 15px; display: flex; gap: 10px; justify-content: flex-end;}
 
-       #actions-table { table-layout: auto; min-width: 100%; }
+       #actions-table { table-layout: fixed; min-width: 900px; }
+      #actions-table th:nth-child(4),
+      #actions-table td.description-cell { width: 240px; max-width: 240px; }
+      /* Bouton toggle descriptions */
+      #btn-toggle-desc { font-size: 0.82em; padding: 5px 10px; border: 1px solid #bfdbfe; border-radius: 5px; background: #f0f7ff; color: #2563eb; cursor: pointer; margin-right: 8px; }
+      #btn-toggle-desc:hover { background: #dbeafe; }
        /* Description col width handled by colgroup */
        #actions-table td:nth-child(4) .description-preview:hover {
            color: #0d6efd; /* Indicate clickability */
@@ -1402,12 +1408,21 @@ button {
   line-height: 1.35;
   vertical-align: top;
 }
-/* description-preview : 3 lignes max pour profiter de la hauteur */
+/* description-preview : 2 lignes max en vue compacte */
 #actions-table tbody td:nth-child(4) .description-preview {
-  -webkit-line-clamp: 3 !important;
-  line-clamp: 3 !important;
-  max-height: 4.05em !important;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
+  max-height: 2.7em;
+  word-break: break-word;
+  cursor: pointer;
+}
+/* Vue étendue : déplier toutes les descriptions */
+#actions-table.desc-all-expanded tbody td:nth-child(4) .description-preview {
+  -webkit-line-clamp: unset;
+  max-height: none;
+  overflow: visible;
 }
 /* Badge desc-status : position absolue bas-gauche */
 .description-cell .desc-status-container {
@@ -1625,15 +1640,15 @@ tr.row-flash td {
           justify-content: center;
           align-items: center;
           flex-wrap: wrap;
-          gap: 12px;
-          padding: 7px 15px;
-          font-size: 0.82em;
+          gap: 8px;
+          padding: 4px 12px;
+          font-size: 0.78em;
           font-weight: 500;
-          border-radius: 5px;
+          border-radius: 4px;
           border: 1px solid #b6d4fe;
           background-color: #e7f3ff;
           color: #0b5ed7;
-          margin-bottom: 5px;
+          margin-bottom: 4px;
       }
       #top-info-banner.mode-edition { background-color: #d1fae5; color: #065f46; border-color: #a7f3d0; }
       #top-info-banner.mode-lecture { background-color: #fff3cd; color: #856404; border-color: #ffeeba; }
@@ -2023,9 +2038,12 @@ tr.row-flash td {
 
     <!-- Onglet 3 : Actions -->
     <div class="tabcontent" id="tab3">
-         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-            <h2>Suivi des Actions</h2>
-            <button id="add-action-button" class="btn-success" onclick="afficherFormulaireAjoutAction()">Ajouter une action</button>
+         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h2 style="margin-bottom:0;">Suivi des Actions</h2>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <button id="btn-toggle-desc" onclick="toggleAllDescriptions()" title="Déplier/Réduire toutes les descriptions">⊞ Déplier tout</button>
+              <button id="add-action-button" class="btn-success" onclick="afficherFormulaireAjoutAction()">Ajouter une action</button>
+            </div>
         </div>
         <!-- Add Action Form -->
          <div id="add-action-form" style="display:none;">
@@ -2226,16 +2244,6 @@ tr.row-flash td {
   <button class="btn-secondary" onclick="deselectionnerTout()" style="padding:5px 12px;">✕ Annuler</button>
 </div>
 
-<!-- Desc status filter bar -->
-<div id="desc-status-filter-bar">
-  <span>Filtre statut (description) :</span>
-  <div id="desc-status-filter-tags"></div>
-  <div class="spacer"></div>
-  <label class="ctrl">
-    <input type="checkbox" id="desc-status-sort-toggle"> Trier par ordre de statut
-  </label>
-</div>
-
         <div class="actions-table-wrapper">
             <table id="actions-table">
                 <thead>
@@ -2279,13 +2287,16 @@ tr.row-flash td {
               <tbody>
                 <tr id="quick-add-row">
                   <td style="width:34px; border-top:2px dashed #bfdbfe;"></td>
-                  <td style="border-top:2px dashed #bfdbfe; min-width:100px; padding:4px;">
-                    <select id="qa-project" style="width:100%;padding:4px 4px;border:1px solid #bfdbfe;border-radius:5px;font-size:0.82em;background:#fff;"><option value="">— Projet —</option></select>
+                  <td style="border-top:2px dashed #bfdbfe; padding:4px;">
+                    <select id="qa-project" style="width:100%;padding:3px 4px;border:1px solid #bfdbfe;border-radius:5px;font-size:0.82em;background:#fff;"><option value="">— Projet —</option></select>
                   </td>
-                  <td colspan="2" style="border-top:2px dashed #bfdbfe; padding:4px;">
-                    <input type="text" id="qa-description" placeholder="✏️ Description rapide… (↵ pour ajouter)"
+                  <td style="border-top:2px dashed #bfdbfe; padding:4px;">
+                    <input type="text" id="qa-description" placeholder="✏️ Description… (↵ ajouter)"
                       style="width:100%;padding:4px 6px;border:1px solid #bfdbfe;border-radius:5px;font-size:0.85em;"
                       onkeydown="if(event.key==='Enter'){event.preventDefault();ajouterActionRapide();}"/>
+                  </td>
+                  <td style="border-top:2px dashed #bfdbfe; padding:4px;">
+                    <input type="text" id="qa-topic" placeholder="Thématique" style="width:100%;padding:4px 6px;border:1px solid #bfdbfe;border-radius:5px;font-size:0.85em;"/>
                   </td>
                   <td style="border-top:2px dashed #bfdbfe; padding:4px;">
                     <input type="text" id="qa-responsible" placeholder="Responsable" style="width:100%;padding:4px 6px;border:1px solid #bfdbfe;border-radius:5px;font-size:0.85em;"/>
@@ -2303,7 +2314,7 @@ tr.row-flash td {
                   </td>
                   <td style="border-top:2px dashed #bfdbfe;"></td>
                   <td style="border-top:2px dashed #bfdbfe;"></td>
-                  <td colspan="2" style="border-top:2px dashed #bfdbfe; padding:4px; white-space:nowrap;">
+                  <td colspan="3" style="border-top:2px dashed #bfdbfe; padding:4px; white-space:nowrap;">
                     <button class="btn-quick-add" onclick="ajouterActionRapide()">+ Ajouter</button>
                   </td>
                 </tr>
@@ -3401,6 +3412,14 @@ tr.row-flash td {
         evt.currentTarget.className += " active";
         // Mémoriser l'onglet actif
         try { localStorage.setItem('lastActiveTab', ongletId); } catch(e) {}
+        // Réinitialiser l'état déplié descriptions (compact par défaut)
+        if (typeof _descExpanded !== 'undefined') {
+          _descExpanded = false;
+          const tbl = document.getElementById('actions-table');
+          if (tbl) tbl.classList.remove('desc-all-expanded');
+          const btn = document.getElementById('btn-toggle-desc');
+          if (btn) btn.textContent = '⊞ Déplier tout';
+        }
     }
 
     // --- MODIFIÉ : Gestion Modale d'Aide (pour charger l'iframe) ---
@@ -6121,6 +6140,16 @@ function fermerMenuStatut() {
   _activeStatusDropdownActionId = null;
 }
 
+// ---- Toggle toutes les descriptions ----
+let _descExpanded = false;
+function toggleAllDescriptions() {
+  _descExpanded = !_descExpanded;
+  const tbl = document.getElementById('actions-table');
+  if (tbl) tbl.classList.toggle('desc-all-expanded', _descExpanded);
+  const btn = document.getElementById('btn-toggle-desc');
+  if (btn) btn.textContent = _descExpanded ? '⊟ Réduire tout' : '⊞ Déplier tout';
+}
+
 // ---- Menu Phase technique (descStatus) ----
 let _activeDescDropdownActionId = null;
 function ouvrirMenuStatutDesc(event, actionId) {
@@ -6526,6 +6555,7 @@ function initQuickAddRow() {
 async function ajouterActionRapide() {
   const projectId  = parseInt(document.getElementById('qa-project')?.value);
   const description = document.getElementById('qa-description')?.value?.trim();
+  const topic       = document.getElementById('qa-topic')?.value?.trim() || '';
   const responsible = document.getElementById('qa-responsible')?.value?.trim();
   const deadline    = document.getElementById('qa-deadline')?.value;
   const priority    = document.getElementById('qa-priority')?.value || 'Moyenne';
@@ -6553,7 +6583,7 @@ async function ajouterActionRapide() {
       numeroRef: newRef,
       description,
       responsible: responsible || '',
-      topic: '',
+      topic: topic || '',
       startDate: today,
       deadline: deadline || '',
       priority,
@@ -6568,7 +6598,7 @@ async function ajouterActionRapide() {
     sauvegarderBackupAutomatique(false); // fire-and-forget
     chargerActions();
     // Vider les champs
-    ['qa-description','qa-responsible','qa-deadline'].forEach(id => {
+    ['qa-description','qa-topic','qa-responsible','qa-deadline'].forEach(id => {
       const el = document.getElementById(id); if(el) el.value = '';
     });
     const dp = document.getElementById('qa-priority'); if(dp) dp.value = 'Moyenne';
