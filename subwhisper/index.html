@@ -943,6 +943,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     </div>
   </div>
   <textarea class="sp" id="sp" spellcheck="false"></textarea>
+  <div id="spkLegend" style="display:none;flex-wrap:wrap;gap:6px;padding:8px 0 4px"></div>
   <div id="richLegend" style="display:none"></div>
   <div id="richTx" style="display:none"></div>
   <div class="ld" id="ld"></div>
@@ -1053,6 +1054,8 @@ function init() {
   } catch(e) {}
   document.getElementById('srcLang').addEventListener('change', function() { try { localStorage.setItem('sw_srcLang', this.value); } catch(e) {} });
   document.getElementById('outLang').addEventListener('change', function() { try { localStorage.setItem('sw_outLang', this.value); } catch(e) {} });
+  try { var dz = localStorage.getItem('sw_diarize'); if (dz === '1') document.getElementById('optDiarize').checked = true; } catch(e) {}
+  document.getElementById('optDiarize').addEventListener('change', function() { try { localStorage.setItem('sw_diarize', this.checked ? '1' : '0'); } catch(e) {} });
   try {
     var th = localStorage.getItem('sw_theme');
     if (th === 'light') { document.body.classList.add('light'); document.getElementById('thmBtn').textContent = '\u2600\uFE0F'; }
@@ -1423,13 +1426,45 @@ function showRes(content, srcLang, tgtLang, wasTranslated, words) {
   updateDirInfo();
   if (selFile && content) showVideoPreview(selFile, content);
   updateFfmpegCmd();
-  if (words) wordData = words; syncRichToggle();
+  if (words) wordData = words;
+  // Injection labels speaker dans le SRT si diarisation active
+  var hasSpeakers = wordData.length > 0 && wordData.some(function(w) { return w.speaker; });
+  if (hasSpeakers) {
+    var spkBlocks = parseSRT(srtOriginal);
+    var withSpk = spkBlocks.map(function(b) {
+      var spk = getSpeakerForBlock(b);
+      return { id: b.id, timestamp: b.timestamp, text: (spk ? '[Speaker ' + spk + '] ' : '') + b.text };
+    });
+    srtOriginal = buildSRT(withSpk);
+    document.getElementById('sp').value = srtOriginal;
+    // Légende speakers visible sous le SRT
+    var spkLeg = document.getElementById('spkLegend');
+    if (spkLeg) {
+      var speakers = {};
+      wordData.forEach(function(w) { if (w.speaker) speakers[w.speaker] = true; });
+      var COLORS = { A:'#7c6aff', B:'#00d4aa', C:'#ff4d6d', D:'#f59e0b', E:'#a78bff', F:'#34d399' };
+      spkLeg.innerHTML = Object.keys(speakers).sort().map(function(s) {
+        var c = COLORS[s] || '#888';
+        return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-family:var(--mono);padding:3px 10px;border-radius:20px;border:1px solid ' + c + '33;color:' + c + ';background:' + c + '18">' +
+          '<span style="width:7px;height:7px;border-radius:50%;background:' + c + ';flex-shrink:0"></span>Speaker ' + s + '</span>';
+      }).join('');
+      spkLeg.style.display = 'flex';
+    }
+    // Auto-switch vers vue rich pour profiter des couleurs
+    switchToRich();
+  } else {
+    var spkLeg = document.getElementById('spkLegend');
+    if (spkLeg) spkLeg.style.display = 'none';
+  }
+  syncRichToggle();
 }
 
 function hideRes() {
   switchToTextarea();
   document.getElementById('rw').classList.remove('vis');
   document.getElementById('ld').innerHTML = '';
+  var spkLeg = document.getElementById('spkLegend');
+  if (spkLeg) spkLeg.style.display = 'none';
   closePreview();
   document.getElementById('ffmpegWrap').classList.remove('vis');
 }
