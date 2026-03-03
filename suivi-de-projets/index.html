@@ -734,7 +734,13 @@ tr.action-surbrillance td:nth-child(12) {
          margin: 3% auto; padding: 20px; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,.5);
          max-height: 90vh; overflow-y: auto;
        }
-       .desc-edit-content h3 { margin-top: 0; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;}
+       .desc-edit-content h3 { margin-top: 0; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;}
+       /* Infos contextuelles de l'action dans la modale */
+       .desc-modal-info { display:flex; flex-wrap:wrap; gap:4px 14px; padding:7px 0 9px; margin-bottom:8px; border-bottom:1px solid #f2f2f2; font-size:0.81em; }
+       .desc-modal-info .di { display:inline-flex; align-items:center; gap:3px; white-space:nowrap; }
+       .desc-modal-info .dl { color:#bbb; font-size:0.88em; margin-right:1px; }
+       /* Statut de sauvegarde inline */
+       .desc-save-status { display:flex; align-items:center; gap:7px; font-size:0.81em; padding:5px 10px; border-radius:6px; background:#f8f9fa; color:#555; margin:4px 0 8px; }
        .desc-edit-content textarea {
          width: 100%; min-height: 120px; max-height: 65vh; overflow-y: auto;
          resize: vertical; margin-bottom: 12px; font-size: 14px;
@@ -2451,10 +2457,19 @@ tr.row-flash td {
     <div class="desc-edit-modal" id="desc-modal">
         <div class="desc-edit-content">
             <h3>Édition de la description</h3>
+            <!-- Infos contextuelles de l'action -->
+            <div id="desc-modal-action-info" class="desc-modal-info"></div>
+            <!-- Toolbar phase tech (boutons statut description) -->
+            <div id="desc-status-toolbar" class="desc-status-toolbar">
+              <span class="label" style="font-size:0.78em;color:#888;">Phase tech :</span>
+              <button type="button" class="desc-status-manage" onclick="openDescStatusManagerModal()" title="Configurer les phases" style="font-size:0.75em;padding:2px 7px;border-radius:5px;border:1px solid #ddd;background:#fafafa;cursor:pointer;">⚙️</button>
+            </div>
             <textarea id="desc-edit-text"></textarea>
+            <!-- Indicateur de sauvegarde -->
+            <div id="desc-modal-save-status" class="desc-save-status" style="display:none;"></div>
             <div class="desc-edit-buttons">
-                <button class="btn-success" onclick="closeDescModal(true)">Enregistrer</button>
-                <button class="btn-secondary" onclick="closeDescModal(false)">Annuler</button>
+                <button class="btn-success" id="desc-save-btn" onclick="closeDescModal(true)">Enregistrer</button>
+                <button class="btn-secondary" id="desc-cancel-btn" onclick="closeDescModal(false)">Annuler</button>
             </div>
         </div>
     </div>
@@ -4889,6 +4904,29 @@ function afficherDescModal(actionId) {
         currentEditingActionId = actionId;
         const action = actions.find(a => a.id === actionId);
         if (!action) return;
+        // Infos contextuelles de l'action
+        const infoDiv = document.getElementById('desc-modal-action-info');
+        if (infoDiv) {
+          const projet = projects.find(p => p.id === action.projectId);
+          const today = new Date().toISOString().split('T')[0];
+          const isLate = action.deadline && action.deadline < today && action.status !== 'Terminé';
+          const fmtDate = d => d ? d.split('-').reverse().join('/') : '';
+          infoDiv.innerHTML = [
+            `<span class="di"><span class="dl">Réf</span><b style="color:#2980b9;font-family:monospace;">${escapeHtml(action.numeroRef||'—')}</b></span>`,
+            projet ? `<span class="di"><span class="dl">Projet</span>${escapeHtml(projet.name)}</span>` : '',
+            `<span class="di"><span class="dl">Statut</span>${escapeHtml(action.status||'—')}</span>`,
+            `<span class="di"><span class="dl">Priorité</span>${escapeHtml(action.priority||'—')}</span>`,
+            action.deadline ? `<span class="di"${isLate?' style="color:#dc3545;font-weight:600;"':''}><span class="dl">Échéance</span>${fmtDate(action.deadline)}${isLate?' ⚠️':''}</span>` : '',
+            action.responsible ? `<span class="di"><span class="dl">Resp.</span>${escapeHtml(action.responsible)}</span>` : '',
+          ].filter(Boolean).join('');
+        }
+        // Reset statut sauvegarde
+        const saveStatus = document.getElementById('desc-modal-save-status');
+        if (saveStatus) { saveStatus.style.display = 'none'; saveStatus.style.color = ''; }
+        const saveBtn = document.getElementById('desc-save-btn');
+        const cancelBtn = document.getElementById('desc-cancel-btn');
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Enregistrer'; }
+        if (cancelBtn) { cancelBtn.disabled = false; }
         const ta = document.getElementById('desc-edit-text');
         if (ta) {
           ta.value = action.description || '';
@@ -4905,26 +4943,45 @@ function afficherDescModal(actionId) {
           ta.style.height = Math.min(Math.max(120, ta.scrollHeight + 4), window.innerHeight * 0.6) + 'px';
         }
     }
-    async function closeDescModal(save) { // <<< Doit être async à cause du log/save
+    async function closeDescModal(save) {
         if (save && currentEditingActionId !== null) {
+            const saveBtn = document.getElementById('desc-save-btn');
+            const cancelBtn = document.getElementById('desc-cancel-btn');
+            const saveStatus = document.getElementById('desc-modal-save-status');
+            // Feedback immédiat — désactiver les boutons
+            if (saveBtn)   { saveBtn.disabled = true; saveBtn.textContent = '⏳ Enregistrement...'; }
+            if (cancelBtn) { cancelBtn.disabled = true; }
+            if (saveStatus){ saveStatus.style.display = 'flex'; saveStatus.style.color = '#555'; saveStatus.innerHTML = '💾 Sauvegarde locale...'; }
+
             const newDesc = document.getElementById('desc-edit-text').value;
             const index = actions.findIndex(a => a.id === currentEditingActionId);
             if (index !== -1) {
-                const originalAction = { ...actions[index] }; // <<< COPIE AVANT
+                const originalAction = { ...actions[index] };
                 actions[index].description = newDesc;
-                const updatedAction = actions[index]; // <<< OBJET APRES
-                 // <<< LOG MODIFICATION DESCRIPTION >>>
+                const updatedAction = actions[index];
                 if (originalAction.description !== updatedAction.description) {
-                     logActivity('Modification', `Description modifiée pour l'action '${updatedAction.numeroRef}'.`);
-                     // Pour un log plus détaillé, on pourrait utiliser generateUpdateLogDescription
-                     // const logDesc = generateUpdateLogDescription(originalAction, updatedAction, 'Action');
-                     // logActivity('Modification', logDesc);
+                    logActivity('Modification', `Description modifiée pour l'action '${updatedAction.numeroRef}'.`);
                 }
                 sauvegarderDonneesLocal();
-                sauvegarderBackupAutomatique(false); // <<< SAUVEGARDE AUTO (fire-and-forget, ne bloque pas l'UI)
+                // Feedback réseau
+                if (saveStatus) saveStatus.innerHTML = '🌐 Sauvegarde réseau en cours...';
+                const backupOk = await sauvegarderBackupAutomatique(false);
                 chargerActions(); mettreAJourTableauDeBord();
-                const editDescField = document.getElementById('edit-action-description'); if(editDescField && document.getElementById('edit-action-id').value == currentEditingActionId) { editDescField.value = newDesc; } } }
-        document.getElementById('desc-modal').style.display = 'none'; currentEditingActionId = null; }
+                const editDescField = document.getElementById('edit-action-description');
+                if (editDescField && document.getElementById('edit-action-id').value == currentEditingActionId) {
+                    editDescField.value = newDesc;
+                }
+                // Résultat visible 700ms avant fermeture
+                if (saveStatus) {
+                    saveStatus.innerHTML = backupOk ? '✅ Sauvegardé' : '✅ Local — réseau indisponible';
+                    saveStatus.style.color = backupOk ? '#198754' : '#856404';
+                }
+                await new Promise(r => setTimeout(r, 700));
+            }
+        }
+        document.getElementById('desc-modal').style.display = 'none';
+        currentEditingActionId = null;
+    }
 
     // -------------------------------------------
     
