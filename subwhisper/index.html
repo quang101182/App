@@ -206,7 +206,7 @@ footer{margin-top:auto;padding:16px 20px;border-top:1px solid var(--border);disp
 
 <div class="rw" id="rw">
   <div class="rh">
-    <div class="rt">&#x2713; Transcription</div>
+    <div class="rt" id="rtLbl">&#x2713; Transcription</div>
     <div class="rac">
       <button class="ab" onclick="copySRT()" id="copyBtn">COPIER</button>
       <button class="ab" onclick="dlTXT()">&#x2B07; TXT</button>
@@ -247,6 +247,7 @@ const TRANSLATE_LANGS = ['en','fr','de','es','it','pt','nl','hi','ja','zh','ko',
 /* ─── ETAT GLOBAL ─────────────────────────────────────────────────────────── */
 let selFile = null;
 let srtTxt = '';
+let translatedContent = '';
 let origName = '';
 let pollTimer = null;
 let currentJobId = null;
@@ -395,6 +396,7 @@ function handleFile(f) {
 
 function clearFile() {
   selFile = null;
+  translatedContent = '';
   document.getElementById('fp').classList.remove('vis');
   document.getElementById('fi').value = '';
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -553,12 +555,15 @@ function startPoll(jobId, outLang) {
           return;
         }
 
-        /* Verifier traduction dans speech_understanding */
-        var translatedTxt = null;
+        /* Traduction : récupérer le texte traduit si demandé */
+        translatedContent = '';
         try {
           var su = status.speech_understanding;
           if (su && su.translation && su.translation.results && su.translation.results.length > 0) {
-            translatedTxt = su.translation.results[0].text || null;
+            translatedContent = su.translation.results
+              .map(function(r) { return r.text || ''; })
+              .join(' ')
+              .trim();
           }
         } catch (e) { /* Pas de traduction */ }
 
@@ -566,15 +571,20 @@ function startPoll(jobId, outLang) {
         setPct(100, 'Termine');
         setLog('Termine');
 
+        /* Si traduction dispo : afficher le texte traduit, sinon le SRT original */
+        var displayContent = (translatedContent && outLang !== 'same') ? translatedContent : srt;
+        var hasTranslation = !!(translatedContent && outLang !== 'same');
+
         setTimeout(function () {
           setProg(false);
           var detectedLang = status.language_code || null;
           var tgtLang = (outLang !== 'same') ? outLang : null;
-          showRes(srt, detectedLang, tgtLang, translatedTxt);
+          showRes(displayContent, detectedLang, tgtLang, hasTranslation);
 
           saveHistory({
             name: origName,
             srt: srt,
+            translated: translatedContent || '',
             srcLang: detectedLang,
             tgtLang: tgtLang,
             ts: Date.now(),
@@ -651,18 +661,20 @@ function setSt(s) {
 /* ═══════════════════════════════════════════════════════════════════════════
    9. AFFICHAGE RESULTATS
 ═══════════════════════════════════════════════════════════════════════════ */
-function showRes(srt, srcLang, tgtLang, translatedTxt) {
-  document.getElementById('sp').value = srt;
+function showRes(content, srcLang, tgtLang, hasTranslation) {
+  document.getElementById('sp').value = content;
   document.getElementById('rw').classList.add('vis');
   setSt('on');
+
+  document.getElementById('rtLbl').textContent = hasTranslation ? '\u2713 Traduction' : '\u2713 Transcription';
 
   var html = '';
   if (srcLang) html += 'SOURCE <span class="lb">' + escHtml(srcLang.toUpperCase()) + '</span> ';
   if (tgtLang && tgtLang !== 'same') {
-    html += '&rarr; SOUS-TITRES <span class="lb">' + escHtml(tgtLang.toUpperCase()) + '</span>';
-  }
-  if (translatedTxt) {
-    html += ' <span class="lb" title="' + escHtml(translatedTxt.substring(0, 200)) + '">TRADUIT</span>';
+    html += '&rarr; <span class="lb">' + escHtml(tgtLang.toUpperCase()) + '</span>';
+    if (hasTranslation) {
+      html += ' &nbsp;<span style="font-family:var(--mono);font-size:9px;color:var(--muted)">SRT horodaté = langue source</span>';
+    }
   }
   document.getElementById('ld').innerHTML = html;
   updateDirInfo();
@@ -741,10 +753,16 @@ function dlVTT() {
 }
 
 function dlTXT() {
+  /* Si traduction disponible : télécharger le texte traduit directement */
+  if (translatedContent) {
+    dlBlob(translatedContent, '.txt', 'text/plain');
+    return;
+  }
+
+  /* Sinon : extraire le texte du SRT (sans numéros ni timestamps) */
   var content = getCurrentSRT();
   if (!content) return;
 
-  /* Filtrer numeros de sequence, timestamps, lignes vides */
   var lines = content.split('\n');
   var textLines = [];
   for (var i = 0; i < lines.length; i++) {
@@ -898,9 +916,11 @@ function loadHistory(i) {
     var item = hist[i];
     if (!item) return;
     srtTxt = item.srt || '';
+    translatedContent = item.translated || '';
     origName = item.name || 'subtitles';
-    document.getElementById('sp').value = srtTxt;
-    showRes(srtTxt, item.srcLang || null, item.tgtLang || null, null);
+    var hasTranslation = !!(translatedContent && item.tgtLang);
+    var displayContent = hasTranslation ? translatedContent : srtTxt;
+    showRes(displayContent, item.srcLang || null, item.tgtLang || null, hasTranslation);
   } catch (e) {
     showErr("Impossible de charger l'historique.");
   }
