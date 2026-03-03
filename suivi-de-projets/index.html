@@ -604,6 +604,20 @@ tr.action-surbrillance td:nth-child(12) {
        #actions-table { table-layout: auto; min-width: 900px; }
       #actions-table th:nth-child(4) { min-width: 160px; max-width: 240px; }
       #actions-table td.description-cell { max-width: 240px; overflow: hidden; }
+      /* Filtres actifs : clignotement discret */
+      @keyframes filter-pulse {
+        0%, 100% { background: #fff; border-color: #d1d5db; }
+        50% { background: #dbeafe; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.25); }
+      }
+      @keyframes filter-pulse-warn {
+        0%, 100% { outline-color: transparent; }
+        50% { outline: 2px solid #f59e0b; }
+      }
+      .filter-active {
+        animation: filter-pulse 2s ease-in-out infinite;
+        border-color: #3b82f6 !important;
+      }
+      .filter-cb-off { outline: 2px solid #f59e0b; outline-offset: 1px; animation: filter-pulse-warn 2s ease-in-out infinite; }
       /* Bouton toggle descriptions */
       #btn-toggle-desc { font-size: 0.82em; padding: 5px 10px; border: 1px solid #bfdbfe; border-radius: 5px; background: #f0f7ff; color: #2563eb; cursor: pointer; margin-right: 8px; }
       #btn-toggle-desc:hover { background: #dbeafe; }
@@ -672,12 +686,15 @@ tr.action-surbrillance td:nth-child(12) {
         max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         vertical-align: middle;
       }
-      .pj-button { /* Button in actions list */
-        background-color: #8e44ad; color: white; font-weight: 500; padding: 5px 10px;
-        border-radius: 4px; border: none; cursor: pointer; display: inline-flex;
-        align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 0.9em;
+      .pj-button { /* Button in actions list — icône au-dessus, texte en-dessous */
+        background-color: #8e44ad; color: white; font-weight: 500; padding: 4px 6px;
+        border-radius: 4px; border: none; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; gap: 1px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 0.78em; width: 100%;
       }
-      .pj-button::before { content: "📎"; margin-right: 5px; font-size: 1.1rem; }
+      .pj-button::before { display: none; } /* supprime l'ancien ::before */
+      .pj-icon { font-size: 1.1em; line-height: 1.2; }
+      .pj-text { line-height: 1.2; white-space: nowrap; }
       .pj-button:hover { background-color: #7d3c98; }
 
       /* Modal Preview */
@@ -713,13 +730,16 @@ tr.action-surbrillance td:nth-child(12) {
          background-color: rgba(0,0,0,0.6);
        }
        .desc-edit-content {
-         background-color: #fff; color: #333; border-radius: 5px; max-width: 700px; /* Wider */
-         margin: 5% auto; padding: 20px; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,.5);
+         background-color: #fff; color: #333; border-radius: 5px; max-width: 700px;
+         margin: 3% auto; padding: 20px; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,.5);
+         max-height: 90vh; overflow-y: auto;
        }
-       .desc-edit-content h3 { margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;}
+       .desc-edit-content h3 { margin-top: 0; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;}
        .desc-edit-content textarea {
-         width: 100%; height: 300px; /* Taller */ resize: vertical; margin-bottom: 15px; font-size: 14px;
-         font-family: monospace; line-height: 1.5; padding: 10px;
+         width: 100%; min-height: 120px; max-height: 65vh; overflow-y: auto;
+         resize: vertical; margin-bottom: 12px; font-size: 14px;
+         font-family: inherit; line-height: 1.5; padding: 10px;
+         box-sizing: border-box;
        }
        .desc-edit-buttons { text-align: right; margin-top: 10px; }
        .desc-edit-buttons button { margin-left: 10px; font-size: 14px; }
@@ -892,19 +912,21 @@ tr.action-surbrillance td:nth-child(12) {
   cursor: pointer;
   overflow: hidden; /* Empêche l'icône de déborder si trop grande */
 }
-.btn-edit {
-  background-color: #3498db;
-  /* color: white; /* Hérité par stroke:currentColor normalement, mais forcé au-dessus */
+.btn-edit { background-color: #3498db; }
+.btn-edit:hover { background-color: #2980b9; }
+.btn-delete { background-color: #e74c3c; }
+.btn-delete:hover { background-color: #c0392b; }
+/* Colonne Actions : boutons en colonne verticale */
+#actions-table tbody td:nth-child(13) {
+  padding: 2px 4px;
+  vertical-align: middle;
+  text-align: center;
 }
-.btn-edit:hover {
-  background-color: #2980b9;
-}
-.btn-delete {
-  background-color: #e74c3c;
-   /* color: white; */
-}
-.btn-delete:hover {
-  background-color: #c0392b;
+#actions-table tbody td:nth-child(13) .btn-icon {
+  display: block;
+  margin: 2px auto;
+  width: 24px;
+  height: 24px;
 }
 
       /* Style pour afficher la description sur 3 lignes maximum */
@@ -1129,12 +1151,14 @@ button {
 #desc-status-manager header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #eee; }
 #desc-status-manager header h3 { margin:0; font-size:1.05rem; }
 #desc-status-manager .content { padding:12px 16px; max-height:65vh; overflow:auto; }
-#desc-status-manager .rows { display:grid; grid-template-columns: 80px 1fr 120px 130px; gap:8px; align-items:center; }
-#desc-status-manager .rows .head { font-size:.85rem; opacity:.7; }
-#desc-status-manager .row { display:contents; }
-#desc-status-manager input[type=text] { width:100%; padding:8px 10px; border:1px solid #e1e1e1; border-radius:8px; }
-#desc-status-manager input[type=color] { width:100%; height:34px; border:1px solid #e1e1e1; border-radius:8px; }
-#desc-status-manager .row .ops { display:flex; gap:6px; }
+#desc-status-manager .rows { display:block; }
+#desc-status-manager .dsm-header { display:flex; gap:8px; font-size:.8rem; opacity:.6; padding:0 0 5px 0; border-bottom:2px solid #eee; margin-bottom:6px; }
+#desc-status-manager .dsm-row { display:flex; gap:8px; align-items:center; padding:5px 0; border-bottom:1px solid #f3f3f3; }
+#desc-status-manager .dsm-row input[type=text]:first-child { flex:0 0 80px; padding:5px 8px; border:1px solid #e1e1e1; border-radius:6px; font-size:.9em; }
+#desc-status-manager .dsm-label-wrap { flex:1; display:flex; gap:8px; align-items:center; min-width:0; }
+#desc-status-manager .dsm-label-wrap input[type=text] { flex:1; padding:5px 8px; border:1px solid #e1e1e1; border-radius:6px; font-size:.9em; }
+#desc-status-manager .dsm-row input[type=color] { flex:0 0 46px; height:32px; border:1px solid #e1e1e1; border-radius:6px; padding:2px; cursor:pointer; }
+#desc-status-manager .dsm-row .ops { flex:0 0 auto; display:flex; gap:4px; }
 #desc-status-manager .btn { padding:8px 12px; border-radius:8px; border:1px solid #ddd; background:#fafafa; cursor:pointer; }
 #desc-status-manager .btn:hover { filter:brightness(.97); }
 #desc-status-manager footer { display:flex; gap:8px; justify-content:flex-end; padding:12px 16px; border-top:1px solid #eee; }
@@ -1418,12 +1442,14 @@ button {
   word-break: break-word;
   cursor: pointer;
 }
-/* Vue étendue : déplier toutes les descriptions */
+/* Vue étendue : déplier toutes les descriptions + élargir colonne */
 #actions-table.desc-all-expanded tbody td:nth-child(4) .description-preview {
   -webkit-line-clamp: unset;
   max-height: none;
   overflow: visible;
+  white-space: pre-wrap;
 }
+#actions-table.desc-all-expanded td.description-cell { max-width: 480px; }
 /* Badge desc-status : position absolue bas-gauche */
 .description-cell .desc-status-container {
   position: absolute;
@@ -2260,7 +2286,7 @@ tr.row-flash td {
                         <th class="sortable" data-col="8" onclick="trierColonne(8)">Priorité</th>
                         <th class="sortable phase-tech-header" data-col="10" onclick="trierColonne(10)" title="Phase technique de développement fournisseur">Phase tech.</th>
                         <th class="sortable" data-col="9" onclick="trierColonne(9)">Statut</th>
-                        <th>Pièces jointes</th>
+                        <th>PJ</th>
                         <th>Actions</th>
                     </tr>
                     <tr class="filters-row">
@@ -4575,7 +4601,7 @@ function chargerActions() {
         const pjCount = attachments[action.id]?.length ?? 0; // CORRIGÉ ICI : espace après '?' supprimé
 
         if (action.hasAttachments && pjCount > 0) {
-            pjHTML = `<button class="pj-button" onclick="afficherToutesPJ(${action.id})">PJ (${pjCount})</button>`;
+            pjHTML = `<button class="pj-button" onclick="afficherToutesPJ(${action.id})"><span class="pj-icon">📎</span><span class="pj-text">PJ (${pjCount})</span></button>`;
         }
         let statusClass = action.status.toLowerCase().replace('é', 'e').replace(' ', '-');
         const _nowDate = new Date().toISOString().split('T')[0];
@@ -4724,8 +4750,8 @@ function chargerActions() {
         let visibleCount = 0;
         rows.forEach(row => {
             // col0=cb, col1=num, col2=projet, col3=desc, col4=topic, col5=resp,
-            // col6=dateDebut, col7=dateLimite, col8=priorite, col9=statut
-            if (row.children.length < 12) return;
+            // col6=dateDebut, col7=dateLimite, col8=priorite, col9=phaseTech, col10=statut, col11=pj, col12=actions
+            if (row.children.length < 13) return;
             const numeroCell    = row.children[1].innerText.toLowerCase();
             const projetCellText = row.children[2].innerText.toLowerCase();
             const projectId     = row.children[2].getAttribute('data-project-id');
@@ -4735,7 +4761,7 @@ function chargerActions() {
             const dateDebutCell = row.children[6].innerText.toLowerCase();
             const dateLimiteCell = row.children[7].innerText.toLowerCase().replace(/\s*⚠️\s*/g,'');
             const prioriteCell  = row.children[8].innerText.toLowerCase();
-            const statutCellText = row.children[9].innerText.toLowerCase();
+            const statutCellText = row.children[10].innerText.toLowerCase();
             const statutRaw = statutCellText.replace('é','e').replace('é','e');
             let match = true;
             if (valNumero && !numeroCell.includes(valNumero)) match = false;
@@ -4773,6 +4799,21 @@ function chargerActions() {
         });
         const noResultsRow = tbody.querySelector('tr td[colspan]');
         if (noResultsRow) { noResultsRow.parentElement.style.display = visibleCount === 0 ? '' : 'none'; }
+        // Clignotement des filtres actifs
+        ['filter-numero','filter-projet','filter-description','filter-topic','filter-responsable',
+         'filter-date-debut','filter-date-limite','filter-priorite','filter-statut','filter-phase-tech'].forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.value ? el.classList.add('filter-active') : el.classList.remove('filter-active');
+        });
+        ['filter-status-en-attente','filter-status-en-cours','filter-status-termine','filter-status-bloque'].forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.checked ? el.classList.remove('filter-cb-off') : el.classList.add('filter-cb-off');
+        });
+        // Chip accès rapide actif
+        const selProject = document.getElementById('filter-project-select');
+        if (selProject) selProject.value ? selProject.classList.add('filter-active') : selProject.classList.remove('filter-active');
     }
     function filtrerActionsByProject() { const selectedProjectId = document.getElementById('filter-project-select').value; localStorage.setItem(getLocalStoragePrefix() + 'selectedProjectFilter', selectedProjectId); filtrerActions(); }
     function initStatusFilters() { const prefix = getLocalStoragePrefix(); const statusFilters = JSON.parse(localStorage.getItem(prefix + 'statusFilters')) || { 'en-attente': true, 'en-cours': true, 'termine': true, 'bloque': true }; const filterEnAttente = document.getElementById('filter-status-en-attente'); const filterEnCours = document.getElementById('filter-status-en-cours'); const filterTermine = document.getElementById('filter-status-termine'); const filterBloque = document.getElementById('filter-status-bloque'); const toggleBtn = document.getElementById('toggle-all-status'); if(filterEnAttente) filterEnAttente.checked = statusFilters['en-attente']; if(filterEnCours) filterEnCours.checked = statusFilters['en-cours']; if(filterTermine) filterTermine.checked = statusFilters['termine']; if(filterBloque) filterBloque.checked = statusFilters['bloque']; const applyAndSave = () => { const currentFilters = { 'en-attente': filterEnAttente?.checked ?? true, 'en-cours': filterEnCours?.checked ?? true, 'termine': filterTermine?.checked ?? true, 'bloque': filterBloque?.checked ?? true }; localStorage.setItem(prefix + 'statusFilters', JSON.stringify(currentFilters)); filtrerActions(); }; if(filterEnAttente) filterEnAttente.onchange = applyAndSave; if(filterEnCours) filterEnCours.onchange = applyAndSave; if(filterTermine) filterTermine.onchange = applyAndSave; if(filterBloque) filterBloque.onchange = applyAndSave; if(toggleBtn) toggleBtn.onclick = () => { const allChecked = filterEnAttente?.checked && filterEnCours?.checked && filterTermine?.checked && filterBloque?.checked; const newState = !allChecked; if(filterEnAttente) filterEnAttente.checked = newState; if(filterEnCours) filterEnCours.checked = newState; if(filterTermine) filterTermine.checked = newState; if(filterBloque) filterBloque.checked = newState; applyAndSave(); }; filtrerActions(); }
@@ -4832,7 +4873,16 @@ function afficherDescModal(actionId) {
         const action = actions.find(a => a.id === actionId);
         if (!action) return;
         const ta = document.getElementById('desc-edit-text');
-        if (ta) ta.value = action.description || '';
+        if (ta) {
+          ta.value = action.description || '';
+          // Auto-height : adapter la hauteur au contenu
+          ta.style.height = 'auto';
+          ta.style.height = Math.min(Math.max(120, ta.scrollHeight + 4), window.innerHeight * 0.6) + 'px';
+          ta.oninput = function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(Math.max(120, this.scrollHeight + 4), window.innerHeight * 0.6) + 'px';
+          };
+        }
         try { renderDescStatusToolbar(action); updateDescStatusToolbarActive(action); } catch(e) {}
         document.getElementById('desc-modal').style.display = 'block';
     }
@@ -5826,9 +5876,9 @@ function rafraichirAffichageActions() {
     const result = _orig.apply(this, arguments);
     try {
       // Post-filter: hide rows that do not match desc status selection
-      const sel = new Set(getDescStatusFilterSelection());
+      // Filtre desc-status désactivé : UI supprimée, filtrage Phase tech géré dans filtrerActions()
+      const sel = new Set();  // always empty — preserved for compat
       if (sel.size > 0) {
-        // Assume row data-key="action-id" or index not guaranteed; we re-evaluate using globals 'actions'
         const tbody = document.querySelector('#actions-table tbody');
         if (tbody) {
           const presets = getDescStatusPresets();
@@ -5956,21 +6006,21 @@ function renderDescStatusManagerRows() {
   host.innerHTML = '';
   _descStatusWork.forEach((p, idx) => {
     const row = document.createElement('div');
-    row.className = 'row';
+    row.className = 'dsm-row';
     row.innerHTML = `
-      <input type="text" value="${(p.key||'').replace(/"/g,'&quot;')}" oninput="onDescStatusEdit(${idx}, 'key', this.value)">
-      <div style="display:flex; align-items:center; gap:8px;">
-        <input type="text" value="${(p.label||'').replace(/"/g,'&quot;')}" oninput="onDescStatusEdit(${idx}, 'label', this.value)">
-        <span class="badge-preview" style="background:${p.color||'#9AA0A6'}14;border-color:${p.color||'#9AA0A6'}40;">
-          <span class="desc-status-dot" style="background:${p.color||'#9AA0A6'}"></span>
+      <input type="text" value="${(p.key||'').replace(/"/g,'&quot;')}" placeholder="clé" title="Clé interne unique (ex: dev)" oninput="onDescStatusEdit(${idx}, 'key', this.value)">
+      <div class="dsm-label-wrap">
+        <input type="text" value="${(p.label||'').replace(/"/g,'&quot;')}" placeholder="Libellé" oninput="onDescStatusEdit(${idx}, 'label', this.value)">
+        <span class="badge-preview" style="background:${p.color||'#9AA0A6'}14;border:1px solid ${p.color||'#9AA0A6'}40;padding:2px 8px;border-radius:999px;font-size:.78em;font-weight:600;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
+          <span class="desc-status-dot" style="width:8px;height:8px;border-radius:50%;display:inline-block;background:${p.color||'#9AA0A6'}"></span>
           <span>${(p.label||'').replace(/</g,'&lt;')}</span>
         </span>
       </div>
-      <input type="color" value="${p.color || '#9AA0A6'}" oninput="onDescStatusEdit(${idx}, 'color', this.value)">
+      <input type="color" value="${p.color || '#9AA0A6'}" title="Couleur" oninput="onDescStatusEdit(${idx}, 'color', this.value)">
       <div class="ops">
         <button type="button" class="btn" title="Monter" onclick="moveDescStatusRow(${idx}, -1)">▲</button>
         <button type="button" class="btn" title="Descendre" onclick="moveDescStatusRow(${idx}, 1)">▼</button>
-        <button type="button" class="btn" title="Supprimer" onclick="deleteDescStatusRow(${idx})">🗑️</button>
+        <button type="button" class="btn" title="Supprimer" onclick="deleteDescStatusRow(${idx})">🗑</button>
       </div>
     `;
     host.appendChild(row);
@@ -5981,8 +6031,21 @@ function onDescStatusEdit(index, field, value) {
   if (!_descStatusWork[index]) return;
   _descStatusWork[index][field] = value;
   if (field === 'label' || field === 'color') {
-    // refresh badge preview
-    renderDescStatusManagerRows();
+    // Mise à jour badge en place (sans re-render complet pour conserver le focus)
+    const rows = document.querySelectorAll('#desc-status-manager-rows .dsm-row');
+    const row = rows[index];
+    if (row) {
+      const p = _descStatusWork[index];
+      const badge = row.querySelector('.badge-preview');
+      const dot = row.querySelector('.desc-status-dot');
+      const lbl = badge?.querySelector('span:last-child');
+      if (badge && dot && lbl) {
+        badge.style.background = (p.color||'#9AA0A6') + '14';
+        badge.style.borderColor = (p.color||'#9AA0A6') + '40';
+        dot.style.background = p.color || '#9AA0A6';
+        lbl.textContent = p.label || '';
+      }
+    }
   }
 }
 
@@ -6762,16 +6825,18 @@ document.addEventListener('DOMContentLoaded', () => {
 <div id="desc-status-manager-modal" role="dialog" aria-modal="true" aria-labelledby="desc-status-manager-title">
   <div id="desc-status-manager">
     <header>
-      <h3 id="desc-status-manager-title">Gestion des statuts (description)</h3>
+      <h3 id="desc-status-manager-title">⚙ Personnaliser les Phases techniques</h3>
       <button type="button" class="btn" onclick="closeDescStatusManagerModal()">Fermer</button>
     </header>
     <div class="content">
       <div class="rows">
-        <div class="head">Clé</div>
-        <div class="head">Libellé</div>
-        <div class="head">Couleur</div>
-        <div class="head">Actions</div>
-        <div id="desc-status-manager-rows" class="row-host"></div>
+        <div class="dsm-header">
+          <span style="flex:0 0 80px">Clé</span>
+          <span style="flex:1">Libellé + aperçu couleur</span>
+          <span style="flex:0 0 46px">Coul.</span>
+          <span style="flex:0 0 auto;width:104px">Ordre / Suppr.</span>
+        </div>
+        <div id="desc-status-manager-rows"></div>
       </div>
       <div style="display:flex; gap:8px; margin-top:12px;">
         <button type="button" class="btn" onclick="addDescStatusRow()">Ajouter un statut</button>
