@@ -4117,6 +4117,7 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
          chargerProjets(); chargerActions(); mettreAJourTableauDeBord(); mettreAJourListesProjets(); mettreAJourSelectFiltreProjet(); masquerFormulaireModificationProjet();
          displayMessage("Projet mis à jour (id=" + projetId + ").", "success");
          mettreAJourListesEtendu(); // Met à jour les listes d'autocomplétion
+         updateContextBar();
      }
 
      async function supprimerProjet(projetId) { // <<< Doit être async à cause du log/save/PJ
@@ -6120,6 +6121,66 @@ function fermerMenuStatut() {
   _activeStatusDropdownActionId = null;
 }
 
+// ---- Menu Phase technique (descStatus) ----
+let _activeDescDropdownActionId = null;
+function ouvrirMenuStatutDesc(event, actionId) {
+  const dropdown = document.getElementById('status-desc-dropdown');
+  if (!dropdown) return;
+  if (_activeDescDropdownActionId === actionId && dropdown.style.display !== 'none') {
+    dropdown.style.display = 'none';
+    _activeDescDropdownActionId = null;
+    return;
+  }
+  _activeDescDropdownActionId = actionId;
+  dropdown.innerHTML = '';
+  const action = actions.find(a => a.id === actionId);
+  const presets = getDescStatusPresets();
+  presets.forEach(p => {
+    const btn = document.createElement('button');
+    btn.className = 'status-dropdown-item';
+    btn.style.cssText = `border-left:3px solid ${p.color};padding-left:8px;`;
+    btn.textContent = (action && action.descStatus?.key === p.key ? '✓ ' : '') + p.label;
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      dropdown.style.display = 'none';
+      _activeDescDropdownActionId = null;
+      await changerPhaseTechAction(actionId, p);
+    };
+    dropdown.appendChild(btn);
+  });
+  const rect = event.target.getBoundingClientRect();
+  dropdown.style.display = 'flex';
+  dropdown.style.position = 'fixed';
+  dropdown.style.top  = (rect.bottom + 4) + 'px';
+  dropdown.style.left = rect.left + 'px';
+  setTimeout(() => {
+    document.addEventListener('click', fermerMenuStatutDesc, { once: true });
+  }, 50);
+}
+function fermerMenuStatutDesc() {
+  const dropdown = document.getElementById('status-desc-dropdown');
+  if (dropdown) dropdown.style.display = 'none';
+  _activeDescDropdownActionId = null;
+}
+async function changerPhaseTechAction(actionId, preset) {
+  const idx = actions.findIndex(a => a.id === actionId);
+  if (idx === -1) return;
+  const oldLabel = actions[idx].descStatus?.label || 'À définir';
+  if (actions[idx].descStatus?.key === preset.key) return;
+  actions[idx].descStatus = { key: preset.key, label: preset.label, color: preset.color };
+  logActivity('Modification', `Phase tech. de '${actions[idx].numeroRef}' : ${oldLabel} → ${preset.label}`);
+  sauvegarderDonneesLocal();
+  sauvegarderBackupAutomatique(false); // fire-and-forget
+  // Mise à jour DOM inline (sans re-render complet)
+  const tr = document.querySelector(`#actions-list tr[data-action-id="${actionId}"]`);
+  if (tr) {
+    const cell = tr.querySelector('.phase-tech-cell');
+    if (cell) cell.innerHTML = renderDescStatusPill(actions[idx]);
+    tr.classList.add('row-flash');
+    setTimeout(() => tr.classList.remove('row-flash'), 1400);
+  }
+}
+
 // ---- Changer statut action en 1 clic ----
 async function changerStatutAction(actionId, newStatus) {
   const idx = actions.findIndex(a => a.id === actionId);
@@ -6273,9 +6334,11 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// ---- Fermer dropdown statut si scroll ou resize ----
+// ---- Fermer dropdowns si scroll ou resize ----
 document.querySelector('.actions-table-wrapper')?.addEventListener('scroll', fermerMenuStatut);
 window.addEventListener('resize', fermerMenuStatut);
+document.querySelector('.actions-table-wrapper')?.addEventListener('scroll', fermerMenuStatutDesc);
+window.addEventListener('resize', fermerMenuStatutDesc);
 
 
 // --- Ensure description clicks open the correct action using row data-action-id ---
@@ -6705,6 +6768,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <!-- Status dropdown (shared, positioned by JS) -->
 <div id="status-dropdown" class="status-dropdown" style="display:none;"></div>
+<!-- Phase technique dropdown (shared, positioned by JS) -->
+<div id="status-desc-dropdown" class="status-dropdown" style="display:none;"></div>
 
 <!-- Keyboard shortcuts panel -->
 <button id="shortcuts-toggle" onclick="toggleShortcuts()" title="Raccourcis clavier">⌨ Raccourcis</button>
