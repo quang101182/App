@@ -690,7 +690,7 @@ tr.action-surbrillance td:nth-child(12) {
         background-color: #8e44ad; color: white; font-weight: 500; padding: 4px 6px;
         border-radius: 4px; border: none; cursor: pointer;
         display: flex; flex-direction: column; align-items: center; gap: 1px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 0.78em; width: 100%;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 0.78em; width: auto;
       }
       .pj-button::before { display: none; } /* supprime l'ancien ::before */
       .pj-icon { font-size: 1.1em; line-height: 1.2; }
@@ -1154,7 +1154,7 @@ button {
 #desc-status-manager .rows { display:block; }
 #desc-status-manager .dsm-header { display:flex; gap:8px; font-size:.8rem; opacity:.6; padding:0 0 5px 0; border-bottom:2px solid #eee; margin-bottom:6px; }
 #desc-status-manager .dsm-row { display:flex; gap:8px; align-items:center; padding:5px 0; border-bottom:1px solid #f3f3f3; }
-#desc-status-manager .dsm-row input[type=text]:first-child { flex:0 0 80px; padding:5px 8px; border:1px solid #e1e1e1; border-radius:6px; font-size:.9em; }
+#desc-status-manager .dsm-row input[type=hidden] { display:none; }
 #desc-status-manager .dsm-label-wrap { flex:1; display:flex; gap:8px; align-items:center; min-width:0; }
 #desc-status-manager .dsm-label-wrap input[type=text] { flex:1; padding:5px 8px; border:1px solid #e1e1e1; border-radius:6px; font-size:.9em; }
 #desc-status-manager .dsm-row input[type=color] { flex:0 0 46px; height:32px; border:1px solid #e1e1e1; border-radius:6px; padding:2px; cursor:pointer; }
@@ -4875,9 +4875,7 @@ function afficherDescModal(actionId) {
         const ta = document.getElementById('desc-edit-text');
         if (ta) {
           ta.value = action.description || '';
-          // Auto-height : adapter la hauteur au contenu
-          ta.style.height = 'auto';
-          ta.style.height = Math.min(Math.max(120, ta.scrollHeight + 4), window.innerHeight * 0.6) + 'px';
+          ta.style.height = 'auto'; // reset avant affichage
           ta.oninput = function() {
             this.style.height = 'auto';
             this.style.height = Math.min(Math.max(120, this.scrollHeight + 4), window.innerHeight * 0.6) + 'px';
@@ -4885,6 +4883,10 @@ function afficherDescModal(actionId) {
         }
         try { renderDescStatusToolbar(action); updateDescStatusToolbarActive(action); } catch(e) {}
         document.getElementById('desc-modal').style.display = 'block';
+        // Calcul de hauteur APRÈS display:block (scrollHeight correct seulement quand visible)
+        if (ta) {
+          ta.style.height = Math.min(Math.max(120, ta.scrollHeight + 4), window.innerHeight * 0.6) + 'px';
+        }
     }
     async function closeDescModal(save) { // <<< Doit être async à cause du log/save
         if (save && currentEditingActionId !== null) {
@@ -5982,6 +5984,10 @@ function ensureUniqueKey(base, taken) {
   while (taken.has(k)) { k = base + (++i); }
   return k;
 }
+function slugifyKey(str) {
+  return (str || 'key').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,24) || 'key';
+}
 
 function openDescStatusManagerModal() {
   const presets = getDescStatusPresets();
@@ -6008,7 +6014,7 @@ function renderDescStatusManagerRows() {
     const row = document.createElement('div');
     row.className = 'dsm-row';
     row.innerHTML = `
-      <input type="text" value="${(p.key||'').replace(/"/g,'&quot;')}" placeholder="clé" title="Clé interne unique (ex: dev)" oninput="onDescStatusEdit(${idx}, 'key', this.value)">
+      <input type="hidden" value="${(p.key||'').replace(/"/g,'&quot;')}" data-dsm-key="${idx}">
       <div class="dsm-label-wrap">
         <input type="text" value="${(p.label||'').replace(/"/g,'&quot;')}" placeholder="Libellé" oninput="onDescStatusEdit(${idx}, 'label', this.value)">
         <span class="badge-preview" style="background:${p.color||'#9AA0A6'}14;border:1px solid ${p.color||'#9AA0A6'}40;padding:2px 8px;border-radius:999px;font-size:.78em;font-weight:600;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
@@ -6030,6 +6036,11 @@ function renderDescStatusManagerRows() {
 function onDescStatusEdit(index, field, value) {
   if (!_descStatusWork[index]) return;
   _descStatusWork[index][field] = value;
+  // Auto-génère la clé interne depuis le libellé pour les nouvelles entrées (clé commence par "new")
+  if (field === 'label' && (_descStatusWork[index].key || '').startsWith('new')) {
+    const taken = new Set(_descStatusWork.map((p, i) => i !== index ? p.key : null).filter(Boolean));
+    _descStatusWork[index].key = ensureUniqueKey(slugifyKey(value), taken);
+  }
   if (field === 'label' || field === 'color') {
     // Mise à jour badge en place (sans re-render complet pour conserver le focus)
     const rows = document.querySelectorAll('#desc-status-manager-rows .dsm-row');
@@ -6831,7 +6842,6 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="content">
       <div class="rows">
         <div class="dsm-header">
-          <span style="flex:0 0 80px">Clé</span>
           <span style="flex:1">Libellé + aperçu couleur</span>
           <span style="flex:0 0 46px">Coul.</span>
           <span style="flex:0 0 auto;width:104px">Ordre / Suppr.</span>
