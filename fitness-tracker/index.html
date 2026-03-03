@@ -398,7 +398,7 @@
 
         async function driveUpsertFile(filename, content) {
             const blob = new Blob([content], { type: 'application/json' });
-            let q = `name = '${filename}' and mimeType = 'application/json' and trashed = false`;
+            let q = `name = '${filename.replace(/'/g, "\\'")}' and mimeType = 'application/json' and trashed = false`;
             if (driveConfig.folderId) q += ` and '${driveConfig.folderId}' in parents`;
             const searchRes = await gapi.client.drive.files.list({ q, fields: 'files(id)', pageSize: 1 });
             if (searchRes.status === 401) throw new Error('TOKEN_EXPIRED');
@@ -643,8 +643,13 @@
             setTimeout(() => toast.classList.add('opacity-0', '-translate-y-4'), 3000);
         };
 
+        const getLocalToday = () => {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        };
+
         const cleanupEmptyPerformances = () => {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getLocalToday();
             for (const progName in state.performance) {
                 for (const exoName in state.performance[progName]) {
                     const cleanedHistory = state.performance[progName][exoName].filter(entry => {
@@ -702,7 +707,10 @@
 
         const loadState = () => {
             const savedState = localStorage.getItem('fitnessTrackerState');
-            if (savedState) { state = JSON.parse(savedState); }
+            if (savedState) {
+                try { state = JSON.parse(savedState); }
+                catch (e) { console.error("localStorage corrompu, réinitialisation.", e); localStorage.removeItem('fitnessTrackerState'); }
+            }
             state.programs = state.programs || {};
             state.performance = state.performance || {};
             state.programOrder = state.programOrder || Object.keys(state.programs);
@@ -768,7 +776,7 @@
                 card.dataset.index = index;
                 if (options.newlyAddedIndex === index) { card.classList.add("newly-added"); } else { card.classList.add("fade-in-up"); }
                 
-                const today = new Date().toISOString().split('T')[0];
+                const today = getLocalToday();
                 const perfHistory = state.performance[programName]?.[exercise.Exercice] || [];
                 const todayPerfEntry = perfHistory.find(e => e.date === today);
                 const hasTodayData = todayPerfEntry && (todayPerfEntry.sets || []).some(s => (s.poids && s.poids.toString().trim() !== '') || (s.reps && s.reps.toString().trim() !== ''));
@@ -1240,7 +1248,7 @@
         };
 
         const getOrCreateTodayEntry = (programName, exerciseName) => {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getLocalToday();
             if (!state.performance[programName]) state.performance[programName] = {};
             let perfHistory = state.performance[programName][exerciseName];
             if (!perfHistory) {
@@ -1272,7 +1280,7 @@
                 const exerciseName = target.dataset.exercise;
                 const value = target.value;
                 
-                const isFirstEditOfToday = !state.performance[programName]?.[exerciseName]?.find(e => e.date === new Date().toISOString().split('T')[0]);
+                const isFirstEditOfToday = !state.performance[programName]?.[exerciseName]?.find(e => e.date === getLocalToday());
                 const todayEntry = getOrCreateTodayEntry(programName, exerciseName);
                 
                 if(isFirstEditOfToday) {
@@ -1285,6 +1293,7 @@
                 }
 
                 const setIndex = parseInt(target.dataset.setIndex, 10);
+                if (isNaN(setIndex) || setIndex < 0 || setIndex > 29) return;
                 const subField = target.dataset.subField;
                 while (todayEntry.sets.length <= setIndex) todayEntry.sets.push({});
                 if (!todayEntry.sets[setIndex]) todayEntry.sets[setIndex] = {};
@@ -1618,7 +1627,7 @@
                 case 'copy-last-reps': {
                     const exerciseName = target.dataset.exerciseName;
                     const card = target.closest('.exercise-card');
-                    const today = new Date().toISOString().split('T')[0];
+                    const today = getLocalToday();
 
                     if (!state.performance[programName]) state.performance[programName] = {};
                     let perfHistory = state.performance[programName][exerciseName];
