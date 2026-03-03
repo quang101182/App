@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
-<title>SubWhisper v3.0</title>
+<title>SubWhisper v3.1</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -307,6 +307,46 @@ body.light .dz:hover,body.light .dz.over{background:rgba(124,106,255,.04)}
 }
 .fp.vis{display:flex}
 @keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+/* FILE PREVIEW (before transcription) */
+.file-prev-wrap{
+  margin:0 28px 16px;
+  display:none;
+  border-radius:14px;
+  overflow:hidden;
+  background:#000;
+  border:1px solid var(--border);
+  animation:slideUp .3s ease;
+  max-height:220px;
+}
+.file-prev-wrap.vis{display:block}
+.file-prev-vid{width:100%;max-height:220px;display:block}
+.file-prev-aud{width:calc(100% - 28px);margin:10px 14px;display:block;accent-color:var(--accent)}
+/* OFFSET CONTROLS */
+.offset-wrap{
+  padding:10px 14px;
+  border-top:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.offset-lbl{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;flex-shrink:0}
+.offset-val{font-family:var(--mono);font-size:13px;color:var(--accent);font-weight:700;min-width:64px;text-align:center}
+.offset-btns{display:flex;gap:4px;flex-wrap:wrap;flex:1}
+.offset-btn{
+  font-family:var(--mono);font-size:10px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:6px;
+  color:var(--muted);
+  cursor:pointer;
+  padding:4px 9px;
+  transition:all .15s;
+}
+.offset-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(124,106,255,.1)}
+.offset-btn.neg:hover{border-color:var(--accent2);color:var(--accent2);background:rgba(255,77,109,.08)}
+.offset-btn.reset{border-color:rgba(0,212,170,.25);color:var(--success)}
+.offset-btn.reset:hover{background:rgba(0,212,170,.1);border-color:var(--success)}
 .finfo{flex:1;overflow:hidden}
 .fname{font-family:var(--mono);font-size:11px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fsz{font-size:11px;color:var(--muted);margin-top:3px}
@@ -697,7 +737,7 @@ body.light footer{background:rgba(240,240,246,.6)}
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v3.0</span>
+    <span class="ver-badge">v3.1</span>
   </div>
   <div class="hdr-r">
     <button class="icon-btn" id="cfgBtn" onclick="toggleConfig()" title="Paramètres">&#9881;&#65039;</button>
@@ -804,6 +844,11 @@ body.light footer{background:rgba(240,240,246,.6)}
   <button class="frm" onclick="clearFile()" title="Retirer le fichier" aria-label="Retirer le fichier">&#x2715;</button>
 </div>
 
+<div class="file-prev-wrap" id="filePrevWrap">
+  <video class="file-prev-vid" id="filePrevVid" controls preload="metadata" playsinline></video>
+  <audio class="file-prev-aud" id="filePrevAud" controls preload="metadata" style="display:none"></audio>
+</div>
+
 <div class="pw" id="pw">
   <div class="ph">
     <span class="plbl" id="pl">Traitement</span>
@@ -851,6 +896,19 @@ body.light footer{background:rgba(240,240,246,.6)}
     <video class="preview-video" id="previewVideo" controls preload="metadata">
       <track id="previewTrack" kind="subtitles" srclang="fr" label="Sous-titres" default>
     </video>
+    <div class="offset-wrap">
+      <span class="offset-lbl">Décalage</span>
+      <span class="offset-val" id="offsetDisplay">0 ms</span>
+      <div class="offset-btns">
+        <button class="offset-btn neg" onclick="applyOffset(-500)">-500ms</button>
+        <button class="offset-btn neg" onclick="applyOffset(-100)">-100ms</button>
+        <button class="offset-btn neg" onclick="applyOffset(-50)">-50ms</button>
+        <button class="offset-btn reset" onclick="resetOffset()">&#x21BA; reset</button>
+        <button class="offset-btn" onclick="applyOffset(50)">+50ms</button>
+        <button class="offset-btn" onclick="applyOffset(100)">+100ms</button>
+        <button class="offset-btn" onclick="applyOffset(500)">+500ms</button>
+      </div>
+    </div>
   </div>
 
   <div class="ffmpeg-wrap" id="ffmpegWrap">
@@ -871,7 +929,7 @@ body.light footer{background:rgba(240,240,246,.6)}
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v3.0 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v3.1 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -884,12 +942,16 @@ var AZURE_LANG = {'fr':'fr','en':'en','es':'es','de':'de','it':'it','pt':'pt-br'
 
 var selFile = null;
 var srtTxt = '';
+var srtOriginal = '';
 var origName = '';
 var pollTimer = null;
 var currentJobId = null;
 var destDirHandle = null;
 var previewVttUrl = null;
 var previewVideoUrl = null;
+var filePrevUrl = null;
+var currentOffset = 0;
+var offsetReloadTimer = null;
 
 // ── CONFIG ────────────────────────────────────────────────
 function toggleConfig() {
@@ -975,26 +1037,60 @@ function handleFile(f) {
   selFile = f;
   origName = f.name.replace(/\.[^/.]+$/, '');
   document.getElementById('fn').textContent = f.name;
-  var url = URL.createObjectURL(f);
-  var media = document.createElement('video');
-  media.preload = 'metadata';
-  media.onloadedmetadata = function() {
-    var dur = media.duration; URL.revokeObjectURL(url);
-    var durStr = isFinite(dur) ? fmtDur(dur) : '';
-    document.getElementById('fs').textContent = fmtSz(f.size) + (durStr ? ' \u00b7 ' + durStr : '');
-  };
-  media.onerror = function() { URL.revokeObjectURL(url); document.getElementById('fs').textContent = fmtSz(f.size); };
-  media.src = url;
+  // Clean previous file preview
+  clearFilePrev();
+  var isAudio = /\.(mp3|wav|aac|flac|m4a|ogg)$/i.test(f.name);
+  var isMkv = /\.mkv$/i.test(f.name);
+  // BUG2: createObjectURL only for playable formats (not MKV → memory leak)
+  var wrap = document.getElementById('filePrevWrap');
+  if (isAudio) {
+    filePrevUrl = URL.createObjectURL(f);
+    var aud = document.getElementById('filePrevAud');
+    aud.src = filePrevUrl;
+    aud.style.display = 'block';
+    document.getElementById('filePrevVid').style.display = 'none';
+    document.getElementById('fs').textContent = fmtSz(f.size);
+    wrap.classList.add('vis');
+  } else if (!isMkv) {
+    filePrevUrl = URL.createObjectURL(f);
+    var vid = document.getElementById('filePrevVid');
+    vid.src = filePrevUrl;
+    vid.style.display = 'block';
+    document.getElementById('filePrevAud').style.display = 'none';
+    vid.onloadedmetadata = function() {
+      var durStr = isFinite(vid.duration) ? fmtDur(vid.duration) : '';
+      document.getElementById('fs').textContent = fmtSz(f.size) + (durStr ? ' \u00b7 ' + durStr : '');
+    };
+    wrap.classList.add('vis');
+  } else {
+    // MKV — browser can't play, just show size
+    document.getElementById('fs').textContent = fmtSz(f.size) + ' \u00b7 MKV';
+  }
   document.getElementById('fp').classList.add('vis');
   document.getElementById('dropSection').style.display = 'none';
   hideErr(); hideRes(); updateSbtn();
 }
 
+function clearFilePrev() {
+  var wrap = document.getElementById('filePrevWrap');
+  wrap.classList.remove('vis');
+  var vid = document.getElementById('filePrevVid');
+  var aud = document.getElementById('filePrevAud');
+  // BUG1: only call load() if src was set (avoids console warning)
+  if (vid.hasAttribute('src')) { vid.removeAttribute('src'); vid.load(); }
+  if (aud.hasAttribute('src')) { aud.removeAttribute('src'); aud.load(); }
+  // BUG3: reset display states for next file
+  vid.style.display = 'block';
+  aud.style.display = 'none';
+  if (filePrevUrl) { URL.revokeObjectURL(filePrevUrl); filePrevUrl = null; }
+}
+
 function clearFile() {
-  selFile = null; srtTxt = '';
+  selFile = null; srtTxt = ''; srtOriginal = '';
   document.getElementById('fp').classList.remove('vis');
   document.getElementById('fi').value = '';
   document.getElementById('dropSection').style.display = '';
+  clearFilePrev();
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   hideRes(); hideErr(); updateSbtn();
 }
@@ -1230,6 +1326,9 @@ function setSt(s) { document.getElementById('sd').className = 'sdot' + (s ? ' ' 
 
 // ── RESULTS ───────────────────────────────────────────────
 function showRes(content, srcLang, tgtLang, wasTranslated) {
+  srtOriginal = content;
+  currentOffset = 0;
+  document.getElementById('offsetDisplay').textContent = '0 ms';
   document.getElementById('sp').value = content;
   document.getElementById('rw').classList.add('vis');
   setSt('on');
@@ -1257,6 +1356,84 @@ function hideRes() {
 function showErr(m) { var e = document.getElementById('ew'); e.textContent = 'ERREUR : ' + m; e.classList.add('vis'); }
 function hideErr() { document.getElementById('ew').classList.remove('vis'); }
 function getCurrentSRT() { return document.getElementById('sp').value; }
+
+// ── OFFSET ────────────────────────────────────────────────
+function tsToMs(ts) {
+  var m = ts.match(/(\d+):(\d+):(\d+)[,.](\d+)/);
+  if (!m) return 0;
+  return (+m[1]) * 3600000 + (+m[2]) * 60000 + (+m[3]) * 1000 + (+m[4]);
+}
+function msToTs(ms) {
+  if (ms < 0) ms = 0;
+  var h = Math.floor(ms / 3600000);
+  var m = Math.floor((ms % 3600000) / 60000);
+  var s = Math.floor((ms % 60000) / 1000);
+  var f = ms % 1000;
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0') + ',' + String(f).padStart(3,'0');
+}
+function shiftSRT(srtContent, offsetMs) {
+  if (offsetMs === 0) return srtContent;
+  var blocks = parseSRT(srtContent);
+  var shifted = [];
+  for (var i = 0; i < blocks.length; i++) {
+    var parts = blocks[i].timestamp.split(' --> ');
+    var newStart = tsToMs(parts[0]) + offsetMs;
+    var newEnd   = tsToMs(parts[1]) + offsetMs;
+    if (newEnd <= 0) continue; // crop blocks fully before t=0
+    if (newStart < 0) newStart = 0;
+    shifted.push({ id: String(shifted.length + 1), timestamp: msToTs(newStart) + ' --> ' + msToTs(newEnd), text: blocks[i].text });
+  }
+  return buildSRT(shifted);
+}
+function applyOffset(deltaMs) {
+  currentOffset += deltaMs;
+  var disp = document.getElementById('offsetDisplay');
+  var shifted = shiftSRT(srtOriginal, currentOffset);
+  // BUG4: warn if extreme offset eliminates all blocks
+  if (shifted.trim() === '') {
+    currentOffset -= deltaMs; // revert
+    disp.textContent = (currentOffset >= 0 ? '+' : '') + currentOffset + ' ms';
+    toast('Décalage trop extrême — tous les sous-titres seraient supprimés');
+    return;
+  }
+  disp.textContent = (currentOffset >= 0 ? '+' : '') + currentOffset + ' ms';
+  disp.style.color = currentOffset === 0 ? 'var(--accent)' : currentOffset < 0 ? 'var(--accent2)' : 'var(--success)';
+  document.getElementById('sp').value = shifted;
+  // Reload preview track in-place (no video reload)
+  if (previewVttUrl) { URL.revokeObjectURL(previewVttUrl); previewVttUrl = null; }
+  var vttBlob = new Blob([srtToVtt(shifted)], { type: 'text/vtt' });
+  previewVttUrl = URL.createObjectURL(vttBlob);
+  var track = document.getElementById('previewTrack');
+  track.src = '';
+  // BUG5: cancel pending reload to avoid race condition
+  clearTimeout(offsetReloadTimer);
+  offsetReloadTimer = setTimeout(function() {
+    track.src = previewVttUrl;
+    if (document.getElementById('previewVideo').textTracks[0]) {
+      document.getElementById('previewVideo').textTracks[0].mode = 'showing';
+    }
+  }, 50);
+}
+function resetOffset() {
+  currentOffset = 0;
+  var disp = document.getElementById('offsetDisplay');
+  disp.textContent = '0 ms';
+  disp.style.color = 'var(--accent)';
+  document.getElementById('sp').value = srtOriginal;
+  if (previewVttUrl) { URL.revokeObjectURL(previewVttUrl); previewVttUrl = null; }
+  var vttBlob = new Blob([srtToVtt(srtOriginal)], { type: 'text/vtt' });
+  previewVttUrl = URL.createObjectURL(vttBlob);
+  var track = document.getElementById('previewTrack');
+  track.src = '';
+  // BUG5: cancel pending reload before scheduling new one
+  clearTimeout(offsetReloadTimer);
+  offsetReloadTimer = setTimeout(function() {
+    track.src = previewVttUrl;
+    if (document.getElementById('previewVideo').textTracks[0]) {
+      document.getElementById('previewVideo').textTracks[0].mode = 'showing';
+    }
+  }, 50);
+}
 
 // ── VIDEO PREVIEW ─────────────────────────────────────────
 function showVideoPreview(videoFile, srtContent) {
