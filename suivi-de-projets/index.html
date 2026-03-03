@@ -1619,6 +1619,89 @@ tr.row-flash td {
   box-shadow: 0 4px 12px rgba(0,0,0,0.12);
 }
 
+      /* === Barre de contexte permanente - améliorations === */
+      #top-info-banner {
+          display: none;
+          justify-content: center;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 12px;
+          padding: 7px 15px;
+          font-size: 0.82em;
+          font-weight: 500;
+          border-radius: 5px;
+          border: 1px solid #b6d4fe;
+          background-color: #e7f3ff;
+          color: #0b5ed7;
+          margin-bottom: 5px;
+      }
+      #top-info-banner.mode-edition { background-color: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+      #top-info-banner.mode-lecture { background-color: #fff3cd; color: #856404; border-color: #ffeeba; }
+      .ctx-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+      .ctx-sep { color: #93c5fd; font-weight: 300; }
+      #top-info-banner.mode-edition .ctx-sep { color: #6ee7b7; }
+      #top-info-banner.mode-lecture .ctx-sep { color: #fcd34d; }
+
+      /* === Bandeau mode dégradé - backup inaccessible === */
+      #backup-degraded-banner {
+          display: none;
+          background-color: #dc2626;
+          color: white;
+          padding: 8px 15px;
+          text-align: center;
+          font-weight: bold;
+          border-radius: 5px;
+          margin-top: 4px;
+          margin-bottom: 4px;
+          font-size: 0.88em;
+          border: 1px solid #b91c1c;
+      }
+
+      /* === Chips filtres rapides === */
+      .chips-filtres {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-bottom: 8px;
+          align-items: center;
+      }
+      .chip-filtre {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          padding: 4px 11px;
+          border-radius: 999px;
+          font-size: 0.78em;
+          font-weight: 600;
+          cursor: pointer;
+          border: 2px solid #bfdbfe;
+          background: #eff6ff;
+          color: #1e40af;
+          transition: all 0.15s ease;
+      }
+      .chip-filtre:hover { background: #dbeafe; transform: translateY(-1px); }
+      .chip-filtre.active { background: #1e40af; color: white; border-color: #1e40af; }
+      .chip-retard { border-color: #fecdd3; background: #fff1f2; color: #be123c; }
+      .chip-retard:hover { background: #ffe4e6; }
+      .chip-retard.active { background: #be123c; color: white; border-color: #be123c; }
+      .chip-phase { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+      .chip-phase:hover { background: #dcfce7; }
+      .chip-phase.active { background: #166534; color: white; border-color: #166534; }
+      .chip-label { font-size: 0.78em; font-weight: 600; color: #6b7280; white-space: nowrap; margin-right: 2px; }
+
+      /* === Colonne Phase technique === */
+      #actions-table th.phase-tech-header,
+      #actions-table td.phase-tech-cell {
+          min-width: 95px;
+          max-width: 120px;
+          text-align: center;
+          vertical-align: middle;
+      }
+      #filter-phase-tech { width: 80px; }
+
+      /* === Config avec dossier configuré === */
+      .config-option-configured::before { content: "📁 "; }
+
 </style>
 </head>
 <body>
@@ -1643,6 +1726,8 @@ tr.row-flash td {
 
     <!-- Bandeau d'alerte pour le verrou multi-utilisateur (dynamique) -->
     <div class="alert-banner" id="verrou-info-banner" style="display: none;"></div>
+    <!-- Bandeau mode dégradé - backup disque inaccessible (persistant) -->
+    <div id="backup-degraded-banner">⚠️ Sauvegarde disque NON DISPONIBLE — Travail en mode local uniquement. Vérifiez l'accès réseau ou cliquez sur "Autoriser dossiers".</div>
 
     <!-- Barre d'onglets -->
     <div class="tabs">
@@ -2084,6 +2169,16 @@ tr.row-flash td {
             </form>
         </div>
 
+        <!-- Chips filtres rapides -->
+            <div class="chips-filtres" id="chips-filtres-rapides">
+                <span class="chip-label">Accès rapide :</span>
+                <button class="chip-filtre active" id="chip-tous" onclick="appliquerChipFiltre('tous')" title="Afficher toutes les actions">Tous</button>
+                <button class="chip-filtre chip-retard" id="chip-retard" onclick="appliquerChipFiltre('retard')" title="Actions dont la date limite est dépassée">⏰ En retard</button>
+                <button class="chip-filtre" id="chip-en-cours" onclick="appliquerChipFiltre('en-cours')" title="Actions en cours">🔄 En cours</button>
+                <button class="chip-filtre chip-phase" id="chip-a-tester" onclick="appliquerChipFiltre('a-tester')" title="Phase technique : À tester">🧪 À tester</button>
+                <button class="chip-filtre chip-phase" id="chip-en-dev" onclick="appliquerChipFiltre('en-dev')" title="Phase technique : En dev">⚙️ En dev</button>
+                <button class="chip-filtre chip-retard" id="chip-bloque" onclick="appliquerChipFiltre('bloque')" title="Actions bloquées">🚫 Bloqué</button>
+            </div>
         <!-- Filters -->
         <div class="filters-container">
              <div class="filter-group">
@@ -2154,6 +2249,7 @@ tr.row-flash td {
                         <th class="sortable" data-col="6" onclick="trierColonne(6)">Date début</th>
                         <th class="sortable" data-col="7" onclick="trierColonne(7)">Date limite</th>
                         <th class="sortable" data-col="8" onclick="trierColonne(8)">Priorité</th>
+                        <th class="sortable phase-tech-header" data-col="10" onclick="trierColonne(10)" title="Phase technique de développement fournisseur">Phase tech.</th>
                         <th class="sortable" data-col="9" onclick="trierColonne(9)">Statut</th>
                         <th>Pièces jointes</th>
                         <th>Actions</th>
@@ -2168,6 +2264,7 @@ tr.row-flash td {
                         <th><input type="text" id="filter-date-debut" oninput="filtrerActions()" placeholder="Filtrer..." /></th>
                         <th><input type="text" id="filter-date-limite" oninput="filtrerActions()" placeholder="Filtrer..." /></th>
                         <th><input type="text" id="filter-priorite" oninput="filtrerActions()" placeholder="Filtrer..." /></th>
+                        <th><input type="text" id="filter-phase-tech" oninput="filtrerActions()" placeholder="Filtrer..." /></th>
                         <th><input type="text" id="filter-statut" oninput="filtrerActions()" placeholder="Filtrer..." /></th>
                         <th><!-- PJ --></th>
                         <th><!-- Actions --></th>
@@ -2369,6 +2466,9 @@ tr.row-flash td {
     let externalLockCheckInterval = null;
     const EXTERNAL_LOCK_CHECK_INTERVAL_MS = 60 * 1000;
 
+    // Tracking sauvegarde chargée (pour détection de conflit)
+    let _lastLoadedBackupName = null;
+
     // Temporary Attachment Arrays
     let addActionAttachments = [];
     let editActionAttachments = [];
@@ -2399,6 +2499,91 @@ tr.row-flash td {
         return String(html)
             .replace(/\s+on\w+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]*)/gi, '')
             .replace(/javascript\s*:/gi, 'javascript&#58;');
+    }
+
+    /** Met à jour la barre de contexte permanente (config | profil | backup | user | mode). */
+    function updateContextBar() {
+        const banner = document.getElementById('top-info-banner');
+        if (!banner) return;
+        if (!selectedProjectSaveId) { banner.style.display = 'none'; return; }
+        const configName = escapeHtml(configNames[activeConfig] || `Config ${activeConfig}`);
+        const profileName = escapeHtml(getProjectSaveName(selectedProjectSaveId) || 'Aucun profil');
+        const userName = escapeHtml(utilisateurActuel || 'Inconnu');
+        const modeLabel = isLockedByCurrentUser ? '✏️ Édition' : '👁️ Consultation';
+        // Dernier backup : lire depuis le select sauvegarde
+        const selSave = document.getElementById('select-sauvegarde');
+        let lastBackup = '—';
+        if (selSave && selSave.options.length > 0) {
+            const firstOpt = selSave.options[0];
+            if (firstOpt && firstOpt.value && !firstOpt.text.startsWith('Aucune') && !firstOpt.text.startsWith('Accès') && !firstOpt.text.startsWith('Dossier')) {
+                lastBackup = escapeHtml(firstOpt.text);
+            }
+        }
+        if (_lastLoadedBackupName) {
+            const dm = _lastLoadedBackupName.match(/(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})\.json$/);
+            if (dm) { const p = dm[1].split('-'); lastBackup = `${p[2]}/${p[1]}/${p[0]} ${p[3]}:${p[4]}`; }
+        }
+        banner.style.display = 'flex';
+        banner.className = isLockedByCurrentUser ? 'mode-edition' : 'mode-lecture';
+        banner.innerHTML = `
+            <span class="ctx-item">📍 <strong>${configName}</strong></span>
+            <span class="ctx-sep">|</span>
+            <span class="ctx-item">📁 ${profileName}</span>
+            <span class="ctx-sep">|</span>
+            <span class="ctx-item">💾 ${lastBackup}</span>
+            <span class="ctx-sep">|</span>
+            <span class="ctx-item">👤 ${userName}</span>
+            <span class="ctx-sep">|</span>
+            <span class="ctx-item">${modeLabel}</span>
+        `;
+    }
+
+    /** Affiche ou masque le bandeau de dégradé backup. */
+    function setBandeauDegrade(visible) {
+        const el = document.getElementById('backup-degraded-banner');
+        if (el) el.style.display = visible ? 'block' : 'none';
+    }
+
+    /** Applique un filtre rapide via les chips. */
+    function appliquerChipFiltre(type) {
+        // Reset tous les chips visuellement
+        document.querySelectorAll('.chip-filtre').forEach(c => c.classList.remove('active'));
+        const activeChip = document.getElementById('chip-' + type);
+        if (activeChip) activeChip.classList.add('active');
+
+        const presets = getDescStatusPresets();
+        // Reset filtres
+        ['filter-numero','filter-projet','filter-description','filter-topic','filter-responsable','filter-date-debut','filter-date-limite','filter-priorite','filter-statut','filter-phase-tech'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.value = '';
+        });
+        ['filter-status-en-attente','filter-status-en-cours','filter-status-termine','filter-status-bloque'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.checked = true;
+        });
+
+        if (type === 'tous') {
+            // Tout déjà réinitialisé ci-dessus
+        } else if (type === 'retard') {
+            // Filtre géré dans filtrerActions() via flag
+            const el = document.getElementById('filter-statut'); // pas utilisé pour retard
+        } else if (type === 'en-cours') {
+            ['filter-status-en-attente','filter-status-termine','filter-status-bloque'].forEach(id => {
+                const el = document.getElementById(id); if (el) el.checked = false;
+            });
+        } else if (type === 'bloque') {
+            ['filter-status-en-attente','filter-status-en-cours','filter-status-termine'].forEach(id => {
+                const el = document.getElementById(id); if (el) el.checked = false;
+            });
+        } else if (type === 'a-tester') {
+            const preset = presets.find(p => p.key === 'qa') || presets.find(p => p.label.toLowerCase().includes('test'));
+            if (preset) { const el = document.getElementById('filter-phase-tech'); if (el) el.value = preset.label; }
+        } else if (type === 'en-dev') {
+            const preset = presets.find(p => p.key === 'dev') || presets.find(p => p.label.toLowerCase().includes('dev'));
+            if (preset) { const el = document.getElementById('filter-phase-tech'); if (el) el.value = preset.label; }
+        }
+
+        // Stocker le chip actif pour filtrerActions()
+        window._activeChipFiltre = type;
+        filtrerActions();
     }
 
     // -------------------------------------------
@@ -2929,17 +3114,18 @@ tr.row-flash td {
     function populateConfigSelect() {
         const selectEl = document.getElementById('config-select');
         if (!selectEl) return;
-
-        const currentSelectedValue = selectEl.value || activeConfig;
         selectEl.innerHTML = '';
-
         for (let i = 1; i <= NUM_CONFIGS; i++) {
             const option = document.createElement('option');
             option.value = i;
-            option.textContent = configNames[i] || `Config ${i}`;
+            const hasBackup = !!(backupHandles[i]);
+            const hasPj = !!(pjHandles[i]);
+            const configured = hasBackup || hasPj;
+            const name = configNames[i] || `Config ${i}`;
+            option.textContent = configured ? `📁 ${name}` : name;
+            if (configured) option.style.fontWeight = '600';
             selectEl.appendChild(option);
         }
-
         selectEl.value = activeConfig;
     }
 
@@ -3073,6 +3259,7 @@ tr.row-flash td {
             mettreAJourSelectFiltreProjet();
             initStatusFilters();
             afficherJournalActivite(); // <<< AFFICHER LE JOURNAL
+            updateContextBar();
 
             await loadProjectSaveBackups(selectedProjectSaveId); // Charger liste des backups dispos
 
@@ -3382,10 +3569,11 @@ tr.row-flash td {
     }
 
 async function sauvegarderBackupAutomatique(afficherMessage = false) { 
-    const backupHandle = getActiveBackupDirHandle(); 
-    if (!backupHandle) { 
-        if (afficherMessage) displayMessage(`Dossier Backup pour Config ${activeConfig} non défini.`, "warning"); 
-        return false; 
+    const backupHandle = getActiveBackupDirHandle();
+    if (!backupHandle) {
+        setBandeauDegrade(true);
+        if (afficherMessage) displayMessage(`Dossier Backup pour Config ${activeConfig} non défini.`, "warning");
+        return false;
     } 
     if (!selectedProjectSaveId) { 
         if (afficherMessage) displayMessage("Aucun profil sélectionné.", "warning"); 
@@ -3398,11 +3586,13 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
 
     try { 
         const permission = await verifyPermission(backupHandle); 
-        if (permission !== 'granted') { 
-            if (afficherMessage) displayMessage(`Permission refusée pour dossier Backup (Config ${activeConfig}).`, "error"); 
-            return false; 
-        } 
-        
+        if (permission !== 'granted') {
+            setBandeauDegrade(true);
+            if (afficherMessage) displayMessage(`Permission refusée pour dossier Backup (Config ${activeConfig}).`, "error");
+            return false;
+        }
+        setBandeauDegrade(false); // Dossier accessible, masquer le bandeau
+
         let backups = []; 
         const filenamePrefix = getBackupFilenamePrefix(); 
         
@@ -3420,9 +3610,21 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
         } 
         
         // CORRECTION ICI : Trier du plus ancien au plus récent 
-        backups.sort((a,b) => a.name.localeCompare(b.name)); 
-        
-        // Supprimer les PLUS ANCIENS si on dépasse la limite 
+        backups.sort((a,b) => a.name.localeCompare(b.name));
+        // Détection de conflit : vérifier si un backup plus récent que celui qu'on a chargé existe
+        if (_lastLoadedBackupName && backups.length > 0) {
+            const latestExisting = backups[backups.length - 1];
+            if (latestExisting.name !== _lastLoadedBackupName && latestExisting.name > _lastLoadedBackupName) {
+                const dm = latestExisting.name.match(/(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})\.json$/);
+                let dispDate = latestExisting.name;
+                if (dm) { const p = dm[1].split('-'); dispDate = `${p[2]}/${p[1]}/${p[0]} ${p[3]}:${p[4]}`; }
+                const ok = confirm(`⚠️ CONFLIT DÉTECTÉ\n\nUne sauvegarde plus récente existe sur le réseau :\n${dispDate}\n\nSi vous continuez, vous risquez d'écraser les modifications d'un autre utilisateur.\n\nChargez d'abord la dernière sauvegarde, puis refaites vos modifications.\n\nContinuer quand même et écraser ?`);
+                if (!ok) {
+                    if (afficherMessage) displayMessage('Sauvegarde annulée. Rechargez la dernière sauvegarde avant de continuer.', 'warning');
+                    return false;
+                }
+            }
+        }
         if (backups.length >= MAX_BACKUPS) { 
             const nombreASupprimer = backups.length - MAX_BACKUPS + 1; 
             const toDelete = backups.slice(0, nombreASupprimer); 
@@ -3453,8 +3655,10 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
             await writable.write(JSON.stringify(data, null, 2)); 
             await writable.close(); 
             
-            await loadProjectSaveBackups(selectedProjectSaveId); 
-            
+            _lastLoadedBackupName = fileName; // Mettre à jour le tracking
+            await loadProjectSaveBackups(selectedProjectSaveId);
+            updateContextBar();
+
             if (afficherMessage) displayMessage(`✓ Sauvegarde créée: ${fileName}`, "success"); 
             console.log(`💾 Backup créé: ${fileName}`); 
             return true; 
@@ -3539,6 +3743,7 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
                     projectCounters = (data.projectCounters && typeof data.projectCounters === 'object') ? data.projectCounters : {};
                     activityLog = Array.isArray(data.activityLog) ? data.activityLog : []; // <<< CHARGER LE LOG DEPUIS BACKUP
                     loadedFromBackup = true;
+                    _lastLoadedBackupName = backupFileName; // Tracking pour détection conflit
                     const dateMatch = backupFileName.match(/(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})\.json$/);
                     let displayDate = backupFileName;
                     if (dateMatch && dateMatch[1]) { const parts = dateMatch[1].split('-'); if (parts.length === 6) displayDate = `${parts[2]}/${parts[1]}/${parts[0]} ${parts[3]}:${parts[4]}:${parts[5]}`; }
@@ -3549,6 +3754,10 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
             chargerProjets(); chargerActions(); mettreAJourTableauDeBord(); mettreAJourListesProjets(); mettreAJourSelectFiltreProjet(); initStatusFilters();
             afficherJournalActivite(); // <<< AFFICHER LE JOURNAL CHARGÉ
             remplacerBoutonsDansTableaux();
+            if (loadedFromBackup && backupFileName) {
+                logActivity('Système', `Données chargées depuis la sauvegarde <strong>${escapeHtml(backupFileName)}</strong> par ${escapeHtml(utilisateurActuel)}.`);
+            }
+            updateContextBar();
 
              if(topBanner){
                  const profileName = getProjectSaveName(selectedProjectSaveId) || 'N/A';
@@ -3890,6 +4099,14 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
          const prefixInput = document.getElementById('edit-project-prefix'); const numInput = document.getElementById('edit-project-num'); const prefix = prefixInput.value.toUpperCase().trim(); const numSequentiel = parseInt(numInput.value);
          if (!prefix || prefix.length < 2 || prefix.length > 4 || !/^[A-Z0-9]+$/.test(prefix)) { displayMessage("Le préfixe doit contenir 2 à 4 caractères.", "error"); prefixInput.focus(); return; }
          if (isNaN(numSequentiel) || numSequentiel < 1) { displayMessage("Le numéro séquentiel doit être positif.", "error"); numInput.focus(); return; }
+    // Avertissement si changement de préfixe avec actions existantes
+    if (originalProjet.prefix && prefix !== originalProjet.prefix) {
+        const actionsCount = actions.filter(a => a.projectId === projetId).length;
+        if (actionsCount > 0) {
+            const ok = confirm(`⚠️ Changement de préfixe : "${originalProjet.prefix}" → "${prefix}"\n\n${actionsCount} action(s) existante(s) garderont leurs anciennes références (${originalProjet.prefix}-XXX-YYY).\nLes nouvelles actions utiliseront le nouveau préfixe.\n\nConfirmer le changement ?`);
+            if (!ok) return;
+        }
+    }
 
          projects[index].name = document.getElementById('edit-project-name').value; projects[index].prefix = prefix; projects[index].numSequentiel = numSequentiel; projects[index].numeroRef = genererNumeroProjet(prefix, numSequentiel); projects[index].client = document.getElementById('edit-project-client').value; projects[index].startDate = document.getElementById('edit-project-start').value; projects[index].endDate = document.getElementById('edit-project-end').value; projects[index].status = document.getElementById('edit-project-status').value; projects[index].description = document.getElementById('edit-project-description').value;
          const updatedProjet = projects[index]; // <<< OBJET APRES MODIFICATION
@@ -4319,7 +4536,7 @@ function chargerActions() {
     if (!tbody) return;
     tbody.innerHTML = '';
     if (actions.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;">Aucune action trouvée pour ce profil</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;">Aucune action trouvée pour ce profil</td></tr>`;
         return;
     }
     const actFrag = document.createDocumentFragment();
@@ -4374,13 +4591,13 @@ function chargerActions() {
               <p class="description-preview" onclick="event.stopPropagation(); afficherDescModal(${action.id})">${escapeHtml(action.description)}</p>
               <span class="tooltiptext">${escapeHtml(action.description)}</span>
             </div>
-            ${renderDescStatusPill(action)}
           </td>
           <td>${escapeHtml(action.topic || '')}</td>
           <td>${escapeHtml(action.responsible)}</td>
           <td>${startDisp}</td>
           <td style="${isLate ? 'color:#dc3545; font-weight:700;' : ''}">${endDisp}${isLate ? ' ⚠️' : ''}</td>
           <td class="priority-${escapeHtml(action.priority.toLowerCase())}">${escapeHtml(action.priority)}</td>
+          <td class="phase-tech-cell" onclick="event.stopPropagation(); ouvrirMenuStatutDesc(event, ${action.id})" title="Phase technique — cliquer pour changer">${renderDescStatusPill(action)}</td>
           <td><span class="status-badge-inline s-${statusClass}" onclick="event.stopPropagation(); ouvrirMenuStatut(event, ${action.id})" title="Cliquer pour changer le statut">${escapeHtml(action.status)}</span></td>
           <td>${pjHTML}</td>
           <td>
@@ -4478,6 +4695,9 @@ function chargerActions() {
         const valDateLimite = document.getElementById('filter-date-limite').value.toLowerCase();
         const valPriorite = document.getElementById('filter-priorite').value.toLowerCase();
         const valStatut = document.getElementById('filter-statut').value.toLowerCase();
+        const valPhaseTech = document.getElementById('filter-phase-tech')?.value.toLowerCase() || '';
+        const _nowChip = window._activeChipFiltre || 'tous';
+        const _todayStr = new Date().toISOString().split('T')[0];
         const selectedProjectId = document.getElementById('filter-project-select').value;
         const showEnAttente = document.getElementById('filter-status-en-attente').checked;
         const showEnCours = document.getElementById('filter-status-en-cours').checked;
@@ -4511,6 +4731,20 @@ function chargerActions() {
             if (valDateLimite && !dateLimiteCell.includes(valDateLimite)) match = false;
             if (valPriorite && !prioriteCell.includes(valPriorite)) match = false;
             if (valStatut && !statutCellText.includes(valStatut)) match = false;
+            // Filtre Phase technique
+            if (valPhaseTech) {
+                const _actionId = parseInt(row.getAttribute('data-action-id'));
+                const _action = actions.find(a => a.id === _actionId);
+                const phaseTechVal = (_action && _action.descStatus?.label || '').toLowerCase();
+                if (!phaseTechVal.includes(valPhaseTech)) match = false;
+            }
+            // Chip "En retard" : actions dont deadline < aujourd'hui et statut != Terminé
+            if (_nowChip === 'retard') {
+                const _actionId2 = parseInt(row.getAttribute('data-action-id'));
+                const _action2 = actions.find(a => a.id === _actionId2);
+                const isLate = _action2 && _action2.deadline && _action2.deadline < _todayStr && _action2.status !== 'Terminé';
+                if (!isLate) match = false;
+            }
             if (selectedProjectId && projectId !== selectedProjectId) match = false;
             if (match) {
                 if (statutRaw.includes('en attente') && !showEnAttente) match = false;
@@ -4733,6 +4967,7 @@ function renderDescStatusPill(action) {
          const addProjBtn = document.getElementById('add-project-button'); const addActionBtn = document.getElementById('add-action-button');
          if(addProjBtn) { addProjBtn.disabled = true; addProjBtn.style.opacity = '0.5'; } if(addActionBtn) { addActionBtn.disabled = true; addActionBtn.style.opacity = '0.5'; }
          console.log("Read-only mode applied.");
+         updateContextBar();
      }
 
       function enableEditing() {
@@ -4744,6 +4979,7 @@ function renderDescStatusPill(action) {
          if(addProjBtn && addProjForm.style.display === 'none') { addProjBtn.disabled = false; addProjBtn.style.opacity = '1'; }
          if(addActionBtn && addActionForm.style.display === 'none') { addActionBtn.disabled = false; addActionBtn.style.opacity = '1'; }
         console.log("Editable mode applied.");
+        updateContextBar();
      }
 
 
@@ -4776,7 +5012,10 @@ function renderDescStatusPill(action) {
             for (const actionId of visibleActionIds) { if (!attachments[actionId]) continue; const action = actions.find(a => a.id === actionId); if (!action) continue; const actionDirName = `${action.numeroRef.replace(/[\/\\:*?"<>|]/g, '_')}`; const actionDirHandle = await pjDirHandle.getDirectoryHandle(actionDirName, { create: true }); for (const pj of attachments[actionId]) { try { const sourceFileHandle = await pjHandle.getFileHandle(pj.name); const sourceFile = await sourceFileHandle.getFile(); const destFileHandle = await actionDirHandle.getFileHandle(pj.name, { create: true }); const writable = await destFileHandle.createWritable(); await writable.write(sourceFile); await writable.close(); copiedPJ++; } catch (e) { console.error(`Erreur copie PJ ${pj.name}: ${e.message}`); } } }
             const _csvNow = new Date().toISOString().split('T')[0]; let csvContent = 'Projet (Ref - Nom);N° d\'action;Description complète;Statut (description);Thématique;Responsable;Date début;Date limite;Priorité;Statut;En retard;Notes;Pièces jointes\n'; visibleRows.forEach(row => { const actionId = parseInt(row.getAttribute('data-action-id')); const action = actions.find(a => a.id === actionId); if (!action) return; const projet = projects.find(p => p.id == action.projectId); const projetCell = projet ? `${projet.numeroRef} - ${projet.name}` : 'Projet inconnu'; let pjInfo = ''; if (action.hasAttachments && attachments[action.id]) { pjInfo = attachments[action.id].map(pj => pj.name).join(', '); } const escapeCSV = (str) => `"${(str || '').replace(/"/g, '""')}"`; const enRetard = (action.deadline && action.deadline < _csvNow && action.status !== 'Terminé') ? 'Oui' : ''; const ligne = [ escapeCSV(projetCell), action.numeroRef, escapeCSV(action.description), ((action && action.descStatus && (action.descStatus.label || action.descStatus)) || ''), escapeCSV(action.topic), escapeCSV(action.responsible), action.startDate ? formatDateDisplay(action.startDate) : '', action.deadline ? formatDateDisplay(action.deadline) : '', action.priority, action.status, enRetard, escapeCSV(action.notes || ''), escapeCSV(pjInfo) ].join(';'); csvContent += ligne + '\n'; });
             const csvFileName = `${projectPrefix}_Actions_${dateStr}.csv`; const csvFileHandle = await dateDirHandle.getFileHandle(csvFileName, { create: true }); const writable = await csvFileHandle.createWritable(); const BOM = "\uFEFF"; await writable.write(BOM + csvContent); await writable.close();
-            displayMessage(`Export terminé: ${copiedPJ}/${totalPJ} PJ et CSV dans ${exportFolderName}`, "success");
+            const _totalActions = actions.length;
+            const _visibleCount = (() => { try { return document.querySelectorAll('#actions-list tr[data-action-id]:not([style*="display: none"]):not([style*="display:none"])').length; } catch(e) { return _totalActions; } })();
+            const _masqued = _totalActions - _visibleCount;
+            displayMessage(`Export terminé: ${visibleRows.length} exportées — ${_masqued} masquées | ${copiedPJ}/${totalPJ} PJ copiées dans ${exportFolderName}`, "success");
         } catch (e) { if (e.name === 'AbortError') { displayMessage("Exportation annulée.", "info"); } else { displayMessage(`Erreur exportation: ${e.message}`, "error"); console.error("Export Error:", e); }
         } finally { hideLoading(); }
      }
