@@ -189,6 +189,14 @@ const TRANSLATE_LANGS = ['en','fr','de','es','it','pt','nl','hi','ja','zh','ko',
 
 let selFile=null, srtTxt='', origName='', pollTimer=null;
 
+// Mémoriser dernière langue
+try{
+  const s=localStorage.getItem('sw_srcLang'); if(s) document.getElementById('srcLang').value=s;
+  const o=localStorage.getItem('sw_outLang'); if(o) document.getElementById('outLang').value=o;
+}catch(e){}
+document.getElementById('srcLang').addEventListener('change',()=>{try{localStorage.setItem('sw_srcLang',document.getElementById('srcLang').value);}catch(e){}});
+document.getElementById('outLang').addEventListener('change',()=>{try{localStorage.setItem('sw_outLang',document.getElementById('outLang').value);}catch(e){}});
+
 const dz=document.getElementById('dz');
 dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
 dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
@@ -233,8 +241,7 @@ async function transcribe(){
       method:'POST',
       headers:{
         'authorization': API_KEY,
-        'content-type': 'application/octet-stream',
-        'transfer-encoding': 'chunked'
+        'content-type': 'application/octet-stream'
       },
       body: selFile
     });
@@ -247,18 +254,17 @@ async function transcribe(){
     const srcLang = document.getElementById('srcLang').value;
     const outLang = document.getElementById('outLang').value;
 
-    const body = {
-      audio_url: upload_url,
-      language_detection: !srcLang,
-    };
-
-    if(srcLang) body.language_code = srcLang;
+    // language_detection et language_code sont mutuellement exclusifs
+    const body = { audio_url: upload_url };
+    if(srcLang) {
+      body.language_code = srcLang;
+    } else {
+      body.language_detection = true;
+    }
 
     // Traduction si langue sortie différente
     if(outLang && outLang !== 'same' && TRANSLATE_LANGS.includes(outLang)) {
-      body.language_code = srcLang || 'en';
-      body.translation_model = 'best';
-      body.translation_target_language = outLang;
+      body.translation_languages = [outLang];
     }
 
     const jobRes = await fetch(AAI_BASE+'/transcript', {
@@ -270,7 +276,10 @@ async function transcribe(){
       body: JSON.stringify(body)
     });
 
-    if(!jobRes.ok) throw new Error('Erreur création job: '+jobRes.status);
+    if(!jobRes.ok){
+      const errBody = await jobRes.json().catch(()=>({}));
+      throw new Error('Erreur création job: '+(errBody.error||jobRes.status));
+    }
     const job = await jobRes.json();
     const jobId = job.id;
 
