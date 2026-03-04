@@ -1377,8 +1377,7 @@ async function transcribeOpenAI() {
     var formData = new FormData();
     formData.append('file', selFile);
     formData.append('model', 'gpt-4o-transcribe');
-    formData.append('response_format', 'verbose_json');
-    formData.append('timestamp_granularities[]', 'segment');
+    formData.append('response_format', 'srt');
     if (srcLang && srcLang !== '') formData.append('language', srcLang);
     var resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
@@ -1389,11 +1388,11 @@ async function transcribeOpenAI() {
       var errData = await resp.json().catch(function() { return {}; });
       throw new Error('OpenAI ' + resp.status + ' : ' + (errData.error ? errData.error.message : resp.statusText));
     }
-    var data = await resp.json();
+    var srt = await resp.text();
+    detectedLang = srcLang || '';
+    var blockCount = (srt.match(/^\d+$/mg) || []).length;
     setPct(80, 'Transcription OK');
-    setLog('Transcription terminée — ' + (data.segments ? data.segments.length : 0) + ' segments');
-    detectedLang = data.language || srcLang || '';
-    var srt = buildSRTFromOpenAISegments(data.segments || []);
+    setLog('Transcription terminée — ' + blockCount + ' blocs SRT');
     var finalSrt = srt;
     var wasTranslated = false;
     if (outLang !== 'same') {
