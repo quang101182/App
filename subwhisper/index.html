@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v6.1</title>
+<title>SubWhisper v6.2</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -818,7 +818,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v6.1</span>
+    <span class="ver-badge">v6.2</span>
   </div>
   <div class="hdr-r">
     <button class="icon-btn" id="cfgBtn" onclick="toggleConfig()" title="Paramètres">&#9881;&#65039;</button>
@@ -1052,6 +1052,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 var AAI_BASE = 'https://api.assemblyai.com/v2';
 var TRANSLATE_LANGS = ['en','fr','de','es','it','pt','nl','hi','ja','zh','ko','ru'];
 var AZURE_LANG = {'fr':'fr','en':'en','es':'es','de':'de','it':'it','pt':'pt-br','ru':'ru','ja':'ja','zh':'zh-Hans','ko':'ko','nl':'nl','hi':'hi'};
+var WHISPER_LANG = {'afrikaans':'af','arabic':'ar','chinese':'zh','croatian':'hr','czech':'cs','danish':'da','dutch':'nl','english':'en','estonian':'et','finnish':'fi','french':'fr','german':'de','greek':'el','hebrew':'he','hindi':'hi','hungarian':'hu','indonesian':'id','italian':'it','japanese':'ja','korean':'ko','latvian':'lv','lithuanian':'lt','malay':'ms','norwegian':'no','persian':'fa','polish':'pl','portuguese':'pt','romanian':'ro','russian':'ru','slovak':'sk','slovenian':'sl','spanish':'es','swedish':'sv','thai':'th','turkish':'tr','ukrainian':'uk','urdu':'ur','vietnamese':'vi','welsh':'cy'};
 
 var selFile = null;
 var srtTxt = '';
@@ -1361,10 +1362,6 @@ function startPoll(jobId, outLang) {
 async function transcribeOpenAI() {
   var key = getOpenAIKey();
   if (!selFile) return;
-  if (selFile.size > 25 * 1024 * 1024) {
-    showErr('Fichier trop lourd pour OpenAI (max 25 MB). Utilisez l\'extraction audio WAV d\'abord.');
-    return;
-  }
   wordData = [];
   hideErr(); hideRes(); setProg(true);
   document.getElementById('sb').disabled = true;
@@ -1373,39 +1370,61 @@ async function transcribeOpenAI() {
   try {
     var srcLang = document.getElementById('srcLang').value;
     var outLang = document.getElementById('outLang').value;
-    setPct(10, 'Envoi OpenAI'); setLog('Envoi à whisper-1 (OpenAI)...');
-    var formData = new FormData();
-    formData.append('file', selFile);
-    formData.append('model', 'whisper-1');
-    formData.append('response_format', 'verbose_json');
-    formData.append('timestamp_granularities[]', 'segment');
-    if (srcLang && srcLang !== '') formData.append('language', srcLang);
-    var resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + key },
-      body: formData
-    });
-    if (!resp.ok) {
-      var errData = await resp.json().catch(function() { return {}; });
-      throw new Error('OpenAI ' + resp.status + ' : ' + (errData.error ? errData.error.message : resp.statusText));
+    var MAX_BYTES = 24 * 1024 * 1024; // 24MB safety margin (~13min à 16kHz mono)
+    var srt;
+
+    if (selFile.size <= MAX_BYTES) {
+      // ── Fichier unique ───────────────────────────────────
+      setPct(10, 'Envoi OpenAI'); setLog('Envoi à whisper-1...');
+      var res = await transcribeChunkOpenAI(selFile, srcLang, key, 1, 1, 0);
+      detectedLang = res.lang;
+      srt = res.srt;
+      setPct(80, 'Transcription OK');
+      setLog('Transcription terminée — ' + res.segments.length + ' segments · ' + (detectedLang || 'lang?'));
+    } else {
+      // ── Fichier volumineux : auto-chunking ───────────────
+      setPct(3, 'Décodage'); setLog('Fichier volumineux — décodage audio...');
+      var arrayBuf = await selFile.arrayBuffer();
+      var tmpCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var decoded;
+      try { decoded = await tmpCtx.decodeAudioData(arrayBuf); }
+      catch(e) { try { tmpCtx.close(); } catch(e2) {} throw new Error('Format non décodable — essayez MP4/H.264 ou extrayez l\'audio WAV d\'abord'); }
+      try { tmpCtx.close(); } catch(e2) {}
+      setPct(12, 'Resample'); setLog('Rééchantillonnage 16kHz mono...');
+      var targetSR = 16000;
+      var offCtx = new OfflineAudioContext(1, Math.ceil(decoded.duration * targetSR), targetSR);
+      var bufSrc = offCtx.createBufferSource();
+      bufSrc.buffer = decoded; bufSrc.connect(offCtx.destination); bufSrc.start(0);
+      var resampled = await offCtx.startRendering();
+      var samples = resampled.getChannelData(0);
+      var samplesPerChunk = Math.floor(MAX_BYTES / 2); // 16-bit = 2 bytes/sample
+      var totalChunks = Math.ceil(samples.length / samplesPerChunk);
+      setLog('Découpage en ' + totalChunks + ' chunks (~13min chacun)...');
+      var allSegments = [];
+      detectedLang = srcLang || '';
+      for (var ci = 0; ci < totalChunks; ci++) {
+        var chStart = ci * samplesPerChunk;
+        var chEnd = Math.min(chStart + samplesPerChunk, samples.length);
+        var chunkOffsetSec = chStart / targetSR;
+        setPct(20 + Math.round((ci / totalChunks) * 55), 'Chunk ' + (ci+1) + '/' + totalChunks);
+        setLog('Transcription chunk ' + (ci+1) + '/' + totalChunks + '...');
+        var wavBuf = encodeWavFromSamples(samples.slice(chStart, chEnd), targetSR);
+        var chunkFile = new File([new Blob([wavBuf], {type:'audio/wav'})], 'chunk_'+ci+'.wav', {type:'audio/wav'});
+        var res = await transcribeChunkOpenAI(chunkFile, srcLang, key, ci+1, totalChunks, chunkOffsetSec);
+        if (ci === 0) detectedLang = res.lang || detectedLang;
+        allSegments = allSegments.concat(res.segments);
+      }
+      srt = allSegments.map(function(seg, i) {
+        return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+(seg.text||'').trim();
+      }).join('\n\n') + '\n';
+      setPct(78, 'Assemblage'); setLog('Assemblage SRT — ' + allSegments.length + ' segments · ' + totalChunks + ' chunks · ' + (detectedLang||'lang?'));
     }
-    var data = await resp.json();
-    // whisper-1 verbose_json retourne language en nom complet ex: "french" → mapper en code ISO
-    var WHISPER_LANG = { 'afrikaans':'af','arabic':'ar','chinese':'zh','croatian':'hr','czech':'cs','danish':'da','dutch':'nl','english':'en','estonian':'et','finnish':'fi','french':'fr','german':'de','greek':'el','hebrew':'he','hindi':'hi','hungarian':'hu','indonesian':'id','italian':'it','japanese':'ja','korean':'ko','latvian':'lv','lithuanian':'lt','malay':'ms','norwegian':'no','persian':'fa','polish':'pl','portuguese':'pt','romanian':'ro','russian':'ru','slovak':'sk','slovenian':'sl','spanish':'es','swedish':'sv','thai':'th','turkish':'tr','ukrainian':'uk','urdu':'ur','vietnamese':'vi','welsh':'cy' };
-    var rawLang = (data.language || '').toLowerCase();
-    detectedLang = WHISPER_LANG[rawLang] || srcLang || rawLang || '';
-    var srt = buildSRTFromOpenAISegments(data.segments || []);
-    var blockCount = (data.segments || []).length;
-    setPct(80, 'Transcription OK');
-    setLog('Transcription terminée — ' + blockCount + ' segments · ' + (detectedLang || 'lang?'));
+
     var finalSrt = srt;
     var wasTranslated = false;
-    // Ne traduit pas si la langue source = langue cible
     var skipTranslation = (outLang === 'same') || (detectedLang && detectedLang === outLang);
     if (!skipTranslation) {
-      var hasGemini = !!getGeminiKey();
-      var hasAzure = !!getAzureKey();
-      var hasDeeplx = !!getDeeplxUrl();
+      var hasGemini = !!getGeminiKey(), hasAzure = !!getAzureKey(), hasDeeplx = !!getDeeplxUrl();
       if (hasGemini || hasAzure || hasDeeplx) {
         if (hasAzure && !hasGemini && !getAzureRegion()) {
           showErr('RÉGION Azure manquante. SRT sans traduction conservé.');
@@ -1414,9 +1433,7 @@ async function transcribeOpenAI() {
             setPct(90, 'Traduction');
             finalSrt = await translateSRT(srt, detectedLang, outLang);
             wasTranslated = (finalSrt !== srt);
-          } catch(e) {
-            showErr('Traduction échouée : ' + (e.message || String(e)) + '\nSRT sans traduction conservé.');
-          }
+          } catch(e) { showErr('Traduction échouée : ' + (e.message||String(e)) + '\nSRT sans traduction conservé.'); }
         }
       }
     }
@@ -1436,6 +1453,53 @@ async function transcribeOpenAI() {
     showErr(e.message || String(e));
     updateSbtn(); setSt('err');
   }
+}
+
+async function transcribeChunkOpenAI(file, srcLang, key, chunkNum, totalChunks, offsetSec) {
+  var formData = new FormData();
+  formData.append('file', file);
+  formData.append('model', 'whisper-1');
+  formData.append('response_format', 'verbose_json');
+  formData.append('timestamp_granularities[]', 'segment');
+  if (srcLang && srcLang !== '') formData.append('language', srcLang);
+  var resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + key },
+    body: formData
+  });
+  if (!resp.ok) {
+    var errData = await resp.json().catch(function() { return {}; });
+    throw new Error('OpenAI chunk ' + chunkNum + '/' + totalChunks + ' — ' + (errData.error ? errData.error.message : resp.statusText));
+  }
+  var data = await resp.json();
+  var rawLang = (data.language || '').toLowerCase();
+  var lang = WHISPER_LANG[rawLang] || srcLang || rawLang || '';
+  var segments = (data.segments || []).map(function(seg) {
+    return { start: (seg.start || 0) + offsetSec, end: (seg.end || 0) + offsetSec, text: seg.text || '' };
+  });
+  var srt = segments.map(function(seg, i) {
+    return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+seg.text.trim();
+  }).join('\n\n') + '\n';
+  return { srt: srt, lang: lang, segments: segments };
+}
+
+function encodeWavFromSamples(samples, sampleRate) {
+  var int16 = new Int16Array(samples.length);
+  for (var i = 0; i < samples.length; i++) {
+    int16[i] = Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767)));
+  }
+  var dataLen = int16.buffer.byteLength;
+  var buf = new ArrayBuffer(44 + dataLen);
+  var v = new DataView(buf);
+  var ws = function(o, s) { for (var i = 0; i < s.length; i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  ws(0,'RIFF'); v.setUint32(4, 36+dataLen, true);
+  ws(8,'WAVE'); ws(12,'fmt ');
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,sampleRate,true); v.setUint32(28,sampleRate*2,true);
+  v.setUint16(32,2,true); v.setUint16(34,16,true);
+  ws(36,'data'); v.setUint32(40,dataLen,true);
+  new Uint8Array(buf,44).set(new Uint8Array(int16.buffer));
+  return buf;
 }
 
 function buildSRTFromOpenAISegments(segments) {
