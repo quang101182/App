@@ -1377,7 +1377,8 @@ async function transcribeOpenAI() {
     var formData = new FormData();
     formData.append('file', selFile);
     formData.append('model', 'whisper-1');
-    formData.append('response_format', 'srt');
+    formData.append('response_format', 'verbose_json');
+    formData.append('timestamp_granularities[]', 'segment');
     if (srcLang && srcLang !== '') formData.append('language', srcLang);
     var resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
@@ -1388,14 +1389,20 @@ async function transcribeOpenAI() {
       var errData = await resp.json().catch(function() { return {}; });
       throw new Error('OpenAI ' + resp.status + ' : ' + (errData.error ? errData.error.message : resp.statusText));
     }
-    var srt = await resp.text();
-    detectedLang = srcLang || '';
-    var blockCount = (srt.match(/^\d+$/mg) || []).length;
+    var data = await resp.json();
+    // whisper-1 verbose_json retourne language en nom complet ex: "french" → mapper en code ISO
+    var WHISPER_LANG = { 'afrikaans':'af','arabic':'ar','chinese':'zh','croatian':'hr','czech':'cs','danish':'da','dutch':'nl','english':'en','estonian':'et','finnish':'fi','french':'fr','german':'de','greek':'el','hebrew':'he','hindi':'hi','hungarian':'hu','indonesian':'id','italian':'it','japanese':'ja','korean':'ko','latvian':'lv','lithuanian':'lt','malay':'ms','norwegian':'no','persian':'fa','polish':'pl','portuguese':'pt','romanian':'ro','russian':'ru','slovak':'sk','slovenian':'sl','spanish':'es','swedish':'sv','thai':'th','turkish':'tr','ukrainian':'uk','urdu':'ur','vietnamese':'vi','welsh':'cy' };
+    var rawLang = (data.language || '').toLowerCase();
+    detectedLang = WHISPER_LANG[rawLang] || srcLang || rawLang || '';
+    var srt = buildSRTFromOpenAISegments(data.segments || []);
+    var blockCount = (data.segments || []).length;
     setPct(80, 'Transcription OK');
-    setLog('Transcription terminée — ' + blockCount + ' blocs SRT');
+    setLog('Transcription terminée — ' + blockCount + ' segments · ' + (detectedLang || 'lang?'));
     var finalSrt = srt;
     var wasTranslated = false;
-    if (outLang !== 'same') {
+    // Ne traduit pas si la langue source = langue cible
+    var skipTranslation = (outLang === 'same') || (detectedLang && detectedLang === outLang);
+    if (!skipTranslation) {
       var hasGemini = !!getGeminiKey();
       var hasAzure = !!getAzureKey();
       var hasDeeplx = !!getDeeplxUrl();
