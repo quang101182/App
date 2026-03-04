@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v7.6</title>
+<title>SubWhisper v7.7</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -879,7 +879,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v7.6</span>
+    <span class="ver-badge">v7.7</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -2519,43 +2519,138 @@ function shiftSRT(srtContent, offsetMs) {
   }
   return buildSRT(shifted);
 }
-// ── REPAIR TIMESTAMPS ─────────────────────────────────────
+// ── REPAIR TIMESTAMPS v2 ──────────────────────────────────
+// Algo 6 règles : médiane dynamique + seuils calibrés Groq/Fly.io
 function repairSRTTimestamps() {
   var raw = getCurrentSRT();
   if (!raw || !raw.trim()) { toast('Aucun SRT \u00e0 r\u00e9parer'); return; }
   var blocks = parseSRT(raw);
   if (!blocks.length) { toast('SRT invalide'); return; }
-  var MAX_DUR_MS  = 8000;   // cap fallback si dur\u00e9e > 30s sans contexte suivant
-  var THRESHOLD_MS = 30000; // dur\u00e9e suspecte (= cap Groq v1.6.0)
-  var MIN_GAP_MS  = 100;
+
+  // ── SEUILS ──────────────────────────────────────────────
+  var OVERLAP_IGNORE    =    50;  // \u226450ms : artefact encodage, ne pas toucher
+  var OVERLAP_CLAMP     =   500;  // >500ms : overflow r\u00e9el
+  var CAP30_MIN         = 29950;  // signature cap Fly.io v1.6.0 (\u00b150ms)
+  var CAP30_MAX         = 30050;
+  var DUR_MIN           =   200;  // bloc imperceptible <200ms
+  var DUR_HALLUCINATION = 60000;  // >60s : hallucination catastrophique certaine
+  var DUR_MODEREE       = 30050;  // zone grise ]30s\u201360s]
+  var FALLBACK_DUR      =  4000;  // m\u00e9diane par d\u00e9faut si donn\u00e9es insuffisantes
+
+  // ── \u00c9TAPE 0 : M\u00e9diane dynamique sur blocs sains ────────────
+  var saines = [];
+  for (var k = 0; k < blocks.length; k++) {
+    var kp = blocks[k].timestamp.split(' --> ');
+    var kd = tsToMs(kp[1]) - tsToMs(kp[0]);
+    if (kd >= DUR_MIN && kd < 25000) saines.push(kd);
+  }
+  var typicalDurMs = FALLBACK_DUR;
+  if (saines.length >= 3) {
+    saines.sort(function(a, b) { return a - b; });
+    var mid = Math.floor(saines.length / 2);
+    var med = saines.length % 2 === 1 ? saines[mid] : Math.round((saines[mid-1] + saines[mid]) / 2);
+    typicalDurMs = Math.min(med, 15000);
+  }
+  var CAP_2X = typicalDurMs * 2;
+  var CAP_3X = typicalDurMs * 3;
+
+  // ── \u00c9TAPE 1 : D\u00e9duplication (m\u00eame startMs = boundary chunk) ──
+  var seen = {};
+  blocks = blocks.filter(function(b) {
+    var s = tsToMs(b.timestamp.split(' --> ')[0]);
+    if (seen[s]) return false;
+    seen[s] = true;
+    return true;
+  });
+  blocks.sort(function(a, b) {
+    return tsToMs(a.timestamp.split(' --> ')[0]) - tsToMs(b.timestamp.split(' --> ')[0]);
+  });
+
+  // ── \u00c9TAPE 2 : Boucle principale ──────────────────────────
+  var stats = { r0:0, ra2:0, ra3:0, ra4:0, rb1:0, rb2:0, rb3:0 };
   var fixed = 0;
+
   for (var i = 0; i < blocks.length; i++) {
-    var parts    = blocks[i].timestamp.split(' --> ');
-    var startMs  = tsToMs(parts[0]);
-    var endMs    = tsToMs(parts[1]);
-    var nextStartMs = (i < blocks.length - 1) ? tsToMs(blocks[i+1].timestamp.split(' --> ')[0]) : null;
-    var newEnd = endMs;
-    // R\u00e8gle 1 : end d\u00e9borde sur le bloc suivant → clamp \u00e0 next_start - 100ms
-    if (nextStartMs !== null && newEnd > nextStartMs - MIN_GAP_MS) {
-      newEnd = Math.max(startMs + 200, nextStartMs - MIN_GAP_MS);
+    var pts         = blocks[i].timestamp.split(' --> ');
+    var startMs     = tsToMs(pts[0]);
+    var endMs       = tsToMs(pts[1]);
+    var durMs       = endMs - startMs;
+    var nextStartMs = i < blocks.length - 1 ? tsToMs(blocks[i+1].timestamp.split(' --> ')[0]) : null;
+    var newEnd      = endMs;
+
+    // R0 : bloc corrompu (end < start)
+    if (durMs < 0) {
+      newEnd = startMs + typicalDurMs;
+      stats.r0++;
     }
-    // R\u00e8gle 2 : dur\u00e9e > 30s et pas de contrainte suivante → cap \u00e0 8s
-    if (endMs - startMs > THRESHOLD_MS && newEnd === endMs) {
-      newEnd = startMs + MAX_DUR_MS;
+    else if (nextStartMs !== null) {
+      var overlapMs = endMs - nextStartMs;
+
+      // RA1 : pas d'overlap r\u00e9el (gap ou jointif \u226450ms)
+      // Si dur\u00e9e suspecte malgr\u00e9 le gap → appliquer les r\u00e8gles B
+      if (overlapMs <= OVERLAP_IGNORE) {
+        if (durMs >= CAP30_MIN && durMs <= CAP30_MAX) { newEnd = startMs + CAP_2X; stats.rb1++; }
+        else if (durMs > DUR_HALLUCINATION)            { newEnd = startMs + CAP_2X; stats.rb2++; }
+        else if (durMs > DUR_MODEREE)                  { newEnd = startMs + Math.min(CAP_3X, 30000); stats.rb3++; }
+        // sinon : dur\u00e9e normale avec gap → rien
+      }
+
+      // RA2 : signature cap-30s Fly.io avec overlap → cap contextuel 2\u00d7m\u00e9diane
+      else if (durMs >= CAP30_MIN && durMs <= CAP30_MAX) {
+        newEnd = Math.min(startMs + CAP_2X, nextStartMs);
+        if (newEnd - startMs < DUR_MIN) newEnd = Math.min(startMs + DUR_MIN, nextStartMs);
+        stats.ra2++;
+      }
+      // RA3 : overlap l\u00e9ger (50ms < overlap \u2264500ms) → clamp simple
+      else if (overlapMs <= OVERLAP_CLAMP) {
+        newEnd = nextStartMs;
+        stats.ra3++;
+      }
+      // RA4 : overflow significatif (>500ms) : hallucination → clamp
+      else {
+        newEnd = nextStartMs;
+        if (newEnd - startMs < DUR_MIN) newEnd = Math.min(startMs + DUR_MIN, nextStartMs);
+        stats.ra4++;
+      }
     }
-    // S\u00e9curit\u00e9 : end ne peut pas \u00eatre avant start
-    if (newEnd <= startMs) newEnd = startMs + 1000;
+    else {
+      // Pas de bloc suivant : r\u00e8gles B (dernier bloc ou isol\u00e9)
+      // RB1 : cap-30s Fly.io sans contexte
+      if (durMs >= CAP30_MIN && durMs <= CAP30_MAX) {
+        newEnd = startMs + CAP_2X;
+        stats.rb1++;
+      }
+      // RB2 : hallucination catastrophique (>60s)
+      else if (durMs > DUR_HALLUCINATION) {
+        newEnd = startMs + CAP_2X;
+        stats.rb2++;
+      }
+      // RB3 : dur\u00e9e mod\u00e9r\u00e9e suspecte (30s\u201360s)
+      else if (durMs > DUR_MODEREE) {
+        newEnd = startMs + Math.min(CAP_3X, 30000);
+        stats.rb3++;
+      }
+      // dur\u00e9e normale → rien
+    }
+
+    // RC : s\u00e9curit\u00e9 — end ne peut jamais pr\u00e9c\u00e9der start
+    if (newEnd < startMs + 1) newEnd = startMs + 1;
+
     if (newEnd !== endMs) {
-      blocks[i].timestamp = parts[0] + ' --> ' + msToTs(newEnd);
+      blocks[i].timestamp = pts[0] + ' --> ' + msToTs(newEnd);
       fixed++;
     }
   }
+
+  // ── \u00c9TAPE 3 : Renumérotation + rebuild ──────────────────
+  blocks.forEach(function(b, i) { b.id = String(i + 1); });
   var repaired = buildSRT(blocks);
-  srtOriginal = repaired;
+  srtOriginal  = repaired;
   currentOffset = 0;
   document.getElementById('sp').value = repaired;
   document.getElementById('offsetDisplay').textContent = '0 ms';
   document.getElementById('offsetDisplay').style.color = 'var(--accent)';
+
   // Recharger la preview VTT si active
   if (previewVttUrl) { URL.revokeObjectURL(previewVttUrl); previewVttUrl = null; }
   var track = document.getElementById('previewTrack');
@@ -2569,7 +2664,18 @@ function repairSRTTimestamps() {
       if (tv && tv.textTracks[0]) tv.textTracks[0].mode = 'showing';
     }, 50);
   }
-  toast(fixed > 0 ? '\u2713 ' + fixed + ' timestamp(s) r\u00e9par\u00e9(s)' : '\u2713 Aucune anomalie d\u00e9tect\u00e9e');
+
+  // ── Toast rapport ────────────────────────────────────────
+  if (fixed === 0) {
+    toast('\u2713 Aucune anomalie d\u00e9tect\u00e9e (m\u00e9diane=' + Math.round(typicalDurMs/100)/10 + 's)');
+  } else {
+    var det = [];
+    if (stats.r0)               det.push(stats.r0 + ' corrompu(s)');
+    if (stats.ra2+stats.rb1)    det.push((stats.ra2+stats.rb1) + ' cap-30s');
+    if (stats.ra3+stats.ra4)    det.push((stats.ra3+stats.ra4) + ' overflow');
+    if (stats.rb2+stats.rb3)    det.push((stats.rb2+stats.rb3) + ' hallucination');
+    toast('\u2713 ' + fixed + ' r\u00e9par\u00e9(s) \u2014 m\u00e9diane=' + Math.round(typicalDurMs/100)/10 + 's' + (det.length ? ' [' + det.join(', ') + ']' : ''));
+  }
 }
 // ── MIC LIVE ──────────────────────────────────────────────
 async function startMic() {
