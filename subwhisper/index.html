@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v5.2</title>
+<title>SubWhisper v6.0</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -154,7 +154,7 @@ body.light header{background:rgba(240,240,246,.88)}
   opacity:0;
   transition:max-height .45s cubic-bezier(.4,0,.2,1),opacity .3s;
 }
-.cfg-wrap.open{max-height:700px;opacity:1}
+.cfg-wrap.open{max-height:950px;opacity:1}
 .cfg{
   margin:20px 28px;
   background:var(--surface);
@@ -818,7 +818,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v5.2</span>
+    <span class="ver-badge">v6.0</span>
   </div>
   <div class="hdr-r">
     <button class="icon-btn" id="cfgBtn" onclick="toggleConfig()" title="Paramètres">&#9881;&#65039;</button>
@@ -830,16 +830,30 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <div class="cfg-wrap" id="cfgWrap">
   <div class="cfg">
     <div class="crow">
-      <span class="clbl">API KEY</span>
+      <span class="clbl">OPENAI</span>
       <div class="irow">
-        <input type="password" id="apiKey" placeholder="Clé AssemblyAI..." oninput="updateSbtn()">
+        <input type="password" id="openaiKey" placeholder="Clé OpenAI (gpt-4o-transcribe — prioritaire)" oninput="updateSbtn()">
+        <button class="tbtn" onclick="toggleKey('openaiKey','tkBtn3')" id="tkBtn3" title="Afficher">&#128065;</button>
+      </div>
+    </div>
+    <div class="crow">
+      <span class="clbl">AAI KEY</span>
+      <div class="irow">
+        <input type="password" id="apiKey" placeholder="Clé AssemblyAI (fallback)" oninput="updateSbtn()">
         <button class="tbtn" onclick="toggleKey('apiKey','tkBtn1')" id="tkBtn1" title="Afficher">&#128065;</button>
+      </div>
+    </div>
+    <div class="crow">
+      <span class="clbl">GEMINI</span>
+      <div class="irow">
+        <input type="password" id="geminiKey" placeholder="Clé Gemini (traduction contextuelle — prioritaire)">
+        <button class="tbtn" onclick="toggleKey('geminiKey','tkBtn4')" id="tkBtn4" title="Afficher">&#128065;</button>
       </div>
     </div>
     <div class="crow">
       <span class="clbl">TRAD</span>
       <div class="irow">
-        <input type="password" id="azureKey" placeholder="Clé Azure Translator (optionnel)">
+        <input type="password" id="azureKey" placeholder="Clé Azure Translator (fallback)">
         <button class="tbtn" onclick="toggleKey('azureKey','tkBtn2')" id="tkBtn2" title="Afficher">&#128065;</button>
       </div>
     </div>
@@ -1075,8 +1089,12 @@ function toggleConfig() {
 
 // ── INIT ──────────────────────────────────────────────────
 function init() {
+  try { var ok = localStorage.getItem('sw_openaikey'); if (ok) document.getElementById('openaiKey').value = ok; } catch(e) {}
+  document.getElementById('openaiKey').addEventListener('change', function() { try { localStorage.setItem('sw_openaikey', this.value.trim()); } catch(e) {} });
   try { var sk = localStorage.getItem('sw_apikey'); if (sk) document.getElementById('apiKey').value = sk; } catch(e) {}
   document.getElementById('apiKey').addEventListener('change', function() { try { localStorage.setItem('sw_apikey', getApiKey()); } catch(e) {} });
+  try { var gk = localStorage.getItem('sw_geminikey'); if (gk) document.getElementById('geminiKey').value = gk; } catch(e) {}
+  document.getElementById('geminiKey').addEventListener('change', function() { try { localStorage.setItem('sw_geminikey', this.value.trim()); } catch(e) {} });
   try { var ak = localStorage.getItem('sw_azurekey'); if (ak) document.getElementById('azureKey').value = ak; } catch(e) {}
   document.getElementById('azureKey').addEventListener('change', function() { try { localStorage.setItem('sw_azurekey', this.value.trim()); } catch(e) {} });
   try { var ar = localStorage.getItem('sw_azureregion'); if (ar) document.getElementById('azureRegion').value = ar; } catch(e) {}
@@ -1095,8 +1113,8 @@ function init() {
     var th = localStorage.getItem('sw_theme');
     if (th === 'light') { document.body.classList.add('light'); document.getElementById('thmBtn').textContent = '\u2600\uFE0F'; }
   } catch(e) {}
-  // Auto-open config if no API key
-  try { if (!localStorage.getItem('sw_apikey')) toggleConfig(); } catch(e) { toggleConfig(); }
+  // Auto-open config if no API key configured
+  try { if (!localStorage.getItem('sw_openaikey') && !localStorage.getItem('sw_apikey')) toggleConfig(); } catch(e) { toggleConfig(); }
 
   var dz = document.getElementById('dz');
   dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('over'); });
@@ -1121,6 +1139,8 @@ function init() {
 }
 
 function getApiKey()    { return document.getElementById('apiKey').value.trim(); }
+function getOpenAIKey() { return document.getElementById('openaiKey').value.trim(); }
+function getGeminiKey() { return document.getElementById('geminiKey').value.trim(); }
 function getAzureKey()  { return document.getElementById('azureKey').value.trim(); }
 function getAzureRegion(){ return document.getElementById('azureRegion').value.trim(); }
 function getDeeplxUrl() { return document.getElementById('deeplxUrl').value.trim(); }
@@ -1142,7 +1162,7 @@ function toggleTheme() {
   if (metaTheme) metaTheme.content = isLight ? '#f0f0f6' : '#080810';
 }
 
-function updateSbtn() { document.getElementById('sb').disabled = !selFile || !getApiKey(); }
+function updateSbtn() { document.getElementById('sb').disabled = !selFile || (!getOpenAIKey() && !getApiKey()); }
 
 // ── FILE PICKER ───────────────────────────────────────────
 function openFilePicker() {
@@ -1227,9 +1247,10 @@ function clearFile() {
 
 // ── TRANSCRIPTION ─────────────────────────────────────────
 async function transcribe() {
-  var apiKey = getApiKey();
-  if (!apiKey) { showErr('Clé API manquante. Ouvrez les paramètres (⚙️) et entrez votre clé AssemblyAI.'); toggleConfig(); return; }
   if (!selFile) return;
+  if (!getOpenAIKey() && !getApiKey()) { showErr('Clé API manquante. Entrez une clé OpenAI ou AssemblyAI dans les paramètres (⚙️).'); toggleConfig(); return; }
+  if (getOpenAIKey()) { await transcribeOpenAI(); return; }
+  var apiKey = getApiKey();
   try { localStorage.setItem('sw_apikey', apiKey); } catch(e) {}
   wordData = [];
   hideErr(); hideRes(); setProg(true);
@@ -1303,8 +1324,8 @@ function startPoll(jobId, outLang) {
         }
         var finalSrt = srt;
         var wasTranslated = false;
-        if (outLang !== 'same' && (getAzureKey() || getDeeplxUrl())) {
-          if (getAzureKey() && !getAzureRegion()) {
+        if (outLang !== 'same' && (getGeminiKey() || getAzureKey() || getDeeplxUrl())) {
+          if (getAzureKey() && !getGeminiKey() && !getAzureRegion()) {
             showErr('RÉGION Azure manquante.\nPour une ressource régionale (ex: francecentral, westeurope), le champ RÉGION est obligatoire.\nAlternative : créez une ressource Azure Translator avec Region = Global (aucune région requise).\nSRT sans traduction conservé.');
           } else {
             try {
@@ -1334,6 +1355,98 @@ function startPoll(jobId, outLang) {
       }
     } catch(e) {}
   }, 3000);
+}
+
+// ── OPENAI TRANSCRIPTION ──────────────────────────────────
+async function transcribeOpenAI() {
+  var key = getOpenAIKey();
+  if (!selFile) return;
+  if (selFile.size > 25 * 1024 * 1024) {
+    showErr('Fichier trop lourd pour OpenAI (max 25 MB). Utilisez l\'extraction audio WAV d\'abord.');
+    return;
+  }
+  wordData = [];
+  hideErr(); hideRes(); setProg(true);
+  document.getElementById('sb').disabled = true;
+  document.getElementById('cb').classList.add('vis');
+  setSt('');
+  try {
+    var srcLang = document.getElementById('srcLang').value;
+    var outLang = document.getElementById('outLang').value;
+    setPct(10, 'Envoi OpenAI'); setLog('Envoi à gpt-4o-transcribe...');
+    var formData = new FormData();
+    formData.append('file', selFile);
+    formData.append('model', 'gpt-4o-transcribe');
+    formData.append('response_format', 'verbose_json');
+    formData.append('timestamp_granularities[]', 'segment');
+    if (srcLang && srcLang !== '') formData.append('language', srcLang);
+    var resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + key },
+      body: formData
+    });
+    if (!resp.ok) {
+      var errData = await resp.json().catch(function() { return {}; });
+      throw new Error('OpenAI ' + resp.status + ' : ' + (errData.error ? errData.error.message : resp.statusText));
+    }
+    var data = await resp.json();
+    setPct(80, 'Transcription OK');
+    setLog('Transcription terminée — ' + (data.segments ? data.segments.length : 0) + ' segments');
+    detectedLang = data.language || srcLang || '';
+    var srt = buildSRTFromOpenAISegments(data.segments || []);
+    var finalSrt = srt;
+    var wasTranslated = false;
+    if (outLang !== 'same') {
+      var hasGemini = !!getGeminiKey();
+      var hasAzure = !!getAzureKey();
+      var hasDeeplx = !!getDeeplxUrl();
+      if (hasGemini || hasAzure || hasDeeplx) {
+        if (hasAzure && !hasGemini && !getAzureRegion()) {
+          showErr('RÉGION Azure manquante. SRT sans traduction conservé.');
+        } else {
+          try {
+            setPct(90, 'Traduction');
+            finalSrt = await translateSRT(srt, detectedLang, outLang);
+            wasTranslated = (finalSrt !== srt);
+          } catch(e) {
+            showErr('Traduction échouée : ' + (e.message || String(e)) + '\nSRT sans traduction conservé.');
+          }
+        }
+      }
+    }
+    srtTxt = finalSrt;
+    setPct(100, 'Terminé'); setLog('Terminé');
+    document.getElementById('cb').classList.remove('vis');
+    var tgtLang = (outLang !== 'same') ? outLang : null;
+    setTimeout(function() {
+      setProg(false);
+      showRes(finalSrt, detectedLang, tgtLang, wasTranslated, wordData);
+      saveHistory({ name: origName, srt: finalSrt, srcLang: detectedLang, tgtLang: tgtLang, wasTranslated: wasTranslated, ts: Date.now(), size: selFile ? selFile.size : 0 });
+      updateSbtn();
+    }, 400);
+  } catch(e) {
+    setProg(false);
+    document.getElementById('cb').classList.remove('vis');
+    showErr(e.message || String(e));
+    updateSbtn(); setSt('err');
+  }
+}
+
+function buildSRTFromOpenAISegments(segments) {
+  if (!segments || !segments.length) return '';
+  return segments.map(function(seg, i) {
+    var start = secToSrtTime(seg.start || 0);
+    var end   = secToSrtTime(seg.end   || 0);
+    return (i + 1) + '\n' + start + ' --> ' + end + '\n' + (seg.text || '').trim();
+  }).join('\n\n') + '\n';
+}
+
+function secToSrtTime(sec) {
+  var ms = Math.round(sec * 1000);
+  var h = Math.floor(ms / 3600000); ms %= 3600000;
+  var m = Math.floor(ms / 60000);   ms %= 60000;
+  var s = Math.floor(ms / 1000);    ms %= 1000;
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+','+String(ms).padStart(3,'0');
 }
 
 // ── SRT PARSING ───────────────────────────────────────────
@@ -1371,11 +1484,16 @@ function srtToVtt(srtContent) {
 
 // ── TRANSLATION ───────────────────────────────────────────
 async function translateSRT(origSrt, sourceLang, targetLang) {
+  var geminiKey = getGeminiKey();
   var azureKey = getAzureKey();
   var deeplxUrl = getDeeplxUrl();
-  if (!azureKey && !deeplxUrl) return origSrt;
+  if (!geminiKey && !azureKey && !deeplxUrl) return origSrt;
   var blocks = parseSRT(origSrt);
   if (!blocks.length) return origSrt;
+  // Gemini prioritaire : traduction contextuelle du SRT complet en 1 appel
+  if (geminiKey) {
+    return await translateGemini(origSrt, sourceLang, targetLang);
+  }
   if (azureKey) {
     var azureLang = AZURE_LANG[targetLang] || targetLang;
     var translatedTexts = [];
@@ -1385,7 +1503,7 @@ async function translateSRT(origSrt, sourceLang, targetLang) {
       setLog('Traduction ' + upTo + '/' + blocks.length + '...');
       var batch = [];
       for (var j = i; j < upTo; j++) batch.push({ Text: blocks[j].text });
-      var results = await azureTranslate(batch, azureLang, azureKey);
+      var results = await azureTranslate(batch, azureLang, azureKey, sourceLang);
       for (var k = 0; k < results.length; k++) translatedTexts.push(results[k]);
     }
     return buildSRT(blocks.map(function(b, idx) { return { id: b.id, timestamp: b.timestamp, text: translatedTexts[idx] || b.text }; }));
@@ -1405,8 +1523,9 @@ async function translateSRT(origSrt, sourceLang, targetLang) {
   return origSrt;
 }
 
-async function azureTranslate(bodyArr, targetLang, azureKey) {
+async function azureTranslate(bodyArr, targetLang, azureKey, sourceLang) {
   var url = 'https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&to=' + targetLang;
+  if (sourceLang) url += '&from=' + (AZURE_LANG[sourceLang] || sourceLang);
   var headers = { 'Ocp-Apim-Subscription-Key': azureKey, 'Content-Type': 'application/json' };
   var region = getAzureRegion();
   if (region) headers['Ocp-Apim-Subscription-Region'] = region;
@@ -1429,6 +1548,28 @@ async function deeplxTranslate(text, srcLang, tgtLang, deeplxUrl) {
   if (!resp.ok) throw new Error('DeepLX ' + resp.status);
   var data = await resp.json();
   return data.data || data.translation || text;
+}
+
+async function translateGemini(srtContent, sourceLang, targetLang) {
+  var key = getGeminiKey();
+  var LANG_NAMES = { fr:'French', en:'English', es:'Spanish', de:'German', it:'Italian', pt:'Portuguese', ru:'Russian', ja:'Japanese', zh:'Chinese', ko:'Korean', nl:'Dutch', hi:'Hindi', ar:'Arabic', vi:'Vietnamese', pl:'Polish', tr:'Turkish' };
+  var srcName = LANG_NAMES[sourceLang] || sourceLang || 'the source language';
+  var tgtName = LANG_NAMES[targetLang] || targetLang;
+  var prompt = 'Translate this SRT subtitle file from ' + srcName + ' to ' + tgtName + '.\nStrict rules:\n- Keep ALL timestamp lines exactly as-is (format: HH:MM:SS,mmm --> HH:MM:SS,mmm)\n- Keep ALL numeric index lines exactly as-is\n- Only translate the text lines\n- Preserve line breaks within subtitle blocks\n- Return ONLY the SRT content, no explanation, no markdown fences\n\n' + srtContent;
+  setLog('Traduction Gemini en cours...');
+  var resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+  });
+  if (!resp.ok) {
+    var err = await resp.json().catch(function() { return {}; });
+    throw new Error('Gemini ' + resp.status + ' : ' + (err.error ? err.error.message : resp.statusText));
+  }
+  var data = await resp.json();
+  var text = (data.candidates[0].content.parts[0].text) || '';
+  text = text.replace(/^```[a-z]*\r?\n?/im, '').replace(/```\s*$/m, '').trim();
+  return text + '\n';
 }
 
 // ── CANCEL ────────────────────────────────────────────────
@@ -1468,8 +1609,8 @@ function showRes(content, srcLang, tgtLang, wasTranslated, words) {
   if (srcLang) html += 'SOURCE <span class="lb">' + escHtml(srcLang.toUpperCase()) + '</span>';
   if (tgtLang && tgtLang !== 'same') {
     html += ' \u2192 <span class="lb">' + escHtml(tgtLang.toUpperCase()) + '</span>';
-    if (!wasTranslated && !getAzureKey() && !getDeeplxUrl()) {
-      html += ' <span style="font-family:var(--mono);font-size:9px;color:var(--muted)">— entrez une clé Azure pour traduire</span>';
+    if (!wasTranslated && !getAzureKey() && !getDeeplxUrl() && !getGeminiKey()) {
+      html += ' <span style="font-family:var(--mono);font-size:9px;color:var(--muted)">— entrez une clé Gemini ou Azure pour traduire</span>';
     }
   }
   document.getElementById('ld').innerHTML = html;
