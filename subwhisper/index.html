@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v7.4</title>
+<title>SubWhisper v7.5</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -426,6 +426,51 @@ body.light .dz:hover,body.light .dz.over{background:rgba(124,106,255,.04)}
 }
 .plog{margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--muted);height:16px;overflow:hidden}
 
+/* ── CHRONO + LIVE LOG ─────────────────────────────────── */
+.chrono-row{display:flex;align-items:center;gap:8px;margin-top:8px}
+.chrono-lbl{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;flex-shrink:0}
+#chronoDisplay{
+  font-family:var(--mono);
+  font-size:13px;
+  color:var(--accent3);
+  font-weight:700;
+  letter-spacing:1.5px;
+  min-width:52px;
+}
+#liveLog{
+  margin-top:8px;
+  background:rgba(0,0,0,.45);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:6px 10px;
+  max-height:132px;
+  overflow-y:auto;
+  font-family:var(--mono);
+  font-size:9.5px;
+  line-height:1.55;
+  color:rgba(240,240,248,.65);
+  scrollbar-width:thin;
+  scrollbar-color:var(--accent) transparent;
+}
+#liveLog::-webkit-scrollbar{width:3px}
+#liveLog::-webkit-scrollbar-thumb{background:var(--accent);border-radius:3px}
+.ll-entry{display:block;white-space:pre-wrap;word-break:break-all}
+.ll-time{color:var(--accent);margin-right:5px;font-size:8.5px;opacity:.8}
+
+/* ── HIST DURATION BADGE ───────────────────────────────── */
+.hdur-badge{
+  display:inline-block;
+  font-family:var(--mono);
+  font-size:8px;
+  background:rgba(255,255,255,.07);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:1px 5px;
+  color:var(--muted);
+  margin-left:4px;
+  vertical-align:middle;
+}
+
 /* ── MAIN BUTTON ───────────────────────────────────────── */
 .sbtn{
   display:block;
@@ -833,7 +878,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v7.4</span>
+    <span class="ver-badge">v7.5</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -999,6 +1044,11 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
   </div>
   <div class="pbar"><div class="pfill" id="pf"></div></div>
   <div class="plog" id="plog">Initialisation...</div>
+  <div class="chrono-row">
+    <span class="chrono-lbl">Durée</span>
+    <span id="chronoDisplay">00:00</span>
+  </div>
+  <div id="liveLog"></div>
 </div>
 
 <button class="sbtn mic-btn" id="micBtn" onclick="toggleMic()">&#x1F3A4; MIC LIVE</button>
@@ -1432,6 +1482,7 @@ async function transcribe() {
   var apiKey = getApiKey();
   try { localStorage.setItem('sw_apikey', apiKey); } catch(e) {}
   wordData = [];
+  startChrono(); clearLiveLog();
   hideErr(); hideRes(); setProg(true);
   document.getElementById('sb').disabled = true;
   document.getElementById('cb').classList.add('vis');
@@ -1521,9 +1572,10 @@ function startPoll(jobId, outLang) {
         setPct(100, 'Terminé'); setLog('Terminé');
         var tgtLang = (outLang !== 'same') ? outLang : null;
         setTimeout(function() {
+          var dur1 = chronoElapsed();
           setProg(false);
           showRes(finalSrt, detectedLang, tgtLang, wasTranslated, wordData);
-          saveHistory({ name: origName, srt: finalSrt, srcLang: detectedLang, tgtLang: tgtLang, wasTranslated: wasTranslated, ts: Date.now(), size: selFile ? selFile.size : 0 });
+          saveHistory({ name: origName, srt: finalSrt, srcLang: detectedLang, tgtLang: tgtLang, wasTranslated: wasTranslated, ts: Date.now(), size: selFile ? selFile.size : 0, duration: dur1 });
           updateSbtn();
         }, 400);
       } else if (status.status === 'error') {
@@ -1541,6 +1593,7 @@ async function transcribeOpenAI() {
   var key = getOpenAIKey();
   if (!selFile) return;
   wordData = [];
+  startChrono(); clearLiveLog();
   hideErr(); hideRes(); setProg(true);
   document.getElementById('sb').disabled = true;
   document.getElementById('cb').classList.add('vis');
@@ -1668,9 +1721,10 @@ async function transcribeOpenAI() {
     document.getElementById('cb').classList.remove('vis');
     var tgtLang = (outLang !== 'same') ? outLang : null;
     setTimeout(function() {
+      var dur2 = chronoElapsed();
       setProg(false);
       showRes(finalSrt, detectedLang, tgtLang, wasTranslated, wordData);
-      saveHistory({ name: origName, srt: finalSrt, srcLang: detectedLang, tgtLang: tgtLang, wasTranslated: wasTranslated, ts: Date.now(), size: selFile ? selFile.size : 0 });
+      saveHistory({ name: origName, srt: finalSrt, srcLang: detectedLang, tgtLang: tgtLang, wasTranslated: wasTranslated, ts: Date.now(), size: selFile ? selFile.size : 0, duration: dur2 });
       updateSbtn();
     }, 400);
   } catch(e) {
@@ -1686,6 +1740,7 @@ async function transcribeGroq() {
   var key = getGroqKey();
   if (!selFile) return;
   wordData = [];
+  startChrono(); clearLiveLog();
   hideErr(); hideRes(); setProg(true);
   document.getElementById('sb').disabled = true;
   document.getElementById('cb').classList.add('vis');
@@ -1809,9 +1864,10 @@ async function transcribeGroq() {
     document.getElementById('cb').classList.remove('vis');
     var tgtLang = (outLang !== 'same') ? outLang : null;
     setTimeout(function() {
+      var dur3 = chronoElapsed();
       setProg(false);
       showRes(finalSrt, detectedLang, tgtLang, wasTranslated, wordData);
-      saveHistory({ name: origName, srt: finalSrt, srcLang: detectedLang, tgtLang: tgtLang, wasTranslated: wasTranslated, ts: Date.now(), size: selFile ? selFile.size : 0 });
+      saveHistory({ name: origName, srt: finalSrt, srcLang: detectedLang, tgtLang: tgtLang, wasTranslated: wasTranslated, ts: Date.now(), size: selFile ? selFile.size : 0, duration: dur3 });
       updateSbtn();
     }, 400);
   } catch(e) {
@@ -1930,9 +1986,10 @@ async function pollCloudJob(base, jobId, outLang) {
           setPct(100, 'Terminé'); setLog('Terminé');
           document.getElementById('cb').classList.remove('vis');
           setTimeout(function() {
+            var dur4 = chronoElapsed();
             setProg(false);
             showRes(finalSrt, detectedLangCloud, outLang !== 'same' ? outLang : null, wasTranslated, []);
-            saveHistory({ name: origName, srt: finalSrt, srcLang: detectedLangCloud, tgtLang: outLang !== 'same' ? outLang : null, wasTranslated: wasTranslated, ts: Date.now(), size: selFile ? selFile.size : 0 });
+            saveHistory({ name: origName, srt: finalSrt, srcLang: detectedLangCloud, tgtLang: outLang !== 'same' ? outLang : null, wasTranslated: wasTranslated, ts: Date.now(), size: selFile ? selFile.size : 0, duration: dur4 });
             updateSbtn();
           }, 400);
           resolve();
@@ -2171,17 +2228,72 @@ function cancelJob() {
   setProg(false); showErr('Annulé'); setSt('err'); updateSbtn();
 }
 
+// ── CHRONO ────────────────────────────────────────────────
+var chronoStart = 0, chronoTimer = null;
+
+function formatChrono(ms) {
+  var totalSec = Math.floor(ms / 1000);
+  var h = Math.floor(totalSec / 3600);
+  var m = Math.floor((totalSec % 3600) / 60);
+  var s = totalSec % 60;
+  if (h > 0) {
+    return (h < 10 ? '0' + h : h) + ':' + (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+  }
+  return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+}
+
+function startChrono() {
+  stopChrono();
+  chronoStart = Date.now();
+  var el = document.getElementById('chronoDisplay');
+  if (el) el.textContent = '00:00';
+  chronoTimer = setInterval(function() {
+    var el2 = document.getElementById('chronoDisplay');
+    if (el2) el2.textContent = formatChrono(Date.now() - chronoStart);
+  }, 1000);
+}
+
+function stopChrono() {
+  if (chronoTimer) { clearInterval(chronoTimer); chronoTimer = null; }
+}
+
+function chronoElapsed() {
+  if (!chronoStart) return 0;
+  return Date.now() - chronoStart;
+}
+
+// ── LIVE LOG ──────────────────────────────────────────────
+function clearLiveLog() {
+  var el = document.getElementById('liveLog');
+  if (el) el.innerHTML = '';
+}
+
+function appendLog(msg) {
+  var el = document.getElementById('liveLog');
+  if (!el) return;
+  var elapsed = chronoStart ? formatChrono(Date.now() - chronoStart) : '00:00';
+  var line = document.createElement('span');
+  line.className = 'll-entry';
+  line.innerHTML = '<span class="ll-time">[' + elapsed + ']</span>' + escHtml(String(msg));
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
 // ── PROGRESS ──────────────────────────────────────────────
 function setProg(v) {
   document.getElementById('pw').classList.toggle('vis', !!v);
-  if (!v) { document.getElementById('pf').style.width = '0%'; document.getElementById('pp').textContent = '0%'; }
+  if (!v) {
+    document.getElementById('pf').style.width = '0%';
+    document.getElementById('pp').textContent = '0%';
+    stopChrono();
+  }
 }
 function setPct(p, l) {
   document.getElementById('pf').style.width = p + '%';
   document.getElementById('pp').textContent = p + '%';
   if (l) document.getElementById('pl').textContent = l;
 }
-function setLog(m) { document.getElementById('plog').textContent = m; }
+function setLog(m) { document.getElementById('plog').textContent = m; appendLog(m); }
 function setSt(s) { document.getElementById('sd').className = 'sdot' + (s ? ' ' + s : ''); }
 
 // ── RESULTS ───────────────────────────────────────────────
@@ -2856,8 +2968,14 @@ function renderHistory() {
       if (item.srcLang) meta += ' \u00b7 ' + item.srcLang.toUpperCase();
       if (item.tgtLang) meta += ' \u2192 ' + item.tgtLang.toUpperCase();
       if (item.wasTranslated) meta += ' \u00b7 traduit';
+      var durBadge = '';
+      if (item.duration && item.duration > 0) {
+        var ds = Math.round(item.duration / 1000);
+        var dm = Math.floor(ds / 60); var dsec = ds % 60;
+        durBadge = '<span class="hdur-badge">' + (dm > 0 ? dm + 'min ' : '') + dsec + 's</span>';
+      }
       return '<div class="hitem" onclick="loadHistory(' + i + ')"><span class="hico">&#127916;</span>' +
-        '<div class="hinfo"><div class="hname">' + escHtml(item.name || 'Inconnu') + '</div>' +
+        '<div class="hinfo"><div class="hname">' + escHtml(item.name || 'Inconnu') + durBadge + '</div>' +
         '<div class="hmeta">' + escHtml(meta) + '</div></div>' +
         '<button class="hdel" onclick="delHistory(event,' + i + ')" title="Supprimer">&#x2715;</button></div>';
     }).join('');

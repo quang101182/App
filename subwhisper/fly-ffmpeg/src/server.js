@@ -172,7 +172,7 @@ async function processJob(job) {
     await updateWorker(workerCallbackUrl, workerSecret, {
       jobId,
       progress: 10,
-      log: 'FFmpeg démarré, extraction en cours...',
+      log: '🔊 FFmpeg démarré — extraction audio WAV 16kHz mono...',
       status: 'processing'
     });
 
@@ -190,7 +190,7 @@ async function processJob(job) {
     await updateWorker(workerCallbackUrl, workerSecret, {
       jobId,
       progress: 95,
-      log: `Assemblage du SRT (${allSegments.length} segments)...`,
+      log: `📝 Assemblage SRT — ${allSegments.length} segments au total`,
       status: 'processing'
     });
 
@@ -275,7 +275,7 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
       await updateWorker(workerCallbackUrl, workerSecret, {
         jobId,
         progress,
-        log: `Transcription chunk ${chunkIdx + 1} (offset ${offsetSec.toFixed(1)}s)...`,
+        log: `🎯 Chunk ${chunkIdx + 1} → Groq Whisper (${formatTime(offsetSec)} → ${formatTime(offsetSec + CHUNK_DUR_SEC)})...`,
         status: 'processing'
       }).catch(() => {}); // non-bloquant
 
@@ -286,8 +286,18 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
         chunkIdx,
         srcLang,
         groqKey,
-        offsetSec
+        offsetSec,
+        workerCallbackUrl,
+        workerSecret
       });
+
+      // Callback "chunk terminé"
+      await updateWorker(workerCallbackUrl, workerSecret, {
+        jobId,
+        progress,
+        log: `✅ Chunk ${chunkIdx + 1} terminé — ${segments.length} segments`,
+        status: 'processing'
+      }).catch(() => {});
 
       return segments;
     }
@@ -307,7 +317,24 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
           if (remaining.length > 0) {
             pcmAccum = Buffer.concat([pcmAccum, remaining]);
           }
-          console.log(`[${jobId}] Header WAV parsé. Sample rate: ${headerBuffer.readUInt32LE(24)} Hz, Channels: ${headerBuffer.readUInt16LE(22)}`);
+          // Parser wavMeta depuis le header pour l'estimation de durée
+          const wavMeta = {
+            sampleRate: headerBuffer.readUInt32LE(24),
+            numChannels: headerBuffer.readUInt16LE(22),
+            bytesPerSec: headerBuffer.readUInt32LE(28),
+            dataSize: headerBuffer.readUInt32LE(40)
+          };
+          console.log(`[${jobId}] Header WAV parsé. Sample rate: ${wavMeta.sampleRate} Hz, Channels: ${wavMeta.numChannels}`);
+          const estimatedChunks = Math.ceil(wavMeta.dataSize / CHUNK_MAX_BYTES) || '?';
+          const estimatedMin = wavMeta.bytesPerSec > 0
+            ? (wavMeta.dataSize / wavMeta.bytesPerSec / 60).toFixed(1)
+            : '?';
+          updateWorker(workerCallbackUrl, workerSecret, {
+            jobId,
+            progress: 15,
+            log: `📐 Audio: ${estimatedMin}min détectés — ~${estimatedChunks} chunks estimés`,
+            status: 'processing'
+          }).catch(() => {});
         }
         return;
       }
@@ -390,7 +417,7 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
 // Transcription Groq avec retry x3
 // ---------------------------------------------------------------------------
 
-async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey, offsetSec }) {
+async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey, offsetSec, workerCallbackUrl, workerSecret }) {
   const MAX_RETRIES = 3;
   let lastError;
 
@@ -447,7 +474,13 @@ async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey
 
       if (attempt < MAX_RETRIES) {
         const backoff = attempt * 5000; // 5s, 10s
+        const backoffSec = backoff / 1000;
         console.log(`[${jobId}] Chunk ${chunkIdx}: retry dans ${backoff}ms...`);
+        updateWorker(workerCallbackUrl, workerSecret, {
+          jobId,
+          log: `⚠️ Groq rate limit — retry ${attempt}/3 dans ${backoffSec}s...`,
+          status: 'processing'
+        }).catch(() => {});
         await sleep(backoff);
       }
     }
@@ -569,6 +602,15 @@ async function updateWorker(url, secret, payload) {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function formatTime(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  return h > 0
+    ? `${h}h${String(m).padStart(2, '0')}m${String(s).padStart(2, '0')}s`
+    : `${m}m${String(s).padStart(2, '0')}s`;
 }
 
 // ---------------------------------------------------------------------------
