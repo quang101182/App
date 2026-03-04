@@ -287,7 +287,10 @@ async function handleJobDone(request, env) {
     return jsonResponse({ error: 'missing required field: jobId' }, 400);
   }
 
-  const { jobId, srt, detectedLang, progress, log, error: jobError } = body;
+  // BUG FIX: extract body.status directly — previously was always 'done' unless body.error present,
+  // causing every progress update (status:'processing') to be stored as 'done' in KV,
+  // making the browser stop polling immediately with empty SRT.
+  const { jobId, srt, detectedLang, progress, log, error: jobError, status: bodyStatus } = body;
 
   // Fetch existing record to get r2Key
   const existing = await kvGet(env, jobId);
@@ -295,7 +298,9 @@ async function handleJobDone(request, env) {
     return jsonResponse({ error: 'job not found' }, 404);
   }
 
-  const status  = jobError ? 'error' : 'done';
+  // Use the status sent by Fly.io ('processing', 'done', 'error')
+  // Fall back to deriving from jobError for backwards compat
+  const status = bodyStatus ?? (jobError ? 'error' : 'done');
   const updated = {
     ...existing,
     status,
@@ -310,9 +315,9 @@ async function handleJobDone(request, env) {
   // Store with same TTL (reset from now)
   await kvPut(env, jobId, updated, KV_TTL_SECONDS);
 
-  // If successful, clean up R2 (schedule in background — no await from client POV)
-  if (status === 'done' && existing.r2Key) {
-    // Not using waitUntil here since we already returned — use plain .catch()
+  // Clean up R2 only on actual completion (status:'done' with SRT present)
+  // Previously this fired on EVERY update due to the bug above, deleting the file mid-download
+  if (status === 'done' && srt != null && existing.r2Key) {
     env.BUCKET.delete(existing.r2Key).catch(err =>
       console.error('[worker] r2 delete error', existing.r2Key, err)
     );
