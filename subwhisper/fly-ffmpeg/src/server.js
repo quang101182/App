@@ -1,12 +1,20 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.2.0 — Fix O(n²) Buffer.concat → array accumulation + concat unique dans end
+ * Version: 1.4.0 — Retry intelligent pour Groq HTTP 429 (rate limit)
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
  *    → corrige "multipart: NextPart: EOF" chez Groq
  *  - Chunks traités séquentiellement dans end handler au lieu de concurrents dans data handler
  *    → corrige unhandled promise rejection → crash Node.js sans callback d'erreur
+ * Fixes v1.2.0:
+ *  - Buffer.concat O(n²) → array accumulation + concat unique dans end handler
+ * Fixes v1.3.0:
+ *  - const pcmAccum → let pcmAccum (TypeError assignment to const)
+ * Fixes v1.4.0:
+ *  - Groq HTTP 429 : parse "try again in Xm Y.Zs" et attend exactement ce délai
+ *    → au lieu de 5-15s, attend 5+ minutes selon la réponse Groq
+ *  - MAX_RETRIES 3→5 pour couvrir plusieurs fenêtres de rate limit
  */
 
 'use strict';
@@ -75,7 +83,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.3.0'
+    version: '1.4.0'
   });
 });
 
@@ -367,7 +375,7 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
 // ---------------------------------------------------------------------------
 
 async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey, offsetSec, workerCallbackUrl, workerSecret }) {
-  const MAX_RETRIES = 3;
+  const MAX_RETRIES = 5; // augmenté pour couvrir plusieurs fenêtres rate-limit Groq
   let lastError;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -397,6 +405,20 @@ async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey
 
       if (!response.ok) {
         const errText = await response.text();
+
+        // Cas rate-limit : parser "try again in Xm Y.Zs" pour attendre exactement ce délai
+        if (response.status === 429) {
+          const m = errText.match(/try again in (\d+)m(\d+(?:\.\d+)?)s/i);
+          const waitMs = m
+            ? Math.ceil((parseInt(m[1]) * 60 + parseFloat(m[2])) * 1000) + 10000 // +10s buffer
+            : 6 * 60 * 1000; // fallback : 6 minutes
+          const waitSec = Math.round(waitMs / 1000);
+          const err429 = new Error(`Groq HTTP 429 (rate limit) — pause ${waitSec}s`);
+          err429.retryAfterMs = waitMs;
+          err429.is429 = true;
+          throw err429;
+        }
+
         throw new Error(`Groq HTTP ${response.status}: ${errText.substring(0, 300)}`);
       }
 
@@ -421,12 +443,16 @@ async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey
       console.error(`[${jobId}] Chunk ${chunkIdx}: tentative ${attempt} échouée:`, err.message);
 
       if (attempt < MAX_RETRIES) {
-        const backoff = attempt * 5000;
-        const backoffSec = backoff / 1000;
-        console.log(`[${jobId}] Chunk ${chunkIdx}: retry dans ${backoff}ms...`);
+        // Pour 429 : attendre le délai exact indiqué par Groq (5+ min)
+        // Pour autres erreurs : backoff exponentiel court (5s, 10s, 15s...)
+        const backoff = err.is429 ? (err.retryAfterMs || 6 * 60 * 1000) : attempt * 5000;
+        const backoffSec = Math.round(backoff / 1000);
+        console.log(`[${jobId}] Chunk ${chunkIdx}: ${err.is429 ? '⏳ rate limit' : '⚠️ erreur'} — retry dans ${backoffSec}s...`);
         updateWorker(workerCallbackUrl, workerSecret, {
           jobId,
-          log: `⚠️ Groq erreur — retry ${attempt}/3 dans ${backoffSec}s... (${err.message.substring(0, 100)})`,
+          log: err.is429
+            ? `⏳ Rate limit Groq — pause ${backoffSec}s (tentative ${attempt}/${MAX_RETRIES})...`
+            : `⚠️ Groq erreur — retry ${attempt}/${MAX_RETRIES} dans ${backoffSec}s... (${err.message.substring(0, 80)})`,
           status: 'processing'
         }).catch(() => {});
         await sleep(backoff);
