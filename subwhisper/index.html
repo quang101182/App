@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.2</title>
+<title>SubWhisper v8.3</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -865,9 +865,9 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 /* Désactiver le rendu natif VTT du browser (défense webkit Chrome) */
 #previewVideo::-webkit-media-text-track-container{display:none!important}
 /* ── SUB OVERLAY ── */
-#subOverlay{position:absolute;bottom:58px;left:0;right:0;text-align:center;font-size:15px;font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.95),0 0 20px rgba(0,0,0,.7);padding:4px 16px;white-space:pre-wrap;line-height:1.4;z-index:10;pointer-events:none}
-#subOverlayInner{cursor:pointer;pointer-events:auto;display:inline-block;transition:opacity .2s}
-#subOverlayInner:hover{opacity:.75}
+#subOverlay{position:absolute;bottom:0;left:0;right:0;top:0;z-index:10;pointer-events:none}
+#subOverlayInner{position:absolute;bottom:0;left:0;right:0;height:60px;cursor:pointer;pointer-events:auto;display:block}
+#subOverlayInner:hover{background:rgba(255,255,255,.03)}
 /* ── SUB BOX ── */
 #subBox{background:#000;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 20px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;transition:background .15s;user-select:none;-webkit-user-select:none;gap:4px}
 #subBox.empty{cursor:default}
@@ -892,7 +892,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.2</span>
+    <span class="ver-badge">v8.3</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -2544,13 +2544,17 @@ function shiftSRT(srtContent, offsetMs) {
   }
   return buildSRT(shifted);
 }
-// ── REPAIR TIMESTAMPS v2 ──────────────────────────────────
-// Algo 6 règles : médiane dynamique + seuils calibrés Groq/Fly.io
+// ── REPAIR TIMESTAMPS v3 ──────────────────────────────────
+// Algo 7 règles : médiane + RC filtre blocs hors durée vidéo
 function repairSRTTimestamps() {
   var raw = getCurrentSRT();
   if (!raw || !raw.trim()) { toast('Aucun SRT \u00e0 r\u00e9parer'); return; }
   var blocks = parseSRT(raw);
   if (!blocks.length) { toast('SRT invalide'); return; }
+  // Durée vidéo (ms) si preview chargée — sert à supprimer les blocs hors-durée
+  var vidEl = document.getElementById('previewVideo');
+  var videoDurMs = (vidEl && isFinite(vidEl.duration) && vidEl.duration > 1)
+    ? Math.round(vidEl.duration * 1000) : 0;
 
   // ── SEUILS ──────────────────────────────────────────────
   var OVERLAP_IGNORE    =    50;  // \u226450ms : artefact encodage, ne pas toucher
@@ -2592,7 +2596,7 @@ function repairSRTTimestamps() {
   });
 
   // ── \u00c9TAPE 2 : Boucle principale ──────────────────────────
-  var stats = { r0:0, ra2:0, ra3:0, ra4:0, rb1:0, rb2:0, rb3:0 };
+  var stats = { r0:0, ra2:0, ra3:0, ra4:0, rb1:0, rb2:0, rb3:0, rc:0 };
   var fixed = 0;
 
   for (var i = 0; i < blocks.length; i++) {
@@ -2667,7 +2671,18 @@ function repairSRTTimestamps() {
     }
   }
 
-  // ── \u00c9TAPE 3 : Renumérotation + rebuild ──────────────────
+  // ── RC : Supprimer blocs dont startMs > durée vidéo + 30s buffer ──
+  // (hallucinations Groq dont le START lui-même est hors-durée vidéo)
+  if (videoDurMs > 0) {
+    var beforeRC = blocks.length;
+    blocks = blocks.filter(function(b) {
+      return tsToMs(b.timestamp.split(' --> ')[0]) <= videoDurMs + 30000;
+    });
+    stats.rc = beforeRC - blocks.length;
+    fixed += stats.rc;
+  }
+
+  // ── ÉTAPE 3 : Renumérotation + rebuild ──────────────────
   blocks.forEach(function(b, i) { b.id = String(i + 1); });
   var repaired = buildSRT(blocks);
   srtOriginal  = repaired;
@@ -2699,6 +2714,7 @@ function repairSRTTimestamps() {
     if (stats.ra2+stats.rb1)    det.push((stats.ra2+stats.rb1) + ' cap-30s');
     if (stats.ra3+stats.ra4)    det.push((stats.ra3+stats.ra4) + ' overflow');
     if (stats.rb2+stats.rb3)    det.push((stats.rb2+stats.rb3) + ' hallucination');
+    if (stats.rc)               det.push(stats.rc + ' hors-durée supprimé(s)');
     toast('\u2713 ' + fixed + ' r\u00e9par\u00e9(s) \u2014 m\u00e9diane=' + Math.round(typicalDurMs/100)/10 + 's' + (det.length ? ' [' + det.join(', ') + ']' : ''));
   }
 }
@@ -2938,8 +2954,8 @@ function updateSubOverlay() {
       break;
     }
   }
-  // Overlay cinéma
-  inner.textContent = found ? found + ' \u270F' : '';
+  // Overlay = zone de clic transparente sur la vidéo (texte affiché uniquement dans #subBox)
+  inner.textContent = '';
   // Box noire sous la vidéo
   var box = document.getElementById('subBox');
   var boxMeta = document.getElementById('subBoxMeta');
