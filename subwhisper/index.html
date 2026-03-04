@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v6.4</title>
+<title>SubWhisper v7.0</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -833,7 +833,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v6.4</span>
+    <span class="ver-badge">v7.0</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -841,7 +841,9 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
       <span class="achip" title="Gemini (traduction)"><span class="adot" id="adotGEM"></span><span class="achip-lbl">GEM</span></span>
       <span class="achip" title="AssemblyAI (fallback transcription)"><span class="adot" id="adotAAI"></span><span class="achip-lbl">AAI</span></span>
       <span class="achip" title="Azure Translator (fallback traduction)"><span class="adot" id="adotAZR"></span><span class="achip-lbl">AZR</span></span>
-      <div id="apiLvlWrap" title="Niveau qualité 0-4">
+      <span class="achip" title="Groq Whisper large-v3 Turbo (CJK top)"><span class="adot" id="adotGRQ"></span><span class="achip-lbl">GRQ</span></span>
+      <span class="achip" title="Cloudflare Worker (cloud processing)"><span class="adot" id="adotWRK"></span><span class="achip-lbl">WRK</span></span>
+      <div id="apiLvlWrap" title="Niveau qualité 0-6">
         <div id="apiLvlBar"><div id="apiLvlFill"></div></div>
         <span id="apiLvlLbl">–</span>
       </div>
@@ -857,7 +859,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     <div class="crow">
       <span class="clbl">OPENAI</span>
       <div class="irow">
-        <input type="password" id="openaiKey" placeholder="Clé OpenAI (gpt-4o-transcribe — prioritaire)" oninput="updateSbtn()">
+        <input type="password" id="openaiKey" placeholder="Clé OpenAI whisper-1 (fallback Groq)" oninput="updateSbtn()">
         <button class="tbtn" onclick="toggleKey('openaiKey','tkBtn3')" id="tkBtn3" title="Afficher">&#128065;</button>
       </div>
     </div>
@@ -867,6 +869,17 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
         <input type="password" id="apiKey" placeholder="Clé AssemblyAI (fallback)" oninput="updateSbtn()">
         <button class="tbtn" onclick="toggleKey('apiKey','tkBtn1')" id="tkBtn1" title="Afficher">&#128065;</button>
       </div>
+    </div>
+    <div class="crow">
+      <span class="clbl">GROQ</span>
+      <div class="irow">
+        <input type="password" id="groqKey" placeholder="Clé Groq (Whisper large-v3-turbo — CJK top)">
+        <button class="tbtn" onclick="toggleKey('groqKey','tkBtn5')" id="tkBtn5" title="Afficher">&#128065;</button>
+      </div>
+    </div>
+    <div class="crow">
+      <span class="clbl">WORKER</span>
+      <input type="text" id="workerUrl" placeholder="URL Cloudflare Worker (ex: https://subwhisper.workers.dev)">
     </div>
     <div class="crow">
       <span class="clbl">GEMINI</span>
@@ -1104,9 +1117,9 @@ var micFinals = [];
 var micActive = false;
 
 // ── API STATUS INDICATORS ─────────────────────────────────
-var API_DOTS = { OAI:'none', GEM:'none', AAI:'none', AZR:'none' };
-var API_LABELS = ['AUCUNE','BASIQUE','STANDARD','AVANCÉ','TOP'];
-var API_COLORS = ['#606070','#ff4d6d','#f59e0b','#7c6aff','#00d4aa'];
+var API_DOTS = { OAI:'none', GEM:'none', AAI:'none', AZR:'none', GRQ:'none', WRK:'none' };
+var API_LABELS = ['AUCUNE','BASIQUE','STANDARD','AVANCÉ','TOP','ELITE','MAX'];
+var API_COLORS = ['#606070','#ff4d6d','#f59e0b','#7c6aff','#00d4aa','#00d4aa','#00d4aa'];
 
 function setDot(id, state) {
   API_DOTS[id] = state;
@@ -1120,7 +1133,7 @@ function updateApiLevel() {
   var fill = document.getElementById('apiLvlFill');
   var lbl  = document.getElementById('apiLvlLbl');
   if (!fill || !lbl) return;
-  fill.style.width      = Math.round(score / 4 * 100) + '%';
+  fill.style.width      = Math.round(score / 6 * 100) + '%';
   fill.style.background = API_COLORS[score] || '#606070';
   lbl.textContent       = API_LABELS[score] || '–';
   lbl.style.color       = API_COLORS[score] || '';
@@ -1161,12 +1174,31 @@ async function pingAZR(key, region) {
   } catch(e) { setDot('AZR', 'err'); }
 }
 
+async function pingGRQ(key) {
+  try {
+    setDot('GRQ','key');
+    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 5000);
+    var r = await fetch('https://api.groq.com/openai/v1/models', { headers:{'Authorization':'Bearer '+key}, signal:ctrl.signal });
+    setDot('GRQ', r.ok ? 'ok' : 'err');
+  } catch(e) { setDot('GRQ','err'); }
+}
+async function pingWRK(url) {
+  try {
+    setDot('WRK','key');
+    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 5000);
+    var r = await fetch(url.replace(/\/$/, '') + '/health', { signal:ctrl.signal });
+    setDot('WRK', r.ok ? 'ok' : 'err');
+  } catch(e) { setDot('WRK','err'); }
+}
+
 function pingAllApis() {
-  var oai = getOpenAIKey(), gem = getGeminiKey(), aai = getApiKey(), azr = getAzureKey(), azrR = getAzureRegion();
+  var oai = getOpenAIKey(), gem = getGeminiKey(), aai = getApiKey(), azr = getAzureKey(), azrR = getAzureRegion(), grq = getGroqKey(), wrk = getWorkerUrl();
   if (oai) pingOAI(oai); else setDot('OAI','none');
   if (gem) pingGEM(gem); else setDot('GEM','none');
   if (aai) pingAAI(aai); else setDot('AAI','none');
   if (azr) pingAZR(azr, azrR); else setDot('AZR','none');
+  if (grq) pingGRQ(grq); else setDot('GRQ','none');
+  if (wrk) pingWRK(wrk); else setDot('WRK','none');
 }
 
 // ── WAV HEADER PARSER (byte slicing) ─────────────────────
@@ -1236,6 +1268,10 @@ function init() {
   document.getElementById('azureRegion').addEventListener('change', function() { try { localStorage.setItem('sw_azureregion', this.value.trim()); } catch(e) {} });
   try { var dlx = localStorage.getItem('sw_deeplxurl'); if (dlx) document.getElementById('deeplxUrl').value = dlx; } catch(e) {}
   document.getElementById('deeplxUrl').addEventListener('change', function() { try { localStorage.setItem('sw_deeplxurl', this.value.trim()); } catch(e) {} });
+  try { var gq = localStorage.getItem('sw_groqkey'); if (gq) document.getElementById('groqKey').value = gq; } catch(e) {}
+  document.getElementById('groqKey').addEventListener('change', function() { try { localStorage.setItem('sw_groqkey', this.value.trim()); } catch(e) {} pingAllApis(); });
+  try { var wu = localStorage.getItem('sw_workerurl'); if (wu) document.getElementById('workerUrl').value = wu; } catch(e) {}
+  document.getElementById('workerUrl').addEventListener('change', function() { try { localStorage.setItem('sw_workerurl', this.value.trim()); } catch(e) {} pingAllApis(); });
   try {
     var s = localStorage.getItem('sw_srcLang'); if (s !== null) document.getElementById('srcLang').value = s;
     var o = localStorage.getItem('sw_outLang'); if (o !== null) document.getElementById('outLang').value = o;
@@ -1281,6 +1317,8 @@ function getGeminiKey() { return document.getElementById('geminiKey').value.trim
 function getAzureKey()  { return document.getElementById('azureKey').value.trim(); }
 function getAzureRegion(){ return document.getElementById('azureRegion').value.trim(); }
 function getDeeplxUrl() { return document.getElementById('deeplxUrl').value.trim(); }
+function getGroqKey()   { return document.getElementById('groqKey').value.trim(); }
+function getWorkerUrl() { return document.getElementById('workerUrl').value.trim(); }
 
 function toggleKey(inputId, btnId) {
   var inp = document.getElementById(inputId);
@@ -1299,7 +1337,7 @@ function toggleTheme() {
   if (metaTheme) metaTheme.content = isLight ? '#f0f0f6' : '#080810';
 }
 
-function updateSbtn() { document.getElementById('sb').disabled = !selFile || (!getOpenAIKey() && !getApiKey()); }
+function updateSbtn() { document.getElementById('sb').disabled = !selFile || (!getOpenAIKey() && !getApiKey() && !getGroqKey()); }
 
 // ── FILE PICKER ───────────────────────────────────────────
 function openFilePicker() {
@@ -1385,7 +1423,9 @@ function clearFile() {
 // ── TRANSCRIPTION ─────────────────────────────────────────
 async function transcribe() {
   if (!selFile) return;
-  if (!getOpenAIKey() && !getApiKey()) { showErr('Clé API manquante. Entrez une clé OpenAI ou AssemblyAI dans les paramètres (⚙️).'); toggleConfig(); return; }
+  if (!getOpenAIKey() && !getApiKey() && !getGroqKey()) { showErr('Clé API manquante. Entrez une clé Groq, OpenAI ou AssemblyAI dans les paramètres (⚙️).'); toggleConfig(); return; }
+  // Priorité : Groq > OpenAI > AAI
+  if (getGroqKey()) { await transcribeGroq(); return; }
   if (getOpenAIKey()) { await transcribeOpenAI(); return; }
   var apiKey = getApiKey();
   try { localStorage.setItem('sw_apikey', apiKey); } catch(e) {}
@@ -1520,6 +1560,12 @@ async function transcribeOpenAI() {
     } else {
       // ── Fichier volumineux : auto-chunking ───────────────
       var isWavFile = /\.wav$/i.test(selFile.name) || selFile.type === 'audio/wav';
+      var workerUrl = getWorkerUrl();
+      if (!isWavFile && workerUrl) {
+        // Déléguer au cloud via Worker
+        await transcribeCloud(workerUrl, srcLang, outLang, key);
+        return;
+      }
       if (isWavFile) {
         // ── Branche WAV byte slicing (0 AudioContext, pic RAM ~24MB) ──
         setPct(3, 'Lecture WAV'); setLog('WAV > 24MB — lecture header et découpe bytes...');
@@ -1633,6 +1679,262 @@ async function transcribeOpenAI() {
   }
 }
 
+// ── GROQ TRANSCRIPTION ────────────────────────────────────
+async function transcribeGroq() {
+  var key = getGroqKey();
+  if (!selFile) return;
+  wordData = [];
+  hideErr(); hideRes(); setProg(true);
+  document.getElementById('sb').disabled = true;
+  document.getElementById('cb').classList.add('vis');
+  setSt('');
+  try {
+    var srcLang = document.getElementById('srcLang').value;
+    var outLang = document.getElementById('outLang').value;
+    var MAX_BYTES = 24 * 1024 * 1024; // 24MB safety margin
+    var srt;
+
+    if (selFile.size <= MAX_BYTES) {
+      // ── Fichier unique ───────────────────────────────────
+      setPct(10, 'Envoi Groq'); setLog('Envoi à Groq Whisper large-v3-turbo...');
+      var res = await transcribeChunkGroq(selFile, srcLang, key, 1, 1, 0);
+      detectedLang = res.lang;
+      srt = res.srt;
+      setPct(80, 'Transcription OK');
+      setLog('Transcription terminée — ' + res.segments.length + ' segments · ' + (detectedLang || 'lang?'));
+    } else {
+      // ── Fichier volumineux : auto-chunking ───────────────
+      var isWavFile = /\.wav$/i.test(selFile.name) || selFile.type === 'audio/wav';
+      var workerUrl = getWorkerUrl();
+      if (!isWavFile && workerUrl) {
+        // Déléguer au cloud via Worker
+        await transcribeCloud(workerUrl, srcLang, outLang, key);
+        return;
+      }
+      if (isWavFile) {
+        // ── Branche WAV byte slicing (0 AudioContext, pic RAM ~24MB) ──
+        setPct(3, 'Lecture WAV'); setLog('WAV > 24MB — lecture header et découpe bytes...');
+        var rawBuf = await selFile.arrayBuffer();
+        var wavMeta = parseWavHeader(rawBuf);
+        if (!wavMeta) throw new Error('WAV invalide — header non parseable. Essayez d\'extraire l\'audio depuis le fichier source.');
+        var chunkMaxPCM = MAX_BYTES - 44;
+        var framesPerChunk = Math.floor(chunkMaxPCM / wavMeta.frameSize);
+        var chunkPCMBytes  = framesPerChunk * wavMeta.frameSize;
+        var chunkDurSec    = framesPerChunk / wavMeta.sampleRate;
+        var totalWavChunks = Math.ceil(wavMeta.dataSize / chunkPCMBytes);
+        var totalDurMin    = Math.round(wavMeta.dataSize / wavMeta.bytesPerSec / 60);
+        setLog('WAV ' + totalDurMin + 'min — ' + totalWavChunks + ' tranches PCM (~' + Math.round(chunkDurSec/60) + 'min chacune, sans décodage)...');
+        var allSegments = [];
+        detectedLang = srcLang || '';
+        for (var ci = 0; ci < totalWavChunks; ci++) {
+          var pcmStart   = wavMeta.dataOffset + ci * chunkPCMBytes;
+          var pcmEnd     = Math.min(pcmStart + chunkPCMBytes, wavMeta.dataOffset + wavMeta.dataSize);
+          var pcmLen     = pcmEnd - pcmStart;
+          var offsetSec  = ci * chunkDurSec;
+          setPct(10 + Math.round((ci / totalWavChunks) * 68), 'Slice ' + (ci+1) + '/' + totalWavChunks);
+          setLog('Groq slice ' + (ci+1) + '/' + totalWavChunks + ' (' + Math.round(offsetSec/60) + 'min→' + Math.round((offsetSec + pcmLen/wavMeta.bytesPerSec)/60) + 'min)...');
+          var hdr  = buildWavChunkHdr(wavMeta, pcmLen);
+          var pcm  = rawBuf.slice(pcmStart, pcmEnd);
+          var blob = new Blob([hdr, pcm], {type:'audio/wav'});
+          var chunkFile = new File([blob], 'slice_'+ci+'.wav', {type:'audio/wav'});
+          var res = await transcribeChunkGroq(chunkFile, srcLang, key, ci+1, totalWavChunks, offsetSec);
+          if (ci === 0) detectedLang = res.lang || detectedLang;
+          allSegments = allSegments.concat(res.segments);
+        }
+        rawBuf = null;
+        srt = allSegments.map(function(seg, i) {
+          return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+(seg.text||'').trim();
+        }).join('\n\n') + '\n';
+        setPct(78, 'Assemblage'); setLog('Assemblage SRT — ' + allSegments.length + ' segments · ' + totalWavChunks + ' slices · ' + (detectedLang||'lang?'));
+      } else {
+        // ── Branche AudioContext (MP4/MKV/MP3 etc.) ──────────
+        setPct(3, 'Décodage'); setLog('Fichier volumineux — décodage audio...');
+        var arrayBuf = await selFile.arrayBuffer();
+        var tmpCtx = new (window.AudioContext || window.webkitAudioContext)();
+        var decoded;
+        try { decoded = await tmpCtx.decodeAudioData(arrayBuf); }
+        catch(e) { try { tmpCtx.close(); } catch(e2) {} throw new Error('Format non décodable — essayez MP4/H.264 ou extrayez l\'audio WAV d\'abord'); }
+        try { tmpCtx.close(); } catch(e2) {}
+        var targetSR = 16000;
+        var chunkDurSec = Math.floor(MAX_BYTES / (targetSR * 2));
+        var totalChunks = Math.ceil(decoded.duration / chunkDurSec);
+        setLog('Découpage en ' + totalChunks + ' chunks (~13min) sur ' + Math.round(decoded.duration/60) + 'min...');
+        var allSegments = [];
+        detectedLang = srcLang || '';
+        for (var ci = 0; ci < totalChunks; ci++) {
+          var chunkStartSec = ci * chunkDurSec;
+          var chunkActualDur = Math.min(chunkDurSec, decoded.duration - chunkStartSec);
+          setPct(15 + Math.round((ci / totalChunks) * 60), 'Chunk ' + (ci+1) + '/' + totalChunks);
+          setLog('Groq resample + transcription chunk ' + (ci+1) + '/' + totalChunks + ' (' + Math.round(chunkStartSec/60) + 'min→' + Math.round((chunkStartSec+chunkActualDur)/60) + 'min)...');
+          var offCtx = new OfflineAudioContext(1, Math.ceil(chunkActualDur * targetSR), targetSR);
+          var bufSrc = offCtx.createBufferSource();
+          bufSrc.buffer = decoded;
+          bufSrc.connect(offCtx.destination);
+          bufSrc.start(0, chunkStartSec, chunkActualDur);
+          var resampled = await offCtx.startRendering();
+          var wavBuf = encodeWav(resampled);
+          var chunkFile = new File([new Blob([wavBuf], {type:'audio/wav'})], 'chunk_'+ci+'.wav', {type:'audio/wav'});
+          var res = await transcribeChunkGroq(chunkFile, srcLang, key, ci+1, totalChunks, chunkStartSec);
+          if (ci === 0) detectedLang = res.lang || detectedLang;
+          allSegments = allSegments.concat(res.segments);
+        }
+        srt = allSegments.map(function(seg, i) {
+          return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+(seg.text||'').trim();
+        }).join('\n\n') + '\n';
+        setPct(78, 'Assemblage'); setLog('Assemblage SRT Groq — ' + allSegments.length + ' segments · ' + totalChunks + ' chunks · ' + (detectedLang||'lang?'));
+      }
+    }
+
+    var finalSrt = srt;
+    var wasTranslated = false;
+    var skipTranslation = (outLang === 'same') || (detectedLang && detectedLang === outLang);
+    if (!skipTranslation) {
+      var hasGemini = !!getGeminiKey(), hasAzure = !!getAzureKey(), hasDeeplx = !!getDeeplxUrl();
+      if (hasGemini || hasAzure || hasDeeplx) {
+        if (hasAzure && !hasGemini && !getAzureRegion()) {
+          showErr('RÉGION Azure manquante. SRT sans traduction conservé.');
+        } else {
+          try {
+            setPct(90, 'Traduction');
+            finalSrt = await translateSRT(srt, detectedLang, outLang);
+            wasTranslated = (finalSrt !== srt);
+          } catch(e) { showErr('Traduction échouée : ' + (e.message||String(e)) + '\nSRT sans traduction conservé.'); }
+        }
+      }
+    }
+    srtTxt = finalSrt;
+    setPct(100, 'Terminé'); setLog('Terminé');
+    document.getElementById('cb').classList.remove('vis');
+    var tgtLang = (outLang !== 'same') ? outLang : null;
+    setTimeout(function() {
+      setProg(false);
+      showRes(finalSrt, detectedLang, tgtLang, wasTranslated, wordData);
+      saveHistory({ name: origName, srt: finalSrt, srcLang: detectedLang, tgtLang: tgtLang, wasTranslated: wasTranslated, ts: Date.now(), size: selFile ? selFile.size : 0 });
+      updateSbtn();
+    }, 400);
+  } catch(e) {
+    setProg(false);
+    document.getElementById('cb').classList.remove('vis');
+    showErr(e.message || String(e));
+    updateSbtn(); setSt('err');
+  }
+}
+
+// ── CLOUD TRANSCRIPTION (Cloudflare Worker) ───────────────
+async function transcribeCloud(workerUrl, srcLang, outLang, groqKey) {
+  var base = workerUrl.replace(/\/$/, '');
+  var filesize = selFile.size;
+  var filename = selFile.name;
+  var mimeType = selFile.type || 'video/mp4';
+  var isMultipart = filesize > 100 * 1024 * 1024; // > 100MB
+
+  // 1. Obtenir presigned URL(s) du Worker
+  setLog('Préparation upload cloud...'); setPct(2, 'Presign');
+  var presignRes = await fetch(base + '/upload-presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: filename, filesize: filesize, mimeType: mimeType, multipart: isMultipart })
+  });
+  if (!presignRes.ok) throw new Error('Worker presign: ' + presignRes.status);
+  var presign = await presignRes.json();
+  var jobId = presign.jobId;
+
+  if (!isMultipart) {
+    // 2a. Upload direct (fichier <= 100MB)
+    setLog('Upload vers cloud...'); setPct(5, 'Upload');
+    var upRes = await fetch(presign.presignedUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': mimeType, 'Content-Length': String(filesize) },
+      body: selFile
+    });
+    if (!upRes.ok) throw new Error('Upload R2: ' + upRes.status);
+    setPct(30, 'Upload OK');
+
+    // 3a. Déclencher traitement
+    await fetch(base + '/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobId: jobId, r2Key: presign.r2Key, srcLang: srcLang, groqKey: groqKey })
+    });
+  } else {
+    // 2b. Upload multipart (fichier > 100MB)
+    var CHUNK_SIZE = 100 * 1024 * 1024;
+    var parts = [];
+    var totalParts = presign.chunkPresignedUrls.length;
+    for (var pi = 0; pi < totalParts; pi++) {
+      var start = pi * CHUNK_SIZE;
+      var end = Math.min(start + CHUNK_SIZE, filesize);
+      var chunk = selFile.slice(start, end);
+      setPct(5 + Math.round((pi / totalParts) * 25), 'Upload ' + (pi+1) + '/' + totalParts);
+      setLog('Upload partie ' + (pi+1) + '/' + totalParts + ' (' + Math.round(start/1024/1024) + 'MB→' + Math.round(end/1024/1024) + 'MB)...');
+      var partRes = await fetch(presign.chunkPresignedUrls[pi], {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: chunk
+      });
+      if (!partRes.ok) throw new Error('Upload part ' + (pi+1) + ': ' + partRes.status);
+      var etag = partRes.headers.get('ETag') || partRes.headers.get('etag') || '';
+      parts.push({ ETag: etag.replace(/"/g,''), PartNumber: pi + 1 });
+    }
+    // Compléter le multipart
+    var completeRes = await fetch(base + '/upload-complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uploadId: presign.uploadId, r2Key: presign.r2Key, jobId: jobId, parts: parts, groqKey: groqKey })
+    });
+    if (!completeRes.ok) throw new Error('Multipart complete: ' + completeRes.status);
+    setPct(32, 'Upload terminé');
+  }
+
+  // 4. Polling job-status
+  setLog('Traitement sur serveur cloud...'); setPct(35, 'Traitement');
+  await pollCloudJob(base, jobId, outLang);
+}
+
+async function pollCloudJob(base, jobId, outLang) {
+  var maxPolls = 600; // 30 min max
+  var pollCount = 0;
+  return new Promise(function(resolve, reject) {
+    var timer = setInterval(async function() {
+      if (pollCount++ > maxPolls) { clearInterval(timer); reject(new Error('Timeout 30min')); return; }
+      try {
+        var r = await fetch(base + '/job-status/' + jobId);
+        if (!r.ok) return;
+        var status = await r.json();
+        if (status.progress) setPct(35 + Math.round(status.progress * 0.55), status.log || 'Traitement...');
+        if (status.log) setLog(status.log);
+        if (status.status === 'done') {
+          clearInterval(timer);
+          var finalSrt = status.srt || '';
+          var detectedLangCloud = status.detectedLang || '';
+          var wasTranslated = false;
+          if (outLang && outLang !== 'same' && detectedLangCloud !== outLang && (getGeminiKey() || getAzureKey())) {
+            try {
+              setPct(90, 'Traduction');
+              var translated = await translateSRT(finalSrt, detectedLangCloud, outLang);
+              wasTranslated = (translated !== finalSrt);
+              finalSrt = translated;
+            } catch(e) { setLog('Traduction échouée'); }
+          }
+          srtTxt = finalSrt;
+          setPct(100, 'Terminé'); setLog('Terminé');
+          document.getElementById('cb').classList.remove('vis');
+          setTimeout(function() {
+            setProg(false);
+            showRes(finalSrt, detectedLangCloud, outLang !== 'same' ? outLang : null, wasTranslated, []);
+            saveHistory({ name: origName, srt: finalSrt, srcLang: detectedLangCloud, tgtLang: outLang !== 'same' ? outLang : null, wasTranslated: wasTranslated, ts: Date.now(), size: selFile ? selFile.size : 0 });
+            updateSbtn();
+          }, 400);
+          resolve();
+        } else if (status.status === 'error') {
+          clearInterval(timer);
+          reject(new Error(status.error || 'Erreur serveur cloud'));
+        }
+      } catch(e) {}
+    }, 3000);
+  });
+}
+
 async function transcribeChunkOpenAI(file, srcLang, key, chunkNum, totalChunks, offsetSec) {
   var formData = new FormData();
   formData.append('file', file);
@@ -1648,6 +1950,34 @@ async function transcribeChunkOpenAI(file, srcLang, key, chunkNum, totalChunks, 
   if (!resp.ok) {
     var errData = await resp.json().catch(function() { return {}; });
     throw new Error('OpenAI chunk ' + chunkNum + '/' + totalChunks + ' — ' + (errData.error ? errData.error.message : resp.statusText));
+  }
+  var data = await resp.json();
+  var rawLang = (data.language || '').toLowerCase();
+  var lang = WHISPER_LANG[rawLang] || srcLang || rawLang || '';
+  var segments = (data.segments || []).map(function(seg) {
+    return { start: (seg.start || 0) + offsetSec, end: (seg.end || 0) + offsetSec, text: seg.text || '' };
+  });
+  var srt = segments.map(function(seg, i) {
+    return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+seg.text.trim();
+  }).join('\n\n') + '\n';
+  return { srt: srt, lang: lang, segments: segments };
+}
+
+async function transcribeChunkGroq(file, srcLang, key, chunkNum, totalChunks, offsetSec) {
+  var formData = new FormData();
+  formData.append('file', file);
+  formData.append('model', 'whisper-large-v3-turbo');
+  formData.append('response_format', 'verbose_json');
+  formData.append('timestamp_granularities[]', 'segment');
+  if (srcLang && srcLang !== '') formData.append('language', srcLang);
+  var resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + key },
+    body: formData
+  });
+  if (!resp.ok) {
+    var errData = await resp.json().catch(function() { return {}; });
+    throw new Error('Groq chunk ' + chunkNum + '/' + totalChunks + ' — ' + (errData.error ? errData.error.message : resp.statusText));
   }
   var data = await resp.json();
   var rawLang = (data.language || '').toLowerCase();

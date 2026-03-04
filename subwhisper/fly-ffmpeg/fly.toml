@@ -1,0 +1,53 @@
+# SubWhisper FFmpeg Server — Fly.io configuration
+# Version: 1.0.0
+# Deploy: fly deploy --config fly.toml
+
+app = "subwhisper-ffmpeg"
+primary_region = "cdg"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3000"
+  MAX_CONCURRENT_JOBS = "2"
+  NODE_ENV = "production"
+
+# Secrets à configurer via: fly secrets set FLY_SECRET=xxx GROQ_API_KEY=xxx
+# fly secrets set FLY_SECRET="votre-secret-fort"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 3000
+  auto_stop_machines = "stop"
+  min_machines_running = 0
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "requests"
+    hard_limit = 10
+    soft_limit = 5
+
+  [[services.http_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
+[metrics]
+  port = 9091
+  path = "/metrics"
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
