@@ -49,14 +49,14 @@ export default {
     }
 
     try {
-      // Route dispatcher
-      if (method === 'GET'   && path === '/health')                return handleHealth();
-      if (method === 'POST'  && path === '/upload-presign')        return handleUploadPresign(request, env);
-      if (method === 'POST'  && path === '/upload-complete')       return handleUploadComplete(request, env, ctx);
-      if (method === 'POST'  && path === '/process')               return handleProcess(request, env, ctx);
-      if (method === 'GET'   && path.startsWith('/job-status/'))   return handleJobStatus(request, env, path);
-      if (method === 'PATCH' && path === '/job-done')              return handleJobDone(request, env);
-      if (method === 'DELETE'&& path.startsWith('/job/'))          return handleJobDelete(request, env, path);
+      // Route dispatcher — await obligatoire pour que le catch capte les erreurs async
+      if (method === 'GET'   && path === '/health')                return await handleHealth();
+      if (method === 'POST'  && path === '/upload-presign')        return await handleUploadPresign(request, env);
+      if (method === 'POST'  && path === '/upload-complete')       return await handleUploadComplete(request, env, ctx);
+      if (method === 'POST'  && path === '/process')               return await handleProcess(request, env, ctx);
+      if (method === 'GET'   && path.startsWith('/job-status/'))   return await handleJobStatus(request, env, path);
+      if (method === 'PATCH' && path === '/job-done')              return await handleJobDone(request, env);
+      if (method === 'DELETE'&& path.startsWith('/job/'))          return await handleJobDelete(request, env, path);
 
       return jsonResponse({ error: 'not found' }, 404);
 
