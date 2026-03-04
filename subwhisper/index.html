@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v6.3</title>
+<title>SubWhisper v6.4</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -146,6 +146,21 @@ body.light header{background:rgba(240,240,246,.88)}
 }
 .sdot.on{background:var(--success);box-shadow:0 0 8px var(--success)}
 .sdot.err{background:var(--accent2);box-shadow:0 0 8px var(--accent2)}
+
+/* ── API STATUS BAR ─────────────────────────────────────── */
+#apiBar{display:flex;align-items:center;gap:5px;margin-right:6px}
+.achip{display:flex;flex-direction:column;align-items:center;gap:2px;cursor:default}
+.adot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .4s,box-shadow .4s}
+.adot.ok{background:var(--success);box-shadow:0 0 6px var(--success)}
+.adot.err{background:var(--accent2);box-shadow:0 0 6px var(--accent2)}
+.adot.key{background:#f59e0b;animation:apiPing .8s ease-in-out infinite alternate}
+@keyframes apiPing{from{opacity:.4}to{opacity:1;box-shadow:0 0 6px #f59e0b}}
+.achip-lbl{font-family:var(--mono);font-size:7px;color:var(--muted);letter-spacing:.5px}
+#apiLvlWrap{display:flex;flex-direction:column;align-items:center;gap:2px;margin-left:1px}
+#apiLvlBar{width:32px;height:3px;border-radius:2px;background:var(--border);overflow:hidden;flex-shrink:0}
+#apiLvlFill{height:100%;border-radius:2px;width:0%;transition:width .5s,background .5s}
+#apiLvlLbl{font-family:var(--mono);font-size:7px;color:var(--muted);letter-spacing:.5px;transition:color .3s}
+@media(max-width:420px){.achip-lbl{display:none}#apiLvlLbl{display:none}}
 
 /* ── CONFIG PANEL ──────────────────────────────────────── */
 .cfg-wrap{
@@ -818,9 +833,19 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v6.3</span>
+    <span class="ver-badge">v6.4</span>
   </div>
   <div class="hdr-r">
+    <div id="apiBar" title="Clés API configurées">
+      <span class="achip" title="OpenAI Whisper (transcription)"><span class="adot" id="adotOAI"></span><span class="achip-lbl">OAI</span></span>
+      <span class="achip" title="Gemini (traduction)"><span class="adot" id="adotGEM"></span><span class="achip-lbl">GEM</span></span>
+      <span class="achip" title="AssemblyAI (fallback transcription)"><span class="adot" id="adotAAI"></span><span class="achip-lbl">AAI</span></span>
+      <span class="achip" title="Azure Translator (fallback traduction)"><span class="adot" id="adotAZR"></span><span class="achip-lbl">AZR</span></span>
+      <div id="apiLvlWrap" title="Niveau qualité 0-4">
+        <div id="apiLvlBar"><div id="apiLvlFill"></div></div>
+        <span id="apiLvlLbl">–</span>
+      </div>
+    </div>
     <button class="icon-btn" id="cfgBtn" onclick="toggleConfig()" title="Paramètres">&#9881;&#65039;</button>
     <button class="icon-btn" id="thmBtn" onclick="toggleTheme()" title="Thème">&#127769;</button>
     <div class="sdot" id="sd"></div>
@@ -1077,6 +1102,115 @@ var micContext = null;
 var micProcessor = null;
 var micFinals = [];
 var micActive = false;
+
+// ── API STATUS INDICATORS ─────────────────────────────────
+var API_DOTS = { OAI:'none', GEM:'none', AAI:'none', AZR:'none' };
+var API_LABELS = ['AUCUNE','BASIQUE','STANDARD','AVANCÉ','TOP'];
+var API_COLORS = ['#606070','#ff4d6d','#f59e0b','#7c6aff','#00d4aa'];
+
+function setDot(id, state) {
+  API_DOTS[id] = state;
+  var el = document.getElementById('adot' + id);
+  if (el) el.className = 'adot' + (state !== 'none' ? ' ' + state : '');
+  updateApiLevel();
+}
+
+function updateApiLevel() {
+  var score = Object.keys(API_DOTS).filter(function(k){ return API_DOTS[k] === 'ok'; }).length;
+  var fill = document.getElementById('apiLvlFill');
+  var lbl  = document.getElementById('apiLvlLbl');
+  if (!fill || !lbl) return;
+  fill.style.width      = Math.round(score / 4 * 100) + '%';
+  fill.style.background = API_COLORS[score] || '#606070';
+  lbl.textContent       = API_LABELS[score] || '–';
+  lbl.style.color       = API_COLORS[score] || '';
+}
+
+async function pingOAI(key) {
+  try {
+    setDot('OAI','key');
+    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 5000);
+    var r = await fetch('https://api.openai.com/v1/models', { headers:{'Authorization':'Bearer '+key}, signal:ctrl.signal });
+    setDot('OAI', r.ok ? 'ok' : 'err');
+  } catch(e) { setDot('OAI', 'err'); }
+}
+async function pingGEM(key) {
+  try {
+    setDot('GEM','key');
+    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 5000);
+    var r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+key+'&pageSize=1', { signal:ctrl.signal });
+    setDot('GEM', r.ok ? 'ok' : 'err');
+  } catch(e) { setDot('GEM', 'err'); }
+}
+async function pingAAI(key) {
+  try {
+    setDot('AAI','key');
+    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 5000);
+    var r = await fetch('https://api.assemblyai.com/v2/account', { headers:{'authorization':key}, signal:ctrl.signal });
+    setDot('AAI', r.ok ? 'ok' : 'err');
+  } catch(e) { setDot('AAI', 'err'); }
+}
+async function pingAZR(key, region) {
+  try {
+    setDot('AZR','key');
+    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 5000);
+    var hdrs = {'Ocp-Apim-Subscription-Key':key,'Content-Type':'application/json'};
+    if (region) hdrs['Ocp-Apim-Subscription-Region'] = region;
+    var r = await fetch('https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&to=en', { method:'POST', headers:hdrs, body:'[{"Text":"hi"}]', signal:ctrl.signal });
+    setDot('AZR', r.ok ? 'ok' : 'err');
+  } catch(e) { setDot('AZR', 'err'); }
+}
+
+function pingAllApis() {
+  var oai = getOpenAIKey(), gem = getGeminiKey(), aai = getApiKey(), azr = getAzureKey(), azrR = getAzureRegion();
+  if (oai) pingOAI(oai); else setDot('OAI','none');
+  if (gem) pingGEM(gem); else setDot('GEM','none');
+  if (aai) pingAAI(aai); else setDot('AAI','none');
+  if (azr) pingAZR(azr, azrR); else setDot('AZR','none');
+}
+
+// ── WAV HEADER PARSER (byte slicing) ─────────────────────
+function parseWavHeader(arrayBuf) {
+  var v = new DataView(arrayBuf);
+  if (arrayBuf.byteLength < 44) return null;
+  var riff = String.fromCharCode(v.getUint8(0),v.getUint8(1),v.getUint8(2),v.getUint8(3));
+  var wave = String.fromCharCode(v.getUint8(8),v.getUint8(9),v.getUint8(10),v.getUint8(11));
+  if (riff !== 'RIFF' || wave !== 'WAVE') return null;
+  var numChannels = 1, sampleRate = 16000, bitsPerSample = 16;
+  var offset = 12, dataOffset = -1, dataSize = 0;
+  while (offset + 8 <= arrayBuf.byteLength) {
+    var cid = String.fromCharCode(v.getUint8(offset),v.getUint8(offset+1),v.getUint8(offset+2),v.getUint8(offset+3));
+    var csz = v.getUint32(offset+4, true);
+    if (cid === 'fmt ') {
+      numChannels  = v.getUint16(offset+10, true);
+      sampleRate   = v.getUint32(offset+12, true);
+      bitsPerSample= v.getUint16(offset+22, true);
+    } else if (cid === 'data') {
+      dataOffset = offset + 8;
+      dataSize   = csz;
+      break;
+    }
+    offset += 8 + csz + (csz % 2); // word-align
+  }
+  if (dataOffset < 0) return null;
+  var bytesPerSample = bitsPerSample >>> 3;
+  var frameSize      = numChannels * bytesPerSample;
+  var bytesPerSec    = sampleRate * frameSize;
+  return { sampleRate:sampleRate, numChannels:numChannels, bitsPerSample:bitsPerSample, bytesPerSample:bytesPerSample, frameSize:frameSize, bytesPerSec:bytesPerSec, dataOffset:dataOffset, dataSize:Math.min(dataSize, arrayBuf.byteLength - dataOffset) };
+}
+
+function buildWavChunkHdr(info, chunkBytes) {
+  var buf = new ArrayBuffer(44);
+  var v   = new DataView(buf);
+  var ws  = function(o,s){ for(var i=0;i<s.length;i++) v.setUint8(o+i,s.charCodeAt(i)); };
+  ws(0,'RIFF'); v.setUint32(4, 36+chunkBytes, true);
+  ws(8,'WAVE'); ws(12,'fmt ');
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,info.numChannels,true);
+  v.setUint32(24,info.sampleRate,true); v.setUint32(28,info.bytesPerSec,true);
+  v.setUint16(32,info.frameSize,true); v.setUint16(34,info.bitsPerSample,true);
+  ws(36,'data'); v.setUint32(40,chunkBytes,true);
+  return buf;
+}
 var currentActiveBlockId = null;
 var origVideoFile = null;
 
@@ -1091,13 +1225,13 @@ function toggleConfig() {
 // ── INIT ──────────────────────────────────────────────────
 function init() {
   try { var ok = localStorage.getItem('sw_openaikey'); if (ok) document.getElementById('openaiKey').value = ok; } catch(e) {}
-  document.getElementById('openaiKey').addEventListener('change', function() { try { localStorage.setItem('sw_openaikey', this.value.trim()); } catch(e) {} });
+  document.getElementById('openaiKey').addEventListener('change', function() { try { localStorage.setItem('sw_openaikey', this.value.trim()); } catch(e) {} pingAllApis(); });
   try { var sk = localStorage.getItem('sw_apikey'); if (sk) document.getElementById('apiKey').value = sk; } catch(e) {}
-  document.getElementById('apiKey').addEventListener('change', function() { try { localStorage.setItem('sw_apikey', getApiKey()); } catch(e) {} });
+  document.getElementById('apiKey').addEventListener('change', function() { try { localStorage.setItem('sw_apikey', getApiKey()); } catch(e) {} pingAllApis(); });
   try { var gk = localStorage.getItem('sw_geminikey'); if (gk) document.getElementById('geminiKey').value = gk; } catch(e) {}
-  document.getElementById('geminiKey').addEventListener('change', function() { try { localStorage.setItem('sw_geminikey', this.value.trim()); } catch(e) {} });
+  document.getElementById('geminiKey').addEventListener('change', function() { try { localStorage.setItem('sw_geminikey', this.value.trim()); } catch(e) {} pingAllApis(); });
   try { var ak = localStorage.getItem('sw_azurekey'); if (ak) document.getElementById('azureKey').value = ak; } catch(e) {}
-  document.getElementById('azureKey').addEventListener('change', function() { try { localStorage.setItem('sw_azurekey', this.value.trim()); } catch(e) {} });
+  document.getElementById('azureKey').addEventListener('change', function() { try { localStorage.setItem('sw_azurekey', this.value.trim()); } catch(e) {} pingAllApis(); });
   try { var ar = localStorage.getItem('sw_azureregion'); if (ar) document.getElementById('azureRegion').value = ar; } catch(e) {}
   document.getElementById('azureRegion').addEventListener('change', function() { try { localStorage.setItem('sw_azureregion', this.value.trim()); } catch(e) {} });
   try { var dlx = localStorage.getItem('sw_deeplxurl'); if (dlx) document.getElementById('deeplxUrl').value = dlx; } catch(e) {}
@@ -1137,6 +1271,8 @@ function init() {
     }
   });
   renderHistory();
+  // Ping APIs au démarrage (fire-and-forget)
+  pingAllApis();
 }
 
 function getApiKey()    { return document.getElementById('apiKey').value.trim(); }
@@ -1383,42 +1519,83 @@ async function transcribeOpenAI() {
       setLog('Transcription terminée — ' + res.segments.length + ' segments · ' + (detectedLang || 'lang?'));
     } else {
       // ── Fichier volumineux : auto-chunking ───────────────
-      setPct(3, 'Décodage'); setLog('Fichier volumineux — décodage audio...');
-      var arrayBuf = await selFile.arrayBuffer();
-      var tmpCtx = new (window.AudioContext || window.webkitAudioContext)();
-      var decoded;
-      try { decoded = await tmpCtx.decodeAudioData(arrayBuf); }
-      catch(e) { try { tmpCtx.close(); } catch(e2) {} throw new Error('Format non décodable — essayez MP4/H.264 ou extrayez l\'audio WAV d\'abord'); }
-      try { tmpCtx.close(); } catch(e2) {}
-      // Chunking par durée : 1 OfflineAudioContext par chunk (évite la limite browser sur grands buffers)
-      var targetSR = 16000;
-      var chunkDurSec = Math.floor(MAX_BYTES / (targetSR * 2)); // ~786s = ~13min par chunk
-      var totalChunks = Math.ceil(decoded.duration / chunkDurSec);
-      setLog('Découpage en ' + totalChunks + ' chunks (~13min) sur ' + Math.round(decoded.duration/60) + 'min...');
-      var allSegments = [];
-      detectedLang = srcLang || '';
-      for (var ci = 0; ci < totalChunks; ci++) {
-        var chunkStartSec = ci * chunkDurSec;
-        var chunkActualDur = Math.min(chunkDurSec, decoded.duration - chunkStartSec);
-        setPct(15 + Math.round((ci / totalChunks) * 60), 'Chunk ' + (ci+1) + '/' + totalChunks);
-        setLog('Resample + transcription chunk ' + (ci+1) + '/' + totalChunks + ' (' + Math.round(chunkStartSec/60) + 'min→' + Math.round((chunkStartSec+chunkActualDur)/60) + 'min)...');
-        // OfflineAudioContext dédié à ce chunk uniquement
-        var offCtx = new OfflineAudioContext(1, Math.ceil(chunkActualDur * targetSR), targetSR);
-        var bufSrc = offCtx.createBufferSource();
-        bufSrc.buffer = decoded;
-        bufSrc.connect(offCtx.destination);
-        bufSrc.start(0, chunkStartSec, chunkActualDur); // offset dans le buffer original
-        var resampled = await offCtx.startRendering();
-        var wavBuf = encodeWav(resampled);
-        var chunkFile = new File([new Blob([wavBuf], {type:'audio/wav'})], 'chunk_'+ci+'.wav', {type:'audio/wav'});
-        var res = await transcribeChunkOpenAI(chunkFile, srcLang, key, ci+1, totalChunks, chunkStartSec);
-        if (ci === 0) detectedLang = res.lang || detectedLang;
-        allSegments = allSegments.concat(res.segments);
+      var isWavFile = /\.wav$/i.test(selFile.name) || selFile.type === 'audio/wav';
+      if (isWavFile) {
+        // ── Branche WAV byte slicing (0 AudioContext, pic RAM ~24MB) ──
+        setPct(3, 'Lecture WAV'); setLog('WAV > 24MB — lecture header et découpe bytes...');
+        var rawBuf = await selFile.arrayBuffer();
+        var wavMeta = parseWavHeader(rawBuf);
+        if (!wavMeta) throw new Error('WAV invalide — header non parseable. Essayez d\'extraire l\'audio depuis le fichier source.');
+        // Calcul des chunks (aligné sur frame boundary)
+        var chunkMaxPCM = MAX_BYTES - 44; // réserver 44 bytes pour le header
+        var framesPerChunk = Math.floor(chunkMaxPCM / wavMeta.frameSize);
+        var chunkPCMBytes  = framesPerChunk * wavMeta.frameSize;
+        var chunkDurSec    = framesPerChunk / wavMeta.sampleRate;
+        var totalWavChunks = Math.ceil(wavMeta.dataSize / chunkPCMBytes);
+        var totalDurMin    = Math.round(wavMeta.dataSize / wavMeta.bytesPerSec / 60);
+        setLog('WAV ' + totalDurMin + 'min — ' + totalWavChunks + ' tranches PCM (~' + Math.round(chunkDurSec/60) + 'min chacune, sans décodage)...');
+        var allSegments = [];
+        detectedLang = srcLang || '';
+        for (var ci = 0; ci < totalWavChunks; ci++) {
+          var pcmStart   = wavMeta.dataOffset + ci * chunkPCMBytes;
+          var pcmEnd     = Math.min(pcmStart + chunkPCMBytes, wavMeta.dataOffset + wavMeta.dataSize);
+          var pcmLen     = pcmEnd - pcmStart;
+          var offsetSec  = ci * chunkDurSec;
+          setPct(10 + Math.round((ci / totalWavChunks) * 68), 'Slice ' + (ci+1) + '/' + totalWavChunks);
+          setLog('Transcription slice ' + (ci+1) + '/' + totalWavChunks + ' (' + Math.round(offsetSec/60) + 'min→' + Math.round((offsetSec + pcmLen/wavMeta.bytesPerSec)/60) + 'min)...');
+          // Construire nouveau WAV header + slice PCM brut → pas de copie, ArrayBuffer.slice
+          var hdr  = buildWavChunkHdr(wavMeta, pcmLen);
+          var pcm  = rawBuf.slice(pcmStart, pcmEnd);
+          var blob = new Blob([hdr, pcm], {type:'audio/wav'});
+          var chunkFile = new File([blob], 'slice_'+ci+'.wav', {type:'audio/wav'});
+          var res = await transcribeChunkOpenAI(chunkFile, srcLang, key, ci+1, totalWavChunks, offsetSec);
+          if (ci === 0) detectedLang = res.lang || detectedLang;
+          allSegments = allSegments.concat(res.segments);
+        }
+        rawBuf = null; // libérer mémoire explicitement
+        srt = allSegments.map(function(seg, i) {
+          return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+(seg.text||'').trim();
+        }).join('\n\n') + '\n';
+        setPct(78, 'Assemblage'); setLog('Assemblage SRT — ' + allSegments.length + ' segments · ' + totalWavChunks + ' slices · ' + (detectedLang||'lang?'));
+      } else {
+        // ── Branche AudioContext (MP4/MKV/MP3 etc.) ──────────
+        setPct(3, 'Décodage'); setLog('Fichier volumineux — décodage audio...');
+        var arrayBuf = await selFile.arrayBuffer();
+        var tmpCtx = new (window.AudioContext || window.webkitAudioContext)();
+        var decoded;
+        try { decoded = await tmpCtx.decodeAudioData(arrayBuf); }
+        catch(e) { try { tmpCtx.close(); } catch(e2) {} throw new Error('Format non décodable — essayez MP4/H.264 ou extrayez l\'audio WAV d\'abord'); }
+        try { tmpCtx.close(); } catch(e2) {}
+        // Chunking par durée : 1 OfflineAudioContext par chunk (évite la limite browser sur grands buffers)
+        var targetSR = 16000;
+        var chunkDurSec = Math.floor(MAX_BYTES / (targetSR * 2)); // ~786s = ~13min par chunk
+        var totalChunks = Math.ceil(decoded.duration / chunkDurSec);
+        setLog('Découpage en ' + totalChunks + ' chunks (~13min) sur ' + Math.round(decoded.duration/60) + 'min...');
+        var allSegments = [];
+        detectedLang = srcLang || '';
+        for (var ci = 0; ci < totalChunks; ci++) {
+          var chunkStartSec = ci * chunkDurSec;
+          var chunkActualDur = Math.min(chunkDurSec, decoded.duration - chunkStartSec);
+          setPct(15 + Math.round((ci / totalChunks) * 60), 'Chunk ' + (ci+1) + '/' + totalChunks);
+          setLog('Resample + transcription chunk ' + (ci+1) + '/' + totalChunks + ' (' + Math.round(chunkStartSec/60) + 'min→' + Math.round((chunkStartSec+chunkActualDur)/60) + 'min)...');
+          // OfflineAudioContext dédié à ce chunk uniquement
+          var offCtx = new OfflineAudioContext(1, Math.ceil(chunkActualDur * targetSR), targetSR);
+          var bufSrc = offCtx.createBufferSource();
+          bufSrc.buffer = decoded;
+          bufSrc.connect(offCtx.destination);
+          bufSrc.start(0, chunkStartSec, chunkActualDur); // offset dans le buffer original
+          var resampled = await offCtx.startRendering();
+          var wavBuf = encodeWav(resampled);
+          var chunkFile = new File([new Blob([wavBuf], {type:'audio/wav'})], 'chunk_'+ci+'.wav', {type:'audio/wav'});
+          var res = await transcribeChunkOpenAI(chunkFile, srcLang, key, ci+1, totalChunks, chunkStartSec);
+          if (ci === 0) detectedLang = res.lang || detectedLang;
+          allSegments = allSegments.concat(res.segments);
+        }
+        srt = allSegments.map(function(seg, i) {
+          return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+(seg.text||'').trim();
+        }).join('\n\n') + '\n';
+        setPct(78, 'Assemblage'); setLog('Assemblage SRT — ' + allSegments.length + ' segments · ' + totalChunks + ' chunks · ' + (detectedLang||'lang?'));
       }
-      srt = allSegments.map(function(seg, i) {
-        return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+(seg.text||'').trim();
-      }).join('\n\n') + '\n';
-      setPct(78, 'Assemblage'); setLog('Assemblage SRT — ' + allSegments.length + ' segments · ' + totalChunks + ' chunks · ' + (detectedLang||'lang?'));
     }
 
     var finalSrt = srt;
