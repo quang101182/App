@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.4.0 — Retry intelligent pour Groq HTTP 429 (rate limit)
+ * Version: 1.5.0 — Clamp seg.end à la durée réelle du chunk (hallucinations Groq timestamps)
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -13,8 +13,11 @@
  *  - const pcmAccum → let pcmAccum (TypeError assignment to const)
  * Fixes v1.4.0:
  *  - Groq HTTP 429 : parse "try again in Xm Y.Zs" et attend exactement ce délai
- *    → au lieu de 5-15s, attend 5+ minutes selon la réponse Groq
  *  - MAX_RETRIES 3→5 pour couvrir plusieurs fenêtres de rate limit
+ * Fixes v1.5.0:
+ *  - Groq Whisper hallucine parfois seg.end >> durée du chunk (ex: 9min→1h00)
+ *    → clamp seg.end à chunkDurationSec avant d'ajouter offsetSec
+ *    → passe chunkDurationSec = pcmChunk.length/32000 à transcribeWithGroq
  */
 
 'use strict';
@@ -83,7 +86,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.4.0'
+    version: '1.5.0'
   });
 });
 
@@ -316,6 +319,7 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
 
           lastGroqCallTime = Date.now();
 
+          const chunkDurationSec = pcmChunk.length / 32000;
           const wavBuffer = buildWavBuffer(pcmChunk);
           const segments = await transcribeWithGroq({
             jobId,
@@ -324,6 +328,7 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
             srcLang,
             groqKey,
             offsetSec,
+            chunkDurationSec,
             workerCallbackUrl,
             workerSecret
           });
@@ -374,7 +379,7 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
 // Transcription Groq avec retry x3 — FormData NATIF Node.js 20
 // ---------------------------------------------------------------------------
 
-async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey, offsetSec, workerCallbackUrl, workerSecret }) {
+async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey, offsetSec, chunkDurationSec, workerCallbackUrl, workerSecret }) {
   const MAX_RETRIES = 5; // augmenté pour couvrir plusieurs fenêtres rate-limit Groq
   let lastError;
 
@@ -429,11 +434,18 @@ async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey
         return [];
       }
 
-      const segments = data.segments.map(seg => ({
-        start: (seg.start || 0) + offsetSec,
-        end: (seg.end || 0) + offsetSec,
-        text: (seg.text || '').trim()
-      })).filter(seg => seg.text.length > 0);
+      // Clamp seg.end à chunkDurationSec : Groq Whisper hallucine parfois des end >> durée du chunk
+      // (ex: segment à 9min avec end=1h00 au lieu de 9min22s → sous-titre bloqué en lecture)
+      const maxRelEnd = chunkDurationSec || CHUNK_DUR_SEC;
+      const segments = data.segments.map(seg => {
+        const relStart = seg.start || 0;
+        const relEnd   = Math.min(seg.end || 0, maxRelEnd);
+        return {
+          start: relStart + offsetSec,
+          end  : Math.max(relEnd + offsetSec, relStart + offsetSec + 0.1), // end > start toujours
+          text : (seg.text || '').trim()
+        };
+      }).filter(seg => seg.text.length > 0);
 
       console.log(`[${jobId}] Chunk ${chunkIdx}: ${segments.length} segments reçus de Groq (offset=${offsetSec.toFixed(1)}s)`);
       return segments;
