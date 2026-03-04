@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.5.0 — Clamp seg.end à la durée réelle du chunk (hallucinations Groq timestamps)
+ * Version: 1.6.0 — Cap 30s max par segment (hallucinations durée modérée type 51s)
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -18,6 +18,10 @@
  *  - Groq Whisper hallucine parfois seg.end >> durée du chunk (ex: 9min→1h00)
  *    → clamp seg.end à chunkDurationSec avant d'ajouter offsetSec
  *    → passe chunkDurationSec = pcmChunk.length/32000 à transcribeWithGroq
+ * Fixes v1.6.0:
+ *  - Groq Whisper hallucine parfois des segments de durée modérée (ex: 51.9s) dans un boundary chunk
+ *    → non corrigés par le clamp v1.5.0 (le segment reste dans la durée du chunk)
+ *    → cap 30s max par segment : Math.min(seg.end, relStart+30, maxRelEnd)
  */
 
 'use strict';
@@ -86,7 +90,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.5.0'
+    version: '1.6.0'
   });
 });
 
@@ -439,7 +443,7 @@ async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey
       const maxRelEnd = chunkDurationSec || CHUNK_DUR_SEC;
       const segments = data.segments.map(seg => {
         const relStart = seg.start || 0;
-        const relEnd   = Math.min(seg.end || 0, maxRelEnd);
+        const relEnd   = Math.min(seg.end || 0, relStart + 30, maxRelEnd); // cap 30s max/segment
         return {
           start: relStart + offsetSec,
           end  : Math.max(relEnd + offsetSec, relStart + offsetSec + 0.1), // end > start toujours
