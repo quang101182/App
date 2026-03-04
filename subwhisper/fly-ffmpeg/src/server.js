@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.1.0 — Fix multipart/form-data natif + chunks séquentiels
+ * Version: 1.2.0 — Fix O(n²) Buffer.concat → array accumulation + concat unique dans end
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -75,7 +75,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.1.0'
+    version: '1.2.0'
   });
 });
 
@@ -222,7 +222,9 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
     let promiseResolved = false;
     let headerParsed = false;
     let headerAccum = Buffer.alloc(0);
-    let pcmAccum = Buffer.alloc(0); // accumuler TOUT le PCM, traiter séquentiellement dans end
+    // IMPORTANT: on accumule les chunks dans un array et on concat UNE SEULE FOIS à la fin
+    // Buffer.concat([buf, chunk]) dans un loop = O(n²) copies → bloque l'event loop sur gros fichiers
+    const pcmChunks = [];
 
     ffmpeg.stderr.on('data', d => { ffmpegStderr += d.toString(); });
 
@@ -234,7 +236,7 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
           headerParsed = true;
           const remaining = headerAccum.slice(44);
           if (remaining.length > 0) {
-            pcmAccum = Buffer.concat([pcmAccum, remaining]);
+            pcmChunks.push(remaining);
           }
           // Estimer durée et nombre de chunks
           const bytesPerSec = headerAccum.readUInt32LE(28);
@@ -253,12 +255,14 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
         }
         return;
       }
-      // Accumuler PCM
-      pcmAccum = Buffer.concat([pcmAccum, chunk]);
+      // Accumuler PCM dans l'array (O(1) par event, concat unique dans end)
+      pcmChunks.push(chunk);
     });
 
     // Phase 2: tout le PCM est accumulé, traiter chunks SÉQUENTIELLEMENT
     ffmpeg.stdout.on('end', async () => {
+      // Concat unique ici — O(n) au lieu de O(n²) dans le data handler
+      const pcmAccum = pcmChunks.length > 0 ? Buffer.concat(pcmChunks) : Buffer.alloc(0);
       console.log(`[${jobId}] FFmpeg stdout terminé. PCM total: ${pcmAccum.length} bytes (${(pcmAccum.length / 1024 / 1024).toFixed(1)} MB)`);
 
       if (!headerParsed || pcmAccum.length === 0) {
@@ -544,7 +548,7 @@ function formatTime(sec) {
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.1.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.2.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);
