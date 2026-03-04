@@ -116,13 +116,24 @@ app.post('/extract', requireFlySecret, (req, res) => {
 
   // Lancer le pipeline en arrière-plan
   activeJobs++;
-  processJob({ jobId, presignedDownload, srcLang, workerCallbackUrl, workerSecret, groqKey })
-    .catch(err => {
-      console.error(`[${jobId}] Erreur non catchée dans processJob:`, err);
+  const JOB_TIMEOUT_MS = 50 * 60 * 1000; // 50 min max par job
+  const jobTimeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Job timeout 50min dépassé')), JOB_TIMEOUT_MS)
+  );
+  Promise.race([
+    processJob({ jobId, presignedDownload, srcLang, workerCallbackUrl, workerSecret, groqKey }),
+    jobTimeout
+  ])
+    .catch(async err => {
+      console.error(`[${jobId}] Erreur pipeline:`, err.message);
+      // Notifier le Worker de l'échec pour sortir l'app du polling immédiatement
+      await updateWorker(workerCallbackUrl, workerSecret, {
+        jobId, status: 'error', error: err.message
+      }).catch(() => {});
     })
     .finally(() => {
       activeJobs--;
-      console.log(`[${jobId}] Job terminé. Jobs actifs restants: ${activeJobs}`);
+      console.log(`[${jobId}] Job terminé. Jobs actifs: ${activeJobs}`);
     });
 });
 
