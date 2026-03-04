@@ -399,11 +399,12 @@ function getS3Config(env) {
 
 /** Generate a presigned PUT URL (single-part upload) */
 async function presignPut(cfg, key, contentType, ttlSeconds) {
+  // Content-Type envoyé comme header HTTP par le client (non signé)
   return presignS3Request(cfg, {
     method      : 'PUT',
     key,
     ttlSeconds,
-    queryParams : { 'Content-Type': contentType },
+    queryParams : {},
   });
 }
 
@@ -460,8 +461,8 @@ async function presignS3Request(cfg, { method, key, ttlSeconds, queryParams = {}
     .map(k => `${uriEncode(k)}=${uriEncode(allQueryParams[k])}`)
     .join('&');
 
-  // Canonical URI (path encode — key already relative)
-  const canonicalUri = '/' + key.split('/').map(segment => uriEncode(segment)).join('/');
+  // Canonical URI — doit inclure /<bucket>/<key> (path-style R2)
+  const canonicalUri = '/' + [bucketName, ...key.split('/')].map(segment => uriEncode(segment)).join('/');
 
   // Canonical headers
   const canonicalHeaders = `host:${host}\n`;
