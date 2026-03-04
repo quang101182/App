@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.6.0 — Cap 30s max par segment (hallucinations durée modérée type 51s)
+ * Version: 1.7.0 — Filtre seg.start >= chunkDurationSec (hallucinations start hors-limites)
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -22,6 +22,10 @@
  *  - Groq Whisper hallucine parfois des segments de durée modérée (ex: 51.9s) dans un boundary chunk
  *    → non corrigés par le clamp v1.5.0 (le segment reste dans la durée du chunk)
  *    → cap 30s max par segment : Math.min(seg.end, relStart+30, maxRelEnd)
+ * Fixes v1.7.0:
+ *  - Groq Whisper hallucine seg.start >= chunkDurationSec → timestamps finaux > durée vidéo
+ *    → ex: chunk de 786s, seg.start=820s → offset+820 >> durée vidéo
+ *    → filtre : skip les segments dont relStart >= maxRelEnd (hors frontière chunk)
  */
 
 'use strict';
@@ -90,7 +94,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.6.0'
+    version: '1.7.0'
   });
 });
 
@@ -439,9 +443,16 @@ async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey
       }
 
       // Clamp seg.end à chunkDurationSec : Groq Whisper hallucine parfois des end >> durée du chunk
-      // (ex: segment à 9min avec end=1h00 au lieu de 9min22s → sous-titre bloqué en lecture)
+      // v1.7.0: filtre aussi seg.start >= chunkDurationSec (hallucination start hors-limites → dépasse durée vidéo)
       const maxRelEnd = chunkDurationSec || CHUNK_DUR_SEC;
-      const segments = data.segments.map(seg => {
+      const segments = data.segments.filter(seg => {
+        const relStart = seg.start || 0;
+        if (relStart >= maxRelEnd) {
+          console.warn(`[${jobId}] Chunk ${chunkIdx}: skip hallucination start=${relStart.toFixed(1)}s >= chunkDur=${maxRelEnd.toFixed(1)}s — "${(seg.text||'').trim().substring(0,60)}"`);
+          return false;
+        }
+        return true;
+      }).map(seg => {
         const relStart = seg.start || 0;
         const relEnd   = Math.min(seg.end || 0, relStart + 30, maxRelEnd); // cap 30s max/segment
         return {
@@ -590,7 +601,7 @@ function formatTime(sec) {
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.3.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.7.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);
