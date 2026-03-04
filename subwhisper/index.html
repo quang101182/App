@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v7.5</title>
+<title>SubWhisper v7.6</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -160,7 +160,7 @@ body.light header{background:rgba(240,240,246,.88)}
 #apiLvlBar{width:32px;height:3px;border-radius:2px;background:var(--border);overflow:hidden;flex-shrink:0}
 #apiLvlFill{height:100%;border-radius:2px;width:0%;transition:width .5s,background .5s}
 #apiLvlLbl{font-family:var(--mono);font-size:7px;color:var(--muted);letter-spacing:.5px;transition:color .3s}
-@media(max-width:420px){.achip-lbl{display:none}#apiLvlLbl{display:none}}
+@media(max-width:480px){#apiBar{flex-wrap:wrap;max-width:74px;row-gap:3px;margin-right:4px}#apiLvlWrap{flex:0 0 100%;flex-direction:row;align-items:center;gap:4px;margin:1px 0 0}#apiLvlBar{width:44px}#apiLvlLbl{display:block}}
 
 /* ── CONFIG PANEL ──────────────────────────────────────── */
 .cfg-wrap{
@@ -863,8 +863,9 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 .mic-partial{font-style:italic;color:var(--muted);font-size:13px;min-height:20px}
 .mic-final{color:var(--text);font-size:13px;line-height:1.7;white-space:pre-wrap;margin-top:6px}
 /* ── SUB OVERLAY ── */
-#subOverlay{position:absolute;bottom:58px;left:0;right:0;text-align:center;font-size:15px;font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.95),0 0 20px rgba(0,0,0,.7);cursor:pointer;padding:4px 16px;transition:opacity .2s;white-space:pre-wrap;line-height:1.4;z-index:10}
-#subOverlay:hover{opacity:.75}
+#subOverlay{position:absolute;bottom:58px;left:0;right:0;text-align:center;font-size:15px;font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.95),0 0 20px rgba(0,0,0,.7);padding:4px 16px;white-space:pre-wrap;line-height:1.4;z-index:10;pointer-events:none}
+#subOverlayInner{cursor:pointer;pointer-events:auto;display:inline-block;transition:opacity .2s}
+#subOverlayInner:hover{opacity:.75}
 /* ── SUB EDIT MODAL ── */
 #subEditModal{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center}
 #subEditInner{background:var(--surface2);backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);border:1px solid var(--border2);border-radius:20px;padding:24px;width:min(480px,90vw)}
@@ -878,7 +879,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v7.5</span>
+    <span class="ver-badge">v7.6</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1068,6 +1069,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     <div class="rac">
       <button class="ab" id="addVideoBtn" onclick="openVideoForPreview()" style="display:none" title="Charger une vid\u00e9o pour voir les sous-titres en overlay">&#x1F39E; VID\u00c9O</button>
       <button class="ab" onclick="openFR()" id="frBtn">&#x1F50D; F&amp;R</button>
+      <button class="ab" onclick="repairSRTTimestamps()" id="repairBtn" title="Corriger les timestamps aberrants (overflow, hallucinations Groq)">&#x1F527; R&#xC9;PARER</button>
       <button class="ab" onclick="copySRT()" id="copyBtn">COPIER</button>
       <button class="ab" id="richToggleBtn" onclick="toggleRichView()" disabled title="Données word-level indisponibles">&#x25A7; RICH</button>
       <button class="ab" onclick="dlTXT()">&#x2B07; TXT</button>
@@ -2517,6 +2519,58 @@ function shiftSRT(srtContent, offsetMs) {
   }
   return buildSRT(shifted);
 }
+// ── REPAIR TIMESTAMPS ─────────────────────────────────────
+function repairSRTTimestamps() {
+  var raw = getCurrentSRT();
+  if (!raw || !raw.trim()) { toast('Aucun SRT \u00e0 r\u00e9parer'); return; }
+  var blocks = parseSRT(raw);
+  if (!blocks.length) { toast('SRT invalide'); return; }
+  var MAX_DUR_MS  = 8000;   // cap fallback si dur\u00e9e > 30s sans contexte suivant
+  var THRESHOLD_MS = 30000; // dur\u00e9e suspecte (= cap Groq v1.6.0)
+  var MIN_GAP_MS  = 100;
+  var fixed = 0;
+  for (var i = 0; i < blocks.length; i++) {
+    var parts    = blocks[i].timestamp.split(' --> ');
+    var startMs  = tsToMs(parts[0]);
+    var endMs    = tsToMs(parts[1]);
+    var nextStartMs = (i < blocks.length - 1) ? tsToMs(blocks[i+1].timestamp.split(' --> ')[0]) : null;
+    var newEnd = endMs;
+    // R\u00e8gle 1 : end d\u00e9borde sur le bloc suivant → clamp \u00e0 next_start - 100ms
+    if (nextStartMs !== null && newEnd > nextStartMs - MIN_GAP_MS) {
+      newEnd = Math.max(startMs + 200, nextStartMs - MIN_GAP_MS);
+    }
+    // R\u00e8gle 2 : dur\u00e9e > 30s et pas de contrainte suivante → cap \u00e0 8s
+    if (endMs - startMs > THRESHOLD_MS && newEnd === endMs) {
+      newEnd = startMs + MAX_DUR_MS;
+    }
+    // S\u00e9curit\u00e9 : end ne peut pas \u00eatre avant start
+    if (newEnd <= startMs) newEnd = startMs + 1000;
+    if (newEnd !== endMs) {
+      blocks[i].timestamp = parts[0] + ' --> ' + msToTs(newEnd);
+      fixed++;
+    }
+  }
+  var repaired = buildSRT(blocks);
+  srtOriginal = repaired;
+  currentOffset = 0;
+  document.getElementById('sp').value = repaired;
+  document.getElementById('offsetDisplay').textContent = '0 ms';
+  document.getElementById('offsetDisplay').style.color = 'var(--accent)';
+  // Recharger la preview VTT si active
+  if (previewVttUrl) { URL.revokeObjectURL(previewVttUrl); previewVttUrl = null; }
+  var track = document.getElementById('previewTrack');
+  if (track && typeof srtToVtt === 'function') {
+    var vttBlob = new Blob([srtToVtt(repaired)], { type: 'text/vtt' });
+    previewVttUrl = URL.createObjectURL(vttBlob);
+    track.src = '';
+    setTimeout(function() {
+      track.src = previewVttUrl;
+      var tv = document.getElementById('previewVideo');
+      if (tv && tv.textTracks[0]) tv.textTracks[0].mode = 'showing';
+    }, 50);
+  }
+  toast(fixed > 0 ? '\u2713 ' + fixed + ' timestamp(s) r\u00e9par\u00e9(s)' : '\u2713 Aucune anomalie d\u00e9tect\u00e9e');
+}
 // ── MIC LIVE ──────────────────────────────────────────────
 async function startMic() {
   var apiKey = getApiKey();
@@ -2711,7 +2765,10 @@ function initSubOverlay(videoEl) {
   destroySubOverlay();
   var overlay = document.createElement('div');
   overlay.id = 'subOverlay';
-  overlay.onclick = function() { openSubEditModal(); };
+  var inner = document.createElement('span');
+  inner.id = 'subOverlayInner';
+  inner.onclick = function() { openSubEditModal(); };
+  overlay.appendChild(inner);
   document.getElementById('previewWrap').appendChild(overlay);
   _timeupdateOverlay = function() { updateSubOverlay(); };
   videoEl.addEventListener('timeupdate', _timeupdateOverlay);
@@ -2728,8 +2785,8 @@ function destroySubOverlay() {
 }
 
 function updateSubOverlay() {
-  var overlay = document.getElementById('subOverlay');
-  if (!overlay) return;
+  var inner = document.getElementById('subOverlayInner');
+  if (!inner) return;
   var vid = document.getElementById('previewVideo');
   var currentMs = vid.currentTime * 1000;
   // Lire le SRT avec offset appliqué (sp.value) pour rester en sync avec les sous-titres affichés
@@ -2746,7 +2803,7 @@ function updateSubOverlay() {
       break;
     }
   }
-  overlay.textContent = found ? found + ' ✏' : '';
+  inner.textContent = found ? found + ' \u270F' : '';
 }
 
 function openSubEditModal() {
