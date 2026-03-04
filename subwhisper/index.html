@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.3</title>
+<title>SubWhisper v8.4</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -892,7 +892,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.3</span>
+    <span class="ver-badge">v8.4</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -2544,8 +2544,8 @@ function shiftSRT(srtContent, offsetMs) {
   }
   return buildSRT(shifted);
 }
-// ── REPAIR TIMESTAMPS v3 ──────────────────────────────────
-// Algo 7 règles : médiane + RC filtre blocs hors durée vidéo
+// ── REPAIR TIMESTAMPS v4 ──────────────────────────────────
+// Algo 8 règles : recalibration clusters + médiane + RC filtre hors-durée
 function repairSRTTimestamps() {
   var raw = getCurrentSRT();
   if (!raw || !raw.trim()) { toast('Aucun SRT \u00e0 r\u00e9parer'); return; }
@@ -2564,9 +2564,48 @@ function repairSRTTimestamps() {
   var DUR_MIN           =   200;  // bloc imperceptible <200ms
   var DUR_HALLUCINATION = 60000;  // >60s : hallucination catastrophique certaine
   var DUR_MODEREE       = 30050;  // zone grise ]30s\u201360s]
-  var FALLBACK_DUR      =  4000;  // m\u00e9diane par d\u00e9faut si donn\u00e9es insuffisantes
+  var FALLBACK_DUR      =  4000;  // médiane par défaut si données insuffisantes
+  // Fly.io pipeline : chunk 24MB WAV 16kHz mono 16-bit = 786431ms (~13:06)
+  var CLUSTER_CHUNK_MS  = 786431;
+  var CLUSTER_JUMP_MS   = Math.round(CLUSTER_CHUNK_MS * 0.4); // seuil détection ~5min
 
-  // ── \u00c9TAPE 0 : M\u00e9diane dynamique sur blocs sains ────────────
+  // ── ÉTAPE -1 : Recalibration clusters ────────────────────
+  // Détecte les sauts de startMs > CLUSTER_JUMP_MS (hallucinations Groq/Fly)
+  // et repositionne chaque cluster à son offset attendu N × CLUSTER_CHUNK_MS
+  blocks.sort(function(a, b) {
+    return tsToMs(a.timestamp.split(' --> ')[0]) - tsToMs(b.timestamp.split(' --> ')[0]);
+  });
+  var clBoundaries = [0]; // indices de début de chaque cluster
+  for (var ci = 1; ci < blocks.length; ci++) {
+    var prevS = tsToMs(blocks[ci-1].timestamp.split(' --> ')[0]);
+    var curS  = tsToMs(blocks[ci].timestamp.split(' --> ')[0]);
+    if (curS - prevS > CLUSTER_JUMP_MS) clBoundaries.push(ci);
+  }
+  var clustersShifted = 0;
+  if (clBoundaries.length > 1) {
+    for (var cn = 1; cn < clBoundaries.length; cn++) {
+      var cStart = clBoundaries[cn];
+      var cEnd   = cn < clBoundaries.length - 1 ? clBoundaries[cn + 1] : blocks.length;
+      var clusterFirstMs = tsToMs(blocks[cStart].timestamp.split(' --> ')[0]);
+      var expectedMs     = cn * CLUSTER_CHUNK_MS;
+      var shift          = expectedMs - clusterFirstMs;
+      if (shift === 0) continue;
+      for (var cj = cStart; cj < cEnd; cj++) {
+        var cPts   = blocks[cj].timestamp.split(' --> ');
+        var newS   = Math.max(0, tsToMs(cPts[0]) + shift);
+        var newE   = tsToMs(cPts[1]) + shift;
+        if (newE <= newS) newE = newS + 100;
+        blocks[cj].timestamp = msToTs(newS) + ' --> ' + msToTs(newE);
+      }
+      clustersShifted++;
+    }
+    // Re-trier après repositionnement
+    blocks.sort(function(a, b) {
+      return tsToMs(a.timestamp.split(' --> ')[0]) - tsToMs(b.timestamp.split(' --> ')[0]);
+    });
+  }
+
+  // ── ÉTAPE 0 : Médiane dynamique sur blocs sains ────────────
   var saines = [];
   for (var k = 0; k < blocks.length; k++) {
     var kp = blocks[k].timestamp.split(' --> ');
@@ -2639,6 +2678,8 @@ function repairSRTTimestamps() {
       else {
         newEnd = nextStartMs;
         if (newEnd - startMs < DUR_MIN) newEnd = Math.min(startMs + DUR_MIN, nextStartMs);
+        // Post-clamp : si durée résiduelle > CAP_2X (bloc halluciné repositionné), cap davantage
+        if (newEnd - startMs > CAP_2X) newEnd = Math.min(startMs + CAP_2X, nextStartMs);
         stats.ra4++;
       }
     }
@@ -2706,10 +2747,11 @@ function repairSRTTimestamps() {
   }
 
   // ── Toast rapport ────────────────────────────────────────
-  if (fixed === 0) {
+  if (fixed === 0 && clustersShifted === 0) {
     toast('\u2713 Aucune anomalie d\u00e9tect\u00e9e (m\u00e9diane=' + Math.round(typicalDurMs/100)/10 + 's)');
   } else {
     var det = [];
+    if (clustersShifted)            det.push(clustersShifted + ' cluster(s) recalibr\u00e9(s)');
     if (stats.r0)               det.push(stats.r0 + ' corrompu(s)');
     if (stats.ra2+stats.rb1)    det.push((stats.ra2+stats.rb1) + ' cap-30s');
     if (stats.ra3+stats.ra4)    det.push((stats.ra3+stats.ra4) + ' overflow');
