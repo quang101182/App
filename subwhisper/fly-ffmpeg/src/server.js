@@ -1,19 +1,19 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.0.0
+ * Version: 1.1.0 — Fix multipart/form-data natif + chunks séquentiels
  *
- * Rôle: reçoit un job depuis le Cloudflare Worker, télécharge la vidéo
- * via FFmpeg (streaming), extrait l'audio en WAV 16kHz mono, découpe en
- * chunks ≤24MB, transcrit chaque chunk via Groq Whisper, assemble le SRT
- * complet et notifie le Worker via callback PATCH.
+ * Fixes v1.1.0:
+ *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
+ *    → corrige "multipart: NextPart: EOF" chez Groq
+ *  - Chunks traités séquentiellement dans end handler au lieu de concurrents dans data handler
+ *    → corrige unhandled promise rejection → crash Node.js sans callback d'erreur
  */
 
 'use strict';
 
 const express = require('express');
 const { spawn } = require('child_process');
-const FormData = require('form-data');
-// Note: jobId is provided by the Cloudflare Worker, no local UUID generation needed
+// Note: FormData et Blob sont des globals Node.js 20+, pas besoin de require
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -28,7 +28,6 @@ const GROQ_MIN_INTERVAL_MS = 4000;
 
 // Taille max d'un chunk WAV: 24 MB
 // PCM s16le = 2 bytes/sample, 16000 samples/sec = 32000 bytes/sec
-// chunkBytes doit être aligné sur 2 octets (frameSize)
 const CHUNK_MAX_BYTES = Math.floor((24 * 1024 * 1024 - 44) / 2) * 2; // ~24MB WAV - 44 bytes header
 const CHUNK_DUR_SEC = CHUNK_MAX_BYTES / 32000; // durée en secondes du chunk PCM
 
@@ -56,7 +55,6 @@ app.use(express.json({ limit: '1mb' }));
 
 function requireFlySecret(req, res, next) {
   if (!FLY_SECRET) {
-    // Si pas de secret configuré, on laisse passer (dev local)
     console.warn('[WARN] FLY_SECRET non configuré — authentification désactivée');
     return next();
   }
@@ -77,7 +75,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.0.0'
+    version: '1.1.0'
   });
 });
 
@@ -95,14 +93,12 @@ app.post('/extract', requireFlySecret, (req, res) => {
     groqKey
   } = req.body || {};
 
-  // Validation des champs obligatoires
   if (!jobId || !presignedDownload || !workerCallbackUrl || !workerSecret || !groqKey) {
     return res.status(400).json({
       error: 'Champs obligatoires manquants: jobId, presignedDownload, workerCallbackUrl, workerSecret, groqKey'
     });
   }
 
-  // Throttling: max jobs simultanés
   if (activeJobs >= MAX_CONCURRENT_JOBS) {
     return res.status(503).json({
       error: 'Trop de jobs en cours',
@@ -114,19 +110,18 @@ app.post('/extract', requireFlySecret, (req, res) => {
   // Répondre immédiatement puis traiter en async
   res.json({ accepted: true, jobId });
 
-  // Lancer le pipeline en arrière-plan
   activeJobs++;
-  const JOB_TIMEOUT_MS = 50 * 60 * 1000; // 50 min max par job
+  const JOB_TIMEOUT_MS = 50 * 60 * 1000; // 50 min max
   const jobTimeout = new Promise((_, reject) =>
     setTimeout(() => reject(new Error('Job timeout 50min dépassé')), JOB_TIMEOUT_MS)
   );
+
   Promise.race([
     processJob({ jobId, presignedDownload, srcLang, workerCallbackUrl, workerSecret, groqKey }),
     jobTimeout
   ])
     .catch(async err => {
       console.error(`[${jobId}] Erreur pipeline:`, err.message);
-      // Notifier le Worker de l'échec pour sortir l'app du polling immédiatement
       await updateWorker(workerCallbackUrl, workerSecret, {
         jobId, status: 'error', error: err.message
       }).catch(() => {});
@@ -147,7 +142,6 @@ async function processJob(job) {
   console.log(`[${jobId}] Démarrage du pipeline. URL: ${presignedDownload.substring(0, 80)}...`);
 
   try {
-    // 1. Notification de démarrage
     await updateWorker(workerCallbackUrl, workerSecret, {
       jobId,
       progress: 5,
@@ -155,19 +149,17 @@ async function processJob(job) {
       status: 'processing'
     });
 
-    // 2. Lancer FFmpeg en streaming
-    //    ffmpeg lit la vidéo depuis l'URL presignée et écrit WAV 16kHz mono sur stdout
     const ffmpegArgs = [
       '-i', presignedDownload,
-      '-vn',                    // ignorer la piste vidéo
-      '-acodec', 'pcm_s16le',  // PCM 16-bit little-endian
-      '-ar', '16000',           // 16 kHz
-      '-ac', '1',               // mono
-      '-f', 'wav',              // format WAV
-      'pipe:1'                  // écrire sur stdout
+      '-vn',
+      '-acodec', 'pcm_s16le',
+      '-ar', '16000',
+      '-ac', '1',
+      '-f', 'wav',
+      'pipe:1'
     ];
 
-    console.log(`[${jobId}] Commande FFmpeg: ffmpeg ${ffmpegArgs.join(' ')}`);
+    console.log(`[${jobId}] Commande FFmpeg: ffmpeg ${ffmpegArgs.slice(0, 4).join(' ')} ... pipe:1`);
 
     await updateWorker(workerCallbackUrl, workerSecret, {
       jobId,
@@ -176,7 +168,6 @@ async function processJob(job) {
       status: 'processing'
     });
 
-    // 3. Découper le WAV en chunks et transcrire
     const allSegments = await streamAndTranscribe({
       jobId,
       ffmpegArgs,
@@ -186,7 +177,6 @@ async function processJob(job) {
       workerSecret
     });
 
-    // 4. Assembler le SRT final
     await updateWorker(workerCallbackUrl, workerSecret, {
       jobId,
       progress: 95,
@@ -197,7 +187,6 @@ async function processJob(job) {
     const srt = assembleSrt(allSegments);
     console.log(`[${jobId}] SRT assemblé: ${srt.length} caractères, ${allSegments.length} segments`);
 
-    // 5. Callback "done" vers le Worker
     await updateWorker(workerCallbackUrl, workerSecret, {
       jobId,
       progress: 100,
@@ -220,7 +209,7 @@ async function processJob(job) {
 }
 
 // ---------------------------------------------------------------------------
-// Streaming FFmpeg + découpe en chunks + transcription Groq
+// Streaming FFmpeg → accumulation PCM → chunks séquentiels → Groq
 // ---------------------------------------------------------------------------
 
 async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, workerCallbackUrl, workerSecret }) {
@@ -230,105 +219,31 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
     });
 
     let ffmpegStderr = '';
-    let ffmpegExitCode = null;
     let promiseResolved = false;
-
-    ffmpeg.stderr.on('data', (d) => {
-      ffmpegStderr += d.toString();
-    });
-
-    // Buffers pour gérer le streaming WAV
-    let headerBuffer = null;       // 44 bytes du header WAV
     let headerParsed = false;
     let headerAccum = Buffer.alloc(0);
+    let pcmAccum = Buffer.alloc(0); // accumuler TOUT le PCM, traiter séquentiellement dans end
 
-    let pcmAccum = Buffer.alloc(0); // buffer PCM courant (sans header)
-    let chunkIndex = 0;
+    ffmpeg.stderr.on('data', d => { ffmpegStderr += d.toString(); });
 
-    // Résultats de tous les chunks (promises accumulées)
-    const chunkPromises = [];
-
-    // Throttling Groq
-    let lastGroqCallTime = 0;
-
-    // Fonction pour envoyer un chunk PCM accumulé à Groq
-    async function flushChunk(pcmData, chunkIdx) {
-      // Construire le WAV complet: header + PCM
-      const wavBuffer = buildWavBuffer(pcmData);
-
-      // Throttling: attendre si dernier appel Groq < 4s
-      const now = Date.now();
-      const elapsed = now - lastGroqCallTime;
-      if (elapsed < GROQ_MIN_INTERVAL_MS && lastGroqCallTime > 0) {
-        const wait = GROQ_MIN_INTERVAL_MS - elapsed;
-        console.log(`[${jobId}] Chunk ${chunkIdx}: throttling Groq, attente ${wait}ms...`);
-        await sleep(wait);
-      }
-
-      lastGroqCallTime = Date.now();
-
-      // Calculer l'offset temporel de ce chunk
-      const offsetSec = chunkIdx * CHUNK_DUR_SEC;
-
-      // Mettre à jour la progression
-      const progress = Math.min(85, 20 + chunkIdx * 15);
-      await updateWorker(workerCallbackUrl, workerSecret, {
-        jobId,
-        progress,
-        log: `🎯 Chunk ${chunkIdx + 1} → Groq Whisper (${formatTime(offsetSec)} → ${formatTime(offsetSec + CHUNK_DUR_SEC)})...`,
-        status: 'processing'
-      }).catch(() => {}); // non-bloquant
-
-      // Envoyer à Groq avec retry x3
-      const segments = await transcribeWithGroq({
-        jobId,
-        wavBuffer,
-        chunkIdx,
-        srcLang,
-        groqKey,
-        offsetSec,
-        workerCallbackUrl,
-        workerSecret
-      });
-
-      // Callback "chunk terminé"
-      await updateWorker(workerCallbackUrl, workerSecret, {
-        jobId,
-        progress,
-        log: `✅ Chunk ${chunkIdx + 1} terminé — ${segments.length} segments`,
-        status: 'processing'
-      }).catch(() => {});
-
-      return segments;
-    }
-
-    // Traiter les données stdout de FFmpeg (WAV stream)
-    // IMPORTANT: handler synchrone — on pousse les promises sans await pour éviter
-    // les race conditions avec l'event loop des Readable streams Node.js.
-    ffmpeg.stdout.on('data', (chunk) => {
-      // Phase 1: accumuler le header WAV (44 bytes)
+    // Phase 1: accumuler header WAV (44 bytes) + PCM
+    ffmpeg.stdout.on('data', chunk => {
       if (!headerParsed) {
         headerAccum = Buffer.concat([headerAccum, chunk]);
         if (headerAccum.length >= 44) {
-          headerBuffer = headerAccum.slice(0, 44);
           headerParsed = true;
-          // Le reste après le header: c'est du PCM
           const remaining = headerAccum.slice(44);
           if (remaining.length > 0) {
             pcmAccum = Buffer.concat([pcmAccum, remaining]);
           }
-          // Parser wavMeta depuis le header pour l'estimation de durée
-          const wavMeta = {
-            sampleRate: headerBuffer.readUInt32LE(24),
-            numChannels: headerBuffer.readUInt16LE(22),
-            bytesPerSec: headerBuffer.readUInt32LE(28),
-            dataSize: headerBuffer.readUInt32LE(40)
-          };
-          console.log(`[${jobId}] Header WAV parsé. Sample rate: ${wavMeta.sampleRate} Hz, Channels: ${wavMeta.numChannels}`);
-          const estimatedChunks = Math.ceil(wavMeta.dataSize / CHUNK_MAX_BYTES) || '?';
-          const estimatedMin = wavMeta.bytesPerSec > 0
-            ? (wavMeta.dataSize / wavMeta.bytesPerSec / 60).toFixed(1)
-            : '?';
+          // Estimer durée et nombre de chunks
+          const bytesPerSec = headerAccum.readUInt32LE(28);
+          const dataSize = headerAccum.readUInt32LE(40);
+          const sampleRate = headerAccum.readUInt32LE(24);
+          const numChannels = headerAccum.readUInt16LE(22);
+          console.log(`[${jobId}] Header WAV parsé. Sample rate: ${sampleRate} Hz, Channels: ${numChannels}`);
+          const estimatedChunks = dataSize > 0 ? Math.ceil(dataSize / CHUNK_MAX_BYTES) : '?';
+          const estimatedMin = bytesPerSec > 0 ? (dataSize / bytesPerSec / 60).toFixed(1) : '?';
           updateWorker(workerCallbackUrl, workerSecret, {
             jobId,
             progress: 15,
@@ -338,70 +253,100 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
         }
         return;
       }
-
-      // Phase 2: accumuler le PCM et découper en chunks complets
+      // Accumuler PCM
       pcmAccum = Buffer.concat([pcmAccum, chunk]);
-
-      // Dès qu'on a assez pour un chunk complet, créer la promise (sans await)
-      // Les promises seront résolues séquentiellement dans 'end'
-      while (pcmAccum.length >= CHUNK_MAX_BYTES) {
-        const pcmChunk = pcmAccum.slice(0, CHUNK_MAX_BYTES);
-        pcmAccum = pcmAccum.slice(CHUNK_MAX_BYTES);
-        const idx = chunkIndex++;
-        console.log(`[${jobId}] Chunk ${idx}: ${pcmChunk.length} bytes PCM → WAV ${(pcmChunk.length / 1024 / 1024).toFixed(1)} MB`);
-        // Lancer la promise mais ne pas l'await ici (handler synchrone)
-        chunkPromises.push({ idx, promise: flushChunk(pcmChunk, idx) });
-      }
     });
 
+    // Phase 2: tout le PCM est accumulé, traiter chunks SÉQUENTIELLEMENT
     ffmpeg.stdout.on('end', async () => {
-      console.log(`[${jobId}] FFmpeg stdout terminé. PCM restant: ${pcmAccum.length} bytes`);
+      console.log(`[${jobId}] FFmpeg stdout terminé. PCM total: ${pcmAccum.length} bytes (${(pcmAccum.length / 1024 / 1024).toFixed(1)} MB)`);
 
-      // Vérifier si FFmpeg a échoué sans produire de données WAV valides
-      if (!headerParsed && chunkPromises.length === 0) {
+      if (!headerParsed || pcmAccum.length === 0) {
         const errMsg = `FFmpeg n'a produit aucun audio WAV valide. Stderr: ${ffmpegStderr.slice(-500)}`;
         console.error(`[${jobId}] ${errMsg}`);
-        promiseResolved = true;
-        return reject(new Error(errMsg));
+        if (!promiseResolved) { promiseResolved = true; reject(new Error(errMsg)); }
+        return;
       }
 
-      // Flusher le dernier chunk PCM s'il y en a un
-      if (pcmAccum.length > 0 && headerParsed) {
-        const idx = chunkIndex++;
-        console.log(`[${jobId}] Dernier chunk ${idx}: ${pcmAccum.length} bytes PCM`);
-        chunkPromises.push({ idx, promise: flushChunk(pcmAccum, idx) });
-      }
-
-      // Attendre tous les chunks dans l'ordre (séquentiellement pour le throttling Groq)
+      // Découper en chunks et transcrire séquentiellement
       try {
+        const totalChunks = Math.ceil(pcmAccum.length / CHUNK_MAX_BYTES);
+        console.log(`[${jobId}] ${totalChunks} chunk(s) à transcrire séquentiellement`);
+
         const allSegments = [];
-        for (const { idx, promise } of chunkPromises) {
-          const segments = await promise;
-          console.log(`[${jobId}] Chunk ${idx} transcrit: ${segments.length} segments`);
+        let lastGroqCallTime = 0;
+
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * CHUNK_MAX_BYTES;
+          const end = Math.min(start + CHUNK_MAX_BYTES, pcmAccum.length);
+          const pcmChunk = pcmAccum.slice(start, end);
+
+          console.log(`[${jobId}] Chunk ${i}: ${pcmChunk.length} bytes PCM → WAV ${(pcmChunk.length / 1024 / 1024).toFixed(1)} MB`);
+
+          // Throttling Groq
+          const now = Date.now();
+          const elapsed = now - lastGroqCallTime;
+          if (elapsed < GROQ_MIN_INTERVAL_MS && lastGroqCallTime > 0) {
+            const wait = GROQ_MIN_INTERVAL_MS - elapsed;
+            console.log(`[${jobId}] Chunk ${i}: throttling Groq, attente ${wait}ms...`);
+            await sleep(wait);
+          }
+
+          const offsetSec = i * CHUNK_DUR_SEC;
+          const progress = Math.min(85, 20 + Math.round((i / totalChunks) * 65));
+
+          await updateWorker(workerCallbackUrl, workerSecret, {
+            jobId,
+            progress,
+            log: `🎯 Chunk ${i + 1}/${totalChunks} → Groq Whisper (${formatTime(offsetSec)} → ${formatTime(offsetSec + pcmChunk.length / 32000)})...`,
+            status: 'processing'
+          }).catch(() => {});
+
+          lastGroqCallTime = Date.now();
+
+          const wavBuffer = buildWavBuffer(pcmChunk);
+          const segments = await transcribeWithGroq({
+            jobId,
+            wavBuffer,
+            chunkIdx: i,
+            srcLang,
+            groqKey,
+            offsetSec,
+            workerCallbackUrl,
+            workerSecret
+          });
+
+          console.log(`[${jobId}] Chunk ${i}: ${segments.length} segments reçus`);
           allSegments.push(...segments);
+
+          await updateWorker(workerCallbackUrl, workerSecret, {
+            jobId,
+            progress,
+            log: `✅ Chunk ${i + 1}/${totalChunks} terminé — ${segments.length} segments`,
+            status: 'processing'
+          }).catch(() => {});
         }
+
+        // Libérer la mémoire PCM
+        pcmAccum = Buffer.alloc(0);
+
         promiseResolved = true;
         resolve(allSegments);
+
       } catch (err) {
-        promiseResolved = true;
-        reject(err);
+        if (!promiseResolved) { promiseResolved = true; reject(err); }
       }
     });
 
-    ffmpeg.on('error', (err) => {
+    ffmpeg.on('error', err => {
       console.error(`[${jobId}] Erreur spawn FFmpeg:`, err);
-      if (!promiseResolved) {
-        promiseResolved = true;
-        reject(new Error(`FFmpeg spawn error: ${err.message}`));
-      }
+      if (!promiseResolved) { promiseResolved = true; reject(new Error(`FFmpeg spawn error: ${err.message}`)); }
     });
 
-    ffmpeg.on('close', (code) => {
-      ffmpegExitCode = code;
+    ffmpeg.on('close', code => {
       if (code !== 0) {
         console.error(`[${jobId}] FFmpeg exited with code ${code}`);
         console.error(`[${jobId}] FFmpeg stderr:\n${ffmpegStderr.slice(-2000)}`);
-        // Si la promise n'a pas encore été résolue (cas: stdout vide + code != 0)
         if (!promiseResolved) {
           promiseResolved = true;
           reject(new Error(`FFmpeg a échoué (code ${code}): ${ffmpegStderr.slice(-500)}`));
@@ -414,7 +359,7 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
 }
 
 // ---------------------------------------------------------------------------
-// Transcription Groq avec retry x3
+// Transcription Groq avec retry x3 — FormData NATIF Node.js 20
 // ---------------------------------------------------------------------------
 
 async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey, offsetSec, workerCallbackUrl, workerSecret }) {
@@ -425,11 +370,11 @@ async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey
     try {
       console.log(`[${jobId}] Chunk ${chunkIdx}: appel Groq (tentative ${attempt}/${MAX_RETRIES})...`);
 
+      // Utiliser FormData et Blob NATIFS de Node.js 20 (pas le paquet npm form-data)
+      // Cela évite le bug "multipart: NextPart: EOF" avec fetch natif
+      const blob = new Blob([wavBuffer], { type: 'audio/wav' });
       const form = new FormData();
-      form.append('file', wavBuffer, {
-        filename: `chunk_${chunkIdx}.wav`,
-        contentType: 'audio/wav'
-      });
+      form.append('file', blob, `chunk_${chunkIdx}.wav`);
       form.append('model', GROQ_MODEL);
       form.append('response_format', 'verbose_json');
       form.append('timestamp_granularities[]', 'segment');
@@ -441,9 +386,9 @@ async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${groqKey}`,
-          ...form.getHeaders()
+          // PAS de Content-Type — fetch le définit automatiquement avec le bon boundary
         },
-        body: form
+        body: form,
       });
 
       if (!response.ok) {
@@ -458,7 +403,6 @@ async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey
         return [];
       }
 
-      // Appliquer l'offset temporel à chaque segment
       const segments = data.segments.map(seg => ({
         start: (seg.start || 0) + offsetSec,
         end: (seg.end || 0) + offsetSec,
@@ -473,12 +417,12 @@ async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey
       console.error(`[${jobId}] Chunk ${chunkIdx}: tentative ${attempt} échouée:`, err.message);
 
       if (attempt < MAX_RETRIES) {
-        const backoff = attempt * 5000; // 5s, 10s
+        const backoff = attempt * 5000;
         const backoffSec = backoff / 1000;
         console.log(`[${jobId}] Chunk ${chunkIdx}: retry dans ${backoff}ms...`);
         updateWorker(workerCallbackUrl, workerSecret, {
           jobId,
-          log: `⚠️ Groq rate limit — retry ${attempt}/3 dans ${backoffSec}s...`,
+          log: `⚠️ Groq erreur — retry ${attempt}/3 dans ${backoffSec}s... (${err.message.substring(0, 100)})`,
           status: 'processing'
         }).catch(() => {});
         await sleep(backoff);
@@ -497,29 +441,23 @@ function buildWavBuffer(pcmData) {
   const numChannels = 1;
   const sampleRate = 16000;
   const bitsPerSample = 16;
-  const byteRate = sampleRate * numChannels * (bitsPerSample / 8); // 32000
-  const blockAlign = numChannels * (bitsPerSample / 8);           // 2
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
   const dataSize = pcmData.length;
   const chunkSize = 36 + dataSize;
 
   const header = Buffer.alloc(44);
-
-  // RIFF header
   header.write('RIFF', 0, 'ascii');
   header.writeUInt32LE(chunkSize, 4);
   header.write('WAVE', 8, 'ascii');
-
-  // fmt chunk
   header.write('fmt ', 12, 'ascii');
-  header.writeUInt32LE(16, 16);           // subchunk1Size (PCM = 16)
-  header.writeUInt16LE(1, 20);            // audioFormat (PCM = 1)
-  header.writeUInt16LE(numChannels, 22);  // numChannels
-  header.writeUInt32LE(sampleRate, 24);   // sampleRate
-  header.writeUInt32LE(byteRate, 28);     // byteRate
-  header.writeUInt16LE(blockAlign, 32);   // blockAlign
-  header.writeUInt16LE(bitsPerSample, 34); // bitsPerSample
-
-  // data chunk
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(numChannels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
   header.write('data', 36, 'ascii');
   header.writeUInt32LE(dataSize, 40);
 
@@ -527,13 +465,11 @@ function buildWavBuffer(pcmData) {
 }
 
 // ---------------------------------------------------------------------------
-// Assemblage SRT depuis les segments (avec offsets déjà appliqués)
+// Assemblage SRT depuis les segments
 // ---------------------------------------------------------------------------
 
 function assembleSrt(segments) {
-  if (!segments || segments.length === 0) {
-    return '';
-  }
+  if (!segments || segments.length === 0) return '';
 
   const lines = [];
   let blockNum = 1;
@@ -541,22 +477,16 @@ function assembleSrt(segments) {
   for (const seg of segments) {
     const text = (seg.text || '').trim();
     if (!text) continue;
-
-    const startStr = secToSrtTime(seg.start);
-    const endStr = secToSrtTime(seg.end);
-
     lines.push(String(blockNum));
-    lines.push(`${startStr} --> ${endStr}`);
+    lines.push(`${secToSrtTime(seg.start)} --> ${secToSrtTime(seg.end)}`);
     lines.push(text);
-    lines.push(''); // ligne vide entre blocs
-
+    lines.push('');
     blockNum++;
   }
 
   return lines.join('\n');
 }
 
-// Convertit des secondes en format SRT: HH:MM:SS,mmm
 function secToSrtTime(sec) {
   const totalMs = Math.round((sec || 0) * 1000);
   const ms = totalMs % 1000;
@@ -565,7 +495,6 @@ function secToSrtTime(sec) {
   const totalMin = Math.floor(totalSec / 60);
   const m = totalMin % 60;
   const h = Math.floor(totalMin / 60);
-
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
 }
 
@@ -582,17 +511,14 @@ async function updateWorker(url, secret, payload) {
         'X-Internal-Secret': secret
       },
       body: JSON.stringify(payload),
-      // Timeout 10s pour les callbacks de progression
       signal: AbortSignal.timeout(10000)
     });
-
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
       console.warn(`[updateWorker] Callback HTTP ${response.status} vers ${url}: ${errText.substring(0, 200)}`);
     }
   } catch (err) {
-    // Non-bloquant: on logue mais on ne lance pas d'erreur
-    console.warn(`[updateWorker] Erreur callback vers ${url}:`, err.message);
+    console.warn(`[updateWorker] Erreur callback:`, err.message);
   }
 }
 
@@ -618,18 +544,17 @@ function formatTime(sec) {
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.0.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.1.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);
   console.log(`  CHUNK_DUR_SEC = ${CHUNK_DUR_SEC.toFixed(1)} secondes`);
   console.log(`  GROQ_MODEL = ${GROQ_MODEL}`);
+  console.log(`  Node.js: ${process.version} — FormData natif: ${typeof FormData !== 'undefined' ? 'OUI' : 'NON'}`);
 });
 
-// Gestion propre des signaux POSIX (Fly.io envoie SIGTERM avant de tuer)
 process.on('SIGTERM', () => {
   console.log('[SIGTERM] Arrêt demandé. Jobs actifs restants:', activeJobs);
-  // Pas de graceful drain pour l'instant — les jobs en cours seront perdus
   process.exit(0);
 });
 
