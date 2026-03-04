@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v6.2</title>
+<title>SubWhisper v6.3</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -818,7 +818,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v6.2</span>
+    <span class="ver-badge">v6.3</span>
   </div>
   <div class="hdr-r">
     <button class="icon-btn" id="cfgBtn" onclick="toggleConfig()" title="Paramètres">&#9881;&#65039;</button>
@@ -1390,27 +1390,28 @@ async function transcribeOpenAI() {
       try { decoded = await tmpCtx.decodeAudioData(arrayBuf); }
       catch(e) { try { tmpCtx.close(); } catch(e2) {} throw new Error('Format non décodable — essayez MP4/H.264 ou extrayez l\'audio WAV d\'abord'); }
       try { tmpCtx.close(); } catch(e2) {}
-      setPct(12, 'Resample'); setLog('Rééchantillonnage 16kHz mono...');
+      // Chunking par durée : 1 OfflineAudioContext par chunk (évite la limite browser sur grands buffers)
       var targetSR = 16000;
-      var offCtx = new OfflineAudioContext(1, Math.ceil(decoded.duration * targetSR), targetSR);
-      var bufSrc = offCtx.createBufferSource();
-      bufSrc.buffer = decoded; bufSrc.connect(offCtx.destination); bufSrc.start(0);
-      var resampled = await offCtx.startRendering();
-      var samples = resampled.getChannelData(0);
-      var samplesPerChunk = Math.floor(MAX_BYTES / 2); // 16-bit = 2 bytes/sample
-      var totalChunks = Math.ceil(samples.length / samplesPerChunk);
-      setLog('Découpage en ' + totalChunks + ' chunks (~13min chacun)...');
+      var chunkDurSec = Math.floor(MAX_BYTES / (targetSR * 2)); // ~786s = ~13min par chunk
+      var totalChunks = Math.ceil(decoded.duration / chunkDurSec);
+      setLog('Découpage en ' + totalChunks + ' chunks (~13min) sur ' + Math.round(decoded.duration/60) + 'min...');
       var allSegments = [];
       detectedLang = srcLang || '';
       for (var ci = 0; ci < totalChunks; ci++) {
-        var chStart = ci * samplesPerChunk;
-        var chEnd = Math.min(chStart + samplesPerChunk, samples.length);
-        var chunkOffsetSec = chStart / targetSR;
-        setPct(20 + Math.round((ci / totalChunks) * 55), 'Chunk ' + (ci+1) + '/' + totalChunks);
-        setLog('Transcription chunk ' + (ci+1) + '/' + totalChunks + '...');
-        var wavBuf = encodeWavFromSamples(samples.slice(chStart, chEnd), targetSR);
+        var chunkStartSec = ci * chunkDurSec;
+        var chunkActualDur = Math.min(chunkDurSec, decoded.duration - chunkStartSec);
+        setPct(15 + Math.round((ci / totalChunks) * 60), 'Chunk ' + (ci+1) + '/' + totalChunks);
+        setLog('Resample + transcription chunk ' + (ci+1) + '/' + totalChunks + ' (' + Math.round(chunkStartSec/60) + 'min→' + Math.round((chunkStartSec+chunkActualDur)/60) + 'min)...');
+        // OfflineAudioContext dédié à ce chunk uniquement
+        var offCtx = new OfflineAudioContext(1, Math.ceil(chunkActualDur * targetSR), targetSR);
+        var bufSrc = offCtx.createBufferSource();
+        bufSrc.buffer = decoded;
+        bufSrc.connect(offCtx.destination);
+        bufSrc.start(0, chunkStartSec, chunkActualDur); // offset dans le buffer original
+        var resampled = await offCtx.startRendering();
+        var wavBuf = encodeWav(resampled);
         var chunkFile = new File([new Blob([wavBuf], {type:'audio/wav'})], 'chunk_'+ci+'.wav', {type:'audio/wav'});
-        var res = await transcribeChunkOpenAI(chunkFile, srcLang, key, ci+1, totalChunks, chunkOffsetSec);
+        var res = await transcribeChunkOpenAI(chunkFile, srcLang, key, ci+1, totalChunks, chunkStartSec);
         if (ci === 0) detectedLang = res.lang || detectedLang;
         allSegments = allSegments.concat(res.segments);
       }
