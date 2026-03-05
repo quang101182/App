@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.8</title>
+<title>SubWhisper v8.9</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -866,10 +866,9 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 #previewVideo::-webkit-media-text-track-container{display:none!important}
 /* ── SUB OVERLAY ── */
 #subOverlay{position:absolute;bottom:0;left:0;right:0;top:0;z-index:10;pointer-events:none}
-#subOverlayInner{position:absolute;bottom:0;left:0;right:0;height:60px;cursor:pointer;pointer-events:auto;display:block}
-#subOverlayInner:hover{background:rgba(255,255,255,.03)}
-/* Mobile : laisser les contrôles natifs vidéo accessibles (seekbar) */
-@media(max-width:768px){#subOverlayInner{pointer-events:none;cursor:default}}
+/* overlay passif : controls natifs vidéo accessibles PC+mobile (play/seekbar) */
+/* Édition sous-titres → cliquer #subBox (boîte noire sous la vidéo) */
+#subOverlayInner{position:absolute;bottom:0;left:0;right:0;height:60px;pointer-events:none;display:block}
 /* ── SUB BOX ── */
 #subBox{background:#000;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 20px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;transition:background .15s;user-select:none;-webkit-user-select:none;gap:4px}
 #subBox.empty{cursor:default}
@@ -894,7 +893,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.8</span>
+    <span class="ver-badge">v8.9</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1639,6 +1638,7 @@ async function transcribeOpenAI() {
       srt = res.srt;
       setPct(80, 'Transcription OK');
       setLog('Transcription terminée — ' + res.segments.length + ' segments · ' + (detectedLang || 'lang?'));
+      logChunkReport(1, 1, res.segments, 0, null, res.rawSegments);
     } else {
       // ── Fichier volumineux : auto-chunking ───────────────
       var isWavFile = /\.wav$/i.test(selFile.name) || selFile.type === 'audio/wav';
@@ -1791,6 +1791,7 @@ async function transcribeGroq() {
       srt = res.srt;
       setPct(80, 'Transcription OK');
       setLog('Transcription terminée — ' + res.segments.length + ' segments · ' + (detectedLang || 'lang?'));
+      logChunkReport(1, 1, res.segments, 0, null, res.rawSegments);
     } else {
       // ── Fichier volumineux : auto-chunking ───────────────
       var isWavFile = /\.wav$/i.test(selFile.name) || selFile.type === 'audio/wav';
@@ -3068,7 +3069,7 @@ function initSubOverlay(videoEl) {
   overlay.id = 'subOverlay';
   var inner = document.createElement('span');
   inner.id = 'subOverlayInner';
-  inner.onclick = function() { openSubEditModal(); };
+  // pointer-events:none → onclick inutile, édition via #subBox
   overlay.appendChild(inner);
   document.getElementById('videoWrap').appendChild(overlay);
   _timeupdateOverlay = function() { updateSubOverlay(); };
