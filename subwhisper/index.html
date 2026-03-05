@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.11</title>
+<title>SubWhisper v8.12</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -893,7 +893,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.11</span>
+    <span class="ver-badge">v8.12</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -3093,6 +3093,41 @@ function initSubOverlay(videoEl) {
   _timeupdateOverlay = function() { updateSubOverlay(); };
   videoEl.addEventListener('timeupdate', _timeupdateOverlay);
 }
+
+// ── FULLSCREEN SUBTITLES ───────────────────────────────────
+// En fullscreen natif, #subBox est hors du contexte → overlay fixe sur body
+var _fsSubEl = null, _fsSubTimer = null;
+function _onFsChange() {
+  var fsEl = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
+  if (fsEl) {
+    if (_fsSubEl) return;
+    _fsSubEl = document.createElement('div');
+    _fsSubEl.style.cssText = 'position:fixed;bottom:80px;left:0;right:0;z-index:2147483647;text-align:center;pointer-events:none;padding:0 5%';
+    var t = document.createElement('span');
+    t.id = 'fsSubTxt';
+    t.style.cssText = 'display:none;background:rgba(0,0,0,.82);color:#fff;font-family:Inter,sans-serif;font-size:clamp(15px,2.2vw,24px);font-weight:600;line-height:1.45;padding:6px 16px;border-radius:6px;white-space:pre-wrap;max-width:90vw;text-shadow:0 1px 3px #000';
+    _fsSubEl.appendChild(t);
+    document.body.appendChild(_fsSubEl);
+    _fsSubTimer = setInterval(function() {
+      var txt = document.getElementById('fsSubTxt');
+      if (!txt) return;
+      var box = document.getElementById('subBox');
+      var src = document.getElementById('subBoxText');
+      if (box && !box.classList.contains('empty') && src && src.textContent !== '\u2014') {
+        txt.textContent = src.textContent;
+        txt.style.display = 'inline-block';
+      } else {
+        txt.style.display = 'none';
+      }
+    }, 100);
+  } else {
+    if (_fsSubTimer) { clearInterval(_fsSubTimer); _fsSubTimer = null; }
+    if (_fsSubEl) { _fsSubEl.parentNode && _fsSubEl.parentNode.removeChild(_fsSubEl); _fsSubEl = null; }
+  }
+}
+document.addEventListener('fullscreenchange', _onFsChange);
+document.addEventListener('webkitfullscreenchange', _onFsChange);
+document.addEventListener('mozfullscreenchange', _onFsChange);
 
 function destroySubOverlay() {
   var overlay = document.getElementById('subOverlay');
