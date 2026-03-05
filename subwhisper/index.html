@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.29</title>
+<title>SubWhisper v8.30</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -379,6 +379,9 @@ body.light .dz:hover,body.light .dz.over{background:rgba(124,106,255,.04)}
 #undoBanner span{flex:1;color:var(--muted)}
 #undoBanner button{background:rgba(124,106,255,.2);border:1px solid var(--accent);color:var(--accent);border-radius:8px;padding:4px 12px;cursor:pointer;font-size:11px;font-family:var(--mono);transition:background .15s}
 #undoBanner button:hover{background:rgba(124,106,255,.35)}
+#langNotice{display:none;align-items:center;gap:10px;padding:8px 12px;margin-top:8px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:10px;font-size:12px}
+#langNotice span{flex:1;color:var(--muted)}
+#langNotice button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px}
 .finfo{flex:1;overflow:hidden}
 .fname{font-family:var(--mono);font-size:11px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fsz{font-size:11px;color:var(--muted);margin-top:3px}
@@ -917,7 +920,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.29</span>
+    <span class="ver-badge">v8.30</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1191,6 +1194,10 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     <span id="undoBannerTxt"></span>
     <button onclick="undoCleanAI()">&#x21A9; Annuler</button>
     <button onclick="closeUndoBanner()" style="background:none;border:none;color:var(--muted);font-size:14px;padding:2px 6px">&#x2715;</button>
+  </div>
+  <div id="langNotice">
+    <span id="langNoticeTxt"></span>
+    <button onclick="closeLangNotice()" title="Fermer">&#x2715;</button>
   </div>
   <div id="spkLegend" style="display:none;flex-wrap:wrap;gap:6px;padding:8px 0 4px"></div>
   <div id="richLegend" style="display:none"></div>
@@ -1621,7 +1628,7 @@ function clearFilePrev() {
 
 function clearFile() {
   wordData = []; richViewActive = false;
-  selFile = null; srtTxt = ''; srtOriginal = ''; origVideoFile = null; closeUndoBanner(); resetValidate();
+  selFile = null; srtTxt = ''; srtOriginal = ''; origVideoFile = null; closeUndoBanner(); resetValidate(); closeLangNotice();
   document.getElementById('fp').classList.remove('vis');
   document.getElementById('fi').value = '';
   document.getElementById('srtFi').value = '';
@@ -2689,6 +2696,9 @@ function showRes(content, srcLang, tgtLang, wasTranslated, words) {
   syncRichToggle();
   // Auto-validate silencieux : badge + hints dès l'arrivée du SRT
   setTimeout(function() { validateSRT(true); }, 150);
+  // Détection langues dans le SRT vs langue cible attendue
+  var _expectedLang = tgtLang || srcLang || null;
+  setTimeout(function() { checkLangMismatch(srtOriginal, _expectedLang); }, 300);
   // Avertissement auto-detect sur langue difficile (CJK/RTL)
   var wasAutoDetect = !document.getElementById('srcLang').value;
   var detectedCJK = /^(zh|ja|ko|ar|he|fa)$/.test(srcLang || '');
@@ -4098,6 +4108,7 @@ async function cleanAI() {
     toast('\u2728 Nettoyage IA termin\u00e9 \u2014 ' + validBlocks.length + ' blocs');
     showUndoBanner(raw, validBlocks.length);
     validateSRT(true);
+    checkLangMismatch(srtOriginal, document.getElementById('outLangMain').value || null);
   } catch(e) {
     toastClear();
     toast('Erreur nettoyage IA : ' + e.message);
@@ -4139,6 +4150,62 @@ function closeUndoBanner() {
   _cleanAIBackup = null;
 }
 
+// ── DÉTECTION LANGUE SRT ──────────────────────────────────
+function detectLangsInSRT(srtText) {
+  var blocks = parseSRT(srtText);
+  var allText = blocks.map(function(b) { return b.text.replace(/\[\.{3}\]/g, ''); }).join('');
+  var chars = allText.replace(/\s+|\d+/g, '');
+  var total = chars.length;
+  if (total < 20) return {};
+  var counts = {
+    zh: (chars.match(/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/g) || []).length,
+    ja: (chars.match(/[\u3040-\u30ff\uff66-\uff9f]/g) || []).length,
+    ko: (chars.match(/[\uac00-\ud7af]/g) || []).length,
+    ru: (chars.match(/[\u0400-\u04ff]/g) || []).length,
+    ar: (chars.match(/[\u0600-\u06ff]/g) || []).length,
+    la: (chars.match(/[a-zA-Z\u00c0-\u024f]/g) || []).length
+  };
+  var result = {};
+  Object.keys(counts).forEach(function(lang) {
+    var pct = Math.round(counts[lang] / total * 100);
+    if (pct >= 5) result[lang] = pct;
+  });
+  return result;
+}
+
+function checkLangMismatch(srtText, expectedLang) {
+  var notice = document.getElementById('langNotice');
+  var noticeTxt = document.getElementById('langNoticeTxt');
+  if (!notice || !noticeTxt) return;
+  notice.style.display = 'none';
+  if (!srtText || !srtText.trim()) return;
+  var detected = detectLangsInSRT(srtText);
+  if (!Object.keys(detected).length) return;
+  // Langue attendue : mapping langue→script dominant
+  var LANG_SCRIPT = { fr:'la', en:'la', es:'la', de:'la', it:'la', pt:'la', nl:'la', pl:'la', tr:'la', ro:'la', ru:'ru', uk:'ru', zh:'zh', ja:'ja', ko:'ko', ar:'ar' };
+  var LANG_NAMES = { zh:'ZH', ja:'JA', ko:'KO', ru:'RU', ar:'AR', la:'Latin' };
+  var expectedScript = expectedLang ? LANG_SCRIPT[expectedLang] : null;
+  // Construire la liste des langues détectées
+  var parts = Object.keys(detected).sort(function(a,b){ return detected[b]-detected[a]; }).map(function(l){
+    return (LANG_NAMES[l] || l.toUpperCase()) + '\u00a0' + detected[l] + '%';
+  });
+  if (parts.length <= 1 && !expectedScript) return; // mono-langue, pas de contexte attendu
+  // Vérifier si une langue inattendue est significative (>10%)
+  var hasUnexpected = expectedScript && Object.keys(detected).some(function(l) {
+    return l !== expectedScript && detected[l] >= 10;
+  });
+  if (!hasUnexpected && parts.length <= 1) return;
+  var msg = '\ud83d\udd0d Langues d\u00e9tect\u00e9es\u00a0: ' + parts.join('\u2002\u00b7\u2002');
+  if (hasUnexpected) msg += ' \u2014 v\u00e9rifiez si attendu';
+  noticeTxt.textContent = msg;
+  notice.style.display = 'flex';
+}
+
+function closeLangNotice() {
+  var el = document.getElementById('langNotice');
+  if (el) el.style.display = 'none';
+}
+
 // ── TRADUCTION MANUELLE ───────────────────────────────────
 async function translateManual() {
   var raw = getCurrentSRT();
@@ -4174,6 +4241,7 @@ async function translateManual() {
     toastClear();
     toast('\ud83c\udf10 Traduit (' + engine + ') \u2192 ' + tgt.toUpperCase());
     validateSRT(true);
+    checkLangMismatch(srtOriginal, tgt);
   } catch(e) {
     toastClear();
     toast('Erreur traduction : ' + e.message);
