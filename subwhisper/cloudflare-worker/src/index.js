@@ -290,7 +290,7 @@ async function handleJobDone(request, env) {
   // BUG FIX: extract body.status directly — previously was always 'done' unless body.error present,
   // causing every progress update (status:'processing') to be stored as 'done' in KV,
   // making the browser stop polling immediately with empty SRT.
-  const { jobId, srt, detectedLang, progress, log, error: jobError, status: bodyStatus } = body;
+  const { jobId, srt, detectedLang, progress, log, chunkReport, gapReport, error: jobError, status: bodyStatus } = body;
 
   // Fetch existing record to get r2Key
   const existing = await kvGet(env, jobId);
@@ -310,6 +310,8 @@ async function handleJobDone(request, env) {
     ...(progress     != null && { progress }),
     ...(log          != null && { log }),
     ...(jobError     != null && { error: jobError }),
+    ...(chunkReport  != null && { chunkReport }),
+    ...(gapReport    != null && { gapReport }),
   };
 
   // Store with same TTL (reset from now)

@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.12</title>
+<title>SubWhisper v8.13</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -868,7 +868,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 #subOverlay{position:absolute;bottom:0;left:0;right:0;top:0;z-index:10;pointer-events:none}
 /* overlay passif : controls natifs vidéo accessibles PC+mobile (play/seekbar) */
 /* Édition sous-titres → cliquer #subBox (boîte noire sous la vidéo) */
-#subOverlayInner{position:absolute;bottom:0;left:0;right:0;height:60px;pointer-events:none;display:block}
+#subOverlayInner{position:absolute;bottom:0;left:0;right:0;height:60px;pointer-events:none;display:flex;align-items:center;justify-content:center}
 /* ── SUB BOX ── */
 #subBox{background:#000;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 20px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;transition:background .15s;user-select:none;-webkit-user-select:none;gap:4px}
 #subBox.empty{cursor:default}
@@ -893,7 +893,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.12</span>
+    <span class="ver-badge">v8.13</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -3092,38 +3092,42 @@ function initSubOverlay(videoEl) {
   document.getElementById('videoWrap').appendChild(overlay);
   _timeupdateOverlay = function() { updateSubOverlay(); };
   videoEl.addEventListener('timeupdate', _timeupdateOverlay);
+  initFullscreenRedirect();
 }
 
 // ── FULLSCREEN SUBTITLES ───────────────────────────────────
-// En fullscreen natif, #subBox est hors du contexte → overlay fixe sur body
-var _fsSubEl = null, _fsSubTimer = null;
+// Stratégie v8.13 : rediriger fullscreen vers #videoWrap → #subOverlayInner
+// (qui affiche le texte du sous-titre courant) reste visible en fullscreen.
+var _fsRedirecting = false;
 function _onFsChange() {
   var fsEl = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
-  if (fsEl) {
-    if (_fsSubEl) return;
-    _fsSubEl = document.createElement('div');
-    _fsSubEl.style.cssText = 'position:fixed;bottom:80px;left:0;right:0;z-index:2147483647;text-align:center;pointer-events:none;padding:0 5%';
-    var t = document.createElement('span');
-    t.id = 'fsSubTxt';
-    t.style.cssText = 'display:none;background:rgba(0,0,0,.82);color:#fff;font-family:Inter,sans-serif;font-size:clamp(15px,2.2vw,24px);font-weight:600;line-height:1.45;padding:6px 16px;border-radius:6px;white-space:pre-wrap;max-width:90vw;text-shadow:0 1px 3px #000';
-    _fsSubEl.appendChild(t);
-    document.body.appendChild(_fsSubEl);
-    _fsSubTimer = setInterval(function() {
-      var txt = document.getElementById('fsSubTxt');
-      if (!txt) return;
-      var box = document.getElementById('subBox');
-      var src = document.getElementById('subBoxText');
-      if (box && !box.classList.contains('empty') && src && src.textContent !== '\u2014') {
-        txt.textContent = src.textContent;
-        txt.style.display = 'inline-block';
-      } else {
-        txt.style.display = 'none';
-      }
-    }, 100);
-  } else {
-    if (_fsSubTimer) { clearInterval(_fsSubTimer); _fsSubTimer = null; }
-    if (_fsSubEl) { _fsSubEl.parentNode && _fsSubEl.parentNode.removeChild(_fsSubEl); _fsSubEl = null; }
+  var vid  = document.getElementById('previewVideo');
+  var wrap = document.getElementById('videoWrap');
+  if (!fsEl || !vid || !wrap) return;
+  // Si la <video> brute est en fullscreen (bouton natif des controls), on redirige vers videoWrap
+  if (fsEl === vid && !_fsRedirecting) {
+    _fsRedirecting = true;
+    var exitFn = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen;
+    if (exitFn) {
+      exitFn.call(document).then(function() {
+        var enterFn = wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.mozRequestFullScreen;
+        if (enterFn) { enterFn.call(wrap).catch(function(){}); }
+        _fsRedirecting = false;
+      }).catch(function() { _fsRedirecting = false; });
+    } else { _fsRedirecting = false; }
   }
+  // Si videoWrap est fullscreen : #subOverlayInner est dans le contexte → rien d'autre à faire
+}
+function initFullscreenRedirect() {
+  var vid  = document.getElementById('previewVideo');
+  var wrap = document.getElementById('videoWrap');
+  if (!vid || !wrap) return;
+  // Intercepter les appels JS requestFullscreen sur <video> → redirige vers videoWrap
+  ['requestFullscreen','webkitRequestFullscreen','mozRequestFullScreen','msRequestFullscreen'].forEach(function(fn) {
+    if (vid[fn] && wrap[fn]) {
+      vid[fn] = function(opts) { return wrap[fn].call(wrap, opts); };
+    }
+  });
 }
 document.addEventListener('fullscreenchange', _onFsChange);
 document.addEventListener('webkitfullscreenchange', _onFsChange);
@@ -3162,8 +3166,12 @@ function updateSubOverlay() {
       break;
     }
   }
-  // Overlay = zone de clic transparente sur la vidéo (texte affiché uniquement dans #subBox)
-  inner.textContent = '';
+  // Overlay : afficher sous-titre sur la vidéo (visible aussi en fullscreen videoWrap)
+  if (found) {
+    inner.innerHTML = '<span style="display:inline-block;background:rgba(0,0,0,.82);color:#fff;font-family:Inter,sans-serif;font-size:clamp(13px,1.8vw,18px);font-weight:600;line-height:1.45;padding:4px 14px;border-radius:5px;white-space:pre-wrap;max-width:92%;text-align:center;text-shadow:0 1px 3px #000">' + found.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>';
+  } else {
+    inner.innerHTML = '';
+  }
   // Box noire sous la vidéo
   var box = document.getElementById('subBox');
   var boxMeta = document.getElementById('subBoxMeta');
