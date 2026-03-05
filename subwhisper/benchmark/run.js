@@ -1,11 +1,14 @@
 /**
  * SubWhisper Benchmark — Runner principal
- * Usage: node run.js --engine gemini --key YOUR_KEY [--testdir PATH]
+ * Usage: node run.js --engine gemini --key YOUR_KEY [--testdir PATH] [--file NAME]
  *
  * Lit tous les *_BRUT.srt du dossier test-files/ (ou --testdir)
  * Appelle l'IA avec le prompt cleanAI
  * Score chaque résultat vs BRUT
  * Génère un rapport Markdown dans results/
+ *
+ * --file "aaa.EN_BRUT.srt"  Traite uniquement ce fichier (nom exact, sans path)
+ *                            Compatible avec --score-only
  */
 
 var fs   = require('fs');
@@ -19,15 +22,16 @@ function getArg(name) {
   var i = args.indexOf('--' + name);
   return i !== -1 ? args[i+1] : null;
 }
-var ENGINE    = getArg('engine') || 'gemini'; // gemini | deepseek
-var API_KEY   = getArg('key');
-var TEST_DIR  = getArg('testdir') || path.join(__dirname, 'test-files');
+var ENGINE     = getArg('engine') || 'gemini'; // gemini | deepseek
+var API_KEY    = getArg('key');
+var TEST_DIR   = getArg('testdir') || path.join(__dirname, 'test-files');
 var SCORE_ONLY = args.includes('--score-only');
+var FILE_FILTER = getArg('file') || null; // nom de fichier exact (sans path)
 var BATCH_SIZE = 200; // blocs par appel API
 
 if (!SCORE_ONLY && !API_KEY) {
-  console.error('Usage: node run.js --engine gemini|deepseek --key YOUR_KEY [--testdir PATH]');
-  console.error('       node run.js --engine gemini|deepseek --score-only [--testdir PATH]');
+  console.error('Usage: node run.js --engine gemini|deepseek --key YOUR_KEY [--testdir PATH] [--file NAME]');
+  console.error('       node run.js --engine gemini|deepseek --score-only [--testdir PATH] [--file NAME]');
   process.exit(1);
 }
 
@@ -154,6 +158,16 @@ async function main() {
   }
 
   if (!files.length) { console.error('No *_BRUT.srt files found in ' + TEST_DIR); process.exit(1); }
+
+  // ── Filtre --file ──────────────────────────────────────
+  if (FILE_FILTER) {
+    var filterName = path.basename(FILE_FILTER); // sécurité : ignorer tout path éventuel
+    files = files.filter(f => path.basename(f) === filterName);
+    if (!files.length) {
+      console.error('--file "' + filterName + '" introuvable dans ' + TEST_DIR);
+      process.exit(1);
+    }
+  }
 
   console.log('SubWhisper Benchmark — Engine: ' + ENGINE.toUpperCase());
   console.log('Files: ' + files.length);
