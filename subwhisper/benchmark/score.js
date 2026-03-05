@@ -117,4 +117,117 @@ function score(brutPath, aiContent, srcLang) {
   };
 }
 
-module.exports = { score, parseSRT };
+// ── BRUT QUALITY SCORE ───────────────────────────────────
+// Évalue la qualité du pipeline de transcription lui-même
+function scoreBrut(filePath, srcLang) {
+  var fs = require('fs');
+  var blocks = parseSRT(fs.readFileSync(filePath, 'utf8'));
+  if (!blocks.length) return { score: 0, issues: [{ type: 'EMPTY', sev: 'CRITICAL', msg: 'Fichier vide ou invalide' }] };
+
+  var issues = [];
+  var penalties = 0;
+
+  // ── 1. Micro-blocs consécutifs < 500ms ────────────────
+  var microCount = 0, microRun = 0;
+  for (var i = 0; i < blocks.length; i++) {
+    var pts = blocks[i].ts.split(' --> ');
+    var dur = tsToMs(pts[1]) - tsToMs(pts[0]);
+    if (dur < 500 && dur > 0) { microRun++; } else { if (microRun >= 3) microCount += microRun; microRun = 0; }
+  }
+  if (microRun >= 3) microCount += microRun;
+  if (microCount > 5) {
+    issues.push({ type: 'MICRO_BLOCKS', sev: 'HIGH', msg: microCount + ' micro-blocs <500ms consécutifs → over-segmentation Groq' });
+    penalties += Math.min(30, microCount);
+  }
+
+  // ── 2. Hallucination phonétique répétée ──────────────
+  var repeatMap = {};
+  blocks.forEach(function(b) {
+    var t = b.text.trim().toLowerCase();
+    if (/^(ah|oh|euh|hm|mm|ugh|ouh|eï)[!?.]?$/.test(t)) repeatMap[t] = (repeatMap[t]||0) + 1;
+  });
+  var totalRepeat = Object.values(repeatMap).reduce(function(a,b){return a+b;},0);
+  if (totalRepeat > 10) {
+    issues.push({ type: 'PHONETIC_HALLUCINATION', sev: 'MEDIUM', msg: totalRepeat + ' blocs phonétiques répétés (Ah/Oh/Euh...) — possible hallucination silence' });
+    penalties += Math.min(20, Math.floor(totalRepeat / 2));
+  }
+
+  // ── 3. Langue étrangère dans SRT censé être FR ───────
+  var foreignWords = 0;
+  var foreignSamples = [];
+  blocks.forEach(function(b) {
+    var t = b.text;
+    // Mots cyrilliques, CJK, arabes dans un texte majoritairement latin
+    var foreignChars = (t.match(/[\u0400-\u04ff\u4e00-\u9fff\u0600-\u06ff]/g) || []).length;
+    var latinChars   = (t.match(/[a-zA-ZÀ-ÿ]/g) || []).length;
+    if (foreignChars > 2 && foreignChars > latinChars * 0.3) {
+      foreignWords++;
+      if (foreignSamples.length < 3) foreignSamples.push('#' + b.id + ': ' + t.substring(0,50));
+    }
+  });
+  if (foreignWords > 0) {
+    issues.push({ type: 'FOREIGN_LANG_IN_FR', sev: 'HIGH', msg: foreignWords + ' blocs avec caractères non-latins dans SRT français\n    Ex: ' + foreignSamples.join(' | ') });
+    penalties += foreignWords * 4;
+  }
+
+  // ── 4. Gaps > 30s entre blocs ────────────────────────
+  var bigGaps = 0;
+  for (var i = 1; i < blocks.length; i++) {
+    var prevEnd   = tsToMs(blocks[i-1].ts.split(' --> ')[1]);
+    var curStart  = tsToMs(blocks[i].ts.split(' --> ')[0]);
+    if (curStart - prevEnd > 30000) bigGaps++;
+  }
+  if (bigGaps > 3) {
+    issues.push({ type: 'BIG_GAPS', sev: 'MEDIUM', msg: bigGaps + ' gaps > 30s — possibles boundaries de chunks problématiques' });
+    penalties += bigGaps * 2;
+  }
+
+  // ── 5. Chevauchements timestamps ─────────────────────
+  var overlaps = 0;
+  for (var i = 1; i < blocks.length; i++) {
+    var prevEnd  = tsToMs(blocks[i-1].ts.split(' --> ')[1]);
+    var curStart = tsToMs(blocks[i].ts.split(' --> ')[0]);
+    if (curStart < prevEnd - 50) overlaps++;
+  }
+  if (overlaps > 0) {
+    issues.push({ type: 'OVERLAPS', sev: 'HIGH', msg: overlaps + ' chevauchements de timestamps' });
+    penalties += overlaps * 3;
+  }
+
+  // ── 6. Blocs > 20s (under-segmentation) ──────────────
+  var longBlocks = 0;
+  blocks.forEach(function(b) {
+    var pts = b.ts.split(' --> ');
+    if (tsToMs(pts[1]) - tsToMs(pts[0]) > 20000) longBlocks++;
+  });
+  if (longBlocks > 2) {
+    issues.push({ type: 'LONG_BLOCKS', sev: 'LOW', msg: longBlocks + ' blocs > 20s → under-segmentation' });
+    penalties += longBlocks;
+  }
+
+  // ── 7. Recommandation pipeline ────────────────────────
+  var recommendations = [];
+  if (foreignWords > 0 && srcLang !== 'fr') recommendations.push('Relancer avec SOURCE=' + srcLang.toUpperCase() + ' forcé (auto-detect cause hallucinations de langue)');
+  if (microCount > 10) recommendations.push('Réduire la sensibilité de segmentation Groq ou activer repairSRTTimestamps');
+  if (bigGaps > 3) recommendations.push('Vérifier la taille des chunks — boundaries à ' + bigGaps + ' endroits');
+
+  var brutScore = Math.max(0, 100 - penalties);
+  return {
+    file: filePath.split(/[/\\]/).pop(),
+    srcLang: srcLang,
+    blocks: blocks.length,
+    score: brutScore,
+    penalties: penalties,
+    issues: issues,
+    recommendations: recommendations,
+    stats: { microCount, totalRepeat, foreignWords, bigGaps, overlaps, longBlocks }
+  };
+}
+
+function tsToMs(ts) {
+  var m = ts.match(/(\d+):(\d+):(\d+)[,.](\d+)/);
+  if (!m) return 0;
+  return +m[1]*3600000 + +m[2]*60000 + +m[3]*1000 + +m[4];
+}
+
+module.exports = { score, scoreBrut, parseSRT };

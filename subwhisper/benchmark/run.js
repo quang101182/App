@@ -11,7 +11,7 @@
 var fs   = require('fs');
 var path = require('path');
 var { getCleanPrompt } = require('./prompts');
-var { score, parseSRT } = require('./score');
+var { score, scoreBrut, parseSRT } = require('./score');
 
 // ── Parse args ────────────────────────────────────────────
 var args = process.argv.slice(2);
@@ -58,6 +58,12 @@ async function processFile(filePath) {
   // For cleanAI, the text is already in French (translated output)
   var srtTextLang = 'fr';
 
+  // ── Score BRUT (pipeline qualité) ────────────────────
+  var brutResult = scoreBrut(filePath, srcLang);
+  console.log('\n[BRUT] ' + fileName + ' — Score pipeline: ' + brutResult.score + '/100');
+  if (brutResult.issues.length) brutResult.issues.forEach(function(iss) { console.log('  ⚠ [' + iss.sev + '] ' + iss.msg.split('\n')[0]); });
+  if (brutResult.recommendations.length) brutResult.recommendations.forEach(function(r) { console.log('  → ' + r); });
+
   console.log('\n[' + ENGINE.toUpperCase() + '] Processing: ' + fileName + ' (src=' + srcLang + ')');
 
   var content = fs.readFileSync(filePath, 'utf8');
@@ -88,6 +94,10 @@ async function processFile(filePath) {
 
   var aiContent = results.join('\n\n') + '\n';
   var result = score(filePath, aiContent, srcLang);
+  result.brutScore = brutResult.score;
+  result.brutIssues = brutResult.issues;
+  result.brutRecs = brutResult.recommendations;
+  result.brutStats = brutResult.stats;
 
   // Save AI output
   var outName = fileName.replace('_BRUT.srt', '_' + ENGINE.toUpperCase() + '_AI.srt');
@@ -131,23 +141,41 @@ async function main() {
     '',
     '## Résumé',
     '',
-    '| Fichier | Src | Blocs BRUT | Blocs AI | Score | Issues |',
-    '|---------|-----|-----------|---------|-------|--------|',
+    '| Fichier | Src | Score BRUT | Score AI | Issues AI | Recommandations |',
+    '|---------|-----|-----------|---------|-----------|----------------|',
   ];
 
-  var totalScore = 0;
+  var totalScore = 0, totalBrutScore = 0;
   allResults.forEach(function(r) {
-    reportLines.push('| ' + r.file + ' | ' + r.srcLang.toUpperCase() + ' | ' + r.brutBlocks + ' | ' + r.aiBlocks + ' | **' + r.score + '/100** | ' + r.issues.length + ' |');
+    var brutEmoji = r.brutScore >= 90 ? '🟢' : r.brutScore >= 70 ? '🟡' : '🔴';
+    var aiEmoji   = r.score >= 90 ? '🟢' : r.score >= 70 ? '🟡' : '🔴';
+    var recs = r.brutRecs && r.brutRecs.length ? r.brutRecs[0].substring(0,40)+'...' : '—';
+    reportLines.push('| ' + r.file.substring(0,35) + ' | ' + r.srcLang.toUpperCase() + ' | ' + brutEmoji + ' **' + r.brutScore + '** | ' + aiEmoji + ' **' + r.score + '** | ' + r.issues.length + ' | ' + recs + ' |');
     totalScore += r.score;
+    totalBrutScore += (r.brutScore || 0);
   });
 
   var avg = allResults.length ? Math.round(totalScore / allResults.length) : 0;
-  reportLines.push('', '**Score moyen : ' + avg + '/100**', '');
+  var avgBrut = allResults.length ? Math.round(totalBrutScore / allResults.length) : 0;
+  reportLines.push('', '**Score moyen BRUT (pipeline) : ' + avgBrut + '/100**');
+  reportLines.push('**Score moyen AI (cleanAI) : ' + avg + '/100**', '');
 
   // Detail per file
   allResults.forEach(function(r) {
     reportLines.push('## ' + r.file);
-    reportLines.push('Score: ' + r.score + '/100 | Penalties: ' + r.penalties + ' | Bonuses: ' + r.bonuses);
+    reportLines.push('');
+    reportLines.push('### Pipeline BRUT — Score: ' + r.brutScore + '/100');
+    reportLines.push('Stats: ' + JSON.stringify(r.brutStats));
+    if (r.brutIssues && r.brutIssues.length) {
+      r.brutIssues.forEach(function(iss) { reportLines.push('- ⚠ **[' + iss.sev + '] ' + iss.type + '** : ' + iss.msg); });
+    } else { reportLines.push('✓ Pipeline propre'); }
+    if (r.brutRecs && r.brutRecs.length) {
+      reportLines.push(''); reportLines.push('**Recommandations pipeline :**');
+      r.brutRecs.forEach(function(rec) { reportLines.push('- → ' + rec); });
+    }
+    reportLines.push('');
+    reportLines.push('### AI CleanAI — Score: ' + r.score + '/100');
+    reportLines.push('Penalties: ' + r.penalties + ' | Bonuses: ' + r.bonuses);
     reportLines.push('Stats: ' + JSON.stringify(r.stats));
     reportLines.push('');
     if (r.issues.length) {
