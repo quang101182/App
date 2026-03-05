@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.55</title>
+<title>SubWhisper v8.56</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -996,7 +996,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.55</span>
+    <span class="ver-badge">v8.56</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -4495,24 +4495,83 @@ function closeLangNotice() {
 
 // ── DÉTECTION CLIENT-SIDE BLOCS HORS-LANGUE ───────────────
 function clientDetectForeign(blocks, targetLang) {
-  var NonLatin = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u0400-\u04ff\u0600-\u06ff]/;
-  var hints = {
-    fr: /[éèêëàâùûôîïçœæÉÈÊËÀÂÙÛÔÎÏÇŒÆ]|\b(?:le|la|les|un|une|des|je|tu|il|elle|nous|vous|et|est|que|qui|dans|sur|par|pour|avec|pas|mais|ce|ne|en|du|au|c'est|j'ai|n'est|qu'il|s'il|d'un|d'une|c'était|j'étais|n'a|qu'on|s'en)\b/i,
-    en: /\b(?:the|a|an|is|are|was|were|be|been|have|has|had|will|would|can|could|shall|should|and|or|but|if|in|on|at|to|for|of|with|by|from|that|this|it|he|she|we|you|they|i|not|so|as|do|does|did)\b/i,
-    es: /[áéíóúüñ]|\b(?:el|la|los|las|un|una|y|es|que|en|de|con|por|para|se|no|lo|le|me|te|nos|les|del|al)\b/i,
-    de: /[äöüßÄÖÜ]|\b(?:der|die|das|ein|eine|und|ist|nicht|ich|du|er|sie|wir|ihr|in|auf|mit|für|von|zu|dem|den|im|am|an)\b/i
+  var NonLatin = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u0400-\u04ff\u0600-\u06ff\u0900-\u097f]/;
+  // Scripts natifs par langue cible non-latine
+  var targetScripts = {
+    ja: /[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]/,
+    zh: /[\u4e00-\u9fff]/,
+    ko: /[\uac00-\ud7af]/,
+    ru: /[\u0400-\u04ff]/,
+    ar: /[\u0600-\u06ff]/,
+    hi: /[\u0900-\u097f]/
   };
+  // Mots fonctionnels / caractères distinctifs par langue latine cible
+  var hints = {
+    fr: /[éèêëàâùûôîïçœæ]|\b(?:le|la|les|un|une|des|je|tu|il|elle|nous|vous|et|est|que|qui|dans|sur|par|pour|avec|pas|mais|ce|ne|en|du|au)\b/i,
+    en: /\b(?:the|a|an|is|are|was|were|have|has|will|would|can|and|or|but|if|in|on|at|to|for|of|with|by|from|that|this|it|he|she|we|you|they|i|not)\b/i,
+    es: /[áéíóúüñ]|\b(?:el|la|los|las|un|una|y|es|que|en|de|con|por|para|se|no)\b/i,
+    de: /[äöüß]|\b(?:der|die|das|ein|eine|und|ist|nicht|ich|du|er|sie|wir|ihr|in|auf|mit|für|von|zu)\b/i,
+    pt: /[ãõâêôáéíóúà]|\b(?:o|a|os|as|um|uma|e|é|que|em|de|com|por|para|se|não|me|nos)\b/i,
+    it: /[àèéìíîòóùú]|\b(?:il|la|lo|le|gli|un|una|è|che|in|di|con|per|se|non|mi|ci|si)\b/i,
+    nl: /\b(?:de|het|een|en|is|dat|in|van|op|te|voor|niet|met|zijn|maar|ook|hij|zij)\b/i,
+    pl: /[ąćęłńóśźż]|\b(?:jest|nie|to|się|w|na|i|że|jak|do|tak|już|po|za)\b/i,
+    tr: /[ğışöüçİ]|\b(?:bir|bu|ve|de|da|ki|için|ile|var|ben|sen|çok|ama)\b/i,
+    vi: /[àáâãèéêìíòóôõùúýăđơư]|\b(?:là|và|của|trong|có|không|với|được|cho|này|một)\b/i
+  };
+  var targetScript = targetScripts[targetLang];
   var hint = hints[targetLang];
-  var toTranslate = [], toKeep = [];
+  var toTranslate = [], toKeep = [], uncertain = [];
   blocks.forEach(function(blk, i) {
     var text = blk.text.trim();
     if (!text) { toKeep.push(i); return; }
-    if (NonLatin.test(text)) { toTranslate.push(i); return; }
-    if (hint && hint.test(text)) { toKeep.push(i); return; }
     var words = text.split(/\s+/).filter(Boolean).length;
-    if (words <= 2) toKeep.push(i); else toTranslate.push(i);
+    if (targetScript) {
+      // Cible non-latine (JA/ZH/KO/RU/AR/HI) : présence du script cible = garder
+      if (targetScript.test(text)) { toKeep.push(i); return; }
+      if (words <= 2) toKeep.push(i); else toTranslate.push(i);
+    } else {
+      // Cible latine : non-latin = étranger certain
+      if (NonLatin.test(text)) { toTranslate.push(i); return; }
+      if (hint && hint.test(text)) { toKeep.push(i); return; }
+      // Latin ambigu : court = garder, long = incertain (IA tranche)
+      if (words <= 2) toKeep.push(i); else uncertain.push(i);
+    }
   });
-  return { toTranslate: toTranslate, toKeep: toKeep };
+  return { toTranslate: toTranslate, toKeep: toKeep, uncertain: uncertain };
+}
+
+// ── IDENTIFICATION IA BLOCS AMBIGUS ───────────────────────
+async function aiIdentifyForeign(blocks, uncertainIdx, targetLang) {
+  if (!uncertainIdx.length) return [];
+  var LANG_NAMES = { fr:'French', en:'English', es:'Spanish', de:'German', pt:'Portuguese', it:'Italian', nl:'Dutch', pl:'Polish', tr:'Turkish', vi:'Vietnamese', ru:'Russian', ja:'Japanese', zh:'Chinese', ko:'Korean', ar:'Arabic', hi:'Hindi' };
+  var tgtName = LANG_NAMES[targetLang] || targetLang;
+  var foreign = [];
+  var BATCH = 200;
+  for (var i = 0; i < uncertainIdx.length; i += BATCH) {
+    var batchIdxs = uncertainIdx.slice(i, i + BATCH);
+    var promptLines = batchIdxs.map(function(globalIdx) {
+      return '[' + (globalIdx + 1) + '] ' + blocks[globalIdx].text.replace(/\n/g, ' | ');
+    });
+    var prompt = 'Language detection task. Target language: ' + tgtName + '.\n' +
+      'Below are subtitle lines [N]. Return ONLY the [N] numbers of lines NOT in ' + tgtName + ', one per line.\n' +
+      'If ALL lines are already in ' + tgtName + ', return exactly: NONE\n' +
+      'No explanation, no other text.\n\n' +
+      promptLines.join('\n');
+    try {
+      var aiText = await callAIText(prompt);
+      if (!/^\s*NONE\s*$/i.test(aiText.trim())) {
+        var numRx = /\[?(\d+)\]?/g, m;
+        while ((m = numRx.exec(aiText)) !== null) {
+          var idx = parseInt(m[1]) - 1;
+          if (idx >= 0 && idx < blocks.length && foreign.indexOf(idx) === -1) foreign.push(idx);
+        }
+      }
+    } catch(e) {
+      // Échec identification : ajouter tous les incertains par sécurité (sur-traduction vaut mieux que silence)
+      batchIdxs.forEach(function(idx) { if (foreign.indexOf(idx) === -1) foreign.push(idx); });
+    }
+  }
+  return foreign;
 }
 
 // ── TRADUCTION MANUELLE ───────────────────────────────────
@@ -4523,8 +4582,8 @@ async function translateManual() {
   var src = detectedLang || document.getElementById('srcLangMain').value || '';
   var tgt = document.getElementById('outLangMain').value;
   if (!tgt || tgt === 'same') { toast('⚠ Sélectionne une langue SORTIE dans la barre'); return; }
-  // Mode sélectif FR autorise src===fr (patch des blocs non-fr restants)
-  if (tgt !== 'fr' && src && src === tgt) { toast('⚠ SOURCE et SORTIE sont identiques'); return; }
+  var useHybrid = !!(getGeminiKey() || getDeepSeekKey());
+  if (!useHybrid && src && src === tgt) { toast('\u26a0 SOURCE et SORTIE sont identiques'); return; }
   var hasKey = getGeminiKey() || getDeepSeekKey() || getAzureKey() || getDeeplxUrl();
   if (!hasKey) { toast('⚠ Clé IA requise (Gemini, DeepSeek ou Azure)'); return; }
   var btn = document.getElementById('translateBtn');
@@ -4533,19 +4592,31 @@ async function translateManual() {
   var engine = getAIEngine() === 'deepseek' ? 'DeepSeek' : 'Gemini';
   try {
     var translated, nbBlocks = 0;
-    if (tgt === 'fr') {
-      // Mode sélectif : détection client-side des blocs hors-langue, puis traduction ciblée
+    var LANG_NAMES_T = { fr:'French', en:'English', es:'Spanish', de:'German', pt:'Portuguese', it:'Italian', nl:'Dutch', pl:'Polish', tr:'Turkish', vi:'Vietnamese', ru:'Russian', ja:'Japanese', zh:'Chinese', ko:'Korean', ar:'Arabic', hi:'Hindi' };
+    var tgtName_t = LANG_NAMES_T[tgt] || tgt;
+    if (useHybrid) {
+      // ── Phase 1 : détection algo ──
       var blocks = parseSRT(raw);
       nbBlocks = blocks.length;
       var detected = clientDetectForeign(blocks, tgt);
-      var foreignIdx = detected.toTranslate;
+      var foreignIdx = detected.toTranslate.slice();
+      var uncertainIdx = detected.uncertain;
+      // ── Phase 2 : IA légère sur blocs ambigus ──
+      if (uncertainIdx.length > 0) {
+        toastPersist('🔍 Analyse ' + uncertainIdx.length + ' bloc' + (uncertainIdx.length > 1 ? 's' : '') + ' ambigus...');
+        var aiFound = await aiIdentifyForeign(blocks, uncertainIdx, tgt);
+        aiFound.forEach(function(idx) { if (foreignIdx.indexOf(idx) === -1) foreignIdx.push(idx); });
+      }
+      foreignIdx.sort(function(a, b) { return a - b; });
       if (foreignIdx.length === 0) {
         toastClear();
-        toast('\u2705 Aucun bloc hors-fran\u00e7ais d\u00e9tect\u00e9 (' + nbBlocks + ' blocs)');
+        toast('✅ Aucun bloc hors-' + tgt.toUpperCase() + ' détecté (' + nbBlocks + ' blocs)');
         return;
       }
-      toastPersist('\ud83d\udd0d ' + foreignIdx.length + ' bloc' + (foreignIdx.length > 1 ? 's' : '') + ' hors-FR d\u00e9tect\u00e9' + (foreignIdx.length > 1 ? 's' : '') + ' / ' + nbBlocks + ' \u2014 traduction...');
+      toastPersist('🔍 ' + foreignIdx.length + ' bloc' + (foreignIdx.length > 1 ? 's' : '') + ' étrang' + (foreignIdx.length > 1 ? 'ers' : 'er') + ' / ' + nbBlocks + ' — traduction...');
       var correctedTexts = blocks.map(function(b) { return b.text; });
+      var typoRule_t = tgt === 'fr' ? '\n4. FRENCH TYPOGRAPHY: Mandatory space before ? ! : ;' : '';
+      // ── Phase 3 : traduction ciblée ──
       var BATCH = getAIEngine() === 'deepseek' ? 75 : 150;
       var batches = [];
       for (var _fi = 0; _fi < foreignIdx.length; _fi += BATCH) batches.push(foreignIdx.slice(_fi, _fi + BATCH));
@@ -4560,13 +4631,12 @@ async function translateManual() {
             var promptLines = batchIdxs.map(function(globalIdx) {
               return '[' + (globalIdx + 1) + '] ' + blocks[globalIdx].text.replace(/\n/g, ' | ');
             });
-            var prompt = 'You are a professional subtitle translator. Target language: French.\n' +
-              'ALL lines below are non-French text. Translate ALL of them to French.\n' +
-              'Each line is [N] foreign_text. Return [N] French_translation.\n' +
+            var prompt = 'You are a professional subtitle translator. Target language: ' + tgtName_t + '.\n' +
+              'ALL lines below are non-' + tgtName_t + ' text. Translate ALL of them to ' + tgtName_t + '.\n' +
+              'Each line is [N] foreign_text. Return [N] ' + tgtName_t + '_translation.\n' +
               '1. NEVER skip a [N]. Translate EVERY line.\n' +
               '2. PROPER NOUNS: Keep character names, place names in their original form.\n' +
-              '3. TRUNCATED: Lines ending without punctuation or with ... are intentionally cut \u2014 do not add words.\n' +
-              '4. FRENCH TYPOGRAPHY: Mandatory space before ? ! : ;\n' +
+              '3. TRUNCATED: Lines ending without punctuation or with ... are intentionally cut \u2014 do not add words.' + typoRule_t + '\n' +
               'Return ONLY the numbered lines [N] text. No explanation.\n\n' +
               promptLines.join('\n');
             try {
@@ -4584,7 +4654,7 @@ async function translateManual() {
               console.warn('Batch ' + bIdx + ' erreur:', e2.message);
             }
             _pDone++;
-            toastPersist('\ud83c\udf10 Trad FR ' + engine + ' ' + _pDone + '/' + batches.length + ' \u2713');
+            toastPersist('\ud83c\udf10 Trad ' + tgt.toUpperCase() + ' ' + engine + ' ' + _pDone + '/' + batches.length + ' \u2713');
             if (btn) btn.innerHTML = '\ud83c\udf10 ' + _pDone + '/' + batches.length;
           })();
         }));
@@ -4593,9 +4663,9 @@ async function translateManual() {
         return blk.id + '\n' + blk.timestamp + '\n' + correctedTexts[i];
       }).join('\n\n') + '\n';
     } else {
-      // Mode classique : traduction complète vers la langue cible
-      toastPersist('🌐 Traduction ' + engine + ' en cours...');
-      if (btn) btn.innerHTML = '🌐 ...';
+      // Mode classique : Azure/DeepLX — traduction complète
+      toastPersist('\ud83c\udf10 Traduction ' + engine + ' en cours...');
+      if (btn) btn.innerHTML = '\ud83c\udf10 ...';
       translated = await translateSRT(raw, src, tgt);
     }
     if (!translated || translated === raw) {
@@ -4612,7 +4682,7 @@ async function translateManual() {
       offsetReloadTimer = setTimeout(function() { document.getElementById('previewTrack').src = previewVttUrl; }, 50);
     }
     toastClear();
-    toast(tgt === 'fr'
+    toast(useHybrid
       ? '🌐 Patch FR terminé (' + engine + ') — ' + nbBlocks + ' blocs'
       : '🌐 Traduit (' + engine + ') → ' + tgt.toUpperCase());
     validateSRT(true);
