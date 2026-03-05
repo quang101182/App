@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.7</title>
+<title>SubWhisper v8.8</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -894,7 +894,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.7</span>
+    <span class="ver-badge">v8.8</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1063,6 +1063,10 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
   <div class="chrono-row">
     <span class="chrono-lbl">Durée</span>
     <span id="chronoDisplay">00:00</span>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;margin-bottom:3px">
+    <span style="font-family:var(--mono);font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Journal chunks</span>
+    <button onclick="copyLiveLog()" title="Copier le log pour diagnostic" style="font-family:var(--mono);font-size:8px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--muted);cursor:pointer;padding:2px 8px;transition:all .2s" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">📋 Copier log</button>
   </div>
   <div id="liveLog"></div>
 </div>
@@ -1675,7 +1679,7 @@ async function transcribeOpenAI() {
           var actualChunkDurSecOAI = pcmLen / wavMeta.bytesPerSec;
           var res = await transcribeChunkOpenAI(chunkFile, srcLang, key, ci+1, totalWavChunks, offsetSec, actualChunkDurSecOAI);
           if (ci === 0) detectedLang = res.lang || detectedLang;
-          logChunkReport(ci+1, totalWavChunks, res.segments, offsetSec, actualChunkDurSecOAI);
+          logChunkReport(ci+1, totalWavChunks, res.segments, offsetSec, actualChunkDurSecOAI, res.rawSegments);
           allSegments = allSegments.concat(res.segments);
         }
         rawBuf = null; // libérer mémoire explicitement
@@ -1683,6 +1687,7 @@ async function transcribeOpenAI() {
           return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+(seg.text||'').trim();
         }).join('\n\n') + '\n';
         setPct(78, 'Assemblage'); setLog('Assemblage SRT — ' + allSegments.length + ' segments · ' + totalWavChunks + ' slices · ' + (detectedLang||'lang?'));
+        logAssemblySummary(allSegments, totalWavChunks);
       } else {
         // ── Branche AudioContext (MP4/MKV/MP3 etc.) ──────────
         setPct(3, 'Décodage'); setLog('Fichier volumineux — décodage audio...');
@@ -1715,13 +1720,14 @@ async function transcribeOpenAI() {
           var chunkFile = new File([new Blob([wavBuf], {type:'audio/wav'})], 'chunk_'+ci+'.wav', {type:'audio/wav'});
           var res = await transcribeChunkOpenAI(chunkFile, srcLang, key, ci+1, totalChunks, chunkStartSec, chunkActualDur);
           if (ci === 0) detectedLang = res.lang || detectedLang;
-          logChunkReport(ci+1, totalChunks, res.segments, chunkStartSec, chunkActualDur);
+          logChunkReport(ci+1, totalChunks, res.segments, chunkStartSec, chunkActualDur, res.rawSegments);
           allSegments = allSegments.concat(res.segments);
         }
         srt = allSegments.map(function(seg, i) {
           return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+(seg.text||'').trim();
         }).join('\n\n') + '\n';
         setPct(78, 'Assemblage'); setLog('Assemblage SRT — ' + allSegments.length + ' segments · ' + totalChunks + ' chunks · ' + (detectedLang||'lang?'));
+        logAssemblySummary(allSegments, totalChunks);
       }
     }
 
@@ -1823,7 +1829,7 @@ async function transcribeGroq() {
           var actualChunkDurSec = pcmLen / wavMeta.bytesPerSec;
           var res = await transcribeChunkGroq(chunkFile, srcLang, key, ci+1, totalWavChunks, offsetSec, actualChunkDurSec);
           if (ci === 0) detectedLang = res.lang || detectedLang;
-          logChunkReport(ci+1, totalWavChunks, res.segments, offsetSec, actualChunkDurSec);
+          logChunkReport(ci+1, totalWavChunks, res.segments, offsetSec, actualChunkDurSec, res.rawSegments);
           allSegments = allSegments.concat(res.segments);
         }
         rawBuf = null;
@@ -1831,6 +1837,7 @@ async function transcribeGroq() {
           return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+(seg.text||'').trim();
         }).join('\n\n') + '\n';
         setPct(78, 'Assemblage'); setLog('Assemblage SRT — ' + allSegments.length + ' segments · ' + totalWavChunks + ' slices · ' + (detectedLang||'lang?'));
+        logAssemblySummary(allSegments, totalWavChunks);
       } else {
         // ── Branche AudioContext (MP4/MKV/MP3 etc.) ──────────
         setPct(3, 'Décodage'); setLog('Fichier volumineux — décodage audio...');
@@ -1861,13 +1868,14 @@ async function transcribeGroq() {
           var chunkFile = new File([new Blob([wavBuf], {type:'audio/wav'})], 'chunk_'+ci+'.wav', {type:'audio/wav'});
           var res = await transcribeChunkGroq(chunkFile, srcLang, key, ci+1, totalChunks, chunkStartSec, chunkActualDur);
           if (ci === 0) detectedLang = res.lang || detectedLang;
-          logChunkReport(ci+1, totalChunks, res.segments, chunkStartSec, chunkActualDur);
+          logChunkReport(ci+1, totalChunks, res.segments, chunkStartSec, chunkActualDur, res.rawSegments);
           allSegments = allSegments.concat(res.segments);
         }
         srt = allSegments.map(function(seg, i) {
           return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+(seg.text||'').trim();
         }).join('\n\n') + '\n';
         setPct(78, 'Assemblage'); setLog('Assemblage SRT Groq — ' + allSegments.length + ' segments · ' + totalChunks + ' chunks · ' + (detectedLang||'lang?'));
+        logAssemblySummary(allSegments, totalChunks);
       }
     }
 
@@ -2051,15 +2059,17 @@ async function transcribeChunkOpenAI(file, srcLang, key, chunkNum, totalChunks, 
   var rawLang = (data.language || '').toLowerCase();
   var lang = WHISPER_LANG[rawLang] || srcLang || rawLang || '';
   var maxRelEnd = chunkDurSec || Infinity;
-  var segments = (data.segments || []).map(function(seg) {
+  var rawSegs = data.segments || [];
+  var segments = rawSegs.map(function(seg) {
     var relStart = seg.start || 0;
     var relEnd = Math.min(seg.end || 0, relStart + 30, maxRelEnd);
     return { start: relStart + offsetSec, end: relEnd + offsetSec, text: seg.text || '' };
   });
+  var rawSegmentsForLog = rawSegs.map(function(seg) { return { start: seg.start || 0, end: seg.end || 0 }; });
   var srt = segments.map(function(seg, i) {
     return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+seg.text.trim();
   }).join('\n\n') + '\n';
-  return { srt: srt, lang: lang, segments: segments };
+  return { srt: srt, lang: lang, segments: segments, rawSegments: rawSegmentsForLog };
 }
 
 async function transcribeChunkGroq(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec) {
@@ -2082,16 +2092,18 @@ async function transcribeChunkGroq(file, srcLang, key, chunkNum, totalChunks, of
   var rawLang = (data.language || '').toLowerCase();
   var lang = WHISPER_LANG[rawLang] || srcLang || rawLang || '';
   var maxRelEnd = chunkDurSec || Infinity;
-  var segments = (data.segments || []).map(function(seg) {
+  var rawSegs = data.segments || [];
+  var segments = rawSegs.map(function(seg) {
     var relStart = seg.start || 0;
     // Cap anti-hallucination : max 30s/seg + cap durée chunk (miroir du fix Fly.io v1.6.0)
     var relEnd = Math.min(seg.end || 0, relStart + 30, maxRelEnd);
     return { start: relStart + offsetSec, end: relEnd + offsetSec, text: seg.text || '' };
   });
+  var rawSegmentsForLog = rawSegs.map(function(seg) { return { start: seg.start || 0, end: seg.end || 0 }; });
   var srt = segments.map(function(seg, i) {
     return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+seg.text.trim();
   }).join('\n\n') + '\n';
-  return { srt: srt, lang: lang, segments: segments };
+  return { srt: srt, lang: lang, segments: segments, rawSegments: rawSegmentsForLog };
 }
 
 function encodeWavFromSamples(samples, sampleRate) {
@@ -2299,19 +2311,79 @@ function chronoElapsed() {
 }
 
 // ── CHUNK REPORT (monitoring temps réel) ──────────────────
-function logChunkReport(chunkNum, totalChunks, segments, offsetSec, chunkDurSec) {
+// rawSegments = segments AVANT cap (pour détecter hallucinations)
+function logChunkReport(chunkNum, totalChunks, segments, offsetSec, chunkDurSec, rawSegments) {
   var n = segments.length;
   if (n === 0) {
     appendLog('❌ Chunk ' + chunkNum + '/' + totalChunks + ' — 0 segments ! Audio vide ou silencieux.');
     return;
   }
-  var relFirst = (segments[0].start - offsetSec).toFixed(1);
-  var relLast  = (segments[n - 1].end - offsetSec).toFixed(1);
-  var covPct   = chunkDurSec ? Math.round((segments[n - 1].end - offsetSec) / chunkDurSec * 100) : '?';
-  var flag     = (chunkDurSec && (segments[n - 1].end - offsetSec) < chunkDurSec * 0.7) ? ' ⚠️ potentiellement incomplet' : ' ✅';
-  var preview  = segments[0].text.trim().substring(0, 40) + (segments[0].text.length > 40 ? '…' : '');
-  appendLog('📦 Chunk ' + chunkNum + '/' + totalChunks + ': ' + n + ' segs · ' + relFirst + 's→' + relLast + 's · couv ' + covPct + '%' + flag);
-  appendLog('   ↳ "' + preview + '"');
+  var relFirst  = (segments[0].start - offsetSec).toFixed(1);
+  var relLast   = (segments[n - 1].end - offsetSec).toFixed(1);
+  var covPct    = chunkDurSec ? Math.round(parseFloat(relLast) / chunkDurSec * 100) : '?';
+  var isIncomplete = chunkDurSec && parseFloat(relLast) < chunkDurSec * 0.7;
+  var flag      = isIncomplete ? ' ⚠️ INCOMPLET' : ' ✅';
+  // Détecter segments hallucination cappés
+  var nHallu = 0;
+  if (rawSegments) {
+    rawSegments.forEach(function(raw, i) {
+      var relRawEnd = (raw.end || 0);
+      var cappedEnd = segments[i] ? (segments[i].end - offsetSec) : relRawEnd;
+      if (relRawEnd - cappedEnd > 0.5) nHallu++;
+    });
+  }
+  var halluInfo = nHallu > 0 ? ' · 🔧 ' + nHallu + ' caps hallucination' : '';
+  // Texte début et fin du chunk
+  var txtFirst = segments[0].text.trim().substring(0, 35) + (segments[0].text.trim().length > 35 ? '…' : '');
+  var txtLast  = n > 1 ? segments[n-1].text.trim().substring(0, 35) + (segments[n-1].text.trim().length > 35 ? '…' : '') : '';
+  appendLog('📦 Chunk ' + chunkNum + '/' + totalChunks + ': ' + n + ' segs · ' + relFirst + 's→' + relLast + 's / ' + (chunkDurSec ? chunkDurSec.toFixed(0) + 's' : '?s') + ' · couv ' + covPct + '%' + halluInfo + flag);
+  appendLog('   ↳ début: "' + txtFirst + '"');
+  if (txtLast) appendLog('   ↳ fin:   "' + txtLast + '"');
+}
+
+// ── RAPPORT FINAL ASSEMBLAGE ───────────────────────────────
+function logAssemblySummary(allSegments, totalChunks) {
+  appendLog('─── Rapport assemblage (' + allSegments.length + ' segs, ' + totalChunks + ' chunks) ───');
+  // Détecter gaps importants entre segments
+  var gaps = [];
+  for (var i = 1; i < allSegments.length; i++) {
+    var gap = allSegments[i].start - allSegments[i-1].end;
+    if (gap > 5) gaps.push({ at: allSegments[i-1].end.toFixed(1), dur: gap.toFixed(1) });
+  }
+  if (gaps.length === 0) {
+    appendLog('✅ Aucun gap > 5s détecté — couverture continue');
+  } else {
+    appendLog('⚠️ ' + gaps.length + ' gap(s) > 5s détecté(s) :');
+    gaps.slice(0, 5).forEach(function(g) {
+      appendLog('   • à ' + g.at + 's : gap de ' + g.dur + 's');
+    });
+    if (gaps.length > 5) appendLog('   • … et ' + (gaps.length - 5) + ' autres');
+  }
+  // Durée totale couverte
+  if (allSegments.length > 0) {
+    var lastEnd = allSegments[allSegments.length-1].end.toFixed(1);
+    appendLog('🕐 Fin dernier segment : ' + lastEnd + 's (' + (lastEnd/60).toFixed(1) + 'min)');
+  }
+}
+
+// ── COPY LIVE LOG ─────────────────────────────────────────
+function copyLiveLog() {
+  var el = document.getElementById('liveLog');
+  if (!el) return;
+  var lines = el.querySelectorAll('.ll-entry');
+  var txt = Array.from(lines).map(function(l) { return l.textContent; }).join('\n');
+  if (!txt.trim()) { toast('Log vide'); return; }
+  navigator.clipboard.writeText(txt).then(function() {
+    toast('📋 Log copié (' + lines.length + ' lignes) — colle-le à Claude pour analyse');
+  }).catch(function() {
+    // fallback
+    var ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('📋 Log copié — colle-le à Claude pour analyse');
+  });
 }
 
 // ── LIVE LOG ──────────────────────────────────────────────
