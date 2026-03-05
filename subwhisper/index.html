@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.44</title>
+<title>SubWhisper v8.45</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -975,7 +975,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.44</span>
+    <span class="ver-badge">v8.45</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -2523,8 +2523,8 @@ async function translateGemini(srtContent, sourceLang, targetLang) {
     setLog(label);
     var batchSrt = batches[b].join('\n\n');
     var typoT = targetLang === 'fr' ? '\n- FRENCH TYPOGRAPHY: Include mandatory space before ? ! : ; in French.' : '';
-    var prompt = 'You are a professional subtitle translator. Translate from ' + srcName + ' to ' + tgtName + '.\n\nSTRICT rules:\n1. STRUCTURE: Keep ALL timestamp (HH:MM:SS,mmm --> HH:MM:SS,mmm) and index lines EXACTLY as-is.\n2. PROPER NOUNS: Keep character names, place names, invented/fantasy terms in their ORIGINAL form.\n3. COMPLETE TRANSLATION: Translate EVERY line. NEVER output [...] — if uncertain give your best translation.\n4. SONG LYRICS: If text is clearly song lyrics in a third language, keep them unchanged.\n5. STYLE: Match register and tone. Preserve exclamations and emotional markers.\n6. TRUNCATED LINES: Lines ending with \u2026 are intentionally cut — preserve the truncation.' + typoT + '\n7. Return ONLY the translated SRT, no explanation, no markdown.\n\n' + batchSrt;
-    var text = await callAIText(prompt);
+    var prompt = 'You are a professional subtitle translator. Translate from ' + srcName + ' to ' + tgtName + '.\n1. STRUCTURE: Timestamp (HH:MM:SS,mmm --> HH:MM:SS,mmm) and index lines EXACTLY as-is. NEVER insert timestamp text into subtitle content.\n2. PROPER NOUNS: Keep character names, place names, invented terms in ORIGINAL form. Capitalized word not starting a sentence = likely proper noun, do not alter.\n3. COMPLETE TRANSLATION: Translate EVERY line. NEVER output [...] — if uncertain give best translation. Do not skip or merge blocks.\n4. SONG LYRICS: Text clearly song lyrics in a third language — keep unchanged, do not translate.\n5. STYLE: Match register and tone. Preserve short exclamations exactly.\n6. TRUNCATED: Lines ending without punctuation or with ... are intentionally cut — do NOT add words.' + typoT + '\n7. Return ONLY translated SRT, SAME block count, no explanation, no markdown.\n\n' + batchSrt;
+        var text = await callAIText(prompt);
     results.push(text);
   }
   return results.join('\n\n') + '\n';
@@ -4239,7 +4239,7 @@ async function cleanAI() {
       var foreignC = isCJK_c
         ? '\n5. Repeated sequences of only numbers or single incoherent characters are hallucinations — replace with [...]'
         : '\n5. Foreign words MAY be intentional (song lyrics, foreign character). Only replace with [...] if clearly incoherent garbled noise.';
-      var prompt = 'You are a professional subtitle editor. ' + langLine + 'Clean up this subtitle file.\n\nSTRICT rules:\n1. STRUCTURE: Keep ALL timestamp and index lines EXACTLY as-is.\n2. PROPER NOUNS: Never change character names, place names, or invented/fantasy terms. When in doubt, leave unchanged.\n3. [...] USAGE: Only use [...] for genuine acoustic noise (isolated mm/ugh/euh, single incoherent characters). Never for real words or sentences.\n4. CORRECTIONS: Fix spelling errors, missing apostrophes, obvious Whisper mishearing only.' + foreignC + typoC + '\n7. Return ONLY the corrected SRT, same block count, no explanation, no markdown.\n\n' + batchSrt;
+      var prompt = 'You are a professional subtitle editor. ' + langLine + 'Clean up this subtitle file.\n1. STRUCTURE: Timestamp lines (HH:MM:SS,mmm --> HH:MM:SS,mmm) and index lines EXACTLY as-is. NEVER insert timestamp text into subtitle content.\n2. PROPER NOUNS: Never alter character names, place names, invented terms. Capitalized word not starting a sentence = likely proper noun, leave unchanged.\n3. [...] USAGE: Only for truly unintelligible noise. Short exclamations (Hé, Oh, Ha, Eï, Ouh, Bah, Tss, Yeah, Kiii, Viendez, etc.) are VALID content — NEVER replace with [...]. Slang and non-standard words are valid.\n4. TRUNCATED: Lines ending without punctuation or ... are intentionally cut — NEVER add words.' + foreignC + typoC + '\n5. CORRECTIONS: Fix spelling errors, missing apostrophes, obvious Whisper mishearing only.\n6. Return ONLY corrected SRT, SAME block count, no explanation, no markdown.\n\n' + batchSrt;
             var text = await callAIText(prompt);
       results.push(text);
     }
