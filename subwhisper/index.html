@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.13</title>
+<title>SubWhisper v8.14</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -893,7 +893,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.13</span>
+    <span class="ver-badge">v8.14</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -2267,21 +2267,31 @@ async function translateGemini(srtContent, sourceLang, targetLang) {
   var LANG_NAMES = { fr:'French', en:'English', es:'Spanish', de:'German', it:'Italian', pt:'Portuguese', ru:'Russian', ja:'Japanese', zh:'Chinese', ko:'Korean', nl:'Dutch', hi:'Hindi', ar:'Arabic', vi:'Vietnamese', pl:'Polish', tr:'Turkish' };
   var srcName = LANG_NAMES[sourceLang] || sourceLang || 'the source language';
   var tgtName = LANG_NAMES[targetLang] || targetLang;
-  var prompt = 'Translate this SRT subtitle file from ' + srcName + ' to ' + tgtName + '.\nStrict rules:\n- Keep ALL timestamp lines exactly as-is (format: HH:MM:SS,mmm --> HH:MM:SS,mmm)\n- Keep ALL numeric index lines exactly as-is\n- Only translate the text lines\n- Preserve line breaks within subtitle blocks\n- Return ONLY the SRT content, no explanation, no markdown fences\n\n' + srtContent;
-  setLog('Traduction Gemini en cours...');
-  var resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-  });
-  if (!resp.ok) {
-    var err = await resp.json().catch(function() { return {}; });
-    throw new Error('Gemini ' + resp.status + ' : ' + (err.error ? err.error.message : resp.statusText));
+  // Découper en batches de 200 blocs pour éviter la limite 8192 tokens de sortie Gemini
+  var BATCH = 200;
+  var allBlocks = srtContent.replace(/\r\n/g, '\n').split(/\n{2,}/).filter(function(b) { return b.trim(); });
+  var batches = [];
+  for (var i = 0; i < allBlocks.length; i += BATCH) { batches.push(allBlocks.slice(i, i + BATCH)); }
+  var results = [];
+  for (var b = 0; b < batches.length; b++) {
+    var label = batches.length > 1 ? 'Traduction Gemini ' + (b+1) + '/' + batches.length + '...' : 'Traduction Gemini en cours...';
+    setLog(label);
+    var batchSrt = batches[b].join('\n\n');
+    var prompt = 'Translate this SRT subtitle file from ' + srcName + ' to ' + tgtName + '.\nStrict rules:\n- Keep ALL timestamp lines exactly as-is (format: HH:MM:SS,mmm --> HH:MM:SS,mmm)\n- Keep ALL numeric index lines exactly as-is\n- Only translate the text lines\n- Preserve line breaks within subtitle blocks\n- Return ONLY the SRT content, no explanation, no markdown fences\n\n' + batchSrt;
+    var resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 8192 } })
+    });
+    if (!resp.ok) {
+      var err = await resp.json().catch(function() { return {}; });
+      throw new Error('Gemini ' + resp.status + ' : ' + (err.error ? err.error.message : resp.statusText));
+    }
+    var data = await resp.json();
+    var text = ((data.candidates[0].content.parts[0].text) || '').replace(/^```[a-z]*\r?\n?/im, '').replace(/```\s*$/m, '').trim();
+    results.push(text);
   }
-  var data = await resp.json();
-  var text = (data.candidates[0].content.parts[0].text) || '';
-  text = text.replace(/^```[a-z]*\r?\n?/im, '').replace(/```\s*$/m, '').trim();
-  return text + '\n';
+  return results.join('\n\n') + '\n';
 }
 
 // ── CANCEL ────────────────────────────────────────────────
@@ -3096,7 +3106,7 @@ function initSubOverlay(videoEl) {
 }
 
 // ── FULLSCREEN SUBTITLES ───────────────────────────────────
-// Stratégie v8.13 : rediriger fullscreen vers #videoWrap → #subOverlayInner
+// Stratégie v8.14 : rediriger fullscreen vers #videoWrap → #subOverlayInner
 // (qui affiche le texte du sous-titre courant) reste visible en fullscreen.
 var _fsRedirecting = false;
 function _onFsChange() {
