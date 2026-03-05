@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.14</title>
+<title>SubWhisper v8.15</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -675,6 +675,14 @@ body.light .sp{background:rgba(0,0,0,.02)}
 .preview-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:4px;line-height:1;transition:color .2s;border-radius:6px}
 .preview-close:hover{color:var(--accent2)}
 .preview-video{width:100%;display:block;max-height:340px;background:#000}
+.preview-collapse{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:4px 6px;line-height:1;transition:color .2s,transform .25s;border-radius:6px;margin-right:4px}
+.preview-collapse:hover{color:var(--accent)}
+.preview-collapse.collapsed{transform:rotate(180deg)}
+#videoWrap{overflow:hidden;transition:max-height .3s ease}
+#videoWrap.collapsed{max-height:0!important}
+#gapTimeline{display:none;height:5px;background:#111;position:relative;border-radius:0;cursor:pointer;flex-shrink:0}
+#gapTimeline:hover{height:7px;margin:-1px 0}
+#tlCursor{position:absolute;top:0;width:2px;height:100%;background:rgba(255,255,255,.7);border-radius:1px;pointer-events:none;transform:translateX(-50%);transition:left .1s linear}
 video::cue{
   background:rgba(0,0,0,.82);
   color:#fff;
@@ -893,7 +901,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.14</span>
+    <span class="ver-badge">v8.15</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1113,13 +1121,17 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
   <div class="preview-wrap" id="previewWrap">
     <div class="preview-hdr">
       <span class="preview-ttl">&#x25B6;&#xFE0F; Prévisualisation + sous-titres</span>
-      <button class="preview-close" onclick="closePreview()" title="Fermer">&#x2715;</button>
+      <div style="display:flex;align-items:center;gap:4px">
+        <button class="preview-collapse" id="previewCollapseBtn" onclick="togglePreviewCollapse()" title="Replier / Déplier la vidéo">&#x25B2;</button>
+        <button class="preview-close" onclick="closePreview()" title="Fermer">&#x2715;</button>
+      </div>
     </div>
     <div id="videoWrap" style="position:relative">
       <video class="preview-video" id="previewVideo" controls preload="metadata">
         <track id="previewTrack" kind="metadata" srclang="fr" label="Sous-titres">
       </video>
     </div>
+    <div id="gapTimeline" onclick="seekFromTimeline(event)" title="Timeline — cliquer pour naviguer · zones rouges = gaps &gt; 5s"></div>
     <div id="subBox" class="empty" onclick="openSubEditModal()">
       <div id="subBoxMeta"></div>
       <div id="subBoxText">&#x2014;</div>
@@ -2475,6 +2487,13 @@ function showRes(content, srcLang, tgtLang, wasTranslated, words) {
     var lastTs = parsed[parsed.length - 1].timestamp;
     var endMatch = lastTs.match(/-->\s*(\d{2}:\d{2}:\d{2}),\d{3}/);
     if (endMatch) html += ' · <span class="lb">' + endMatch[1] + '</span>';
+    var gapCount = 0;
+    for (var gi = 1; gi < parsed.length; gi++) {
+      var gPrev = parsed[gi-1].timestamp.split(' --> ')[1];
+      var gCur  = parsed[gi].timestamp.split(' --> ')[0];
+      if (tsToMs(gCur) - tsToMs(gPrev) > 5000) gapCount++;
+    }
+    if (gapCount > 0) html += ' · <span class="lb" style="color:#f87171;cursor:pointer" onclick="skipToNextGap()" title="Cliquer pour aller au prochain gap">' + gapCount + ' gaps</span>';
   }
   document.getElementById('ld').innerHTML = html;
   updateDirInfo();
@@ -3100,13 +3119,14 @@ function initSubOverlay(videoEl) {
   // pointer-events:none → onclick inutile, édition via #subBox
   overlay.appendChild(inner);
   document.getElementById('videoWrap').appendChild(overlay);
-  _timeupdateOverlay = function() { updateSubOverlay(); };
+  _timeupdateOverlay = function() { updateSubOverlay(); updateTimelineCursor(); };
   videoEl.addEventListener('timeupdate', _timeupdateOverlay);
   initFullscreenRedirect();
+  buildGapTimeline();
 }
 
 // ── FULLSCREEN SUBTITLES ───────────────────────────────────
-// Stratégie v8.14 : rediriger fullscreen vers #videoWrap → #subOverlayInner
+// Stratégie v8.15 : rediriger fullscreen vers #videoWrap → #subOverlayInner
 // (qui affiche le texte du sous-titre courant) reste visible en fullscreen.
 var _fsRedirecting = false;
 function _onFsChange() {
@@ -3128,6 +3148,96 @@ function _onFsChange() {
   }
   // Si videoWrap est fullscreen : #subOverlayInner est dans le contexte → rien d'autre à faire
 }
+// ── COLLAPSE VIDÉO ────────────────────────────────────────
+var _previewCollapsed = false;
+function togglePreviewCollapse() {
+  var wrap = document.getElementById('videoWrap');
+  var btn  = document.getElementById('previewCollapseBtn');
+  if (!wrap) return;
+  _previewCollapsed = !_previewCollapsed;
+  if (_previewCollapsed) {
+    wrap.style.maxHeight = wrap.scrollHeight + 'px'; // force reflow avant transition
+    requestAnimationFrame(function() {
+      wrap.style.maxHeight = '0';
+      wrap.classList.add('collapsed');
+    });
+  } else {
+    wrap.classList.remove('collapsed');
+    wrap.style.maxHeight = wrap.scrollHeight + 'px';
+    setTimeout(function() { wrap.style.maxHeight = ''; }, 320);
+  }
+  if (btn) btn.classList.toggle('collapsed', _previewCollapsed);
+}
+
+// ── GAP TIMELINE ──────────────────────────────────────────
+function buildGapTimeline() {
+  var tl  = document.getElementById('gapTimeline');
+  var vid = document.getElementById('previewVideo');
+  if (!tl || !vid) return;
+  var dur = vid.duration;
+  if (!dur || isNaN(dur)) { setTimeout(buildGapTimeline, 500); return; }
+  tl.style.display = 'block';
+  tl.innerHTML = '';
+  var blocks = parseSRT(document.getElementById('sp').value || srtOriginal);
+  // Zones de présence sous-titre (bleu sombre)
+  for (var i = 0; i < blocks.length; i++) {
+    var parts = blocks[i].timestamp.split(' --> ');
+    var s = tsToMs(parts[0]) / 1000, e = tsToMs(parts[1]) / 1000;
+    var seg = document.createElement('div');
+    seg.style.cssText = 'position:absolute;top:0;height:100%;background:rgba(99,179,237,.35);border-radius:1px';
+    seg.style.left = (s / dur * 100).toFixed(3) + '%';
+    seg.style.width = Math.max((e - s) / dur * 100, 0.1).toFixed(3) + '%';
+    tl.appendChild(seg);
+  }
+  // Zones gaps > 5s (rouge)
+  for (var j = 1; j < blocks.length; j++) {
+    var prevEnd = tsToMs(blocks[j-1].timestamp.split(' --> ')[1]) / 1000;
+    var curStart = tsToMs(blocks[j].timestamp.split(' --> ')[0]) / 1000;
+    if (curStart - prevEnd > 5) {
+      var gap = document.createElement('div');
+      gap.style.cssText = 'position:absolute;top:0;height:100%;background:rgba(248,113,113,.6);border-radius:1px';
+      gap.style.left = (prevEnd / dur * 100).toFixed(3) + '%';
+      gap.style.width = Math.max((curStart - prevEnd) / dur * 100, 0.3).toFixed(3) + '%';
+      tl.appendChild(gap);
+    }
+  }
+  // Curseur position courante
+  var cursor = document.createElement('div');
+  cursor.id = 'tlCursor';
+  cursor.style.cssText = 'position:absolute;top:0;width:2px;height:100%;background:rgba(255,255,255,.8);border-radius:1px;pointer-events:none;transform:translateX(-50%)';
+  cursor.style.left = '0%';
+  tl.appendChild(cursor);
+}
+function updateTimelineCursor() {
+  var vid = document.getElementById('previewVideo');
+  var c   = document.getElementById('tlCursor');
+  if (c && vid && vid.duration) c.style.left = (vid.currentTime / vid.duration * 100).toFixed(2) + '%';
+}
+function seekFromTimeline(e) {
+  var tl  = document.getElementById('gapTimeline');
+  var vid = document.getElementById('previewVideo');
+  if (!tl || !vid || !vid.duration) return;
+  var rect = tl.getBoundingClientRect();
+  vid.currentTime = ((e.clientX - rect.left) / rect.width) * vid.duration;
+}
+
+// ── SKIP GAP ──────────────────────────────────────────────
+function skipToNextGap() {
+  var vid = document.getElementById('previewVideo');
+  if (!vid) return;
+  var blocks = parseSRT(document.getElementById('sp').value || srtOriginal);
+  var curMs  = vid.currentTime * 1000;
+  for (var i = 1; i < blocks.length; i++) {
+    var prevEnd  = tsToMs(blocks[i-1].timestamp.split(' --> ')[1]);
+    var curStart = tsToMs(blocks[i].timestamp.split(' --> ')[0]);
+    if (curStart - prevEnd > 5000 && prevEnd > curMs) {
+      vid.currentTime = (prevEnd + 300) / 1000;
+      return;
+    }
+  }
+  toast('Aucun gap après la position courante');
+}
+
 function initFullscreenRedirect() {
   var vid  = document.getElementById('previewVideo');
   var wrap = document.getElementById('videoWrap');
@@ -3176,12 +3286,7 @@ function updateSubOverlay() {
       break;
     }
   }
-  // Overlay : afficher sous-titre sur la vidéo (visible aussi en fullscreen videoWrap)
-  if (found) {
-    inner.innerHTML = '<span style="display:inline-block;background:rgba(0,0,0,.82);color:#fff;font-family:Inter,sans-serif;font-size:clamp(13px,1.8vw,18px);font-weight:600;line-height:1.45;padding:4px 14px;border-radius:5px;white-space:pre-wrap;max-width:92%;text-align:center;text-shadow:0 1px 3px #000">' + found.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>';
-  } else {
-    inner.innerHTML = '';
-  }
+  inner.innerHTML = ''; // texte uniquement dans #subBox, pas sur la vidéo
   // Box noire sous la vidéo
   var box = document.getElementById('subBox');
   var boxMeta = document.getElementById('subBoxMeta');
