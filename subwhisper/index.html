@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.21</title>
+<title>SubWhisper v8.22</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -912,7 +912,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.21</span>
+    <span class="ver-badge">v8.22</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1132,7 +1132,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
             <button onclick="dlTXT()">&#x2B07; TXT</button>
             <button onclick="dlASS()">&#x2B07; ASS</button>
             <button onclick="dlJSON()">&#x2B07; JSON</button>
-            <button onclick="saveToDir()" id="saveDirBtn">&#x1F4BE; Dossier</button>
+            <button onclick="pickDir()" id="saveDirBtn">&#x1F4C1; Dossier cible</button>
           </div>
         </div>
       </div>
@@ -1152,7 +1152,8 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
   <div class="dir-info" id="dirInfo">
     <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">Dossier :</span>
     <span class="dir-name" id="dirName"></span>
-    <button class="dir-chg" onclick="changeDir()">changer</button>
+    <button class="dir-chg" onclick="pickDir()">changer</button>
+    <button class="dir-chg" onclick="clearDir()" style="color:var(--accent2)">&#x2715;</button>
   </div>
 
   <div class="preview-wrap" id="previewWrap">
@@ -3497,28 +3498,51 @@ function copyFfmpegCmd() {
 }
 
 // ── DOWNLOAD ──────────────────────────────────────────────
-async function dlSRT() {
-  var content = getCurrentSRT();
-  if (!content) return;
-  var fname = (origName || 'subtitles') + '.srt';
+// ── EXPORT CENTRAL ────────────────────────────────────────
+// Si dossier mappé actif → écrit directement sans dialogue
+// Sinon → showSaveFilePicker → fallback dlBlob
+async function exportFile(content, ext, mime) {
+  var fname = (origName || 'subtitles') + ext;
+  if (destDirHandle) {
+    try {
+      var fh = await destDirHandle.getFileHandle(fname, { create: true });
+      var w = await fh.createWritable();
+      await w.write(content); await w.close();
+      toast('\ud83d\udcbe ' + fname + ' \u2192 ' + destDirHandle.name);
+      return;
+    } catch(e) {
+      if (e.name === 'AbortError') return;
+      if (e.name === 'NotAllowedError' || e.name === 'SecurityError') {
+        destDirHandle = null; updateDirInfo();
+        toast('\u26a0 Permission dossier perdue \u2014 choisissez \u00e0 nouveau');
+        return;
+      }
+    }
+  }
   if ('showSaveFilePicker' in window) {
     try {
-      var handle = await window.showSaveFilePicker({ suggestedName: fname, types: [{ description: 'Fichier SRT', accept: { 'text/srt': ['.srt'] } }] });
+      var handle = await window.showSaveFilePicker({ suggestedName: fname, types: [{ description: mime, accept: { [mime]: [ext] } }] });
       var writable = await handle.createWritable();
       await writable.write(content); await writable.close();
       return;
     } catch(e) { if (e.name === 'AbortError') return; }
   }
-  dlBlob(content, '.srt', 'text/srt');
+  dlBlob(content, ext, mime);
 }
 
-function dlVTT() {
+async function dlSRT() {
   var content = getCurrentSRT();
   if (!content) return;
-  dlBlob(srtToVtt(content), '.vtt', 'text/vtt');
+  await exportFile(content, '.srt', 'text/srt');
 }
 
-function dlTXT() {
+async function dlVTT() {
+  var content = getCurrentSRT();
+  if (!content) return;
+  await exportFile(srtToVtt(content), '.vtt', 'text/vtt');
+}
+
+async function dlTXT() {
   var content = getCurrentSRT();
   if (!content) return;
   var lines = content.split('\n');
@@ -3528,10 +3552,10 @@ function dlTXT() {
     if (!trimmed || /^\d+$/.test(trimmed) || /^\d{2}:\d{2}:\d{2}[,.]\d{3} --> /.test(trimmed)) continue;
     textLines.push(trimmed);
   }
-  dlBlob(textLines.join('\n'), '.txt', 'text/plain');
+  await exportFile(textLines.join('\n'), '.txt', 'text/plain');
 }
 
-function dlASS() {
+async function dlASS() {
   var content = getCurrentSRT();
   if (!content) return;
   var blocks = parseSRT(content);
@@ -3550,10 +3574,10 @@ function dlASS() {
     var text = b.text.replace(/\n/g, '\\N');
     return 'Dialogue: 0,' + start + ',' + end + ',Default,,0,0,0,,' + text;
   }).join('\n');
-  dlBlob(header + dialogues + '\n', '.ass', 'text/plain');
+  await exportFile(header + dialogues + '\n', '.ass', 'text/plain');
 }
 
-function dlJSON() {
+async function dlJSON() {
   var content = getCurrentSRT();
   if (!content) return;
   var data = {
@@ -3563,7 +3587,7 @@ function dlJSON() {
     blocks: parseSRT(srtOriginal),
     words: wordData
   };
-  dlBlob(JSON.stringify(data, null, 2), '.json', 'application/json');
+  await exportFile(JSON.stringify(data, null, 2), '.json', 'application/json');
 }
 
 function dlBlob(content, ext, mime) {
@@ -3576,29 +3600,20 @@ function dlBlob(content, ext, mime) {
   setTimeout(function() { URL.revokeObjectURL(url); }, 5000);
 }
 
-// ── SAVE TO DIR ───────────────────────────────────────────
-async function saveToDir() {
-  var content = getCurrentSRT();
-  if (!content) return;
-  if (!('showDirectoryPicker' in window)) { dlSRT(); return; }
+// ── DOSSIER CIBLE ─────────────────────────────────────────
+async function pickDir() {
+  if (!('showDirectoryPicker' in window)) { toast('\u26a0 Non support\u00e9 sur ce navigateur'); return; }
   try {
-    if (!destDirHandle) { destDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' }); updateDirInfo(); }
-    var fname = (origName || 'subtitles') + '.srt';
-    var fileHandle = await destDirHandle.getFileHandle(fname, { create: true });
-    var writable = await fileHandle.createWritable();
-    await writable.write(content); await writable.close();
-    var btn = document.getElementById('saveDirBtn');
-    var orig = btn.innerHTML;
-    btn.innerHTML = '&#x2713; Enregistré';
-    setTimeout(function() { btn.innerHTML = orig; }, 2500);
+    destDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    updateDirInfo();
+    toast('\ud83d\udcc1 Dossier cible : ' + destDirHandle.name);
   } catch(e) {
     if (e.name === 'AbortError') return;
-    destDirHandle = null; updateDirInfo();
-    showErr((e.name === 'NotAllowedError' || e.name === 'SecurityError') ? 'Permission refusée. Veuillez resélectionner le dossier.' : 'Erreur sauvegarde dossier : ' + e.message);
+    toast('Erreur : ' + e.message);
   }
 }
 
-function changeDir() { destDirHandle = null; updateDirInfo(); saveToDir(); }
+function clearDir() { destDirHandle = null; updateDirInfo(); toast('Dossier cible effac\u00e9'); }
 
 function updateDirInfo() {
   var el = document.getElementById('dirInfo');
