@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.34</title>
+<title>SubWhisper v8.35</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -855,7 +855,15 @@ body.light footer{background:rgba(240,240,246,.6)}
 /* ── TOAST ── */
 #toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:2000;background:var(--surface2);border:1px solid var(--border2);backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);padding:9px 22px;border-radius:40px;font-family:var(--mono);font-size:11px;letter-spacing:.4px;opacity:0;pointer-events:none;transition:opacity .3s;white-space:nowrap}
 #toast.toast-vis{opacity:1;animation:toastPulse 1.8s ease-in-out infinite}
-@keyframes toastPulse{0%,100%{border-color:var(--border2);box-shadow:none}50%{border-color:var(--accent);box-shadow:0 0 10px rgba(124,106,255,.4)}}
+@keyframes toastPulse    {0%,100%{border-color:rgba(124,106,255,.3);box-shadow:none}50%{border-color:#7c6aff;box-shadow:0 0 10px rgba(124,106,255,.4)}}
+@keyframes toastPulseTeal{0%,100%{border-color:rgba(0,212,170,.3);box-shadow:none}50%{border-color:#00d4aa;box-shadow:0 0 10px rgba(0,212,170,.4)}}
+@keyframes toastPulseOra {0%,100%{border-color:rgba(245,158,11,.3);box-shadow:none}50%{border-color:#f59e0b;box-shadow:0 0 10px rgba(245,158,11,.4)}}
+@keyframes toastPulseRed {0%,100%{border-color:rgba(255,77,109,.3);box-shadow:none}50%{border-color:#ff4d6d;box-shadow:0 0 10px rgba(255,77,109,.4)}}
+@keyframes toastPulseBlue{0%,100%{border-color:rgba(96,165,250,.3);box-shadow:none}50%{border-color:#60a5fa;box-shadow:0 0 10px rgba(96,165,250,.4)}}
+#toast.t-teal{animation-name:toastPulseTeal}
+#toast.t-ora {animation-name:toastPulseOra}
+#toast.t-red {animation-name:toastPulseRed}
+#toast.t-blue{animation-name:toastPulseBlue}
 /* ── RICH TRANSCRIPT ── */
 #richLegend{flex-wrap:wrap;gap:10px 16px;padding:8px 0 4px;font-size:10px;font-family:var(--mono);color:var(--muted)}
 .legend-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
@@ -933,7 +941,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.34</span>
+    <span class="ver-badge">v8.35</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -2856,10 +2864,25 @@ function seekToWord(spanEl) {
 }
 
 // ── TOAST ─────────────────────────────────────────────────
+function _toastColor(msg) {
+  var s = (msg || '');
+  if (/\u2728|Nettoyage/i.test(s))             return 't-blue';
+  if (/\u1f310|Tradui|Traduction/i.test(s))     return 't-teal';
+  if (/\u1f527|r\u00e9par|Auto-r/i.test(s))    return 't-ora';
+  if (/\u26a0|Erreur|invalid|manquante|perdue|annul/i.test(s)) return 't-red';
+  if (/\u2713|termin|OK/i.test(s))              return 't-teal';
+  if (/\ud83d\udca1|d\u00e9tect|relance/i.test(s)) return 't-blue';
+  return '';
+}
+function _toastApply(t, msg) {
+  t.classList.remove('t-teal','t-ora','t-red','t-blue');
+  var c = _toastColor(msg); if (c) t.classList.add(c);
+}
 function toast(msg) {
   var t = document.getElementById('toast');
   if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
   t.textContent = msg;
+  _toastApply(t, msg);
   t.classList.add('toast-vis');
   clearTimeout(t._timer);
   t._timer = setTimeout(function() { t.classList.remove('toast-vis'); }, 2800);
@@ -2870,6 +2893,7 @@ function toastPersist(msg) {
   if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
   clearTimeout(t._timer); t._timer = null;
   t.textContent = msg;
+  _toastApply(t, msg);
   t.classList.add('toast-vis');
 }
 function toastClear() {
