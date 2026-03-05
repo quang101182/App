@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.7.0 — Filtre seg.start >= chunkDurationSec (hallucinations start hors-limites)
+ * Version: 1.8.0 — chunkReport[] dans payload final (diagnostic sous-titres incomplets)
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -94,7 +94,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.7.0'
+    version: '1.8.0'
   });
 });
 
@@ -187,7 +187,7 @@ async function processJob(job) {
       status: 'processing'
     });
 
-    const allSegments = await streamAndTranscribe({
+    const { allSegments, chunkReport } = await streamAndTranscribe({
       jobId,
       ffmpegArgs,
       srcLang,
@@ -206,12 +206,21 @@ async function processJob(job) {
     const srt = assembleSrt(allSegments);
     console.log(`[${jobId}] SRT assemblé: ${srt.length} caractères, ${allSegments.length} segments`);
 
+    // Détecter les gaps dans l'assemblage final
+    const gapReport = [];
+    for (let gi = 1; gi < allSegments.length; gi++) {
+      const gap = allSegments[gi].start - allSegments[gi - 1].end;
+      if (gap > 5) gapReport.push({ at: +allSegments[gi - 1].end.toFixed(1), dur: +gap.toFixed(1) });
+    }
+
     await updateWorker(workerCallbackUrl, workerSecret, {
       jobId,
       progress: 100,
       log: 'Transcription terminée.',
       status: 'done',
-      srt
+      srt,
+      chunkReport,
+      gapReport
     });
 
     console.log(`[${jobId}] Pipeline terminé avec succès.`);
@@ -297,12 +306,14 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
         console.log(`[${jobId}] ${totalChunks} chunk(s) à transcrire séquentiellement`);
 
         const allSegments = [];
+        const chunkReport = [];
         let lastGroqCallTime = 0;
 
         for (let i = 0; i < totalChunks; i++) {
           const start = i * CHUNK_MAX_BYTES;
           const end = Math.min(start + CHUNK_MAX_BYTES, pcmAccum.length);
           const pcmChunk = pcmAccum.slice(start, end);
+          const chunkDurationSec = pcmChunk.length / 32000;
 
           console.log(`[${jobId}] Chunk ${i}: ${pcmChunk.length} bytes PCM → WAV ${(pcmChunk.length / 1024 / 1024).toFixed(1)} MB`);
 
@@ -321,13 +332,12 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
           await updateWorker(workerCallbackUrl, workerSecret, {
             jobId,
             progress,
-            log: `🎯 Chunk ${i + 1}/${totalChunks} → Groq Whisper (${formatTime(offsetSec)} → ${formatTime(offsetSec + pcmChunk.length / 32000)})...`,
+            log: `🎯 Chunk ${i + 1}/${totalChunks} → Groq Whisper (${formatTime(offsetSec)} → ${formatTime(offsetSec + chunkDurationSec)})...`,
             status: 'processing'
           }).catch(() => {});
 
           lastGroqCallTime = Date.now();
 
-          const chunkDurationSec = pcmChunk.length / 32000;
           const wavBuffer = buildWavBuffer(pcmChunk);
           const segments = await transcribeWithGroq({
             jobId,
@@ -344,10 +354,33 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
           console.log(`[${jobId}] Chunk ${i}: ${segments.length} segments reçus`);
           allSegments.push(...segments);
 
+          // Calculer la couverture réelle de ce chunk
+          const covPct = segments.length > 0
+            ? Math.round((segments[segments.length - 1].end - offsetSec) / chunkDurationSec * 100)
+            : 0;
+          const txtFirst = segments.length > 0 ? segments[0].text.substring(0, 40) : '';
+          const txtLast  = segments.length > 1 ? segments[segments.length - 1].text.substring(0, 40) : txtFirst;
+          const incomplete = segments.length > 0 && covPct < 70;
+
+          chunkReport.push({
+            i: i + 1,
+            total: totalChunks,
+            segs: segments.length,
+            dur: +chunkDurationSec.toFixed(1),
+            cov: covPct,
+            ok: !incomplete,
+            first: txtFirst,
+            last: txtLast
+          });
+
+          const chunkLogMsg = segments.length === 0
+            ? `❌ Chunk ${i + 1}/${totalChunks} — 0 segments (audio vide ?)`
+            : `${incomplete ? '⚠️' : '✅'} Chunk ${i + 1}/${totalChunks}: ${segments.length} segs · couv ${covPct}%${incomplete ? ' INCOMPLET' : ''}`;
+
           await updateWorker(workerCallbackUrl, workerSecret, {
             jobId,
             progress,
-            log: `✅ Chunk ${i + 1}/${totalChunks} terminé — ${segments.length} segments`,
+            log: chunkLogMsg,
             status: 'processing'
           }).catch(() => {});
         }
@@ -356,12 +389,12 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
         pcmAccum = Buffer.alloc(0);
 
         promiseResolved = true;
-        resolve(allSegments);
+        resolve({ allSegments, chunkReport });
 
       } catch (err) {
         if (!promiseResolved) { promiseResolved = true; reject(err); }
       }
-    });
+    }); // fin ffmpeg.stdout.on('end')
 
     ffmpeg.on('error', err => {
       console.error(`[${jobId}] Erreur spawn FFmpeg:`, err);
@@ -601,7 +634,7 @@ function formatTime(sec) {
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.7.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.8.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);
