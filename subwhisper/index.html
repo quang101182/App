@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.39</title>
+<title>SubWhisper v8.40</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -950,6 +950,10 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 /* Sous-titres clbl */
 .clbl-sub{font-size:8px;color:var(--muted);font-weight:400;letter-spacing:.3px;opacity:.7}
 .clbl-req{font-size:8px;color:#f59e0b;font-weight:400;letter-spacing:.3px}
+/* Groupe Azure key+région */
+.azure-group{border-left:2px solid rgba(255,255,255,.08);padding-left:8px;margin-left:-2px;border-radius:0 6px 6px 0;transition:border-color .3s}
+@keyframes azureWarn{0%,100%{border-color:#ff4d6d;box-shadow:-2px 0 8px rgba(255,77,109,.4)}50%{border-color:rgba(255,77,109,.2);box-shadow:none}}
+.azure-group.warn{animation:azureWarn 1s ease-in-out infinite}
 /* API guide popover */
 #apiGuide{display:none;position:absolute;top:60px;right:8px;z-index:3000;background:var(--surface2);border:1px solid var(--border2);border-radius:14px;padding:14px 16px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,.5);backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);font-size:11px;animation:slideUp .15s ease}
 #apiGuide.vis{display:block}
@@ -968,7 +972,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.39</span>
+    <span class="ver-badge">v8.40</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1020,11 +1024,17 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
         <button class="tbtn" onclick="toggleKey('geminiKey','tkBtn4')" id="tkBtn4" title="Afficher">&#128065;</button>
       </div>
     </div>
-    <div class="crow">
-      <span class="clbl">TRAD <span class="clbl-sub">fallback</span></span>
-      <div class="irow">
-        <input type="password" id="azureKey" placeholder="Clé Azure Translator (fallback traduction)">
-        <button class="tbtn" onclick="toggleKey('azureKey','tkBtn2')" id="tkBtn2" title="Afficher">&#128065;</button>
+    <div class="azure-group" id="azureGroup">
+      <div class="crow">
+        <span class="clbl">TRAD <span class="clbl-sub">fallback</span></span>
+        <div class="irow">
+          <input type="password" id="azureKey" placeholder="Clé Azure Translator (fallback traduction)" oninput="checkAzurePair()">
+          <button class="tbtn" onclick="toggleKey('azureKey','tkBtn2')" id="tkBtn2" title="Afficher">&#128065;</button>
+        </div>
+      </div>
+      <div class="crow" style="margin-top:-4px">
+        <span class="clbl">R&#xc9;GION <span class="clbl-sub">azure</span></span>
+        <input type="text" id="azureRegion" placeholder="ex: francecentral (vide si Global)" oninput="checkAzurePair()">
       </div>
     </div>
     <div class="crow">
@@ -1037,10 +1047,6 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     <div class="crow">
       <span class="clbl">WORKER <span class="clbl-sub">cloud</span></span>
       <input type="text" id="workerUrl" placeholder="URL Cloudflare Worker — gros fichiers cloud">
-    </div>
-    <div class="crow">
-      <span class="clbl">RÉGION</span>
-      <input type="text" id="azureRegion" placeholder="Obligatoire si ressource régionale (ex: francecentral)">
     </div>
     <div class="crow">
       <span class="clbl">PROXY</span>
@@ -1553,7 +1559,7 @@ function init() {
   });
   renderHistory();
   // Ping APIs au démarrage — délai 1.5s pour éviter faux négatifs réseau lent
-  setTimeout(pingAllApis, 1500); updateRequiredBlink();
+  setTimeout(pingAllApis, 1500); updateRequiredBlink(); checkAzurePair();
 }
 
 function getApiKey()    { return document.getElementById('apiKey').value.trim(); }
@@ -4494,6 +4500,16 @@ document.addEventListener('click', function(e) {
   if (!g || !g.classList.contains('vis')) return;
   if (!g.contains(e.target) && !document.getElementById('apiLvlWrap').contains(e.target)) g.classList.remove('vis');
 });
+function checkAzurePair() {
+  var key = (document.getElementById('azureKey').value || '').trim();
+  var reg = (document.getElementById('azureRegion').value || '').trim();
+  var group = document.getElementById('azureGroup');
+  if (!group) return;
+  // Warn si clé présente sans région OU région présente sans clé
+  var mismatch = (!!key && !reg) || (!key && !!reg);
+  group.classList.toggle('warn', mismatch);
+}
+
 function updateRequiredBlink() {
   var hasGroq = !!getGroqKey();
   var dot = document.getElementById('adotGRQ');
