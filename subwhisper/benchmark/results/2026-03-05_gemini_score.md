@@ -4,15 +4,15 @@
 
 | Fichier | Src | Score BRUT | Score AI | Issues AI | Recommandations |
 |---------|-----|-----------|---------|-----------|----------------|
-| 20260304.ZH_BRUT.srt | FR | 🔴 **55** | 🟢 **94** | 1 | — |
-| aaa.EN_BRUT.srt | FR | 🔴 **64** | 🔴 **0** | 2 | — |
+| 20260304.ZH_BRUT.srt | FR | 🔴 **55** | 🟢 **100** | 0 | — |
+| aaa.EN_BRUT.srt | FR | 🔴 **64** | 🔴 **0** | 6 | — |
 | DIALOGUES EN FRANÇAIS.FR_BRUT.srt | FR | 🟢 **97** | 🔴 **0** | 2 | — |
 | S01E07-Assault [21D8A02E].JA_BRUT.s | FR | 🟢 **100** | 🟢 **100** | 0 | — |
 | Sentenced.to.Be.a.Hero.JA_BRUT.srt | FR | 🟢 **100** | 🟡 **85** | 2 | — |
 | videoplayback.KR_BRUT.srt | FR | 🟢 **100** | 🟢 **100** | 0 | — |
 
 **Score moyen BRUT (pipeline) : 86/100**
-**Score moyen AI (cleanAI) : 63/100**
+**Score moyen AI (cleanAI) : 64/100**
 
 ## 20260304.ZH_BRUT.srt
 
@@ -23,11 +23,11 @@ Stats: {"microCount":0,"totalRepeat":71,"foreignWords":5,"bigGaps":0,"overlaps":
     Ex: #22: оп, 發 微笑, 笑 | #230: Eh всего mom | #270: как
 - ⚠ **[LOW] LONG_BLOCKS** : 5 blocs > 20s → under-segmentation
 
-### AI CleanAI — Score: 94/100
-Penalties: 6 | Bonuses: 0
-Stats: {"timestampInText":0,"ellipsisAdded":0,"properNounChanged":1,"exclamationRemoved":0,"typoRegressed":0}
+### AI CleanAI — Score: 100/100
+Penalties: 0 | Bonuses: 0
+Stats: {"timestampInText":0,"ellipsisAdded":0,"properNounChanged":0,"exclamationRemoved":0,"typoRegressed":0}
 
-- **[MEDIUM] PROPER_NOUN_CHANGED** : #93 Nom propre modifié: "Yup" → "אני"
+✓ Aucun problème détecté
 
 ## aaa.EN_BRUT.srt
 
@@ -38,11 +38,17 @@ Stats: {"microCount":6,"totalRepeat":77,"foreignWords":0,"bigGaps":1,"overlaps":
 - ⚠ **[LOW] LONG_BLOCKS** : 10 blocs > 20s → under-segmentation
 
 ### AI CleanAI — Score: 0/100
-Penalties: 475 | Bonuses: 0
-Stats: {"timestampInText":0,"ellipsisAdded":0,"properNounChanged":0,"exclamationRemoved":0,"typoRegressed":0}
+Penalties: 158 | Bonuses: 0
+Stats: {"timestampInText":2,"ellipsisAdded":0,"properNounChanged":3,"exclamationRemoved":0,"typoRegressed":0}
 
-- **[HIGH] BLOCK_COUNT** : Block count: BRUT=831 AI=736 (diff=95)
-- **[INFO] BLOCK_ANALYSIS_SKIPPED** : Analyse détaillée ignorée (blockDiff=95 soit 11% — correspondances non fiables)
+- **[HIGH] BLOCK_COUNT** : Block count: BRUT=831 AI=811 (diff=20)
+- **[MEDIUM] PROPER_NOUN_CHANGED** : #158 Nom propre modifié: "Mmm" → "j'ai"
+- **[MEDIUM] PROPER_NOUN_CHANGED** : #158 Nom propre modifié: "Oui" → "de"
+- **[MEDIUM] PROPER_NOUN_CHANGED** : #158 Nom propre modifié: "Mmm" → "le"
+- **[CRITICAL] TIMESTAMP_IN_TEXT** : #714 Timestamp injecté dans texte: 00:52:38,063 --> 00:52:39,043
+Alors tu as comme ça.
+- **[CRITICAL] TIMESTAMP_IN_TEXT** : #724 Timestamp injecté dans texte: 00:52:53,183 --> 00:52:54,822
+Ta queue en a besoin.
 
 ## DIALOGUES EN FRANÇAIS.FR_BRUT.srt
 
@@ -51,11 +57,11 @@ Stats: {"microCount":0,"totalRepeat":0,"foreignWords":0,"bigGaps":2,"overlaps":1
 - ⚠ **[HIGH] OVERLAPS** : 1 chevauchements de timestamps
 
 ### AI CleanAI — Score: 0/100
-Penalties: 250 | Bonuses: 0
+Penalties: 240 | Bonuses: 0
 Stats: {"timestampInText":0,"ellipsisAdded":0,"properNounChanged":0,"exclamationRemoved":0,"typoRegressed":0}
 
-- **[HIGH] BLOCK_COUNT** : Block count: BRUT=428 AI=378 (diff=50)
-- **[INFO] BLOCK_ANALYSIS_SKIPPED** : Analyse détaillée ignorée (blockDiff=50 soit 12% — correspondances non fiables)
+- **[HIGH] BLOCK_COUNT** : Block count: BRUT=428 AI=380 (diff=48)
+- **[INFO] BLOCK_ANALYSIS_SKIPPED** : Analyse détaillée ignorée (blockDiff=48 soit 11% — correspondances non fiables)
 
 ## S01E07-Assault [21D8A02E].JA_BRUT.srt
 
