@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.25</title>
+<title>SubWhisper v8.26</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -923,7 +923,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.25</span>
+    <span class="ver-badge">v8.26</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -933,6 +933,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
       <span class="achip" title="Azure Translator (fallback traduction)"><span class="adot" id="adotAZR"></span><span class="achip-lbl">AZR</span></span>
       <span class="achip" title="Groq Whisper large-v3 Turbo (CJK top)"><span class="adot" id="adotGRQ"></span><span class="achip-lbl">GRQ</span></span>
       <span class="achip" title="Cloudflare Worker (cloud processing)"><span class="adot" id="adotWRK"></span><span class="achip-lbl">WRK</span></span>
+      <span class="achip" title="DeepSeek (IA traduction/nettoyage)"><span class="adot" id="adotDSK"></span><span class="achip-lbl">DSK</span></span>
       <div id="apiLvlWrap" title="Niveau qualité 0-6">
         <div id="apiLvlBar"><div id="apiLvlFill"></div></div>
         <span id="apiLvlLbl">–</span>
@@ -1306,9 +1307,9 @@ var micFinals = [];
 var micActive = false;
 
 // ── API STATUS INDICATORS ─────────────────────────────────
-var API_DOTS = { OAI:'none', GEM:'none', AAI:'none', AZR:'none', GRQ:'none', WRK:'none' };
-var API_LABELS = ['AUCUNE','BASIQUE','STANDARD','AVANCÉ','TOP','ELITE','MAX'];
-var API_COLORS = ['#606070','#ff4d6d','#f59e0b','#7c6aff','#00d4aa','#00d4aa','#00d4aa'];
+var API_DOTS = { OAI:'none', GEM:'none', AAI:'none', AZR:'none', GRQ:'none', WRK:'none', DSK:'none' };
+var API_LABELS = ['AUCUNE','BASIQUE','STANDARD','AVANCÉ','TOP','ELITE','MAX','MAX+'];
+var API_COLORS = ['#606070','#ff4d6d','#f59e0b','#7c6aff','#00d4aa','#00d4aa','#00d4aa','#00d4aa'];
 
 function setDot(id, state) {
   API_DOTS[id] = state;
@@ -1365,9 +1366,13 @@ async function pingAZR(key, region) {
 
 function pingGRQ(key) {
   // Groq bloque les requêtes CORS depuis file:// — validation format uniquement
-  // Clé valide = commence par gsk_ et longueur >= 30
   var valid = typeof key === 'string' && /^gsk_.{20,}$/.test(key.trim());
   setDot('GRQ', valid ? 'ok' : 'err');
+}
+function pingDSK(key) {
+  // DeepSeek bloque CORS — validation format uniquement (sk-...)
+  var valid = typeof key === 'string' && /^sk-.{10,}$/.test(key.trim());
+  setDot('DSK', valid ? 'ok' : 'err');
 }
 async function pingWRK(url) {
   try {
@@ -1383,13 +1388,14 @@ async function pingWRK(url) {
 }
 
 function pingAllApis() {
-  var oai = getOpenAIKey(), gem = getGeminiKey(), aai = getApiKey(), azr = getAzureKey(), azrR = getAzureRegion(), grq = getGroqKey(), wrk = getWorkerUrl();
+  var oai = getOpenAIKey(), gem = getGeminiKey(), aai = getApiKey(), azr = getAzureKey(), azrR = getAzureRegion(), grq = getGroqKey(), wrk = getWorkerUrl(), dsk = getDeepSeekKey();
   if (oai) pingOAI(oai); else setDot('OAI','none');
   if (gem) pingGEM(gem); else setDot('GEM','none');
   if (aai) pingAAI(aai); else setDot('AAI','none');
   if (azr) pingAZR(azr, azrR); else setDot('AZR','none');
   if (grq) pingGRQ(grq); else setDot('GRQ','none');
   if (wrk) pingWRK(wrk); else setDot('WRK','none');
+  if (dsk) pingDSK(dsk); else setDot('DSK','none');
 }
 
 // ── WAV HEADER PARSER (byte slicing) ─────────────────────
@@ -1470,7 +1476,7 @@ function init() {
   } catch(e) {}
   // Clé DeepSeek
   try { var dk = localStorage.getItem('sw_deepseekkey'); if (dk) document.getElementById('deepseekKey').value = dk; } catch(e) {}
-  document.getElementById('deepseekKey').addEventListener('change', function() { try { localStorage.setItem('sw_deepseekkey', this.value.trim()); } catch(e) {} });
+  document.getElementById('deepseekKey').addEventListener('change', function() { try { localStorage.setItem('sw_deepseekkey', this.value.trim()); } catch(e) {} pingAllApis(); });
   // Sync config selects → main bar
   document.getElementById('srcLang').addEventListener('change', function() { try { localStorage.setItem('sw_srcLang', this.value); document.getElementById('srcLangMain').value = this.value; } catch(e) {} });
   document.getElementById('outLang').addEventListener('change', function() { try { localStorage.setItem('sw_outLang', this.value); document.getElementById('outLangMain').value = this.value; } catch(e) {} });
