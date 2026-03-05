@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.56</title>
+<title>SubWhisper v8.57</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -996,7 +996,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.56</span>
+    <span class="ver-badge">v8.57</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -2533,35 +2533,65 @@ async function callAIText(prompt) {
 }
 
 async function translateGemini(srtContent, sourceLang, targetLang) {
-  var key = getAIEngine() === 'deepseek' ? getDeepSeekKey() : getGeminiKey();
   var LANG_NAMES = { fr:'French', en:'English', es:'Spanish', de:'German', it:'Italian', pt:'Portuguese', ru:'Russian', ja:'Japanese', zh:'Chinese', ko:'Korean', nl:'Dutch', hi:'Hindi', ar:'Arabic', vi:'Vietnamese', pl:'Polish', tr:'Turkish' };
   var srcName = LANG_NAMES[sourceLang] || sourceLang || 'the source language';
   var tgtName = LANG_NAMES[targetLang] || targetLang;
-  // Découper en batches adaptatifs (DeepSeek: 75, Gemini: 200)
-  var BATCH = getAIEngine() === 'deepseek' ? 75 : 200;
-  var allBlocks = srtContent.replace(/\r\n/g, '\n').split(/\n{2,}/).filter(function(b) { return b.trim(); });
-  var batches = [];
-  for (var i = 0; i < allBlocks.length; i += BATCH) { batches.push(allBlocks.slice(i, i + BATCH)); }
   var engineName = getAIEngine() === 'deepseek' ? 'DeepSeek' : 'Gemini';
-  var results = new Array(batches.length);
+  // parseSRT : structure {id, timestamp, text} — timestamps JAMAIS envoyés à l'IA
+  var allBlocks = parseSRT(srtContent);
+  if (!allBlocks.length) return srtContent;
+  var BATCH = getAIEngine() === 'deepseek' ? 75 : 150;
+  var batches = [];
+  for (var i = 0; i < allBlocks.length; i += BATCH) batches.push(allBlocks.slice(i, i + BATCH));
+  // Fallback = texte source (conservé si l'IA rate un [N])
+  var translatedTexts = allBlocks.map(function(b) { return b.text; });
   var _tDone = 0;
-  var _tCores = getAIEngine() === 'deepseek' ? 4 : 1;
+  var _tCores = getAIEngine() === 'deepseek' ? 4 : 2;
+  var typoT = targetLang === 'fr' ? '\n7. FRENCH TYPOGRAPHY: Mandatory space before ? ! : ;' : '';
   for (var _tS = 0; _tS < batches.length; _tS += _tCores) {
     var _tGrp = [];
     for (var _tK = _tS; _tK < Math.min(_tS + _tCores, batches.length); _tK++) _tGrp.push(_tK);
     await Promise.all(_tGrp.map(function(b) {
       return (async function() {
-        var batchSrt = batches[b].join('\n\n');
-        var typoT = targetLang === 'fr' ? '\n- FRENCH TYPOGRAPHY: Include mandatory space before ? ! : ; in French.' : '';
-        var prompt = 'You are a professional subtitle translator. Translate from ' + srcName + ' to ' + tgtName + '.\n1. STRUCTURE: Timestamp (HH:MM:SS,mmm --> HH:MM:SS,mmm) and index lines EXACTLY as-is. NEVER insert timestamp text into subtitle content.\n2. PROPER NOUNS: Keep character names, place names, invented terms in ORIGINAL form. Capitalized word not starting a sentence = likely proper noun, do not alter.\n3. COMPLETE TRANSLATION: Translate EVERY line. NEVER output [...] — if uncertain give best translation. Do not skip or merge blocks.\n4. SONG LYRICS: Text clearly song lyrics in a third language — keep unchanged, do not translate.\n5. STYLE: Match register and tone. Preserve short exclamations exactly.\n6. TRUNCATED: Lines ending without punctuation or with ... are intentionally cut — do NOT add words.' + typoT + '\n7. Return ONLY translated SRT, SAME block count, no explanation, no markdown.\n\n' + batchSrt;
-        var text = await callAIText(prompt);
-        results[b] = text;
+        var batchBlocks = batches[b];
+        var batchOffset = b * BATCH;
+        var promptLines = batchBlocks.map(function(blk, j) {
+          return '[' + (batchOffset + j + 1) + '] ' + blk.text.replace(/\n/g, ' | ');
+        });
+        var prompt =
+          'You are a professional subtitle translator. Translate from ' + srcName + ' to ' + tgtName + '.\n' +
+          'Each line is [N] source_text. Return [N] translated_text.\n' +
+          '1. NEVER skip a [N]. Translate EVERY line.\n' +
+          '2. PROPER NOUNS: Keep character names, place names, invented terms in original form.\n' +
+          '3. COMPLETE TRANSLATION: Translate EVERY line. NEVER output [...] \u2014 if uncertain give best translation.\n' +
+          '4. SONG LYRICS: Text in a third language clearly song lyrics \u2014 keep unchanged.\n' +
+          '5. STYLE: Match register and tone. Preserve short exclamations exactly.\n' +
+          '6. TRUNCATED: Lines ending without punctuation or with ... \u2014 do NOT add words.' + typoT + '\n' +
+          'Return ONLY the numbered lines [N] text. No explanation.\n\n' +
+          promptLines.join('\n');
+        try {
+          var aiText = await callAIText(prompt);
+          var lineRx = /^\[(\d+)\]\s*(.*)/gm;
+          var m;
+          while ((m = lineRx.exec(aiText)) !== null) {
+            var idx = parseInt(m[1]) - 1;
+            if (idx >= 0 && idx < allBlocks.length) {
+              var t = m[2].replace(/ \| /g, '\n').trim();
+              if (t) translatedTexts[idx] = t;
+            }
+          }
+        } catch(e2) {
+          console.warn('Batch ' + b + ' trad erreur (source conservée):', e2.message);
+        }
         _tDone++;
         setLog('Traduction ' + engineName + ' ' + _tDone + '/' + batches.length + ' \u2713');
       })();
     }));
   }
-  return results.join('\n\n') + '\n';
+  // Reconstruction SRT depuis structure originale → timestamps intacts, block count garanti
+  return allBlocks.map(function(blk, i) {
+    return blk.id + '\n' + blk.timestamp + '\n' + translatedTexts[i];
+  }).join('\n\n') + '\n';
 }
 
 // ── CANCEL ────────────────────────────────────────────────
