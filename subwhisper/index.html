@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.18</title>
+<title>SubWhisper v8.19</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -363,6 +363,12 @@ body.light .dz:hover,body.light .dz.over{background:rgba(124,106,255,.04)}
 .exp-menu button:hover{background:rgba(255,255,255,.06);color:var(--accent)}
 @media(max-width:520px){.offset-btns-row{flex-wrap:wrap;justify-content:center}}
 @media(max-width:600px){.btn-sep{display:none}.btn-grp{flex-wrap:wrap}}
+/* Validateur panel */
+#valPanel{background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:12px}
+#valPanel .val-issue{cursor:pointer;padding:5px 8px;border-radius:6px;background:var(--surface);display:flex;align-items:baseline;gap:8px;font-size:12px;transition:background .12s}
+#valPanel .val-issue:hover{background:rgba(255,77,109,.08)}
+#valPanel .val-ts{color:var(--muted);font-family:var(--mono);flex-shrink:0}
+#valPanel .val-txt{color:var(--text)}
 .finfo{flex:1;overflow:hidden}
 .fname{font-family:var(--mono);font-size:11px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fsz{font-size:11px;color:var(--muted);margin-top:3px}
@@ -901,7 +907,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.18</span>
+    <span class="ver-badge">v8.19</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1105,6 +1111,9 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
         <button class="ab" onclick="copyLiveLog()" id="logBtn" title="Copier le journal de traitement pour diagnostic">&#x1F4CB; LOG</button>
         <button class="ab" onclick="openFR()" id="frBtn">&#x1F50D; F&amp;R</button>
         <button class="ab" onclick="repairSRTTimestamps()" id="repairBtn" title="Corriger les timestamps aberrants">&#x1F527;</button>
+        <button class="ab" onclick="validateSRT()" id="validateBtn" title="Analyser la qualit&#233; des sous-titres">&#x2713; VALID</button>
+        <button class="ab" onclick="autoFormatSRT()" id="formatBtn" title="Formater : 42 chars/ligne, max 2 lignes, fusionner micro-blocs">&#x229E; FORMAT</button>
+        <button class="ab" onclick="cleanAI()" id="cleanAIBtn" title="Nettoyage IA Gemini : corriger hallucinations Whisper">&#x2728; IA</button>
       </div>
       <div class="btn-sep"></div>
       <!-- EXPORT -->
@@ -1125,6 +1134,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     </div>
   </div>
   <textarea class="sp" id="sp" spellcheck="false"></textarea>
+  <div id="valPanel" style="display:none"></div>
   <div id="spkLegend" style="display:none;flex-wrap:wrap;gap:6px;padding:8px 0 4px"></div>
   <div id="richLegend" style="display:none"></div>
   <div id="richTx" style="display:none"></div>
@@ -3800,6 +3810,231 @@ function applyFR() {
   var msg = count + ' remplacement' + (count !== 1 ? 's' : '') + ' effectu\u00e9' + (count !== 1 ? 's' : '');
   document.getElementById('frStat').textContent = msg;
   toast(msg + ' \u2713');
+}
+
+// ── VALIDATEUR SOUS-TITRES ────────────────────────────────
+function validateSRT() {
+  var raw = getCurrentSRT();
+  if (!raw || !raw.trim()) { toast('Aucun SRT \u00e0 valider'); return; }
+  var blocks = parseSRT(raw);
+  if (!blocks.length) { toast('SRT invalide'); return; }
+  var issues = [];
+  var MAX_CPS = 25;   // chars/sec max
+  var MIN_DUR = 800;  // ms minimum
+  var MAX_CHARS = 84; // 2 × 42 chars max
+  for (var i = 0; i < blocks.length; i++) {
+    var b = blocks[i];
+    var pts = b.timestamp.split(' --> ');
+    var startMs = tsToMs(pts[0]);
+    var endMs   = tsToMs(pts[1]);
+    var durMs   = endMs - startMs;
+    var charCount = b.text.replace(/\n/g, '').length;
+    // Chevauchement avec bloc précédent
+    if (i > 0) {
+      var prevEnd = tsToMs(blocks[i-1].timestamp.split(' --> ')[1]);
+      if (startMs < prevEnd - 50) {
+        issues.push({ id: b.id, ts: pts[0], startMs: startMs, type: 'overlap',
+          detail: 'Chevauchement avec bloc #' + blocks[i-1].id + ' (+' + (prevEnd - startMs) + 'ms)' });
+      }
+    }
+    // Bloc trop court
+    if (durMs > 0 && durMs < MIN_DUR) {
+      issues.push({ id: b.id, ts: pts[0], startMs: startMs, type: 'short',
+        detail: 'Dur\u00e9e trop courte : ' + durMs + 'ms (min ' + MIN_DUR + 'ms)' });
+    }
+    // Vitesse lecture > 25 chars/sec
+    if (durMs > 0 && charCount > 0) {
+      var cps = charCount / (durMs / 1000);
+      if (cps > MAX_CPS) {
+        issues.push({ id: b.id, ts: pts[0], startMs: startMs, type: 'speed',
+          detail: 'Lecture rapide : ' + Math.round(cps) + ' chars/s (max ' + MAX_CPS + ')' });
+      }
+    }
+    // Texte trop long
+    if (charCount > MAX_CHARS) {
+      issues.push({ id: b.id, ts: pts[0], startMs: startMs, type: 'long',
+        detail: 'Texte trop long : ' + charCount + ' chars (max ' + MAX_CHARS + ')' });
+    }
+  }
+  var panel = document.getElementById('valPanel');
+  var btn   = document.getElementById('validateBtn');
+  if (!issues.length) {
+    panel.style.display = 'none';
+    btn.innerHTML = '\u2713 VALID';
+    toast('\u2713 SRT valide \u2014 aucun probl\u00e8me d\u00e9tect\u00e9');
+    return;
+  }
+  // Badge rouge sur le bouton
+  btn.innerHTML = '\u2713 VALID <span style="background:var(--accent2);color:#fff;border-radius:10px;padding:1px 5px;font-size:10px;margin-left:3px">' + issues.length + '</span>';
+  // Construire le panel
+  var ICONS = { overlap: '\u26a1', short: '\u23f1', speed: '\ud83d\ude80', long: '\ud83d\udccf' };
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+    + '<span style="font-size:12px;font-weight:600;color:var(--accent2)">' + issues.length + ' probl\u00e8me' + (issues.length > 1 ? 's' : '') + ' d\u00e9tect\u00e9' + (issues.length > 1 ? 's' : '') + '</span>'
+    + '<button onclick="closeValPanel()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px">\u2715</button>'
+    + '</div>'
+    + '<div style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto">';
+  issues.forEach(function(iss) {
+    html += '<div class="val-issue" onclick="seekValIssue(' + iss.startMs + ')">'
+      + '<span class="val-ts">#' + iss.id + ' ' + iss.ts.substring(0, 8) + '</span>'
+      + '<span class="val-txt">' + (ICONS[iss.type] || '') + ' ' + iss.detail + '</span>'
+      + '</div>';
+  });
+  html += '</div>';
+  panel.innerHTML = html;
+  panel.style.display = 'block';
+}
+
+function seekValIssue(ms) {
+  var vid = document.getElementById('previewVideo');
+  if (vid && vid.src) { vid.currentTime = ms / 1000; }
+}
+
+function closeValPanel() {
+  var panel = document.getElementById('valPanel');
+  if (panel) panel.style.display = 'none';
+  var btn = document.getElementById('validateBtn');
+  if (btn) btn.innerHTML = '\u2713 VALID';
+}
+
+// ── AUTO-FORMATEUR SRT ────────────────────────────────────
+function autoFormatSRT() {
+  var raw = getCurrentSRT();
+  if (!raw || !raw.trim()) { toast('Aucun SRT \u00e0 formater'); return; }
+  var blocks = parseSRT(raw);
+  if (!blocks.length) { toast('SRT invalide'); return; }
+  var MAX_LINE    = 42;
+  var MAX_LINES   = 2;
+  var MIN_MERGE   = 500; // ms : bloc < 500ms fusionné avec suivant
+  var modified    = 0;
+
+  // Étape 1 : format lignes
+  blocks = blocks.map(function(b) {
+    var origText = b.text;
+    var lines = b.text.split('\n');
+    var newLines = [];
+    lines.forEach(function(line) {
+      if (line.length <= MAX_LINE) {
+        newLines.push(line);
+      } else {
+        var remaining = line;
+        while (remaining.length > MAX_LINE) {
+          var cut = remaining.lastIndexOf(' ', MAX_LINE);
+          if (cut <= 0) cut = MAX_LINE;
+          newLines.push(remaining.substring(0, cut).trimEnd());
+          remaining = remaining.substring(cut).trimStart();
+        }
+        if (remaining) newLines.push(remaining);
+      }
+    });
+    // Max 2 lignes
+    if (newLines.length > MAX_LINES) {
+      var merged2 = newLines.slice(1).join(' ');
+      if (merged2.length > MAX_LINE) merged2 = merged2.substring(0, MAX_LINE - 1) + '\u2026';
+      newLines = [newLines[0], merged2];
+    }
+    var newText = newLines.join('\n');
+    if (newText !== origText) modified++;
+    return { id: b.id, timestamp: b.timestamp, text: newText };
+  });
+
+  // Étape 2 : fusionner micro-blocs < MIN_MERGE ms
+  var merged = [];
+  var i = 0;
+  while (i < blocks.length) {
+    var b = blocks[i];
+    var pts = b.timestamp.split(' --> ');
+    var durMs = tsToMs(pts[1]) - tsToMs(pts[0]);
+    if (durMs < MIN_MERGE && durMs > 0 && i + 1 < blocks.length) {
+      var next    = blocks[i + 1];
+      var nextPts = next.timestamp.split(' --> ');
+      var combo   = b.text.trimEnd() + ' ' + next.text.trimStart();
+      if (combo.replace(/\n/g, '').length <= MAX_LINE * MAX_LINES) {
+        merged.push({ id: b.id, timestamp: pts[0] + ' --> ' + nextPts[1], text: combo });
+        i += 2; modified++;
+        continue;
+      }
+    }
+    merged.push(b);
+    i++;
+  }
+  // Renuméroter
+  merged = merged.map(function(bl, idx) { return { id: String(idx + 1), timestamp: bl.timestamp, text: bl.text }; });
+
+  var newSrt = buildSRT(merged);
+  srtOriginal = newSrt; srtTxt = newSrt;
+  var withOffset = currentOffset !== 0 ? shiftSRT(srtOriginal, currentOffset) : srtOriginal;
+  document.getElementById('sp').value = withOffset;
+  if (previewVttUrl) {
+    URL.revokeObjectURL(previewVttUrl);
+    var vttBlob = new Blob([srtToVtt(withOffset)], { type: 'text/vtt' });
+    previewVttUrl = URL.createObjectURL(vttBlob);
+    clearTimeout(offsetReloadTimer);
+    offsetReloadTimer = setTimeout(function() {
+      document.getElementById('previewTrack').src = previewVttUrl;
+    }, 50);
+  }
+  toast('\u229e Format\u00e9 \u2014 ' + modified + ' bloc' + (modified !== 1 ? 's' : '') + ' modifi\u00e9' + (modified !== 1 ? 's' : ''));
+}
+
+// ── NETTOYAGE IA (Gemini) ─────────────────────────────────
+async function cleanAI() {
+  var raw = getCurrentSRT();
+  if (!raw || !raw.trim()) { toast('Aucun SRT \u00e0 nettoyer'); return; }
+  var key = getGeminiKey();
+  if (!key) { toast('\u26a0 Cl\u00e9 Gemini requise pour le nettoyage IA'); return; }
+  var BATCH = 200;
+  var allBlocks = raw.replace(/\r\n/g, '\n').split(/\n{2,}/).filter(function(b) { return b.trim(); });
+  var batches = [];
+  for (var i = 0; i < allBlocks.length; i += BATCH) { batches.push(allBlocks.slice(i, i + BATCH)); }
+  var btn = document.getElementById('cleanAIBtn');
+  if (btn) btn.disabled = true;
+  try {
+    var results = [];
+    for (var b = 0; b < batches.length; b++) {
+      var label = batches.length > 1
+        ? '\u2728 Nettoyage IA ' + (b + 1) + '/' + batches.length + '...'
+        : '\u2728 Nettoyage IA en cours...';
+      toast(label);
+      var batchSrt = batches[b].join('\n\n');
+      var prompt = 'You are an expert subtitle editor. Clean up this SRT file produced by Whisper speech recognition.\n\nStrict rules:\n- Keep ALL timestamp lines EXACTLY as-is (HH:MM:SS,mmm --> HH:MM:SS,mmm)\n- Keep ALL numeric index lines EXACTLY as-is\n- Fix spelling/punctuation errors in text lines only\n- Fix obvious Whisper recognition errors (e.g. wrong homophone, missing apostrophe)\n- If a text line is a single character, isolated punctuation, or phonetic noise (mm, euh, [inaudible]), replace the text with [...]\n- Fix obvious wrong-language words mixed in\n- Preserve line breaks within subtitle blocks\n- Do NOT change correct words, names, or specific terminology\n- Return ONLY the corrected SRT content, no explanation, no markdown\n\n' + batchSrt;
+      var resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 8192 } })
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        throw new Error('Gemini ' + resp.status + ' : ' + (err.error ? err.error.message : resp.statusText));
+      }
+      var data = await resp.json();
+      var text = ((data.candidates[0].content.parts[0].text) || '').replace(/^```[a-z]*\r?\n?/im, '').replace(/```\s*$/m, '').trim();
+      results.push(text);
+    }
+    var cleaned = results.join('\n\n') + '\n';
+    // Validation : le SRT retourné doit être parseable
+    var validBlocks = parseSRT(cleaned);
+    if (!validBlocks.length) {
+      toast('\u26a0 R\u00e9ponse IA invalide \u2014 nettoyage annul\u00e9');
+      return;
+    }
+    srtOriginal = cleaned; srtTxt = cleaned;
+    var withOffset = currentOffset !== 0 ? shiftSRT(srtOriginal, currentOffset) : srtOriginal;
+    document.getElementById('sp').value = withOffset;
+    if (previewVttUrl) {
+      URL.revokeObjectURL(previewVttUrl);
+      var vttBlob = new Blob([srtToVtt(withOffset)], { type: 'text/vtt' });
+      previewVttUrl = URL.createObjectURL(vttBlob);
+      clearTimeout(offsetReloadTimer);
+      offsetReloadTimer = setTimeout(function() {
+        document.getElementById('previewTrack').src = previewVttUrl;
+      }, 50);
+    }
+    toast('\u2728 Nettoyage IA termin\u00e9 \u2014 ' + validBlocks.length + ' blocs');
+  } catch(e) {
+    toast('Erreur nettoyage IA : ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 // ── EXTRACT AUDIO WAV ─────────────────────────────────────
