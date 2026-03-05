@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.49</title>
+<title>SubWhisper v8.50</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -975,7 +975,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.49</span>
+    <span class="ver-badge">v8.50</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -4203,54 +4203,74 @@ function autoFormatSRT() {
 // ── NETTOYAGE IA ─────────────────────────────────────────
 async function cleanAI() {
   var raw = getCurrentSRT();
-  if (!raw || !raw.trim()) { toast('Aucun SRT \u00e0 nettoyer'); return; }
+  if (!raw || !raw.trim()) { toast('Aucun SRT à nettoyer'); return; }
   var engine = getAIEngine();
   var hasKey = engine === 'deepseek' ? !!getDeepSeekKey() : !!getGeminiKey();
-  if (!hasKey) { toast('\u26a0 Cl\u00e9 ' + (engine === 'deepseek' ? 'DeepSeek' : 'Gemini') + ' requise'); return; }
+  if (!hasKey) { toast('⚠ Clé ' + (engine === 'deepseek' ? 'DeepSeek' : 'Gemini') + ' requise'); return; }
   var engineName = engine === 'deepseek' ? 'DeepSeek' : 'Gemini';
+  var origBlocks = parseSRT(raw);
+  if (!origBlocks.length) { toast('SRT invalide'); return; }
+  var srtTextLang = (function() {
+    var out = document.getElementById('outLangMain').value;
+    if (out && out !== 'same') return out;
+    return detectedLang || document.getElementById('srcLangMain').value || '';
+  })();
   var BATCH = 200;
-  var allBlocks = raw.replace(/\r\n/g, '\n').split(/\n{2,}/).filter(function(b) { return b.trim(); });
-  var batches = [];
-  for (var i = 0; i < allBlocks.length; i += BATCH) { batches.push(allBlocks.slice(i, i + BATCH)); }
   var btn = document.getElementById('cleanAIBtn');
   var btnOrig = btn ? btn.innerHTML : '';
   if (btn) btn.disabled = true;
   try {
-    var results = [];
+    var batches = [];
+    for (var i = 0; i < origBlocks.length; i += BATCH) batches.push(origBlocks.slice(i, i + BATCH));
+    // Textes corrigés — par défaut = originaux (fallback si IA rate un bloc)
+    var correctedTexts = origBlocks.map(function(b) { return b.text; });
     for (var b = 0; b < batches.length; b++) {
-      var label = batches.length > 1
-        ? '\u2728 Nettoyage ' + engineName + ' ' + (b + 1) + '/' + batches.length + '...'
-        : '\u2728 Nettoyage ' + engineName + '...';
+      var label = batches.length > 1 ? '✨ Nettoyage ' + engineName + ' ' + (b+1) + '/' + batches.length + '...' : '✨ Nettoyage ' + engineName + '...';
       toastPersist(label);
-      if (btn) btn.innerHTML = batches.length > 1
-        ? '\u2728 IA ' + (b + 1) + '/' + batches.length
-        : '\u2728 IA...';
-      var batchSrt = batches[b].join('\n\n');
-      var srtTextLang = (function() {
-        var out = document.getElementById('outLangMain').value;
-        if (out && out !== 'same') return out;
-        return detectedLang || document.getElementById('srcLangMain').value || '';
-      })();
+      if (btn) btn.innerHTML = batches.length > 1 ? '✨ IA ' + (b+1) + '/' + batches.length : '✨ IA...';
+      var batchBlocks = batches[b];
+      var batchOffset = b * BATCH;
       var isCJK_c = /^(zh|ja|ko)$/.test(srtTextLang);
-      var langLine = srtTextLang ? 'The subtitle TEXT language is "' + srtTextLang + '". ' : '';
-      var typoC = srtTextLang === 'fr'
-        ? '\n6. FRENCH TYPOGRAPHY: Preserve spaces before ? ! : ; — mandatory in French. NEVER remove them.'
-        : (isCJK_c ? '\n6. CJK: Fix wrong characters with similar pronunciation. Do NOT convert Traditional/Simplified.' : '');
-      var foreignC = isCJK_c
-        ? '\n5. Repeated sequences of only numbers or single incoherent characters are hallucinations — replace inline with [...] only if partial noise. NEVER replace an entire block.'
-        : '\n5. Foreign words MAY be intentional (song lyrics, foreign character). Only use [...] inline for partial unintelligible noise. NEVER replace an entire block with [...].';
-      var batchCountLine = '⚠ THIS BATCH HAS EXACTLY ' + batches[b].length + ' BLOCKS. Output MUST have exactly ' + batches[b].length + ' blocks.' + String.fromCharCode(10);
-      var prompt = batchCountLine + 'You are a professional subtitle editor. ' + langLine + 'Clean up this subtitle file.\n⚠ BLOCK COUNT RULE (mandatory): Count input blocks. Output MUST have THE EXACT SAME COUNT. NEVER merge two blocks into one, NEVER delete a block, NEVER split a block. If a block is noise or unclear, copy it UNCHANGED.\n1. STRUCTURE: Each block = index line + timestamp line (HH:MM:SS,mmm --> HH:MM:SS,mmm) + text line(s). Copy index and timestamp lines VERBATIM. NEVER copy a timestamp into the text content of any block.\n2. PROPER NOUNS: Never alter character names, place names, invented terms. Capitalized word not starting a sentence = likely proper noun, leave unchanged.\n3. [...] USAGE: ONLY for partial unintelligible noise WITHIN a line. NEVER replace an entire block with [...]. Short exclamations (Hé, Oh, Ha, Eï, Ouh, Bah, Tss, Yeah, Kiii, Viendez, etc.) are VALID content — NEVER replace with [...]. Foreign words are VALID — keep them.\n4. TRUNCATED: Lines ending without punctuation or ... are intentionally cut — NEVER add words.' + foreignC + typoC + '\n5. CORRECTIONS: Fix spelling errors, missing apostrophes, obvious Whisper mishearing only.\n6. Return ONLY corrected SRT, SAME block count as input, no explanation, no markdown.\n\n' + batchSrt;
-            var text = await callAIText(prompt);
-      results.push(text);
+      var langLine = srtTextLang ? 'The subtitle text language is "' + srtTextLang + '". ' : '';
+      var typoRule = srtTextLang === 'fr'
+        ? '\n5. FRENCH: Fix missing apostrophes (c est->c\'est, j ai->j\'ai, qu il->qu\'il, s il->s\'il, etc.). Add space before ? ! : ; if missing.'
+        : (isCJK_c ? '\n5. CJK: Fix wrong characters with similar pronunciation only. Do NOT convert Traditional/Simplified.' : '');
+      var bracketsRule = isCJK_c
+        ? '\n4. Incoherent sequences = hallucination — replace inline with [...] only if partial. NEVER entire line.'
+        : '\n4. Foreign words MAY be intentional. Only [...] for partial unintelligible noise inline. NEVER entire line.';
+      // Construire lignes numérotées — texte multiligne joint avec ' | '
+      var promptLines = batchBlocks.map(function(blk, j) {
+        return '[' + (batchOffset + j + 1) + '] ' + blk.text.replace(/\n/g, ' | ');
+      });
+      var prompt = 'You are a professional subtitle editor. ' + langLine + '\n' +
+        'Each line is [N] subtitle_text. Return EACH line as [N] corrected_text.\n' +
+        '1. NEVER skip a number. If text is already correct, return it UNCHANGED.\n' +
+        '2. PROPER NOUNS: Never alter character names, place names, invented terms. Capitalized word not starting a sentence = likely proper noun.\n' +
+        '3. INTERJECTIONS & TRUNCATED: Short exclamations (Hé, Oh, Ha, Eï, Ouh, Bah, Tss, Yeah, Kiii, etc.) are VALID — NEVER replace. Lines ending without punctuation are intentionally cut — never add words.\n' +
+        bracketsRule + typoRule + '\n' +
+        '6. CORRECTIONS: Fix spelling errors, missing apostrophes, obvious Whisper mishearing only.\n' +
+        'Return ONLY the numbered lines [N] text. No SRT structure, no timestamps, no explanation.\n\n' +
+        promptLines.join('\n');
+      try {
+        var aiText = await callAIText(prompt);
+        // Parser les marqueurs [N] dans la réponse IA
+        var lineRx = /^\[(\d+)\]\s*(.*)/gm;
+        var m;
+        while ((m = lineRx.exec(aiText)) !== null) {
+          var idx = parseInt(m[1]) - 1;
+          if (idx >= 0 && idx < origBlocks.length) {
+            var corrected = m[2].replace(/ \| /g, '\n').trim();
+            if (corrected) correctedTexts[idx] = corrected;
+          }
+        }
+      } catch(e2) {
+        console.warn('Batch ' + b + ' erreur (textes originaux conservés):', e2.message);
+      }
     }
-    var cleaned = results.join('\n\n') + '\n';
-    // Validation : le SRT retourné doit être parseable
-    var validBlocks = parseSRT(cleaned);
-    if (!validBlocks.length) {
-      toast('\u26a0 R\u00e9ponse IA invalide \u2014 nettoyage annul\u00e9');
-      return;
-    }
+    // Reconstruire SRT depuis structure originale (timestamps intouchés) → block count garanti
+    var cleaned = origBlocks.map(function(blk, i) {
+      return blk.id + '\n' + blk.timestamp + '\n' + correctedTexts[i];
+    }).join('\n\n') + '\n';
     srtOriginal = cleaned; srtTxt = cleaned;
     var withOffset = currentOffset !== 0 ? shiftSRT(srtOriginal, currentOffset) : srtOriginal;
     document.getElementById('sp').value = withOffset;
@@ -4259,20 +4279,11 @@ async function cleanAI() {
       var vttBlob = new Blob([srtToVtt(withOffset)], { type: 'text/vtt' });
       previewVttUrl = URL.createObjectURL(vttBlob);
       clearTimeout(offsetReloadTimer);
-      offsetReloadTimer = setTimeout(function() {
-        document.getElementById('previewTrack').src = previewVttUrl;
-      }, 50);
+      offsetReloadTimer = setTimeout(function() { document.getElementById('previewTrack').src = previewVttUrl; }, 50);
     }
     toastClear();
-    var origBlocks = parseSRT(raw);
-    var blockLost = origBlocks.length - validBlocks.length;
-    var blockLostPct = origBlocks.length > 0 ? blockLost / origBlocks.length : 0;
-    if (blockLostPct > 0.05) {
-      toast('\u26a0 CleanAI a fusionn\u00e9 des blocs (' + origBlocks.length + '\u2192' + validBlocks.length + ', -' + Math.round(blockLostPct*100) + '%) \u2014 timings affect\u00e9s');
-    } else {
-      toast('\u2728 Nettoyage IA termin\u00e9 \u2014 ' + validBlocks.length + ' blocs');
-    }
-    showUndoBanner(raw, validBlocks.length, blockLost);
+    toast('✨ Nettoyage IA terminé — ' + origBlocks.length + ' blocs');
+    showUndoBanner(raw, origBlocks.length, 0);
     validateSRT(true);
     checkLangMismatch(srtOriginal, document.getElementById('outLangMain').value || null);
   } catch(e) {

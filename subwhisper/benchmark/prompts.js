@@ -1,7 +1,7 @@
 /**
  * SubWhisper — Prompts centralisés
  * Source unique : modifié ici → copié dans index.html
- * Version : v8.48
+ * Version : v8.50
  */
 
 function getCleanPrompt(srtTextLang, blockCount) {
@@ -42,4 +42,29 @@ function getTranslatePrompt(srcName, tgtName) {
     '7. Return ONLY translated SRT, SAME block count, no explanation, no markdown.';
 }
 
-module.exports = { getCleanPrompt, getTranslatePrompt };
+/**
+ * getCleanTextPrompt — Nouvelle approche v8.50 : texte numéroté [N]
+ * L'IA ne reçoit QUE les textes (pas les timestamps).
+ * Block count garanti par reconstruction algo depuis structure originale.
+ */
+function getCleanTextPrompt(lang) {
+  var isCJK = /^(zh|ja|ko)$/.test(lang);
+  var isFR  = lang === 'fr';
+  var langLine = lang ? 'The subtitle text language is "' + lang + '". ' : '';
+  var typoRule = isFR
+    ? '\n5. FRENCH: Fix missing apostrophes (c est->c\'est, j ai->j\'ai, qu il->qu\'il, s il->s\'il, etc.). Add space before ? ! : ; if missing.'
+    : (isCJK ? '\n5. CJK: Fix wrong characters with similar pronunciation only. Do NOT convert Traditional/Simplified.' : '');
+  var bracketsRule = isCJK
+    ? '\n4. Incoherent sequences = hallucination — replace inline with [...] only if partial. NEVER entire line.'
+    : '\n4. Foreign words MAY be intentional. Only [...] for partial unintelligible noise inline. NEVER entire line.';
+  return 'You are a professional subtitle editor. ' + langLine + '\n' +
+    'Each line is [N] subtitle_text. Return EACH line as [N] corrected_text.\n' +
+    '1. NEVER skip a number. If text is already correct, return it UNCHANGED.\n' +
+    '2. PROPER NOUNS: Never alter character names, place names, invented terms. Capitalized word not starting a sentence = likely proper noun.\n' +
+    '3. INTERJECTIONS & TRUNCATED: Short exclamations (Hé, Oh, Ha, Eï, Ouh, Bah, Tss, Yeah, Kiii, etc.) are VALID — NEVER replace. Lines ending without punctuation are intentionally cut — never add words.\n' +
+    bracketsRule + typoRule + '\n' +
+    '6. CORRECTIONS: Fix spelling errors, missing apostrophes, obvious Whisper mishearing only.\n' +
+    'Return ONLY the numbered lines [N] text. No SRT structure, no timestamps, no explanation.';
+}
+
+module.exports = { getCleanPrompt, getCleanTextPrompt, getTranslatePrompt };

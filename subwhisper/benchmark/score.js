@@ -78,14 +78,16 @@ function score(brutPath, aiContent, srcLang) {
     }
 
     // ── 5. Nom propre modifié ─────────────────────────────
+    // Ne check que les mots capitalisés hors début de ligne, absents PARTOUT dans le texte AI
+    // (évite les faux positifs quand l'IA corrige des contractions FR et décale les positions)
+    var COMMON_FR = /^(Non|Sur|Mais|Alors|Ainsi|Donc|Car|Ni|Ou|Et|La|Le|Les|Un|Une|Des|Du|Au|Aux|Ce|Se|Si|Il|Elle|Ils|Elles|Je|Tu|Nous|Vous|On|Que|Qui|Dont|Pour|Par|Dans|Avec|Sous|Sans|En|À|De)$/i;
     var brutWords = b.split(/\s+/);
-    var aiWords   = a.split(/\s+/);
     brutWords.forEach(function(w, wi) {
-      if (!aiWords[wi]) return;
-      // Mot avec majuscule pas en début de phrase
-      if (/^[A-ZÀÂÉÈÊ][a-zàâéèêôû]{2,}$/.test(w) && aiWords[wi] !== w && wi > 0) {
+      if (wi === 0) return; // premier mot = début de phrase, pas un NP
+      // Mot capitalisé (3+ chars), non commun, absent partout dans le texte AI
+      if (/^[A-ZÀÂÉÈÊ][a-zàâéèêôû]{2,}$/.test(w) && !COMMON_FR.test(w) && !a.includes(w)) {
         issues.push({ type: 'PROPER_NOUN_CHANGED', sev: 'MEDIUM', id: brut[i].id,
-          msg: '#' + brut[i].id + ' Nom propre modifié: "' + w + '" → "' + aiWords[wi] + '"' });
+          msg: '#' + brut[i].id + ' Nom propre modifié: "' + w + '" absent du texte AI' });
         penalties += 6;
         properNounChanged++;
       }

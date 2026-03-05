@@ -13,7 +13,7 @@
 
 var fs   = require('fs');
 var path = require('path');
-var { getCleanPrompt } = require('./prompts');
+var { getCleanTextPrompt } = require('./prompts');
 var { score, scoreBrut, parseSRT } = require('./score');
 
 // ── Parse args ────────────────────────────────────────────
@@ -105,29 +105,44 @@ async function processFile(filePath) {
   var blocks = parseSRT(content);
   console.log('  Blocks: ' + blocks.length);
 
-  // Split into batches
-  var allBlocks = content.trim().split(/\r?\n\r?\n/).filter(b => b.trim());
-  var batches = [];
-  for (var i = 0; i < allBlocks.length; i += BATCH_SIZE) batches.push(allBlocks.slice(i, i+BATCH_SIZE));
+  // Approche v8.50 : texte numéroté [N] — block count garanti par reconstruction algo
+  var correctedTexts = blocks.map(function(b) { return b.text; });
+  var totalBatches = Math.ceil(blocks.length / BATCH_SIZE);
 
-  var results = [];
-  for (var b = 0; b < batches.length; b++) {
-    process.stdout.write('  Batch ' + (b+1) + '/' + batches.length + '...');
-    var batchSrt = batches[b].join('\n\n');
-    var prompt = getCleanPrompt(srtTextLang, batches[b].length) + '\n\n' + batchSrt;
+  for (var b = 0; b < totalBatches; b++) {
+    var batchBlocks = blocks.slice(b * BATCH_SIZE, (b+1) * BATCH_SIZE);
+    var batchOffset = b * BATCH_SIZE;
+    process.stdout.write('  Batch ' + (b+1) + '/' + totalBatches + '...');
+
+    var promptLines = batchBlocks.map(function(blk, j) {
+      return '[' + (batchOffset + j + 1) + '] ' + blk.text.replace(/\n/g, ' | ');
+    });
+    var prompt = getCleanTextPrompt(srtTextLang) + '\n\n' + promptLines.join('\n');
+
     try {
-      var text = await callAI(prompt);
-      results.push(text);
+      var aiText = await callAI(prompt);
+      var lineRx = /^\[(\d+)\]\s*(.*)/gm;
+      var m;
+      while ((m = lineRx.exec(aiText)) !== null) {
+        var idx = parseInt(m[1]) - 1;
+        if (idx >= 0 && idx < blocks.length) {
+          var corrected = m[2].replace(/ \| /g, '\n').trim();
+          if (corrected) correctedTexts[idx] = corrected;
+        }
+      }
       console.log(' OK');
     } catch(e) {
       console.log(' ERROR: ' + e.message);
-      results.push(batchSrt); // keep original on error
+      // textes originaux conservés pour ce batch
     }
     // Rate limit throttle
-    if (b < batches.length - 1) await new Promise(r => setTimeout(r, 1000));
+    if (b < totalBatches - 1) await new Promise(r => setTimeout(r, 1000));
   }
 
-  var aiContent = results.join('\n\n') + '\n';
+  // Reconstruction SRT depuis structure originale (timestamps intouchés)
+  var aiContent = blocks.map(function(blk, i) {
+    return blk.id + '\n' + blk.timestamp + '\n' + correctedTexts[i];
+  }).join('\n\n') + '\n';
   var result = score(filePath, aiContent, srcLang);
   result.brutScore = brutResult.score;
   result.brutIssues = brutResult.issues;
