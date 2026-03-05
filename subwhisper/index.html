@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.35</title>
+<title>SubWhisper v8.36</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -729,6 +729,10 @@ video::cue{
 body.light .ffmpeg-wrap{background:rgba(0,0,0,.04)}
 /* ffmpeg-cmd stays accent3 (teal) in both themes — removed body.light override */
 .ffmpeg-wrap.vis{display:block;animation:slideUp .3s ease}
+.ffmpeg-modes{display:flex;gap:4px;margin-bottom:8px}
+.ffmpeg-mode{font-family:var(--mono);font-size:9px;background:none;border:1px solid var(--border2);color:var(--muted);border-radius:5px;padding:3px 9px;cursor:pointer;transition:all .15s;letter-spacing:.3px}
+.ffmpeg-mode.active{background:rgba(0,212,170,.12);border-color:var(--accent3);color:var(--accent3)}
+.ffmpeg-mode-desc{font-family:var(--sans);font-size:10px;color:var(--muted);margin-bottom:7px;line-height:1.5}
 .ffmpeg-lbl{
   font-family:var(--mono);
   font-size:9px;color:var(--muted);
@@ -941,7 +945,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.35</span>
+    <span class="ver-badge">v8.36</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1274,6 +1278,11 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
       <span>&#x1F4BB; Graver les sous-titres dans la vidéo (FFmpeg)</span>
       <button class="ffmpeg-copy" id="ffCopyBtn" onclick="copyFfmpegCmd()">copier</button>
     </div>
+    <div class="ffmpeg-modes">
+      <button class="ffmpeg-mode active" id="ffModeHard" onclick="setFfmpegMode('hard')">HARDCODE</button>
+      <button class="ffmpeg-mode" id="ffModeSoft" onclick="setFfmpegMode('soft')">SOFT SUB</button>
+    </div>
+    <div class="ffmpeg-mode-desc" id="ffModeDesc"></div>
     <textarea class="ffmpeg-cmd" id="ffmpegCmd" readonly rows="2"></textarea>
   </div>
 </div>
@@ -3572,10 +3581,31 @@ function closePreview() {
 }
 
 // ── FFMPEG ────────────────────────────────────────────────
+var _ffmpegMode = 'hard';
+
+var _FFMPEG_MODES = {
+  hard: {
+    desc: 'Sous-titres incrustés définitivement dans l\'image — compatible partout, re-encodage vidéo (plus lent)',
+    cmd: function(f) { return 'ffmpeg -i "' + f + '.mp4" -vf subtitles="' + f + '.srt" -c:v libx264 -crf 18 -preset fast -c:a copy "' + f + '_subs.mp4"'; }
+  },
+  soft: {
+    desc: 'Sous-titres en piste séparée — aucun re-encodage, instantané, qualité préservée, activables/désactivables à la lecture',
+    cmd: function(f) { return 'ffmpeg -i "' + f + '.mp4" -i "' + f + '.srt" -c copy -c:s mov_text -metadata:s:s:0 language=fre "' + f + '_subs.mp4"'; }
+  }
+};
+
+function setFfmpegMode(mode) {
+  _ffmpegMode = mode;
+  document.getElementById('ffModeHard').classList.toggle('active', mode === 'hard');
+  document.getElementById('ffModeSoft').classList.toggle('active', mode === 'soft');
+  updateFfmpegCmd();
+}
+
 function updateFfmpegCmd() {
   var fname = origName || 'video';
-  var cmd = 'ffmpeg -i "' + fname + '.mp4" -vf subtitles="' + fname + '.srt" "' + fname + '_subs.mp4"';
-  document.getElementById('ffmpegCmd').value = cmd;
+  var m = _FFMPEG_MODES[_ffmpegMode];
+  document.getElementById('ffmpegCmd').value = m.cmd(fname);
+  document.getElementById('ffModeDesc').textContent = m.desc;
   document.getElementById('ffmpegWrap').classList.add('vis');
 }
 
