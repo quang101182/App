@@ -114,7 +114,7 @@ async function processFile(filePath) {
   for (var b = 0; b < batches.length; b++) {
     process.stdout.write('  Batch ' + (b+1) + '/' + batches.length + '...');
     var batchSrt = batches[b].join('\n\n');
-    var prompt = getCleanPrompt(srtTextLang) + '\n\n' + batchSrt;
+    var prompt = getCleanPrompt(srtTextLang, batches[b].length) + '\n\n' + batchSrt;
     try {
       var text = await callAI(prompt);
       results.push(text);

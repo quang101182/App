@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.47</title>
+<title>SubWhisper v8.49</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -975,7 +975,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.47</span>
+    <span class="ver-badge">v8.49</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -4239,7 +4239,8 @@ async function cleanAI() {
       var foreignC = isCJK_c
         ? '\n5. Repeated sequences of only numbers or single incoherent characters are hallucinations — replace inline with [...] only if partial noise. NEVER replace an entire block.'
         : '\n5. Foreign words MAY be intentional (song lyrics, foreign character). Only use [...] inline for partial unintelligible noise. NEVER replace an entire block with [...].';
-      var prompt = 'You are a professional subtitle editor. ' + langLine + 'Clean up this subtitle file.\n⚠ BLOCK COUNT RULE (mandatory): Count input blocks. Output MUST have THE EXACT SAME COUNT. NEVER merge two blocks into one, NEVER delete a block, NEVER split a block. If a block is noise or unclear, copy it UNCHANGED.\n1. STRUCTURE: Each block = index line + timestamp line (HH:MM:SS,mmm --> HH:MM:SS,mmm) + text line(s). Copy index and timestamp lines VERBATIM. NEVER copy a timestamp into the text content of any block.\n2. PROPER NOUNS: Never alter character names, place names, invented terms. Capitalized word not starting a sentence = likely proper noun, leave unchanged.\n3. [...] USAGE: ONLY for partial unintelligible noise WITHIN a line. NEVER replace an entire block with [...]. Short exclamations (Hé, Oh, Ha, Eï, Ouh, Bah, Tss, Yeah, Kiii, Viendez, etc.) are VALID content — NEVER replace with [...]. Foreign words are VALID — keep them.\n4. TRUNCATED: Lines ending without punctuation or ... are intentionally cut — NEVER add words.' + foreignC + typoC + '\n5. CORRECTIONS: Fix spelling errors, missing apostrophes, obvious Whisper mishearing only.\n6. Return ONLY corrected SRT, SAME block count as input, no explanation, no markdown.\n\n' + batchSrt;
+      var batchCountLine = '⚠ THIS BATCH HAS EXACTLY ' + batches[b].length + ' BLOCKS. Output MUST have exactly ' + batches[b].length + ' blocks.' + String.fromCharCode(10);
+      var prompt = batchCountLine + 'You are a professional subtitle editor. ' + langLine + 'Clean up this subtitle file.\n⚠ BLOCK COUNT RULE (mandatory): Count input blocks. Output MUST have THE EXACT SAME COUNT. NEVER merge two blocks into one, NEVER delete a block, NEVER split a block. If a block is noise or unclear, copy it UNCHANGED.\n1. STRUCTURE: Each block = index line + timestamp line (HH:MM:SS,mmm --> HH:MM:SS,mmm) + text line(s). Copy index and timestamp lines VERBATIM. NEVER copy a timestamp into the text content of any block.\n2. PROPER NOUNS: Never alter character names, place names, invented terms. Capitalized word not starting a sentence = likely proper noun, leave unchanged.\n3. [...] USAGE: ONLY for partial unintelligible noise WITHIN a line. NEVER replace an entire block with [...]. Short exclamations (Hé, Oh, Ha, Eï, Ouh, Bah, Tss, Yeah, Kiii, Viendez, etc.) are VALID content — NEVER replace with [...]. Foreign words are VALID — keep them.\n4. TRUNCATED: Lines ending without punctuation or ... are intentionally cut — NEVER add words.' + foreignC + typoC + '\n5. CORRECTIONS: Fix spelling errors, missing apostrophes, obvious Whisper mishearing only.\n6. Return ONLY corrected SRT, SAME block count as input, no explanation, no markdown.\n\n' + batchSrt;
             var text = await callAIText(prompt);
       results.push(text);
     }
@@ -4263,8 +4264,15 @@ async function cleanAI() {
       }, 50);
     }
     toastClear();
-    toast('\u2728 Nettoyage IA termin\u00e9 \u2014 ' + validBlocks.length + ' blocs');
-    showUndoBanner(raw, validBlocks.length);
+    var origBlocks = parseSRT(raw);
+    var blockLost = origBlocks.length - validBlocks.length;
+    var blockLostPct = origBlocks.length > 0 ? blockLost / origBlocks.length : 0;
+    if (blockLostPct > 0.05) {
+      toast('\u26a0 CleanAI a fusionn\u00e9 des blocs (' + origBlocks.length + '\u2192' + validBlocks.length + ', -' + Math.round(blockLostPct*100) + '%) \u2014 timings affect\u00e9s');
+    } else {
+      toast('\u2728 Nettoyage IA termin\u00e9 \u2014 ' + validBlocks.length + ' blocs');
+    }
+    showUndoBanner(raw, validBlocks.length, blockLost);
     validateSRT(true);
     checkLangMismatch(srtOriginal, document.getElementById('outLangMain').value || null);
   } catch(e) {
@@ -4276,12 +4284,20 @@ async function cleanAI() {
 }
 
 var _cleanAIBackup = null;
-function showUndoBanner(originalSrt, nbBlocks) {
+function showUndoBanner(originalSrt, nbBlocks, blockLost) {
   _cleanAIBackup = originalSrt;
   var banner = document.getElementById('undoBanner');
   var txt    = document.getElementById('undoBannerTxt');
   if (!banner) return;
-  if (txt) txt.textContent = '\u2728 Nettoyage IA appliqu\u00e9 (' + nbBlocks + ' blocs) \u2014 v\u00e9rifiez le r\u00e9sultat';
+  if (blockLost && blockLost > 0) {
+    if (txt) txt.textContent = '\u26a0 ' + blockLost + ' blocs fusionn\u00e9s par l\'IA \u2014 timings affect\u00e9s, pensez \u00e0 annuler';
+    banner.style.background = 'rgba(255,160,50,.12)';
+    banner.style.borderColor = 'rgba(255,160,50,.4)';
+  } else {
+    if (txt) txt.textContent = '\u2728 Nettoyage IA appliqu\u00e9 (' + nbBlocks + ' blocs) \u2014 v\u00e9rifiez le r\u00e9sultat';
+    banner.style.background = '';
+    banner.style.borderColor = '';
+  }
   banner.style.display = 'flex';
 }
 function undoCleanAI() {

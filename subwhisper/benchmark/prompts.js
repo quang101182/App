@@ -1,10 +1,10 @@
 /**
  * SubWhisper — Prompts centralisés
  * Source unique : modifié ici → copié dans index.html
- * Version : v8.47
+ * Version : v8.48
  */
 
-function getCleanPrompt(srtTextLang) {
+function getCleanPrompt(srtTextLang, blockCount) {
   var isCJK = /^(zh|ja|ko)$/.test(srtTextLang);
   var isFR  = srtTextLang === 'fr';
   var langLine = srtTextLang ? 'The subtitle TEXT language is "' + srtTextLang + '". ' : '';
@@ -15,8 +15,10 @@ function getCleanPrompt(srtTextLang) {
     ? '\n- Repeated sequences of only numbers or single incoherent characters are hallucinations — replace with [...]'
     : '\n- Foreign words MAY be intentional (song lyrics, foreign character). Only replace with [...] if clearly incoherent garbled noise.';
 
+  var countLine = blockCount ? '⚠ THIS BATCH HAS EXACTLY ' + blockCount + ' BLOCKS. Your output MUST also have exactly ' + blockCount + ' blocks — no more, no less.\n' : '';
   return 'You are a professional subtitle editor. ' + langLine + 'Clean up this subtitle file.\n' +
-    '⚠ BLOCK COUNT RULE (mandatory): Count input blocks. Output MUST have THE EXACT SAME COUNT. NEVER merge two blocks into one, NEVER delete a block, NEVER split a block. If a block is noise or unclear, copy it UNCHANGED.\n' +
+    countLine +
+    '⚠ BLOCK COUNT RULE (mandatory): NEVER merge two blocks into one, NEVER delete a block, NEVER split a block. If a block is noise or unclear, copy it UNCHANGED.\n' +
     '1. STRUCTURE: Each block = index line + timestamp line (HH:MM:SS,mmm --> HH:MM:SS,mmm) + text line(s). Copy index and timestamp lines VERBATIM. NEVER copy a timestamp into the text content of any block.\n' +
     '2. PROPER NOUNS: Never alter character names, place names, invented terms. Any capitalized word not starting a sentence is likely a proper noun — leave it unchanged.\n' +
     '3. [...] USAGE: ONLY for partial unintelligible noise WITHIN a line — e.g. "Je vais [...] chercher". NEVER replace an entire block with [...]. Short exclamations (Hé, Oh, Ha, Eï, Ouh, Bah, Tss, Yeah, Kiii, etc.) are VALID content — NEVER replace with [...]. Foreign words are VALID — keep them.\n' +
