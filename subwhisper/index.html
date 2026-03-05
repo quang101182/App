@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.19</title>
+<title>SubWhisper v8.20</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -907,7 +907,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.19</span>
+    <span class="ver-badge">v8.20</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1263,7 +1263,7 @@ function updateApiLevel() {
 async function pingOAI(key) {
   try {
     setDot('OAI','key');
-    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 5000);
+    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 10000);
     var r = await fetch('https://api.openai.com/v1/models', { headers:{'Authorization':'Bearer '+key}, signal:ctrl.signal });
     setDot('OAI', r.ok ? 'ok' : 'err');
   } catch(e) { setDot('OAI', 'err'); }
@@ -1271,7 +1271,7 @@ async function pingOAI(key) {
 async function pingGEM(key) {
   try {
     setDot('GEM','key');
-    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 5000);
+    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 10000);
     var r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+key+'&pageSize=1', { signal:ctrl.signal });
     setDot('GEM', r.ok ? 'ok' : 'err');
   } catch(e) { setDot('GEM', 'err'); }
@@ -1279,7 +1279,7 @@ async function pingGEM(key) {
 async function pingAAI(key) {
   try {
     setDot('AAI','key');
-    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 5000);
+    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 10000);
     var r = await fetch('https://api.assemblyai.com/v2/account', { headers:{'authorization':key}, signal:ctrl.signal });
     setDot('AAI', r.ok ? 'ok' : 'err');
   } catch(e) { setDot('AAI', 'err'); }
@@ -1287,7 +1287,7 @@ async function pingAAI(key) {
 async function pingAZR(key, region) {
   try {
     setDot('AZR','key');
-    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 5000);
+    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 10000);
     var hdrs = {'Ocp-Apim-Subscription-Key':key,'Content-Type':'application/json'};
     if (region) hdrs['Ocp-Apim-Subscription-Region'] = region;
     var r = await fetch('https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&to=en', { method:'POST', headers:hdrs, body:'[{"Text":"hi"}]', signal:ctrl.signal });
@@ -1304,7 +1304,7 @@ function pingGRQ(key) {
 async function pingWRK(url) {
   try {
     setDot('WRK','key');
-    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 5000);
+    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 10000);
     var r = await fetch(url.replace(/\/$/, '') + '/health', { signal:ctrl.signal });
     setDot('WRK', r.ok ? 'ok' : 'err');
   } catch(e) {
@@ -1430,8 +1430,8 @@ function init() {
     }
   });
   renderHistory();
-  // Ping APIs au démarrage (fire-and-forget)
-  pingAllApis();
+  // Ping APIs au démarrage — délai 1.5s pour éviter faux négatifs réseau lent
+  setTimeout(pingAllApis, 1500);
 }
 
 function getApiKey()    { return document.getElementById('apiKey').value.trim(); }
@@ -2726,6 +2726,20 @@ function toast(msg) {
   clearTimeout(t._timer);
   t._timer = setTimeout(function() { t.classList.remove('toast-vis'); }, 2800);
 }
+// Toast persistant (pour ops longues — reste visible jusqu'à toastClear)
+function toastPersist(msg) {
+  var t = document.getElementById('toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+  clearTimeout(t._timer); t._timer = null;
+  t.textContent = msg;
+  t.classList.add('toast-vis');
+}
+function toastClear() {
+  var t = document.getElementById('toast');
+  if (!t) return;
+  clearTimeout(t._timer); t._timer = null;
+  t.classList.remove('toast-vis');
+}
 
 // ── OFFSET ────────────────────────────────────────────────
 function tsToMs(ts) {
@@ -3987,6 +4001,7 @@ async function cleanAI() {
   var batches = [];
   for (var i = 0; i < allBlocks.length; i += BATCH) { batches.push(allBlocks.slice(i, i + BATCH)); }
   var btn = document.getElementById('cleanAIBtn');
+  var btnOrig = btn ? btn.innerHTML : '';
   if (btn) btn.disabled = true;
   try {
     var results = [];
@@ -3994,7 +4009,10 @@ async function cleanAI() {
       var label = batches.length > 1
         ? '\u2728 Nettoyage IA ' + (b + 1) + '/' + batches.length + '...'
         : '\u2728 Nettoyage IA en cours...';
-      toast(label);
+      toastPersist(label);
+      if (btn) btn.innerHTML = batches.length > 1
+        ? '\u2728 IA ' + (b + 1) + '/' + batches.length
+        : '\u2728 IA...';
       var batchSrt = batches[b].join('\n\n');
       var prompt = 'You are an expert subtitle editor. Clean up this SRT file produced by Whisper speech recognition.\n\nStrict rules:\n- Keep ALL timestamp lines EXACTLY as-is (HH:MM:SS,mmm --> HH:MM:SS,mmm)\n- Keep ALL numeric index lines EXACTLY as-is\n- Fix spelling/punctuation errors in text lines only\n- Fix obvious Whisper recognition errors (e.g. wrong homophone, missing apostrophe)\n- If a text line is a single character, isolated punctuation, or phonetic noise (mm, euh, [inaudible]), replace the text with [...]\n- Fix obvious wrong-language words mixed in\n- Preserve line breaks within subtitle blocks\n- Do NOT change correct words, names, or specific terminology\n- Return ONLY the corrected SRT content, no explanation, no markdown\n\n' + batchSrt;
       var resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, {
@@ -4029,11 +4047,13 @@ async function cleanAI() {
         document.getElementById('previewTrack').src = previewVttUrl;
       }, 50);
     }
+    toastClear();
     toast('\u2728 Nettoyage IA termin\u00e9 \u2014 ' + validBlocks.length + ' blocs');
   } catch(e) {
+    toastClear();
     toast('Erreur nettoyage IA : ' + e.message);
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = btnOrig; }
   }
 }
 
