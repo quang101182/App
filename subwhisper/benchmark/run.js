@@ -60,6 +60,7 @@ async function scoreOnlyFile(filePath) {
   var fileName = path.basename(filePath);
   var langMatch = fileName.match(/_([A-Z]{2,3})_BRUT/i);
   var srcLang = langMatch ? langMatch[1].toLowerCase() : 'fr';
+  if (srcLang === 'jp') srcLang = 'ja'; // normalise JP → JA
 
   // Score BRUT
   var brutResult = scoreBrut(filePath, srcLang);
@@ -90,6 +91,7 @@ async function processFile(filePath) {
   // Extract source language from filename: name_ZH_BRUT.srt → zh
   var langMatch = fileName.match(/_([A-Z]{2,3})_BRUT/i);
   var srcLang = langMatch ? langMatch[1].toLowerCase() : 'fr';
+  if (srcLang === 'jp') srcLang = 'ja'; // normalise JP → JA (ISO 639-1)
   // For cleanAI, the text is already in French (translated output)
   var srtTextLang = 'fr';
 
