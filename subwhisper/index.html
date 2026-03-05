@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.54</title>
+<title>SubWhisper v8.55</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -996,7 +996,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.54</span>
+    <span class="ver-badge">v8.55</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -4493,6 +4493,28 @@ function closeLangNotice() {
   if (el) el.style.display = 'none';
 }
 
+// ── DÉTECTION CLIENT-SIDE BLOCS HORS-LANGUE ───────────────
+function clientDetectForeign(blocks, targetLang) {
+  var NonLatin = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u0400-\u04ff\u0600-\u06ff]/;
+  var hints = {
+    fr: /[éèêëàâùûôîïçœæÉÈÊËÀÂÙÛÔÎÏÇŒÆ]|\b(?:le|la|les|un|une|des|je|tu|il|elle|nous|vous|et|est|que|qui|dans|sur|par|pour|avec|pas|mais|ce|ne|en|du|au|c'est|j'ai|n'est|qu'il|s'il|d'un|d'une|c'était|j'étais|n'a|qu'on|s'en)\b/i,
+    en: /\b(?:the|a|an|is|are|was|were|be|been|have|has|had|will|would|can|could|shall|should|and|or|but|if|in|on|at|to|for|of|with|by|from|that|this|it|he|she|we|you|they|i|not|so|as|do|does|did)\b/i,
+    es: /[áéíóúüñ]|\b(?:el|la|los|las|un|una|y|es|que|en|de|con|por|para|se|no|lo|le|me|te|nos|les|del|al)\b/i,
+    de: /[äöüßÄÖÜ]|\b(?:der|die|das|ein|eine|und|ist|nicht|ich|du|er|sie|wir|ihr|in|auf|mit|für|von|zu|dem|den|im|am|an)\b/i
+  };
+  var hint = hints[targetLang];
+  var toTranslate = [], toKeep = [];
+  blocks.forEach(function(blk, i) {
+    var text = blk.text.trim();
+    if (!text) { toKeep.push(i); return; }
+    if (NonLatin.test(text)) { toTranslate.push(i); return; }
+    if (hint && hint.test(text)) { toKeep.push(i); return; }
+    var words = text.split(/\s+/).filter(Boolean).length;
+    if (words <= 2) toKeep.push(i); else toTranslate.push(i);
+  });
+  return { toTranslate: toTranslate, toKeep: toKeep };
+}
+
 // ── TRADUCTION MANUELLE ───────────────────────────────────
 async function translateManual() {
   hideSuggBanner();
@@ -4512,33 +4534,40 @@ async function translateManual() {
   try {
     var translated, nbBlocks = 0;
     if (tgt === 'fr') {
-      // Mode sélectif : l'IA détecte et traduit uniquement les blocs non-français
+      // Mode sélectif : détection client-side des blocs hors-langue, puis traduction ciblée
       var blocks = parseSRT(raw);
       nbBlocks = blocks.length;
+      var detected = clientDetectForeign(blocks, tgt);
+      var foreignIdx = detected.toTranslate;
+      if (foreignIdx.length === 0) {
+        toastClear();
+        toast('\u2705 Aucun bloc hors-fran\u00e7ais d\u00e9tect\u00e9 (' + nbBlocks + ' blocs)');
+        return;
+      }
+      toastPersist('\ud83d\udd0d ' + foreignIdx.length + ' bloc' + (foreignIdx.length > 1 ? 's' : '') + ' hors-FR d\u00e9tect\u00e9' + (foreignIdx.length > 1 ? 's' : '') + ' / ' + nbBlocks + ' \u2014 traduction...');
       var correctedTexts = blocks.map(function(b) { return b.text; });
-      var BATCH = getAIEngine() === 'deepseek' ? 75 : 200;
-      var totalBatches = Math.ceil(blocks.length / BATCH);
+      var BATCH = getAIEngine() === 'deepseek' ? 75 : 150;
+      var batches = [];
+      for (var _fi = 0; _fi < foreignIdx.length; _fi += BATCH) batches.push(foreignIdx.slice(_fi, _fi + BATCH));
       var _pDone = 0;
       var _pCores = getAIEngine() === 'deepseek' ? 4 : 1;
-      for (var _pS = 0; _pS < totalBatches; _pS += _pCores) {
+      for (var _pS = 0; _pS < batches.length; _pS += _pCores) {
         var _pGrp = [];
-        for (var _pK = _pS; _pK < Math.min(_pS + _pCores, totalBatches); _pK++) _pGrp.push(_pK);
-        await Promise.all(_pGrp.map(function(b) {
+        for (var _pK = _pS; _pK < Math.min(_pS + _pCores, batches.length); _pK++) _pGrp.push(_pK);
+        await Promise.all(_pGrp.map(function(bIdx) {
           return (async function() {
-            var batchBlocks = blocks.slice(b * BATCH, (b+1) * BATCH);
-            var batchOffset = b * BATCH;
-            var promptLines = batchBlocks.map(function(blk, j) {
-              return '[' + (batchOffset + j + 1) + '] ' + blk.text.replace(/\n/g, ' | ');
+            var batchIdxs = batches[bIdx];
+            var promptLines = batchIdxs.map(function(globalIdx) {
+              return '[' + (globalIdx + 1) + '] ' + blocks[globalIdx].text.replace(/\n/g, ' | ');
             });
             var prompt = 'You are a professional subtitle translator. Target language: French.\n' +
-              'Each line is [N] subtitle_text.\n' +
-              '1. If the text is ALREADY in French: return it UNCHANGED as [N] text.\n' +
-              '2. If the text is in ANY OTHER language: translate it to French as [N] French_text.\n' +
-              '3. NEVER skip a number. Return ALL lines.\n' +
-              '4. PROPER NOUNS: Keep character names, place names in their original form.\n' +
-              '5. TRUNCATED: Lines ending without punctuation are intentionally cut — never add words.\n' +
-              '6. FRENCH TYPOGRAPHY: Add mandatory space before ? ! : ; if missing.\n' +
-              'Return ONLY the numbered lines [N] text. No SRT structure, no timestamps, no explanation.\n\n' +
+              'ALL lines below are non-French text. Translate ALL of them to French.\n' +
+              'Each line is [N] foreign_text. Return [N] French_translation.\n' +
+              '1. NEVER skip a [N]. Translate EVERY line.\n' +
+              '2. PROPER NOUNS: Keep character names, place names in their original form.\n' +
+              '3. TRUNCATED: Lines ending without punctuation or with ... are intentionally cut \u2014 do not add words.\n' +
+              '4. FRENCH TYPOGRAPHY: Mandatory space before ? ! : ;\n' +
+              'Return ONLY the numbered lines [N] text. No explanation.\n\n' +
               promptLines.join('\n');
             try {
               var aiText = await callAIText(prompt);
@@ -4551,12 +4580,12 @@ async function translateManual() {
                   if (corrected) correctedTexts[idx] = corrected;
                 }
               }
-              _pDone++;
-              toastPersist('🌐 Patch FR ' + engine + ' ' + _pDone + '/' + totalBatches + ' \u2713');
-              if (btn) btn.innerHTML = '🌐 ' + _pDone + '/' + totalBatches;
             } catch(e2) {
-              console.warn('Batch ' + b + ' erreur:', e2.message);
+              console.warn('Batch ' + bIdx + ' erreur:', e2.message);
             }
+            _pDone++;
+            toastPersist('\ud83c\udf10 Trad FR ' + engine + ' ' + _pDone + '/' + batches.length + ' \u2713');
+            if (btn) btn.innerHTML = '\ud83c\udf10 ' + _pDone + '/' + batches.length;
           })();
         }));
       }
