@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.41</title>
+<title>SubWhisper v8.42</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -975,7 +975,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.41</span>
+    <span class="ver-badge">v8.42</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -2522,7 +2522,8 @@ async function translateGemini(srtContent, sourceLang, targetLang) {
     var label = batches.length > 1 ? 'Traduction ' + engineName + ' ' + (b+1) + '/' + batches.length + '...' : 'Traduction ' + engineName + ' en cours...';
     setLog(label);
     var batchSrt = batches[b].join('\n\n');
-    var prompt = 'Translate this SRT subtitle file from ' + srcName + ' to ' + tgtName + '.\nStrict rules:\n- Keep ALL timestamp lines exactly as-is (format: HH:MM:SS,mmm --> HH:MM:SS,mmm)\n- Keep ALL numeric index lines exactly as-is\n- Only translate the text lines\n- Preserve line breaks within subtitle blocks\n- Return ONLY the SRT content, no explanation, no markdown fences\n\n' + batchSrt;
+    var typoT = targetLang === 'fr' ? '\n- FRENCH TYPOGRAPHY: Include mandatory space before ? ! : ; in French.' : '';
+    var prompt = 'You are a professional subtitle translator. Translate from ' + srcName + ' to ' + tgtName + '.\n\nSTRICT rules:\n1. STRUCTURE: Keep ALL timestamp (HH:MM:SS,mmm --> HH:MM:SS,mmm) and index lines EXACTLY as-is.\n2. PROPER NOUNS: Keep character names, place names, invented/fantasy terms in their ORIGINAL form.\n3. COMPLETE TRANSLATION: Translate EVERY line. NEVER output [...] — if uncertain give your best translation.\n4. SONG LYRICS: If text is clearly song lyrics in a third language, keep them unchanged.\n5. STYLE: Match register and tone. Preserve exclamations and emotional markers.\n6. TRUNCATED LINES: Lines ending with \u2026 are intentionally cut — preserve the truncation.' + typoT + '\n7. Return ONLY the translated SRT, no explanation, no markdown.\n\n' + batchSrt;
     var text = await callAIText(prompt);
     results.push(text);
   }
@@ -4223,21 +4224,21 @@ async function cleanAI() {
         ? '\u2728 IA ' + (b + 1) + '/' + batches.length
         : '\u2728 IA...';
       var batchSrt = batches[b].join('\n\n');
-      // Prompt adapté selon la langue source
-      var cleanSrc = detectedLang || document.getElementById('srcLangMain').value || '';
-      var isCJK = /^(zh|ja|ko)$/.test(cleanSrc);
-      var isRTL = /^(ar|he|fa|ur)$/.test(cleanSrc);
-      var langHint = cleanSrc ? 'The subtitle language is "' + cleanSrc + '". ' : '';
-      var langRules = '';
-      if (isCJK) {
-        langRules = '\n- This is a CJK language (Chinese/Japanese/Korean). Fix wrong characters that sound similar but have different meanings\n- If text contains random Latin/Cyrillic/Spanish/English words mixed in (not names), they are Whisper hallucinations — replace with [...]\n- Sequences of only numbers (1, 2, 1, 2...) repeated are hallucinations — replace each with [...]\n- Do NOT convert between Traditional and Simplified Chinese — keep original script';
-      } else if (isRTL) {
-        langRules = '\n- This is an RTL language. Fix obvious character/diacritic errors from Whisper recognition\n- If text contains random Latin words mixed in (not names/brands), they are hallucinations — replace with [...]';
-      } else {
-        langRules = '\n- If text contains words clearly from a completely different language (not names/brands), they are hallucinations — replace with [...]';
-      }
-      var prompt = 'You are an expert subtitle editor. ' + langHint + 'Clean up this SRT file produced by Whisper speech recognition.\n\nStrict rules:\n- Keep ALL timestamp lines EXACTLY as-is (HH:MM:SS,mmm --> HH:MM:SS,mmm)\n- Keep ALL numeric index lines EXACTLY as-is\n- Fix spelling/punctuation errors in text lines only\n- Fix obvious Whisper recognition errors (e.g. wrong homophone, missing apostrophe)\n- If a text line is a single character, isolated punctuation, or phonetic noise (mm, euh, [inaudible]), replace the text with [...]\n- Preserve line breaks within subtitle blocks\n- Do NOT change correct words, names, or specific terminology\n- Return ONLY the corrected SRT content, no explanation, no markdown' + langRules + '\n\n' + batchSrt;
-      var text = await callAIText(prompt);
+      var srtTextLang = (function() {
+        var out = document.getElementById('outLangMain').value;
+        if (out && out !== 'same') return out;
+        return detectedLang || document.getElementById('srcLangMain').value || '';
+      })();
+      var isCJK_c = /^(zh|ja|ko)$/.test(srtTextLang);
+      var langLine = srtTextLang ? 'The subtitle TEXT language is "' + srtTextLang + '". ' : '';
+      var typoC = srtTextLang === 'fr'
+        ? '\n6. FRENCH TYPOGRAPHY: Preserve spaces before ? ! : ; — mandatory in French. NEVER remove them.'
+        : (isCJK_c ? '\n6. CJK: Fix wrong characters with similar pronunciation. Do NOT convert Traditional/Simplified.' : '');
+      var foreignC = isCJK_c
+        ? '\n5. Repeated sequences of only numbers or single incoherent characters are hallucinations — replace with [...]'
+        : '\n5. Foreign words MAY be intentional (song lyrics, foreign character). Only replace with [...] if clearly incoherent garbled noise.';
+      var prompt = 'You are a professional subtitle editor. ' + langLine + 'Clean up this subtitle file.\n\nSTRICT rules:\n1. STRUCTURE: Keep ALL timestamp and index lines EXACTLY as-is.\n2. PROPER NOUNS: Never change character names, place names, or invented/fantasy terms. When in doubt, leave unchanged.\n3. [...] USAGE: Only use [...] for genuine acoustic noise (isolated mm/ugh/euh, single incoherent characters). Never for real words or sentences.\n4. CORRECTIONS: Fix spelling errors, missing apostrophes, obvious Whisper mishearing only.' + foreignC + typoC + '\n7. Return ONLY the corrected SRT, same block count, no explanation, no markdown.\n\n' + batchSrt;
+            var text = await callAIText(prompt);
       results.push(text);
     }
     var cleaned = results.join('\n\n') + '\n';
