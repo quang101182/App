@@ -19,13 +19,15 @@ function getArg(name) {
   var i = args.indexOf('--' + name);
   return i !== -1 ? args[i+1] : null;
 }
-var ENGINE  = getArg('engine') || 'gemini'; // gemini | deepseek
-var API_KEY = getArg('key');
-var TEST_DIR = getArg('testdir') || path.join(__dirname, 'test-files');
+var ENGINE    = getArg('engine') || 'gemini'; // gemini | deepseek
+var API_KEY   = getArg('key');
+var TEST_DIR  = getArg('testdir') || path.join(__dirname, 'test-files');
+var SCORE_ONLY = args.includes('--score-only');
 var BATCH_SIZE = 200; // blocs par appel API
 
-if (!API_KEY) {
+if (!SCORE_ONLY && !API_KEY) {
   console.error('Usage: node run.js --engine gemini|deepseek --key YOUR_KEY [--testdir PATH]');
+  console.error('       node run.js --engine gemini|deepseek --score-only [--testdir PATH]');
   process.exit(1);
 }
 
@@ -47,6 +49,35 @@ async function callAI(prompt) {
   var data = await resp.json();
   if (ENGINE === 'deepseek') return (data.choices[0].message.content || '').trim();
   return ((data.candidates[0].content.parts[0].text) || '').replace(/^```[a-z]*\r?\n?/im,'').replace(/```\s*$/m,'').trim();
+}
+
+// ── Score-only mode : utilise les fichiers _AI.srt existants ──────────────
+async function scoreOnlyFile(filePath) {
+  var fileName = path.basename(filePath);
+  var langMatch = fileName.match(/_([A-Z]{2,3})_BRUT/i);
+  var srcLang = langMatch ? langMatch[1].toLowerCase() : 'fr';
+
+  // Score BRUT
+  var brutResult = scoreBrut(filePath, srcLang);
+  console.log('\n[BRUT] ' + fileName + ' — Score pipeline: ' + brutResult.score + '/100');
+
+  // Find AI output
+  var aiFileName = fileName.replace('_BRUT.srt', '_' + ENGINE.toUpperCase() + '_AI.srt');
+  var aiPath = path.join(path.dirname(filePath), aiFileName);
+
+  if (!fs.existsSync(aiPath)) {
+    console.log('  [SKIP] Fichier AI introuvable: ' + aiFileName);
+    return null;
+  }
+
+  var aiContent = fs.readFileSync(aiPath, 'utf8');
+  var result = score(filePath, aiContent, srcLang);
+  result.brutScore = brutResult.score;
+  result.brutIssues = brutResult.issues;
+  result.brutRecs = brutResult.recommendations;
+  result.brutStats = brutResult.stats;
+  console.log('  [' + ENGINE.toUpperCase() + '] Score AI: ' + result.score + '/100 | Issues: ' + result.issues.length);
+  return result;
 }
 
 // ── Process one file ──────────────────────────────────────
@@ -129,9 +160,19 @@ async function main() {
   console.log('='.repeat(60));
 
   var allResults = [];
-  for (var f of files) {
-    try { allResults.push(await processFile(f)); }
-    catch(e) { console.error('  FAILED: ' + e.message); }
+  if (SCORE_ONLY) {
+    console.log('Mode: --score-only (aucun appel API)');
+    for (var f of files) {
+      try {
+        var r = await scoreOnlyFile(f);
+        if (r) allResults.push(r);
+      } catch(e) { console.error('  FAILED: ' + e.message); }
+    }
+  } else {
+    for (var f of files) {
+      try { allResults.push(await processFile(f)); }
+      catch(e) { console.error('  FAILED: ' + e.message); }
+    }
   }
 
   // ── Generate report ───────────────────────────────────

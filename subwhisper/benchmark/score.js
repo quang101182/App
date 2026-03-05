@@ -32,6 +32,17 @@ function score(brutPath, aiContent, srcLang) {
   var ellipsisAdded = 0, timestampInText = 0, ellipsisRemoved = 0;
   var properNounChanged = 0, exclamationRemoved = 0, typoRegressed = 0;
 
+  // Skip per-block analysis if block count differs by > 10%: comparisons are unreliable
+  var blockDiffPct = brut.length > 0 ? blockDiff / brut.length : 0;
+  if (blockDiffPct > 0.10) {
+    issues.push({ type: 'BLOCK_ANALYSIS_SKIPPED', sev: 'INFO',
+      msg: 'Analyse détaillée ignorée (blockDiff=' + blockDiff + ' soit ' + Math.round(blockDiffPct*100) + '% — correspondances non fiables)' });
+    var rawScore = Math.max(0, 100 - penalties + bonuses);
+    return { file: brutPath.split(/[/\\]/).pop(), srcLang, brutBlocks: brut.length, aiBlocks: ai.length,
+      score: rawScore, penalties, bonuses, issues,
+      stats: { timestampInText, ellipsisAdded, properNounChanged, exclamationRemoved, typoRegressed } };
+  }
+
   for (var i = 0; i < max; i++) {
     var b = brut[i].text, a = ai[i].text;
     if (b === a) continue;
