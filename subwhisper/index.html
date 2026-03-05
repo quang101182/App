@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.15</title>
+<title>SubWhisper v8.16</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -326,6 +326,8 @@ body.light .dz:hover,body.light .dz.over{background:rgba(124,106,255,.04)}
 /* FILE PREVIEW (before transcription) */
 .file-prev-wrap{
   margin:0 28px 16px;
+  overflow:hidden;
+  transition:max-height .3s ease;
   display:none;
   border-radius:14px;
   overflow:hidden;
@@ -335,6 +337,7 @@ body.light .dz:hover,body.light .dz.over{background:rgba(124,106,255,.04)}
   max-height:220px;
 }
 .file-prev-wrap.vis{display:block}
+.file-prev-wrap.src-collapsed{max-height:0!important}
 .file-prev-vid{width:100%;max-height:220px;display:block}
 .file-prev-aud{width:calc(100% - 28px);margin:10px 14px;display:block;accent-color:var(--accent)}
 /* OFFSET CONTROLS */
@@ -901,7 +904,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.15</span>
+    <span class="ver-badge">v8.16</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1046,6 +1049,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     <div class="fsz" id="fs">—</div>
   </div>
   <button class="frm" id="extractBtn" onclick="extractAudio()" title="Extraire l'audio WAV 16kHz (upload plus rapide)" aria-label="Extraire audio" style="display:none">&#x1F3B5;</button>
+  <button class="frm" id="srcCollapseBtn" onclick="toggleSrcCollapse()" title="Replier / Déplier la prévisualisation source" style="display:none">&#x25B2;</button>
   <button class="frm" onclick="clearFile()" title="Retirer le fichier" aria-label="Retirer le fichier">&#x2715;</button>
 </div>
 
@@ -1472,6 +1476,8 @@ function handleFile(f) {
       document.getElementById('fs').textContent = fmtSz(f.size) + (durStr ? ' \u00b7 ' + durStr : '');
     };
     wrap.classList.add('vis');
+    _srcCollapsed = false;
+    var scBtn = document.getElementById('srcCollapseBtn'); if (scBtn) scBtn.style.display = 'inline-block';
   } else {
     // MKV — browser can't play, just show size
     document.getElementById('fs').textContent = fmtSz(f.size) + ' \u00b7 MKV';
@@ -1483,9 +1489,30 @@ function handleFile(f) {
   hideErr(); hideRes(); updateSbtn();
 }
 
+var _srcCollapsed = false;
+function toggleSrcCollapse() {
+  var wrap = document.getElementById('filePrevWrap');
+  var btn  = document.getElementById('srcCollapseBtn');
+  if (!wrap || !wrap.classList.contains('vis')) return;
+  _srcCollapsed = !_srcCollapsed;
+  wrap.classList.toggle('src-collapsed', _srcCollapsed);
+  if (btn) { btn.textContent = _srcCollapsed ? '\u25BC' : '\u25B2'; }
+}
+function collapseFilePrev() {
+  var wrap = document.getElementById('filePrevWrap');
+  var btn  = document.getElementById('srcCollapseBtn');
+  if (!wrap || !wrap.classList.contains('vis') || _srcCollapsed) return;
+  _srcCollapsed = true;
+  wrap.classList.add('src-collapsed');
+  if (btn) btn.textContent = '\u25BC';
+}
+
 function clearFilePrev() {
   var wrap = document.getElementById('filePrevWrap');
   wrap.classList.remove('vis');
+  wrap.classList.remove('src-collapsed');
+  _srcCollapsed = false;
+  var scBtn = document.getElementById('srcCollapseBtn'); if (scBtn) scBtn.style.display = 'none';
   var vid = document.getElementById('filePrevVid');
   var aud = document.getElementById('filePrevAud');
   // BUG1: only call load() if src was set (avoids console warning)
@@ -1515,6 +1542,7 @@ function clearFile() {
 async function transcribe() {
   if (!selFile) return;
   if (!getOpenAIKey() && !getApiKey() && !getGroqKey()) { showErr('Clé API manquante. Entrez une clé Groq, OpenAI ou AssemblyAI dans les paramètres (⚙️).'); toggleConfig(); return; }
+  collapseFilePrev();
   // Priorité : Groq > OpenAI > AAI
   if (getGroqKey()) { await transcribeGroq(); return; }
   if (getOpenAIKey()) { await transcribeOpenAI(); return; }
@@ -3126,7 +3154,7 @@ function initSubOverlay(videoEl) {
 }
 
 // ── FULLSCREEN SUBTITLES ───────────────────────────────────
-// Stratégie v8.15 : rediriger fullscreen vers #videoWrap → #subOverlayInner
+// Stratégie v8.16 : rediriger fullscreen vers #videoWrap → #subOverlayInner
 // (qui affiche le texte du sous-titre courant) reste visible en fullscreen.
 var _fsRedirecting = false;
 function _onFsChange() {
@@ -3764,6 +3792,8 @@ async function extractAudio() {
       var vid = document.getElementById('filePrevVid');
       aud.src = filePrevUrl; aud.style.display = 'block'; vid.style.display = 'none';
       document.getElementById('filePrevWrap').classList.add('vis');
+      _srcCollapsed = false;
+      var scBtnA = document.getElementById('srcCollapseBtn'); if (scBtnA) scBtnA.style.display = 'inline-block';
       if (btn) btn.style.display = 'none';
       updateSbtn();
       toast('\u2713 Audio extrait \u2014 ' + fmtSz(audioFile.size) + ' (upload optimis\u00e9)');
