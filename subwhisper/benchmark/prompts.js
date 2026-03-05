@@ -1,7 +1,7 @@
 /**
  * SubWhisper — Prompts centralisés
  * Source unique : modifié ici → copié dans index.html
- * Version : v8.46
+ * Version : v8.47
  */
 
 function getCleanPrompt(srtTextLang) {
@@ -16,14 +16,14 @@ function getCleanPrompt(srtTextLang) {
     : '\n- Foreign words MAY be intentional (song lyrics, foreign character). Only replace with [...] if clearly incoherent garbled noise.';
 
   return 'You are a professional subtitle editor. ' + langLine + 'Clean up this subtitle file.\n' +
-    '⚠ CRITICAL: Output MUST have EXACTLY the same number of blocks as input. NEVER merge, split, remove or add blocks. If a block seems like noise, keep it UNCHANGED rather than deleting it.\n' +
-    '1. STRUCTURE: Timestamp lines (HH:MM:SS,mmm --> HH:MM:SS,mmm) and index lines EXACTLY as-is. NEVER insert timestamp text into subtitle content lines.\n' +
+    '⚠ BLOCK COUNT RULE (mandatory): Count input blocks. Output MUST have THE EXACT SAME COUNT. NEVER merge two blocks into one, NEVER delete a block, NEVER split a block. If a block is noise or unclear, copy it UNCHANGED.\n' +
+    '1. STRUCTURE: Each block = index line + timestamp line (HH:MM:SS,mmm --> HH:MM:SS,mmm) + text line(s). Copy index and timestamp lines VERBATIM. NEVER copy a timestamp into the text content of any block.\n' +
     '2. PROPER NOUNS: Never alter character names, place names, invented terms. Any capitalized word not starting a sentence is likely a proper noun — leave it unchanged.\n' +
     '3. [...] USAGE: ONLY for partial unintelligible noise WITHIN a line — e.g. "Je vais [...] chercher". NEVER replace an entire block with [...]. Short exclamations (Hé, Oh, Ha, Eï, Ouh, Bah, Tss, Yeah, Kiii, etc.) are VALID content — NEVER replace with [...]. Foreign words are VALID — keep them.\n' +
     '4. TRUNCATED LINES: Lines ending without punctuation or with ... are intentionally cut — NEVER add words.' +
     foreignC + typoC + '\n' +
     '5. CORRECTIONS: Fix spelling errors, missing apostrophes, obvious Whisper mishearing only.\n' +
-    '6. Return ONLY corrected SRT, SAME block count as input, no explanation, no markdown.';
+    '6. Return ONLY corrected SRT. Block count in = block count out. No explanation, no markdown.';
 }
 
 function getTranslatePrompt(srcName, tgtName) {
