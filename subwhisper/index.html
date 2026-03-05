@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.23</title>
+<title>SubWhisper v8.24</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -363,6 +363,10 @@ body.light .dz:hover,body.light .dz.over{background:rgba(124,106,255,.04)}
 .exp-menu button:hover{background:rgba(255,255,255,.06);color:var(--accent)}
 @media(max-width:520px){.offset-btns-row{flex-wrap:wrap;justify-content:center}}
 @media(max-width:600px){.btn-sep{display:none}.btn-grp{flex-wrap:wrap}}
+/* Hints contextuels sur boutons outils */
+.ab.hint-format{border-color:var(--accent)!important;box-shadow:0 0 0 2px rgba(124,106,255,.25)}
+.ab.hint-ai{border-color:var(--accent3)!important;box-shadow:0 0 0 2px rgba(0,212,170,.25)}
+.ab.hint-repair{border-color:#f59e0b!important;box-shadow:0 0 0 2px rgba(245,158,11,.25)}
 /* Validateur panel */
 #valPanel{background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:12px}
 #valPanel .val-issue{cursor:pointer;padding:5px 8px;border-radius:6px;background:var(--surface);display:flex;align-items:baseline;gap:8px;font-size:12px;transition:background .12s}
@@ -912,7 +916,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span>
-    <span class="ver-badge">v8.23</span>
+    <span class="ver-badge">v8.24</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1558,7 +1562,7 @@ function clearFilePrev() {
 
 function clearFile() {
   stopMic(); wordData = []; richViewActive = false; micFinals = [];
-  selFile = null; srtTxt = ''; srtOriginal = ''; origVideoFile = null; closeUndoBanner();
+  selFile = null; srtTxt = ''; srtOriginal = ''; origVideoFile = null; closeUndoBanner(); resetValidate();
   document.getElementById('fp').classList.remove('vis');
   document.getElementById('fi').value = '';
   document.getElementById('srtFi').value = '';
@@ -2598,6 +2602,8 @@ function showRes(content, srcLang, tgtLang, wasTranslated, words) {
     if (spkLeg) spkLeg.style.display = 'none';
   }
   syncRichToggle();
+  // Auto-validate silencieux : badge + hints dès l'arrivée du SRT
+  setTimeout(function() { validateSRT(true); }, 150);
 }
 
 function hideRes() {
@@ -2993,6 +2999,7 @@ function repairSRTTimestamps(silent) {
       toast('\u2713 ' + fixed + ' r\u00e9par\u00e9(s) \u2014 m\u00e9diane=' + Math.round(typicalDurMs/100)/10 + 's' + (det.length ? ' [' + det.join(', ') + ']' : ''));
     }
   }
+  validateSRT(true);
 }
 // ── MIC LIVE ──────────────────────────────────────────────
 async function startMic() {
@@ -3845,11 +3852,13 @@ function applyFR() {
 }
 
 // ── VALIDATEUR SOUS-TITRES ────────────────────────────────
-function validateSRT() {
+// silent=true : met à jour badge + hints seulement (pas de panel, pas de toast)
+// silent=false (défaut) : comportement complet
+function validateSRT(silent) {
   var raw = getCurrentSRT();
-  if (!raw || !raw.trim()) { toast('Aucun SRT \u00e0 valider'); return; }
+  if (!raw || !raw.trim()) { if (!silent) toast('Aucun SRT \u00e0 valider'); return; }
   var blocks = parseSRT(raw);
-  if (!blocks.length) { toast('SRT invalide'); return; }
+  if (!blocks.length) { if (!silent) toast('SRT invalide'); return; }
   var issues = [];
   var MAX_CPS = 25;   // chars/sec max
   var MIN_DUR = 800;  // ms minimum
@@ -3861,7 +3870,6 @@ function validateSRT() {
     var endMs   = tsToMs(pts[1]);
     var durMs   = endMs - startMs;
     var charCount = b.text.replace(/\n/g, '').length;
-    // Chevauchement avec bloc précédent
     if (i > 0) {
       var prevEnd = tsToMs(blocks[i-1].timestamp.split(' --> ')[1]);
       if (startMs < prevEnd - 50) {
@@ -3869,12 +3877,10 @@ function validateSRT() {
           detail: 'Chevauchement avec bloc #' + blocks[i-1].id + ' (+' + (prevEnd - startMs) + 'ms)' });
       }
     }
-    // Bloc trop court
     if (durMs > 0 && durMs < MIN_DUR) {
       issues.push({ id: b.id, ts: pts[0], startMs: startMs, type: 'short',
         detail: 'Dur\u00e9e trop courte : ' + durMs + 'ms (min ' + MIN_DUR + 'ms)' });
     }
-    // Vitesse lecture > 25 chars/sec
     if (durMs > 0 && charCount > 0) {
       var cps = charCount / (durMs / 1000);
       if (cps > MAX_CPS) {
@@ -3882,38 +3888,72 @@ function validateSRT() {
           detail: 'Lecture rapide : ' + Math.round(cps) + ' chars/s (max ' + MAX_CPS + ')' });
       }
     }
-    // Texte trop long
     if (charCount > MAX_CHARS) {
       issues.push({ id: b.id, ts: pts[0], startMs: startMs, type: 'long',
         detail: 'Texte trop long : ' + charCount + ' chars (max ' + MAX_CHARS + ')' });
     }
   }
-  var panel = document.getElementById('valPanel');
-  var btn   = document.getElementById('validateBtn');
+  var panel  = document.getElementById('valPanel');
+  var btn    = document.getElementById('validateBtn');
+  var fmtBtn = document.getElementById('formatBtn');
+  var aiBtn  = document.getElementById('cleanAIBtn');
+  var repBtn = document.getElementById('repairBtn');
+  // Réinitialiser les hints
+  if (fmtBtn) fmtBtn.classList.remove('hint-format');
+  if (aiBtn)  aiBtn.classList.remove('hint-ai');
+  if (repBtn) repBtn.classList.remove('hint-repair');
+
   if (!issues.length) {
-    panel.style.display = 'none';
-    btn.innerHTML = '\u2713 VALID';
-    toast('\u2713 SRT valide \u2014 aucun probl\u00e8me d\u00e9tect\u00e9');
+    // Badge vert ✓
+    if (btn) btn.innerHTML = '\u2713 VALID <span style="background:var(--success);color:#111;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px">\u2713</span>';
+    if (!silent) {
+      if (panel) panel.style.display = 'none';
+      toast('\u2713 SRT valide \u2014 aucun probl\u00e8me d\u00e9tect\u00e9');
+    }
     return;
   }
-  // Badge rouge sur le bouton
-  btn.innerHTML = '\u2713 VALID <span style="background:var(--accent2);color:#fff;border-radius:10px;padding:1px 5px;font-size:10px;margin-left:3px">' + issues.length + '</span>';
-  // Construire le panel
-  var ICONS = { overlap: '\u26a1', short: '\u23f1', speed: '\ud83d\ude80', long: '\ud83d\udccf' };
-  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-    + '<span style="font-size:12px;font-weight:600;color:var(--accent2)">' + issues.length + ' probl\u00e8me' + (issues.length > 1 ? 's' : '') + ' d\u00e9tect\u00e9' + (issues.length > 1 ? 's' : '') + '</span>'
-    + '<button onclick="closeValPanel()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px">\u2715</button>'
-    + '</div>'
-    + '<div style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto">';
-  issues.forEach(function(iss) {
-    html += '<div class="val-issue" onclick="seekValIssue(' + iss.startMs + ')">'
-      + '<span class="val-ts">#' + iss.id + ' ' + iss.ts.substring(0, 8) + '</span>'
-      + '<span class="val-txt">' + (ICONS[iss.type] || '') + ' ' + iss.detail + '</span>'
-      + '</div>';
-  });
-  html += '</div>';
-  panel.innerHTML = html;
-  panel.style.display = 'block';
+
+  // Badge rouge avec compteur
+  if (btn) btn.innerHTML = '\u2713 VALID <span style="background:var(--accent2);color:#fff;border-radius:10px;padding:1px 5px;font-size:10px;margin-left:3px">' + issues.length + '</span>';
+
+  // Hints contextuels : quel bouton utiliser ?
+  var hasFormat  = issues.some(function(i) { return i.type === 'long' || i.type === 'short' || i.type === 'speed'; });
+  var hasOverlap = issues.some(function(i) { return i.type === 'overlap'; });
+  var manyIssues = issues.length > 6;
+  if (hasFormat  && fmtBtn) fmtBtn.classList.add('hint-format');
+  if (hasOverlap && repBtn) repBtn.classList.add('hint-repair');
+  if (manyIssues && aiBtn)  aiBtn.classList.add('hint-ai');
+
+  if (!silent) {
+    // Panel complet avec liste cliquable
+    var ICONS = { overlap: '\u26a1', short: '\u23f1', speed: '\ud83d\ude80', long: '\ud83d\udccf' };
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      + '<span style="font-size:12px;font-weight:600;color:var(--accent2)">' + issues.length + ' probl\u00e8me' + (issues.length > 1 ? 's' : '') + ' d\u00e9tect\u00e9' + (issues.length > 1 ? 's' : '') + '</span>'
+      + '<button onclick="closeValPanel()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px">\u2715</button>'
+      + '</div>'
+      + '<div style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto">';
+    issues.forEach(function(iss) {
+      html += '<div class="val-issue" onclick="seekValIssue(' + iss.startMs + ')">'
+        + '<span class="val-ts">#' + iss.id + ' ' + iss.ts.substring(0, 8) + '</span>'
+        + '<span class="val-txt">' + (ICONS[iss.type] || '') + ' ' + iss.detail + '</span>'
+        + '</div>';
+    });
+    html += '</div>';
+    if (panel) { panel.innerHTML = html; panel.style.display = 'block'; }
+  }
+}
+
+function resetValidate() {
+  var btn = document.getElementById('validateBtn');
+  if (btn) btn.innerHTML = '\u2713 VALID';
+  var panel = document.getElementById('valPanel');
+  if (panel) panel.style.display = 'none';
+  var fmtBtn = document.getElementById('formatBtn');
+  var aiBtn  = document.getElementById('cleanAIBtn');
+  var repBtn = document.getElementById('repairBtn');
+  if (fmtBtn) fmtBtn.classList.remove('hint-format');
+  if (aiBtn)  aiBtn.classList.remove('hint-ai');
+  if (repBtn) repBtn.classList.remove('hint-repair');
 }
 
 function seekValIssue(ms) {
@@ -3926,6 +3966,7 @@ function closeValPanel() {
   if (panel) panel.style.display = 'none';
   var btn = document.getElementById('validateBtn');
   if (btn) btn.innerHTML = '\u2713 VALID';
+  resetValidate();
 }
 
 // ── AUTO-FORMATEUR SRT ────────────────────────────────────
@@ -4006,6 +4047,7 @@ function autoFormatSRT() {
     }, 50);
   }
   toast('\u229e Format\u00e9 \u2014 ' + modified + ' bloc' + (modified !== 1 ? 's' : '') + ' modifi\u00e9' + (modified !== 1 ? 's' : ''));
+  validateSRT(true);
 }
 
 // ── NETTOYAGE IA (Gemini) ─────────────────────────────────
@@ -4067,8 +4109,8 @@ async function cleanAI() {
     }
     toastClear();
     toast('\u2728 Nettoyage IA termin\u00e9 \u2014 ' + validBlocks.length + ' blocs');
-    // Bannière undo sans timer
     showUndoBanner(raw, validBlocks.length);
+    validateSRT(true);
   } catch(e) {
     toastClear();
     toast('Erreur nettoyage IA : ' + e.message);
