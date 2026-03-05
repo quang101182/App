@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.40</title>
+<title>SubWhisper v8.41</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -965,6 +965,9 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 #apiGuide tr:last-child td{border-bottom:none}
 #apiGuide .ag-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 #apiGuide .ag-ttl{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+
+@keyframes iaSelectWarn{0%,100%{border-color:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,.4)}50%{border-color:rgba(245,158,11,.2);box-shadow:none}}
+#aiEngine.warn{animation:iaSelectWarn 1s ease-in-out infinite!important}
 </style>
 </head>
 <body>
@@ -972,7 +975,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.40</span>
+    <span class="ver-badge">v8.41</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1052,9 +1055,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
       <span class="clbl">PROXY</span>
       <input type="text" id="deeplxUrl" placeholder="URL DeepLX optionnel (ex: https://...workers.dev)">
     </div>
-    <div class="crow">
-      <span class="clbl">SOURCE</span>
-      <select id="srcLang">
+    <select id="srcLang" style="display:none">
         <option value="">Auto-detect</option>
         <option value="fr">Français</option>
         <option value="en">English</option>
@@ -1073,10 +1074,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
         <option value="tr">Turc</option>
         <option value="hi">Hindi</option>
       </select>
-    </div>
-    <div class="crow">
-      <span class="clbl">SORTIE</span>
-      <select id="outLang">
+    <select id="outLang" style="display:none">
         <option value="same">Même langue</option>
         <option value="fr">Français</option>
         <option value="en">English</option>
@@ -1091,7 +1089,6 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
         <option value="nl">Néerlandais</option>
         <option value="hi">Hindi</option>
       </select>
-    </div>
     <div class="crow">
       <span class="clbl">OPTIONS</span>
       <div class="opts">
@@ -1507,7 +1504,7 @@ function init() {
   try { var sk = localStorage.getItem('sw_apikey'); if (sk) document.getElementById('apiKey').value = sk; } catch(e) {}
   document.getElementById('apiKey').addEventListener('change', function() { try { localStorage.setItem('sw_apikey', getApiKey()); } catch(e) {} pingAllApis(); });
   try { var gk = localStorage.getItem('sw_geminikey'); if (gk) document.getElementById('geminiKey').value = gk; } catch(e) {}
-  document.getElementById('geminiKey').addEventListener('change', function() { try { localStorage.setItem('sw_geminikey', this.value.trim()); } catch(e) {} pingAllApis(); });
+  document.getElementById('geminiKey').addEventListener('change', function() { try { localStorage.setItem('sw_geminikey', this.value.trim()); } catch(e) {} pingAllApis(); checkAIEngine(); });
   try { var ak = localStorage.getItem('sw_azurekey'); if (ak) document.getElementById('azureKey').value = ak; } catch(e) {}
   document.getElementById('azureKey').addEventListener('change', function() { try { localStorage.setItem('sw_azurekey', this.value.trim()); } catch(e) {} pingAllApis(); });
   try { var ar = localStorage.getItem('sw_azureregion'); if (ar) document.getElementById('azureRegion').value = ar; } catch(e) {}
@@ -1525,7 +1522,7 @@ function init() {
   } catch(e) {}
   // Clé DeepSeek
   try { var dk = localStorage.getItem('sw_deepseekkey'); if (dk) document.getElementById('deepseekKey').value = dk; } catch(e) {}
-  document.getElementById('deepseekKey').addEventListener('change', function() { try { localStorage.setItem('sw_deepseekkey', this.value.trim()); } catch(e) {} pingAllApis(); });
+  document.getElementById('deepseekKey').addEventListener('change', function() { try { localStorage.setItem('sw_deepseekkey', this.value.trim()); } catch(e) {} pingAllApis(); checkAIEngine(); });
   // Sync config selects → main bar
   document.getElementById('srcLang').addEventListener('change', function() { try { localStorage.setItem('sw_srcLang', this.value); document.getElementById('srcLangMain').value = this.value; } catch(e) {} });
   document.getElementById('outLang').addEventListener('change', function() { try { localStorage.setItem('sw_outLang', this.value); document.getElementById('outLangMain').value = this.value; } catch(e) {} });
@@ -1559,7 +1556,7 @@ function init() {
   });
   renderHistory();
   // Ping APIs au démarrage — délai 1.5s pour éviter faux négatifs réseau lent
-  setTimeout(pingAllApis, 1500); updateRequiredBlink(); checkAzurePair();
+  setTimeout(pingAllApis, 1500); updateRequiredBlink(); checkAzurePair(); checkAIEngine();
 }
 
 function getApiKey()    { return document.getElementById('apiKey').value.trim(); }
@@ -1576,7 +1573,7 @@ function syncLangMain(type, val) {
     try { localStorage.setItem('sw_outLang', val); } catch(e) {}
   }
 }
-function saveAIEngine(val) { try { localStorage.setItem('sw_aiengine', val); } catch(e) {} }
+function saveAIEngine(val) { try { localStorage.setItem('sw_aiengine', val); } catch(e) {} checkAIEngine(); }
 function getAzureKey()  { return document.getElementById('azureKey').value.trim(); }
 function getAzureRegion(){ return document.getElementById('azureRegion').value.trim(); }
 function getDeeplxUrl() { return document.getElementById('deeplxUrl').value.trim(); }
@@ -4500,6 +4497,14 @@ document.addEventListener('click', function(e) {
   if (!g || !g.classList.contains('vis')) return;
   if (!g.contains(e.target) && !document.getElementById('apiLvlWrap').contains(e.target)) g.classList.remove('vis');
 });
+
+function checkAIEngine() {
+  var engine = getAIEngine();
+  var el = document.getElementById('aiEngine');
+  if (!el) return;
+  var hasKey = engine === 'deepseek' ? !!getDeepSeekKey() : !!getGeminiKey();
+  el.classList.toggle('warn', !hasKey);
+}
 function checkAzurePair() {
   var key = (document.getElementById('azureKey').value || '').trim();
   var reg = (document.getElementById('azureRegion').value || '').trim();
