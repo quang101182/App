@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.84</title>
+<title>SubWhisper v8.85</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -999,7 +999,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.84</span>
+    <span class="ver-badge">v8.85</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1753,7 +1753,7 @@ function clearFile() {
 // ── TRANSCRIPTION ─────────────────────────────────────────
 async function transcribe() {
   if (!selFile) return;
-  if (!getOpenAIKey() && !getApiKey() && !getGroqKey() && API_DOTS['GWY'] !== 'ok') { showErr('Clé API manquante. Entrez une clé Groq, OpenAI ou AssemblyAI dans les paramètres (⚙️).'); toggleConfig(); return; }
+  if (!getOpenAIKey() && !getApiKey() && !getGroqKey() && API_DOTS['GWY'] !== 'ok') { showErr('Gateway non connectée. Entrez votre GATEWAY SECRET dans les paramètres (⚙️).'); toggleConfig(); return; }
   collapseFilePrev();
   // Priorité : Groq > Gateway > OpenAI > AAI
   if (getGroqKey() || API_DOTS['GWY'] === 'ok') { await transcribeGroq(); return; }
@@ -1833,18 +1833,14 @@ function startPoll(jobId, outLang) {
         }
         var finalSrt = srt;
         var wasTranslated = false;
-        if (outLang !== 'same' && (getGeminiKey() || getAzureKey() || getDeeplxUrl())) {
-          if (getAzureKey() && !getGeminiKey() && !getAzureRegion()) {
-            showErr('RÉGION Azure manquante.\nPour une ressource régionale (ex: francecentral, westeurope), le champ RÉGION est obligatoire.\nAlternative : créez une ressource Azure Translator avec Region = Global (aucune région requise).\nSRT sans traduction conservé.');
-          } else {
-            try {
-              setPct(91, 'Traduction');
-              finalSrt = await translateSRT(srt, status.language_code, outLang);
-              wasTranslated = (finalSrt !== srt);
-            } catch(e) {
-              setLog('Traduction échouée');
-              showErr('Traduction échouée : ' + (e.message || String(e)) + '\n\nVérifiez votre clé Azure et la RÉGION (ex: francecentral). SRT sans traduction conservé.');
-            }
+        if (outLang !== 'same' && hasTranslationEngine()) {
+          try {
+            setPct(91, 'Traduction');
+            finalSrt = await translateSRT(srt, status.language_code, outLang);
+            wasTranslated = (finalSrt !== srt);
+          } catch(e) {
+            setLog('Traduction échouée');
+            showErr('Traduction échouée : ' + (e.message || String(e)) + '\nSRT sans traduction conservé.');
           }
         }
         srtTxt = finalSrt;
@@ -1989,17 +1985,12 @@ async function transcribeOpenAI() {
     _rawGroqSrt = srt; // Batch Lab: stocker brut transcription pour bouton téléchargement
     var skipTranslation = (outLang === 'same') || (detectedLang && detectedLang === outLang);
     if (!skipTranslation) {
-      var hasGemini = !!getGeminiKey(), hasAzure = !!getAzureKey(), hasDeeplx = !!getDeeplxUrl();
-      if (hasGemini || hasAzure || hasDeeplx) {
-        if (hasAzure && !hasGemini && !getAzureRegion()) {
-          showErr('RÉGION Azure manquante. SRT sans traduction conservé.');
-        } else {
-          try {
+      if (hasTranslationEngine()) {
+        try {
             setPct(90, 'Traduction');
             finalSrt = await translateSRT(srt, detectedLang, outLang);
             wasTranslated = (finalSrt !== srt);
-          } catch(e) { showErr('Traduction échouée : ' + (e.message||String(e)) + '\nSRT sans traduction conservé.'); }
-        }
+        } catch(e) { showErr('Traduction échouée : ' + (e.message||String(e)) + '\nSRT sans traduction conservé.'); }
       }
     }
     srtTxt = finalSrt;
@@ -2139,17 +2130,12 @@ async function transcribeGroq() {
     _rawGroqSrt = srt; // Batch Lab: stocker brut Groq pour bouton téléchargement
     var skipTranslation = (outLang === 'same') || (detectedLang && detectedLang === outLang);
     if (!skipTranslation) {
-      var hasGemini = !!getGeminiKey(), hasAzure = !!getAzureKey(), hasDeeplx = !!getDeeplxUrl();
-      if (hasGemini || hasAzure || hasDeeplx) {
-        if (hasAzure && !hasGemini && !getAzureRegion()) {
-          showErr('RÉGION Azure manquante. SRT sans traduction conservé.');
-        } else {
-          try {
+      if (hasTranslationEngine()) {
+        try {
             setPct(90, 'Traduction');
             finalSrt = await translateSRT(srt, detectedLang, outLang);
             wasTranslated = (finalSrt !== srt);
-          } catch(e) { showErr('Traduction échouée : ' + (e.message||String(e)) + '\nSRT sans traduction conservé.'); }
-        }
+        } catch(e) { showErr('Traduction échouée : ' + (e.message||String(e)) + '\nSRT sans traduction conservé.'); }
       }
     }
     srtTxt = finalSrt;
@@ -2449,18 +2435,16 @@ function srtToVtt(srtContent) {
 
 // ── TRANSLATION ───────────────────────────────────────────
 async function translateSRT(origSrt, sourceLang, targetLang) {
-  var geminiKey = getGeminiKey();
-  var deepseekKey = getDeepSeekKey();
-  var azureKey = getAzureKey();
   var deeplxUrl = getDeeplxUrl();
-  if (!geminiKey && !deepseekKey && !azureKey && !deeplxUrl) return origSrt;
+  if (!hasTranslationEngine()) return origSrt;
   var blocks = parseSRT(origSrt);
   if (!blocks.length) return origSrt;
   // IA sélectionnée (Gemini ou DeepSeek) prioritaire
-  if ((getAIEngine() === 'deepseek' && deepseekKey) || (geminiKey && getAIEngine() !== 'deepseek')) {
+  var engine = getAIEngine();
+  if ((engine === 'deepseek' && API_DOTS['DSK'] === 'ok') || (API_DOTS['GEM'] === 'ok' && engine !== 'deepseek')) {
     return await translateGemini(origSrt, sourceLang, targetLang);
   }
-  if (azureKey) {
+  if (API_DOTS['AZR'] === 'ok') {
     var azureLang = AZURE_LANG[targetLang] || targetLang;
     var translatedTexts = [];
     var BATCH = 50;
@@ -2469,7 +2453,7 @@ async function translateSRT(origSrt, sourceLang, targetLang) {
       setLog('Traduction ' + upTo + '/' + blocks.length + '...');
       var batch = [];
       for (var j = i; j < upTo; j++) batch.push({ Text: blocks[j].text });
-      var results = await azureTranslate(batch, azureLang, azureKey, sourceLang);
+      var results = await azureTranslate(batch, azureLang, '', sourceLang);
       for (var k = 0; k < results.length; k++) translatedTexts.push(results[k]);
     }
     return buildSRT(blocks.map(function(b, idx) { return { id: b.id, timestamp: b.timestamp, text: translatedTexts[idx] || b.text }; }));
@@ -2815,8 +2799,8 @@ function showRes(content, srcLang, tgtLang, wasTranslated, words) {
   if (srcLang) html += 'SOURCE <span class="lb">' + escHtml(srcLang.toUpperCase()) + '</span>';
   if (tgtLang && tgtLang !== 'same') {
     html += ' \u2192 <span class="lb">' + escHtml(tgtLang.toUpperCase()) + '</span>';
-    if (!wasTranslated && !getAzureKey() && !getDeeplxUrl() && !getGeminiKey()) {
-      html += ' <span style="font-family:var(--mono);font-size:9px;color:var(--muted)">— entrez une clé Gemini ou Azure pour traduire</span>';
+    if (!wasTranslated && !hasTranslationEngine()) {
+      html += ' <span style="font-family:var(--mono);font-size:9px;color:var(--muted)">— configurez Gemini, DeepSeek ou Azure dans le gateway</span>';
     }
   }
   // Nb blocs + durée totale depuis le dernier timestamp de fin (post-réparation)
@@ -5038,6 +5022,9 @@ function checkAIEngine() {
   el.classList.toggle('warn', !hasKey);
 }
 function checkAzurePair() { /* géré via gateway */ }
+function hasTranslationEngine() {
+  return API_DOTS['GEM'] === 'ok' || API_DOTS['DSK'] === 'ok' || API_DOTS['AZR'] === 'ok' || !!getDeeplxUrl();
+}
 
 function updateRequiredBlink() {
   // Les dots sont gérés par fetchGatewayConfig() via GW_DOT_MAP
