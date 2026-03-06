@@ -34,7 +34,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.2';
+const VERSION = '1.3';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -43,7 +43,7 @@ const CORS_HEADERS = {
 };
 
 /** All recognised key names stored in KV */
-const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'AZURE_REGION'];
+const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'AZURE_REGION', 'WORKER_URL'];
 
 /** Rate limit: max requests per minute window */
 const RL_API_MAX   = 20;
@@ -72,6 +72,13 @@ export default {
       // ── Health (no auth) ──────────────────────────────────────────────────
       if (method === 'GET' && path === '/health') {
         return handleHealth();
+      }
+
+      // ── Config (auth: WORKER_SECRET) ──────────────────────────────────────
+      if (method === 'GET' && path === '/config') {
+        const authErr = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
+        if (authErr) return authErr;
+        return await handleConfig(env);
       }
 
       // ── API routes ────────────────────────────────────────────────────────
@@ -129,6 +136,24 @@ export default {
 
 function handleHealth() {
   return jsonResponse({ ok: true, version: VERSION, ts: Date.now() });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /config — returns public config for connected apps
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function handleConfig(env) {
+  const workerUrl = await resolveKey(env, 'WORKER_URL') || '';
+
+  // List which API keys are configured (name only, no values)
+  const apiKeys = KNOWN_KEYS.filter(k => k.endsWith('_KEY'));
+  const apis = [];
+  for (const key of apiKeys) {
+    const val = await kvGetKey(env, key);
+    if (val) apis.push(key.replace('_KEY', ''));
+  }
+
+  return jsonResponse({ worker_url: workerUrl, apis, version: VERSION });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
