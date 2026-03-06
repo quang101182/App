@@ -13,6 +13,8 @@ const KNOWN_KEYS = [
   { key: 'AZURE_REGION',   label: 'Azure Région', usage: 'ex: francecentral', isConfig: true },
   { key: 'ASSEMBLYAI_KEY', label: 'AssemblyAI', usage: 'Transcription word-level' },
   { key: 'DEEPL_KEY',      label: 'DeepL',      usage: 'Traduction haute qualité' },
+  { key: 'CLAUDE_KEY',     label: 'Claude',     usage: 'Anthropic Claude (claude-sonnet-4-6, etc.)' },
+  { key: 'WORKER_URL',     label: 'Worker CF',  usage: 'URL Worker gros fichiers cloud', isConfig: true },
 ];
 
 const hPost = (url, body) => this.helpers.httpRequest({
@@ -40,26 +42,36 @@ if (!sub || sub === 'list') {
     const presence = listData[key] || 'not set';
     const hasKey   = presence !== 'not set';
 
+    if (key === 'WORKER_URL') {
+      return `☁️ *Worker CF* \`WORKER_URL\` = ${hasKey ? '✔ définie' : '⚠️ non définie'}`;
+    }
     if (isConfig) {
-      // Config value (ex: AZURE_REGION) — pas de ping, juste la valeur
-      const val = hasKey ? presence.replace('set (', '').replace(' chars)', '') : 'non définie';
-      // Récupérer la valeur brute si possible (listData stocke "set (N chars)" mais pas la valeur)
       return `    ↳ *Région*: \`${key}\` = ${hasKey ? '✔ définie' : '⚠️ non définie'}`;
     }
 
-    const st   = statuses[key];
-    const icon = !hasKey ? '⚪' : st?.ok ? '✅' : '❌';
-    return `${icon} *${label}* \`${key}\`\n    └ ${hasKey ? presence : 'aucune clé'}`;
+    const st      = statuses[key];
+    const icon    = !hasKey ? '⚪' : st?.ok ? '✅' : '❌';
+    const masked  = hasKey ? `••• ${presence.length} chars` : 'aucune clé';
+    return `${icon} *${label}* \`${key}\`\n    └ ${masked}`;
   }).join('\n');
 
-  result = `🔑 *API Gateway — Clés*\n\n${lines}\n\n\`/keys set GROQ_KEY gsk_...\`\n\`/keys delete GROQ_KEY\``;
+  result = `🔑 *API Gateway — Clés*\n\n${lines}\n\n\`/keys set GROQ_KEY=gsk_...\`\n\`/keys delete GROQ_KEY\`\n\n_Partage app:_ \`/keys set APPNAME_SHARE=https://...#gwy=...\` → \`/share\``;
 
 // ── /keys set|add KEY VALEUR ───────────────────────────────────────────────
 } else if (sub === 'set' || sub === 'add') {
-  const keyName = (parts[2] || '').toUpperCase();
-  const value   = parts.slice(3).join(' ');
+  // Supporte KEY=VALUE et KEY VALEUR
+  let keyName, value;
+  const arg2 = parts[2] || '';
+  if (arg2.includes('=')) {
+    const eqIdx = arg2.indexOf('=');
+    keyName = arg2.slice(0, eqIdx).toUpperCase();
+    value   = arg2.slice(eqIdx + 1) + (parts.length > 3 ? ' ' + parts.slice(3).join(' ') : '');
+  } else {
+    keyName = arg2.toUpperCase();
+    value   = parts.slice(3).join(' ');
+  }
   if (!keyName || !value) {
-    result = `❌ Usage: \`/keys set KEY VALEUR\`\nEx: \`/keys set GROQ_KEY gsk_...\``;
+    result = `❌ Usage:\n\`/keys set GROQ_KEY=gsk_...\`\nou\n\`/keys set GROQ_KEY gsk_...\``;
   } else {
     const data = await hPost(`${GATEWAY_URL}/admin/keys/set`, { key: keyName, value });
     result = data.ok ? `✅ Clé *${data.key}* configurée` : `❌ ${data.error}`;

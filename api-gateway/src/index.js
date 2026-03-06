@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.4
+ * api-gateway — Cloudflare Worker v1.6
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -10,7 +10,7 @@
  *
  * Keys stored in KV via /admin/keys/set:
  *   GEMINI_KEY, GROQ_KEY, OPENAI_KEY, DEEPL_KEY, ASSEMBLYAI_KEY
- *   DEEPSEEK_KEY, AZURE_KEY
+ *   DEEPSEEK_KEY, AZURE_KEY, CLAUDE_KEY
  *
  * Config in KV:
  *   cfg:azure:region  — Azure Translator region (e.g. "francecentral")
@@ -23,6 +23,7 @@
  *   POST /api/assemblyai  → AssemblyAI Transcription API
  *   POST /api/deepseek    → DeepSeek API
  *   POST /api/azure       → Azure Translator (query params forwarded)
+ *   POST /api/claude      → Anthropic Claude API
  *   POST /admin/keys/list
  *   POST /admin/keys/set
  *   POST /admin/keys/delete
@@ -35,7 +36,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.5';
+const VERSION = '1.6';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -44,7 +45,7 @@ const CORS_HEADERS = {
 };
 
 /** All recognised key names stored in KV */
-const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'AZURE_REGION', 'WORKER_URL'];
+const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'AZURE_REGION', 'WORKER_URL'];
 
 /** Rate limit: max requests per minute window */
 const RL_API_MAX   = 20;
@@ -101,6 +102,7 @@ export default {
         if (path === '/api/assemblyai')       return await proxyAssemblyai(request, env);
         if (path === '/api/deepseek')         return await proxyDeepSeek(request, env);
         if (path === '/api/azure')            return await proxyAzure(request, env, url);
+        if (path.startsWith('/api/claude'))   return await proxyClaude(request, env, path);
 
         return jsonResponse({ error: 'unknown api route' }, 404);
       }
@@ -194,6 +196,46 @@ async function proxyDeepSeek(request, env) {
   const apiPath  = safeApiPath(request, '/v1/chat/completions');
   const upstream = `https://api.deepseek.com${apiPath}`;
   return proxyRequest(request, upstream, { 'Authorization': `Bearer ${apiKey}` });
+}
+
+/**
+ * POST /api/claude/* → https://api.anthropic.com
+ *
+ * Sub-path: /api/claude → /v1/messages (default)
+ * Auth: x-api-key header (Anthropic format) + anthropic-version.
+ * Header X-Api-Path overrides the upstream path.
+ */
+async function proxyClaude(request, env, path) {
+  const apiKey = await resolveKey(env, 'CLAUDE_KEY');
+  if (!apiKey) return jsonResponse({ error: 'CLAUDE_KEY not configured' }, 503);
+
+  let subPath = path.slice('/api/claude'.length) || '/v1/messages';
+  if (!subPath.startsWith('/')) subPath = '/' + subPath;
+
+  const upstream = `https://api.anthropic.com${subPath}`;
+
+  // Anthropic uses x-api-key + anthropic-version (not Bearer)
+  const body = await request.arrayBuffer();
+  const forwardHeaders = new Headers();
+  const contentType = request.headers.get('Content-Type');
+  if (contentType) forwardHeaders.set('Content-Type', contentType);
+  forwardHeaders.set('x-api-key', apiKey);
+  forwardHeaders.set('anthropic-version', request.headers.get('anthropic-version') || '2023-06-01');
+
+  const upstreamResp = await fetch(upstream, {
+    method : request.method,
+    headers: forwardHeaders,
+    body   : body.byteLength > 0 ? body : undefined,
+  });
+
+  const respHeaders = new Headers();
+  for (const h of ['content-type', 'content-length']) {
+    const val = upstreamResp.headers.get(h);
+    if (val) respHeaders.set(h, val);
+  }
+  for (const [k, v] of Object.entries(CORS_HEADERS)) respHeaders.set(k, v);
+
+  return new Response(upstreamResp.body, { status: upstreamResp.status, headers: respHeaders });
 }
 
 /**
@@ -442,7 +484,8 @@ async function adminKeysStatus(env) {
     ASSEMBLYAI_KEY: pingAssemblyai,
     DEEPSEEK_KEY  : pingDeepSeek,
     AZURE_KEY     : pingAzure,
-    // AZURE_REGION is a config value, not a secret — skip ping
+    CLAUDE_KEY    : pingClaude,
+    // AZURE_REGION, WORKER_URL are config values — skip ping
   };
 
   const statuses = {};
@@ -532,6 +575,14 @@ async function pingAssemblyai(apiKey) {
   const resp = await fetch('https://api.assemblyai.com/v2/account', {
     method : 'GET',
     headers: { 'Authorization': apiKey },
+  });
+  return { ok: resp.ok, status: resp.status };
+}
+
+async function pingClaude(apiKey) {
+  const resp = await fetch('https://api.anthropic.com/v1/models', {
+    method : 'GET',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
   });
   return { ok: resp.ok, status: resp.status };
 }
