@@ -300,9 +300,14 @@ function buildReport(date, srcLang, tgtLang, rawSrt, gem, dsk) {
     }
     lines.push('');
 
-    lines.push('## Réflexion — Amélioration prompt');
+    lines.push('## Réflexion — Évolution prompt ' + srcLang.toUpperCase() + '→' + tgtLang.toUpperCase());
     lines.push('');
     lines.push('> ⏳ À compléter par Claude après analyse des blocs résiduels ci-dessus.');
+    lines.push('> ');
+    lines.push('> **Rappel méthodologique :**');
+    lines.push('> - Les prompts ne se **remplacent pas** — ils **évoluent** : chaque ajustement s\'appuie sur les versions précédentes.');
+    lines.push('> - Chaque langue source (`' + srcLang.toUpperCase() + '`, ZH, JA, KO, EN…) a ses **prompts dédiés** dans `prompts.js` — toute évolution ne s\'applique qu\'à la langue concernée.');
+    lines.push('> - Questions à traiter : (1) Les résiduels sont-ils des hallucinations Groq intraduisibles ? (2) Y a-t-il un pattern répété qui justifie une règle supplémentaire ? (3) Quel moteur bénéficierait d\'un ajustement spécifique ?');
     lines.push('');
   }
 
