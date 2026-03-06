@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.68</title>
+<title>SubWhisper v8.69</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -997,7 +997,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.68</span>
+    <span class="ver-badge">v8.69</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -4825,6 +4825,57 @@ async function translateManual() {
           })();
         }));
       }
+      // ── Phase 4 : second pass sur blocs encore étrangers ──
+      var _secondBlocks = blocks.map(function(blk, i) {
+        return { id: blk.id, timestamp: blk.timestamp, text: correctedTexts[i] };
+      });
+      var _secondDet = clientDetectForeign(_secondBlocks, tgt);
+      var _secondIdx = _secondDet.toTranslate;
+      if (_secondIdx.length > 0) {
+        toastPersist('\ud83d\udd04 2e passe : ' + _secondIdx.length + ' bloc' + (_secondIdx.length > 1 ? 's' : '') + ' encore \u00e9trangers...');
+        var _sBatches = [];
+        for (var _sF = 0; _sF < _secondIdx.length; _sF += BATCH) _sBatches.push(_secondIdx.slice(_sF, _sF + BATCH));
+        var _s2Done = 0;
+        for (var _sS = 0; _sS < _sBatches.length; _sS += _pCores) {
+          var _sGrp = [];
+          for (var _sK = _sS; _sK < Math.min(_sS + _pCores, _sBatches.length); _sK++) _sGrp.push(_sK);
+          await Promise.all(_sGrp.map(function(bIdx) {
+            return (async function() {
+              var batchIdxs = _sBatches[bIdx];
+              var promptLines = batchIdxs.map(function(globalIdx) {
+                return '[' + (globalIdx + 1) + '] ' + _secondBlocks[globalIdx].text.replace(/\n/g, ' | ');
+              });
+              var prompt2 = 'You are a professional subtitle translator. Target language: ' + tgtName_t + '.\n' +
+                'These lines still contain untranslated foreign characters after a first pass. Translate ALL of them fully to ' + tgtName_t + '.\n' +
+                'Each line is [N] mixed_text. Return [N] ' + tgtName_t + '_translation.\n' +
+                '1. NEVER skip a [N].\n' +
+                '2. Lines may contain mixed scripts or garbled noise. Translate all meaningful content. Discard untranslatable noise characters silently — do NOT replace with [...].\n' +
+                '3. If the line is already mostly in ' + tgtName_t + ' with only a few foreign chars embedded, output the clean ' + tgtName_t + ' version without the foreign chars.\n' +
+                '4. PROPER NOUNS: Keep character names unchanged.' + typoRule_t + '\n' +
+                'Return ONLY the numbered lines [N] text. No explanation.\n\n' +
+                promptLines.join('\n');
+              try {
+                var aiText2 = await callAIText(prompt2);
+                var lineRx2 = /^\[(\d+)\]\s*(.*)/gm;
+                var m2;
+                while ((m2 = lineRx2.exec(aiText2)) !== null) {
+                  var idx2 = parseInt(m2[1]) - 1;
+                  if (idx2 >= 0 && idx2 < blocks.length) {
+                    var c2 = m2[2].replace(/ \| /g, '\n').trim();
+                    c2 = c2.replace(/^\[\d+\]\s*/, '');
+                    if (c2 && tgt === 'fr') c2 = c2.replace(/ ([?!:;])/g, '\u00A0$1');
+                    if (c2) correctedTexts[idx2] = c2;
+                  }
+                }
+              } catch(e3) {
+                console.warn('Second pass batch ' + bIdx + ' erreur:', e3.message);
+              }
+              _s2Done++;
+              toastPersist('\ud83d\udd04 2e passe ' + _s2Done + '/' + _sBatches.length + ' \u2713');
+            })();
+          }));
+        }
+      }
       translated = blocks.map(function(blk, i) {
         return blk.id + '\n' + blk.timestamp + '\n' + correctedTexts[i];
       }).join('\n\n') + '\n';
@@ -4849,7 +4900,7 @@ async function translateManual() {
     }
     toastClear();
     toast(useHybrid
-      ? '🌐 Patch FR terminé (' + engine + ') — ' + nbBlocks + ' blocs'
+      ? '🌐 Patch FR terminé (' + engine + ') — ' + nbBlocks + ' blocs' + (_secondIdx && _secondIdx.length > 0 ? ' (+2e passe: ' + _secondIdx.length + ')' : '')
       : '🌐 Traduit (' + engine + ') → ' + tgt.toUpperCase());
     validateSRT(true);
     checkLangMismatch(srtOriginal, tgt);
