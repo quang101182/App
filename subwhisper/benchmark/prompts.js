@@ -1,7 +1,7 @@
 /**
  * SubWhisper — Prompts centralisés
  * Source unique : modifié ici → copié dans index.html
- * Version : v8.65
+ * Version : v8.66
  */
 
 function getCleanPrompt(srtTextLang, blockCount) {
@@ -69,7 +69,7 @@ function getCleanTextPrompt(lang) {
 
   var bracketsRule = isCJK
     ? '\n4. NEVER output [...] for ANY reason. If a line is noise, garbled, or incoherent — COPY IT EXACTLY UNCHANGED. [...] is FORBIDDEN in your output.'
-    : '\n4. Foreign words MAY be intentional. Only [...] for partial unintelligible noise inline. NEVER entire line.';
+    : '\n4. [...] FORBIDDEN for entire blocks. If a line contains garbled tokens, foreign words, or mixed-language noise — COPY IT EXACTLY AS-IS. Only [...] is allowed INSIDE a line for partial unintelligible noise (e.g. "Je vais [...] chercher").';
 
   return 'You are a professional subtitle editor. ' + langLine + '\n' +
     'Each line is [N] subtitle_text. Return EACH line as [N] corrected_text.\n' +
