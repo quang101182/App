@@ -1,7 +1,7 @@
 /**
  * SubWhisper — Prompts centralisés
  * Source unique : modifié ici → copié dans index.html
- * Version : v8.50
+ * Version : v8.65
  */
 
 function getCleanPrompt(srtTextLang, blockCount) {
@@ -43,41 +43,65 @@ function getTranslatePrompt(srcName, tgtName) {
 }
 
 /**
- * getCleanTextPrompt — Nouvelle approche v8.50 : texte numéroté [N]
- * L'IA ne reçoit QUE les textes (pas les timestamps).
- * Block count garanti par reconstruction algo depuis structure originale.
+ * getCleanTextPrompt — Approche [N] v8.65 : règles spécifiques par langue
+ * ZH : 的/地/得, 在/再, 他/她/它
+ * JA : hiragana/katakana, register です/ます vs だ
+ * KO : Hangul phonétique, register 요/습니다 vs 야/다
+ * FR : apostrophes + U+00A0 avant ?!:;
  */
 function getCleanTextPrompt(lang) {
-  var isCJK = /^(zh|ja|ko)$/.test(lang);
-  var isFR  = lang === 'fr';
+  var isZH = lang === 'zh';
+  var isJA = lang === 'ja';
+  var isKO = lang === 'ko';
+  var isCJK = isZH || isJA || isKO;
   var langLine = lang ? 'The subtitle text language is "' + lang + '". ' : '';
-  var typoRule = isFR
-    ? '\n5. FRENCH: Fix missing apostrophes (c est->c\'est, j ai->j\'ai, qu il->qu\'il, s il->s\'il, etc.). Add space before ? ! : ; if missing.'
-    : (isCJK ? '\n5. CJK: Fix wrong characters with similar pronunciation only. Do NOT convert Traditional/Simplified.' : '');
+
+  var langSpecificRule = '';
+  if (isZH) {
+    langSpecificRule = '\n5. CHINESE: Fix common homophones — 的/地/得 (grammar particle), 在/再 (at/again), 他/她/它 (he/she/it). Do NOT convert Traditional↔Simplified — keep characters exactly as transcribed.';
+  } else if (isJA) {
+    langSpecificRule = '\n5. JAPANESE: Fix obvious hiragana/katakana confusion and misheard kanji only. Preserve speech register — do NOT convert です/ます (polite) to だ/である (casual) or vice versa.';
+  } else if (isKO) {
+    langSpecificRule = '\n5. KOREAN: Fix phonetically similar Hangul characters only. Preserve speech register — do NOT convert 요/습니다 (formal) to 야/다 (casual) or vice versa.';
+  } else if (lang === 'fr') {
+    langSpecificRule = '\n5. FRENCH: Fix missing apostrophes (c est→c\'est, j ai→j\'ai, qu il→qu\'il, s il→s\'il, n est→n\'est, l homme→l\'homme, etc.). Add non-breaking space (U+00A0) before ? ! : ; if missing — mandatory French typography.';
+  }
+
   var bracketsRule = isCJK
     ? '\n4. NEVER output [...] for ANY reason. If a line is noise, garbled, or incoherent — COPY IT EXACTLY UNCHANGED. [...] is FORBIDDEN in your output.'
     : '\n4. Foreign words MAY be intentional. Only [...] for partial unintelligible noise inline. NEVER entire line.';
+
   return 'You are a professional subtitle editor. ' + langLine + '\n' +
     'Each line is [N] subtitle_text. Return EACH line as [N] corrected_text.\n' +
     '1. NEVER skip a number. If text is already correct, return it UNCHANGED.\n' +
     '2. PROPER NOUNS: Never alter character names, place names, invented terms. Capitalized word not starting a sentence = likely proper noun.\n' +
     '3. INTERJECTIONS & TRUNCATED: Short exclamations (Hé, Oh, Ha, Eï, Ouh, Bah, Tss, Yeah, Kiii, etc.) are VALID — NEVER replace. Lines ending without punctuation are intentionally cut — never add words.\n' +
-    bracketsRule + typoRule + '\n' +
+    bracketsRule + langSpecificRule + '\n' +
     '6. CORRECTIONS: Fix spelling errors, missing apostrophes, obvious Whisper mishearing only.\n' +
     'Return ONLY the numbered lines [N] text. No SRT structure, no timestamps, no explanation.';
 }
 
 /**
- * getTranslateTextPrompt — Approche [N] pour traduction (v8.57+)
- * L'IA reçoit UNIQUEMENT les textes numérotés [N], jamais les timestamps.
+ * getTranslateTextPrompt — Approche [N] v8.65 : règles spécifiques par langue source
  * srcName : 'Chinese', 'Japanese', 'Korean', etc.
  * tgtName : 'French', 'English', etc.
  * tgtLang : 'fr', 'en', etc.
+ * srcLang : 'zh', 'ja', 'ko', etc. (NOUVEAU v8.65 — règles per-source)
  */
-function getTranslateTextPrompt(srcName, tgtName, tgtLang) {
+function getTranslateTextPrompt(srcName, tgtName, tgtLang, srcLang) {
   var typoRule = (tgtLang === 'fr')
-    ? '\n6. FRENCH TYPOGRAPHY: Add mandatory space before ? ! : ; in French.'
+    ? '\n6. FRENCH TYPOGRAPHY: Add mandatory non-breaking space (U+00A0) before ? ! : ; in French.'
     : '';
+
+  var srcSpecificRule = '';
+  if (srcLang === 'zh') {
+    srcSpecificRule = '\n7. CHINESE SOURCE: Romanized names (Xiao Ming, Li Wei, etc.) — adapt naturally in context or keep as-is. Chinese onomatopoeia/interjections (哈哈, 啊, 哟, 哦) → convert to natural equivalent in ' + tgtName + '.';
+  } else if (srcLang === 'ja') {
+    srcSpecificRule = '\n7. JAPANESE SOURCE: Honorifics (-san, -kun, -chan, -sama, -sensei) — keep UNCHANGED after the name (e.g., "Tanaka-san" stays "Tanaka-san"). Keigo (ultra-polite speech) → translate as formal/polite ' + tgtName + ', not overly literal.';
+  } else if (srcLang === 'ko') {
+    srcSpecificRule = '\n7. KOREAN SOURCE: Relationship address terms (oppa, unnie, noona, hyung) — keep UNCHANGED as-is (they are culturally specific, not translatable). Speech levels → match formal/casual register in ' + tgtName + '.';
+  }
+
   return 'You are a professional subtitle translator. Translate ALL text to ' + tgtName + '.\n' +
     'Source is primarily ' + srcName + ' but MAY contain English or other languages — translate EVERYTHING to ' + tgtName + '.\n' +
     'Each line is [N] source_text. Return EACH line as [N] translated_text.\n' +
@@ -85,7 +109,7 @@ function getTranslateTextPrompt(srcName, tgtName, tgtLang) {
     '2. PROPER NOUNS: Keep character names, place names, invented terms in original form.\n' +
     '3. COMPLETE TRANSLATION: Translate EVERY line regardless of source language. NEVER output [...]. If uncertain, give best translation.\n' +
     '4. SONG LYRICS: Text clearly song lyrics in a third language — keep unchanged.\n' +
-    '5. TRUNCATED: Lines ending without punctuation = intentionally cut — do NOT add words.' + typoRule + '\n' +
+    '5. TRUNCATED: Lines ending without punctuation = intentionally cut — do NOT add words.' + typoRule + srcSpecificRule + '\n' +
     'Return ONLY the numbered lines [N] text. No timestamps, no SRT structure, no explanation.';
 }
 

@@ -259,7 +259,7 @@ async function runStep2(filePath) {
   var date     = new Date().toISOString();
   console.log('Blocs: ' + blocks.length);
 
-  var promptFn = function() { return getTranslateTextPrompt(langName(srcLang), langName(tgtLang), tgtLang); };
+  var promptFn = function() { return getTranslateTextPrompt(langName(srcLang), langName(tgtLang), tgtLang, srcLang); };
   var { gemResult, dskResult, gemOutput, dskOutput } = await runEnginePair(blocks, promptFn, 150, filePath, content, srcLang, tgtLang, runId, 2);
 
   var reportPath = path.join(RESULTS_DIR, runId + '.html');
@@ -323,7 +323,7 @@ async function runStep4(filePath) {
   var date     = new Date().toISOString();
   console.log('Blocs: ' + blocks.length);
 
-  var promptFn = function() { return getTranslateTextPrompt(langName(srcLang), langName(tgtLang), tgtLang); };
+  var promptFn = function() { return getTranslateTextPrompt(langName(srcLang), langName(tgtLang), tgtLang, srcLang); };
   var { gemResult, dskResult, gemOutput, dskOutput } = await runEnginePair(blocks, promptFn, 150, filePath, content, srcLang, tgtLang, runId, 4);
 
   var reportPath = path.join(RESULTS_DIR, runId + '.html');
