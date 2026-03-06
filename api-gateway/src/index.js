@@ -35,7 +35,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.4';
+const VERSION = '1.5';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -349,9 +349,19 @@ async function proxyRequest(request, upstreamUrl, authHeaders) {
  */
 async function adminKeysList(env) {
   const result = {};
+  // KNOWN_KEYS toujours présents (avec statut)
   for (const name of KNOWN_KEYS) {
     const val = await kvGetKey(env, name);
-    result[name] = val ? `set (${val.length} chars)` : 'not set';
+    result[name] = val ? val : 'not set';
+  }
+  // Clés custom (ex: *_SHARE) via KV.list
+  const listed = await env.GATEWAY_KV.list({ prefix: 'key:' });
+  for (const item of listed.keys) {
+    const name = item.name.replace(/^key:/, '');
+    if (!KNOWN_KEYS.includes(name)) {
+      const val = await kvGetKey(env, name);
+      result[name] = val ? val : 'not set';
+    }
   }
   return jsonResponse(result);
 }
@@ -365,8 +375,8 @@ async function adminKeysSet(request, env, ctx, ip) {
   if (!body || !body.key || !body.value) {
     return jsonResponse({ error: 'missing required fields: key, value' }, 400);
   }
-  if (!KNOWN_KEYS.includes(body.key)) {
-    return jsonResponse({ error: `unknown key "${body.key}". Allowed: ${KNOWN_KEYS.join(', ')}` }, 400);
+  if (!/^[A-Z][A-Z0-9_]{1,63}$/.test(body.key)) {
+    return jsonResponse({ error: `invalid key name "${body.key}". Use uppercase letters, digits, underscores.` }, 400);
   }
 
   await kvSetKey(env, body.key, body.value);
@@ -386,8 +396,8 @@ async function adminKeysDelete(request, env, ctx, ip) {
   if (!body || !body.key) {
     return jsonResponse({ error: 'missing required field: key' }, 400);
   }
-  if (!KNOWN_KEYS.includes(body.key)) {
-    return jsonResponse({ error: `unknown key "${body.key}". Allowed: ${KNOWN_KEYS.join(', ')}` }, 400);
+  if (!/^[A-Z][A-Z0-9_]{1,63}$/.test(body.key)) {
+    return jsonResponse({ error: `invalid key name "${body.key}". Use uppercase letters, digits, underscores.` }, 400);
   }
 
   await kvDeleteKey(env, body.key);
@@ -407,8 +417,8 @@ async function adminKeysGet(request, env) {
   if (!body || !body.key) {
     return jsonResponse({ error: 'missing required field: key' }, 400);
   }
-  if (!KNOWN_KEYS.includes(body.key)) {
-    return jsonResponse({ error: `unknown key "${body.key}". Allowed: ${KNOWN_KEYS.join(', ')}` }, 400);
+  if (!/^[A-Z][A-Z0-9_]{1,63}$/.test(body.key)) {
+    return jsonResponse({ error: `invalid key name "${body.key}". Use uppercase letters, digits, underscores.` }, 400);
   }
 
   const value = await kvGetKey(env, body.key);
