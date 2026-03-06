@@ -382,7 +382,10 @@
       </div>
       <div class="scroll-y" style="flex:1;padding:0 20px 24px;">
         <div class="glass" style="padding:18px;margin-bottom:14px;">
-          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;">Fournisseur IA</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;">Fournisseur IA</div>
+            <span style="font-size:10px;color:var(--muted);">— fallback si pas de Gateway</span>
+          </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;" id="cfg-provider-pills">
             <button class="provider-pill" data-p="claude">Claude</button>
             <button class="provider-pill" data-p="gemini">Gemini</button>
@@ -400,9 +403,8 @@
             <span style="font-size:10px;color:#06b6d4;font-weight:600;">— Recommandé</span>
           </div>
           <p style="font-size:11px;color:var(--muted);margin:0 0 10px;line-height:1.6;">Centralise toutes les clés API côté serveur. Si configuré, remplace les clés directes ci-dessus.</p>
-          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">URL Gateway</label>
-          <input type="url" id="cfg-gw-url" class="field" placeholder="https://api-gateway.xxx.workers.dev" style="margin-bottom:10px;" autocomplete="off">
-          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">Secret Worker</label>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">WORKER_SECRET</label>
+          <p style="font-size:10px;color:var(--muted);margin:0 0 8px;">api-gateway.quang101182.workers.dev</p>
           <input type="password" id="cfg-gw-secret" class="field" placeholder="Ton WORKER_SECRET..." style="margin-bottom:12px;" autocomplete="off">
           <button onclick="saveGateway()" class="btn-ghost" style="width:100%;font-size:13px;">Sauvegarder Gateway</button>
         </div>
@@ -484,8 +486,9 @@
 
 <script>
 const LS_PROFILE='music_ai_profile',LS_CONFIG='music_ai_config',LS_HISTORY='music_ai_history',LS_YT_KEY='music_ai_yt_key',LS_YT_QUOTA='music_ai_yt_quota';
-const LS_GW_URL='music_ai_gw_url',LS_GW_SECRET='music_ai_gw_secret';
-function getGwUrl(){return localStorage.getItem(LS_GW_URL)||'';}
+const LS_GW_SECRET='music_ai_gw_secret';
+const GATEWAY_URL='https://api-gateway.quang101182.workers.dev';
+function getGwUrl(){return GATEWAY_URL;}
 function getGwSecret(){return localStorage.getItem(LS_GW_SECRET)||'';}
 const YT_QUOTA_MAX=100;
 function getQuota(){try{const q=JSON.parse(localStorage.getItem(LS_YT_QUOTA));const today=new Date().toISOString().slice(0,10);if(!q||q.date!==today)return{count:0,date:today};return q;}catch{return{count:0,date:new Date().toISOString().slice(0,10)}}}
@@ -1170,8 +1173,8 @@ RÈGLE ABSOLUE: JSON UNIQUEMENT. Zéro texte avant/après. Zéro backtick. Zéro
 }
 async function callAI(sys,msg){
   const cfg=getConfig();const{provider,model}=cfg;
-  const gwUrl=getGwUrl();const gwSecret=getGwSecret();
-  const useGateway=!!(gwUrl&&gwSecret);
+  const gwSecret=getGwSecret();
+  const useGateway=!!gwSecret;
   const apiKey=useGateway?'':cfg.keys?.[provider]||'';
   if(!useGateway&&!apiKey)throw new Error('Clé API manquante ou Gateway non configuré — ouvre ⚙️');
   const base=useGateway?gwUrl.replace(/\/$/,''):'';
@@ -1355,8 +1358,8 @@ function loadSettingsUI(){
   fillModelSelect('cfg-model',cfg.provider||'claude');
   const sel=document.getElementById('cfg-model');if(sel&&cfg.model)[...sel.options].forEach(o=>{o.selected=o.value===cfg.model});
   document.getElementById('cfg-ytkey').value=getYtKey();
-  const gwUrl=document.getElementById('cfg-gw-url');const gwSec=document.getElementById('cfg-gw-secret');
-  if(gwUrl)gwUrl.value=getGwUrl();if(gwSec)gwSec.value=getGwSecret();
+  const gwSec=document.getElementById('cfg-gw-secret');
+  if(gwSec)gwSec.value=getGwSecret();
   const p=getProfile();
   if(p){
     document.getElementById('profile-summary').innerHTML=`<span style="color:var(--muted);font-size:11px;">Genres</span><br>${(p.genres||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Époques</span><br>${(p.eras&&p.eras.length?p.eras.map(id=>{const e=ERAS.find(x=>x.id===id);return e?e.label:id}).join(', '):'Toutes')}<br><span style="color:var(--muted);font-size:11px;">Contextes</span><br>${(p.contexts||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Aventure</span><br>${Math.round((p.adventurousness||0)*100)}%`;
@@ -1366,7 +1369,7 @@ function loadSettingsUI(){
   const _q=getQuota();document.getElementById('stats-display').innerHTML=`Interactions : ${p?.interactions||0}<br>Likes : ${h.filter(x=>x.action==='like').length}<br>Dislikes : ${h.filter(x=>x.action==='dislike').length}<br>Recos : ${h.filter(x=>x.action==='suggest'||x.action==='chat').length}<br>File : ${ST.queue.length} titre(s)<br>Fil de session : ${ST.sessionThread.length} titre(s)<br>API IA : ${getConfig()?.apiKey?'✅':'❌ non configurée'}<br>API YouTube : ${getYtKey()?'✅':'❌ non configurée'}<br>Quota YT : <span style="color:${_q.count>=100?'#ef4444':_q.count>=80?'#f59e0b':'inherit'}">${_q.count}/${YT_QUOTA_MAX} aujourd\'hui</span>`;
 }
 function saveSettings(){const k=document.getElementById('cfg-apikey').value.trim();const gwOk=!!(getGwUrl()&&getGwSecret());if(!k&&!gwOk){toast('⚠️ Clé API ou Gateway requis');return}const m=document.getElementById('cfg-model').value;const cfg=getConfig();if(!cfg.keys)cfg.keys={claude:'',gemini:'',openai:''};if(k)cfg.keys[ST.cfgProvider]=k;cfg.provider=ST.cfgProvider;cfg.model=m;saveConfig(cfg);toast('✅ Config IA sauvegardée');updateApiStatus()}
-function saveGateway(){const u=document.getElementById('cfg-gw-url').value.trim();const s=document.getElementById('cfg-gw-secret').value.trim();if(u)localStorage.setItem(LS_GW_URL,u);else localStorage.removeItem(LS_GW_URL);if(s)localStorage.setItem(LS_GW_SECRET,s);else localStorage.removeItem(LS_GW_SECRET);toast(u&&s?'✅ Gateway sauvegardé':'⚠️ Gateway effacé');updateApiStatus();}
+function saveGateway(){const s=document.getElementById('cfg-gw-secret').value.trim();if(s)localStorage.setItem(LS_GW_SECRET,s);else localStorage.removeItem(LS_GW_SECRET);toast(s?'✅ Gateway sauvegardé':'⚠️ Gateway effacé');updateApiStatus();}
 function quickSwitchProvider(p){const cfg=getConfig();cfg.provider=p;saveConfig(cfg);document.querySelectorAll('.prov-pill').forEach(btn=>btn.classList.toggle('active',btn.dataset.p===p));if(document.getElementById('screen-settings')?.classList.contains('active')){loadSettingsUI();}toast('IA → '+p.charAt(0).toUpperCase()+p.slice(1));}
 function saveYtKey(){const k=document.getElementById('cfg-ytkey').value.trim();setYtKey(k);toast(k?'✅ Clé YouTube sauvegardée':'⚠️ Clé YT effacée');updateApiStatus()}
 function saveArtists(){const p=getProfile();if(!p){toast('⚠️ Profil introuvable');return}p.artists=document.getElementById('cfg-artists').value.split('\n').map(x=>x.trim()).filter(Boolean);saveProfile(p);toast('✅ Artistes mis à jour');document.getElementById('profile-summary').innerHTML=`<span style="color:var(--muted);font-size:11px;">Genres</span><br>${(p.genres||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Époques</span><br>${(p.eras&&p.eras.length?p.eras.map(id=>{const e=ERAS.find(x=>x.id===id);return e?e.label:id}).join(', '):'Toutes')}<br><span style="color:var(--muted);font-size:11px;">Contextes</span><br>${(p.contexts||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Aventure</span><br>${Math.round((p.adventurousness||0)*100)}%`}
@@ -1391,8 +1394,8 @@ async function pingGWY(url){try{setDot('GWY','key');const ctrl=new AbortControll
 // ── BOOT ──
 function updateApiStatus(){
   const cfg=getConfig();const keys=cfg.keys||{};
-  const gwUrl=getGwUrl();const gwSecret=getGwSecret();
-  const useGateway=!!(gwUrl&&gwSecret);
+  const gwSecret=getGwSecret();
+  const useGateway=!!gwSecret;
   // Update provider quick-switch active state
   document.querySelectorAll('.prov-pill').forEach(btn=>btn.classList.toggle('active',btn.dataset.p===cfg.provider));
   // YT
@@ -1418,7 +1421,7 @@ function boot(){
   window.addEventListener('offline',()=>{toast('📶 Hors ligne',3000);ST.isLoading=false;});
   window.addEventListener('online',()=>toast('📶 Connexion rétablie ✓',2000));
   initPlaylistsOverlay();
-  const hasDirectKey=!!(c?.keys?.[c?.provider]);const hasGateway=!!(getGwUrl()&&getGwSecret());
+  const hasDirectKey=!!(c?.keys?.[c?.provider]);const hasGateway=!!getGwSecret();
   if(p?.completedOnboarding&&(hasDirectKey||hasGateway)){showScreen('main');initMainApp();setTimeout(updateApiStatus,200)}
   else{showScreen('onboard');initOnboarding();}
 }
