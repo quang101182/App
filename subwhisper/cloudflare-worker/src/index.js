@@ -168,7 +168,7 @@ async function handleUploadComplete(request, env, ctx) {
     return jsonResponse({ error: 'missing required fields: uploadId, r2Key, jobId, parts' }, 400);
   }
 
-  const { uploadId, r2Key, jobId, parts, groqKey = null } = body;
+  const { uploadId, r2Key, jobId, parts, groqKey = null, gatewayKey = null, gatewayUrl = null } = body;
 
   // Validate parts
   if (parts.length === 0) {
@@ -190,7 +190,7 @@ async function handleUploadComplete(request, env, ctx) {
   await kvPut(env, jobId, updated, KV_TTL_SECONDS);
 
   // Fire-and-forget dispatch to Fly.io /extract
-  ctx.waitUntil(dispatchToFly(env, jobId, r2Key, existing?.srcLang ?? null, groqKey, buildCallbackUrl(request.url)));
+  ctx.waitUntil(dispatchToFly(env, jobId, r2Key, existing?.srcLang ?? null, groqKey, buildCallbackUrl(request.url), gatewayKey, gatewayUrl));
 
   return jsonResponse({ status: 'processing', jobId });
 }
@@ -209,7 +209,7 @@ async function handleProcess(request, env, ctx) {
     return jsonResponse({ error: 'missing required fields: jobId, r2Key' }, 400);
   }
 
-  const { jobId, r2Key, srcLang = null, groqKey = null } = body;
+  const { jobId, r2Key, srcLang = null, groqKey = null, gatewayKey = null, gatewayUrl = null } = body;
 
   // Verify job exists
   const existing = await kvGet(env, jobId);
@@ -244,6 +244,8 @@ async function handleProcess(request, env, ctx) {
         workerCallbackUrl,
         workerSecret: env.WORKER_SECRET,
         groqKey,
+        gatewayKey,
+        gatewayUrl,
       }),
     }).catch(err => console.error('[worker] fly dispatch error', err))
   );
@@ -360,7 +362,7 @@ async function handleJobDelete(request, env, path) {
 // Helper: dispatch to Fly.io (used by /upload-complete for non-process flow)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function dispatchToFly(env, jobId, r2Key, srcLang, groqKey = null, workerCallbackUrl = null) {
+async function dispatchToFly(env, jobId, r2Key, srcLang, groqKey = null, workerCallbackUrl = null, gatewayKey = null, gatewayUrl = null) {
   try {
     const s3Config         = getS3Config(env);
     const presignedDownload = await presignGet(s3Config, r2Key, PRESIGN_TTL_GET);
@@ -379,6 +381,8 @@ async function dispatchToFly(env, jobId, r2Key, srcLang, groqKey = null, workerC
         workerCallbackUrl,
         workerSecret: env.WORKER_SECRET,
         groqKey,
+        gatewayKey,
+        gatewayUrl,
       }),
     });
   } catch (err) {

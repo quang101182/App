@@ -109,12 +109,14 @@ app.post('/extract', requireFlySecret, (req, res) => {
     srcLang,
     workerCallbackUrl,
     workerSecret,
-    groqKey
+    groqKey,
+    gatewayKey,
+    gatewayUrl
   } = req.body || {};
 
-  if (!jobId || !presignedDownload || !workerCallbackUrl || !workerSecret || !groqKey) {
+  if (!jobId || !presignedDownload || !workerCallbackUrl || !workerSecret || (!groqKey && !(gatewayKey && gatewayUrl))) {
     return res.status(400).json({
-      error: 'Champs obligatoires manquants: jobId, presignedDownload, workerCallbackUrl, workerSecret, groqKey'
+      error: 'Champs obligatoires manquants: jobId, presignedDownload, workerCallbackUrl, workerSecret, (groqKey ou gatewayKey+gatewayUrl)'
     });
   }
 
@@ -136,7 +138,7 @@ app.post('/extract', requireFlySecret, (req, res) => {
   );
 
   Promise.race([
-    processJob({ jobId, presignedDownload, srcLang, workerCallbackUrl, workerSecret, groqKey }),
+    processJob({ jobId, presignedDownload, srcLang, workerCallbackUrl, workerSecret, groqKey, gatewayKey, gatewayUrl }),
     jobTimeout
   ])
     .catch(async err => {
@@ -156,7 +158,7 @@ app.post('/extract', requireFlySecret, (req, res) => {
 // ---------------------------------------------------------------------------
 
 async function processJob(job) {
-  const { jobId, presignedDownload, srcLang, workerCallbackUrl, workerSecret, groqKey } = job;
+  const { jobId, presignedDownload, srcLang, workerCallbackUrl, workerSecret, groqKey, gatewayKey, gatewayUrl } = job;
 
   console.log(`[${jobId}] Démarrage du pipeline. URL: ${presignedDownload.substring(0, 80)}...`);
 
@@ -192,6 +194,8 @@ async function processJob(job) {
       ffmpegArgs,
       srcLang,
       groqKey,
+      gatewayKey,
+      gatewayUrl,
       workerCallbackUrl,
       workerSecret
     });
@@ -240,7 +244,7 @@ async function processJob(job) {
 // Streaming FFmpeg → accumulation PCM → chunks séquentiels → Groq
 // ---------------------------------------------------------------------------
 
-async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, workerCallbackUrl, workerSecret }) {
+async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, gatewayKey, gatewayUrl, workerCallbackUrl, workerSecret }) {
   return new Promise((resolve, reject) => {
     const ffmpeg = spawn('ffmpeg', ffmpegArgs, {
       stdio: ['ignore', 'pipe', 'pipe']
@@ -345,6 +349,8 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
             chunkIdx: i,
             srcLang,
             groqKey,
+            gatewayKey,
+            gatewayUrl,
             offsetSec,
             chunkDurationSec,
             workerCallbackUrl,
@@ -420,7 +426,7 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, worker
 // Transcription Groq avec retry x3 — FormData NATIF Node.js 20
 // ---------------------------------------------------------------------------
 
-async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey, offsetSec, chunkDurationSec, workerCallbackUrl, workerSecret }) {
+async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey, gatewayKey, gatewayUrl, offsetSec, chunkDurationSec, workerCallbackUrl, workerSecret }) {
   const MAX_RETRIES = 5; // augmenté pour couvrir plusieurs fenêtres rate-limit Groq
   let lastError;
 
@@ -440,12 +446,23 @@ async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey
         form.append('language', srcLang.trim());
       }
 
-      const response = await fetch(GROQ_ENDPOINT, {
+      // Si groqKey dispo → Groq direct ; sinon → passer via la gateway CF
+      let transcribeUrl, transcribeHeaders;
+      if (groqKey) {
+        transcribeUrl = GROQ_ENDPOINT;
+        transcribeHeaders = { 'Authorization': `Bearer ${groqKey}` };
+      } else {
+        transcribeUrl = `${gatewayUrl}/api/groq`;
+        transcribeHeaders = {
+          'Authorization': `Bearer ${gatewayKey}`,
+          'X-Api-Path': '/openai/v1/audio/transcriptions',
+        };
+      }
+
+      const response = await fetch(transcribeUrl, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${groqKey}`,
-          // PAS de Content-Type — fetch le définit automatiquement avec le bon boundary
-        },
+        headers: transcribeHeaders,
+        // PAS de Content-Type — fetch le définit automatiquement avec le bon boundary
         body: form,
       });
 
