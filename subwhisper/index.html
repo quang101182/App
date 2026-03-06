@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.90</title>
+<title>SubWhisper v8.91</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1016,7 +1016,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.90</span>
+    <span class="ver-badge">v8.91</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -4484,7 +4484,7 @@ async function cleanAI() {
     showUndoBanner(raw, origBlocks.length, 0);
     validateSRT(true);
     checkLangMismatch(srtOriginal, document.getElementById('outLangMain').value || null);
-    setTimeout(function() { showSuggBanner(analyzeSRT(srtOriginal)); }, 400);
+    if (!_autoProcessRunning) setTimeout(function() { showSuggBanner(analyzeSRT(srtOriginal)); }, 400);
   } catch(e) {
     toastClear();
     toast('Erreur nettoyage IA : ' + e.message);
@@ -4494,6 +4494,7 @@ async function cleanAI() {
 }
 
 var _cleanAIBackup = null;
+var _autoProcessRunning = false; // flag anti-cascade pour showSuggBanner
 function analyzeSRT(srtContent) {
   var blocks = parseSRT(srtContent);
   if (!blocks.length) return [];
@@ -4949,7 +4950,7 @@ async function translateManual() {
       : '🌐 Traduit (' + engine + ') → ' + tgt.toUpperCase());
     validateSRT(true);
     checkLangMismatch(srtOriginal, tgt);
-    setTimeout(function() { showSuggBanner(analyzeSRT(srtOriginal)); }, 400);
+    if (!_autoProcessRunning) setTimeout(function() { showSuggBanner(analyzeSRT(srtOriginal)); }, 400);
   } catch(e) {
     toastClear();
     toast('Erreur traduction : ' + e.message);
@@ -4965,6 +4966,7 @@ async function autoProcess() {
   var btn = document.getElementById('autoBtn');
   var btnOrig = btn ? btn.innerHTML : '&#x26A1; AUTO';
   var toolBtns = ['formatBtn','cleanAIBtn','translateBtn','repairBtn','validateBtn','autoBtn'];
+  _autoProcessRunning = true;
   toolBtns.forEach(function(id) { var el = document.getElementById(id); if (el) el.disabled = true; });
   if (btn) { btn.classList.add('running'); btn.innerHTML = '&#x26A1;&#x2026;'; }
   hideSuggBanner();
@@ -5012,12 +5014,18 @@ async function autoProcess() {
     toastClear();
     var summary = plan.length === 1 ? '⚡ AUTO — FORMAT appliqué (SRT déjà propre)' : '⚡ AUTO terminé — ' + plan.join(' → ') + ' ✓';
     toast(summary);
+    // Afficher l'état final APRÈS tout traitement
+    setTimeout(function() { showSuggBanner(analyzeSRT(srtOriginal)); }, 400);
   } catch(e) {
     toastClear();
     toast('⚡ AUTO erreur : ' + (e.message || e));
   } finally {
+    _autoProcessRunning = false;
+    hideSuggBanner();
     toolBtns.forEach(function(id) { var el = document.getElementById(id); if (el) el.disabled = false; });
     if (btn) { btn.classList.remove('running'); btn.innerHTML = btnOrig; }
+    // Afficher suggestions restantes après nettoyage complet
+    setTimeout(function() { showSuggBanner(analyzeSRT(srtOriginal)); }, 500);
   }
 }
 
