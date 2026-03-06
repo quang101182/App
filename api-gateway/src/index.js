@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.2
+ * api-gateway — Cloudflare Worker v1.4
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -26,6 +26,7 @@
  *   POST /admin/keys/list
  *   POST /admin/keys/set
  *   POST /admin/keys/delete
+ *   POST /admin/keys/get
  *   POST /admin/keys/status
  *   GET  /health
  */
@@ -34,7 +35,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.3';
+const VERSION = '1.4';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -116,6 +117,7 @@ export default {
         if (path === '/admin/keys/list')   return await adminKeysList(env);
         if (path === '/admin/keys/set')    return await adminKeysSet(request, env, ctx, ip);
         if (path === '/admin/keys/delete') return await adminKeysDelete(request, env, ctx, ip);
+        if (path === '/admin/keys/get')    return await adminKeysGet(request, env);
         if (path === '/admin/keys/status') return await adminKeysStatus(env);
 
         return jsonResponse({ error: 'unknown admin route' }, 404);
@@ -393,6 +395,27 @@ async function adminKeysDelete(request, env, ctx, ip) {
   ctx.waitUntil(writeAuditLog(env, { action: 'delete', key_name: body.key, ip }));
 
   return jsonResponse({ ok: true, key: body.key });
+}
+
+/**
+ * POST /admin/keys/get
+ * Body: { key: "GEMINI_KEY" }
+ * Returns the raw value stored in KV for the given key name.
+ */
+async function adminKeysGet(request, env) {
+  const body = await request.json().catch(() => null);
+  if (!body || !body.key) {
+    return jsonResponse({ error: 'missing required field: key' }, 400);
+  }
+  if (!KNOWN_KEYS.includes(body.key)) {
+    return jsonResponse({ error: `unknown key "${body.key}". Allowed: ${KNOWN_KEYS.join(', ')}` }, 400);
+  }
+
+  const value = await kvGetKey(env, body.key);
+  if (value === null) {
+    return jsonResponse({ ok: false, error: 'not found' }, 404);
+  }
+  return jsonResponse({ ok: true, key: body.key, value });
 }
 
 /**
