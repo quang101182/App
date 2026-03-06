@@ -1,4 +1,4 @@
-// keys_handler.js — n8n Code node (v2.1)
+// keys_handler.js — n8n Code node (v2.2)
 // Utilise this.helpers.httpRequest (pas fetch — n8n 2.8.3 task runner)
 
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
@@ -22,7 +22,7 @@ const hPost = (url, body) => this.helpers.httpRequest({
   body   : JSON.stringify(body || {}),
 });
 
-const text  = ($input.first().json.text || '').trim();
+const text  = ($input.first().json.cmd || $input.first().json.text || '').trim();
 const parts = text.split(/\s+/);
 const sub   = (parts[1] || '').toLowerCase();
 
@@ -52,14 +52,14 @@ if (!sub || sub === 'list') {
     return `${icon} *${label}* \`${key}\`\n    └ ${hasKey ? presence : 'aucune clé'}`;
   }).join('\n');
 
-  result = `🔑 *API Gateway — Clés*\n\n${lines}\n\n_/keys set GROQ\\_KEY gsk\\_..._\n_/keys delete GROQ\\_KEY_`;
+  result = `🔑 *API Gateway — Clés*\n\n${lines}\n\n\`/keys set GROQ_KEY gsk_...\`\n\`/keys delete GROQ_KEY\``;
 
 // ── /keys set|add KEY VALEUR ───────────────────────────────────────────────
 } else if (sub === 'set' || sub === 'add') {
   const keyName = (parts[2] || '').toUpperCase();
   const value   = parts.slice(3).join(' ');
   if (!keyName || !value) {
-    result = `❌ Usage: /keys set KEY VALEUR\nEx: /keys set GROQ\\_KEY gsk\\_...`;
+    result = `❌ Usage: \`/keys set KEY VALEUR\`\nEx: \`/keys set GROQ_KEY gsk_...\``;
   } else {
     const data = await hPost(`${GATEWAY_URL}/admin/keys/set`, { key: keyName, value });
     result = data.ok ? `✅ Clé *${data.key}* configurée` : `❌ ${data.error}`;
@@ -69,7 +69,7 @@ if (!sub || sub === 'list') {
 } else if (sub === 'delete') {
   const keyName = (parts[2] || '').toUpperCase();
   if (!keyName) {
-    result = '❌ Usage: /keys delete KEY\nEx: /keys delete GROQ\\_KEY';
+    result = '❌ Usage: `/keys delete KEY`\nEx: `/keys delete GROQ_KEY`';
   } else {
     const data = await hPost(`${GATEWAY_URL}/admin/keys/delete`, { key: keyName });
     result = data.ok ? `🗑 Clé *${data.key}* supprimée` : `❌ ${data.error}`;
