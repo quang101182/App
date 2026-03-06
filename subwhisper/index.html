@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.66</title>
+<title>SubWhisper v8.67</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -997,7 +997,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.66</span>
+    <span class="ver-badge">v8.67</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -4303,6 +4303,35 @@ function autoFormatSRT() {
   validateSRT(true);
 }
 
+// ── DÉTECTION ALGO pour cleanAI (v8.67) ──────────────────
+// Retourne les indices des blocs suspects — seuls ces blocs sont envoyés à l'IA
+function _cleanAIDetect(blocks, lang) {
+  var isZH = lang === 'zh', isJA = lang === 'ja', isKO = lang === 'ko';
+  var isCJK = isZH || isJA || isKO;
+  var isFR  = lang === 'fr';
+  // Patterns
+  var CHAR_REPEAT_RX = /(.)\1{2,}/; // même char répété 3+ fois
+  var WORD_REPEAT_RX = /\b(\w{3,})\b(?:[\s\S]*?\b\1\b){2}/; // même mot répété 3+ fois
+  var MONO_CJK_RX    = /^[\u3040-\u9fff\uac00-\ud7af\s]{1,3}$/; // mono-CJK ≤3 chars
+  // Token multi-script corrompu (CJK/Cyrillic mélangé à Latin ≥2 chars)
+  var MIXED_SCRIPT_RX = /[\u3040-\u9fff\uac00-\ud7af\u0400-\u04ff].*[a-zA-Z]{2}|[a-zA-Z]{2}.*[\u3040-\u9fff\uac00-\ud7af\u0400-\u04ff]/;
+  var APO_RX    = /\b(c est|j ai|j en|j y|qu il|qu elle|qu elles|qu ils|s il|s ils|n est|n a |n ont|l homme|l eau|l air|l heure|d un|d une|l on)\b/i;
+  var PUNCT_RX  = /[a-zA-Z\u00C0-\u024F][?!]/; // lettre collée à ? ou !
+  var indices = [];
+  blocks.forEach(function(b, i) {
+    var text = b.text;
+    var flag = false;
+    if (isCJK && CHAR_REPEAT_RX.test(text)) flag = true; // hallucination CJK
+    if (isCJK && MONO_CJK_RX.test(text.trim())) flag = true; // mono-char silence
+    if (WORD_REPEAT_RX.test(text)) flag = true; // mot répété (toutes langues)
+    if (MIXED_SCRIPT_RX.test(text)) flag = true; // token corrompu multi-script
+    if (isFR && APO_RX.test(text)) flag = true; // apostrophe manquante FR
+    if (isFR && PUNCT_RX.test(text)) flag = true; // espace manquant avant ?! FR
+    if (flag) indices.push(i);
+  });
+  return indices;
+}
+
 // ── NETTOYAGE IA ─────────────────────────────────────────
 async function cleanAI() {
   hideSuggBanner();
@@ -4319,56 +4348,61 @@ async function cleanAI() {
     if (out && out !== 'same') return out;
     return detectedLang || document.getElementById('srcLangMain').value || '';
   })();
-  var BATCH = getAIEngine() === 'deepseek' ? 75 : 200;
+  // ── Phase 1 : détection algo ──
+  var _detected = _cleanAIDetect(origBlocks, srtTextLang);
   var btn = document.getElementById('cleanAIBtn');
   var btnOrig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '✨ IA ⏳'; }
-  toastPersist('✨ Nettoyage ' + engineName + ' en cours…');
+  if (_detected.length === 0) {
+    toast('✅ SRT propre — aucun bloc à corriger (' + origBlocks.length + ' blocs)');
+    if (btn) { btn.disabled = false; btn.innerHTML = btnOrig; }
+    return;
+  }
+  var _detectMsg = _detected.length + ' bloc' + (_detected.length > 1 ? 's' : '') + ' / ' + origBlocks.length;
+  toastPersist('✨ Nettoyage ' + engineName + ' — ' + _detectMsg + '…');
+  // ── Construire prompt header (invariant par batch) ──
+  var _cIsZH = srtTextLang === 'zh', _cIsJA = srtTextLang === 'ja', _cIsKO = srtTextLang === 'ko';
+  var isCJK_c = _cIsZH || _cIsJA || _cIsKO;
+  var _langLine = srtTextLang ? 'The subtitle text language is "' + srtTextLang + '". ' : '';
+  var _langSpecific = '';
+  if (_cIsZH) {
+    _langSpecific = '\n5. CHINESE: Fix common homophones — 的/地/得 (grammar particle), 在/再 (at/again), 他/她/它 (he/she/it). Do NOT convert Traditional\u2194Simplified — keep characters exactly as transcribed.';
+  } else if (_cIsJA) {
+    _langSpecific = '\n5. JAPANESE: Fix obvious hiragana/katakana confusion and misheard kanji only. Preserve speech register — do NOT convert です/ます (polite) to だ/である (casual) or vice versa.';
+  } else if (_cIsKO) {
+    _langSpecific = '\n5. KOREAN: Fix phonetically similar Hangul characters only. Preserve speech register — do NOT convert 요/습니다 (formal) to 야/다 (casual) or vice versa.';
+  } else if (srtTextLang === 'fr') {
+    _langSpecific = '\n5. FRENCH: Fix missing apostrophes (c est\u2192c\'est, j ai\u2192j\'ai, qu il\u2192qu\'il, s il\u2192s\'il, n est\u2192n\'est, l homme\u2192l\'homme, etc.). Add non-breaking space (U+00A0) before ? ! : ; if missing — mandatory French typography.';
+  }
+  var _bracketsRule = isCJK_c
+    ? '\n4. NEVER output [...] for ANY reason. If a line is noise, garbled, or incoherent — COPY IT EXACTLY UNCHANGED. [...] is FORBIDDEN in your output.'
+    : '\n4. [...] FORBIDDEN for entire blocks. If a line contains garbled tokens, foreign words, or mixed-language noise — COPY IT EXACTLY AS-IS. Only [...] is allowed INSIDE a line for partial unintelligible noise (e.g. "Je vais [...] chercher").';
+  var _promptHeader = 'You are a professional subtitle editor. ' + _langLine + '\n' +
+    'Each line is [N] subtitle_text. Return EACH line as [N] corrected_text.\n' +
+    '1. NEVER skip a number. If text is already correct, return it UNCHANGED.\n' +
+    '2. PROPER NOUNS: Never alter character names, place names, invented terms. Capitalized word not starting a sentence = likely proper noun.\n' +
+    '3. INTERJECTIONS & TRUNCATED: Short exclamations (Hé, Oh, Ha, Eï, Ouh, Bah, Tss, Yeah, Kiii, etc.) are VALID — NEVER replace. Lines ending without punctuation are intentionally cut — never add words.\n' +
+    _bracketsRule + _langSpecific + '\n' +
+    '6. CORRECTIONS: Fix spelling errors, missing apostrophes, obvious Whisper mishearing only.\n' +
+    'Return ONLY the numbered lines [N] text. No SRT structure, no timestamps, no explanation.';
   try {
+    // ── Phase 2 : IA sur blocs détectés uniquement ──
+    var BATCH = engine === 'deepseek' ? 75 : 200;
     var batches = [];
-    for (var i = 0; i < origBlocks.length; i += BATCH) batches.push(origBlocks.slice(i, i + BATCH));
-    // Textes corrigés — par défaut = originaux (fallback si IA rate un bloc)
+    for (var i = 0; i < _detected.length; i += BATCH) batches.push(_detected.slice(i, i + BATCH));
     var correctedTexts = origBlocks.map(function(b) { return b.text; });
     var _cDone = 0;
-    var _cCores = getAIEngine() === 'deepseek' ? 4 : 1;
+    var _cCores = engine === 'deepseek' ? 4 : 1;
     for (var _cS = 0; _cS < batches.length; _cS += _cCores) {
       var _cGrp = [];
       for (var _cK = _cS; _cK < Math.min(_cS + _cCores, batches.length); _cK++) _cGrp.push(_cK);
-      await Promise.all(_cGrp.map(function(b) {
+      await Promise.all(_cGrp.map(function(bIdx) {
         return (async function() {
-          var batchBlocks = batches[b];
-          var batchOffset = b * BATCH;
-          var _cIsZH = srtTextLang === 'zh';
-          var _cIsJA = srtTextLang === 'ja';
-          var _cIsKO = srtTextLang === 'ko';
-          var isCJK_c = _cIsZH || _cIsJA || _cIsKO;
-          var langLine = srtTextLang ? 'The subtitle text language is "' + srtTextLang + '". ' : '';
-          // Règle spécifique par langue (v8.65)
-          var langSpecificRule = '';
-          if (_cIsZH) {
-            langSpecificRule = '\n5. CHINESE: Fix common homophones — 的/地/得 (grammar particle), 在/再 (at/again), 他/她/它 (he/she/it). Do NOT convert Traditional\u2194Simplified — keep characters exactly as transcribed.';
-          } else if (_cIsJA) {
-            langSpecificRule = '\n5. JAPANESE: Fix obvious hiragana/katakana confusion and misheard kanji only. Preserve speech register — do NOT convert です/ます (polite) to だ/である (casual) or vice versa.';
-          } else if (_cIsKO) {
-            langSpecificRule = '\n5. KOREAN: Fix phonetically similar Hangul characters only. Preserve speech register — do NOT convert 요/습니다 (formal) to 야/다 (casual) or vice versa.';
-          } else if (srtTextLang === 'fr') {
-            langSpecificRule = '\n5. FRENCH: Fix missing apostrophes (c est\u2192c\'est, j ai\u2192j\'ai, qu il\u2192qu\'il, s il\u2192s\'il, n est\u2192n\'est, l homme\u2192l\'homme, etc.). Add non-breaking space (U+00A0) before ? ! : ; if missing — mandatory French typography.';
-          }
-          var bracketsRule = isCJK_c
-            ? '\n4. NEVER output [...] for ANY reason. If a line is noise, garbled, or incoherent — COPY IT EXACTLY UNCHANGED. [...] is FORBIDDEN in your output.'
-            : '\n4. [...] FORBIDDEN for entire blocks. If a line contains garbled tokens, foreign words, or mixed-language noise — COPY IT EXACTLY AS-IS. Only [...] is allowed INSIDE a line for partial unintelligible noise (e.g. "Je vais [...] chercher").';
-          var promptLines = batchBlocks.map(function(blk, j) {
-            return '[' + (batchOffset + j + 1) + '] ' + blk.text.replace(/\n/g, ' | ');
+          var batchIndices = batches[bIdx]; // indices globaux dans origBlocks
+          var promptLines = batchIndices.map(function(globalIdx) {
+            return '[' + (globalIdx + 1) + '] ' + origBlocks[globalIdx].text.replace(/\n/g, ' | ');
           });
-          var prompt = 'You are a professional subtitle editor. ' + langLine + '\n' +
-            'Each line is [N] subtitle_text. Return EACH line as [N] corrected_text.\n' +
-            '1. NEVER skip a number. If text is already correct, return it UNCHANGED.\n' +
-            '2. PROPER NOUNS: Never alter character names, place names, invented terms. Capitalized word not starting a sentence = likely proper noun.\n' +
-            '3. INTERJECTIONS & TRUNCATED: Short exclamations (Hé, Oh, Ha, Eï, Ouh, Bah, Tss, Yeah, Kiii, etc.) are VALID — NEVER replace. Lines ending without punctuation are intentionally cut — never add words.\n' +
-            bracketsRule + langSpecificRule + '\n' +
-            '6. CORRECTIONS: Fix spelling errors, missing apostrophes, obvious Whisper mishearing only.\n' +
-            'Return ONLY the numbered lines [N] text. No SRT structure, no timestamps, no explanation.\n\n' +
-            promptLines.join('\n');
+          var prompt = _promptHeader + '\n\n' + promptLines.join('\n');
           try {
             var aiText = await callAIText(prompt);
             var lineRx = /^\[(\d+)\]\s*(.*)/gm;
@@ -4377,7 +4411,6 @@ async function cleanAI() {
               var idx = parseInt(m[1]) - 1;
               if (idx >= 0 && idx < origBlocks.length) {
                 var corrected = m[2].replace(/ \| /g, '\n').trim();
-                // Post-process FR : normaliser espace → U+00A0 avant ?!:; (typographie française)
                 if (corrected && srtTextLang === 'fr') corrected = corrected.replace(/ ([?!:;])/g, '\u00A0$1');
                 if (corrected) correctedTexts[idx] = corrected;
               }
@@ -4386,7 +4419,7 @@ async function cleanAI() {
             toastPersist('✨ Nettoyage ' + engineName + ' ' + _cDone + '/' + batches.length + ' \u2713');
             if (btn) btn.innerHTML = '✨ IA ' + _cDone + '/' + batches.length;
           } catch(e2) {
-            console.warn('Batch ' + b + ' erreur (textes originaux conservés):', e2.message);
+            console.warn('Batch ' + bIdx + ' erreur (textes originaux conservés):', e2.message);
           }
         })();
       }));
@@ -4406,7 +4439,7 @@ async function cleanAI() {
       offsetReloadTimer = setTimeout(function() { document.getElementById('previewTrack').src = previewVttUrl; }, 50);
     }
     toastClear();
-    toast('✨ Nettoyage IA terminé — ' + origBlocks.length + ' blocs');
+    toast('✨ Nettoyage IA terminé — ' + _detected.length + ' vérifiés / ' + origBlocks.length + ' blocs');
     showUndoBanner(raw, origBlocks.length, 0);
     validateSRT(true);
     checkLangMismatch(srtOriginal, document.getElementById('outLangMain').value || null);
