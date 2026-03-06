@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.81</title>
+<title>SubWhisper v8.82</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -999,7 +999,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.81</span>
+    <span class="ver-badge">v8.82</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1029,7 +1029,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
       <span class="clbl">GATEWAY <span class="clbl-sub">secret</span></span>
       <div style="display:flex;flex-direction:column;flex:1;gap:4px">
         <div style="display:flex;gap:6px;align-items:center">
-          <input type="password" id="gatewayKey" placeholder="WORKER_SECRET — une seule clé pour toutes les APIs" style="flex:1">
+          <input type="password" id="gatewayKey" placeholder="WORKER_SECRET — une seule clé pour toutes les APIs" style="flex:1" autocomplete="new-password">
           <button class="tbtn" onclick="toggleKey('gatewayKey','tkBtnGW')" id="tkBtnGW" title="Afficher">&#128065;</button>
         </div>
         <span id="gatewayInfo" style="font-size:12px;color:var(--fg);padding-left:2px;opacity:.8"></span>
@@ -1493,7 +1493,11 @@ function init() {
     }
   } catch(e) {}
   try { var gwk = localStorage.getItem('sw_gatewaykey'); if (gwk) document.getElementById('gatewayKey').value = gwk; } catch(e) {}
-  document.getElementById('gatewayKey').addEventListener('change', function() { try { localStorage.setItem('sw_gatewaykey', this.value.trim()); } catch(e) {} fetchGatewayConfig(); });
+  var _gwTimer;
+  function _saveGwKey() { var v = document.getElementById('gatewayKey').value.trim(); try { localStorage.setItem('sw_gatewaykey', v); } catch(e) {} fetchGatewayConfig(); }
+  document.getElementById('gatewayKey').addEventListener('change', _saveGwKey);
+  document.getElementById('gatewayKey').addEventListener('input', function() { clearTimeout(_gwTimer); _gwTimer = setTimeout(_saveGwKey, 600); });
+  document.getElementById('gatewayKey').addEventListener('keydown', function(e) { if (e.key === 'Enter') { clearTimeout(_gwTimer); _saveGwKey(); } });
   // Lancer fetchGatewayConfig immédiatement après chargement de la clé
   setTimeout(fetchGatewayConfig, 300);
   try {
@@ -1557,7 +1561,13 @@ function getAzureRegion(){ return ''; }
 function getDeeplxUrl() { return ''; }
 function getGroqKey()   { return ''; }
 function getWorkerUrl()  { return document.getElementById('workerUrl').value.trim(); }
-function getGatewayKey() { return document.getElementById('gatewayKey').value.trim(); }
+function getGatewayKey() {
+  var v = document.getElementById('gatewayKey').value.trim();
+  if (v) return v;
+  try { v = localStorage.getItem('sw_gatewaykey') || ''; } catch(e) {}
+  if (v) document.getElementById('gatewayKey').value = v; // restore if autofill erased
+  return v;
+}
 var GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 
 async function fetchGatewayConfig() {
