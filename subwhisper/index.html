@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.62</title>
+<title>SubWhisper v8.63</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -996,7 +996,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.62</span>
+    <span class="ver-badge">v8.63</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -4385,6 +4385,7 @@ async function cleanAI() {
     showUndoBanner(raw, origBlocks.length, 0);
     validateSRT(true);
     checkLangMismatch(srtOriginal, document.getElementById('outLangMain').value || null);
+    setTimeout(function() { showSuggBanner(analyzeSRT(srtOriginal)); }, 400);
   } catch(e) {
     toastClear();
     toast('Erreur nettoyage IA : ' + e.message);
@@ -4398,20 +4399,54 @@ function analyzeSRT(srtContent) {
   var blocks = parseSRT(srtContent);
   if (!blocks.length) return [];
   var suggestions = [];
-  // 1. Blocs non-latins (CJK, cyrillique, hangul...)
-  var nonFr = 0;
-  blocks.forEach(function(b) { if (/[\u3040-\u9fff\uac00-\ud7af\u0400-\u04ff]/.test(b.text)) nonFr++; });
-  if (nonFr > 0) suggestions.push({ msg: nonFr + ' bloc' + (nonFr > 1 ? 's' : '') + ' non-fran\u00e7ais', action: 'TRAD', btnId: 'translateBtn', fn: 'translateManual' });
-  // 2. Apostrophes manquantes FR
+  var CJK = /[\u3040-\u9fff\uac00-\ud7af]/;
+  var NONLATIN = /[\u3040-\u9fff\uac00-\ud7af\u0400-\u04ff]/;
+  var EN_HINT = /\b(the|this|that|when|what|with|you|your|and|for|are|was|not|can|will|have|been|they|from|is|it|do|let|come|look|feel|like|want|so|go)\b/i;
+  var FR_HINT = /\b(le|la|les|un|une|des|je|tu|il|elle|nous|vous|que|qui|dans|avec|pour|sur|et|est|pas|mais|ou|ce|ne|en|du|au|ça|j'ai|c'est)\b/i;
+
+  // 1. Blocs non-latins (CJK, cyrillique...) → source non traduite
+  var nonLatin = 0;
+  blocks.forEach(function(b) { if (NONLATIN.test(b.text)) nonLatin++; });
+
+  // 2. Répétitions phonétiques — Latin ET CJK
+  var halluc = 0;
+  blocks.forEach(function(b) {
+    // Latin: mots identiques ×3
+    var ws = b.text.split(/\s+/);
+    for (var i = 0; i < ws.length - 2; i++) {
+      if (ws[i] && ws[i] === ws[i+1] && ws[i+1] === ws[i+2] && ws[i].length <= 5) { halluc++; break; }
+    }
+    // CJK: caractères phonétiques répétés (啊啊啊 / 哦哦哦)
+    if (/([啊哦嗯唉哎喔哟哈呀]{1})\1{2,}/.test(b.text)) halluc++;
+    // Blocs mono-CJK très courts répétés
+    if (CJK.test(b.text) && b.text.trim().length <= 3) halluc++;
+  });
+
+  // 3. Drift EN résiduel dans SRT FR (blocs EN sans mots FR)
+  var enDrift = 0;
+  if (nonLatin === 0) { // SRT déjà traduit (pas de CJK)
+    blocks.forEach(function(b) {
+      if (b.text.length >= 8 && EN_HINT.test(b.text) && !FR_HINT.test(b.text)) enDrift++;
+    });
+  }
+
+  // 4. Apostrophes manquantes FR
   var missApo = 0;
   blocks.forEach(function(b) { if (/\b(c est|j ai|j en|qu il|qu elle|s il|n est|l homme)\b/i.test(b.text)) missApo++; });
-  if (missApo > 1) suggestions.push({ msg: missApo + ' fautes apostrophe', action: 'IA', btnId: 'cleanAIBtn', fn: 'cleanAI' });
-  // 3. Répétitions phonétiques (hallucinations)
-  var halluc = 0;
-  blocks.forEach(function(b) { var ws = b.text.split(/\s+/); for (var i = 0; i < ws.length - 2; i++) { if (ws[i] && ws[i] === ws[i+1] && ws[i+1] === ws[i+2] && ws[i].length <= 5) { halluc++; break; } } });
-  if (halluc > 2) suggestions.push({ msg: halluc + ' r\u00e9p\u00e9titions phon\u00e9tiques', action: 'IA', btnId: 'cleanAIBtn', fn: 'cleanAI' });
-  // 4. SRT propre → IA recommandé par précaution
-  if (suggestions.length === 0 && blocks.length > 5) suggestions.push({ msg: 'Nettoyage IA recommand\u00e9', action: 'IA', btnId: 'cleanAIBtn', fn: 'cleanAI', soft: true });
+
+  // ── Construire suggestions dans le bon ordre ──────────────
+  // Source CJK : IA d'abord (cleanAI sur brut), PUIS TRAD
+  if (nonLatin > 0) {
+    if (halluc > 2) suggestions.push({ msg: halluc + ' hallucinations phonétiques — nettoyer d\'abord', action: 'IA', btnId: 'cleanAIBtn', fn: 'cleanAI' });
+    suggestions.push({ msg: nonLatin + ' bloc' + (nonLatin > 1 ? 's' : '') + ' non-traduit' + (nonLatin > 1 ? 's' : ''), action: 'TRAD', btnId: 'translateBtn', fn: 'translateManual' });
+  } else {
+    // SRT Latin (déjà traduit ou source latine)
+    if (halluc > 2) suggestions.push({ msg: halluc + ' répétitions phonétiques', action: 'IA', btnId: 'cleanAIBtn', fn: 'cleanAI' });
+    if (enDrift > 3) suggestions.push({ msg: enDrift + ' bloc' + (enDrift > 1 ? 's' : '') + ' EN non traduit' + (enDrift > 1 ? 's' : ''), action: 'TRAD', btnId: 'translateBtn', fn: 'translateManual' });
+    if (missApo > 1) suggestions.push({ msg: missApo + ' fautes apostrophe', action: 'IA', btnId: 'cleanAIBtn', fn: 'cleanAI' });
+    // Fallback
+    if (suggestions.length === 0 && blocks.length > 5) suggestions.push({ msg: 'Nettoyage IA recommandé', action: 'IA', btnId: 'cleanAIBtn', fn: 'cleanAI', soft: true });
+  }
   return suggestions;
 }
 function showSuggBanner(suggestions) {
@@ -4744,6 +4779,7 @@ async function translateManual() {
       : '🌐 Traduit (' + engine + ') → ' + tgt.toUpperCase());
     validateSRT(true);
     checkLangMismatch(srtOriginal, tgt);
+    setTimeout(function() { showSuggBanner(analyzeSRT(srtOriginal)); }, 400);
   } catch(e) {
     toastClear();
     toast('Erreur traduction : ' + e.message);
