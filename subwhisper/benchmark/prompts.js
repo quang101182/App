@@ -1,7 +1,7 @@
 /**
  * SubWhisper — Prompts centralisés
  * Source unique : modifié ici → copié dans index.html
- * Version : v8.66
+ * Version : v8.70
  */
 
 function getCleanPrompt(srtTextLang, blockCount) {
@@ -97,7 +97,7 @@ function getTranslateTextPrompt(srcName, tgtName, tgtLang, srcLang) {
   if (srcLang === 'zh') {
     srcSpecificRule = '\n7. CHINESE SOURCE: Romanized names (Xiao Ming, Li Wei, etc.) — adapt naturally in context or keep as-is. Chinese onomatopoeia/interjections (哈哈, 啊, 哟, 哦) → convert to natural equivalent in ' + tgtName + '.';
   } else if (srcLang === 'ja') {
-    srcSpecificRule = '\n7. JAPANESE SOURCE: Honorifics (-san, -kun, -chan, -sama, -sensei) — keep UNCHANGED after the name (e.g., "Tanaka-san" stays "Tanaka-san"). Keigo (ultra-polite speech) → translate as formal/polite ' + tgtName + ', not overly literal.';
+    srcSpecificRule = '\n7. JAPANESE SOURCE: Honorifics (-san, -kun, -chan, -sama, -sensei) — keep UNCHANGED after the name. Keigo → translate as formal/polite ' + tgtName + '. Short Japanese exclamations (すごい, あー, おやすみ, パンパン, etc.) are common expressions — ALWAYS translate them, they are NOT proper nouns. Korean (Hangul) characters in this file are speech recognition errors — translate them phonetically or give best approximation in ' + tgtName + '.';
   } else if (srcLang === 'ko') {
     srcSpecificRule = '\n7. KOREAN SOURCE: Relationship address terms (oppa, unnie, noona, hyung) — keep UNCHANGED as-is (they are culturally specific, not translatable). Speech levels → match formal/casual register in ' + tgtName + '.';
   }
