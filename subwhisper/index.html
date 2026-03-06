@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.76</title>
+<title>SubWhisper v8.77</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -997,7 +997,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.76</span>
+    <span class="ver-badge">v8.77</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1033,7 +1033,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
           <input type="password" id="gatewayKey" placeholder="WORKER_SECRET — une seule clé pour toutes les APIs" style="flex:1">
           <button class="tbtn" onclick="toggleKey('gatewayKey','tkBtnGW')" id="tkBtnGW" title="Afficher">&#128065;</button>
         </div>
-        <span id="gatewayInfo" style="font-size:11px;color:var(--muted);padding-left:2px"></span>
+        <span id="gatewayInfo" style="font-size:12px;color:var(--fg);padding-left:2px;opacity:.8"></span>
       </div>
     </div>
     <div class="crow">
@@ -1491,14 +1491,13 @@ function init() {
   document.getElementById('workerUrl').addEventListener('change', function() { try { localStorage.setItem('sw_workerurl', this.value.trim()); } catch(e) {} pingAllApis(); });
   try { var gwk = localStorage.getItem('sw_gatewaykey'); if (gwk) document.getElementById('gatewayKey').value = gwk; } catch(e) {}
   document.getElementById('gatewayKey').addEventListener('change', function() { try { localStorage.setItem('sw_gatewaykey', this.value.trim()); } catch(e) {} fetchGatewayConfig(); });
+  // Lancer fetchGatewayConfig immédiatement après chargement de la clé
+  setTimeout(fetchGatewayConfig, 300);
   try {
     var s = localStorage.getItem('sw_srcLang'); if (s !== null) { document.getElementById('srcLang').value = s; document.getElementById('srcLangMain').value = s; }
     var o = localStorage.getItem('sw_outLang'); if (o !== null) { document.getElementById('outLang').value = o; document.getElementById('outLangMain').value = o; }
     var ae = localStorage.getItem('sw_aiengine'); if (ae) document.getElementById('aiEngine').value = ae;
   } catch(e) {}
-  // Clé DeepSeek
-  try { var dk = localStorage.getItem('sw_deepseekkey'); if (dk) document.getElementById('deepseekKey').value = dk; } catch(e) {}
-  document.getElementById('deepseekKey').addEventListener('change', function() { try { localStorage.setItem('sw_deepseekkey', this.value.trim()); } catch(e) {} pingAllApis(); checkAIEngine(); });
   // Sync config selects → main bar
   document.getElementById('srcLang').addEventListener('change', function() { try { localStorage.setItem('sw_srcLang', this.value); document.getElementById('srcLangMain').value = this.value; } catch(e) {} });
   document.getElementById('outLang').addEventListener('change', function() { try { localStorage.setItem('sw_outLang', this.value); document.getElementById('outLangMain').value = this.value; } catch(e) {} });
@@ -1560,7 +1559,18 @@ var GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 
 async function fetchGatewayConfig() {
   var gk = getGatewayKey();
-  if (!gk) { setDot('GWY','none'); document.getElementById('gatewayInfo').textContent = ''; return; }
+  if (!gk) {
+    setDot('GWY','none');
+    var gwDot = document.getElementById('adotGWY');
+    if (gwDot) gwDot.classList.add('required');
+    document.getElementById('gatewayInfo').textContent = '⚠️ Entrez votre GATEWAY SECRET';
+    // Reset tous les dots API à none
+    ['GRQ','OAI','GEM','DSK','AAI','AZR'].forEach(function(d){ setDot(d,'none'); });
+    updateSbtn();
+    return;
+  }
+  var gwDot2 = document.getElementById('adotGWY');
+  if (gwDot2) gwDot2.classList.remove('required');
   setDot('GWY','key');
   document.getElementById('gatewayInfo').textContent = '⏳ Connexion...';
   try {
