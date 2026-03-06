@@ -63,7 +63,7 @@ var RATE_LIMIT   = 1200; // ms entre batches
 
 // ── parseSRT / buildSRT ───────────────────────────────────────────────────────
 function parseSRT(srt) {
-  return srt.split(/\n\n+/).filter(function(b) {
+  return srt.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split(/\n\n+/).filter(function(b) {
     var l = b.trim().split('\n');
     return l.length >= 3 && /^\d+$/.test(l[0].trim()) && l[1].includes('-->');
   }).map(function(b) {
