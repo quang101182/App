@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.72</title>
+<title>SubWhisper v8.73</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -997,7 +997,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.72</span>
+    <span class="ver-badge">v8.73</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1072,6 +1072,11 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     <div class="crow">
       <span class="clbl">WORKER <span class="clbl-sub">cloud</span></span>
       <input type="text" id="workerUrl" placeholder="URL Cloudflare Worker — gros fichiers cloud">
+    </div>
+    <div class="crow">
+      <span class="clbl">GATEWAY <span class="clbl-sub">secret</span></span>
+      <input type="password" id="gatewayKey" placeholder="WORKER_SECRET api-gateway (centralise toutes les clés)">
+      <button class="tbtn" onclick="toggleKey('gatewayKey','tkBtnGW')" id="tkBtnGW" title="Afficher">&#128065;</button>
     </div>
     <div class="crow">
       <span class="clbl">PROXY</span>
@@ -1543,6 +1548,8 @@ function init() {
   document.getElementById('groqKey').addEventListener('change', function() { try { localStorage.setItem('sw_groqkey', this.value.trim()); } catch(e) {} pingAllApis(); updateRequiredBlink(); });
   try { var wu = localStorage.getItem('sw_workerurl'); if (wu) document.getElementById('workerUrl').value = wu; } catch(e) {}
   document.getElementById('workerUrl').addEventListener('change', function() { try { localStorage.setItem('sw_workerurl', this.value.trim()); } catch(e) {} pingAllApis(); });
+  try { var gwk = localStorage.getItem('sw_gatewaykey'); if (gwk) document.getElementById('gatewayKey').value = gwk; } catch(e) {}
+  document.getElementById('gatewayKey').addEventListener('change', function() { try { localStorage.setItem('sw_gatewaykey', this.value.trim()); } catch(e) {} });
   try {
     var s = localStorage.getItem('sw_srcLang'); if (s !== null) { document.getElementById('srcLang').value = s; document.getElementById('srcLangMain').value = s; }
     var o = localStorage.getItem('sw_outLang'); if (o !== null) { document.getElementById('outLang').value = o; document.getElementById('outLangMain').value = o; }
@@ -1606,7 +1613,9 @@ function getAzureKey()  { return document.getElementById('azureKey').value.trim(
 function getAzureRegion(){ return document.getElementById('azureRegion').value.trim(); }
 function getDeeplxUrl() { return document.getElementById('deeplxUrl').value.trim(); }
 function getGroqKey()   { return document.getElementById('groqKey').value.trim(); }
-function getWorkerUrl() { return document.getElementById('workerUrl').value.trim(); }
+function getWorkerUrl()  { return document.getElementById('workerUrl').value.trim(); }
+function getGatewayKey() { return document.getElementById('gatewayKey').value.trim(); }
+var GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 
 function toggleKey(inputId, btnId) {
   var inp = document.getElementById(inputId);
@@ -2308,11 +2317,10 @@ async function transcribeChunkOpenAI(file, srcLang, key, chunkNum, totalChunks, 
   formData.append('response_format', 'verbose_json');
   formData.append('timestamp_granularities[]', 'segment');
   if (srcLang && srcLang !== '') formData.append('language', srcLang);
-  var resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + key },
-    body: formData
-  });
+  var _gwKeyOAI = getGatewayKey();
+  var _oaiUrl = _gwKeyOAI ? GATEWAY_URL + '/api/openai' : 'https://api.openai.com/v1/audio/transcriptions';
+  var _oaiHdr = _gwKeyOAI ? { 'Authorization': 'Bearer ' + _gwKeyOAI, 'X-Api-Path': '/v1/audio/transcriptions' } : { 'Authorization': 'Bearer ' + key };
+  var resp = await fetch(_oaiUrl, { method: 'POST', headers: _oaiHdr, body: formData });
   if (!resp.ok) {
     var errData = await resp.json().catch(function() { return {}; });
     throw new Error('OpenAI chunk ' + chunkNum + '/' + totalChunks + ' — ' + (errData.error ? errData.error.message : resp.statusText));
@@ -2341,11 +2349,10 @@ async function transcribeChunkGroq(file, srcLang, key, chunkNum, totalChunks, of
   formData.append('response_format', 'verbose_json');
   formData.append('timestamp_granularities[]', 'segment');
   if (srcLang && srcLang !== '') formData.append('language', srcLang);
-  var resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + key },
-    body: formData
-  });
+  var _gwKeyGRQ = getGatewayKey();
+  var _grqUrl = _gwKeyGRQ ? GATEWAY_URL + '/api/groq' : 'https://api.groq.com/openai/v1/audio/transcriptions';
+  var _grqHdr = _gwKeyGRQ ? { 'Authorization': 'Bearer ' + _gwKeyGRQ, 'X-Api-Path': '/openai/v1/audio/transcriptions' } : { 'Authorization': 'Bearer ' + key };
+  var resp = await fetch(_grqUrl, { method: 'POST', headers: _grqHdr, body: formData });
   if (!resp.ok) {
     var errData = await resp.json().catch(function() { return {}; });
     throw new Error('Groq chunk ' + chunkNum + '/' + totalChunks + ' — ' + (errData.error ? errData.error.message : resp.statusText));
@@ -2480,11 +2487,20 @@ async function translateSRT(origSrt, sourceLang, targetLang) {
 }
 
 async function azureTranslate(bodyArr, targetLang, azureKey, sourceLang) {
-  var url = 'https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&to=' + targetLang;
+  var _gwKeyAZR = getGatewayKey();
+  var baseUrl = _gwKeyAZR ? GATEWAY_URL + '/api/azure' : 'https://api.cognitive.microsofttranslator.com/translate';
+  var url = baseUrl + '?api-version=3.0&to=' + targetLang;
   if (sourceLang) url += '&from=' + (AZURE_LANG[sourceLang] || sourceLang);
-  var headers = { 'Ocp-Apim-Subscription-Key': azureKey, 'Content-Type': 'application/json' };
-  var region = getAzureRegion();
-  if (region) headers['Ocp-Apim-Subscription-Region'] = region;
+  var headers = { 'Content-Type': 'application/json' };
+  if (_gwKeyAZR) {
+    headers['Authorization'] = 'Bearer ' + _gwKeyAZR;
+    var region = getAzureRegion();
+    if (region) headers['X-Azure-Region'] = region;
+  } else {
+    headers['Ocp-Apim-Subscription-Key'] = azureKey;
+    var region = getAzureRegion();
+    if (region) headers['Ocp-Apim-Subscription-Region'] = region;
+  }
   var resp = await fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(bodyArr) });
   if (!resp.ok) {
     var err = await resp.json().catch(function() { return {}; });
@@ -2511,10 +2527,13 @@ async function callAIText(prompt) {
   var engine = getAIEngine();
   if (engine === 'deepseek') {
     var key = getDeepSeekKey();
-    if (!key) throw new Error('Cl\u00e9 DeepSeek manquante');
-    var resp = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    var _gwKeyDSK = getGatewayKey();
+    if (!key && !_gwKeyDSK) throw new Error('Cl\u00e9 DeepSeek manquante');
+    var _dskUrl = _gwKeyDSK ? GATEWAY_URL + '/api/deepseek' : 'https://api.deepseek.com/v1/chat/completions';
+    var _dskAuth = _gwKeyDSK ? _gwKeyDSK : key;
+    var resp = await fetch(_dskUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _dskAuth },
       body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: prompt }], max_tokens: 8192 })
     });
     if (!resp.ok) {
@@ -2525,10 +2544,17 @@ async function callAIText(prompt) {
     return (data.choices[0].message.content || '').trim();
   } else {
     var key = getGeminiKey();
-    if (!key) throw new Error('Cl\u00e9 Gemini manquante');
-    var resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, {
+    var _gwKeyGEM = getGatewayKey();
+    if (!key && !_gwKeyGEM) throw new Error('Cl\u00e9 Gemini manquante');
+    var _gemUrl = _gwKeyGEM
+      ? GATEWAY_URL + '/api/gemini/v1beta/models/gemini-2.0-flash:generateContent'
+      : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key;
+    var _gemHdr = _gwKeyGEM
+      ? { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _gwKeyGEM }
+      : { 'Content-Type': 'application/json' };
+    var resp = await fetch(_gemUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: _gemHdr,
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 8192 } })
     });
     if (!resp.ok) {

@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.1
+ * api-gateway — Cloudflare Worker v1.2
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -7,11 +7,13 @@
  * Secrets (wrangler secret put):
  *   WORKER_SECRET    — Bearer token for API routes
  *   ADMIN_TOKEN      — Bearer token for admin routes
- *   GEMINI_KEY       — can also be stored in KV via /admin/keys/set
- *   GROQ_KEY
- *   OPENAI_KEY
- *   DEEPL_KEY
- *   ASSEMBLYAI_KEY
+ *
+ * Keys stored in KV via /admin/keys/set:
+ *   GEMINI_KEY, GROQ_KEY, OPENAI_KEY, DEEPL_KEY, ASSEMBLYAI_KEY
+ *   DEEPSEEK_KEY, AZURE_KEY
+ *
+ * Config in KV:
+ *   cfg:azure:region  — Azure Translator region (e.g. "francecentral")
  *
  * Routes:
  *   POST /api/gemini/*    → Google Generative Language API
@@ -19,6 +21,8 @@
  *   POST /api/openai      → OpenAI API
  *   POST /api/deepl       → DeepL Translation API
  *   POST /api/assemblyai  → AssemblyAI Transcription API
+ *   POST /api/deepseek    → DeepSeek API
+ *   POST /api/azure       → Azure Translator (query params forwarded)
  *   POST /admin/keys/list
  *   POST /admin/keys/set
  *   POST /admin/keys/delete
@@ -30,16 +34,16 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.1';
+const VERSION = '1.2';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Api-Path, X-Api-Variant',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Api-Path, X-Api-Variant, X-Azure-Region',
 };
 
 /** All recognised key names stored in KV */
-const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY'];
+const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY'];
 
 /** Rate limit: max requests per minute window */
 const RL_API_MAX   = 20;
@@ -87,6 +91,8 @@ export default {
         if (path === '/api/openai')           return await proxyOpenai(request, env);
         if (path === '/api/deepl')            return await proxyDeepl(request, env);
         if (path === '/api/assemblyai')       return await proxyAssemblyai(request, env);
+        if (path === '/api/deepseek')         return await proxyDeepSeek(request, env);
+        if (path === '/api/azure')            return await proxyAzure(request, env, url);
 
         return jsonResponse({ error: 'unknown api route' }, 404);
       }
@@ -146,6 +152,44 @@ async function proxyGemini(request, env, path) {
 
   const upstream = `https://generativelanguage.googleapis.com${subPath}?key=${apiKey}`;
   return proxyRequest(request, upstream, {});
+}
+
+/**
+ * POST /api/deepseek → https://api.deepseek.com/v1/chat/completions
+ *
+ * Header X-Api-Path overrides.
+ * Auth: Bearer DEEPSEEK_KEY.
+ */
+async function proxyDeepSeek(request, env) {
+  const apiKey = await resolveKey(env, 'DEEPSEEK_KEY');
+  if (!apiKey) return jsonResponse({ error: 'DEEPSEEK_KEY not configured' }, 503);
+
+  const apiPath  = safeApiPath(request, '/v1/chat/completions');
+  const upstream = `https://api.deepseek.com${apiPath}`;
+  return proxyRequest(request, upstream, { 'Authorization': `Bearer ${apiKey}` });
+}
+
+/**
+ * POST /api/azure → https://api.cognitive.microsofttranslator.com/translate
+ *
+ * Query params (api-version, to, from) are forwarded as-is.
+ * Region: from X-Azure-Region header, or KV key cfg:azure:region.
+ * Auth: Ocp-Apim-Subscription-Key + Ocp-Apim-Subscription-Region.
+ */
+async function proxyAzure(request, env, parsedUrl) {
+  const apiKey = await resolveKey(env, 'AZURE_KEY');
+  if (!apiKey) return jsonResponse({ error: 'AZURE_KEY not configured' }, 503);
+
+  const upstream = `https://api.cognitive.microsofttranslator.com/translate${parsedUrl.search}`;
+
+  const region = request.headers.get('X-Azure-Region')
+    || await env.GATEWAY_KV.get('cfg:azure:region')
+    || '';
+
+  const authHeaders = { 'Ocp-Apim-Subscription-Key': apiKey };
+  if (region) authHeaders['Ocp-Apim-Subscription-Region'] = region;
+
+  return proxyRequest(request, upstream, authHeaders);
 }
 
 /**
@@ -338,6 +382,8 @@ async function adminKeysStatus(env) {
     OPENAI_KEY    : pingOpenai,
     DEEPL_KEY     : pingDeepl,
     ASSEMBLYAI_KEY: pingAssemblyai,
+    DEEPSEEK_KEY  : pingDeepSeek,
+    AZURE_KEY     : pingAzure,
   };
 
   const statuses = {};
@@ -405,6 +451,22 @@ async function pingDeepl(apiKey) {
     return { ok: respPro.ok, status: respPro.status, variant: 'pro' };
   }
   return { ok: resp.ok, status: resp.status, variant: 'free' };
+}
+
+async function pingDeepSeek(apiKey) {
+  const resp = await fetch('https://api.deepseek.com/v1/models', {
+    method : 'GET',
+    headers: { 'Authorization': `Bearer ${apiKey}` },
+  });
+  return { ok: resp.ok, status: resp.status };
+}
+
+async function pingAzure(apiKey) {
+  const resp = await fetch('https://api.cognitive.microsofttranslator.com/languages?api-version=3.0', {
+    method : 'GET',
+    headers: { 'Ocp-Apim-Subscription-Key': apiKey },
+  });
+  return { ok: resp.ok, status: resp.status };
 }
 
 async function pingAssemblyai(apiKey) {
