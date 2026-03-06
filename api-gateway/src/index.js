@@ -43,7 +43,7 @@ const CORS_HEADERS = {
 };
 
 /** All recognised key names stored in KV */
-const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY'];
+const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'AZURE_REGION'];
 
 /** Rate limit: max requests per minute window */
 const RL_API_MAX   = 20;
@@ -183,7 +183,7 @@ async function proxyAzure(request, env, parsedUrl) {
   const upstream = `https://api.cognitive.microsofttranslator.com/translate${parsedUrl.search}`;
 
   const region = request.headers.get('X-Azure-Region')
-    || await env.GATEWAY_KV.get('cfg:azure:region')
+    || await resolveKey(env, 'AZURE_REGION')
     || '';
 
   const authHeaders = { 'Ocp-Apim-Subscription-Key': apiKey };
@@ -384,6 +384,7 @@ async function adminKeysStatus(env) {
     ASSEMBLYAI_KEY: pingAssemblyai,
     DEEPSEEK_KEY  : pingDeepSeek,
     AZURE_KEY     : pingAzure,
+    // AZURE_REGION is a config value, not a secret — skip ping
   };
 
   const statuses = {};

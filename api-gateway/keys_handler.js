@@ -9,7 +9,8 @@ const KNOWN_KEYS = [
   { key: 'OPENAI_KEY',     label: 'OpenAI',     usage: 'Transcription Whisper-1, GPT' },
   { key: 'GEMINI_KEY',     label: 'Gemini',     usage: 'Traduction & IA (gemini-2.0-flash)' },
   { key: 'DEEPSEEK_KEY',   label: 'DeepSeek',   usage: 'Traduction & IA (deepseek-chat)' },
-  { key: 'AZURE_KEY',      label: 'Azure',      usage: 'Traduction Microsoft Translator' },
+  { key: 'AZURE_KEY',      label: 'Azure',      usage: 'Traduction Microsoft Translator', paired: 'AZURE_REGION' },
+  { key: 'AZURE_REGION',   label: 'Azure Région', usage: 'ex: francecentral', isConfig: true },
   { key: 'ASSEMBLYAI_KEY', label: 'AssemblyAI', usage: 'Transcription word-level' },
   { key: 'DEEPL_KEY',      label: 'DeepL',      usage: 'Traduction haute qualité' },
 ];
@@ -35,13 +36,20 @@ if (!sub || sub === 'list') {
   ]);
   const statuses = statusData.statuses || {};
 
-  const lines = KNOWN_KEYS.map(({ key, label }) => {
+  const lines = KNOWN_KEYS.map(({ key, label, isConfig }) => {
     const presence = listData[key] || 'not set';
     const hasKey   = presence !== 'not set';
-    const st       = statuses[key];
-    const icon     = !hasKey ? '⚪' : st?.ok ? '✅' : '❌';
-    const detail   = hasKey ? presence : 'aucune clé';
-    return `${icon} *${label}* \`${key}\`\n    └ ${detail}`;
+
+    if (isConfig) {
+      // Config value (ex: AZURE_REGION) — pas de ping, juste la valeur
+      const val = hasKey ? presence.replace('set (', '').replace(' chars)', '') : 'non définie';
+      // Récupérer la valeur brute si possible (listData stocke "set (N chars)" mais pas la valeur)
+      return `    ↳ *Région*: \`${key}\` = ${hasKey ? '✔ définie' : '⚠️ non définie'}`;
+    }
+
+    const st   = statuses[key];
+    const icon = !hasKey ? '⚪' : st?.ok ? '✅' : '❌';
+    return `${icon} *${label}* \`${key}\`\n    └ ${hasKey ? presence : 'aucune clé'}`;
   }).join('\n');
 
   result = `🔑 *API Gateway — Clés*\n\n${lines}\n\n_/keys set GROQ\\_KEY gsk\\_..._\n_/keys delete GROQ\\_KEY_`;
@@ -70,7 +78,7 @@ if (!sub || sub === 'list') {
 // ── /keys status ───────────────────────────────────────────────────────────
 } else if (sub === 'status') {
   const data  = await hPost(`${GATEWAY_URL}/admin/keys/status`);
-  const lines = KNOWN_KEYS.map(({ key, label }) => {
+  const lines = KNOWN_KEYS.filter(k => !k.isConfig).map(({ key, label }) => {
     const st      = (data.statuses || {})[key];
     if (!st) return `⚪ *${label}*: non configurée`;
     const icon    = st.ok ? '✅' : '❌';
@@ -88,7 +96,8 @@ if (!sub || sub === 'list') {
     '/keys delete KEY — supprimer une clé',
     '/keys status — tester toutes les clés (ping)', '',
     '*Clés disponibles:*',
-    ...KNOWN_KEYS.map(({ key, label, usage }) => `• \`${key}\` — ${label}: ${usage}`),
+    ...KNOWN_KEYS.map(({ key, label, usage, isConfig }) =>
+      `${isConfig ? '  ↳' : '•'} \`${key}\` — ${label}: ${usage}`),
   ].join('\n');
 }
 
