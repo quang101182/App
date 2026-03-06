@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.88</title>
+<title>SubWhisper v8.89</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -382,6 +382,12 @@ body.light .dz:hover,body.light .dz.over{background:rgba(124,106,255,.04)}
 .ab.hint-ai{border-color:var(--accent3)!important;box-shadow:0 0 0 2px rgba(0,212,170,.25)}
 .ab.hint-repair{border-color:#f59e0b!important;box-shadow:0 0 0 2px rgba(245,158,11,.25)}
 .ab.hint-trad{border-color:#f97316!important;box-shadow:0 0 0 2px rgba(249,115,22,.28);animation:btnSuggPulse 1.2s ease-in-out infinite}
+/* ── BOUTON AUTO ─────────────────────────────────────────── */
+.ab.ab-auto{background:linear-gradient(135deg,rgba(16,185,129,.18),rgba(5,150,105,.12));border-color:rgba(16,185,129,.45);color:#10b981;font-weight:700;letter-spacing:.4px}
+.ab.ab-auto:hover{background:linear-gradient(135deg,rgba(16,185,129,.32),rgba(5,150,105,.22));border-color:#10b981;transform:translateY(-1px);box-shadow:0 4px 18px rgba(16,185,129,.28)}
+.ab.ab-auto:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+.ab.ab-auto.running{background:linear-gradient(135deg,rgba(16,185,129,.25),rgba(5,150,105,.20));border-color:#10b981;animation:autoPulse 1.1s ease-in-out infinite}
+@keyframes autoPulse{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}50%{box-shadow:0 0 0 4px rgba(16,185,129,.30)}}
 /* Validateur panel */
 #valPanel{background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-top:8px;font-size:12px}
 #valPanel .val-issue{cursor:pointer;padding:5px 8px;border-radius:6px;background:var(--surface);display:flex;align-items:baseline;gap:8px;font-size:12px;transition:background .12s}
@@ -402,6 +408,8 @@ body.light .dz:hover,body.light .dz.over{background:rgba(124,106,255,.04)}
 #suggChips{display:flex;gap:6px;flex-wrap:wrap;flex:1}
 .sugg-chip{background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.38);color:#f59e0b;border-radius:8px;padding:4px 11px;cursor:pointer;font-size:11px;font-family:var(--mono);transition:background .15s;white-space:nowrap}
 .sugg-chip:hover{background:rgba(245,158,11,.28)}
+.sugg-chip.auto{background:rgba(16,185,129,.15);border-color:rgba(16,185,129,.38);color:#10b981}
+.sugg-chip.auto:hover{background:rgba(16,185,129,.28)}
 #suggClose{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px;margin-left:auto;flex-shrink:0;line-height:1}
 #suggClose:hover{color:var(--text)}
 @keyframes suggSlideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
@@ -999,7 +1007,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.88</span>
+    <span class="ver-badge">v8.89</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1200,6 +1208,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
         <button class="ab" onclick="autoFormatSRT()" id="formatBtn" title="Formater : 42 chars/ligne, max 2 lignes, fusionner micro-blocs">&#x229E; FORMAT</button>
         <button class="ab" onclick="cleanAI()" id="cleanAIBtn" title="Nettoyage IA : corriger hallucinations Whisper">&#x2728; IA</button>
         <button class="ab" onclick="translateManual()" id="translateBtn" title="Traduire le SRT vers la langue SORTIE s&#233;lectionn&#233;e">&#x1F310; TRAD</button>
+        <button class="ab ab-auto" onclick="autoProcess()" id="autoBtn" title="Traitement AUTO intelligent : analyse → IA si hallucinations → TRAD si non-traduit → FORMAT toujours">&#x26A1; AUTO</button>
       </div>
       <div class="btn-sep"></div>
       <!-- EXPORT -->
@@ -4512,8 +4521,11 @@ function analyzeSRT(srtContent) {
     if (halluc > 2) suggestions.push({ msg: halluc + ' répétitions phonétiques', action: 'IA', btnId: 'cleanAIBtn', fn: 'cleanAI' });
     if (enDrift > 3) suggestions.push({ msg: enDrift + ' bloc' + (enDrift > 1 ? 's' : '') + ' EN non traduit' + (enDrift > 1 ? 's' : ''), action: 'TRAD', btnId: 'translateBtn', fn: 'translateManual' });
     if (missApo > 1) suggestions.push({ msg: missApo + ' fautes apostrophe', action: 'IA', btnId: 'cleanAIBtn', fn: 'cleanAI' });
-    // Fallback
-    if (suggestions.length === 0 && blocks.length > 5) suggestions.push({ msg: 'Nettoyage IA recommandé', action: 'IA', btnId: 'cleanAIBtn', fn: 'cleanAI', soft: true });
+    // FORMAT suggéré si lignes longues
+    var avgChars = blocks.reduce(function(s, b) { return s + b.text.length; }, 0) / (blocks.length || 1);
+    if (avgChars > 48) suggestions.push({ msg: 'lignes longues (' + Math.round(avgChars) + ' chars)', action: 'FORMAT', btnId: 'formatBtn', fn: 'autoFormatSRT', soft: true });
+    // Fallback : SRT propre → suggérer AUTO plutôt que IA à l'aveugle
+    if (suggestions.length === 0 && blocks.length > 5) suggestions.push({ msg: 'Appliquer le traitement complet', action: 'AUTO', btnId: 'autoBtn', fn: 'autoProcess', soft: true });
   }
   return suggestions;
 }
@@ -4522,13 +4534,16 @@ function showSuggBanner(suggestions) {
   var chips  = document.getElementById('suggChips');
   var lbl    = document.getElementById('suggBannerLbl');
   if (!banner || !suggestions || !suggestions.length) return;
-  var actions = { cleanAI: cleanAI, translateManual: translateManual };
+  var actions = { cleanAI: cleanAI, translateManual: translateManual, autoFormatSRT: autoFormatSRT, autoProcess: autoProcess };
+  var actionIcons = { IA: '\u2728 IA', TRAD: '\ud83c\udf10 TRAD', FORMAT: '\u229e FORMAT', AUTO: '\u26a1 AUTO' };
   chips.innerHTML = '';
   var pulse = [];
   suggestions.forEach(function(s) {
     var chip = document.createElement('button');
-    chip.className = 'sugg-chip';
-    chip.textContent = (s.action === 'IA' ? '\u2728 IA' : '\ud83c\udf10 TRAD') + ' \u2014 ' + s.msg;
+    chip.className = 'sugg-chip' + (s.action === 'AUTO' ? ' auto' : '');
+    var icon = actionIcons[s.action] || s.action;
+    chip.textContent = icon + ' \u2014 ' + s.msg;
+    chip.title = s.msg;
     chip.onclick = (function(fn) { return function() { hideSuggBanner(); if (actions[fn]) actions[fn](); }; })(s.fn);
     chips.appendChild(chip);
     if (s.btnId && !s.soft) pulse.push(s.btnId);
@@ -4918,6 +4933,69 @@ async function translateManual() {
     toast('Erreur traduction : ' + e.message);
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = btnOrig; }
+  }
+}
+
+// ── AUTO-PROCESS INTELLIGENT ──────────────────────────────
+async function autoProcess() {
+  var raw = getCurrentSRT();
+  if (!raw || !raw.trim()) { toast('Aucun SRT à traiter'); return; }
+  var btn = document.getElementById('autoBtn');
+  var btnOrig = btn ? btn.innerHTML : '&#x26A1; AUTO';
+  var toolBtns = ['formatBtn','cleanAIBtn','translateBtn','repairBtn','validateBtn','autoBtn'];
+  toolBtns.forEach(function(id) { var el = document.getElementById(id); if (el) el.disabled = true; });
+  if (btn) { btn.classList.add('running'); btn.innerHTML = '&#x26A1;&#x2026;'; }
+  hideSuggBanner();
+  try {
+    // Analyse
+    var suggs = analyzeSRT(getCurrentSRT());
+    var needsIA   = suggs.some(function(s) { return s.fn === 'cleanAI'; });
+    var needsTRAD = suggs.some(function(s) { return s.fn === 'translateManual'; });
+    // Vérification langue si TRAD requise
+    if (needsTRAD) {
+      var tgt = document.getElementById('outLangMain') ? document.getElementById('outLangMain').value : '';
+      if (!tgt || tgt === 'same') {
+        toast('⚡ AUTO : sélectionne une langue SORTIE d\'abord');
+        return;
+      }
+    }
+    // Plan
+    var plan = [];
+    if (needsIA) plan.push('IA');
+    if (needsTRAD) plan.push('TRAD');
+    plan.push('FORMAT');
+    toastPersist('⚡ AUTO — ' + plan.join(' → '));
+    if (btn) btn.innerHTML = '&#x26A1; ' + plan.join('→');
+    await new Promise(function(r) { setTimeout(r, 500); });
+    // Étape IA
+    if (needsIA) {
+      if (btn) btn.innerHTML = '&#x2728; IA…';
+      toastPersist('⚡ AUTO → ✨ IA en cours…');
+      await cleanAI();
+      await new Promise(function(r) { setTimeout(r, 300); });
+    }
+    // Étape TRAD
+    if (needsTRAD) {
+      if (btn) btn.innerHTML = '&#x1F310; TRAD…';
+      toastPersist('⚡ AUTO → 🌐 TRAD en cours…');
+      await translateManual();
+      await new Promise(function(r) { setTimeout(r, 300); });
+    }
+    // Étape FORMAT (toujours)
+    if (btn) btn.innerHTML = '&#x229E; FORMAT…';
+    toastPersist('⚡ AUTO → ⊞ FORMAT…');
+    autoFormatSRT();
+    await new Promise(function(r) { setTimeout(r, 200); });
+    // Fin
+    toastClear();
+    var summary = plan.length === 1 ? '⚡ AUTO — FORMAT appliqué (SRT déjà propre)' : '⚡ AUTO terminé — ' + plan.join(' → ') + ' ✓';
+    toast(summary);
+  } catch(e) {
+    toastClear();
+    toast('⚡ AUTO erreur : ' + (e.message || e));
+  } finally {
+    toolBtns.forEach(function(id) { var el = document.getElementById(id); if (el) el.disabled = false; });
+    if (btn) { btn.classList.remove('running'); btn.innerHTML = btnOrig; }
   }
 }
 

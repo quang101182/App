@@ -32,20 +32,28 @@ function getArg(name) {
   return i !== -1 ? args[i + 1] : null;
 }
 
-var SRC_LANG = (getArg('src') || 'zh').toLowerCase();
-var TGT_LANG = (getArg('tgt') || 'fr').toLowerCase();
-var GEM_KEY  = getArg('gem-key');
-var DSK_KEY  = getArg('dsk-key');
-var INPUT    = getArg('input');
-var OUTDIR   = getArg('outdir');
+var SRC_LANG     = (getArg('src') || 'zh').toLowerCase();
+var TGT_LANG     = (getArg('tgt') || 'fr').toLowerCase();
+var GEM_KEY      = getArg('gem-key');
+var DSK_KEY      = getArg('dsk-key');
+var INPUT        = getArg('input');
+var OUTDIR       = getArg('outdir');
+var GATEWAY_URL  = getArg('gateway-url');
+var GATEWAY_KEY  = getArg('gateway-key');
+
+// Mode gateway : active Gemini + DeepSeek via proxy
+if (GATEWAY_URL && GATEWAY_KEY) {
+  if (!GEM_KEY) GEM_KEY = '__gateway__';
+  if (!DSK_KEY) DSK_KEY = '__gateway__';
+}
 
 if (!INPUT) {
   console.error('Usage: node pipeline.js --src LANG --tgt LANG [--gem-key KEY] [--dsk-key KEY] --input FILE.srt [--outdir DIR]');
-  console.error('Au moins --gem-key ou --dsk-key requis.');
+  console.error('       node pipeline.js --src LANG --tgt LANG --gateway-url URL --gateway-key KEY --input FILE.srt [--outdir DIR]');
   process.exit(1);
 }
 if (!GEM_KEY && !DSK_KEY) {
-  console.error('Erreur : --gem-key et/ou --dsk-key requis.');
+  console.error('Erreur : --gem-key/--dsk-key ou --gateway-url/--gateway-key requis.');
   process.exit(1);
 }
 
@@ -81,17 +89,23 @@ function buildSRT(blocks) {
 // ── API call ──────────────────────────────────────────────────────────────────
 async function callAI(engine, apiKey, prompt) {
   var url, headers, body;
+  var viaGateway = (apiKey === '__gateway__');
   if (engine === 'deepseek') {
-    url     = 'https://api.deepseek.com/v1/chat/completions';
-    headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey };
+    url     = viaGateway ? (GATEWAY_URL + '/api/deepseek') : 'https://api.deepseek.com/v1/chat/completions';
+    headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (viaGateway ? GATEWAY_KEY : apiKey) };
     body    = JSON.stringify({
       model: 'deepseek-chat',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 8192
     });
   } else {
-    url     = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey;
-    headers = { 'Content-Type': 'application/json' };
+    if (viaGateway) {
+      url     = GATEWAY_URL + '/api/gemini/v1beta/models/gemini-2.0-flash:generateContent';
+      headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GATEWAY_KEY };
+    } else {
+      url     = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey;
+      headers = { 'Content-Type': 'application/json' };
+    }
     body    = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { maxOutputTokens: 8192 }
