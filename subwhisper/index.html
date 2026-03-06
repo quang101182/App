@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.73</title>
+<title>SubWhisper v8.74</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -997,7 +997,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.73</span>
+    <span class="ver-badge">v8.74</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1008,6 +1008,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
       <span class="achip" title="Azure · traduction fallback"><span class="adot" id="adotAZR"></span><span class="achip-lbl">AZR</span></span>
       <span class="achip" title="AssemblyAI · word-level • vue RICH"><span class="adot" id="adotAAI"></span><span class="achip-lbl">AAI</span></span>
       <span class="achip" title="Worker CF · gros fichiers cloud"><span class="adot" id="adotWRK"></span><span class="achip-lbl">WRK</span></span>
+      <span class="achip" title="API Gateway · clés centralisées"><span class="adot" id="adotGWY"></span><span class="achip-lbl">GWY</span></span>
       <div id="apiLvlWrap" title="Cliquez pour voir les besoins par fonctionnalité" onclick="toggleApiGuide()" style="cursor:pointer">
         <div id="apiLvlBar"><div id="apiLvlFill"></div></div>
         <span id="apiLvlLbl">–</span>
@@ -1075,8 +1076,13 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     </div>
     <div class="crow">
       <span class="clbl">GATEWAY <span class="clbl-sub">secret</span></span>
-      <input type="password" id="gatewayKey" placeholder="WORKER_SECRET api-gateway (centralise toutes les clés)">
-      <button class="tbtn" onclick="toggleKey('gatewayKey','tkBtnGW')" id="tkBtnGW" title="Afficher">&#128065;</button>
+      <div style="display:flex;flex-direction:column;flex:1;gap:4px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="password" id="gatewayKey" placeholder="WORKER_SECRET — une seule clé pour toutes les APIs" style="flex:1">
+          <button class="tbtn" onclick="toggleKey('gatewayKey','tkBtnGW')" id="tkBtnGW" title="Afficher">&#128065;</button>
+        </div>
+        <span id="gatewayInfo" style="font-size:11px;color:var(--muted);padding-left:2px"></span>
+      </div>
     </div>
     <div class="crow">
       <span class="clbl">PROXY</span>
@@ -1386,7 +1392,7 @@ var _timeupdateHighlight = null;
 var _timeupdateOverlay = null;
 
 // ── API STATUS INDICATORS ─────────────────────────────────
-var API_DOTS = { OAI:'none', GEM:'none', AAI:'none', AZR:'none', GRQ:'none', WRK:'none', DSK:'none' };
+var API_DOTS = { OAI:'none', GEM:'none', AAI:'none', AZR:'none', GRQ:'none', WRK:'none', DSK:'none', GWY:'none' };
 var API_LABELS = ['AUCUNE','BASIQUE','STANDARD','AVANCÉ','TOP','ELITE','MAX','MAX+'];
 var API_COLORS = ['#606070','#ff4d6d','#f59e0b','#7c6aff','#00d4aa','#00d4aa','#00d4aa','#00d4aa'];
 
@@ -1468,6 +1474,7 @@ async function pingWRK(url) {
 
 function pingAllApis() {
   var oai = getOpenAIKey(), gem = getGeminiKey(), aai = getApiKey(), azr = getAzureKey(), azrR = getAzureRegion(), grq = getGroqKey(), wrk = getWorkerUrl(), dsk = getDeepSeekKey();
+  fetchGatewayConfig();
   if (oai) pingOAI(oai); else setDot('OAI','none');
   if (gem) pingGEM(gem); else setDot('GEM','none');
   if (aai) pingAAI(aai); else setDot('AAI','none');
@@ -1617,6 +1624,32 @@ function getWorkerUrl()  { return document.getElementById('workerUrl').value.tri
 function getGatewayKey() { return document.getElementById('gatewayKey').value.trim(); }
 var GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 
+async function fetchGatewayConfig() {
+  var gk = getGatewayKey();
+  if (!gk) { setDot('GWY','none'); document.getElementById('gatewayInfo').textContent = ''; return; }
+  setDot('GWY','key');
+  document.getElementById('gatewayInfo').textContent = '⏳ Connexion...';
+  try {
+    var ctrl = new AbortController(); setTimeout(function(){ ctrl.abort(); }, 8000);
+    var resp = await fetch(GATEWAY_URL + '/config', { headers:{ 'Authorization':'Bearer '+gk }, signal:ctrl.signal });
+    if (!resp.ok) { setDot('GWY','err'); document.getElementById('gatewayInfo').textContent = '❌ Secret invalide'; return; }
+    var cfg = await resp.json();
+    setDot('GWY','ok');
+    var apis = cfg.apis || [];
+    document.getElementById('gatewayInfo').textContent = '✅ ' + apis.length + ' APIs: ' + (apis.join(', ') || '—');
+    if (cfg.worker_url && !getWorkerUrl()) {
+      document.getElementById('workerUrl').value = cfg.worker_url;
+      try { localStorage.setItem('sw_workerurl', cfg.worker_url); } catch(e) {}
+      pingWRK(cfg.worker_url);
+    }
+    updateRequiredBlink();
+    updateSbtn();
+  } catch(e) {
+    setDot('GWY','err');
+    document.getElementById('gatewayInfo').textContent = '❌ Erreur réseau';
+  }
+}
+
 function toggleKey(inputId, btnId) {
   var inp = document.getElementById(inputId);
   var visible = inp.type === 'password';
@@ -1634,7 +1667,7 @@ function toggleTheme() {
   if (metaTheme) metaTheme.content = isLight ? '#f0f0f6' : '#080810';
 }
 
-function updateSbtn() { document.getElementById('sb').disabled = !selFile || (!getOpenAIKey() && !getApiKey() && !getGroqKey()); }
+function updateSbtn() { document.getElementById('sb').disabled = !selFile || (!getOpenAIKey() && !getApiKey() && !getGroqKey() && API_DOTS['GWY'] !== 'ok'); }
 
 // ── FILE PICKER ───────────────────────────────────────────
 function openFilePicker() {
@@ -5045,7 +5078,7 @@ function checkAzurePair() {
 }
 
 function updateRequiredBlink() {
-  var hasGroq = !!getGroqKey();
+  var hasGroq = !!getGroqKey() || API_DOTS['GWY'] === 'ok';
   var dot = document.getElementById('adotGRQ');
   var row = document.getElementById('crowGRQ');
   var chip = document.getElementById('achipGRQ');
