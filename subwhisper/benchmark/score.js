@@ -316,6 +316,50 @@ function scoreTranslation(inputSRT, outputSRT, srcLang, tgtLang) {
     }
   });
 
+  // ── 6b. Langue cible non atteinte ────────────────────
+  // Détecte des mots-fonctionnels de langues étrangères dans l'output
+  var langNotReached = 0;
+  var LANG_HINTS = {
+    fr: null, // français = cible, pas besoin de détecter
+    en: /\b(the|this|that|when|what|with|you|your|and|for|are|was|not|can|will|have|been|they|from|his|her|their|which|where|how|who)\b/i,
+    es: /\b(el|la|los|las|que|en|con|por|para|del|una|este|pero|como|muy|más|también|porque)\b/i,
+    de: /\b(der|die|das|ein|eine|und|ist|nicht|mit|auf|von|an|dem|den|für|des)\b/i,
+    ja: /[\u3040-\u309f\u30a0-\u30ff]/,
+    zh: /[\u4e00-\u9fff]/,
+    ko: /[\uac00-\ud7af]/
+  };
+  if (tgtLang && LANG_HINTS[tgtLang] === undefined) {
+    // langue cible non connue, on skip
+  } else if (tgtLang && tgtLang !== 'fr') {
+    // pour cibles non-françaises, détecter si langue source encore présente
+    var srcHint = LANG_HINTS[srcLang];
+    if (srcHint) {
+      output.forEach(function(b) {
+        if (srcHint.test(b.text) && b.text.trim().length > 3) {
+          issues.push({ type: 'SRC_LANG_NOT_TRANSLATED', sev: 'HIGH', id: b.id,
+            msg: '#' + b.id + ' Texte source non traduit vers ' + tgtLang + ': ' + b.text.substring(0,80) });
+          penalties += 8; langNotReached++;
+        }
+      });
+    }
+  } else if (tgtLang === 'fr') {
+    // cible française : détecter anglais résiduel (le plus courant)
+    var enHint = LANG_HINTS['en'];
+    output.forEach(function(b) {
+      // Skip les blocs très courts (interjections ok)
+      if (b.text.trim().length < 8) return;
+      // Skip si le bloc contient déjà du français (mélange acceptable)
+      var hasFrench = /\b(le|la|les|un|une|des|je|tu|il|elle|nous|vous|ils|que|qui|dans|avec|pour|sur|mais|ou|et|donc|car|si|comme|plus|très|bien|tout|même)\b/i.test(b.text);
+      if (hasFrench) return;
+      // Bloc entièrement en anglais
+      if (enHint && enHint.test(b.text)) {
+        issues.push({ type: 'ENGLISH_IN_FR_OUTPUT', sev: 'HIGH', id: b.id,
+          msg: '#' + b.id + ' Anglais non traduit en FR: ' + b.text.substring(0,80) });
+        penalties += 8; langNotReached++;
+      }
+    });
+  }
+
   // ── 7. Typo FR (espace avant ? ! manquant) ───────────
   var typoFR = 0;
   if (tgtLang === 'fr') {
@@ -335,7 +379,7 @@ function scoreTranslation(inputSRT, outputSRT, srcLang, tgtLang) {
     score: rawScore,
     penalties,
     issues,
-    stats: { blockDiff, tsMismatch, tsInText, invalidEllipsis, srcRemaining, emptyBlocks, typoFR }
+    stats: { blockDiff, tsMismatch, tsInText, invalidEllipsis, srcRemaining, emptyBlocks, typoFR, langNotReached }
   };
 }
 
