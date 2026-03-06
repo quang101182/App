@@ -139,6 +139,7 @@ function scoreBrut(filePath, srcLang) {
 
   var issues = [];
   var penalties = 0;
+  var isCJKSrc = /^(zh|ja|ko)$/.test(srcLang);
 
   // ── 1. Micro-blocs consécutifs < 500ms ────────────────
   var microCount = 0, microRun = 0;
@@ -154,33 +155,76 @@ function scoreBrut(filePath, srcLang) {
   }
 
   // ── 2. Hallucination phonétique répétée ──────────────
+  // Latin phonetics + CJK single-char interjections (啊/哦/嗯 en boucle = hallucination Groq)
   var repeatMap = {};
   blocks.forEach(function(b) {
     var t = b.text.trim().toLowerCase();
-    if (/^(ah|oh|euh|hm|mm|ugh|ouh|eï)[!?.]?$/.test(t)) repeatMap[t] = (repeatMap[t]||0) + 1;
+    var isPhonetic = isCJKSrc
+      ? /^([啊哦嗯唉哎喔嗯哟哈呀嗔嚯]+|ah|oh|euh|hm+|mm+|ugh|eh+)[!?～~。]*$/i.test(t)
+      : /^(ah|oh|euh|hm|mm|ugh|ouh|eï)[!?.]?$/.test(t);
+    if (isPhonetic) repeatMap[t] = (repeatMap[t]||0) + 1;
   });
   var totalRepeat = Object.values(repeatMap).reduce(function(a,b){return a+b;},0);
   if (totalRepeat > 10) {
-    issues.push({ type: 'PHONETIC_HALLUCINATION', sev: 'MEDIUM', msg: totalRepeat + ' blocs phonétiques répétés (Ah/Oh/Euh...) — possible hallucination silence' });
+    issues.push({ type: 'PHONETIC_HALLUCINATION', sev: 'MEDIUM', msg: totalRepeat + ' blocs phonétiques répétés (Ah/Oh/' + (isCJKSrc ? '啊/哦...' : 'Euh...') + ') — hallucination Groq sur silence' });
     penalties += Math.min(20, Math.floor(totalRepeat / 2));
   }
 
-  // ── 3. Langue étrangère dans SRT censé être FR ───────
-  var foreignWords = 0;
-  var foreignSamples = [];
-  blocks.forEach(function(b) {
-    var t = b.text;
-    // Mots cyrilliques, CJK, arabes dans un texte majoritairement latin
-    var foreignChars = (t.match(/[\u0400-\u04ff\u4e00-\u9fff\u0600-\u06ff]/g) || []).length;
-    var latinChars   = (t.match(/[a-zA-ZÀ-ÿ]/g) || []).length;
-    if (foreignChars > 2 && foreignChars > latinChars * 0.3) {
-      foreignWords++;
-      if (foreignSamples.length < 3) foreignSamples.push('#' + b.id + ': ' + t.substring(0,50));
+  // ── 3. Langue étrangère (adapté au srcLang) ──────────
+  var foreignWords = 0, foreignSamples = [];
+  var latinDriftBlocks = 0, latinDriftClusters = 0, corruptedTokens = 0, corruptSamples = [];
+
+  if (isCJKSrc) {
+    // 3a. Drift anglais : séquences de blocs Latin-dominant sans CJK (Groq hallucine de l'anglais)
+    var latinDriftRun = 0;
+    blocks.forEach(function(b) {
+      var t = b.text;
+      var latinChars = (t.match(/[a-zA-Z]/g) || []).length;
+      var cjkChars   = (t.match(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g) || []).length;
+      if (latinChars > 4 && cjkChars === 0) {
+        latinDriftRun++;
+      } else {
+        if (latinDriftRun >= 3) { latinDriftClusters++; latinDriftBlocks += latinDriftRun; }
+        latinDriftRun = 0;
+      }
+    });
+    if (latinDriftRun >= 3) { latinDriftClusters++; latinDriftBlocks += latinDriftRun; }
+    if (latinDriftClusters > 0) {
+      issues.push({ type: 'LATIN_DRIFT_IN_CJK', sev: 'HIGH',
+        msg: latinDriftBlocks + ' blocs anglais/latins dans source ' + srcLang.toUpperCase() + ' (' + latinDriftClusters + ' cluster(s)) — hallucination Groq langue\n    → cleanAI peut supprimer ces sections' });
+      penalties += latinDriftBlocks * 2;
     }
-  });
-  if (foreignWords > 0) {
-    issues.push({ type: 'FOREIGN_LANG_IN_FR', sev: 'HIGH', msg: foreignWords + ' blocs avec caractères non-latins dans SRT français\n    Ex: ' + foreignSamples.join(' | ') });
-    penalties += foreignWords * 4;
+    // 3b. Tokens mixtes corrompus : CJK + mots latins mélangés dans un même bloc
+    blocks.forEach(function(b) {
+      var t = b.text;
+      var cjkChars  = (t.match(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g) || []).length;
+      var latinWds  = (t.match(/\b[a-zA-Z]{3,}\b/g) || []);
+      if (cjkChars > 0 && latinWds.length > 0) {
+        corruptedTokens++;
+        if (corruptSamples.length < 4) corruptSamples.push('#' + b.id + ': ' + t.substring(0, 60));
+      }
+    });
+    if (corruptedTokens > 0) {
+      issues.push({ type: 'CORRUPTED_MIXED_TOKENS', sev: 'MEDIUM',
+        msg: corruptedTokens + ' blocs avec tokens mixtes CJK+Latin — transcription corrompue Groq\n    Ex: ' + corruptSamples.join(' | ') });
+      penalties += corruptedTokens * 3;
+    }
+  } else {
+    // Source latine (fr, en...) : flag les blocs avec caractères non-latins
+    blocks.forEach(function(b) {
+      var t = b.text;
+      var foreignChars = (t.match(/[\u0400-\u04ff\u4e00-\u9fff\u0600-\u06ff]/g) || []).length;
+      var latinChars   = (t.match(/[a-zA-ZÀ-ÿ]/g) || []).length;
+      if (foreignChars > 2 && foreignChars > latinChars * 0.3) {
+        foreignWords++;
+        if (foreignSamples.length < 3) foreignSamples.push('#' + b.id + ': ' + t.substring(0, 50));
+      }
+    });
+    if (foreignWords > 0) {
+      issues.push({ type: 'FOREIGN_LANG_IN_FR', sev: 'HIGH',
+        msg: foreignWords + ' blocs avec caractères non-latins dans SRT\n    Ex: ' + foreignSamples.join(' | ') });
+      penalties += foreignWords * 4;
+    }
   }
 
   // ── 4. Gaps > 30s entre blocs ────────────────────────
@@ -220,7 +264,14 @@ function scoreBrut(filePath, srcLang) {
 
   // ── 7. Recommandation pipeline ────────────────────────
   var recommendations = [];
-  if (foreignWords > 0 && srcLang !== 'fr') recommendations.push('Relancer avec SOURCE=' + srcLang.toUpperCase() + ' forcé (auto-detect cause hallucinations de langue)');
+  if (isCJKSrc) {
+    if (latinDriftClusters > 0) recommendations.push('Drift anglais (' + latinDriftBlocks + ' blocs) : cleanAI peut éliminer ces hallucinations — tester step 3');
+    if (corruptedTokens > 0) recommendations.push('Tokens corrompus (' + corruptedTokens + ' blocs) : inévitable sur voix de mauvaise qualité — cleanAI à vérifier');
+    if (totalRepeat > 10) recommendations.push('Phonétiques répétées (' + totalRepeat + ' blocs) : cleanAI peut les fusionner ou supprimer');
+    recommendations.push('Forcer SOURCE=' + srcLang.toUpperCase() + ' dans SubWhisper pour éviter les drifts de langue Groq');
+  } else {
+    if (foreignWords > 0 && srcLang !== 'fr') recommendations.push('Relancer avec SOURCE=' + srcLang.toUpperCase() + ' forcé (auto-detect cause hallucinations de langue)');
+  }
   if (microCount > 10) recommendations.push('Réduire la sensibilité de segmentation Groq ou activer repairSRTTimestamps');
   if (bigGaps > 3) recommendations.push('Vérifier la taille des chunks — boundaries à ' + bigGaps + ' endroits');
 
@@ -233,7 +284,8 @@ function scoreBrut(filePath, srcLang) {
     penalties: penalties,
     issues: issues,
     recommendations: recommendations,
-    stats: { microCount, totalRepeat, foreignWords, bigGaps, overlaps, longBlocks }
+    stats: { microCount, totalRepeat, foreignWords, bigGaps, overlaps, longBlocks,
+             latinDriftBlocks, latinDriftClusters, corruptedTokens }
   };
 }
 

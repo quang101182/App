@@ -55,7 +55,7 @@ function getCleanTextPrompt(lang) {
     ? '\n5. FRENCH: Fix missing apostrophes (c est->c\'est, j ai->j\'ai, qu il->qu\'il, s il->s\'il, etc.). Add space before ? ! : ; if missing.'
     : (isCJK ? '\n5. CJK: Fix wrong characters with similar pronunciation only. Do NOT convert Traditional/Simplified.' : '');
   var bracketsRule = isCJK
-    ? '\n4. Incoherent sequences = hallucination — replace inline with [...] only if partial. NEVER entire line.'
+    ? '\n4. NEVER output [...] for ANY reason. If a line is noise, garbled, or incoherent — COPY IT EXACTLY UNCHANGED. [...] is FORBIDDEN in your output.'
     : '\n4. Foreign words MAY be intentional. Only [...] for partial unintelligible noise inline. NEVER entire line.';
   return 'You are a professional subtitle editor. ' + langLine + '\n' +
     'Each line is [N] subtitle_text. Return EACH line as [N] corrected_text.\n' +
@@ -76,13 +76,14 @@ function getCleanTextPrompt(lang) {
  */
 function getTranslateTextPrompt(srcName, tgtName, tgtLang) {
   var typoRule = (tgtLang === 'fr')
-    ? '\n5. FRENCH TYPOGRAPHY: Add mandatory space before ? ! : ; in French.'
+    ? '\n6. FRENCH TYPOGRAPHY: Add mandatory space before ? ! : ; in French.'
     : '';
-  return 'You are a professional subtitle translator. Translate from ' + srcName + ' to ' + tgtName + '.\n' +
+  return 'You are a professional subtitle translator. Translate ALL text to ' + tgtName + '.\n' +
+    'Source is primarily ' + srcName + ' but MAY contain English or other languages — translate EVERYTHING to ' + tgtName + '.\n' +
     'Each line is [N] source_text. Return EACH line as [N] translated_text.\n' +
     '1. NEVER skip a number. Return ALL [N] lines.\n' +
     '2. PROPER NOUNS: Keep character names, place names, invented terms in original form.\n' +
-    '3. COMPLETE TRANSLATION: Translate EVERY line. NEVER output [...]. If uncertain, give best translation.\n' +
+    '3. COMPLETE TRANSLATION: Translate EVERY line regardless of source language. NEVER output [...]. If uncertain, give best translation.\n' +
     '4. SONG LYRICS: Text clearly song lyrics in a third language — keep unchanged.\n' +
     '5. TRUNCATED: Lines ending without punctuation = intentionally cut — do NOT add words.' + typoRule + '\n' +
     'Return ONLY the numbered lines [N] text. No timestamps, no SRT structure, no explanation.';
