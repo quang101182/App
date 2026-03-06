@@ -414,8 +414,11 @@ function scoreTranslation(inputSRT, outputSRT, srcLang, tgtLang) {
 
   // ── 7. Typo FR (espace avant ? ! manquant) ───────────
   var typoFR = 0;
+  var FR_WORDS = /\b(le|la|les|un|une|des|je|tu|il|elle|nous|vous|ils|que|qui|dans|avec|pour|sur|mais|ou|et|donc|car|si|comme|plus|très|bien|tout|même|pas|ça|oui|non|aussi|alors|encore|c'est|j'ai|d'un|d'une|au|aux)\b/i;
   if (tgtLang === 'fr') {
     output.forEach(function(b) {
+      // Skip if block is English (no French function words) — false positive
+      if (!FR_WORDS.test(b.text)) return;
       if (/[a-zàâéèêôûùî][?!:;]/.test(b.text)) {
         issues.push({ type: 'TYPO_FR', sev: 'LOW', id: b.id,
           msg: '#' + b.id + ' Espace manquant avant ? ! : ; : ' + b.text.substring(0,60) });
