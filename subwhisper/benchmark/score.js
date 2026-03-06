@@ -243,4 +243,100 @@ function tsToMs(ts) {
   return +m[1]*3600000 + +m[2]*60000 + +m[3]*1000 + +m[4];
 }
 
-module.exports = { score, scoreBrut, parseSRT };
+// ── TRANSLATION QUALITY SCORE ────────────────────────────
+// Évalue la qualité d'une traduction SRT (sans référence ground truth)
+function scoreTranslation(inputSRT, outputSRT, srcLang, tgtLang) {
+  var input  = parseSRT(inputSRT);
+  var output = parseSRT(outputSRT);
+  var issues = [];
+  var penalties = 0;
+
+  // ── 1. Block count ────────────────────────────────────
+  var blockDiff = Math.abs(input.length - output.length);
+  if (blockDiff > 0) {
+    issues.push({ type: 'BLOCK_COUNT', sev: 'HIGH',
+      msg: 'Block count: INPUT=' + input.length + ' OUTPUT=' + output.length + ' (diff=' + blockDiff + ')' });
+    penalties += blockDiff * 5;
+  }
+
+  // ── 2. Timestamps préservés ───────────────────────────
+  var tsMismatch = 0;
+  var max = Math.min(input.length, output.length);
+  for (var i = 0; i < max; i++) {
+    if (input[i].ts !== output[i].ts) tsMismatch++;
+  }
+  if (tsMismatch > 0) {
+    issues.push({ type: 'TIMESTAMP_CHANGED', sev: 'HIGH',
+      msg: tsMismatch + ' timestamps modifiés (doivent être identiques à l\'input)' });
+    penalties += tsMismatch * 3;
+  }
+
+  // ── 3. Timestamp injecté dans texte ──────────────────
+  var tsInText = 0;
+  output.forEach(function(b) {
+    if (/\d{2}:\d{2}:\d{2}[,.]/.test(b.text)) {
+      issues.push({ type: 'TIMESTAMP_IN_TEXT', sev: 'CRITICAL', id: b.id,
+        msg: '#' + b.id + ' Timestamp injecté dans texte: ' + b.text.substring(0,80) });
+      penalties += 20; tsInText++;
+    }
+  });
+
+  // ── 4. [...] interdit en traduction ──────────────────
+  var invalidEllipsis = 0;
+  output.forEach(function(b) {
+    if (/\[\.\.\.\]/.test(b.text)) {
+      issues.push({ type: 'INVALID_ELLIPSIS_TRAD', sev: 'HIGH', id: b.id,
+        msg: '#' + b.id + ' [...] interdit en traduction: ' + b.text.substring(0,80) });
+      penalties += 8; invalidEllipsis++;
+    }
+  });
+
+  // ── 5. Langue source encore présente (CJK → latin) ──
+  var isCJKSrc = /^(zh|ja|ko)$/.test(srcLang);
+  var srcRemaining = 0;
+  if (isCJKSrc) {
+    output.forEach(function(b) {
+      var cjk = (b.text.match(/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/g) || []).length;
+      var latin = (b.text.match(/[a-zA-ZÀ-ÿ]/g) || []).length;
+      if (cjk > 2 && cjk > latin) {
+        issues.push({ type: 'SRC_LANG_REMAINING', sev: 'HIGH', id: b.id,
+          msg: '#' + b.id + ' Texte source non traduit: ' + b.text.substring(0,80) });
+        penalties += 10; srcRemaining++;
+      }
+    });
+  }
+
+  // ── 6. Blocs vides ────────────────────────────────────
+  var emptyBlocks = 0;
+  output.forEach(function(b) {
+    if (!b.text.trim()) {
+      issues.push({ type: 'EMPTY_BLOCK', sev: 'MEDIUM', id: b.id,
+        msg: '#' + b.id + ' Bloc vide après traduction' });
+      penalties += 5; emptyBlocks++;
+    }
+  });
+
+  // ── 7. Typo FR (espace avant ? ! manquant) ───────────
+  var typoFR = 0;
+  if (tgtLang === 'fr') {
+    output.forEach(function(b) {
+      if (/[a-zàâéèêôûùî][?!:;]/.test(b.text)) {
+        issues.push({ type: 'TYPO_FR', sev: 'LOW', id: b.id,
+          msg: '#' + b.id + ' Espace manquant avant ? ! : ; : ' + b.text.substring(0,60) });
+        penalties += 2; typoFR++;
+      }
+    });
+  }
+
+  var rawScore = Math.max(0, 100 - penalties);
+  return {
+    inputBlocks: input.length,
+    outputBlocks: output.length,
+    score: rawScore,
+    penalties,
+    issues,
+    stats: { blockDiff, tsMismatch, tsInText, invalidEllipsis, srcRemaining, emptyBlocks, typoFR }
+  };
+}
+
+module.exports = { score, scoreBrut, scoreTranslation, parseSRT };

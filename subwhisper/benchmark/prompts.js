@@ -67,4 +67,25 @@ function getCleanTextPrompt(lang) {
     'Return ONLY the numbered lines [N] text. No SRT structure, no timestamps, no explanation.';
 }
 
-module.exports = { getCleanPrompt, getCleanTextPrompt, getTranslatePrompt };
+/**
+ * getTranslateTextPrompt — Approche [N] pour traduction (v8.57+)
+ * L'IA reçoit UNIQUEMENT les textes numérotés [N], jamais les timestamps.
+ * srcName : 'Chinese', 'Japanese', 'Korean', etc.
+ * tgtName : 'French', 'English', etc.
+ * tgtLang : 'fr', 'en', etc.
+ */
+function getTranslateTextPrompt(srcName, tgtName, tgtLang) {
+  var typoRule = (tgtLang === 'fr')
+    ? '\n5. FRENCH TYPOGRAPHY: Add mandatory space before ? ! : ; in French.'
+    : '';
+  return 'You are a professional subtitle translator. Translate from ' + srcName + ' to ' + tgtName + '.\n' +
+    'Each line is [N] source_text. Return EACH line as [N] translated_text.\n' +
+    '1. NEVER skip a number. Return ALL [N] lines.\n' +
+    '2. PROPER NOUNS: Keep character names, place names, invented terms in original form.\n' +
+    '3. COMPLETE TRANSLATION: Translate EVERY line. NEVER output [...]. If uncertain, give best translation.\n' +
+    '4. SONG LYRICS: Text clearly song lyrics in a third language — keep unchanged.\n' +
+    '5. TRUNCATED: Lines ending without punctuation = intentionally cut — do NOT add words.' + typoRule + '\n' +
+    'Return ONLY the numbered lines [N] text. No timestamps, no SRT structure, no explanation.';
+}
+
+module.exports = { getCleanPrompt, getCleanTextPrompt, getTranslatePrompt, getTranslateTextPrompt };
