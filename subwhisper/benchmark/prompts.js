@@ -1,7 +1,7 @@
 /**
  * SubWhisper — Prompts centralisés
  * Source unique : modifié ici → copié dans index.html
- * Version : v8.70
+ * Version : v8.71
  */
 
 function getCleanPrompt(srtTextLang, blockCount) {
@@ -99,7 +99,7 @@ function getTranslateTextPrompt(srcName, tgtName, tgtLang, srcLang) {
   } else if (srcLang === 'ja') {
     srcSpecificRule = '\n7. JAPANESE SOURCE: Honorifics (-san, -kun, -chan, -sama, -sensei) — keep UNCHANGED after the name. Keigo → translate as formal/polite ' + tgtName + '. Short Japanese exclamations (すごい, あー, おやすみ, パンパン, etc.) are common expressions — ALWAYS translate them, they are NOT proper nouns. Korean (Hangul) characters in this file are speech recognition errors — translate them phonetically or give best approximation in ' + tgtName + '.';
   } else if (srcLang === 'ko') {
-    srcSpecificRule = '\n7. KOREAN SOURCE: Relationship address terms (oppa, unnie, noona, hyung) — keep UNCHANGED as-is (they are culturally specific, not translatable). Speech levels → match formal/casual register in ' + tgtName + '.';
+    srcSpecificRule = '\n7. KOREAN SOURCE: Relationship address terms (oppa, unnie, noona, hyung) — keep UNCHANGED as-is (they are culturally specific, not translatable). Speech levels → match formal/casual register in ' + tgtName + '. Japanese characters (hiragana/katakana/kanji) in this file are Groq speech recognition errors — translate them phonetically or give best approximation in ' + tgtName + '.';
   }
 
   return 'You are a professional subtitle translator. Translate ALL text to ' + tgtName + '.\n' +
