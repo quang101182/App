@@ -203,6 +203,15 @@ function diffCount(srt1, srt2) {
   return { changed: changed, total: n };
 }
 
+// ── Blocs résiduels CJK ───────────────────────────────────────────────────────
+function residualBlocks(srt) {
+  return parseSRT(srt).filter(function(b) {
+    return /[\u3040-\u9fff\uac00-\ud7af\u0600-\u06ff]/.test(b.text);
+  }).map(function(b) {
+    return { id: b.id, text: b.text.replace(/\n/g, ' ') };
+  });
+}
+
 // ── Rapport Markdown ──────────────────────────────────────────────────────────
 function buildReport(date, srcLang, tgtLang, rawSrt, gem, dsk) {
   var mRaw = metrics(rawSrt);
@@ -270,24 +279,30 @@ function buildReport(date, srcLang, tgtLang, rawSrt, gem, dsk) {
     lines.push('**Vainqueur** : ' + winner);
     lines.push('');
 
-    // Recommandations prompt
-    var recs = [];
-    if (gT.cjk > 0)    recs.push('**Gemini** : ' + gT.cjk + ' blocs CJK résiduels → renforcer règle 7 source `' + srcLang.toUpperCase() + '` dans `getTranslateTextPrompt`');
-    if (dT.cjk > 0)    recs.push('**DeepSeek** : ' + dT.cjk + ' blocs CJK résiduels → idem');
-    if (gT.ellips > 0) recs.push('**Gemini** : ' + gT.ellips + ' [...] invalides → renforcer règle FORBIDDEN [...] pour blocs entiers');
-    if (dT.ellips > 0) recs.push('**DeepSeek** : ' + dT.ellips + ' [...] invalides → idem');
-    if (gT.nPfx > 0)   recs.push('**Gemini** : ' + gT.nPfx + ' [N] prefix non strippés → vérifier parsing réponse');
-    if (dT.nPfx > 0)   recs.push('**DeepSeek** : ' + dT.nPfx + ' [N] prefix → idem');
-    if (gT.tsText > 0) recs.push('**Gemini** : ' + gT.tsText + ' timestamps dans texte → renforcer règle STRUCTURE');
-    if (dT.tsText > 0) recs.push('**DeepSeek** : ' + dT.tsText + ' timestamps dans texte → idem');
+    // Blocs résiduels — liste les contenus réels pour analyse manuelle
+    var gemRes = gem ? residualBlocks(gem.trad) : [];
+    var dskRes = dsk ? residualBlocks(dsk.trad) : [];
 
-    lines.push('## Recommandations prompt');
+    lines.push('## Blocs résiduels');
     lines.push('');
-    if (recs.length) {
-      recs.forEach(function(r) { lines.push('- ' + r); });
+    if (gemRes.length === 0 && dskRes.length === 0) {
+      lines.push('✅ Aucun bloc résiduel — pipeline parfait.');
     } else {
-      lines.push('✅ Aucune régression détectée — prompts OK pour `' + srcLang.toUpperCase() + '→' + tgtLang.toUpperCase() + '`');
+      if (gemRes.length) {
+        lines.push('**Gemini TRAD** (' + gemRes.length + ' blocs) :');
+        gemRes.forEach(function(b) { lines.push('- `[' + b.id + ']` ' + b.text); });
+        lines.push('');
+      }
+      if (dskRes.length) {
+        lines.push('**DeepSeek TRAD** (' + dskRes.length + ' blocs) :');
+        dskRes.forEach(function(b) { lines.push('- `[' + b.id + ']` ' + b.text); });
+      }
     }
+    lines.push('');
+
+    lines.push('## Réflexion — Amélioration prompt');
+    lines.push('');
+    lines.push('> ⏳ À compléter par Claude après analyse des blocs résiduels ci-dessus.');
     lines.push('');
   }
 
