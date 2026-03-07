@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>music·ai</title>
+<title>music·ai v2.0</title>
 <meta name="theme-color" content="#09091a">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -172,6 +172,22 @@ body{padding-top:var(--safe-top);}
   cursor:pointer;font-size:13px;font-weight:600;transition:all .2s;color:var(--muted);font-family:inherit;}
 .prov-pill.on{border-color:var(--accent);background:rgba(168,85,247,0.2);color:#fff;}
 
+/* ── API LED BAR ─────────────────────────────────────── */
+#api-bar{display:flex;align-items:center;gap:5px;}
+.achip{display:flex;flex-direction:column;align-items:center;gap:2px;cursor:default;}
+.adot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .4s,box-shadow .4s;}
+.adot.ok{background:#22c55e;box-shadow:0 0 6px #22c55e;}
+.adot.err{background:#ef4444;box-shadow:0 0 6px #ef4444;}
+.adot.key{background:#f59e0b;animation:apiPing .8s ease-in-out infinite alternate;}
+#adotGWY.ok{background:#06b6d4;box-shadow:0 0 8px #06b6d4;}
+#adotGWY.key{background:#06b6d4;opacity:.5;animation:apiPing .8s ease-in-out infinite alternate;}
+@keyframes apiPing{from{opacity:.4}to{opacity:1;box-shadow:0 0 6px #f59e0b;}}
+.achip-lbl{font-family:monospace;font-size:7px;color:var(--muted);letter-spacing:.4px;}
+/* ── PROVIDER QUICK-SWITCH ─────────────────────────── */
+#prov-bar{display:flex;gap:4px;}
+.prov-pill-qs{padding:3px 8px;border-radius:50px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:10px;font-weight:700;color:var(--muted);font-family:inherit;transition:all .2s;}
+.prov-pill-qs.active{border-color:var(--accent);background:rgba(124,58,237,.2);color:white;}
+
 /* ── DISC BAR ── */
 .disc-bar{height:4px;border-radius:2px;background:var(--border);overflow:hidden;}
 .disc-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--accent2),var(--accent3));transition:width .8s ease-out;}
@@ -293,7 +309,7 @@ body{padding-top:var(--safe-top);}
      Android Chrome throttles clipped/z--1 iframes
      left:-400px keeps it off-screen but fully rendered
 ════════════════════════════════════════ -->
-<div id="yt-bg" style="position:fixed;left:-400px;bottom:0;width:320px;height:180px;pointer-events:none;z-index:1;overflow:hidden;">
+<div id="yt-bg" style="position:fixed;bottom:-9999px;left:0;width:1px;height:1px;overflow:hidden;opacity:0.01;pointer-events:none;z-index:1;">
   <div id="yt-div" style="width:320px;height:180px;"></div>
 </div>
 
@@ -456,18 +472,25 @@ body{padding-top:var(--safe-top);}
     <!-- Header -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="serif" style="font-size:1.2rem;font-weight:900;">music·ai</div>
+        <div class="serif" style="font-size:1.2rem;font-weight:900;">music·ai <span style="font-size:9px;color:var(--muted);font-family:'DM Sans',sans-serif;font-weight:400;">v2.0</span></div>
         <div id="greeting" style="font-size:10px;color:var(--muted);">Bonne écoute</div>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <div class="status-pill" onclick="showScreen('settings')">
-          <span style="font-size:10px;">🤖</span><div class="dot" id="dot-ai" style="background:var(--danger);"></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
+        <div style="display:flex;align-items:center;gap:5px;">
+          <div id="api-bar" onclick="showScreen('settings')" style="cursor:pointer;display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:50px;background:var(--card);border:1px solid var(--border);">
+            <span class="achip" title="Claude"><span class="adot" id="adotCDL"></span><span class="achip-lbl">CDL</span></span>
+            <span class="achip" title="Gemini"><span class="adot" id="adotGEM"></span><span class="achip-lbl">GEM</span></span>
+            <span class="achip" title="OpenAI"><span class="adot" id="adotOAI"></span><span class="achip-lbl">OAI</span></span>
+            <span class="achip" title="Gateway CF"><span class="adot" id="adotGWY"></span><span class="achip-lbl">GWY</span></span>
+            <span class="achip" title="YouTube · quota"><span class="adot" id="adotYT"></span><span class="achip-lbl" id="yt-quota-display">YT</span></span>
+          </div>
+          <button class="btn-icon" onclick="showScreen('settings')" style="width:36px;height:36px;font-size:0.9rem;">⚙️</button>
         </div>
-        <div class="status-pill" onclick="showScreen('settings')">
-          <span style="font-size:10px;">▶</span><div class="dot" id="dot-yt" style="background:var(--danger);"></div>
-          <span id="quota-disp" style="font-size:9px;color:var(--muted);">0/100</span>
+        <div id="prov-bar">
+          <button class="prov-pill-qs" data-p="claude" onclick="quickSwitchProvider('claude')">Claude</button>
+          <button class="prov-pill-qs" data-p="gemini" onclick="quickSwitchProvider('gemini')">Gemini</button>
+          <button class="prov-pill-qs" data-p="openai" onclick="quickSwitchProvider('openai')">OpenAI</button>
         </div>
-        <button class="btn-icon" onclick="showScreen('settings')" style="width:36px;height:36px;font-size:0.9rem;">⚙️</button>
       </div>
     </div>
 
@@ -578,6 +601,17 @@ body{padding-top:var(--safe-top);}
           <button class="btn-primary" onclick="saveSettings()" style="width:100%;font-size:14px;">Sauvegarder IA</button>
         </div>
         <div class="glass" style="padding:18px;margin-bottom:14px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;">API Gateway</div>
+            <span style="font-size:10px;color:#06b6d4;font-weight:600;">— Recommandé</span>
+          </div>
+          <p style="font-size:11px;color:var(--muted);margin:0 0 10px;line-height:1.6;">Centralise toutes les clés API côté serveur. Si configuré, remplace les clés directes ci-dessus.</p>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">WORKER_SECRET</label>
+          <p style="font-size:10px;color:var(--muted);margin:0 0 8px;">api-gateway.quang101182.workers.dev</p>
+          <input type="password" id="cfg-gw-secret" class="field" placeholder="Ton WORKER_SECRET..." style="margin-bottom:12px;" autocomplete="off">
+          <button onclick="saveGateway()" class="btn-ghost" style="width:100%;font-size:13px;">Sauvegarder Gateway</button>
+        </div>
+        <div class="glass" style="padding:18px;margin-bottom:14px;">
           <p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:0 0 10px;">YouTube Data API v3</p>
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">Clé API YouTube</label>
           <input type="password" id="cfg-ytkey" class="field" style="margin-bottom:8px;" autocomplete="off">
@@ -614,6 +648,10 @@ body{padding-top:var(--safe-top);}
 // ════════════════════════════════════════
 const LS_PROFILE='music_ai_profile',LS_CONFIG='music_ai_config',LS_HISTORY='music_ai_history',
       LS_YT_KEY='music_ai_yt_key',LS_YT_QUOTA='music_ai_yt_quota',LS_PL='music_ai_playlists';
+const LS_GW_SECRET='music_ai_gw_secret';
+const GATEWAY_URL='https://api-gateway.quang101182.workers.dev';
+function getGwUrl(){return GATEWAY_URL;}
+function getGwSecret(){return localStorage.getItem(LS_GW_SECRET)||'';}
 const YT_QUOTA_MAX=100;
 const GENRES=[{id:'pop',label:'🎤 Pop'},{id:'rock',label:'🎸 Rock'},{id:'electro',label:'🎛️ Electronic'},{id:'jazz',label:'🎷 Jazz'},{id:'classique',label:'🎻 Classique'},{id:'hip-hop',label:'🎤 Hip-Hop'},{id:'rnb',label:'🎵 R&B'},{id:'indie',label:'🌿 Indie'},{id:'metal',label:'🤘 Metal'},{id:'folk',label:'🪕 Folk'},{id:'soul',label:'💛 Soul'},{id:'reggae',label:'🌴 Reggae'},{id:'latin',label:'💃 Latin'},{id:'ambient',label:'🌫️ Ambient'},{id:'funk',label:'🕺 Funk'},{id:'blues',label:'🎸 Blues'},{id:'country',label:'🤠 Country'},{id:'afrobeat',label:'🥁 Afrobeat'}];
 const ERAS=[{id:'vintage',label:'📻 Vintage',range:'1950–1979'},{id:'80s90s',label:'💿 80s/90s',range:'1980–1999'},{id:'2000s',label:'📀 2000s',range:'2000–2009'},{id:'recent',label:'🆕 2010s',range:'2010–2019'},{id:'actuel',label:'⚡ Actuel',range:'2020+'},{id:'mix',label:'🎲 Mix toutes époques',range:''}];
@@ -648,7 +686,7 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 function getQuota(){try{const q=JSON.parse(localStorage.getItem(LS_YT_QUOTA));const t=new Date().toISOString().slice(0,10);if(!q||q.date!==t)return{count:0,date:t};return q}catch{return{count:0,date:new Date().toISOString().slice(0,10)}}}
-function incQuota(){const q=getQuota();q.count++;localStorage.setItem(LS_YT_QUOTA,JSON.stringify(q));updateQuotaDisp();return q.count}
+function incQuota(){const q=getQuota();q.count++;localStorage.setItem(LS_YT_QUOTA,JSON.stringify(q));updateQuotaDisplay();return q.count}
 function updateQuotaDisp(){const q=getQuota();const c=q.count;const el=document.getElementById('quota-disp');if(el){el.textContent=`${c}/100`;el.style.color=c>=100?'var(--danger)':c>=80?'var(--accent3)':'var(--muted)';}}
 function getPlaylists(){try{return JSON.parse(localStorage.getItem(LS_PL))||[]}catch{return[]}}
 function savePlaylists(pl){localStorage.setItem(LS_PL,JSON.stringify(pl))}
@@ -1110,12 +1148,66 @@ function switchTab(tab){
   if(tab==='history')renderHistory();
   if(tab==='chat'){const m=document.getElementById('chat-msgs');if(m)setTimeout(()=>m.scrollTop=m.scrollHeight,50);}
 }
-function updateApiStatus(){
-  const cfg=getConfig();
-  const ai=document.getElementById('dot-ai');if(ai)ai.style.background=cfg&&cfg.apiKey?'var(--green)':'var(--danger)';
-  const yt=document.getElementById('dot-yt');if(yt)yt.style.background=getYtKey()?'var(--green)':'var(--danger)';
-  updateQuotaDisp();
+// ── LED system ──
+function setDot(id,state){const el=document.getElementById('adot'+id);if(el)el.className='adot'+(state&&state!=='none'?' '+state:'');}
+async function pingCDL(key){try{setDot('CDL','key');const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),10000);const r=await fetch('https://api.anthropic.com/v1/models',{headers:{'x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},signal:ctrl.signal});setDot('CDL',r.ok?'ok':'err');}catch(e){setDot('CDL','err');}}
+async function pingGEM(key){try{setDot('GEM','key');const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),10000);const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+key+'&pageSize=1',{signal:ctrl.signal});setDot('GEM',r.ok?'ok':'err');}catch(e){setDot('GEM','err');}}
+async function pingOAI(key){try{setDot('OAI','key');const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),10000);const r=await fetch('https://api.openai.com/v1/models',{headers:{'Authorization':'Bearer '+key},signal:ctrl.signal});setDot('OAI',r.ok?'ok':'err');}catch(e){setDot('OAI','err');}}
+async function fetchGatewayConfig(){
+  const secret=getGwSecret();if(!secret){setDot('GWY','');['CDL','GEM','OAI'].forEach(d=>setDot(d,''));return;}
+  setDot('GWY','key');
+  try{
+    const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),8000);
+    const r=await fetch(getGwUrl()+'/config',{headers:{'Authorization':'Bearer '+secret},signal:ctrl.signal});
+    if(!r.ok){setDot('GWY','err');return;}
+    const cfg=await r.json();setDot('GWY','ok');
+    const apis=cfg.apis||[];
+    const MAP={CLAUDE:'CDL',GEMINI:'GEM',OPENAI:'OAI'};
+    Object.keys(MAP).forEach(k=>setDot(MAP[k],apis.includes(k)?'ok':''));
+  }catch(e){setDot('GWY',/^https?:\/\/.+/.test(getGwUrl())?'key':'err');}
 }
+
+// Auto-config via #gwy= hash
+(function(){
+  try{
+    var h=window.location.hash;
+    var m=h.match(/[#&]gwy=([^&]+)/);
+    if(m){
+      var s=decodeURIComponent(m[1]);
+      localStorage.setItem(LS_GW_SECRET,s);
+      history.replaceState(null,'',window.location.pathname+window.location.search);
+    }
+  }catch(e){}
+})();
+
+function updateQuotaDisplay(){const q=getQuota();const c=q.count;const el=document.getElementById('yt-quota-display');if(el)el.textContent=c+'/'+YT_QUOTA_MAX;const dot=document.getElementById('adotYT');if(dot)dot.className='adot'+(getYtKey()?(c>=YT_QUOTA_MAX?' err':c>=80?' key':' ok'):'');}
+
+function updateApiStatus(){
+  const cfg=getConfig();const keys=cfg.keys||{};
+  const gwSecret=getGwSecret();const useGateway=!!gwSecret;
+  // Provider quick-switch active state
+  document.querySelectorAll('.prov-pill-qs').forEach(btn=>btn.classList.toggle('active',btn.dataset.p===cfg.provider));
+  // YT dot
+  updateQuotaDisplay();
+  // Ping avec délai réseau
+  setTimeout(()=>{
+    if(useGateway){fetchGatewayConfig();}
+    else{
+      setDot('GWY','');
+      const apiKey=cfg.apiKey||keys[cfg.provider]||'';
+      if(cfg.provider==='claude'&&apiKey)pingCDL(apiKey);else setDot('CDL','');
+      if(cfg.provider==='gemini'&&apiKey)pingGEM(apiKey);else setDot('GEM','');
+      if(cfg.provider==='openai'&&apiKey)pingOAI(apiKey);else setDot('OAI','');
+    }
+  },1500);
+}
+
+// Gateway save
+function saveGateway(){const s=document.getElementById('cfg-gw-secret').value.trim();if(s)localStorage.setItem(LS_GW_SECRET,s);else localStorage.removeItem(LS_GW_SECRET);toast(s?'✅ Gateway sauvegardé':'⚠️ Gateway effacé');updateApiStatus();}
+
+// Provider quick-switch
+function quickSwitchProvider(p){const cfg=getConfig();cfg.provider=p;const defaultModels={claude:'claude-sonnet-4-6',gemini:'gemini-2.0-flash',openai:'gpt-4o-mini'};const curModel=cfg.model||'';const wrongProvider=!curModel.startsWith(p==='claude'?'claude':p==='gemini'?'gemini':'gpt');if(wrongProvider)cfg.model=defaultModels[p];saveConfig(cfg);document.querySelectorAll('.prov-pill-qs').forEach(btn=>btn.classList.toggle('active',btn.dataset.p===p));toast('IA → '+p.charAt(0).toUpperCase()+p.slice(1)+' ('+cfg.model+')');}
+
 
 // ════════════════════════════════════════
 //  AI ENGINE
@@ -1146,12 +1238,29 @@ RÈGLE ABSOLUE: JSON UNIQUEMENT. Zéro texte avant/après.
 {"title":"...","artist":"...","genre":"...","year":2010,"mood":"...","why":"max 20 mots","story":"2-3 phrases anecdote","now_reason":"1 phrase pourquoi maintenant","youtube_query":"artiste titre official audio","discovery_score":0.0}`;
 }
 async function callAI(sys,msg){
-  const cfg=getConfig();const{provider,model,apiKey}=cfg;
-  if(!apiKey)throw new Error('Clé API manquante — ouvre ⚙️');
+  const cfg=getConfig();const{provider,model}=cfg;
+  const gwSecret=getGwSecret();const useGateway=!!gwSecret;
+  const apiKey=useGateway?'':(cfg.apiKey||cfg.keys?.[provider]||'');
+  if(!useGateway&&!apiKey)throw new Error('Clé API manquante ou Gateway non configuré — ouvre ⚙️');
+  const base=useGateway?getGwUrl().replace(/\/$/,''):'';
   let url,headers,body;
-  if(provider==='claude'){url='https://api.anthropic.com/v1/messages';headers={'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};body=JSON.stringify({model,max_tokens:800,temperature:0.85,system:sys,messages:[{role:'user',content:msg}]})}
-  else if(provider==='gemini'){url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;headers={'Content-Type':'application/json'};body=JSON.stringify({contents:[{role:'user',parts:[{text:sys+'\n\n'+msg}]}],generationConfig:{maxOutputTokens:800,temperature:0.85}})}
-  else{url='https://api.openai.com/v1/chat/completions';headers={'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`};body=JSON.stringify({model,max_tokens:800,temperature:0.85,messages:[{role:'system',content:sys},{role:'user',content:msg}]})}
+  if(provider==='claude'){
+    url=useGateway?base+'/api/claude':'https://api.anthropic.com/v1/messages';
+    headers=useGateway?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}
+      :{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
+    body=JSON.stringify({model,max_tokens:800,temperature:0.85,system:sys,messages:[{role:'user',content:msg}]});
+  }else if(provider==='gemini'){
+    url=useGateway?base+'/api/gemini/v1beta/models/'+model+':generateContent'
+      :'https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+apiKey;
+    headers=useGateway?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}
+      :{'Content-Type':'application/json'};
+    body=JSON.stringify({contents:[{role:'user',parts:[{text:sys+'\n\n'+msg}]}],generationConfig:{maxOutputTokens:800,temperature:0.85}});
+  }else{
+    url=useGateway?base+'/api/openai':'https://api.openai.com/v1/chat/completions';
+    headers=useGateway?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}
+      :{'Content-Type':'application/json','Authorization':'Bearer '+apiKey};
+    body=JSON.stringify({model,max_tokens:800,temperature:0.85,messages:[{role:'system',content:sys},{role:'user',content:msg}]});
+  }
   const res=await fetch(url,{method:'POST',headers,body});
   if(!res.ok){let m=`Erreur ${res.status}`;try{const e=await res.json();m=e&&e.error&&e.error.message?e.error.message:m}catch(_){}throw new Error(m)}
   const data=await res.json();
@@ -1175,7 +1284,7 @@ async function getRecommendation(mode){
   if(mode==='onetap'&&otBtn){otBtn.style.opacity='0.5';otBtn.style.transform='scale(0.95)';}
   try{
     const cfg=getConfig();
-    if(!cfg||!cfg.apiKey)throw new Error('Clé API manquante — ouvre ⚙️');
+    if((!cfg||!cfg.apiKey)&&!getGwSecret())throw new Error('Clé API manquante ou Gateway non configuré — ouvre ⚙️');
     const msgs={onetap:'Recommande-moi une chanson parfaite maintenant.',mood:`Je me sens ${ST.selMood||'neutre'}. Reco.`,activity:`Je fais: ${ST.selActivity||'quelque chose'}. Reco.`,discovery:'Mode découverte: pépite inattendue.'};
     const raw=await callAI(buildPrompt(mode),msgs[mode]||'Recommande-moi une chanson.');
     const rec=parseJSON(raw);
@@ -1309,7 +1418,7 @@ async function sendChat(){
   ab.innerHTML=`<div class="typing"><span></span><span></span><span></span></div>`;
   msgs.appendChild(ab);msgs.scrollTop=msgs.scrollHeight;
   try{
-    const cfg=getConfig();if(!cfg||!cfg.apiKey)throw new Error('Clé API manquante — ouvre ⚙️');
+    const cfg=getConfig();if((!cfg||!cfg.apiKey)&&!getGwSecret())throw new Error('Clé API manquante ou Gateway non configuré — ouvre ⚙️');
     const raw=await callAI(buildPrompt('chat'),`L'utilisateur dit: "${msg}". Recommande UN titre adapté. JSON uniquement.`);
     const rec=parseJSON(raw);
     const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;
@@ -1383,15 +1492,16 @@ function loadSettings(){
   fillModelSelect('cfg-model',cfg.provider||'claude');
   const sel=document.getElementById('cfg-model');if(sel&&cfg.model)[...sel.options].forEach(o=>o.selected=o.value===cfg.model);
   document.getElementById('cfg-ytkey').value=getYtKey();
+  const gwSec=document.getElementById('cfg-gw-secret');if(gwSec)gwSec.value=getGwSecret();
   const p=getProfile();
   if(p){
     document.getElementById('profile-summary').innerHTML=`<span style="color:var(--muted);font-size:11px;">Genres</span><br>${(p.genres||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Époques</span><br>${(p.eras&&p.eras.length?p.eras.map(id=>{const e=ERAS.find(x=>x.id===id);return e?e.label:id}).join(', '):'Toutes')}<br><span style="color:var(--muted);font-size:11px;">Aventure</span><br>${Math.round((p.adventurousness||0)*100)}%`;
     const ta=document.getElementById('cfg-artists');if(ta)ta.value=(p.artists||[]).join('\n');
   }
   const _q=getQuota();
-  document.getElementById('stats-display').innerHTML=`Interactions : ${p&&p.interactions||0}<br>Likes : ${getHistory().filter(x=>x.action==='like').length}<br>Recos : ${getHistory().filter(x=>x.action==='suggest'||x.action==='chat').length}<br>File : ${ST.queue.length} titre(s)<br>API IA : ${cfg&&cfg.apiKey?'✅':'❌'}<br>API YouTube : ${getYtKey()?'✅':'❌'}<br>Quota YT : <span style="color:${_q.count>=100?'var(--danger)':_q.count>=80?'var(--accent3)':'inherit'}">${_q.count}/100 aujourd'hui</span>`;
+  document.getElementById('stats-display').innerHTML=`Interactions : ${p&&p.interactions||0}<br>Likes : ${getHistory().filter(x=>x.action==='like').length}<br>Recos : ${getHistory().filter(x=>x.action==='suggest'||x.action==='chat').length}<br>File : ${ST.queue.length} titre(s)<br>Gateway : ${getGwSecret()?'✅ Configuré':'❌ Non configuré'}<br>API IA : ${cfg&&cfg.apiKey?'✅':'❌'}<br>API YouTube : ${getYtKey()?'✅':'❌'}<br>Quota YT : <span style="color:${_q.count>=100?'var(--danger)':_q.count>=80?'var(--accent3)':'inherit'}">${_q.count}/100 aujourd'hui</span>`;
 }
-function saveSettings(){const k=document.getElementById('cfg-apikey').value.trim();if(!k){toast('⚠️ Clé API requise');return;}const m=document.getElementById('cfg-model').value;saveConfig({provider:ST.cfgProvider,model:m,apiKey:k});toast('✅ Config IA sauvegardée');updateApiStatus();}
+function saveSettings(){const k=document.getElementById('cfg-apikey').value.trim();const gwOk=!!getGwSecret();if(!k&&!gwOk){toast('⚠️ Clé API ou Gateway requis');return;}const m=document.getElementById('cfg-model').value;saveConfig({provider:ST.cfgProvider,model:m,apiKey:k});toast('✅ Config IA sauvegardée');updateApiStatus();}
 function saveYtKey(){const k=document.getElementById('cfg-ytkey').value.trim();setYtKey(k);toast(k?'✅ Clé YouTube sauvegardée':'⚠️ Clé YT effacée');updateApiStatus();}
 function saveArtists(){const p=getProfile();if(!p){toast('⚠️ Profil introuvable');return;}p.artists=document.getElementById('cfg-artists').value.split('\n').map(x=>x.trim()).filter(Boolean);saveProfile(p);toast('✅ Artistes mis à jour');}
 function resetProfile(){if(!confirm('Réinitialiser le profil ? Les clés API sont conservées.'))return;[LS_PROFILE,LS_HISTORY].forEach(k=>localStorage.removeItem(k));location.reload();}
@@ -1564,7 +1674,7 @@ function obGo(n){
   document.getElementById('ob-next').textContent=n===5?'Démarrer ✓':'Continuer →';
 }
 function finishOnboarding(){
-  const apiKey=document.getElementById('ob-apikey').value.trim();if(!apiKey){toast('⚠️ Clé API IA requise');return;}
+  const apiKey=document.getElementById('ob-apikey').value.trim();if(!apiKey&&!getGwSecret()){toast('⚠️ Clé API IA ou Gateway requis');return;}
   const ytKey=document.getElementById('ob-ytkey').value.trim();if(ytKey)setYtKey(ytKey);
   const model=document.getElementById('ob-model').value;
   const artists=document.getElementById('ob-artists').value.split('\n').map(x=>x.trim()).filter(Boolean);
@@ -1629,7 +1739,8 @@ function initMain(){
 // ════════════════════════════════════════
 function boot(){
   const p=getProfile();const c=getConfig();
-  if(p&&p.completedOnboarding&&c&&c.apiKey){showScreen('main');initMain();setTimeout(updateApiStatus,100);}
+  const hasDirectKey=!!(c&&(c.apiKey||c.keys?.[c.provider]));const hasGateway=!!getGwSecret();
+  if(p&&p.completedOnboarding&&(hasDirectKey||hasGateway)){showScreen('main');initMain();setTimeout(updateApiStatus,100);}
   else{showScreen('onboard');initOnboarding();}
 }
 boot();
