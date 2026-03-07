@@ -3,7 +3,7 @@
 
 const GATEWAY_URL  = 'https://api-gateway.quang101182.workers.dev';
 const ADMIN_TOKEN  = '0c99681bdec0e7af381192d4c97c4c6b820f5093edab43b642557b4dadbba02ccc8faa59a1eb902d';
-const WORKER_SECRET = '333a33b16f8cab5aec61eb5806eeaee332a50e1172ad1b3e3d710b3d84b9cc7b';
+const WORKER_SECRET_FALLBACK = '333a33b16f8cab5aec61eb5806eeaee332a50e1172ad1b3e3d710b3d84b9cc7b';
 const GITHUB_TREE_URL = 'https://api.github.com/repos/quang101182/App/git/trees/main';
 const EXCLUDED_DIRS = ['node_modules', 'api-gateway', '.github', '.git', '.vscode', 'dist', 'build'];
 
@@ -113,7 +113,10 @@ else if (action === 'addshare') {
 else if (action === 'addshare_exec') {
   const appName = param;
   const keyName = appName.toUpperCase().replace(/-/g, '_') + '_SHARE';
-  const shareUrl = `https://quang101182.github.io/App/${appName}/#gwy=${WORKER_SECRET}`;
+  // Lire WORKER_SECRET depuis KV (fallback sur valeur par défaut)
+  const kvData = await hPost(`${GATEWAY_URL}/admin/keys/list`);
+  const workerSecret = (kvData.WORKER_SECRET && kvData.WORKER_SECRET !== 'not set') ? kvData.WORKER_SECRET : WORKER_SECRET_FALLBACK;
+  const shareUrl = `https://quang101182.github.io/App/${appName}/#gwy=${workerSecret}`;
 
   // Save to gateway
   await hPost(`${GATEWAY_URL}/admin/keys/set`, { key: keyName, value: shareUrl });
