@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v8.97</title>
+<title>SubWhisper v8.98</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1047,7 +1047,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.97</span>
+    <span class="ver-badge">v8.98</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1257,6 +1257,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
           <button class="ab" onclick="repairSRTTimestamps()" id="repairBtn" title="Corriger les timestamps aberrants">&#x1F527; RPR</button>
           <button class="ab" onclick="validateSRT()" id="validateBtn" title="Analyser la qualit&#233; des sous-titres">&#x2713; VALID</button>
           <button class="ab" onclick="openDiff()" id="diffBtn" title="Comparer avant/apr&#232;s modifications">&#x21C4; DIFF</button>
+          <button class="ab" onclick="exportDiag()" id="diagBtn" title="Exporter le diagnostic JSON de toutes les &#233;tapes">&#x1F9EA; DIAG</button>
         </div>
       </div>
       <div class="btn-sep"></div>
@@ -1380,7 +1381,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v8.97 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v8.98 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -2875,6 +2876,7 @@ function setSt(s) { document.getElementById('sd').className = 'sdot' + (s ? ' ' 
 function showRes(content, srcLang, tgtLang, wasTranslated, words) {
   srtOriginal = content;
   _diffOriginalSnapshot = content;
+  _diagSteps = { raw_groq: content };
   currentOffset = 0;
   document.getElementById('offsetDisplay').textContent = '0 ms';
   document.getElementById('sp').value = content;
@@ -3913,9 +3915,62 @@ function copyFfmpegCmd() {
 // Stocke le SRT brut Groq pour téléchargement via bouton dédié (Batch Lab)
 var _rawGroqSrt = null;
 
+// ── DIAGNOSTIC EXPORT ────────────────────────────────────
+var _diagSteps = {}; // { raw_groq, after_format, after_clean, after_translate }
+
 async function dlRawGroq() {
   if (!_rawGroqSrt) { toast('⚠ Aucune transcription brute disponible — relancez une vidéo'); return; }
   await exportFile(_rawGroqSrt, '.RAW_GROQ.srt', 'application/octet-stream');
+}
+
+function _srtToBlocks(srt) {
+  if (!srt) return [];
+  return parseSRT(srt).map(function(b) { return { id: parseInt(b.id), ts: b.timestamp, text: b.text }; });
+}
+
+function _diagStats(before, after) {
+  var bBlocks = parseSRT(before || '');
+  var aBlocks = parseSRT(after || '');
+  var modified = 0, charsChanged = 0;
+  var len = Math.max(bBlocks.length, aBlocks.length);
+  for (var i = 0; i < len; i++) {
+    var bt = bBlocks[i] ? bBlocks[i].text : '';
+    var at = aBlocks[i] ? aBlocks[i].text : '';
+    if (bt !== at) { modified++; charsChanged += Math.abs(at.length - bt.length); }
+  }
+  return { blocks_before: bBlocks.length, blocks_after: aBlocks.length, blocks_modified: modified, chars_delta: charsChanged };
+}
+
+async function exportDiag() {
+  if (!_diagSteps.raw_groq) { toast('Aucun diagnostic — lance une transcription d\'abord'); return; }
+  var src = detectedLang || (document.getElementById('srcLangMain') ? document.getElementById('srcLangMain').value : '') || '';
+  var tgt = document.getElementById('outLangMain') ? document.getElementById('outLangMain').value : '';
+  var engine = getAIEngine();
+  var diag = {
+    type: 'DIAG',
+    version: 'v8.98',
+    date: new Date().toISOString(),
+    file: origName || 'unknown',
+    lang_source: src,
+    lang_target: tgt,
+    engine_clean: engine,
+    engine_translate: (API_DOTS['GEM'] === 'ok' || API_DOTS['DSK'] === 'ok') ? engine : (document.getElementById('deeplxUrl') ? 'deeplx' : 'azure'),
+    steps: {
+      raw_groq: _srtToBlocks(_diagSteps.raw_groq),
+      after_clean: _diagSteps.after_clean ? _srtToBlocks(_diagSteps.after_clean) : null,
+      after_translate: _diagSteps.after_translate ? _srtToBlocks(_diagSteps.after_translate) : null,
+      after_format: _diagSteps.after_format ? _srtToBlocks(_diagSteps.after_format) : null,
+      final: _srtToBlocks(getCurrentSRT())
+    },
+    stats: {}
+  };
+  if (_diagSteps.after_clean) diag.stats.clean = _diagStats(_diagSteps.raw_groq, _diagSteps.after_clean);
+  if (_diagSteps.after_translate) diag.stats.translate = _diagStats(_diagSteps.after_clean || _diagSteps.raw_groq, _diagSteps.after_translate);
+  if (_diagSteps.after_format) diag.stats.format = _diagStats(_diagSteps.after_translate || _diagSteps.after_clean || _diagSteps.raw_groq, _diagSteps.after_format);
+  diag.stats.total = _diagStats(_diagSteps.raw_groq, getCurrentSRT());
+  var json = JSON.stringify(diag, null, 2);
+  await exportFile(json, '.DIAG.json', 'application/json');
+  toast('🧪 Diagnostic exporté — ' + Object.keys(_diagSteps).length + ' étapes capturées');
 }
 
 // Si dossier mappé actif → écrit directement sans dialogue
@@ -4508,6 +4563,7 @@ function autoFormatSRT() {
     }, 50);
   }
   toast('\u229e Format\u00e9 \u2014 ' + modified + ' bloc' + (modified !== 1 ? 's' : '') + ' modifi\u00e9' + (modified !== 1 ? 's' : ''));
+  _diagSteps.after_format = getCurrentSRT();
   validateSRT(true);
   updateDiffBtn();
 }
@@ -4641,6 +4697,7 @@ async function cleanAI() {
       return blk.id + '\n' + blk.timestamp + '\n' + correctedTexts[i];
     }).join('\n\n') + '\n';
     srtOriginal = cleaned; srtTxt = cleaned;
+    _diagSteps.after_clean = cleaned;
     var withOffset = currentOffset !== 0 ? shiftSRT(srtOriginal, currentOffset) : srtOriginal;
     document.getElementById('sp').value = withOffset;
     if (previewVttUrl) {
@@ -5111,6 +5168,7 @@ async function translateManual() {
       toastClear(); toast('⚠ Traduction identique — vérifie les clés et la langue source'); return;
     }
     srtOriginal = translated; srtTxt = translated;
+    _diagSteps.after_translate = translated;
     var withOffset = currentOffset !== 0 ? shiftSRT(srtOriginal, currentOffset) : srtOriginal;
     document.getElementById('sp').value = withOffset;
     if (previewVttUrl) {
