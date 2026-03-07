@@ -111,18 +111,23 @@ else if (action === 'addshare') {
 // ADDSHARE:{app_name} — Générer URL et sauvegarder
 // ============================================================
 else if (action === 'addshare_exec') {
-  const appName = param;
-  const keyName = appName.toUpperCase().replace(/-/g, '_') + '_SHARE';
-  // Lire WORKER_SECRET depuis KV (fallback sur valeur par défaut)
-  const kvData = await hPost(`${GATEWAY_URL}/admin/keys/list`);
-  const workerSecret = (kvData.WORKER_SECRET && kvData.WORKER_SECRET !== 'not set') ? kvData.WORKER_SECRET : WORKER_SECRET_FALLBACK;
-  const shareUrl = `https://quang101182.github.io/App/${appName}/#gwy=${workerSecret}`;
+  try {
+    const appName = param;
+    let keyName = appName.toUpperCase().replace(/-/g, '_') + '_SHARE';
+    // Gateway exige que le nom commence par [A-Z] — préfixer si commence par un chiffre
+    if (/^[0-9]/.test(keyName)) keyName = 'APP_' + keyName;
+    // Lire WORKER_SECRET depuis KV (fallback sur valeur par défaut)
+    const kvData = await hPost(`${GATEWAY_URL}/admin/keys/list`);
+    const workerSecret = (kvData.WORKER_SECRET && kvData.WORKER_SECRET !== 'not set') ? kvData.WORKER_SECRET : WORKER_SECRET_FALLBACK;
+    const shareUrl = `https://quang101182.github.io/App/${appName}/#gwy=${workerSecret}`;
 
-  // Save to gateway
-  await hPost(`${GATEWAY_URL}/admin/keys/set`, { key: keyName, value: shareUrl });
+    // Save to gateway
+    await hPost(`${GATEWAY_URL}/admin/keys/set`, { key: keyName, value: shareUrl });
 
-  reply = `✅ *Partage créé*\n\n📱 *${appName.toUpperCase().replace(/-/g, '_')}*\n\`${shareUrl}\``;
-
+    reply = `✅ *Partage créé*\n\n📱 *${appName.toUpperCase().replace(/-/g, '_')}*\n\`${shareUrl}\``;
+  } catch (e) {
+    reply = `❌ Erreur addshare: ${e.message}`;
+  }
   keyboard.push([{ text: '🔗 Voir tous', callback_data: 'share' }]);
   keyboard.push([{ text: '⬅️ Menu', callback_data: 'menu' }]);
 }
@@ -146,9 +151,10 @@ else if (action === 'sharedel') {
 // ============================================================
 else if (action === 'sharedelconfirm') {
   const appName = param;
-  const keyName = `${appName}_SHARE`;
+  let keyName = `${appName}_SHARE`;
+  if (/^[0-9]/.test(keyName)) keyName = 'APP_' + keyName;
 
-  await hPost(`${GATEWAY_URL}/admin/keys/delete`, { key: keyName });
+  try { await hPost(`${GATEWAY_URL}/admin/keys/delete`, { key: keyName }); } catch(e) {}
 
   reply = `✅ Partage *${appName}* supprimé`;
 
