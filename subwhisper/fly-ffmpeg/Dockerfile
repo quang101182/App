@@ -33,8 +33,8 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY src/ ./src/
 COPY package.json ./
 
-# Donner les permissions à l'utilisateur non-root
-RUN chown -R nodeuser:nodejs /app
+# Créer un dossier tmp pour les fichiers temporaires (accessible par nodeuser)
+RUN mkdir -p /app/tmp && chown -R nodeuser:nodejs /app
 
 USER nodeuser
 

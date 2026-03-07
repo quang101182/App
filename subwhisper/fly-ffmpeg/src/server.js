@@ -33,6 +33,9 @@
 const express = require('express');
 const { spawn } = require('child_process');
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 // Note: FormData et Blob sont des globals Node.js 20+, pas besoin de require
 
 // ---------------------------------------------------------------------------
@@ -125,63 +128,142 @@ app.get('/health', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /deepgram — Streaming proxy vers Deepgram API (pas de buffering mémoire)
-// Query params forwarded: model, diarize, language, punctuate, etc.
-// Auth: FLY_SECRET ou WORKER_SECRET en Bearer
-// Deepgram key: DEEPGRAM_KEY env var
-// Le body est PIPÉ directement vers Deepgram — supporte fichiers > 1 GB
+// POST /deepgram — Reçoit audio/vidéo, extrait l'audio avec FFmpeg, envoie à Deepgram
+// Pipeline: upload → disque → FFmpeg → MP3 ~30MB → Deepgram → réponse
+// Supporte fichiers vidéo > 1 GB (streaming sur disque, pas en RAM)
 // ---------------------------------------------------------------------------
 
-app.post('/deepgram', requireAnySecret, (req, res) => {
+app.post('/deepgram', requireAnySecret, async (req, res) => {
   const DEEPGRAM_KEY = process.env.DEEPGRAM_KEY || '';
-
   if (!DEEPGRAM_KEY) {
     return res.status(503).json({ error: 'DEEPGRAM_KEY not configured' });
   }
 
   const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-  const dgPath = `/v1/listen${qs}`;
   const contentType = req.headers['content-type'] || 'audio/mpeg';
-  const contentLength = req.headers['content-length'] || '';
+  const contentLength = req.headers['content-length'] || '0';
+  const sizeMB = (parseInt(contentLength) / 1048576).toFixed(1);
+  const jobId = `dg-${Date.now().toString(36)}`;
+  const tmpDir = process.env.NODE_ENV === 'production' ? '/app/tmp' : os.tmpdir();
+  const inputPath = path.join(tmpDir, `${jobId}-input`);
+  const audioPath = path.join(tmpDir, `${jobId}-audio.mp3`);
 
-  console.log(`[deepgram] Streaming proxy ${contentLength ? (parseInt(contentLength)/1048576).toFixed(1)+' MB' : '? MB'} → api.deepgram.com${dgPath.substring(0, 80)}...`);
+  console.log(`[${jobId}] Reçu ${sizeMB} MB (${contentType}) — sauvegarde sur disque...`);
   const startMs = Date.now();
 
-  const dgHeaders = {
-    'Authorization': `Token ${DEEPGRAM_KEY}`,
-    'Content-Type': contentType,
-  };
-  if (contentLength) dgHeaders['Content-Length'] = contentLength;
+  // Étape 1: Sauver le fichier uploadé sur disque (streaming, pas en RAM)
+  try {
+    await new Promise((resolve, reject) => {
+      const ws = fs.createWriteStream(inputPath);
+      let received = 0;
+      req.on('data', (chunk) => {
+        received += chunk.length;
+        // Log toutes les 50 MB
+        if (received % (50 * 1024 * 1024) < chunk.length) {
+          console.log(`[${jobId}] Reçu ${(received / 1048576).toFixed(0)}/${sizeMB} MB`);
+        }
+      });
+      req.pipe(ws);
+      ws.on('finish', resolve);
+      ws.on('error', reject);
+      req.on('error', reject);
+    });
 
-  const dgReq = https.request({
-    hostname: 'api.deepgram.com',
-    path: dgPath,
-    method: 'POST',
-    headers: dgHeaders,
-    timeout: 600000, // 10 min
-  }, (dgRes) => {
-    const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-    console.log(`[deepgram] Response ${dgRes.statusCode} in ${elapsed}s`);
+    const uploadElapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+    const inputStat = fs.statSync(inputPath);
+    console.log(`[${jobId}] Upload terminé: ${(inputStat.size / 1048576).toFixed(1)} MB en ${uploadElapsed}s`);
 
-    res.status(dgRes.statusCode);
-    res.set('Content-Type', dgRes.headers['content-type'] || 'application/json');
-    dgRes.pipe(res);
-  });
+    // Étape 2: Extraire l'audio avec FFmpeg → MP3 128kbps mono
+    const isAudioOnly = contentType.startsWith('audio/');
+    let fileToSend, sendContentType;
 
-  dgReq.on('error', (err) => {
-    console.error('[deepgram] Proxy error:', err.message);
+    if (isAudioOnly && inputStat.size < 50 * 1024 * 1024) {
+      // Petit fichier audio → envoyer directement, pas besoin de FFmpeg
+      fileToSend = inputPath;
+      sendContentType = contentType;
+      console.log(`[${jobId}] Petit fichier audio — envoi direct à Deepgram`);
+    } else {
+      // Vidéo ou gros audio → extraire/convertir avec FFmpeg
+      console.log(`[${jobId}] FFmpeg: extraction audio → MP3 128kbps mono...`);
+      const ffmpegStart = Date.now();
+
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', [
+          '-i', inputPath,
+          '-vn',              // pas de vidéo
+          '-acodec', 'libmp3lame',
+          '-b:a', '128k',    // 128 kbps
+          '-ac', '1',        // mono
+          '-ar', '16000',    // 16kHz (optimal pour speech)
+          '-y',              // overwrite
+          audioPath
+        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`FFmpeg exit ${code}: ${stderr.slice(-300)}`));
+        });
+        ff.on('error', reject);
+      });
+
+      const audioStat = fs.statSync(audioPath);
+      const ffElapsed = ((Date.now() - ffmpegStart) / 1000).toFixed(1);
+      console.log(`[${jobId}] FFmpeg terminé en ${ffElapsed}s: ${(inputStat.size / 1048576).toFixed(1)} MB → ${(audioStat.size / 1048576).toFixed(1)} MB`);
+
+      fileToSend = audioPath;
+      sendContentType = 'audio/mpeg';
+    }
+
+    // Étape 3: Envoyer le fichier audio à Deepgram (streaming depuis disque)
+    const audioStat = fs.statSync(fileToSend);
+    console.log(`[${jobId}] Envoi ${(audioStat.size / 1048576).toFixed(1)} MB à Deepgram...`);
+    const dgStart = Date.now();
+
+    const dgResult = await new Promise((resolve, reject) => {
+      const dgReq = https.request({
+        hostname: 'api.deepgram.com',
+        path: `/v1/listen${qs}`,
+        method: 'POST',
+        headers: {
+          'Authorization': `Token ${DEEPGRAM_KEY}`,
+          'Content-Type': sendContentType,
+          'Content-Length': audioStat.size,
+        },
+        timeout: 600000,
+      }, (dgRes) => {
+        let body = '';
+        dgRes.on('data', d => { body += d.toString(); });
+        dgRes.on('end', () => resolve({ status: dgRes.statusCode, body }));
+      });
+
+      dgReq.on('error', reject);
+      dgReq.on('timeout', () => dgReq.destroy(new Error('Deepgram timeout')));
+
+      // Stream depuis le disque → Deepgram
+      const rs = fs.createReadStream(fileToSend);
+      rs.pipe(dgReq);
+    });
+
+    const dgElapsed = ((Date.now() - dgStart) / 1000).toFixed(1);
+    const totalElapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+    console.log(`[${jobId}] Deepgram répondu ${dgResult.status} en ${dgElapsed}s (total: ${totalElapsed}s)`);
+
+    res.status(dgResult.status);
+    res.set('Content-Type', 'application/json');
+    res.send(dgResult.body);
+
+  } catch (err) {
+    console.error(`[${jobId}] Erreur:`, err.message);
     if (!res.headersSent) {
       res.status(502).json({ error: `Deepgram proxy error: ${err.message}` });
     }
-  });
-
-  dgReq.on('timeout', () => {
-    console.error('[deepgram] Upstream timeout');
-    dgReq.destroy(new Error('Deepgram upstream timeout'));
-  });
-
-  // PIPE le body entrant directement vers Deepgram — ZERO buffering mémoire
-  req.pipe(dgReq);
+  } finally {
+    // Nettoyage fichiers temporaires
+    try { fs.unlinkSync(inputPath); } catch (_) {}
+    try { fs.unlinkSync(audioPath); } catch (_) {}
+  }
 });
 
 // ---------------------------------------------------------------------------
