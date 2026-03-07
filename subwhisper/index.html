@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v8.96</title>
+<title>SubWhisper v8.97</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1047,7 +1047,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.96</span>
+    <span class="ver-badge">v8.97</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1380,7 +1380,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v8.96 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v8.97 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -5339,36 +5339,59 @@ function updateDiffBtn() {
 function openDiff() {
   var current = getCurrentSRT();
   var original = _diffOriginalSnapshot || srtOriginal;
-  if (!current || !original) { toast('Aucun SRT à comparer'); return; }
-  if (current === original) { toast('Aucun changement détecté'); return; }
+  if (!current || !original) { toast('Aucun SRT \u00e0 comparer'); return; }
+  if (current === original) { toast('Aucun changement d\u00e9tect\u00e9'); return; }
   var beforeBlocks = parseSRT(original);
   var afterBlocks = parseSRT(current);
+  // Match par timestamp (gère split/merge correctement)
+  var rows = [];
+  var bi = 0, ai = 0;
+  while (bi < beforeBlocks.length || ai < afterBlocks.length) {
+    var bb = bi < beforeBlocks.length ? beforeBlocks[bi] : null;
+    var ab = ai < afterBlocks.length ? afterBlocks[ai] : null;
+    if (!bb) { rows.push({ before: null, after: ab }); ai++; continue; }
+    if (!ab) { rows.push({ before: bb, after: null }); bi++; continue; }
+    var bStart = tsToMs(bb.timestamp.split(' --> ')[0]);
+    var aStart = tsToMs(ab.timestamp.split(' --> ')[0]);
+    if (Math.abs(bStart - aStart) < 500) {
+      // Timestamps proches → même bloc (possiblement modifié)
+      rows.push({ before: bb, after: ab });
+      bi++; ai++;
+    } else if (aStart < bStart) {
+      // Bloc APRÈS n'existe pas dans AVANT → ajouté (split)
+      rows.push({ before: null, after: ab });
+      ai++;
+    } else {
+      // Bloc AVANT n'existe pas dans APRÈS → supprimé (merge)
+      rows.push({ before: bb, after: null });
+      bi++;
+    }
+  }
   var colBefore = document.getElementById('diffColBefore');
   var colAfter = document.getElementById('diffColAfter');
-  colBefore.innerHTML = '<div class="diff-col-hdr">AVANT</div>';
-  colAfter.innerHTML = '<div class="diff-col-hdr">APR\u00c8S</div>';
+  colBefore.innerHTML = '<div class="diff-col-hdr">AVANT (' + beforeBlocks.length + ' blocs)</div>';
+  colAfter.innerHTML = '<div class="diff-col-hdr">APR\u00c8S (' + afterBlocks.length + ' blocs)</div>';
   var changed = 0;
-  var total = Math.max(beforeBlocks.length, afterBlocks.length);
-  for (var i = 0; i < total; i++) {
-    var bBefore = beforeBlocks[i];
-    var bAfter = afterBlocks[i];
-    var textBefore = bBefore ? bBefore.text : '';
-    var textAfter = bAfter ? bAfter.text : '';
-    var isChanged = textBefore !== textAfter;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var textB = row.before ? row.before.text : '';
+    var textA = row.after ? row.after.text : '';
+    var isChanged = textB !== textA;
     if (isChanged) changed++;
     var cls = isChanged ? 'diff-block changed' : 'diff-block same';
     var divB = document.createElement('div');
-    divB.className = cls;
-    divB.innerHTML = '<div class="diff-id">#' + (i + 1) + '</div>' + escHtml(textBefore || '(absent)');
+    divB.className = row.before ? cls : 'diff-block same';
+    var idB = row.before ? '#' + row.before.id : '';
+    divB.innerHTML = '<div class="diff-id">' + idB + '</div>' + escHtml(textB || '\u2014');
     colBefore.appendChild(divB);
     var divA = document.createElement('div');
-    divA.className = cls;
-    divA.innerHTML = '<div class="diff-id">#' + (i + 1) + '</div>' + escHtml(textAfter || '(absent)');
+    divA.className = row.after ? cls : 'diff-block same';
+    var idA = row.after ? '#' + row.after.id : '';
+    divA.innerHTML = '<div class="diff-id">' + idA + '</div>' + escHtml(textA || '\u2014');
     colAfter.appendChild(divA);
   }
-  document.getElementById('diffStats').textContent = changed + ' bloc' + (changed !== 1 ? 's' : '') + ' modifié' + (changed !== 1 ? 's' : '') + ' sur ' + total;
+  document.getElementById('diffStats').textContent = changed + ' modifi\u00e9' + (changed !== 1 ? 's' : '') + ' sur ' + rows.length;
   document.getElementById('diffModal').classList.add('vis');
-  // Sync scroll
   var cb = document.getElementById('diffColBefore');
   var ca = document.getElementById('diffColAfter');
   cb.onscroll = function() { ca.scrollTop = cb.scrollTop; };
