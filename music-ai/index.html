@@ -1370,7 +1370,7 @@ function loadSettingsUI(){
 }
 function saveSettings(){const k=document.getElementById('cfg-apikey').value.trim();const gwOk=!!(getGwUrl()&&getGwSecret());if(!k&&!gwOk){toast('⚠️ Clé API ou Gateway requis');return}const m=document.getElementById('cfg-model').value;const cfg=getConfig();if(!cfg.keys)cfg.keys={claude:'',gemini:'',openai:''};cfg.keys[ST.cfgProvider]=k;cfg.provider=ST.cfgProvider;cfg.model=m;saveConfig(cfg);toast('✅ Config IA sauvegardée');updateApiStatus()}
 function saveGateway(){const s=document.getElementById('cfg-gw-secret').value.trim();if(s)localStorage.setItem(LS_GW_SECRET,s);else localStorage.removeItem(LS_GW_SECRET);toast(s?'✅ Gateway sauvegardé':'⚠️ Gateway effacé');updateApiStatus();}
-function quickSwitchProvider(p){const cfg=getConfig();cfg.provider=p;saveConfig(cfg);document.querySelectorAll('.prov-pill').forEach(btn=>btn.classList.toggle('active',btn.dataset.p===p));if(document.getElementById('screen-settings')?.classList.contains('active')){loadSettingsUI();}toast('IA → '+p.charAt(0).toUpperCase()+p.slice(1));}
+function quickSwitchProvider(p){const cfg=getConfig();cfg.provider=p;const defaultModels={claude:'claude-sonnet-4-6',gemini:'gemini-2.0-flash',openai:'gpt-4o-mini'};const curModel=cfg.model||'';const wrongProvider=!curModel.startsWith(p==='claude'?'claude':p==='gemini'?'gemini':'gpt');if(wrongProvider)cfg.model=defaultModels[p];saveConfig(cfg);document.querySelectorAll('.prov-pill').forEach(btn=>btn.classList.toggle('active',btn.dataset.p===p));if(document.getElementById('screen-settings')?.classList.contains('active')){loadSettingsUI();}toast('IA → '+p.charAt(0).toUpperCase()+p.slice(1)+' ('+cfg.model+')');}
 function saveYtKey(){const k=document.getElementById('cfg-ytkey').value.trim();setYtKey(k);toast(k?'✅ Clé YouTube sauvegardée':'⚠️ Clé YT effacée');updateApiStatus()}
 function saveArtists(){const p=getProfile();if(!p){toast('⚠️ Profil introuvable');return}p.artists=document.getElementById('cfg-artists').value.split('\n').map(x=>x.trim()).filter(Boolean);saveProfile(p);toast('✅ Artistes mis à jour');document.getElementById('profile-summary').innerHTML=`<span style="color:var(--muted);font-size:11px;">Genres</span><br>${(p.genres||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Époques</span><br>${(p.eras&&p.eras.length?p.eras.map(id=>{const e=ERAS.find(x=>x.id===id);return e?e.label:id}).join(', '):'Toutes')}<br><span style="color:var(--muted);font-size:11px;">Contextes</span><br>${(p.contexts||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Aventure</span><br>${Math.round((p.adventurousness||0)*100)}%`}
 function editProfile(){ST.editProfileMode=true;ST.selGenres=[];ST.selEras=[];ST.selContexts=[];ST.obStep=1;showScreen('onboard');initOnboarding();setTimeout(()=>{const b=document.getElementById('ob-back');if(b)b.style.display='inline-flex';},60);}
@@ -1389,7 +1389,19 @@ function setDot(id,state){const el=document.getElementById('adot'+id);if(el)el.c
 async function pingCDL(key){try{setDot('CDL','key');const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),10000);const r=await fetch('https://api.anthropic.com/v1/models',{headers:{'x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},signal:ctrl.signal});setDot('CDL',r.ok?'ok':'err');}catch(e){setDot('CDL','err');}}
 async function pingGEM(key){try{setDot('GEM','key');const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),10000);const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}&pageSize=1`,{signal:ctrl.signal});setDot('GEM',r.ok?'ok':'err');}catch(e){setDot('GEM','err');}}
 async function pingOAI(key){try{setDot('OAI','key');const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),10000);const r=await fetch('https://api.openai.com/v1/models',{headers:{'Authorization':'Bearer '+key},signal:ctrl.signal});setDot('OAI',r.ok?'ok':'err');}catch(e){setDot('OAI','err');}}
-async function pingGWY(url){try{setDot('GWY','key');const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),10000);const r=await fetch(url.replace(/\/$/,'')+'/health',{signal:ctrl.signal});setDot('GWY',r.ok?'ok':'err');}catch(e){setDot('GWY',/^https?:\/\/.+\..+/.test(url.trim())?'key':'err');}}
+async function fetchGatewayConfig(){
+  const secret=getGwSecret();if(!secret){setDot('GWY','');['CDL','GEM','OAI'].forEach(d=>setDot(d,''));return;}
+  setDot('GWY','key');
+  try{
+    const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),8000);
+    const r=await fetch(GATEWAY_URL+'/config',{headers:{'Authorization':'Bearer '+secret},signal:ctrl.signal});
+    if(!r.ok){setDot('GWY','err');return;}
+    const cfg=await r.json();setDot('GWY','ok');
+    const apis=cfg.apis||[];
+    const MAP={CLAUDE:'CDL',GEMINI:'GEM',OPENAI:'OAI'};
+    Object.keys(MAP).forEach(k=>setDot(MAP[k],apis.includes(k)?'ok':''));
+  }catch(e){setDot('GWY',/^https?:\/\/.+/.test(GATEWAY_URL)?'key':'err');}
+}
 
 // ── AUTO-CONFIG via lien de partage #gwy=SECRET ──
 (function(){
@@ -1415,10 +1427,14 @@ function updateApiStatus(){
   updateQuotaDisplay();
   // Ping APIs avec délai (réseau potentiellement lent au démarrage)
   setTimeout(()=>{
-    if(useGateway){pingGWY(getGwUrl());}else{setDot('GWY','');}
-    if(keys.claude)pingCDL(keys.claude);else setDot('CDL','');
-    if(keys.gemini)pingGEM(keys.gemini);else setDot('GEM','');
-    if(keys.openai)pingOAI(keys.openai);else setDot('OAI','');
+    if(useGateway){
+      fetchGatewayConfig(); // /config allume CDL/GEM/OAI + GWY
+    }else{
+      setDot('GWY','');
+      if(keys.claude)pingCDL(keys.claude);else setDot('CDL','');
+      if(keys.gemini)pingGEM(keys.gemini);else setDot('GEM','');
+      if(keys.openai)pingOAI(keys.openai);else setDot('OAI','');
+    }
   },1500);
 }
 function boot(){
