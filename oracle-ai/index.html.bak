@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ORACLE.ai v1.0 — Décide. Détecte.</title>
+<title>ORACLE.ai — Décide. Détecte.</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -227,18 +227,6 @@
       transition-duration: 0.01ms !important;
     }
   }
-
-  /* API LED DOTS */
-  #api-bar{display:flex;align-items:center;gap:5px;}
-  .achip{display:flex;flex-direction:column;align-items:center;gap:2px;cursor:default;}
-  .adot{width:6px;height:6px;border-radius:50%;background:#333;flex-shrink:0;transition:background .4s,box-shadow .4s;}
-  .adot.ok{background:#22c55e;box-shadow:0 0 6px #22c55e;}
-  .adot.err{background:#ef4444;box-shadow:0 0 6px #ef4444;}
-  .adot.key{background:#f59e0b;animation:apiPing .8s ease-in-out infinite alternate;}
-  #adotGWY.ok{background:#06b6d4;box-shadow:0 0 8px #06b6d4;}
-  #adotGWY.key{background:#06b6d4;opacity:.5;animation:apiPing .8s ease-in-out infinite alternate;}
-  @keyframes apiPing{from{opacity:.4}to{opacity:1;box-shadow:0 0 8px #f59e0b;}}
-  .achip-lbl{font-family:monospace;font-size:7px;color:#555;letter-spacing:.4px;}
 </style>
 </head>
 <body>
@@ -287,12 +275,6 @@
 
     <label class="block text-xs mb-2" style="color:var(--c-muted); letter-spacing:0.1em">API KEY</label>
     <input id="apiKeyInput" type="password" placeholder="sk-ant-..." class="inp w-full rounded-lg px-4 py-3 text-sm mb-4">
-    <div style="margin:12px 0;padding:12px;background:rgba(6,182,212,0.06);border:1px solid rgba(6,182,212,0.2);border-radius:10px;">
-      <div style="font-size:10px;color:#06b6d4;font-weight:700;margin-bottom:6px;letter-spacing:.5px;">⚡ GATEWAY — RECOMMANDÉ</div>
-      <input id="gwSecretInput" type="password" placeholder="WORKER_SECRET (api-gateway.quang101182.workers.dev)" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(6,182,212,0.3);border-radius:8px;padding:10px 14px;color:#e8e8f0;font-family:monospace;font-size:12px;outline:none;margin-bottom:4px;">
-      <div style="font-size:10px;color:#555;">Remplace la clé API — centralisé et sécurisé</div>
-    </div>
-    <div style="font-size:10px;color:#555;text-align:center;margin-bottom:8px;">— ou clé directe —</div>
     <label class="block text-xs mb-2" style="color:var(--c-muted); letter-spacing:0.1em">TON PSEUDO</label>
     <input id="pseudoInput" type="text" placeholder="ex: ghost_42" class="inp w-full rounded-lg px-4 py-3 text-sm mb-6" maxlength="20">
     <button onclick="saveSetup()" class="btn-oracle w-full py-3 rounded-lg syne font-bold text-sm tracking-widest">
@@ -309,13 +291,7 @@
     <div class="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="status-dot"></div>
-        <span class="syne font-bold text-white tracking-wider">ORACLE<span style="color:var(--c-oracle)">.ai</span> <span style="font-size:9px;color:#555;font-family:monospace;font-weight:400;">v1.0</span></span>
-        <div id="api-bar" style="margin-left:8px;">
-          <span class="achip" title="Claude"><span class="adot" id="adotCDL"></span><span class="achip-lbl">CDL</span></span>
-          <span class="achip" title="Gemini"><span class="adot" id="adotGEM"></span><span class="achip-lbl">GEM</span></span>
-          <span class="achip" title="OpenAI"><span class="adot" id="adotOAI"></span><span class="achip-lbl">OAI</span></span>
-          <span class="achip" title="Gateway CF"><span class="adot" id="adotGWY"></span><span class="achip-lbl">GWY</span></span>
-        </div>
+        <span class="syne font-bold text-white tracking-wider">ORACLE<span style="color:var(--c-oracle)">.ai</span></span>
       </div>
       <div class="flex items-center gap-4">
         <div class="text-xs" style="color:var(--c-muted)">
@@ -582,12 +558,6 @@
 
 <script>
 // ===================== STATE =====================
-const LS_GW_SECRET='oracle_gw_secret';
-const GATEWAY_URL='https://api-gateway.quang101182.workers.dev';
-function getGwSecret(){return localStorage.getItem(LS_GW_SECRET)||'';}
-// Auto-config via lien #gwy=SECRET
-(function(){try{var h=window.location.hash;var m=h.match(/[#&]gwy=([^&]+)/);if(m){localStorage.setItem(LS_GW_SECRET,decodeURIComponent(m[1]));history.replaceState(null,'',window.location.pathname+window.location.search);}}catch(e){}})();
-
 let STATE = {
   apiKey: '',
   provider: 'anthropic', // 'anthropic' | 'openai' | 'gemini'
@@ -659,13 +629,11 @@ function init() {
   const p = localStorage.getItem('oracle_pseudo');
   STATE.provider = prov;
   selectProvider(prov);
-  const gwSecret=getGwSecret();
-  if ((k && p) || (gwSecret && p)) {
-    STATE.apiKey = k||'';
-    STATE.pseudo = p||'oracle';
+  if (k && p) {
+    STATE.apiKey = k;
+    STATE.pseudo = p;
     loadUserData();
     showApp();
-    updateApiStatus();
   }
   document.getElementById('decisionInput').addEventListener('input', e => {
     document.getElementById('charCount').textContent = e.target.value.length;
@@ -674,19 +642,15 @@ function init() {
 
 function saveSetup() {
   const k = document.getElementById('apiKeyInput').value.trim();
-  const gwSecret = document.getElementById('gwSecretInput')?.value.trim() || '';
   const p = document.getElementById('pseudoInput').value.trim();
-  if (!p) return alert('Entre ton pseudo.');
-  if (!k && !gwSecret) return alert('Entre une clé API ou le WORKER_SECRET Gateway.');
-  if (gwSecret) localStorage.setItem(LS_GW_SECRET, gwSecret);
+  if (!k || !p) return alert('Remplis les deux champs.');
   STATE.apiKey = k;
   STATE.pseudo = p;
-  if (k) localStorage.setItem('oracle_apikey', k);
+  localStorage.setItem('oracle_apikey', k);
   localStorage.setItem('oracle_pseudo', p);
   localStorage.setItem('oracle_provider', STATE.provider);
   loadUserData();
   showApp();
-  updateApiStatus();
 }
 
 function loadUserData() {
@@ -1269,80 +1233,58 @@ async function callAI(prompt, maxTokens = 500) {
 }
 
 async function callAnthropic(prompt, maxTokens) {
-  const gwSecret=getGwSecret();
-  const useGW=!!gwSecret;
-  const url=useGW?GATEWAY_URL+'/api/claude':'https://api.anthropic.com/v1/messages';
-  const headers=useGW
-    ?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}
-    :{'Content-Type':'application/json','x-api-key':STATE.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
-  if(!useGW&&!STATE.apiKey)throw new Error('Clé API ou Gateway requis');
-  const res=await fetch(url,{method:'POST',headers,body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens,messages:[{role:'user',content:prompt}]})});
-  if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'Anthropic error');}
-  const d=await res.json();
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': STATE.apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || 'Anthropic error'); }
+  const d = await res.json();
   return d.content[0].text.trim();
 }
 
 async function callOpenAI(prompt, maxTokens) {
-  const gwSecret=getGwSecret();
-  const useGW=!!gwSecret;
-  const url=useGW?GATEWAY_URL+'/api/openai':'https://api.openai.com/v1/chat/completions';
-  const headers=useGW
-    ?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}
-    :{'Content-Type':'application/json','Authorization':'Bearer '+STATE.apiKey};
-  if(!useGW&&!STATE.apiKey)throw new Error('Clé API ou Gateway requis');
-  const res=await fetch(url,{method:'POST',headers,body:JSON.stringify({model:'gpt-4o-mini',max_tokens:maxTokens,messages:[{role:'user',content:prompt}]})});
-  if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'OpenAI error');}
-  const d=await res.json();
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${STATE.apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || 'OpenAI error'); }
+  const d = await res.json();
   return d.choices[0].message.content.trim();
 }
 
 async function callGemini(prompt, maxTokens) {
-  const gwSecret=getGwSecret();
-  const useGW=!!gwSecret;
-  const model='gemini-2.0-flash';
-  const url=useGW
-    ?GATEWAY_URL+'/api/gemini/v1beta/models/'+model+':generateContent'
-    :`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${STATE.apiKey}`;
-  const headers=useGW
-    ?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}
-    :{'Content-Type':'application/json'};
-  if(!useGW&&!STATE.apiKey)throw new Error('Clé API ou Gateway requis');
-  const res=await fetch(url,{method:'POST',headers,body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:maxTokens}})});
-  if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'Gemini error');}
-  const d=await res.json();
+  const model = 'gemini-2.0-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${STATE.apiKey}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: maxTokens }
+    })
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || 'Gemini error'); }
+  const d = await res.json();
   return d.candidates[0].content.parts[0].text.trim();
 }
-
-// ===================== GATEWAY STATUS =====================
-async function fetchGatewayConfig(){
-  const secret=getGwSecret();if(!secret)return;
-  setDot('GWY','key');
-  try{
-    const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),8000);
-    const r=await fetch(GATEWAY_URL+'/config',{headers:{'Authorization':'Bearer '+secret},signal:ctrl.signal});
-    if(!r.ok){setDot('GWY','err');return;}
-    const cfg=await r.json();setDot('GWY','ok');
-    const apis=cfg.apis||[];
-    const MAP={CLAUDE:'CDL',GEMINI:'GEM',OPENAI:'OAI'};
-    Object.keys(MAP).forEach(k=>setDot(MAP[k],apis.includes(k)?'ok':''));
-  }catch(e){setDot('GWY','err');}
-}
-function setDot(id,state){const el=document.getElementById('adot'+id);if(el)el.className='adot'+(state?' '+state:'');}
-function updateApiStatus(){
-  const gwSecret=getGwSecret();
-  if(gwSecret){setTimeout(fetchGatewayConfig,1500);return;}
-  // Direct key pings
-  const k=STATE.apiKey;const p=STATE.provider;
-  if(!k)return;
-  setTimeout(()=>{
-    if(p==='anthropic')pingCDL(k);
-    else if(p==='gemini')pingGEM(k);
-    else if(p==='openai')pingOAI(k);
-  },1500);
-}
-async function pingCDL(key){try{setDot('CDL','key');const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),8000);const r=await fetch('https://api.anthropic.com/v1/models',{headers:{'x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},signal:ctrl.signal});setDot('CDL',r.ok?'ok':'err');}catch(e){setDot('CDL','err');}}
-async function pingGEM(key){try{setDot('GEM','key');const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),8000);const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}&pageSize=1`,{signal:ctrl.signal});setDot('GEM',r.ok?'ok':'err');}catch(e){setDot('GEM','err');}}
-async function pingOAI(key){try{setDot('OAI','key');const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),8000);const r=await fetch('https://api.openai.com/v1/models',{headers:{'Authorization':'Bearer '+key},signal:ctrl.signal});setDot('OAI',r.ok?'ok':'err');}catch(e){setDot('OAI','err');}}
 
 // ===================== BOOTSTRAP =====================
 init();
