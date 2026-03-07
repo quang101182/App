@@ -1,0 +1,105 @@
+name: Claude Auto-Fix SubWhisper
+
+on:
+  repository_dispatch:
+    types: [claude-auto-fix]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create fix branch
+        run: |
+          BRANCH="fix/diag-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.CLAUDE_API_KEY }}
+          direct_prompt: |
+            Tu es un expert SubWhisper. Voici un diagnostic DIAG qui a détecté des anomalies.
+            Analyse les anomalies et corrige le code source.
+
+            CONTEXTE PROJET:
+            - subwhisper/index.html = app principale single-file HTML (v actuelle dans <title>)
+            - subwhisper/prompts.js = prompts IA versionnés
+            - subwhisper/sw.js = service worker (version cache à bumper)
+            - Toujours faire backup .bak avant modification
+            - Incrémenter la version (v9.XX → v9.XX+1) dans title, badge, footer, DIAG export, sw.js
+            - Ne corriger QUE les anomalies listées, ne rien casser
+
+            DIAGNOSTIC:
+            ${{ github.event.client_payload.anomalies_text }}
+
+            RECOMMENDATIONS:
+            ${{ github.event.client_payload.recommendations_text }}
+
+            FICHIER DIAG COMPLET (metadata):
+            Version: ${{ github.event.client_payload.diag_version }}
+            Fichier: ${{ github.event.client_payload.diag_file }}
+            Langues: ${{ github.event.client_payload.diag_langs }}
+            Score: ${{ github.event.client_payload.diag_score }}
+
+            Après correction, commit sur cette branche avec un message descriptif.
+
+      - name: Push branch and notify
+        if: always()
+        env:
+          BOT_TOKEN: "8716414004:AAFVSPchPl236LCgA2H9UPp0xx8EQcM7h_E"
+          CHAT_ID: "5867229613"
+          BRANCH: ${{ env.BRANCH }}
+        run: |
+          # Check if there are changes
+          if git diff --quiet HEAD origin/main 2>/dev/null; then
+            # No changes - notify
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"chat_id\": \"${CHAT_ID}\",
+                \"text\": \"🤖 Claude n'a trouvé aucune correction à appliquer.\",
+                \"parse_mode\": \"Markdown\"
+              }"
+            exit 0
+          fi
+
+          # Push branch
+          git push origin "$BRANCH"
+
+          # Get diff info
+          DIFF_STAT=$(git diff origin/main --stat | tail -5)
+          COMMIT_MSG=$(git log origin/main..HEAD --pretty=format:"%s" | head -3)
+          FILES_CHANGED=$(git diff origin/main --name-only | tr '\n' ', ')
+
+          # Send Telegram notification with push/cancel buttons
+          ESCAPED_MSG=$(echo "$COMMIT_MSG" | sed 's/"/\\"/g' | head -c 500)
+          ESCAPED_DIFF=$(echo "$DIFF_STAT" | sed 's/"/\\"/g' | head -c 500)
+
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"chat_id\": \"${CHAT_ID}\",
+              \"text\": \"🤖 *Claude Code a terminé !*\n\n🌿 Branche: \`${BRANCH}\`\n📝 ${ESCAPED_MSG}\n\n📊 *Diff:*\n\`\`\`\n${ESCAPED_DIFF}\n\`\`\`\n\n📄 Fichiers: ${FILES_CHANGED}\",
+              \"parse_mode\": \"Markdown\",
+              \"reply_markup\": {
+                \"inline_keyboard\": [
+                  [
+                    {\"text\": \"🚀 Push & Deploy\", \"callback_data\": \"diag_push:${BRANCH}\"},
+                    {\"text\": \"❌ Annuler\", \"callback_data\": \"diag_annuler:${BRANCH}\"}
+                  ],
+                  [{\"text\": \"📜 Logs\", \"callback_data\": \"logs\"}]
+                ]
+              }
+            }"
