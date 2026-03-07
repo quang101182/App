@@ -259,6 +259,7 @@
                     <button data-action="header-backup" class="p-1.5 rounded-full icon-btn flex-shrink-0" title="Backup local"><i class="fa-solid fa-cloud-arrow-up fa-fw text-sm"></i></button>
                     <button data-action="header-import" class="p-1.5 rounded-full icon-btn flex-shrink-0" title="Importer local"><i class="fa-solid fa-cloud-arrow-down fa-fw text-sm"></i></button>
                     <span class="opacity-30 text-xs flex-shrink-0">|</span>
+                    <span id="drive-api-dot" class="flex-shrink-0" style="width:7px;height:7px;border-radius:50%;background:#ef4444;margin:0 2px;transition:background 0.3s;" title="API Drive"></span>
                     <button data-action="header-drive-save" class="p-1.5 rounded-full icon-btn flex-shrink-0" title="Sauvegarder Drive"><i class="fa-brands fa-google-drive fa-fw text-sm"></i></button>
                     <button data-action="header-drive-load" class="p-1.5 rounded-full icon-btn flex-shrink-0" title="Charger Drive"><i class="fa-solid fa-folder-open fa-fw text-sm"></i></button>
                     <!-- Bannière fichier actif — juste après les boutons Drive -->
@@ -360,6 +361,30 @@
             const data = await res.json();
             if (data.error) throw new Error(data.error);
             return data.result;
+        }
+
+        async function checkDriveApi() {
+            const dot = document.getElementById('drive-api-dot');
+            if (!dot) return;
+            try {
+                const r = await fetch(MCP_DRIVE_URL.replace('/api/tool', '/health'), { method: 'GET', signal: AbortSignal.timeout(5000) });
+                dot.style.background = r.ok ? '#22c55e' : '#ef4444';
+                dot.title = r.ok ? 'API Drive ✓' : 'API Drive ✗';
+            } catch(_) {
+                // fallback: ping /api/tool with a harmless search
+                try {
+                    const r = await fetch(MCP_DRIVE_URL, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tool: 'search_files', arguments: { query: '__ping__', max_results: 1 } }),
+                        signal: AbortSignal.timeout(8000)
+                    });
+                    dot.style.background = r.ok ? '#22c55e' : '#ef4444';
+                    dot.title = r.ok ? 'API Drive ✓' : 'API Drive ✗';
+                } catch(_) {
+                    dot.style.background = '#ef4444';
+                    dot.title = 'API Drive ✗';
+                }
+            }
         }
 
         async function driveUpsertFile(filename, content) {
@@ -1917,6 +1942,7 @@
         async function init() {
             loadDriveConfig();
             loadState();
+            setTimeout(checkDriveApi, 1000);
             refreshAll();
             if (isFileSystemAccessAPISupported) {
                 dbRequest.onsuccess = async () => {
