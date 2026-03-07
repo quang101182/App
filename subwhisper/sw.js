@@ -1,4 +1,4 @@
-var CACHE = 'subwhisper-v8.98';
+var CACHE = 'subwhisper-v8.99';
 var FILES = ['./', './index.html'];
 
 self.addEventListener('install', function(e) {
@@ -9,7 +9,14 @@ self.addEventListener('install', function(e) {
 self.addEventListener('activate', function(e) {
   e.waitUntil(
     caches.keys().then(function(keys) {
-      return Promise.all(keys.filter(function(k) { return k !== CACHE; }).map(function(k) { return caches.delete(k); }));
+      var old = keys.filter(function(k) { return k !== CACHE; });
+      return Promise.all(old.map(function(k) { return caches.delete(k); })).then(function() {
+        if (old.length > 0) {
+          self.clients.matchAll().then(function(clients) {
+            clients.forEach(function(c) { c.postMessage({ type: 'SW_UPDATED', version: CACHE }); });
+          });
+        }
+      });
     })
   );
   self.clients.claim();
