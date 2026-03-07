@@ -1,4 +1,4 @@
-var CACHE = 'subwhisper-v9.00';
+var CACHE = 'subwhisper-v9.01';
 var FILES = ['./', './index.html'];
 
 self.addEventListener('install', function(e) {
