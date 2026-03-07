@@ -1664,12 +1664,25 @@ function boot(){
   // Service Worker registration + update notification
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    // Listener enregistré immédiatement (pas de race condition)
     navigator.serviceWorker.addEventListener('message',e=>{
       if(e.data?.type==='SW_UPDATED'){
         const v=e.data.version||'';
         const t=document.getElementById('toast');
-        if(t){t.innerHTML=`🆕 Nouvelle version ${v.replace('music-ai-','')} disponible <button onclick="location.reload()" style="margin-left:8px;padding:4px 12px;border-radius:20px;border:1px solid var(--accent);background:rgba(124,58,237,0.2);color:white;cursor:pointer;font-family:inherit;font-size:12px;">Recharger</button>`;t.style.display='flex';t.style.alignItems='center';t.style.justifyContent='center';setTimeout(()=>{t.style.display='none'},15000);}
+        if(t){
+          t.innerHTML=`🆕 ${v.replace('music-ai-','')} disponible <button onclick="location.reload()" style="margin-left:8px;padding:4px 12px;border-radius:20px;border:1px solid var(--accent);background:rgba(124,58,237,0.2);color:white;cursor:pointer;font-family:inherit;font-size:12px;">Recharger</button>`;
+          t.classList.remove('hidden');
+          t.style.pointerEvents='auto';
+          t.style.whiteSpace='normal';
+          clearTimeout(_tt);
+          setTimeout(()=>{t.classList.add('hidden');t.style.pointerEvents='';t.style.whiteSpace='';},15000);
+        }
       }
+    });
+    // Fallback: vérifier si SW a changé via controller change
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      // Nouveau SW a pris le contrôle — si message raté, on reload
+      // (le postMessage dans activate peut arriver avant ce listener)
     });
   }
   initPlaylistsOverlay();

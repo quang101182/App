@@ -12,9 +12,12 @@ self.addEventListener('activate', function(e) {
       var old = keys.filter(function(k) { return k !== CACHE; });
       return Promise.all(old.map(function(k) { return caches.delete(k); })).then(function() {
         if (old.length > 0) {
-          self.clients.matchAll().then(function(clients) {
-            clients.forEach(function(c) { c.postMessage({ type: 'SW_UPDATED', version: CACHE }); });
-          });
+          // Délai pour laisser le client enregistrer son listener
+          setTimeout(function() {
+            self.clients.matchAll().then(function(clients) {
+              clients.forEach(function(c) { c.postMessage({ type: 'SW_UPDATED', version: CACHE }); });
+            });
+          }, 1000);
         }
       });
     })
