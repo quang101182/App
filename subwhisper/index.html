@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.07</title>
+<title>SubWhisper v9.08</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1106,7 +1106,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.07</span>
+    <span class="ver-badge">v9.08</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1440,7 +1440,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.07 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.08 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -4049,7 +4049,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.07',
+    version: 'v9.08',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4582,8 +4582,28 @@ function autoFormatSRT() {
       } else {
         var remaining = line;
         while (remaining.length > MAX_LINE) {
-          var cut = remaining.lastIndexOf(' ', MAX_LINE);
-          if (cut <= 0) cut = MAX_LINE;
+          // Chercher coupure naturelle : après ponctuation ou conjonction
+          var cut = -1;
+          var zone = remaining.substring(0, MAX_LINE + 1);
+          // Priorité 1 : après virgule/point-virgule/tiret (dernier trouvé dans la zone)
+          var natMatch = zone.match(/^(.+[,;:\u2014–—\-])\s/);
+          if (natMatch && natMatch[1].length >= 12 && natMatch[1].length <= MAX_LINE) {
+            cut = natMatch[1].length;
+          }
+          // Priorité 2 : avant conjonction/préposition fréquente
+          if (cut <= 0) {
+            var conjRx = /\s(et |ou |mais |car |que |qui |pour |dans |avec |sur |quand |lorsque |si |and |but |or |when |that |for |the )/gi;
+            var cm, bestCut = -1;
+            while ((cm = conjRx.exec(zone)) !== null) {
+              if (cm.index >= 12 && cm.index <= MAX_LINE) bestCut = cm.index;
+            }
+            if (bestCut > 0) cut = bestCut;
+          }
+          // Fallback : dernier espace
+          if (cut <= 0) {
+            cut = remaining.lastIndexOf(' ', MAX_LINE);
+            if (cut <= 0) cut = MAX_LINE;
+          }
           newLines.push(remaining.substring(0, cut).trimEnd());
           remaining = remaining.substring(cut).trimStart();
         }
@@ -4701,6 +4721,10 @@ function _cleanAIDetect(blocks, lang) {
     if (MIXED_SCRIPT_RX.test(text)) flag = true; // token corrompu multi-script
     if (isFR && APO_RX.test(text)) flag = true; // apostrophe manquante FR
     if (isFR && PUNCT_RX.test(text)) flag = true; // espace manquant avant ?! FR
+    // Répétition consécutive (hallucination Groq classique)
+    if (i > 0 && text.trim() === blocks[i - 1].text.trim()) flag = true;
+    // Bloc ultra-court isolé (≤2 chars non-CJK = probable bruit Groq)
+    if (!isCJK && text.trim().length <= 2 && /^[a-zA-Z\u00C0-\u024F]+$/.test(text.trim())) flag = true;
     if (flag) indices.push(i);
   });
   return indices;
@@ -5149,6 +5173,7 @@ async function translateManual() {
       }
       foreignIdx.sort(function(a, b) { return a - b; });
       if (foreignIdx.length === 0) {
+        _diagSteps.after_translate = raw;
         toastClear();
         toast('✅ Aucun bloc hors-' + tgt.toUpperCase() + ' détecté (' + nbBlocks + ' blocs)');
         return;
