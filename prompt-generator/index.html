@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PromptForge AI v2</title>
+<title>PromptForge AI v3</title>
 <style>
 :root {
   --font-display: 'Courier New', monospace;
@@ -250,6 +250,14 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
     transition-duration: 0.01ms !important;
   }
 }
+/* ── LED GATEWAY STATUS ── */
+.led-bar{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:20px;background:var(--bg-overlay);border:1px solid var(--border)}
+.led{width:8px;height:8px;border-radius:50%;background:#555;transition:background .3s,box-shadow .3s;flex-shrink:0;cursor:default}
+.led.green{background:#00d4aa;box-shadow:0 0 6px #00d4aa99}
+.led.amber{background:#ff9900;box-shadow:0 0 6px #ff990099}
+.led.red{background:#ff4444;box-shadow:0 0 6px #ff444499}
+.led.cyan{background:#00ccff;box-shadow:0 0 6px #00ccff99}
+.led-label{font-family:var(--font-display);font-size:.5rem;letter-spacing:.08em;color:var(--text-muted);text-transform:uppercase}
 </style>
 </head>
 <body>
@@ -287,6 +295,15 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
         <button class="modal-cancel" id="modal-cancel">Annuler</button>
         <button class="modal-test" id="modal-test">🔍 Tester</button>
         <button class="modal-save" id="modal-save">Enregistrer</button>
+      </div>
+      <div id="gw-secret-section" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+        <span class="modal-label">🔑 Gateway Secret (optionnel)</span>
+        <input type="password" class="modal-input" id="gw-secret-input" placeholder="Votre WORKER_SECRET..." autocomplete="off" spellcheck="false">
+        <div class="modal-hint">Remplace les clés API individuelles via le gateway Cloudflare.</div>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button class="modal-save" id="gw-secret-save" style="flex:1">Enregistrer Gateway</button>
+          <button class="modal-cancel" id="gw-secret-clear" style="flex:1">Effacer</button>
+        </div>
       </div>
     </div>
 
@@ -327,7 +344,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 <!-- APP -->
 <div class="app" role="main">
   <header class="header">
-    <div class="logo">PROMPT<span>FORGE</span><span class="ai-badge">AI v2</span></div>
+    <div class="logo">PROMPT<span>FORGE</span><span class="ai-badge">AI v3</span></div>
     <div class="header-controls">
       <div class="lang-toggle">
         <button class="lang-btn active" data-lang="fr">FR</button>
@@ -341,6 +358,12 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
         <span id="theme-icon">☽</span>
         <span id="theme-label">DARK</span>
       </button>
+      <div class="led-bar" title="Statut APIs">
+        <span class="led" id="adotCDL" title="Claude"></span>
+        <span class="led" id="adotGEM" title="Gemini"></span>
+        <span class="led" id="adotOAI" title="OpenAI"></span>
+        <span class="led cyan" id="adotGWY" title="Gateway"></span>
+      </div>
     </div>
   </header>
 
@@ -711,19 +734,35 @@ const LocalEngine = (() => {
   return{transform};
 })();
 
+/* ── GATEWAY CONFIG ── */
+const LS_GW_SECRET='promptforge_gw_secret';
+const GATEWAY_URL='https://api-gateway.quang101182.workers.dev';
+function getGwSecret(){return localStorage.getItem(LS_GW_SECRET)||'';}
+(function(){try{var h=window.location.hash;var m=h.match(/[#&]gwy=([^&]+)/);if(m){localStorage.setItem(LS_GW_SECRET,decodeURIComponent(m[1]));history.replaceState(null,'',window.location.pathname+window.location.search);}}catch(e){}})();
+
 const AiEngine = (() => {
   async function callClaude(prompt,sys,model,key){
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:2048,system:sys,messages:[{role:'user',content:`Améliore ce prompt :\n\n${prompt}`}]})});
+    const gwSecret=getGwSecret();const useGW=!!gwSecret;
+    const url=useGW?GATEWAY_URL+'/api/claude':'https://api.anthropic.com/v1/messages';
+    const headers=useGW?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
+    const body=useGW?JSON.stringify({model,max_tokens:2048,system:sys,messages:[{role:'user',content:`Améliore ce prompt :\n\n${prompt}`}]}):JSON.stringify({model,max_tokens:2048,system:sys,messages:[{role:'user',content:`Améliore ce prompt :\n\n${prompt}`}]});
+    const r=await fetch(url,{method:'POST',headers,body});
     if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`)}
     const d=await r.json();return d.content[0].text;
   }
   async function callOpenAI(prompt,sys,model,key){
-    const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},body:JSON.stringify({model,max_tokens:2048,messages:[{role:'system',content:sys},{role:'user',content:`Améliore ce prompt :\n\n${prompt}`}]})});
+    const gwSecret=getGwSecret();const useGW=!!gwSecret;
+    const url=useGW?GATEWAY_URL+'/api/openai':'https://api.openai.com/v1/chat/completions';
+    const headers=useGW?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}:{'Content-Type':'application/json','Authorization':'Bearer '+key};
+    const r=await fetch(url,{method:'POST',headers,body:JSON.stringify({model,max_tokens:2048,messages:[{role:'system',content:sys},{role:'user',content:`Améliore ce prompt :\n\n${prompt}`}]})});
     if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`)}
     const d=await r.json();return d.choices[0].message.content;
   }
   async function callGemini(prompt,sys,model,key){
-    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:`${sys}\n\nAméliore ce prompt :\n\n${prompt}`}]}]})});
+    const gwSecret=getGwSecret();const useGW=!!gwSecret;
+    const url=useGW?`${GATEWAY_URL}/api/gemini/v1beta/models/${model}:generateContent`:`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+    const headers=useGW?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}:{'Content-Type':'application/json'};
+    const r=await fetch(url,{method:'POST',headers,body:JSON.stringify({contents:[{parts:[{text:`${sys}\n\nAméliore ce prompt :\n\n${prompt}`}]}]})});
     if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`)}
     const d=await r.json();return d.candidates[0].content.parts[0].text;
   }
@@ -1047,14 +1086,21 @@ const ApiModal = (() => {
       try{
         const MODELS={claude:'claude-haiku-4-5-20251001',openai:'gpt-4o-mini',gemini:'gemini-2.0-flash'};
         const m=MODELS[cur]||'';
+        const gwSecret=getGwSecret();const useGW=!!gwSecret;
         if(cur==='claude'){
-          const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:m,max_tokens:5,messages:[{role:'user',content:'Hi'}]})});
+          const url=useGW?GATEWAY_URL+'/api/claude':'https://api.anthropic.com/v1/messages';
+          const hdrs=useGW?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
+          const r=await fetch(url,{method:'POST',headers:hdrs,body:JSON.stringify({model:m,max_tokens:5,messages:[{role:'user',content:'Hi'}]})});
           if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`)}
         }else if(cur==='openai'){
-          const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},body:JSON.stringify({model:m,max_tokens:5,messages:[{role:'user',content:'Hi'}]})});
+          const url=useGW?GATEWAY_URL+'/api/openai':'https://api.openai.com/v1/chat/completions';
+          const hdrs=useGW?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}:{'Content-Type':'application/json','Authorization':'Bearer '+key};
+          const r=await fetch(url,{method:'POST',headers:hdrs,body:JSON.stringify({model:m,max_tokens:5,messages:[{role:'user',content:'Hi'}]})});
           if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`)}
         }else if(cur==='gemini'){
-          const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:'Hi'}]}],generationConfig:{maxOutputTokens:5}})});
+          const url=useGW?`${GATEWAY_URL}/api/gemini/v1beta/models/${m}:generateContent`:`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`;
+          const hdrs=useGW?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}:{'Content-Type':'application/json'};
+          const r=await fetch(url,{method:'POST',headers:hdrs,body:JSON.stringify({contents:[{parts:[{text:'Hi'}]}],generationConfig:{maxOutputTokens:5}})});
           if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${r.status}`)}
         }
         Toast.show(`✓ Clé ${cur} valide`,'success');
@@ -1327,10 +1373,47 @@ const Controller = (() => {
 
     // Restore draft from previous session
     try{const draft=sessionStorage.getItem('pf_draft');if(draft){const inp=document.getElementById('input-prompt');inp.value=draft;Renderer.updateCharCount(draft.length);if(draft.trim().length>3){const s=Scorer.score(draft);Renderer.setScore(document.getElementById('score-in-bar'),document.getElementById('score-in-val'),document.getElementById('score-in-bar-wrap'),s,'original')}}}catch{}
+
+    // Gateway secret
+    const gwInput=document.getElementById('gw-secret-input');
+    if(gwInput){
+      gwInput.value=getGwSecret();
+      document.getElementById('gw-secret-save').addEventListener('click',()=>{
+        const v=gwInput.value.trim();
+        localStorage.setItem(LS_GW_SECRET,v);
+        Toast.show(v?'✓ Gateway secret enregistré':'Gateway effacé','success');
+        updateApiStatus();
+      });
+      document.getElementById('gw-secret-clear').addEventListener('click',()=>{
+        localStorage.removeItem(LS_GW_SECRET);gwInput.value='';
+        Toast.show('Gateway effacé','info');updateApiStatus();
+      });
+    }
+    updateApiStatus();
   }
 
   return{init,loadHistoryEntry,setMode};
 })();
+
+/* ── GATEWAY STATUS ── */
+async function fetchGatewayConfig(){
+  const gwSecret=getGwSecret();if(!gwSecret)return null;
+  try{
+    const r=await fetch(GATEWAY_URL+'/config',{headers:{'Authorization':'Bearer '+gwSecret}});
+    if(!r.ok)return null;
+    return await r.json();
+  }catch{return null;}
+}
+async function pingCDL(){const dot=document.getElementById('adotCDL');if(!dot)return;dot.className='led amber';try{const gwSecret=getGwSecret();if(!gwSecret){dot.className='led';return;}const r=await fetch(GATEWAY_URL+'/api/claude',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:5,messages:[{role:'user',content:'Hi'}]})});dot.className=r.ok?'led green':'led red';}catch{dot.className='led red';}}
+async function pingGEM(){const dot=document.getElementById('adotGEM');if(!dot)return;dot.className='led amber';try{const gwSecret=getGwSecret();if(!gwSecret){dot.className='led';return;}const r=await fetch(`${GATEWAY_URL}/api/gemini/v1beta/models/gemini-2.0-flash:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret},body:JSON.stringify({contents:[{parts:[{text:'Hi'}]}],generationConfig:{maxOutputTokens:5}})});dot.className=r.ok?'led green':'led red';}catch{dot.className='led red';}}
+async function pingOAI(){const dot=document.getElementById('adotOAI');if(!dot)return;dot.className='led amber';try{const gwSecret=getGwSecret();if(!gwSecret){dot.className='led';return;}const r=await fetch(GATEWAY_URL+'/api/openai',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret},body:JSON.stringify({model:'gpt-4o-mini',max_tokens:5,messages:[{role:'user',content:'Hi'}]})});dot.className=r.ok?'led green':'led red';}catch{dot.className='led red';}}
+async function updateApiStatus(){
+  const gwSecret=getGwSecret();
+  const dot=document.getElementById('adotGWY');
+  if(!gwSecret){if(dot)dot.className='led';return;}
+  if(dot){dot.className='led amber';try{const r=await fetch(GATEWAY_URL+'/config',{headers:{'Authorization':'Bearer '+gwSecret}});dot.className=r.ok?'led cyan':'led red';}catch{dot.className='led red';}}
+  Promise.all([pingCDL(),pingGEM(),pingOAI()]);
+}
 
 document.addEventListener('DOMContentLoaded',Controller.init);
 </script>
