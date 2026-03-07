@@ -3,10 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v2.2 — Discovery Engine</title>
+<title>music·ai v2.3 — Discovery Engine</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7c3aed" id="theme-color-meta">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="music·ai">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
 <style>
   :root {
     --bg: #060609; --bg2: #0d0d14;
@@ -294,7 +298,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v2.2</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v2.3</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -332,7 +336,7 @@
             <div class="onetap-btn-wrap" style="position:relative;width:120px;height:120px;margin-bottom:28px;">
               <div class="pulse-ring"></div><div class="pulse-ring-2"></div>
               <div class="pulse-ring-3"></div>
-              <button class="onetap-btn" id="onetap-btn" onclick="getRecommendation('onetap')"><span id="onetap-icon">♪</span></button>
+              <button class="onetap-btn" id="onetap-btn" onclick="try{navigator.vibrate&&navigator.vibrate(20)}catch(_){};getRecommendation('onetap')"><span id="onetap-icon">♪</span></button>
             </div>
             <div style="font-size:13px;color:var(--muted);text-align:center;">Appuie pour une reco parfaite<br><span style="font-size:11px;">basée sur ton profil</span></div>
           </div>
@@ -545,6 +549,8 @@ function applyTheme(t){
   document.documentElement.classList.toggle('light',t==='light');
   const btn=document.getElementById('theme-toggle');
   if(btn)btn.textContent=t==='light'?'☀️':'🌙';
+  const tc=document.getElementById('theme-color-meta');
+  if(tc)tc.setAttribute('content',t==='light'?'#f0f0fa':'#7c3aed');
   localStorage.setItem(LS_THEME,t);
 }
 function toggleTheme(){
@@ -552,6 +558,7 @@ function toggleTheme(){
   applyTheme(curr==='light'?'dark':'light');
 }
 const YT_QUOTA_MAX=100;
+let _ytVidCache={};// session cache: ytQuery→videoId (évite double quota)
 function getQuota(){try{const q=JSON.parse(localStorage.getItem(LS_YT_QUOTA));const today=new Date().toISOString().slice(0,10);if(!q||q.date!==today)return{count:0,date:today};return q;}catch{return{count:0,date:new Date().toISOString().slice(0,10)}}}
 function incQuota(){const q=getQuota();q.count++;localStorage.setItem(LS_YT_QUOTA,JSON.stringify(q));updateQuotaDisplay();return q.count;}
 function updateQuotaDisplay(){const q=getQuota();const c=q.count;const el=document.getElementById('yt-quota-display');if(el)el.textContent=c+'/'+YT_QUOTA_MAX;const dot=document.getElementById('adotYT');if(dot)dot.className='adot'+(getYtKey()?(c>=YT_QUOTA_MAX?' err':c>=80?' key':' ok'):' ');}
@@ -571,7 +578,7 @@ const MOODS=[{id:'energique',label:'Énergie',emoji:'⚡'},{id:'melancolique',la
 const ACTIVITIES=[{id:'running',label:'🏃 Running'},{id:'gym',label:'💪 Gym'},{id:'coding',label:'💻 Coding'},{id:'cuisine',label:'🍳 Cuisine'},{id:'conduite',label:'🚗 Conduite'},{id:'meditation',label:'🧘 Méditation'}];
 const MODELS={claude:['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001'],gemini:['gemini-2.0-flash','gemini-1.5-pro','gemini-1.5-flash'],openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo']};
 const ADVENTURE_LABELS=[[0,'Confort absolu'],[25,'Plutôt classique'],[40,'Équilibré'],[60,'Curieux'],[80,'Aventurier'],[100,'Explorateur']];
-let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,continuousMode:true,volume:80,sleepMinutes:0,sleepTimer:null,sessionThread:[],chatHistory:[],sessionStart:Date.now(),_pendingUnmute:null,editProfileMode:false};
+let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,continuousMode:true,volume:80,sleepMinutes:0,sleepTimer:null,sessionThread:[],chatHistory:[],sessionStart:Date.now(),_pendingUnmute:null,_preRec:null,_preFetching:false,editProfileMode:false};
 
 let _tt=null;
 function toast(msg,dur=2400){const el=document.getElementById('toast');el.textContent=msg;el.classList.remove('hidden');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.add('hidden'),dur)}
@@ -581,6 +588,7 @@ function parseDuration(iso){if(!iso)return 0;const m=iso.match(/PT(?:(\d+)H)?(?:
 const YT_DUR_MIN=90,YT_DUR_MAX=300; // 1m30 → 5min
 async function ytSearch(query){
   const key=getYtKey();if(!key)return null;
+  if(_ytVidCache[query])return _ytVidCache[query];// cache hit → 0 quota
   const q=getQuota();
   if(q.count>=YT_QUOTA_MAX){toast('🚫 Quota YT épuisé (100/100) — recharge demain',4000);return null;}
   try{
@@ -599,12 +607,14 @@ async function ytSearch(query){
       if(vr.ok){
         const vd=await vr.json();
         const valid=(vd.items||[]).find(item=>{const dur=parseDuration(item.contentDetails?.duration);return dur>=YT_DUR_MIN&&dur<=YT_DUR_MAX;});
-        if(valid)return valid.id;
+        if(valid){_ytVidCache[query]=valid.id;return valid.id;}
         // Aucun dans la plage → fallback au premier résultat
         toast('⚠️ Aucun résultat dans 1m30–5min, fallback',3000);
       }
     }catch(_){console.warn('[YT] Duration check failed');}
-    return ids[0]||null;
+    const finalVid=ids[0]||null;
+    if(finalVid)_ytVidCache[query]=finalVid;
+    return finalVid;
   }catch(e){console.warn('[YT] Search error:',e);return null}
 }
 window.onYouTubeIframeAPIReady=function(){
@@ -639,6 +649,7 @@ window.onYouTubeIframeAPIReady=function(){
         if(e.data===1){
           updatePlayPauseUI(true);
           startProgressTick();
+          try{navigator.mediaSession.playbackState='playing';}catch(_){}
           try{
             if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();
             ST.ytPlayer.setVolume(ST.volume);
@@ -647,7 +658,7 @@ window.onYouTubeIframeAPIReady=function(){
             ['mp-vol-label','ko-vol-label'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=v+'%';});
           }catch(_){}
         }
-        if(e.data===2){updatePlayPauseUI(false);stopProgressTick();}
+        if(e.data===2){updatePlayPauseUI(false);stopProgressTick();try{navigator.mediaSession.playbackState='paused';}catch(_){}}
         if(e.data===0){onTrackEnded();}
       },
       onError:function(e){
@@ -686,16 +697,53 @@ function startProgressTick(){
       if(el)el.style.width=pct.toFixed(1)+'%';
       const tc=document.getElementById('mp-time-cur');if(tc)tc.textContent=fmtT(cur);
       const td=document.getElementById('mp-time-dur');if(td)td.textContent=fmtT(dur);
+      // Pre-fetch à 80% si mode Auto actif
+      if(pct>=80&&ST.continuousMode&&!ST._preFetching&&!ST._preRec){
+        ST._preFetching=true;
+        const _preMode=ST.mode;
+        const _msgMap={onetap:'Recommande-moi une chanson parfaite maintenant.',mood:`Je me sens ${ST.selMood||'neutre'}. Reco.`,activity:`Je fais: ${ST.selActivity||'quelque chose'}. Reco.`,discovery:'Mode découverte: pépite inattendue.',shuffle:'Mode Shuffle: genre TOTALEMENT aléatoire.'};
+        callAI(buildSystemPrompt(_preMode),_msgMap[_preMode]||_msgMap.onetap)
+          .then(raw=>{try{ST._preRec=parseJSON(raw);}catch(_){}ST._preFetching=false;})
+          .catch(()=>{ST._preFetching=false;});
+      }
     }catch(_){}
   },500);
 }
 function stopProgressTick(){if(_progressTick){clearInterval(_progressTick);_progressTick=null}}
+function updateMediaSession(title,artist,thumb){
+  if(!('mediaSession' in navigator))return;
+  try{
+    navigator.mediaSession.metadata=new MediaMetadata({
+      title:title||'—',artist:artist||'—',album:'music·ai',
+      artwork:thumb?[{src:thumb,sizes:'320x180',type:'image/jpeg'}]:[]
+    });
+    navigator.mediaSession.setActionHandler('play',()=>{try{ST.ytPlayer.playVideo();}catch(_){}});
+    navigator.mediaSession.setActionHandler('pause',()=>{try{ST.ytPlayer.pauseVideo();}catch(_){}});
+    navigator.mediaSession.setActionHandler('previoustrack',ytPrev);
+    navigator.mediaSession.setActionHandler('nexttrack',ytNext);
+    navigator.mediaSession.setActionHandler('stop',ytStop);
+  }catch(_){}
+}
 function onTrackEnded(){
   stopProgressTick();updatePlayPauseUI(false);
-  if(ST.continuousMode){toast('🎵 Prochaine reco…');getRecommendation(ST.mode);return}
+  if(ST.continuousMode){
+    if(ST._preRec){
+      const rec=ST._preRec;ST._preRec=null;ST._preFetching=false;
+      const resultEl=document.getElementById(`result-${ST.mode}`);
+      if(resultEl){renderCard(resultEl,rec);}
+      pushHistory({title:rec.title,artist:rec.artist,genre:rec.genre,action:'suggest',context:ST.mode});
+      ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
+      if(ST.sessionThread.length>8)ST.sessionThread.shift();
+      saveThread(ST.sessionThread);
+      if(getYtKey()){const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;ytPlay({title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`});}
+      toast('🎵 '+esc(rec.title)+' — '+esc(rec.artist));
+    }else{toast('🎵 Prochaine reco…');getRecommendation(ST.mode);}
+    return;
+  }
   if(ST.queue.length>0&&ST.queueIdx<ST.queue.length-1){ytNext();return}
 }
 async function ytPlay(track){
+  ST._preRec=null;ST._preFetching=false;// reset prefetch sur nouvelle piste manuelle
   ST.currentTrack={...track,videoId:null};
   updateMiniPlayer(track.title,track.artist);
   const key=getYtKey();
@@ -703,7 +751,7 @@ async function ytPlay(track){
   // PAS d'ouverture modale → lecture en arrière-plan, mini-player uniquement
   toast('🔍 Recherche…');
   const q=track.ytQuery||track.youtube_query||`${track.artist} ${track.title} official audio`;
-  const vid=await ytSearch(q);
+  const vid=track._videoId||await ytSearch(q);
   if(!vid){ytShowFallbackToast(track);return}
   ST.currentTrack.videoId=vid;
   const _thumb=`https://img.youtube.com/vi/${vid}/mqdefault.jpg`;
@@ -799,12 +847,14 @@ function updateMiniPlayer(title,artist){
   document.getElementById('mini-player').classList.remove('hidden');
   const kt=document.getElementById('ko-title');const ka=document.getElementById('ko-artist');
   if(kt)kt.textContent=title||'—';if(ka)ka.textContent=artist||'—';
+  updateMediaSession(title,artist,null);
 }
 function updateMiniPlayerArtwork(thumb){
   const el=document.getElementById('mp-artwork');
   if(el){if(thumb){el.style.backgroundImage=`url(${thumb})`;el.textContent='';}else{el.style.backgroundImage='none';el.textContent='🎵';}}
   const ko=document.getElementById('ko-artwork');
   if(ko){if(thumb){ko.style.backgroundImage=`url(${thumb})`;ko.textContent='';}else{ko.style.backgroundImage='none';ko.textContent='🎵';}}
+  if(thumb&&ST.currentTrack)updateMediaSession(ST.currentTrack.title||'',ST.currentTrack.artist||'',thumb);
 }
 function ytAddToQueue(){
   if(!ST.currentTrack)return;
@@ -1202,6 +1252,17 @@ function selectActivity(id,el){document.querySelectorAll('#activity-grid .mood-c
 function setMode(mode){ST.mode=mode;document.querySelectorAll('.mode-chip').forEach(x=>x.classList.toggle('active',x.dataset.mode===mode));['onetap','mood','activity','discovery','shuffle'].forEach(z=>{document.getElementById(`zone-${z}`).style.display=z===mode?'block':'none'})}
 
 // ── AI ──
+function deriveSessionVibe(){
+  if(ST.sessionThread.length<3)return null;
+  const moods=ST.sessionThread.map(x=>x.mood).filter(Boolean);
+  const genres=ST.sessionThread.map(x=>(x.genre||'').split(/[\/,\s]/)[0].trim()).filter(Boolean);
+  const avgDisc=ST.sessionThread.reduce((s,x)=>s+(x.discovery_score||0),0)/ST.sessionThread.length;
+  const freq=(arr)=>arr.sort((a,b)=>arr.filter(x=>x===b).length-arr.filter(x=>x===a).length)[0];
+  const topMood=freq(moods)||'';
+  const topGenre=freq(genres)||'';
+  const discLabel=avgDisc>0.6?'exploratoire':avgDisc>0.3?'équilibré':'confort';
+  return [topMood,topGenre,`tendance ${discLabel}`].filter(Boolean).join(', ');
+}
 function buildSystemPrompt(mode){
   const p=getProfile()||{};
   // ALL contexts, not just first
@@ -1221,6 +1282,8 @@ function buildSystemPrompt(mode){
   const threadDesc=ST.sessionThread.length>0
     ?'PROGRESSION SESSION: '+ST.sessionThread.map((x,i)=>`${i+1}.${x.title}(${x.mood||'?'},score:${Math.round((x.discovery_score||0)*100)}%)`).join(' → ')
     :'Début de session.';
+  const vibeStr=deriveSessionVibe();
+  const vibeSection=vibeStr?'SESSION VIBE ÉMERGENT: '+vibeStr+' — maintenir/nuancer cette cohérence.':'';
   // Adventure score drives discovery instructions
   const adv=p.adventurousness??0.4;
   const advInstr=adv>=0.7?'Aventure élevée: propose des artistes peu connus, sous-genres inattendus.'
@@ -1232,6 +1295,8 @@ function buildSystemPrompt(mode){
   const chatCtx=mode==='chat'&&ST.chatHistory.length>0?'\nCONVERSATION RÉCENTE:\n'+ST.chatHistory.slice(-6).map(m=>(m.role==='user'?'User':'IA')+': '+m.content).join('\n'):'';
   const antiRepeat=recentTitles.length>0?'ANTI-RÉPÉTITION ABSOLUE — NE JAMAIS proposer ces titres: '+recentTitles.join(' | '):'';
   const dislikedSection=(p.disliked&&p.disliked.length>0)?'GENRES/ARTISTES À ÉVITER (dislikes utilisateur): '+p.disliked.slice(-20).join(', '):'';
+  const likedHistory=getHistory().filter(x=>x.action==='like').slice(-12);
+  const likedSection=likedHistory.length>0?'TITRES AIMÉS (renforcer ces patterns sonores): '+likedHistory.map(x=>x.title+' — '+x.artist+(x.genre?' ('+x.genre+')':'')).join(' | '):'';
   return `Tu es un expert mondial en recommandation musicale — connaissance encyclopédique de TOUS genres, époques, cultures, sous-cultures.
 
 PROFIL COMPLET:
@@ -1243,10 +1308,12 @@ PROFIL COMPLET:
 - Niveau aventure: ${Math.round(adv*100)}% — ${advInstr}
 
 ${dislikedSection}
+${likedSection}
 
 MOMENT: ${dow} ${timeSlot} (${h}h) — calibre énergie et atmosphère sur ce créneau.
 
 ${threadDesc}
+${vibeSection}
 
 ${antiRepeat}
 
@@ -1341,6 +1408,7 @@ function renderCard(container,rec){
         <button class="feedback-btn" id="${id}-like">👍</button>
         <button class="feedback-btn" id="${id}-dislike">👎</button>
         <button class="feedback-btn" id="${id}-save">🔖</button>
+        <button class="feedback-btn" id="${id}-share" title="Partager">📤</button>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         <button class="btn-primary" id="${id}-play" style="padding:10px 14px;font-size:12px;">${hasYT?'▶ In-app':'▶ Écouter'}</button>
@@ -1351,10 +1419,16 @@ function renderCard(container,rec){
   container.className='music-card appear';
   const title=rec.title||'',artist=rec.artist||'',genre=rec.genre||'',track={title,artist,ytQuery,ytUrl};
   // Charger la vignette YT en arrière-plan pour l'artwork de la carte
-  if(hasYT){ytSearch(ytQuery).then(vid=>{if(vid){const artEl=document.getElementById(`${id}-art`);if(artEl){artEl.style.backgroundImage=`url(https://img.youtube.com/vi/${vid}/mqdefault.jpg)`;artEl.textContent='';}}}).catch(()=>{});}
+  if(hasYT){ytSearch(ytQuery).then(vid=>{if(vid){track._videoId=vid;const artEl=document.getElementById(`${id}-art`);if(artEl){artEl.style.backgroundImage=`url(https://img.youtube.com/vi/${vid}/mqdefault.jpg)`;artEl.textContent='';}}}).catch(()=>{});}
   document.getElementById(`${id}-like`).onclick=()=>doFeedback(`${id}-like`,'like',title,artist,genre);
   document.getElementById(`${id}-dislike`).onclick=()=>doFeedback(`${id}-dislike`,'dislike',title,artist,genre);
   document.getElementById(`${id}-save`).onclick=()=>doFeedback(`${id}-save`,'save',title,artist,genre);
+  document.getElementById(`${id}-share`).onclick=()=>{
+    const txt=`🎵 ${rec.title} — ${rec.artist}\nDécouvert avec music·ai ✨`;
+    if(navigator.share){navigator.share({title:rec.title+' — '+rec.artist,text:txt}).catch(()=>{});}
+    else{navigator.clipboard?navigator.clipboard.writeText(txt).then(()=>toast('📤 Copié !')).catch(()=>toast('📤 '+txt)):toast('📤 '+txt);}
+    try{if(navigator.vibrate)navigator.vibrate(10);}catch(_){}
+  };
   const _plB=document.getElementById(`${id}-pl`);
   if(_plB)_plB.onclick=()=>addToPlaylist({title:track.title,artist:track.artist,ytQuery:track.ytQuery||track.youtube_query,ytUrl});
   document.getElementById(`${id}-play`).onclick=()=>hasYT?ytPlay(track):window.open(ytUrl,'_blank','noopener');
@@ -1373,6 +1447,7 @@ function doFeedback(btnId,action,title,artist,genre){
   const btn=document.getElementById(btnId);if(!btn)return;
   btn.classList.add({like:'liked',dislike:'disliked',save:'saved'}[action]);
   btn.style.transform='scale(1.3)';setTimeout(()=>{if(btn)btn.style.transform=''},200);
+  try{if(navigator.vibrate)navigator.vibrate(action==='like'?[15]:action==='dislike'?[30,10,30]:[10]);}catch(_){}
   pushHistory({title,artist,action,context:ST.mode});
   // Update profile disliked list on thumbs down
   if(action==='dislike'){
@@ -1423,14 +1498,36 @@ async function sendChat(){
 function renderHistory(){
   const h=getHistory();const el=document.getElementById('history-list');if(!el)return;
   if(!h.length){el.innerHTML='<p style="color:var(--muted);font-size:13px;text-align:center;padding:40px 0;">Aucune écoute pour l\'instant</p>';return}
+  // Compute stats
+  const suggs=h.filter(x=>x.action==='suggest'||x.action==='chat');
+  const likes=h.filter(x=>x.action==='like');
+  const disc=suggs.filter(x=>x.context==='discovery'||x.context==='shuffle');
+  const freq=(arr)=>{const c={};arr.forEach(v=>{if(v)c[v]=(c[v]||0)+1;});return Object.entries(c).sort((a,b)=>b[1]-a[1])[0]||null;};
+  const topArtist=freq(suggs.map(x=>x.artist).filter(Boolean));
+  const topGenre=freq(suggs.map(x=>(x.genre||'').split(/[\/,\s]/)[0].trim()).filter(Boolean));
+  const statsHTML=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">
+    <div class="glass" style="padding:10px;text-align:center;border-radius:14px;">
+      <div style="font-size:1.4rem;font-weight:800;">${suggs.length}</div>
+      <div style="font-size:9px;color:var(--muted);margin-top:2px;">🎵 Recos</div>
+    </div>
+    <div class="glass" style="padding:10px;text-align:center;border-radius:14px;">
+      <div style="font-size:1.4rem;font-weight:800;color:#22c55e;">${likes.length}</div>
+      <div style="font-size:9px;color:var(--muted);margin-top:2px;">👍 Likes</div>
+    </div>
+    <div class="glass" style="padding:10px;text-align:center;border-radius:14px;">
+      <div style="font-size:1.4rem;font-weight:800;color:var(--accent2);">${disc.length}</div>
+      <div style="font-size:9px;color:var(--muted);margin-top:2px;">🔭 Découv.</div>
+    </div>
+  </div>${topArtist?`<div class="glass" style="padding:12px 14px;margin-bottom:8px;border-radius:14px;display:flex;align-items:center;gap:12px;"><span style="font-size:1.4rem;">🎤</span><div><div style="font-size:9px;color:var(--muted);">Artiste le plus joué</div><div style="font-weight:700;font-size:13px;">${esc(topArtist[0])}</div></div><div style="margin-left:auto;font-size:11px;color:var(--muted);">${topArtist[1]}×</div></div>`:''}${topGenre?`<div class="glass" style="padding:12px 14px;margin-bottom:16px;border-radius:14px;display:flex;align-items:center;gap:12px;"><span style="font-size:1.4rem;">🎸</span><div><div style="font-size:9px;color:var(--muted);">Genre dominant</div><div style="font-weight:700;font-size:13px;">${esc(topGenre[0])}</div></div><div style="margin-left:auto;font-size:11px;color:var(--muted);">${topGenre[1]}×</div></div>`:''}`;
   const aI={like:'👍',dislike:'👎',save:'🔖',suggest:'🎵',chat:'💬'};
   const aC={like:'rgba(34,197,94,.2)',dislike:'rgba(239,68,68,.2)',save:'rgba(245,158,11,.2)',suggest:'rgba(124,58,237,.2)',chat:'rgba(6,182,212,.2)'};
-  el.innerHTML=h.slice(0,50).map(item=>{
+  const listHTML=h.slice(0,50).map(item=>{
     const d=new Date(item.ts||Date.now());
     const time=d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
     const date=d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
     return`<div class="history-item"><div class="action-badge" style="background:${aC[item.action]||aC.suggest};">${aI[item.action]||'🎵'}</div><div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(item.title||'—')}</div><div style="color:var(--muted);font-size:12px;">${esc(item.artist||'')}</div></div><div style="text-align:right;font-size:10px;color:var(--muted);flex-shrink:0;">${time}<br>${date}</div></div>`;
   }).join('');
+  el.innerHTML=statsHTML+listHTML;
 }
 
 // ── SETTINGS ──
