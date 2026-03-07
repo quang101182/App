@@ -14,6 +14,7 @@ const KNOWN_KEYS = [
   { key: 'ASSEMBLYAI_KEY', label: 'AssemblyAI', usage: 'Transcription word-level' },
   { key: 'DEEPL_KEY',      label: 'DeepL',      usage: 'Traduction haute qualité' },
   { key: 'CLAUDE_KEY',     label: 'Claude',     usage: 'Anthropic Claude (claude-sonnet-4-6, etc.)' },
+  { key: 'DEEPGRAM_KEY',   label: 'Deepgram',   usage: 'Transcription + Diarization (Nova-2)' },
   { key: 'WORKER_URL',     label: 'Worker CF',  usage: 'URL Worker gros fichiers cloud', isConfig: true },
   { key: 'WORKER_SECRET',  label: 'Worker Secret', usage: 'Secret auth apps → gateway', noPing: true },
   { key: 'DIAG_FOLDER_ID', label: 'DIAG Folder', usage: 'Google Drive folder ID pour DIAG uploads', isConfig: true },
