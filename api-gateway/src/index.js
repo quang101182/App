@@ -345,7 +345,7 @@ async function proxyAssemblyai(request, env) {
  *
  * Sub-path: /api/deepgram → /v1/listen (default)
  * Auth: Token DEEPGRAM_KEY.
- * Supports large audio uploads (arrayBuffer forwarded as-is).
+ * STREAMS the request body directly (no buffering) to handle large files (>100MB).
  */
 async function proxyDeepgram(request, env, path) {
   const apiKey = await resolveKey(env, 'DEEPGRAM_KEY');
@@ -354,22 +354,23 @@ async function proxyDeepgram(request, env, path) {
   let subPath = path.slice('/api/deepgram'.length) || '/v1/listen';
   if (!subPath.startsWith('/')) subPath = '/' + subPath;
 
-  // Forward query string (contains Deepgram params like model, diarize, language, etc.)
   const url = new URL(request.url);
   const qs = url.search || '';
-
   const upstream = `https://api.deepgram.com${subPath}${qs}`;
 
-  const body = await request.arrayBuffer();
   const forwardHeaders = new Headers();
   const contentType = request.headers.get('Content-Type');
   if (contentType) forwardHeaders.set('Content-Type', contentType);
   forwardHeaders.set('Authorization', `Token ${apiKey}`);
+  // Forward content-length for progress tracking
+  const contentLength = request.headers.get('Content-Length');
+  if (contentLength) forwardHeaders.set('Content-Length', contentLength);
 
+  // Stream body directly — no arrayBuffer() buffering — handles large files
   const upstreamResp = await fetch(upstream, {
     method : request.method,
     headers: forwardHeaders,
-    body   : body.byteLength > 0 ? body : undefined,
+    body   : request.body,
   });
 
   const respHeaders = new Headers();

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoxSplit v1.2 — Diarization & Transcription</title>
+<title>VoxSplit v1.3 — Diarization & Transcription</title>
 <meta name="description" content="Transcription audio/vidéo avec identification des locuteurs (diarization) via Deepgram Nova-2">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#8b5cf6">
@@ -685,7 +685,7 @@ mark {
       <h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1>
     </div>
     <div class="header-actions">
-      <span class="version">v1.2</span>
+      <span class="version">v1.3</span>
       <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--text-muted)">
         <span class="status-dot yellow"></span>
       </span>
@@ -703,10 +703,6 @@ mark {
     <div class="setting-group" style="margin-bottom:12px">
       <label>Gateway Secret (Bearer)</label>
       <input type="text" id="cfg-secret" placeholder="Votre WORKER_SECRET">
-    </div>
-    <div class="setting-group" style="margin-bottom:12px">
-      <label>Admin Token (pour récupérer les clés API)</label>
-      <input type="text" id="cfg-admin" placeholder="Votre ADMIN_TOKEN">
     </div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn-secondary" onclick="saveConfig()"><i class="fas fa-check"></i> Sauvegarder</button>
@@ -865,7 +861,7 @@ mark {
 
 <script>
 // ─────────────────────────────────────────────────────────────────────
-// VoxSplit v1.2 — Diarization & Transcription via Deepgram
+// VoxSplit v1.3 — Diarization & Transcription via Deepgram
 // ─────────────────────────────────────────────────────────────────────
 
 const VERSION = '1.0';
@@ -894,14 +890,12 @@ function setConfig(c) { localStorage.setItem('voxsplit_config', JSON.stringify(c
 
 function getGateway() { return getConfig().gateway || GATEWAY_DEFAULT; }
 function getSecret() { return getConfig().secret || ''; }
-function getAdminToken() { return getConfig().adminToken || ''; }
 
 function saveConfig() {
   const gw = document.getElementById('cfg-gateway').value.trim();
   const secret = document.getElementById('cfg-secret').value.trim();
-  const adminToken = document.getElementById('cfg-admin').value.trim();
-  if (!gw || !secret || !adminToken) { toast('Tous les champs sont requis', 'warn'); return; }
-  setConfig({ gateway: gw, secret: secret, adminToken: adminToken });
+  if (!gw || !secret) { toast('Gateway URL et Secret requis', 'warn'); return; }
+  setConfig({ gateway: gw, secret: secret });
   toast('Configuration sauvegardée');
   checkGateway();
 }
@@ -913,7 +907,6 @@ function toggleSettings() {
     const c = getConfig();
     document.getElementById('cfg-gateway').value = c.gateway || GATEWAY_DEFAULT;
     document.getElementById('cfg-secret').value = c.secret || '';
-    document.getElementById('cfg-admin').value = c.adminToken || '';
   }
 }
 
@@ -1094,29 +1087,12 @@ async function startTranscription() {
   log(`Fichier: ${selectedFile.name} (${formatSize(selectedFile.size)})`, 'info');
   log(`Modèle: ${document.getElementById('opt-model').value}`, 'info');
   log(`Diarization: ${params.has('diarize') ? 'OUI' : 'NON'}`, 'info');
-  setProgress(5, 'Récupération de la clé API...');
+  setProgress(5, 'Préparation...');
 
   const startTime = Date.now();
 
   try {
-    // Step 1: Fetch Deepgram API key from gateway (avoids CF Worker 100MB body limit)
-    log('Récupération clé Deepgram via gateway...', 'info');
-    const keyResp = await fetch(getGateway() + '/admin/keys/get', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + getAdminToken(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ key: 'DEEPGRAM_KEY' }),
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!keyResp.ok) throw new Error('Impossible de récupérer la clé Deepgram du gateway');
-    const keyData = await keyResp.json();
-    if (!keyData.ok || !keyData.value) throw new Error('Clé DEEPGRAM_KEY non configurée dans le gateway');
-    const dgKey = keyData.value;
-    log('Clé Deepgram récupérée', 'success');
-
-    // Step 2: Determine content type
+    // Determine content type
     let contentType = selectedFile.type || 'audio/mpeg';
     if (!contentType || contentType === 'application/octet-stream') {
       const ext = selectedFile.name.split('.').pop().toLowerCase();
@@ -1129,12 +1105,12 @@ async function startTranscription() {
       contentType = mimeMap[ext] || 'audio/mpeg';
     }
 
-    // Step 3: Upload directly to Deepgram API via XHR (real-time progress)
-    const dgUrl = `https://api.deepgram.com/v1/listen?${params.toString()}`;
-    log(`Upload direct → Deepgram (${formatSize(selectedFile.size)})`, 'info');
+    // Upload via gateway (streams body to Deepgram without buffering)
+    const gwUrl = `${getGateway()}/api/deepgram/v1/listen?${params.toString()}`;
+    log(`Upload via gateway → Deepgram (${formatSize(selectedFile.size)})`, 'info');
     log(`Content-Type: ${contentType}`, 'info');
 
-    const json = await uploadWithProgress(dgUrl, dgKey, contentType, selectedFile, startTime);
+    const json = await uploadWithProgress(gwUrl, getSecret(), contentType, selectedFile, startTime, true);
     rawResult = json;
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -1172,24 +1148,21 @@ async function startTranscription() {
  * Upload file to Deepgram with real-time progress via XHR
  * Returns parsed JSON response
  */
-function uploadWithProgress(url, apiKey, contentType, file, startTime) {
+function uploadWithProgress(url, secret, contentType, file, startTime, viaGateway) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    let uploadDone = false;
     let lastLoggedPct = -1;
 
-    // Upload progress (file → Deepgram)
+    // Upload progress
     xhr.upload.addEventListener('progress', (e) => {
       if (!e.lengthComputable) return;
       const pct = (e.loaded / e.total) * 100;
       const elapsed = (Date.now() - startTime) / 1000;
-      const speed = e.loaded / elapsed; // bytes/s
-      const remaining = (e.total - e.loaded) / speed;
+      const speed = e.loaded / elapsed;
+      const remaining = speed > 0 ? (e.total - e.loaded) / speed : 0;
 
-      // Progress bar: 10-75% range for upload
       setProgress(10 + (pct * 0.65), `Upload: ${Math.round(pct)}% — ${formatSize(e.loaded)}/${formatSize(e.total)}`);
 
-      // Log every 10%
       const pct10 = Math.floor(pct / 10) * 10;
       if (pct10 > lastLoggedPct && pct10 > 0) {
         lastLoggedPct = pct10;
@@ -1200,12 +1173,9 @@ function uploadWithProgress(url, apiKey, contentType, file, startTime) {
     });
 
     xhr.upload.addEventListener('load', () => {
-      uploadDone = true;
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      log(`Upload terminé en ${elapsed}s — en attente de transcription Deepgram...`, 'success');
-      setProgress(78, 'Transcription par Deepgram en cours...');
-
-      // Start elapsed timer while Deepgram processes
+      log(`Upload terminé en ${elapsed}s — Deepgram traite l'audio...`, 'success');
+      setProgress(78, 'Deepgram traite l\'audio...');
       startProcessingTimer(startTime);
     });
 
@@ -1216,33 +1186,22 @@ function uploadWithProgress(url, apiKey, contentType, file, startTime) {
     xhr.addEventListener('load', () => {
       stopProcessingTimer();
       if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const json = JSON.parse(xhr.responseText);
-          resolve(json);
-        } catch (e) {
-          reject(new Error('Réponse Deepgram invalide (JSON parse error)'));
-        }
+        try { resolve(JSON.parse(xhr.responseText)); }
+        catch { reject(new Error('Réponse invalide (JSON parse error)')); }
       } else {
         let errMsg = xhr.responseText;
-        try { errMsg = JSON.parse(xhr.responseText).err_msg || errMsg; } catch {}
+        try { errMsg = JSON.parse(xhr.responseText).error || JSON.parse(xhr.responseText).err_msg || errMsg; } catch {}
         reject(new Error(`HTTP ${xhr.status}: ${errMsg}`));
       }
     });
 
-    xhr.addEventListener('error', () => {
-      stopProcessingTimer();
-      reject(new Error('Erreur réseau'));
-    });
-
-    xhr.addEventListener('timeout', () => {
-      stopProcessingTimer();
-      reject(new Error('Timeout — fichier trop volumineux ou connexion lente'));
-    });
+    xhr.addEventListener('error', () => { stopProcessingTimer(); reject(new Error('Erreur réseau')); });
+    xhr.addEventListener('timeout', () => { stopProcessingTimer(); reject(new Error('Timeout (10 min)')); });
 
     xhr.open('POST', url);
-    xhr.setRequestHeader('Authorization', 'Token ' + apiKey);
+    xhr.setRequestHeader('Authorization', viaGateway ? 'Bearer ' + secret : 'Token ' + secret);
     xhr.setRequestHeader('Content-Type', contentType);
-    xhr.timeout = 600000; // 10 minutes max
+    xhr.timeout = 600000; // 10 min
     xhr.send(file);
   });
 }
