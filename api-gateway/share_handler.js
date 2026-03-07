@@ -28,7 +28,7 @@ let param  = '';
 
 if (cmd === 'share' || cmd === '/share') {
   action = 'list';
-} else if (cmd === 'addshare') {
+} else if (cmd === 'addshare' || cmd === '/addshare') {
   action = 'addshare';
 } else if (cmd.startsWith('addshare:')) {
   action = 'addshare_exec';
