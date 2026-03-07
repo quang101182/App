@@ -16,6 +16,8 @@ const KNOWN_KEYS = [
   { key: 'CLAUDE_KEY',     label: 'Claude',     usage: 'Anthropic Claude (claude-sonnet-4-6, etc.)' },
   { key: 'WORKER_URL',     label: 'Worker CF',  usage: 'URL Worker gros fichiers cloud', isConfig: true },
   { key: 'WORKER_SECRET',  label: 'Worker Secret', usage: 'Secret auth apps → gateway', noPing: true },
+  { key: 'DIAG_FOLDER_ID', label: 'DIAG Folder', usage: 'Google Drive folder ID pour DIAG uploads', isConfig: true },
+  { key: 'MCP_DRIVE_URL',  label: 'MCP Drive',   usage: 'URL serveur MCP Drive (Render)', isConfig: true },
 ];
 
 const hPost = (url, body) => this.helpers.httpRequest({

@@ -45,7 +45,7 @@ const CORS_HEADERS = {
 };
 
 /** All recognised key names stored in KV */
-const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'AZURE_REGION', 'WORKER_URL'];
+const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL'];
 
 /** Rate limit: max requests per minute window */
 const RL_API_MAX   = 20;
@@ -157,7 +157,10 @@ async function handleConfig(env) {
     if (val) apis.push(key.replace('_KEY', ''));
   }
 
-  return jsonResponse({ worker_url: workerUrl, apis, version: VERSION });
+  const diagFolder = await kvGetKey(env, 'DIAG_FOLDER_ID') || '';
+  const mcpDriveUrl = await kvGetKey(env, 'MCP_DRIVE_URL') || '';
+
+  return jsonResponse({ worker_url: workerUrl, apis, version: VERSION, diag_folder: diagFolder, mcp_drive_url: mcpDriveUrl });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

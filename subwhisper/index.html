@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.10</title>
+<title>SubWhisper v9.11</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1106,7 +1106,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.10</span>
+    <span class="ver-badge">v9.11</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1440,7 +1440,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.10 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.11 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -1746,6 +1746,8 @@ async function fetchGatewayConfig() {
       try { localStorage.setItem('sw_workerurl', cfg.worker_url); } catch(e) {}
       pingWRK(cfg.worker_url);
     }
+    if (cfg.diag_folder) _diagDriveFolder = cfg.diag_folder;
+    if (cfg.mcp_drive_url) _mcpDriveUrl = cfg.mcp_drive_url;
     updateRequiredBlink(); checkAIEngine();
     updateSbtn();
   } catch(e) {
@@ -3993,6 +3995,8 @@ var _rawGroqSrt = null;
 
 // ── DIAGNOSTIC EXPORT ────────────────────────────────────
 var _diagSteps = {}; // { raw_groq, after_format, after_clean, after_translate }
+var _diagDriveFolder = ''; // Google Drive folder ID for DIAG uploads
+var _mcpDriveUrl = '';     // MCP Drive server URL
 
 async function dlRawGroq() {
   if (!_rawGroqSrt) { toast('⚠ Aucune transcription brute disponible — relancez une vidéo'); return; }
@@ -4049,7 +4053,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.10',
+    version: 'v9.11',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4072,8 +4076,28 @@ async function exportDiag() {
   if (_diagSteps.after_format) diag.stats.format = _diagStats(_diagSteps.after_translate || _diagSteps.after_clean || _diagSteps.raw_groq, _diagSteps.after_format);
   diag.stats.total = _diagStats(_diagSteps.raw_groq, getCurrentSRT());
   var json = JSON.stringify(diag, null, 2);
+  var fname = (origName || 'subtitles') + '.DIAG.json';
+  // Upload vers Google Drive si configuré
+  if (_mcpDriveUrl && _diagDriveFolder) {
+    toast('🧪 Upload DIAG vers Drive…');
+    try {
+      var driveResp = await fetch(_mcpDriveUrl + '/api/diag-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: fname, content: json, folder_id: _diagDriveFolder })
+      });
+      if (driveResp.ok) {
+        toast('🧪 DIAG uploadé sur Drive — ' + fname);
+        return;
+      }
+      throw new Error('HTTP ' + driveResp.status);
+    } catch(e) {
+      toast('⚠ Upload Drive échoué (' + e.message + ') — export local…');
+    }
+  }
+  // Fallback : export fichier local
   await exportFile(json, '.DIAG.json', 'application/json');
-  toast('🧪 Diagnostic exporté — ' + Object.keys(_diagSteps).length + ' étapes capturées');
+  toast('🧪 Diagnostic exporté localement');
 }
 
 // Si dossier mappé actif → écrit directement sans dialogue
