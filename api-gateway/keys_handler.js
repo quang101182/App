@@ -31,7 +31,7 @@ const text  = ($input.first().json.cmd || $input.first().json.text || '').trim()
 const btn = (text, callback_data) => ({ text, callback_data });
 const backKb = [[btn('🔑 Voir les clés', 'keys'), btn('⬅️ Menu', 'menu')]];
 
-let reply, keyboard;
+let reply, keyboard, forceReply = false;
 
 // ── Route: callback keyset:{KEY} ───────────────────────────────────────────
 if (text.startsWith('keyset:')) {
@@ -39,7 +39,8 @@ if (text.startsWith('keyset:')) {
   const info = KNOWN_KEYS.find(k => k.key === keyName);
   const label = info ? info.label : keyName;
   reply = `✏️ Envoie la nouvelle valeur pour *${keyName}* :\n_(colle ta clé API en réponse)_`;
-  keyboard = [[btn('❌ Annuler', 'keys')]];
+  forceReply = true;
+  keyboard = null;
 
 // ── Route: callback keydel:{KEY} ───────────────────────────────────────────
 } else if (text.startsWith('keydel:')) {
@@ -61,7 +62,8 @@ if (text.startsWith('keyset:')) {
 // ── Route: callback keyadd ─────────────────────────────────────────────────
 } else if (text === 'keyadd') {
   reply = `➕ Envoie la clé au format :\n\`NOM_CLE=valeur\`\nEx: \`GROQ_KEY=gsk_abc123...\``;
-  keyboard = [[btn('❌ Annuler', 'keys')]];
+  forceReply = true;
+  keyboard = null;
 
 // ── Route: callback keystatus or /keys status ──────────────────────────────
 } else if (text === 'keystatus' || text === 'keys status') {
@@ -184,4 +186,4 @@ if (text.startsWith('keyset:')) {
   keyboard = backKb;
 }
 
-return [{ json: { reply, keyboard } }];
+return [{ json: { reply, keyboard, forceReply } }];
