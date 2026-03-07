@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <!-- deploy test 2026-02-22 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fitness Tracker v1.1</title>
+    <title>Fitness Tracker v2.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -80,6 +80,129 @@
             --icon-drive-load-color: #188038;
         }
 
+        /* === v2.0 Animated Gradient Borders === */
+        @property --angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+        @keyframes border-rotate { to { --angle: 360deg; } }
+        @keyframes progress-shimmer { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        @keyframes fab-pulse { 0%, 100% { box-shadow: 0 4px 20px rgba(34,197,94,0.4); } 50% { box-shadow: 0 4px 30px rgba(34,197,94,0.6), 0 0 50px rgba(34,197,94,0.2); } }
+        @keyframes slideOutLeft { to { transform: translateX(-30px); opacity: 0; } }
+        @keyframes slideInRight { from { transform: translateX(30px); opacity: 0; } }
+        #exercise-list.slide-out-left { animation: slideOutLeft 0.2s ease forwards; }
+        #exercise-list.slide-in-right { animation: slideInRight 0.2s ease forwards; }
+
+        /* Animated gradient border on exercise cards */
+        .exercise-card { position: relative; border: none !important; }
+        .exercise-card::after {
+            content: ''; position: absolute; inset: -1px; border-radius: inherit; z-index: -1;
+            background: conic-gradient(from var(--angle), var(--glow-violet), var(--glow-teal), var(--glow-magenta), var(--glow-violet));
+            animation: border-rotate 4s linear infinite;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude;
+            padding: 1px; opacity: 0.6;
+        }
+        .exercise-card:hover::after { opacity: 1; }
+
+        /* Glassmorphism noise texture */
+        .exercise-card::before {
+            content: ''; position: absolute; inset: 0; border-radius: inherit;
+            background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E") repeat;
+            opacity: 0.03; pointer-events: none; z-index: 0;
+        }
+
+        /* Glassmorphism card background */
+        .exercise-card, .modal-container > div:not(.modal-backdrop) {
+            background: linear-gradient(135deg, rgba(30,41,59,0.85), rgba(15,23,42,0.95));
+            backdrop-filter: blur(12px) saturate(1.3);
+            -webkit-backdrop-filter: blur(12px) saturate(1.3);
+        }
+        html:not(.dark) .exercise-card, html:not(.dark) .modal-container > div:not(.modal-backdrop) {
+            background: linear-gradient(135deg, rgba(255,255,255,0.85), rgba(238,242,255,0.95));
+        }
+
+        /* Exercise number badge */
+        .exercise-number {
+            width: 32px !important; height: 32px !important; border-radius: 50% !important;
+            background: linear-gradient(135deg, var(--glow-violet), var(--glow-teal)) !important;
+            display: flex !important; align-items: center !important; justify-content: center !important;
+            font-weight: 700 !important; font-size: 14px !important; color: #fff !important;
+            box-shadow: 0 0 12px rgba(139,92,246,0.4) !important;
+            -webkit-background-clip: unset !important; background-clip: unset !important;
+            -webkit-text-fill-color: unset !important; text-shadow: none !important;
+            animation: none !important; filter: none !important;
+        }
+
+        /* Underline-style inputs for performance */
+        .editable-perf {
+            background: transparent !important; border: none !important;
+            border-bottom: 2px solid var(--border-color) !important;
+            border-radius: 0 !important;
+            transition: border-color 0.3s, box-shadow 0.3s !important;
+            padding: 4px 2px !important; text-align: center;
+        }
+        .editable-perf:focus {
+            border-bottom-color: var(--glow-violet) !important;
+            box-shadow: 0 2px 8px rgba(139,92,246,0.3) !important;
+            outline: none !important;
+        }
+
+        /* Program pills */
+        #program-pills { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        #program-pills::-webkit-scrollbar { display: none; }
+        .program-pill {
+            white-space: nowrap; padding: 8px 20px; border-radius: 9999px;
+            background: rgba(30,41,59,0.6); border: 1px solid var(--border-color);
+            color: var(--text-secondary); font-size: 14px; font-weight: 500;
+            transition: all 0.3s; cursor: pointer; scroll-snap-align: start;
+            flex-shrink: 0;
+        }
+        .program-pill:hover { border-color: var(--border-hover); }
+        .program-pill.active {
+            background: linear-gradient(135deg, var(--glow-violet), var(--glow-teal));
+            color: #fff; border-color: transparent;
+            box-shadow: 0 0 16px rgba(139,92,246,0.4);
+        }
+        html:not(.dark) .program-pill { background: rgba(241,245,249,0.8); }
+        html:not(.dark) .program-pill.active { background: linear-gradient(135deg, var(--glow-violet), var(--glow-teal)); color: #fff; }
+
+        /* Enhanced session progress bar */
+        #session-progress-fill {
+            background: linear-gradient(90deg, var(--glow-violet), var(--glow-teal), var(--glow-magenta)) !important;
+            background-size: 200% 100% !important;
+            animation: progress-shimmer 2s ease infinite !important;
+            box-shadow: 0 0 10px rgba(139,92,246,0.5);
+            border-radius: 9999px !important;
+        }
+
+        /* Enhanced FAB */
+        #add-exercise-btn {
+            background: linear-gradient(135deg, var(--glow-green), #059669) !important;
+            box-shadow: 0 4px 20px rgba(34,197,94,0.4), 0 0 40px rgba(34,197,94,0.1) !important;
+            animation: fab-pulse 3s ease-in-out infinite !important;
+        }
+
+        /* Enhanced modal backdrop */
+        .modal-container {
+            backdrop-filter: blur(8px) saturate(0.8);
+            -webkit-backdrop-filter: blur(8px) saturate(0.8);
+            background: rgba(2,6,23,0.7);
+        }
+        .modal-container > div:not(.modal-backdrop) {
+            border: 1px solid rgba(148,163,184,0.15);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(139,92,246,0.1);
+        }
+        html:not(.dark) .modal-container { background: rgba(241,245,249,0.7); }
+
+        /* CSS Tooltips */
+        [data-tooltip] { position: relative; }
+        [data-tooltip]::after {
+            content: attr(data-tooltip); position: absolute; bottom: 100%; left: 50%;
+            transform: translateX(-50%) translateY(-4px); padding: 4px 10px;
+            background: rgba(15,23,42,0.95); color: #e2e8f0; font-size: 11px;
+            border-radius: 6px; white-space: nowrap; opacity: 0;
+            pointer-events: none; transition: opacity 0.2s; z-index: 50;
+        }
+        [data-tooltip]:hover::after, [data-tooltip]:focus::after { opacity: 1; }
+
         @keyframes background-pan { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
         @keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes title-glow { 0% { text-shadow: 0 0 8px var(--glow-app-title), 0 0 10px #fff; } 70% { text-shadow: 0 0 15px var(--glow-app-title), 0 0 25px #fff; } 100% { text-shadow: 0 0 8px var(--glow-app-title), 0 0 10px #fff; } }
@@ -133,7 +256,7 @@
         
         .program-editor-item:focus-within { background-color: var(--border-hover); }
 
-        body { font-family: 'Roboto', sans-serif; background: linear-gradient(135deg, var(--bg-main-1), var(--bg-main-2), var(--bg-main-3), var(--bg-main-4)); background-size: 400% 400%; animation: background-pan 25s ease infinite; color: var(--text-main); -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, var(--bg-main-1), var(--bg-main-2), var(--bg-main-3), var(--bg-main-4)); background-size: 400% 400%; animation: background-pan 25s ease infinite; color: var(--text-main); -webkit-tap-highlight-color: transparent; }
         header { background-color: var(--bg-secondary); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border-color); }
         .bg-card { background: linear-gradient(145deg, var(--bg-card-start), var(--bg-card-end)); border: 1px solid var(--card-border-top); box-shadow: 0 4px 10px rgba(0,0,0,0.2), inset 0 1px 1px var(--card-border-top), inset 0 -1px 1px var(--card-border-bottom); transition: transform 0.3s ease, box-shadow 0.3s ease; }
         .exercise-card {
@@ -252,23 +375,24 @@
                     <div id="app-title-container">
                         <h1 id="app-title" class="text-base font-bold leading-tight">Fitness Tracker</h1>
                         <span id="app-icon" class="text-base"><i class="fa-solid fa-dumbbell"></i></span>
-                        <span style="font-size:9px;color:var(--text-secondary);font-weight:400;margin-left:4px;opacity:0.7;">v1.1</span>
+                        <span style="font-size:9px;color:var(--text-secondary);font-weight:400;margin-left:4px;opacity:0.7;">v2.0</span>
                     </div>
                     <div class="flex items-center gap-0.5" style="position:relative; z-index:3;">
-                        <button id="collapse-all-btn" class="p-1.5 rounded-full icon-btn" title="Tout replier"><i class="fa-solid fa-compress fa-fw text-sm"></i></button>
-                        <button id="expand-all-btn" class="p-1.5 rounded-full icon-btn" title="Tout déplier"><i class="fa-solid fa-expand fa-fw text-sm"></i></button>
-                        <button id="clear-all-perf-btn" class="p-1.5 rounded-full icon-btn" title="Effacer les réalisations du jour"><i class="fa-solid fa-eraser fa-fw text-sm"></i></button>
-                        <button id="global-stats-btn" class="p-1.5 rounded-full icon-btn" title="Statistiques Globales"><i class="fa-solid fa-chart-pie fa-fw text-sm"></i></button>
-                        <button id="manage-programs-btn" class="p-1.5 rounded-full icon-btn" title="Gérer les programmes"><i class="fa-solid fa-cogs fa-fw text-sm"></i></button>
-                        <button id="theme-toggle-btn" class="p-1.5 rounded-full icon-btn" title="Changer de thème"><i id="theme-icon" class="fa-solid fa-sun fa-fw text-sm"></i></button>
+                        <button id="collapse-all-btn" class="p-1.5 rounded-full icon-btn" title="Tout replier" data-tooltip="Replier"><i class="fa-solid fa-compress fa-fw text-sm"></i></button>
+                        <button id="expand-all-btn" class="p-1.5 rounded-full icon-btn" title="Tout déplier" data-tooltip="Déplier"><i class="fa-solid fa-expand fa-fw text-sm"></i></button>
+                        <button id="clear-all-perf-btn" class="p-1.5 rounded-full icon-btn" title="Effacer les réalisations du jour" data-tooltip="Effacer"><i class="fa-solid fa-eraser fa-fw text-sm"></i></button>
+                        <button id="global-stats-btn" class="p-1.5 rounded-full icon-btn" title="Statistiques Globales" data-tooltip="Stats"><i class="fa-solid fa-chart-pie fa-fw text-sm"></i></button>
+                        <button id="manage-programs-btn" class="p-1.5 rounded-full icon-btn" title="Gérer les programmes" data-tooltip="Programmes"><i class="fa-solid fa-cogs fa-fw text-sm"></i></button>
+                        <button id="theme-toggle-btn" class="p-1.5 rounded-full icon-btn" title="Changer de thème" data-tooltip="Thème"><i id="theme-icon" class="fa-solid fa-sun fa-fw text-sm"></i></button>
                     </div>
                 </div>
-                <!-- Ligne 2 : sélecteur programme pleine largeur -->
-                <select id="program-select" class="input-bg border-border-color text-main text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 w-full p-2" style="position:relative; z-index:2;"></select>
+                <!-- Ligne 2 : sélecteur programme en pills -->
+                <select id="program-select" class="hidden"></select>
+                <div id="program-pills" style="position:relative; z-index:2;"></div>
                 <!-- Ligne 3 : boutons backup/drive + bannière inline -->
                 <div class="flex items-center border-t border-border-color pt-1" style="position:relative; z-index:3; gap:4px;">
-                    <button data-action="header-backup" class="p-1.5 rounded-full icon-btn flex-shrink-0" title="Backup local"><i class="fa-solid fa-download fa-fw text-sm"></i></button>
-                    <button data-action="header-import" class="p-1.5 rounded-full icon-btn flex-shrink-0" title="Importer local"><i class="fa-solid fa-upload fa-fw text-sm"></i></button>
+                    <button data-action="header-backup" class="p-1.5 rounded-full icon-btn flex-shrink-0" title="Backup local" data-tooltip="Backup"><i class="fa-solid fa-download fa-fw text-sm"></i></button>
+                    <button data-action="header-import" class="p-1.5 rounded-full icon-btn flex-shrink-0" title="Importer local" data-tooltip="Importer"><i class="fa-solid fa-upload fa-fw text-sm"></i></button>
                     <span class="opacity-30 text-xs flex-shrink-0">|</span>
                     <span id="drive-api-dot" class="flex-shrink-0" style="width:7px;height:7px;border-radius:50%;background:#ef4444;margin:0 2px;transition:background 0.3s;" title="API Drive"></span>
                     <button data-action="header-drive-save" class="p-1.5 rounded-full icon-btn flex-shrink-0" title="Sauvegarder Drive"><i class="fa-brands fa-google-drive fa-fw text-sm"></i></button>
@@ -674,6 +798,22 @@
             _saveTimeout = setTimeout(_saveStateImmediate, 300);
         };
 
+        // Confetti animation
+        let _confettiFired = false;
+        function launchConfetti() {
+            const colors = ['#8b5cf6','#22d3ee','#ec4899','#facc15','#22c55e'];
+            for (let i = 0; i < 40; i++) {
+                const el = document.createElement('div');
+                el.style.cssText = `position:fixed;width:8px;height:8px;border-radius:50%;background:${colors[i%colors.length]};top:-10px;left:${Math.random()*100}vw;z-index:9999;pointer-events:none;`;
+                document.body.appendChild(el);
+                el.animate([
+                    { transform: 'translateY(0) rotate(0)', opacity: 1 },
+                    { transform: `translateY(${window.innerHeight+20}px) rotate(${Math.random()*720}deg)`, opacity: 0 }
+                ], { duration: 1500 + Math.random()*1000, easing: 'cubic-bezier(.25,.46,.45,.94)' });
+                setTimeout(() => el.remove(), 2500);
+            }
+        }
+
         // Session progress bar
         function updateSessionProgress() {
             const bar = document.getElementById('session-progress-fill');
@@ -681,7 +821,7 @@
             if (!bar || !label) return;
             const prog = state.currentProgram;
             const exercises = state.programs[prog]?.exercises || [];
-            if (exercises.length === 0) { label.style.display = 'none'; bar.style.width = '0%'; return; }
+            if (exercises.length === 0) { label.style.display = 'none'; bar.style.width = '0%'; _confettiFired = false; return; }
             const today = getLocalToday();
             let done = 0;
             exercises.forEach(ex => {
@@ -693,8 +833,13 @@
             bar.style.width = pct + '%';
             label.style.display = 'block';
             label.textContent = `${done}/${exercises.length} exercices • ${pct}%`;
-            if (pct === 100) label.style.color = 'var(--glow-green)';
-            else label.style.color = 'var(--text-secondary)';
+            if (pct === 100) {
+                label.style.color = 'var(--glow-green)';
+                if (!_confettiFired) { _confettiFired = true; launchConfetti(); }
+            } else {
+                label.style.color = 'var(--text-secondary)';
+                _confettiFired = false;
+            }
         }
 
         const cleanupEmptyPerformances = () => {
@@ -960,18 +1105,53 @@
         };
 
         const populateSelector = () => {
+            // Keep hidden select in sync for compatibility
             programSelect.innerHTML = '';
+            const pillsContainer = document.getElementById('program-pills');
+            if (pillsContainer) pillsContainer.innerHTML = '';
             if (state.programOrder.length === 0) {
                 const option = document.createElement('option');
                 option.textContent = "Aucun programme"; programSelect.appendChild(option); programSelect.disabled = true;
+                if (pillsContainer) pillsContainer.innerHTML = '<span class="text-sm text-secondary py-2">Aucun programme</span>';
             } else {
                 programSelect.disabled = false;
                 state.programOrder.forEach(name => {
                     const option = document.createElement('option');
                     option.value = name; option.textContent = name;
                     programSelect.appendChild(option);
+                    // Create pill button
+                    if (pillsContainer) {
+                        const pill = document.createElement('button');
+                        pill.className = 'program-pill' + (state.currentProgram === name ? ' active' : '');
+                        pill.textContent = name;
+                        pill.dataset.program = name;
+                        pill.addEventListener('click', () => {
+                            if (state.currentProgram === name) return;
+                            // Slide transition
+                            exerciseList.classList.add('slide-out-left');
+                            setTimeout(() => {
+                                state.currentProgram = name;
+                                programSelect.value = name;
+                                saveState();
+                                renderProgram();
+                                // Update active pill
+                                pillsContainer.querySelectorAll('.program-pill').forEach(p => p.classList.toggle('active', p.dataset.program === name));
+                                exerciseList.classList.remove('slide-out-left');
+                                exerciseList.classList.add('slide-in-right');
+                                setTimeout(() => exerciseList.classList.remove('slide-in-right'), 250);
+                            }, 200);
+                        });
+                        pillsContainer.appendChild(pill);
+                    }
                 });
-                if (state.currentProgram) programSelect.value = state.currentProgram;
+                if (state.currentProgram) {
+                    programSelect.value = state.currentProgram;
+                    // Scroll active pill into view
+                    if (pillsContainer) {
+                        const activePill = pillsContainer.querySelector('.program-pill.active');
+                        if (activePill) setTimeout(() => activePill.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 100);
+                    }
+                }
             }
         };
 
@@ -1562,9 +1742,15 @@
                 newIndex = (currentIndex - 1 + state.programOrder.length) % state.programOrder.length;
             }
             if (newIndex !== currentIndex) {
-                state.currentProgram = state.programOrder[newIndex];
-                saveState();
-                refreshAll();
+                exerciseList.classList.add('slide-out-left');
+                setTimeout(() => {
+                    state.currentProgram = state.programOrder[newIndex];
+                    saveState();
+                    refreshAll();
+                    exerciseList.classList.remove('slide-out-left');
+                    exerciseList.classList.add('slide-in-right');
+                    setTimeout(() => exerciseList.classList.remove('slide-in-right'), 250);
+                }, 200);
             }
         }
 
@@ -1581,12 +1767,17 @@
 
         const refreshAll = () => { applyTheme(); renderHeader(); populateSelector(); renderProgram(); };
         programSelect.addEventListener('change', (e) => {
-            exerciseList.style.opacity = 0;
+            exerciseList.classList.add('slide-out-left');
             setTimeout(() => {
                 state.currentProgram = e.target.value;
                 saveState();
                 renderProgram();
-                exerciseList.style.opacity = 1;
+                // Update pills
+                const pillsContainer = document.getElementById('program-pills');
+                if (pillsContainer) pillsContainer.querySelectorAll('.program-pill').forEach(p => p.classList.toggle('active', p.dataset.program === e.target.value));
+                exerciseList.classList.remove('slide-out-left');
+                exerciseList.classList.add('slide-in-right');
+                setTimeout(() => exerciseList.classList.remove('slide-in-right'), 250);
             }, 200);
         });
 
