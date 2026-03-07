@@ -1,4 +1,4 @@
-var CACHE = 'fitness-tracker-v1.0';
+var CACHE = 'fitness-tracker-v1.1';
 var FILES = ['./', './index.html'];
 
 self.addEventListener('install', function(e) {
@@ -23,8 +23,10 @@ self.addEventListener('activate', function(e) {
 });
 
 self.addEventListener('fetch', function(e) {
+  var url = e.request.url;
+
   // Navigation → network-first
-  if (e.request.mode === 'navigate' || e.request.url.endsWith('index.html')) {
+  if (e.request.mode === 'navigate' || url.endsWith('index.html')) {
     e.respondWith(
       fetch(e.request).then(function(r) {
         var clone = r.clone();
@@ -36,6 +38,26 @@ self.addEventListener('fetch', function(e) {
     );
     return;
   }
-  // APIs, CDN, etc. → network only
+
+  // CDN resources (Tailwind, Chart.js, Font Awesome, Google Fonts) → cache-first
+  if (url.indexOf('cdn.tailwindcss.com') !== -1 ||
+      url.indexOf('cdn.jsdelivr.net') !== -1 ||
+      url.indexOf('cdnjs.cloudflare.com') !== -1 ||
+      url.indexOf('fonts.googleapis.com') !== -1 ||
+      url.indexOf('fonts.gstatic.com') !== -1) {
+    e.respondWith(
+      caches.match(e.request).then(function(cached) {
+        if (cached) return cached;
+        return fetch(e.request).then(function(r) {
+          var clone = r.clone();
+          caches.open(CACHE).then(function(c) { c.put(e.request, clone); });
+          return r;
+        });
+      })
+    );
+    return;
+  }
+
+  // APIs (MCP Drive, etc.) → network only
   e.respondWith(fetch(e.request));
 });

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- deploy test 2026-02-22 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fitness Tracker v1.0</title>
+    <title>Fitness Tracker v1.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -186,7 +186,18 @@
         button[data-action="start-timer"] { color: var(--icon-timer-color); }
         button[data-action="view-history"] { color: var(--icon-history-color); }
         button[data-action="duplicate-exercise"] { color: var(--glow-yellow); }
-        button[data-action="delete-set"] { color: var(--glow-red); background-color: rgba(15, 23, 42, 0.8); border-radius: 9999px; width: 1rem; height: 1rem; font-size: 0.65rem; display: flex; align-items: center; justify-content: center; position: absolute; top: -0.25rem; right: -0.25rem; }
+        button[data-action="delete-set"] { color: var(--glow-red); background-color: rgba(15, 23, 42, 0.8); border-radius: 9999px; width: 1.5rem; height: 1.5rem; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; position: absolute; top: -0.4rem; right: -0.4rem; border: 1px solid rgba(239,68,68,0.3); }
+        /* Touch targets minimum 44px */
+        .icon-btn { min-width: 36px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; }
+        /* Session progress bar */
+        #session-progress { height: 3px; background: var(--border-color); border-radius: 2px; overflow: hidden; margin-top: 2px; }
+        #session-progress-fill { height: 100%; background: linear-gradient(90deg, var(--glow-teal), var(--glow-green)); border-radius: 2px; transition: width 0.4s ease; }
+        /* Progression indicators */
+        .perf-delta-up { color: var(--glow-green); font-size: 10px; font-weight: 700; }
+        .perf-delta-down { color: var(--glow-red); font-size: 10px; font-weight: 700; }
+        .perf-delta-same { color: var(--text-secondary); font-size: 10px; }
+        /* Mini timer in card */
+        .mini-timer { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--glow-red); animation: pulse-border 2s ease-in-out infinite; padding: 2px 8px; border-radius: 8px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); }
         #remap-backup-path-btn { color: var(--glow-exo-title); }
         .footer-btn { color: white; font-weight: bold; padding: 0.75rem 1rem; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; border: none; text-shadow: 0 1px 2px rgba(0,0,0,0.3); transition: transform 0.3s, box-shadow 0.3s, background 0.3s; }
         .footer-btn:hover { transform: scale(1.05); }
@@ -241,7 +252,7 @@
                     <div id="app-title-container">
                         <h1 id="app-title" class="text-base font-bold leading-tight">Fitness Tracker</h1>
                         <span id="app-icon" class="text-base"><i class="fa-solid fa-dumbbell"></i></span>
-                        <span style="font-size:9px;color:var(--text-secondary);font-weight:400;margin-left:4px;opacity:0.7;">v1.0</span>
+                        <span style="font-size:9px;color:var(--text-secondary);font-weight:400;margin-left:4px;opacity:0.7;">v1.1</span>
                     </div>
                     <div class="flex items-center gap-0.5" style="position:relative; z-index:3;">
                         <button id="collapse-all-btn" class="p-1.5 rounded-full icon-btn" title="Tout replier"><i class="fa-solid fa-compress fa-fw text-sm"></i></button>
@@ -265,6 +276,9 @@
                     <!-- Bannière fichier actif — juste après les boutons Drive -->
                     <p id="active-backup-name" class="text-xs text-secondary hidden italic" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1;"></p>
                 </div>
+                <!-- Barre de progression séance -->
+                <div id="session-progress"><div id="session-progress-fill" style="width:0%"></div></div>
+                <div id="session-progress-label" class="text-center" style="font-size:9px;color:var(--text-secondary);margin-top:1px;display:none;"></div>
             </div>
         </header>
 
@@ -352,15 +366,30 @@
         }
 
         async function mcpDrive(tool, args) {
-            const res = await fetch(MCP_DRIVE_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tool, arguments: args })
+            const ctrl = new AbortController();
+            const timeout = setTimeout(() => ctrl.abort(), 20000);
+            try {
+                const res = await fetch(MCP_DRIVE_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tool, arguments: args }),
+                    signal: ctrl.signal
+                });
+                if (!res.ok) throw new Error(`MCP Drive HTTP ${res.status}`);
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                return data.result;
+            } catch(e) {
+                if (e.name === 'AbortError') throw new Error('Timeout Drive (20s) — Render en cold start ?');
+                throw e;
+            } finally { clearTimeout(timeout); }
+        }
+        function setDriveBtnsLoading(loading) {
+            document.querySelectorAll('[data-action="header-drive-save"],[data-action="header-drive-load"]').forEach(b => {
+                b.disabled = loading;
+                if (loading) b.style.opacity = '0.4';
+                else b.style.opacity = '';
             });
-            if (!res.ok) throw new Error(`MCP Drive HTTP ${res.status}`);
-            const data = await res.json();
-            if (data.error) throw new Error(data.error);
-            return data.result;
         }
 
         async function checkDriveApi() {
@@ -404,7 +433,8 @@
 
         const handleDriveSave = async () => {
             if (!driveConfig.folderId) { showToast('Folder ID Drive manquant ! Ouvrez les réglages.', true); return; }
-            showToast('Envoi vers Drive...');
+            setDriveBtnsLoading(true);
+            showToast('☁️ Envoi vers Drive...');
             cleanupEmptyPerformances();
             try {
                 const backupState = { ...state, isDirty: false };
@@ -418,18 +448,19 @@
 
                 state.isDirty = false;
                 state.activeFileName = dailyFilename;
-                saveState();
+                saveState(true);
                 renderHeader(`☁️ ${dailyFilename.replace('backup_fitness_','').replace('.json','')} ✓`);
                 showToast(`☁️ Drive : ${dailyFilename} + last_backup ✓`);
             } catch(e) {
                 console.error('Erreur Drive save:', e);
                 showToast('Erreur sauvegarde Drive: ' + e.message, true);
-            }
+            } finally { setDriveBtnsLoading(false); }
         };
 
         const handleDriveLoad = async () => {
             if (!driveConfig.folderId) { showToast('Folder ID Drive manquant ! Ouvrez les réglages.', true); return; }
-            showToast('Récupération des fichiers...');
+            setDriveBtnsLoading(true);
+            showToast('☁️ Récupération des fichiers...');
             try {
                 const searchArgs = { query: 'backup_fitness', max_results: 50, format: 'json' };
                 if (driveConfig.folderId) searchArgs.folder_id = driveConfig.folderId;
@@ -439,7 +470,7 @@
             } catch(e) {
                 console.error('Erreur Drive list:', e);
                 showToast('Erreur lecture Drive: ' + e.message, true);
-            }
+            } finally { setDriveBtnsLoading(false); }
         };
 
         function renderDriveLoadModal(files) {
@@ -491,7 +522,7 @@
                         state = importedState;
                         state.activeFileName = fileName;
                         state.isDirty = false;
-                        saveState();
+                        saveState(true);
                         refreshAll();
                         renderHeader(`☁️ ${fileName.replace('backup_fitness_','').replace('.json','')}`);
                         driveModalContainer.classList.remove('visible');
@@ -557,16 +588,49 @@
             oscillator.stop(audioCtx.currentTime + 1);
         }
 
-        function startTimer(durationInSeconds) {
+        let _timerCard = null; // card DOM element hosting the mini-timer
+        function startTimer(durationInSeconds, triggerBtn) {
             clearInterval(timerInterval);
+            // Remove previous mini-timer if any
+            document.querySelectorAll('.mini-timer').forEach(el => el.remove());
             let remaining = durationInSeconds;
+            // Create mini-timer in the card
+            const card = triggerBtn ? triggerBtn.closest('.exercise-card') : null;
+            _timerCard = card;
+            let miniEl = null;
+            if (card) {
+                miniEl = document.createElement('span');
+                miniEl.className = 'mini-timer';
+                miniEl.innerHTML = '<i class="fa-solid fa-stopwatch"></i> <span class="mini-timer-text"></span> <button class="mini-timer-close" style="margin-left:4px;cursor:pointer;opacity:0.6;font-size:11px;">&times;</button>';
+                // Insert after the timer button
+                const timerRow = triggerBtn.closest('.input-bg') || triggerBtn.parentElement;
+                timerRow.appendChild(miniEl);
+                miniEl.querySelector('.mini-timer-close').addEventListener('click', () => {
+                    clearInterval(timerInterval);
+                    miniEl.remove();
+                    timerDisplay.classList.add('hidden');
+                    timerDisplay.classList.remove('flex');
+                });
+            }
+            // Also show overlay (user can close it, mini stays)
             timerDisplay.classList.remove('hidden');
             timerDisplay.classList.add('flex');
             const update = () => {
+                if (remaining <= 0) {
+                    clearInterval(timerInterval);
+                    playSound();
+                    if (miniEl) { miniEl.innerHTML = '<i class="fa-solid fa-check" style="color:var(--glow-green)"></i> <span style="color:var(--glow-green)">Repos fini !</span>'; setTimeout(() => miniEl.remove(), 3000); }
+                    timerDisplay.classList.add('hidden');
+                    timerDisplay.classList.remove('flex');
+                    // Vibrate if available
+                    try { navigator.vibrate?.([200, 100, 200]); } catch(_) {}
+                    return;
+                }
                 const minutes = Math.floor(remaining / 60);
                 const seconds = remaining % 60;
-                timerText.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-                if (remaining <= 0) { clearInterval(timerInterval); playSound(); }
+                const txt = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                timerText.textContent = txt;
+                if (miniEl) { const t = miniEl.querySelector('.mini-timer-text'); if (t) t.textContent = txt; }
                 remaining--;
             };
             update();
@@ -574,7 +638,7 @@
         }
 
         timerCloseBtn.addEventListener('click', () => {
-            clearInterval(timerInterval);
+            // Only close overlay, keep mini-timer running
             timerDisplay.classList.add('hidden');
             timerDisplay.classList.remove('flex');
         });
@@ -598,6 +662,40 @@
             const d = new Date();
             return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         };
+
+        // Debounced saveState
+        let _saveTimeout = null;
+        const _saveStateImmediate = () => {
+            try { localStorage.setItem('fitnessTrackerState', JSON.stringify(state)); }
+            catch(e) { showToast('⚠️ Stockage local plein !', true); }
+        };
+        const debouncedSave = () => {
+            clearTimeout(_saveTimeout);
+            _saveTimeout = setTimeout(_saveStateImmediate, 300);
+        };
+
+        // Session progress bar
+        function updateSessionProgress() {
+            const bar = document.getElementById('session-progress-fill');
+            const label = document.getElementById('session-progress-label');
+            if (!bar || !label) return;
+            const prog = state.currentProgram;
+            const exercises = state.programs[prog]?.exercises || [];
+            if (exercises.length === 0) { label.style.display = 'none'; bar.style.width = '0%'; return; }
+            const today = getLocalToday();
+            let done = 0;
+            exercises.forEach(ex => {
+                const perf = state.performance[prog]?.[ex.Exercice] || [];
+                const todayEntry = perf.find(e => e.date === today);
+                if (todayEntry && (todayEntry.sets || []).some(s => s.poids?.toString().trim() || s.reps?.toString().trim())) done++;
+            });
+            const pct = Math.round((done / exercises.length) * 100);
+            bar.style.width = pct + '%';
+            label.style.display = 'block';
+            label.textContent = `${done}/${exercises.length} exercices • ${pct}%`;
+            if (pct === 100) label.style.color = 'var(--glow-green)';
+            else label.style.color = 'var(--text-secondary)';
+        }
 
         const cleanupEmptyPerformances = () => {
             const today = getLocalToday();
@@ -644,11 +742,11 @@
             console.log("Nettoyage terminé.");
         };
         
-        const saveState = () => {
-            try {
-                cleanupEmptyPerformances();
-                localStorage.setItem('fitnessTrackerState', JSON.stringify(state));
-            } catch (e) { console.error("Error saving state to localStorage:", e); showToast("Erreur: Impossible de sauvegarder les données.", true); }
+        const saveState = (immediate = false) => {
+            cleanupEmptyPerformances();
+            if (immediate) _saveStateImmediate();
+            else debouncedSave();
+            updateSessionProgress();
         };
 
         const markDirty = () => {
@@ -748,6 +846,8 @@
                 const realisationData = (todayPerfEntry?.sets) || (latestPerf?.sets) || [{}, {}, {}, {}];
                 const isEditable = !!todayPerfEntry;
 
+                // Compute deltas vs previous session
+                const prevSets = latestPerf?.sets || [];
                 let setsHTML = '<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-1">';
                 realisationData.forEach((set, i) => {
                     const isComplete = set.poids && set.poids.toString().trim() !== '' && set.reps && set.reps.toString().trim() !== '';
@@ -755,16 +855,33 @@
                     const containerClasses = isPending ? 'pending-input' : '';
                     const safeExoName = exercise.Exercice.replace(/[^a-zA-Z0-9]/g, '');
                     const poidsInputId = `poids-${i}-${safeExoName}`;
+                    // Delta indicators
+                    let deltaHTML = '';
+                    if (todayPerfEntry && prevSets[i]) {
+                        const curP = parseFloat(set.poids) || 0, prevP = parseFloat(prevSets[i].poids) || 0;
+                        const curR = parseFloat(set.reps) || 0, prevR = parseFloat(prevSets[i].reps) || 0;
+                        if (curP > 0 || curR > 0) {
+                            const pDiff = curP - prevP, rDiff = curR - prevR;
+                            const parts = [];
+                            if (pDiff > 0) parts.push(`<span class="perf-delta-up">↑${pDiff}kg</span>`);
+                            else if (pDiff < 0) parts.push(`<span class="perf-delta-down">↓${Math.abs(pDiff)}kg</span>`);
+                            if (rDiff > 0) parts.push(`<span class="perf-delta-up">↑${rDiff}r</span>`);
+                            else if (rDiff < 0) parts.push(`<span class="perf-delta-down">↓${Math.abs(rDiff)}r</span>`);
+                            if (parts.length === 0 && (curP > 0 || curR > 0)) parts.push(`<span class="perf-delta-same">=</span>`);
+                            deltaHTML = `<div style="display:flex;gap:3px;justify-content:center;margin-top:2px;">${parts.join('')}</div>`;
+                        }
+                    }
                     setsHTML += `<div class="input-bg p-2 rounded-lg relative ${containerClasses}">
                         ${isEditable ? `<button data-action="delete-set" data-exercise-name="${exercise.Exercice}" data-set-index="${i}" class="icon-btn" title="Supprimer la série">&times;</button>` : ''}
                         <div class="flex justify-between items-center mb-1 pr-4">
                             <label class="text-xs font-medium text-secondary">Série ${i + 1}</label>
-                            ${isEditable ? `<button data-action="set-pdc" data-target-id="${poidsInputId}" class="text-xs font-bold text-cyan-400 border border-cyan-400 rounded px-1 py-0.5 hover:bg-cyan-900 transition-colors leading-none" title="Remplir Poids du Corps">PDC</button>`: ''}
+                            ${isEditable ? `<button data-action="set-pdc" data-target-id="${poidsInputId}" class="text-xs font-bold text-cyan-400 border border-cyan-400 rounded px-1.5 py-1 hover:bg-cyan-900 transition-colors leading-none" title="Poids du Corps">PDC</button>`: ''}
                         </div>
                         <div class="flex gap-2">
                             <input type="text" inputmode="decimal" class="editable-perf w-1/2 bg-card rounded-md text-center" id="${poidsInputId}" data-exercise="${exercise.Exercice}" data-set-index="${i}" data-sub-field="poids" placeholder="Poids" value="${set.poids || ''}" ${!isEditable ? 'disabled' : ''}>
                             <input type="text" inputmode="decimal" class="editable-perf w-1/2 bg-card rounded-md text-center" data-exercise="${exercise.Exercice}" data-set-index="${i}" data-sub-field="reps" placeholder="Reps" value="${set.reps || ''}" ${!isEditable ? 'disabled' : ''}>
                         </div>
+                        ${deltaHTML}
                     </div>`;
                 });
                 setsHTML += '</div>';
@@ -839,6 +956,7 @@
                     </div>`;
                 exerciseList.appendChild(card);
             });
+            updateSessionProgress();
         };
 
         const populateSelector = () => {
@@ -1803,7 +1921,7 @@
                     const exercise = state.programs[programName].exercises[index];
                     const duration = parseInt(exercise.Repos, 10) || 0;
                     if (duration > 0) {
-                        startTimer(duration);
+                        startTimer(duration, target);
                     } else {
                         showToast("Aucun temps de repos valide défini.", true);
                     }
