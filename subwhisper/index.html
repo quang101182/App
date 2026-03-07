@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.02</title>
+<title>SubWhisper v9.03</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1047,7 +1047,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.02</span>
+    <span class="ver-badge">v9.03</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1381,7 +1381,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.02 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.03 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -2879,7 +2879,7 @@ function setSt(s) { document.getElementById('sd').className = 'sdot' + (s ? ' ' 
 function showRes(content, srcLang, tgtLang, wasTranslated, words) {
   srtOriginal = content;
   _diffOriginalSnapshot = content;
-  _diagSteps = { raw_groq: content };
+  _diagSteps = { raw_groq: content, detected_lang: srcLang || '', was_translated: !!wasTranslated };
   currentOffset = 0;
   document.getElementById('offsetDisplay').textContent = '0 ms';
   document.getElementById('sp').value = content;
@@ -3944,14 +3944,39 @@ function _diagStats(before, after) {
   return { blocks_before: bBlocks.length, blocks_after: aBlocks.length, blocks_modified: modified, chars_delta: charsChanged };
 }
 
+function _detectLangFromText(text) {
+  if (!text) return '';
+  var sample = text.substring(0, 2000);
+  var cjk = 0, latin = 0, cyrillic = 0, arabic = 0;
+  for (var i = 0; i < sample.length; i++) {
+    var c = sample.charCodeAt(i);
+    if (c >= 0x3000 && c <= 0x9FFF || c >= 0xFF00 && c <= 0xFFEF) cjk++;
+    else if (c >= 0x0400 && c <= 0x04FF) cyrillic++;
+    else if (c >= 0x0600 && c <= 0x06FF) arabic++;
+    else if (c >= 0x41 && c <= 0x7A) latin++;
+  }
+  if (cjk > latin) return 'ja';
+  if (cyrillic > latin) return 'ru';
+  if (arabic > latin) return 'ar';
+  // Latin — try FR vs EN vs ES heuristic
+  var fr = (sample.match(/\b(le|la|les|un|une|des|du|de|est|pas|que|qui|dans|pour|avec|sur|mais|comme|cette|aussi|tout|fait|vous|nous|ils|elles|sont|ont|peut|très|bien|même|encore)\b/gi) || []).length;
+  var en = (sample.match(/\b(the|is|are|was|were|have|has|had|not|but|and|for|with|this|that|from|they|will|would|could|should|been|into|just|about|than|very|also|know|more|some)\b/gi) || []).length;
+  var es = (sample.match(/\b(el|los|las|una|unos|unas|del|está|pero|como|por|para|con|esta|ese|eso|más|muy|también|puede|tiene|hace|desde|entre|sobre|todos|porque)\b/gi) || []).length;
+  if (fr > en && fr > es) return 'fr';
+  if (es > en && es > fr) return 'es';
+  if (en > 0) return 'en';
+  return '';
+}
+
 async function exportDiag() {
   if (!_diagSteps.raw_groq) { toast('Aucun diagnostic — lance une transcription d\'abord'); return; }
-  var src = detectedLang || (document.getElementById('srcLangMain') ? document.getElementById('srcLangMain').value : '') || '';
+  var src = detectedLang || _diagSteps.detected_lang || (document.getElementById('srcLangMain') ? document.getElementById('srcLangMain').value : '') || '';
+  if (!src) src = _detectLangFromText(_diagSteps.raw_groq);
   var tgt = document.getElementById('outLangMain') ? document.getElementById('outLangMain').value : '';
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.02',
+    version: 'v9.03',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4247,6 +4272,7 @@ function loadSrtFile(file) {
     if (extractBtn) extractBtn.style.display = 'none';
     hideErr(); hideRes();
     showRes(content, null, null, false, []);
+    _diagSteps.transcription_engine = 'import';
     updateSbtn();
     toast('\u2713 SRT import\u00e9 \u2014 ' + blocks.length + ' blocs');
   };
