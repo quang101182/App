@@ -10,7 +10,7 @@
  *
  * Keys stored in KV via /admin/keys/set:
  *   GEMINI_KEY, GROQ_KEY, OPENAI_KEY, DEEPL_KEY, ASSEMBLYAI_KEY
- *   DEEPSEEK_KEY, AZURE_KEY, CLAUDE_KEY
+ *   DEEPSEEK_KEY, AZURE_KEY, CLAUDE_KEY, DEEPGRAM_KEY
  *
  * Config in KV:
  *   cfg:azure:region  — Azure Translator region (e.g. "francecentral")
@@ -24,6 +24,7 @@
  *   POST /api/deepseek    → DeepSeek API
  *   POST /api/azure       → Azure Translator (query params forwarded)
  *   POST /api/claude      → Anthropic Claude API
+ *   POST /api/deepgram/*  → Deepgram Nova-2 API (transcription + diarization)
  *   POST /admin/keys/list
  *   POST /admin/keys/set
  *   POST /admin/keys/delete
@@ -36,7 +37,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.6';
+const VERSION = '1.7';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -45,7 +46,7 @@ const CORS_HEADERS = {
 };
 
 /** All recognised key names stored in KV */
-const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL'];
+const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL'];
 
 /** Rate limit: max requests per minute window */
 const RL_API_MAX   = 20;
@@ -103,6 +104,7 @@ export default {
         if (path === '/api/deepseek')         return await proxyDeepSeek(request, env);
         if (path === '/api/azure')            return await proxyAzure(request, env, url);
         if (path.startsWith('/api/claude'))   return await proxyClaude(request, env, path);
+        if (path.startsWith('/api/deepgram')) return await proxyDeepgram(request, env, path);
 
         return jsonResponse({ error: 'unknown api route' }, 404);
       }
@@ -338,6 +340,48 @@ async function proxyAssemblyai(request, env) {
   return proxyRequest(request, upstream, { 'Authorization': apiKey });
 }
 
+/**
+ * POST /api/deepgram/* → https://api.deepgram.com
+ *
+ * Sub-path: /api/deepgram → /v1/listen (default)
+ * Auth: Token DEEPGRAM_KEY.
+ * Supports large audio uploads (arrayBuffer forwarded as-is).
+ */
+async function proxyDeepgram(request, env, path) {
+  const apiKey = await resolveKey(env, 'DEEPGRAM_KEY');
+  if (!apiKey) return jsonResponse({ error: 'DEEPGRAM_KEY not configured' }, 503);
+
+  let subPath = path.slice('/api/deepgram'.length) || '/v1/listen';
+  if (!subPath.startsWith('/')) subPath = '/' + subPath;
+
+  // Forward query string (contains Deepgram params like model, diarize, language, etc.)
+  const url = new URL(request.url);
+  const qs = url.search || '';
+
+  const upstream = `https://api.deepgram.com${subPath}${qs}`;
+
+  const body = await request.arrayBuffer();
+  const forwardHeaders = new Headers();
+  const contentType = request.headers.get('Content-Type');
+  if (contentType) forwardHeaders.set('Content-Type', contentType);
+  forwardHeaders.set('Authorization', `Token ${apiKey}`);
+
+  const upstreamResp = await fetch(upstream, {
+    method : request.method,
+    headers: forwardHeaders,
+    body   : body.byteLength > 0 ? body : undefined,
+  });
+
+  const respHeaders = new Headers();
+  for (const h of ['content-type', 'content-length']) {
+    const val = upstreamResp.headers.get(h);
+    if (val) respHeaders.set(h, val);
+  }
+  for (const [k, v] of Object.entries(CORS_HEADERS)) respHeaders.set(k, v);
+
+  return new Response(upstreamResp.body, { status: upstreamResp.status, headers: respHeaders });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Core proxy helper
 // ─────────────────────────────────────────────────────────────────────────────
@@ -488,6 +532,7 @@ async function adminKeysStatus(env) {
     DEEPSEEK_KEY  : pingDeepSeek,
     AZURE_KEY     : pingAzure,
     CLAUDE_KEY    : pingClaude,
+    DEEPGRAM_KEY  : pingDeepgram,
     // AZURE_REGION, WORKER_URL are config values — skip ping
   };
 
@@ -586,6 +631,14 @@ async function pingClaude(apiKey) {
   const resp = await fetch('https://api.anthropic.com/v1/models', {
     method : 'GET',
     headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+  });
+  return { ok: resp.ok, status: resp.status };
+}
+
+async function pingDeepgram(apiKey) {
+  const resp = await fetch('https://api.deepgram.com/v1/projects', {
+    method : 'GET',
+    headers: { 'Authorization': `Token ${apiKey}` },
   });
   return { ok: resp.ok, status: resp.status };
 }

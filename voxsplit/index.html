@@ -1,0 +1,1649 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoxSplit v1.0 — Diarization & Transcription</title>
+<meta name="description" content="Transcription audio/vidéo avec identification des locuteurs (diarization) via Deepgram Nova-2">
+<link rel="manifest" href="data:application/json,%7B%22name%22%3A%22VoxSplit%22%2C%22short_name%22%3A%22VoxSplit%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230f172a%22%2C%22theme_color%22%3A%228b5cf6%22%7D">
+<meta name="theme-color" content="#8b5cf6">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-color: rgba(148,163,184,0.15);
+  --glow-violet: #8b5cf6;
+  --glow-teal: #22d3ee;
+  --glow-magenta: #ec4899;
+  --glow-green: #22c55e;
+  --accent: #8b5cf6;
+  --accent-hover: #7c3aed;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --success: #22c55e;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* Noise texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E") repeat;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Layout */
+.app-container {
+  position: relative;
+  z-index: 1;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px;
+  padding-bottom: 100px;
+}
+
+/* Header */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(30,41,59,0.9), rgba(15,23,42,0.95));
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  margin-bottom: 20px;
+}
+.app-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--glow-violet), var(--glow-teal));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.app-header .version {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: rgba(139,92,246,0.15);
+  color: var(--glow-violet);
+  font-weight: 600;
+}
+.header-actions { display: flex; gap: 8px; align-items: center; }
+.icon-btn {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: rgba(30,41,59,0.5);
+  color: var(--text-secondary);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+.icon-btn:hover {
+  background: rgba(139,92,246,0.15);
+  color: var(--glow-violet);
+  border-color: rgba(139,92,246,0.3);
+}
+
+/* Gateway status dot */
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+.status-dot.green { background: var(--success); box-shadow: 0 0 6px rgba(34,197,94,0.5); }
+.status-dot.red { background: var(--danger); box-shadow: 0 0 6px rgba(239,68,68,0.5); }
+.status-dot.yellow { background: var(--warning); box-shadow: 0 0 6px rgba(245,158,11,0.5); }
+
+/* Cards */
+.card {
+  background: linear-gradient(135deg, rgba(30,41,59,0.85), rgba(15,23,42,0.95));
+  backdrop-filter: blur(12px) saturate(1.3);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+/* Upload zone */
+.upload-zone {
+  border: 2px dashed var(--border-color);
+  border-radius: 16px;
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+.upload-zone:hover, .upload-zone.drag-over {
+  border-color: var(--glow-violet);
+  background: rgba(139,92,246,0.05);
+}
+.upload-zone.drag-over {
+  box-shadow: inset 0 0 30px rgba(139,92,246,0.1);
+}
+.upload-zone i {
+  font-size: 48px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  display: block;
+}
+.upload-zone h3 {
+  font-size: 18px;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+.upload-zone p {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.upload-zone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* File info */
+.file-info {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(139,92,246,0.08);
+  border-radius: 12px;
+  margin-top: 16px;
+}
+.file-info.visible { display: flex; }
+.file-info i { font-size: 24px; color: var(--glow-violet); }
+.file-info .file-details { flex: 1; }
+.file-info .file-name { font-weight: 600; font-size: 14px; }
+.file-info .file-size { font-size: 12px; color: var(--text-muted); }
+.file-info .remove-btn {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(239,68,68,0.15);
+  color: var(--danger);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+}
+.file-info .remove-btn:hover { background: rgba(239,68,68,0.3); }
+
+/* Settings */
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+@media (max-width: 600px) {
+  .settings-grid { grid-template-columns: 1fr; }
+}
+.setting-group label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.setting-group select, .setting-group input[type="text"] {
+  width: 100%;
+  background: rgba(15,23,42,0.6);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+.setting-group select:focus, .setting-group input[type="text"]:focus {
+  outline: none;
+  border-color: var(--glow-violet);
+  box-shadow: 0 0 12px rgba(139,92,246,0.15);
+}
+.setting-group select option { background: var(--bg-secondary); }
+
+/* Checkbox toggle */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+}
+.toggle-row span { font-size: 14px; color: var(--text-secondary); }
+.toggle {
+  width: 44px; height: 24px;
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+.toggle.active { background: var(--glow-violet); }
+.toggle::after {
+  content: '';
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  top: 3px; left: 3px;
+  transition: transform 0.3s;
+}
+.toggle.active::after { transform: translateX(20px); }
+
+/* Action buttons */
+.btn-primary {
+  width: 100%;
+  padding: 14px 24px;
+  border: none;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: linear-gradient(135deg, var(--glow-violet), var(--accent-hover));
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(139,92,246,0.3);
+}
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 30px rgba(139,92,246,0.4);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  padding: 10px 20px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: rgba(30,41,59,0.5);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-secondary:hover {
+  background: rgba(139,92,246,0.1);
+  border-color: var(--glow-violet);
+  color: var(--text-primary);
+}
+
+/* Progress bar */
+.progress-container {
+  display: none;
+  margin-top: 20px;
+}
+.progress-container.visible { display: block; }
+.progress-bar {
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--glow-violet), var(--glow-teal), var(--glow-magenta));
+  background-size: 200% 100%;
+  animation: progress-shimmer 2s ease infinite;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+@keyframes progress-shimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.progress-text {
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Log console */
+.log-console {
+  display: none;
+  margin-top: 16px;
+  background: rgba(2,6,23,0.6);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px 16px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.log-console.visible { display: block; }
+.log-entry { color: var(--text-muted); }
+.log-entry.info { color: var(--glow-teal); }
+.log-entry.success { color: var(--success); }
+.log-entry.error { color: var(--danger); }
+.log-entry.warn { color: var(--warning); }
+
+/* Results */
+.results-section {
+  display: none;
+}
+.results-section.visible { display: block; }
+
+.results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.results-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+.results-header .stats {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Speaker legend */
+.speaker-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.speaker-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+.speaker-tag:hover { opacity: 0.8; }
+.speaker-tag .speaker-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+}
+
+/* Transcript blocks */
+.transcript-block {
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  border-left: 3px solid transparent;
+  transition: all 0.2s;
+}
+.transcript-block:hover {
+  background: rgba(255,255,255,0.03);
+}
+.transcript-block .block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.transcript-block .speaker-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.transcript-block .timestamp {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+.transcript-block .block-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.transcript-block .confidence-bar {
+  margin-top: 6px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+.transcript-block .confidence-fill {
+  height: 100%;
+  border-radius: 1px;
+  transition: width 0.5s;
+}
+
+/* Export bar */
+.export-bar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0; right: 0;
+  z-index: 100;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(30,41,59,0.95), rgba(15,23,42,0.98));
+  backdrop-filter: blur(16px);
+  border-top: 1px solid var(--border-color);
+}
+.export-bar.visible { display: block; }
+.export-bar-inner {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.export-btn {
+  flex-shrink: 0;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: rgba(30,41,59,0.6);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.export-btn:hover {
+  background: rgba(139,92,246,0.15);
+  border-color: var(--glow-violet);
+}
+.export-btn i { font-size: 14px; }
+
+/* Speaker edit modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(2,6,23,0.7);
+  backdrop-filter: blur(8px);
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.visible { display: flex; }
+.modal-box {
+  background: linear-gradient(135deg, rgba(30,41,59,0.95), rgba(15,23,42,0.98));
+  border: 1px solid rgba(148,163,184,0.15);
+  border-radius: 16px;
+  padding: 24px;
+  width: 90%;
+  max-width: 420px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(139,92,246,0.1);
+}
+.modal-box h3 {
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+.modal-box .input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.modal-box .input-row .color-swatch {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  border: 2px solid rgba(255,255,255,0.2);
+  flex-shrink: 0;
+}
+.modal-box .input-row input {
+  flex: 1;
+  background: rgba(15,23,42,0.6);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+}
+.modal-box .input-row input:focus {
+  outline: none;
+  border-color: var(--glow-violet);
+}
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+/* Toast */
+#toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  padding: 10px 20px;
+  border-radius: 10px;
+  background: rgba(30,41,59,0.95);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 14px;
+  z-index: 300;
+  opacity: 0;
+  transition: all 0.3s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+#toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Settings panel */
+.settings-panel {
+  display: none;
+}
+.settings-panel.visible { display: block; }
+
+/* Spinner */
+.spinner {
+  display: inline-block;
+  width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* SW update banner */
+.sw-banner {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999;
+  padding: 10px 20px;
+  border-radius: 12px;
+  background: rgba(139,92,246,0.95);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(139,92,246,0.4);
+  pointer-events: auto;
+}
+.sw-banner.visible { display: flex; align-items: center; gap: 8px; }
+
+/* Responsive */
+@media (max-width: 480px) {
+  .app-header h1 { font-size: 18px; }
+  .card { padding: 16px; }
+  .upload-zone { padding: 32px 16px; }
+  .upload-zone i { font-size: 36px; }
+}
+
+/* Speaker colors */
+.speaker-0 { --spk-color: #8b5cf6; }
+.speaker-1 { --spk-color: #22d3ee; }
+.speaker-2 { --spk-color: #ec4899; }
+.speaker-3 { --spk-color: #22c55e; }
+.speaker-4 { --spk-color: #f59e0b; }
+.speaker-5 { --spk-color: #ef4444; }
+.speaker-6 { --spk-color: #3b82f6; }
+.speaker-7 { --spk-color: #a855f7; }
+.speaker-8 { --spk-color: #14b8a6; }
+.speaker-9 { --spk-color: #f97316; }
+
+/* Search */
+.search-bar {
+  display: none;
+  margin-bottom: 12px;
+}
+.search-bar.visible { display: flex; }
+.search-bar input {
+  flex: 1;
+  background: rgba(15,23,42,0.6);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+}
+.search-bar input:focus { outline: none; border-color: var(--glow-violet); }
+.search-bar .search-count {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Highlighted text */
+mark {
+  background: rgba(245,158,11,0.3);
+  color: var(--text-primary);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+</style>
+</head>
+<body>
+
+<!-- SW Update Banner -->
+<div id="sw-banner" class="sw-banner" onclick="location.reload()">
+  <i class="fas fa-sync-alt"></i>
+  <span>Nouvelle version disponible — cliquer pour recharger</span>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<div class="app-container">
+  <!-- Header -->
+  <div class="app-header">
+    <div>
+      <h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1>
+    </div>
+    <div class="header-actions">
+      <span class="version">v1.0</span>
+      <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--text-muted)">
+        <span class="status-dot yellow"></span>
+      </span>
+      <button class="icon-btn" onclick="toggleSettings()" title="Paramètres"><i class="fas fa-gear"></i></button>
+    </div>
+  </div>
+
+  <!-- Settings Panel -->
+  <div id="settings-panel" class="settings-panel card">
+    <h3 style="font-size:16px;margin-bottom:16px"><i class="fas fa-sliders" style="margin-right:8px"></i>Configuration</h3>
+    <div class="setting-group" style="margin-bottom:12px">
+      <label>Gateway URL</label>
+      <input type="text" id="cfg-gateway" placeholder="https://api-gateway.quang101182.workers.dev" value="">
+    </div>
+    <div class="setting-group" style="margin-bottom:12px">
+      <label>Gateway Secret (Bearer)</label>
+      <input type="text" id="cfg-secret" placeholder="Votre WORKER_SECRET">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn-secondary" onclick="saveConfig()"><i class="fas fa-check"></i> Sauvegarder</button>
+      <button class="btn-secondary" onclick="testGateway()"><i class="fas fa-plug"></i> Tester</button>
+    </div>
+  </div>
+
+  <!-- Upload Section -->
+  <div class="card" id="upload-card">
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" id="file-input" accept="audio/*,video/*,.mp3,.mp4,.wav,.webm,.ogg,.flac,.m4a,.aac,.mkv,.avi,.mov">
+      <i class="fas fa-cloud-arrow-up"></i>
+      <h3>Déposer un fichier audio ou vidéo</h3>
+      <p>MP3, MP4, WAV, WEBM, OGG, FLAC, M4A, MKV, AVI, MOV — jusqu'à 2 Go</p>
+    </div>
+
+    <div class="file-info" id="file-info">
+      <i class="fas fa-file-audio"></i>
+      <div class="file-details">
+        <div class="file-name" id="file-name">—</div>
+        <div class="file-size" id="file-size">—</div>
+      </div>
+      <button class="remove-btn" onclick="removeFile()" title="Retirer"><i class="fas fa-xmark"></i></button>
+    </div>
+
+    <!-- Options -->
+    <div class="settings-grid" id="options-grid">
+      <div class="setting-group">
+        <label>Modèle</label>
+        <select id="opt-model">
+          <option value="nova-2" selected>Nova-2 (meilleur)</option>
+          <option value="nova-2-general">Nova-2 General</option>
+          <option value="nova-2-meeting">Nova-2 Meeting</option>
+          <option value="nova-2-phonecall">Nova-2 PhoneCall</option>
+          <option value="nova-2-voicemail">Nova-2 VoiceMail</option>
+          <option value="nova-2-finance">Nova-2 Finance</option>
+          <option value="nova-2-conversationalai">Nova-2 ConversationalAI</option>
+          <option value="nova-2-video">Nova-2 Video</option>
+          <option value="whisper-large">Whisper Large</option>
+        </select>
+      </div>
+      <div class="setting-group">
+        <label>Langue</label>
+        <select id="opt-lang">
+          <option value="">Auto-détection</option>
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="de">Deutsch</option>
+          <option value="it">Italiano</option>
+          <option value="pt">Português</option>
+          <option value="ja">日本語</option>
+          <option value="ko">한국어</option>
+          <option value="zh">中文</option>
+          <option value="ar">العربية</option>
+          <option value="ru">Русский</option>
+          <option value="hi">हिन्दी</option>
+          <option value="nl">Nederlands</option>
+          <option value="pl">Polski</option>
+          <option value="tr">Türkçe</option>
+          <option value="vi">Tiếng Việt</option>
+          <option value="th">ไทย</option>
+          <option value="id">Bahasa Indonesia</option>
+          <option value="uk">Українська</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <div class="toggle-row">
+        <span><i class="fas fa-users" style="margin-right:6px"></i>Diarization (identification locuteurs)</span>
+        <div class="toggle active" id="toggle-diarize" onclick="this.classList.toggle('active')"></div>
+      </div>
+      <div class="toggle-row">
+        <span><i class="fas fa-paragraph" style="margin-right:6px"></i>Ponctuation automatique</span>
+        <div class="toggle active" id="toggle-punctuate" onclick="this.classList.toggle('active')"></div>
+      </div>
+      <div class="toggle-row">
+        <span><i class="fas fa-language" style="margin-right:6px"></i>Détection de langue</span>
+        <div class="toggle active" id="toggle-detect-lang" onclick="this.classList.toggle('active')"></div>
+      </div>
+      <div class="toggle-row">
+        <span><i class="fas fa-spell-check" style="margin-right:6px"></i>Smart Format</span>
+        <div class="toggle active" id="toggle-smart-format" onclick="this.classList.toggle('active')"></div>
+      </div>
+    </div>
+
+    <!-- Launch button -->
+    <div style="margin-top:20px">
+      <button class="btn-primary" id="btn-start" onclick="startTranscription()" disabled>
+        <i class="fas fa-play"></i>
+        <span>Transcrire</span>
+      </button>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-container" id="progress-container">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-text">
+        <span id="progress-label">Préparation...</span>
+        <span id="progress-pct">0%</span>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="log-console" id="log-console"></div>
+  </div>
+
+  <!-- Results Section -->
+  <div class="results-section" id="results-section">
+    <div class="results-header">
+      <h2><i class="fas fa-message-lines" style="margin-right:8px"></i>Résultat</h2>
+      <div class="stats" id="results-stats">—</div>
+    </div>
+
+    <div class="speaker-legend" id="speaker-legend"></div>
+
+    <div class="search-bar" id="search-bar">
+      <input type="text" id="search-input" placeholder="Rechercher dans la transcription..." oninput="filterTranscript()">
+      <div class="search-count" id="search-count"></div>
+    </div>
+
+    <div id="transcript-output"></div>
+  </div>
+</div>
+
+<!-- Export Bar -->
+<div class="export-bar" id="export-bar">
+  <div class="export-bar-inner">
+    <button class="export-btn" onclick="exportSRT()"><i class="fas fa-file-lines"></i> SRT (locuteurs)</button>
+    <button class="export-btn" onclick="exportTXT()"><i class="fas fa-file-alt"></i> TXT</button>
+    <button class="export-btn" onclick="exportJSON()"><i class="fas fa-file-code"></i> JSON brut</button>
+    <button class="export-btn" onclick="exportVTT()"><i class="fas fa-closed-captioning"></i> VTT</button>
+    <button class="export-btn" onclick="copyToClipboard()"><i class="fas fa-copy"></i> Copier</button>
+    <button class="export-btn" onclick="toggleSearch()"><i class="fas fa-magnifying-glass"></i> Rechercher</button>
+    <button class="export-btn" onclick="editSpeakers()"><i class="fas fa-user-pen"></i> Renommer</button>
+    <button class="export-btn" onclick="resetAll()"><i class="fas fa-rotate-left"></i> Nouveau</button>
+  </div>
+</div>
+
+<!-- Speaker Edit Modal -->
+<div class="modal-overlay" id="speaker-modal">
+  <div class="modal-box">
+    <h3><i class="fas fa-user-pen" style="margin-right:8px"></i>Renommer les locuteurs</h3>
+    <div id="speaker-inputs"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeSpeakerModal()">Annuler</button>
+      <button class="btn-primary" style="width:auto;padding:10px 24px" onclick="applySpeakerNames()">
+        <i class="fas fa-check"></i> Appliquer
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────
+// VoxSplit v1.0 — Diarization & Transcription via Deepgram
+// ─────────────────────────────────────────────────────────────────────
+
+const VERSION = '1.0';
+const GATEWAY_DEFAULT = 'https://api-gateway.quang101182.workers.dev';
+
+// Speaker colors palette
+const SPEAKER_COLORS = [
+  '#8b5cf6','#22d3ee','#ec4899','#22c55e','#f59e0b',
+  '#ef4444','#3b82f6','#a855f7','#14b8a6','#f97316'
+];
+
+// State
+let selectedFile = null;
+let rawResult = null; // Deepgram JSON response
+let speakerNames = {}; // { 0: "Alice", 1: "Bob" }
+let parsedUtterances = []; // processed utterances
+
+// ─────────────────────────────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────────────────────────────
+
+function getConfig() {
+  try { return JSON.parse(localStorage.getItem('voxsplit_config') || '{}'); } catch { return {}; }
+}
+function setConfig(c) { localStorage.setItem('voxsplit_config', JSON.stringify(c)); }
+
+function getGateway() { return getConfig().gateway || GATEWAY_DEFAULT; }
+function getSecret() { return getConfig().secret || ''; }
+
+function saveConfig() {
+  const gw = document.getElementById('cfg-gateway').value.trim();
+  const secret = document.getElementById('cfg-secret').value.trim();
+  if (!gw || !secret) { toast('Gateway URL et Secret requis', 'warn'); return; }
+  setConfig({ gateway: gw, secret: secret });
+  toast('Configuration sauvegardée');
+  checkGateway();
+}
+
+function toggleSettings() {
+  const p = document.getElementById('settings-panel');
+  p.classList.toggle('visible');
+  if (p.classList.contains('visible')) {
+    const c = getConfig();
+    document.getElementById('cfg-gateway').value = c.gateway || GATEWAY_DEFAULT;
+    document.getElementById('cfg-secret').value = c.secret || '';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Gateway check
+// ─────────────────────────────────────────────────────────────────────
+
+async function checkGateway() {
+  const dot = document.querySelector('#gw-status .status-dot');
+  const secret = getSecret();
+  if (!secret) {
+    dot.className = 'status-dot red';
+    dot.parentElement.title = 'Gateway: secret non configuré';
+    return false;
+  }
+  try {
+    const r = await fetch(getGateway() + '/health', { signal: AbortSignal.timeout(5000) });
+    const j = await r.json();
+    if (j.ok) {
+      dot.className = 'status-dot green';
+      dot.parentElement.title = `Gateway v${j.version} OK`;
+      return true;
+    }
+  } catch(e) {}
+  dot.className = 'status-dot red';
+  dot.parentElement.title = 'Gateway: inaccessible';
+  return false;
+}
+
+async function testGateway() {
+  toast('Test en cours...');
+  const ok = await checkGateway();
+  if (ok) {
+    // Also check Deepgram key
+    try {
+      const r = await fetch(getGateway() + '/config', {
+        headers: { 'Authorization': 'Bearer ' + getSecret() },
+        signal: AbortSignal.timeout(5000)
+      });
+      const j = await r.json();
+      if (j.apis && j.apis.includes('DEEPGRAM')) {
+        toast('Gateway OK + clé Deepgram configurée', 'success');
+      } else {
+        toast('Gateway OK mais clé DEEPGRAM_KEY non configurée', 'warn');
+      }
+    } catch(e) {
+      toast('Gateway OK, vérification config échouée', 'warn');
+    }
+  } else {
+    toast('Gateway inaccessible ou secret invalide', 'error');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// File handling
+// ─────────────────────────────────────────────────────────────────────
+
+function setupFileInput() {
+  const zone = document.getElementById('upload-zone');
+  const input = document.getElementById('file-input');
+
+  input.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) handleFile(e.target.files[0]);
+  });
+
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+  });
+}
+
+function handleFile(file) {
+  if (file.size > 2 * 1024 * 1024 * 1024) {
+    toast('Fichier trop volumineux (max 2 Go)', 'error');
+    return;
+  }
+  selectedFile = file;
+  document.getElementById('file-name').textContent = file.name;
+  document.getElementById('file-size').textContent = formatSize(file.size);
+  document.getElementById('file-info').classList.add('visible');
+  document.getElementById('btn-start').disabled = false;
+
+  // Auto-detect if video
+  const icon = document.querySelector('#file-info > i');
+  icon.className = file.type.startsWith('video/') ? 'fas fa-file-video' : 'fas fa-file-audio';
+}
+
+function removeFile() {
+  selectedFile = null;
+  document.getElementById('file-info').classList.remove('visible');
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('file-input').value = '';
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+  return (bytes / 1073741824).toFixed(2) + ' GB';
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Logging
+// ─────────────────────────────────────────────────────────────────────
+
+function log(msg, level = '') {
+  const console = document.getElementById('log-console');
+  console.classList.add('visible');
+  const ts = new Date().toLocaleTimeString('fr-FR');
+  const div = document.createElement('div');
+  div.className = 'log-entry' + (level ? ' ' + level : '');
+  div.textContent = `[${ts}] ${msg}`;
+  console.appendChild(div);
+  console.scrollTop = console.scrollHeight;
+}
+
+function setProgress(pct, label) {
+  const container = document.getElementById('progress-container');
+  container.classList.add('visible');
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = Math.round(pct) + '%';
+  if (label) document.getElementById('progress-label').textContent = label;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Transcription pipeline
+// ─────────────────────────────────────────────────────────────────────
+
+async function startTranscription() {
+  if (!selectedFile) return;
+
+  const secret = getSecret();
+  if (!secret) {
+    toast('Configurez le Gateway d\'abord', 'error');
+    toggleSettings();
+    return;
+  }
+
+  const btn = document.getElementById('btn-start');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div><span>Transcription en cours...</span>';
+
+  // Reset
+  document.getElementById('results-section').classList.remove('visible');
+  document.getElementById('export-bar').classList.remove('visible');
+  document.getElementById('log-console').innerHTML = '';
+  rawResult = null;
+  parsedUtterances = [];
+  speakerNames = {};
+
+  // Build query params
+  const params = new URLSearchParams();
+  params.set('model', document.getElementById('opt-model').value);
+
+  const lang = document.getElementById('opt-lang').value;
+  if (lang) params.set('language', lang);
+
+  if (document.getElementById('toggle-diarize').classList.contains('active')) {
+    params.set('diarize', 'true');
+  }
+  if (document.getElementById('toggle-punctuate').classList.contains('active')) {
+    params.set('punctuate', 'true');
+  }
+  if (document.getElementById('toggle-detect-lang').classList.contains('active') && !lang) {
+    params.set('detect_language', 'true');
+  }
+  if (document.getElementById('toggle-smart-format').classList.contains('active')) {
+    params.set('smart_format', 'true');
+  }
+
+  // Additional useful params
+  params.set('utterances', 'true'); // Get utterance-level diarization
+  params.set('paragraphs', 'true');
+
+  const gateway = getGateway();
+  const url = `${gateway}/api/deepgram/v1/listen?${params.toString()}`;
+
+  log(`Fichier: ${selectedFile.name} (${formatSize(selectedFile.size)})`, 'info');
+  log(`Modèle: ${document.getElementById('opt-model').value}`, 'info');
+  log(`Diarization: ${params.has('diarize') ? 'OUI' : 'NON'}`, 'info');
+  log('Upload en cours...', 'info');
+  setProgress(10, 'Upload du fichier...');
+
+  const startTime = Date.now();
+
+  try {
+    // Determine content type
+    let contentType = selectedFile.type || 'audio/mpeg';
+    // Deepgram accepts raw audio — use the actual MIME type
+    if (!contentType || contentType === 'application/octet-stream') {
+      const ext = selectedFile.name.split('.').pop().toLowerCase();
+      const mimeMap = {
+        mp3: 'audio/mpeg', mp4: 'video/mp4', wav: 'audio/wav',
+        webm: 'audio/webm', ogg: 'audio/ogg', flac: 'audio/flac',
+        m4a: 'audio/mp4', aac: 'audio/aac', mkv: 'video/x-matroska',
+        avi: 'video/x-msvideo', mov: 'video/quicktime'
+      };
+      contentType = mimeMap[ext] || 'audio/mpeg';
+    }
+
+    setProgress(20, 'Envoi au serveur Deepgram...');
+    log(`Content-Type: ${contentType}`, 'info');
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + secret,
+        'Content-Type': contentType,
+      },
+      body: selectedFile,
+    });
+
+    setProgress(70, 'Réponse reçue, traitement...');
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      let errMsg;
+      try { errMsg = JSON.parse(errText).error || errText; } catch { errMsg = errText; }
+      throw new Error(`HTTP ${resp.status}: ${errMsg}`);
+    }
+
+    const json = await resp.json();
+    rawResult = json;
+
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    log(`Transcription reçue en ${elapsed}s`, 'success');
+
+    // Check for detected language
+    if (json.results?.channels?.[0]?.detected_language) {
+      log(`Langue détectée: ${json.results.channels[0].detected_language}`, 'info');
+    }
+
+    setProgress(85, 'Analyse des locuteurs...');
+
+    // Parse results
+    processResults(json);
+
+    setProgress(100, 'Terminé');
+    log(`${parsedUtterances.length} segments, ${Object.keys(speakerNames).length} locuteurs identifiés`, 'success');
+
+    // Show results
+    renderResults();
+    document.getElementById('results-section').classList.add('visible');
+    document.getElementById('export-bar').classList.add('visible');
+
+    // Scroll to results
+    setTimeout(() => {
+      document.getElementById('results-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 300);
+
+  } catch (err) {
+    log(`Erreur: ${err.message}`, 'error');
+    toast('Erreur de transcription: ' + err.message, 'error');
+    setProgress(0, 'Erreur');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-play"></i><span>Transcrire</span>';
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Process Deepgram results
+// ─────────────────────────────────────────────────────────────────────
+
+function processResults(json) {
+  parsedUtterances = [];
+  speakerNames = {};
+
+  const channel = json.results?.channels?.[0];
+  if (!channel) {
+    log('Aucun résultat dans la réponse', 'error');
+    return;
+  }
+
+  // Use utterances if available (best for diarization)
+  if (json.results.utterances && json.results.utterances.length > 0) {
+    for (const utt of json.results.utterances) {
+      const spk = utt.speaker ?? 0;
+      if (!(spk in speakerNames)) {
+        speakerNames[spk] = `Locuteur ${spk + 1}`;
+      }
+      parsedUtterances.push({
+        speaker: spk,
+        start: utt.start,
+        end: utt.end,
+        text: utt.transcript || '',
+        confidence: utt.confidence || 0,
+        words: utt.words || [],
+      });
+    }
+    return;
+  }
+
+  // Fallback: use paragraphs
+  if (channel.alternatives?.[0]?.paragraphs?.paragraphs) {
+    for (const para of channel.alternatives[0].paragraphs.paragraphs) {
+      const spk = para.speaker ?? 0;
+      if (!(spk in speakerNames)) {
+        speakerNames[spk] = `Locuteur ${spk + 1}`;
+      }
+      for (const sent of (para.sentences || [])) {
+        parsedUtterances.push({
+          speaker: spk,
+          start: sent.start,
+          end: sent.end,
+          text: sent.text || '',
+          confidence: 0,
+          words: [],
+        });
+      }
+    }
+    return;
+  }
+
+  // Last fallback: single transcript
+  const alt = channel.alternatives?.[0];
+  if (alt) {
+    speakerNames[0] = 'Locuteur 1';
+
+    // Try to split by words with speaker info
+    if (alt.words && alt.words.length > 0 && alt.words[0].speaker !== undefined) {
+      let currentSpeaker = alt.words[0].speaker;
+      let currentStart = alt.words[0].start;
+      let currentWords = [];
+      let currentConfidence = [];
+
+      for (const w of alt.words) {
+        if (w.speaker !== currentSpeaker) {
+          // Flush
+          parsedUtterances.push({
+            speaker: currentSpeaker,
+            start: currentStart,
+            end: alt.words[alt.words.indexOf(w) - 1]?.end || currentStart,
+            text: currentWords.join(' '),
+            confidence: currentConfidence.reduce((a, b) => a + b, 0) / currentConfidence.length,
+            words: [],
+          });
+          if (!(w.speaker in speakerNames)) {
+            speakerNames[w.speaker] = `Locuteur ${w.speaker + 1}`;
+          }
+          currentSpeaker = w.speaker;
+          currentStart = w.start;
+          currentWords = [];
+          currentConfidence = [];
+        }
+        currentWords.push(w.punctuated_word || w.word);
+        currentConfidence.push(w.confidence || 0);
+      }
+      // Flush last
+      if (currentWords.length > 0) {
+        parsedUtterances.push({
+          speaker: currentSpeaker,
+          start: currentStart,
+          end: alt.words[alt.words.length - 1]?.end || currentStart,
+          text: currentWords.join(' '),
+          confidence: currentConfidence.reduce((a, b) => a + b, 0) / currentConfidence.length,
+          words: [],
+        });
+      }
+    } else {
+      // No speaker info at all
+      parsedUtterances.push({
+        speaker: 0,
+        start: 0,
+        end: json.metadata?.duration || 0,
+        text: alt.transcript || '',
+        confidence: alt.confidence || 0,
+        words: alt.words || [],
+      });
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Render results
+// ─────────────────────────────────────────────────────────────────────
+
+function renderResults() {
+  // Stats
+  const duration = rawResult?.metadata?.duration || 0;
+  const numSpeakers = Object.keys(speakerNames).length;
+  const totalWords = parsedUtterances.reduce((sum, u) => sum + u.text.split(/\s+/).filter(Boolean).length, 0);
+  document.getElementById('results-stats').textContent =
+    `${formatDuration(duration)} · ${numSpeakers} locuteur${numSpeakers > 1 ? 's' : ''} · ${totalWords} mots`;
+
+  // Speaker legend
+  renderSpeakerLegend();
+
+  // Transcript blocks
+  renderTranscriptBlocks();
+}
+
+function renderSpeakerLegend() {
+  const container = document.getElementById('speaker-legend');
+  container.innerHTML = '';
+  for (const [spkId, name] of Object.entries(speakerNames)) {
+    const idx = parseInt(spkId);
+    const color = SPEAKER_COLORS[idx % SPEAKER_COLORS.length];
+    const tag = document.createElement('div');
+    tag.className = 'speaker-tag';
+    tag.style.background = hexToRgba(color, 0.15);
+    tag.style.color = color;
+    tag.innerHTML = `<span class="speaker-dot" style="background:${color}"></span>${name}`;
+    tag.onclick = () => highlightSpeaker(idx);
+    container.appendChild(tag);
+  }
+}
+
+function renderTranscriptBlocks(filter = '') {
+  const container = document.getElementById('transcript-output');
+  container.innerHTML = '';
+  let count = 0;
+
+  for (const utt of parsedUtterances) {
+    let text = utt.text;
+    if (filter && !text.toLowerCase().includes(filter.toLowerCase())) continue;
+
+    count++;
+    const color = SPEAKER_COLORS[utt.speaker % SPEAKER_COLORS.length];
+    const name = speakerNames[utt.speaker] || `Locuteur ${utt.speaker + 1}`;
+
+    const block = document.createElement('div');
+    block.className = `transcript-block speaker-${utt.speaker}`;
+    block.style.borderLeftColor = color;
+    block.dataset.speaker = utt.speaker;
+
+    // Highlight search terms
+    let displayText = text;
+    if (filter) {
+      const regex = new RegExp(`(${escapeRegex(filter)})`, 'gi');
+      displayText = text.replace(regex, '<mark>$1</mark>');
+    }
+
+    block.innerHTML = `
+      <div class="block-header">
+        <span class="speaker-name" style="color:${color}">${name}</span>
+        <span class="timestamp">${formatTime(utt.start)} → ${formatTime(utt.end)}</span>
+      </div>
+      <div class="block-text">${displayText}</div>
+      ${utt.confidence > 0 ? `
+        <div class="confidence-bar">
+          <div class="confidence-fill" style="width:${Math.round(utt.confidence * 100)}%;background:${color}"></div>
+        </div>
+      ` : ''}
+    `;
+
+    container.appendChild(block);
+  }
+
+  if (filter) {
+    document.getElementById('search-count').textContent = `${count} résultat${count > 1 ? 's' : ''}`;
+  }
+}
+
+function highlightSpeaker(spkIdx) {
+  const blocks = document.querySelectorAll('.transcript-block');
+  blocks.forEach(b => {
+    if (parseInt(b.dataset.speaker) === spkIdx) {
+      b.style.background = 'rgba(255,255,255,0.05)';
+    } else {
+      b.style.background = '';
+      b.style.opacity = '0.4';
+    }
+  });
+  // Reset after 3s
+  setTimeout(() => {
+    blocks.forEach(b => { b.style.background = ''; b.style.opacity = ''; });
+  }, 3000);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Search
+// ─────────────────────────────────────────────────────────────────────
+
+function toggleSearch() {
+  const bar = document.getElementById('search-bar');
+  bar.classList.toggle('visible');
+  if (bar.classList.contains('visible')) {
+    document.getElementById('search-input').focus();
+  } else {
+    document.getElementById('search-input').value = '';
+    renderTranscriptBlocks();
+  }
+}
+
+function filterTranscript() {
+  const q = document.getElementById('search-input').value;
+  renderTranscriptBlocks(q);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Speaker rename modal
+// ─────────────────────────────────────────────────────────────────────
+
+function editSpeakers() {
+  const container = document.getElementById('speaker-inputs');
+  container.innerHTML = '';
+  for (const [spkId, name] of Object.entries(speakerNames)) {
+    const idx = parseInt(spkId);
+    const color = SPEAKER_COLORS[idx % SPEAKER_COLORS.length];
+    const row = document.createElement('div');
+    row.className = 'input-row';
+    row.innerHTML = `
+      <div class="color-swatch" style="background:${color}"></div>
+      <input type="text" value="${name}" data-speaker="${spkId}" placeholder="Nom du locuteur ${idx + 1}">
+    `;
+    container.appendChild(row);
+  }
+  document.getElementById('speaker-modal').classList.add('visible');
+}
+
+function closeSpeakerModal() {
+  document.getElementById('speaker-modal').classList.remove('visible');
+}
+
+function applySpeakerNames() {
+  const inputs = document.querySelectorAll('#speaker-inputs input');
+  inputs.forEach(inp => {
+    const spk = inp.dataset.speaker;
+    const name = inp.value.trim();
+    if (name) speakerNames[spk] = name;
+  });
+  closeSpeakerModal();
+  renderResults();
+  toast('Locuteurs renommés');
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Exports
+// ─────────────────────────────────────────────────────────────────────
+
+function exportSRT() {
+  if (!parsedUtterances.length) return;
+  let srt = '';
+  parsedUtterances.forEach((utt, i) => {
+    const name = speakerNames[utt.speaker] || `Locuteur ${utt.speaker + 1}`;
+    srt += `${i + 1}\n`;
+    srt += `${formatSRTTime(utt.start)} --> ${formatSRTTime(utt.end)}\n`;
+    srt += `[${name}] ${utt.text}\n\n`;
+  });
+  downloadFile(srt, getExportFilename('srt'), 'text/srt');
+  toast('SRT exporté');
+}
+
+function exportVTT() {
+  if (!parsedUtterances.length) return;
+  let vtt = 'WEBVTT\n\n';
+  parsedUtterances.forEach((utt, i) => {
+    const name = speakerNames[utt.speaker] || `Locuteur ${utt.speaker + 1}`;
+    vtt += `${i + 1}\n`;
+    vtt += `${formatVTTTime(utt.start)} --> ${formatVTTTime(utt.end)}\n`;
+    vtt += `<v ${name}>${utt.text}\n\n`;
+  });
+  downloadFile(vtt, getExportFilename('vtt'), 'text/vtt');
+  toast('VTT exporté');
+}
+
+function exportTXT() {
+  if (!parsedUtterances.length) return;
+  let txt = '';
+  let lastSpeaker = -1;
+  for (const utt of parsedUtterances) {
+    const name = speakerNames[utt.speaker] || `Locuteur ${utt.speaker + 1}`;
+    if (utt.speaker !== lastSpeaker) {
+      if (txt) txt += '\n';
+      txt += `${name}:\n`;
+      lastSpeaker = utt.speaker;
+    }
+    txt += `  ${utt.text}\n`;
+  }
+  downloadFile(txt, getExportFilename('txt'), 'text/plain');
+  toast('TXT exporté');
+}
+
+function exportJSON() {
+  if (!rawResult) return;
+  const exportData = {
+    version: VERSION,
+    file: selectedFile?.name || 'unknown',
+    exported: new Date().toISOString(),
+    speakers: speakerNames,
+    utterances: parsedUtterances,
+    raw: rawResult,
+  };
+  downloadFile(JSON.stringify(exportData, null, 2), getExportFilename('json'), 'application/json');
+  toast('JSON exporté');
+}
+
+async function copyToClipboard() {
+  if (!parsedUtterances.length) return;
+  let txt = '';
+  let lastSpeaker = -1;
+  for (const utt of parsedUtterances) {
+    const name = speakerNames[utt.speaker] || `Locuteur ${utt.speaker + 1}`;
+    if (utt.speaker !== lastSpeaker) {
+      if (txt) txt += '\n';
+      txt += `[${name}]\n`;
+      lastSpeaker = utt.speaker;
+    }
+    txt += `${utt.text}\n`;
+  }
+  try {
+    await navigator.clipboard.writeText(txt);
+    toast('Copié dans le presse-papier');
+  } catch {
+    toast('Erreur de copie', 'error');
+  }
+}
+
+function getExportFilename(ext) {
+  const base = selectedFile ? selectedFile.name.replace(/\.[^.]+$/, '') : 'voxsplit';
+  return `${base}_voxsplit.${ext}`;
+}
+
+function downloadFile(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Reset
+// ─────────────────────────────────────────────────────────────────────
+
+function resetAll() {
+  removeFile();
+  rawResult = null;
+  parsedUtterances = [];
+  speakerNames = {};
+  document.getElementById('results-section').classList.remove('visible');
+  document.getElementById('export-bar').classList.remove('visible');
+  document.getElementById('progress-container').classList.remove('visible');
+  document.getElementById('log-console').classList.remove('visible');
+  document.getElementById('log-console').innerHTML = '';
+  document.getElementById('search-bar').classList.remove('visible');
+  document.getElementById('search-input').value = '';
+  document.getElementById('progress-fill').style.width = '0%';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────
+
+function formatTime(seconds) {
+  if (!seconds && seconds !== 0) return '00:00';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function formatDuration(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}h ${m}min`;
+  if (m > 0) return `${m}min ${s}s`;
+  return `${s}s`;
+}
+
+function formatSRTTime(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const ms = Math.round((seconds % 1) * 1000);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
+}
+
+function formatVTTTime(seconds) {
+  return formatSRTTime(seconds).replace(',', '.');
+}
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+let _toastTimer;
+function toast(msg, level) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = level === 'error' ? 'var(--danger)' :
+                        level === 'warn' ? 'var(--warning)' :
+                        level === 'success' ? 'var(--success)' : 'var(--border-color)';
+  t.classList.add('visible');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove('visible'), 3000);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Service Worker
+// ─────────────────────────────────────────────────────────────────────
+
+function initSW() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'SW_UPDATED') {
+        const banner = document.getElementById('sw-banner');
+        banner.classList.add('visible');
+      }
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────────────────
+
+function init() {
+  setupFileInput();
+  checkGateway();
+  initSW();
+
+  // Auto-open settings if no config
+  const c = getConfig();
+  if (!c.secret) {
+    setTimeout(() => toggleSettings(), 500);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
