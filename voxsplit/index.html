@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoxSplit v1.0 — Diarization & Transcription</title>
+<title>VoxSplit v1.1 — Diarization & Transcription</title>
 <meta name="description" content="Transcription audio/vidéo avec identification des locuteurs (diarization) via Deepgram Nova-2">
-<link rel="manifest" href="data:application/json,%7B%22name%22%3A%22VoxSplit%22%2C%22short_name%22%3A%22VoxSplit%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230f172a%22%2C%22theme_color%22%3A%228b5cf6%22%7D">
+<link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#8b5cf6">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -685,7 +685,7 @@ mark {
       <h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1>
     </div>
     <div class="header-actions">
-      <span class="version">v1.0</span>
+      <span class="version">v1.1</span>
       <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--text-muted)">
         <span class="status-dot yellow"></span>
       </span>
@@ -703,6 +703,10 @@ mark {
     <div class="setting-group" style="margin-bottom:12px">
       <label>Gateway Secret (Bearer)</label>
       <input type="text" id="cfg-secret" placeholder="Votre WORKER_SECRET">
+    </div>
+    <div class="setting-group" style="margin-bottom:12px">
+      <label>Admin Token (pour récupérer les clés API)</label>
+      <input type="text" id="cfg-admin" placeholder="Votre ADMIN_TOKEN">
     </div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn-secondary" onclick="saveConfig()"><i class="fas fa-check"></i> Sauvegarder</button>
@@ -861,7 +865,7 @@ mark {
 
 <script>
 // ─────────────────────────────────────────────────────────────────────
-// VoxSplit v1.0 — Diarization & Transcription via Deepgram
+// VoxSplit v1.1 — Diarization & Transcription via Deepgram
 // ─────────────────────────────────────────────────────────────────────
 
 const VERSION = '1.0';
@@ -890,12 +894,14 @@ function setConfig(c) { localStorage.setItem('voxsplit_config', JSON.stringify(c
 
 function getGateway() { return getConfig().gateway || GATEWAY_DEFAULT; }
 function getSecret() { return getConfig().secret || ''; }
+function getAdminToken() { return getConfig().adminToken || ''; }
 
 function saveConfig() {
   const gw = document.getElementById('cfg-gateway').value.trim();
   const secret = document.getElementById('cfg-secret').value.trim();
-  if (!gw || !secret) { toast('Gateway URL et Secret requis', 'warn'); return; }
-  setConfig({ gateway: gw, secret: secret });
+  const adminToken = document.getElementById('cfg-admin').value.trim();
+  if (!gw || !secret || !adminToken) { toast('Tous les champs sont requis', 'warn'); return; }
+  setConfig({ gateway: gw, secret: secret, adminToken: adminToken });
   toast('Configuration sauvegardée');
   checkGateway();
 }
@@ -907,6 +913,7 @@ function toggleSettings() {
     const c = getConfig();
     document.getElementById('cfg-gateway').value = c.gateway || GATEWAY_DEFAULT;
     document.getElementById('cfg-secret').value = c.secret || '';
+    document.getElementById('cfg-admin').value = c.adminToken || '';
   }
 }
 
@@ -1084,21 +1091,33 @@ async function startTranscription() {
   params.set('utterances', 'true'); // Get utterance-level diarization
   params.set('paragraphs', 'true');
 
-  const gateway = getGateway();
-  const url = `${gateway}/api/deepgram/v1/listen?${params.toString()}`;
-
   log(`Fichier: ${selectedFile.name} (${formatSize(selectedFile.size)})`, 'info');
   log(`Modèle: ${document.getElementById('opt-model').value}`, 'info');
   log(`Diarization: ${params.has('diarize') ? 'OUI' : 'NON'}`, 'info');
-  log('Upload en cours...', 'info');
-  setProgress(10, 'Upload du fichier...');
+  setProgress(5, 'Récupération de la clé API...');
 
   const startTime = Date.now();
 
   try {
-    // Determine content type
+    // Step 1: Fetch Deepgram API key from gateway (avoids CF Worker 100MB body limit)
+    log('Récupération clé Deepgram via gateway...', 'info');
+    const keyResp = await fetch(getGateway() + '/admin/keys/get', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + getAdminToken(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ key: 'DEEPGRAM_KEY' }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!keyResp.ok) throw new Error('Impossible de récupérer la clé Deepgram du gateway');
+    const keyData = await keyResp.json();
+    if (!keyData.ok || !keyData.value) throw new Error('Clé DEEPGRAM_KEY non configurée dans le gateway');
+    const dgKey = keyData.value;
+    log('Clé Deepgram récupérée', 'success');
+
+    // Step 2: Determine content type
     let contentType = selectedFile.type || 'audio/mpeg';
-    // Deepgram accepts raw audio — use the actual MIME type
     if (!contentType || contentType === 'application/octet-stream') {
       const ext = selectedFile.name.split('.').pop().toLowerCase();
       const mimeMap = {
@@ -1110,13 +1129,16 @@ async function startTranscription() {
       contentType = mimeMap[ext] || 'audio/mpeg';
     }
 
-    setProgress(20, 'Envoi au serveur Deepgram...');
+    // Step 3: Upload directly to Deepgram API (no CF Worker body limit)
+    const dgUrl = `https://api.deepgram.com/v1/listen?${params.toString()}`;
+    setProgress(15, 'Upload direct vers Deepgram...');
+    log(`Upload direct → Deepgram (${formatSize(selectedFile.size)})`, 'info');
     log(`Content-Type: ${contentType}`, 'info');
 
-    const resp = await fetch(url, {
+    const resp = await fetch(dgUrl, {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer ' + secret,
+        'Authorization': 'Token ' + dgKey,
         'Content-Type': contentType,
       },
       body: selectedFile,
