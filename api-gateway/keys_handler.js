@@ -15,7 +15,7 @@ const KNOWN_KEYS = [
   { key: 'DEEPL_KEY',      label: 'DeepL',      usage: 'Traduction haute qualité' },
   { key: 'CLAUDE_KEY',     label: 'Claude',     usage: 'Anthropic Claude (claude-sonnet-4-6, etc.)' },
   { key: 'WORKER_URL',     label: 'Worker CF',  usage: 'URL Worker gros fichiers cloud', isConfig: true },
-  { key: 'WORKER_SECRET',  label: 'Worker Secret', usage: 'Secret auth apps → gateway', isConfig: true },
+  { key: 'WORKER_SECRET',  label: 'Worker Secret', usage: 'Secret auth apps → gateway', noPing: true },
 ];
 
 const hPost = (url, body) => this.helpers.httpRequest({
@@ -69,7 +69,7 @@ if (text.startsWith('keyset:')) {
 } else if (text === 'keystatus' || text === 'keys status') {
   try {
     const data  = await hPost(`${GATEWAY_URL}/admin/keys/status`);
-    const lines = KNOWN_KEYS.filter(k => !k.isConfig).map(({ key, label }) => {
+    const lines = KNOWN_KEYS.filter(k => !k.isConfig && !k.noPing).map(({ key, label }) => {
       const st = (data.statuses || {})[key];
       if (!st) return `⚪ *${label}*: non configurée`;
       const icon    = st.ok ? '✅' : '❌';
@@ -91,7 +91,7 @@ if (text.startsWith('keyset:')) {
     ]);
     const statuses = statusData.statuses || {};
 
-    const lines = KNOWN_KEYS.map(({ key, label, isConfig }) => {
+    const lines = KNOWN_KEYS.map(({ key, label, isConfig, noPing }) => {
       const presence = listData[key] || 'not set';
       const hasKey   = presence !== 'not set';
 
@@ -103,7 +103,7 @@ if (text.startsWith('keyset:')) {
       }
 
       const st     = statuses[key];
-      const icon   = !hasKey ? '⚪' : st?.ok ? '✅' : '❌';
+      const icon   = !hasKey ? '⚪' : (noPing ? '🔒' : (st?.ok ? '✅' : '❌'));
       const masked = hasKey ? `••• ${presence.length} chars` : 'aucune clé';
       return `${icon} *${label}* (\`${key}\`) ${masked}`;
     }).join('\n');
