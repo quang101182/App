@@ -791,7 +791,7 @@ const AiEngine = (() => {
 
   async function transform(prompt,provider,lang='fr',targetProvider='universal'){
     const apiKey=ApiKeys.getKey(provider),model=ApiKeys.getModel(provider);
-    if(!apiKey) throw new Error(`Clé API ${provider} manquante`);
+    if(!apiKey && !getGwSecret()) throw new Error(`Clé API ${provider} manquante`);
     const sys=TemplateEngine.get(targetProvider,lang);
     let text;
     if(provider==='claude') text=await callClaude(prompt,sys,model,apiKey);
@@ -803,7 +803,7 @@ const AiEngine = (() => {
 
   async function fetchTemplateGuidelines(targetProvider,lang){
     const provider=State.get().activeProvider;
-    if(!ApiKeys.hasKey(provider)) throw new Error(`Clé API ${provider} manquante`);
+    if(!ApiKeys.hasKey(provider) && !getGwSecret()) throw new Error(`Clé API ${provider} manquante`);
     const apiKey=ApiKeys.getKey(provider),model=ApiKeys.getModel(provider);
     const fetchPrompt=TemplateEngine.buildFetchPrompt(targetProvider,lang);
     const universalSys=TemplateEngine.DEFAULTS.universal.system(lang);
@@ -889,7 +889,7 @@ const Renderer = (() => {
   function setCopyState(success){const btn=$('btn-copy'),icon=$('copy-icon');if(success){btn.classList.add('copy-success');icon.textContent='✓';setTimeout(()=>{btn.classList.remove('copy-success');icon.textContent='⎘'},2000)}}
   function updateCharCount(len){const el=$('char-count-in');el.textContent=`${len} / 8000`;el.classList.toggle('warn',len>7000)}
   function updateOutCharCount(text){$('char-count-out').textContent=text?`${text.length} car.`:''}
-  function updateApiButton(provider){const hasKey=ApiKeys.hasKey(provider||State.get().activeProvider);$('btn-api-key').classList.toggle('has-key',hasKey);$('api-dot').classList.toggle('active',hasKey);$('api-key-label').textContent=hasKey?'🔑 API':'API'}
+  function updateApiButton(provider){const hasKey=ApiKeys.hasKey(provider||State.get().activeProvider)||!!getGwSecret();$('btn-api-key').classList.toggle('has-key',hasKey);$('api-dot').classList.toggle('active',hasKey);$('api-key-label').textContent=hasKey?'🔑 API':'API'}
   function updateModeUI(mode){$('mode-local').classList.toggle('active',mode==='local');$('mode-ai').classList.toggle('active',mode==='ai');const badge=$('output-badge');if(mode==='ai'){badge.textContent='IA';badge.className='panel-badge badge-ai'}else{badge.textContent='FORGE';badge.className='panel-badge badge-output'}}
   function updateLangUI(lang){document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang))}
   function updateOutputTab(tab){$('tab-result').classList.toggle('active',tab==='result');$('tab-diff').classList.toggle('active',tab==='diff')}
@@ -990,7 +990,7 @@ const TemplateModal = (() => {
 
     document.getElementById('btn-tpl-fetch').addEventListener('click',async()=>{
       const btn=document.getElementById('btn-tpl-fetch'),status=document.getElementById('tpl-fetch-status');
-      if(!ApiKeys.hasAnyKey()){Toast.show('Configurez une clé API d\'abord','error');return}
+      if(!ApiKeys.hasAnyKey()&&!getGwSecret()){Toast.show('Configurez une clé API d\'abord','error');return}
       btn.disabled=true;status.textContent='⏳ Interrogation de l\'IA…';status.style.color='#aa88ff';
       try{
         const result=await AiEngine.fetchTemplateGuidelines(curTarget,State.get().lang);
@@ -1124,7 +1124,7 @@ const Controller = (() => {
 
     if(mode==='ai'){
       const provider=State.get().activeProvider;
-      if(!ApiKeys.hasKey(provider)){Toast.show(`Clé API ${provider} manquante`,'error');Renderer.setStatus('Clé API manquante','error');Renderer.setLoading(false);State.set({loading:false});return}
+      if(!ApiKeys.hasKey(provider)&&!getGwSecret()){Toast.show(`Clé API ${provider} manquante`,'error');Renderer.setStatus('Clé API manquante','error');Renderer.setLoading(false);State.set({loading:false});return}
       Renderer.setStatus(`Amélioration via ${provider} → cible ${targetProvider}…`,'ai');
       try{
         const aiResult=await AiEngine.transform(promptText,provider,lang,targetProvider);
@@ -1177,7 +1177,7 @@ const Controller = (() => {
   async function iterate(){
     const outputRaw=State.get().outputRaw;if(!outputRaw) return;
     const mode=State.get().mode;
-    if(mode!=='ai'||!ApiKeys.hasKey(State.get().activeProvider)){Toast.show('Itération disponible en mode IA uniquement','error');return}
+    if(mode!=='ai'||(!ApiKeys.hasKey(State.get().activeProvider)&&!getGwSecret())){Toast.show('Itération disponible en mode IA uniquement','error');return}
     document.getElementById('input-prompt').value=outputRaw;Renderer.updateCharCount(outputRaw.length);
     await runForge(outputRaw);
   }
@@ -1315,7 +1315,7 @@ const Controller = (() => {
     Toast.show('Entrée chargée','info');
   }
 
-  function setMode(mode){State.set({mode});Renderer.updateModeUI(mode);if(mode==='ai'&&!ApiKeys.hasAnyKey()) Toast.show('Configurez une clé API via le bouton API','info')}
+  function setMode(mode){State.set({mode});Renderer.updateModeUI(mode);if(mode==='ai'&&!ApiKeys.hasAnyKey()&&!getGwSecret()) Toast.show('Configurez une clé API via le bouton API','info')}
   function setLang(lang){State.set({lang});Renderer.updateLangUI(lang);Store.write('lang',lang)}
   function setOutputTab(tab){State.set({outputTab:tab});Renderer.updateOutputTab(tab);const s=State.get();Renderer.renderOutput(s.outputSections,s.outputSections?null:s.outputRaw,tab,s.inputValue,s.outputRaw)}
   function setTarget(target){State.set({targetProvider:target});Renderer.updateTargetUI(target);Store.write('targetProvider',target)}
@@ -1344,7 +1344,7 @@ const Controller = (() => {
     State.set({history});Renderer.renderHistory(history);
     document.getElementById('btn-export').disabled=!history.length;
 
-    if(ApiKeys.hasAnyKey()){const p=ApiKeys.firstKeyProvider();State.set({activeProvider:p,mode:'ai'});Renderer.updateModeUI('ai');Renderer.updateApiButton(p)}
+    if(ApiKeys.hasAnyKey()||getGwSecret()){const p=ApiKeys.firstKeyProvider()||'claude';State.set({activeProvider:p,mode:'ai'});Renderer.updateModeUI('ai');Renderer.updateApiButton(p)}
     else{Renderer.updateModeUI('local');Renderer.updateApiButton()}
 
     document.getElementById('btn-forge').addEventListener('click',forge);
