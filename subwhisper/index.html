@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.93</title>
+<title>SubWhisper v8.94</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1021,6 +1021,23 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 
 @keyframes iaSelectWarn{0%,100%{border-color:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,.4)}50%{border-color:rgba(245,158,11,.2);box-shadow:none}}
 #aiEngine.warn{animation:iaSelectWarn 1s ease-in-out infinite!important}
+/* ── DIFF MODAL ── */
+@keyframes diffPulse{0%,100%{border-color:rgba(0,212,170,.5);box-shadow:0 0 8px rgba(0,212,170,.3)}50%{border-color:rgba(0,212,170,.15);box-shadow:none}}
+#diffBtn.has-diff{animation:diffPulse 1.5s ease-in-out infinite;color:var(--accent3);border-color:var(--accent3)}
+#diffModal{position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;flex-direction:column}
+#diffModal.vis{display:flex}
+#diffHdr{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid var(--border)}
+#diffHdr span{font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+#diffStats{font-family:var(--mono);font-size:10px;color:var(--accent3);padding:0 20px}
+#diffBody{flex:1;display:flex;overflow:hidden;gap:1px;background:var(--border)}
+.diff-col{flex:1;overflow-y:auto;background:var(--bg);padding:10px}
+.diff-col-hdr{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;padding:4px 0 8px;position:sticky;top:0;background:var(--bg);z-index:1}
+.diff-block{padding:6px 8px;margin-bottom:4px;border-radius:6px;font-size:12px;line-height:1.5;font-family:var(--sans);white-space:pre-wrap;word-break:break-word}
+.diff-block.changed{background:rgba(0,212,170,.08);border-left:3px solid var(--accent3)}
+.diff-block.same{color:var(--muted);font-size:11px}
+.diff-block .diff-id{font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:2px}
+#diffActions{display:flex;gap:8px;padding:12px 20px;border-top:1px solid var(--border);justify-content:flex-end}
+@media(max-width:600px){#diffBody{flex-direction:column}.diff-col{max-height:45vh}}
 </style>
 </head>
 <body>
@@ -1028,7 +1045,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.93</span>
+    <span class="ver-badge">v8.94</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1237,6 +1254,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
           <button class="ab" onclick="openFR()" id="frBtn">&#x1F50D; F&amp;R</button>
           <button class="ab" onclick="repairSRTTimestamps()" id="repairBtn" title="Corriger les timestamps aberrants">&#x1F527; RPR</button>
           <button class="ab" onclick="validateSRT()" id="validateBtn" title="Analyser la qualit&#233; des sous-titres">&#x2713; VALID</button>
+          <button class="ab" onclick="openDiff()" id="diffBtn" title="Comparer avant/apr&#232;s modifications">&#x21C4; DIFF</button>
         </div>
       </div>
       <div class="btn-sep"></div>
@@ -1360,7 +1378,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v8.93 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v8.94 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -1791,7 +1809,7 @@ function clearFilePrev() {
 
 function clearFile() {
   wordData = []; richViewActive = false;
-  selFile = null; srtTxt = ''; srtOriginal = ''; origVideoFile = null; closeUndoBanner(); resetValidate(); closeLangNotice();
+  selFile = null; srtTxt = ''; srtOriginal = ''; _diffOriginalSnapshot = ''; origVideoFile = null; closeUndoBanner(); resetValidate(); closeLangNotice();
   document.getElementById('fp').classList.remove('vis');
   document.getElementById('fi').value = '';
   document.getElementById('srtFi').value = '';
@@ -2854,6 +2872,7 @@ function setSt(s) { document.getElementById('sd').className = 'sdot' + (s ? ' ' 
 // ── RESULTS ───────────────────────────────────────────────
 function showRes(content, srcLang, tgtLang, wasTranslated, words) {
   srtOriginal = content;
+  _diffOriginalSnapshot = content;
   currentOffset = 0;
   document.getElementById('offsetDisplay').textContent = '0 ms';
   document.getElementById('sp').value = content;
@@ -3787,6 +3806,53 @@ function closeSubEditModal() {
   document.getElementById('subEditModal').style.display = 'none';
 }
 
+function splitSubBlock() {
+  if (!currentActiveBlockId) return;
+  var tx = document.getElementById('subEditTx');
+  var text = tx.value;
+  if (!text.trim()) return;
+  var cursorPos = tx.selectionStart || 0;
+  // Si curseur au début ou à la fin, couper au milieu au mot le plus proche
+  if (cursorPos <= 0 || cursorPos >= text.length) {
+    var mid = Math.floor(text.length / 2);
+    var spaceAfter = text.indexOf(' ', mid);
+    var spaceBefore = text.lastIndexOf(' ', mid);
+    cursorPos = (spaceAfter !== -1 && (spaceAfter - mid) < (mid - spaceBefore || Infinity)) ? spaceAfter : (spaceBefore > 0 ? spaceBefore : mid);
+  }
+  var text1 = text.substring(0, cursorPos).trim();
+  var text2 = text.substring(cursorPos).trim();
+  if (!text1 || !text2) { toast('Impossible de couper ici'); return; }
+  var blocks = parseSRT(srtOriginal);
+  var idx = -1;
+  for (var i = 0; i < blocks.length; i++) { if (blocks[i].id === currentActiveBlockId) { idx = i; break; } }
+  if (idx === -1) return;
+  var pts = blocks[idx].timestamp.split(' --> ');
+  var startMs = tsToMs(pts[0]);
+  var endMs = tsToMs(pts[1]);
+  // Diviser timestamp proportionnellement au texte
+  var ratio = text1.length / (text1.length + text2.length);
+  var midMs = Math.round(startMs + (endMs - startMs) * ratio);
+  var block1 = { id: '', timestamp: msToTs(startMs) + ' --> ' + msToTs(midMs), text: text1 };
+  var block2 = { id: '', timestamp: msToTs(midMs) + ' --> ' + msToTs(endMs), text: text2 };
+  blocks.splice(idx, 1, block1, block2);
+  // Renuméroter
+  blocks = blocks.map(function(b, i) { return { id: String(i + 1), timestamp: b.timestamp, text: b.text }; });
+  srtOriginal = buildSRT(blocks);
+  srtTxt = srtOriginal;
+  document.getElementById('sp').value = srtOriginal;
+  closeSubEditModal();
+  validateSRT(true);
+  if (previewVttUrl) {
+    URL.revokeObjectURL(previewVttUrl);
+    var vttBlob = new Blob([srtToVtt(srtOriginal)], { type: 'text/vtt' });
+    previewVttUrl = URL.createObjectURL(vttBlob);
+    var track = document.getElementById('previewTrack');
+    track.src = '';
+    setTimeout(function() { track.src = previewVttUrl; }, 50);
+  }
+  toast('✂ Bloc coupé en 2');
+}
+
 function closePreview() {
   document.getElementById('previewWrap').classList.remove('vis');
   var video = document.getElementById('previewVideo');
@@ -4334,10 +4400,13 @@ function closeValPanel() {
 function autoFormatSRT() {
   var raw = getCurrentSRT();
   if (!raw || !raw.trim()) { toast('Aucun SRT \u00e0 formater'); return; }
+  if (!_diffOriginalSnapshot) _diffOriginalSnapshot = raw;
   var blocks = parseSRT(raw);
   if (!blocks.length) { toast('SRT invalide'); return; }
   var MAX_LINE    = 42;
   var MAX_LINES   = 2;
+  var MAX_CPS     = 25;
+  var MAX_CHARS   = 84;
   var MIN_MERGE   = 500; // ms : bloc < 500ms fusionné avec suivant
   var modified    = 0;
 
@@ -4370,6 +4439,35 @@ function autoFormatSRT() {
     if (newText !== origText) modified++;
     return { id: b.id, timestamp: b.timestamp, text: newText };
   });
+
+  // Étape 1.5 : split blocs trop longs (>84 chars) ou trop rapides (>25 CPS)
+  var splitted = [];
+  blocks.forEach(function(b) {
+    var charCount = b.text.replace(/\n/g, '').length;
+    var pts = b.timestamp.split(' --> ');
+    var startMs = tsToMs(pts[0]), endMs = tsToMs(pts[1]);
+    var durMs = endMs - startMs;
+    var cps = durMs > 0 ? charCount / (durMs / 1000) : 0;
+    if (charCount > MAX_CHARS || (cps > MAX_CPS && charCount > MAX_LINE)) {
+      var flat = b.text.replace(/\n/g, ' ');
+      var mid = Math.floor(flat.length / 2);
+      var sp = flat.indexOf(' ', mid);
+      var spb = flat.lastIndexOf(' ', mid);
+      var cut = (sp !== -1 && (sp - mid) < (mid - spb || Infinity)) ? sp : (spb > 0 ? spb : mid);
+      var t1 = flat.substring(0, cut).trim();
+      var t2 = flat.substring(cut).trim();
+      if (t1 && t2) {
+        var ratio = t1.length / (t1.length + t2.length);
+        var midMs = Math.round(startMs + (endMs - startMs) * ratio);
+        splitted.push({ id: '', timestamp: msToTs(startMs) + ' --> ' + msToTs(midMs), text: t1 });
+        splitted.push({ id: '', timestamp: msToTs(midMs) + ' --> ' + msToTs(endMs), text: t2 });
+        modified++;
+        return;
+      }
+    }
+    splitted.push(b);
+  });
+  blocks = splitted;
 
   // Étape 2 : fusionner micro-blocs < MIN_MERGE ms
   var merged = [];
@@ -4409,6 +4507,7 @@ function autoFormatSRT() {
   }
   toast('\u229e Format\u00e9 \u2014 ' + modified + ' bloc' + (modified !== 1 ? 's' : '') + ' modifi\u00e9' + (modified !== 1 ? 's' : ''));
   validateSRT(true);
+  updateDiffBtn();
 }
 
 // ── DÉTECTION ALGO pour cleanAI (v8.67) ──────────────────
@@ -4445,6 +4544,7 @@ async function cleanAI() {
   hideSuggBanner();
   var raw = getCurrentSRT();
   if (!raw || !raw.trim()) { toast('Aucun SRT à nettoyer'); return; }
+  if (!_diffOriginalSnapshot) _diffOriginalSnapshot = raw;
   var engine = getAIEngine();
   var hasKey = engine === 'deepseek' ? API_DOTS['DSK'] === 'ok' : API_DOTS['GEM'] === 'ok';
   if (!hasKey) { toast('⚠ Clé ' + (engine === 'deepseek' ? 'DeepSeek' : 'Gemini') + ' requise'); return; }
@@ -4552,6 +4652,7 @@ async function cleanAI() {
     toast('✨ Nettoyage IA terminé — ' + _detected.length + ' vérifiés / ' + origBlocks.length + ' blocs');
     showUndoBanner(raw, origBlocks.length, 0);
     validateSRT(true);
+    updateDiffBtn();
     checkLangMismatch(srtOriginal, document.getElementById('outLangMain').value || null);
     if (!_autoProcessRunning) setTimeout(function() { showSuggBanner(analyzeSRT(srtOriginal)); }, 400);
   } catch(e) {
@@ -4848,6 +4949,7 @@ async function translateManual() {
   hideSuggBanner();
   var raw = getCurrentSRT();
   if (!raw || !raw.trim()) { toast('Aucun SRT à traduire'); return; }
+  if (!_diffOriginalSnapshot) _diffOriginalSnapshot = raw;
   var src = detectedLang || document.getElementById('srcLangMain').value || '';
   var tgt = document.getElementById('outLangMain').value;
   if (!tgt || tgt === 'same') { toast('⚠ Sélectionne une langue SORTIE dans la barre'); return; }
@@ -5021,6 +5123,7 @@ async function translateManual() {
       ? '🌐 Patch FR terminé (' + engine + ') — ' + nbBlocks + ' blocs' + (_secondIdx && _secondIdx.length > 0 ? ' (+2e passe: ' + _secondIdx.length + ')' : '')
       : '🌐 Traduit (' + engine + ') → ' + tgt.toUpperCase());
     validateSRT(true);
+    updateDiffBtn();
     checkLangMismatch(srtOriginal, tgt);
     if (!_autoProcessRunning) setTimeout(function() { showSuggBanner(analyzeSRT(srtOriginal)); }, 400);
   } catch(e) {
@@ -5035,6 +5138,7 @@ async function translateManual() {
 async function autoProcess() {
   var raw = getCurrentSRT();
   if (!raw || !raw.trim()) { toast('Aucun SRT à traiter'); return; }
+  _diffOriginalSnapshot = raw;
   var btn = document.getElementById('autoBtn');
   var btnOrig = btn ? btn.innerHTML : '&#x26A1; AUTO';
   var toolBtns = ['formatBtn','cleanAIBtn','translateBtn','repairBtn','validateBtn','autoBtn'];
@@ -5086,6 +5190,7 @@ async function autoProcess() {
     toastClear();
     var summary = plan.length === 1 ? '⚡ AUTO — FORMAT appliqué (SRT déjà propre)' : '⚡ AUTO terminé — ' + plan.join(' → ') + ' ✓';
     toast(summary);
+    updateDiffBtn();
     // Afficher l'état final APRÈS tout traitement
     setTimeout(function() { showSuggBanner(analyzeSRT(srtOriginal)); }, 400);
   } catch(e) {
@@ -5216,6 +5321,75 @@ function updateRequiredBlink() {
   var chip = document.getElementById('achipGRQ');
   if (chip) chip.style.opacity = API_DOTS['GRQ'] === 'ok' ? '1' : '0.6';
 }
+// ── DIFF (comparaison avant/après) ────────────────────────
+var _diffOriginalSnapshot = '';
+
+function updateDiffBtn() {
+  var btn = document.getElementById('diffBtn');
+  if (!btn) return;
+  var current = getCurrentSRT();
+  var hasDiff = _diffOriginalSnapshot && current && _diffOriginalSnapshot !== current;
+  btn.classList.toggle('has-diff', hasDiff);
+}
+
+function openDiff() {
+  var current = getCurrentSRT();
+  var original = _diffOriginalSnapshot || srtOriginal;
+  if (!current || !original) { toast('Aucun SRT à comparer'); return; }
+  if (current === original) { toast('Aucun changement détecté'); return; }
+  var beforeBlocks = parseSRT(original);
+  var afterBlocks = parseSRT(current);
+  var colBefore = document.getElementById('diffColBefore');
+  var colAfter = document.getElementById('diffColAfter');
+  colBefore.innerHTML = '<div class="diff-col-hdr">AVANT</div>';
+  colAfter.innerHTML = '<div class="diff-col-hdr">APR\u00c8S</div>';
+  var changed = 0;
+  var total = Math.max(beforeBlocks.length, afterBlocks.length);
+  for (var i = 0; i < total; i++) {
+    var bBefore = beforeBlocks[i];
+    var bAfter = afterBlocks[i];
+    var textBefore = bBefore ? bBefore.text : '';
+    var textAfter = bAfter ? bAfter.text : '';
+    var isChanged = textBefore !== textAfter;
+    if (isChanged) changed++;
+    var cls = isChanged ? 'diff-block changed' : 'diff-block same';
+    var divB = document.createElement('div');
+    divB.className = cls;
+    divB.innerHTML = '<div class="diff-id">#' + (i + 1) + '</div>' + escHtml(textBefore || '(absent)');
+    colBefore.appendChild(divB);
+    var divA = document.createElement('div');
+    divA.className = cls;
+    divA.innerHTML = '<div class="diff-id">#' + (i + 1) + '</div>' + escHtml(textAfter || '(absent)');
+    colAfter.appendChild(divA);
+  }
+  document.getElementById('diffStats').textContent = changed + ' bloc' + (changed !== 1 ? 's' : '') + ' modifié' + (changed !== 1 ? 's' : '') + ' sur ' + total;
+  document.getElementById('diffModal').classList.add('vis');
+  // Sync scroll
+  var cb = document.getElementById('diffColBefore');
+  var ca = document.getElementById('diffColAfter');
+  cb.onscroll = function() { ca.scrollTop = cb.scrollTop; };
+  ca.onscroll = function() { cb.scrollTop = ca.scrollTop; };
+}
+
+function closeDiff() {
+  document.getElementById('diffModal').classList.remove('vis');
+}
+
+function diffRevert() {
+  if (!_diffOriginalSnapshot) { toast('Rien à annuler'); return; }
+  srtOriginal = _diffOriginalSnapshot;
+  srtTxt = _diffOriginalSnapshot;
+  document.getElementById('sp').value = _diffOriginalSnapshot;
+  closeDiff();
+  updateDiffBtn();
+  validateSRT(true);
+  toast('\u21a9 Revenu à la version précédente');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 init();
 
 // ── KEYBOARD SHORTCUTS ───────────────────────────────────
@@ -5233,6 +5407,8 @@ document.addEventListener('keydown', function(e) {
     else toast('Rien à annuler');
   }
   if (e.key === 'Escape') {
+    var diffM = document.getElementById('diffModal');
+    if (diffM && diffM.classList.contains('vis')) { closeDiff(); return; }
     var modal = document.getElementById('subEditModal');
     if (modal && modal.style.display === 'flex') { closeSubEditModal(); return; }
     var fr = document.getElementById('frOverlay');
@@ -5243,6 +5419,35 @@ document.addEventListener('keydown', function(e) {
   if (ctrl && e.key === 'f') {
     e.preventDefault();
     if (getCurrentSRT()) openFR();
+  }
+  // Ctrl+Enter → transcrire
+  if (ctrl && e.key === 'Enter') {
+    e.preventDefault();
+    var sb = document.getElementById('sb');
+    if (sb && !sb.disabled) sb.click();
+  }
+});
+// Contrôles vidéo dans sub edit modal
+document.addEventListener('keydown', function(e) {
+  var modal = document.getElementById('subEditModal');
+  if (!modal || modal.style.display !== 'flex') return;
+  var vid = document.getElementById('previewVideo');
+  if (!vid || !vid.src) return;
+  var tag = (e.target.tagName || '').toLowerCase();
+  // Espace = play/pause (sauf si dans textarea/input)
+  if (e.key === ' ' && tag !== 'textarea' && tag !== 'input') {
+    e.preventDefault();
+    if (vid.paused) vid.play(); else vid.pause();
+  }
+  // ← = reculer 3s
+  if (e.key === 'ArrowLeft' && tag !== 'textarea' && tag !== 'input') {
+    e.preventDefault();
+    vid.currentTime = Math.max(0, vid.currentTime - 3);
+  }
+  // → = avancer 3s
+  if (e.key === 'ArrowRight' && tag !== 'textarea' && tag !== 'input') {
+    e.preventDefault();
+    vid.currentTime = Math.min(vid.duration || 0, vid.currentTime + 3);
   }
 });
 </script>
@@ -5277,6 +5482,7 @@ document.addEventListener('keydown', function(e) {
     <textarea id="subEditTx" rows="3"></textarea>
     <div id="subEditActions">
       <button class="ab" onclick="closeSubEditModal()">Annuler</button>
+      <button class="ab" onclick="splitSubBlock()" id="subSplitBtn" title="Couper le bloc en 2 au curseur">&#x2702; Split</button>
       <button class="ab pri" onclick="saveSubEdit()">Sauvegarder</button>
     </div>
   </div>
@@ -5318,6 +5524,21 @@ document.addEventListener('keydown', function(e) {
     <tr><td>Vue RICH word-level</td><td>AssemblyAI (optionnel)</td></tr>
     <tr><td>Gros fichiers cloud</td><td>Groq + Worker CF + Fly.io</td></tr>
   </table>
+</div>
+<div id="diffModal">
+  <div id="diffHdr">
+    <span>&#x21C4; Comparaison avant / apr&#232;s</span>
+    <span id="diffStats"></span>
+    <button onclick="closeDiff()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">&#x2715;</button>
+  </div>
+  <div id="diffBody">
+    <div class="diff-col" id="diffColBefore"><div class="diff-col-hdr">AVANT</div></div>
+    <div class="diff-col" id="diffColAfter"><div class="diff-col-hdr">APR&#200;S</div></div>
+  </div>
+  <div id="diffActions">
+    <button class="ab" onclick="diffRevert()">&#x21A9; Annuler les changements</button>
+    <button class="ab" onclick="closeDiff()">Fermer</button>
+  </div>
 </div>
 </body>
 </html>
