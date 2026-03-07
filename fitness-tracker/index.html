@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- deploy test 2026-02-22 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fitness Tracker</title>
+    <title>Fitness Tracker v1.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,9 +12,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <!-- Google Drive API -->
-    <script src="https://apis.google.com/js/api.js"></script>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#7c3aed">
     <style>
         :root {
             /* Palette Générale */
@@ -224,9 +224,9 @@
         .drive-file-item:hover { background-color: rgba(34,211,238,0.1); border-color: var(--glow-exo-title); }
         .drive-file-item i { color: var(--glow-exo-title); flex-shrink: 0; }
 
-        /* Drive connected indicator */
-        #drive-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--glow-red); display: inline-block; margin-right: 4px; transition: background 0.3s; }
-        #drive-status-dot.connected { background: var(--glow-green); }
+        /* Install banner */
+        #install-banner { display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:linear-gradient(135deg, #7c3aed, #4f46e5); color:white; padding:10px 20px; border-radius:50px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 4px 20px rgba(124,58,237,0.4); z-index:100; border:none; font-family:inherit; }
+        #install-banner:hover { transform:translateX(-50%) scale(1.03); }
 
         @media print { body { background: none; color: #000; } header, footer, #add-exercise-btn, .icon-btn, button[data-action] { display: none; } main { padding-top: 0; } .bg-card { box-shadow: none; border: 1px solid #ccc; margin-bottom: 1rem; page-break-inside: avoid; } .collapsible-content { display: block !important; max-height: none !important; opacity: 1 !important; transform: none !important; } [contenteditable="true"] { border: none; } #app-title { color: #000; text-shadow: none; animation: none; } .exercise-title, .subtitle-color { color: #333; } }
     </style>
@@ -241,6 +241,7 @@
                     <div id="app-title-container">
                         <h1 id="app-title" class="text-base font-bold leading-tight">Fitness Tracker</h1>
                         <span id="app-icon" class="text-base"><i class="fa-solid fa-dumbbell"></i></span>
+                        <span style="font-size:9px;color:var(--text-secondary);font-weight:400;margin-left:4px;opacity:0.7;">v1.0</span>
                     </div>
                     <div class="flex items-center gap-0.5" style="position:relative; z-index:3;">
                         <button id="collapse-all-btn" class="p-1.5 rounded-full icon-btn" title="Tout replier"><i class="fa-solid fa-compress fa-fw text-sm"></i></button>
@@ -330,15 +331,18 @@
         let touchEndX = 0;
 
         // =============================================
-        // GOOGLE DRIVE — Variables et configuration
+        // GOOGLE DRIVE via MCP Gateway
         // =============================================
-        let driveConfig = { clientId: '', apiKey: '', folderId: '' };
-        let driveSession = { tokenClient: null, accessToken: null, isConnected: false };
+        const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
+        let driveConfig = { folderId: '' };
 
         function loadDriveConfig() {
             const saved = localStorage.getItem('fitnessDriveConfig');
             if (saved) {
-                try { driveConfig = { ...driveConfig, ...JSON.parse(saved) }; } catch(e) {}
+                try {
+                    const parsed = JSON.parse(saved);
+                    driveConfig.folderId = parsed.folderId || '';
+                } catch(e) {}
             }
         }
 
@@ -346,141 +350,71 @@
             localStorage.setItem('fitnessDriveConfig', JSON.stringify(driveConfig));
         }
 
-        function updateDriveStatusDot() {
-            const dot = document.getElementById('drive-status-dot');
-            if (dot) dot.classList.toggle('connected', driveSession.isConnected);
-        }
-
-        function initDriveConnection(callback) {
-            if (!driveConfig.clientId || !driveConfig.apiKey) {
-                showToast('Config Drive manquante ! Ouvrez les réglages.', true);
-                return;
-            }
-            gapi.load('client', async () => {
-                await gapi.client.init({
-                    apiKey: driveConfig.apiKey,
-                    discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']
-                });
-                driveSession.tokenClient = google.accounts.oauth2.initTokenClient({
-                    client_id: driveConfig.clientId,
-                    scope: 'https://www.googleapis.com/auth/drive.file',
-                    callback: (resp) => {
-                        if (resp.error) {
-                            showToast('Erreur d\'authentification Google.', true);
-                            return;
-                        }
-                        driveSession.accessToken = resp.access_token;
-                        driveSession.isConnected = true;
-                        updateDriveStatusDot();
-                        showToast('Connecté à Google Drive');
-                        if (typeof callback === 'function') callback();
-                    }
-                });
-                driveSession.tokenClient.requestAccessToken({ prompt: '' });
+        async function mcpDrive(tool, args) {
+            const res = await fetch(MCP_DRIVE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tool, arguments: args })
             });
-        }
-
-        function ensureDriveConnected(callback) {
-            if (driveSession.isConnected && driveSession.accessToken) {
-                callback();
-            } else {
-                initDriveConnection(callback);
-            }
-        }
-
-        function refreshDriveToken(callback) {
-            console.warn('Token Drive expiré (401) — reconnexion automatique...');
-            driveSession.isConnected = false;
-            driveSession.accessToken = null;
-            updateDriveStatusDot();
-            initDriveConnection(callback);
+            if (!res.ok) throw new Error(`MCP Drive HTTP ${res.status}`);
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            return data.result;
         }
 
         async function driveUpsertFile(filename, content) {
-            const blob = new Blob([content], { type: 'application/json' });
-            let q = `name = '${filename.replace(/'/g, "\\'")}' and mimeType = 'application/json' and trashed = false`;
-            if (driveConfig.folderId) q += ` and '${driveConfig.folderId}' in parents`;
-            const searchRes = await gapi.client.drive.files.list({ q, fields: 'files(id)', pageSize: 1 });
-            if (searchRes.status === 401) throw new Error('TOKEN_EXPIRED');
-            const existingId = searchRes.result.files?.[0]?.id;
-
-            let response;
-            if (existingId) {
-                response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=media`, {
-                    method: 'PATCH',
-                    headers: { 'Authorization': `Bearer ${driveSession.accessToken}`, 'Content-Type': 'application/json' },
-                    body: blob
-                });
+            const searchArgs = { query: filename, max_results: 1, format: 'json' };
+            if (driveConfig.folderId) searchArgs.folder_id = driveConfig.folderId;
+            const raw = await mcpDrive('search_files', searchArgs);
+            const files = typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : []);
+            const existing = files.find(f => f.name === filename);
+            if (existing) {
+                await mcpDrive('write_file', { file_id: existing.id, content });
             } else {
-                const meta = { name: filename, mimeType: 'application/json' };
-                if (driveConfig.folderId) meta.parents = [driveConfig.folderId];
-                const form = new FormData();
-                form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
-                form.append('file', blob);
-                response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${driveSession.accessToken}` },
-                    body: form
-                });
+                const createArgs = { name: filename, content };
+                if (driveConfig.folderId) createArgs.folder_id = driveConfig.folderId;
+                await mcpDrive('create_file', createArgs);
             }
-            if (response && response.status === 401) throw new Error('TOKEN_EXPIRED');
-            if (response && !response.ok) throw new Error(`Erreur Drive HTTP ${response.status}`);
         }
 
-        const handleDriveSave = (isRetry = false) => {
-            ensureDriveConnected(async () => {
-                showToast('Envoi vers Drive...');
-                cleanupEmptyPerformances();
-                try {
-                    const backupState = { ...state, isDirty: false };
-                    const jsonContent = JSON.stringify(backupState, null, 2);
-                    const dateString = new Date().toISOString().slice(0, 10);
-                    const dailyFilename = `backup_fitness_${dateString}.json`;
-                    const lastFilename = 'fitness_last_backup.json';
+        const handleDriveSave = async () => {
+            if (!driveConfig.folderId) { showToast('Folder ID Drive manquant ! Ouvrez les réglages.', true); return; }
+            showToast('Envoi vers Drive...');
+            cleanupEmptyPerformances();
+            try {
+                const backupState = { ...state, isDirty: false };
+                const jsonContent = JSON.stringify(backupState, null, 2);
+                const dateString = new Date().toISOString().slice(0, 10);
+                const dailyFilename = `backup_fitness_${dateString}.json`;
+                const lastFilename = 'fitness_last_backup.json';
 
-                    await driveUpsertFile(dailyFilename, jsonContent);
-                    await driveUpsertFile(lastFilename, jsonContent);
+                await driveUpsertFile(dailyFilename, jsonContent);
+                await driveUpsertFile(lastFilename, jsonContent);
 
-                    state.isDirty = false;
-                    state.activeFileName = dailyFilename;
-                    saveState();
-                    renderHeader(`☁️ ${dailyFilename.replace('backup_fitness_','').replace('.json','')} ✓`);
-                    showToast(`☁️ Drive : ${dailyFilename} + last_backup ✓`);
-                } catch(e) {
-                    if (e.message === 'TOKEN_EXPIRED' && !isRetry) {
-                        refreshDriveToken(() => handleDriveSave(true));
-                    } else {
-                        console.error('Erreur Drive save:', e);
-                        showToast('Erreur sauvegarde Drive.', true);
-                    }
-                }
-            });
+                state.isDirty = false;
+                state.activeFileName = dailyFilename;
+                saveState();
+                renderHeader(`☁️ ${dailyFilename.replace('backup_fitness_','').replace('.json','')} ✓`);
+                showToast(`☁️ Drive : ${dailyFilename} + last_backup ✓`);
+            } catch(e) {
+                console.error('Erreur Drive save:', e);
+                showToast('Erreur sauvegarde Drive: ' + e.message, true);
+            }
         };
 
-        const handleDriveLoad = (isRetry = false) => {
-            ensureDriveConnected(async () => {
-                showToast('Récupération des fichiers...');
-                try {
-                    let q = `mimeType = 'application/json' and trashed = false`;
-                    if (driveConfig.folderId) q += ` and '${driveConfig.folderId}' in parents`;
-                    const res = await gapi.client.drive.files.list({
-                        q,
-                        fields: 'files(id, name, modifiedTime)',
-                        orderBy: 'modifiedTime desc',
-                        pageSize: 50
-                    });
-                    if (res.status === 401) throw new Error('TOKEN_EXPIRED');
-                    const files = res.result.files || [];
-                    renderDriveLoadModal(files);
-                } catch(e) {
-                    if (e.message === 'TOKEN_EXPIRED' && !isRetry) {
-                        refreshDriveToken(() => handleDriveLoad(true));
-                    } else {
-                        console.error('Erreur Drive list:', e);
-                        showToast('Erreur lecture Drive.', true);
-                    }
-                }
-            });
+        const handleDriveLoad = async () => {
+            if (!driveConfig.folderId) { showToast('Folder ID Drive manquant ! Ouvrez les réglages.', true); return; }
+            showToast('Récupération des fichiers...');
+            try {
+                const searchArgs = { query: 'backup_fitness', max_results: 50, format: 'json' };
+                if (driveConfig.folderId) searchArgs.folder_id = driveConfig.folderId;
+                const raw = await mcpDrive('search_files', searchArgs);
+                const files = typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : []);
+                renderDriveLoadModal(files);
+            } catch(e) {
+                console.error('Erreur Drive list:', e);
+                showToast('Erreur lecture Drive: ' + e.message, true);
+            }
         };
 
         function renderDriveLoadModal(files) {
@@ -524,35 +458,27 @@
                 const fileId = item.dataset.fileId;
                 const fileName = item.dataset.fileName;
 
-                const doLoad = async (isRetry = false) => {
-                    showToast(`Chargement de ${fileName}...`);
-                    try {
-                        const res = await gapi.client.drive.files.get({ fileId, alt: 'media' });
-                        if (res.status === 401) throw new Error('TOKEN_EXPIRED');
-                        const importedState = JSON.parse(res.body);
-                        if (importedState.programs && importedState.performance) {
-                            state = importedState;
-                            state.activeFileName = fileName;
-                            state.isDirty = false;
-                            saveState();
-                            refreshAll();
-                            renderHeader(`☁️ ${fileName.replace('backup_fitness_','').replace('.json','')}`);
-                            driveModalContainer.classList.remove('visible');
-                            setTimeout(() => { driveModalContainer.style.display = 'none'; }, 200);
-                            showToast(`☁️ ${fileName} chargé avec succès !`);
-                        } else {
-                            throw new Error('Format de fichier invalide.');
-                        }
-                    } catch(e) {
-                        if (e.message === 'TOKEN_EXPIRED' && !isRetry) {
-                            refreshDriveToken(() => doLoad(true));
-                        } else {
-                            console.error('Erreur Drive load file:', e);
-                            showToast(e.message || 'Erreur lors du chargement.', true);
-                        }
+                showToast(`Chargement de ${fileName}...`);
+                try {
+                    const content = await mcpDrive('read_file', { file_id: fileId });
+                    const importedState = JSON.parse(content);
+                    if (importedState.programs && importedState.performance) {
+                        state = importedState;
+                        state.activeFileName = fileName;
+                        state.isDirty = false;
+                        saveState();
+                        refreshAll();
+                        renderHeader(`☁️ ${fileName.replace('backup_fitness_','').replace('.json','')}`);
+                        driveModalContainer.classList.remove('visible');
+                        setTimeout(() => { driveModalContainer.style.display = 'none'; }, 200);
+                        showToast(`☁️ ${fileName} chargé avec succès !`);
+                    } else {
+                        throw new Error('Format de fichier invalide.');
                     }
-                };
-                doLoad();
+                } catch(e) {
+                    console.error('Erreur Drive load file:', e);
+                    showToast(e.message || 'Erreur lors du chargement.', true);
+                }
             });
         }
 
@@ -951,20 +877,11 @@
                         <h3 class="font-semibold mb-2 text-secondary">
                             <i class="fa-brands fa-google-drive mr-1" style="color: #4285F4"></i>
                             Cloud Google Drive
-                            <span id="drive-status-dot" class="${driveSession.isConnected ? 'connected' : ''}" style="margin-left:6px;"></span>
                         </h3>
                         <div class="space-y-2">
                             <div>
-                                <label class="text-xs text-secondary">Client ID</label>
-                                <input type="text" id="drive-client-id" value="${cfg.clientId}" placeholder="xxxx.apps.googleusercontent.com" class="w-full mt-1 p-2 rounded-md input-bg text-sm focus:outline-none focus:border-cyan-500">
-                            </div>
-                            <div>
-                                <label class="text-xs text-secondary">API Key</label>
-                                <input type="text" id="drive-api-key" value="${cfg.apiKey}" placeholder="AIzaSy..." class="w-full mt-1 p-2 rounded-md input-bg text-sm focus:outline-none focus:border-cyan-500">
-                            </div>
-                            <div>
-                                <label class="text-xs text-secondary">Folder ID</label>
-                                <input type="text" id="drive-folder-id" value="${cfg.folderId}" placeholder="ID du dossier Drive cible" class="w-full mt-1 p-2 rounded-md input-bg text-sm focus:outline-none focus:border-cyan-500">
+                                <label class="text-xs text-secondary">Folder ID (dossier Drive cible)</label>
+                                <input type="text" id="drive-folder-id" value="${cfg.folderId}" placeholder="ID du dossier Drive" class="w-full mt-1 p-2 rounded-md input-bg text-sm focus:outline-none focus:border-cyan-500">
                             </div>
                             <button id="save-drive-config-btn" class="w-full p-2 rounded-md text-sm font-semibold mt-1" style="background: linear-gradient(45deg, #4285F4, #34A853); color: white; border: none;">
                                 <i class="fa-solid fa-floppy-disk mr-1"></i>Sauvegarder config Drive
@@ -977,14 +894,8 @@
             programModalContainer.innerHTML = editorHTML;
 
             document.getElementById('save-drive-config-btn')?.addEventListener('click', () => {
-                driveConfig.clientId = document.getElementById('drive-client-id').value.trim();
-                driveConfig.apiKey = document.getElementById('drive-api-key').value.trim();
                 driveConfig.folderId = document.getElementById('drive-folder-id').value.trim();
                 saveDriveConfig();
-                driveSession.isConnected = false;
-                driveSession.accessToken = null;
-                driveSession.tokenClient = null;
-                updateDriveStatusDot();
                 showToast('Config Drive sauvegardée');
             });
         };
@@ -2020,7 +1931,48 @@
         }
 
         init();
+
+        // === Service Worker + Update notification ===
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').catch(() => {});
+            navigator.serviceWorker.addEventListener('message', e => {
+                if (e.data?.type === 'SW_UPDATED') {
+                    const v = e.data.version || '';
+                    const t = document.getElementById('toast');
+                    if (t) {
+                        toastText.innerHTML = `🆕 Nouvelle version ${v.replace('fitness-tracker-','')} <button onclick="location.reload()" style="margin-left:8px;padding:3px 10px;border-radius:16px;border:1px solid rgba(255,255,255,0.4);background:rgba(255,255,255,0.15);color:white;cursor:pointer;font-size:11px;">Recharger</button>`;
+                        toastIcon.className = 'fas fa-arrow-up';
+                        toast.className = 'fixed top-5 right-4 py-2 px-5 rounded-lg shadow-xl transition-all duration-300 z-50 flex items-center space-x-2 toast-success';
+                        toast.style.pointerEvents = 'auto';
+                        setTimeout(() => { toast.classList.add('opacity-0', '-translate-y-4'); toast.style.pointerEvents = 'none'; }, 15000);
+                    }
+                }
+            });
+        }
+
+        // === Install PWA prompt ===
+        let _deferredInstall = null;
+        window.addEventListener('beforeinstallprompt', e => {
+            e.preventDefault();
+            _deferredInstall = e;
+            const btn = document.getElementById('install-banner');
+            if (btn) btn.style.display = 'block';
+        });
+        document.getElementById('install-banner')?.addEventListener('click', () => {
+            if (_deferredInstall) {
+                _deferredInstall.prompt();
+                _deferredInstall.userChoice.then(() => {
+                    _deferredInstall = null;
+                    document.getElementById('install-banner').style.display = 'none';
+                });
+            }
+        });
+        window.addEventListener('appinstalled', () => {
+            document.getElementById('install-banner').style.display = 'none';
+            _deferredInstall = null;
+        });
     });
 </script>
+<button id="install-banner">📲 Installer l'application</button>
 </body>
 </html>
