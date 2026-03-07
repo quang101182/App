@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.01</title>
+<title>SubWhisper v9.02</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1047,7 +1047,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.01</span>
+    <span class="ver-badge">v9.02</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1381,7 +1381,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.01 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.02 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -2062,6 +2062,7 @@ async function transcribeOpenAI() {
     var finalSrt = srt;
     var wasTranslated = false;
     _rawGroqSrt = srt; // Batch Lab: stocker brut transcription pour bouton téléchargement
+    _diagSteps.transcription_engine = 'assemblyai';
     var skipTranslation = (outLang === 'same') || (detectedLang && detectedLang === outLang);
     if (!skipTranslation) {
       if (hasTranslationEngine()) {
@@ -2209,6 +2210,7 @@ async function transcribeGroq() {
     var finalSrt = srt;
     var wasTranslated = false;
     _rawGroqSrt = srt; // Batch Lab: stocker brut Groq pour bouton téléchargement
+    _diagSteps.transcription_engine = 'groq';
     var skipTranslation = (outLang === 'same') || (detectedLang && detectedLang === outLang);
     if (!skipTranslation) {
       if (hasTranslationEngine()) {
@@ -2351,6 +2353,7 @@ async function pollCloudJob(base, jobId, outLang) {
           }
           var finalSrt = status.srt || '';
           _rawGroqSrt = finalSrt; // Batch Lab: stocker brut cloud transcription pour bouton
+          _diagSteps.transcription_engine = 'cloud';
           var detectedLangCloud = status.detectedLang || '';
           var wasTranslated = false;
           if (outLang && outLang !== 'same' && detectedLangCloud !== outLang && hasTranslationEngine()) {
@@ -3948,11 +3951,13 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.01',
+    version: 'v9.02',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
     lang_target: tgt,
+    mode: _diagSteps.mode || 'manual',
+    transcription_engine: _diagSteps.transcription_engine || 'unknown',
     engine_clean: engine,
     engine_translate: (API_DOTS['GEM'] === 'ok' || API_DOTS['DSK'] === 'ok') ? engine : (document.getElementById('deeplxUrl') ? 'deeplx' : 'azure'),
     steps: {
@@ -5204,6 +5209,7 @@ async function autoProcess() {
   var raw = getCurrentSRT();
   if (!raw || !raw.trim()) { toast('Aucun SRT à traiter'); return; }
   _diffOriginalSnapshot = raw;
+  _diagSteps.mode = 'auto';
   var btn = document.getElementById('autoBtn');
   var btnOrig = btn ? btn.innerHTML : '&#x26A1; AUTO';
   var toolBtns = ['formatBtn','cleanAIBtn','translateBtn','repairBtn','validateBtn','autoBtn'];
