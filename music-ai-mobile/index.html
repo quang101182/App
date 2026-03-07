@@ -309,9 +309,12 @@ body{padding-top:var(--safe-top);}
      Android Chrome throttles clipped/z--1 iframes
      left:-400px keeps it off-screen but fully rendered
 ════════════════════════════════════════ -->
-<div id="yt-bg" style="position:fixed;bottom:-9999px;left:0;width:1px;height:1px;overflow:hidden;opacity:0.01;pointer-events:none;z-index:1;">
+<!-- FIX MOBILE AUDIO: iframe dans viewport (z-index:1), masquée par overlay de couleur (z-index:2)
+     Chrome ne throttle PAS les iframes dans le viewport. opacity:0 ou bottom:-9999px = audio suspendu. -->
+<div id="yt-bg" style="position:fixed;bottom:0;left:0;width:320px;height:180px;z-index:1;overflow:hidden;pointer-events:none;">
   <div id="yt-div" style="width:320px;height:180px;"></div>
 </div>
+<div id="yt-mask" style="position:fixed;bottom:0;left:0;width:320px;height:180px;z-index:2;background:var(--bg,#060609);pointer-events:none;"></div>
 
 <!-- ═══════════════════════════════════════
      NOW PLAYING OVERLAY
@@ -759,12 +762,16 @@ window.onYouTubeIframeAPIReady=function(){
       onReady:function(e){
         ST.ytReady=true;
         try{e.target.setVolume(ST.volume);}catch(_){}
-        console.log('[YT] Player ready ✓');
+        // FIX MOBILE: patch allow="autoplay" sur l'iframe cross-origin (YT API ne le met pas)
+        try{
+          var iframes=document.querySelectorAll('#yt-div iframe,#yt-bg iframe');
+          iframes.forEach(function(f){f.setAttribute('allow','autoplay;fullscreen;encrypted-media');});
+        }catch(_){}
       },
       onStateChange:function(e){
         const s=e.data;
         if(s===1){// PLAYING — confirmed working
-          _audioReady=true;
+          _audioReady=true;ST._ytRetried=false;
           updatePPUI(true);startTick();
           setTimeout(()=>{
             try{
@@ -775,11 +782,16 @@ window.onYouTubeIframeAPIReady=function(){
         }
         if(s===2){updatePPUI(false);stopTick();}// PAUSED
         if(s===0){onEnded();}// ENDED
-        if(s===3){updatePPUI(true);}// BUFFERING — show as playing
-        if(s===-1&&ST.currentTrack&&ST.currentTrack._videoId){
-          // UNSTARTED — Android sometimes needs a nudge
-          setTimeout(()=>{try{ST.ytPlayer.playVideo();}catch(_){}},400);
+        if(s===3){updatePPUI(true);}// BUFFERING
+        if(s===-1&&ST.currentTrack&&ST.currentTrack._videoId&&!ST._ytRetried){
+          // UNSTARTED — un seul retry (pas en boucle — user gesture expiré après ~1s)
+          ST._ytRetried=true;
+          setTimeout(()=>{try{ST.ytPlayer.playVideo();}catch(_){}},600);
         }
+      },
+      onAutoplayBlocked:function(){
+        // Lecture bloquée — afficher bouton play manuel
+        toast('▶ Appuie pour lancer la lecture');
       },
       onError:function(e){
         console.warn('[YT] error',e.data);
@@ -842,19 +854,10 @@ function ytPlayDirect(track){
     ST.ytPlayer.setVolume(ST.volume); // pre-set volume so unmute plays at right level
 
     // Load + play — muted so Chrome won't block it
+    // Retries gérés par onStateChange state=-1 (un seul retry, user gesture actif)
+    ST._ytRetried=false;
     ST.ytPlayer.loadVideoById(track._videoId);
     ST.ytPlayer.playVideo();
-
-    // Retry playVideo only (NOT unMute — that's handled by onStateChange state=1)
-    [300,900,2000].forEach(delay=>{
-      setTimeout(()=>{
-        if(!ST.ytPlayer||!ST.currentTrack||ST.currentTrack._videoId!==track._videoId)return;
-        try{
-          const s=ST.ytPlayer.getPlayerState();
-          if(s!==1&&s!==3){ST.ytPlayer.playVideo();}
-        }catch(_){}
-      },delay);
-    });
 
   }catch(err){console.warn('[ytPlayDirect]',err);}
 
@@ -875,11 +878,11 @@ async function ytPlay(track){
   updateMiniPlayer(track.title,track.artist,track._thumb);
   updateNowPlayingUI(track);
   try{
-    ST.ytPlayer.mute(); // start muted, onStateChange state=1 will unmute
+    ST._ytRetried=false;
+    ST.ytPlayer.mute();
     ST.ytPlayer.setVolume(ST.volume);
     ST.ytPlayer.loadVideoById(vid);
     ST.ytPlayer.playVideo();
-    [300,900].forEach(d=>setTimeout(()=>{try{const s=ST.ytPlayer.getPlayerState();if(s!==1&&s!==3)ST.ytPlayer.playVideo();}catch(_){}},d));
   }catch(_){}
   updatePPUI(true);
 }
