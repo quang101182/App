@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.04</title>
+<title>SubWhisper v9.05</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1088,15 +1088,17 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 #diffHdr{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid var(--border)}
 #diffHdr span{font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
 #diffStats{font-family:var(--mono);font-size:10px;color:var(--accent3);padding:0 20px}
-#diffBody{flex:1;display:flex;overflow:hidden;gap:1px;background:var(--border)}
-.diff-col{flex:1;overflow-y:auto;background:var(--bg);padding:10px}
-.diff-col-hdr{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;padding:4px 0 8px;position:sticky;top:0;background:var(--bg);z-index:1}
-.diff-block{padding:6px 8px;margin-bottom:4px;border-radius:6px;font-size:12px;line-height:1.5;font-family:var(--sans);white-space:pre-wrap;word-break:break-word}
-.diff-block.changed{background:rgba(0,212,170,.08);border-left:3px solid var(--accent3)}
-.diff-block.same{color:var(--muted);font-size:11px}
-.diff-block .diff-id{font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:2px}
+#diffBody{flex:1;overflow-y:auto;background:var(--bg);padding:10px}
+.diff-row-hdr{display:flex;gap:4px;position:sticky;top:0;z-index:2;background:var(--bg);padding:4px 0 8px}
+.diff-row-hdr span{flex:1;font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;padding:4px 8px;background:var(--surface2);border-radius:4px;text-align:center}
+.diff-row{display:flex;gap:4px;margin-bottom:4px;align-items:stretch}
+.diff-cell{flex:1;min-width:0;padding:6px 8px;border-radius:6px;font-size:12px;line-height:1.5;font-family:var(--sans);white-space:pre-wrap;word-break:break-word}
+.diff-cell.changed{background:rgba(0,212,170,.08);border-left:3px solid var(--accent3)}
+.diff-cell.same{color:var(--muted);font-size:11px}
+.diff-cell.empty{opacity:.3;font-style:italic}
+.diff-cell .diff-id{font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:2px}
 #diffActions{display:flex;gap:8px;padding:12px 20px;border-top:1px solid var(--border);justify-content:flex-end}
-@media(max-width:600px){#diffBody{flex-direction:column}.diff-col{max-height:45vh}}
+@media(max-width:600px){.diff-row{flex-direction:column}.diff-cell{border-left:3px solid transparent}.diff-cell.cell-before{border-left-color:var(--accent)!important}.diff-cell.cell-after{border-left-color:var(--accent3)!important}.diff-row-hdr span{font-size:11px;padding:6px 8px;font-weight:700}}
 </style>
 </head>
 <body>
@@ -1104,7 +1106,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.04</span>
+    <span class="ver-badge">v9.05</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1438,7 +1440,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.04 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.05 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -4047,7 +4049,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.04',
+    version: 'v9.05',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -5533,10 +5535,8 @@ function openDiff() {
       bi++;
     }
   }
-  var colBefore = document.getElementById('diffColBefore');
-  var colAfter = document.getElementById('diffColAfter');
-  colBefore.innerHTML = '<div class="diff-col-hdr">AVANT (' + beforeBlocks.length + ' blocs)</div>';
-  colAfter.innerHTML = '<div class="diff-col-hdr">APR\u00c8S (' + afterBlocks.length + ' blocs)</div>';
+  var body = document.getElementById('diffBody');
+  body.innerHTML = '<div class="diff-row-hdr"><span>AVANT (' + beforeBlocks.length + ')</span><span>APR\u00c8S (' + afterBlocks.length + ')</span></div>';
   var changed = 0;
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i];
@@ -5544,24 +5544,18 @@ function openDiff() {
     var textA = row.after ? row.after.text : '';
     var isChanged = textB !== textA;
     if (isChanged) changed++;
-    var cls = isChanged ? 'diff-block changed' : 'diff-block same';
-    var divB = document.createElement('div');
-    divB.className = row.before ? cls : 'diff-block same';
+    var rowDiv = document.createElement('div');
+    rowDiv.className = 'diff-row';
+    var clsB = !row.before ? 'diff-cell empty' : (isChanged ? 'diff-cell changed cell-before' : 'diff-cell same cell-before');
+    var clsA = !row.after ? 'diff-cell empty' : (isChanged ? 'diff-cell changed cell-after' : 'diff-cell same cell-after');
     var idB = row.before ? '#' + row.before.id : '';
-    divB.innerHTML = '<div class="diff-id">' + idB + '</div>' + escHtml(textB || '\u2014');
-    colBefore.appendChild(divB);
-    var divA = document.createElement('div');
-    divA.className = row.after ? cls : 'diff-block same';
     var idA = row.after ? '#' + row.after.id : '';
-    divA.innerHTML = '<div class="diff-id">' + idA + '</div>' + escHtml(textA || '\u2014');
-    colAfter.appendChild(divA);
+    rowDiv.innerHTML = '<div class="' + clsB + '"><div class="diff-id">' + idB + '</div>' + escHtml(textB || '\u2014') + '</div>'
+      + '<div class="' + clsA + '"><div class="diff-id">' + idA + '</div>' + escHtml(textA || '\u2014') + '</div>';
+    body.appendChild(rowDiv);
   }
   document.getElementById('diffStats').textContent = changed + ' modifi\u00e9' + (changed !== 1 ? 's' : '') + ' sur ' + rows.length;
   document.getElementById('diffModal').classList.add('vis');
-  var cb = document.getElementById('diffColBefore');
-  var ca = document.getElementById('diffColAfter');
-  cb.onscroll = function() { ca.scrollTop = cb.scrollTop; };
-  ca.onscroll = function() { cb.scrollTop = ca.scrollTop; };
 }
 
 function closeDiff() {
@@ -5744,10 +5738,7 @@ if ('serviceWorker' in navigator) {
     <span id="diffStats"></span>
     <button onclick="closeDiff()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">&#x2715;</button>
   </div>
-  <div id="diffBody">
-    <div class="diff-col" id="diffColBefore"><div class="diff-col-hdr">AVANT</div></div>
-    <div class="diff-col" id="diffColAfter"><div class="diff-col-hdr">APR&#200;S</div></div>
-  </div>
+  <div id="diffBody"></div>
   <div id="diffActions">
     <button class="ab" onclick="diffRevert()">&#x21A9; Annuler les changements</button>
     <button class="ab" onclick="closeDiff()">Fermer</button>
