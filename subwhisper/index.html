@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.16</title>
+<title>SubWhisper v9.17</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1132,7 +1132,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.16</span>
+    <span class="ver-badge">v9.17</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1471,7 +1471,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.16 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.17 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -4096,7 +4096,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.16',
+    version: 'v9.17',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4675,6 +4675,7 @@ function applyDedup() {
 function autoFormatSRT() {
   var raw = getCurrentSRT();
   if (!raw || !raw.trim()) { toast('Aucun SRT \u00e0 formater'); return; }
+  if (!_autoProcessRunning) { setProg(true); setPct(50, 'Formatage SRT'); }
   if (!_diffOriginalSnapshot) _diffOriginalSnapshot = raw;
   var blocks = parseSRT(raw);
   if (!blocks.length) { toast('SRT invalide'); return; }
@@ -4829,6 +4830,7 @@ function autoFormatSRT() {
   _diagSteps.after_format = getCurrentSRT();
   validateSRT(true);
   updateDiffBtn();
+  if (!_autoProcessRunning) setProg(false);
 }
 
 // ── DÉTECTION ALGO pour cleanAI (v8.67) ──────────────────
@@ -4884,10 +4886,12 @@ async function cleanAI() {
   var btn = document.getElementById('cleanAIBtn');
   var btnOrig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '✨ IA ⏳'; }
+  if (!_autoProcessRunning) { setProg(true); setPct(0, 'Nettoyage IA'); }
   if (_detected.length === 0) {
     _diagSteps.after_clean = raw;
     toast('✅ SRT propre — aucun bloc à corriger (' + origBlocks.length + ' blocs)');
     if (btn) { btn.disabled = false; btn.innerHTML = btnOrig; }
+    if (!_autoProcessRunning) setProg(false);
     return;
   }
   var _detectMsg = _detected.length + ' bloc' + (_detected.length > 1 ? 's' : '') + ' / ' + origBlocks.length;
@@ -4928,6 +4932,7 @@ async function cleanAI() {
               }
             }
             _cDone++;
+            setPct(Math.round(_cDone / batches.length * 100), 'IA ' + _cDone + '/' + batches.length);
             toastPersist('✨ Nettoyage ' + engineName + ' ' + _cDone + '/' + batches.length + ' \u2713');
             if (btn) btn.innerHTML = '✨ IA ' + _cDone + '/' + batches.length;
           } catch(e2) {
@@ -4962,6 +4967,7 @@ async function cleanAI() {
     toastClear();
     toast('Erreur nettoyage IA : ' + e.message);
   } finally {
+    if (!_autoProcessRunning) setProg(false);
     if (btn) { btn.disabled = false; btn.innerHTML = btnOrig; }
   }
 }
@@ -5259,6 +5265,7 @@ async function translateManual() {
   var btn = document.getElementById('translateBtn');
   var btnOrig = btn ? btn.innerHTML : '';
   if (btn) btn.disabled = true;
+  if (!_autoProcessRunning) { setProg(true); setPct(0, 'Traduction'); }
   var engine = getAIEngine() === 'deepseek' ? 'DeepSeek' : 'Gemini';
   try {
     var translated, nbBlocks = 0;
@@ -5322,6 +5329,7 @@ async function translateManual() {
               console.warn('Batch ' + bIdx + ' erreur:', e2.message);
             }
             _pDone++;
+            setPct(Math.round(_pDone / batches.length * 100), 'Trad ' + _pDone + '/' + batches.length);
             toastPersist('\ud83c\udf10 Trad ' + tgt.toUpperCase() + ' ' + engine + ' ' + _pDone + '/' + batches.length + ' \u2713');
             if (btn) btn.innerHTML = '\ud83c\udf10 ' + _pDone + '/' + batches.length;
           })();
@@ -5365,6 +5373,7 @@ async function translateManual() {
                 console.warn('Second pass batch ' + bIdx + ' erreur:', e3.message);
               }
               _s2Done++;
+              setPct(Math.round(_s2Done / _sBatches.length * 100), 'Trad 2e passe ' + _s2Done + '/' + _sBatches.length);
               toastPersist('\ud83d\udd04 2e passe ' + _s2Done + '/' + _sBatches.length + ' \u2713');
             })();
           }));
@@ -5405,6 +5414,7 @@ async function translateManual() {
     toastClear();
     toast('Erreur traduction : ' + e.message);
   } finally {
+    if (!_autoProcessRunning) setProg(false);
     if (btn) { btn.disabled = false; btn.innerHTML = btnOrig; }
   }
 }
@@ -5419,6 +5429,7 @@ async function autoProcess() {
   var btnOrig = btn ? btn.innerHTML : '&#x26A1; AUTO';
   var toolBtns = ['formatBtn','cleanAIBtn','translateBtn','repairBtn','validateBtn','autoBtn'];
   _autoProcessRunning = true;
+  setProg(true); setPct(0, 'AUTO — analyse');
   toolBtns.forEach(function(id) { var el = document.getElementById(id); if (el) el.disabled = true; });
   if (btn) { btn.classList.add('running'); btn.innerHTML = '&#x26A1;&#x2026;'; }
   hideSuggBanner();
@@ -5444,10 +5455,12 @@ async function autoProcess() {
     if (btn) btn.innerHTML = '&#x26A1; ' + plan.join('→');
     await new Promise(function(r) { setTimeout(r, 500); });
     // Étape 0 : dedup avant IA/TRAD (élimine hallucinations Groq en amont)
+    setPct(5, 'Dedup initial');
     var ddRemoved = applyDedup();
     if (ddRemoved > 0) toast('Dedup: ' + ddRemoved + ' doublon' + (ddRemoved > 1 ? 's' : '') + ' supprimé' + (ddRemoved > 1 ? 's' : ''));
     // Étape IA
     if (needsIA) {
+      setPct(10, 'Nettoyage IA');
       if (btn) btn.innerHTML = '&#x2728; IA…';
       toastPersist('⚡ AUTO → ✨ IA en cours…');
       await cleanAI();
@@ -5460,6 +5473,7 @@ async function autoProcess() {
     if (ddPost > 0) toast('Dedup post-clean: ' + ddPost + ' doublon' + (ddPost > 1 ? 's' : '') + ' supprimé' + (ddPost > 1 ? 's' : ''));
     // Étape TRAD
     if (needsTRAD) {
+      setPct(50, 'Traduction');
       if (btn) btn.innerHTML = '&#x1F310; TRAD…';
       toastPersist('⚡ AUTO → 🌐 TRAD en cours…');
       await translateManual();
@@ -5468,11 +5482,13 @@ async function autoProcess() {
       _diagSteps.after_translate = getCurrentSRT();
     }
     // Étape FORMAT (toujours)
+    setPct(85, 'Formatage');
     if (btn) btn.innerHTML = '&#x229E; FORMAT…';
     toastPersist('⚡ AUTO → ⊞ FORMAT…');
     autoFormatSRT();
     await new Promise(function(r) { setTimeout(r, 200); });
     // Fin
+    setPct(100, 'Terminé');
     toastClear();
     var summary = plan.length === 1 ? '⚡ AUTO — FORMAT appliqué (SRT déjà propre)' : '⚡ AUTO terminé — ' + plan.join(' → ') + ' ✓';
     toast(summary);
@@ -5485,6 +5501,7 @@ async function autoProcess() {
     toastClear();
     toast('⚡ AUTO erreur : ' + (e.message || e));
   } finally {
+    setTimeout(function() { setProg(false); }, 1000);
     _autoProcessRunning = false;
     hideSuggBanner();
     // Nettoyer tous les hints visuels laissés par validateSRT pendant AUTO
