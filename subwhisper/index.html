@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.13</title>
+<title>SubWhisper v9.14</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1132,7 +1132,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.13</span>
+    <span class="ver-badge">v9.14</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -2987,7 +2987,8 @@ function setSt(s) { document.getElementById('sd').className = 'sdot' + (s ? ' ' 
 function showRes(content, srcLang, tgtLang, wasTranslated, words) {
   srtOriginal = content;
   _diffOriginalSnapshot = content;
-  _diagSteps = { raw_groq: content, detected_lang: srcLang || '', was_translated: !!wasTranslated };
+  var _prevEngine = _diagSteps.transcription_engine || '';
+  _diagSteps = { raw_groq: content, detected_lang: srcLang || '', was_translated: !!wasTranslated, transcription_engine: _prevEngine };
   currentOffset = 0;
   document.getElementById('offsetDisplay').textContent = '0 ms';
   document.getElementById('sp').value = content;
@@ -4114,7 +4115,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.13',
+    version: 'v9.14',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4653,6 +4654,42 @@ function closeValPanel() {
 }
 
 // ── AUTO-FORMATEUR SRT ────────────────────────────────────
+// Déduplique blocs consécutifs identiques (hallucination Groq)
+// Retourne { blocks, removed }
+function dedupConsecutiveBlocks(blocks) {
+  if (!blocks.length) return { blocks: blocks, removed: 0 };
+  var deduped = [blocks[0]];
+  var removed = 0;
+  for (var _di = 1; _di < blocks.length; _di++) {
+    if (blocks[_di].text.trim() === blocks[_di - 1].text.trim()) {
+      var prevPts = deduped[deduped.length - 1].timestamp.split(' --> ');
+      var curPts = blocks[_di].timestamp.split(' --> ');
+      deduped[deduped.length - 1].timestamp = prevPts[0] + ' --> ' + curPts[1];
+      removed++;
+    } else {
+      deduped.push(blocks[_di]);
+    }
+  }
+  return { blocks: deduped, removed: removed };
+}
+
+// Applique dedup sur le SRT courant et met à jour l'éditeur
+function applyDedup() {
+  var raw = getCurrentSRT();
+  if (!raw || !raw.trim()) return 0;
+  var blocks = parseSRT(raw);
+  var result = dedupConsecutiveBlocks(blocks);
+  if (result.removed > 0) {
+    var srt = result.blocks.map(function(b, i) {
+      return (i + 1) + '\n' + b.timestamp + '\n' + b.text;
+    }).join('\n\n') + '\n';
+    srtOriginal = srt; srtTxt = srt;
+    var withOffset = currentOffset !== 0 ? shiftSRT(srt, currentOffset) : srt;
+    document.getElementById('sp').value = withOffset;
+  }
+  return result.removed;
+}
+
 function autoFormatSRT() {
   var raw = getCurrentSRT();
   if (!raw || !raw.trim()) { toast('Aucun SRT \u00e0 formater'); return; }
@@ -4667,19 +4704,9 @@ function autoFormatSRT() {
   var modified    = 0;
 
   // Étape 0 : dédupliquer blocs consécutifs identiques (hallucination Groq)
-  var deduped = [blocks[0]];
-  for (var _di = 1; _di < blocks.length; _di++) {
-    if (blocks[_di].text.trim() === blocks[_di - 1].text.trim()) {
-      // Étendre le timestamp du bloc précédent (garder le end du doublon)
-      var prevPts = deduped[deduped.length - 1].timestamp.split(' --> ');
-      var curPts = blocks[_di].timestamp.split(' --> ');
-      deduped[deduped.length - 1].timestamp = prevPts[0] + ' --> ' + curPts[1];
-      modified++;
-    } else {
-      deduped.push(blocks[_di]);
-    }
-  }
-  blocks = deduped;
+  var dd = dedupConsecutiveBlocks(blocks);
+  blocks = dd.blocks;
+  modified += dd.removed;
 
   // Étape 1 : format lignes
   blocks = blocks.map(function(b) {
@@ -5472,6 +5499,9 @@ async function autoProcess() {
     toastPersist('⚡ AUTO — ' + plan.join(' → '));
     if (btn) btn.innerHTML = '&#x26A1; ' + plan.join('→');
     await new Promise(function(r) { setTimeout(r, 500); });
+    // Étape 0 : dedup avant IA/TRAD (élimine hallucinations Groq en amont)
+    var ddRemoved = applyDedup();
+    if (ddRemoved > 0) toast('Dedup: ' + ddRemoved + ' doublon' + (ddRemoved > 1 ? 's' : '') + ' supprimé' + (ddRemoved > 1 ? 's' : ''));
     // Étape IA
     if (needsIA) {
       if (btn) btn.innerHTML = '&#x2728; IA…';
