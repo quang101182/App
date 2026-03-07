@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#080810">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
-<title>SubWhisper v8.92</title>
+<title>SubWhisper v8.93</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -68,7 +68,9 @@ body::before{
     radial-gradient(ellipse 60% 50% at 90% 85%, rgba(0,212,170,.09) 0%, transparent 60%),
     radial-gradient(ellipse 50% 65% at 75% 5%,  rgba(255,77,109,.07) 0%, transparent 55%);
   animation:meshPulse 18s ease-in-out infinite alternate;
+  will-change:opacity,transform;
 }
+@media (prefers-reduced-motion:reduce){body::before{animation:none}}
 @keyframes meshPulse{
   0%  {opacity:1;transform:scale(1)}
   100%{opacity:.6;transform:scale(1.05)}
@@ -667,7 +669,7 @@ body.light .dz:hover,body.light .dz.over{background:rgba(124,106,255,.04)}
   font-size:11px;
   line-height:1.85;
   color:var(--text);
-  max-height:260px;
+  max-height:50vh;
   overflow-y:auto;
   white-space:pre-wrap;
   word-break:break-word;
@@ -731,7 +733,7 @@ body.light .sp{background:#f6f7fe;border-color:rgba(80,80,160,.12)}
 .preview-ttl{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
 .preview-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:4px;line-height:1;transition:color .2s;border-radius:6px}
 .preview-close:hover{color:var(--accent2)}
-.preview-video{width:100%;display:block;max-height:340px;background:#000}
+.preview-video{width:100%;display:block;max-height:50vh;background:#000}
 .preview-collapse{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:4px 6px;line-height:1;transition:color .2s,transform .25s;border-radius:6px;margin-right:4px}
 .preview-collapse:hover{color:var(--accent)}
 .preview-collapse.collapsed{transform:rotate(180deg)}
@@ -902,6 +904,13 @@ body.light footer{background:rgba(234,236,247,.8)}
   .dz-title{font-size:16px}
   .rac{gap:4px}
   .ab{padding:6px 10px;font-size:9px}
+  .crow{flex-wrap:wrap;gap:6px}
+  .crow>input{min-width:0;font-size:11px}
+  #richTx{font-size:13px;line-height:1.8;max-height:180px}
+  .ts-row{flex-direction:column;gap:6px}
+  .ts-arr{display:none}
+  #subEditInner{width:95vw;padding:16px}
+  #frInner{width:95vw}
 }
 /* ── TOAST ── */
 #toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:2000;background:var(--surface2);border:1px solid var(--border2);backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);padding:9px 22px;border-radius:40px;font-family:var(--mono);font-size:11px;letter-spacing:.4px;opacity:0;pointer-events:none;transition:opacity .3s;white-space:nowrap}
@@ -1019,7 +1028,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v8.92</span>
+    <span class="ver-badge">v8.93</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1351,7 +1360,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v5.2 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v8.93 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -1691,6 +1700,9 @@ function openFilePicker() {
 
 function handleFile(f) {
   if (!f) return;
+  if (f.size > 500 * 1024 * 1024) {
+    toast('Fichier volumineux (' + Math.round(f.size/1024/1024) + ' MB) — utilise le mode Cloud si disponible');
+  }
   selFile = f;
   origName = f.name.replace(/\.[^/.]+$/, '');
   _rawGroqSrt = null; // reset brut Groq du fichier précédent
@@ -1701,7 +1713,6 @@ function handleFile(f) {
   clearFilePrev();
   var isAudio = /\.(mp3|wav|aac|flac|m4a|ogg)$/i.test(f.name);
   var isMkv = /\.mkv$/i.test(f.name);
-  // BUG2: createObjectURL only for playable formats (not MKV → memory leak)
   var wrap = document.getElementById('filePrevWrap');
   if (isAudio) {
     filePrevUrl = URL.createObjectURL(f);
@@ -1772,10 +1783,10 @@ function clearFilePrev() {
   var scBtn = document.getElementById('srcCollapseBtn'); if (scBtn) scBtn.style.display = 'none';
   var vid = document.getElementById('filePrevVid');
   var aud = document.getElementById('filePrevAud');
-  // BUG1: only call load() if src was set (avoids console warning)
+  // Only call load() if src was set (avoids console warning)
   if (vid.hasAttribute('src')) { vid.removeAttribute('src'); vid.load(); }
   if (aud.hasAttribute('src')) { aud.removeAttribute('src'); aud.load(); }
-  // BUG3: reset display states for next file
+  // Reset display states for next file
   vid.style.display = 'block';
   aud.style.display = 'none';
   if (filePrevUrl) { URL.revokeObjectURL(filePrevUrl); filePrevUrl = null; }
@@ -1813,10 +1824,12 @@ async function transcribe() {
   setSt('');
   try {
     setLog('Upload en cours...'); setPct(5, 'Upload');
+    _abortCtrl = new AbortController();
     var uploadRes = await fetch(AAI_BASE + '/upload', {
       method: 'POST',
       headers: { 'authorization': apiKey, 'content-type': 'application/octet-stream' },
-      body: selFile
+      body: selFile,
+      signal: _abortCtrl.signal
     });
     if (!uploadRes.ok) {
       var uploadErr = await uploadRes.json().catch(function() { return {}; });
@@ -1834,7 +1847,8 @@ async function transcribe() {
     var jobRes = await fetch(AAI_BASE + '/transcript', {
       method: 'POST',
       headers: { 'authorization': apiKey, 'content-type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: _abortCtrl ? _abortCtrl.signal : undefined
     });
     if (!jobRes.ok) {
       var jobErr = await jobRes.json().catch(function() { return {}; });
@@ -1845,6 +1859,7 @@ async function transcribe() {
     setPct(50, 'En attente'); setLog('Job créé — polling...');
     startPoll(currentJobId, outLang);
   } catch(e) {
+    if (e.name === 'AbortError') return; // Cancel handled by cancelJob()
     setProg(false);
     document.getElementById('cb').classList.remove('vis');
     showErr(e.message || String(e));
@@ -1855,7 +1870,7 @@ async function transcribe() {
 function startPoll(jobId, outLang) {
   pollTimer = setInterval(async function() {
     try {
-      var statusRes = await fetch(AAI_BASE + '/transcript/' + jobId, { headers: { 'authorization': getApiKey() } });
+      var statusRes = await fetch(AAI_BASE + '/transcript/' + jobId, { headers: { 'authorization': getApiKey() }, signal: _abortCtrl ? _abortCtrl.signal : undefined });
       if (!statusRes.ok) return;
       var status = await statusRes.json();
       if (status.status === 'queued') {
@@ -1913,6 +1928,7 @@ async function transcribeOpenAI() {
   var key = getOpenAIKey();
   if (!selFile) return;
   wordData = [];
+  _abortCtrl = new AbortController();
   startChrono(); clearLiveLog();
   hideErr(); hideRes(); setProg(true);
   document.getElementById('sb').disabled = true;
@@ -2050,6 +2066,7 @@ async function transcribeOpenAI() {
       updateSbtn();
     }, 400);
   } catch(e) {
+    if (e.name === 'AbortError') return;
     setProg(false);
     document.getElementById('cb').classList.remove('vis');
     showErr(e.message || String(e));
@@ -2062,6 +2079,7 @@ async function transcribeGroq() {
   var key = getGroqKey();
   if (!selFile) return;
   wordData = [];
+  _abortCtrl = new AbortController();
   startChrono(); clearLiveLog();
   hideErr(); hideRes(); setProg(true);
   document.getElementById('sb').disabled = true;
@@ -2195,6 +2213,7 @@ async function transcribeGroq() {
       updateSbtn();
     }, 400);
   } catch(e) {
+    if (e.name === 'AbortError') return;
     // Fallback OpenAI si Groq retourne 401 (clé invalide)
     var isAuthErr = /401|invalid api key|authentication/i.test(e.message || '');
     if (isAuthErr && getOpenAIKey()) {
@@ -2354,7 +2373,7 @@ async function transcribeChunkOpenAI(file, srcLang, key, chunkNum, totalChunks, 
   var _gwKeyOAI = getGatewayKey();
   var _oaiUrl = _gwKeyOAI ? GATEWAY_URL + '/api/openai' : 'https://api.openai.com/v1/audio/transcriptions';
   var _oaiHdr = _gwKeyOAI ? { 'Authorization': 'Bearer ' + _gwKeyOAI, 'X-Api-Path': '/v1/audio/transcriptions' } : { 'Authorization': 'Bearer ' + key };
-  var resp = await fetch(_oaiUrl, { method: 'POST', headers: _oaiHdr, body: formData });
+  var resp = await fetch(_oaiUrl, { method: 'POST', headers: _oaiHdr, body: formData, signal: _abortCtrl ? _abortCtrl.signal : undefined });
   if (!resp.ok) {
     var errData = await resp.json().catch(function() { return {}; });
     throw new Error('OpenAI chunk ' + chunkNum + '/' + totalChunks + ' — ' + (errData.error ? errData.error.message : resp.statusText));
@@ -2386,7 +2405,7 @@ async function transcribeChunkGroq(file, srcLang, key, chunkNum, totalChunks, of
   var _gwKeyGRQ = getGatewayKey();
   var _grqUrl = _gwKeyGRQ ? GATEWAY_URL + '/api/groq' : 'https://api.groq.com/openai/v1/audio/transcriptions';
   var _grqHdr = _gwKeyGRQ ? { 'Authorization': 'Bearer ' + _gwKeyGRQ, 'X-Api-Path': '/openai/v1/audio/transcriptions' } : { 'Authorization': 'Bearer ' + key };
-  var resp = await fetch(_grqUrl, { method: 'POST', headers: _grqHdr, body: formData });
+  var resp = await fetch(_grqUrl, { method: 'POST', headers: _grqHdr, body: formData, signal: _abortCtrl ? _abortCtrl.signal : undefined });
   if (!resp.ok) {
     var errData = await resp.json().catch(function() { return {}; });
     throw new Error('Groq chunk ' + chunkNum + '/' + totalChunks + ' — ' + (errData.error ? errData.error.message : resp.statusText));
@@ -2672,7 +2691,13 @@ async function translateGemini(srtContent, sourceLang, targetLang) {
 }
 
 // ── CANCEL ────────────────────────────────────────────────
+var _abortCtrl = null;
+function getAbortSignal() {
+  if (!_abortCtrl) _abortCtrl = new AbortController();
+  return _abortCtrl.signal;
+}
 function cancelJob() {
+  if (_abortCtrl) { _abortCtrl.abort(); _abortCtrl = null; }
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   document.getElementById('cb').classList.remove('vis');
   if (currentJobId) {
@@ -3064,14 +3089,30 @@ function _toastApply(t, msg) {
   t.classList.remove('t-teal','t-ora','t-red','t-blue');
   var c = _toastColor(msg); if (c) t.classList.add(c);
 }
+var _toastQueue = [];
+var _toastActive = false;
 function toast(msg) {
   var t = document.getElementById('toast');
   if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+  if (_toastActive) {
+    // Skip if same message already queued
+    if (_toastQueue.length < 3 && !_toastQueue.some(function(m) { return m === msg; })) {
+      _toastQueue.push(msg);
+    }
+    return;
+  }
+  _toastActive = true;
   t.textContent = msg;
   _toastApply(t, msg);
   t.classList.add('toast-vis');
   clearTimeout(t._timer);
-  t._timer = setTimeout(function() { t.classList.remove('toast-vis'); }, 2800);
+  t._timer = setTimeout(function() {
+    t.classList.remove('toast-vis');
+    _toastActive = false;
+    if (_toastQueue.length > 0) {
+      setTimeout(function() { toast(_toastQueue.shift()); }, 200);
+    }
+  }, 2800);
 }
 // Toast persistant (pour ops longues — reste visible jusqu'à toastClear)
 function toastPersist(msg) {
@@ -3091,9 +3132,11 @@ function toastClear() {
 
 // ── OFFSET ────────────────────────────────────────────────
 function tsToMs(ts) {
-  var m = ts.match(/(\d+):(\d+):(\d+)[,.](\d+)/);
+  if (!ts || typeof ts !== 'string') return 0;
+  var m = ts.match(/(\d+):(\d+):(\d+)[,.](\d{1,3})/);
   if (!m) return 0;
-  return (+m[1]) * 3600000 + (+m[2]) * 60000 + (+m[3]) * 1000 + (+m[4]);
+  var ms = (+m[1]) * 3600000 + (+m[2]) * 60000 + (+m[3]) * 1000 + (+m[4].padEnd(3,'0').slice(0,3)) * 1;
+  return isFinite(ms) ? ms : 0;
 }
 function msToTs(ms) {
   if (ms < 0) ms = 0;
@@ -3382,7 +3425,7 @@ function applyOffset(deltaMs) {
   currentOffset += deltaMs;
   var disp = document.getElementById('offsetDisplay');
   var shifted = shiftSRT(srtOriginal, currentOffset);
-  // BUG4: warn if extreme offset eliminates all blocks
+  // Warn if extreme offset eliminates all blocks
   if (shifted.trim() === '') {
     currentOffset -= deltaMs; // revert
     disp.textContent = (currentOffset >= 0 ? '+' : '') + currentOffset + ' ms';
@@ -3398,7 +3441,7 @@ function applyOffset(deltaMs) {
   previewVttUrl = URL.createObjectURL(vttBlob);
   var track = document.getElementById('previewTrack');
   track.src = '';
-  // BUG5: cancel pending reload to avoid race condition
+  // Cancel pending reload to avoid race condition
   clearTimeout(offsetReloadTimer);
   offsetReloadTimer = setTimeout(function() {
     track.src = previewVttUrl;
@@ -3418,7 +3461,7 @@ function resetOffset() {
   previewVttUrl = URL.createObjectURL(vttBlob);
   var track = document.getElementById('previewTrack');
   track.src = '';
-  // BUG5: cancel pending reload before scheduling new one
+  // Cancel pending reload before scheduling new one
   clearTimeout(offsetReloadTimer);
   offsetReloadTimer = setTimeout(function() {
     track.src = previewVttUrl;
@@ -3722,7 +3765,7 @@ function saveSubEdit() {
     }
   }
   srtOriginal = buildSRT(blocks);
-  srtTxt = srtOriginal; // BUG4: sync srtTxt
+  srtTxt = srtOriginal; // Sync srtTxt
   document.getElementById('sp').value = srtOriginal;
   closeSubEditModal();
   validateSRT(true);
@@ -3734,7 +3777,7 @@ function saveSubEdit() {
   clearTimeout(offsetReloadTimer);
   offsetReloadTimer = setTimeout(function() {
     track.src = previewVttUrl;
-    // BUG6: forcer le mode hidden (subOverlay gère l'affichage)
+    // Forcer le mode hidden (subOverlay gère l'affichage)
     var vid = document.getElementById('previewVideo');
     if (vid.textTracks && vid.textTracks[0]) vid.textTracks[0].mode = 'hidden';
   }, 50);
@@ -3762,12 +3805,12 @@ var _ffmpegMode = 'hard';
 
 var _FFMPEG_MODES = {
   hard: {
-    desc: 'Sous-titres incrustés définitivement dans l\'image — compatible partout, re-encodage vidéo (plus lent)',
-    cmd: function(f) { return 'ffmpeg -i "' + f + '.mp4" -vf subtitles="' + f + '.srt" -c:v libx264 -crf 18 -preset fast -c:a copy "' + f + '_subs.mp4"'; }
+    desc: 'Sous-titres incrustés définitivement — compatible partout, re-encodage vidéo',
+    cmd: function(f, ext) { return 'ffmpeg -i "' + f + ext + '" -vf subtitles="' + f + '.srt" -c:v libx264 -crf 18 -preset fast -c:a copy "' + f + '_subs.mp4"'; }
   },
   soft: {
-    desc: 'Sous-titres en piste séparée — aucun re-encodage, instantané, qualité préservée, activables/désactivables à la lecture',
-    cmd: function(f) { return 'ffmpeg -i "' + f + '.mp4" -i "' + f + '.srt" -c copy -c:s mov_text -metadata:s:s:0 language=fre "' + f + '_subs.mp4"'; }
+    desc: 'Piste séparée — aucun re-encodage, instantané, activable/désactivable',
+    cmd: function(f, ext) { return 'ffmpeg -i "' + f + ext + '" -i "' + f + '.srt" -c copy -c:s mov_text -metadata:s:s:0 language=fre "' + f + '_subs.mp4"'; }
   }
 };
 
@@ -3780,8 +3823,9 @@ function setFfmpegMode(mode) {
 
 function updateFfmpegCmd() {
   var fname = origName || 'video';
+  var ext = selFile ? ('.' + selFile.name.split('.').pop()) : '.mp4';
   var m = _FFMPEG_MODES[_ffmpegMode];
-  document.getElementById('ffmpegCmd').value = m.cmd(fname);
+  document.getElementById('ffmpegCmd').value = m.cmd(fname, ext);
   document.getElementById('ffModeDesc').textContent = m.desc;
   document.getElementById('ffmpegWrap').classList.add('vis');
 }
@@ -3954,7 +3998,12 @@ function saveHistory(item) {
     hist = hist.filter(function(h) { return h.name !== item.name; });
     hist.unshift(item);
     if (hist.length > 10) hist = hist.slice(0, 10);
-    localStorage.setItem('sw_history', JSON.stringify(hist));
+    var json = JSON.stringify(hist);
+    if (json.length > 512000) { hist = hist.slice(0, 5); json = JSON.stringify(hist); }
+    try { localStorage.setItem('sw_history', json); } catch(quotaErr) {
+      hist = hist.slice(0, 3);
+      localStorage.setItem('sw_history', JSON.stringify(hist));
+    }
     renderHistory();
   } catch(e) {}
 }
@@ -5165,6 +5214,34 @@ function updateRequiredBlink() {
   if (chip) chip.style.opacity = API_DOTS['GRQ'] === 'ok' ? '1' : '0.6';
 }
 init();
+
+// ── KEYBOARD SHORTCUTS ───────────────────────────────────
+document.addEventListener('keydown', function(e) {
+  // Ignore if typing in input/textarea
+  var tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
+  var ctrl = e.ctrlKey || e.metaKey;
+  if (ctrl && e.key === 's') { e.preventDefault(); dlSRT(); }
+  if (ctrl && e.key === 'c' && !window.getSelection().toString()) { e.preventDefault(); copySRT(); }
+  if (ctrl && e.key === 'z') {
+    e.preventDefault();
+    var undoBtn = document.querySelector('.sbanner button');
+    if (undoBtn) undoBtn.click();
+    else toast('Rien à annuler');
+  }
+  if (e.key === 'Escape') {
+    var modal = document.getElementById('subEditModal');
+    if (modal && modal.style.display === 'flex') { closeSubEditModal(); return; }
+    var fr = document.getElementById('frOverlay');
+    if (fr && fr.style.display === 'flex') { closeFR(); return; }
+    var hist = document.getElementById('histPanel');
+    if (hist && hist.classList.contains('hpopen')) { toggleHist(); return; }
+  }
+  if (ctrl && e.key === 'f') {
+    e.preventDefault();
+    if (getCurrentSRT()) openFR();
+  }
+});
 </script>
 <div id="subEditModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);align-items:center;justify-content:center">
   <div id="subEditInner">
