@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.11</title>
+<title>SubWhisper v9.12</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -167,6 +167,8 @@ body.light::before{opacity:.12}
 @keyframes apiPing{from{opacity:.4}to{opacity:1;box-shadow:0 0 6px #f59e0b}}
 #adotGWY.ok{background:#06b6d4;box-shadow:0 0 8px #06b6d4}
 #adotGWY.key{background:#06b6d4;opacity:.5;animation:apiPing .8s ease-in-out infinite alternate}
+#adotDRV.ok{background:#34a853;box-shadow:0 0 8px #34a853}
+#adotDRV.err{background:var(--accent2);box-shadow:0 0 6px var(--accent2)}
 .achip-lbl{font-family:var(--mono);font-size:7px;color:var(--muted);letter-spacing:.5px}
 #apiLvlWrap{display:flex;flex-direction:column;align-items:center;gap:2px;margin-left:1px}
 #apiLvlBar{width:32px;height:3px;border-radius:2px;background:var(--border);overflow:hidden;flex-shrink:0}
@@ -1054,6 +1056,27 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 .ts-cst{font-family:var(--mono);font-size:9px;color:var(--muted);text-align:center;margin-top:2px;min-height:14px}
 .ts-arr{color:var(--muted);font-size:14px;padding-top:22px;flex-shrink:0}
 
+/* DIAG toggle switch */
+.diag-wrap{display:flex;align-items:center;gap:4px}
+.diag-switch{position:relative;display:inline-block;width:28px;height:14px;flex-shrink:0}
+.diag-switch input{opacity:0;width:0;height:0}
+.diag-slider{position:absolute;cursor:pointer;inset:0;background:var(--border2);border-radius:7px;transition:.2s}
+.diag-slider::before{content:'';position:absolute;width:10px;height:10px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.2s}
+.diag-switch input:checked+.diag-slider{background:#34a853}
+.diag-switch input:checked+.diag-slider::before{transform:translateX(14px)}
+.diag-switch input:disabled+.diag-slider{opacity:.35;cursor:not-allowed}
+.diag-lbl{font-family:var(--mono);font-size:7px;color:var(--muted);letter-spacing:.3px;cursor:pointer;position:relative}
+/* Mobile-friendly tooltip (tap = show) */
+.diag-lbl .tip{visibility:hidden;opacity:0;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:rgba(20,20,30,.95);color:#e0e0e8;font-family:var(--sans);font-size:11px;padding:6px 10px;border-radius:6px;white-space:nowrap;pointer-events:none;transition:opacity .15s;z-index:200;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.diag-lbl .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:rgba(20,20,30,.95)}
+.diag-lbl:hover .tip,.diag-lbl:focus .tip,.diag-lbl.tip-vis .tip{visibility:visible;opacity:1}
+/* DIAG button feedback */
+@keyframes diagPulse{0%{box-shadow:0 0 0 0 rgba(52,168,83,.5)}70%{box-shadow:0 0 0 8px rgba(52,168,83,0)}100%{box-shadow:0 0 0 0 rgba(52,168,83,0)}}
+@keyframes diagErr{0%{box-shadow:0 0 0 0 rgba(255,77,109,.5)}70%{box-shadow:0 0 0 8px rgba(255,77,109,0)}100%{box-shadow:0 0 0 0 rgba(255,77,109,0)}}
+.ab.diag-ok{animation:diagPulse .6s ease-out;border-color:#34a853!important;color:#34a853!important}
+.ab.diag-err{animation:diagErr .6s ease-out;border-color:var(--accent2)!important;color:var(--accent2)!important}
+.ab.diag-uploading{opacity:.7;pointer-events:none}
+
 /* LED requis manquante */
 @keyframes dotRequired{0%,100%{background:#f59e0b;box-shadow:0 0 7px rgba(245,158,11,.8)}50%{background:rgba(245,158,11,.25);box-shadow:none}}
 .adot.required{animation:dotRequired 1s ease-in-out infinite!important}
@@ -1106,7 +1129,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.11</span>
+    <span class="ver-badge">v9.12</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1118,6 +1141,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
       <span class="achip" title="AssemblyAI · word-level • vue RICH"><span class="adot" id="adotAAI"></span><span class="achip-lbl">AAI</span></span>
       <span class="achip" title="Worker CF · gros fichiers cloud"><span class="adot" id="adotWRK"></span><span class="achip-lbl">WRK</span></span>
       <span class="achip" title="API Gateway · clés centralisées"><span class="adot" id="adotGWY"></span><span class="achip-lbl">GWY</span></span>
+      <span class="achip" title="Google Drive · export DIAG auto"><span class="adot" id="adotDRV"></span><span class="achip-lbl">DRV</span></span>
       <div id="apiLvlWrap" title="Cliquez pour voir les besoins par fonctionnalité" onclick="toggleApiGuide()" style="cursor:pointer">
         <div id="apiLvlBar"><div id="apiLvlFill"></div></div>
         <span id="apiLvlLbl">–</span>
@@ -1316,7 +1340,11 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
           <button class="ab" onclick="repairSRTTimestamps()" id="repairBtn" title="Corriger les timestamps aberrants">&#x1F527; RPR</button>
           <button class="ab" onclick="validateSRT()" id="validateBtn" title="Analyser la qualit&#233; des sous-titres">&#x2713; VALID</button>
           <button class="ab" onclick="openDiff()" id="diffBtn" title="Comparer avant/apr&#232;s modifications">&#x21C4; DIFF</button>
-          <button class="ab" onclick="exportDiag()" id="diagBtn" title="Exporter le diagnostic JSON de toutes les &#233;tapes">&#x1F9EA; DIAG</button>
+          <div class="diag-wrap">
+            <button class="ab" onclick="exportDiag()" id="diagBtn">&#x1F9EA; DIAG</button>
+            <label class="diag-switch" title="Upload auto vers Google Drive"><input type="checkbox" id="diagDriveToggle" onchange="toggleDiagDrive(this.checked)"><span class="diag-slider"></span></label>
+            <span class="diag-lbl" tabindex="0" onclick="this.classList.toggle('tip-vis')">DRV<span class="tip">DIAG → Google Drive auto. Si OFF ou Drive indisponible, export fichier local.</span></span>
+          </div>
         </div>
       </div>
       <div class="btn-sep"></div>
@@ -1721,6 +1749,7 @@ async function fetchGatewayConfig() {
     document.getElementById('gatewayInfo').textContent = '⚠️ Entrez votre GATEWAY SECRET';
     // Reset tous les dots API à none
     ['GRQ','OAI','GEM','DSK','AAI','AZR'].forEach(function(d){ setDot(d,'none'); });
+    initDiagDrive();
     updateSbtn();
     return;
   }
@@ -1748,6 +1777,7 @@ async function fetchGatewayConfig() {
     }
     if (cfg.diag_folder) _diagDriveFolder = cfg.diag_folder;
     if (cfg.mcp_drive_url) _mcpDriveUrl = cfg.mcp_drive_url;
+    initDiagDrive();
     updateRequiredBlink(); checkAIEngine();
     updateSbtn();
   } catch(e) {
@@ -3997,6 +4027,32 @@ var _rawGroqSrt = null;
 var _diagSteps = {}; // { raw_groq, after_format, after_clean, after_translate }
 var _diagDriveFolder = ''; // Google Drive folder ID for DIAG uploads
 var _mcpDriveUrl = '';     // MCP Drive server URL
+var _diagDriveAuto = false; // Toggle state: auto-upload to Drive
+
+function toggleDiagDrive(on) {
+  _diagDriveAuto = on;
+  try { localStorage.setItem('sw_diag_drive', on ? '1' : '0'); } catch(e) {}
+  updateDrvDot();
+}
+function updateDrvDot() {
+  var el = document.getElementById('adotDRV');
+  if (!el) return;
+  if (!_mcpDriveUrl || !_diagDriveFolder) { el.className = 'adot'; return; }
+  el.className = 'adot ' + (_diagDriveAuto ? 'ok' : '');
+}
+function initDiagDrive() {
+  var hasDrive = !!(_mcpDriveUrl && _diagDriveFolder);
+  var toggle = document.getElementById('diagDriveToggle');
+  if (!toggle) return;
+  toggle.disabled = !hasDrive;
+  // Restore from localStorage
+  var saved = null;
+  try { saved = localStorage.getItem('sw_diag_drive'); } catch(e) {}
+  if (saved === '1' && hasDrive) { toggle.checked = true; _diagDriveAuto = true; }
+  else if (saved === '0') { toggle.checked = false; _diagDriveAuto = false; }
+  else if (hasDrive) { toggle.checked = true; _diagDriveAuto = true; } // Default ON si Drive configuré
+  updateDrvDot();
+}
 
 async function dlRawGroq() {
   if (!_rawGroqSrt) { toast('⚠ Aucune transcription brute disponible — relancez une vidéo'); return; }
@@ -4047,13 +4103,15 @@ function _detectLangFromText(text) {
 
 async function exportDiag() {
   if (!_diagSteps.raw_groq) { toast('Aucun diagnostic — lance une transcription d\'abord'); return; }
+  var btn = document.getElementById('diagBtn');
+  var btnOrig = btn ? btn.innerHTML : '';
   var src = detectedLang || _diagSteps.detected_lang || (document.getElementById('srcLangMain') ? document.getElementById('srcLangMain').value : '') || '';
   if (!src) src = _detectLangFromText(_diagSteps.raw_groq);
   var tgt = document.getElementById('outLangMain') ? document.getElementById('outLangMain').value : '';
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.11',
+    version: 'v9.12',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4077,9 +4135,10 @@ async function exportDiag() {
   diag.stats.total = _diagStats(_diagSteps.raw_groq, getCurrentSRT());
   var json = JSON.stringify(diag, null, 2);
   var fname = (origName || 'subtitles') + '.DIAG.json';
-  // Upload vers Google Drive si configuré
-  if (_mcpDriveUrl && _diagDriveFolder) {
-    toast('🧪 Upload DIAG vers Drive…');
+
+  // Upload vers Google Drive si toggle ON + configuré
+  if (_diagDriveAuto && _mcpDriveUrl && _diagDriveFolder) {
+    if (btn) { btn.innerHTML = '&#x1F9EA; &#x2191;'; btn.classList.add('diag-uploading'); }
     try {
       var driveResp = await fetch(_mcpDriveUrl + '/api/diag-upload', {
         method: 'POST',
@@ -4087,17 +4146,26 @@ async function exportDiag() {
         body: JSON.stringify({ filename: fname, content: json, folder_id: _diagDriveFolder })
       });
       if (driveResp.ok) {
-        toast('🧪 DIAG uploadé sur Drive — ' + fname);
+        if (btn) { btn.classList.remove('diag-uploading'); btn.innerHTML = '&#x1F9EA; &#x2705;'; btn.classList.add('diag-ok'); }
+        toast('DIAG upload Drive OK — ' + fname);
+        setTimeout(function() { if (btn) { btn.innerHTML = btnOrig; btn.classList.remove('diag-ok'); } }, 2500);
         return;
       }
       throw new Error('HTTP ' + driveResp.status);
     } catch(e) {
-      toast('⚠ Upload Drive échoué (' + e.message + ') — export local…');
+      if (btn) { btn.classList.remove('diag-uploading'); btn.innerHTML = '&#x1F9EA; &#x274C;'; btn.classList.add('diag-err'); }
+      toast('Drive indisponible (' + e.message + ') — export local...');
+      setTimeout(function() { if (btn) { btn.innerHTML = btnOrig; btn.classList.remove('diag-err'); } }, 2500);
+      // Fallback : export fichier local
+      await exportFile(json, '.DIAG.json', 'application/json');
+      return;
     }
   }
-  // Fallback : export fichier local
+  // Mode local : export fichier
   await exportFile(json, '.DIAG.json', 'application/json');
-  toast('🧪 Diagnostic exporté localement');
+  if (btn) { btn.innerHTML = '&#x1F9EA; &#x2705;'; btn.classList.add('diag-ok'); }
+  toast('DIAG export local — ' + fname);
+  setTimeout(function() { if (btn) { btn.innerHTML = btnOrig; btn.classList.remove('diag-ok'); } }, 2500);
 }
 
 // Si dossier mappé actif → écrit directement sans dialogue
