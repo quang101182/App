@@ -148,6 +148,24 @@ if (text.startsWith('keyset:')) {
     try {
       const data = await hPost(`${GATEWAY_URL}/admin/keys/set`, { key: keyName, value });
       reply = data.ok ? `✅ Clé *${data.key}* configurée` : `❌ ${data.error}`;
+
+      // Auto-update tous les liens *_SHARE si WORKER_SECRET change
+      if (data.ok && keyName === 'WORKER_SECRET') {
+        const listData = await hPost(`${GATEWAY_URL}/admin/keys/list`);
+        const shareKeys = Object.keys(listData).filter(k => k.endsWith('_SHARE') && listData[k] && listData[k] !== 'not set');
+        let updated = 0;
+        for (const sk of shareKeys) {
+          const oldUrl = listData[sk];
+          const newUrl = oldUrl.replace(/#gwy=.*$/, `#gwy=${value}`);
+          if (newUrl !== oldUrl) {
+            await hPost(`${GATEWAY_URL}/admin/keys/set`, { key: sk, value: newUrl });
+            updated++;
+          }
+        }
+        if (updated > 0) {
+          reply += `\n\n🔗 ${updated} lien(s) de partage mis à jour`;
+        }
+      }
     } catch (e) {
       reply = `❌ Erreur set: ${e.message}`;
     }
