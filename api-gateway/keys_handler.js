@@ -15,7 +15,7 @@ const KNOWN_KEYS = [
   { key: 'DEEPL_KEY',      label: 'DeepL',      usage: 'Traduction haute qualité' },
   { key: 'CLAUDE_KEY',     label: 'Claude',     usage: 'Anthropic Claude (claude-sonnet-4-6, etc.)' },
   { key: 'WORKER_URL',     label: 'Worker CF',  usage: 'URL Worker gros fichiers cloud', isConfig: true },
-  { key: 'WORKER_SECRET',  label: 'Worker Secret', usage: 'Secret auth apps → gateway' },
+  { key: 'WORKER_SECRET',  label: 'Worker Secret', usage: 'Secret auth apps → gateway', isConfig: true },
 ];
 
 const hPost = (url, body) => this.helpers.httpRequest({
