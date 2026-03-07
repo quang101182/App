@@ -2571,7 +2571,7 @@ async function deeplxTranslate(text, srcLang, tgtLang, deeplxUrl) {
 }
 
 // ── DISPATCH IA (Gemini ou DeepSeek selon sélection) ──────
-async function callAIText(prompt) {
+async function callAIText(prompt, _retry) {
   var engine = getAIEngine();
   if (engine === 'deepseek') {
     var key = getDeepSeekKey();
@@ -2582,10 +2582,11 @@ async function callAIText(prompt) {
     var resp = await fetch(_dskUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _dskAuth },
-      body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: prompt }], max_tokens: 8192 })
+      body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: prompt }], max_tokens: 8192, temperature: 0 })
     });
     if (!resp.ok) {
       var err = await resp.json().catch(function() { return {}; });
+      if (!_retry && (resp.status === 429 || resp.status >= 500)) { await new Promise(function(r) { setTimeout(r, 2000); }); return callAIText(prompt, true); }
       throw new Error('DeepSeek ' + resp.status + ' : ' + (err.error ? err.error.message : resp.statusText));
     }
     var data = await resp.json();
@@ -2603,10 +2604,11 @@ async function callAIText(prompt) {
     var resp = await fetch(_gemUrl, {
       method: 'POST',
       headers: _gemHdr,
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 8192 } })
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 8192, temperature: 0 } })
     });
     if (!resp.ok) {
       var err = await resp.json().catch(function() { return {}; });
+      if (!_retry && (resp.status === 429 || resp.status >= 500)) { await new Promise(function(r) { setTimeout(r, 2000); }); return callAIText(prompt, true); }
       throw new Error('Gemini ' + resp.status + ' : ' + (err.error ? err.error.message : resp.statusText));
     }
     var data = await resp.json();
