@@ -1,4 +1,4 @@
-// keys_handler.js — n8n Code node (v2.2)
+// keys_handler.js — n8n Code node (v3.0 — interactive)
 // Utilise this.helpers.httpRequest (pas fetch — n8n 2.8.3 task runner)
 
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
@@ -25,41 +25,109 @@ const hPost = (url, body) => this.helpers.httpRequest({
 });
 
 const text  = ($input.first().json.cmd || $input.first().json.text || '').trim();
-const parts = text.split(/\s+/);
-const sub   = (parts[1] || '').toLowerCase();
 
-let result;
+// ── Helpers clavier ────────────────────────────────────────────────────────
+const btn = (text, callback_data) => ({ text, callback_data });
+const backKb = [[btn('🔑 Voir les clés', 'keys'), btn('⬅️ Menu', 'menu')]];
 
-// ── /keys (sans arg) ou /keys list ────────────────────────────────────────
-if (!sub || sub === 'list') {
-  const [listData, statusData] = await Promise.all([
-    hPost(`${GATEWAY_URL}/admin/keys/list`),
-    hPost(`${GATEWAY_URL}/admin/keys/status`),
-  ]);
-  const statuses = statusData.statuses || {};
+let reply, keyboard;
 
-  const lines = KNOWN_KEYS.map(({ key, label, isConfig }) => {
-    const presence = listData[key] || 'not set';
-    const hasKey   = presence !== 'not set';
+// ── Route: callback keyset:{KEY} ───────────────────────────────────────────
+if (text.startsWith('keyset:')) {
+  const keyName = text.slice('keyset:'.length);
+  const info = KNOWN_KEYS.find(k => k.key === keyName);
+  const label = info ? info.label : keyName;
+  reply = `✏️ Envoie la nouvelle valeur pour *${keyName}* :\n_(colle ta clé API en réponse)_`;
+  keyboard = [[btn('❌ Annuler', 'keys')]];
 
-    if (key === 'WORKER_URL') {
-      return `☁️ *Worker CF* \`WORKER_URL\` = ${hasKey ? '✔ définie' : '⚠️ non définie'}`;
-    }
-    if (isConfig) {
-      return `    ↳ *Région*: \`${key}\` = ${hasKey ? '✔ définie' : '⚠️ non définie'}`;
-    }
+// ── Route: callback keydel:{KEY} ───────────────────────────────────────────
+} else if (text.startsWith('keydel:')) {
+  const keyName = text.slice('keydel:'.length);
+  reply = `🗑 Supprimer *${keyName}* ?`;
+  keyboard = [[btn('✅ Oui', `keydelconfirm:${keyName}`), btn('❌ Non', 'keys')]];
 
-    const st      = statuses[key];
-    const icon    = !hasKey ? '⚪' : st?.ok ? '✅' : '❌';
-    const masked  = hasKey ? `••• ${presence.length} chars` : 'aucune clé';
-    return `${icon} *${label}* \`${key}\`\n    └ ${masked}`;
-  }).join('\n');
+// ── Route: callback keydelconfirm:{KEY} ────────────────────────────────────
+} else if (text.startsWith('keydelconfirm:')) {
+  const keyName = text.slice('keydelconfirm:'.length);
+  try {
+    const data = await hPost(`${GATEWAY_URL}/admin/keys/delete`, { key: keyName });
+    reply = data.ok ? `🗑 Clé *${data.key}* supprimée` : `❌ ${data.error}`;
+  } catch (e) {
+    reply = `❌ Erreur suppression: ${e.message}`;
+  }
+  keyboard = backKb;
 
-  result = `🔑 *API Gateway — Clés*\n\n${lines}\n\n\`/keys set GROQ_KEY=gsk_...\`\n\`/keys delete GROQ_KEY\`\n\n_Partage app:_ \`/keys set APPNAME_SHARE=https://...#gwy=...\` → \`/share\``;
+// ── Route: callback keyadd ─────────────────────────────────────────────────
+} else if (text === 'keyadd') {
+  reply = `➕ Envoie la clé au format :\n\`NOM_CLE=valeur\`\nEx: \`GROQ_KEY=gsk_abc123...\``;
+  keyboard = [[btn('❌ Annuler', 'keys')]];
 
-// ── /keys set|add KEY VALEUR ───────────────────────────────────────────────
-} else if (sub === 'set' || sub === 'add') {
-  // Supporte KEY=VALUE et KEY VALEUR
+// ── Route: callback keystatus or /keys status ──────────────────────────────
+} else if (text === 'keystatus' || text === 'keys status') {
+  try {
+    const data  = await hPost(`${GATEWAY_URL}/admin/keys/status`);
+    const lines = KNOWN_KEYS.filter(k => !k.isConfig).map(({ key, label }) => {
+      const st = (data.statuses || {})[key];
+      if (!st) return `⚪ *${label}*: non configurée`;
+      const icon    = st.ok ? '✅' : '❌';
+      const variant = st.variant ? ` (${st.variant})` : '';
+      return `${icon} *${label}*: ${st.ok ? `OK ${st.status}${variant}` : st.status}`;
+    }).join('\n');
+    reply = `📊 *Ping APIs*\n\n${lines}`;
+  } catch (e) {
+    reply = `❌ Erreur status: ${e.message}`;
+  }
+  keyboard = backKb;
+
+// ── Route: /keys or /keys list ─────────────────────────────────────────────
+} else if (text === 'keys' || text === 'keys list' || text === '/keys' || text === '/keys list') {
+  try {
+    const [listData, statusData] = await Promise.all([
+      hPost(`${GATEWAY_URL}/admin/keys/list`),
+      hPost(`${GATEWAY_URL}/admin/keys/status`),
+    ]);
+    const statuses = statusData.statuses || {};
+
+    const lines = KNOWN_KEYS.map(({ key, label, isConfig }) => {
+      const presence = listData[key] || 'not set';
+      const hasKey   = presence !== 'not set';
+
+      if (key === 'WORKER_URL') {
+        return `☁️ *Worker CF* \`WORKER_URL\` = ${hasKey ? '✔ définie' : '⚠️ non définie'}`;
+      }
+      if (isConfig) {
+        return `    ↳ *Région*: \`${key}\` = ${hasKey ? '✔ définie' : '⚠️ non définie'}`;
+      }
+
+      const st     = statuses[key];
+      const icon   = !hasKey ? '⚪' : st?.ok ? '✅' : '❌';
+      const masked = hasKey ? `••• ${presence.length} chars` : 'aucune clé';
+      return `${icon} *${label}* (\`${key}\`) ${masked}`;
+    }).join('\n');
+
+    reply = `🔑 *API Gateway — Clés*\n\n${lines}`;
+
+    // Build inline keyboard: edit/delete buttons for each non-config key
+    const keyButtons = KNOWN_KEYS
+      .filter(k => !k.isConfig)
+      .map(({ key, label }) => [
+        btn(`✏️ ${label}`, `keyset:${key}`),
+        btn(`🗑 ${label}`, `keydel:${key}`),
+      ]);
+
+    keyboard = [
+      ...keyButtons,
+      [btn('➕ Ajouter clé', 'keyadd'), btn('📊 Ping all', 'keystatus')],
+      [btn('⬅️ Menu', 'menu')],
+    ];
+  } catch (e) {
+    reply = `❌ Erreur chargement clés: ${e.message}`;
+    keyboard = [[btn('⬅️ Menu', 'menu')]];
+  }
+
+// ── Route: /keys set KEY=VALUE ─────────────────────────────────────────────
+} else if (text.match(/^(\/)?keys\s+set\b/i)) {
+  const parts = text.split(/\s+/);
   let keyName, value;
   const arg2 = parts[2] || '';
   if (arg2.includes('=')) {
@@ -71,37 +139,38 @@ if (!sub || sub === 'list') {
     value   = parts.slice(3).join(' ');
   }
   if (!keyName || !value) {
-    result = `❌ Usage:\n\`/keys set GROQ_KEY=gsk_...\`\nou\n\`/keys set GROQ_KEY gsk_...\``;
+    reply = `❌ Usage:\n\`/keys set GROQ_KEY=gsk_...\`\nou\n\`/keys set GROQ_KEY gsk_...\``;
+    keyboard = backKb;
   } else {
-    const data = await hPost(`${GATEWAY_URL}/admin/keys/set`, { key: keyName, value });
-    result = data.ok ? `✅ Clé *${data.key}* configurée` : `❌ ${data.error}`;
+    try {
+      const data = await hPost(`${GATEWAY_URL}/admin/keys/set`, { key: keyName, value });
+      reply = data.ok ? `✅ Clé *${data.key}* configurée` : `❌ ${data.error}`;
+    } catch (e) {
+      reply = `❌ Erreur set: ${e.message}`;
+    }
+    keyboard = backKb;
   }
 
-// ── /keys delete KEY ───────────────────────────────────────────────────────
-} else if (sub === 'delete') {
+// ── Route: /keys delete KEY ────────────────────────────────────────────────
+} else if (text.match(/^(\/)?keys\s+delete\b/i)) {
+  const parts   = text.split(/\s+/);
   const keyName = (parts[2] || '').toUpperCase();
   if (!keyName) {
-    result = '❌ Usage: `/keys delete KEY`\nEx: `/keys delete GROQ_KEY`';
+    reply = '❌ Usage: `/keys delete KEY`\nEx: `/keys delete GROQ_KEY`';
+    keyboard = backKb;
   } else {
-    const data = await hPost(`${GATEWAY_URL}/admin/keys/delete`, { key: keyName });
-    result = data.ok ? `🗑 Clé *${data.key}* supprimée` : `❌ ${data.error}`;
+    try {
+      const data = await hPost(`${GATEWAY_URL}/admin/keys/delete`, { key: keyName });
+      reply = data.ok ? `🗑 Clé *${data.key}* supprimée` : `❌ ${data.error}`;
+    } catch (e) {
+      reply = `❌ Erreur delete: ${e.message}`;
+    }
+    keyboard = backKb;
   }
 
-// ── /keys status ───────────────────────────────────────────────────────────
-} else if (sub === 'status') {
-  const data  = await hPost(`${GATEWAY_URL}/admin/keys/status`);
-  const lines = KNOWN_KEYS.filter(k => !k.isConfig).map(({ key, label }) => {
-    const st      = (data.statuses || {})[key];
-    if (!st) return `⚪ *${label}*: non configurée`;
-    const icon    = st.ok ? '✅' : '❌';
-    const variant = st.variant ? ` (${st.variant})` : '';
-    return `${icon} *${label}*: ${st.ok ? `OK ${st.status}${variant}` : st.status}`;
-  }).join('\n');
-  result = `📊 *Ping APIs*\n\n${lines}`;
-
-// ── aide ───────────────────────────────────────────────────────────────────
+// ── Route: aide / fallback ─────────────────────────────────────────────────
 } else {
-  result = [
+  reply = [
     '🔑 *Gestion des clés API*', '',
     '/keys — liste toutes les APIs + statut',
     '/keys set KEY VALEUR — configurer une clé',
@@ -111,6 +180,7 @@ if (!sub || sub === 'list') {
     ...KNOWN_KEYS.map(({ key, label, usage, isConfig }) =>
       `${isConfig ? '  ↳' : '•'} \`${key}\` — ${label}: ${usage}`),
   ].join('\n');
+  keyboard = backKb;
 }
 
-return [{ json: { reply: result } }];
+return [{ json: { reply, keyboard } }];
