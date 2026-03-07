@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v2.0 — Discovery Engine</title>
+<title>music·ai v2.1 — Discovery Engine</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
@@ -80,6 +80,22 @@
   .field { background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:12px; padding:12px 16px; color:var(--text); font-family:inherit; font-size:14px; width:100%; outline:none; transition:border-color 0.2s; }
   .field:focus { border-color:var(--accent); }
   .field::placeholder { color:var(--muted); }
+  /* === RESPONSIVE PC (>480px) === */
+  @media (min-width:481px){
+    #app{max-width:520px;border-left:1px solid var(--border);border-right:1px solid var(--border);}
+    .onetap-btn{width:140px;height:140px;font-size:2.8rem;}
+    .btn-primary{font-size:16px;padding:16px 32px;}
+    .chat-bubble{font-size:15px;}
+    .genre-chip,.mode-chip{font-size:14px;padding:10px 18px;}
+    .music-card{padding:24px;}
+    .mood-chip{font-size:0.85rem;}
+    /* YT player mask responsive */
+    #yt-player-container,#yt-mask{width:360px;height:202px;}
+  }
+  @media (min-width:768px){
+    #app{max-width:580px;}
+    body{background:radial-gradient(ellipse 70% 60% at 30% 20%,rgba(124,58,237,0.08) 0%,transparent 70%),var(--bg);}
+  }
   /* YT MODAL */
   #yt-modal { position:fixed; inset:0; z-index:300; background:rgba(0,0,0,0.93); display:flex; flex-direction:column; transition:opacity 0.3s; }
   #yt-modal.hidden { opacity:0; pointer-events:none; }
@@ -247,7 +263,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v2.0</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v2.1</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -548,8 +564,8 @@ async function ytSearch(query){
 }
 window.onYouTubeIframeAPIReady=function(){
   // On cible le DIV — l'API YT crée elle-même l'iframe dans ce div
-  // Le conteneur #yt-player-container est toujours visible (opacity:0.01, jamais visibility:hidden)
-  // → postMessage fonctionne → onReady se déclenche correctement
+  // Le conteneur #yt-player-container est en viewport (bottom:0) masqué par #yt-mask
+  // → postMessage fonctionne → onReady se déclenche → Android Chrome peut lire
   ST.ytPlayer=new YT.Player('yt-player-div',{
     width:'320',height:'180',
     playerVars:{autoplay:0,playsinline:1,rel:0,enablejsapi:1,modestbranding:1,origin:window.location.origin},
@@ -557,10 +573,24 @@ window.onYouTubeIframeAPIReady=function(){
       onReady:function(e){
         ST.ytPlayerReady=true;
         e.target.setVolume(ST.volume);
+        // Patch allow="autoplay" — YT API ne l'ajoute pas, requis sur Android Chrome
+        try{
+          const iframes=document.querySelectorAll('#yt-player-container iframe');
+          iframes.forEach(function(f){f.setAttribute('allow','autoplay;fullscreen;encrypted-media');});
+        }catch(_){}
         console.log('[YT] Player ready, volume='+ST.volume);
+      },
+      onAutoplayBlocked:function(){
+        // Android Chrome a bloqué l'autoplay — retry via geste utilisateur
+        console.log('[YT] Autoplay blocked — attente geste');
       },
       onStateChange:function(e){
         // 1=playing, 2=paused, 0=ended, 3=buffering, -1=unstarted
+        // -1 = YT chargé mais pas encore lancé (Android autoplay bloqué) → retry unique à 600ms
+        if(e.data===-1&&!ST._ytRetried&&ST.currentTrack&&ST.currentTrack.videoId){
+          ST._ytRetried=true;
+          setTimeout(function(){try{ST.ytPlayer.playVideo();}catch(_){}},600);
+        }
         if(e.data===1){
           updatePlayPauseUI(true);
           startProgressTick();
@@ -639,6 +669,7 @@ async function ytPlay(track){
   if(yt)yt.textContent=track.title||'—';
   if(ya)ya.textContent=track.artist||'—';
   if(ST.ytPlayerReady&&ST.ytPlayer&&typeof ST.ytPlayer.loadVideoById==='function'){
+    ST._ytRetried=false;// reset flag → onStateChange peut faire 1 retry
     ST.ytPlayer.loadVideoById(vid);
     // Re-appliquer volume 800ms après loadVideoById (YT reset audio context sur nouveau load)
     setTimeout(()=>{
@@ -648,10 +679,9 @@ async function ytPlay(track){
       }catch(_){}
     },800);
   }else{
-    // Player pas encore prêt — retry dans 1s (max 3)
-    if(!track._retries)track._retries=0;
-    if(track._retries>=3){toast('❌ Player YouTube indisponible — ouvre ⚙️');ytShowFallbackToast(track);return;}
-    track._retries++;
+    // Player pas encore prêt — retry unique dans 1s
+    if(track._pendingRetry){toast('❌ Player YouTube indisponible — ouvre ⚙️');ytShowFallbackToast(track);return;}
+    track._pendingRetry=true;
     toast('⏳ Player en initialisation…');
     setTimeout(()=>ytPlay(track),1000);
     return;
@@ -1458,8 +1488,11 @@ boot();
 </script>
 <!-- Conteneur player YT PERMANENT — opacity:0 uniquement (jamais visibility:hidden ni display:none)
      Garantit que postMessage fonctionne → onReady → ST.ytPlayerReady=true -->
-<div id="yt-player-container" style="position:fixed;bottom:-9999px;left:-9999px;width:1px;height:1px;overflow:hidden;opacity:0.01;pointer-events:none;z-index:-1;">
+<!-- YT player en viewport (Android Chrome exige que l'iframe soit visible pour déclencher playback) -->
+<div id="yt-player-container" style="position:fixed;bottom:0;left:0;width:320px;height:180px;z-index:1;overflow:hidden;pointer-events:none;">
   <div id="yt-player-div" style="width:320px;height:180px;"></div>
 </div>
+<!-- Masque visuel sur le player YT — même coordonnées, z-index supérieur -->
+<div id="yt-mask" style="position:fixed;bottom:0;left:0;width:320px;height:180px;z-index:2;background:var(--bg,#060609);pointer-events:none;"></div>
 </body>
 </html>
