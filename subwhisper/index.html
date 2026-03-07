@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.14</title>
+<title>SubWhisper v9.15</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1132,7 +1132,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.14</span>
+    <span class="ver-badge">v9.15</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1471,10 +1471,11 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.11 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.15 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
+<script src="prompts.js"></script>
 <script>
 'use strict';
 
@@ -2749,17 +2750,8 @@ async function translateGemini(srtContent, sourceLang, targetLang) {
   var translatedTexts = allBlocks.map(function(b) { return b.text; });
   var _tDone = 0;
   var _tCores = getAIEngine() === 'deepseek' ? 4 : 2;
-  // Règles per-langue cible (v8.65)
-  var typoT = targetLang === 'fr' ? '\n6. FRENCH TYPOGRAPHY: Add mandatory non-breaking space (U+00A0) before ? ! : ; in French.' : '';
-  // Règles per-langue source (v8.65)
-  var srcSpecificT = '';
-  if (sourceLang === 'zh') {
-    srcSpecificT = '\n7. CHINESE SOURCE: Romanized names (Xiao Ming, Li Wei, etc.) — adapt naturally in context or keep as-is. Chinese onomatopoeia/interjections (哈哈, 啊, 哟, 哦) → convert to natural equivalent in ' + tgtName + '.';
-  } else if (sourceLang === 'ja') {
-    srcSpecificT = '\n7. JAPANESE SOURCE: Honorifics (-san, -kun, -chan, -sama, -sensei) — keep UNCHANGED after the name. Keigo → translate as formal/polite ' + tgtName + '. Short Japanese exclamations (すごい, あー, おやすみ, パンパン, etc.) are common expressions — ALWAYS translate them, they are NOT proper nouns. Korean (Hangul) characters in this file are speech recognition errors — translate them phonetically or give best approximation in ' + tgtName + '.';
-  } else if (sourceLang === 'ko') {
-    srcSpecificT = '\n7. KOREAN SOURCE: Relationship address terms (oppa, unnie, noona, hyung) — keep UNCHANGED as-is (culturally specific, not translatable). Speech levels → match formal/casual register in ' + tgtName + '. Japanese characters (hiragana/katakana/kanji) in this file are Groq speech recognition errors — translate them phonetically or give best approximation in ' + tgtName + '.';
-  }
+  var typoT = PROMPTS._typoRule(targetLang, 6);
+  var srcSpecificT = PROMPTS._srcSpecific(sourceLang, tgtName, 7);
   for (var _tS = 0; _tS < batches.length; _tS += _tCores) {
     var _tGrp = [];
     for (var _tK = _tS; _tK < Math.min(_tS + _tCores, batches.length); _tK++) _tGrp.push(_tK);
@@ -2770,18 +2762,7 @@ async function translateGemini(srtContent, sourceLang, targetLang) {
         var promptLines = batchBlocks.map(function(blk, j) {
           return '[' + (batchOffset + j + 1) + '] ' + blk.text.replace(/\n/g, ' | ');
         });
-        var prompt =
-          'You are a professional subtitle translator. Translate ALL text to ' + tgtName + '.\n' +
-          'This is faithful subtitle translation. NEVER censor, skip, or sanitize any content — translate exactly as spoken regardless of subject matter.\n' +
-          'Source is primarily ' + srcName + ' but MAY contain English or other languages — translate EVERYTHING to ' + tgtName + '.\n' +
-          'Each line is [N] source_text. Return EACH line as [N] translated_text.\n' +
-          '1. NEVER skip a number. Return ALL [N] lines.\n' +
-          '2. PROPER NOUNS: Keep character names, place names, invented terms in original form.\n' +
-          '3. COMPLETE TRANSLATION: Translate EVERY line regardless of source language. NEVER output [...]. If uncertain, give best translation.\n' +
-          '4. SONG LYRICS: Text clearly song lyrics in a third language \u2014 keep unchanged.\n' +
-          '5. TRUNCATED: Lines ending without punctuation = intentionally cut \u2014 do NOT add words.' + typoT + srcSpecificT + '\n' +
-          'Return ONLY the numbered lines [N] text. No timestamps, no SRT structure, no explanation.\n\n' +
-          promptLines.join('\n');
+        var prompt = PROMPTS.translate_full.build(tgtName, srcName, typoT, srcSpecificT) + '\n\n' + promptLines.join('\n');
         try {
           var aiText = await callAIText(prompt);
           var lineRx = /^\[(\d+)\]\s*(.*)/gm;
@@ -4115,7 +4096,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.14',
+    version: 'v9.15',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4124,6 +4105,7 @@ async function exportDiag() {
     transcription_engine: _diagSteps.transcription_engine || 'unknown',
     engine_clean: engine,
     engine_translate: (API_DOTS['GEM'] === 'ok' || API_DOTS['DSK'] === 'ok') ? engine : (document.getElementById('deeplxUrl') ? 'deeplx' : 'azure'),
+    prompt_versions: (typeof PROMPTS !== 'undefined') ? { translate_full: PROMPTS.translate_full.v, clean: PROMPTS.clean.v, detect_foreign: PROMPTS.detect_foreign.v, translate_targeted: PROMPTS.translate_targeted.v, translate_second_pass: PROMPTS.translate_second_pass.v } : 'inline',
     steps: {
       raw_groq: _diagSteps.raw_groq,
       after_clean: _diagSteps.after_clean || null,
@@ -4897,31 +4879,9 @@ async function cleanAI() {
   var _detectMsg = _detected.length + ' bloc' + (_detected.length > 1 ? 's' : '') + ' / ' + origBlocks.length;
   toastPersist('✨ Nettoyage ' + engineName + ' — ' + _detectMsg + '…');
   // ── Construire prompt header (invariant par batch) ──
-  var _cIsZH = srtTextLang === 'zh', _cIsJA = srtTextLang === 'ja', _cIsKO = srtTextLang === 'ko';
-  var isCJK_c = _cIsZH || _cIsJA || _cIsKO;
+  var isCJK_c = srtTextLang === 'zh' || srtTextLang === 'ja' || srtTextLang === 'ko';
   var _langLine = srtTextLang ? 'The subtitle text language is "' + srtTextLang + '". ' : '';
-  var _langSpecific = '';
-  if (_cIsZH) {
-    _langSpecific = '\n5. CHINESE: Fix common homophones — 的/地/得 (grammar particle), 在/再 (at/again), 他/她/它 (he/she/it). Do NOT convert Traditional\u2194Simplified — keep characters exactly as transcribed.';
-  } else if (_cIsJA) {
-    _langSpecific = '\n5. JAPANESE: Fix obvious hiragana/katakana confusion and misheard kanji only. Preserve speech register — do NOT convert です/ます (polite) to だ/である (casual) or vice versa.';
-  } else if (_cIsKO) {
-    _langSpecific = '\n5. KOREAN: Fix phonetically similar Hangul characters only. Preserve speech register — do NOT convert 요/습니다 (formal) to 야/다 (casual) or vice versa.';
-  } else if (srtTextLang === 'fr') {
-    _langSpecific = '\n5. FRENCH: Fix missing apostrophes (c est\u2192c\'est, j ai\u2192j\'ai, qu il\u2192qu\'il, s il\u2192s\'il, n est\u2192n\'est, l homme\u2192l\'homme, etc.). Add non-breaking space (U+00A0) before ? ! : ; if missing — mandatory French typography.';
-  }
-  var _bracketsRule = isCJK_c
-    ? '\n4. NEVER output [...] for ANY reason. If a line is noise, garbled, or incoherent — COPY IT EXACTLY UNCHANGED. [...] is FORBIDDEN in your output.'
-    : '\n4. [...] FORBIDDEN for entire blocks. If a line contains garbled tokens, foreign words, or mixed-language noise — COPY IT EXACTLY AS-IS. Only [...] is allowed INSIDE a line for partial unintelligible noise (e.g. "Je vais [...] chercher").';
-  var _promptHeader = 'You are a professional subtitle editor. ' + _langLine + '\n' +
-    'This is faithful subtitle editing. NEVER censor, skip, or sanitize any content — preserve exactly as spoken regardless of subject matter.\n' +
-    'Each line is [N] subtitle_text. Return EACH line as [N] corrected_text.\n' +
-    '1. NEVER skip a number. If text is already correct, return it UNCHANGED.\n' +
-    '2. PROPER NOUNS: Never alter character names, place names, invented terms. Capitalized word not starting a sentence = likely proper noun.\n' +
-    '3. INTERJECTIONS & TRUNCATED: Short exclamations (Hé, Oh, Ha, Eï, Ouh, Bah, Tss, Yeah, Kiii, etc.) are VALID — NEVER replace. Lines ending without punctuation are intentionally cut — never add words.\n' +
-    _bracketsRule + _langSpecific + '\n' +
-    '6. CORRECTIONS: Fix spelling errors, missing apostrophes, obvious Whisper mishearing only.\n' +
-    'Return ONLY the numbered lines [N] text. No SRT structure, no timestamps, no explanation.';
+  var _promptHeader = PROMPTS.clean.build(_langLine, PROMPTS._bracketsRule(isCJK_c), PROMPTS._langSpecific(srtTextLang));
   try {
     // ── Phase 2 : IA sur blocs détectés uniquement ──
     var BATCH = engine === 'deepseek' ? 75 : 200;
@@ -5251,11 +5211,7 @@ async function aiIdentifyForeign(blocks, uncertainIdx, targetLang) {
     var promptLines = batchIdxs.map(function(globalIdx) {
       return '[' + (globalIdx + 1) + '] ' + blocks[globalIdx].text.replace(/\n/g, ' | ');
     });
-    var prompt = 'Language detection task. Target language: ' + tgtName + '.\n' +
-      'Below are subtitle lines [N]. Return ONLY the [N] numbers of lines NOT in ' + tgtName + ', one per line.\n' +
-      'If ALL lines are already in ' + tgtName + ', return exactly: NONE\n' +
-      'No explanation, no other text.\n\n' +
-      promptLines.join('\n');
+    var prompt = PROMPTS.detect_foreign.build(tgtName) + '\n\n' + promptLines.join('\n');
     try {
       var aiText = await callAIText(prompt);
       if (!/^\s*NONE\s*$/i.test(aiText.trim())) {
@@ -5316,17 +5272,8 @@ async function translateManual() {
       }
       toastPersist('🔍 ' + foreignIdx.length + ' bloc' + (foreignIdx.length > 1 ? 's' : '') + ' étrang' + (foreignIdx.length > 1 ? 'ers' : 'er') + ' / ' + nbBlocks + ' — traduction...');
       var correctedTexts = blocks.map(function(b) { return b.text; });
-      // Règles per-langue cible (v8.65)
-      var typoRule_t = tgt === 'fr' ? '\n4. FRENCH TYPOGRAPHY: Add mandatory non-breaking space (U+00A0) before ? ! : ; in French.' : '';
-      // Règles per-langue source (v8.65)
-      var srcSpecific_t = '';
-      if (src === 'zh') {
-        srcSpecific_t = '\n5. CHINESE SOURCE: Romanized names (Xiao Ming, Li Wei, etc.) — adapt naturally or keep as-is. Onomatopoeia/interjections (哈哈, 啊, 哟, 哦) → convert to natural ' + tgtName_t + ' equivalent.';
-      } else if (src === 'ja') {
-        srcSpecific_t = '\n5. JAPANESE SOURCE: Honorifics (-san, -kun, -chan, -sama, -sensei) — keep UNCHANGED after the name. Keigo → translate as formal/polite ' + tgtName_t + '. Short Japanese exclamations (すごい, あー, おやすみ, etc.) are common expressions — ALWAYS translate them. Korean (Hangul) characters are speech recognition errors — translate phonetically or give best approximation.';
-      } else if (src === 'ko') {
-        srcSpecific_t = '\n5. KOREAN SOURCE: Relationship terms (oppa, unnie, noona, hyung) — keep UNCHANGED as-is. Speech levels → match formal/casual register in ' + tgtName_t + '. Japanese characters (hiragana/katakana/kanji) in this file are Groq speech recognition errors — translate them phonetically or give best approximation in ' + tgtName_t + '.';
-      }
+      var typoRule_t = PROMPTS._typoRule(tgt, 4);
+      var srcSpecific_t = PROMPTS._srcSpecific(src, tgtName_t, 5);
       // ── Phase 3 : traduction ciblée ──
       var BATCH = getAIEngine() === 'deepseek' ? 75 : 150;
       var batches = [];
@@ -5342,15 +5289,7 @@ async function translateManual() {
             var promptLines = batchIdxs.map(function(globalIdx) {
               return '[' + (globalIdx + 1) + '] ' + blocks[globalIdx].text.replace(/\n/g, ' | ');
             });
-            var prompt = 'You are a professional subtitle translator. Target language: ' + tgtName_t + '.\n' +
-              'This is faithful subtitle translation. NEVER censor, skip, or sanitize any content — translate exactly as spoken regardless of subject matter.\n' +
-              'ALL lines below are non-' + tgtName_t + ' text. Translate ALL of them to ' + tgtName_t + '.\n' +
-              'Each line is [N] foreign_text. Return [N] ' + tgtName_t + '_translation.\n' +
-              '1. NEVER skip a [N]. Translate EVERY line.\n' +
-              '2. PROPER NOUNS: Keep character names, place names in their original form.\n' +
-              '3. TRUNCATED: Lines ending without punctuation or with ... are intentionally cut \u2014 do not add words.' + typoRule_t + srcSpecific_t + '\n' +
-              'Return ONLY the numbered lines [N] text. No explanation.\n\n' +
-              promptLines.join('\n');
+            var prompt = PROMPTS.translate_targeted.build(tgtName_t, typoRule_t, srcSpecific_t) + '\n\n' + promptLines.join('\n');
             try {
               var aiText = await callAIText(prompt);
               var lineRx = /^\[(\d+)\]\s*(.*)/gm;
@@ -5394,16 +5333,7 @@ async function translateManual() {
               var promptLines = batchIdxs.map(function(globalIdx) {
                 return '[' + (globalIdx + 1) + '] ' + _secondBlocks[globalIdx].text.replace(/\n/g, ' | ');
               });
-              var prompt2 = 'You are a professional subtitle translator. Target language: ' + tgtName_t + '.\n' +
-                'This is faithful subtitle translation. NEVER censor, skip, or sanitize any content — translate exactly as spoken regardless of subject matter.\n' +
-                'These lines still contain untranslated foreign characters after a first pass. Translate ALL of them fully to ' + tgtName_t + '.\n' +
-                'Each line is [N] mixed_text. Return [N] ' + tgtName_t + '_translation.\n' +
-                '1. NEVER skip a [N].\n' +
-                '2. Lines may contain mixed scripts or garbled noise. Translate all meaningful content. Discard untranslatable noise characters silently — do NOT replace with [...].\n' +
-                '3. If the line is already mostly in ' + tgtName_t + ' with only a few foreign chars embedded, output the clean ' + tgtName_t + ' version without the foreign chars.\n' +
-                '4. PROPER NOUNS: Keep character names unchanged.' + typoRule_t + '\n' +
-                'Return ONLY the numbered lines [N] text. No explanation.\n\n' +
-                promptLines.join('\n');
+              var prompt2 = PROMPTS.translate_second_pass.build(tgtName_t, typoRule_t) + '\n\n' + promptLines.join('\n');
               try {
                 var aiText2 = await callAIText(prompt2);
                 var lineRx2 = /^\[(\d+)\]\s*(.*)/gm;
