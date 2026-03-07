@@ -32,6 +32,7 @@
 
 const express = require('express');
 const { spawn } = require('child_process');
+const https = require('https');
 // Note: FormData et Blob sont des globals Node.js 20+, pas besoin de require
 
 // ---------------------------------------------------------------------------
@@ -66,10 +67,19 @@ const startTime = Date.now();
 // ---------------------------------------------------------------------------
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
 
-// Raw body parser for /deepgram endpoint (large audio/video files)
-const rawBodyParser = express.raw({ type: () => true, limit: '2gb' });
+// CORS middleware global — DOIT être avant toutes les routes
+app.use((req, res, next) => {
+  res.set({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  });
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
+
+app.use(express.json({ limit: '1mb' }));
 
 // Auth middleware that accepts FLY_SECRET or WORKER_SECRET
 function requireAnySecret(req, res, next) {
@@ -115,85 +125,63 @@ app.get('/health', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /deepgram — Proxy vers Deepgram API (pas de limite de taille)
+// POST /deepgram — Streaming proxy vers Deepgram API (pas de buffering mémoire)
 // Query params forwarded: model, diarize, language, punctuate, etc.
 // Auth: FLY_SECRET ou WORKER_SECRET en Bearer
-// Deepgram key: DEEPGRAM_KEY env var ou récupérée via gateway
+// Deepgram key: DEEPGRAM_KEY env var
+// Le body est PIPÉ directement vers Deepgram — supporte fichiers > 1 GB
 // ---------------------------------------------------------------------------
 
-app.post('/deepgram', requireAnySecret, rawBodyParser, async (req, res) => {
+app.post('/deepgram', requireAnySecret, (req, res) => {
   const DEEPGRAM_KEY = process.env.DEEPGRAM_KEY || '';
 
   if (!DEEPGRAM_KEY) {
-    // Try to fetch from gateway
-    const gwUrl = process.env.GATEWAY_URL || '';
-    const gwAdmin = process.env.GATEWAY_ADMIN_TOKEN || '';
-    if (gwUrl && gwAdmin) {
-      try {
-        const keyResp = await fetch(`${gwUrl}/admin/keys/get`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${gwAdmin}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: 'DEEPGRAM_KEY' }),
-          signal: AbortSignal.timeout(10000),
-        });
-        const keyData = await keyResp.json();
-        if (keyData.ok && keyData.value) {
-          return proxyToDeepgram(req, res, keyData.value);
-        }
-      } catch (e) {
-        console.error('[deepgram] Failed to fetch key from gateway:', e.message);
-      }
-    }
     return res.status(503).json({ error: 'DEEPGRAM_KEY not configured' });
   }
 
-  return proxyToDeepgram(req, res, DEEPGRAM_KEY);
-});
-
-async function proxyToDeepgram(req, res, apiKey) {
   const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-  const dgUrl = `https://api.deepgram.com/v1/listen${qs}`;
+  const dgPath = `/v1/listen${qs}`;
   const contentType = req.headers['content-type'] || 'audio/mpeg';
-  const bodySize = req.body ? req.body.length : 0;
+  const contentLength = req.headers['content-length'] || '';
 
-  console.log(`[deepgram] Proxy ${(bodySize / 1048576).toFixed(1)} MB → ${dgUrl.substring(0, 80)}...`);
+  console.log(`[deepgram] Streaming proxy ${contentLength ? (parseInt(contentLength)/1048576).toFixed(1)+' MB' : '? MB'} → api.deepgram.com${dgPath.substring(0, 80)}...`);
   const startMs = Date.now();
 
-  try {
-    const dgResp = await fetch(dgUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Token ${apiKey}`,
-        'Content-Type': contentType,
-      },
-      body: req.body,
-    });
+  const dgHeaders = {
+    'Authorization': `Token ${DEEPGRAM_KEY}`,
+    'Content-Type': contentType,
+  };
+  if (contentLength) dgHeaders['Content-Length'] = contentLength;
 
+  const dgReq = https.request({
+    hostname: 'api.deepgram.com',
+    path: dgPath,
+    method: 'POST',
+    headers: dgHeaders,
+    timeout: 600000, // 10 min
+  }, (dgRes) => {
     const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-    console.log(`[deepgram] Response ${dgResp.status} in ${elapsed}s`);
+    console.log(`[deepgram] Response ${dgRes.statusCode} in ${elapsed}s`);
 
-    const respBody = await dgResp.text();
-    res.set({
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    });
-    res.status(dgResp.status).send(respBody);
-  } catch (err) {
-    console.error('[deepgram] Proxy error:', err.message);
-    res.status(502).json({ error: `Deepgram proxy error: ${err.message}` });
-  }
-}
-
-// CORS preflight for /deepgram
-app.options('/deepgram', (req, res) => {
-  res.set({
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    res.status(dgRes.statusCode);
+    res.set('Content-Type', dgRes.headers['content-type'] || 'application/json');
+    dgRes.pipe(res);
   });
-  res.status(204).end();
+
+  dgReq.on('error', (err) => {
+    console.error('[deepgram] Proxy error:', err.message);
+    if (!res.headersSent) {
+      res.status(502).json({ error: `Deepgram proxy error: ${err.message}` });
+    }
+  });
+
+  dgReq.on('timeout', () => {
+    console.error('[deepgram] Upstream timeout');
+    dgReq.destroy(new Error('Deepgram upstream timeout'));
+  });
+
+  // PIPE le body entrant directement vers Deepgram — ZERO buffering mémoire
+  req.pipe(dgReq);
 });
 
 // ---------------------------------------------------------------------------
