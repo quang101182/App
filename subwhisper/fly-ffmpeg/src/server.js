@@ -68,6 +68,22 @@ const startTime = Date.now();
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 
+// Raw body parser for /deepgram endpoint (large audio/video files)
+const rawBodyParser = express.raw({ type: () => true, limit: '2gb' });
+
+// Auth middleware that accepts FLY_SECRET or WORKER_SECRET
+function requireAnySecret(req, res, next) {
+  const auth = req.headers['authorization'] || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!token) return res.status(401).json({ error: 'Missing Authorization header' });
+  const flySecret = process.env.FLY_SECRET || '';
+  const workerSecret = process.env.WORKER_SECRET || '';
+  if ((flySecret && token === flySecret) || (workerSecret && token === workerSecret)) return next();
+  // Also accept gateway WORKER_SECRET from KV (passed as query param for convenience)
+  if (!flySecret && !workerSecret) return next(); // dev mode
+  return res.status(401).json({ error: 'Unauthorized' });
+}
+
 // ---------------------------------------------------------------------------
 // Middleware auth
 // ---------------------------------------------------------------------------
@@ -96,6 +112,88 @@ app.get('/health', (req, res) => {
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
     version: '1.8.0'
   });
+});
+
+// ---------------------------------------------------------------------------
+// POST /deepgram — Proxy vers Deepgram API (pas de limite de taille)
+// Query params forwarded: model, diarize, language, punctuate, etc.
+// Auth: FLY_SECRET ou WORKER_SECRET en Bearer
+// Deepgram key: DEEPGRAM_KEY env var ou récupérée via gateway
+// ---------------------------------------------------------------------------
+
+app.post('/deepgram', requireAnySecret, rawBodyParser, async (req, res) => {
+  const DEEPGRAM_KEY = process.env.DEEPGRAM_KEY || '';
+
+  if (!DEEPGRAM_KEY) {
+    // Try to fetch from gateway
+    const gwUrl = process.env.GATEWAY_URL || '';
+    const gwAdmin = process.env.GATEWAY_ADMIN_TOKEN || '';
+    if (gwUrl && gwAdmin) {
+      try {
+        const keyResp = await fetch(`${gwUrl}/admin/keys/get`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${gwAdmin}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'DEEPGRAM_KEY' }),
+          signal: AbortSignal.timeout(10000),
+        });
+        const keyData = await keyResp.json();
+        if (keyData.ok && keyData.value) {
+          return proxyToDeepgram(req, res, keyData.value);
+        }
+      } catch (e) {
+        console.error('[deepgram] Failed to fetch key from gateway:', e.message);
+      }
+    }
+    return res.status(503).json({ error: 'DEEPGRAM_KEY not configured' });
+  }
+
+  return proxyToDeepgram(req, res, DEEPGRAM_KEY);
+});
+
+async function proxyToDeepgram(req, res, apiKey) {
+  const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  const dgUrl = `https://api.deepgram.com/v1/listen${qs}`;
+  const contentType = req.headers['content-type'] || 'audio/mpeg';
+  const bodySize = req.body ? req.body.length : 0;
+
+  console.log(`[deepgram] Proxy ${(bodySize / 1048576).toFixed(1)} MB → ${dgUrl.substring(0, 80)}...`);
+  const startMs = Date.now();
+
+  try {
+    const dgResp = await fetch(dgUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${apiKey}`,
+        'Content-Type': contentType,
+      },
+      body: req.body,
+    });
+
+    const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+    console.log(`[deepgram] Response ${dgResp.status} in ${elapsed}s`);
+
+    const respBody = await dgResp.text();
+    res.set({
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    });
+    res.status(dgResp.status).send(respBody);
+  } catch (err) {
+    console.error('[deepgram] Proxy error:', err.message);
+    res.status(502).json({ error: `Deepgram proxy error: ${err.message}` });
+  }
+}
+
+// CORS preflight for /deepgram
+app.options('/deepgram', (req, res) => {
+  res.set({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  });
+  res.status(204).end();
 });
 
 // ---------------------------------------------------------------------------

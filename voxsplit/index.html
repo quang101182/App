@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoxSplit v1.3 — Diarization & Transcription</title>
+<title>VoxSplit v1.4 — Diarization & Transcription</title>
 <meta name="description" content="Transcription audio/vidéo avec identification des locuteurs (diarization) via Deepgram Nova-2">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#8b5cf6">
@@ -685,7 +685,7 @@ mark {
       <h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1>
     </div>
     <div class="header-actions">
-      <span class="version">v1.3</span>
+      <span class="version">v1.4</span>
       <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--text-muted)">
         <span class="status-dot yellow"></span>
       </span>
@@ -703,6 +703,10 @@ mark {
     <div class="setting-group" style="margin-bottom:12px">
       <label>Gateway Secret (Bearer)</label>
       <input type="text" id="cfg-secret" placeholder="Votre WORKER_SECRET">
+    </div>
+    <div class="setting-group" style="margin-bottom:12px">
+      <label>Cloud Worker URL (Fly.io — pour gros fichiers)</label>
+      <input type="text" id="cfg-flyio" placeholder="https://subwhisper-ffmpeg.fly.dev">
     </div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn-secondary" onclick="saveConfig()"><i class="fas fa-check"></i> Sauvegarder</button>
@@ -861,7 +865,7 @@ mark {
 
 <script>
 // ─────────────────────────────────────────────────────────────────────
-// VoxSplit v1.3 — Diarization & Transcription via Deepgram
+// VoxSplit v1.4 — Diarization & Transcription via Deepgram
 // ─────────────────────────────────────────────────────────────────────
 
 const VERSION = '1.0';
@@ -890,12 +894,14 @@ function setConfig(c) { localStorage.setItem('voxsplit_config', JSON.stringify(c
 
 function getGateway() { return getConfig().gateway || GATEWAY_DEFAULT; }
 function getSecret() { return getConfig().secret || ''; }
+function getFlyUrl() { return getConfig().flyUrl || ''; }
 
 function saveConfig() {
   const gw = document.getElementById('cfg-gateway').value.trim();
   const secret = document.getElementById('cfg-secret').value.trim();
+  const flyUrl = document.getElementById('cfg-flyio').value.trim();
   if (!gw || !secret) { toast('Gateway URL et Secret requis', 'warn'); return; }
-  setConfig({ gateway: gw, secret: secret });
+  setConfig({ gateway: gw, secret: secret, flyUrl: flyUrl });
   toast('Configuration sauvegardée');
   checkGateway();
 }
@@ -907,6 +913,7 @@ function toggleSettings() {
     const c = getConfig();
     document.getElementById('cfg-gateway').value = c.gateway || GATEWAY_DEFAULT;
     document.getElementById('cfg-secret').value = c.secret || '';
+    document.getElementById('cfg-flyio').value = c.flyUrl || '';
   }
 }
 
@@ -1105,12 +1112,28 @@ async function startTranscription() {
       contentType = mimeMap[ext] || 'audio/mpeg';
     }
 
-    // Upload via gateway (streams body to Deepgram without buffering)
-    const gwUrl = `${getGateway()}/api/deepgram/v1/listen?${params.toString()}`;
-    log(`Upload via gateway → Deepgram (${formatSize(selectedFile.size)})`, 'info');
+    // Route: < 95MB → CF Worker gateway, >= 95MB → Fly.io cloud worker
+    const LARGE_FILE_THRESHOLD = 95 * 1024 * 1024; // 95 MB
+    let uploadUrl, authToken, viaGateway;
+
+    if (selectedFile.size >= LARGE_FILE_THRESHOLD) {
+      const flyUrl = getFlyUrl();
+      if (!flyUrl) {
+        throw new Error('Fichier > 95 MB — configurez l\'URL Cloud Worker (Fly.io) dans les paramètres');
+      }
+      uploadUrl = `${flyUrl}/deepgram?${params.toString()}`;
+      authToken = getSecret();
+      viaGateway = true; // Bearer auth
+      log(`Gros fichier → Cloud Worker Fly.io (${formatSize(selectedFile.size)})`, 'warn');
+    } else {
+      uploadUrl = `${getGateway()}/api/deepgram/v1/listen?${params.toString()}`;
+      authToken = getSecret();
+      viaGateway = true;
+      log(`Upload via gateway → Deepgram (${formatSize(selectedFile.size)})`, 'info');
+    }
     log(`Content-Type: ${contentType}`, 'info');
 
-    const json = await uploadWithProgress(gwUrl, getSecret(), contentType, selectedFile, startTime, true);
+    const json = await uploadWithProgress(uploadUrl, authToken, contentType, selectedFile, startTime, viaGateway);
     rawResult = json;
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
