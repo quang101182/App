@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.12</title>
+<title>SubWhisper v9.13</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1065,17 +1065,20 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 .diag-switch input:checked+.diag-slider{background:#34a853}
 .diag-switch input:checked+.diag-slider::before{transform:translateX(14px)}
 .diag-switch input:disabled+.diag-slider{opacity:.35;cursor:not-allowed}
-.diag-lbl{font-family:var(--mono);font-size:7px;color:var(--muted);letter-spacing:.3px;cursor:pointer;position:relative}
-/* Mobile-friendly tooltip (tap = show) */
-.diag-lbl .tip{visibility:hidden;opacity:0;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:rgba(20,20,30,.95);color:#e0e0e8;font-family:var(--sans);font-size:11px;padding:6px 10px;border-radius:6px;white-space:nowrap;pointer-events:none;transition:opacity .15s;z-index:200;box-shadow:0 2px 8px rgba(0,0,0,.4)}
-.diag-lbl .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:rgba(20,20,30,.95)}
-.diag-lbl:hover .tip,.diag-lbl:focus .tip,.diag-lbl.tip-vis .tip{visibility:visible;opacity:1}
+.diag-lbl{font-family:var(--mono);font-size:7px;color:var(--muted);letter-spacing:.3px;cursor:default}
 /* DIAG button feedback */
 @keyframes diagPulse{0%{box-shadow:0 0 0 0 rgba(52,168,83,.5)}70%{box-shadow:0 0 0 8px rgba(52,168,83,0)}100%{box-shadow:0 0 0 0 rgba(52,168,83,0)}}
 @keyframes diagErr{0%{box-shadow:0 0 0 0 rgba(255,77,109,.5)}70%{box-shadow:0 0 0 8px rgba(255,77,109,0)}100%{box-shadow:0 0 0 0 rgba(255,77,109,0)}}
 .ab.diag-ok{animation:diagPulse .6s ease-out;border-color:#34a853!important;color:#34a853!important}
 .ab.diag-err{animation:diagErr .6s ease-out;border-color:var(--accent2)!important;color:var(--accent2)!important}
 .ab.diag-uploading{opacity:.7;pointer-events:none}
+
+/* Mobile tooltip overlay (replaces native title on touch) */
+#mTip{position:fixed;z-index:9999;max-width:280px;padding:8px 12px;background:rgba(20,20,30,.95);color:#e0e0e8;font-family:var(--sans);font-size:12px;line-height:1.4;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.5);pointer-events:none;opacity:0;transition:opacity .15s;white-space:normal;word-break:break-word}
+#mTip.vis{opacity:1}
+#mTip::after{content:'';position:absolute;border:6px solid transparent}
+#mTip.above::after{top:100%;left:50%;transform:translateX(-50%);border-top-color:rgba(20,20,30,.95)}
+#mTip.below::after{bottom:100%;left:50%;transform:translateX(-50%);border-bottom-color:rgba(20,20,30,.95)}
 
 /* LED requis manquante */
 @keyframes dotRequired{0%,100%{background:#f59e0b;box-shadow:0 0 7px rgba(245,158,11,.8)}50%{background:rgba(245,158,11,.25);box-shadow:none}}
@@ -1129,7 +1132,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.12</span>
+    <span class="ver-badge">v9.13</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1342,8 +1345,8 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
           <button class="ab" onclick="openDiff()" id="diffBtn" title="Comparer avant/apr&#232;s modifications">&#x21C4; DIFF</button>
           <div class="diag-wrap">
             <button class="ab" onclick="exportDiag()" id="diagBtn">&#x1F9EA; DIAG</button>
-            <label class="diag-switch" title="Upload auto vers Google Drive"><input type="checkbox" id="diagDriveToggle" onchange="toggleDiagDrive(this.checked)"><span class="diag-slider"></span></label>
-            <span class="diag-lbl" tabindex="0" onclick="this.classList.toggle('tip-vis')">DRV<span class="tip">DIAG → Google Drive auto. Si OFF ou Drive indisponible, export fichier local.</span></span>
+            <label class="diag-switch" title="DIAG → Drive auto. Si OFF ou Drive indisponible, export fichier local."><input type="checkbox" id="diagDriveToggle" onchange="toggleDiagDrive(this.checked)"><span class="diag-slider"></span></label>
+            <span class="diag-lbl" title="DIAG → Drive auto. Si OFF ou Drive indisponible, export fichier local.">DRV</span>
           </div>
         </div>
       </div>
@@ -4111,7 +4114,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.12',
+    version: 'v9.13',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -5793,6 +5796,76 @@ if ('serviceWorker' in navigator) {
     });
   }, 5 * 60 * 1000);
 }
+
+// ── MOBILE TOOLTIP ─────────────────────────────────────────
+// On touch devices, title attributes don't show. This adds a tap-to-show tooltip.
+(function() {
+  var tip = document.createElement('div');
+  tip.id = 'mTip';
+  document.body.appendChild(tip);
+  var hideTimer = null;
+  function showTip(el) {
+    var text = el.getAttribute('title') || el.getAttribute('data-tip');
+    if (!text) return;
+    // Store and remove title to prevent native tooltip
+    if (el.getAttribute('title')) { el.setAttribute('data-tip', text); el.removeAttribute('title'); }
+    tip.textContent = text;
+    tip.className = 'vis';
+    var r = el.getBoundingClientRect();
+    var tw = tip.offsetWidth, th = tip.offsetHeight;
+    var left = Math.max(8, Math.min(r.left + r.width / 2 - tw / 2, window.innerWidth - tw - 8));
+    // Prefer above, fallback below
+    if (r.top - th - 10 > 0) {
+      tip.style.top = (r.top - th - 10) + 'px';
+      tip.classList.add('above');
+    } else {
+      tip.style.top = (r.bottom + 10) + 'px';
+      tip.classList.add('below');
+    }
+    tip.style.left = left + 'px';
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hideTip, 2500);
+  }
+  function hideTip() { tip.className = ''; }
+
+  // Convert all title attrs to data-tip on touch
+  var isTouch = false;
+  window.addEventListener('touchstart', function onFirstTouch() {
+    isTouch = true;
+    document.querySelectorAll('[title]').forEach(function(el) {
+      el.setAttribute('data-tip', el.getAttribute('title'));
+      el.removeAttribute('title');
+    });
+    // MutationObserver for dynamically added elements
+    new MutationObserver(function(muts) {
+      muts.forEach(function(m) { m.addedNodes.forEach(function(n) {
+        if (n.querySelectorAll) n.querySelectorAll('[title]').forEach(function(el) {
+          el.setAttribute('data-tip', el.getAttribute('title'));
+          el.removeAttribute('title');
+        });
+      }); });
+    }).observe(document.body, { childList: true, subtree: true });
+    window.removeEventListener('touchstart', onFirstTouch);
+  }, { once: true });
+
+  // Touch: tap on elements with data-tip
+  document.addEventListener('touchstart', function(e) {
+    if (!isTouch) return;
+    var el = e.target.closest('[data-tip]');
+    if (el) { e.preventDefault(); showTip(el); }
+    else hideTip();
+  }, { passive: false });
+
+  // Desktop: also show on hover for data-tip (for elements where title was removed)
+  document.addEventListener('mouseenter', function(e) {
+    var el = e.target.closest('[data-tip]');
+    if (el && !isTouch) showTip(el);
+  }, true);
+  document.addEventListener('mouseleave', function(e) {
+    var el = e.target.closest('[data-tip]');
+    if (el && !isTouch) hideTip();
+  }, true);
+})();
 </script>
 <div id="subEditModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);align-items:center;justify-content:center">
   <div id="subEditInner">
