@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.7.1 — Discovery Engine</title>
+<title>music·ai v3.8 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -166,6 +166,8 @@
   .adot.ok{background:#22c55e;box-shadow:0 0 6px #22c55e;}
   .adot.err{background:#ef4444;box-shadow:0 0 6px #ef4444;}
   .adot.key{background:#f59e0b;animation:apiPing .8s ease-in-out infinite alternate;}
+  .adot.blink{animation:ytBlink .5s ease-in-out infinite alternate;}
+  @keyframes ytBlink{0%{background:#22c55e;box-shadow:0 0 8px #22c55e}100%{background:#06b6d4;box-shadow:0 0 12px #06b6d4}}
   #adotGWY.ok{background:#06b6d4;box-shadow:0 0 8px #06b6d4;}
   #adotGWY.key{background:#06b6d4;opacity:.5;animation:apiPing .8s ease-in-out infinite alternate;}
   @keyframes apiPing{from{opacity:.4}to{opacity:1;box-shadow:0 0 6px #f59e0b;}}
@@ -441,7 +443,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.7.1</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.8</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -620,6 +622,11 @@
             <div id="extra-yt-keys" style="display:flex;flex-direction:column;gap:6px;"></div>
             <p style="font-size:10px;color:var(--muted);margin:8px 0 0;line-height:1.5;">Ajoutez plusieurs clés pour multiplier le quota. Rotation automatique quand une clé est épuisée. Cache persistant des vidéos déjà trouvées.</p>
           </div>
+          <div id="yt-server-info" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;display:none;">
+            <div style="font-size:11px;color:var(--accent2);font-weight:600;margin-bottom:6px;">☁️ Clés serveur (via Gateway)</div>
+            <p id="yt-server-status" style="font-size:12px;color:var(--text);margin:0 0 4px;"></p>
+            <p style="font-size:10px;color:var(--muted);margin:0;line-height:1.5;">Pool de clés géré côté serveur. Utilisé automatiquement si les clés locales sont épuisées ou absentes.</p>
+          </div>
         </div>
         <div class="glass" style="padding:18px;margin-bottom:14px;">
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;">Profil musical</div>
@@ -728,7 +735,7 @@ function getTotalQuota(){const keys=getAllYtKeys();let used=0,total=0;keys.forEa
 // Legacy compat
 function getQuota(){const k=getYtKey();return k?getQuotaForKey(k):{count:0,date:new Date().toISOString().slice(0,10)};}
 function incQuota(){const k=getYtKey();if(k)incQuotaForKey(k);}
-function updateQuotaDisplay(){const{used,total}=getTotalQuota();const el=document.getElementById('yt-quota-display');if(el)el.textContent=used+'/'+total;const dot=document.getElementById('adotYT');if(dot)dot.className='adot'+(getAllYtKeys().length?(used>=total?' err':used>=total*0.8?' key':' ok'):' ');}
+function updateQuotaDisplay(){const{used,total}=getTotalQuota();const srvKeys=ST.ytServerKeys||0;const el=document.getElementById('yt-quota-display');if(el){const parts=[];if(total)parts.push(used+'/'+total);if(srvKeys)parts.push('S:'+srvKeys+' clés');el.textContent=parts.join(' · ')||'YT';}const hasLocal=getAllYtKeys().length>0;const hasSrv=srvKeys>0;const dot=document.getElementById('adotYT');if(dot&&!dot.classList.contains('blink')){dot.className='adot'+((hasLocal||hasSrv)?(hasLocal&&used>=total&&!hasSrv?' err':used>=total*0.8&&!hasSrv?' key':' ok'):' ');}}
 function getProfile(){try{return JSON.parse(localStorage.getItem(LS_PROFILE))}catch(e){return null}}
 function saveProfile(p){localStorage.setItem(LS_PROFILE,JSON.stringify(p))}
 function getConfig(){try{const c=JSON.parse(localStorage.getItem(LS_CONFIG));if(!c)return{provider:'claude',model:'claude-opus-4-6',keys:{claude:'',gemini:'',openai:''}};if('apiKey'in c&&!c.keys){const keys={claude:'',gemini:'',openai:''};keys[c.provider||'claude']=c.apiKey||'';const migrated={provider:c.provider||'claude',model:c.model||'claude-opus-4-6',keys};saveConfig(migrated);return migrated;}if(!c.keys)c.keys={claude:'',gemini:'',openai:''};return c;}catch(e){return{provider:'claude',model:'claude-opus-4-6',keys:{claude:'',gemini:'',openai:''}}}}
@@ -745,7 +752,7 @@ const MOODS=[{id:'energique',label:'Énergie',emoji:'⚡'},{id:'melancolique',la
 const ACTIVITIES=[{id:'running',label:'🏃 Running'},{id:'gym',label:'💪 Gym'},{id:'coding',label:'💻 Coding'},{id:'cuisine',label:'🍳 Cuisine'},{id:'conduite',label:'🚗 Conduite'},{id:'meditation',label:'🧘 Méditation'}];
 const MODELS={claude:['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001'],gemini:['gemini-2.0-flash','gemini-1.5-pro','gemini-1.5-flash'],openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo']};
 const ADVENTURE_LABELS=[[0,'Confort absolu'],[25,'Plutôt classique'],[40,'Équilibré'],[60,'Curieux'],[80,'Aventurier'],[100,'Explorateur']];
-let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,continuousMode:true,volume:80,sleepMinutes:0,sleepTimer:null,sessionThread:[],chatHistory:[],sessionStart:Date.now(),_pendingUnmute:null,_preRec:null,_preFetching:false,editProfileMode:false};
+let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,continuousMode:true,volume:80,sleepMinutes:0,sleepTimer:null,sessionThread:[],chatHistory:[],sessionStart:Date.now(),_pendingUnmute:null,_preRec:null,_preFetching:false,editProfileMode:false,ytServerKeys:0};
 
 let _tt=null;
 function toast(msg,dur=2400){const el=document.getElementById('toast');el.textContent=msg;el.classList.remove('hidden');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.add('hidden'),dur)}
@@ -753,20 +760,29 @@ function toast(msg,dur=2400){const el=document.getElementById('toast');el.textCo
 // ── YOUTUBE ──
 function parseDuration(iso){if(!iso)return 0;const m=iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);if(!m)return 0;return(parseInt(m[1]||0)*3600)+(parseInt(m[2]||0)*60)+parseInt(m[3]||0);}
 const YT_DUR_MIN=90,YT_DUR_MAX=300; // 1m30 → 5min
-async function ytSearch(query){
-  if(!getAllYtKeys().length)return null;
-  if(_ytVidCache[query])return _ytVidCache[query];// cache hit → 0 quota
+function ytBlinkOn(){const d=document.getElementById('adotYT');if(d)d.className='adot blink';}
+function ytBlinkOff(){updateQuotaDisplay();}
+async function ytSearchGateway(query){
+  const secret=getGwSecret();if(!secret)return null;
+  try{
+    const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),10000);
+    const r=await fetch(GATEWAY_URL+'/api/youtube-search',{method:'POST',headers:{'Authorization':'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify({q:query}),signal:ctrl.signal});
+    if(!r.ok)return null;
+    const d=await r.json();
+    if(d.videoId){_ytVidCache[query]=d.videoId;saveVidCache();return d.videoId;}
+    return null;
+  }catch(e){console.warn('[YT-GW] error:',e);return null;}
+}
+async function ytSearchLocal(query){
   const key=pickBestKey();
-  if(!key){const{used,total}=getTotalQuota();toast(`🚫 Quota YT épuisé (${used}/${total}) — recharge demain`,4000);return null;}
+  if(!key)return null;
   try{
     const r=await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${key}`);
     if(!r.ok){
       if(r.status===403){
-        // Marquer cette clé comme épuisée et retry avec la suivante
         const q=getQuotaForKey(key);q.count=YT_QUOTA_PER_KEY;localStorage.setItem(LS_YT_QUOTA+'_'+key,JSON.stringify(q));
         const nextKey=pickBestKey();
-        if(nextKey){toast('🔄 Rotation clé YT…');return ytSearch(query);}
-        toast('🚫 Toutes les clés YT épuisées — recharge demain',5000);
+        if(nextKey){toast('🔄 Rotation clé YT…');return ytSearchLocal(query);}
       }
       return null;
     }
@@ -774,20 +790,36 @@ async function ytSearch(query){
     const d=await r.json();
     const ids=(d.items||[]).map(x=>x.id?.videoId).filter(Boolean);
     if(!ids.length)return null;
-    // Vérifier durées via videos.list (même clé, coût 1 unité)
     try{
       const vr=await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${ids.join(',')}&key=${key}`);
       if(vr.ok){
         const vd=await vr.json();
         const valid=(vd.items||[]).find(item=>{const dur=parseDuration(item.contentDetails?.duration);return dur>=YT_DUR_MIN&&dur<=YT_DUR_MAX;});
         if(valid){_ytVidCache[query]=valid.id;saveVidCache();return valid.id;}
-        toast('⚠️ Aucun résultat dans 1m30–5min, fallback',3000);
       }
-    }catch(_){console.warn('[YT] Duration check failed');}
+    }catch(_){}
     const finalVid=ids[0]||null;
     if(finalVid){_ytVidCache[query]=finalVid;saveVidCache();}
     return finalVid;
   }catch(e){console.warn('[YT] Search error:',e);return null}
+}
+async function ytSearch(query){
+  // 1. Cache local persistant
+  if(_ytVidCache[query])return _ytVidCache[query];
+  const hasLocal=getAllYtKeys().length>0;
+  const hasGw=!!(getGwSecret()&&(ST.ytServerKeys||0));
+  if(!hasLocal&&!hasGw){toast('⚠️ Aucune clé YouTube (locale ou serveur)',3000);return null;}
+  ytBlinkOn();
+  try{
+    // 2. Clés locales d'abord (pas de latence réseau gateway)
+    if(hasLocal){const localKey=pickBestKey();if(localKey){const r=await ytSearchLocal(query);if(r)return r;}}
+    // 3. Gateway serveur (fallback ou pas de clé locale)
+    if(hasGw){const r=await ytSearchGateway(query);if(r)return r;}
+    // 4. Tout épuisé
+    if(hasLocal){const{used,total}=getTotalQuota();toast(`🚫 Quota YT épuisé (${used}/${total})`,4000);}
+    else toast('🚫 Clés serveur épuisées',4000);
+    return null;
+  }finally{ytBlinkOff();}
 }
 window.onYouTubeIframeAPIReady=function(){
   // On cible le DIV — l'API YT crée elle-même l'iframe dans ce div
@@ -2042,6 +2074,9 @@ function loadSettingsUI(){
   const sel=document.getElementById('cfg-model');if(sel&&cfg.model)[...sel.options].forEach(o=>{o.selected=o.value===cfg.model});
   document.getElementById('cfg-ytkey').value=getYtKey();
   renderExtraYtKeys();
+  const srvInfo=document.getElementById('yt-server-info');
+  const srvStatus=document.getElementById('yt-server-status');
+  if(srvInfo&&srvStatus){const n=ST.ytServerKeys||0;if(n>0){srvInfo.style.display='block';srvStatus.textContent=n+' clé'+(n>1?'s':'')+' disponible'+(n>1?'s':'');}else{srvInfo.style.display=getGwSecret()?'block':'none';srvStatus.textContent=getGwSecret()?'Aucune clé YT sur le serveur':'';}}
   const gwSec=document.getElementById('cfg-gw-secret');
   if(gwSec)gwSec.value=getGwSecret();
   const p=getProfile();
@@ -2087,6 +2122,8 @@ async function fetchGatewayConfig(){
     const apis=cfg.apis||[];
     const MAP={CLAUDE:'CDL',GEMINI:'GEM',OPENAI:'OAI'};
     Object.keys(MAP).forEach(k=>setDot(MAP[k],apis.includes(k)?'ok':''));
+    ST.ytServerKeys=cfg.yt_server_keys||0;
+    updateQuotaDisplay();
   }catch(e){setDot('GWY',/^https?:\/\/.+/.test(GATEWAY_URL)?'key':'err');}
 }
 

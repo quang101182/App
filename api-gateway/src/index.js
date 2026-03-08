@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.6
+ * api-gateway — Cloudflare Worker v1.8
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -37,7 +37,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.7';
+const VERSION = '1.8';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -46,7 +46,7 @@ const CORS_HEADERS = {
 };
 
 /** All recognised key names stored in KV */
-const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL'];
+const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS'];
 
 /** Rate limit: max requests per minute window */
 const RL_API_MAX   = 20;
@@ -105,6 +105,7 @@ export default {
         if (path === '/api/azure')            return await proxyAzure(request, env, url);
         if (path.startsWith('/api/claude'))   return await proxyClaude(request, env, path);
         if (path.startsWith('/api/deepgram')) return await proxyDeepgram(request, env, path);
+        if (path === '/api/youtube-search')  return await proxyYoutubeSearch(request, env);
 
         return jsonResponse({ error: 'unknown api route' }, 404);
       }
@@ -162,7 +163,11 @@ async function handleConfig(env) {
   const diagFolder = await kvGetKey(env, 'DIAG_FOLDER_ID') || '';
   const mcpDriveUrl = await kvGetKey(env, 'MCP_DRIVE_URL') || '';
 
-  return jsonResponse({ worker_url: workerUrl, apis, version: VERSION, diag_folder: diagFolder, mcp_drive_url: mcpDriveUrl });
+  // YouTube server keys count (for client display)
+  const ytKeysRaw = await kvGetKey(env, 'YOUTUBE_KEYS');
+  const ytKeysCount = ytKeysRaw ? ytKeysRaw.split(',').filter(k => k.trim()).length : 0;
+
+  return jsonResponse({ worker_url: workerUrl, apis, version: VERSION, diag_folder: diagFolder, mcp_drive_url: mcpDriveUrl, yt_server_keys: ytKeysCount });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -393,6 +398,74 @@ async function proxyDeepgram(request, env, path) {
  * Strips the client-side Authorization and X-Api-* headers from the forwarded request.
  * Returns the upstream response with CORS headers appended.
  */
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/youtube-search — YouTube Data API v3 with multi-key rotation + KV cache
+// Body: { q: "search query" }
+// Returns: { videoId, title, cached } or { error }
+// ─────────────────────────────────────────────────────────────────────────────
+
+const YT_CACHE_TTL = 7 * 24 * 3600; // 7 days
+
+async function proxyYoutubeSearch(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return jsonResponse({ error: 'invalid JSON body' }, 400); }
+  const query = (body.q || '').trim();
+  if (!query) return jsonResponse({ error: 'missing q parameter' }, 400);
+
+  // 1. Check KV cache first
+  const cacheKey = `ytcache:${query.toLowerCase().replace(/\s+/g, ' ')}`;
+  const cached = await env.GATEWAY_KV.get(cacheKey);
+  if (cached) {
+    try {
+      const data = JSON.parse(cached);
+      return jsonResponse({ videoId: data.videoId, title: data.title || '', cached: true });
+    } catch { /* cache corrupted, continue to search */ }
+  }
+
+  // 2. Load YOUTUBE_KEYS from KV (comma-separated string)
+  const keysRaw = await resolveKey(env, 'YOUTUBE_KEYS');
+  if (!keysRaw) return jsonResponse({ error: 'YOUTUBE_KEYS not configured' }, 503);
+  const keys = keysRaw.split(',').map(k => k.trim()).filter(Boolean);
+  if (!keys.length) return jsonResponse({ error: 'YOUTUBE_KEYS is empty' }, 503);
+
+  // 3. Try each key with rotation on 403/quota errors
+  let lastError = null;
+  for (const apiKey of keys) {
+    try {
+      const ytUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
+      const resp = await fetch(ytUrl);
+      if (resp.status === 403) {
+        // Quota exceeded for this key, try next
+        lastError = 'quota exceeded';
+        continue;
+      }
+      if (!resp.ok) {
+        lastError = `YouTube API error ${resp.status}`;
+        continue;
+      }
+      const data = await resp.json();
+      const items = data.items || [];
+      if (!items.length) return jsonResponse({ videoId: null, title: null, cached: false });
+
+      const videoId = items[0].id?.videoId || null;
+      const title = items[0].snippet?.title || '';
+
+      // 4. Cache result in KV (fire-and-forget)
+      if (videoId) {
+        env.GATEWAY_KV.put(cacheKey, JSON.stringify({ videoId, title }), { expirationTtl: YT_CACHE_TTL }).catch(() => {});
+      }
+
+      return jsonResponse({ videoId, title, cached: false });
+    } catch (err) {
+      lastError = err.message;
+      continue;
+    }
+  }
+
+  // All keys exhausted
+  return jsonResponse({ error: 'all YouTube keys exhausted', detail: lastError }, 429);
+}
+
 async function proxyRequest(request, upstreamUrl, authHeaders) {
   // Read body as raw bytes to forward regardless of content-type
   const body = await request.arrayBuffer();
