@@ -171,10 +171,42 @@ select option { background:#12121e; color:#e8e6f0; }
 .transcript-block .confidence-bar { margin-top:6px; height:2px; border-radius:1px; background:var(--surface2); overflow:hidden; }
 .transcript-block .confidence-fill { height:100%; border-radius:1px; transition:width .5s; }
 .transcript-block.active-block { background:rgba(124,106,255,.06); border-left-color:var(--accent) !important; }
-/* Copy icon on hover */
-.transcript-block .block-copy { position:absolute; top:10px; right:10px; display:none; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--muted); cursor:pointer; padding:3px 7px; font-size:10px; transition:all .15s; }
-.transcript-block:hover .block-copy { display:block; }
-.transcript-block .block-copy:hover { color:var(--accent); border-color:var(--accent); }
+/* Block action buttons on hover */
+.block-actions { position:absolute; top:8px; right:8px; display:none; gap:3px; }
+.transcript-block:hover .block-actions { display:flex; }
+.block-act { background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--muted); cursor:pointer; padding:3px 7px; font-size:10px; transition:all .15s; }
+.block-act:hover { color:var(--accent); border-color:var(--accent); }
+
+/* SUB EDIT MODAL */
+#subEditModal { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.72); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); align-items:center; justify-content:center; }
+#subEditModal.visible { display:flex; }
+#subEditInner { background:var(--surface2); backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); border:1px solid var(--border2); border-radius:20px; padding:24px; width:min(520px,92vw); box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 30px rgba(124,106,255,.1); max-height:90vh; overflow-y:auto; }
+#subEditHdr { font-family:var(--mono); font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+#subEditHdr .se-speaker { font-weight:700; }
+.ts-row { display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; }
+.ts-col { flex:1; display:flex; flex-direction:column; gap:4px; }
+.ts-lbl { font-family:var(--mono); font-size:9px; color:var(--muted); letter-spacing:.5px; text-transform:uppercase; }
+.ts-inp { width:100%; background:var(--surface); border:1px solid var(--border2); border-radius:8px; color:var(--text); font-family:var(--mono); font-size:11px; padding:6px 8px; text-align:center; transition:border-color .15s; }
+.ts-inp:focus { outline:none; border-color:var(--accent); }
+.ts-inp.warn { border-color:#f59e0b!important; color:#f59e0b; }
+.ts-adj { display:flex; gap:3px; justify-content:center; flex-wrap:wrap; }
+.ts-adj button { font-family:var(--mono); font-size:9px; background:var(--surface2); border:1px solid var(--border); color:var(--muted); border-radius:5px; padding:2px 6px; cursor:pointer; transition:all .12s; flex-shrink:0; }
+.ts-adj button:hover { border-color:var(--accent); color:var(--accent); }
+.ts-adj button.neg:hover { border-color:#f87171; color:#f87171; }
+.ts-cst { font-family:var(--mono); font-size:9px; color:var(--muted); text-align:center; margin-top:2px; min-height:14px; }
+.ts-arr { color:var(--muted); font-size:16px; padding-top:18px; }
+#subEditTx { width:100%; background:var(--surface); border:1px solid var(--border2); border-radius:10px; color:var(--text); font-size:14px; padding:10px 12px; resize:vertical; min-height:80px; font-family:var(--sans); line-height:1.6; margin-bottom:10px; }
+#subEditTx:focus { outline:none; border-color:var(--accent); box-shadow:0 0 10px rgba(124,106,255,.15); }
+#subEditTrTx { width:100%; background:var(--surface); border:1px solid rgba(0,212,170,.2); border-radius:10px; color:var(--accent3); font-size:13px; padding:10px 12px; resize:vertical; min-height:50px; font-family:var(--sans); line-height:1.6; margin-bottom:10px; }
+#subEditTrTx:focus { outline:none; border-color:var(--accent3); }
+#subEditActions { display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap; }
+#subEditActions .ab { padding:7px 14px; border-radius:9px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:var(--mono); font-size:10px; font-weight:700; cursor:pointer; transition:all .2s; }
+#subEditActions .ab:hover { background:rgba(124,106,255,.08); border-color:var(--accent); color:var(--accent); }
+#subEditActions .ab.pri { background:linear-gradient(135deg,var(--accent),#9b7aff); border:none; color:#fff; }
+#subEditActions .ab.pri:hover { filter:brightness(1.1); transform:translateY(-1px); }
+#subEditActions .ab.danger { border-color:rgba(255,77,109,.3); color:var(--danger); }
+#subEditActions .ab.danger:hover { background:rgba(255,77,109,.1); }
+@media(max-width:600px){.ts-row{flex-direction:column;gap:6px}.ts-arr{display:none}#subEditInner{width:95vw;padding:16px}}
 
 /* ACTION BAR */
 .btn-grp-wrap { display:flex; flex-direction:column; gap:3px; }
@@ -550,7 +582,7 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
           <div id="videoWrap">
             <video class="preview-video" id="previewVideo" controls preload="metadata"></video>
           </div>
-          <div id="subBox" class="empty">
+          <div id="subBox" class="empty" onclick="openSubEditFromBox()"
             <div id="subBoxMeta"></div>
             <div id="subBoxText">—</div>
           </div>
@@ -600,6 +632,46 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeSpeakerModal()">Annuler</button>
       <button class="btn-primary" style="width:auto;padding:10px 24px" onclick="applySpeakerNames()"><i class="fas fa-check"></i> Appliquer</button>
+    </div>
+  </div>
+</div>
+
+<div id="subEditModal">
+  <div id="subEditInner">
+    <div id="subEditHdr"><i class="fas fa-pen-to-square"></i> <span>Éditer</span> — <span class="se-speaker" id="se-speaker"></span> <span style="opacity:.4" id="se-idx"></span></div>
+    <div class="ts-row">
+      <div class="ts-col">
+        <span class="ts-lbl">Début</span>
+        <input class="ts-inp" id="subEditStart" type="text" oninput="validateSubTs()" onchange="validateSubTs()">
+        <div class="ts-adj">
+          <button class="neg" onclick="adjustSubTs('start',-500)">-500</button>
+          <button class="neg" onclick="adjustSubTs('start',-100)">-100</button>
+          <button onclick="adjustSubTs('start',100)">+100</button>
+          <button onclick="adjustSubTs('start',500)">+500</button>
+        </div>
+        <div class="ts-cst" id="subEditStartCst"></div>
+      </div>
+      <span class="ts-arr">→</span>
+      <div class="ts-col">
+        <span class="ts-lbl">Fin</span>
+        <input class="ts-inp" id="subEditEnd" type="text" oninput="validateSubTs()" onchange="validateSubTs()">
+        <div class="ts-adj">
+          <button class="neg" onclick="adjustSubTs('end',-500)">-500</button>
+          <button class="neg" onclick="adjustSubTs('end',-100)">-100</button>
+          <button onclick="adjustSubTs('end',100)">+100</button>
+          <button onclick="adjustSubTs('end',500)">+500</button>
+        </div>
+        <div class="ts-cst" id="subEditEndCst"></div>
+      </div>
+    </div>
+    <textarea id="subEditTx" rows="3" placeholder="Texte du segment..."></textarea>
+    <textarea id="subEditTrTx" rows="2" placeholder="Traduction (optionnel)" style="display:none"></textarea>
+    <div id="subEditActions">
+      <button class="ab danger" onclick="deleteSubBlock()" title="Supprimer ce segment"><i class="fas fa-trash-can"></i></button>
+      <button class="ab" onclick="splitSubAtCursor()" title="Couper au curseur"><i class="fas fa-scissors"></i> Split</button>
+      <button class="ab" onclick="mergeSubWithNext()" title="Fusionner avec le suivant"><i class="fas fa-compress"></i> Merge</button>
+      <button class="ab" onclick="closeSubEdit()">Annuler</button>
+      <button class="ab pri" onclick="saveSubEdit()"><i class="fas fa-check"></i> Sauvegarder</button>
     </div>
   </div>
 </div>
@@ -896,10 +968,10 @@ function renderTranscriptBlocks(searchFilter=''){
     const hasTr=translations[uttIdx];const offStart=utt.start+currentOffset/1000;const offEnd=utt.end+currentOffset/1000;
     let confClass='';if(utt.confidence>0){const cp=utt.confidence*100;confClass=cp>=90?'conf-high':cp>=70?'conf-mid':'conf-low'}
     let textHtml;
-    if(hasTr&&!showOriginal){textHtml=`<div class="block-text" ondblclick="makeEditable(this,${uttIdx},'translation')">${hasTr}</div>`}
+    if(hasTr&&!showOriginal){textHtml=`<div class="block-text">${hasTr}</div>`}
     else if(hasTr){textHtml=`<div class="block-text-original">${displayText}</div><div class="block-translation">${hasTr}</div>`}
-    else{textHtml=`<div class="block-text" ondblclick="makeEditable(this,${uttIdx})">${displayText}</div>`}
-    block.innerHTML=`<div class="block-header"><span class="speaker-name" style="color:${color}">${name}</span><span class="timestamp">${formatTime(Math.max(0,offStart))} → ${formatTime(Math.max(0,offEnd))}</span>${utt.confidence>0?`<span class="${confClass}" style="font-family:var(--mono);font-size:9px;opacity:.7">${Math.round(utt.confidence*100)}%</span>`:''}</div>${textHtml}${utt.confidence>0?`<div class="confidence-bar"><div class="confidence-fill" style="width:${Math.round(utt.confidence*100)}%;background:${utt.confidence>=.9?'var(--success)':utt.confidence>=.7?'var(--warning)':'var(--danger)'}"></div></div>`:''}<button class="block-copy" onclick="event.stopPropagation();copySegment(${uttIdx})" title="Copier ce segment"><i class="fas fa-copy"></i></button>`;
+    else{textHtml=`<div class="block-text">${displayText}</div>`}
+    block.innerHTML=`<div class="block-header"><span class="speaker-name" style="color:${color}">${name}</span><span class="timestamp">${formatTime(Math.max(0,offStart))} → ${formatTime(Math.max(0,offEnd))}</span>${utt.confidence>0?`<span class="${confClass}" style="font-family:var(--mono);font-size:9px;opacity:.7">${Math.round(utt.confidence*100)}%</span>`:''}</div>${textHtml}${utt.confidence>0?`<div class="confidence-bar"><div class="confidence-fill" style="width:${Math.round(utt.confidence*100)}%;background:${utt.confidence>=.9?'var(--success)':utt.confidence>=.7?'var(--warning)':'var(--danger)'}"></div></div>`:''}<div class="block-actions"><button class="block-act" onclick="event.stopPropagation();copySegment(${uttIdx})" title="Copier"><i class="fas fa-copy"></i></button><button class="block-act" onclick="event.stopPropagation();openSubEdit(${uttIdx})" title="Éditer"><i class="fas fa-pen"></i></button></div>`;
     container.appendChild(block);
   }
   if(searchFilter)document.getElementById('search-count').textContent=`${count} résultat${count>1?'s':''}`;
@@ -915,14 +987,95 @@ function copySegment(idx){
   navigator.clipboard.writeText(text).then(()=>toast('Segment copié')).catch(()=>toast('Erreur copie','error'));
 }
 
-// ─── Inline editing ──────────────────────────────────────
-function makeEditable(el,idx,type){
-  el.contentEditable='true';el.focus();
-  const range=document.createRange();range.selectNodeContents(el);const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
-  el.onblur=()=>{el.contentEditable='false';const t=el.textContent.trim();
-    if(t){if(type==='translation'){if(t!==translations[idx]){translations[idx]=t;toast('Traduction modifiée')}}else{if(t!==parsedUtterances[idx].text){parsedUtterances[idx].text=t;toast('Segment modifié')}}}
-    saveToHistory();el.onblur=null};
-  el.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();el.blur()}if(e.key==='Escape'){el.textContent=type==='translation'?translations[idx]:parsedUtterances[idx].text;el.blur()}};
+// ─── Sub Edit Modal ──────────────────────────────────────
+let _editIdx=-1;
+function openSubEdit(idx){
+  if(idx<0||idx>=parsedUtterances.length)return;
+  _editIdx=idx;const utt=parsedUtterances[idx];const name=speakerNames[utt.speaker]||`Locuteur ${utt.speaker+1}`;
+  const color=SPEAKER_COLORS[utt.speaker%SPEAKER_COLORS.length];
+  document.getElementById('se-speaker').textContent=name;document.getElementById('se-speaker').style.color=color;
+  document.getElementById('se-idx').textContent=`#${idx+1}`;
+  document.getElementById('subEditStart').value=formatSRTTime(utt.start);
+  document.getElementById('subEditEnd').value=formatSRTTime(utt.end);
+  document.getElementById('subEditTx').value=utt.text;
+  // Show translation field if exists
+  const trTx=document.getElementById('subEditTrTx');
+  if(translations[idx]){trTx.style.display='';trTx.value=translations[idx]}else{trTx.style.display='none';trTx.value=''}
+  // Constraints
+  const prevEnd=idx>0?parsedUtterances[idx-1].end:null;
+  const nextStart=idx<parsedUtterances.length-1?parsedUtterances[idx+1].start:null;
+  document.getElementById('subEditStartCst').textContent=prevEnd!==null?'≥ '+formatTime(prevEnd):'premier';
+  document.getElementById('subEditEndCst').textContent=nextStart!==null?'≤ '+formatTime(nextStart):'dernier';
+  validateSubTs();
+  document.getElementById('subEditModal').classList.add('visible');
+  setTimeout(()=>document.getElementById('subEditTx').focus(),50);
+}
+function openSubEditFromBox(){
+  const active=document.querySelector('.transcript-block.active-block');
+  if(!active||active.dataset.idx===undefined)return;
+  openSubEdit(parseInt(active.dataset.idx));
+}
+function closeSubEdit(){document.getElementById('subEditModal').classList.remove('visible');_editIdx=-1}
+function adjustSubTs(field,deltaMs){
+  const el=document.getElementById(field==='start'?'subEditStart':'subEditEnd');
+  const ms=srtTsToMs(el.value)+deltaMs;if(ms<0)return;
+  el.value=formatSRTTime(ms/1000);validateSubTs();
+}
+function srtTsToMs(s){const p=s.replace(',','.').split(':');if(p.length===3)return Math.round((parseFloat(p[0])*3600+parseFloat(p[1])*60+parseFloat(p[2]))*1000);return 0}
+function validateSubTs(){
+  const sEl=document.getElementById('subEditStart'),eEl=document.getElementById('subEditEnd');
+  const sMs=srtTsToMs(sEl.value),eMs=srtTsToMs(eEl.value);
+  let sWarn=false,eWarn=false;
+  if(_editIdx>0){const prevEnd=parsedUtterances[_editIdx-1].end*1000;if(sMs<prevEnd)sWarn=true}
+  if(_editIdx<parsedUtterances.length-1){const nextStart=parsedUtterances[_editIdx+1].start*1000;if(eMs>nextStart)eWarn=true}
+  if(eMs<=sMs)eWarn=true;
+  sEl.classList.toggle('warn',sWarn);eEl.classList.toggle('warn',eWarn);
+}
+function saveSubEdit(){
+  if(_editIdx<0)return;
+  const newText=document.getElementById('subEditTx').value.trim();if(!newText){toast('Texte vide','warn');return}
+  const newStart=srtTsToMs(document.getElementById('subEditStart').value)/1000;
+  const newEnd=srtTsToMs(document.getElementById('subEditEnd').value)/1000;
+  if(newEnd<=newStart){toast('Fin doit être > Début','warn');return}
+  parsedUtterances[_editIdx].text=newText;
+  parsedUtterances[_editIdx].start=newStart;
+  parsedUtterances[_editIdx].end=newEnd;
+  // Save translation if field visible
+  const trTx=document.getElementById('subEditTrTx');
+  if(trTx.style.display!=='none'){const tr=trTx.value.trim();if(tr)translations[_editIdx]=tr;else delete translations[_editIdx]}
+  closeSubEdit();renderTranscriptBlocks();rebuildVttTrack();saveToHistory();toast('Segment sauvegardé');
+}
+function splitSubAtCursor(){
+  if(_editIdx<0)return;
+  const tx=document.getElementById('subEditTx');const text=tx.value;if(!text.trim())return;
+  let cur=tx.selectionStart||0;
+  if(cur<=0||cur>=text.length){const mid=Math.floor(text.length/2);const sa=text.indexOf(' ',mid),sb=text.lastIndexOf(' ',mid);cur=sa!==-1&&(sb===-1||(sa-mid)<=(mid-sb))?sa:sb;if(cur===-1){toast('Impossible de couper','warn');return}}
+  const t1=text.substring(0,cur).trim(),t2=text.substring(cur).trim();if(!t1||!t2){toast('Impossible de couper','warn');return}
+  const utt=parsedUtterances[_editIdx];
+  const sMs=srtTsToMs(document.getElementById('subEditStart').value)/1000;
+  const eMs=srtTsToMs(document.getElementById('subEditEnd').value)/1000;
+  const midT=sMs+(eMs-sMs)*(t1.length/text.length);
+  parsedUtterances[_editIdx]={...utt,start:sMs,end:midT,text:t1};
+  parsedUtterances.splice(_editIdx+1,0,{...utt,start:midT,end:eMs,text:t2});
+  // Shift translations
+  const newTr={};for(const[k,v]of Object.entries(translations)){const ki=parseInt(k);if(ki<_editIdx)newTr[ki]=v;else if(ki===_editIdx){const tw=v.split(/\s+/);const tm=Math.floor(tw.length/2);newTr[ki]=tw.slice(0,tm).join(' ');newTr[ki+1]=tw.slice(tm).join(' ')}else newTr[ki+1]=v}
+  translations=newTr;closeSubEdit();renderTranscriptBlocks();rebuildVttTrack();saveToHistory();toast('Segment coupé en 2');
+}
+function mergeSubWithNext(){
+  if(_editIdx<0||_editIdx>=parsedUtterances.length-1){toast('Rien à fusionner après','warn');return}
+  const u1=parsedUtterances[_editIdx],u2=parsedUtterances[_editIdx+1];
+  const newText=document.getElementById('subEditTx').value.trim()+' '+u2.text;
+  const sMs=srtTsToMs(document.getElementById('subEditStart').value)/1000;
+  parsedUtterances.splice(_editIdx,2,{...u1,start:sMs,end:u2.end,text:newText});
+  const newTr={};for(const[k,v]of Object.entries(translations)){const ki=parseInt(k);if(ki<_editIdx)newTr[ki]=v;else if(ki===_editIdx||ki===_editIdx+1){const t1=translations[_editIdx]||'',t2=translations[_editIdx+1]||'';if(t1||t2)newTr[_editIdx]=(t1+' '+t2).trim()}else newTr[ki-1]=v}
+  translations=newTr;closeSubEdit();renderTranscriptBlocks();rebuildVttTrack();saveToHistory();toast('Segments fusionnés');
+}
+function deleteSubBlock(){
+  if(_editIdx<0)return;
+  if(!confirm(`Supprimer le segment #${_editIdx+1} ?`))return;
+  parsedUtterances.splice(_editIdx,1);
+  const newTr={};for(const[k,v]of Object.entries(translations)){const ki=parseInt(k);if(ki<_editIdx)newTr[ki]=v;else if(ki>_editIdx)newTr[ki-1]=v}
+  translations=newTr;closeSubEdit();renderTranscriptBlocks();rebuildVttTrack();saveToHistory();toast('Segment supprimé');
 }
 
 function highlightSpeaker(spkIdx){const blocks=document.querySelectorAll('.transcript-block');blocks.forEach(b=>{if(parseInt(b.dataset.speaker)===spkIdx){b.style.background='rgba(255,255,255,.05)'}else{b.style.background='';b.style.opacity='.4'}});setTimeout(()=>blocks.forEach(b=>{b.style.background='';b.style.opacity=''}),3000)}
@@ -1155,6 +1308,7 @@ function resetAll(){closePreview();removeFile();rawResult=null;parsedUtterances=
 // ─── Keyboard shortcuts ─────────────────────────────────
 function setupKeyboardShortcuts(){
   document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&document.getElementById('subEditModal').classList.contains('visible')){closeSubEdit();return}
     if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.contentEditable==='true')return;
     const v=document.getElementById('previewVideo');
     if(e.code==='Space'&&v?.src){e.preventDefault();v.paused?v.play().catch(()=>{}):v.pause()}
