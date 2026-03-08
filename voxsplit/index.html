@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoxSplit v3.0 — Diarization & Transcription</title>
+<title>VoxSplit v3.1 — Diarization & Transcription</title>
 <meta name="description" content="Transcription audio/vidéo avec identification des locuteurs (diarization) via Deepgram Nova-2">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#080810">
@@ -11,1315 +11,344 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
 :root {
-  --bg:#080810;
-  --surface:rgba(255,255,255,.04);
-  --surface2:rgba(255,255,255,.08);
-  --border:rgba(255,255,255,.08);
-  --border2:rgba(255,255,255,.15);
-  --accent:#7c6aff;
-  --accent2:#ff4d6d;
-  --accent3:#00d4aa;
-  --text:#f0f0f8;
-  --muted:#606070;
-  --success:#00d4aa;
-  --danger:#ff4d6d;
-  --warning:#f59e0b;
-  --mono:'Space Mono',monospace;
-  --sans:'Inter',sans-serif;
+  --bg:#080810; --surface:rgba(255,255,255,.04); --surface2:rgba(255,255,255,.08);
+  --border:rgba(255,255,255,.08); --border2:rgba(255,255,255,.15);
+  --accent:#7c6aff; --accent2:#ff4d6d; --accent3:#00d4aa;
+  --text:#f0f0f8; --muted:#606070;
+  --success:#00d4aa; --danger:#ff4d6d; --warning:#f59e0b;
+  --mono:'Space Mono',monospace; --sans:'Inter',sans-serif;
   --glass:blur(24px) saturate(180%);
 }
-
-body {
-  font-family: var(--sans);
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-  line-height: 1.5;
-  overflow-x: hidden;
-}
-
-/* MESH GRADIENT */
+body { font-family:var(--sans); background:var(--bg); color:var(--text); min-height:100vh; line-height:1.5; overflow-x:hidden; }
 body::before {
-  content:'';
-  position:fixed;
-  inset:0;
-  pointer-events:none;
-  z-index:0;
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
   background:
     radial-gradient(ellipse 70% 55% at 10% 10%, rgba(124,106,255,.12) 0%, transparent 65%),
     radial-gradient(ellipse 60% 50% at 90% 85%, rgba(0,212,170,.09) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 65% at 75% 5%,  rgba(255,77,109,.07) 0%, transparent 55%);
-  animation:meshPulse 18s ease-in-out infinite alternate;
-  will-change:opacity,transform;
+    radial-gradient(ellipse 50% 65% at 75% 5%, rgba(255,77,109,.07) 0%, transparent 55%);
+  animation:meshPulse 18s ease-in-out infinite alternate; will-change:opacity,transform;
 }
-@media (prefers-reduced-motion:reduce){body::before{animation:none}}
-@keyframes meshPulse {
-  0%  {opacity:1;transform:scale(1)}
-  100%{opacity:.6;transform:scale(1.05)}
-}
+@media(prefers-reduced-motion:reduce){body::before{animation:none}}
+@keyframes meshPulse{0%{opacity:1;transform:scale(1)}100%{opacity:.6;transform:scale(1.05)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes gradFlow{to{background-position:200% center}}
+@keyframes spinBorder{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-@keyframes slideUp {
-  from{opacity:0;transform:translateY(8px)}
-  to{opacity:1;transform:translateY(0)}
-}
-
-/* Layout */
-.app-container {
-  position: relative;
-  z-index: 1;
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 16px;
-  padding-bottom: 32px;
-}
+.app-container { position:relative; z-index:1; max-width:900px; margin:0 auto; padding:16px; padding-bottom:32px; }
 
 /* HEADER */
-.app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px;
-  background: rgba(8,8,16,.88);
-  backdrop-filter: var(--glass);
-  -webkit-backdrop-filter: var(--glass);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  margin-bottom: 20px;
-}
-.app-header h1 {
-  font-family: var(--mono);
-  font-size: 20px;
-  font-weight: 700;
-  background: linear-gradient(135deg, var(--accent), var(--accent3));
-  background-size: 200% auto;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  animation: gradFlow 4s linear infinite;
-}
-@keyframes gradFlow{to{background-position:200% center}}
-.app-header .version {
-  font-family: var(--mono);
-  font-size: 10px;
-  padding: 3px 10px;
-  border-radius: 9999px;
-  background: rgba(124,106,255,.12);
-  color: var(--accent);
-  font-weight: 700;
-  letter-spacing: .5px;
-  border: 1px solid rgba(124,106,255,.2);
-}
-.header-actions { display: flex; gap: 8px; align-items: center; }
-.icon-btn {
-  width: 36px; height: 36px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--muted);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 14px;
-  backdrop-filter: var(--glass);
-  -webkit-backdrop-filter: var(--glass);
-}
-.icon-btn:hover {
-  background: rgba(124,106,255,.1);
-  color: var(--accent);
-  border-color: rgba(124,106,255,.3);
-}
+.app-header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; background:rgba(8,8,16,.88); backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); border:1px solid var(--border); border-radius:16px; margin-bottom:20px; }
+.app-header h1 { font-family:var(--mono); font-size:20px; font-weight:700; background:linear-gradient(135deg,var(--accent),var(--accent3)); background-size:200% auto; -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; animation:gradFlow 4s linear infinite; }
+.app-header .version { font-family:var(--mono); font-size:10px; padding:3px 10px; border-radius:9999px; background:rgba(124,106,255,.12); color:var(--accent); font-weight:700; letter-spacing:.5px; border:1px solid rgba(124,106,255,.2); }
+.header-actions { display:flex; gap:8px; align-items:center; }
+.icon-btn { width:36px; height:36px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--muted); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .2s; font-size:14px; backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); }
+.icon-btn:hover { background:rgba(124,106,255,.1); color:var(--accent); border-color:rgba(124,106,255,.3); }
 
-/* GATEWAY STATUS */
-.status-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-  margin-right: 6px;
-}
-.status-dot.green { background: var(--success); box-shadow: 0 0 8px rgba(0,212,170,.5); }
-.status-dot.red { background: var(--danger); box-shadow: 0 0 8px rgba(255,77,109,.5); }
-.status-dot.yellow { background: var(--warning); box-shadow: 0 0 8px rgba(245,158,11,.5); }
+.status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+.status-dot.green { background:var(--success); box-shadow:0 0 8px rgba(0,212,170,.5); }
+.status-dot.red { background:var(--danger); box-shadow:0 0 8px rgba(255,77,109,.5); }
+.status-dot.yellow { background:var(--warning); box-shadow:0 0 8px rgba(245,158,11,.5); }
 
-/* CARDS */
-.card {
-  background: var(--surface);
-  backdrop-filter: var(--glass);
-  -webkit-backdrop-filter: var(--glass);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 24px;
-  margin-bottom: 16px;
-  position: relative;
-  animation: slideUp .3s ease;
-}
+.card { background:var(--surface); backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); border:1px solid var(--border); border-radius:16px; padding:24px; margin-bottom:16px; position:relative; animation:slideUp .3s ease; }
 
 /* DROP ZONE */
-.upload-zone {
-  border: none;
-  border-radius: 24px;
-  padding: 60px 32px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.3s;
-  position: relative;
-  overflow: visible;
-  background: var(--surface);
-  backdrop-filter: var(--glass);
-  -webkit-backdrop-filter: var(--glass);
-}
-.upload-zone::before {
-  content:'';
-  position:absolute;
-  inset:-2px;
-  border-radius:26px;
-  background:conic-gradient(from 0deg,var(--accent),var(--accent3),var(--accent2),var(--accent));
-  z-index:-1;
-  opacity:.2;
-  animation:spinBorder 6s linear infinite;
-  transition:opacity .35s;
-}
-@keyframes spinBorder {
-  from{transform:rotate(0deg)}
-  to{transform:rotate(360deg)}
-}
-.upload-zone:hover::before, .upload-zone.drag-over::before { opacity:.7; }
-.upload-zone:hover, .upload-zone.drag-over {
-  transform: translateY(-3px);
-  background: rgba(124,106,255,.06);
-}
-.upload-zone i {
-  font-size: 48px;
-  color: var(--muted);
-  margin-bottom: 16px;
-  display: block;
-}
-.upload-zone h3 {
-  font-family: var(--mono);
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 8px;
-  letter-spacing: .3px;
-}
-.upload-zone p {
-  color: var(--muted);
-  font-size: 12px;
-}
-.upload-zone input[type="file"] {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
+.upload-zone { border:none; border-radius:24px; padding:60px 32px; text-align:center; cursor:pointer; transition:all .3s; position:relative; overflow:visible; background:var(--surface); backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); }
+.upload-zone::before { content:''; position:absolute; inset:-2px; border-radius:26px; background:conic-gradient(from 0deg,var(--accent),var(--accent3),var(--accent2),var(--accent)); z-index:-1; opacity:.2; animation:spinBorder 6s linear infinite; transition:opacity .35s; }
+.upload-zone:hover::before,.upload-zone.drag-over::before { opacity:.7; }
+.upload-zone:hover,.upload-zone.drag-over { transform:translateY(-3px); background:rgba(124,106,255,.06); }
+.upload-zone i { font-size:48px; color:var(--muted); margin-bottom:16px; display:block; }
+.upload-zone h3 { font-family:var(--mono); font-size:15px; font-weight:700; color:var(--text); margin-bottom:8px; letter-spacing:.3px; }
+.upload-zone p { color:var(--muted); font-size:12px; }
+.upload-zone input[type="file"] { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.upload-zone.compact { padding:14px 20px; border-radius:14px; display:flex; align-items:center; gap:12px; text-align:left; }
+.upload-zone.compact::before { border-radius:16px; opacity:.1; }
+.upload-zone.compact i { font-size:22px; margin-bottom:0; display:inline; }
+.upload-zone.compact h3 { font-size:13px; margin-bottom:0; flex:1; }
+.upload-zone.compact p { display:none; }
+.upload-zone.compact input[type="file"] { display:none; }
+.upload-zone.compact .compact-size { font-family:var(--mono); font-size:11px; color:var(--muted); white-space:nowrap; }
+.upload-zone.compact .compact-remove { width:28px; height:28px; border-radius:8px; border:1px solid rgba(255,77,109,.2); background:rgba(255,77,109,.08); color:var(--danger); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s; font-size:12px; }
+.upload-zone.compact .compact-remove:hover { background:rgba(255,77,109,.2); }
+.file-info { display:none !important; }
 
-/* COMPACT DROP ZONE (after file selected) */
-.upload-zone.compact {
-  padding: 14px 20px;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  text-align: left;
-}
-.upload-zone.compact::before { border-radius: 16px; opacity: .1; }
-.upload-zone.compact i { font-size: 22px; margin-bottom: 0; display: inline; }
-.upload-zone.compact h3 { font-size: 13px; margin-bottom: 0; flex: 1; }
-.upload-zone.compact p { display: none; }
-.upload-zone.compact input[type="file"] { display: none; }
-.upload-zone.compact .compact-size {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.upload-zone.compact .compact-remove {
-  width: 28px; height: 28px;
-  border-radius: 8px;
-  border: 1px solid rgba(255,77,109,.2);
-  background: rgba(255,77,109,.08);
-  color: var(--danger);
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.2s;
-  font-size: 12px;
-}
-.upload-zone.compact .compact-remove:hover { background: rgba(255,77,109,.2); }
+/* OPTIONS */
+.options-row { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+.options-row .setting-group { flex:1; min-width:100px; }
+.setting-group label { display:block; font-family:var(--mono); font-size:10px; color:var(--muted); margin-bottom:4px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; }
+.setting-group select { width:100%; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:10px; padding:10px 12px; color:var(--text); font-family:var(--sans); font-size:13px; transition:border-color .2s,box-shadow .2s; }
+.setting-group select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 12px rgba(124,106,255,.2); }
+.setting-group select option { background:#12121e; }
+/* Conditional engine select */
+.setting-group.engine-group { display:none; }
+.setting-group.engine-group.visible { display:block; }
 
-/* FILE INFO (hidden in v3.0 — replaced by compact zone) */
-.file-info { display: none !important; }
-
-/* OPTIONS ROW (2 lines) */
-.options-row {
-  display: flex;
-  gap: 10px;
-  margin-top: 16px;
-  flex-wrap: wrap;
-}
-.options-row .setting-group { flex: 1; min-width: 120px; }
-.setting-group label {
-  display: block;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-  margin-bottom: 4px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .8px;
-}
-.setting-group select {
-  width: 100%;
-  background: rgba(255,255,255,.03);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  color: var(--text);
-  font-family: var(--sans);
-  font-size: 13px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.setting-group select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 12px rgba(124,106,255,.2);
-}
-.setting-group select option { background: #12121e; }
-
-/* CHIPS (toggle pills) */
-.chips-row {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-}
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: 9999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-  user-select: none;
-  letter-spacing: .3px;
-}
-.chip:hover { border-color: rgba(124,106,255,.3); color: var(--accent); }
-.chip.active {
-  background: rgba(124,106,255,.12);
-  border-color: rgba(124,106,255,.3);
-  color: var(--accent);
-}
-.chip i { font-size: 10px; }
+/* CHIPS */
+.chips-row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.chip { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:9999px; border:1px solid var(--border); background:var(--surface); color:var(--muted); font-family:var(--mono); font-size:11px; font-weight:700; cursor:pointer; transition:all .2s; user-select:none; letter-spacing:.3px; }
+.chip:hover { border-color:rgba(124,106,255,.3); color:var(--accent); }
+.chip.active { background:rgba(124,106,255,.12); border-color:rgba(124,106,255,.3); color:var(--accent); }
+.chip i { font-size:10px; }
 
 /* PRESETS */
-.presets-row {
-  display: flex;
-  gap: 6px;
-  margin-top: 10px;
-  flex-wrap: wrap;
-}
-.preset-chip {
-  padding: 5px 12px;
-  border-radius: 9999px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 10px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.preset-chip:hover { border-color: var(--accent3); color: var(--accent3); }
-.preset-chip.active { background: rgba(0,212,170,.1); border-color: var(--accent3); color: var(--accent3); }
+.presets-row { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+.preset-chip { padding:5px 12px; border-radius:9999px; border:1px solid var(--border); background:transparent; color:var(--muted); font-family:var(--mono); font-size:10px; cursor:pointer; transition:all .2s; }
+.preset-chip:hover { border-color:var(--accent3); color:var(--accent3); }
+.preset-chip.active { background:rgba(0,212,170,.1); border-color:var(--accent3); color:var(--accent3); }
 
 /* BUTTONS */
-.btn-primary {
-  width: 100%;
-  padding: 16px 24px;
-  border: none;
-  border-radius: 16px;
-  font-family: var(--mono);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.35s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  background: linear-gradient(135deg, var(--accent) 0%, #9b7aff 50%, var(--accent) 100%);
-  background-size: 200% auto;
-  color: #fff;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  position: relative;
-  overflow: hidden;
-}
-.btn-primary::after {
-  content:'';
-  position:absolute;
-  inset:0;
-  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.2) 50%,transparent 100%);
-  transform:translateX(-200%);
-}
-.btn-primary:hover:not(:disabled)::after {
-  transform:translateX(200%);
-  transition:transform .8s;
-}
-.btn-primary:hover:not(:disabled) {
-  background-position: right center;
-  transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(124,106,255,.45);
-}
-.btn-primary:disabled {
-  background: var(--surface2);
-  color: var(--muted);
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-.btn-primary:disabled::after { display: none; }
-
-.btn-secondary {
-  padding: 8px 16px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface);
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-  letter-spacing: .3px;
-}
-.btn-secondary:hover {
-  background: rgba(124,106,255,.08);
-  border-color: var(--accent);
-  color: var(--accent);
-}
+.btn-primary { width:100%; padding:16px 24px; border:none; border-radius:16px; font-family:var(--mono); font-size:13px; font-weight:700; cursor:pointer; transition:all .35s; display:flex; align-items:center; justify-content:center; gap:10px; background:linear-gradient(135deg,var(--accent) 0%,#9b7aff 50%,var(--accent) 100%); background-size:200% auto; color:#fff; letter-spacing:1.5px; text-transform:uppercase; position:relative; overflow:hidden; }
+.btn-primary::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.2) 50%,transparent 100%); transform:translateX(-200%); }
+.btn-primary:hover:not(:disabled)::after { transform:translateX(200%); transition:transform .8s; }
+.btn-primary:hover:not(:disabled) { background-position:right center; transform:translateY(-2px); box-shadow:0 12px 40px rgba(124,106,255,.45); }
+.btn-primary:disabled { background:var(--surface2); color:var(--muted); cursor:not-allowed; transform:none; box-shadow:none; }
+.btn-primary:disabled::after { display:none; }
+.btn-secondary { padding:8px 16px; border:1px solid var(--border); border-radius:9px; background:var(--surface); color:var(--text); font-family:var(--mono); font-size:10px; font-weight:700; cursor:pointer; transition:all .2s; letter-spacing:.3px; }
+.btn-secondary:hover { background:rgba(124,106,255,.08); border-color:var(--accent); color:var(--accent); }
 
 /* PROGRESS */
-.progress-container {
-  display: none;
-  margin-top: 20px;
-}
-.progress-container.visible { display: block; animation: slideUp .3s ease; }
-.progress-bar {
-  height: 2px;
-  background: var(--surface2);
-  border-radius: 1px;
-  overflow: visible;
-  margin-bottom: 8px;
-  position: relative;
-}
-.progress-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--accent), var(--accent3));
-  border-radius: 1px;
-  transition: width 0.3s ease;
-  position: relative;
-}
-.progress-fill::after {
-  content: '';
-  position: absolute;
-  right: -3px;
-  top: -3px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent3);
-  box-shadow: 0 0 12px rgba(0,212,170,.6), 0 0 24px rgba(0,212,170,.3);
-  transition: opacity 0.3s;
-}
-.progress-text {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.progress-chrono {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--accent);
-  font-weight: 700;
-}
+.progress-container { display:none; margin-top:20px; }
+.progress-container.visible { display:block; animation:slideUp .3s ease; }
+.progress-bar { height:2px; background:var(--surface2); border-radius:1px; overflow:visible; margin-bottom:8px; position:relative; }
+.progress-fill { height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent3)); border-radius:1px; transition:width .3s ease; position:relative; }
+.progress-fill::after { content:''; position:absolute; right:-3px; top:-3px; width:8px; height:8px; border-radius:50%; background:var(--accent3); box-shadow:0 0 12px rgba(0,212,170,.6),0 0 24px rgba(0,212,170,.3); transition:opacity .3s; }
+.progress-text { font-family:var(--mono); font-size:11px; color:var(--muted); display:flex; justify-content:space-between; align-items:center; }
+.progress-chrono { font-family:var(--mono); font-size:11px; color:var(--accent); font-weight:700; }
 
-/* WAVEFORM ANIMATION */
-.waveform {
-  display: none;
-  align-items: flex-end;
-  gap: 3px;
-  height: 28px;
-  margin-top: 12px;
-  justify-content: center;
-}
-.waveform.visible { display: flex; }
-.wv-bar {
-  width: 3px;
-  border-radius: 2px;
-  background: var(--accent);
-  transition: background 0.3s;
-}
-/* Upload step — blue pulse */
-.waveform.step-upload .wv-bar { animation: wvPulse 1.2s ease-in-out infinite; background: var(--accent); }
-/* FFmpeg step — purple bounce */
-.waveform.step-ffmpeg .wv-bar { animation: wvBounce 0.8s ease-in-out infinite; background: #a855f7; }
-/* Transcription step — cyan sparkle */
-.waveform.step-transcription .wv-bar { animation: wvSparkle 0.6s ease-in-out infinite; background: var(--accent3); }
-/* Translation step — green morph */
-.waveform.step-translation .wv-bar { animation: wvMorph 1s ease-in-out infinite; background: #22c55e; }
-/* Done — fade */
-.waveform.step-done .wv-bar { animation: wvSnap 0.4s ease forwards; background: var(--accent3); }
+/* WAVEFORM */
+.waveform { display:none; align-items:flex-end; gap:3px; height:28px; margin-top:12px; justify-content:center; }
+.waveform.visible { display:flex; }
+.wv-bar { width:3px; border-radius:2px; background:var(--accent); transition:background .3s; }
+.waveform.step-upload .wv-bar { animation:wvPulse 1.2s ease-in-out infinite; background:var(--accent); }
+.waveform.step-ffmpeg .wv-bar { animation:wvBounce .8s ease-in-out infinite; background:#a855f7; }
+.waveform.step-transcription .wv-bar { animation:wvSparkle .6s ease-in-out infinite; background:var(--accent3); }
+.waveform.step-translation .wv-bar { animation:wvMorph 1s ease-in-out infinite; background:#22c55e; }
+.waveform.step-done .wv-bar { animation:wvSnap .4s ease forwards; background:var(--accent3); }
+@keyframes wvPulse{0%,100%{height:6px;opacity:.4}50%{height:22px;opacity:1}}
+@keyframes wvBounce{0%,100%{height:4px;transform:translateY(0)}50%{height:26px;transform:translateY(-2px)}}
+@keyframes wvSparkle{0%,100%{height:8px;opacity:.3}25%{height:24px;opacity:1}75%{height:12px;opacity:.6}}
+@keyframes wvMorph{0%,100%{height:10px;border-radius:2px}50%{height:20px;border-radius:4px}}
+@keyframes wvSnap{0%{height:20px;opacity:1}100%{height:4px;opacity:.2}}
 
-@keyframes wvPulse {
-  0%, 100% { height: 6px; opacity: .4; }
-  50% { height: 22px; opacity: 1; }
-}
-@keyframes wvBounce {
-  0%, 100% { height: 4px; transform: translateY(0); }
-  50% { height: 26px; transform: translateY(-2px); }
-}
-@keyframes wvSparkle {
-  0%, 100% { height: 8px; opacity: .3; }
-  25% { height: 24px; opacity: 1; }
-  75% { height: 12px; opacity: .6; }
-}
-@keyframes wvMorph {
-  0%, 100% { height: 10px; border-radius: 2px; }
-  50% { height: 20px; border-radius: 4px; }
-}
-@keyframes wvSnap {
-  0% { height: 20px; opacity: 1; }
-  100% { height: 4px; opacity: .2; }
-}
-
-/* LOG CONSOLE */
-.log-console {
-  display: none;
-  margin-top: 16px;
-  background: rgba(8,8,16,.6);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px 16px;
-  max-height: 200px;
-  overflow-y: auto;
-  font-family: var(--mono);
-  font-size: 11px;
-  line-height: 1.8;
-}
-.log-console.visible { display: block; animation: slideUp .2s ease; }
-.log-entry { color: var(--muted); }
-.log-entry.info { color: var(--accent3); }
-.log-entry.success { color: var(--success); }
-.log-entry.error { color: var(--danger); }
-.log-entry.warn { color: var(--warning); }
+/* LOG */
+.log-console { display:none; margin-top:16px; background:rgba(8,8,16,.6); border:1px solid var(--border); border-radius:12px; padding:12px 16px; max-height:200px; overflow-y:auto; font-family:var(--mono); font-size:11px; line-height:1.8; }
+.log-console.visible { display:block; animation:slideUp .2s ease; }
+.log-entry { color:var(--muted); } .log-entry.info { color:var(--accent3); } .log-entry.success { color:var(--success); } .log-entry.error { color:var(--danger); } .log-entry.warn { color:var(--warning); }
 
 /* RESULTS */
-.results-section { display: none; }
-.results-section.visible { display: block; animation: slideUp .35s ease; }
+.results-section { display:none; } .results-section.visible { display:block; animation:slideUp .35s ease; }
+.results-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.results-header h2 { font-family:var(--mono); font-size:14px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; }
+.results-header .stats { font-family:var(--mono); font-size:11px; color:var(--muted); }
 
-.results-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-.results-header h2 {
-  font-family: var(--mono);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: .5px;
-  text-transform: uppercase;
-}
-.results-header .stats {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-}
-
-/* SPLIT PANEL (desktop) */
-.results-split {
-  display: block;
-}
-@media (min-width: 769px) {
-  .results-split {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    align-items: start;
-  }
-  .panel-video {
-    position: sticky;
-    top: 16px;
-  }
-  .panel-transcript {
-    max-height: 80vh;
-    overflow-y: auto;
-    padding-right: 4px;
-  }
+/* SPLIT PANEL */
+.results-split { display:block; }
+@media(min-width:769px){
+  .results-split { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
+  .panel-video { position:sticky; top:16px; }
+  .panel-transcript { max-height:80vh; overflow-y:auto; padding-right:4px; }
 }
 
 /* SPEAKER LEGEND */
-.speaker-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 16px;
-}
-.speaker-tag {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 14px;
-  border-radius: 9999px;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid transparent;
-}
-.speaker-tag:hover { opacity: 0.8; transform: translateY(-1px); }
-.speaker-tag .speaker-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-}
+.speaker-legend { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
+.speaker-tag { display:flex; align-items:center; gap:6px; padding:5px 14px; border-radius:9999px; font-family:var(--mono); font-size:11px; font-weight:700; cursor:pointer; transition:all .2s; border:1px solid transparent; }
+.speaker-tag:hover { opacity:.8; transform:translateY(-1px); }
+.speaker-tag .speaker-dot { width:8px; height:8px; border-radius:50%; }
+/* Speaker time in legend */
+.speaker-tag .spk-time { font-weight:400; opacity:.6; font-size:10px; margin-left:4px; }
 
 /* TRANSCRIPT BLOCKS */
-.transcript-block {
-  padding: 12px 16px;
-  border-radius: 12px;
-  margin-bottom: 6px;
-  border-left: 3px solid transparent;
-  transition: all 0.2s;
-  background: transparent;
-  cursor: pointer;
-}
-.transcript-block:hover {
-  background: rgba(255,255,255,.02);
-}
-.transcript-block .block-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-.transcript-block .speaker-name {
-  font-family: var(--mono);
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: .3px;
-}
-.transcript-block .timestamp {
-  font-size: 10px;
-  color: var(--muted);
-  font-family: var(--mono);
-  opacity: .6;
-}
-.transcript-block .block-text {
-  font-size: 14px;
-  color: rgba(240,240,248,.7);
-  line-height: 1.6;
-}
-/* Editable segment */
-.transcript-block .block-text[contenteditable="true"] {
-  outline: 1px solid var(--accent);
-  border-radius: 4px;
-  padding: 4px 6px;
-  background: rgba(124,106,255,.05);
-}
-.transcript-block .confidence-bar {
-  margin-top: 6px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--surface2);
-  overflow: hidden;
-}
-.transcript-block .confidence-fill {
-  height: 100%;
-  border-radius: 1px;
-  transition: width 0.5s;
-}
-.transcript-block.active-block {
-  background: rgba(124,106,255,.06);
-  border-left-color: var(--accent) !important;
-}
+.transcript-block { padding:12px 16px; border-radius:12px; margin-bottom:6px; border-left:3px solid transparent; transition:all .2s; background:transparent; cursor:pointer; position:relative; }
+.transcript-block:hover { background:rgba(255,255,255,.02); }
+.transcript-block .block-header { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+.transcript-block .speaker-name { font-family:var(--mono); font-weight:700; font-size:11px; letter-spacing:.3px; }
+.transcript-block .timestamp { font-size:10px; color:var(--muted); font-family:var(--mono); opacity:.6; }
+.transcript-block .block-text { font-size:14px; color:rgba(240,240,248,.7); line-height:1.6; }
+/* Colored text mode */
+.transcript-block.colored-text .block-text { color:var(--spk-color, rgba(240,240,248,.7)); opacity:.85; }
+.transcript-block .block-text[contenteditable="true"] { outline:1px solid var(--accent); border-radius:4px; padding:4px 6px; background:rgba(124,106,255,.05); }
+.transcript-block .confidence-bar { margin-top:6px; height:2px; border-radius:1px; background:var(--surface2); overflow:hidden; }
+.transcript-block .confidence-fill { height:100%; border-radius:1px; transition:width .5s; }
+.transcript-block.active-block { background:rgba(124,106,255,.06); border-left-color:var(--accent) !important; }
+/* Copy icon on hover */
+.transcript-block .block-copy { position:absolute; top:10px; right:10px; display:none; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--muted); cursor:pointer; padding:3px 7px; font-size:10px; transition:all .15s; }
+.transcript-block:hover .block-copy { display:block; }
+.transcript-block .block-copy:hover { color:var(--accent); border-color:var(--accent); }
 
 /* ACTION BAR */
-.btn-grp-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.btn-grp-lbl {
-  font-family: var(--mono);
-  font-size: 8px;
-  letter-spacing: .9px;
-  color: var(--muted);
-  opacity: .5;
-  padding: 0 3px;
-  line-height: 1;
-  pointer-events: none;
-  text-transform: uppercase;
-}
-.btn-grp {
-  display: flex;
-  gap: 3px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.btn-sep {
-  width: 1px;
-  background: var(--border);
-  margin: 0 6px;
-  flex-shrink: 0;
-  align-self: stretch;
-  min-height: 16px;
-}
-.export-btn {
-  flex-shrink: 0;
-  padding: 7px 13px;
-  border-radius: 9px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 400;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  transition: all 0.2s;
-  white-space: nowrap;
-  letter-spacing: .3px;
-}
-.export-btn:hover {
-  background: rgba(124,106,255,.08);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.export-btn i { font-size: 12px; }
-
-.action-bar {
-  display: none;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: flex-end;
-  margin-bottom: 14px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
-}
-.action-bar.visible { display: flex; }
+.btn-grp-wrap { display:flex; flex-direction:column; gap:3px; }
+.btn-grp-lbl { font-family:var(--mono); font-size:8px; letter-spacing:.9px; color:var(--muted); opacity:.5; padding:0 3px; line-height:1; pointer-events:none; text-transform:uppercase; }
+.btn-grp { display:flex; gap:3px; align-items:center; flex-wrap:wrap; }
+.btn-sep { width:1px; background:var(--border); margin:0 6px; flex-shrink:0; align-self:stretch; min-height:16px; }
+.export-btn { flex-shrink:0; padding:7px 13px; border-radius:9px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:var(--mono); font-size:10px; font-weight:400; cursor:pointer; display:flex; align-items:center; gap:5px; transition:all .2s; white-space:nowrap; letter-spacing:.3px; }
+.export-btn:hover { background:rgba(124,106,255,.08); border-color:var(--accent); color:var(--accent); }
+.export-btn.active-toggle { background:rgba(124,106,255,.12); border-color:var(--accent); color:var(--accent); }
+.export-btn i { font-size:12px; }
+.action-bar { display:none; flex-wrap:wrap; gap:4px; align-items:flex-end; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border); }
+.action-bar.visible { display:flex; }
 
 /* SPEAKER MODAL */
-.modal-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: rgba(0,0,0,.72);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  align-items: center;
-  justify-content: center;
-}
-.modal-overlay.visible { display: flex; }
-.modal-box {
-  background: var(--surface2);
-  backdrop-filter: var(--glass);
-  -webkit-backdrop-filter: var(--glass);
-  border: 1px solid var(--border2);
-  border-radius: 20px;
-  padding: 24px;
-  width: 90%;
-  max-width: 480px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.5), 0 0 30px rgba(124,106,255,.1);
-  max-height: 85vh;
-  overflow-y: auto;
-}
-.modal-box h3 {
-  font-family: var(--mono);
-  font-size: 13px;
-  font-weight: 700;
-  margin-bottom: 16px;
-  text-transform: uppercase;
-  letter-spacing: .5px;
-}
-.modal-box .input-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.modal-box .input-row .color-swatch {
-  width: 22px; height: 22px;
-  border-radius: 6px;
-  border: 2px solid rgba(255,255,255,.15);
-  flex-shrink: 0;
-}
-.modal-box .input-row input, .modal-box .input-row select {
-  flex: 1;
-  background: rgba(255,255,255,.03);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 12px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-}
-.modal-box .input-row input:focus, .modal-box .input-row select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 8px rgba(124,106,255,.2);
-}
-.modal-box .input-row select option { background: #12121e; }
-.modal-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 16px;
-}
-
-/* Merge section in modal */
-.merge-section {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-.merge-section h4 {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  margin-bottom: 10px;
-  text-transform: uppercase;
-  letter-spacing: .5px;
-}
-.merge-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.merge-row select {
-  flex: 1;
-  background: rgba(255,255,255,.03);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 12px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-}
-.merge-row select option { background: #12121e; }
-.merge-row button {
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(0,212,170,.3);
-  background: rgba(0,212,170,.08);
-  color: var(--accent3);
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.merge-row button:hover { background: rgba(0,212,170,.15); }
+.modal-overlay { display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,.72); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); align-items:center; justify-content:center; }
+.modal-overlay.visible { display:flex; }
+.modal-box { background:var(--surface2); backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); border:1px solid var(--border2); border-radius:20px; padding:24px; width:90%; max-width:480px; box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 30px rgba(124,106,255,.1); max-height:85vh; overflow-y:auto; }
+.modal-box h3 { font-family:var(--mono); font-size:13px; font-weight:700; margin-bottom:16px; text-transform:uppercase; letter-spacing:.5px; }
+.modal-box .input-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.modal-box .input-row .color-swatch { width:22px; height:22px; border-radius:6px; border:2px solid rgba(255,255,255,.15); flex-shrink:0; }
+.modal-box .input-row input,.modal-box .input-row select { flex:1; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-family:var(--mono); font-size:12px; }
+.modal-box .input-row input:focus,.modal-box .input-row select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 8px rgba(124,106,255,.2); }
+.modal-box .input-row select option { background:#12121e; }
+.modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+.merge-section { margin-top:16px; padding-top:16px; border-top:1px solid var(--border); }
+.merge-section h4 { font-family:var(--mono); font-size:11px; color:var(--muted); margin-bottom:10px; text-transform:uppercase; letter-spacing:.5px; }
+.merge-row { display:flex; align-items:center; gap:8px; }
+.merge-row select { flex:1; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-family:var(--mono); font-size:12px; }
+.merge-row select option { background:#12121e; }
+.merge-row button { padding:8px 14px; border-radius:8px; border:1px solid rgba(0,212,170,.3); background:rgba(0,212,170,.08); color:var(--accent3); font-family:var(--mono); font-size:11px; font-weight:700; cursor:pointer; transition:all .2s; }
+.merge-row button:hover { background:rgba(0,212,170,.15); }
 
 /* TOAST */
-#toast {
-  position: fixed;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  padding: 10px 20px;
-  border-radius: 10px;
-  background: var(--surface2);
-  backdrop-filter: var(--glass);
-  -webkit-backdrop-filter: var(--glass);
-  border: 1px solid var(--border2);
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-  z-index: 300;
-  opacity: 0;
-  transition: all 0.3s;
-  pointer-events: none;
-  white-space: nowrap;
-}
-#toast.visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
+#toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(20px); padding:10px 20px; border-radius:10px; background:var(--surface2); backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); border:1px solid var(--border2); color:var(--text); font-family:var(--mono); font-size:12px; z-index:300; opacity:0; transition:all .3s; pointer-events:none; white-space:nowrap; }
+#toast.visible { opacity:1; transform:translateX(-50%) translateY(0); }
 
 /* SETTINGS PANEL */
-.settings-panel { display: none; }
-.settings-panel.visible { display: block; }
-.settings-panel .setting-group { margin-bottom: 12px; }
-.settings-panel .setting-group input[type="text"] {
-  width: 100%;
-  background: rgba(255,255,255,.03);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  color: var(--text);
-  font-family: var(--sans);
-  font-size: 13px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.settings-panel .setting-group input[type="text"]:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 12px rgba(124,106,255,.2);
-}
+.settings-panel { display:none; } .settings-panel.visible { display:block; }
+.settings-panel .setting-group { margin-bottom:12px; }
+.settings-panel .setting-group input[type="text"] { width:100%; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:10px; padding:10px 12px; color:var(--text); font-family:var(--sans); font-size:13px; transition:border-color .2s,box-shadow .2s; }
+.settings-panel .setting-group input[type="text"]:focus { outline:none; border-color:var(--accent); box-shadow:0 0 12px rgba(124,106,255,.2); }
 
-/* SPINNER */
-.spinner {
-  display: inline-block;
-  width: 16px; height: 16px;
-  border: 2px solid rgba(255,255,255,0.2);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* SW BANNER */
-.sw-banner {
-  display: none;
-  position: fixed;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 999;
-  padding: 10px 20px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--accent), #9b7aff);
-  color: #fff;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 4px 20px rgba(124,106,255,.4);
-  pointer-events: auto;
-  letter-spacing: .3px;
-}
-.sw-banner.visible { display: flex; align-items: center; gap: 8px; }
+.spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.2); border-top-color:#fff; border-radius:50%; animation:spin .8s linear infinite; }
+.sw-banner { display:none; position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:999; padding:10px 20px; border-radius:12px; background:linear-gradient(135deg,var(--accent),#9b7aff); color:#fff; font-family:var(--mono); font-size:11px; font-weight:700; cursor:pointer; box-shadow:0 4px 20px rgba(124,106,255,.4); pointer-events:auto; letter-spacing:.3px; }
+.sw-banner.visible { display:flex; align-items:center; gap:8px; }
 
 /* SEARCH */
-.search-bar {
-  display: none;
-  margin-bottom: 12px;
-}
-.search-bar.visible { display: flex; }
-.search-bar input {
-  flex: 1;
-  background: rgba(255,255,255,.03);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 14px;
-  color: var(--text);
-  font-family: var(--sans);
-  font-size: 13px;
-}
-.search-bar input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 10px rgba(124,106,255,.15); }
-.search-bar .search-count {
-  padding: 10px 14px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-/* HIGHLIGHT */
-mark {
-  background: rgba(245,158,11,.25);
-  color: var(--text);
-  border-radius: 2px;
-  padding: 0 2px;
-}
+.search-bar { display:none; margin-bottom:12px; }
+.search-bar.visible { display:flex; }
+.search-bar input { flex:1; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:10px; padding:10px 14px; color:var(--text); font-family:var(--sans); font-size:13px; }
+.search-bar input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 10px rgba(124,106,255,.15); }
+.search-bar .search-count { padding:10px 14px; font-family:var(--mono); font-size:11px; color:var(--muted); white-space:nowrap; }
+mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; padding:0 2px; }
 
 /* TRANSLATE BAR */
-.translate-bar {
-  display: none;
-  gap: 8px;
-  align-items: center;
-  padding: 12px 16px;
-  background: var(--surface);
-  backdrop-filter: var(--glass);
-  -webkit-backdrop-filter: var(--glass);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-.translate-bar.visible { display: flex; animation: slideUp .2s ease; }
-.translate-bar select, .translate-bar button {
-  padding: 7px 13px;
-  border-radius: 9px;
-  font-size: 11px;
-  font-family: var(--mono);
-  border: 1px solid var(--border);
-  background: var(--surface2);
-  color: var(--text);
-  cursor: pointer;
-  transition: all .2s;
-}
-.translate-bar select:focus { outline: none; border-color: var(--accent); }
-.translate-bar select option { background: #12121e; }
-.translate-bar .btn-translate {
-  background: linear-gradient(135deg, var(--accent), var(--accent3));
-  border: none;
-  color: #fff;
-  font-weight: 700;
-  padding: 7px 18px;
-  letter-spacing: .3px;
-  transition: all .2s;
-}
-.translate-bar .btn-translate:hover { filter: brightness(1.12); transform: translateY(-1px); box-shadow: 0 4px 18px rgba(124,106,255,.38); }
-.translate-bar .btn-translate:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
-.translate-bar .translate-status {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-  margin-left: auto;
-}
+.translate-bar { display:none; gap:8px; align-items:center; padding:12px 16px; background:var(--surface); backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); border:1px solid var(--border); border-radius:14px; margin-bottom:16px; flex-wrap:wrap; }
+.translate-bar.visible { display:flex; animation:slideUp .2s ease; }
+.translate-bar select,.translate-bar button { padding:7px 13px; border-radius:9px; font-size:11px; font-family:var(--mono); border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer; transition:all .2s; }
+.translate-bar select:focus { outline:none; border-color:var(--accent); }
+.translate-bar select option { background:#12121e; }
+.translate-bar .btn-translate { background:linear-gradient(135deg,var(--accent),var(--accent3)); border:none; color:#fff; font-weight:700; padding:7px 18px; letter-spacing:.3px; transition:all .2s; }
+.translate-bar .btn-translate:hover { filter:brightness(1.12); transform:translateY(-1px); box-shadow:0 4px 18px rgba(124,106,255,.38); }
+.translate-bar .btn-translate:disabled { opacity:.45; cursor:not-allowed; transform:none; box-shadow:none; }
+.translate-bar .translate-status { font-family:var(--mono); font-size:10px; color:var(--muted); margin-left:auto; }
 
 /* BILINGUAL TEXT */
-.block-translation {
-  margin-top: 5px;
-  padding-top: 5px;
-  border-top: 1px dashed rgba(255,255,255,.06);
-  color: var(--accent3);
-  font-size: 13px;
-  line-height: 1.5;
-  opacity: 0.9;
-}
-.block-text-original {
-  opacity: 0.55;
-  font-size: 13px;
-}
-.block-text-original + .block-translation {
-  border-top: none;
-  padding-top: 2px;
-}
+.block-translation { margin-top:5px; padding-top:5px; border-top:1px dashed rgba(255,255,255,.06); color:var(--accent3); font-size:13px; line-height:1.5; opacity:.9; }
+.block-text-original { opacity:.55; font-size:13px; }
+.block-text-original + .block-translation { border-top:none; padding-top:2px; }
 
-/* VIDEO PLAYER */
-#videoWrap {
-  overflow: hidden;
-  transition: max-height .3s ease;
-  position: relative;
-  border-radius: 12px 12px 0 0;
-  background: #000;
-}
-#videoWrap.collapsed { max-height: 0 !important; }
-.preview-video {
-  width: 100%;
-  display: block;
-  max-height: 50vh;
-  background: #000;
-}
-#subBox {
-  background: #000;
-  min-height: 54px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 20px;
-  border-bottom: 1px solid rgba(255,255,255,.06);
-  cursor: pointer;
-  transition: background .15s;
-  user-select: none;
-  -webkit-user-select: none;
-  gap: 4px;
-  border-radius: 0 0 12px 12px;
-}
-#subBox.empty { cursor: default; }
-#subBox:not(.empty):hover { background: #141414; }
-#subBoxMeta {
-  font-family: var(--mono);
-  font-size: 9px;
-  color: #666;
-  letter-spacing: .4px;
-  transition: color .15s;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-#subBox:not(.empty):hover #subBoxMeta { color: #999; }
-#subBoxText {
-  font-size: 15px;
-  font-weight: 600;
-  text-align: center;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  color: #e8e8e8;
-  transition: color .15s;
-}
-#subBox.empty #subBoxText {
-  color: #2a2a2a;
-  font-weight: 400;
-  font-size: 13px;
-}
-#previewSection {
-  display: none;
-  margin-bottom: 16px;
-  animation: slideUp .3s ease;
-}
-#previewSection.visible { display: block; }
-#previewHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 0;
-  margin-bottom: 6px;
-}
-#previewHeader span {
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .8px;
-  color: var(--muted);
-}
-#previewHeader .preview-actions { display: flex; gap: 6px; }
-#previewHeader .preview-actions button {
-  background: none;
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 4px;
-  transition: color .15s;
-}
-#previewHeader .preview-actions button:hover { color: var(--text); }
+/* VIDEO */
+#videoWrap { overflow:hidden; transition:max-height .3s ease; position:relative; border-radius:12px 12px 0 0; background:#000; }
+#videoWrap.collapsed { max-height:0 !important; }
+.preview-video { width:100%; display:block; max-height:50vh; background:#000; }
+.preview-video::cue { background:rgba(0,0,0,.7); color:#fff; font-size:16px; font-family:var(--sans); }
+#subBox { background:#000; min-height:54px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px 20px; border-bottom:1px solid rgba(255,255,255,.06); cursor:pointer; transition:background .15s; user-select:none; -webkit-user-select:none; gap:4px; border-radius:0 0 12px 12px; }
+#subBox.empty { cursor:default; }
+#subBox:not(.empty):hover { background:#141414; }
+#subBoxMeta { font-family:var(--mono); font-size:9px; color:#666; letter-spacing:.4px; transition:color .15s; display:flex; align-items:center; gap:4px; }
+#subBox:not(.empty):hover #subBoxMeta { color:#999; }
+#subBoxText { font-size:15px; font-weight:600; text-align:center; line-height:1.45; white-space:pre-wrap; color:#e8e8e8; transition:color .15s; }
+#subBox.empty #subBoxText { color:#2a2a2a; font-weight:400; font-size:13px; }
+#previewSection { display:none; margin-bottom:16px; animation:slideUp .3s ease; }
+#previewSection.visible { display:block; }
+#previewHeader { display:flex; align-items:center; justify-content:space-between; padding:10px 0; margin-bottom:6px; }
+#previewHeader span { font-family:var(--mono); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); }
+#previewHeader .preview-actions { display:flex; gap:6px; }
+#previewHeader .preview-actions button { background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; padding:4px; transition:color .15s; }
+#previewHeader .preview-actions button:hover { color:var(--text); }
+
+/* OFFSET CONTROLS */
+.offset-wrap { padding:8px 14px 12px; border-top:1px solid rgba(255,255,255,.06); }
+.offset-hdr-row { display:flex; justify-content:flex-end; align-items:center; gap:6px; margin-bottom:4px; }
+.offset-btns-row { display:flex; gap:4px; justify-content:center; margin-top:6px; }
+.ob { font-family:var(--mono); font-size:10px; background:var(--surface2); border:1px solid var(--border); color:var(--muted); border-radius:6px; padding:4px 8px; cursor:pointer; transition:all .15s; white-space:nowrap; flex-shrink:0; }
+.ob:hover { border-color:var(--accent); color:var(--accent); background:rgba(124,106,255,.08); }
+.ob.neg { color:rgba(248,113,113,.7); }
+.ob.neg:hover { border-color:#f87171; color:#f87171; background:rgba(248,113,113,.08); }
+.offset-track { flex:1; height:4px; background:rgba(255,255,255,.07); border-radius:2px; position:relative; width:100%; }
+.offset-fill { position:absolute; top:0; height:100%; border-radius:2px; transition:left .15s,width .15s,background .15s; }
+.offset-dot { position:absolute; top:50%; width:10px; height:10px; border-radius:50%; background:var(--muted); transform:translate(-50%,-50%); transition:left .15s,background .15s; box-shadow:0 0 5px rgba(0,0,0,.5); left:50%; }
+.offset-val { font-family:var(--mono); font-size:11px; color:var(--muted); cursor:pointer; user-select:none; line-height:1; transition:color .15s; }
+.offset-val:hover { opacity:.75; }
 
 /* HISTORY */
-.hist-wrap {
-  margin-top: 24px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  overflow: hidden;
-}
-.hist-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px;
-  cursor: pointer;
-  background: var(--surface);
-  transition: background 0.2s;
-  user-select: none;
-}
-.hist-header:hover { background: var(--surface2); }
-.hist-header h3 {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--muted);
-}
-.hist-header .hist-chevron {
-  color: var(--muted);
-  transition: transform 0.2s;
-  font-size: 12px;
-}
-.hist-header.open .hist-chevron { transform: rotate(180deg); }
-.hist-body {
-  display: none;
-  padding: 0;
-}
-.hist-body.open { display: block; }
-.hitem {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.hitem:hover { background: rgba(124,106,255,.04); }
-.hitem-icon {
-  font-size: 18px;
-  flex-shrink: 0;
-}
-.hitem-info { flex: 1; min-width: 0; }
-.hname {
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.hmeta {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-  margin-top: 2px;
-}
-.hbadge {
-  font-family: var(--mono);
-  font-size: 9px;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  background: rgba(124,106,255,.1);
-  color: var(--accent);
-  white-space: nowrap;
-}
-.hdel {
-  width: 28px; height: 28px;
-  border-radius: 8px;
-  border: 1px solid rgba(255,77,109,.15);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.2s;
-  font-size: 11px;
-  flex-shrink: 0;
-}
-.hdel:hover {
-  background: rgba(255,77,109,.1);
-  border-color: rgba(255,77,109,.3);
-  color: var(--danger);
-}
+.hist-wrap { margin-top:24px; border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+.hist-header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; cursor:pointer; background:var(--surface); transition:background .2s; user-select:none; }
+.hist-header:hover { background:var(--surface2); }
+.hist-header h3 { font-family:var(--mono); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+.hist-header .hist-chevron { color:var(--muted); transition:transform .2s; font-size:12px; }
+.hist-header.open .hist-chevron { transform:rotate(180deg); }
+.hist-body { display:none; padding:0; } .hist-body.open { display:block; }
+.hitem { display:flex; align-items:center; gap:12px; padding:12px 20px; border-top:1px solid var(--border); cursor:pointer; transition:background .15s; }
+.hitem:hover { background:rgba(124,106,255,.04); }
+.hitem-icon { font-size:18px; flex-shrink:0; }
+.hitem-info { flex:1; min-width:0; }
+.hname { font-family:var(--mono); font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hmeta { font-family:var(--mono); font-size:10px; color:var(--muted); margin-top:2px; }
+.hbadge { font-family:var(--mono); font-size:9px; padding:2px 8px; border-radius:9999px; background:rgba(124,106,255,.1); color:var(--accent); white-space:nowrap; }
+.hdel { width:28px; height:28px; border-radius:8px; border:1px solid rgba(255,77,109,.15); background:transparent; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .2s; font-size:11px; flex-shrink:0; }
+.hdel:hover { background:rgba(255,77,109,.1); border-color:rgba(255,77,109,.3); color:var(--danger); }
 
-/* CONFIDENCE COLORS */
-.conf-high { color: var(--success); }
-.conf-mid { color: var(--warning); }
-.conf-low { color: var(--danger); }
+.conf-high { color:var(--success); } .conf-mid { color:var(--warning); } .conf-low { color:var(--danger); }
 
-/* FLOATING BUTTON (mobile) */
-.btn-start-floating {
-  display: none;
-  position: fixed;
-  bottom: 20px;
-  left: 16px;
-  right: 16px;
-  z-index: 100;
-  padding: 16px;
-  border: none;
-  border-radius: 16px;
-  font-family: var(--mono);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  background: linear-gradient(135deg, var(--accent), #9b7aff);
-  color: #fff;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  text-align: center;
-  box-shadow: 0 8px 30px rgba(124,106,255,.5);
+/* FLOATING BTN */
+.btn-start-floating { display:none; position:fixed; bottom:20px; left:16px; right:16px; z-index:100; padding:16px; border:none; border-radius:16px; font-family:var(--mono); font-size:13px; font-weight:700; cursor:pointer; background:linear-gradient(135deg,var(--accent),#9b7aff); color:#fff; letter-spacing:1.5px; text-transform:uppercase; text-align:center; box-shadow:0 8px 30px rgba(124,106,255,.5); }
+.btn-start-floating:disabled { opacity:.5; cursor:not-allowed; box-shadow:none; }
+
+.speaker-0{--spk-color:#7c6aff}.speaker-1{--spk-color:#00d4aa}.speaker-2{--spk-color:#ff4d6d}.speaker-3{--spk-color:#22c55e}.speaker-4{--spk-color:#f59e0b}.speaker-5{--spk-color:#60a5fa}.speaker-6{--spk-color:#3b82f6}.speaker-7{--spk-color:#a855f7}.speaker-8{--spk-color:#14b8a6}.speaker-9{--spk-color:#f97316}
+
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--surface2);border-radius:3px}::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.15)}
+
+@media(max-width:768px){
+  .options-row{flex-direction:column}
+  .results-split{display:block!important}
+  .panel-transcript{max-height:none!important;overflow:visible!important}
+  .app-container{max-width:100%}
+  .offset-btns-row{flex-wrap:wrap;justify-content:center}
 }
-.btn-start-floating:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
-
-/* SPEAKER COLORS */
-.speaker-0 { --spk-color: #7c6aff; }
-.speaker-1 { --spk-color: #00d4aa; }
-.speaker-2 { --spk-color: #ff4d6d; }
-.speaker-3 { --spk-color: #22c55e; }
-.speaker-4 { --spk-color: #f59e0b; }
-.speaker-5 { --spk-color: #60a5fa; }
-.speaker-6 { --spk-color: #3b82f6; }
-.speaker-7 { --spk-color: #a855f7; }
-.speaker-8 { --spk-color: #14b8a6; }
-.speaker-9 { --spk-color: #f97316; }
-
-/* SCROLLBAR */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.15); }
-
-/* RESPONSIVE */
-@media (max-width: 768px) {
-  .options-row { flex-direction: column; }
-  .results-split { display: block !important; }
-  .panel-transcript { max-height: none !important; overflow: visible !important; }
-  .app-container { max-width: 100%; }
-}
-@media (max-width: 600px) {
-  .app-header h1 { font-size: 16px; }
-  .card { padding: 16px; }
-  .upload-zone { padding: 40px 16px; }
-  .upload-zone i { font-size: 36px; }
-  .export-btn { padding: 6px 10px; font-size: 9px; }
-  .btn-primary { font-size: 11px; padding: 14px; }
-  #subBoxText { font-size: 13px; }
-  #subBox { padding: 8px 12px; }
-  .chips-row { gap: 6px; }
-  .chip { padding: 6px 10px; font-size: 10px; }
-  .btn-start-floating.show { display: block; }
+@media(max-width:600px){
+  .app-header h1{font-size:16px} .card{padding:16px} .upload-zone{padding:40px 16px} .upload-zone i{font-size:36px}
+  .export-btn{padding:6px 10px;font-size:9px} .btn-primary{font-size:11px;padding:14px}
+  #subBoxText{font-size:13px} #subBox{padding:8px 12px}
+  .chips-row{gap:6px} .chip{padding:6px 10px;font-size:10px}
+  .btn-start-floating.show{display:block}
 }
 </style>
 </head>
 <body>
-
-<!-- SW Update Banner -->
-<div id="sw-banner" class="sw-banner" onclick="location.reload()">
-  <i class="fas fa-sync-alt"></i>
-  <span>Nouvelle version disponible — cliquer pour recharger</span>
-</div>
-
-<!-- Toast -->
+<div id="sw-banner" class="sw-banner" onclick="location.reload()"><i class="fas fa-sync-alt"></i><span>Nouvelle version disponible — cliquer pour recharger</span></div>
 <div id="toast"></div>
-
-<!-- Floating start button (mobile) -->
-<button class="btn-start-floating" id="btn-start-floating" onclick="startTranscription()" disabled>
-  <i class="fas fa-play"></i> Transcrire
-</button>
+<button class="btn-start-floating" id="btn-start-floating" onclick="startTranscription()" disabled><i class="fas fa-play"></i> Transcrire</button>
 
 <div class="app-container">
-  <!-- Header -->
   <div class="app-header">
-    <div>
-      <h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1>
-    </div>
+    <div><h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1></div>
     <div class="header-actions">
-      <span class="version">v3.0</span>
-      <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--muted)">
-        <span class="status-dot yellow"></span>
-      </span>
+      <span class="version">v3.1</span>
+      <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--muted)"><span class="status-dot yellow"></span></span>
       <button class="icon-btn" onclick="toggleSettings()" title="Paramètres"><i class="fas fa-gear"></i></button>
     </div>
   </div>
 
-  <!-- Settings Panel -->
   <div id="settings-panel" class="settings-panel card">
     <h3 style="font-size:16px;margin-bottom:16px"><i class="fas fa-sliders" style="margin-right:8px"></i>Configuration</h3>
-    <div class="setting-group">
-      <label>Gateway URL</label>
-      <input type="text" id="cfg-gateway" placeholder="https://api-gateway.quang101182.workers.dev" value="">
-    </div>
-    <div class="setting-group">
-      <label>Gateway Secret (Bearer)</label>
-      <input type="text" id="cfg-secret" placeholder="Votre WORKER_SECRET">
-    </div>
-    <div class="setting-group">
-      <label>Cloud Worker URL (Fly.io — pour gros fichiers)</label>
-      <input type="text" id="cfg-flyio" placeholder="https://subwhisper-ffmpeg.fly.dev">
-    </div>
+    <div class="setting-group"><label>Gateway URL</label><input type="text" id="cfg-gateway" placeholder="https://api-gateway.quang101182.workers.dev"></div>
+    <div class="setting-group"><label>Gateway Secret (Bearer)</label><input type="text" id="cfg-secret" placeholder="Votre WORKER_SECRET"></div>
+    <div class="setting-group"><label>Cloud Worker URL (Fly.io)</label><input type="text" id="cfg-flyio" placeholder="https://subwhisper-ffmpeg.fly.dev"></div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn-secondary" onclick="saveConfig()"><i class="fas fa-check"></i> Sauvegarder</button>
       <button class="btn-secondary" onclick="testGateway()"><i class="fas fa-plug"></i> Tester</button>
     </div>
   </div>
 
-  <!-- Upload Section -->
   <div class="card" id="upload-card">
     <div class="upload-zone" id="upload-zone">
       <input type="file" id="file-input" accept="audio/*,video/*,.mp3,.mp4,.wav,.webm,.ogg,.flac,.m4a,.aac,.mkv,.avi,.mov">
@@ -1328,79 +357,47 @@ mark {
       <p>MP3, MP4, WAV, WEBM, OGG, FLAC, M4A, MKV, AVI, MOV — jusqu'à 5 Go</p>
     </div>
 
-    <!-- Options Row 1: 3 selects -->
     <div class="options-row" id="options-row">
-      <div class="setting-group">
-        <label>Modèle</label>
+      <div class="setting-group"><label>Modèle</label>
         <select id="opt-model">
           <option value="nova-2" selected>Nova-2 (meilleur)</option>
-          <option value="nova-2-general">Nova-2 General</option>
-          <option value="nova-2-meeting">Nova-2 Meeting</option>
-          <option value="nova-2-phonecall">Nova-2 PhoneCall</option>
-          <option value="nova-2-voicemail">Nova-2 VoiceMail</option>
-          <option value="nova-2-finance">Nova-2 Finance</option>
-          <option value="nova-2-conversationalai">Nova-2 ConversationalAI</option>
-          <option value="nova-2-video">Nova-2 Video</option>
-          <option value="whisper-large">Whisper Large</option>
+          <option value="nova-2-general">Nova-2 General</option><option value="nova-2-meeting">Nova-2 Meeting</option>
+          <option value="nova-2-phonecall">Nova-2 PhoneCall</option><option value="nova-2-voicemail">Nova-2 VoiceMail</option>
+          <option value="nova-2-finance">Nova-2 Finance</option><option value="nova-2-conversationalai">Nova-2 ConversationalAI</option>
+          <option value="nova-2-video">Nova-2 Video</option><option value="whisper-large">Whisper Large</option>
         </select>
       </div>
-      <div class="setting-group">
-        <label>Source</label>
+      <div class="setting-group"><label>Source</label>
         <select id="opt-lang">
-          <option value="">Auto-détection</option>
-          <option value="fr">Français</option>
-          <option value="en">English</option>
-          <option value="es">Español</option>
-          <option value="de">Deutsch</option>
-          <option value="it">Italiano</option>
-          <option value="pt">Português</option>
-          <option value="ja">日本語</option>
-          <option value="ko">한국어</option>
-          <option value="zh">中文</option>
-          <option value="ar">العربية</option>
-          <option value="ru">Русский</option>
-          <option value="hi">हिन्दी</option>
-          <option value="nl">Nederlands</option>
-          <option value="pl">Polski</option>
-          <option value="tr">Türkçe</option>
-          <option value="vi">Tiếng Việt</option>
-          <option value="th">ไทย</option>
-          <option value="id">Bahasa Indonesia</option>
-          <option value="uk">Українська</option>
+          <option value="">Auto-détection</option><option value="fr">Français</option><option value="en">English</option>
+          <option value="es">Español</option><option value="de">Deutsch</option><option value="it">Italiano</option>
+          <option value="pt">Português</option><option value="ja">日本語</option><option value="ko">한국어</option>
+          <option value="zh">中文</option><option value="ar">العربية</option><option value="ru">Русский</option>
+          <option value="hi">हिन्दी</option><option value="nl">Nederlands</option><option value="pl">Polski</option>
+          <option value="tr">Türkçe</option><option value="vi">Tiếng Việt</option><option value="th">ไทย</option>
+          <option value="id">Bahasa Indonesia</option><option value="uk">Українська</option>
         </select>
       </div>
-      <div class="setting-group">
-        <label>Traduire vers</label>
-        <select id="opt-target-lang">
-          <option value="">Aucune</option>
-          <option value="fr">Français</option>
-          <option value="en">English</option>
-          <option value="es">Español</option>
-          <option value="de">Deutsch</option>
-          <option value="it">Italiano</option>
-          <option value="pt">Português</option>
-          <option value="zh">中文</option>
-          <option value="ko">한국어</option>
-          <option value="vi">Tiếng Việt</option>
-          <option value="ja">日本語</option>
+      <div class="setting-group"><label>Traduire vers</label>
+        <select id="opt-target-lang" onchange="onTargetLangChange()">
+          <option value="">Aucune</option><option value="fr">Français</option><option value="en">English</option>
+          <option value="es">Español</option><option value="de">Deutsch</option><option value="it">Italiano</option>
+          <option value="pt">Português</option><option value="zh">中文</option><option value="ko">한국어</option>
+          <option value="vi">Tiếng Việt</option><option value="ja">日本語</option>
+        </select>
+      </div>
+      <div class="setting-group engine-group" id="engine-group"><label>Moteur IA</label>
+        <select id="opt-engine">
+          <option value="gemini">Gemini</option><option value="deepseek">DeepSeek</option>
         </select>
       </div>
     </div>
 
-    <!-- Options Row 2: chips -->
     <div class="chips-row" id="chips-row">
-      <div class="chip active" id="chip-diarize" onclick="this.classList.toggle('active')">
-        <i class="fas fa-users"></i> Diarization
-      </div>
-      <div class="chip active" id="chip-punctuate" onclick="this.classList.toggle('active')">
-        <i class="fas fa-paragraph"></i> Ponctuation
-      </div>
-      <div class="chip active" id="chip-smart-format" onclick="this.classList.toggle('active')">
-        <i class="fas fa-spell-check"></i> Smart Format
-      </div>
+      <div class="chip active" id="chip-diarize" onclick="this.classList.toggle('active')"><i class="fas fa-users"></i> Diarization</div>
+      <div class="chip active" id="chip-punctuate" onclick="this.classList.toggle('active')"><i class="fas fa-paragraph"></i> Ponctuation</div>
+      <div class="chip active" id="chip-smart-format" onclick="this.classList.toggle('active')"><i class="fas fa-spell-check"></i> Smart Format</div>
     </div>
-
-    <!-- Presets -->
     <div class="presets-row" id="presets-row">
       <div class="preset-chip" onclick="applyPreset('podcast')">Podcast</div>
       <div class="preset-chip" onclick="applyPreset('interview')">Interview</div>
@@ -1408,51 +405,41 @@ mark {
       <div class="preset-chip" onclick="applyPreset('meeting')">Réunion</div>
     </div>
 
-    <!-- Launch button -->
     <div style="margin-top:20px">
-      <button class="btn-primary" id="btn-start" onclick="startTranscription()" disabled>
-        <i class="fas fa-play"></i>
-        <span>Transcrire</span>
-      </button>
+      <button class="btn-primary" id="btn-start" onclick="startTranscription()" disabled><i class="fas fa-play"></i><span>Transcrire</span></button>
     </div>
-
-    <!-- Progress -->
     <div class="progress-container" id="progress-container">
-      <div class="progress-bar">
-        <div class="progress-fill" id="progress-fill"></div>
-      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
       <div class="progress-text">
         <span id="progress-label">Préparation...</span>
         <span class="progress-chrono" id="progress-chrono" style="display:none">00:00</span>
         <span id="progress-pct">0%</span>
       </div>
-      <!-- Waveform -->
       <div class="waveform" id="waveform"></div>
     </div>
-
-    <!-- Log -->
     <div style="position:relative">
       <div class="log-console" id="log-console"></div>
-      <button id="btn-copy-log" onclick="copyLog()" style="display:none;position:absolute;top:8px;right:8px;font-family:var(--mono);font-size:9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;padding:3px 10px;transition:all .2s;z-index:2" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">Copier log</button>
+      <button id="btn-copy-log" onclick="copyLog()" style="display:none;position:absolute;top:8px;right:8px;font-family:var(--mono);font-size:9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;padding:3px 10px;transition:all .2s;z-index:2">Copier log</button>
     </div>
   </div>
 
-  <!-- Results Section -->
   <div class="results-section" id="results-section">
     <div class="results-header">
       <h2><i class="fas fa-message-lines" style="margin-right:8px"></i>Résultat</h2>
       <div class="stats" id="results-stats">—</div>
     </div>
-
     <div class="speaker-legend" id="speaker-legend"></div>
 
-    <!-- Action buttons -->
     <div class="action-bar" id="action-bar">
-      <div class="btn-grp-wrap">
-        <span class="btn-grp-lbl">Export</span>
+      <div class="btn-grp-wrap"><span class="btn-grp-lbl">Export</span>
         <div class="btn-grp">
+          <select id="export-content" style="font-family:var(--mono);font-size:10px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:7px 10px;cursor:pointer" title="Contenu à exporter">
+            <option value="original">Original</option><option value="translated">Traduit</option><option value="bilingual">Bilingue</option>
+          </select>
+          <select id="export-speaker-filter" style="font-family:var(--mono);font-size:10px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:7px 10px;cursor:pointer" title="Filtrer par locuteur">
+            <option value="all">Tous</option>
+          </select>
           <button class="export-btn" onclick="exportSRT()"><i class="fas fa-file-lines"></i> SRT</button>
-          <button class="export-btn" id="btn-export-srt-bilingual" onclick="exportSRTBilingual()" style="display:none"><i class="fas fa-file-lines"></i> SRT bilingue</button>
           <button class="export-btn" onclick="exportASS()"><i class="fas fa-palette"></i> ASS</button>
           <button class="export-btn" onclick="exportTXT()"><i class="fas fa-file-alt"></i> TXT</button>
           <button class="export-btn" onclick="exportJSON()"><i class="fas fa-file-code"></i> JSON</button>
@@ -1461,45 +448,32 @@ mark {
         </div>
       </div>
       <div class="btn-sep"></div>
-      <div class="btn-grp-wrap">
-        <span class="btn-grp-lbl">Outils</span>
+      <div class="btn-grp-wrap"><span class="btn-grp-lbl">Affichage</span>
         <div class="btn-grp">
+          <button class="export-btn" id="btn-toggle-colors" onclick="toggleColoredText()" title="Colorer le texte par locuteur"><i class="fas fa-palette"></i> Couleurs</button>
+          <button class="export-btn" id="btn-toggle-original" onclick="toggleShowOriginal()" title="Afficher/masquer l'original"><i class="fas fa-eye"></i> Original</button>
           <button class="export-btn" onclick="toggleSearch()"><i class="fas fa-magnifying-glass"></i> Rechercher</button>
           <button class="export-btn" onclick="editSpeakers()"><i class="fas fa-user-pen"></i> Renommer</button>
           <button class="export-btn" onclick="resetAll()"><i class="fas fa-rotate-left"></i> Nouveau</button>
         </div>
       </div>
       <div class="btn-sep"></div>
-      <div class="btn-grp-wrap">
-        <span class="btn-grp-lbl" style="color:#00d4aa;opacity:.75">Traduction</span>
+      <div class="btn-grp-wrap"><span class="btn-grp-lbl" style="color:#00d4aa;opacity:.75">Traduction</span>
         <div class="btn-grp">
           <button class="export-btn" onclick="toggleTranslateBar()" style="border-color:rgba(0,212,170,.3);color:var(--accent3)"><i class="fas fa-language"></i> Traduire</button>
         </div>
       </div>
     </div>
 
-    <!-- Translation bar -->
     <div class="translate-bar" id="translate-bar">
       <i class="fas fa-language" style="color:var(--accent3);font-size:18px"></i>
-      <select id="translate-engine">
-        <option value="gemini">Gemini</option>
-        <option value="deepseek">DeepSeek</option>
-      </select>
+      <select id="translate-engine"><option value="gemini">Gemini</option><option value="deepseek">DeepSeek</option></select>
       <select id="translate-target">
-        <option value="fr">Français</option>
-        <option value="en">English</option>
-        <option value="es">Español</option>
-        <option value="de">Deutsch</option>
-        <option value="it">Italiano</option>
-        <option value="pt">Português</option>
-        <option value="zh">中文</option>
-        <option value="ko">한국어</option>
-        <option value="vi">Tiếng Việt</option>
-        <option value="ja">日本語</option>
+        <option value="fr">Français</option><option value="en">English</option><option value="es">Español</option>
+        <option value="de">Deutsch</option><option value="it">Italiano</option><option value="pt">Português</option>
+        <option value="zh">中文</option><option value="ko">한국어</option><option value="vi">Tiếng Việt</option><option value="ja">日本語</option>
       </select>
-      <button class="btn-translate" id="btn-translate" onclick="startTranslation()">
-        <i class="fas fa-language"></i> Traduire
-      </button>
+      <button class="btn-translate" id="btn-translate" onclick="startTranslation()"><i class="fas fa-language"></i> Traduire</button>
       <span class="translate-status" id="translate-status"></span>
     </div>
 
@@ -1508,10 +482,8 @@ mark {
       <div class="search-count" id="search-count"></div>
     </div>
 
-    <!-- Split panel: video left + transcript right on desktop -->
     <div class="results-split" id="results-split">
       <div class="panel-video">
-        <!-- Video Preview + Subtitles -->
         <div id="previewSection">
           <div id="previewHeader">
             <span><i class="fas fa-film" style="margin-right:6px"></i>Prévisualisation</span>
@@ -1527,15 +499,28 @@ mark {
             <div id="subBoxMeta"></div>
             <div id="subBoxText">—</div>
           </div>
+          <!-- Offset controls -->
+          <div class="offset-wrap" id="offset-wrap" style="display:none">
+            <div class="offset-hdr-row">
+              <span class="offset-val" id="offsetDisplay" onclick="resetOffset()" title="Cliquer pour reset à 0">0 ms</span>
+              <button class="ob" onclick="resetOffset()" title="Reset" style="padding:3px 7px;font-size:12px">&#x27F2;</button>
+            </div>
+            <div class="offset-track"><div class="offset-fill" id="offsetFill"></div><div class="offset-dot" id="offsetDot"></div></div>
+            <div class="offset-btns-row">
+              <button class="ob neg" onclick="applyOffset(-500)">-500</button>
+              <button class="ob neg" onclick="applyOffset(-100)">-100</button>
+              <button class="ob neg" onclick="applyOffset(-50)">-50</button>
+              <button class="ob" onclick="applyOffset(50)">+50</button>
+              <button class="ob" onclick="applyOffset(100)">+100</button>
+              <button class="ob" onclick="applyOffset(500)">+500</button>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="panel-transcript">
-        <div id="transcript-output"></div>
-      </div>
+      <div class="panel-transcript"><div id="transcript-output"></div></div>
     </div>
   </div>
 
-  <!-- History -->
   <div class="hist-wrap" id="hist-wrap" style="display:none">
     <div class="hist-header" id="hist-header" onclick="toggleHistory()">
       <h3><i class="fas fa-clock-rotate-left" style="margin-right:8px"></i>Historique</h3>
@@ -1545,1736 +530,557 @@ mark {
   </div>
 </div>
 
-<!-- Speaker Edit Modal -->
 <div class="modal-overlay" id="speaker-modal">
   <div class="modal-box">
     <h3><i class="fas fa-user-pen" style="margin-right:8px"></i>Renommer les locuteurs</h3>
     <div id="speaker-inputs"></div>
-    <!-- Merge section -->
     <div class="merge-section" id="merge-section">
-      <h4><i class="fas fa-merge" style="margin-right:6px"></i>Fusionner deux locuteurs</h4>
+      <h4><i class="fas fa-compress" style="margin-right:6px"></i>Fusionner deux locuteurs</h4>
       <div class="merge-row">
-        <select id="merge-from"></select>
-        <span style="color:var(--muted);font-size:12px">→</span>
+        <select id="merge-from"></select><span style="color:var(--muted);font-size:12px">→</span>
         <select id="merge-to"></select>
         <button onclick="mergeSpeakers()"><i class="fas fa-compress"></i> Fusionner</button>
       </div>
     </div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeSpeakerModal()">Annuler</button>
-      <button class="btn-primary" style="width:auto;padding:10px 24px" onclick="applySpeakerNames()">
-        <i class="fas fa-check"></i> Appliquer
-      </button>
+      <button class="btn-primary" style="width:auto;padding:10px 24px" onclick="applySpeakerNames()"><i class="fas fa-check"></i> Appliquer</button>
     </div>
   </div>
 </div>
 
 <script>
-// ─────────────────────────────────────────────────────────────────────
-// VoxSplit v3.0 — Diarization & Transcription via Deepgram
-// ─────────────────────────────────────────────────────────────────────
+// VoxSplit v3.1 — Diarization & Transcription via Deepgram
+const VERSION='3.1';
+const GATEWAY_DEFAULT='https://api-gateway.quang101182.workers.dev';
+const CLOUD_WORKER_URL='https://subwhisper-worker.quang101182.workers.dev';
+const SPEAKER_COLORS=['#7c6aff','#00d4aa','#ff4d6d','#22c55e','#f59e0b','#60a5fa','#3b82f6','#a855f7','#14b8a6','#f97316'];
 
-const VERSION = '3.0';
-const GATEWAY_DEFAULT = 'https://api-gateway.quang101182.workers.dev';
-const CLOUD_WORKER_URL = 'https://subwhisper-worker.quang101182.workers.dev';
+let selectedFile=null, rawResult=null, speakerNames={}, parsedUtterances=[], translations={};
+let previewVideoUrl=null, _timeupdateHandler=null, _chronoInterval=null, _chronoStart=0;
+let currentOffset=0, _processingInterval=null;
+let showColoredText=false, showOriginal=true;
+let previewVttUrl=null;
 
-const SPEAKER_COLORS = [
-  '#7c6aff','#00d4aa','#ff4d6d','#22c55e','#f59e0b',
-  '#60a5fa','#3b82f6','#a855f7','#14b8a6','#f97316'
-];
+// ─── Config ──────────────────────────────────────────────
+function getConfig(){try{return JSON.parse(localStorage.getItem('voxsplit_config')||'{}')}catch{return{}}}
+function setConfig(c){localStorage.setItem('voxsplit_config',JSON.stringify(c))}
+function getGateway(){return getConfig().gateway||GATEWAY_DEFAULT}
+function getSecret(){return getConfig().secret||''}
+function getFlyUrl(){return getConfig().flyUrl||''}
 
-// State
-let selectedFile = null;
-let rawResult = null;
-let speakerNames = {};
-let parsedUtterances = [];
-let translations = {};
-let previewVideoUrl = null;
-let _timeupdateHandler = null;
-let _chronoInterval = null;
-let _chronoStart = 0;
-
-// ─── Config ──────────────────────────────────────────────────────────
-
-function getConfig() {
-  try { return JSON.parse(localStorage.getItem('voxsplit_config') || '{}'); } catch { return {}; }
+function saveConfig(){
+  const gw=document.getElementById('cfg-gateway').value.trim();
+  const secret=document.getElementById('cfg-secret').value.trim();
+  const flyUrl=document.getElementById('cfg-flyio').value.trim();
+  if(!gw||!secret){toast('Gateway URL et Secret requis','warn');return}
+  setConfig({gateway:gw,secret,flyUrl});
+  toast('Configuration sauvegardée');checkGateway();
 }
-function setConfig(c) { localStorage.setItem('voxsplit_config', JSON.stringify(c)); }
-
-function getGateway() { return getConfig().gateway || GATEWAY_DEFAULT; }
-function getSecret() { return getConfig().secret || ''; }
-function getFlyUrl() { return getConfig().flyUrl || ''; }
-
-function saveConfig() {
-  const gw = document.getElementById('cfg-gateway').value.trim();
-  const secret = document.getElementById('cfg-secret').value.trim();
-  const flyUrl = document.getElementById('cfg-flyio').value.trim();
-  if (!gw || !secret) { toast('Gateway URL et Secret requis', 'warn'); return; }
-  setConfig({ gateway: gw, secret: secret, flyUrl: flyUrl });
-  toast('Configuration sauvegardée');
-  checkGateway();
+function toggleSettings(){
+  const p=document.getElementById('settings-panel');p.classList.toggle('visible');
+  if(p.classList.contains('visible')){const c=getConfig();document.getElementById('cfg-gateway').value=c.gateway||GATEWAY_DEFAULT;document.getElementById('cfg-secret').value=c.secret||'';document.getElementById('cfg-flyio').value=c.flyUrl||''}
 }
 
-function toggleSettings() {
-  const p = document.getElementById('settings-panel');
-  p.classList.toggle('visible');
-  if (p.classList.contains('visible')) {
-    const c = getConfig();
-    document.getElementById('cfg-gateway').value = c.gateway || GATEWAY_DEFAULT;
-    document.getElementById('cfg-secret').value = c.secret || '';
-    document.getElementById('cfg-flyio').value = c.flyUrl || '';
-  }
+// ─── Gateway ─────────────────────────────────────────────
+async function checkGateway(){
+  const dot=document.querySelector('#gw-status .status-dot');const secret=getSecret();
+  if(!secret){dot.className='status-dot red';dot.parentElement.title='Gateway: secret non configuré';return false}
+  try{const r=await fetch(getGateway()+'/health',{signal:AbortSignal.timeout(5000)});const j=await r.json();if(j.ok){dot.className='status-dot green';dot.parentElement.title=`Gateway v${j.version} OK`;return true}}catch(e){}
+  dot.className='status-dot red';dot.parentElement.title='Gateway: inaccessible';return false;
+}
+async function testGateway(){
+  toast('Test en cours...');const ok=await checkGateway();
+  if(ok){try{const r=await fetch(getGateway()+'/config',{headers:{'Authorization':'Bearer '+getSecret()},signal:AbortSignal.timeout(5000)});const j=await r.json();toast(j.apis&&j.apis.includes('DEEPGRAM')?'Gateway OK + clé Deepgram configurée':'Gateway OK mais DEEPGRAM_KEY manquante',j.apis&&j.apis.includes('DEEPGRAM')?'success':'warn')}catch(e){toast('Gateway OK, vérification config échouée','warn')}}
+  else{toast('Gateway inaccessible ou secret invalide','error')}
 }
 
-// ─── Gateway check ───────────────────────────────────────────────────
-
-async function checkGateway() {
-  const dot = document.querySelector('#gw-status .status-dot');
-  const secret = getSecret();
-  if (!secret) {
-    dot.className = 'status-dot red';
-    dot.parentElement.title = 'Gateway: secret non configuré';
-    return false;
-  }
-  try {
-    const r = await fetch(getGateway() + '/health', { signal: AbortSignal.timeout(5000) });
-    const j = await r.json();
-    if (j.ok) {
-      dot.className = 'status-dot green';
-      dot.parentElement.title = `Gateway v${j.version} OK`;
-      return true;
-    }
-  } catch(e) {}
-  dot.className = 'status-dot red';
-  dot.parentElement.title = 'Gateway: inaccessible';
-  return false;
+// ─── File handling ───────────────────────────────────────
+function setupFileInput(){
+  const zone=document.getElementById('upload-zone');const input=document.getElementById('file-input');
+  input.addEventListener('change',e=>{if(e.target.files.length>0)handleFile(e.target.files[0])});
+  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag-over')});
+  zone.addEventListener('dragleave',()=>zone.classList.remove('drag-over'));
+  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag-over');if(e.dataTransfer.files.length>0)handleFile(e.dataTransfer.files[0])});
 }
-
-async function testGateway() {
-  toast('Test en cours...');
-  const ok = await checkGateway();
-  if (ok) {
-    try {
-      const r = await fetch(getGateway() + '/config', {
-        headers: { 'Authorization': 'Bearer ' + getSecret() },
-        signal: AbortSignal.timeout(5000)
-      });
-      const j = await r.json();
-      if (j.apis && j.apis.includes('DEEPGRAM')) {
-        toast('Gateway OK + clé Deepgram configurée', 'success');
-      } else {
-        toast('Gateway OK mais clé DEEPGRAM_KEY non configurée', 'warn');
-      }
-    } catch(e) {
-      toast('Gateway OK, vérification config échouée', 'warn');
-    }
-  } else {
-    toast('Gateway inaccessible ou secret invalide', 'error');
-  }
-}
-
-// ─── File handling ───────────────────────────────────────────────────
-
-function setupFileInput() {
-  const zone = document.getElementById('upload-zone');
-  const input = document.getElementById('file-input');
-
-  input.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) handleFile(e.target.files[0]);
-  });
-
-  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-  zone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    zone.classList.remove('drag-over');
-    if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
-  });
-}
-
-function handleFile(file) {
-  if (file.size > 5 * 1024 * 1024 * 1024) {
-    toast('Fichier trop volumineux (max 5 Go)', 'error');
-    return;
-  }
-  selectedFile = file;
-
-  // Compact the drop zone
-  const zone = document.getElementById('upload-zone');
-  const isVideo = file.type.startsWith('video/');
-  const iconClass = isVideo ? 'fas fa-file-video' : 'fas fa-file-audio';
-
+function handleFile(file){
+  if(file.size>5*1024*1024*1024){toast('Fichier trop volumineux (max 5 Go)','error');return}
+  selectedFile=file;const zone=document.getElementById('upload-zone');
+  const iconClass=file.type.startsWith('video/')?'fas fa-file-video':'fas fa-file-audio';
   zone.classList.add('compact');
-  zone.innerHTML = `
-    <i class="${iconClass}"></i>
-    <h3>${file.name}</h3>
-    <span class="compact-size">${formatSize(file.size)}</span>
-    <button class="compact-remove" onclick="event.stopPropagation();removeFile()" title="Retirer"><i class="fas fa-xmark"></i></button>
-  `;
+  zone.innerHTML=`<i class="${iconClass}"></i><h3>${file.name}</h3><span class="compact-size">${formatSize(file.size)}</span><button class="compact-remove" onclick="event.stopPropagation();removeFile()" title="Retirer"><i class="fas fa-xmark"></i></button>`;
+  document.getElementById('btn-start').disabled=false;document.getElementById('btn-start-floating').disabled=false;
+  if(window.innerWidth<=600){document.getElementById('btn-start-floating').classList.add('show');setTimeout(()=>document.getElementById('btn-start').scrollIntoView({behavior:'smooth',block:'center'}),200)}
+}
+function removeFile(){
+  selectedFile=null;const zone=document.getElementById('upload-zone');zone.classList.remove('compact');
+  zone.innerHTML='<input type="file" id="file-input" accept="audio/*,video/*,.mp3,.mp4,.wav,.webm,.ogg,.flac,.m4a,.aac,.mkv,.avi,.mov"><i class="fas fa-cloud-arrow-up"></i><h3>Déposer un fichier audio ou vidéo</h3><p>MP3, MP4, WAV, WEBM, OGG, FLAC, M4A, MKV, AVI, MOV — jusqu\'à 5 Go</p>';
+  document.getElementById('file-input').addEventListener('change',e=>{if(e.target.files.length>0)handleFile(e.target.files[0])});
+  document.getElementById('btn-start').disabled=true;document.getElementById('btn-start-floating').disabled=true;document.getElementById('btn-start-floating').classList.remove('show');
+}
+function formatSize(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';if(b<1073741824)return(b/1048576).toFixed(1)+' MB';return(b/1073741824).toFixed(2)+' GB'}
 
-  document.getElementById('btn-start').disabled = false;
-  document.getElementById('btn-start-floating').disabled = false;
-
-  // On mobile, show floating button and scroll
-  if (window.innerWidth <= 600) {
-    document.getElementById('btn-start-floating').classList.add('show');
-    setTimeout(() => {
-      document.getElementById('btn-start').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 200);
-  }
+// ─── Engine select visibility ────────────────────────────
+function onTargetLangChange(){
+  const tgt=document.getElementById('opt-target-lang').value;
+  document.getElementById('engine-group').classList.toggle('visible',!!tgt);
 }
 
-function removeFile() {
-  selectedFile = null;
-  const zone = document.getElementById('upload-zone');
-  zone.classList.remove('compact');
-  zone.innerHTML = `
-    <input type="file" id="file-input" accept="audio/*,video/*,.mp3,.mp4,.wav,.webm,.ogg,.flac,.m4a,.aac,.mkv,.avi,.mov">
-    <i class="fas fa-cloud-arrow-up"></i>
-    <h3>Déposer un fichier audio ou vidéo</h3>
-    <p>MP3, MP4, WAV, WEBM, OGG, FLAC, M4A, MKV, AVI, MOV — jusqu'à 5 Go</p>
-  `;
-  // Re-attach file input listener
-  document.getElementById('file-input').addEventListener('change', (e) => {
-    if (e.target.files.length > 0) handleFile(e.target.files[0]);
-  });
-  document.getElementById('btn-start').disabled = true;
-  document.getElementById('btn-start-floating').disabled = true;
-  document.getElementById('btn-start-floating').classList.remove('show');
-}
-
-function formatSize(bytes) {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
-  return (bytes / 1073741824).toFixed(2) + ' GB';
-}
-
-// ─── Presets ─────────────────────────────────────────────────────────
-
-function applyPreset(type) {
-  // Clear active
-  document.querySelectorAll('.preset-chip').forEach(c => c.classList.remove('active'));
-  event.target.classList.add('active');
-
-  const model = document.getElementById('opt-model');
-  const diarize = document.getElementById('chip-diarize');
-  const punct = document.getElementById('chip-punctuate');
-  const smart = document.getElementById('chip-smart-format');
-
-  switch(type) {
-    case 'podcast':
-      model.value = 'nova-2';
-      diarize.classList.add('active');
-      punct.classList.add('active');
-      smart.classList.add('active');
-      break;
-    case 'interview':
-      model.value = 'nova-2-general';
-      diarize.classList.add('active');
-      punct.classList.add('active');
-      smart.classList.add('active');
-      break;
-    case 'film':
-      model.value = 'nova-2-video';
-      diarize.classList.add('active');
-      punct.classList.add('active');
-      smart.classList.remove('active');
-      break;
-    case 'meeting':
-      model.value = 'nova-2-meeting';
-      diarize.classList.add('active');
-      punct.classList.add('active');
-      smart.classList.add('active');
-      break;
+// ─── Presets ─────────────────────────────────────────────
+function applyPreset(type){
+  document.querySelectorAll('.preset-chip').forEach(c=>c.classList.remove('active'));event.target.classList.add('active');
+  const m=document.getElementById('opt-model'),d=document.getElementById('chip-diarize'),p=document.getElementById('chip-punctuate'),s=document.getElementById('chip-smart-format');
+  switch(type){
+    case'podcast':m.value='nova-2';d.classList.add('active');p.classList.add('active');s.classList.add('active');break;
+    case'interview':m.value='nova-2-general';d.classList.add('active');p.classList.add('active');s.classList.add('active');break;
+    case'film':m.value='nova-2-video';d.classList.add('active');p.classList.add('active');s.classList.remove('active');break;
+    case'meeting':m.value='nova-2-meeting';d.classList.add('active');p.classList.add('active');s.classList.add('active');break;
   }
   toast(`Preset "${type}" appliqué`);
 }
 
-// ─── Logging ─────────────────────────────────────────────────────────
-
-function log(msg, level = '') {
-  const logEl = document.getElementById('log-console');
-  logEl.classList.add('visible');
-  const btn = document.getElementById('btn-copy-log');
-  if (btn) btn.style.display = 'inline-block';
-  const ts = new Date().toLocaleTimeString('fr-FR');
-  const div = document.createElement('div');
-  div.className = 'log-entry' + (level ? ' ' + level : '');
-  div.textContent = `[${ts}] ${msg}`;
-  logEl.appendChild(div);
-  logEl.scrollTop = logEl.scrollHeight;
+// ─── Logging ─────────────────────────────────────────────
+function log(msg,level=''){
+  const el=document.getElementById('log-console');el.classList.add('visible');
+  const btn=document.getElementById('btn-copy-log');if(btn)btn.style.display='inline-block';
+  const div=document.createElement('div');div.className='log-entry'+(level?' '+level:'');div.textContent=`[${new Date().toLocaleTimeString('fr-FR')}] ${msg}`;
+  el.appendChild(div);el.scrollTop=el.scrollHeight;
 }
-
-function copyLog() {
-  const logEl = document.getElementById('log-console');
-  if (!logEl) return;
-  const entries = logEl.querySelectorAll('.log-entry');
-  const txt = 'VoxSplit v3.0 — Log\n' + '='.repeat(40) + '\n' +
-    Array.from(entries).map(e => e.textContent).join('\n');
-  if (!txt.trim()) { toast('Log vide', 'warn'); return; }
-  navigator.clipboard.writeText(txt).then(() => {
-    toast('Log copié (' + entries.length + ' lignes)');
-  }).catch(() => {
-    const ta = document.createElement('textarea');
-    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    toast('Log copié');
-  });
+function copyLog(){
+  const el=document.getElementById('log-console');if(!el)return;const entries=el.querySelectorAll('.log-entry');
+  const txt='VoxSplit v3.1 — Log\n'+'='.repeat(40)+'\n'+Array.from(entries).map(e=>e.textContent).join('\n');
+  navigator.clipboard.writeText(txt).then(()=>toast('Log copié ('+entries.length+' lignes)')).catch(()=>{const ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('Log copié')});
 }
-
-function setProgress(pct, label, step) {
-  const container = document.getElementById('progress-container');
-  container.classList.add('visible');
-  document.getElementById('progress-fill').style.width = pct + '%';
-  document.getElementById('progress-pct').textContent = Math.round(pct) + '%';
-  if (label) document.getElementById('progress-label').textContent = label;
-
-  // Waveform step animation
-  if (step) {
-    const wf = document.getElementById('waveform');
-    wf.className = 'waveform visible step-' + step;
-  }
+function setProgress(pct,label,step){
+  document.getElementById('progress-container').classList.add('visible');
+  document.getElementById('progress-fill').style.width=pct+'%';document.getElementById('progress-pct').textContent=Math.round(pct)+'%';
+  if(label)document.getElementById('progress-label').textContent=label;
+  if(step){document.getElementById('waveform').className='waveform visible step-'+step}
 }
+function startChrono(){_chronoStart=Date.now();document.getElementById('progress-chrono').style.display='';_chronoInterval=setInterval(()=>{const e=Math.floor((Date.now()-_chronoStart)/1000);document.getElementById('progress-chrono').textContent=String(Math.floor(e/60)).padStart(2,'0')+':'+String(e%60).padStart(2,'0')},1000)}
+function stopChrono(){if(_chronoInterval){clearInterval(_chronoInterval);_chronoInterval=null}}
+function initWaveform(){const wf=document.getElementById('waveform');wf.innerHTML='';for(let i=0;i<12;i++){const b=document.createElement('div');b.className='wv-bar';b.style.animationDelay=(i*.1)+'s';b.style.height='6px';wf.appendChild(b)}}
 
-// ─── Chrono ──────────────────────────────────────────────────────────
-
-function startChrono() {
-  _chronoStart = Date.now();
-  const el = document.getElementById('progress-chrono');
-  el.style.display = '';
-  _chronoInterval = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - _chronoStart) / 1000);
-    const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
-    const s = String(elapsed % 60).padStart(2, '0');
-    el.textContent = m + ':' + s;
-  }, 1000);
-}
-
-function stopChrono() {
-  if (_chronoInterval) { clearInterval(_chronoInterval); _chronoInterval = null; }
-}
-
-// ─── Waveform init ───────────────────────────────────────────────────
-
-function initWaveform() {
-  const wf = document.getElementById('waveform');
-  wf.innerHTML = '';
-  for (let i = 0; i < 12; i++) {
-    const bar = document.createElement('div');
-    bar.className = 'wv-bar';
-    bar.style.animationDelay = (i * 0.1) + 's';
-    bar.style.height = '6px';
-    wf.appendChild(bar);
-  }
-}
-
-// ─── Transcription pipeline ──────────────────────────────────────────
-
-async function startTranscription() {
-  if (!selectedFile) return;
-
-  const secret = getSecret();
-  if (!secret) {
-    toast('Configurez le Gateway d\'abord', 'error');
-    toggleSettings();
-    return;
-  }
-
-  const btn = document.getElementById('btn-start');
-  btn.disabled = true;
-  btn.innerHTML = '<div class="spinner"></div><span>Transcription en cours...</span>';
-  document.getElementById('btn-start-floating').disabled = true;
-
-  // Reset
-  document.getElementById('results-section').classList.remove('visible');
-  document.getElementById('action-bar').classList.remove('visible');
-  document.getElementById('log-console').innerHTML = '';
-  rawResult = null;
-  parsedUtterances = [];
-  speakerNames = {};
-  translations = {};
-
-  // Init waveform + chrono
-  initWaveform();
-  startChrono();
-
-  // Build query params
-  const params = new URLSearchParams();
-  params.set('model', document.getElementById('opt-model').value);
-
-  const lang = document.getElementById('opt-lang').value;
-  if (lang) params.set('language', lang);
-
-  if (document.getElementById('chip-diarize').classList.contains('active')) {
-    params.set('diarize', 'true');
-  }
-  if (document.getElementById('chip-punctuate').classList.contains('active')) {
-    params.set('punctuate', 'true');
-  }
-  if (!lang) {
-    params.set('detect_language', 'true');
-  }
-  if (document.getElementById('chip-smart-format').classList.contains('active')) {
-    params.set('smart_format', 'true');
-  }
-
-  params.set('utterances', 'true');
-  params.set('paragraphs', 'true');
-
-  log(`Fichier: ${selectedFile.name} (${formatSize(selectedFile.size)})`, 'info');
-  log(`Type: ${selectedFile.type || 'auto-detect'}`, 'info');
-  log(`Modèle: ${document.getElementById('opt-model').value}`, 'info');
-  log(`Langue: ${lang || 'auto-détection'}`, 'info');
-  log(`Diarization: ${params.has('diarize') ? 'OUI' : 'NON'} | Ponctuation: ${params.has('punctuate') ? 'OUI' : 'NON'} | Smart Format: ${params.has('smart_format') ? 'OUI' : 'NON'}`, 'info');
-  log(`Route: ${selectedFile.size >= 95 * 1024 * 1024 ? 'R2 + Fly.io (gros fichier)' : 'Gateway direct'}`, 'info');
-  setProgress(5, 'Préparation...', 'upload');
-
-  const startTime = Date.now();
-
-  try {
-    let contentType = selectedFile.type || 'audio/mpeg';
-    if (!contentType || contentType === 'application/octet-stream') {
-      const ext = selectedFile.name.split('.').pop().toLowerCase();
-      const mimeMap = {
-        mp3: 'audio/mpeg', mp4: 'video/mp4', wav: 'audio/wav',
-        webm: 'audio/webm', ogg: 'audio/ogg', flac: 'audio/flac',
-        m4a: 'audio/mp4', aac: 'audio/aac', mkv: 'video/x-matroska',
-        avi: 'video/x-msvideo', mov: 'video/quicktime'
-      };
-      contentType = mimeMap[ext] || 'audio/mpeg';
+// ─── Transcription ───────────────────────────────────────
+async function startTranscription(){
+  if(!selectedFile)return;const secret=getSecret();
+  if(!secret){toast('Configurez le Gateway d\'abord','error');toggleSettings();return}
+  const btn=document.getElementById('btn-start');btn.disabled=true;btn.innerHTML='<div class="spinner"></div><span>Transcription en cours...</span>';
+  document.getElementById('btn-start-floating').disabled=true;
+  document.getElementById('results-section').classList.remove('visible');document.getElementById('action-bar').classList.remove('visible');
+  document.getElementById('log-console').innerHTML='';rawResult=null;parsedUtterances=[];speakerNames={};translations={};currentOffset=0;
+  initWaveform();startChrono();
+  const params=new URLSearchParams();params.set('model',document.getElementById('opt-model').value);
+  const lang=document.getElementById('opt-lang').value;if(lang)params.set('language',lang);
+  if(document.getElementById('chip-diarize').classList.contains('active'))params.set('diarize','true');
+  if(document.getElementById('chip-punctuate').classList.contains('active'))params.set('punctuate','true');
+  if(!lang)params.set('detect_language','true');
+  if(document.getElementById('chip-smart-format').classList.contains('active'))params.set('smart_format','true');
+  params.set('utterances','true');params.set('paragraphs','true');
+  log(`Fichier: ${selectedFile.name} (${formatSize(selectedFile.size)})`,'info');
+  log(`Modèle: ${document.getElementById('opt-model').value} | Langue: ${lang||'auto'}`,'info');
+  setProgress(5,'Préparation...','upload');
+  const startTime=Date.now();
+  try{
+    let ct=selectedFile.type||'audio/mpeg';
+    if(!ct||ct==='application/octet-stream'){const ext=selectedFile.name.split('.').pop().toLowerCase();ct={mp3:'audio/mpeg',mp4:'video/mp4',wav:'audio/wav',webm:'audio/webm',ogg:'audio/ogg',flac:'audio/flac',m4a:'audio/mp4',aac:'audio/aac',mkv:'video/x-matroska',avi:'video/x-msvideo',mov:'video/quicktime'}[ext]||'audio/mpeg'}
+    const LARGE=95*1024*1024;let json;
+    if(selectedFile.size>=LARGE){const flyUrl=getFlyUrl();if(!flyUrl)throw new Error('Fichier > 95 MB — configurez Fly.io');log(`Gros fichier → R2 + Fly.io`,'warn');json=await uploadViaR2(flyUrl,params,ct,selectedFile,startTime)}
+    else{log(`Upload gateway → Deepgram (${formatSize(selectedFile.size)})`,'info');json=await uploadWithProgress(`${getGateway()}/api/deepgram/v1/listen?${params}`,getSecret(),ct,selectedFile,startTime,true)}
+    rawResult=json;
+    const elapsed=((Date.now()-startTime)/1000).toFixed(1);log(`Transcription reçue en ${elapsed}s`,'success');
+    if(json.results?.channels?.[0]?.detected_language)log(`Langue détectée: ${json.results.channels[0].detected_language}`,'info');
+    const ch=json.results?.channels?.[0];if(ch?.alternatives?.[0]){const alt=ch.alternatives[0];log(`Mots: ${alt.words?.length||0} | Durée: ${json.metadata?.duration?(json.metadata.duration/60).toFixed(1)+' min':'N/A'}`,'info')}
+    setProgress(90,'Analyse des locuteurs...','transcription');processResults(json);
+    setProgress(100,'Terminé','done');log(`${parsedUtterances.length} segments, ${Object.keys(speakerNames).length} locuteurs`,'success');
+    renderResults();document.getElementById('results-section').classList.add('visible');document.getElementById('action-bar').classList.add('visible');
+    updateSpeakerFilter();showVideoPreview();
+    const targetLang=document.getElementById('opt-target-lang').value;
+    if(targetLang&&parsedUtterances.length>0){
+      log(`Traduction auto vers ${targetLang}...`,'info');setProgress(92,'Traduction automatique...','translation');
+      document.getElementById('translate-target').value=targetLang;
+      const eng=document.getElementById('opt-engine').value;document.getElementById('translate-engine').value=eng;
+      await startTranslation(true);setProgress(100,'Terminé','done');
     }
-
-    const LARGE_FILE_THRESHOLD = 95 * 1024 * 1024;
-    let json;
-
-    if (selectedFile.size >= LARGE_FILE_THRESHOLD) {
-      const flyUrl = getFlyUrl();
-      if (!flyUrl) {
-        throw new Error('Fichier > 95 MB — configurez l\'URL Cloud Worker (Fly.io) dans les paramètres');
-      }
-      log(`Gros fichier (${formatSize(selectedFile.size)}) → Upload R2 + Fly.io`, 'warn');
-      log(`Content-Type: ${contentType}`, 'info');
-      json = await uploadViaR2(flyUrl, params, contentType, selectedFile, startTime);
-    } else {
-      const uploadUrl = `${getGateway()}/api/deepgram/v1/listen?${params.toString()}`;
-      log(`Upload via gateway → Deepgram (${formatSize(selectedFile.size)})`, 'info');
-      log(`Content-Type: ${contentType}`, 'info');
-      json = await uploadWithProgress(uploadUrl, getSecret(), contentType, selectedFile, startTime, true);
-    }
-    rawResult = json;
-
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    log(`Transcription reçue en ${elapsed}s`, 'success');
-
-    if (json.results?.channels?.[0]?.detected_language) {
-      log(`Langue détectée: ${json.results.channels[0].detected_language}`, 'info');
-    }
-    const ch = json.results?.channels?.[0];
-    if (ch?.alternatives?.[0]) {
-      const alt = ch.alternatives[0];
-      const wordCount = alt.words?.length || 0;
-      const duration = json.metadata?.duration || 0;
-      log(`Mots transcrits: ${wordCount} | Durée audio: ${duration ? (duration / 60).toFixed(1) + ' min' : 'N/A'}`, 'info');
-      if (json.metadata?.models) log(`Modèle Deepgram: ${json.metadata.models[0]}`, 'info');
-    }
-
-    setProgress(90, 'Analyse des locuteurs...', 'transcription');
-    processResults(json);
-
-    setProgress(100, 'Terminé', 'done');
-    log(`${parsedUtterances.length} segments, ${Object.keys(speakerNames).length} locuteurs identifiés`, 'success');
-    log(`Temps total: ${elapsed}s`, 'success');
-
-    renderResults();
-    document.getElementById('results-section').classList.add('visible');
-    document.getElementById('action-bar').classList.add('visible');
-
-    showVideoPreview();
-
-    // Auto-translate if target lang selected
-    const targetLang = document.getElementById('opt-target-lang').value;
-    if (targetLang && parsedUtterances.length > 0) {
-      log(`Traduction automatique vers ${targetLang}...`, 'info');
-      setProgress(92, 'Traduction automatique...', 'translation');
-      document.getElementById('translate-target').value = targetLang;
-      await startTranslation(true); // silent mode
-      setProgress(100, 'Terminé', 'done');
-    }
-
-    // Save to history
     saveToHistory();
-
-    setTimeout(() => {
-      document.getElementById('results-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 300);
-
-  } catch (err) {
-    log(`Erreur: ${err.message}`, 'error');
-    toast('Erreur: ' + err.message, 'error');
-    setProgress(0, 'Erreur');
-  }
-
-  stopChrono();
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fas fa-play"></i><span>Transcrire</span>';
-  document.getElementById('btn-start-floating').disabled = false;
-
-  // Hide waveform after a delay
-  setTimeout(() => {
-    document.getElementById('waveform').classList.remove('visible');
-  }, 2000);
+    setTimeout(()=>document.getElementById('results-section').scrollIntoView({behavior:'smooth',block:'start'}),300);
+  }catch(err){log(`Erreur: ${err.message}`,'error');toast('Erreur: '+err.message,'error');setProgress(0,'Erreur')}
+  stopChrono();btn.disabled=false;btn.innerHTML='<i class="fas fa-play"></i><span>Transcrire</span>';
+  document.getElementById('btn-start-floating').disabled=false;
+  setTimeout(()=>document.getElementById('waveform').classList.remove('visible'),2000);
 }
 
-// ─── Upload via R2 (gros fichiers) ───────────────────────────────────
-
-async function uploadViaR2(flyUrl, dgParams, contentType, file, startTime) {
-  const CHUNK_SIZE = 100 * 1024 * 1024;
-  const isMultipart = file.size > CHUNK_SIZE;
-  const mimeType = contentType || 'video/mp4';
-
-  setProgress(2, 'Préparation upload R2...', 'upload');
-  log(`Mode multipart: ${isMultipart ? 'OUI (' + Math.ceil(file.size / CHUNK_SIZE) + ' chunks de 100 MB)' : 'NON (upload direct)'}`, 'info');
-  log('Demande presigned URLs au CF Worker...', 'info');
-  const presignRes = await fetch(`${CLOUD_WORKER_URL}/upload-presign`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename: file.name, filesize: file.size, mimeType, multipart: isMultipart })
-  });
-  if (!presignRes.ok) throw new Error('Presign failed: ' + presignRes.status);
-  const presign = await presignRes.json();
-  log(`Presign OK — R2 key: ${presign.r2Key}`, 'success');
-
-  const uploadStart = Date.now();
-  if (!isMultipart) {
-    setProgress(5, 'Upload R2...', 'upload');
-    log(`Upload direct vers R2 (${formatSize(file.size)})...`, 'info');
-    const upRes = await fetch(presign.presignedUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': mimeType },
-      body: file
-    });
-    if (!upRes.ok) throw new Error('Upload R2: ' + upRes.status);
-    const upElapsed = ((Date.now() - uploadStart) / 1000).toFixed(1);
-    log(`Upload R2 terminé en ${upElapsed}s`, 'success');
-  } else {
-    const totalParts = presign.chunkPresignedUrls.length;
-    const parts = [];
-    log(`Début upload multipart: ${totalParts} parties`, 'info');
-    for (let i = 0; i < totalParts; i++) {
-      const start = i * CHUNK_SIZE;
-      const end = Math.min(start + CHUNK_SIZE, file.size);
-      const chunk = file.slice(start, end);
-      const pct = Math.round(((i + 1) / totalParts) * 60);
-      setProgress(5 + pct, `Upload R2: ${i + 1}/${totalParts} (${formatSize(end)})`, 'upload');
-      const chunkStart = Date.now();
-      log(`Upload partie ${i + 1}/${totalParts} (${formatSize(start)}→${formatSize(end)})...`, 'info');
-      const partRes = await fetch(presign.chunkPresignedUrls[i].url, {
-        method: 'PUT',
-        body: chunk
-      });
-      if (!partRes.ok) throw new Error(`Upload part ${i + 1}: ${partRes.status}`);
-      const etag = partRes.headers.get('ETag') || '';
-      parts.push({ ETag: etag.replace(/"/g, ''), PartNumber: i + 1 });
-      const chunkElapsed = ((Date.now() - chunkStart) / 1000).toFixed(1);
-      const speed = ((end - start) / 1048576 / (chunkElapsed || 0.1)).toFixed(1);
-      log(`Partie ${i + 1} OK (${chunkElapsed}s, ${speed} MB/s)`, 'success');
-    }
-    log('Finalisation multipart upload...', 'info');
-    const completeRes = await fetch(`${CLOUD_WORKER_URL}/upload-complete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uploadId: presign.uploadId, r2Key: presign.r2Key, jobId: presign.jobId, parts, skipDispatch: true })
-    });
-    if (!completeRes.ok) throw new Error('Multipart complete: ' + completeRes.status);
-    const totalUpElapsed = ((Date.now() - uploadStart) / 1000).toFixed(1);
-    const avgSpeed = (file.size / 1048576 / (totalUpElapsed || 0.1)).toFixed(1);
-    log(`Upload R2 complet: ${formatSize(file.size)} en ${totalUpElapsed}s (${avgSpeed} MB/s)`, 'success');
-  }
-
-  setProgress(68, 'Préparation download URL...', 'upload');
-  log('Génération URL de téléchargement R2...', 'info');
-  const dlRes = await fetch(`${CLOUD_WORKER_URL}/presigned-download`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ r2Key: presign.r2Key })
-  });
-  if (!dlRes.ok) throw new Error('Presigned download failed: ' + dlRes.status);
-  const { downloadUrl } = await dlRes.json();
-  log('URL de téléchargement obtenue', 'success');
-
-  setProgress(70, 'Fly.io traitement en cours...', 'ffmpeg');
-  log('Envoi requête Fly.io (FFmpeg direct depuis R2)...', 'info');
-  const secret = getSecret();
-  const flyRes = await fetch(`${flyUrl}/deepgram?source_url=${encodeURIComponent(downloadUrl)}&${dgParams.toString()}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${secret}`,
-      'Content-Type': 'application/json'
-    }
-  });
-  if (!flyRes.ok) {
-    const errText = await flyRes.text();
-    if (flyRes.status === 503) {
-      throw new Error('Serveur occupé (SubWhisper en cours). Réessayez dans quelques minutes.');
-    }
-    throw new Error(`Fly.io ${flyRes.status}: ${errText.substring(0, 200)}`);
-  }
-
-  const STEP_LABELS = {
-    download: 'Fly.io télécharge depuis R2',
-    ffmpeg: 'FFmpeg extraction audio',
-    deepgram: 'Deepgram transcription',
-    done: 'Finalisation'
-  };
-  const STEP_MAP = {
-    download: 'upload',
-    ffmpeg: 'ffmpeg',
-    deepgram: 'transcription',
-    done: 'done'
-  };
-  let resultJson = null;
-  let lastStep = '', lastPct = 0;
-  const reader = flyRes.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const msg = JSON.parse(line);
-        if (msg.type === 'progress') {
-          const pct = 70 + Math.round((msg.pct / 100) * 28);
-          const label = STEP_LABELS[msg.step] || msg.step;
-          setProgress(pct, label, STEP_MAP[msg.step] || 'transcription');
-          if (msg.step !== lastStep) {
-            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-            if (msg.step === 'ffmpeg') log(`[${elapsed}s] FFmpeg: extraction audio...`, 'info');
-            else if (msg.step === 'deepgram') log(`[${elapsed}s] Envoi audio à Deepgram...`, 'info');
-            else if (msg.step === 'done') log(`[${elapsed}s] Transcription terminée`, 'success');
-            lastStep = msg.step;
-          } else if (msg.step === 'ffmpeg' && msg.pct > lastPct) {
-            log(`FFmpeg: ${msg.pct}% traité`, 'info');
-            lastPct = msg.pct;
-          }
-        } else if (msg.type === 'result') {
-          resultJson = typeof msg.body === 'string' ? JSON.parse(msg.body) : msg.body;
-        } else if (msg.type === 'error') {
-          throw new Error(`Fly.io: ${msg.error}`);
-        }
-      } catch (e) {
-        if (e.message.startsWith('Fly.io:')) throw e;
-        try { resultJson = JSON.parse(line); } catch (_) {}
-      }
-    }
-  }
-  if (buffer.trim()) {
-    try {
-      const msg = JSON.parse(buffer);
-      if (msg.type === 'result') resultJson = typeof msg.body === 'string' ? JSON.parse(msg.body) : msg.body;
-      else if (!resultJson) resultJson = msg;
-    } catch (_) {}
-  }
-  if (!resultJson) throw new Error('Fly.io: réponse vide ou invalide');
-
-  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  log(`Transcription reçue en ${elapsed}s`, 'success');
-  return resultJson;
+// ─── Upload R2 (gros fichiers) ───────────────────────────
+async function uploadViaR2(flyUrl,dgParams,ct,file,startTime){
+  const CS=100*1024*1024;const isMP=file.size>CS;const mt=ct||'video/mp4';
+  setProgress(2,'Préparation upload R2...','upload');
+  const presignRes=await fetch(`${CLOUD_WORKER_URL}/upload-presign`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:file.name,filesize:file.size,mimeType:mt,multipart:isMP})});
+  if(!presignRes.ok)throw new Error('Presign failed: '+presignRes.status);const presign=await presignRes.json();log(`Presign OK — R2 key: ${presign.r2Key}`,'success');
+  const us=Date.now();
+  if(!isMP){setProgress(5,'Upload R2...','upload');const ur=await fetch(presign.presignedUrl,{method:'PUT',headers:{'Content-Type':mt},body:file});if(!ur.ok)throw new Error('Upload R2: '+ur.status);log(`Upload R2 terminé en ${((Date.now()-us)/1000).toFixed(1)}s`,'success')}
+  else{const tp=presign.chunkPresignedUrls.length;const parts=[];for(let i=0;i<tp;i++){const s=i*CS,e=Math.min(s+CS,file.size);setProgress(5+Math.round(((i+1)/tp)*60),`Upload R2: ${i+1}/${tp}`,'upload');const pr=await fetch(presign.chunkPresignedUrls[i].url,{method:'PUT',body:file.slice(s,e)});if(!pr.ok)throw new Error(`Part ${i+1}: ${pr.status}`);parts.push({ETag:(pr.headers.get('ETag')||'').replace(/"/g,''),PartNumber:i+1})}
+  const cr=await fetch(`${CLOUD_WORKER_URL}/upload-complete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uploadId:presign.uploadId,r2Key:presign.r2Key,jobId:presign.jobId,parts,skipDispatch:true})});if(!cr.ok)throw new Error('Complete: '+cr.status);log(`Upload R2 complet`,'success')}
+  setProgress(68,'Download URL...','upload');
+  const dlRes=await fetch(`${CLOUD_WORKER_URL}/presigned-download`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({r2Key:presign.r2Key})});if(!dlRes.ok)throw new Error('Download URL failed');const{downloadUrl}=await dlRes.json();
+  setProgress(70,'Fly.io traitement...','ffmpeg');
+  const flyRes=await fetch(`${flyUrl}/deepgram?source_url=${encodeURIComponent(downloadUrl)}&${dgParams}`,{method:'POST',headers:{'Authorization':`Bearer ${getSecret()}`,'Content-Type':'application/json'}});
+  if(!flyRes.ok){const et=await flyRes.text();throw new Error(flyRes.status===503?'Serveur occupé':`Fly.io ${flyRes.status}: ${et.substring(0,200)}`)}
+  const SL={download:'upload',ffmpeg:'ffmpeg',deepgram:'transcription',done:'done'};let resultJson=null,lastStep='';
+  const reader=flyRes.body.getReader();const decoder=new TextDecoder();let buffer='';
+  while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();
+  for(const line of lines){if(!line.trim())continue;try{const msg=JSON.parse(line);if(msg.type==='progress'){setProgress(70+Math.round((msg.pct/100)*28),msg.step,SL[msg.step]||'transcription');if(msg.step!==lastStep){lastStep=msg.step}}else if(msg.type==='result'){resultJson=typeof msg.body==='string'?JSON.parse(msg.body):msg.body}else if(msg.type==='error')throw new Error(`Fly.io: ${msg.error}`)}catch(e){if(e.message.startsWith('Fly.io:'))throw e;try{resultJson=JSON.parse(line)}catch(_){}}}}
+  if(buffer.trim()){try{const msg=JSON.parse(buffer);if(msg.type==='result')resultJson=typeof msg.body==='string'?JSON.parse(msg.body):msg.body;else if(!resultJson)resultJson=msg}catch(_){}}
+  if(!resultJson)throw new Error('Fly.io: réponse vide');return resultJson;
 }
 
-// ─── Upload direct (< 95MB) ─────────────────────────────────────────
-
-function uploadWithProgress(url, secret, contentType, file, startTime, viaGateway) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    let lastLoggedPct = -1;
-
-    xhr.upload.addEventListener('progress', (e) => {
-      if (!e.lengthComputable) return;
-      const pct = (e.loaded / e.total) * 100;
-      const elapsed = (Date.now() - startTime) / 1000;
-      const speed = e.loaded / elapsed;
-      const remaining = speed > 0 ? (e.total - e.loaded) / speed : 0;
-
-      setProgress(10 + (pct * 0.65), `Upload: ${Math.round(pct)}% — ${formatSize(e.loaded)}/${formatSize(e.total)}`, 'upload');
-
-      const pct10 = Math.floor(pct / 10) * 10;
-      if (pct10 > lastLoggedPct && pct10 > 0) {
-        lastLoggedPct = pct10;
-        const speedStr = speed > 1048576 ? (speed / 1048576).toFixed(1) + ' MB/s' : (speed / 1024).toFixed(0) + ' KB/s';
-        const etaStr = remaining < 60 ? Math.round(remaining) + 's' : Math.round(remaining / 60) + 'min ' + Math.round(remaining % 60) + 's';
-        log(`Upload ${pct10}% — ${speedStr} — ETA ${etaStr}`, 'info');
-      }
-    });
-
-    xhr.upload.addEventListener('load', () => {
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      log(`Upload terminé en ${elapsed}s — Deepgram traite l'audio...`, 'success');
-      setProgress(78, 'Deepgram traite l\'audio...', 'transcription');
-      startProcessingTimer(startTime);
-    });
-
-    xhr.upload.addEventListener('error', () => {
-      reject(new Error('Erreur réseau pendant l\'upload'));
-    });
-
-    xhr.addEventListener('load', () => {
-      stopProcessingTimer();
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try { resolve(JSON.parse(xhr.responseText)); }
-        catch { reject(new Error('Réponse invalide (JSON parse error)')); }
-      } else {
-        let errMsg = xhr.responseText;
-        try { errMsg = JSON.parse(xhr.responseText).error || JSON.parse(xhr.responseText).err_msg || errMsg; } catch {}
-        reject(new Error(`HTTP ${xhr.status}: ${errMsg}`));
-      }
-    });
-
-    xhr.addEventListener('error', () => { stopProcessingTimer(); reject(new Error('Erreur réseau')); });
-    xhr.addEventListener('timeout', () => { stopProcessingTimer(); reject(new Error('Timeout (30 min)')); });
-
-    xhr.open('POST', url);
-    xhr.setRequestHeader('Authorization', viaGateway ? 'Bearer ' + secret : 'Token ' + secret);
-    xhr.setRequestHeader('Content-Type', contentType);
-    xhr.timeout = 1800000;
-    xhr.send(file);
+// ─── Upload direct ───────────────────────────────────────
+function uploadWithProgress(url,secret,ct,file,startTime,viaGW){
+  return new Promise((resolve,reject)=>{
+    const xhr=new XMLHttpRequest();let lastPct=-1;
+    xhr.upload.addEventListener('progress',e=>{if(!e.lengthComputable)return;const p=(e.loaded/e.total)*100;setProgress(10+(p*.65),`Upload: ${Math.round(p)}%`,'upload');const p10=Math.floor(p/10)*10;if(p10>lastPct&&p10>0){lastPct=p10;log(`Upload ${p10}%`,'info')}});
+    xhr.upload.addEventListener('load',()=>{log(`Upload terminé — Deepgram traite...`,'success');setProgress(78,'Deepgram traite...','transcription');startProcessingTimer(startTime)});
+    xhr.upload.addEventListener('error',()=>reject(new Error('Erreur réseau upload')));
+    xhr.addEventListener('load',()=>{stopProcessingTimer();if(xhr.status>=200&&xhr.status<300){try{resolve(JSON.parse(xhr.responseText))}catch{reject(new Error('JSON parse error'))}}else{let em=xhr.responseText;try{em=JSON.parse(xhr.responseText).error||em}catch{}reject(new Error(`HTTP ${xhr.status}: ${em}`))}});
+    xhr.addEventListener('error',()=>{stopProcessingTimer();reject(new Error('Erreur réseau'))});
+    xhr.addEventListener('timeout',()=>{stopProcessingTimer();reject(new Error('Timeout 30min'))});
+    xhr.open('POST',url);xhr.setRequestHeader('Authorization',(viaGW?'Bearer ':'Token ')+secret);xhr.setRequestHeader('Content-Type',ct);xhr.timeout=1800000;xhr.send(file);
   });
 }
+function startProcessingTimer(st){stopProcessingTimer();_processingInterval=setInterval(()=>{const e=Math.round((Date.now()-st)/1000);setProgress(78+Math.min((e%30)*.4,10),`Deepgram traite... (${e}s)`,'transcription')},1000)}
+function stopProcessingTimer(){if(_processingInterval){clearInterval(_processingInterval);_processingInterval=null}}
 
-let _processingInterval = null;
-function startProcessingTimer(startTime) {
-  stopProcessingTimer();
-  _processingInterval = setInterval(() => {
-    const elapsed = Math.round((Date.now() - startTime) / 1000);
-    const min = Math.floor(elapsed / 60);
-    const sec = elapsed % 60;
-    const timeStr = min > 0 ? `${min}min ${sec}s` : `${sec}s`;
-    setProgress(78 + Math.min((elapsed % 30) * 0.4, 10), `Deepgram traite l'audio... (${timeStr} écoulées)`, 'transcription');
-  }, 1000);
+// ─── Process Deepgram results ────────────────────────────
+function processResults(json){
+  parsedUtterances=[];speakerNames={};
+  const ch=json.results?.channels?.[0];if(!ch){log('Aucun résultat','error');return}
+  const hasUtt=json.results.utterances&&json.results.utterances.length>0;
+  const hasPara=ch.alternatives?.[0]?.paragraphs?.paragraphs?.length>0;
+  const hasWords=ch.alternatives?.[0]?.words?.length>0;
+  log(`[debug] utterances=${hasUtt}, paragraphs=${hasPara}, words=${hasWords}`,'info');
+  if(hasUtt){for(const u of json.results.utterances){const s=u.speaker??0;if(!(s in speakerNames))speakerNames[s]=`Locuteur ${s+1}`;parsedUtterances.push({speaker:s,start:u.start,end:u.end,text:u.transcript||'',confidence:u.confidence||0,words:u.words||[]})}if(parsedUtterances.length>0)return}
+  if(hasPara){for(const p of ch.alternatives[0].paragraphs.paragraphs){const s=p.speaker??0;if(!(s in speakerNames))speakerNames[s]=`Locuteur ${s+1}`;for(const sent of(p.sentences||[]))parsedUtterances.push({speaker:s,start:sent.start,end:sent.end,text:sent.text||'',confidence:0,words:[]})}if(parsedUtterances.length>0)return}
+  const alt=ch.alternatives?.[0];
+  if(alt&&hasWords&&alt.words[0].speaker!==undefined){let cs=alt.words[0].speaker,cst=alt.words[0].start,cw=[],cc=[];
+    for(let i=0;i<alt.words.length;i++){const w=alt.words[i];if(w.speaker!==cs){if(cw.length>0)parsedUtterances.push({speaker:cs,start:cst,end:alt.words[i-1]?.end||cst,text:cw.join(' '),confidence:cc.reduce((a,b)=>a+b,0)/cc.length,words:[]});if(!(w.speaker in speakerNames))speakerNames[w.speaker]=`Locuteur ${w.speaker+1}`;cs=w.speaker;cst=w.start;cw=[];cc=[]}cw.push(w.punctuated_word||w.word);cc.push(w.confidence||0)}
+    if(cw.length>0){if(!(cs in speakerNames))speakerNames[cs]=`Locuteur ${cs+1}`;parsedUtterances.push({speaker:cs,start:cst,end:alt.words[alt.words.length-1]?.end||cst,text:cw.join(' '),confidence:cc.reduce((a,b)=>a+b,0)/cc.length,words:[]})}if(parsedUtterances.length>0)return}
+  if(alt&&alt.transcript){speakerNames[0]='Locuteur 1';parsedUtterances.push({speaker:0,start:0,end:json.metadata?.duration||0,text:alt.transcript||'',confidence:alt.confidence||0,words:alt.words||[]})}
+  if(parsedUtterances.length===0)log('Aucun segment trouvé','error');
 }
-function stopProcessingTimer() {
-  if (_processingInterval) { clearInterval(_processingInterval); _processingInterval = null; }
+
+// ─── Render results ──────────────────────────────────────
+function renderResults(){
+  const dur=rawResult?.metadata?.duration||0;const ns=Object.keys(speakerNames).length;
+  const tw=parsedUtterances.reduce((s,u)=>s+u.text.split(/\s+/).filter(Boolean).length,0);
+  document.getElementById('results-stats').textContent=`${formatDuration(dur)} · ${ns} locuteur${ns>1?'s':''} · ${tw} mots`;
+  renderSpeakerLegend();renderTranscriptBlocks();
 }
 
-// ─── Process Deepgram results ────────────────────────────────────────
-
-function processResults(json) {
-  parsedUtterances = [];
-  speakerNames = {};
-
-  const channel = json.results?.channels?.[0];
-  if (!channel) {
-    log('Aucun résultat dans la réponse Deepgram', 'error');
-    return;
-  }
-
-  // Debug: log available data paths
-  const hasUtterances = json.results.utterances && json.results.utterances.length > 0;
-  const hasParagraphs = channel.alternatives?.[0]?.paragraphs?.paragraphs?.length > 0;
-  const hasWords = channel.alternatives?.[0]?.words?.length > 0;
-  const hasTranscript = !!channel.alternatives?.[0]?.transcript;
-  log(`[debug] Données: utterances=${hasUtterances}, paragraphs=${hasParagraphs}, words=${hasWords}, transcript=${hasTranscript}`, 'info');
-
-  // 1. Use utterances if available (best for diarization)
-  if (hasUtterances) {
-    log(`[debug] Parsing ${json.results.utterances.length} utterances`, 'info');
-    for (const utt of json.results.utterances) {
-      const spk = utt.speaker ?? 0;
-      if (!(spk in speakerNames)) {
-        speakerNames[spk] = `Locuteur ${spk + 1}`;
-      }
-      parsedUtterances.push({
-        speaker: spk,
-        start: utt.start,
-        end: utt.end,
-        text: utt.transcript || '',
-        confidence: utt.confidence || 0,
-        words: utt.words || [],
-      });
-    }
-    if (parsedUtterances.length > 0) return;
-  }
-
-  // 2. Fallback: use paragraphs
-  if (hasParagraphs) {
-    log(`[debug] Fallback: parsing paragraphs`, 'info');
-    for (const para of channel.alternatives[0].paragraphs.paragraphs) {
-      const spk = para.speaker ?? 0;
-      if (!(spk in speakerNames)) {
-        speakerNames[spk] = `Locuteur ${spk + 1}`;
-      }
-      for (const sent of (para.sentences || [])) {
-        parsedUtterances.push({
-          speaker: spk,
-          start: sent.start,
-          end: sent.end,
-          text: sent.text || '',
-          confidence: 0,
-          words: [],
-        });
-      }
-    }
-    if (parsedUtterances.length > 0) return;
-  }
-
-  // 3. Fallback: words with speaker info
-  const alt = channel.alternatives?.[0];
-  if (alt && hasWords && alt.words[0].speaker !== undefined) {
-    log(`[debug] Fallback: parsing ${alt.words.length} words with speaker info`, 'info');
-    let currentSpeaker = alt.words[0].speaker;
-    let currentStart = alt.words[0].start;
-    let currentWords = [];
-    let currentConfidence = [];
-
-    for (let wi = 0; wi < alt.words.length; wi++) {
-      const w = alt.words[wi];
-      if (w.speaker !== currentSpeaker) {
-        if (currentWords.length > 0) {
-          parsedUtterances.push({
-            speaker: currentSpeaker,
-            start: currentStart,
-            end: alt.words[wi - 1]?.end || currentStart,
-            text: currentWords.join(' '),
-            confidence: currentConfidence.reduce((a, b) => a + b, 0) / currentConfidence.length,
-            words: [],
-          });
-        }
-        if (!(w.speaker in speakerNames)) {
-          speakerNames[w.speaker] = `Locuteur ${w.speaker + 1}`;
-        }
-        currentSpeaker = w.speaker;
-        currentStart = w.start;
-        currentWords = [];
-        currentConfidence = [];
-      }
-      currentWords.push(w.punctuated_word || w.word);
-      currentConfidence.push(w.confidence || 0);
-    }
-    if (currentWords.length > 0) {
-      if (!(currentSpeaker in speakerNames)) {
-        speakerNames[currentSpeaker] = `Locuteur ${currentSpeaker + 1}`;
-      }
-      parsedUtterances.push({
-        speaker: currentSpeaker,
-        start: currentStart,
-        end: alt.words[alt.words.length - 1]?.end || currentStart,
-        text: currentWords.join(' '),
-        confidence: currentConfidence.reduce((a, b) => a + b, 0) / currentConfidence.length,
-        words: [],
-      });
-    }
-    if (parsedUtterances.length > 0) return;
-  }
-
-  // 4. Last fallback: single transcript block
-  if (alt && hasTranscript) {
-    log(`[debug] Fallback: single transcript block`, 'info');
-    speakerNames[0] = 'Locuteur 1';
-    parsedUtterances.push({
-      speaker: 0,
-      start: 0,
-      end: json.metadata?.duration || 0,
-      text: alt.transcript || '',
-      confidence: alt.confidence || 0,
-      words: alt.words || [],
-    });
-  }
-
-  if (parsedUtterances.length === 0) {
-    log('Aucun segment trouvé dans la réponse Deepgram', 'error');
+function renderSpeakerLegend(){
+  const c=document.getElementById('speaker-legend');c.innerHTML='';
+  // Calculate speaking time per speaker
+  const spkTime={};for(const u of parsedUtterances){const d=u.end-u.start;spkTime[u.speaker]=(spkTime[u.speaker]||0)+d}
+  for(const[spkId,name]of Object.entries(speakerNames)){
+    const idx=parseInt(spkId);const color=SPEAKER_COLORS[idx%SPEAKER_COLORS.length];
+    const tag=document.createElement('div');tag.className='speaker-tag';tag.style.background=hexToRgba(color,.15);tag.style.color=color;
+    const timeStr=spkTime[idx]?formatDuration(spkTime[idx]):'';
+    tag.innerHTML=`<span class="speaker-dot" style="background:${color}"></span>${name}${timeStr?`<span class="spk-time">${timeStr}</span>`:''}`;
+    tag.onclick=()=>highlightSpeaker(idx);c.appendChild(tag);
   }
 }
 
-// ─── Render results ──────────────────────────────────────────────────
-
-function renderResults() {
-  const duration = rawResult?.metadata?.duration || 0;
-  const numSpeakers = Object.keys(speakerNames).length;
-  const totalWords = parsedUtterances.reduce((sum, u) => sum + u.text.split(/\s+/).filter(Boolean).length, 0);
-  document.getElementById('results-stats').textContent =
-    `${formatDuration(duration)} · ${numSpeakers} locuteur${numSpeakers > 1 ? 's' : ''} · ${totalWords} mots`;
-
-  renderSpeakerLegend();
-  renderTranscriptBlocks();
+function getExportText(utt,idx){
+  const mode=document.getElementById('export-content')?.value||'original';
+  if(mode==='translated'&&translations[idx])return translations[idx];
+  if(mode==='bilingual'&&translations[idx])return utt.text+'\n'+translations[idx];
+  return utt.text;
 }
 
-function renderSpeakerLegend() {
-  const container = document.getElementById('speaker-legend');
-  container.innerHTML = '';
-  for (const [spkId, name] of Object.entries(speakerNames)) {
-    const idx = parseInt(spkId);
-    const color = SPEAKER_COLORS[idx % SPEAKER_COLORS.length];
-    const tag = document.createElement('div');
-    tag.className = 'speaker-tag';
-    tag.style.background = hexToRgba(color, 0.15);
-    tag.style.color = color;
-    tag.innerHTML = `<span class="speaker-dot" style="background:${color}"></span>${name}`;
-    tag.onclick = () => highlightSpeaker(idx);
-    container.appendChild(tag);
-  }
+function getFilteredUtterances(){
+  const filter=document.getElementById('export-speaker-filter')?.value||'all';
+  if(filter==='all')return parsedUtterances.map((u,i)=>({...u,origIdx:i}));
+  const spkId=parseInt(filter);return parsedUtterances.map((u,i)=>({...u,origIdx:i})).filter(u=>u.speaker===spkId);
 }
 
-function renderTranscriptBlocks(filter = '') {
-  const container = document.getElementById('transcript-output');
-  container.innerHTML = '';
-  let count = 0;
-
-  for (let uttIdx = 0; uttIdx < parsedUtterances.length; uttIdx++) {
-    const utt = parsedUtterances[uttIdx];
-    let text = utt.text;
-    if (filter && !text.toLowerCase().includes(filter.toLowerCase())) continue;
-
-    count++;
-    const color = SPEAKER_COLORS[utt.speaker % SPEAKER_COLORS.length];
-    const name = speakerNames[utt.speaker] || `Locuteur ${utt.speaker + 1}`;
-
-    const block = document.createElement('div');
-    block.className = `transcript-block speaker-${utt.speaker}`;
-    block.style.borderLeftColor = color;
-    block.dataset.speaker = utt.speaker;
-    block.dataset.idx = uttIdx;
-    block.onclick = () => seekToUtterance(uttIdx);
-
-    let displayText = text;
-    if (filter) {
-      const regex = new RegExp(`(${escapeRegex(filter)})`, 'gi');
-      displayText = text.replace(regex, '<mark>$1</mark>');
-    }
-
-    const hasTranslation = translations[uttIdx];
-
-    // Confidence color
-    let confClass = '';
-    if (utt.confidence > 0) {
-      const confPct = utt.confidence * 100;
-      confClass = confPct >= 90 ? 'conf-high' : confPct >= 70 ? 'conf-mid' : 'conf-low';
-    }
-
-    block.innerHTML = `
-      <div class="block-header">
-        <span class="speaker-name" style="color:${color}">${name}</span>
-        <span class="timestamp">${formatTime(utt.start)} → ${formatTime(utt.end)}</span>
-        ${utt.confidence > 0 ? `<span class="${confClass}" style="font-family:var(--mono);font-size:9px;opacity:.7">${Math.round(utt.confidence * 100)}%</span>` : ''}
-      </div>
-      ${hasTranslation
-        ? `<div class="block-text-original">${displayText}</div>
-           <div class="block-translation">${hasTranslation}</div>`
-        : `<div class="block-text" ondblclick="makeEditable(this, ${uttIdx})">${displayText}</div>`
-      }
-      ${utt.confidence > 0 ? `
-        <div class="confidence-bar">
-          <div class="confidence-fill" style="width:${Math.round(utt.confidence * 100)}%;background:${utt.confidence >= 0.9 ? 'var(--success)' : utt.confidence >= 0.7 ? 'var(--warning)' : 'var(--danger)'}"></div>
-        </div>
-      ` : ''}
-    `;
-
+function renderTranscriptBlocks(searchFilter=''){
+  const container=document.getElementById('transcript-output');container.innerHTML='';let count=0;
+  for(let uttIdx=0;uttIdx<parsedUtterances.length;uttIdx++){
+    const utt=parsedUtterances[uttIdx];let text=utt.text;
+    if(searchFilter&&!text.toLowerCase().includes(searchFilter.toLowerCase()))continue;
+    count++;const color=SPEAKER_COLORS[utt.speaker%SPEAKER_COLORS.length];const name=speakerNames[utt.speaker]||`Locuteur ${utt.speaker+1}`;
+    const block=document.createElement('div');block.className=`transcript-block speaker-${utt.speaker}${showColoredText?' colored-text':''}`;
+    block.style.borderLeftColor=color;block.dataset.speaker=utt.speaker;block.dataset.idx=uttIdx;
+    block.onclick=()=>seekToUtterance(uttIdx);
+    let displayText=text;if(searchFilter){displayText=text.replace(new RegExp(`(${escapeRegex(searchFilter)})`,'gi'),'<mark>$1</mark>')}
+    const hasTr=translations[uttIdx];const offStart=utt.start+currentOffset/1000;const offEnd=utt.end+currentOffset/1000;
+    let confClass='';if(utt.confidence>0){const cp=utt.confidence*100;confClass=cp>=90?'conf-high':cp>=70?'conf-mid':'conf-low'}
+    let textHtml;
+    if(hasTr&&!showOriginal){textHtml=`<div class="block-text" ondblclick="makeEditable(this,${uttIdx},'translation')">${hasTr}</div>`}
+    else if(hasTr){textHtml=`<div class="block-text-original">${displayText}</div><div class="block-translation">${hasTr}</div>`}
+    else{textHtml=`<div class="block-text" ondblclick="makeEditable(this,${uttIdx})">${displayText}</div>`}
+    block.innerHTML=`<div class="block-header"><span class="speaker-name" style="color:${color}">${name}</span><span class="timestamp">${formatTime(Math.max(0,offStart))} → ${formatTime(Math.max(0,offEnd))}</span>${utt.confidence>0?`<span class="${confClass}" style="font-family:var(--mono);font-size:9px;opacity:.7">${Math.round(utt.confidence*100)}%</span>`:''}</div>${textHtml}${utt.confidence>0?`<div class="confidence-bar"><div class="confidence-fill" style="width:${Math.round(utt.confidence*100)}%;background:${utt.confidence>=.9?'var(--success)':utt.confidence>=.7?'var(--warning)':'var(--danger)'}"></div></div>`:''}<button class="block-copy" onclick="event.stopPropagation();copySegment(${uttIdx})" title="Copier ce segment"><i class="fas fa-copy"></i></button>`;
     container.appendChild(block);
   }
+  if(searchFilter)document.getElementById('search-count').textContent=`${count} résultat${count>1?'s':''}`;
+}
 
-  if (filter) {
-    document.getElementById('search-count').textContent = `${count} résultat${count > 1 ? 's' : ''}`;
+// ─── Display toggles ─────────────────────────────────────
+function toggleColoredText(){showColoredText=!showColoredText;document.getElementById('btn-toggle-colors').classList.toggle('active-toggle',showColoredText);renderTranscriptBlocks()}
+function toggleShowOriginal(){showOriginal=!showOriginal;document.getElementById('btn-toggle-original').classList.toggle('active-toggle',!showOriginal);renderTranscriptBlocks()}
+
+// ─── Copy individual segment ─────────────────────────────
+function copySegment(idx){
+  const text=translations[idx]&&!showOriginal?translations[idx]:parsedUtterances[idx].text;
+  navigator.clipboard.writeText(text).then(()=>toast('Segment copié')).catch(()=>toast('Erreur copie','error'));
+}
+
+// ─── Inline editing ──────────────────────────────────────
+function makeEditable(el,idx,type){
+  el.contentEditable='true';el.focus();
+  const range=document.createRange();range.selectNodeContents(el);const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
+  el.onblur=()=>{el.contentEditable='false';const t=el.textContent.trim();
+    if(t){if(type==='translation'){if(t!==translations[idx]){translations[idx]=t;toast('Traduction modifiée')}}else{if(t!==parsedUtterances[idx].text){parsedUtterances[idx].text=t;toast('Segment modifié')}}}
+    saveToHistory();el.onblur=null};
+  el.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();el.blur()}if(e.key==='Escape'){el.textContent=type==='translation'?translations[idx]:parsedUtterances[idx].text;el.blur()}};
+}
+
+function highlightSpeaker(spkIdx){const blocks=document.querySelectorAll('.transcript-block');blocks.forEach(b=>{if(parseInt(b.dataset.speaker)===spkIdx){b.style.background='rgba(255,255,255,.05)'}else{b.style.background='';b.style.opacity='.4'}});setTimeout(()=>blocks.forEach(b=>{b.style.background='';b.style.opacity=''}),3000)}
+
+// ─── Search ──────────────────────────────────────────────
+function toggleSearch(){const bar=document.getElementById('search-bar');bar.classList.toggle('visible');if(bar.classList.contains('visible'))document.getElementById('search-input').focus();else{document.getElementById('search-input').value='';renderTranscriptBlocks()}}
+function filterTranscript(){renderTranscriptBlocks(document.getElementById('search-input').value)}
+
+// ─── Speaker modal + merge ───────────────────────────────
+function editSpeakers(){
+  const c=document.getElementById('speaker-inputs');c.innerHTML='';const mf=document.getElementById('merge-from'),mt=document.getElementById('merge-to');mf.innerHTML='';mt.innerHTML='';
+  for(const[spkId,name]of Object.entries(speakerNames)){const idx=parseInt(spkId);const color=SPEAKER_COLORS[idx%SPEAKER_COLORS.length];
+    c.innerHTML+=`<div class="input-row"><div class="color-swatch" style="background:${color}"></div><input type="text" value="${name}" data-speaker="${spkId}" placeholder="Locuteur ${idx+1}"></div>`;
+    mf.innerHTML+=`<option value="${spkId}">${name}</option>`;mt.innerHTML+=`<option value="${spkId}">${name}</option>`;
   }
-}
-
-// ─── Inline editing ──────────────────────────────────────────────────
-
-function makeEditable(el, idx) {
-  el.contentEditable = 'true';
-  el.focus();
-  // Select all text
-  const range = document.createRange();
-  range.selectNodeContents(el);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
-
-  el.onblur = () => {
-    el.contentEditable = 'false';
-    const newText = el.textContent.trim();
-    if (newText && newText !== parsedUtterances[idx].text) {
-      parsedUtterances[idx].text = newText;
-      toast('Segment mis à jour');
-      // Update history
-      saveToHistory();
-    }
-    el.onblur = null;
-  };
-
-  el.onkeydown = (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
-    if (e.key === 'Escape') { el.textContent = parsedUtterances[idx].text; el.blur(); }
-  };
-}
-
-function highlightSpeaker(spkIdx) {
-  const blocks = document.querySelectorAll('.transcript-block');
-  blocks.forEach(b => {
-    if (parseInt(b.dataset.speaker) === spkIdx) {
-      b.style.background = 'rgba(255,255,255,0.05)';
-    } else {
-      b.style.background = '';
-      b.style.opacity = '0.4';
-    }
-  });
-  setTimeout(() => {
-    blocks.forEach(b => { b.style.background = ''; b.style.opacity = ''; });
-  }, 3000);
-}
-
-// ─── Search ──────────────────────────────────────────────────────────
-
-function toggleSearch() {
-  const bar = document.getElementById('search-bar');
-  bar.classList.toggle('visible');
-  if (bar.classList.contains('visible')) {
-    document.getElementById('search-input').focus();
-  } else {
-    document.getElementById('search-input').value = '';
-    renderTranscriptBlocks();
-  }
-}
-
-function filterTranscript() {
-  const q = document.getElementById('search-input').value;
-  renderTranscriptBlocks(q);
-}
-
-// ─── Speaker modal + merge ───────────────────────────────────────────
-
-function editSpeakers() {
-  const container = document.getElementById('speaker-inputs');
-  container.innerHTML = '';
-  const mergeFrom = document.getElementById('merge-from');
-  const mergeTo = document.getElementById('merge-to');
-  mergeFrom.innerHTML = '';
-  mergeTo.innerHTML = '';
-
-  for (const [spkId, name] of Object.entries(speakerNames)) {
-    const idx = parseInt(spkId);
-    const color = SPEAKER_COLORS[idx % SPEAKER_COLORS.length];
-    const row = document.createElement('div');
-    row.className = 'input-row';
-    row.innerHTML = `
-      <div class="color-swatch" style="background:${color}"></div>
-      <input type="text" value="${name}" data-speaker="${spkId}" placeholder="Nom du locuteur ${idx + 1}">
-    `;
-    container.appendChild(row);
-
-    // Merge selects
-    mergeFrom.innerHTML += `<option value="${spkId}" style="color:${color}">${name}</option>`;
-    mergeTo.innerHTML += `<option value="${spkId}" style="color:${color}">${name}</option>`;
-  }
-
-  // Show/hide merge section
-  document.getElementById('merge-section').style.display = Object.keys(speakerNames).length > 1 ? '' : 'none';
-
+  document.getElementById('merge-section').style.display=Object.keys(speakerNames).length>1?'':'none';
   document.getElementById('speaker-modal').classList.add('visible');
 }
-
-function closeSpeakerModal() {
-  document.getElementById('speaker-modal').classList.remove('visible');
+function closeSpeakerModal(){document.getElementById('speaker-modal').classList.remove('visible')}
+function applySpeakerNames(){document.querySelectorAll('#speaker-inputs input').forEach(inp=>{const n=inp.value.trim();if(n)speakerNames[inp.dataset.speaker]=n});closeSpeakerModal();renderResults();updateSpeakerFilter();saveToHistory();toast('Locuteurs renommés')}
+function mergeSpeakers(){
+  const fi=parseInt(document.getElementById('merge-from').value),ti=parseInt(document.getElementById('merge-to').value);
+  if(fi===ti){toast('Sélectionnez deux locuteurs différents','warn');return}
+  let m=0;for(const u of parsedUtterances)if(u.speaker===fi){u.speaker=ti;m++}
+  delete speakerNames[fi];closeSpeakerModal();renderResults();updateSpeakerFilter();saveToHistory();toast(`${m} segments fusionnés`);
+}
+function updateSpeakerFilter(){
+  const sel=document.getElementById('export-speaker-filter');sel.innerHTML='<option value="all">Tous</option>';
+  for(const[id,name]of Object.entries(speakerNames))sel.innerHTML+=`<option value="${id}">${name}</option>`;
 }
 
-function applySpeakerNames() {
-  const inputs = document.querySelectorAll('#speaker-inputs input');
-  inputs.forEach(inp => {
-    const spk = inp.dataset.speaker;
-    const name = inp.value.trim();
-    if (name) speakerNames[spk] = name;
-  });
-  closeSpeakerModal();
-  renderResults();
-  saveToHistory();
-  toast('Locuteurs renommés');
+// ─── Offset ──────────────────────────────────────────────
+function applyOffset(deltaMs){
+  currentOffset+=deltaMs;
+  const disp=document.getElementById('offsetDisplay');disp.textContent=(currentOffset>=0?'+':'')+currentOffset+' ms';
+  updateOffsetTrack();renderTranscriptBlocks();rebuildVttTrack();
+}
+function resetOffset(){currentOffset=0;document.getElementById('offsetDisplay').textContent='0 ms';updateOffsetTrack();renderTranscriptBlocks();rebuildVttTrack()}
+function updateOffsetTrack(){
+  const MAX=1500;const dot=document.getElementById('offsetDot'),fill=document.getElementById('offsetFill'),val=document.getElementById('offsetDisplay');
+  if(!dot||!fill)return;const pct=Math.max(-1,Math.min(1,currentOffset/MAX));dot.style.left=(50+pct*50).toFixed(1)+'%';
+  if(Math.abs(currentOffset)<5){fill.style.cssText='';dot.style.background='var(--muted)';if(val)val.style.color='var(--muted)'}
+  else if(currentOffset>0){fill.style.cssText=`position:absolute;top:0;height:100%;border-radius:2px;background:var(--success);left:50%;width:${(pct*50).toFixed(1)}%`;dot.style.background='var(--success)';if(val)val.style.color='var(--success)'}
+  else{const w=Math.abs(pct)*50;fill.style.cssText=`position:absolute;top:0;height:100%;border-radius:2px;background:#f87171;left:${(50-w).toFixed(1)}%;width:${w.toFixed(1)}%`;dot.style.background='#f87171';if(val)val.style.color='#f87171'}
 }
 
-function mergeSpeakers() {
-  const fromId = parseInt(document.getElementById('merge-from').value);
-  const toId = parseInt(document.getElementById('merge-to').value);
-  if (fromId === toId) { toast('Sélectionnez deux locuteurs différents', 'warn'); return; }
+// ─── Exports ─────────────────────────────────────────────
+async function exportSRT(){
+  const utts=getFilteredUtterances();if(!utts.length)return;let srt='';
+  utts.forEach((utt,i)=>{const name=speakerNames[utt.speaker]||`Locuteur ${utt.speaker+1}`;const text=getExportText(utt,utt.origIdx);
+    const s=Math.max(0,utt.start+currentOffset/1000),e=Math.max(0,utt.end+currentOffset/1000);
+    srt+=`${i+1}\n${formatSRTTime(s)} --> ${formatSRTTime(e)}\n[${name}] ${text}\n\n`});
+  if(await exportFile(srt,getExportFilename('srt'),'application/octet-stream'))toast('SRT exporté');
+}
+async function exportVTT(){
+  const utts=getFilteredUtterances();if(!utts.length)return;let vtt='WEBVTT\n\n';
+  utts.forEach((utt,i)=>{const name=speakerNames[utt.speaker]||`Locuteur ${utt.speaker+1}`;const text=getExportText(utt,utt.origIdx);
+    const s=Math.max(0,utt.start+currentOffset/1000),e=Math.max(0,utt.end+currentOffset/1000);
+    vtt+=`${i+1}\n${formatVTTTime(s)} --> ${formatVTTTime(e)}\n<v ${name}>${text}\n\n`});
+  if(await exportFile(vtt,getExportFilename('vtt'),'application/octet-stream'))toast('VTT exporté');
+}
+async function exportTXT(){
+  const utts=getFilteredUtterances();if(!utts.length)return;let txt='';let ls=-1;
+  for(const utt of utts){const name=speakerNames[utt.speaker]||`Locuteur ${utt.speaker+1}`;const text=getExportText(utt,utt.origIdx);if(utt.speaker!==ls){if(txt)txt+='\n';txt+=`${name}:\n`;ls=utt.speaker}txt+=`  ${text}\n`}
+  if(await exportFile(txt,getExportFilename('txt'),'text/plain'))toast('TXT exporté');
+}
+async function exportJSON(){
+  if(!rawResult)return;
+  if(await exportFile(JSON.stringify({version:VERSION,file:selectedFile?.name||'unknown',exported:new Date().toISOString(),speakers:speakerNames,utterances:parsedUtterances,translations,offset:currentOffset,raw:rawResult},null,2),getExportFilename('json'),'application/json'))toast('JSON exporté');
+}
+async function exportASS(){
+  const utts=getFilteredUtterances();if(!utts.length)return;
+  function hexBGR(h){return`&H00${h.slice(5,7)}${h.slice(3,5)}${h.slice(1,3)}`.toUpperCase()}
+  function assTime(sec){const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=Math.floor(sec%60),cs=Math.round((sec%1)*100);return`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(cs).padStart(2,'0')}`}
+  let styles='';for(const[id,name]of Object.entries(speakerNames)){const c=SPEAKER_COLORS[parseInt(id)%SPEAKER_COLORS.length];styles+=`Style: ${name},Arial,20,${hexBGR(c)},&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1\n`}
+  let ass=`[Script Info]\nTitle: ${selectedFile?.name||'VoxSplit'}\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n${styles}\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
+  utts.forEach(utt=>{const name=speakerNames[utt.speaker]||`Locuteur ${utt.speaker+1}`;const text=getExportText(utt,utt.origIdx).replace(/\n/g,'\\N');
+    const s=Math.max(0,utt.start+currentOffset/1000),e=Math.max(0,utt.end+currentOffset/1000);
+    ass+=`Dialogue: 0,${assTime(s)},${assTime(e)},${name},,0,0,0,,${text}\n`});
+  if(await exportFile(ass,getExportFilename('ass'),'application/octet-stream'))toast('ASS exporté');
+}
+async function copyToClipboard(){
+  const utts=getFilteredUtterances();if(!utts.length)return;let txt='';let ls=-1;
+  for(const utt of utts){const name=speakerNames[utt.speaker]||`Locuteur ${utt.speaker+1}`;const text=getExportText(utt,utt.origIdx);if(utt.speaker!==ls){if(txt)txt+='\n';txt+=`[${name}]\n`;ls=utt.speaker}txt+=`${text}\n`}
+  try{await navigator.clipboard.writeText(txt);toast('Copié')}catch{toast('Erreur copie','error')}
+}
+function getExportFilename(ext){return`${selectedFile?selectedFile.name.replace(/\.[^.]+$/,''):'voxsplit'}_voxsplit.${ext}`}
+async function exportFile(content,filename,mimeType){
+  if('showSaveFilePicker' in window){
+    try{
+      const lastDot=filename.lastIndexOf('.');const ext=lastDot>=0?filename.slice(lastDot):'.txt';
+      const handle=await window.showSaveFilePicker({suggestedName:filename,types:[{description:mimeType,accept:{[mimeType]:[ext]}}]});
+      const w=await handle.createWritable();await w.write(content);await w.close();return true;
+    }catch(e){if(e.name==='AbortError')return false;}
+  }
+  const blob=new Blob([content],{type:mimeType+';charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);return true;
+}
 
-  let merged = 0;
-  for (const utt of parsedUtterances) {
-    if (utt.speaker === fromId) {
-      utt.speaker = toId;
-      merged++;
+// ─── Translation ─────────────────────────────────────────
+function toggleTranslateBar(){document.getElementById('translate-bar').classList.toggle('visible')}
+async function startTranslation(silent=false){
+  if(!parsedUtterances.length)return;
+  const engine=document.getElementById('translate-engine').value;const targetLang=document.getElementById('translate-target').value;
+  const langNames={fr:'français',en:'anglais',es:'espagnol',de:'allemand',it:'italien',pt:'portugais',zh:'chinois',ko:'coréen',vi:'vietnamien',ja:'japonais'};
+  const btn=document.getElementById('btn-translate'),status=document.getElementById('translate-status');
+  if(!silent){btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Traduction...'}translations={};
+  const CS=30;const chunks=[];for(let i=0;i<parsedUtterances.length;i+=CS)chunks.push(parsedUtterances.slice(i,i+CS).map((u,j)=>({idx:i+j,text:u.text})));
+  try{
+    for(let ci=0;ci<chunks.length;ci++){
+      status.textContent=`Chunk ${ci+1}/${chunks.length}...`;
+      const lines=chunks[ci].map(c=>`[${c.idx}] ${c.text}`).join('\n');
+      const prompt=`Traduis les lignes suivantes en ${langNames[targetLang]||targetLang}. Chaque ligne est préfixée par [numéro]. Retourne EXACTEMENT le même format [numéro] suivi de la traduction. Ne traduis PAS les noms propres. Conserve le sens et le ton. Pas d'explication.\n\n${lines}`;
+      const apiPath=engine==='gemini'?'/api/gemini/v1beta/models/gemini-2.0-flash:generateContent':'/api/deepseek';
+      const body=engine==='gemini'?{contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.3,maxOutputTokens:8192}}:{model:'deepseek-chat',messages:[{role:'user',content:prompt}],temperature:.3,max_tokens:8192};
+      const resp=await fetch(getGateway()+apiPath,{method:'POST',headers:{'Authorization':'Bearer '+getSecret(),'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(120000)});
+      if(!resp.ok)throw new Error(`${engine} HTTP ${resp.status}`);const data=await resp.json();
+      const rt=engine==='gemini'?data.candidates?.[0]?.content?.parts?.[0]?.text||'':data.choices?.[0]?.message?.content||'';
+      let match;const rx=/\[(\d+)\]\s*(.*)/g;while((match=rx.exec(rt))!==null){const t=match[2].trim();if(t)translations[parseInt(match[1])]=t}
     }
-  }
-  delete speakerNames[fromId];
-  closeSpeakerModal();
-  renderResults();
-  saveToHistory();
-  toast(`${merged} segments fusionnés vers ${speakerNames[toId]}`);
+    status.textContent=`${Object.keys(translations).length}/${parsedUtterances.length} traduits`;
+    if(!silent)toast(`Traduction terminée (${engine})`,'success');
+    log(`Traduction: ${Object.keys(translations).length}/${parsedUtterances.length} (${engine})`,'success');
+    renderTranscriptBlocks();rebuildVttTrack();saveToHistory();
+  }catch(err){toast(`Erreur traduction: ${err.message}`,'error');status.textContent='Erreur'}
+  finally{if(!silent){btn.disabled=false;btn.innerHTML='<i class="fas fa-language"></i> Traduire'}}
 }
 
-// ─── Exports ─────────────────────────────────────────────────────────
-
-function exportSRT() {
-  if (!parsedUtterances.length) return;
-  let srt = '';
-  parsedUtterances.forEach((utt, i) => {
-    const name = speakerNames[utt.speaker] || `Locuteur ${utt.speaker + 1}`;
-    srt += `${i + 1}\n`;
-    srt += `${formatSRTTime(utt.start)} --> ${formatSRTTime(utt.end)}\n`;
-    srt += `[${name}] ${utt.text}\n\n`;
-  });
-  downloadFile(srt, getExportFilename('srt'), 'text/srt');
-  toast('SRT exporté');
-}
-
-function exportVTT() {
-  if (!parsedUtterances.length) return;
-  let vtt = 'WEBVTT\n\n';
-  parsedUtterances.forEach((utt, i) => {
-    const name = speakerNames[utt.speaker] || `Locuteur ${utt.speaker + 1}`;
-    vtt += `${i + 1}\n`;
-    vtt += `${formatVTTTime(utt.start)} --> ${formatVTTTime(utt.end)}\n`;
-    vtt += `<v ${name}>${utt.text}\n\n`;
-  });
-  downloadFile(vtt, getExportFilename('vtt'), 'text/vtt');
-  toast('VTT exporté');
-}
-
-function exportTXT() {
-  if (!parsedUtterances.length) return;
-  let txt = '';
-  let lastSpeaker = -1;
-  for (const utt of parsedUtterances) {
-    const name = speakerNames[utt.speaker] || `Locuteur ${utt.speaker + 1}`;
-    if (utt.speaker !== lastSpeaker) {
-      if (txt) txt += '\n';
-      txt += `${name}:\n`;
-      lastSpeaker = utt.speaker;
-    }
-    txt += `  ${utt.text}\n`;
-  }
-  downloadFile(txt, getExportFilename('txt'), 'text/plain');
-  toast('TXT exporté');
-}
-
-function exportJSON() {
-  if (!rawResult) return;
-  const exportData = {
-    version: VERSION,
-    file: selectedFile?.name || 'unknown',
-    exported: new Date().toISOString(),
-    speakers: speakerNames,
-    utterances: parsedUtterances,
-    translations: translations,
-    raw: rawResult,
-  };
-  downloadFile(JSON.stringify(exportData, null, 2), getExportFilename('json'), 'application/json');
-  toast('JSON exporté');
-}
-
-function exportSRTBilingual() {
-  if (!parsedUtterances.length || !Object.keys(translations).length) return;
-  let srt = '';
-  parsedUtterances.forEach((utt, i) => {
-    const name = speakerNames[utt.speaker] || `Locuteur ${utt.speaker + 1}`;
-    srt += `${i + 1}\n`;
-    srt += `${formatSRTTime(utt.start)} --> ${formatSRTTime(utt.end)}\n`;
-    srt += `[${name}] ${utt.text}\n`;
-    if (translations[i]) srt += `${translations[i]}\n`;
-    srt += '\n';
-  });
-  downloadFile(srt, getExportFilename('bilingual.srt'), 'text/srt');
-  toast('SRT bilingue exporté');
-}
-
-// ─── Export ASS (colored subtitles) ──────────────────────────────────
-
-function exportASS() {
-  if (!parsedUtterances.length) return;
-
-  // Convert hex RGB to ASS BGR format (&HBBGGRR)
-  function hexToBGR(hex) {
-    const r = hex.slice(1, 3);
-    const g = hex.slice(3, 5);
-    const b = hex.slice(5, 7);
-    return `&H00${b}${g}${r}`.toUpperCase();
-  }
-
-  function formatASSTime(seconds) {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    const cs = Math.round((seconds % 1) * 100);
-    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
-  }
-
-  // Build styles for each speaker
-  let styles = '';
-  for (const [spkId, name] of Object.entries(speakerNames)) {
-    const idx = parseInt(spkId);
-    const color = SPEAKER_COLORS[idx % SPEAKER_COLORS.length];
-    const bgrColor = hexToBGR(color);
-    styles += `Style: ${name},Arial,20,${bgrColor},&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1\n`;
-  }
-
-  let ass = `[Script Info]
-Title: ${selectedFile?.name || 'VoxSplit Export'}
-ScriptType: v4.00+
-PlayResX: 1920
-PlayResY: 1080
-WrapStyle: 0
-ScaledBorderAndShadow: yes
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-${styles}
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-`;
-
-  parsedUtterances.forEach((utt) => {
-    const name = speakerNames[utt.speaker] || `Locuteur ${utt.speaker + 1}`;
-    const start = formatASSTime(utt.start);
-    const end = formatASSTime(utt.end);
-    const text = utt.text.replace(/\n/g, '\\N');
-    ass += `Dialogue: 0,${start},${end},${name},,0,0,0,,${text}\n`;
-  });
-
-  downloadFile(ass, getExportFilename('ass'), 'text/x-ssa');
-  toast('ASS exporté (sous-titres colorés)');
-}
-
-async function copyToClipboard() {
-  if (!parsedUtterances.length) return;
-  let txt = '';
-  let lastSpeaker = -1;
-  for (const utt of parsedUtterances) {
-    const name = speakerNames[utt.speaker] || `Locuteur ${utt.speaker + 1}`;
-    if (utt.speaker !== lastSpeaker) {
-      if (txt) txt += '\n';
-      txt += `[${name}]\n`;
-      lastSpeaker = utt.speaker;
-    }
-    txt += `${utt.text}\n`;
-  }
-  try {
-    await navigator.clipboard.writeText(txt);
-    toast('Copié dans le presse-papier');
-  } catch {
-    toast('Erreur de copie', 'error');
-  }
-}
-
-function getExportFilename(ext) {
-  const base = selectedFile ? selectedFile.name.replace(/\.[^.]+$/, '') : 'voxsplit';
-  return `${base}_voxsplit.${ext}`;
-}
-
-function downloadFile(content, filename, mimeType) {
-  const blob = new Blob([content], { type: mimeType + ';charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// ─── Translation ─────────────────────────────────────────────────────
-
-function toggleTranslateBar() {
-  document.getElementById('translate-bar').classList.toggle('visible');
-}
-
-async function startTranslation(silent = false) {
-  if (!parsedUtterances.length) return;
-
-  const engine = document.getElementById('translate-engine').value;
-  const targetLang = document.getElementById('translate-target').value;
-  const langNames = { fr:'français', en:'anglais', es:'espagnol', de:'allemand', it:'italien', pt:'portugais', zh:'chinois', ko:'coréen', vi:'vietnamien', ja:'japonais' };
-  const targetName = langNames[targetLang] || targetLang;
-
-  const btn = document.getElementById('btn-translate');
-  const status = document.getElementById('translate-status');
-  if (!silent) {
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traduction...';
-  }
-  translations = {};
-
-  const CHUNK_SIZE = 30;
-  const chunks = [];
-  for (let i = 0; i < parsedUtterances.length; i += CHUNK_SIZE) {
-    chunks.push(parsedUtterances.slice(i, i + CHUNK_SIZE).map((u, j) => ({ idx: i + j, text: u.text })));
-  }
-
-  try {
-    for (let ci = 0; ci < chunks.length; ci++) {
-      status.textContent = `Chunk ${ci + 1}/${chunks.length}...`;
-
-      const lines = chunks[ci].map(c => `[${c.idx}] ${c.text}`).join('\n');
-      const prompt = `Traduis les lignes suivantes en ${targetName}. Chaque ligne est préfixée par [numéro]. Retourne EXACTEMENT le même format [numéro] suivi de la traduction. Ne traduis PAS les noms propres de personnages. Conserve le sens et le ton. Pas d'explication, pas de commentaire, uniquement les lignes traduites.\n\n${lines}`;
-
-      const apiPath = engine === 'gemini' ? '/api/gemini/v1beta/models/gemini-2.0-flash:generateContent' : '/api/deepseek';
-
-      let body;
-      if (engine === 'gemini') {
-        body = {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 8192 }
-        };
-      } else {
-        body = {
-          model: 'deepseek-chat',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.3,
-          max_tokens: 8192
-        };
-      }
-
-      const resp = await fetch(getGateway() + apiPath, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + getSecret(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(120000),
-      });
-
-      if (!resp.ok) {
-        const errText = await resp.text();
-        throw new Error(`${engine} HTTP ${resp.status}: ${errText.substring(0, 200)}`);
-      }
-
-      const data = await resp.json();
-
-      let resultText = '';
-      if (engine === 'gemini') {
-        resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      } else {
-        resultText = data.choices?.[0]?.message?.content || '';
-      }
-
-      const lineRegex = /\[(\d+)\]\s*(.*)/g;
-      let match;
-      while ((match = lineRegex.exec(resultText)) !== null) {
-        const idx = parseInt(match[1]);
-        const translated = match[2].trim();
-        if (translated) translations[idx] = translated;
-      }
-    }
-
-    status.textContent = `${Object.keys(translations).length}/${parsedUtterances.length} traduits`;
-    if (!silent) toast(`Traduction terminée (${engine})`, 'success');
-    log(`Traduction: ${Object.keys(translations).length}/${parsedUtterances.length} segments traduits (${engine})`, 'success');
-
-    document.getElementById('btn-export-srt-bilingual').style.display = '';
-
-    renderTranscriptBlocks();
-    saveToHistory();
-
-  } catch (err) {
-    toast(`Erreur traduction: ${err.message}`, 'error');
-    log(`Erreur traduction: ${err.message}`, 'error');
-    status.textContent = 'Erreur';
-  } finally {
-    if (!silent) {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-language"></i> Traduire';
-    }
-  }
-}
-
-// ─── Video Preview + Subtitle Sync ───────────────────────────────────
-
-function showVideoPreview() {
-  if (!selectedFile) return;
-  const isVideo = selectedFile.type.startsWith('video/') || /\.(mp4|webm|mov)$/i.test(selectedFile.name);
-  const isMkv = /\.mkv$/i.test(selectedFile.name);
-  if (!isVideo || isMkv) return;
-
-  if (previewVideoUrl) URL.revokeObjectURL(previewVideoUrl);
-  previewVideoUrl = URL.createObjectURL(selectedFile);
-
-  const video = document.getElementById('previewVideo');
-  video.src = previewVideoUrl;
-  video.load();
-
-  try { const sv = localStorage.getItem('voxsplit_vol'); if (sv !== null) video.volume = parseFloat(sv); } catch(e) {}
-  video.addEventListener('volumechange', () => {
-    try { localStorage.setItem('voxsplit_vol', video.volume); } catch(e) {}
-  });
-
-  _timeupdateHandler = () => updateSubBox(video);
-  video.addEventListener('timeupdate', _timeupdateHandler);
-
+// ─── Video Preview + VTT track for fullscreen ────────────
+function showVideoPreview(){
+  if(!selectedFile)return;
+  const isVideo=selectedFile.type.startsWith('video/')||/\.(mp4|webm|mov)$/i.test(selectedFile.name);
+  if(!isVideo||/\.mkv$/i.test(selectedFile.name))return;
+  if(previewVideoUrl)URL.revokeObjectURL(previewVideoUrl);previewVideoUrl=URL.createObjectURL(selectedFile);
+  const video=document.getElementById('previewVideo');video.src=previewVideoUrl;video.load();
+  try{const sv=localStorage.getItem('voxsplit_vol');if(sv!==null)video.volume=parseFloat(sv)}catch(e){}
+  video.addEventListener('volumechange',()=>{try{localStorage.setItem('voxsplit_vol',video.volume)}catch(e){}});
+  _timeupdateHandler=()=>updateSubBox(video);video.addEventListener('timeupdate',_timeupdateHandler);
   document.getElementById('previewSection').classList.add('visible');
   document.getElementById('videoWrap').classList.remove('collapsed');
-  document.getElementById('collapseIcon').className = 'fas fa-chevron-up';
+  document.getElementById('collapseIcon').className='fas fa-chevron-up';
+  document.getElementById('offset-wrap').style.display='';
+  rebuildVttTrack();
 }
 
-function updateSubBox(video) {
-  const currentSec = video.currentTime;
-  const box = document.getElementById('subBox');
-  const meta = document.getElementById('subBoxMeta');
-  const text = document.getElementById('subBoxText');
-
-  let found = null;
-  let foundIdx = -1;
-  for (let i = 0; i < parsedUtterances.length; i++) {
-    const u = parsedUtterances[i];
-    if (currentSec >= u.start && currentSec <= u.end) {
-      found = u;
-      foundIdx = i;
-      break;
-    }
-  }
-
-  if (found) {
-    box.classList.remove('empty');
-    const name = speakerNames[found.speaker] || `Locuteur ${found.speaker + 1}`;
-    const color = SPEAKER_COLORS[found.speaker % SPEAKER_COLORS.length];
-    box.style.borderLeft = `3px solid ${color}`;
-    meta.innerHTML = `<span style="color:${color};font-weight:700">${name}</span> · #${foundIdx + 1} · ${formatTime(found.start)} → ${formatTime(found.end)}`;
-    const translatedText = translations[foundIdx];
-    if (translatedText) {
-      text.innerHTML = `<span style="opacity:.6;font-size:13px">${found.text}</span><br><span style="color:var(--accent3)">${translatedText}</span>`;
-    } else {
-      text.textContent = found.text;
-    }
-  } else {
-    box.classList.add('empty');
-    box.style.borderLeft = 'none';
-    meta.textContent = '';
-    text.textContent = '—';
-  }
-
-  const blocks = document.querySelectorAll('.transcript-block');
-  blocks.forEach((b) => {
-    const bIdx = parseInt(b.dataset.idx);
-    if (bIdx === foundIdx) {
-      b.classList.add('active-block');
-      if (!b.dataset.scrolled || parseInt(b.dataset.scrolled) !== foundIdx) {
-        b.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        b.dataset.scrolled = foundIdx;
-      }
-    } else {
-      b.classList.remove('active-block');
-    }
+function rebuildVttTrack(){
+  const video=document.getElementById('previewVideo');
+  // Remove existing tracks
+  video.querySelectorAll('track').forEach(t=>t.remove());
+  if(previewVttUrl){URL.revokeObjectURL(previewVttUrl);previewVttUrl=null}
+  if(!parsedUtterances.length)return;
+  // Build VTT for fullscreen subtitles
+  let vtt='WEBVTT\n\n';
+  parsedUtterances.forEach((utt,i)=>{
+    const name=speakerNames[utt.speaker]||`Locuteur ${utt.speaker+1}`;
+    const text=translations[i]&&!showOriginal?translations[i]:(translations[i]?utt.text+'\n'+translations[i]:utt.text);
+    const s=Math.max(0,utt.start+currentOffset/1000),e=Math.max(0,utt.end+currentOffset/1000);
+    vtt+=`${i+1}\n${formatVTTTime(s)} --> ${formatVTTTime(e)}\n${name}: ${text}\n\n`;
   });
+  const blob=new Blob([vtt],{type:'text/vtt'});previewVttUrl=URL.createObjectURL(blob);
+  const track=document.createElement('track');track.kind='captions';track.label='VoxSplit';track.srclang='fr';track.src=previewVttUrl;track.default=true;
+  video.appendChild(track);
+  // Activate track
+  setTimeout(()=>{if(video.textTracks[0])video.textTracks[0].mode='showing'},100);
 }
 
-function seekToUtterance(idx) {
-  const video = document.getElementById('previewVideo');
-  if (!video.src || !parsedUtterances[idx]) return;
-  video.currentTime = parsedUtterances[idx].start;
-  video.play().catch(() => {});
+function updateSubBox(video){
+  const t=video.currentTime;const box=document.getElementById('subBox'),meta=document.getElementById('subBoxMeta'),text=document.getElementById('subBoxText');
+  let found=null,fi=-1;const offSec=currentOffset/1000;
+  for(let i=0;i<parsedUtterances.length;i++){const u=parsedUtterances[i];if(t>=(u.start+offSec)&&t<=(u.end+offSec)){found=u;fi=i;break}}
+  if(found){
+    box.classList.remove('empty');const name=speakerNames[found.speaker]||`Locuteur ${found.speaker+1}`;const color=SPEAKER_COLORS[found.speaker%SPEAKER_COLORS.length];
+    box.style.borderLeft=`3px solid ${color}`;
+    meta.innerHTML=`<span style="color:${color};font-weight:700">${name}</span> · #${fi+1}`;
+    const tr=translations[fi];
+    if(tr&&!showOriginal){text.textContent=tr}
+    else if(tr){text.innerHTML=`<span style="opacity:.6;font-size:13px">${found.text}</span><br><span style="color:var(--accent3)">${tr}</span>`}
+    else{text.textContent=found.text}
+  }else{box.classList.add('empty');box.style.borderLeft='none';meta.textContent='';text.textContent='—'}
+  document.querySelectorAll('.transcript-block').forEach(b=>{const bIdx=parseInt(b.dataset.idx);if(bIdx===fi){b.classList.add('active-block');if(!b.dataset.scrolled||parseInt(b.dataset.scrolled)!==fi){b.scrollIntoView({behavior:'smooth',block:'nearest'});b.dataset.scrolled=fi}}else b.classList.remove('active-block')});
 }
+function seekToUtterance(idx){const v=document.getElementById('previewVideo');if(!v.src||!parsedUtterances[idx])return;v.currentTime=parsedUtterances[idx].start+currentOffset/1000;v.play().catch(()=>{})}
+function toggleVideoCollapse(){const w=document.getElementById('videoWrap'),i=document.getElementById('collapseIcon');w.classList.toggle('collapsed');i.className=w.classList.contains('collapsed')?'fas fa-chevron-down':'fas fa-chevron-up'}
+function closePreview(){const v=document.getElementById('previewVideo');if(_timeupdateHandler)v.removeEventListener('timeupdate',_timeupdateHandler);v.pause();v.src='';v.querySelectorAll('track').forEach(t=>t.remove());if(previewVideoUrl){URL.revokeObjectURL(previewVideoUrl);previewVideoUrl=null}if(previewVttUrl){URL.revokeObjectURL(previewVttUrl);previewVttUrl=null}document.getElementById('previewSection').classList.remove('visible');document.querySelectorAll('.transcript-block.active-block').forEach(b=>b.classList.remove('active-block'))}
 
-function toggleVideoCollapse() {
-  const wrap = document.getElementById('videoWrap');
-  const icon = document.getElementById('collapseIcon');
-  wrap.classList.toggle('collapsed');
-  icon.className = wrap.classList.contains('collapsed') ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
+// ─── History ─────────────────────────────────────────────
+function getHistory(){try{return JSON.parse(localStorage.getItem('voxsplit_history')||'[]')}catch{return[]}}
+function setHistory(h){localStorage.setItem('voxsplit_history',JSON.stringify(h))}
+function saveToHistory(){
+  if(!parsedUtterances.length)return;
+  const item={name:selectedFile?.name||'Inconnu',speakers:Object.keys(speakerNames).length,utteranceCount:parsedUtterances.length,srcLang:document.getElementById('opt-lang').value||'auto',tgtLang:document.getElementById('opt-target-lang').value||'',wasTranslated:Object.keys(translations).length>0,ts:Date.now(),size:selectedFile?.size||0,duration:rawResult?.metadata?.duration||0,data:{parsedUtterances,speakerNames,translations}};
+  let h=getHistory();const ei=h.findIndex(x=>x.name===item.name);if(ei>=0)h[ei]=item;else h.unshift(item);
+  if(h.length>10)h=h.slice(0,10);let j=JSON.stringify(h);while(j.length>512*1024&&h.length>1){h.pop();j=JSON.stringify(h)}
+  setHistory(h);renderHistory();
 }
-
-function closePreview() {
-  const video = document.getElementById('previewVideo');
-  if (_timeupdateHandler) video.removeEventListener('timeupdate', _timeupdateHandler);
-  video.pause();
-  video.src = '';
-  if (previewVideoUrl) { URL.revokeObjectURL(previewVideoUrl); previewVideoUrl = null; }
-  document.getElementById('previewSection').classList.remove('visible');
-  document.querySelectorAll('.transcript-block.active-block').forEach(b => b.classList.remove('active-block'));
-}
-
-// ─── History ─────────────────────────────────────────────────────────
-
-function getHistory() {
-  try { return JSON.parse(localStorage.getItem('voxsplit_history') || '[]'); } catch { return []; }
-}
-function setHistory(h) { localStorage.setItem('voxsplit_history', JSON.stringify(h)); }
-
-function saveToHistory() {
-  if (!parsedUtterances.length) return;
-
-  const item = {
-    name: selectedFile?.name || 'Inconnu',
-    speakers: Object.keys(speakerNames).length,
-    utteranceCount: parsedUtterances.length,
-    srcLang: document.getElementById('opt-lang').value || 'auto',
-    tgtLang: document.getElementById('opt-target-lang').value || '',
-    wasTranslated: Object.keys(translations).length > 0,
-    ts: Date.now(),
-    size: selectedFile?.size || 0,
-    duration: rawResult?.metadata?.duration || 0,
-    data: {
-      parsedUtterances: parsedUtterances,
-      speakerNames: speakerNames,
-      translations: translations
-    }
-  };
-
-  let history = getHistory();
-
-  // Check if same file already in history (update it)
-  const existingIdx = history.findIndex(h => h.name === item.name);
-  if (existingIdx >= 0) {
-    history[existingIdx] = item;
-  } else {
-    history.unshift(item);
-  }
-
-  // Max 10 items
-  if (history.length > 10) history = history.slice(0, 10);
-
-  // Purge if > 512KB
-  let json = JSON.stringify(history);
-  while (json.length > 512 * 1024 && history.length > 1) {
-    history.pop();
-    json = JSON.stringify(history);
-  }
-
-  setHistory(history);
-  renderHistory();
-}
-
-function renderHistory() {
-  const history = getHistory();
-  const wrap = document.getElementById('hist-wrap');
-  const body = document.getElementById('hist-body');
-
-  if (history.length === 0) {
-    wrap.style.display = 'none';
-    return;
-  }
-
-  wrap.style.display = '';
-  body.innerHTML = '';
-
-  history.forEach((item, i) => {
-    const d = new Date(item.ts);
-    const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
-    const timeStr = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    const durStr = item.duration ? formatDuration(item.duration) : '';
-    const sizeStr = item.size ? formatSize(item.size) : '';
-
-    const div = document.createElement('div');
-    div.className = 'hitem';
-    div.onclick = () => loadHistory(i);
-    div.innerHTML = `
-      <span class="hitem-icon">${item.wasTranslated ? '🌐' : '🎙️'}</span>
-      <div class="hitem-info">
-        <div class="hname">${item.name}</div>
-        <div class="hmeta">${dateStr} ${timeStr} · ${item.speakers} loc. · ${item.utteranceCount} seg. ${sizeStr ? '· ' + sizeStr : ''}</div>
-      </div>
-      ${durStr ? `<span class="hbadge">${durStr}</span>` : ''}
-      <button class="hdel" onclick="delHistory(event,${i})" title="Supprimer"><i class="fas fa-trash-can"></i></button>
-    `;
+function renderHistory(){
+  const h=getHistory(),wrap=document.getElementById('hist-wrap'),body=document.getElementById('hist-body');
+  if(!h.length){wrap.style.display='none';return}wrap.style.display='';body.innerHTML='';
+  h.forEach((item,i)=>{const d=new Date(item.ts);const ds=d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});const ts=d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    const div=document.createElement('div');div.className='hitem';div.onclick=()=>loadHistory(i);
+    div.innerHTML=`<span class="hitem-icon">${item.wasTranslated?'🌐':'🎙️'}</span><div class="hitem-info"><div class="hname">${item.name}</div><div class="hmeta">${ds} ${ts} · ${item.speakers} loc. · ${item.utteranceCount} seg.</div></div>${item.duration?`<span class="hbadge">${formatDuration(item.duration)}</span>`:''}<button class="hdel" onclick="delHistory(event,${i})" title="Supprimer"><i class="fas fa-trash-can"></i></button>`;
     body.appendChild(div);
   });
 }
+function loadHistory(i){const h=getHistory();const item=h[i];if(!item?.data)return;parsedUtterances=item.data.parsedUtterances||[];speakerNames=item.data.speakerNames||{};translations=item.data.translations||{};rawResult=null;currentOffset=0;renderResults();document.getElementById('results-section').classList.add('visible');document.getElementById('action-bar').classList.add('visible');updateSpeakerFilter();toast(`Historique: ${item.name}`);document.getElementById('results-section').scrollIntoView({behavior:'smooth',block:'start'})}
+function delHistory(e,i){e.stopPropagation();const h=getHistory();h.splice(i,1);setHistory(h);renderHistory();toast('Supprimé')}
+function toggleHistory(){document.getElementById('hist-header').classList.toggle('open');document.getElementById('hist-body').classList.toggle('open')}
 
-function loadHistory(i) {
-  const history = getHistory();
-  const item = history[i];
-  if (!item || !item.data) return;
-
-  parsedUtterances = item.data.parsedUtterances || [];
-  speakerNames = item.data.speakerNames || {};
-  translations = item.data.translations || {};
-  rawResult = null;
-
-  renderResults();
-  document.getElementById('results-section').classList.add('visible');
-  document.getElementById('action-bar').classList.add('visible');
-  if (Object.keys(translations).length > 0) {
-    document.getElementById('btn-export-srt-bilingual').style.display = '';
-  }
-
-  toast(`Historique chargé: ${item.name}`);
-  document.getElementById('results-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+// ─── Reset ───────────────────────────────────────────────
+function resetAll(){closePreview();removeFile();rawResult=null;parsedUtterances=[];speakerNames={};translations={};currentOffset=0;
+  ['results-section','action-bar','translate-bar','progress-container','log-console','search-bar'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+  document.getElementById('log-console').innerHTML='';document.getElementById('search-input').value='';document.getElementById('progress-fill').style.width='0%';
+  document.getElementById('waveform').classList.remove('visible');document.getElementById('progress-chrono').style.display='none';
+  stopChrono();window.scrollTo({top:0,behavior:'smooth'});
 }
 
-function delHistory(e, i) {
-  e.stopPropagation();
-  const history = getHistory();
-  history.splice(i, 1);
-  setHistory(history);
-  renderHistory();
-  toast('Élément supprimé');
-}
-
-function toggleHistory() {
-  const header = document.getElementById('hist-header');
-  const body = document.getElementById('hist-body');
-  header.classList.toggle('open');
-  body.classList.toggle('open');
-}
-
-// ─── Reset ───────────────────────────────────────────────────────────
-
-function resetAll() {
-  closePreview();
-  removeFile();
-  rawResult = null;
-  parsedUtterances = [];
-  speakerNames = {};
-  translations = {};
-  document.getElementById('results-section').classList.remove('visible');
-  document.getElementById('action-bar').classList.remove('visible');
-  document.getElementById('translate-bar').classList.remove('visible');
-  document.getElementById('btn-export-srt-bilingual').style.display = 'none';
-  document.getElementById('progress-container').classList.remove('visible');
-  document.getElementById('log-console').classList.remove('visible');
-  document.getElementById('log-console').innerHTML = '';
-  document.getElementById('search-bar').classList.remove('visible');
-  document.getElementById('search-input').value = '';
-  document.getElementById('progress-fill').style.width = '0%';
-  document.getElementById('waveform').classList.remove('visible');
-  document.getElementById('progress-chrono').style.display = 'none';
-  stopChrono();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-// ─── Keyboard shortcuts ─────────────────────────────────────────────
-
-function setupKeyboardShortcuts() {
-  document.addEventListener('keydown', (e) => {
-    // Don't intercept when typing in inputs
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.contentEditable === 'true') return;
-
-    const video = document.getElementById('previewVideo');
-
-    switch(e.code) {
-      case 'Space':
-        if (video && video.src) {
-          e.preventDefault();
-          video.paused ? video.play().catch(() => {}) : video.pause();
-        }
-        break;
-      case 'ArrowLeft':
-        if (parsedUtterances.length > 0) {
-          e.preventDefault();
-          const currentIdx = getCurrentUtteranceIdx(video?.currentTime || 0);
-          const prevIdx = Math.max(0, currentIdx - 1);
-          seekToUtterance(prevIdx);
-        }
-        break;
-      case 'ArrowRight':
-        if (parsedUtterances.length > 0) {
-          e.preventDefault();
-          const curIdx = getCurrentUtteranceIdx(video?.currentTime || 0);
-          const nextIdx = Math.min(parsedUtterances.length - 1, curIdx + 1);
-          seekToUtterance(nextIdx);
-        }
-        break;
-    }
+// ─── Keyboard shortcuts ─────────────────────────────────
+function setupKeyboardShortcuts(){
+  document.addEventListener('keydown',e=>{
+    if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.contentEditable==='true')return;
+    const v=document.getElementById('previewVideo');
+    if(e.code==='Space'&&v?.src){e.preventDefault();v.paused?v.play().catch(()=>{}):v.pause()}
+    if(e.code==='ArrowLeft'&&parsedUtterances.length>0){e.preventDefault();seekToUtterance(Math.max(0,getCurrentUtteranceIdx(v?.currentTime||0)-1))}
+    if(e.code==='ArrowRight'&&parsedUtterances.length>0){e.preventDefault();seekToUtterance(Math.min(parsedUtterances.length-1,getCurrentUtteranceIdx(v?.currentTime||0)+1))}
   });
 }
+function getCurrentUtteranceIdx(time){const off=currentOffset/1000;for(let i=0;i<parsedUtterances.length;i++)if(time>=(parsedUtterances[i].start+off)&&time<=(parsedUtterances[i].end+off))return i;let c=0,m=Infinity;for(let i=0;i<parsedUtterances.length;i++){const d=Math.abs(parsedUtterances[i].start+off-time);if(d<m){m=d;c=i}}return c}
 
-function getCurrentUtteranceIdx(time) {
-  for (let i = 0; i < parsedUtterances.length; i++) {
-    if (time >= parsedUtterances[i].start && time <= parsedUtterances[i].end) return i;
-  }
-  // Find nearest
-  let closest = 0;
-  let minDist = Infinity;
-  for (let i = 0; i < parsedUtterances.length; i++) {
-    const dist = Math.abs(parsedUtterances[i].start - time);
-    if (dist < minDist) { minDist = dist; closest = i; }
-  }
-  return closest;
-}
+// ─── Helpers ─────────────────────────────────────────────
+function formatTime(s){if(!s&&s!==0)return'00:00';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=Math.floor(s%60);return h>0?`${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`:`${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`}
+function formatDuration(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=Math.floor(s%60);return h>0?`${h}h${m}min`:m>0?`${m}min${sec}s`:`${sec}s`}
+function formatSRTTime(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=Math.floor(s%60),ms=Math.round((s%1)*1000);return`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')},${String(ms).padStart(3,'0')}`}
+function formatVTTTime(s){return formatSRTTime(s).replace(',','.')}
+function hexToRgba(hex,a){return`rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},${a})`}
+function escapeRegex(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
+let _toastTimer;function toast(msg,level){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=level==='error'?'var(--danger)':level==='warn'?'var(--warning)':level==='success'?'var(--success)':'var(--border)';t.classList.add('visible');clearTimeout(_toastTimer);_toastTimer=setTimeout(()=>t.classList.remove('visible'),3000)}
+function initSW(){if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{});navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='SW_UPDATED')document.getElementById('sw-banner').classList.add('visible')})}}
 
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-function formatTime(seconds) {
-  if (!seconds && seconds !== 0) return '00:00';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
-function formatDuration(seconds) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) return `${h}h ${m}min`;
-  if (m > 0) return `${m}min ${s}s`;
-  return `${s}s`;
-}
-
-function formatSRTTime(seconds) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  const ms = Math.round((seconds % 1) * 1000);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
-}
-
-function formatVTTTime(seconds) {
-  return formatSRTTime(seconds).replace(',', '.');
-}
-
-function hexToRgba(hex, alpha) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-let _toastTimer;
-function toast(msg, level) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.style.borderColor = level === 'error' ? 'var(--danger)' :
-                        level === 'warn' ? 'var(--warning)' :
-                        level === 'success' ? 'var(--success)' : 'var(--border)';
-  t.classList.add('visible');
-  clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => t.classList.remove('visible'), 3000);
-}
-
-// ─── Service Worker ──────────────────────────────────────────────────
-
-function initSW() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-    navigator.serviceWorker.addEventListener('message', function(e) {
-      if (e.data && e.data.type === 'SW_UPDATED') {
-        const banner = document.getElementById('sw-banner');
-        banner.classList.add('visible');
-      }
-    });
-  }
-}
-
-// ─── Init ────────────────────────────────────────────────────────────
-
-function init() {
-  setupFileInput();
-  checkGateway();
-  initSW();
-  setupKeyboardShortcuts();
-  renderHistory();
-
-  const c = getConfig();
-  if (!c.secret) {
-    setTimeout(() => toggleSettings(), 500);
-  }
-}
-
-document.addEventListener('DOMContentLoaded', init);
+// ─── Init ────────────────────────────────────────────────
+function init(){setupFileInput();checkGateway();initSW();setupKeyboardShortcuts();renderHistory();if(!getConfig().secret)setTimeout(()=>toggleSettings(),500)}
+document.addEventListener('DOMContentLoaded',init);
 </script>
 </body>
 </html>
