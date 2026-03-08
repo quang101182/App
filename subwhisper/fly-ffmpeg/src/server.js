@@ -75,7 +75,7 @@ const app = express();
 app.use((req, res, next) => {
   res.set({
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, DELETE',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   });
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -1256,6 +1256,22 @@ app.get('/hls2mp4/events/:jobId', requireAnySecret, (req, res) => {
   req.on('close', () => {
     job.listeners.delete(listener);
   });
+});
+
+// Cancel a job (kill FFmpeg, cleanup)
+app.delete('/hls2mp4/:jobId', requireAnySecret, (req, res) => {
+  const job = hlsJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'job not found' });
+
+  job.status = 'cancelled';
+  if (job.listeners) job.listeners.forEach(fn => fn({ type: 'done', status: 'cancelled', error: 'Annule par utilisateur', mp4Size: 0 }));
+
+  // Cleanup files
+  try { fs.rmSync(job.tmpDir, { recursive: true, force: true }); } catch (e) {}
+  hlsJobs.delete(job.id);
+
+  console.log(`[hls2mp4:${job.id}] Cancelled by user`);
+  res.json({ ok: true });
 });
 
 // Download completed MP4 (auth via ?s= query param or Authorization header)
