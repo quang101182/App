@@ -1665,8 +1665,7 @@ async function uploadViaR2(flyUrl, dgParams, contentType, file, startTime) {
 
   // 4. Call Fly.io /deepgram with source_url — streaming NDJSON progress
   setProgress(70, 'Fly.io traitement en cours...');
-  log('Envoi requête Fly.io (source_url mode)...', 'info');
-  log(`Fly.io: ${flyUrl}/deepgram`, 'info');
+  log('Envoi requête Fly.io (FFmpeg direct depuis R2, pas de download séparé)...', 'info');
   const secret = getSecret();
   const flyRes = await fetch(`${flyUrl}/deepgram?source_url=${encodeURIComponent(downloadUrl)}&${dgParams.toString()}`, {
     method: 'POST',
@@ -1688,7 +1687,7 @@ async function uploadViaR2(flyUrl, dgParams, contentType, file, startTime) {
     done: 'Finalisation'
   };
   let resultJson = null;
-  let lastStep = '';
+  let lastStep = '', lastPct = 0;
   const reader = flyRes.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -1709,14 +1708,13 @@ async function uploadViaR2(flyUrl, dgParams, contentType, file, startTime) {
           // Log à chaque changement d'étape
           if (msg.step !== lastStep) {
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-            if (msg.step === 'download') log(`[${elapsed}s] Fly.io télécharge le fichier depuis R2...`, 'info');
-            else if (msg.step === 'ffmpeg') log(`[${elapsed}s] FFmpeg: extraction audio en cours...`, 'info');
+            if (msg.step === 'ffmpeg') log(`[${elapsed}s] FFmpeg: download R2 + extraction audio (1 passe)...`, 'info');
             else if (msg.step === 'deepgram') log(`[${elapsed}s] Envoi audio à Deepgram pour transcription...`, 'info');
             else if (msg.step === 'done') log(`[${elapsed}s] Transcription terminée, réception des données...`, 'success');
             lastStep = msg.step;
-          } else if (msg.step === 'download' && msg.pct % 10 < 5) {
-            // Log intermédiaire pendant le download (toutes les ~10%)
-            log(`Téléchargement R2: ${msg.pct}%`, 'info');
+          } else if (msg.step === 'ffmpeg' && msg.pct > lastPct) {
+            log(`FFmpeg: ${msg.pct}% traité`, 'info');
+            lastPct = msg.pct;
           }
         } else if (msg.type === 'result') {
           resultJson = typeof msg.body === 'string' ? JSON.parse(msg.body) : msg.body;

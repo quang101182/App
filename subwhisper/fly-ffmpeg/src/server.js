@@ -178,55 +178,58 @@ app.post('/deepgram', requireAnySecret, async (req, res) => {
       sendProgress(5, 'download');
     }
 
-    let inputSize = 0;
+    let fileToSend, sendContentType;
 
     if (sourceUrl) {
-      // ── Mode URL: téléchargement depuis R2 presigned URL ──
-      console.log(`[${jobId}] Mode source_url — téléchargement depuis R2...`);
+      // ── Mode URL: FFmpeg lit DIRECTEMENT depuis l'URL R2 (skip download!) ──
+      console.log(`[${jobId}] Mode source_url — FFmpeg direct depuis R2 URL (skip download)`);
+      sendProgress(10, 'ffmpeg');
+      const ffmpegStart = Date.now();
+
       await new Promise((resolve, reject) => {
-        const proto = sourceUrl.startsWith('https') ? https : require('http');
-        const fileStream = fs.createWriteStream(inputPath);
-        proto.get(sourceUrl, (response) => {
-          if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-            proto.get(response.headers.location, (r2) => {
-              const totalSize = parseInt(r2.headers['content-length'] || '0');
-              let received = 0;
-              r2.on('data', (chunk) => {
-                received += chunk.length;
-                if (totalSize > 0 && received % (50 * 1024 * 1024) < chunk.length) {
-                  const dlPct = Math.min(40, Math.round((received / totalSize) * 40));
-                  sendProgress(5 + dlPct, 'download');
-                  console.log(`[${jobId}] Download R2: ${(received / 1048576).toFixed(0)}/${(totalSize / 1048576).toFixed(0)} MB`);
-                }
-              });
-              r2.pipe(fileStream);
-              fileStream.on('finish', resolve);
-              fileStream.on('error', reject);
-            }).on('error', reject);
-          } else if (response.statusCode !== 200) {
-            reject(new Error(`Download failed: HTTP ${response.statusCode}`));
-          } else {
-            const totalSize = parseInt(response.headers['content-length'] || '0');
-            let received = 0;
-            response.on('data', (chunk) => {
-              received += chunk.length;
-              if (totalSize > 0 && received % (50 * 1024 * 1024) < chunk.length) {
-                const dlPct = Math.min(40, Math.round((received / totalSize) * 40));
-                sendProgress(5 + dlPct, 'download');
-                console.log(`[${jobId}] Download R2: ${(received / 1048576).toFixed(0)}/${(totalSize / 1048576).toFixed(0)} MB`);
-              }
-            });
-            response.pipe(fileStream);
-            fileStream.on('finish', resolve);
-            fileStream.on('error', reject);
+        const ff = spawn('ffmpeg', [
+          '-i', sourceUrl,   // FFmpeg télécharge + convertit en 1 seule passe
+          '-vn',
+          '-acodec', 'libmp3lame',
+          '-b:a', '128k',
+          '-ac', '1',
+          '-ar', '16000',
+          '-y',
+          audioPath
+        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+        let stderr = '';
+        let lastPct = 0;
+        ff.stderr.on('data', d => {
+          const chunk = d.toString();
+          stderr += chunk;
+          // Parse FFmpeg time= progress
+          const m = chunk.match(/time=(\d+):(\d+):(\d+)/);
+          if (m) {
+            const secs = parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseInt(m[3]);
+            const newPct = Math.min(60, 10 + Math.floor(secs / 30) * 5);
+            if (newPct > lastPct) {
+              lastPct = newPct;
+              sendProgress(newPct, 'ffmpeg');
+              console.log(`[${jobId}] FFmpeg: ${secs}s audio traité`);
+            }
           }
-        }).on('error', reject);
+        });
+        ff.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`FFmpeg exit ${code}: ${stderr.slice(-500)}`));
+        });
+        ff.on('error', reject);
       });
-      const downloadElapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-      const inputStat = fs.statSync(inputPath);
-      inputSize = inputStat.size;
-      console.log(`[${jobId}] Download R2 terminé: ${(inputSize / 1048576).toFixed(1)} MB en ${downloadElapsed}s`);
-      sendProgress(45, 'ffmpeg');
+
+      const audioStat = fs.statSync(audioPath);
+      const ffElapsed = ((Date.now() - ffmpegStart) / 1000).toFixed(1);
+      console.log(`[${jobId}] FFmpeg direct terminé en ${ffElapsed}s → ${(audioStat.size / 1048576).toFixed(1)} MB audio`);
+      sendProgress(65, 'deepgram');
+
+      fileToSend = audioPath;
+      sendContentType = 'audio/mpeg';
+
     } else {
       // ── Mode body direct: streaming du body HTTP sur disque ──
       console.log(`[${jobId}] Reçu ${sizeMB} MB (${contentType}) — sauvegarde sur disque...`);
@@ -246,50 +249,46 @@ app.post('/deepgram', requireAnySecret, async (req, res) => {
       });
       const uploadElapsed = ((Date.now() - startMs) / 1000).toFixed(1);
       const inputStat = fs.statSync(inputPath);
-      inputSize = inputStat.size;
+      const inputSize = inputStat.size;
       console.log(`[${jobId}] Upload terminé: ${(inputSize / 1048576).toFixed(1)} MB en ${uploadElapsed}s`);
-    }
 
-    // Étape 2: Extraire l'audio avec FFmpeg → MP3 128kbps mono
-    const isAudioOnly = contentType.startsWith('audio/');
-    let fileToSend, sendContentType;
+      const isAudioOnly = contentType.startsWith('audio/');
+      if (isAudioOnly && inputSize < 50 * 1024 * 1024) {
+        fileToSend = inputPath;
+        sendContentType = contentType;
+        console.log(`[${jobId}] Petit fichier audio — envoi direct à Deepgram`);
+      } else {
+        console.log(`[${jobId}] FFmpeg: extraction audio → MP3 128kbps mono...`);
+        const ffmpegStart = Date.now();
 
-    if (isAudioOnly && inputSize < 50 * 1024 * 1024) {
-      fileToSend = inputPath;
-      sendContentType = contentType;
-      console.log(`[${jobId}] Petit fichier audio — envoi direct à Deepgram`);
-    } else {
-      console.log(`[${jobId}] FFmpeg: extraction audio → MP3 128kbps mono...`);
-      sendProgress(50, 'ffmpeg');
-      const ffmpegStart = Date.now();
+        await new Promise((resolve, reject) => {
+          const ff = spawn('ffmpeg', [
+            '-i', inputPath,
+            '-vn',
+            '-acodec', 'libmp3lame',
+            '-b:a', '128k',
+            '-ac', '1',
+            '-ar', '16000',
+            '-y',
+            audioPath
+          ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
-      await new Promise((resolve, reject) => {
-        const ff = spawn('ffmpeg', [
-          '-i', inputPath,
-          '-vn',
-          '-acodec', 'libmp3lame',
-          '-b:a', '128k',
-          '-ac', '1',
-          '-ar', '16000',
-          '-y',
-          audioPath
-        ], { stdio: ['ignore', 'pipe', 'pipe'] });
-
-        let stderr = '';
-        ff.stderr.on('data', d => { stderr += d.toString(); });
-        ff.on('close', code => {
-          if (code === 0) resolve();
-          else reject(new Error(`FFmpeg exit ${code}: ${stderr.slice(-300)}`));
+          let stderr = '';
+          ff.stderr.on('data', d => { stderr += d.toString(); });
+          ff.on('close', code => {
+            if (code === 0) resolve();
+            else reject(new Error(`FFmpeg exit ${code}: ${stderr.slice(-300)}`));
+          });
+          ff.on('error', reject);
         });
-        ff.on('error', reject);
-      });
 
-      const audioStat = fs.statSync(audioPath);
-      const ffElapsed = ((Date.now() - ffmpegStart) / 1000).toFixed(1);
-      console.log(`[${jobId}] FFmpeg terminé en ${ffElapsed}s: ${(inputSize / 1048576).toFixed(1)} MB → ${(audioStat.size / 1048576).toFixed(1)} MB`);
+        const audioStat = fs.statSync(audioPath);
+        const ffElapsed = ((Date.now() - ffmpegStart) / 1000).toFixed(1);
+        console.log(`[${jobId}] FFmpeg terminé en ${ffElapsed}s: ${(inputSize / 1048576).toFixed(1)} MB → ${(audioStat.size / 1048576).toFixed(1)} MB`);
 
-      fileToSend = audioPath;
-      sendContentType = 'audio/mpeg';
+        fileToSend = audioPath;
+        sendContentType = 'audio/mpeg';
+      }
     }
 
     // Étape 3: Envoyer le fichier audio à Deepgram (streaming depuis disque)
