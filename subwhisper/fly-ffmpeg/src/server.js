@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.15.0 — reduce analyzeduration/probesize to 5M (was 100M, too slow)
+ * Version: 1.16.0 — use /data volume (5GB) for HLS jobs, 2 concurrent jobs
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -122,7 +122,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.15.0'
+    version: '1.16.0'
   });
 });
 
@@ -1022,7 +1022,7 @@ app.get('/webproxy', requireAnySecret, async (req, res) => {
 // ---------------------------------------------------------------------------
 
 const hlsJobs = new Map(); // jobId → { status, logs[], progress, mp4Path, tmpDir, mp4Size, safeName, error }
-const MAX_HLS_CONCURRENT = 1; // 1 at a time to avoid disk full (TS+MP4 can be 1.5GB)
+const MAX_HLS_CONCURRENT = 2; // 5GB volume supports concurrent jobs
 const hlsQueue = []; // pending job processing functions
 
 function hlsActiveCount() {
@@ -1074,7 +1074,9 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
   if (!m3u8Url) return res.status(400).json({ error: 'missing m3u8Url' });
 
   const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const tmpDir = path.join(os.tmpdir(), 'hls_' + jobId);
+  // Use /data volume in production (5GB persistent), fallback to os.tmpdir()
+  const hlsBase = fs.existsSync('/data') ? '/data' : os.tmpdir();
+  const tmpDir = path.join(hlsBase, 'hls_' + jobId);
   fs.mkdirSync(tmpDir, { recursive: true });
 
   const job = {
