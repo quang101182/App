@@ -1,5 +1,5 @@
-// VideoGrab Service Worker v4.3
-var CACHE = 'videograb-v4.3';
+// VideoGrab Service Worker v4.4
+var CACHE = 'videograb-v4.4';
 var FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function(e) {
