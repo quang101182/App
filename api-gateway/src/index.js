@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.21
+ * api-gateway — Cloudflare Worker v1.22
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -541,35 +541,7 @@ function S(){
     }}catch(x){}})}catch(x){}
 }
 
-/* ── 6b. Intercept clicks — stopImmediatePropagation blocks site SPA handlers ── */
-var SKIP=/^(javascript:|mailto:|tel:|data:|blob:)/i;
-window.addEventListener('click',function(e){
-  var a=e.target.closest('a[href]');if(!a)return;
-  var h=a.getAttribute('href');if(!h||SKIP.test(h))return;
-  if(h==='#'||h.startsWith('#')&&h.indexOf('/')< 0)return;
-  e.preventDefault();
-  e.stopImmediatePropagation();
-  e.stopPropagation();
-  try{var abs=new URL(h,window.__vg_origHref||location.href).href;
-  if(abs.startsWith('http')){
-    document.body.style.pointerEvents='none';document.body.style.opacity='0.5';
-    parent.postMessage({t:'vg-click',url:abs},'*')
-  }}catch(x){}
-},true);
-/* ── 6c. Block SPA navigation via History API ── */
-var _oPush=history.pushState,_oRepl=history.replaceState;
-history.pushState=function(s,t,u){if(u){try{var abs=new URL(u,window.__vg_origHref||location.href).href;
-  parent.postMessage({t:'vg-click',url:abs},'*')}catch(x){}}return};
-history.replaceState=function(s,t,u){if(u){try{var abs=new URL(u,window.__vg_origHref||location.href).href;
-  parent.postMessage({t:'vg-click',url:abs},'*')}catch(x){}}return};
-/* ── 6d. Intercept form submissions ── */
-window.addEventListener('submit',function(e){
-  var f=e.target;if(!f||f.tagName!=='FORM')return;
-  e.preventDefault();e.stopImmediatePropagation();
-  var act=f.getAttribute('action')||'';
-  try{var abs=new URL(act||window.__vg_origHref||location.href,window.__vg_origHref||location.href).href;
-  parent.postMessage({t:'vg-click',url:abs},'*')}catch(x){}
-},true);
+/* ── 6b-6d: Click/History/Form interceptors moved to early-inject script in <head> ── */
 
 /* ── 7. Report current page URL to parent ── */
 try{var pu=new URLSearchParams(location.search).get('url');if(pu){_lastNav=pu;parent.postMessage({t:'vg-nav',url:pu},'*')}}catch(x){}
@@ -762,9 +734,43 @@ try{Object.defineProperty(document,'domain',{value:o.hostname,writable:true,conf
 window.__vg_origUrl=o;window.__vg_origHref=o.href;
 }catch(e){}})();</scrip`+`t>`;
 
-  // Insert polyfill as first script in <head>
+  // Early-inject: click interceptor + History patch — MUST run before site scripts
+  const earlyIntercept = `<script>(function(){
+'use strict';
+if(window.parent===window)return;
+var OH=window.__vg_origHref;
+function orig(){return OH||location.href}
+/* Block History API SPA navigation */
+var _oP=history.pushState,_oR=history.replaceState;
+history.pushState=function(s,t,u){if(!u)return _oP.apply(this,arguments);
+  try{var a=new URL(u,orig()).href;parent.postMessage({t:'vg-click',url:a},'*')}catch(x){}};
+history.replaceState=function(s,t,u){if(!u)return _oR.apply(this,arguments);
+  try{var a=new URL(u,orig()).href;parent.postMessage({t:'vg-click',url:a},'*')}catch(x){}};
+/* Intercept clicks on links — capture phase on window, first handler registered */
+var SK=/^(javascript:|mailto:|tel:|data:|blob:)/i;
+window.addEventListener('click',function(e){
+  var a=e.target.closest('a[href]');if(!a)return;
+  var h=a.getAttribute('href');if(!h||SK.test(h))return;
+  if(h==='#'||(h.charAt(0)==='#'&&h.indexOf('/')<0))return;
+  e.preventDefault();e.stopImmediatePropagation();e.stopPropagation();
+  try{var abs=new URL(h,orig()).href;
+  if(abs.startsWith('http')){
+    try{document.body.style.pointerEvents='none';document.body.style.opacity='0.3'}catch(x){}
+    parent.postMessage({t:'vg-click',url:abs},'*')}}catch(x){}
+},true);
+/* Intercept form submissions */
+window.addEventListener('submit',function(e){
+  var f=e.target;if(!f||f.tagName!=='FORM')return;
+  e.preventDefault();e.stopImmediatePropagation();
+  var act=f.getAttribute('action')||'';
+  try{var abs=new URL(act||orig(),orig()).href;
+  parent.postMessage({t:'vg-click',url:abs},'*')}catch(x){}
+},true);
+})();</scrip`+`t>`;
+
+  // Insert polyfill + early interceptor as first scripts in <head>
   if (/<head([^>]*)>/i.test(html)) {
-    html = html.replace(/<head([^>]*)>/, `<head$1>${locationPolyfill}`);
+    html = html.replace(/<head([^>]*)>/, `<head$1>${locationPolyfill}${earlyIntercept}`);
   }
 
   // Inject sniffer script before </body> (or at end)
