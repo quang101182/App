@@ -432,7 +432,9 @@ function buildSnifferScript(secret) {
 var PB=location.origin+'/proxy?s=${encodeURIComponent(esc)}&raw=1&url=';
 var PP=location.origin+'/proxy?s=${encodeURIComponent(esc)}&url=';
 var V=/\\.(mp4|webm|m3u8|mov|mkv|flv|avi|ts|mpd)(\\?[^"'\\s<>]*)?/i;
+var VS=/\\.(m3u8|mpd)(\\?[^"'\\s<>]*)?/i;
 var DT=new Set();
+var _lastTitle='';
 function isExt(u){return typeof u==='string'&&u.startsWith('http')&&!u.includes('/proxy?s=');}
 function GT(){try{var j=document.querySelector('script[type="application/ld+json"]');if(j){var o=JSON.parse(j.textContent||'{}');if(o.name)return o.name.split('|')[0].trim()}var og=document.querySelector('meta[property="og:title"]');if(og)return og.content;return document.title||''}catch(e){return document.title||''}}
 function R(u,t){if(!u||u.length<8||DT.has(u))return;DT.add(u);try{parent.postMessage({t:'vg-video',url:u,mt:t,title:GT()},'*')}catch(e){}}
@@ -483,9 +485,9 @@ function isAd(u){return typeof u==='string'&&ADS.test(u);}
 /* ── 5b. Intercept video.src / source.src setter ── */
 try{
   var _vDesc=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'src');
-  if(_vDesc&&_vDesc.set){Object.defineProperty(HTMLMediaElement.prototype,'src',{set:function(v){if(v&&V.test(v)&&!isAd(v))R(v,'src-set');return _vDesc.set.call(this,v)},get:_vDesc.get,configurable:true})}
+  if(_vDesc&&_vDesc.set){Object.defineProperty(HTMLMediaElement.prototype,'src',{set:function(v){if(v&&VS.test(v)&&!isAd(v))R(v,'src-set');return _vDesc.set.call(this,v)},get:_vDesc.get,configurable:true})}
   var _sDesc=Object.getOwnPropertyDescriptor(HTMLSourceElement.prototype,'src');
-  if(_sDesc&&_sDesc.set){Object.defineProperty(HTMLSourceElement.prototype,'src',{set:function(v){if(v&&V.test(v)&&!isAd(v))R(v,'source-set');return _sDesc.set.call(this,v)},get:_sDesc.get,configurable:true})}
+  if(_sDesc&&_sDesc.set){Object.defineProperty(HTMLSourceElement.prototype,'src',{set:function(v){if(v&&VS.test(v)&&!isAd(v))R(v,'source-set');return _sDesc.set.call(this,v)},get:_sDesc.get,configurable:true})}
 }catch(x){}
 
 /* ── 5c. Intercept MediaSource / HLS — catch blob URL creation ── */
@@ -545,7 +547,13 @@ try{var pu=new URLSearchParams(location.search).get('url');if(pu){_lastNav=pu;pa
 /* ── 8. Observe DOM changes ── */
 new MutationObserver(S).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','data-src']});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',S);else S();
-setInterval(S,3000);
+/* ── 9. Detect SPA navigation via title change ── */
+_lastTitle=document.title;
+setInterval(function(){
+  S();
+  var t=document.title;
+  if(t&&t!==_lastTitle){_lastTitle=t;DT.clear();try{parent.postMessage({t:'vg-nav',url:document.URL||location.href},'*')}catch(x){}}
+},3000);
 })();</scrip`+`t>`;
 }
 
