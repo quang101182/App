@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.8
+ * api-gateway — Cloudflare Worker v1.14
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -618,8 +618,25 @@ async function handleProxy(request, env, ctx, parsedUrl) {
   // Remove CSP meta tags
   html = html.replace(/<meta\s[^>]*http-equiv\s*=\s*["']Content-Security-Policy["'][^>]*>/gi, '');
 
-  // Inject sniffer script before </body> (or at end)
+  // Build sniffer + location polyfill
   const snifferScript = buildSnifferScript(secret);
+
+  // Inject location polyfill at the TOP of <head> (before any other scripts)
+  const locationPolyfill = `<script>(function(){
+try{var u=new URLSearchParams(location.search).get('url');if(!u)return;var o=new URL(u);
+Object.defineProperty(document,'URL',{get:function(){return o.href},configurable:true});
+Object.defineProperty(document,'documentURI',{get:function(){return o.href},configurable:true});
+try{Object.defineProperty(document,'referrer',{get:function(){return o.origin+'/'},configurable:true})}catch(e){}
+try{Object.defineProperty(document,'domain',{value:o.hostname,writable:true,configurable:true})}catch(e){}
+window.__vg_origUrl=o;window.__vg_origHref=o.href;
+}catch(e){}})();</scrip`+`t>`;
+
+  // Insert polyfill as first script in <head>
+  if (/<head([^>]*)>/i.test(html)) {
+    html = html.replace(/<head([^>]*)>/, `<head$1>${locationPolyfill}`);
+  }
+
+  // Inject sniffer script before </body> (or at end)
   if (/<\/body>/i.test(html)) {
     html = html.replace(/<\/body>/i, snifferScript + '</body>');
   } else {
