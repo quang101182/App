@@ -56,6 +56,11 @@ body::before {
 .status-dot.yellow { background:var(--warning); box-shadow:0 0 8px rgba(245,158,11,.5); }
 
 .card { background:var(--surface); backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); border:1px solid var(--border); border-radius:16px; padding:24px; margin-bottom:16px; position:relative; animation:slideUp .3s ease; }
+.card-collapse-btn { position:absolute; top:10px; right:10px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--muted); cursor:pointer; padding:4px 8px; font-size:11px; transition:all .15s; z-index:2; display:none; }
+.card-collapse-btn:hover { color:var(--accent); border-color:var(--accent); }
+.card-collapse-btn.show { display:block; }
+.card .collapsible { transition:max-height .3s ease, opacity .2s ease; overflow:hidden; }
+.card.collapsed .collapsible { max-height:0!important; opacity:0; margin:0!important; padding:0!important; pointer-events:none; }
 
 /* DROP ZONE */
 .upload-zone { border:none; border-radius:24px; padding:60px 32px; text-align:center; cursor:pointer; transition:all .3s; position:relative; overflow:visible; background:var(--surface); backdrop-filter:var(--glass); -webkit-backdrop-filter:var(--glass); }
@@ -414,6 +419,8 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
   </div>
 
   <div class="card" id="upload-card">
+    <button class="card-collapse-btn" id="card-collapse-btn" onclick="toggleUploadCard()"><i class="fas fa-chevron-up" id="card-collapse-icon"></i></button>
+    <div class="collapsible" id="upload-collapsible">
     <div class="upload-zone" id="upload-zone">
       <input type="file" id="file-input" accept="audio/*,video/*,.mp3,.mp4,.wav,.webm,.ogg,.flac,.m4a,.aac,.mkv,.avi,.mov">
       <i class="fas fa-cloud-arrow-up"></i>
@@ -472,6 +479,7 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
     <div style="margin-top:20px">
       <button class="btn-primary" id="btn-start" onclick="startTranscription()" disabled><i class="fas fa-play"></i><span>Transcrire</span></button>
     </div>
+    </div><!-- /collapsible -->
     <div class="progress-container" id="progress-container">
       <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
       <div class="progress-text">
@@ -781,6 +789,20 @@ function removeFile(){
 function formatSize(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';if(b<1073741824)return(b/1048576).toFixed(1)+' MB';return(b/1073741824).toFixed(2)+' GB'}
 
 // ─── Engine select visibility ────────────────────────────
+function toggleUploadCard(){
+  const card=document.getElementById('upload-card');card.classList.toggle('collapsed');
+  document.getElementById('card-collapse-icon').className=card.classList.contains('collapsed')?'fas fa-chevron-down':'fas fa-chevron-up';
+}
+function collapseUploadCard(){
+  document.getElementById('upload-card').classList.add('collapsed');
+  document.getElementById('card-collapse-icon').className='fas fa-chevron-down';
+  document.getElementById('card-collapse-btn').classList.add('show');
+}
+function expandUploadCard(){
+  document.getElementById('upload-card').classList.remove('collapsed');
+  document.getElementById('card-collapse-icon').className='fas fa-chevron-up';
+}
+
 function onTargetLangChange(){
   const tgt=document.getElementById('opt-target-lang').value;
   document.getElementById('engine-group').classList.toggle('visible',!!tgt);
@@ -826,6 +848,7 @@ async function startTranscription(){
   if(!selectedFile)return;const secret=getSecret();
   if(!secret){toast('Configurez le Gateway d\'abord','error');toggleSettings();return}
   const btn=document.getElementById('btn-start');btn.disabled=true;btn.innerHTML='<div class="spinner"></div><span>Transcription en cours...</span>';
+  collapseUploadCard();
   document.getElementById('results-section').classList.remove('visible');document.getElementById('action-bar').classList.remove('visible');
   document.getElementById('log-console').innerHTML='';rawResult=null;parsedUtterances=[];speakerNames={};translations={};currentOffset=0;
   initWaveform();startChrono();
