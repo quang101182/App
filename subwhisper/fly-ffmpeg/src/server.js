@@ -136,8 +136,19 @@ app.get('/health', (req, res) => {
 // ---------------------------------------------------------------------------
 
 app.post('/deepgram', requireAnySecret, async (req, res) => {
+  // Vérifier concurrence GLOBALE (partagée avec /extract)
+  if (activeJobs >= MAX_CONCURRENT_JOBS) {
+    return res.status(503).json({
+      error: 'Serveur occupé — un autre traitement est en cours. Réessayez dans quelques minutes.',
+      activeJobs,
+      maxConcurrentJobs: MAX_CONCURRENT_JOBS
+    });
+  }
+  activeJobs++;
+
   const DEEPGRAM_KEY = process.env.DEEPGRAM_KEY || '';
   if (!DEEPGRAM_KEY) {
+    activeJobs--;
     return res.status(503).json({ error: 'DEEPGRAM_KEY not configured' });
   }
 
@@ -345,6 +356,8 @@ app.post('/deepgram', requireAnySecret, async (req, res) => {
       res.status(502).json({ error: `Deepgram proxy error: ${err.message}` });
     }
   } finally {
+    activeJobs--;
+    console.log(`[${jobId}] Deepgram job terminé. Jobs actifs: ${activeJobs}`);
     try { fs.unlinkSync(inputPath); } catch (_) {}
     try { fs.unlinkSync(audioPath); } catch (_) {}
   }
