@@ -228,6 +228,17 @@ select option { background:#12121e; color:#e8e6f0; }
 .export-btn i { font-size:12px; }
 .action-bar { display:none; flex-wrap:wrap; gap:4px; align-items:flex-end; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border); }
 .action-bar.visible { display:flex; }
+/* AUTO toggle */
+.auto-toggle{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;flex-shrink:0;margin-left:auto;padding:4px 12px;border-radius:9px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.06);transition:all .2s}
+.auto-toggle:hover{background:rgba(16,185,129,.12);border-color:#10b981}
+.auto-toggle input{display:none}
+.auto-toggle .at-track{width:32px;height:18px;border-radius:9px;background:var(--surface2);border:1px solid var(--border);position:relative;transition:all .2s;flex-shrink:0}
+.auto-toggle .at-track::after{content:'';position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--muted);transition:all .2s}
+.auto-toggle input:checked+.at-track{background:#10b981;border-color:#10b981}
+.auto-toggle input:checked+.at-track::after{left:16px;background:#fff}
+.auto-toggle .at-lbl{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.5px;color:#10b981;text-transform:uppercase}
+.btn-auto-opt{border-color:rgba(16,185,129,.4)!important;color:#10b981!important;font-weight:700!important;letter-spacing:.4px}
+.btn-auto-opt:hover{background:rgba(16,185,129,.12)!important;border-color:#10b981!important}
 
 /* SPEAKER MODAL */
 .modal-overlay { display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,.72); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); align-items:center; justify-content:center; }
@@ -538,6 +549,7 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
       <div class="btn-sep"></div>
       <div class="btn-grp-wrap"><span class="btn-grp-lbl">Outils</span>
         <div class="btn-grp">
+          <button class="export-btn btn-auto-opt" onclick="autoOptimize()" title="Auto: dedup + merge courts + split longs + format lignes"><i class="fas fa-bolt"></i> Optimiser</button>
           <button class="export-btn" onclick="formatSubtitles()" title="FORMAT: 42 chars/ligne, max 2 lignes"><i class="fas fa-align-left"></i> FORMAT</button>
           <button class="export-btn" onclick="splitBlock()" title="Couper le segment actif en 2"><i class="fas fa-scissors"></i> Split</button>
           <button class="export-btn" onclick="mergeBlocks()" title="Fusionner 2 segments consécutifs"><i class="fas fa-compress"></i> Merge</button>
@@ -553,6 +565,11 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
           <button class="export-btn" onclick="startSecondPass()" title="2e passe correction traduction" style="border-color:rgba(0,212,170,.2);color:var(--accent3);opacity:.8"><i class="fas fa-rotate"></i> 2e passe</button>
         </div>
       </div>
+      <label class="auto-toggle" title="AUTO: optimiser automatiquement après transcription">
+        <input type="checkbox" id="autoToggle" onchange="saveAutoToggle()">
+        <span class="at-track"></span>
+        <span class="at-lbl">AUTO</span>
+      </label>
     </div>
 
     <div class="translate-bar" id="translate-bar">
@@ -906,6 +923,8 @@ async function startTranscription(){
       const eng=document.getElementById('opt-engine').value;document.getElementById('translate-engine').value=eng;
       await startTranslation(true);setProgress(100,'Terminé','done');
     }
+    // AUTO optimize si toggle activé
+    if(isAutoOn()&&parsedUtterances.length>0){log('AUTO optimize activé','info');autoOptimize()}
     saveToHistory();
     setTimeout(()=>document.getElementById('results-section').scrollIntoView({behavior:'smooth',block:'start'}),300);
   }catch(err){log(`Erreur: ${err.message}`,'error');toast('Erreur: '+err.message,'error');setProgress(0,'Erreur')}
@@ -1426,6 +1445,101 @@ function mergeBlocks(){
   translations=newTr;renderTranscriptBlocks();saveToHistory();toast('Segments fusionnés');
 }
 
+// ─── AUTO OPTIMIZE ───────────────────────────────────────
+function autoOptimize(){
+  if(!parsedUtterances.length){toast('Rien à optimiser','warn');return}
+  const MAX_LINE=42,MAX_CHARS=84,MIN_DUR_MS=500;
+  let deduped=0,merged=0,split=0,formatted=0;
+  const before=parsedUtterances.length;
+
+  // Étape 1: Dedup — blocs consécutifs même speaker + texte identique
+  for(let i=parsedUtterances.length-1;i>0;i--){
+    const a=parsedUtterances[i-1],b=parsedUtterances[i];
+    if(a.speaker===b.speaker&&a.text.trim()===b.text.trim()){
+      a.end=Math.max(a.end,b.end);a.words=[...a.words,...b.words];
+      parsedUtterances.splice(i,1);
+      // Shift translations
+      const nt={};for(const[k,v]of Object.entries(translations)){const ki=parseInt(k);if(ki<i)nt[ki]=v;else if(ki>i)nt[ki-1]=v}
+      translations=nt;deduped++
+    }
+  }
+
+  // Étape 2: Merge micro-blocs (<500ms) avec le suivant si même speaker
+  for(let i=parsedUtterances.length-2;i>=0;i--){
+    const u=parsedUtterances[i],next=parsedUtterances[i+1];
+    const durMs=(u.end-u.start)*1000;
+    if(durMs<MIN_DUR_MS&&durMs>0&&u.speaker===next.speaker){
+      const combo=u.text.trimEnd()+' '+next.text.trimStart();
+      if(combo.replace(/\n/g,'').length<=MAX_CHARS){
+        u.end=next.end;u.text=combo;u.words=[...u.words,...next.words];u.confidence=Math.min(u.confidence,next.confidence);
+        parsedUtterances.splice(i+1,1);
+        const nt={};for(const[k,v]of Object.entries(translations)){const ki=parseInt(k);if(ki<=i)nt[ki]=v;else if(ki===i+1){nt[i]=((translations[i]||'')+' '+(v||'')).trim()}else nt[ki-1]=v}
+        translations=nt;merged++
+      }
+    }
+  }
+
+  // Étape 3: Split blocs trop longs (>84 chars)
+  for(let i=parsedUtterances.length-1;i>=0;i--){
+    const u=parsedUtterances[i];
+    const flat=u.text.replace(/\n/g,' ');
+    if(flat.length>MAX_CHARS){
+      // Utiliser word-level timing si disponible
+      if(u.words&&u.words.length>=2){
+        const midW=Math.floor(u.words.length/2);
+        const t1=u.words.slice(0,midW).map(w=>w.punctuated_word||w.word).join(' ');
+        const t2=u.words.slice(midW).map(w=>w.punctuated_word||w.word).join(' ');
+        const midTime=u.words[midW].start||u.start+(u.end-u.start)/2;
+        const u1={speaker:u.speaker,start:u.start,end:midTime,text:t1,confidence:u.confidence,words:u.words.slice(0,midW)};
+        const u2={speaker:u.speaker,start:midTime,end:u.end,text:t2,confidence:u.confidence,words:u.words.slice(midW)};
+        parsedUtterances.splice(i,1,u1,u2);
+        // Shift translations
+        const nt={};for(const[k,v]of Object.entries(translations)){const ki=parseInt(k);if(ki<i)nt[ki]=v;else if(ki===i){const tw=(v||'').split(/\s+/);const tm=Math.floor(tw.length/2);nt[i]=tw.slice(0,tm).join(' ');nt[i+1]=tw.slice(tm).join(' ')}else nt[ki+1]=v}
+        translations=nt;split++
+      }else{
+        // Fallback: split par mots au milieu
+        const words=flat.split(/\s+/);if(words.length<2)continue;
+        const mid=Math.floor(words.length/2);const ratio=mid/words.length;
+        const midTime=u.start+(u.end-u.start)*ratio;
+        const u1={speaker:u.speaker,start:u.start,end:midTime,text:words.slice(0,mid).join(' '),confidence:u.confidence,words:[]};
+        const u2={speaker:u.speaker,start:midTime,end:u.end,text:words.slice(mid).join(' '),confidence:u.confidence,words:[]};
+        parsedUtterances.splice(i,1,u1,u2);
+        const nt={};for(const[k,v]of Object.entries(translations)){const ki=parseInt(k);if(ki<i)nt[ki]=v;else if(ki===i){const tw=(v||'').split(/\s+/);const tm=Math.floor(tw.length/2);nt[i]=tw.slice(0,tm).join(' ');nt[i+1]=tw.slice(tm).join(' ')}else nt[ki+1]=v}
+        translations=nt;split++
+      }
+    }
+  }
+
+  // Étape 4: Format lignes (42 chars/ligne, max 2 lignes)
+  for(const u of parsedUtterances){
+    const orig=u.text;let text=u.text.replace(/\n/g,' ').replace(/\s+/g,' ').trim();
+    if(text.length>MAX_LINE){
+      const words=text.split(' ');let l1='',l2='';
+      for(const w of words){
+        if(!l2&&(l1+' '+w).trim().length<=MAX_LINE)l1=(l1+' '+w).trim();
+        else l2=(l2+' '+w).trim();
+      }
+      if(l2&&l1.length<=MAX_LINE&&l2.length<=MAX_LINE)text=l1+'\n'+l2;
+      else if(text.length>MAX_LINE*2)text=text.substring(0,MAX_LINE*2-1)+'…';
+    }
+    if(text!==orig){u.text=text;formatted++}
+  }
+
+  const after=parsedUtterances.length;
+  renderTranscriptBlocks();saveToHistory();
+  const parts=[];
+  if(deduped)parts.push(`${deduped} dedup`);
+  if(merged)parts.push(`${merged} merge`);
+  if(split)parts.push(`${split} split`);
+  if(formatted)parts.push(`${formatted} format`);
+  const total=deduped+merged+split+formatted;
+  toast(total?`⚡ Optimisé: ${parts.join(', ')} (${before}→${after} seg.)`:'⚡ Déjà optimal — aucune modification');
+  log(`AUTO: ${parts.join(', ')||'aucune modif'} (${before}→${after})`,'success');
+}
+
+function saveAutoToggle(){const on=document.getElementById('autoToggle').checked;savePrefs()}
+function isAutoOn(){return document.getElementById('autoToggle')?.checked||false}
+
 // ─── FORMAT auto (42 chars, max 2 lignes) ────────────────
 function formatSubtitles(){
   if(!parsedUtterances.length){toast('Rien à formater','warn');return}
@@ -1558,6 +1672,7 @@ function savePrefs(){
   PREF_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el)p[id]=el.value});
   PREF_CHIPS.forEach(id=>{const el=document.getElementById(id);if(el)p[id]=el.classList.contains('active')});
   p.showColoredText=showColoredText;p.showOriginal=showOriginal;
+  p.autoToggle=document.getElementById('autoToggle')?.checked||false;
   try{localStorage.setItem(PREF_KEY,JSON.stringify(p))}catch(e){}
 }
 function restorePrefs(){
@@ -1567,6 +1682,7 @@ function restorePrefs(){
     PREF_CHIPS.forEach(id=>{const el=document.getElementById(id);if(el&&p[id]!==undefined){el.classList.toggle('active',p[id])}});
     if(p.showColoredText!==undefined){showColoredText=p.showColoredText;document.getElementById('btn-toggle-colors')?.classList.toggle('active-toggle',showColoredText)}
     if(p.showOriginal!==undefined){showOriginal=p.showOriginal;document.getElementById('btn-toggle-original')?.classList.toggle('active-toggle',!showOriginal)}
+    if(p.autoToggle!==undefined){const at=document.getElementById('autoToggle');if(at)at.checked=p.autoToggle}
     // Trigger engine visibility
     onTargetLangChange();
   }catch(e){}
