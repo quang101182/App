@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.9.8 — Discovery Engine</title>
+<title>music·ai v3.9.9 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -144,7 +144,25 @@
   .light .chat-input{color:var(--text);}
   #mini-player-title { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #mini-player-artist { font-size:11px; color:var(--muted); }
-  .mini-btn { width:44px; height:44px; border-radius:50%; background:var(--card); border:1px solid var(--border); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; touch-action:manipulation; }
+  .mini-btn { width:44px; height:44px; border-radius:50%; background:var(--card); border:1px solid var(--border); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; touch-action:manipulation; transition:transform 0.2s cubic-bezier(.34,1.56,.64,1),box-shadow 0.25s,border-color 0.25s; }
+  .mini-btn:active { transform:scale(0.82); }
+  .mini-btn.pop { animation:btnPop 0.4s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes btnPop { 0%{transform:scale(0.82)} 50%{transform:scale(1.12)} 100%{transform:scale(1)} }
+  .mini-btn:hover,.mini-btn:focus-visible { border-color:var(--accent); box-shadow:0 0 12px rgba(124,58,237,0.3); }
+  #mp-playpause.playing { box-shadow:0 0 0 0 rgba(124,58,237,0.5); animation:pulseRing 2s ease-out infinite; }
+  @keyframes pulseRing { 0%{box-shadow:0 0 0 0 rgba(124,58,237,0.45)} 70%{box-shadow:0 0 0 8px rgba(124,58,237,0)} 100%{box-shadow:0 0 0 0 rgba(124,58,237,0)} }
+  /* Equalizer bars */
+  .mp-eq { display:flex; align-items:flex-end; gap:2px; height:16px; flex-shrink:0; padding:0 4px; }
+  .mp-eq.paused .mp-eq-bar { animation-play-state:paused; }
+  .mp-eq-bar { width:3px; border-radius:1.5px; background:linear-gradient(0deg,var(--accent2),var(--accent)); }
+  .mp-eq-bar:nth-child(1) { animation:eqBar1 0.8s ease-in-out infinite alternate; }
+  .mp-eq-bar:nth-child(2) { animation:eqBar2 0.6s ease-in-out infinite alternate; }
+  .mp-eq-bar:nth-child(3) { animation:eqBar3 0.9s ease-in-out infinite alternate; }
+  .mp-eq-bar:nth-child(4) { animation:eqBar4 0.7s ease-in-out infinite alternate; }
+  @keyframes eqBar1 { 0%{height:4px} 100%{height:14px} }
+  @keyframes eqBar2 { 0%{height:8px} 100%{height:16px} }
+  @keyframes eqBar3 { 0%{height:3px} 100%{height:11px} }
+  @keyframes eqBar4 { 0%{height:6px} 100%{height:15px} }
   /* RADIO */
   #radio-btn { padding:6px 12px; border-radius:50px; background:var(--card); border:1px solid var(--border); font-family:inherit; font-size:12px; font-weight:600; color:var(--muted); cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:5px; }
   #radio-btn.active { border-color:#ef4444; background:rgba(239,68,68,0.15); color:#ef4444; }
@@ -443,7 +461,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.9.8</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.9.9</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -545,6 +563,7 @@
           <div id="mini-player-title" style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</div>
           <div id="mini-player-artist" style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</div>
         </div>
+        <div id="mp-eq" class="mp-eq paused"><div class="mp-eq-bar"></div><div class="mp-eq-bar"></div><div class="mp-eq-bar"></div><div class="mp-eq-bar"></div></div>
         <button class="mini-btn" id="mp-playpause" onclick="ytTogglePlay()" title="Play/Pause">⏸</button>
         <button class="mini-btn" onclick="ytPrev()" title="Précédent">⏮</button>
         <button class="mini-btn" onclick="ytNext()" title="Suivant">⏭</button>
@@ -1087,7 +1106,13 @@ function setVolume(v){
 function updatePlayPauseUI(playing){
   const ic=playing?'⏸':'▶';
   ['mp-playpause','ko-playpause'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=ic});
+  // Equalizer animation
+  const eq=document.getElementById('mp-eq');if(eq){if(playing)eq.classList.remove('paused');else eq.classList.add('paused');}
+  // Pulse ring on play/pause button
+  const ppBtn=document.getElementById('mp-playpause');if(ppBtn){if(playing)ppBtn.classList.add('playing');else ppBtn.classList.remove('playing');}
 }
+// Bounce effect on mini-btn click (delegated)
+document.addEventListener('click',function(e){const btn=e.target.closest('.mini-btn');if(!btn)return;btn.classList.remove('pop');void btn.offsetWidth;btn.classList.add('pop');});
 function mpSeek(e){
   if(!ST.ytPlayerReady||!ST.ytPlayer||!ST.ytPlayer.getDuration)return;
   const bar=document.getElementById('mp-progress');
