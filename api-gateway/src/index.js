@@ -417,6 +417,14 @@ async function proxyYoutubeSearch(request, env) {
   const query = (body.q || '').trim();
   if (!query) return jsonResponse({ error: 'missing q parameter' }, 400);
 
+  // 0. Increment daily usage counter (fire-and-forget, all requests)
+  const today = new Date().toISOString().slice(0, 10);
+  const usageKey = `ytusage:${today}`;
+  env.GATEWAY_KV.get(usageKey).then(raw => {
+    const count = parseInt(raw || '0', 10) + 1;
+    env.GATEWAY_KV.put(usageKey, String(count), { expirationTtl: 172800 }).catch(() => {});
+  }).catch(() => {});
+
   // 1. Check KV cache first
   const cacheKey = `ytcache:${query.toLowerCase().replace(/\s+/g, ' ')}`;
   const cached = await env.GATEWAY_KV.get(cacheKey);
@@ -476,13 +484,6 @@ async function proxyYoutubeSearch(request, env) {
       // 4. Cache result in KV (fire-and-forget)
       if (bestId) {
         env.GATEWAY_KV.put(cacheKey, JSON.stringify({ videoId: bestId, title: bestTitle }), { expirationTtl: YT_CACHE_TTL }).catch(() => {});
-        // 5. Increment daily usage counter (fire-and-forget)
-        const today = new Date().toISOString().slice(0, 10);
-        const usageKey = `ytusage:${today}`;
-        env.GATEWAY_KV.get(usageKey).then(raw => {
-          const count = parseInt(raw || '0', 10) + 1;
-          env.GATEWAY_KV.put(usageKey, String(count), { expirationTtl: 172800 }).catch(() => {});
-        }).catch(() => {});
       }
 
       return jsonResponse({ videoId: bestId, title: bestTitle, cached: false });
