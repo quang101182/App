@@ -1255,9 +1255,13 @@ async function startTranslation(silent=false){
   const btn=document.getElementById('btn-translate'),status=document.getElementById('translate-status');
   if(!silent){btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Traduction...'}translations={};
   const CS=30;const chunks=[];for(let i=0;i<parsedUtterances.length;i+=CS)chunks.push(parsedUtterances.slice(i,i+CS).map((u,j)=>({idx:i+j,text:u.text})));
+  log(`Traduction ${engine}: ${parsedUtterances.length} seg. en ${chunks.length} chunks`,'info');
   try{
     for(let ci=0;ci<chunks.length;ci++){
+      const pct=silent?Math.round(92+(ci/chunks.length)*6):Math.round((ci/chunks.length)*100);
       status.textContent=`Chunk ${ci+1}/${chunks.length}...`;
+      if(silent)setProgress(pct,`Traduction chunk ${ci+1}/${chunks.length}...`,'translation');
+      log(`  ↳ Chunk ${ci+1}/${chunks.length} (${chunks[ci].length} seg.)...`,'info');
       const lines=chunks[ci].map(c=>`[${c.idx}] ${c.text}`).join('\n');
       const prompt=`Traduis les lignes suivantes en ${langNames[targetLang]||targetLang}. Chaque ligne est préfixée par [numéro]. Retourne EXACTEMENT le même format [numéro] suivi de la traduction. Ne traduis PAS les noms propres. Conserve le sens et le ton. Pas d'explication.\n\n${lines}`;
       const apiPath=engine==='gemini'?'/api/gemini/v1beta/models/gemini-2.0-flash:generateContent':'/api/deepseek';
@@ -1266,10 +1270,11 @@ async function startTranslation(silent=false){
       if(!resp.ok)throw new Error(`${engine} HTTP ${resp.status}`);const data=await resp.json();
       const rt=engine==='gemini'?data.candidates?.[0]?.content?.parts?.[0]?.text||'':data.choices?.[0]?.message?.content||'';
       let match;const rx=/\[(\d+)\]\s*(.*)/g;while((match=rx.exec(rt))!==null){const t=match[2].trim();if(t)translations[parseInt(match[1])]=t}
+      log(`  ✓ Chunk ${ci+1} OK — ${Object.keys(translations).length} traduits`,'success');
     }
     status.textContent=`${Object.keys(translations).length}/${parsedUtterances.length} traduits`;
     if(!silent)toast(`Traduction terminée (${engine})`,'success');
-    log(`Traduction: ${Object.keys(translations).length}/${parsedUtterances.length} (${engine})`,'success');
+    log(`Traduction terminée: ${Object.keys(translations).length}/${parsedUtterances.length} (${engine})`,'success');
     renderTranscriptBlocks();rebuildVttTrack();saveToHistory();
   }catch(err){toast(`Erreur traduction: ${err.message}`,'error');status.textContent='Erreur'}
   finally{if(!silent){btn.disabled=false;btn.innerHTML='<i class="fas fa-language"></i> Traduire'}}
