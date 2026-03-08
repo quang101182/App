@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.9.1 — Discovery Engine</title>
+<title>music·ai v3.9.2 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -443,7 +443,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.9.1</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.9.2</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -881,8 +881,9 @@ let _audioUnlocked=false;
 function unlockAudioContext(){
   if(_audioUnlocked||!ST.ytPlayerReady||!ST.ytPlayer||!ST.ytPlayer.playVideo)return;
   try{
+    ST.ytPlayer.mute();
     ST.ytPlayer.playVideo();
-    setTimeout(()=>{ST.ytPlayer.pauseVideo();_audioUnlocked=true;},50);
+    setTimeout(()=>{ST.ytPlayer.pauseVideo();ST.ytPlayer.unMute();_audioUnlocked=true;},50);
   }catch(e){}
 }
 document.addEventListener('touchstart',unlockAudioContext,{once:true});
@@ -962,7 +963,7 @@ function onTrackEnded(){
       ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
       if(ST.sessionThread.length>8)ST.sessionThread.shift();
       saveThread(ST.sessionThread);
-      if(getYtKey()){const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;ytPlay({title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`});}
+      if(getYtKey()||getAllYtKeys().length||getGwSecret()){const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;ytPlay({title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`});}
       toast('🎵 '+esc(rec.title)+' — '+esc(rec.artist));
     }else{toast('🎵 Prochaine reco…');getRecommendation(ST.mode);}
     return;
@@ -973,8 +974,8 @@ async function ytPlay(track){
   ST._preRec=null;ST._preFetching=false;// reset prefetch sur nouvelle piste manuelle
   ST.currentTrack={...track,videoId:null};
   updateMiniPlayer(track.title,track.artist);
-  const key=getYtKey();
-  if(!key){ytShowFallbackToast(track);return}
+  const hasAny=!!(getYtKey()||getAllYtKeys().length||getGwSecret());
+  if(!hasAny){ytShowFallbackToast(track);return}
   // PAS d'ouverture modale → lecture en arrière-plan, mini-player uniquement
   toast('🔍 Recherche…');
   const q=track.ytQuery||track.youtube_query||`${track.artist} ${track.title} official audio`;
@@ -989,8 +990,18 @@ async function ytPlay(track){
   if(yt)yt.textContent=track.title||'—';
   if(ya)ya.textContent=track.artist||'—';
   if(ST.ytPlayerReady&&ST.ytPlayer&&typeof ST.ytPlayer.loadVideoById==='function'){
-    ST._ytRetried=false;// reset flag → onStateChange peut faire 1 retry
+    ST._ytRetried=false;
     ST.ytPlayer.loadVideoById(vid);
+    // Retries escaladés playVideo() — Android Chrome bloque souvent le premier appel
+    [200,600,1200,2500].forEach(delay=>{
+      setTimeout(()=>{
+        try{
+          if(ST.currentTrack&&ST.currentTrack.videoId===vid&&ST.ytPlayer.getPlayerState&&ST.ytPlayer.getPlayerState()!==1){
+            ST.ytPlayer.playVideo();
+          }
+        }catch(_){}
+      },delay);
+    });
     // Re-appliquer volume 800ms après loadVideoById (YT reset audio context sur nouveau load)
     setTimeout(()=>{
       try{
@@ -1706,7 +1717,7 @@ async function getRecommendation(mode){
     if(ST.sessionThread.length>8)ST.sessionThread.shift();
     saveThread(ST.sessionThread);
     const p=getProfile();if(p){p.interactions=(p.interactions||0)+1;saveProfile(p)}
-    if(ST.continuousMode&&getYtKey()){const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;ytPlay({title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`});}
+    if(ST.continuousMode&&(getYtKey()||getAllYtKeys().length||getGwSecret())){const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;ytPlay({title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`});}
   }catch(e){resultEl.innerHTML=`<div style="color:#ef4444;font-size:13px;">⚠️ ${esc(e.message)}</div>`}
   finally{if(mode==='onetap')document.getElementById('onetap-icon').textContent='♪';ST.isLoading=false;}
 }
@@ -1880,7 +1891,7 @@ async function sendChat(){
           const ytQ=`${c.artist} ${c.title} official audio`;
           const t={title:c.title,artist:c.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`};
           _searchContext={active:false,clues:[],attempts:0};
-          getYtKey()?ytPlay(t):window.open(t.ytUrl,'_blank','noopener');
+          (getYtKey()||getAllYtKeys().length||getGwSecret())?ytPlay(t):window.open(t.ytUrl,'_blank','noopener');
           pushHistory({title:c.title,artist:c.artist,action:'chat',context:'chat'});
           toast('🎵 '+esc(c.title));
         };
