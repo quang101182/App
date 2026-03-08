@@ -1304,6 +1304,13 @@ app.get('/hls2mp4/events/:jobId', requireAnySecret, (req, res) => {
   });
 });
 
+// Poll job status (fallback when SSE drops on mobile)
+app.get('/hls2mp4/poll/:jobId', requireAnySecret, (req, res) => {
+  const job = hlsJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'job not found' });
+  res.json({ status: job.status, progress: job.progress, mp4Size: job.mp4Size || 0, error: job.error || null, lastLog: job.logs[job.logs.length - 1] || '' });
+});
+
 // Cancel a job (kill FFmpeg, cleanup)
 app.delete('/hls2mp4/:jobId', requireAnySecret, (req, res) => {
   const job = hlsJobs.get(req.params.jobId);
