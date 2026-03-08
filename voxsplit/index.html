@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoxSplit v2.0 — Diarization & Transcription</title>
+<title>VoxSplit v2.1 — Diarization & Transcription</title>
 <meta name="description" content="Transcription audio/vidéo avec identification des locuteurs (diarization) via Deepgram Nova-2">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#080810">
@@ -73,7 +73,7 @@ body::before {
   max-width: 900px;
   margin: 0 auto;
   padding: 16px;
-  padding-bottom: 100px;
+  padding-bottom: 32px;
 }
 
 /* ── HEADER ────────────────────────────────────────────── */
@@ -557,29 +557,7 @@ body::before {
   transition: width 0.5s;
 }
 
-/* ── EXPORT BAR ────────────────────────────────────────── */
-.export-bar {
-  display: none;
-  position: fixed;
-  bottom: 0;
-  left: 0; right: 0;
-  z-index: 100;
-  padding: 10px 16px;
-  background: rgba(8,8,16,.92);
-  backdrop-filter: var(--glass);
-  -webkit-backdrop-filter: var(--glass);
-  border-top: 1px solid var(--border);
-}
-.export-bar.visible { display: block; }
-.export-bar-inner {
-  max-width: 900px;
-  margin: 0 auto;
-  display: flex;
-  gap: 4px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  align-items: center;
-}
+/* (export-bar removed — now inline action-bar) */
 .btn-grp-wrap {
   display: flex;
   flex-direction: column;
@@ -882,6 +860,118 @@ mark {
   padding-top: 2px;
 }
 
+/* ── VIDEO PLAYER ──────────────────────────────────────── */
+#videoWrap {
+  overflow: hidden;
+  transition: max-height .3s ease;
+  position: relative;
+  border-radius: 12px 12px 0 0;
+  background: #000;
+}
+#videoWrap.collapsed { max-height: 0 !important; }
+.preview-video {
+  width: 100%;
+  display: block;
+  max-height: 50vh;
+  background: #000;
+}
+#subBox {
+  background: #000;
+  min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  cursor: pointer;
+  transition: background .15s;
+  user-select: none;
+  -webkit-user-select: none;
+  gap: 4px;
+  border-radius: 0 0 12px 12px;
+}
+#subBox.empty { cursor: default; }
+#subBox:not(.empty):hover { background: #141414; }
+#subBoxMeta {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  transition: color .15s;
+}
+#subBox:not(.empty):hover #subBoxMeta { color: #888; }
+#subBoxText {
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: #e8e8e8;
+  transition: color .15s;
+}
+#subBox.empty #subBoxText {
+  color: #2a2a2a;
+  font-weight: 400;
+  font-size: 13px;
+}
+#previewSection {
+  display: none;
+  margin-bottom: 16px;
+  animation: slideUp .3s ease;
+}
+#previewSection.visible { display: block; }
+#previewHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  margin-bottom: 6px;
+}
+#previewHeader span {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--muted);
+}
+#previewHeader .preview-actions { display: flex; gap: 6px; }
+#previewHeader .preview-actions button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  transition: color .15s;
+}
+#previewHeader .preview-actions button:hover { color: var(--text); }
+@media(max-width:600px) {
+  #subBoxText { font-size: 13px; }
+  #subBox { padding: 8px 12px; }
+}
+
+/* ── ACTION BAR (inline, like SubWhisper) ─────────────── */
+.action-bar {
+  display: none;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: flex-end;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.action-bar.visible { display: flex; }
+
+/* ── TRANSCRIPT BLOCK SEEK ─────────────────────────────── */
+.transcript-block { cursor: pointer; }
+.transcript-block.active-block {
+  background: rgba(124,106,255,.06);
+  border-left-color: var(--accent) !important;
+}
+
 /* ── SCROLLBAR ─────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -907,7 +997,7 @@ mark {
       <h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1>
     </div>
     <div class="header-actions">
-      <span class="version">v2.0</span>
+      <span class="version">v2.1</span>
       <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--muted)">
         <span class="status-dot yellow"></span>
       </span>
@@ -1048,6 +1138,37 @@ mark {
 
     <div class="speaker-legend" id="speaker-legend"></div>
 
+    <!-- Action buttons (inline like SubWhisper) -->
+    <div class="action-bar" id="action-bar">
+      <div class="btn-grp-wrap">
+        <span class="btn-grp-lbl">Export</span>
+        <div class="btn-grp">
+          <button class="export-btn" onclick="exportSRT()"><i class="fas fa-file-lines"></i> SRT</button>
+          <button class="export-btn" id="btn-export-srt-bilingual" onclick="exportSRTBilingual()" style="display:none"><i class="fas fa-file-lines"></i> SRT bilingue</button>
+          <button class="export-btn" onclick="exportTXT()"><i class="fas fa-file-alt"></i> TXT</button>
+          <button class="export-btn" onclick="exportJSON()"><i class="fas fa-file-code"></i> JSON</button>
+          <button class="export-btn" onclick="exportVTT()"><i class="fas fa-closed-captioning"></i> VTT</button>
+          <button class="export-btn" onclick="copyToClipboard()"><i class="fas fa-copy"></i> Copier</button>
+        </div>
+      </div>
+      <div class="btn-sep"></div>
+      <div class="btn-grp-wrap">
+        <span class="btn-grp-lbl">Outils</span>
+        <div class="btn-grp">
+          <button class="export-btn" onclick="toggleSearch()"><i class="fas fa-magnifying-glass"></i> Rechercher</button>
+          <button class="export-btn" onclick="editSpeakers()"><i class="fas fa-user-pen"></i> Renommer</button>
+          <button class="export-btn" onclick="resetAll()"><i class="fas fa-rotate-left"></i> Nouveau</button>
+        </div>
+      </div>
+      <div class="btn-sep"></div>
+      <div class="btn-grp-wrap">
+        <span class="btn-grp-lbl" style="color:#00d4aa;opacity:.75">Traduction</span>
+        <div class="btn-grp">
+          <button class="export-btn" onclick="toggleTranslateBar()" style="border-color:rgba(0,212,170,.3);color:var(--accent3)"><i class="fas fa-language"></i> Traduire</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Translation bar -->
     <div class="translate-bar" id="translate-bar">
       <i class="fas fa-language" style="color:var(--accent3);font-size:18px"></i>
@@ -1077,41 +1198,25 @@ mark {
       <div class="search-count" id="search-count"></div>
     </div>
 
-    <div id="transcript-output"></div>
-  </div>
-</div>
+    <!-- Video Preview + Subtitles (like SubWhisper) -->
+    <div id="previewSection">
+      <div id="previewHeader">
+        <span><i class="fas fa-film" style="margin-right:6px"></i>Prévisualisation + sous-titres</span>
+        <div class="preview-actions">
+          <button onclick="toggleVideoCollapse()" title="Réduire/agrandir"><i class="fas fa-chevron-up" id="collapseIcon"></i></button>
+          <button onclick="closePreview()" title="Fermer"><i class="fas fa-xmark"></i></button>
+        </div>
+      </div>
+      <div id="videoWrap">
+        <video class="preview-video" id="previewVideo" controls preload="metadata"></video>
+      </div>
+      <div id="subBox" class="empty">
+        <div id="subBoxMeta"></div>
+        <div id="subBoxText">—</div>
+      </div>
+    </div>
 
-<!-- Export Bar -->
-<div class="export-bar" id="export-bar">
-  <div class="export-bar-inner">
-    <div class="btn-grp-wrap">
-      <span class="btn-grp-lbl">Export</span>
-      <div class="btn-grp">
-        <button class="export-btn" onclick="exportSRT()"><i class="fas fa-file-lines"></i> SRT</button>
-        <button class="export-btn" id="btn-export-srt-bilingual" onclick="exportSRTBilingual()" style="display:none"><i class="fas fa-file-lines"></i> SRT bilingue</button>
-        <button class="export-btn" onclick="exportTXT()"><i class="fas fa-file-alt"></i> TXT</button>
-        <button class="export-btn" onclick="exportJSON()"><i class="fas fa-file-code"></i> JSON</button>
-        <button class="export-btn" onclick="exportVTT()"><i class="fas fa-closed-captioning"></i> VTT</button>
-      </div>
-    </div>
-    <div class="btn-sep"></div>
-    <div class="btn-grp-wrap">
-      <span class="btn-grp-lbl">Outils</span>
-      <div class="btn-grp">
-        <button class="export-btn" onclick="copyToClipboard()"><i class="fas fa-copy"></i> Copier</button>
-        <button class="export-btn" onclick="toggleSearch()"><i class="fas fa-magnifying-glass"></i> Rechercher</button>
-        <button class="export-btn" onclick="editSpeakers()"><i class="fas fa-user-pen"></i> Renommer</button>
-      </div>
-    </div>
-    <div class="btn-sep"></div>
-    <div class="btn-grp-wrap">
-      <span class="btn-grp-lbl" style="color:#00d4aa;opacity:.75">Traduction</span>
-      <div class="btn-grp">
-        <button class="export-btn" onclick="toggleTranslateBar()" style="border-color:rgba(0,212,170,.3);color:var(--accent3)"><i class="fas fa-language"></i> Traduire</button>
-      </div>
-    </div>
-    <div class="btn-sep"></div>
-    <button class="export-btn" onclick="resetAll()"><i class="fas fa-rotate-left"></i> Nouveau</button>
+    <div id="transcript-output"></div>
   </div>
 </div>
 
@@ -1131,7 +1236,7 @@ mark {
 
 <script>
 // ─────────────────────────────────────────────────────────────────────
-// VoxSplit v2.0 — Diarization & Transcription via Deepgram
+// VoxSplit v2.1 — Diarization & Transcription via Deepgram
 // ─────────────────────────────────────────────────────────────────────
 
 const VERSION = '2.0';
@@ -1149,6 +1254,8 @@ let rawResult = null; // Deepgram JSON response
 let speakerNames = {}; // { 0: "Alice", 1: "Bob" }
 let parsedUtterances = []; // processed utterances
 let translations = {}; // { index: "translated text" }
+let previewVideoUrl = null;
+let _timeupdateHandler = null;
 
 // ─────────────────────────────────────────────────────────────────────
 // Config
@@ -1328,7 +1435,7 @@ async function startTranscription() {
 
   // Reset
   document.getElementById('results-section').classList.remove('visible');
-  document.getElementById('export-bar').classList.remove('visible');
+  document.getElementById('action-bar').classList.remove('visible');
   document.getElementById('log-console').innerHTML = '';
   rawResult = null;
   parsedUtterances = [];
@@ -1418,7 +1525,10 @@ async function startTranscription() {
 
     renderResults();
     document.getElementById('results-section').classList.add('visible');
-    document.getElementById('export-bar').classList.add('visible');
+    document.getElementById('action-bar').classList.add('visible');
+
+    // Show video preview if applicable
+    showVideoPreview();
 
     setTimeout(() => {
       document.getElementById('results-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1677,6 +1787,8 @@ function renderTranscriptBlocks(filter = '') {
     block.className = `transcript-block speaker-${utt.speaker}`;
     block.style.borderLeftColor = color;
     block.dataset.speaker = utt.speaker;
+    block.dataset.idx = uttIdx;
+    block.onclick = () => seekToUtterance(uttIdx);
 
     // Highlight search terms
     let displayText = text;
@@ -2005,17 +2117,122 @@ function exportSRTBilingual() {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Video Preview + Subtitle Sync
+// ─────────────────────────────────────────────────────────────────────
+
+function showVideoPreview() {
+  if (!selectedFile) return;
+  // Only show for video files the browser can play (not mkv)
+  const isVideo = selectedFile.type.startsWith('video/') || /\.(mp4|webm|mov)$/i.test(selectedFile.name);
+  const isMkv = /\.mkv$/i.test(selectedFile.name);
+  if (!isVideo || isMkv) return;
+
+  if (previewVideoUrl) URL.revokeObjectURL(previewVideoUrl);
+  previewVideoUrl = URL.createObjectURL(selectedFile);
+
+  const video = document.getElementById('previewVideo');
+  video.src = previewVideoUrl;
+  video.load();
+
+  // Restore saved volume
+  try { const sv = localStorage.getItem('voxsplit_vol'); if (sv !== null) video.volume = parseFloat(sv); } catch(e) {}
+  video.addEventListener('volumechange', () => {
+    try { localStorage.setItem('voxsplit_vol', video.volume); } catch(e) {}
+  });
+
+  // Subtitle sync on timeupdate
+  _timeupdateHandler = () => updateSubBox(video);
+  video.addEventListener('timeupdate', _timeupdateHandler);
+
+  document.getElementById('previewSection').classList.add('visible');
+  document.getElementById('videoWrap').classList.remove('collapsed');
+  document.getElementById('collapseIcon').className = 'fas fa-chevron-up';
+}
+
+function updateSubBox(video) {
+  const currentSec = video.currentTime;
+  const box = document.getElementById('subBox');
+  const meta = document.getElementById('subBoxMeta');
+  const text = document.getElementById('subBoxText');
+
+  let found = null;
+  let foundIdx = -1;
+  for (let i = 0; i < parsedUtterances.length; i++) {
+    const u = parsedUtterances[i];
+    if (currentSec >= u.start && currentSec <= u.end) {
+      found = u;
+      foundIdx = i;
+      break;
+    }
+  }
+
+  // Update subBox
+  if (found) {
+    box.classList.remove('empty');
+    const name = speakerNames[found.speaker] || `Locuteur ${found.speaker + 1}`;
+    meta.textContent = `#${foundIdx + 1}  ${formatTime(found.start)} → ${formatTime(found.end)}  [${name}]`;
+    const translatedText = translations[foundIdx];
+    text.textContent = translatedText || found.text;
+  } else {
+    box.classList.add('empty');
+    meta.textContent = '';
+    text.textContent = '—';
+  }
+
+  // Highlight active transcript block
+  const blocks = document.querySelectorAll('.transcript-block');
+  blocks.forEach((b, i) => {
+    if (i === foundIdx) {
+      b.classList.add('active-block');
+      // Auto-scroll to active block
+      if (!b.dataset.scrolled || parseInt(b.dataset.scrolled) !== foundIdx) {
+        b.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        b.dataset.scrolled = foundIdx;
+      }
+    } else {
+      b.classList.remove('active-block');
+    }
+  });
+}
+
+function seekToUtterance(idx) {
+  const video = document.getElementById('previewVideo');
+  if (!video.src || !parsedUtterances[idx]) return;
+  video.currentTime = parsedUtterances[idx].start;
+  video.play().catch(() => {});
+}
+
+function toggleVideoCollapse() {
+  const wrap = document.getElementById('videoWrap');
+  const icon = document.getElementById('collapseIcon');
+  wrap.classList.toggle('collapsed');
+  icon.className = wrap.classList.contains('collapsed') ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
+}
+
+function closePreview() {
+  const video = document.getElementById('previewVideo');
+  if (_timeupdateHandler) video.removeEventListener('timeupdate', _timeupdateHandler);
+  video.pause();
+  video.src = '';
+  if (previewVideoUrl) { URL.revokeObjectURL(previewVideoUrl); previewVideoUrl = null; }
+  document.getElementById('previewSection').classList.remove('visible');
+  // Remove active highlights
+  document.querySelectorAll('.transcript-block.active-block').forEach(b => b.classList.remove('active-block'));
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Reset
 // ─────────────────────────────────────────────────────────────────────
 
 function resetAll() {
+  closePreview();
   removeFile();
   rawResult = null;
   parsedUtterances = [];
   speakerNames = {};
   translations = {};
   document.getElementById('results-section').classList.remove('visible');
-  document.getElementById('export-bar').classList.remove('visible');
+  document.getElementById('action-bar').classList.remove('visible');
   document.getElementById('translate-bar').classList.remove('visible');
   document.getElementById('btn-export-srt-bilingual').style.display = 'none';
   document.getElementById('progress-container').classList.remove('visible');
