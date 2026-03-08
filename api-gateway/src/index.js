@@ -462,10 +462,13 @@ XMLHttpRequest.prototype.open=function(m,u){
   return XO.call(this,m,u,true);
 };
 
-/* ── 3. Suppress pushState/replaceState SecurityError ── */
+/* ── 3. Detect pushState/replaceState navigation + suppress SecurityError ── */
 var oPS=history.pushState,oRS=history.replaceState;
-history.pushState=function(){try{return oPS.apply(this,arguments)}catch(e){}};
-history.replaceState=function(){try{return oRS.apply(this,arguments)}catch(e){}};
+var _lastNav='';
+function NN(){try{var pu=new URLSearchParams(location.search).get('url');if(pu&&pu!==_lastNav){_lastNav=pu;DT.clear();parent.postMessage({t:'vg-nav',url:pu},'*')}}catch(e){}}
+history.pushState=function(){try{oPS.apply(this,arguments)}catch(e){}NN()};
+history.replaceState=function(){try{oRS.apply(this,arguments)}catch(e){}NN()};
+window.addEventListener('popstate',NN);
 
 /* ── 4. Mock localStorage if blocked ── */
 try{localStorage.getItem('_t')}catch(e){
