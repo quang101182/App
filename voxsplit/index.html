@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoxSplit v3.1 — Diarization & Transcription</title>
+<title>VoxSplit v3.2 — Diarization & Transcription</title>
 <meta name="description" content="Transcription audio/vidéo avec identification des locuteurs (diarization) via Deepgram Nova-2">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#080810">
@@ -300,6 +300,40 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
 
 .speaker-0{--spk-color:#7c6aff}.speaker-1{--spk-color:#00d4aa}.speaker-2{--spk-color:#ff4d6d}.speaker-3{--spk-color:#22c55e}.speaker-4{--spk-color:#f59e0b}.speaker-5{--spk-color:#60a5fa}.speaker-6{--spk-color:#3b82f6}.speaker-7{--spk-color:#a855f7}.speaker-8{--spk-color:#14b8a6}.speaker-9{--spk-color:#f97316}
 
+/* FIND & REPLACE */
+.fnr-bar { display:none; margin-bottom:12px; flex-direction:column; gap:8px; padding:14px 16px; background:var(--surface); border:1px solid var(--border); border-radius:14px; }
+.fnr-bar.visible { display:flex; animation:slideUp .2s ease; }
+.fnr-row { display:flex; gap:8px; align-items:center; }
+.fnr-row input { flex:1; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-family:var(--mono); font-size:12px; }
+.fnr-row input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 8px rgba(124,106,255,.15); }
+.fnr-row label { font-family:var(--mono); font-size:10px; color:var(--muted); display:flex; align-items:center; gap:4px; cursor:pointer; white-space:nowrap; }
+.fnr-row label input[type="checkbox"] { accent-color:var(--accent); }
+.fnr-info { font-family:var(--mono); font-size:10px; color:var(--muted); }
+
+/* VALIDATION PANEL */
+.valid-panel { display:none; margin-bottom:14px; padding:12px 16px; background:var(--surface); border:1px solid var(--border); border-radius:14px; }
+.valid-panel.visible { display:block; animation:slideUp .2s ease; }
+.valid-panel h4 { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin-bottom:8px; }
+.valid-item { display:flex; align-items:center; gap:8px; padding:5px 0; font-family:var(--mono); font-size:11px; cursor:pointer; transition:color .15s; }
+.valid-item:hover { color:var(--accent); }
+.valid-item .vi-icon { width:18px; text-align:center; }
+.valid-ok { color:var(--success); } .valid-warn { color:var(--warning); } .valid-err { color:var(--danger); }
+
+/* IMPORT SRT MODAL */
+.import-area { width:100%; min-height:120px; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:10px; padding:12px; color:var(--text); font-family:var(--mono); font-size:11px; resize:vertical; }
+.import-area:focus { outline:none; border-color:var(--accent); box-shadow:0 0 10px rgba(124,106,255,.15); }
+
+/* INSTALL PWA */
+.pwa-install { display:none; padding:5px 13px; border-radius:9px; border:1px solid rgba(0,212,170,.3); background:rgba(0,212,170,.08); color:var(--accent3); font-family:var(--mono); font-size:10px; font-weight:700; cursor:pointer; transition:all .2s; align-items:center; gap:5px; }
+.pwa-install.show { display:inline-flex; }
+.pwa-install:hover { background:rgba(0,212,170,.15); }
+
+/* HISTORY PAGINATION */
+.hist-pagination { display:flex; gap:6px; justify-content:center; padding:10px 16px; border-top:1px solid var(--border); }
+.hist-page-btn { padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--muted); font-family:var(--mono); font-size:10px; cursor:pointer; transition:all .15s; }
+.hist-page-btn:hover { border-color:var(--accent); color:var(--accent); }
+.hist-page-btn.active { background:rgba(124,106,255,.12); border-color:var(--accent); color:var(--accent); }
+
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--surface2);border-radius:3px}::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.15)}
 
 @media(max-width:768px){
@@ -325,8 +359,9 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
   <div class="app-header">
     <div><h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1></div>
     <div class="header-actions">
-      <span class="version">v3.1</span>
+      <span class="version">v3.2</span>
       <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--muted)"><span class="status-dot yellow"></span></span>
+      <button class="pwa-install" id="pwa-install" onclick="installPWA()"><i class="fas fa-download"></i> Installer</button>
       <button class="icon-btn" onclick="toggleSettings()" title="Paramètres"><i class="fas fa-gear"></i></button>
     </div>
   </div>
@@ -446,14 +481,27 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
           <button class="export-btn" id="btn-toggle-colors" onclick="toggleColoredText()" title="Colorer le texte par locuteur"><i class="fas fa-palette"></i> Couleurs</button>
           <button class="export-btn" id="btn-toggle-original" onclick="toggleShowOriginal()" title="Afficher/masquer l'original"><i class="fas fa-eye"></i> Original</button>
           <button class="export-btn" onclick="toggleSearch()"><i class="fas fa-magnifying-glass"></i> Rechercher</button>
+          <button class="export-btn" onclick="toggleFnR()"><i class="fas fa-arrow-right-arrow-left"></i> Remplacer</button>
           <button class="export-btn" onclick="editSpeakers()"><i class="fas fa-user-pen"></i> Renommer</button>
           <button class="export-btn" onclick="resetAll()"><i class="fas fa-rotate-left"></i> Nouveau</button>
+        </div>
+      </div>
+      <div class="btn-sep"></div>
+      <div class="btn-grp-wrap"><span class="btn-grp-lbl">Outils</span>
+        <div class="btn-grp">
+          <button class="export-btn" onclick="formatSubtitles()" title="FORMAT: 42 chars/ligne, max 2 lignes"><i class="fas fa-align-left"></i> FORMAT</button>
+          <button class="export-btn" onclick="splitBlock()" title="Couper le segment actif en 2"><i class="fas fa-scissors"></i> Split</button>
+          <button class="export-btn" onclick="mergeBlocks()" title="Fusionner 2 segments consécutifs"><i class="fas fa-compress"></i> Merge</button>
+          <button class="export-btn" onclick="toggleValidation()"><i class="fas fa-check-double"></i> Valider</button>
+          <button class="export-btn" onclick="toggleImportSRT()"><i class="fas fa-file-import"></i> Import SRT</button>
+          <button class="export-btn" onclick="showFFmpegCmds()"><i class="fas fa-terminal"></i> FFmpeg</button>
         </div>
       </div>
       <div class="btn-sep"></div>
       <div class="btn-grp-wrap"><span class="btn-grp-lbl" style="color:#00d4aa;opacity:.75">Traduction</span>
         <div class="btn-grp">
           <button class="export-btn" onclick="toggleTranslateBar()" style="border-color:rgba(0,212,170,.3);color:var(--accent3)"><i class="fas fa-language"></i> Traduire</button>
+          <button class="export-btn" onclick="startSecondPass()" title="2e passe correction traduction" style="border-color:rgba(0,212,170,.2);color:var(--accent3);opacity:.8"><i class="fas fa-rotate"></i> 2e passe</button>
         </div>
       </div>
     </div>
@@ -474,6 +522,20 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
       <input type="text" id="search-input" placeholder="Rechercher dans la transcription..." oninput="filterTranscript()">
       <div class="search-count" id="search-count"></div>
     </div>
+
+    <div class="fnr-bar" id="fnr-bar">
+      <div class="fnr-row">
+        <input type="text" id="fnr-find" placeholder="Rechercher...">
+        <input type="text" id="fnr-replace" placeholder="Remplacer par...">
+        <label><input type="checkbox" id="fnr-regex"> Regex</label>
+      </div>
+      <div class="fnr-row">
+        <button class="btn-secondary" onclick="fnrReplaceAll()"><i class="fas fa-check-double"></i> Tout remplacer</button>
+        <span class="fnr-info" id="fnr-info"></span>
+      </div>
+    </div>
+
+    <div class="valid-panel" id="valid-panel"></div>
 
     <div class="results-split" id="results-split">
       <div class="panel-video">
@@ -542,9 +604,38 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
   </div>
 </div>
 
+<div class="modal-overlay" id="import-modal">
+  <div class="modal-box">
+    <h3><i class="fas fa-file-import" style="margin-right:8px"></i>Importer un SRT</h3>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Collez un SRT ou chargez un fichier .srt pour retravailler/traduire</p>
+    <div style="margin-bottom:10px"><input type="file" id="import-srt-file" accept=".srt,.vtt" style="font-size:11px;color:var(--muted)"></div>
+    <textarea class="import-area" id="import-srt-text" placeholder="Ou collez le contenu SRT ici..." spellcheck="false"></textarea>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeImportModal()">Annuler</button>
+      <button class="btn-primary" style="width:auto;padding:10px 24px" onclick="doImportSRT()"><i class="fas fa-check"></i> Importer</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="ffmpeg-modal">
+  <div class="modal-box">
+    <h3><i class="fas fa-terminal" style="margin-right:8px"></i>Commandes FFmpeg</h3>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Copiez la commande pour incruster les sous-titres dans la vidéo</p>
+    <div style="margin-bottom:10px;font-family:var(--mono);font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px">Soft subs (piste séparée)</div>
+    <div style="background:rgba(0,0,0,.4);padding:10px 14px;border-radius:8px;font-family:var(--mono);font-size:11px;color:var(--accent3);word-break:break-all;cursor:pointer;margin-bottom:12px" id="ffmpeg-soft" onclick="copyFFmpeg('soft')"></div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px">Hard subs (gravé dans la vidéo)</div>
+    <div style="background:rgba(0,0,0,.4);padding:10px 14px;border-radius:8px;font-family:var(--mono);font-size:11px;color:var(--warning);word-break:break-all;cursor:pointer;margin-bottom:12px" id="ffmpeg-hard" onclick="copyFFmpeg('hard')"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="document.getElementById('ffmpeg-modal').classList.remove('visible')">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <script>
-// VoxSplit v3.1 — Diarization & Transcription via Deepgram
-const VERSION='3.1';
+// VoxSplit v3.2 — Diarization & Transcription via Deepgram
+const VERSION='3.2';
+let _deferredInstallPrompt=null;
+let _histPage=0;const HIST_PER_PAGE=10;const HIST_MAX=50;
 const GATEWAY_DEFAULT='https://api-gateway.quang101182.workers.dev';
 const CLOUD_WORKER_URL='https://subwhisper-worker.quang101182.workers.dev';
 const SPEAKER_COLORS=['#7c6aff','#00d4aa','#ff4d6d','#22c55e','#f59e0b','#60a5fa','#3b82f6','#a855f7','#14b8a6','#f97316'];
@@ -641,7 +732,7 @@ function log(msg,level=''){
 }
 function copyLog(){
   const el=document.getElementById('log-console');if(!el)return;const entries=el.querySelectorAll('.log-entry');
-  const txt='VoxSplit v3.1 — Log\n'+'='.repeat(40)+'\n'+Array.from(entries).map(e=>e.textContent).join('\n');
+  const txt='VoxSplit v3.2 — Log\n'+'='.repeat(40)+'\n'+Array.from(entries).map(e=>e.textContent).join('\n');
   navigator.clipboard.writeText(txt).then(()=>toast('Log copié ('+entries.length+' lignes)')).catch(()=>{const ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('Log copié')});
 }
 function setProgress(pct,label,step){
@@ -1028,17 +1119,26 @@ function saveToHistory(){
   if(!parsedUtterances.length)return;
   const item={name:selectedFile?.name||'Inconnu',speakers:Object.keys(speakerNames).length,utteranceCount:parsedUtterances.length,srcLang:document.getElementById('opt-lang').value||'auto',tgtLang:document.getElementById('opt-target-lang').value||'',wasTranslated:Object.keys(translations).length>0,ts:Date.now(),size:selectedFile?.size||0,duration:rawResult?.metadata?.duration||0,data:{parsedUtterances,speakerNames,translations}};
   let h=getHistory();const ei=h.findIndex(x=>x.name===item.name);if(ei>=0)h[ei]=item;else h.unshift(item);
-  if(h.length>10)h=h.slice(0,10);let j=JSON.stringify(h);while(j.length>512*1024&&h.length>1){h.pop();j=JSON.stringify(h)}
+  if(h.length>HIST_MAX)h=h.slice(0,HIST_MAX);let j=JSON.stringify(h);while(j.length>2*1024*1024&&h.length>1){h.pop();j=JSON.stringify(h)}
   setHistory(h);renderHistory();
 }
 function renderHistory(){
   const h=getHistory(),wrap=document.getElementById('hist-wrap'),body=document.getElementById('hist-body');
   if(!h.length){wrap.style.display='none';return}wrap.style.display='';body.innerHTML='';
-  h.forEach((item,i)=>{const d=new Date(item.ts);const ds=d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});const ts=d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  const totalPages=Math.ceil(h.length/HIST_PER_PAGE);if(_histPage>=totalPages)_histPage=totalPages-1;
+  const start=_histPage*HIST_PER_PAGE,end=Math.min(start+HIST_PER_PAGE,h.length);
+  for(let i=start;i<end;i++){
+    const item=h[i];const d=new Date(item.ts);const ds=d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});const ts=d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
     const div=document.createElement('div');div.className='hitem';div.onclick=()=>loadHistory(i);
     div.innerHTML=`<span class="hitem-icon">${item.wasTranslated?'🌐':'🎙️'}</span><div class="hitem-info"><div class="hname">${item.name}</div><div class="hmeta">${ds} ${ts} · ${item.speakers} loc. · ${item.utteranceCount} seg.</div></div>${item.duration?`<span class="hbadge">${formatDuration(item.duration)}</span>`:''}<button class="hdel" onclick="delHistory(event,${i})" title="Supprimer"><i class="fas fa-trash-can"></i></button>`;
     body.appendChild(div);
-  });
+  }
+  if(totalPages>1){
+    const pag=document.createElement('div');pag.className='hist-pagination';
+    for(let p=0;p<totalPages;p++){pag.innerHTML+=`<button class="hist-page-btn${p===_histPage?' active':''}" onclick="event.stopPropagation();_histPage=${p};renderHistory()">${p+1}</button>`}
+    pag.innerHTML+=`<span style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-left:6px">${h.length} total</span>`;
+    body.appendChild(pag);
+  }
 }
 function loadHistory(i){const h=getHistory();const item=h[i];if(!item?.data)return;parsedUtterances=item.data.parsedUtterances||[];speakerNames=item.data.speakerNames||{};translations=item.data.translations||{};rawResult=null;currentOffset=0;renderResults();document.getElementById('results-section').classList.add('visible');document.getElementById('action-bar').classList.add('visible');updateSpeakerFilter();toast(`Historique: ${item.name}`);document.getElementById('results-section').scrollIntoView({behavior:'smooth',block:'start'})}
 function delHistory(e,i){e.stopPropagation();const h=getHistory();h.splice(i,1);setHistory(h);renderHistory();toast('Supprimé')}
@@ -1073,6 +1173,175 @@ function hexToRgba(hex,a){return`rgba(${parseInt(hex.slice(1,3),16)},${parseInt(
 function escapeRegex(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
 let _toastTimer;function toast(msg,level){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=level==='error'?'var(--danger)':level==='warn'?'var(--warning)':level==='success'?'var(--success)':'var(--border)';t.classList.add('visible');clearTimeout(_toastTimer);_toastTimer=setTimeout(()=>t.classList.remove('visible'),3000)}
 function initSW(){if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{});navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='SW_UPDATED')document.getElementById('sw-banner').classList.add('visible')})}}
+
+// ─── Find & Replace ──────────────────────────────────────
+function toggleFnR(){document.getElementById('fnr-bar').classList.toggle('visible');if(document.getElementById('fnr-bar').classList.contains('visible'))document.getElementById('fnr-find').focus()}
+function fnrReplaceAll(){
+  const find=document.getElementById('fnr-find').value,replace=document.getElementById('fnr-replace').value,useRegex=document.getElementById('fnr-regex').checked;
+  if(!find){toast('Saisissez un terme','warn');return}
+  let count=0;
+  try{
+    const rx=useRegex?new RegExp(find,'gi'):null;
+    for(let i=0;i<parsedUtterances.length;i++){
+      const old=parsedUtterances[i].text;
+      const nw=rx?old.replace(rx,replace):old.split(find).join(replace);
+      if(nw!==old){parsedUtterances[i].text=nw;count++}
+      if(translations[i]){const ot=translations[i];const nt=rx?ot.replace(rx,replace):ot.split(find).join(replace);if(nt!==ot){translations[i]=nt;count++}}
+    }
+  }catch(e){toast('Regex invalide: '+e.message,'error');return}
+  document.getElementById('fnr-info').textContent=`${count} remplacement${count>1?'s':''}`;
+  if(count>0){renderTranscriptBlocks();saveToHistory();toast(`${count} remplacement${count>1?'s':''}`)}
+  else toast('Aucune correspondance','warn');
+}
+
+// ─── Split Block ─────────────────────────────────────────
+function splitBlock(){
+  const active=document.querySelector('.transcript-block.active-block');
+  if(!active){toast('Cliquez sur un segment dans la vidéo d\'abord','warn');return}
+  const idx=parseInt(active.dataset.idx);const utt=parsedUtterances[idx];
+  const words=utt.text.split(/\s+/);if(words.length<2){toast('Segment trop court pour couper','warn');return}
+  const mid=Math.floor(words.length/2);const midTime=utt.start+(utt.end-utt.start)*(mid/words.length);
+  const u1={speaker:utt.speaker,start:utt.start,end:midTime,text:words.slice(0,mid).join(' '),confidence:utt.confidence,words:[]};
+  const u2={speaker:utt.speaker,start:midTime,end:utt.end,text:words.slice(mid).join(' '),confidence:utt.confidence,words:[]};
+  parsedUtterances.splice(idx,1,u1,u2);
+  // Shift translations
+  const newTr={};for(const[k,v]of Object.entries(translations)){const ki=parseInt(k);if(ki<idx)newTr[ki]=v;else if(ki===idx){/* split translation too */const tw=v.split(/\s+/);const tm=Math.floor(tw.length/2);newTr[ki]=tw.slice(0,tm).join(' ');newTr[ki+1]=tw.slice(tm).join(' ')}else newTr[ki+1]=v}
+  translations=newTr;renderTranscriptBlocks();saveToHistory();toast('Segment coupé en 2');
+}
+
+// ─── Merge Blocks ────────────────────────────────────────
+function mergeBlocks(){
+  const active=document.querySelector('.transcript-block.active-block');
+  if(!active){toast('Cliquez sur un segment dans la vidéo d\'abord','warn');return}
+  const idx=parseInt(active.dataset.idx);if(idx>=parsedUtterances.length-1){toast('Dernier segment — rien à fusionner','warn');return}
+  const u1=parsedUtterances[idx],u2=parsedUtterances[idx+1];
+  const merged={speaker:u1.speaker,start:u1.start,end:u2.end,text:u1.text+' '+u2.text,confidence:Math.min(u1.confidence,u2.confidence),words:[]};
+  parsedUtterances.splice(idx,2,merged);
+  // Shift translations
+  const newTr={};for(const[k,v]of Object.entries(translations)){const ki=parseInt(k);if(ki<idx)newTr[ki]=v;else if(ki===idx||ki===idx+1){const t1=translations[idx]||'',t2=translations[idx+1]||'';if(t1||t2)newTr[idx]=(t1+' '+t2).trim()}else newTr[ki-1]=v}
+  translations=newTr;renderTranscriptBlocks();saveToHistory();toast('Segments fusionnés');
+}
+
+// ─── FORMAT auto (42 chars, max 2 lignes) ────────────────
+function formatSubtitles(){
+  if(!parsedUtterances.length){toast('Rien à formater','warn');return}
+  let changed=0;const MAX=42;
+  for(let i=0;i<parsedUtterances.length;i++){
+    let text=parsedUtterances[i].text.replace(/\n/g,' ').replace(/\s+/g,' ').trim();
+    if(text.length>MAX){
+      // Try to split at word boundary near middle
+      const words=text.split(' ');let line1='',line2='';
+      for(const w of words){
+        if(!line2&&(line1+' '+w).trim().length<=MAX)line1=(line1+' '+w).trim();
+        else line2=(line2+' '+w).trim();
+      }
+      if(line2&&line1.length<=MAX&&line2.length<=MAX)text=line1+'\n'+line2;
+      else if(text.length>MAX*2){text=text.substring(0,MAX*2-1)+'…'}
+    }
+    if(text!==parsedUtterances[i].text){parsedUtterances[i].text=text;changed++}
+  }
+  renderTranscriptBlocks();saveToHistory();toast(`FORMAT: ${changed} segment${changed>1?'s':''} reformaté${changed>1?'s':''}`);
+}
+
+// ─── Validation panel ────────────────────────────────────
+function toggleValidation(){
+  const panel=document.getElementById('valid-panel');
+  if(panel.classList.contains('visible')){panel.classList.remove('visible');return}
+  if(!parsedUtterances.length){toast('Rien à valider','warn');return}
+  const issues=[];let longLines=0,overlaps=0,gaps=0,empty=0;
+  for(let i=0;i<parsedUtterances.length;i++){
+    const u=parsedUtterances[i];
+    if(!u.text.trim()){empty++;issues.push({icon:'⚠️',cls:'valid-warn',msg:`#${i+1} vide`,idx:i})}
+    const lines=u.text.split('\n');for(const l of lines)if(l.length>42){longLines++;issues.push({icon:'📏',cls:'valid-warn',msg:`#${i+1} ligne longue (${l.length} chars)`,idx:i})}
+    if(i>0){const prev=parsedUtterances[i-1];if(u.start<prev.end){overlaps++;issues.push({icon:'🔴',cls:'valid-err',msg:`#${i+1} overlap (${((prev.end-u.start)*1000).toFixed(0)}ms)`,idx:i})}
+    if(u.start-prev.end>5){gaps++;issues.push({icon:'🕳️',cls:'valid-warn',msg:`#${i+1} gap ${formatDuration(u.start-prev.end)}`,idx:i})}}
+    if(u.confidence>0&&u.confidence<.7)issues.push({icon:'❓',cls:'valid-warn',msg:`#${i+1} confiance basse (${Math.round(u.confidence*100)}%)`,idx:i});
+  }
+  let html=`<h4><i class="fas fa-check-double" style="margin-right:6px"></i>Validation — ${parsedUtterances.length} segments</h4>`;
+  if(!issues.length)html+=`<div class="valid-item valid-ok"><span class="vi-icon">✅</span>Aucun problème détecté</div>`;
+  else{
+    html+=`<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:6px">${issues.length} problème${issues.length>1?'s':''} · ${longLines} long · ${overlaps} overlap · ${gaps} gap · ${empty} vide</div>`;
+    issues.slice(0,30).forEach(is=>{html+=`<div class="valid-item ${is.cls}" onclick="seekToUtterance(${is.idx})"><span class="vi-icon">${is.icon}</span>${is.msg}</div>`});
+    if(issues.length>30)html+=`<div class="valid-item" style="opacity:.5">...et ${issues.length-30} autres</div>`;
+  }
+  panel.innerHTML=html;panel.classList.add('visible');
+}
+
+// ─── Import SRT ──────────────────────────────────────────
+function toggleImportSRT(){document.getElementById('import-modal').classList.add('visible');document.getElementById('import-srt-text').value='';
+  document.getElementById('import-srt-file').value='';
+  document.getElementById('import-srt-file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{document.getElementById('import-srt-text').value=r.result};r.readAsText(f)};
+}
+function closeImportModal(){document.getElementById('import-modal').classList.remove('visible')}
+function doImportSRT(){
+  const text=document.getElementById('import-srt-text').value.trim();if(!text){toast('Collez ou chargez un SRT','warn');return}
+  parsedUtterances=[];speakerNames={0:'Locuteur 1'};translations={};rawResult=null;currentOffset=0;
+  // Parse SRT format
+  const blocks=text.replace(/\r\n/g,'\n').split(/\n\n+/);
+  for(const block of blocks){
+    const lines=block.trim().split('\n');if(lines.length<2)continue;
+    // Find timestamp line
+    let tsLine=-1;for(let i=0;i<lines.length;i++)if(lines[i].includes('-->')){tsLine=i;break}
+    if(tsLine<0)continue;
+    const ts=lines[tsLine].split('-->').map(s=>parseSRTTimestamp(s.trim()));if(ts.length!==2||isNaN(ts[0]))continue;
+    const textLines=lines.slice(tsLine+1).join('\n');
+    // Try to extract speaker from [Speaker] or Speaker: prefix
+    let speaker=0,finalText=textLines;
+    const spkMatch=textLines.match(/^\[([^\]]+)\]\s*/);
+    if(spkMatch){finalText=textLines.replace(spkMatch[0],'');const spkName=spkMatch[1];let found=false;for(const[id,name]of Object.entries(speakerNames))if(name===spkName){speaker=parseInt(id);found=true;break}if(!found){speaker=Object.keys(speakerNames).length;speakerNames[speaker]=spkName}}
+    parsedUtterances.push({speaker,start:ts[0],end:ts[1],text:finalText.trim(),confidence:1,words:[]});
+  }
+  if(!parsedUtterances.length){toast('Aucun bloc SRT valide trouvé','error');return}
+  closeImportModal();renderResults();
+  document.getElementById('results-section').classList.add('visible');document.getElementById('action-bar').classList.add('visible');
+  updateSpeakerFilter();saveToHistory();toast(`${parsedUtterances.length} segments importés`);
+}
+function parseSRTTimestamp(s){
+  const p=s.replace(',','.').split(':');if(p.length===3)return parseFloat(p[0])*3600+parseFloat(p[1])*60+parseFloat(p[2]);
+  if(p.length===2)return parseFloat(p[0])*60+parseFloat(p[1]);return parseFloat(s)||0;
+}
+
+// ─── FFmpeg commands ─────────────────────────────────────
+function showFFmpegCmds(){
+  if(!parsedUtterances.length){toast('Transcrivez d\'abord','warn');return}
+  const fname=selectedFile?.name||'video.mp4';const srtName=getExportFilename('srt');const outName=fname.replace(/\.[^.]+$/,'')+'_sub.mp4';
+  document.getElementById('ffmpeg-soft').textContent=`ffmpeg -i "${fname}" -i "${srtName}" -c copy -c:s mov_text "${outName}"`;
+  document.getElementById('ffmpeg-hard').textContent=`ffmpeg -i "${fname}" -vf "subtitles=${srtName}:force_style='FontSize=24'" -c:a copy "${outName}"`;
+  document.getElementById('ffmpeg-modal').classList.add('visible');
+}
+function copyFFmpeg(type){
+  const el=document.getElementById('ffmpeg-'+type);navigator.clipboard.writeText(el.textContent).then(()=>toast('Commande copiée')).catch(()=>toast('Erreur copie','error'));
+}
+
+// ─── 2nd pass translation ────────────────────────────────
+async function startSecondPass(){
+  if(!parsedUtterances.length||!Object.keys(translations).length){toast('Traduisez d\'abord (1ère passe)','warn');return}
+  const engine=document.getElementById('translate-engine').value;const targetLang=document.getElementById('translate-target').value;
+  const langNames={fr:'français',en:'anglais',es:'espagnol',de:'allemand',it:'italien',pt:'portugais',zh:'chinois',ko:'coréen',vi:'vietnamien',ja:'japonais'};
+  toast('2e passe correction...');log('2e passe traduction (correction contextuelle)...','info');
+  const CS=20;const chunks=[];const indices=Object.keys(translations).map(Number).sort((a,b)=>a-b);
+  for(let i=0;i<indices.length;i+=CS)chunks.push(indices.slice(i,i+CS));
+  let corrected=0;
+  try{
+    for(let ci=0;ci<chunks.length;ci++){
+      const lines=chunks[ci].map(idx=>`[${idx}] ORIGINAL: ${parsedUtterances[idx].text}\nTRADUCTION: ${translations[idx]}`).join('\n\n');
+      const prompt=`Tu es un correcteur de sous-titres. Voici des paires original/traduction en ${langNames[targetLang]||targetLang}. Corrige UNIQUEMENT les erreurs de traduction (sens, grammaire, naturalité). Si la traduction est correcte, retourne-la telle quelle. Format: [numéro] traduction_corrigée. Une ligne par numéro.\n\n${lines}`;
+      const apiPath=engine==='gemini'?'/api/gemini/v1beta/models/gemini-2.0-flash:generateContent':'/api/deepseek';
+      const body=engine==='gemini'?{contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.2,maxOutputTokens:8192}}:{model:'deepseek-chat',messages:[{role:'user',content:prompt}],temperature:.2,max_tokens:8192};
+      const resp=await fetch(getGateway()+apiPath,{method:'POST',headers:{'Authorization':'Bearer '+getSecret(),'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(120000)});
+      if(!resp.ok)throw new Error(`${engine} HTTP ${resp.status}`);const data=await resp.json();
+      const rt=engine==='gemini'?data.candidates?.[0]?.content?.parts?.[0]?.text||'':data.choices?.[0]?.message?.content||'';
+      let match;const rx=/\[(\d+)\]\s*(.*)/g;while((match=rx.exec(rt))!==null){const t=match[2].trim();const idx=parseInt(match[1]);if(t&&translations[idx]&&t!==translations[idx]){translations[idx]=t;corrected++}}
+    }
+    log(`2e passe: ${corrected} correction${corrected>1?'s':''}`,'success');
+    toast(`2e passe: ${corrected} correction${corrected>1?'s':''}`);
+    renderTranscriptBlocks();rebuildVttTrack();saveToHistory();
+  }catch(err){toast(`Erreur 2e passe: ${err.message}`,'error');log(`Erreur 2e passe: ${err.message}`,'error')}
+}
+
+// ─── PWA Install ─────────────────────────────────────────
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_deferredInstallPrompt=e;document.getElementById('pwa-install').classList.add('show')});
+async function installPWA(){if(!_deferredInstallPrompt)return;_deferredInstallPrompt.prompt();const r=await _deferredInstallPrompt.userChoice;if(r.outcome==='accepted'){toast('App installée !','success');document.getElementById('pwa-install').classList.remove('show')}_deferredInstallPrompt=null}
 
 // ─── Init ────────────────────────────────────────────────
 // ─── Persist user preferences ────────────────────────────
