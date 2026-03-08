@@ -84,15 +84,14 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '1mb' }));
 
-// Auth middleware that accepts FLY_SECRET or WORKER_SECRET
+// Auth middleware that accepts FLY_SECRET or WORKER_SECRET (header or query param ?s=)
 function requireAnySecret(req, res, next) {
   const auth = req.headers['authorization'] || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  if (!token) return res.status(401).json({ error: 'Missing Authorization header' });
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : (req.query.s || '');
+  if (!token) return res.status(401).json({ error: 'Missing Authorization' });
   const flySecret = process.env.FLY_SECRET || '';
   const workerSecret = process.env.WORKER_SECRET || '';
   if ((flySecret && token === flySecret) || (workerSecret && token === workerSecret)) return next();
-  // Also accept gateway WORKER_SECRET from KV (passed as query param for convenience)
   if (!flySecret && !workerSecret) return next(); // dev mode
   return res.status(401).json({ error: 'Unauthorized' });
 }
@@ -1016,39 +1015,85 @@ app.get('/webproxy', requireAnySecret, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /hls2mp4 — Download HLS m3u8, remux to MP4 via FFmpeg, stream result
-// Handles any file size: FFmpeg reads segments directly from URLs, zero disk for video data
+// HLS to MP4 — Job-based with SSE progress tracking
+// POST /hls2mp4       → starts job, returns { jobId }
+// GET  /hls2mp4/events/:id → SSE stream with progress events
+// GET  /hls2mp4/file/:id   → download completed MP4 file
 // ---------------------------------------------------------------------------
+
+const hlsJobs = new Map(); // jobId → { status, logs[], progress, mp4Path, tmpDir, mp4Size, safeName, error }
+
+// Cleanup old jobs after 10 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, job] of hlsJobs) {
+    if (now - job.created > 600000) {
+      try { fs.rmSync(job.tmpDir, { recursive: true, force: true }); } catch (e) {}
+      hlsJobs.delete(id);
+    }
+  }
+}, 60000);
+
+function jobLog(job, msg) {
+  const ts = new Date().toISOString().split('T')[1].split('.')[0];
+  const line = `[${ts}] ${msg}`;
+  job.logs.push(line);
+  console.log(`[hls2mp4:${job.id}] ${msg}`);
+  // Notify SSE listeners
+  if (job.listeners) job.listeners.forEach(fn => fn({ type: 'log', data: line, progress: job.progress, status: job.status }));
+}
+
+function jobProgress(job, pct) {
+  job.progress = pct;
+  if (job.listeners) job.listeners.forEach(fn => fn({ type: 'progress', data: pct, status: job.status }));
+}
+
+function jobDone(job, status, error) {
+  job.status = status;
+  if (error) job.error = error;
+  if (job.listeners) job.listeners.forEach(fn => fn({ type: 'done', status, error: error || null, mp4Size: job.mp4Size || 0 }));
+}
 
 app.post('/hls2mp4', requireAnySecret, async (req, res) => {
   const { m3u8Url, title, proxyBase } = req.body || {};
   if (!m3u8Url) return res.status(400).json({ error: 'missing m3u8Url' });
 
-  const jobTag = `[hls2mp4:${Date.now().toString(36)}]`;
-  console.log(`${jobTag} Start — ${m3u8Url}`);
-
-  const tmpDir = path.join(os.tmpdir(), 'hls_' + Date.now());
+  const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const tmpDir = path.join(os.tmpdir(), 'hls_' + jobId);
   fs.mkdirSync(tmpDir, { recursive: true });
+
+  const job = {
+    id: jobId, status: 'processing', logs: [], progress: 0,
+    mp4Path: null, mp4Size: 0, tmpDir, safeName: '',
+    created: Date.now(), listeners: new Set(),
+  };
+  hlsJobs.set(jobId, job);
+
+  // Return jobId immediately
+  res.json({ jobId });
+
+  // Process in background
   const combinedTs = path.join(tmpDir, 'combined.ts');
 
-  // Helper: fetch a URL (optionally via proxy)
   async function fetchUrl(url) {
     const finalUrl = proxyBase ? `${proxyBase}${encodeURIComponent(url)}` : url;
     return fetch(finalUrl, { headers: { ...CHROME_HEADERS, 'Accept': '*/*' } });
   }
 
   try {
-    // 1. Fetch and parse m3u8 playlist
+    jobLog(job, `Debut — ${m3u8Url.substring(0, 80)}...`);
+
+    // 1. Fetch and parse m3u8
     const m3u8Resp = await fetchUrl(m3u8Url);
-    if (!m3u8Resp.ok) throw new Error(`m3u8 fetch failed: HTTP ${m3u8Resp.status}`);
+    if (!m3u8Resp.ok) throw new Error(`m3u8 HTTP ${m3u8Resp.status}`);
     const m3u8Text = await m3u8Resp.text();
     const allLines = m3u8Text.split('\n').map(l => l.trim()).filter(l => l);
     const baseUrl = m3u8Url.substring(0, m3u8Url.lastIndexOf('/') + 1);
 
-    // Check for master playlist → pick highest bandwidth variant
-    let isMaster = false;
-    let bestBandwidth = 0;
-    let bestVariant = '';
+    jobLog(job, 'Playlist m3u8 recuperee');
+
+    // Check for master playlist
+    let isMaster = false, bestBandwidth = 0, bestVariant = '';
     for (let i = 0; i < allLines.length; i++) {
       if (allLines[i].startsWith('#EXT-X-STREAM-INF')) {
         isMaster = true;
@@ -1063,9 +1108,9 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
 
     let segUrls = [];
     if (isMaster && bestVariant) {
-      console.log(`${jobTag} Master playlist → variant (${bestBandwidth} bps)`);
+      jobLog(job, `Master playlist → variante ${(bestBandwidth/1000).toFixed(0)} kbps`);
       const varResp = await fetchUrl(bestVariant);
-      if (!varResp.ok) throw new Error(`Variant fetch HTTP ${varResp.status}`);
+      if (!varResp.ok) throw new Error(`Variant HTTP ${varResp.status}`);
       const varText = await varResp.text();
       const varBase = bestVariant.substring(0, bestVariant.lastIndexOf('/') + 1);
       for (const vl of varText.split('\n').map(l => l.trim())) {
@@ -1077,10 +1122,10 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
       }
     }
 
-    if (!segUrls.length) throw new Error('No segments found');
-    console.log(`${jobTag} ${segUrls.length} segments — downloading to combined.ts`);
+    if (!segUrls.length) throw new Error('Aucun segment trouve');
+    jobLog(job, `${segUrls.length} segments a telecharger`);
 
-    // 2. Download all segments → append to combined.ts file
+    // 2. Download segments
     const writeStream = fs.createWriteStream(combinedTs);
     let downloaded = 0;
     const BATCH = 6;
@@ -1090,37 +1135,39 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
       const buffers = await Promise.all(batch.map(async (url) => {
         try {
           const r = await fetchUrl(url);
-          if (!r.ok) { console.error(`${jobTag} Seg ${i} HTTP ${r.status}`); return Buffer.alloc(0); }
+          if (!r.ok) return Buffer.alloc(0);
           return Buffer.from(await r.arrayBuffer());
-        } catch (e) { console.error(`${jobTag} Seg fetch error: ${e.message}`); return Buffer.alloc(0); }
+        } catch (e) { return Buffer.alloc(0); }
       }));
       for (const buf of buffers) {
         if (buf.length > 0) writeStream.write(buf);
         downloaded++;
       }
+      const pct = Math.round(downloaded / segUrls.length * 70); // 0-70% for download
+      jobProgress(job, pct);
       if (downloaded % 30 === 0 || downloaded === segUrls.length) {
-        console.log(`${jobTag} Downloaded ${downloaded}/${segUrls.length} segments`);
+        jobLog(job, `Segments: ${downloaded}/${segUrls.length}`);
       }
     }
 
-    await new Promise((resolve, reject) => { writeStream.end(resolve); });
+    await new Promise((resolve) => { writeStream.end(resolve); });
 
     const tsSize = fs.statSync(combinedTs).size;
-    console.log(`${jobTag} combined.ts = ${(tsSize / 1048576).toFixed(1)} MB — starting FFmpeg remux`);
+    jobLog(job, `combined.ts = ${(tsSize / 1048576).toFixed(1)} MB`);
+    if (tsSize < 1000) throw new Error('Fichier TS vide — echec telechargement');
 
-    if (tsSize < 1000) throw new Error('combined.ts is empty — segments download failed');
-
-    // 3. FFmpeg remux combined.ts → MP4 file (bsf:a aac_adtstoasc critical for TS→MP4)
+    // 3. FFmpeg remux
+    jobLog(job, 'FFmpeg remux TS → MP4...');
+    jobProgress(job, 75);
     const safeName = (title || 'video').replace(/[<>:"/\\|?*]/g, '').substring(0, 100).trim();
+    job.safeName = safeName;
     const outMp4 = path.join(tmpDir, 'output.mp4');
 
     await new Promise((resolve, reject) => {
       const ffmpeg = spawn('ffmpeg', [
-        '-y',
-        '-fflags', '+genpts+igndts',
+        '-y', '-fflags', '+genpts+igndts',
         '-i', combinedTs,
-        '-c', 'copy',
-        '-bsf:a', 'aac_adtstoasc',
+        '-c', 'copy', '-bsf:a', 'aac_adtstoasc',
         '-movflags', '+faststart',
         outMp4
       ], { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -1129,60 +1176,100 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
       ffmpeg.stderr.on('data', chunk => {
         stderrBuf += chunk.toString();
         if (stderrBuf.length > 4096) stderrBuf = stderrBuf.slice(-4096);
+        // Parse progress from FFmpeg stderr
+        const timeMatch = stderrBuf.match(/time=(\d+:\d+:\d+\.\d+)/);
+        if (timeMatch) jobLog(job, `FFmpeg: ${timeMatch[1]}`);
       });
 
       ffmpeg.on('close', code => {
-        console.log(`${jobTag} FFmpeg exit code ${code}`);
         if (code !== 0) {
-          console.error(`${jobTag} FFmpeg stderr: ${stderrBuf.slice(-500)}`);
-          reject(new Error(`FFmpeg failed (code ${code})`));
+          console.error(`[hls2mp4:${job.id}] FFmpeg stderr: ${stderrBuf.slice(-500)}`);
+          reject(new Error(`FFmpeg code ${code}: ${stderrBuf.slice(-200)}`));
         } else {
           resolve();
         }
       });
-
-      ffmpeg.on('error', err => reject(err));
-
-      // If client disconnects, kill FFmpeg
-      req.on('close', () => {
-        if (!ffmpeg.killed) {
-          console.log(`${jobTag} Client disconnected — killing FFmpeg`);
-          ffmpeg.kill('SIGTERM');
-          reject(new Error('Client disconnected'));
-        }
-      });
+      ffmpeg.on('error', reject);
     });
 
-    // 4. Stream the MP4 file to client
-    const mp4Size = fs.statSync(outMp4).size;
-    console.log(`${jobTag} MP4 ready: ${(mp4Size / 1048576).toFixed(1)} MB — streaming to client`);
-
-    res.setHeader('Content-Type', 'video/mp4');
-    res.setHeader('Content-Length', mp4Size);
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeName)}.mp4"; filename*=UTF-8''${encodeURIComponent(safeName)}.mp4`);
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length');
-
-    const fileStream = fs.createReadStream(outMp4);
-    fileStream.pipe(res);
-    fileStream.on('end', () => {
-      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
-    });
-    fileStream.on('error', err => {
-      console.error(`${jobTag} Stream error:`, err.message);
-      try { res.end(); } catch (e) {}
-      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
-    });
-
-    req.on('close', () => {
-      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
-    });
+    jobProgress(job, 95);
+    job.mp4Path = outMp4;
+    job.mp4Size = fs.statSync(outMp4).size;
+    jobLog(job, `MP4 pret: ${(job.mp4Size / 1048576).toFixed(1)} MB`);
+    jobProgress(job, 100);
+    // Remove combined.ts to save disk space
+    try { fs.unlinkSync(combinedTs); } catch (e) {}
+    jobDone(job, 'done');
 
   } catch (err) {
-    console.error(`${jobTag} Error:`, err.message);
-    if (!res.headersSent) res.status(500).json({ error: err.message });
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+    jobLog(job, `ERREUR: ${err.message}`);
+    jobDone(job, 'error', err.message);
+    // Don't cleanup tmpDir yet — let the cleanup interval handle it
   }
+});
+
+// SSE progress events (auth via ?s= query param since EventSource doesn't support headers)
+app.get('/hls2mp4/events/:jobId', requireAnySecret, (req, res) => {
+  const job = hlsJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'job not found' });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+
+  // Send existing logs
+  for (const line of job.logs) {
+    res.write(`data: ${JSON.stringify({ type: 'log', data: line, progress: job.progress, status: job.status })}\n\n`);
+  }
+
+  // If already done, send final event and close
+  if (job.status === 'done' || job.status === 'error') {
+    res.write(`data: ${JSON.stringify({ type: 'done', status: job.status, error: job.error || null, mp4Size: job.mp4Size || 0 })}\n\n`);
+    res.end();
+    return;
+  }
+
+  // Subscribe to live events
+  const listener = (evt) => {
+    try {
+      res.write(`data: ${JSON.stringify(evt)}\n\n`);
+      if (evt.type === 'done') res.end();
+    } catch (e) {}
+  };
+  job.listeners.add(listener);
+
+  req.on('close', () => {
+    job.listeners.delete(listener);
+  });
+});
+
+// Download completed MP4 (auth via ?s= query param or Authorization header)
+app.get('/hls2mp4/file/:jobId', requireAnySecret, (req, res) => {
+  const job = hlsJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'job not found' });
+  if (job.status !== 'done') return res.status(409).json({ error: 'not ready', status: job.status });
+  if (!job.mp4Path || !fs.existsSync(job.mp4Path)) return res.status(410).json({ error: 'file gone' });
+
+  const safeName = job.safeName || 'video';
+  res.setHeader('Content-Type', 'video/mp4');
+  res.setHeader('Content-Length', job.mp4Size);
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeName)}.mp4"; filename*=UTF-8''${encodeURIComponent(safeName)}.mp4`);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length');
+
+  const fileStream = fs.createReadStream(job.mp4Path);
+  fileStream.pipe(res);
+  fileStream.on('end', () => {
+    // Cleanup after download
+    try { fs.rmSync(job.tmpDir, { recursive: true, force: true }); } catch (e) {}
+    hlsJobs.delete(job.id);
+  });
+  fileStream.on('error', err => {
+    console.error(`[hls2mp4:${job.id}] Stream error:`, err.message);
+    try { res.end(); } catch (e) {}
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-<!-- VideoGrab v2.4 — Video Browser & Downloader — Mobile-First -->
+<!-- VideoGrab v2.5 — Video Browser & Downloader — Mobile-First -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0a0f">
-<title>VideoGrab v2.4</title>
+<title>VideoGrab v2.5</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -95,12 +95,38 @@ input,button,select{font-family:inherit;font-size:inherit}
 .player-dl-btn.primary:active{opacity:.8}
 .player-dl-btn.secondary{background:var(--card);border:1px solid var(--border);color:var(--text)}
 
-/* ═══ Progress ═══ */
+/* ═══ Progress (player inline) ═══ */
 .dl-progress{margin-top:10px;display:none}
 .dl-progress.active{display:block}
 .dl-bar-bg{height:5px;background:var(--card);border-radius:3px;overflow:hidden}
 .dl-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));width:0%;transition:width .2s;border-radius:3px}
 .dl-stats{display:flex;justify-content:space-between;font-size:.7rem;color:var(--dim);margin-top:5px;font-family:monospace}
+
+/* ═══ Download Panel ═══ */
+.dl-panel{position:fixed;bottom:0;left:0;right:0;z-index:180;background:var(--bg2);border-top:1px solid var(--border2);transform:translateY(100%);transition:transform .3s ease;max-height:55vh;display:flex;flex-direction:column}
+.dl-panel.open{transform:translateY(0)}
+.dl-panel-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.dl-panel-header h3{font-size:.85rem;font-weight:700;display:flex;align-items:center;gap:8px}
+.dl-status{font-size:.7rem;padding:3px 8px;border-radius:6px;font-weight:600}
+.dl-status.processing{background:rgba(79,172,254,.15);color:var(--accent2)}
+.dl-status.done{background:rgba(52,211,153,.15);color:var(--green)}
+.dl-status.error{background:rgba(248,113,113,.15);color:var(--red)}
+.dl-status.downloading{background:rgba(250,204,21,.15);color:var(--yellow)}
+.dl-panel-close{background:none;border:none;color:var(--dim);font-size:1.3rem;cursor:pointer;padding:4px 8px}
+.dl-panel-progress{padding:10px 16px 6px;flex-shrink:0}
+.dl-panel-bar-bg{height:8px;background:var(--card);border-radius:4px;overflow:hidden}
+.dl-panel-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%;transition:width .3s;border-radius:4px}
+.dl-panel-bar.complete{background:linear-gradient(90deg,var(--green),#2dd4bf)}
+.dl-panel-info{display:flex;justify-content:space-between;font-size:.7rem;color:var(--dim);margin-top:4px;font-family:monospace}
+.dl-panel-logs{flex:1;overflow-y:auto;padding:8px 16px;font-family:monospace;font-size:.68rem;line-height:1.6;color:var(--dim);min-height:80px;max-height:25vh}
+.dl-panel-logs .log-line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl-panel-logs .log-line.err{color:var(--red)}
+.dl-panel-logs .log-line.ok{color:var(--green)}
+.dl-panel-actions{padding:8px 16px 12px;display:flex;gap:8px;flex-shrink:0}
+.dl-panel-actions button{flex:1;padding:10px;border-radius:10px;border:none;cursor:pointer;font-weight:700;font-size:.8rem;transition:.15s}
+.dl-panel-actions .btn-dl{background:linear-gradient(135deg,var(--green),#2dd4bf);color:#000;display:none}
+.dl-panel-actions .btn-dl.visible{display:block}
+.dl-panel-actions .btn-close{background:var(--card);color:var(--dim);border:1px solid var(--border)}
 
 /* ═══ Settings Modal ═══ */
 .settings-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;place-items:center}
@@ -182,6 +208,13 @@ html,body{max-width:100vw;overflow-x:hidden}
   .browser-empty h2{font-size:1rem}
   .browser-empty p{font-size:.76rem}
   .video-badge{padding:7px 11px;font-size:.75rem;bottom:10px;right:10px;border-radius:22px}
+  .dl-panel{max-height:60vh}
+  .dl-panel-header{padding:8px 12px}
+  .dl-panel-header h3{font-size:.78rem}
+  .dl-panel-progress{padding:8px 12px 4px}
+  .dl-panel-logs{padding:6px 12px;font-size:.62rem;max-height:20vh}
+  .dl-panel-actions{padding:6px 12px 10px}
+  .dl-panel-actions button{padding:8px;font-size:.75rem}
 }
 </style>
 </head>
@@ -193,7 +226,7 @@ html,body{max-width:100vw;overflow-x:hidden}
 <div class="setup-screen" id="setupScreen" style="display:none">
   <div class="setup-card">
     <h1>VideoGrab</h1>
-    <div class="sub">v2.4 — Configuration initiale</div>
+    <div class="sub">v2.5 — Configuration initiale</div>
     <div class="setting-group">
       <label>URL du Gateway</label>
       <input id="setupGw" placeholder="https://api-gateway.xxxxx.workers.dev">
@@ -242,6 +275,23 @@ html,body{max-width:100vw;overflow-x:hidden}
   <div class="dl-progress" id="dlProgress">
     <div class="dl-bar-bg"><div class="dl-bar" id="dlBar"></div></div>
     <div class="dl-stats"><span id="dlPct">0%</span><span id="dlSpeed">--</span><span id="dlEta">--</span></div>
+  </div>
+</div>
+
+<!-- ═══ Download Panel ═══ -->
+<div class="dl-panel" id="dlPanel">
+  <div class="dl-panel-header">
+    <h3>Telechargement <span class="dl-status processing" id="dlPanelStatus">Preparation...</span></h3>
+    <button class="dl-panel-close" onclick="closeDlPanel()">&times;</button>
+  </div>
+  <div class="dl-panel-progress">
+    <div class="dl-panel-bar-bg"><div class="dl-panel-bar" id="dlPanelBar"></div></div>
+    <div class="dl-panel-info"><span id="dlPanelPct">0%</span><span id="dlPanelSize">--</span><span id="dlPanelSpeed">--</span></div>
+  </div>
+  <div class="dl-panel-logs" id="dlPanelLogs"></div>
+  <div class="dl-panel-actions">
+    <button class="btn-close" onclick="closeDlPanel()">Fermer</button>
+    <button class="btn-dl" id="dlPanelSave" onclick="saveDlFile()">Enregistrer MP4</button>
   </div>
 </div>
 
@@ -652,53 +702,155 @@ async function startDownload(url, filename) {
   }
 }
 
-// ── HLS Download via Fly.io — FFmpeg remux to MP4, stream download ──
-async function startHlsDownload(m3u8Url, filename) {
-  const progress = $('dlProgress');
-  const bar = $('dlBar');
-  const pct = $('dlPct');
-  const speed = $('dlSpeed');
-  const eta = $('dlEta');
+// ── HLS Download via Fly.io — Job-based with SSE progress panel ──
+let dlPanelJobId = null;
+let dlPanelMp4Url = null;
+let dlPanelSafeName = '';
+let dlPanelEventSource = null;
 
+function openDlPanel() {
+  const panel = $('dlPanel');
+  panel.classList.add('open');
+  $('dlPanelLogs').innerHTML = '';
+  $('dlPanelBar').style.width = '0%';
+  $('dlPanelBar').classList.remove('complete');
+  $('dlPanelPct').textContent = '0%';
+  $('dlPanelSize').textContent = '--';
+  $('dlPanelSpeed').textContent = '--';
+  $('dlPanelSave').classList.remove('visible');
+  setDlStatus('processing', 'Preparation...');
+}
+
+function closeDlPanel() {
+  $('dlPanel').classList.remove('open');
+  if (dlPanelEventSource) { dlPanelEventSource.close(); dlPanelEventSource = null; }
+}
+
+function setDlStatus(cls, text) {
+  const el = $('dlPanelStatus');
+  el.className = 'dl-status ' + cls;
+  el.textContent = text;
+}
+
+function addDlLog(msg, cls) {
+  const logs = $('dlPanelLogs');
+  const div = document.createElement('div');
+  div.className = 'log-line' + (cls ? ' ' + cls : '');
+  div.textContent = msg;
+  logs.appendChild(div);
+  logs.scrollTop = logs.scrollHeight;
+}
+
+async function startHlsDownload(m3u8Url, filename) {
   // Find video title from detected videos
   const vid = detectedVideos.find(v => v.url === m3u8Url || currentDlUrl === v.url);
   const videoTitle = (vid && vid.title) ? vid.title : filename.replace(/\.\w+$/, '');
   const safeName = videoTitle.replace(/[<>:"/\\|?*]/g, '').substring(0, 100).trim() || 'video';
+  dlPanelSafeName = safeName;
 
-  progress.classList.add('active');
-  bar.style.width = '0%';
-  pct.textContent = 'Connexion Fly.io...';
-  speed.textContent = '--';
-  eta.textContent = '--';
+  openDlPanel();
+  addDlLog('Envoi de la requete au serveur Fly.io...');
 
   try {
-    // Build proxy base URL for Fly.io to fetch segments through our gateway
     const proxyBase = `${gateway}/proxy?s=${encodeURIComponent(secret)}&raw=1&url=`;
 
-    toast('Conversion MP4 en cours (serveur)...', 'i');
-
+    // Step 1: Start job
     const resp = await fetch(`${FLY_URL}/hls2mp4`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${secret}`,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
       body: JSON.stringify({ m3u8Url, title: safeName, proxyBase }),
     });
 
-    if (!resp.ok) {
-      const err = await resp.text().catch(() => resp.statusText);
-      throw new Error(`Serveur: ${err}`);
-    }
+    if (!resp.ok) throw new Error(`Serveur: ${await resp.text().catch(() => resp.statusText)}`);
+    const { jobId } = await resp.json();
+    dlPanelJobId = jobId;
+    addDlLog(`Job demarre: ${jobId}`, 'ok');
+    setDlStatus('processing', 'Segments...');
 
-    // Stream the MP4 response with progress
+    // Step 2: Connect SSE for progress
+    await new Promise((resolve, reject) => {
+      const es = new EventSource(`${FLY_URL}/hls2mp4/events/${jobId}?s=${encodeURIComponent(secret)}`);
+      dlPanelEventSource = es;
+
+      es.onmessage = (e) => {
+        try {
+          const evt = JSON.parse(e.data);
+          if (evt.type === 'log') {
+            addDlLog(evt.data);
+            if (evt.progress !== undefined) {
+              $('dlPanelBar').style.width = evt.progress + '%';
+              $('dlPanelPct').textContent = evt.progress + '%';
+            }
+            if (evt.status === 'processing') {
+              if (evt.progress > 70) setDlStatus('processing', 'FFmpeg...');
+              else setDlStatus('processing', 'Segments...');
+            }
+          } else if (evt.type === 'progress') {
+            $('dlPanelBar').style.width = evt.data + '%';
+            $('dlPanelPct').textContent = evt.data + '%';
+          } else if (evt.type === 'done') {
+            es.close();
+            dlPanelEventSource = null;
+            if (evt.status === 'done') {
+              $('dlPanelBar').style.width = '100%';
+              $('dlPanelBar').classList.add('complete');
+              $('dlPanelPct').textContent = '100%';
+              $('dlPanelSize').textContent = fmtSize(evt.mp4Size);
+              setDlStatus('done', 'Pret');
+              addDlLog(`MP4 pret: ${fmtSize(evt.mp4Size)}`, 'ok');
+              dlPanelMp4Url = `${FLY_URL}/hls2mp4/file/${jobId}?s=${encodeURIComponent(secret)}`;
+              $('dlPanelSave').classList.add('visible');
+              resolve();
+            } else {
+              setDlStatus('error', 'Erreur');
+              addDlLog(`ERREUR: ${evt.error}`, 'err');
+              reject(new Error(evt.error));
+            }
+          }
+        } catch (err) { /* ignore parse errors */ }
+      };
+
+      es.onerror = () => {
+        // SSE error — check if job completed between retries
+        setTimeout(() => {
+          if (es.readyState === EventSource.CLOSED) {
+            // Already resolved or rejected
+          }
+        }, 2000);
+      };
+    });
+
+    // Auto-start download when done
+    await saveDlFile();
+
+  } catch (e) {
+    if (e.message !== 'AbortError') {
+      addDlLog(`Erreur: ${e.message}`, 'err');
+      setDlStatus('error', 'Erreur');
+      toast('Erreur: ' + e.message, 'e');
+      // Fallback
+      addDlLog('Fallback: telechargement segments bruts...');
+      closeDlPanel();
+      startHlsSegmentFallback(m3u8Url, safeName + '.ts');
+    }
+  }
+}
+
+async function saveDlFile() {
+  if (!dlPanelMp4Url) return;
+  const mp4Name = dlPanelSafeName + '.mp4';
+  setDlStatus('downloading', 'Telechargement...');
+  addDlLog('Telechargement du fichier MP4...');
+
+  try {
+    const resp = await fetch(dlPanelMp4Url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
     const total = parseInt(resp.headers.get('content-length') || '0');
     const reader = resp.body.getReader();
     const chunks = [];
     let received = 0;
     const t0 = Date.now();
-
-    pct.textContent = 'Telechargement MP4...';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -711,25 +863,20 @@ async function startHlsDownload(m3u8Url, filename) {
 
       if (total) {
         const p = Math.min(100, Math.round(received / total * 100));
-        bar.style.width = p + '%';
-        pct.textContent = `${p}% — ${fmtSize(received)}`;
-        eta.textContent = fmtTime((total - received) / bps);
-      } else {
-        // No content-length (chunked) — show bytes received
-        bar.style.width = '50%'; // indeterminate
-        pct.textContent = fmtSize(received);
+        $('dlPanelBar').style.width = p + '%';
+        $('dlPanelPct').textContent = p + '%';
       }
-      speed.textContent = fmtSize(bps) + '/s';
+      $('dlPanelSize').textContent = fmtSize(received);
+      $('dlPanelSpeed').textContent = fmtSize(bps) + '/s';
     }
 
-    bar.style.width = '100%';
-    pct.textContent = `100% — ${fmtSize(received)}`;
-    eta.textContent = 'OK';
+    $('dlPanelBar').style.width = '100%';
+    $('dlPanelBar').classList.add('complete');
+    $('dlPanelPct').textContent = '100%';
 
     const blob = new Blob(chunks, { type: 'video/mp4' });
-    const mp4Name = safeName + '.mp4';
 
-    // Try showSaveFilePicker (desktop Chrome/Edge) for folder choice
+    // showSaveFilePicker on desktop
     if (window.showSaveFilePicker) {
       try {
         const handle = await window.showSaveFilePicker({
@@ -739,31 +886,26 @@ async function startHlsDownload(m3u8Url, filename) {
         const writable = await handle.createWritable();
         await writable.write(blob);
         await writable.close();
+        addDlLog(`Enregistre: ${mp4Name}`, 'ok');
+        setDlStatus('done', 'Termine !');
         toast(`Enregistre: ${mp4Name}`, 's');
-        saveToHistory(m3u8Url, mp4Name, blob.size);
+        saveToHistory(m3u8Url || '', mp4Name, blob.size);
         return;
       } catch (e) {
-        if (e.name === 'AbortError') {
-          toast('Annule', 'w');
-          return;
-        }
-        // Fallback to <a download>
+        if (e.name === 'AbortError') { addDlLog('Annule par utilisateur'); return; }
       }
     }
 
-    // Fallback: trigger download via <a>
     triggerBlobDownload(blob, mp4Name);
+    addDlLog(`Telecharge: ${mp4Name}`, 'ok');
+    setDlStatus('done', 'Termine !');
     toast(`Telecharge: ${mp4Name} (${fmtSize(blob.size)})`, 's');
-    saveToHistory(m3u8Url, mp4Name, blob.size);
+    saveToHistory(m3u8Url || '', mp4Name, blob.size);
 
   } catch (e) {
+    addDlLog(`Erreur DL: ${e.message}`, 'err');
+    setDlStatus('error', 'Erreur');
     toast('Erreur: ' + e.message, 'e');
-    console.error('HLS MP4 download error:', e);
-    // Fallback: try direct segment download
-    toast('Fallback: telechargement segments...', 'w');
-    startHlsSegmentFallback(m3u8Url, safeName + '.ts');
-  } finally {
-    setTimeout(() => progress.classList.remove('active'), 5000);
   }
 }
 
