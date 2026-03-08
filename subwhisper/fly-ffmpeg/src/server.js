@@ -1205,16 +1205,32 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
         outMp4
       ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
+      // Kill FFmpeg if stuck for more than 10 minutes
+      let lastProgress = '';
+      let stuckCount = 0;
+      const ffmpegWatchdog = setInterval(() => {
+        const timeMatch = stderrBuf.match(/time=(\d+:\d+:\d+\.\d+)/);
+        const cur = timeMatch ? timeMatch[1] : '';
+        if (cur && cur === lastProgress) { stuckCount++; } else { stuckCount = 0; }
+        lastProgress = cur;
+        if (stuckCount >= 20) { // 20 * 3s = 60s stuck on same timestamp
+          clearInterval(ffmpegWatchdog);
+          jobLog(job, `FFmpeg bloque a ${cur} — kill`);
+          ffmpeg.kill('SIGKILL');
+          reject(new Error(`FFmpeg stuck at ${cur}`));
+        }
+      }, 3000);
+
       let stderrBuf = '';
       ffmpeg.stderr.on('data', chunk => {
         stderrBuf += chunk.toString();
         if (stderrBuf.length > 4096) stderrBuf = stderrBuf.slice(-4096);
-        // Parse progress from FFmpeg stderr
         const timeMatch = stderrBuf.match(/time=(\d+:\d+:\d+\.\d+)/);
         if (timeMatch) jobLog(job, `FFmpeg: ${timeMatch[1]}`);
       });
 
       ffmpeg.on('close', code => {
+        clearInterval(ffmpegWatchdog);
         if (code !== 0) {
           console.error(`[hls2mp4:${job.id}] FFmpeg stderr: ${stderrBuf.slice(-500)}`);
           reject(new Error(`FFmpeg code ${code}: ${stderrBuf.slice(-200)}`));
@@ -1222,7 +1238,7 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
           resolve();
         }
       });
-      ffmpeg.on('error', reject);
+      ffmpeg.on('error', e => { clearInterval(ffmpegWatchdog); reject(e); });
     });
 
     jobProgress(job, 95);
