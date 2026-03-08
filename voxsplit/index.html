@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoxSplit v2.2 — Diarization & Transcription</title>
+<title>VoxSplit v2.3 — Diarization & Transcription</title>
 <meta name="description" content="Transcription audio/vidéo avec identification des locuteurs (diarization) via Deepgram Nova-2">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#080810">
@@ -999,7 +999,7 @@ mark {
       <h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1>
     </div>
     <div class="header-actions">
-      <span class="version">v2.2</span>
+      <span class="version">v2.3</span>
       <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--muted)">
         <span class="status-dot yellow"></span>
       </span>
@@ -1238,7 +1238,7 @@ mark {
 
 <script>
 // ─────────────────────────────────────────────────────────────────────
-// VoxSplit v2.2 — Diarization & Transcription via Deepgram
+// VoxSplit v2.3 — Diarization & Transcription via Deepgram
 // ─────────────────────────────────────────────────────────────────────
 
 const VERSION = '2.0';
@@ -1612,9 +1612,9 @@ async function uploadViaR2(flyUrl, dgParams, contentType, file, startTime) {
   if (!dlRes.ok) throw new Error('Presigned download failed: ' + dlRes.status);
   const { downloadUrl } = await dlRes.json();
 
-  // 4. Call Fly.io /deepgram with source_url (server-to-server download, ultra rapide)
-  setProgress(70, 'Fly.io télécharge depuis R2...');
-  log('Fly.io télécharge + FFmpeg + Deepgram...', 'info');
+  // 4. Call Fly.io /deepgram with source_url — streaming NDJSON progress
+  setProgress(70, 'Fly.io traitement en cours...');
+  log('Fly.io: téléchargement + FFmpeg + Deepgram...', 'info');
   const secret = getSecret();
   const flyRes = await fetch(`${flyUrl}/deepgram?source_url=${encodeURIComponent(downloadUrl)}&${dgParams.toString()}`, {
     method: 'POST',
@@ -1627,9 +1627,56 @@ async function uploadViaR2(flyUrl, dgParams, contentType, file, startTime) {
     const errText = await flyRes.text();
     throw new Error(`Fly.io ${flyRes.status}: ${errText.substring(0, 200)}`);
   }
+
+  // Lire le stream NDJSON pour progress en temps réel
+  const STEP_LABELS = {
+    download: 'Fly.io télécharge depuis R2',
+    ffmpeg: 'FFmpeg extraction audio',
+    deepgram: 'Deepgram transcription',
+    done: 'Finalisation'
+  };
+  let resultJson = null;
+  const reader = flyRes.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop(); // garder le reste incomplet
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const msg = JSON.parse(line);
+        if (msg.type === 'progress') {
+          const pct = 70 + Math.round((msg.pct / 100) * 28); // map 0-100 → 70-98
+          setProgress(pct, STEP_LABELS[msg.step] || msg.step);
+        } else if (msg.type === 'result') {
+          resultJson = typeof msg.body === 'string' ? JSON.parse(msg.body) : msg.body;
+        } else if (msg.type === 'error') {
+          throw new Error(`Fly.io: ${msg.error}`);
+        }
+      } catch (e) {
+        if (e.message.startsWith('Fly.io:')) throw e;
+        // Peut-être la réponse brute JSON (fallback non-NDJSON)
+        try { resultJson = JSON.parse(line); } catch (_) {}
+      }
+    }
+  }
+  // Traiter le reste du buffer
+  if (buffer.trim()) {
+    try {
+      const msg = JSON.parse(buffer);
+      if (msg.type === 'result') resultJson = typeof msg.body === 'string' ? JSON.parse(msg.body) : msg.body;
+      else if (!resultJson) resultJson = msg;
+    } catch (_) {}
+  }
+  if (!resultJson) throw new Error('Fly.io: réponse vide ou invalide');
+
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   log(`Transcription reçue en ${elapsed}s`, 'success');
-  return await flyRes.json();
+  return resultJson;
 }
 
 /**
