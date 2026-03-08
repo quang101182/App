@@ -1,4 +1,4 @@
-<!-- VideoGrab v3.0 — Video Browser & Downloader — Mobile-First -->
+<!-- VideoGrab v3.1 — Video Browser & Downloader — Mobile-First -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0a0f">
-<title>VideoGrab v3.0</title>
+<title>VideoGrab v3.1</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -342,7 +342,7 @@ html,body{max-width:100vw;overflow-x:hidden}
   <div class="browser-frame" id="browserFrame">
     <div class="browser-empty" id="emptyState">
       <div>
-        <h2>VideoGrab v3.0</h2>
+        <h2>VideoGrab v3.1</h2>
         <p>Entrez une URL dans la barre pour commencer a naviguer.<br>Les videos seront detectees automatiquement.</p>
       </div>
     </div>
@@ -358,10 +358,10 @@ html,body{max-width:100vw;overflow-x:hidden}
 
 <script>
 // ═══════════════════════════════════════════════════════════════
-// VideoGrab v3.0 — Core Logic
+// VideoGrab v3.1 — Core Logic
 // ═══════════════════════════════════════════════════════════════
 
-const VERSION = '3.0';
+const VERSION = '3.1';
 const $ = id => document.getElementById(id);
 
 // ── State ──
@@ -464,6 +464,9 @@ function loadInIframe(url) {
 
   iframe.onload = () => {
     loading.classList.remove('active');
+    // Reset detected videos — new page loaded in iframe
+    detectedVideos = [];
+    updateBadge();
   };
   // Timeout fallback
   setTimeout(() => loading.classList.remove('active'), 12000);
@@ -515,16 +518,16 @@ function handleMessage(e) {
 
   // Navigation update — user clicked a link inside the iframe
   if (e.data.t === 'vg-nav' && e.data.url) {
-    // Update URL bar with the actual page URL
-    $('urlInput').value = e.data.url;
-    // Update history
-    if (navHistory[navIndex] !== e.data.url) {
+    const newUrl = e.data.url;
+    $('urlInput').value = newUrl;
+    // Always reset detected videos on any navigation
+    detectedVideos = [];
+    updateBadge();
+    // Update history if URL changed
+    if (navHistory[navIndex] !== newUrl) {
       navHistory = navHistory.slice(0, navIndex + 1);
-      navHistory.push(e.data.url);
+      navHistory.push(newUrl);
       navIndex = navHistory.length - 1;
-      // New page → reset detected videos
-      detectedVideos = [];
-      updateBadge();
     }
   }
 }

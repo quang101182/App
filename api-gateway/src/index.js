@@ -511,9 +511,10 @@ function S(){
     try{var j=JSON.parse(s.textContent||'');var items=Array.isArray(j)?j:[j];
     items.forEach(function(o){
       if(o['@type']==='VideoObject'||o['@type']==='Video'){
-        if(o.contentURL)R(o.contentURL,'jsonld');
+        if(o.contentURL&&V.test(o.contentURL))R(o.contentURL,'jsonld');
         if(o.embedUrl&&V.test(o.embedUrl))R(o.embedUrl,'jsonld');
         if(o.url&&V.test(o.url))R(o.url,'jsonld');
+        if(o.embedUrl&&!V.test(o.embedUrl))R(o.embedUrl,'embed');
       }
     })}catch(x){}
   })}catch(x){}
@@ -521,11 +522,21 @@ function S(){
   try{document.querySelectorAll('script:not([src])').forEach(function(s){
     var t=s.textContent||'';var re=/["'](https?:\\/\\/[^"'\\s]+\\.(?:mp4|m3u8|webm|mpd)(?:\\?[^"'\\s]*)?)["']/gi;var m;
     while((m=re.exec(t))!==null){if(!isAd(m[1]))R(m[1],'js')}})}catch(x){}
-  /* Scan nested iframes (same-origin only) */
-  try{document.querySelectorAll('iframe').forEach(function(f){try{var fd=f.contentDocument;if(fd){fd.querySelectorAll('video,source,[src]').forEach(function(e){
+  /* Scan nested iframes (same-origin via proxy) */
+  try{document.querySelectorAll('iframe').forEach(function(f){
+    /* Report iframe src if it looks like a video embed */
+    var fs=f.src||f.getAttribute('src')||'';
+    if(fs&&fs.includes('/proxy?')){try{var iu=new URL(fs).searchParams.get('url');if(iu&&/embed|player/i.test(iu))R(iu,'iframe-embed')}catch(x){}}
+    /* Scan accessible iframe content */
+    try{var fd=f.contentDocument;if(fd){fd.querySelectorAll('video,source,[src]').forEach(function(e){
     var s=e.src||e.currentSrc||e.getAttribute('src')||'';
     if(s&&s.includes('/proxy?')){try{s=new URL(s).searchParams.get('url')||s}catch(x){}}
-    if(s&&V.test(s)&&!isAd(s))R(s,'iframe-dom')})}}catch(x){}})}catch(x){}
+    if(s&&V.test(s)&&!isAd(s))R(s,'iframe-dom')});
+    /* Also scan inline scripts in iframe */
+    try{fd.querySelectorAll('script:not([src])').forEach(function(s){
+      var t=s.textContent||'';var re=/["'](https?:\\/\\/[^"'\\s]+\\.(?:mp4|m3u8|webm|mpd)(?:\\?[^"'\\s]*)?)["']/gi;var m;
+      while((m=re.exec(t))!==null){if(!isAd(m[1]))R(m[1],'iframe-js')}})}catch(x){}
+    }}catch(x){}})}catch(x){}
 }
 
 /* ── 7. Report current page URL to parent ── */
