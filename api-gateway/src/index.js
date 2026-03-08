@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.23
+ * api-gateway — Cloudflare Worker v1.24
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -709,12 +709,14 @@ async function handleProxy(request, env, ctx, parsedUrl) {
     } catch { return m; }
   });
 
-  // Rewrite <iframe src> so nested iframes also go through proxy
+  // Rewrite <iframe src> — only cross-origin iframes need proxy, same-origin use <base> tag
+  const pageOrigin = new URL(finalUrl).origin;
   html = html.replace(/(<iframe\s[^>]*src\s*=\s*["'])([^"']*)(["'])/gi, (m, pre, src, post) => {
     if (!src || src.startsWith('about:') || src.startsWith('javascript:') || src.startsWith('data:')) return m;
     try {
-      const abs = new URL(src, finalUrl).href;
-      return `${pre}${proxyPrefix}${encodeURIComponent(abs)}${post}`;
+      const abs = new URL(src, finalUrl);
+      if (abs.origin === pageOrigin) return m; // same-origin → loads via <base>, no proxy needed
+      return `${pre}${proxyPrefix}${encodeURIComponent(abs.href)}${post}`;
     } catch { return m; }
   });
 
