@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.18
+ * api-gateway — Cloudflare Worker v1.19
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -37,7 +37,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.13';
+const VERSION = '1.19';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -541,6 +541,27 @@ function S(){
     }}catch(x){}})}catch(x){}
 }
 
+/* ── 6b. Intercept clicks on dynamic links ── */
+var SKIP=/^(javascript:|#|mailto:|tel:|data:|blob:)/i;
+document.addEventListener('click',function(e){
+  var a=e.target.closest('a[href]');if(!a)return;
+  var h=a.getAttribute('href');if(!h||SKIP.test(h))return;
+  if(h.indexOf('/proxy?s=')!==-1)return;/* already proxied */
+  try{var abs=new URL(h,window.__vg_origHref||location.href).href;
+  if(abs.startsWith('http')){e.preventDefault();location.href=PP+encodeURIComponent(abs)}}catch(x){}
+},true);
+/* Intercept form submissions from dynamic forms */
+document.addEventListener('submit',function(e){
+  var f=e.target;if(!f||f.tagName!=='FORM')return;
+  var act=f.getAttribute('action')||'';
+  if(act.indexOf('/proxy?s=')!==-1)return;
+  if(act&&!act.startsWith('javascript:')){
+    try{var abs=new URL(act,window.__vg_origHref||location.href).href;
+    f.setAttribute('action',PP+encodeURIComponent(abs))}catch(x){}}
+  else if(!act){
+    try{f.setAttribute('action',PP+encodeURIComponent(window.__vg_origHref||location.href))}catch(x){}}
+},true);
+
 /* ── 7. Report current page URL to parent ── */
 try{var pu=new URLSearchParams(location.search).get('url');if(pu){_lastNav=pu;parent.postMessage({t:'vg-nav',url:pu},'*')}}catch(x){}
 
@@ -697,7 +718,7 @@ async function handleProxy(request, env, ctx, parsedUrl) {
 
   // Rewrite <a href> and <area href> for navigation within proxy
   html = html.replace(/(<(?:a|area)\s[^>]*href\s*=\s*["'])([^"']*)(["'])/gi, (m, pre, href, post) => {
-    if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('data:') || href.startsWith('mailto:') || href.startsWith('tel:')) return m;
+    if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('data:') || href.startsWith('blob:') || href.startsWith('mailto:') || href.startsWith('tel:')) return m;
     try {
       const abs = new URL(href, finalUrl).href;
       return `${pre}${proxyPrefix}${encodeURIComponent(abs)}${post}`;

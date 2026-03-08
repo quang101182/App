@@ -1,4 +1,4 @@
-<!-- VideoGrab v3.2 — Video Browser & Downloader — Mobile-First -->
+<!-- VideoGrab v3.3 — Video Browser & Downloader — Mobile-First -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0a0f">
-<title>VideoGrab v3.2</title>
+<title>VideoGrab v3.3</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -342,7 +342,7 @@ html,body{max-width:100vw;overflow-x:hidden}
   <div class="browser-frame" id="browserFrame">
     <div class="browser-empty" id="emptyState">
       <div>
-        <h2>VideoGrab v3.2</h2>
+        <h2>VideoGrab v3.3</h2>
         <p>Entrez une URL dans la barre pour commencer a naviguer.<br>Les videos seront detectees automatiquement.</p>
       </div>
     </div>
@@ -358,10 +358,10 @@ html,body{max-width:100vw;overflow-x:hidden}
 
 <script>
 // ═══════════════════════════════════════════════════════════════
-// VideoGrab v3.2 — Core Logic
+// VideoGrab v3.3 — Core Logic
 // ═══════════════════════════════════════════════════════════════
 
-const VERSION = '3.2';
+const VERSION = '3.3';
 const $ = id => document.getElementById(id);
 
 // ── State ──
@@ -508,9 +508,15 @@ function handleMessage(e) {
   if (e.data.t === 'vg-video') {
     const url = resolveVideoUrl(e.data.url);
     if (!url) return;
-    // Deduplicate
+    // Filter out preview/thumbnail MP4s detected via DOM
+    const detType = e.data.mt || 'unknown';
+    if (detType === 'dom' && /\.(mp4|webm)/i.test(url) && /(preview|thumb|trailer|teaser|sample)/i.test(url)) return;
+    // Deduplicate by URL
     if (detectedVideos.some(v => v.url === url)) return;
-    detectedVideos.push({ url, type: e.data.mt || 'unknown', ts: Date.now(), title: e.data.title || '' });
+    // Deduplicate by title (avoid listing same video multiple times)
+    const title = e.data.title || '';
+    if (title && detectedVideos.some(v => v.title === title)) return;
+    detectedVideos.push({ url, type: detType, ts: Date.now(), title });
     updateBadge();
     // Subtle toast for first detection
     if (detectedVideos.length === 1) toast('Video detectee !', 's');
@@ -579,7 +585,17 @@ function renderVideoList() {
 
   $('sheetTitle').textContent = `${detectedVideos.length} video(s) detectee(s)`;
 
-  body.innerHTML = detectedVideos.map((v, i) => {
+  // Sort: m3u8/mpd first, then by detection order
+  const sorted = detectedVideos
+    .map((v, i) => ({ ...v, _idx: i }))
+    .sort((a, b) => {
+      const aHls = /\.(m3u8|mpd)/i.test(a.url) ? 0 : 1;
+      const bHls = /\.(m3u8|mpd)/i.test(b.url) ? 0 : 1;
+      return aHls - bHls || a._idx - b._idx;
+    });
+
+  body.innerHTML = sorted.map((v) => {
+    const i = v._idx;
     const ext = getExtension(v.url);
     const isHls = ext === 'm3u8' || ext === 'mpd';
     const icon = isHls ? '&#127909;' : '&#9654;&#65039;';
