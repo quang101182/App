@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoxSplit v1.4 — Diarization & Transcription</title>
+<title>VoxSplit v1.5 — Diarization & Transcription</title>
 <meta name="description" content="Transcription audio/vidéo avec identification des locuteurs (diarization) via Deepgram Nova-2">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#8b5cf6">
@@ -665,6 +665,65 @@ mark {
   border-radius: 2px;
   padding: 0 1px;
 }
+
+/* Translation bar */
+.translate-bar {
+  display: none;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.translate-bar.visible { display: flex; }
+.translate-bar select, .translate-bar button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.translate-bar select:focus { outline: none; border-color: var(--glow-violet); }
+.translate-bar .btn-translate {
+  background: linear-gradient(135deg, var(--glow-violet), var(--glow-teal));
+  border: none;
+  color: #fff;
+  font-weight: 600;
+  padding: 8px 20px;
+  transition: opacity 0.2s;
+}
+.translate-bar .btn-translate:hover { opacity: 0.85; }
+.translate-bar .btn-translate:disabled { opacity: 0.5; cursor: not-allowed; }
+.translate-bar .translate-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* Bilingual block text */
+.block-translation {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(148,163,184,0.15);
+  color: var(--glow-teal);
+  font-size: 14px;
+  line-height: 1.5;
+  opacity: 0.9;
+}
+.block-text-original {
+  opacity: 0.7;
+  font-size: 13px;
+}
+.block-text-original + .block-translation {
+  border-top: none;
+  padding-top: 2px;
+}
 </style>
 </head>
 <body>
@@ -685,7 +744,7 @@ mark {
       <h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1>
     </div>
     <div class="header-actions">
-      <span class="version">v1.4</span>
+      <span class="version">v1.5</span>
       <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--text-muted)">
         <span class="status-dot yellow"></span>
       </span>
@@ -826,6 +885,30 @@ mark {
 
     <div class="speaker-legend" id="speaker-legend"></div>
 
+    <!-- Translation bar -->
+    <div class="translate-bar" id="translate-bar">
+      <i class="fas fa-language" style="color:var(--glow-teal);font-size:18px"></i>
+      <select id="translate-engine">
+        <option value="gemini">Gemini</option>
+        <option value="deepseek">DeepSeek</option>
+      </select>
+      <select id="translate-target">
+        <option value="fr">Français</option>
+        <option value="en">English</option>
+        <option value="es">Español</option>
+        <option value="de">Deutsch</option>
+        <option value="it">Italiano</option>
+        <option value="pt">Português</option>
+        <option value="zh">中文</option>
+        <option value="ko">한국어</option>
+        <option value="vi">Tiếng Việt</option>
+      </select>
+      <button class="btn-translate" id="btn-translate" onclick="startTranslation()">
+        <i class="fas fa-language"></i> Traduire
+      </button>
+      <span class="translate-status" id="translate-status"></span>
+    </div>
+
     <div class="search-bar" id="search-bar">
       <input type="text" id="search-input" placeholder="Rechercher dans la transcription..." oninput="filterTranscript()">
       <div class="search-count" id="search-count"></div>
@@ -838,13 +921,15 @@ mark {
 <!-- Export Bar -->
 <div class="export-bar" id="export-bar">
   <div class="export-bar-inner">
-    <button class="export-btn" onclick="exportSRT()"><i class="fas fa-file-lines"></i> SRT (locuteurs)</button>
+    <button class="export-btn" onclick="exportSRT()"><i class="fas fa-file-lines"></i> SRT</button>
+    <button class="export-btn" id="btn-export-srt-bilingual" onclick="exportSRTBilingual()" style="display:none"><i class="fas fa-file-lines"></i> SRT bilingue</button>
     <button class="export-btn" onclick="exportTXT()"><i class="fas fa-file-alt"></i> TXT</button>
     <button class="export-btn" onclick="exportJSON()"><i class="fas fa-file-code"></i> JSON brut</button>
     <button class="export-btn" onclick="exportVTT()"><i class="fas fa-closed-captioning"></i> VTT</button>
     <button class="export-btn" onclick="copyToClipboard()"><i class="fas fa-copy"></i> Copier</button>
     <button class="export-btn" onclick="toggleSearch()"><i class="fas fa-magnifying-glass"></i> Rechercher</button>
     <button class="export-btn" onclick="editSpeakers()"><i class="fas fa-user-pen"></i> Renommer</button>
+    <button class="export-btn" onclick="toggleTranslateBar()"><i class="fas fa-language"></i> Traduire</button>
     <button class="export-btn" onclick="resetAll()"><i class="fas fa-rotate-left"></i> Nouveau</button>
   </div>
 </div>
@@ -868,7 +953,7 @@ mark {
 // VoxSplit v1.4 — Diarization & Transcription via Deepgram
 // ─────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.0';
+const VERSION = '1.5';
 const GATEWAY_DEFAULT = 'https://api-gateway.quang101182.workers.dev';
 
 // Speaker colors palette
@@ -882,6 +967,7 @@ let selectedFile = null;
 let rawResult = null; // Deepgram JSON response
 let speakerNames = {}; // { 0: "Alice", 1: "Bob" }
 let parsedUtterances = []; // processed utterances
+let translations = {}; // { index: "translated text" }
 
 // ─────────────────────────────────────────────────────────────────────
 // Config
@@ -1418,12 +1504,19 @@ function renderTranscriptBlocks(filter = '') {
       displayText = text.replace(regex, '<mark>$1</mark>');
     }
 
+    const uttIdx = parsedUtterances.indexOf(utt);
+    const hasTranslation = translations[uttIdx];
+
     block.innerHTML = `
       <div class="block-header">
         <span class="speaker-name" style="color:${color}">${name}</span>
         <span class="timestamp">${formatTime(utt.start)} → ${formatTime(utt.end)}</span>
       </div>
-      <div class="block-text">${displayText}</div>
+      ${hasTranslation
+        ? `<div class="block-text-original">${displayText}</div>
+           <div class="block-translation">${hasTranslation}</div>`
+        : `<div class="block-text">${displayText}</div>`
+      }
       ${utt.confidence > 0 ? `
         <div class="confidence-bar">
           <div class="confidence-fill" style="width:${Math.round(utt.confidence * 100)}%;background:${color}"></div>
@@ -1610,6 +1703,127 @@ function downloadFile(content, filename, mimeType) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Translation
+// ─────────────────────────────────────────────────────────────────────
+
+function toggleTranslateBar() {
+  document.getElementById('translate-bar').classList.toggle('visible');
+}
+
+async function startTranslation() {
+  if (!parsedUtterances.length) return;
+
+  const engine = document.getElementById('translate-engine').value;
+  const targetLang = document.getElementById('translate-target').value;
+  const langNames = { fr:'français', en:'anglais', es:'espagnol', de:'allemand', it:'italien', pt:'portugais', zh:'chinois', ko:'coréen', vi:'vietnamien' };
+  const targetName = langNames[targetLang] || targetLang;
+
+  const btn = document.getElementById('btn-translate');
+  const status = document.getElementById('translate-status');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traduction...';
+  translations = {};
+
+  // Regrouper les utterances en chunks de ~30 pour limiter les appels API
+  const CHUNK_SIZE = 30;
+  const chunks = [];
+  for (let i = 0; i < parsedUtterances.length; i += CHUNK_SIZE) {
+    chunks.push(parsedUtterances.slice(i, i + CHUNK_SIZE).map((u, j) => ({ idx: i + j, text: u.text })));
+  }
+
+  try {
+    for (let ci = 0; ci < chunks.length; ci++) {
+      status.textContent = `Chunk ${ci + 1}/${chunks.length}...`;
+
+      const lines = chunks[ci].map(c => `[${c.idx}] ${c.text}`).join('\n');
+      const prompt = `Traduis les lignes suivantes en ${targetName}. Chaque ligne est préfixée par [numéro]. Retourne EXACTEMENT le même format [numéro] suivi de la traduction. Ne traduis PAS les noms propres de personnages. Conserve le sens et le ton. Pas d'explication, pas de commentaire, uniquement les lignes traduites.\n\n${lines}`;
+
+      const apiPath = engine === 'gemini' ? '/api/gemini' : '/api/deepseek';
+      const model = engine === 'gemini' ? 'gemini-2.0-flash' : 'deepseek-chat';
+
+      let body;
+      if (engine === 'gemini') {
+        body = {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 8192 }
+        };
+      } else {
+        body = {
+          model: model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.3,
+          max_tokens: 8192
+        };
+      }
+
+      const resp = await fetch(getGateway() + apiPath, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + getSecret(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(120000),
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`${engine} HTTP ${resp.status}: ${errText.substring(0, 200)}`);
+      }
+
+      const data = await resp.json();
+
+      let resultText = '';
+      if (engine === 'gemini') {
+        resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } else {
+        resultText = data.choices?.[0]?.message?.content || '';
+      }
+
+      // Parser les lignes [idx] texte
+      const lineRegex = /\[(\d+)\]\s*(.*)/g;
+      let match;
+      while ((match = lineRegex.exec(resultText)) !== null) {
+        const idx = parseInt(match[1]);
+        const translated = match[2].trim();
+        if (translated) translations[idx] = translated;
+      }
+    }
+
+    status.textContent = `${Object.keys(translations).length}/${parsedUtterances.length} traduits`;
+    toast(`Traduction terminée (${engine})`, 'success');
+
+    // Afficher le bouton SRT bilingue
+    document.getElementById('btn-export-srt-bilingual').style.display = '';
+
+    // Re-render avec traductions
+    renderTranscriptBlocks();
+
+  } catch (err) {
+    toast(`Erreur traduction: ${err.message}`, 'error');
+    status.textContent = 'Erreur';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-language"></i> Traduire';
+  }
+}
+
+function exportSRTBilingual() {
+  if (!parsedUtterances.length || !Object.keys(translations).length) return;
+  let srt = '';
+  parsedUtterances.forEach((utt, i) => {
+    const name = speakerNames[utt.speaker] || `Locuteur ${utt.speaker + 1}`;
+    srt += `${i + 1}\n`;
+    srt += `${formatSRTTime(utt.start)} --> ${formatSRTTime(utt.end)}\n`;
+    srt += `[${name}] ${utt.text}\n`;
+    if (translations[i]) srt += `${translations[i]}\n`;
+    srt += '\n';
+  });
+  downloadFile(srt, getExportFilename('bilingual.srt'), 'text/srt');
+  toast('SRT bilingue exporté');
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Reset
 // ─────────────────────────────────────────────────────────────────────
 
@@ -1618,8 +1832,11 @@ function resetAll() {
   rawResult = null;
   parsedUtterances = [];
   speakerNames = {};
+  translations = {};
   document.getElementById('results-section').classList.remove('visible');
   document.getElementById('export-bar').classList.remove('visible');
+  document.getElementById('translate-bar').classList.remove('visible');
+  document.getElementById('btn-export-srt-bilingual').style.display = 'none';
   document.getElementById('progress-container').classList.remove('visible');
   document.getElementById('log-console').classList.remove('visible');
   document.getElementById('log-console').innerHTML = '';
