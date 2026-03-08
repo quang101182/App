@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoxSplit v3.4 — Diarization & Transcription</title>
+<title>VoxSplit v3.4.1 — Diarization & Transcription</title>
 <meta name="description" content="Transcription audio/vidéo avec identification des locuteurs (diarization) via Deepgram Nova-2">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#7c6aff">
@@ -391,7 +391,7 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
 @media(max-width:768px){
   .options-row{flex-direction:column}
   .results-split{display:block!important}
-  .panel-transcript{max-height:50vh;overflow-y:auto}
+  .panel-transcript{max-height:none;overflow-y:visible}
   .app-container{max-width:100%}
   .offset-btns-row{flex-wrap:wrap;justify-content:center}
 }
@@ -411,7 +411,7 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
   <div class="app-header">
     <div><h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1></div>
     <div class="header-actions">
-      <span class="version">v3.4</span>
+      <span class="version">v3.4.1</span>
       <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--muted)"><span class="status-dot yellow"></span></span>
       <button class="pwa-install" id="pwa-install" onclick="installPWA()"><i class="fas fa-download"></i> Installer</button>
       <button class="icon-btn" onclick="toggleSettings()" title="Paramètres"><i class="fas fa-gear"></i></button>
@@ -741,7 +741,7 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
 </div>
 
 <script>
-// VoxSplit v3.4 — Diarization & Transcription via Deepgram
+// VoxSplit v3.4.1 — Diarization & Transcription via Deepgram
 const VERSION='3.3';
 let _deferredInstallPrompt=null;
 let _histPage=0;const HIST_PER_PAGE=10;const HIST_MAX=50;
@@ -872,7 +872,7 @@ function log(msg,level=''){
 }
 function copyLog(){
   const el=document.getElementById('log-console');if(!el)return;const entries=el.querySelectorAll('.log-entry');
-  const txt='VoxSplit v3.4 — Log\n'+'='.repeat(40)+'\n'+Array.from(entries).map(e=>e.textContent).join('\n');
+  const txt='VoxSplit v3.4.1 — Log\n'+'='.repeat(40)+'\n'+Array.from(entries).map(e=>e.textContent).join('\n');
   navigator.clipboard.writeText(txt).then(()=>toast('Log copié ('+entries.length+' lignes)')).catch(()=>{const ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('Log copié')});
 }
 function setProgress(pct,label,step){
@@ -1289,17 +1289,23 @@ function showVideoPreview(){
   const video=document.getElementById('previewVideo');video.src=previewVideoUrl;video.load();
   try{const sv=localStorage.getItem('voxsplit_vol');if(sv!==null)video.volume=parseFloat(sv)}catch(e){}
   video.addEventListener('volumechange',()=>{try{localStorage.setItem('voxsplit_vol',video.volume)}catch(e){}});
-  _timeupdateHandler=()=>updateSubBox(video);video.addEventListener('timeupdate',_timeupdateHandler);
+  _timeupdateHandler=()=>updateSubBox(video);
+  video.addEventListener('timeupdate',_timeupdateHandler);
+  video.addEventListener('seeked',_timeupdateHandler);
+  video.addEventListener('playing',_timeupdateHandler);
   document.getElementById('previewSection').classList.add('visible');
   document.getElementById('videoWrap').classList.remove('collapsed');
   document.getElementById('collapseIcon').className='fas fa-chevron-up';
   document.getElementById('offset-wrap').style.display='';
   rebuildVttTrack();
-  // Show VTT captions only in fullscreen
-  document.addEventListener('fullscreenchange',()=>{
-    const tt=video.textTracks[0];if(!tt)return;
-    tt.mode=document.fullscreenElement?'showing':'hidden';
-  });
+  // Show VTT captions only in fullscreen — rebuild on enter to pick up latest toggle state
+  if(!video._fsListenerAdded){
+    video._fsListenerAdded=true;
+    document.addEventListener('fullscreenchange',()=>{
+      if(document.fullscreenElement){rebuildVttTrack();setTimeout(()=>{const tt=video.textTracks[0];if(tt)tt.mode='showing'},150)}
+      else{const tt=video.textTracks[0];if(tt)tt.mode='hidden'}
+    });
+  }
 }
 
 function rebuildVttTrack(){
@@ -1340,7 +1346,7 @@ function updateSubBox(video){
 }
 function seekToUtterance(idx){const v=document.getElementById('previewVideo');if(!v.src||!parsedUtterances[idx])return;v.currentTime=parsedUtterances[idx].start+currentOffset/1000;v.play().catch(()=>{})}
 function toggleVideoCollapse(){const w=document.getElementById('videoWrap'),i=document.getElementById('collapseIcon');w.classList.toggle('collapsed');i.className=w.classList.contains('collapsed')?'fas fa-chevron-down':'fas fa-chevron-up'}
-function closePreview(){const v=document.getElementById('previewVideo');if(_timeupdateHandler)v.removeEventListener('timeupdate',_timeupdateHandler);v.pause();v.src='';v.querySelectorAll('track').forEach(t=>t.remove());if(previewVideoUrl){URL.revokeObjectURL(previewVideoUrl);previewVideoUrl=null}if(previewVttUrl){URL.revokeObjectURL(previewVttUrl);previewVttUrl=null}document.getElementById('previewSection').classList.remove('visible');document.querySelectorAll('.transcript-block.active-block').forEach(b=>b.classList.remove('active-block'))}
+function closePreview(){const v=document.getElementById('previewVideo');if(_timeupdateHandler){v.removeEventListener('timeupdate',_timeupdateHandler);v.removeEventListener('seeked',_timeupdateHandler);v.removeEventListener('playing',_timeupdateHandler)}v.pause();v.src='';v.querySelectorAll('track').forEach(t=>t.remove());if(previewVideoUrl){URL.revokeObjectURL(previewVideoUrl);previewVideoUrl=null}if(previewVttUrl){URL.revokeObjectURL(previewVttUrl);previewVttUrl=null}document.getElementById('previewSection').classList.remove('visible');document.querySelectorAll('.transcript-block.active-block').forEach(b=>b.classList.remove('active-block'))}
 
 // ─── History ─────────────────────────────────────────────
 function getHistory(){try{return JSON.parse(localStorage.getItem('voxsplit_history')||'[]')}catch{return[]}}
