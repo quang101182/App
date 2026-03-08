@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoxSplit v3.2 — Diarization & Transcription</title>
+<title>VoxSplit v3.3 — Diarization & Transcription</title>
 <meta name="description" content="Transcription audio/vidéo avec identification des locuteurs (diarization) via Deepgram Nova-2">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#7c6aff">
@@ -400,7 +400,7 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
   <div class="app-header">
     <div><h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1></div>
     <div class="header-actions">
-      <span class="version">v3.2</span>
+      <span class="version">v3.3</span>
       <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--muted)"><span class="status-dot yellow"></span></span>
       <button class="pwa-install" id="pwa-install" onclick="installPWA()"><i class="fas fa-download"></i> Installer</button>
       <button class="icon-btn" onclick="toggleSettings()" title="Paramètres"><i class="fas fa-gear"></i></button>
@@ -409,9 +409,14 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
 
   <div id="settings-panel" class="settings-panel card">
     <h3 style="font-size:16px;margin-bottom:16px"><i class="fas fa-sliders" style="margin-right:8px"></i>Configuration</h3>
-    <div class="setting-group"><label>Gateway URL</label><input type="text" id="cfg-gateway" placeholder="https://api-gateway.quang101182.workers.dev"></div>
-    <div class="setting-group"><label>Gateway Secret (Bearer)</label><input type="text" id="cfg-secret" placeholder="Votre WORKER_SECRET"></div>
-    <div class="setting-group"><label>Cloud Worker URL (Fly.io)</label><input type="text" id="cfg-flyio" placeholder="https://subwhisper-ffmpeg.fly.dev"></div>
+    <div class="setting-group">
+      <label>GATEWAY <span style="opacity:.6;font-size:11px">secret</span></label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="password" id="cfg-secret" placeholder="WORKER_SECRET — une seule clé pour toutes les APIs" style="flex:1" autocomplete="new-password">
+        <button class="btn-secondary" onclick="toggleSecretEye()" id="btn-eye" title="Afficher" style="padding:8px 10px;min-width:0">👁️</button>
+      </div>
+      <span id="gateway-info" style="font-size:12px;color:var(--text-secondary);padding-left:2px;margin-top:4px;display:block"></span>
+    </div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn-secondary" onclick="saveConfig()"><i class="fas fa-check"></i> Sauvegarder</button>
       <button class="btn-secondary" onclick="testGateway()"><i class="fas fa-plug"></i> Tester</button>
@@ -716,8 +721,8 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
 </div>
 
 <script>
-// VoxSplit v3.2 — Diarization & Transcription via Deepgram
-const VERSION='3.2';
+// VoxSplit v3.3 — Diarization & Transcription via Deepgram
+const VERSION='3.3';
 let _deferredInstallPrompt=null;
 let _histPage=0;const HIST_PER_PAGE=10;const HIST_MAX=50;
 const GATEWAY_DEFAULT='https://api-gateway.quang101182.workers.dev';
@@ -731,23 +736,40 @@ let showColoredText=false, showOriginal=true;
 let previewVttUrl=null;
 
 // ─── Config ──────────────────────────────────────────────
+const FLY_DEFAULT='https://subwhisper-ffmpeg.fly.dev';
 function getConfig(){try{return JSON.parse(localStorage.getItem('voxsplit_config')||'{}')}catch{return{}}}
 function setConfig(c){localStorage.setItem('voxsplit_config',JSON.stringify(c))}
-function getGateway(){return getConfig().gateway||GATEWAY_DEFAULT}
+function getGateway(){return GATEWAY_DEFAULT}
 function getSecret(){return getConfig().secret||''}
-function getFlyUrl(){return getConfig().flyUrl||''}
+function getFlyUrl(){return getConfig().flyUrl||FLY_DEFAULT}
 
 function saveConfig(){
-  const gw=document.getElementById('cfg-gateway').value.trim();
   const secret=document.getElementById('cfg-secret').value.trim();
-  const flyUrl=document.getElementById('cfg-flyio').value.trim();
-  if(!gw||!secret){toast('Gateway URL et Secret requis','warn');return}
-  setConfig({gateway:gw,secret,flyUrl});
-  toast('Configuration sauvegardée');checkGateway();
+  if(!secret){toast('Secret requis','warn');return}
+  const c=getConfig();c.secret=secret;setConfig(c);
+  toast('Configuration sauvegardée');fetchGatewayConfig();
 }
 function toggleSettings(){
   const p=document.getElementById('settings-panel');p.classList.toggle('visible');
-  if(p.classList.contains('visible')){const c=getConfig();document.getElementById('cfg-gateway').value=c.gateway||GATEWAY_DEFAULT;document.getElementById('cfg-secret').value=c.secret||'';document.getElementById('cfg-flyio').value=c.flyUrl||''}
+  if(p.classList.contains('visible'))document.getElementById('cfg-secret').value=getSecret();
+}
+function toggleSecretEye(){
+  const i=document.getElementById('cfg-secret');
+  i.type=i.type==='password'?'text':'password';
+  document.getElementById('btn-eye').textContent=i.type==='password'?'👁️':'🙈';
+}
+async function fetchGatewayConfig(){
+  const info=document.getElementById('gateway-info');const secret=getSecret();
+  if(!secret){info.textContent='⚠️ Entrez votre GATEWAY SECRET';checkGateway();return}
+  info.textContent='⏳ Connexion...';
+  try{
+    const r=await fetch(GATEWAY_DEFAULT+'/config',{headers:{'Authorization':'Bearer '+secret},signal:AbortSignal.timeout(8000)});
+    if(!r.ok){info.textContent='❌ Secret invalide';checkGateway();return}
+    const cfg=await r.json();const apis=cfg.apis||[];
+    info.textContent='✅ '+apis.length+' APIs: '+(apis.join(', ')||'—');
+    // worker_url from /config is the Cloud Worker (R2), not Fly.io — no auto-fill needed
+    checkGateway();
+  }catch(e){info.textContent='❌ Erreur réseau';checkGateway()}
 }
 
 // ─── Gateway ─────────────────────────────────────────────
@@ -830,7 +852,7 @@ function log(msg,level=''){
 }
 function copyLog(){
   const el=document.getElementById('log-console');if(!el)return;const entries=el.querySelectorAll('.log-entry');
-  const txt='VoxSplit v3.2 — Log\n'+'='.repeat(40)+'\n'+Array.from(entries).map(e=>e.textContent).join('\n');
+  const txt='VoxSplit v3.3 — Log\n'+'='.repeat(40)+'\n'+Array.from(entries).map(e=>e.textContent).join('\n');
   navigator.clipboard.writeText(txt).then(()=>toast('Log copié ('+entries.length+' lignes)')).catch(()=>{const ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('Log copié')});
 }
 function setProgress(pct,label,step){
@@ -1554,7 +1576,22 @@ function setupPrefListeners(){
   PREF_CHIPS.forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('click',()=>setTimeout(savePrefs,50))});
 }
 
-function init(){setupFileInput();checkGateway();initSW();setupKeyboardShortcuts();renderHistory();restorePrefs();setupPrefListeners();if(!getConfig().secret)setTimeout(()=>toggleSettings(),500)}
+function init(){
+  // Auto-config via lien de partage : #gwy=SECRET
+  try{
+    const hash=window.location.hash;
+    const m=hash.match(/[#&]gwy=([^&]+)/);
+    if(m){const key=decodeURIComponent(m[1]);const c=getConfig();c.secret=key;setConfig(c);history.replaceState(null,'',window.location.pathname+window.location.search)}
+  }catch(e){}
+  setupFileInput();initSW();setupKeyboardShortcuts();renderHistory();restorePrefs();setupPrefListeners();
+  // Auto-save secret on change/input
+  const secEl=document.getElementById('cfg-secret');
+  let _t;
+  secEl.addEventListener('change',()=>{const v=secEl.value.trim();const c=getConfig();c.secret=v;setConfig(c);fetchGatewayConfig()});
+  secEl.addEventListener('input',()=>{clearTimeout(_t);_t=setTimeout(()=>{const v=secEl.value.trim();const c=getConfig();c.secret=v;setConfig(c);fetchGatewayConfig()},800)});
+  // Init gateway check
+  if(getSecret())setTimeout(fetchGatewayConfig,300);else{checkGateway();setTimeout(()=>toggleSettings(),500)}
+}
 document.addEventListener('DOMContentLoaded',init);
 </script>
 </body>
