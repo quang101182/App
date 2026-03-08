@@ -57,6 +57,7 @@ export default {
       if (method === 'GET'   && path.startsWith('/job-status/'))   return await handleJobStatus(request, env, path);
       if (method === 'PATCH' && path === '/job-done')              return await handleJobDone(request, env);
       if (method === 'DELETE'&& path.startsWith('/job/'))          return await handleJobDelete(request, env, path);
+      if (method === 'POST'  && path === '/presigned-download')   return await handlePresignedDownload(request, env);
 
       return jsonResponse({ error: 'not found' }, 404);
 
@@ -168,7 +169,7 @@ async function handleUploadComplete(request, env, ctx) {
     return jsonResponse({ error: 'missing required fields: uploadId, r2Key, jobId, parts' }, 400);
   }
 
-  const { uploadId, r2Key, jobId, parts, groqKey = null, gatewayKey = null, gatewayUrl = null } = body;
+  const { uploadId, r2Key, jobId, parts, groqKey = null, gatewayKey = null, gatewayUrl = null, skipDispatch = false } = body;
 
   // Validate parts
   if (parts.length === 0) {
@@ -189,10 +190,30 @@ async function handleUploadComplete(request, env, ctx) {
   const updated  = { ...(existing ?? {}), status: 'uploaded', jobId, r2Key, ts: Date.now() };
   await kvPut(env, jobId, updated, KV_TTL_SECONDS);
 
-  // Fire-and-forget dispatch to Fly.io /extract
-  ctx.waitUntil(dispatchToFly(env, jobId, r2Key, existing?.srcLang ?? null, groqKey, buildCallbackUrl(request.url), gatewayKey, gatewayUrl));
+  // Fire-and-forget dispatch to Fly.io /extract (skip for VoxSplit — uses its own Deepgram flow)
+  if (!skipDispatch) {
+    ctx.waitUntil(dispatchToFly(env, jobId, r2Key, existing?.srcLang ?? null, groqKey, buildCallbackUrl(request.url), gatewayKey, gatewayUrl));
+  }
 
-  return jsonResponse({ status: 'processing', jobId });
+  return jsonResponse({ status: skipDispatch ? 'uploaded' : 'processing', jobId });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /presigned-download
+ * Body: { r2Key }
+ * Returns a presigned GET URL for downloading the file from R2.
+ * Used by VoxSplit to pass source_url to Fly.io /deepgram.
+ */
+async function handlePresignedDownload(request, env) {
+  const body = await request.json().catch(() => null);
+  if (!body || !body.r2Key) {
+    return jsonResponse({ error: 'missing required field: r2Key' }, 400);
+  }
+  const s3Config = getS3Config(env);
+  const downloadUrl = await presignGet(s3Config, body.r2Key, PRESIGN_TTL_GET);
+  return jsonResponse({ downloadUrl });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

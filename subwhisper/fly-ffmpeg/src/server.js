@@ -130,7 +130,9 @@ app.get('/health', (req, res) => {
 // ---------------------------------------------------------------------------
 // POST /deepgram — Reçoit audio/vidéo, extrait l'audio avec FFmpeg, envoie à Deepgram
 // Pipeline: upload → disque → FFmpeg → MP3 ~30MB → Deepgram → réponse
-// Supporte fichiers vidéo > 1 GB (streaming sur disque, pas en RAM)
+// Supporte fichiers vidéo > 2 GB via source_url (R2 presigned URL)
+// Mode 1: body direct (petits fichiers < 95MB)
+// Mode 2: source_url query param (gros fichiers — Fly.io télécharge depuis R2)
 // ---------------------------------------------------------------------------
 
 app.post('/deepgram', requireAnySecret, async (req, res) => {
@@ -139,7 +141,13 @@ app.post('/deepgram', requireAnySecret, async (req, res) => {
     return res.status(503).json({ error: 'DEEPGRAM_KEY not configured' });
   }
 
-  const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  const urlObj = new URL(req.url, 'http://localhost');
+  const sourceUrl = urlObj.searchParams.get('source_url');
+  // Construire le query string pour Deepgram SANS source_url
+  urlObj.searchParams.delete('source_url');
+  const dgParams = urlObj.searchParams.toString();
+  const qs = dgParams ? `?${dgParams}` : '';
+
   const contentType = req.headers['content-type'] || 'audio/mpeg';
   const contentLength = req.headers['content-length'] || '0';
   const sizeMB = (parseInt(contentLength) / 1048576).toFixed(1);
@@ -148,30 +156,65 @@ app.post('/deepgram', requireAnySecret, async (req, res) => {
   const inputPath = path.join(tmpDir, `${jobId}-input`);
   const audioPath = path.join(tmpDir, `${jobId}-audio.mp3`);
 
-  console.log(`[${jobId}] Reçu ${sizeMB} MB (${contentType}) — sauvegarde sur disque...`);
   const startMs = Date.now();
 
-  // Étape 1: Sauver le fichier uploadé sur disque (streaming, pas en RAM)
+  // Étape 1: Obtenir le fichier sur disque (2 modes)
   try {
-    await new Promise((resolve, reject) => {
-      const ws = fs.createWriteStream(inputPath);
-      let received = 0;
-      req.on('data', (chunk) => {
-        received += chunk.length;
-        // Log toutes les 50 MB
-        if (received % (50 * 1024 * 1024) < chunk.length) {
-          console.log(`[${jobId}] Reçu ${(received / 1048576).toFixed(0)}/${sizeMB} MB`);
-        }
+    if (sourceUrl) {
+      // ── Mode URL: FFmpeg télécharge directement depuis R2 presigned URL ──
+      console.log(`[${jobId}] Mode source_url — téléchargement depuis R2...`);
+      await new Promise((resolve, reject) => {
+        const proto = sourceUrl.startsWith('https') ? https : require('http');
+        const fileStream = fs.createWriteStream(inputPath);
+        proto.get(sourceUrl, (response) => {
+          if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+            // Follow redirect
+            proto.get(response.headers.location, (r2) => {
+              r2.pipe(fileStream);
+              fileStream.on('finish', resolve);
+              fileStream.on('error', reject);
+            }).on('error', reject);
+          } else if (response.statusCode !== 200) {
+            reject(new Error(`Download failed: HTTP ${response.statusCode}`));
+          } else {
+            const totalSize = parseInt(response.headers['content-length'] || '0');
+            let received = 0;
+            response.on('data', (chunk) => {
+              received += chunk.length;
+              if (received % (100 * 1024 * 1024) < chunk.length) {
+                console.log(`[${jobId}] Download R2: ${(received / 1048576).toFixed(0)}/${(totalSize / 1048576).toFixed(0)} MB`);
+              }
+            });
+            response.pipe(fileStream);
+            fileStream.on('finish', resolve);
+            fileStream.on('error', reject);
+          }
+        }).on('error', reject);
       });
-      req.pipe(ws);
-      ws.on('finish', resolve);
-      ws.on('error', reject);
-      req.on('error', reject);
-    });
-
-    const uploadElapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-    const inputStat = fs.statSync(inputPath);
-    console.log(`[${jobId}] Upload terminé: ${(inputStat.size / 1048576).toFixed(1)} MB en ${uploadElapsed}s`);
+      const downloadElapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+      const inputStat = fs.statSync(inputPath);
+      console.log(`[${jobId}] Download R2 terminé: ${(inputStat.size / 1048576).toFixed(1)} MB en ${downloadElapsed}s`);
+    } else {
+      // ── Mode body direct: streaming du body HTTP sur disque ──
+      console.log(`[${jobId}] Reçu ${sizeMB} MB (${contentType}) — sauvegarde sur disque...`);
+      await new Promise((resolve, reject) => {
+        const ws = fs.createWriteStream(inputPath);
+        let received = 0;
+        req.on('data', (chunk) => {
+          received += chunk.length;
+          if (received % (50 * 1024 * 1024) < chunk.length) {
+            console.log(`[${jobId}] Reçu ${(received / 1048576).toFixed(0)}/${sizeMB} MB`);
+          }
+        });
+        req.pipe(ws);
+        ws.on('finish', resolve);
+        ws.on('error', reject);
+        req.on('error', reject);
+      });
+      const uploadElapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+      const inputStat = fs.statSync(inputPath);
+      console.log(`[${jobId}] Upload terminé: ${(inputStat.size / 1048576).toFixed(1)} MB en ${uploadElapsed}s`);
+    }
 
     // Étape 2: Extraire l'audio avec FFmpeg → MP3 128kbps mono
     const isAudioOnly = contentType.startsWith('audio/');
