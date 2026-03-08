@@ -37,7 +37,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.10';
+const VERSION = '1.11';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -172,7 +172,22 @@ async function handleConfig(env) {
   const ytUsedRaw = await env.GATEWAY_KV.get(`ytusage:${today}`);
   const ytUsed = parseInt(ytUsedRaw || '0', 10);
 
-  return jsonResponse({ worker_url: workerUrl, apis, version: VERSION, diag_folder: diagFolder, mcp_drive_url: mcpDriveUrl, yt_server_keys: ytKeysCount, yt_server_used: ytUsed });
+  // YouTube quota health check — videos.list costs 1 unit (vs 100 for search.list)
+  let ytQuotaOk = null;
+  if (ytKeysRaw) {
+    const testKeys = ytKeysRaw.split(',').map(k => k.trim()).filter(Boolean);
+    // Test 2 keys from different positions (likely different projects)
+    const toTest = [testKeys[0], testKeys[Math.floor(testKeys.length / 2)]].filter(Boolean);
+    ytQuotaOk = false;
+    for (const tk of toTest) {
+      try {
+        const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=id&id=dQw4w9WgXcQ&key=${encodeURIComponent(tk)}`);
+        if (r.ok) { ytQuotaOk = true; break; }
+      } catch (_) {}
+    }
+  }
+
+  return jsonResponse({ worker_url: workerUrl, apis, version: VERSION, diag_folder: diagFolder, mcp_drive_url: mcpDriveUrl, yt_server_keys: ytKeysCount, yt_server_used: ytUsed, yt_quota_ok: ytQuotaOk });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
