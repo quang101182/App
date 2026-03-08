@@ -1,4 +1,4 @@
-<!-- VideoGrab v2.3 — Video Browser & Downloader — Mobile-First -->
+<!-- VideoGrab v2.4 — Video Browser & Downloader — Mobile-First -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0a0f">
-<title>VideoGrab v2.3</title>
+<title>VideoGrab v2.4</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -193,7 +193,7 @@ html,body{max-width:100vw;overflow-x:hidden}
 <div class="setup-screen" id="setupScreen" style="display:none">
   <div class="setup-card">
     <h1>VideoGrab</h1>
-    <div class="sub">v2.3 — Configuration initiale</div>
+    <div class="sub">v2.4 — Configuration initiale</div>
     <div class="setting-group">
       <label>URL du Gateway</label>
       <input id="setupGw" placeholder="https://api-gateway.xxxxx.workers.dev">
@@ -276,7 +276,7 @@ html,body{max-width:100vw;overflow-x:hidden}
   <div class="browser-frame" id="browserFrame">
     <div class="browser-empty" id="emptyState">
       <div>
-        <h2>VideoGrab v2.3</h2>
+        <h2>VideoGrab v2.4</h2>
         <p>Entrez une URL dans la barre pour commencer a naviguer.<br>Les videos seront detectees automatiquement.</p>
       </div>
     </div>
@@ -292,16 +292,17 @@ html,body{max-width:100vw;overflow-x:hidden}
 
 <script>
 // ═══════════════════════════════════════════════════════════════
-// VideoGrab v2.3 — Core Logic
+// VideoGrab v2.4 — Core Logic
 // ═══════════════════════════════════════════════════════════════
 
-const VERSION = '2.3';
+const VERSION = '2.4';
 const $ = id => document.getElementById(id);
 
 // ── State ──
 let gateway = '', secret = '';
 let navHistory = [], navIndex = -1;
-let detectedVideos = []; // [{url, type, ts}]
+let detectedVideos = []; // [{url, type, ts, title}]
+const FLY_URL = 'https://subwhisper-ffmpeg.fly.dev';
 let hlsInstance = null;
 let currentDlUrl = null;
 
@@ -440,7 +441,7 @@ function handleMessage(e) {
     if (!url) return;
     // Deduplicate
     if (detectedVideos.some(v => v.url === url)) return;
-    detectedVideos.push({ url, type: e.data.mt || 'unknown', ts: Date.now() });
+    detectedVideos.push({ url, type: e.data.mt || 'unknown', ts: Date.now(), title: e.data.title || '' });
     updateBadge();
     // Subtle toast for first detection
     if (detectedVideos.length === 1) toast('Video detectee !', 's');
@@ -506,8 +507,8 @@ function renderVideoList() {
     const ext = getExtension(v.url);
     const isHls = ext === 'm3u8' || ext === 'mpd';
     const icon = isHls ? '&#127909;' : '&#9654;&#65039;';
-    const name = getFilename(v.url);
-    const badge = ext.toUpperCase();
+    const name = v.title || getFilename(v.url);
+    const badge = isHls ? 'MP4' : ext.toUpperCase();
     const source = v.type;
     return `<div class="vid-item">
       <div class="vid-icon">${icon}</div>
@@ -651,7 +652,7 @@ async function startDownload(url, filename) {
   }
 }
 
-// ── HLS Download — parse m3u8, fetch all .ts segments, merge ──
+// ── HLS Download via Fly.io — FFmpeg remux to MP4, stream download ──
 async function startHlsDownload(m3u8Url, filename) {
   const progress = $('dlProgress');
   const bar = $('dlBar');
@@ -659,96 +660,161 @@ async function startHlsDownload(m3u8Url, filename) {
   const speed = $('dlSpeed');
   const eta = $('dlEta');
 
+  // Find video title from detected videos
+  const vid = detectedVideos.find(v => v.url === m3u8Url || currentDlUrl === v.url);
+  const videoTitle = (vid && vid.title) ? vid.title : filename.replace(/\.\w+$/, '');
+  const safeName = videoTitle.replace(/[<>:"/\\|?*]/g, '').substring(0, 100).trim() || 'video';
+
   progress.classList.add('active');
   bar.style.width = '0%';
-  pct.textContent = 'Chargement m3u8...';
+  pct.textContent = 'Connexion Fly.io...';
   speed.textContent = '--';
   eta.textContent = '--';
 
   try {
-    // 1. Fetch and parse the m3u8 playlist
+    // Build proxy base URL for Fly.io to fetch segments through our gateway
+    const proxyBase = `${gateway}/proxy?s=${encodeURIComponent(secret)}&raw=1&url=`;
+
+    toast('Conversion MP4 en cours (serveur)...', 'i');
+
+    const resp = await fetch(`${FLY_URL}/hls2mp4`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${secret}`,
+      },
+      body: JSON.stringify({ m3u8Url, title: safeName, proxyBase }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text().catch(() => resp.statusText);
+      throw new Error(`Serveur: ${err}`);
+    }
+
+    // Stream the MP4 response with progress
+    const total = parseInt(resp.headers.get('content-length') || '0');
+    const reader = resp.body.getReader();
+    const chunks = [];
+    let received = 0;
+    const t0 = Date.now();
+
+    pct.textContent = 'Telechargement MP4...';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+
+      const elapsed = (Date.now() - t0) / 1000;
+      const bps = elapsed > 0 ? received / elapsed : 0;
+
+      if (total) {
+        const p = Math.min(100, Math.round(received / total * 100));
+        bar.style.width = p + '%';
+        pct.textContent = `${p}% — ${fmtSize(received)}`;
+        eta.textContent = fmtTime((total - received) / bps);
+      } else {
+        // No content-length (chunked) — show bytes received
+        bar.style.width = '50%'; // indeterminate
+        pct.textContent = fmtSize(received);
+      }
+      speed.textContent = fmtSize(bps) + '/s';
+    }
+
+    bar.style.width = '100%';
+    pct.textContent = `100% — ${fmtSize(received)}`;
+    eta.textContent = 'OK';
+
+    const blob = new Blob(chunks, { type: 'video/mp4' });
+    const mp4Name = safeName + '.mp4';
+
+    // Try showSaveFilePicker (desktop Chrome/Edge) for folder choice
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: mp4Name,
+          types: [{ description: 'Video MP4', accept: { 'video/mp4': ['.mp4'] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        toast(`Enregistre: ${mp4Name}`, 's');
+        saveToHistory(m3u8Url, mp4Name, blob.size);
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') {
+          toast('Annule', 'w');
+          return;
+        }
+        // Fallback to <a download>
+      }
+    }
+
+    // Fallback: trigger download via <a>
+    triggerBlobDownload(blob, mp4Name);
+    toast(`Telecharge: ${mp4Name} (${fmtSize(blob.size)})`, 's');
+    saveToHistory(m3u8Url, mp4Name, blob.size);
+
+  } catch (e) {
+    toast('Erreur: ' + e.message, 'e');
+    console.error('HLS MP4 download error:', e);
+    // Fallback: try direct segment download
+    toast('Fallback: telechargement segments...', 'w');
+    startHlsSegmentFallback(m3u8Url, safeName + '.ts');
+  } finally {
+    setTimeout(() => progress.classList.remove('active'), 5000);
+  }
+}
+
+// ── Fallback: direct segment download if Fly.io fails ──
+async function startHlsSegmentFallback(m3u8Url, filename) {
+  const progress = $('dlProgress');
+  const bar = $('dlBar');
+  const pct = $('dlPct');
+  const speed = $('dlSpeed');
+  const eta = $('dlEta');
+
+  progress.classList.add('active');
+
+  try {
     const m3u8Resp = await fetch(buildRawUrl(m3u8Url));
     if (!m3u8Resp.ok) throw new Error('m3u8 HTTP ' + m3u8Resp.status);
     const m3u8Text = await m3u8Resp.text();
-
-    // Check if master playlist (contains other m3u8 refs)
     const lines = m3u8Text.split('\n').map(l => l.trim()).filter(l => l);
     const baseUrl = m3u8Url.substring(0, m3u8Url.lastIndexOf('/') + 1);
 
-    let segmentUrls = [];
-    let isMaster = false;
-
-    for (const line of lines) {
-      if (line.startsWith('#EXT-X-STREAM-INF')) { isMaster = true; continue; }
-      if (isMaster && !line.startsWith('#')) {
-        // It's a master playlist — pick the first (usually highest quality) variant
-        const variantUrl = line.startsWith('http') ? line : baseUrl + line;
-        toast('Playlist master detectee, chargement variante...', 'i');
-        return startHlsDownload(variantUrl, filename);
-      }
-    }
-
-    // Parse segment URLs
+    const segmentUrls = [];
     for (const line of lines) {
       if (!line.startsWith('#') && line.length > 0) {
-        const segUrl = line.startsWith('http') ? line : baseUrl + line;
-        segmentUrls.push(segUrl);
+        segmentUrls.push(line.startsWith('http') ? line : baseUrl + line);
       }
     }
+    if (!segmentUrls.length) throw new Error('No segments');
 
-    if (!segmentUrls.length) throw new Error('Aucun segment trouve dans le m3u8');
-
-    toast(`${segmentUrls.length} segments a telecharger`, 'i');
-    pct.textContent = `0/${segmentUrls.length}`;
-
-    // 2. Download all segments with progress
     const allChunks = [];
     let totalBytes = 0;
     const t0 = Date.now();
-    const CONCURRENT = 4; // parallel downloads
 
-    for (let i = 0; i < segmentUrls.length; i += CONCURRENT) {
-      const batch = segmentUrls.slice(i, i + CONCURRENT);
-      const results = await Promise.all(batch.map(async (segUrl) => {
-        const resp = await fetch(buildRawUrl(segUrl));
-        if (!resp.ok) throw new Error(`Segment HTTP ${resp.status}`);
-        return await resp.arrayBuffer();
+    for (let i = 0; i < segmentUrls.length; i += 4) {
+      const batch = segmentUrls.slice(i, i + 4);
+      const results = await Promise.all(batch.map(async u => {
+        const r = await fetch(buildRawUrl(u));
+        return r.ok ? await r.arrayBuffer() : new ArrayBuffer(0);
       }));
-
-      for (const buf of results) {
-        allChunks.push(new Uint8Array(buf));
-        totalBytes += buf.byteLength;
-      }
-
-      const done = Math.min(i + CONCURRENT, segmentUrls.length);
-      const p = Math.round(done / segmentUrls.length * 100);
-      bar.style.width = p + '%';
+      for (const buf of results) { allChunks.push(new Uint8Array(buf)); totalBytes += buf.byteLength; }
+      const done = Math.min(i + 4, segmentUrls.length);
+      bar.style.width = Math.round(done / segmentUrls.length * 100) + '%';
       pct.textContent = `${done}/${segmentUrls.length}`;
-
       const elapsed = (Date.now() - t0) / 1000;
-      const bps = totalBytes / elapsed;
-      speed.textContent = fmtSize(bps) + '/s';
-      const remaining = (segmentUrls.length - done) / (done / elapsed);
-      eta.textContent = fmtTime(remaining);
+      speed.textContent = fmtSize(totalBytes / elapsed) + '/s';
     }
 
-    // 3. Merge all segments into one blob
-    bar.style.width = '100%';
-    pct.textContent = '100%';
-    eta.textContent = 'Fusion...';
-
     const blob = new Blob(allChunks, { type: 'video/mp2t' });
-
     triggerBlobDownload(blob, filename);
-    eta.textContent = fmtSize(blob.size);
-    toast(`Telechargement termine ! ${fmtSize(blob.size)}`, 's');
-    saveToHistory(m3u8Url, filename, blob.size);
-
+    toast(`Telecharge: ${filename} (${fmtSize(blob.size)})`, 's');
   } catch (e) {
-    toast('Erreur HLS: ' + e.message, 'e');
-    console.error('HLS download error:', e);
-  } finally {
-    setTimeout(() => progress.classList.remove('active'), 5000);
+    toast('Echec total: ' + e.message, 'e');
   }
 }
 

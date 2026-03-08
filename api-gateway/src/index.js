@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.17
+ * api-gateway — Cloudflare Worker v1.18
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -434,7 +434,8 @@ var PP=location.origin+'/proxy?s=${encodeURIComponent(esc)}&url=';
 var V=/\\.(mp4|webm|m3u8|mov|mkv|flv|avi|ts|mpd)(\\?[^"'\\s<>]*)?/i;
 var DT=new Set();
 function isExt(u){return typeof u==='string'&&u.startsWith('http')&&!u.includes('/proxy?s=');}
-function R(u,t){if(!u||u.length<8||DT.has(u))return;DT.add(u);try{parent.postMessage({t:'vg-video',url:u,mt:t},'*')}catch(e){}}
+function GT(){try{var j=document.querySelector('script[type="application/ld+json"]');if(j){var o=JSON.parse(j.textContent||'{}');if(o.name)return o.name.split('|')[0].trim()}var og=document.querySelector('meta[property="og:title"]');if(og)return og.content;return document.title||''}catch(e){return document.title||''}}
+function R(u,t){if(!u||u.length<8||DT.has(u))return;DT.add(u);try{parent.postMessage({t:'vg-video',url:u,mt:t,title:GT()},'*')}catch(e){}}
 
 /* ── 1. Proxy ALL fetch requests + block ads ── */
 var OF=window.fetch;
