@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.5 — Discovery Engine</title>
+<title>music·ai v3.6 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -441,7 +441,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.5</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.6</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -1738,33 +1738,36 @@ function doFeedback(btnId,action,title,artist,genre){
 }
 
 // ── SEARCH MEMORY ──
-const SEARCH_TRIGGERS=['cherche','trouve','recherche','connais','chanson qui','musique qui','titre','quel est','c\'est quoi','remember','souviens','j\'ai entendu','entendu','passage','paroles','lyric','clip','refrain','ça fait','ça dit','ça sonne','sounds like'];
+const SEARCH_TRIGGERS=['chanson qui','musique qui','quel est','c\'est quoi','souviens','j\'ai entendu','entendu une','passage','paroles','lyric','refrain','ça fait','ça dit','ça sonne','sounds like'];
+const SEARCH_EXCLUDES=['similaire','comme','style','genre','ambiance','mood','dans le','envie de','quelque chose'];
 let _searchContext={active:false,clues:[],attempts:0};
 function isSearchMode(msg){
   const low=msg.toLowerCase();
   if(_searchContext.active)return true;
+  // Exclure les demandes de reco (similaire, comme, style...)
+  if(SEARCH_EXCLUDES.some(t=>low.includes(t)))return false;
   return SEARCH_TRIGGERS.some(t=>low.includes(t));
 }
 function extractClues(msg){
-  const clues=[];
-  const low=msg.toLowerCase();
-  // Extraire indices bruts
-  if(msg.length>3)clues.push(msg.trim());
-  return clues;
+  if(msg.length>3)return[msg.trim()];
+  return[];
 }
-function buildSearchPrompt(){
+function buildSearchPrompt(forceReco){
   const clueStr=_searchContext.clues.join('\n- ');
+  if(forceReco)return `L'utilisateur cherchait un titre précis avec ces indices :
+- ${clueStr}
+Propose LE meilleur candidat que tu penses correspondre. Si aucun ne colle, propose le plus proche.
+Retourne le JSON habituel. Zéro texte avant/après. JSON UNIQUEMENT.`;
   return `MODE RECHERCHE MUSICALE — L'utilisateur cherche une chanson précise.
 
 INDICES ACCUMULÉS:
 - ${clueStr}
 
-TENTATIVES: ${_searchContext.attempts}/5
+RÈGLE ABSOLUE: pose MAXIMUM 1 question courte, ET propose toujours au moins 2 candidats jouables.
 
-Si tu penses avoir identifié le titre avec confiance ≥ 70%, retourne le JSON habituel avec un champ supplémentaire "confidence":0.XX et "search_mode":"found".
+Si confiance ≥ 50% sur un titre, retourne le JSON habituel avec "confidence":0.XX et "search_mode":"found".
 
-Si tu n'es pas sûr, retourne ce JSON:
-{"search_mode":"need_more","question":"[pose UNE question ciblée pour obtenir plus d'indices]","candidates":[{"title":"...","artist":"...","confidence":0.XX}]}
+Sinon: {"search_mode":"need_more","question":"[1 question courte]","candidates":[{"title":"...","artist":"...","confidence":0.XX}]}
 
 Zéro texte avant/après. JSON UNIQUEMENT.`;
 }
@@ -1787,25 +1790,50 @@ async function sendChat(){
     _searchContext.clues.push(...extractClues(msg));
     _searchContext.attempts++;
   }
+  // Après 2 questions sans résultat → forcer une reco directe
+  const _forceReco=_isSearch&&_searchContext.attempts>2;
   try{
-    let raw;const _prompt=_isSearch?buildSearchPrompt():`L'utilisateur veut: ${JSON.stringify(msg)}. Recommande une chanson.`;
+    let raw;const _prompt=_isSearch?buildSearchPrompt(_forceReco):`L'utilisateur veut: ${JSON.stringify(msg)}. Recommande une chanson.`;
     try{raw=await callAI(buildSystemPrompt('chat'),_prompt);}
     catch(retryErr){if(retryErr.message&&retryErr.message.includes('Timeout')){toast('⏳ Retry IA…');raw=await callAI(buildSystemPrompt('chat'),_prompt);}else throw retryErr;}
     const parsed=parseJSON(raw);
-    // Search mode: need more clues
-    if(parsed.search_mode==='need_more'){
+    // Search mode: need more clues (max 2 fois)
+    if(parsed.search_mode==='need_more'&&!_forceReco){
       const cands=(parsed.candidates||[]).slice(0,3);
-      let html=`<div style="font-size:13px;margin-bottom:8px;">🔍 ${esc(parsed.question||'Peux-tu donner plus de détails ?')}</div>`;
-      if(cands.length){html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Pistes possibles :</div>`;cands.forEach(c=>{html+=`<div style="font-size:12px;padding:4px 0;">• <strong>${esc(c.title)}</strong> — ${esc(c.artist)} <span style="color:var(--accent);font-size:10px;">(${Math.round((c.confidence||0)*100)}%)</span></div>`;});}
-      html+=`<div style="font-size:10px;color:var(--muted);margin-top:6px;">💡 Donne plus de détails ou tape "c'est ça" si tu reconnais un titre ci-dessus</div>`;
+      const cid='sc_'+Date.now();
+      let html=`<div style="font-size:13px;margin-bottom:10px;">🔍 ${esc(parsed.question||'Peux-tu donner plus de détails ?')}</div>`;
+      if(cands.length){
+        html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Ça pourrait être :</div>`;
+        cands.forEach((c,i)=>{
+          const conf=Math.round((c.confidence||0)*100);
+          html+=`<div id="${cid}-c${i}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:4px;border-radius:12px;border:1px solid var(--border);background:var(--card);cursor:pointer;transition:all .15s;">
+            <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.title)}</div><div style="font-size:11px;color:var(--muted);">${esc(c.artist)}</div></div>
+            <span style="font-size:10px;color:var(--accent);font-weight:600;flex-shrink:0;">${conf}%</span>
+            <span style="font-size:14px;flex-shrink:0;">▶</span>
+          </div>`;
+        });
+      }
+      html+=`<div style="font-size:10px;color:var(--muted);margin-top:6px;">💡 Tape un détail ou clique un candidat pour l'écouter</div>`;
       ab.innerHTML=html;
+      // Rendre candidats cliquables
+      cands.forEach((c,i)=>{
+        const el=document.getElementById(`${cid}-c${i}`);
+        if(el)el.onclick=()=>{
+          const ytQ=`${c.artist} ${c.title} official audio`;
+          const t={title:c.title,artist:c.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`};
+          _searchContext={active:false,clues:[],attempts:0};
+          getYtKey()?ytPlay(t):window.open(t.ytUrl,'_blank','noopener');
+          pushHistory({title:c.title,artist:c.artist,action:'chat',context:'chat'});
+          toast('🎵 '+esc(c.title));
+        };
+      });
       ST.chatHistory.push({role:'user',content:msg});
       ST.chatHistory.push({role:'assistant',content:parsed.question||'Recherche en cours...'});
       saveChatHistory();
       msgs.scrollTop=msgs.scrollHeight;ST.isLoading=false;return;
     }
-    // Found or normal reco
-    if(parsed.search_mode==='found')_searchContext={active:false,clues:[],attempts:0};
+    // Found, forced reco, or normal reco → reset search
+    _searchContext={active:false,clues:[],attempts:0};
     const rec=parsed;
     const ytQuery=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;
     const ytUrl=`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQuery)}`;
