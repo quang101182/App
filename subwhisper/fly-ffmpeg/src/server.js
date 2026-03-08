@@ -912,6 +912,110 @@ function formatTime(sec) {
 }
 
 // ---------------------------------------------------------------------------
+// POST /webproxy — Web proxy pour VideoGrab (contourne blocage IP datacenter CF)
+// Le Worker CF redirige ici quand le fetch direct retourne 403
+// ---------------------------------------------------------------------------
+
+const CHROME_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9,fr-FR;q=0.8,fr;q=0.7',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Sec-Ch-Ua': '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+  'Sec-Ch-Ua-Mobile': '?1',
+  'Sec-Ch-Ua-Platform': '"Android"',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Sec-Fetch-User': '?1',
+  'Upgrade-Insecure-Requests': '1',
+  'DNT': '1',
+  'Cache-Control': 'max-age=0',
+};
+
+app.post('/webproxy', requireAnySecret, async (req, res) => {
+  const { url, method: reqMethod, headers: extraHeaders, raw } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'missing url' });
+
+  try {
+    const target = new URL(url);
+    if (!['http:', 'https:'].includes(target.protocol)) {
+      return res.status(400).json({ error: 'only http/https' });
+    }
+
+    const fetchHeaders = { ...CHROME_HEADERS, 'Referer': target.origin + '/' };
+    if (raw) {
+      fetchHeaders['Accept'] = '*/*';
+      fetchHeaders['Sec-Fetch-Dest'] = 'empty';
+      fetchHeaders['Sec-Fetch-Mode'] = 'cors';
+    }
+    // Forward cookies if provided
+    if (extraHeaders && extraHeaders.cookie) fetchHeaders['Cookie'] = extraHeaders.cookie;
+    if (extraHeaders && extraHeaders.range) fetchHeaders['Range'] = extraHeaders.range;
+
+    const upstream = await fetch(url, {
+      method: reqMethod || 'GET',
+      headers: fetchHeaders,
+      redirect: 'follow',
+    });
+
+    // Forward status + key headers
+    const respHeaders = {
+      'Content-Type': upstream.headers.get('content-type') || 'text/html',
+      'Access-Control-Allow-Origin': '*',
+      'X-Proxy-Status': String(upstream.status),
+    };
+    for (const h of ['content-length', 'accept-ranges', 'content-range', 'content-disposition', 'last-modified', 'etag', 'set-cookie']) {
+      const v = upstream.headers.get(h);
+      if (v) respHeaders[h] = v;
+    }
+
+    // Stream body
+    const body = Buffer.from(await upstream.arrayBuffer());
+    res.status(upstream.status).set(respHeaders).send(body);
+
+  } catch (err) {
+    console.error('[webproxy] Error:', err.message);
+    res.status(502).json({ error: 'fetch failed: ' + err.message });
+  }
+});
+
+app.get('/webproxy', requireAnySecret, async (req, res) => {
+  const url = req.query.url;
+  if (!url) return res.status(400).json({ error: 'missing url query param' });
+
+  try {
+    const target = new URL(url);
+    const raw = req.query.raw === '1';
+    const fetchHeaders = { ...CHROME_HEADERS, 'Referer': target.origin + '/' };
+    if (raw) {
+      fetchHeaders['Accept'] = '*/*';
+      fetchHeaders['Sec-Fetch-Dest'] = 'empty';
+      fetchHeaders['Sec-Fetch-Mode'] = 'cors';
+    }
+    const range = req.headers['range'];
+    if (range) fetchHeaders['Range'] = range;
+
+    const upstream = await fetch(url, { headers: fetchHeaders, redirect: 'follow' });
+
+    const respHeaders = {
+      'Content-Type': upstream.headers.get('content-type') || 'application/octet-stream',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
+    };
+    for (const h of ['content-length', 'accept-ranges', 'content-range', 'content-disposition']) {
+      const v = upstream.headers.get(h);
+      if (v) respHeaders[h] = v;
+    }
+
+    const body = Buffer.from(await upstream.arrayBuffer());
+    res.status(upstream.status).set(respHeaders).send(body);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Démarrage du serveur
 // ---------------------------------------------------------------------------
 

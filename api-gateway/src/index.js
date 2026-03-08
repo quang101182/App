@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.15
+ * api-gateway — Cloudflare Worker v1.17
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -41,8 +41,10 @@ const VERSION = '1.13';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Api-Path, X-Api-Variant, X-Azure-Region',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, HEAD',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Api-Path, X-Api-Variant, X-Azure-Region, Range, X-Proxy-Cookie, X-Requested-With',
+  'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges, Content-Disposition, X-Proxy-Status',
+  'Access-Control-Max-Age': '86400',
 };
 
 /** All recognised key names stored in KV */
@@ -434,11 +436,12 @@ var DT=new Set();
 function isExt(u){return typeof u==='string'&&u.startsWith('http')&&!u.includes('/proxy?s=');}
 function R(u,t){if(!u||u.length<8||DT.has(u))return;DT.add(u);try{parent.postMessage({t:'vg-video',url:u,mt:t},'*')}catch(e){}}
 
-/* ── 1. Proxy ALL fetch requests ── */
+/* ── 1. Proxy ALL fetch requests + block ads ── */
 var OF=window.fetch;
 window.fetch=function(i,o){
   var u=typeof i==='string'?i:(i&&i.url)||'';
-  if(V.test(u))R(u,'fetch');
+  if(isAd(u))return Promise.resolve(new Response('',{status:200}));
+  if(V.test(u)&&!isAd(u))R(u,'fetch');
   if(isExt(u)){
     var pu=PB+encodeURIComponent(u);
     if(typeof i==='string')return OF.call(this,pu,o);
@@ -447,11 +450,12 @@ window.fetch=function(i,o){
   return OF.apply(this,arguments);
 };
 
-/* ── 2. Proxy ALL XHR requests ── */
+/* ── 2. Proxy ALL XHR requests + block ads ── */
 var XO=XMLHttpRequest.prototype.open;
 XMLHttpRequest.prototype.open=function(m,u){
   if(typeof u==='string'){
-    if(V.test(u))R(u,'xhr');
+    if(isAd(u)){u='data:text/plain,';return XO.call(this,m,u,true);}
+    if(V.test(u)&&!isAd(u))R(u,'xhr');
     if(isExt(u))u=PB+encodeURIComponent(u);
   }
   return XO.call(this,m,u,true);
@@ -468,17 +472,33 @@ try{localStorage.getItem('_t')}catch(e){
   Object.defineProperty(window,'localStorage',{value:{getItem:function(k){return _s[k]||null},setItem:function(k,v){_s[k]=String(v)},removeItem:function(k){delete _s[k]},clear:function(){_s={}},get length(){return Object.keys(_s).length},key:function(i){return Object.keys(_s)[i]||null}},configurable:true});
 }
 
-/* ── 5. Detect video URLs in DOM ── */
+/* ── 5. Ad domain blocklist ── */
+var ADS=/(\\.|-)(magsrv|tsyndicate|exoclick|trafficjunky|juicyads|popads|adsterra|clickaine|pushame|ad-maven|hilltopads|plugrush|ero-advertising|trafficstars|crakrevenue|largeconfusion|exosrv|syndication)\\.|(doubleclick|googlesyndication)\\.com/i;
+function isAd(u){return typeof u==='string'&&ADS.test(u);}
+
+/* ── 6. Detect video URLs in DOM ── */
 function S(){
   document.querySelectorAll('video,audio,source,[src],[data-src],[data-video-src]').forEach(function(e){
     var s=e.src||e.currentSrc||(e.dataset&&(e.dataset.src||e.dataset.videoSrc))||e.getAttribute('src')||'';
-    if(s&&V.test(s))R(s,'dom');
-    if(e.tagName==='VIDEO'&&e.currentSrc)R(e.currentSrc,'cur');
+    if(s&&V.test(s)&&!isAd(s))R(s,'dom');
+    if(e.tagName==='VIDEO'&&e.currentSrc&&!isAd(e.currentSrc))R(e.currentSrc,'cur');
   });
-  document.querySelectorAll('a[href]').forEach(function(a){if(V.test(a.href))R(a.href,'link')});
+  document.querySelectorAll('a[href]').forEach(function(a){if(V.test(a.href)&&!isAd(a.href))R(a.href,'link')});
+  /* JSON-LD VideoObject detection */
+  try{document.querySelectorAll('script[type="application/ld+json"]').forEach(function(s){
+    try{var j=JSON.parse(s.textContent||'');var items=Array.isArray(j)?j:[j];
+    items.forEach(function(o){
+      if(o['@type']==='VideoObject'||o['@type']==='Video'){
+        if(o.contentURL)R(o.contentURL,'jsonld');
+        if(o.embedUrl&&V.test(o.embedUrl))R(o.embedUrl,'jsonld');
+        if(o.url&&V.test(o.url))R(o.url,'jsonld');
+      }
+    })}catch(x){}
+  })}catch(x){}
+  /* Inline script video URL extraction */
   try{document.querySelectorAll('script:not([src])').forEach(function(s){
-    var t=s.textContent||'';var re=/["'](https?:\\/\\/[^"'\\s]+\\.(?:mp4|m3u8|webm)(?:\\?[^"'\\s]*)?)["']/gi;var m;
-    while((m=re.exec(t))!==null)R(m[1],'js')})}catch(x){}
+    var t=s.textContent||'';var re=/["'](https?:\\/\\/[^"'\\s]+\\.(?:mp4|m3u8|webm|mpd)(?:\\?[^"'\\s]*)?)["']/gi;var m;
+    while((m=re.exec(t))!==null){if(!isAd(m[1]))R(m[1],'js')}})}catch(x){}
 }
 
 /* ── 6. Report current page URL to parent ── */
@@ -562,6 +582,37 @@ async function handleProxy(request, env, ctx, parsedUrl) {
     });
   } catch (err) {
     return jsonResponse({ error: 'fetch failed: ' + err.message }, 502);
+  }
+
+  // ── Fallback via Fly.io if target blocks CF datacenter IPs (403) ──
+  if (resp.status === 403) {
+    const flyUrl = await env.GATEWAY_KV.get('FLY_PROXY_URL'); // e.g. https://subwhisper-ffmpeg.fly.dev
+    const flySecret = await env.GATEWAY_KV.get('FLY_SECRET');
+    if (flyUrl && flySecret) {
+      try {
+        const flyResp = await fetch(`${flyUrl}/webproxy`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${flySecret}`,
+          },
+          body: JSON.stringify({
+            url: targetUrl,
+            method: request.method,
+            raw: isRaw,
+            headers: {
+              cookie: cookie || undefined,
+              range: request.headers.get('Range') || undefined,
+            },
+          }),
+        });
+        if (flyResp.ok || (flyResp.status >= 200 && flyResp.status < 500 && flyResp.status !== 403)) {
+          resp = flyResp;
+        }
+      } catch (e) {
+        // Fly.io fallback failed — use original 403 response
+      }
+    }
   }
 
   const contentType = resp.headers.get('content-type') || '';
