@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.9.4 — Discovery Engine</title>
+<title>music·ai v3.9.5 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -443,7 +443,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.9.4</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.9.5</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -849,7 +849,7 @@ window.onYouTubeIframeAPIReady=function(){
         // -1 = YT chargé mais pas encore lancé (Android autoplay bloqué) → retry unique à 600ms
         if(e.data===-1&&!ST._ytRetried&&ST.currentTrack&&ST.currentTrack.videoId){
           ST._ytRetried=true;
-          setTimeout(function(){try{ST.ytPlayer.playVideo();}catch(_){}},600);
+          setTimeout(function(){try{if(ST.ytPlayer.getPlayerState()!==1)ST.ytPlayer.playVideo();}catch(_){}},600);
         }
         if(e.data===1){
           updatePlayPauseUI(true);fpSetPaused(false);
@@ -879,15 +879,20 @@ window.onYouTubeIframeAPIReady=function(){
 // Tous les loadVideoById suivants héritent du contexte ouvert → son garanti sur Android.
 let _audioUnlocked=false;
 function unlockAudioContext(){
-  if(_audioUnlocked||!ST.ytPlayerReady||!ST.ytPlayer||!ST.ytPlayer.playVideo)return;
+  if(_audioUnlocked)return;
+  if(!ST.ytPlayerReady||!ST.ytPlayer||!ST.ytPlayer.playVideo)return;// player pas encore prêt → on garde le listener
+  if(typeof ST.ytPlayer.getPlayerState==='function'&&ST.ytPlayer.getPlayerState()===1)return;// déjà en lecture
   try{
     ST.ytPlayer.mute();
     ST.ytPlayer.playVideo();
-    setTimeout(()=>{ST.ytPlayer.pauseVideo();ST.ytPlayer.unMute();_audioUnlocked=true;},50);
+    setTimeout(()=>{ST.ytPlayer.pauseVideo();ST.ytPlayer.unMute();_audioUnlocked=true;
+      document.removeEventListener('touchstart',unlockAudioContext);
+      document.removeEventListener('click',unlockAudioContext);
+    },50);
   }catch(e){}
 }
-document.addEventListener('touchstart',unlockAudioContext,{once:true});
-document.addEventListener('click',unlockAudioContext,{once:true});
+document.addEventListener('touchstart',unlockAudioContext);
+document.addEventListener('click',unlockAudioContext);
 (function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s)})();
 let _progressTick=null;
 function startProgressTick(){
