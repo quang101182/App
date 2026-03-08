@@ -1075,16 +1075,23 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
   // Process in background
   const combinedTs = path.join(tmpDir, 'combined.ts');
 
-  async function fetchUrl(url) {
-    const finalUrl = proxyBase ? `${proxyBase}${encodeURIComponent(url)}` : url;
-    return fetch(finalUrl, { headers: { ...CHROME_HEADERS, 'Accept': '*/*' } });
+  // Direct fetch first, proxy fallback only if needed
+  async function fetchUrl(url, useProxy) {
+    if (useProxy && proxyBase) {
+      return fetch(`${proxyBase}${encodeURIComponent(url)}`, { headers: { ...CHROME_HEADERS, 'Accept': '*/*' } });
+    }
+    return fetch(url, { headers: { ...CHROME_HEADERS, 'Accept': '*/*' } });
   }
 
   try {
     jobLog(job, `Debut — ${m3u8Url.substring(0, 80)}...`);
 
-    // 1. Fetch and parse m3u8
-    const m3u8Resp = await fetchUrl(m3u8Url);
+    // 1. Fetch and parse m3u8 (try direct first, then proxy)
+    let m3u8Resp = await fetchUrl(m3u8Url, false);
+    if (!m3u8Resp.ok && proxyBase) {
+      jobLog(job, 'Direct m3u8 echoue, essai via proxy...');
+      m3u8Resp = await fetchUrl(m3u8Url, true);
+    }
     if (!m3u8Resp.ok) throw new Error(`m3u8 HTTP ${m3u8Resp.status}`);
     const m3u8Text = await m3u8Resp.text();
     const allLines = m3u8Text.split('\n').map(l => l.trim()).filter(l => l);
@@ -1109,7 +1116,8 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
     let segUrls = [];
     if (isMaster && bestVariant) {
       jobLog(job, `Master playlist → variante ${(bestBandwidth/1000).toFixed(0)} kbps`);
-      const varResp = await fetchUrl(bestVariant);
+      let varResp = await fetchUrl(bestVariant, false);
+      if (!varResp.ok && proxyBase) varResp = await fetchUrl(bestVariant, true);
       if (!varResp.ok) throw new Error(`Variant HTTP ${varResp.status}`);
       const varText = await varResp.text();
       const varBase = bestVariant.substring(0, bestVariant.lastIndexOf('/') + 1);
@@ -1125,16 +1133,21 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
     if (!segUrls.length) throw new Error('Aucun segment trouve');
     jobLog(job, `${segUrls.length} segments a telecharger`);
 
-    // 2. Download segments
+    // 2. Download segments (direct first, proxy fallback — batch of 20 for speed)
     const writeStream = fs.createWriteStream(combinedTs);
     let downloaded = 0;
-    const BATCH = 6;
+    const BATCH = 20;
+    let useProxy = false; // start direct, switch to proxy if first batch fails
 
     for (let i = 0; i < segUrls.length; i += BATCH) {
       const batch = segUrls.slice(i, i + BATCH);
       const buffers = await Promise.all(batch.map(async (url) => {
         try {
-          const r = await fetchUrl(url);
+          let r = await fetchUrl(url, useProxy);
+          if (!r.ok && proxyBase && !useProxy) {
+            r = await fetchUrl(url, true);
+            if (r.ok) useProxy = true; // switch all subsequent to proxy
+          }
           if (!r.ok) return Buffer.alloc(0);
           return Buffer.from(await r.arrayBuffer());
         } catch (e) { return Buffer.alloc(0); }
