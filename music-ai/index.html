@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.9.7 — Discovery Engine</title>
+<title>music·ai v3.9.8 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -443,7 +443,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.9.7</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.9.8</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -736,12 +736,10 @@ function getTotalQuota(){const keys=getAllYtKeys();let used=0,total=0;keys.forEa
 // Legacy compat
 function getQuota(){const k=getYtKey();return k?getQuotaForKey(k):{count:0,date:new Date().toISOString().slice(0,10)};}
 function incQuota(){const k=getYtKey();if(k)incQuotaForKey(k);}
-// ── Compteur recherches serveur (côté client) ──
-const LS_YT_SRV_QUOTA='music_ai_yt_srv';
-function getSrvSearchCount(){try{const d=JSON.parse(localStorage.getItem(LS_YT_SRV_QUOTA));const today=new Date().toISOString().slice(0,10);if(!d||d.date!==today)return 0;return d.count||0;}catch{return 0;}}
-function incSrvSearchCount(){const today=new Date().toISOString().slice(0,10);const cur=getSrvSearchCount();localStorage.setItem(LS_YT_SRV_QUOTA,JSON.stringify({date:today,count:cur+1}));updateQuotaDisplay();}
+// ── Compteur recherches serveur (depuis gateway KV) ──
 function updateQuotaDisplay(){
-  const{used,total}=getTotalQuota();const srvKeys=ST.ytServerKeys||0;const hasGw=!!getGwSecret();const hasLocal=getAllYtKeys().length>0;const srvUsed=getSrvSearchCount();const localKeys=getAllYtKeys().length;
+  const{used,total}=getTotalQuota();const srvKeys=ST.ytServerKeys||0;const srvUsed=ST.ytServerUsed||0;const hasGw=!!getGwSecret();const hasLocal=getAllYtKeys().length>0;const localKeys=getAllYtKeys().length;
+  const srvTotal=srvKeys*100;
   // LED label simple
   const el=document.getElementById('yt-quota-display');
   if(el){let txt='YT';if(hasLocal||hasGw)txt=_ytLastSource==='S'?'☁S':_ytLastSource==='L'?'🔑L':'YT';el.textContent=txt;}
@@ -750,7 +748,7 @@ function updateQuotaDisplay(){
   if(dot&&!dot.classList.contains('blink')){if(!hasLocal&&!hasGw){dot.className='adot';}else if(_ytLastSource==='S'){dot.className='adot ok';dot.style.background='#06b6d4';dot.style.boxShadow='0 0 6px #06b6d4';}else if(_ytLastSource==='L'){dot.className='adot ok';dot.style.background='';dot.style.boxShadow='';}else{dot.style.background='';dot.style.boxShadow='';dot.className='adot'+((hasLocal||hasGw)?' ok':' ');}}
   // Stats line
   const line=document.getElementById('yt-stats-line');
-  if(line){const parts=[];if(hasLocal)parts.push('🔑 '+used+'/'+total+' · '+localKeys+' clé'+(localKeys>1?'s':''));if(hasGw)parts.push('☁ '+srvUsed+' rech · '+(srvKeys||'…')+' clé'+(srvKeys>1?'s':''));line.textContent=parts.join('  ·  ')||'';}
+  if(line){const parts=[];if(hasLocal)parts.push('🔑 '+used+'/'+total+' · '+localKeys+' clé'+(localKeys>1?'s':''));if(hasGw)parts.push('☁ '+srvUsed+'/'+srvTotal+' · '+srvKeys+' clé'+(srvKeys>1?'s':''));line.textContent=parts.join('  ·  ')||'';}
 }
 function getProfile(){try{return JSON.parse(localStorage.getItem(LS_PROFILE))}catch(e){return null}}
 function saveProfile(p){localStorage.setItem(LS_PROFILE,JSON.stringify(p))}
@@ -768,7 +766,7 @@ const MOODS=[{id:'energique',label:'Énergie',emoji:'⚡'},{id:'melancolique',la
 const ACTIVITIES=[{id:'running',label:'🏃 Running'},{id:'gym',label:'💪 Gym'},{id:'coding',label:'💻 Coding'},{id:'cuisine',label:'🍳 Cuisine'},{id:'conduite',label:'🚗 Conduite'},{id:'meditation',label:'🧘 Méditation'}];
 const MODELS={claude:['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001'],gemini:['gemini-2.0-flash','gemini-1.5-pro','gemini-1.5-flash'],openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo']};
 const ADVENTURE_LABELS=[[0,'Confort absolu'],[25,'Plutôt classique'],[40,'Équilibré'],[60,'Curieux'],[80,'Aventurier'],[100,'Explorateur']];
-let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,continuousMode:true,volume:80,sleepMinutes:0,sleepTimer:null,sessionThread:[],chatHistory:[],sessionStart:Date.now(),_pendingUnmute:null,_preRec:null,_preFetching:false,editProfileMode:false,ytServerKeys:0};
+let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,continuousMode:true,volume:80,sleepMinutes:0,sleepTimer:null,sessionThread:[],chatHistory:[],sessionStart:Date.now(),_pendingUnmute:null,_preRec:null,_preFetching:false,editProfileMode:false,ytServerKeys:0,ytServerUsed:0};
 
 let _tt=null;
 function toast(msg,dur=2400){const el=document.getElementById('toast');el.textContent=msg;el.classList.remove('hidden');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.add('hidden'),dur)}
@@ -786,7 +784,7 @@ async function ytSearchGateway(query){
     const r=await fetch(GATEWAY_URL+'/api/youtube-search',{method:'POST',headers:{'Authorization':'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify({q:query}),signal:ctrl.signal});
     if(!r.ok)return null;
     const d=await r.json();
-    if(d.videoId){_ytVidCache[query]=d.videoId;saveVidCache();incSrvSearchCount();return d.videoId;}
+    if(d.videoId){_ytVidCache[query]=d.videoId;saveVidCache();ST.ytServerUsed=(ST.ytServerUsed||0)+1;updateQuotaDisplay();return d.videoId;}
     return null;
   }catch(e){console.warn('[YT-GW] error:',e);return null;}
 }
@@ -2154,6 +2152,7 @@ async function fetchGatewayConfig(){
     const MAP={CLAUDE:'CDL',GEMINI:'GEM',OPENAI:'OAI'};
     Object.keys(MAP).forEach(k=>setDot(MAP[k],apis.includes(k)?'ok':''));
     ST.ytServerKeys=cfg.yt_server_keys||0;
+    ST.ytServerUsed=cfg.yt_server_used||0;
     updateQuotaDisplay();
   }catch(e){setDot('GWY',/^https?:\/\/.+/.test(GATEWAY_URL)?'key':'err');}
 }

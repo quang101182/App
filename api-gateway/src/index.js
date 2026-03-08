@@ -37,7 +37,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.8';
+const VERSION = '1.9';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -167,7 +167,12 @@ async function handleConfig(env) {
   const ytKeysRaw = await kvGetKey(env, 'YOUTUBE_KEYS');
   const ytKeysCount = ytKeysRaw ? ytKeysRaw.split(',').filter(k => k.trim()).length : 0;
 
-  return jsonResponse({ worker_url: workerUrl, apis, version: VERSION, diag_folder: diagFolder, mcp_drive_url: mcpDriveUrl, yt_server_keys: ytKeysCount });
+  // YouTube daily usage counter
+  const today = new Date().toISOString().slice(0, 10);
+  const ytUsedRaw = await env.GATEWAY_KV.get(`ytusage:${today}`);
+  const ytUsed = parseInt(ytUsedRaw || '0', 10);
+
+  return jsonResponse({ worker_url: workerUrl, apis, version: VERSION, diag_folder: diagFolder, mcp_drive_url: mcpDriveUrl, yt_server_keys: ytKeysCount, yt_server_used: ytUsed });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -471,6 +476,13 @@ async function proxyYoutubeSearch(request, env) {
       // 4. Cache result in KV (fire-and-forget)
       if (bestId) {
         env.GATEWAY_KV.put(cacheKey, JSON.stringify({ videoId: bestId, title: bestTitle }), { expirationTtl: YT_CACHE_TTL }).catch(() => {});
+        // 5. Increment daily usage counter (fire-and-forget)
+        const today = new Date().toISOString().slice(0, 10);
+        const usageKey = `ytusage:${today}`;
+        env.GATEWAY_KV.get(usageKey).then(raw => {
+          const count = parseInt(raw || '0', 10) + 1;
+          env.GATEWAY_KV.put(usageKey, String(count), { expirationTtl: 172800 }).catch(() => {});
+        }).catch(() => {});
       }
 
       return jsonResponse({ videoId: bestId, title: bestTitle, cached: false });
