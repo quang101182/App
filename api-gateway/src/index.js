@@ -432,10 +432,10 @@ async function proxyYoutubeSearch(request, env) {
   let lastError = null;
   for (const apiKey of keys) {
     try {
-      const ytUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
+      // Search top 5 results
+      const ytUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
       const resp = await fetch(ytUrl);
       if (resp.status === 403) {
-        // Quota exceeded for this key, try next
         lastError = 'quota exceeded';
         continue;
       }
@@ -447,15 +447,33 @@ async function proxyYoutubeSearch(request, env) {
       const items = data.items || [];
       if (!items.length) return jsonResponse({ videoId: null, title: null, cached: false });
 
-      const videoId = items[0].id?.videoId || null;
-      const title = items[0].snippet?.title || '';
-
-      // 4. Cache result in KV (fire-and-forget)
-      if (videoId) {
-        env.GATEWAY_KV.put(cacheKey, JSON.stringify({ videoId, title }), { expirationTtl: YT_CACHE_TTL }).catch(() => {});
+      const ids = items.map(i => i.id?.videoId).filter(Boolean);
+      // Duration filter: 90s–300s (same as client-side ytSearchLocal)
+      let bestId = ids[0], bestTitle = items[0].snippet?.title || '';
+      if (ids.length > 0) {
+        try {
+          const vUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=${ids.join(',')}&key=${encodeURIComponent(apiKey)}`;
+          const vResp = await fetch(vUrl);
+          if (vResp.ok) {
+            const vData = await vResp.json();
+            const valid = (vData.items || []).find(v => {
+              const dur = v.contentDetails?.duration || '';
+              const m = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+              if (!m) return false;
+              const secs = (parseInt(m[1]||0)*3600) + (parseInt(m[2]||0)*60) + parseInt(m[3]||0);
+              return secs >= 90 && secs <= 300;
+            });
+            if (valid) { bestId = valid.id; bestTitle = valid.snippet?.title || bestTitle; }
+          }
+        } catch (_) { /* duration check failed, use first result */ }
       }
 
-      return jsonResponse({ videoId, title, cached: false });
+      // 4. Cache result in KV (fire-and-forget)
+      if (bestId) {
+        env.GATEWAY_KV.put(cacheKey, JSON.stringify({ videoId: bestId, title: bestTitle }), { expirationTtl: YT_CACHE_TTL }).catch(() => {});
+      }
+
+      return jsonResponse({ videoId: bestId, title: bestTitle, cached: false });
     } catch (err) {
       lastError = err.message;
       continue;
