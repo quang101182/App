@@ -824,8 +824,8 @@ function renderTranscriptBlocks(searchFilter=''){
 }
 
 // ─── Display toggles ─────────────────────────────────────
-function toggleColoredText(){showColoredText=!showColoredText;document.getElementById('btn-toggle-colors').classList.toggle('active-toggle',showColoredText);renderTranscriptBlocks()}
-function toggleShowOriginal(){showOriginal=!showOriginal;document.getElementById('btn-toggle-original').classList.toggle('active-toggle',!showOriginal);renderTranscriptBlocks()}
+function toggleColoredText(){showColoredText=!showColoredText;document.getElementById('btn-toggle-colors').classList.toggle('active-toggle',showColoredText);renderTranscriptBlocks();savePrefs()}
+function toggleShowOriginal(){showOriginal=!showOriginal;document.getElementById('btn-toggle-original').classList.toggle('active-toggle',!showOriginal);renderTranscriptBlocks();savePrefs()}
 
 // ─── Copy individual segment ─────────────────────────────
 function copySegment(idx){
@@ -1084,7 +1084,35 @@ let _toastTimer;function toast(msg,level){const t=document.getElementById('toast
 function initSW(){if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{});navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='SW_UPDATED')document.getElementById('sw-banner').classList.add('visible')})}}
 
 // ─── Init ────────────────────────────────────────────────
-function init(){setupFileInput();checkGateway();initSW();setupKeyboardShortcuts();renderHistory();if(!getConfig().secret)setTimeout(()=>toggleSettings(),500)}
+// ─── Persist user preferences ────────────────────────────
+const PREF_KEY='voxsplit_prefs';
+const PREF_SELECTS=['opt-model','opt-lang','opt-target-lang','opt-engine','export-content','translate-engine','translate-target'];
+const PREF_CHIPS=['chip-diarize','chip-punctuate','chip-smart-format'];
+const PREF_TOGGLES=['showColoredText','showOriginal'];
+function savePrefs(){
+  const p={};
+  PREF_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el)p[id]=el.value});
+  PREF_CHIPS.forEach(id=>{const el=document.getElementById(id);if(el)p[id]=el.classList.contains('active')});
+  p.showColoredText=showColoredText;p.showOriginal=showOriginal;
+  try{localStorage.setItem(PREF_KEY,JSON.stringify(p))}catch(e){}
+}
+function restorePrefs(){
+  try{
+    const p=JSON.parse(localStorage.getItem(PREF_KEY));if(!p)return;
+    PREF_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&p[id]!==undefined){el.value=p[id]}});
+    PREF_CHIPS.forEach(id=>{const el=document.getElementById(id);if(el&&p[id]!==undefined){el.classList.toggle('active',p[id])}});
+    if(p.showColoredText!==undefined){showColoredText=p.showColoredText;document.getElementById('btn-toggle-colors')?.classList.toggle('active-toggle',showColoredText)}
+    if(p.showOriginal!==undefined){showOriginal=p.showOriginal;document.getElementById('btn-toggle-original')?.classList.toggle('active-toggle',!showOriginal)}
+    // Trigger engine visibility
+    onTargetLangChange();
+  }catch(e){}
+}
+function setupPrefListeners(){
+  PREF_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('change',savePrefs)});
+  PREF_CHIPS.forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('click',()=>setTimeout(savePrefs,50))});
+}
+
+function init(){setupFileInput();checkGateway();initSW();setupKeyboardShortcuts();renderHistory();restorePrefs();setupPrefListeners();if(!getConfig().secret)setTimeout(()=>toggleSettings(),500)}
 document.addEventListener('DOMContentLoaded',init);
 </script>
 </body>
