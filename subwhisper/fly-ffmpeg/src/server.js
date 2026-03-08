@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.14.0 — no faststart (saves disk), delete TS on ffmpeg close, 1 HLS job
+ * Version: 1.15.0 — reduce analyzeduration/probesize to 5M (was 100M, too slow)
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -122,7 +122,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.14.0'
+    version: '1.15.0'
   });
 });
 
@@ -1209,7 +1209,7 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
       jobLog(job, `FFmpeg ${label} TS → MP4...`);
       const args = ['-y',
         '-fflags', '+genpts+igndts+discardcorrupt',
-        '-analyzeduration', '100000000', '-probesize', '50000000',
+        '-analyzeduration', '5000000', '-probesize', '5000000',
         '-err_detect', 'ignore_err',
         '-i', combinedTs];
       if (mode === 'copy') {
