@@ -1029,90 +1029,98 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
 
   const tmpDir = path.join(os.tmpdir(), 'hls_' + Date.now());
   fs.mkdirSync(tmpDir, { recursive: true });
+  const combinedTs = path.join(tmpDir, 'combined.ts');
+
+  // Helper: fetch a URL (optionally via proxy)
+  async function fetchUrl(url) {
+    const finalUrl = proxyBase ? `${proxyBase}${encodeURIComponent(url)}` : url;
+    return fetch(finalUrl, { headers: { ...CHROME_HEADERS, 'Accept': '*/*' } });
+  }
 
   try {
     // 1. Fetch and parse m3u8 playlist
-    const m3u8Resp = await fetch(proxyBase ? `${proxyBase}${encodeURIComponent(m3u8Url)}` : m3u8Url, {
-      headers: { ...CHROME_HEADERS, 'Accept': '*/*' },
-    });
+    const m3u8Resp = await fetchUrl(m3u8Url);
     if (!m3u8Resp.ok) throw new Error(`m3u8 fetch failed: HTTP ${m3u8Resp.status}`);
     const m3u8Text = await m3u8Resp.text();
-    const lines = m3u8Text.split('\n').map(l => l.trim()).filter(l => l);
+    const allLines = m3u8Text.split('\n').map(l => l.trim()).filter(l => l);
     const baseUrl = m3u8Url.substring(0, m3u8Url.lastIndexOf('/') + 1);
 
     // Check for master playlist → pick highest bandwidth variant
     let isMaster = false;
     let bestBandwidth = 0;
     let bestVariant = '';
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line.startsWith('#EXT-X-STREAM-INF')) {
+    for (let i = 0; i < allLines.length; i++) {
+      if (allLines[i].startsWith('#EXT-X-STREAM-INF')) {
         isMaster = true;
-        const bwMatch = line.match(/BANDWIDTH=(\d+)/);
-        const bw = bwMatch ? parseInt(bwMatch[1]) : 0;
-        const nextLine = lines[i + 1];
-        if (nextLine && !nextLine.startsWith('#') && bw >= bestBandwidth) {
+        const bw = parseInt((allLines[i].match(/BANDWIDTH=(\d+)/) || [])[1] || '0');
+        const next = allLines[i + 1];
+        if (next && !next.startsWith('#') && bw >= bestBandwidth) {
           bestBandwidth = bw;
-          bestVariant = nextLine.startsWith('http') ? nextLine : baseUrl + nextLine;
+          bestVariant = next.startsWith('http') ? next : baseUrl + next;
         }
       }
     }
+
+    let segUrls = [];
     if (isMaster && bestVariant) {
-      console.log(`${jobTag} Master playlist → variant ${bestVariant} (${bestBandwidth} bps)`);
-      // Re-fetch variant playlist
-      const varResp = await fetch(proxyBase ? `${proxyBase}${encodeURIComponent(bestVariant)}` : bestVariant, {
-        headers: { ...CHROME_HEADERS, 'Accept': '*/*' },
-      });
-      if (!varResp.ok) throw new Error(`Variant fetch failed: HTTP ${varResp.status}`);
+      console.log(`${jobTag} Master playlist → variant (${bestBandwidth} bps)`);
+      const varResp = await fetchUrl(bestVariant);
+      if (!varResp.ok) throw new Error(`Variant fetch HTTP ${varResp.status}`);
       const varText = await varResp.text();
-      const varLines = varText.split('\n').map(l => l.trim()).filter(l => l);
       const varBase = bestVariant.substring(0, bestVariant.lastIndexOf('/') + 1);
-      lines.length = 0;
-      for (const vl of varLines) {
-        if (!vl.startsWith('#') && vl.length > 0) {
-          lines.push(vl.startsWith('http') ? vl : varBase + vl);
-        }
+      for (const vl of varText.split('\n').map(l => l.trim())) {
+        if (vl && !vl.startsWith('#')) segUrls.push(vl.startsWith('http') ? vl : varBase + vl);
       }
     } else {
-      // Normal playlist — extract segment URLs
-      const segUrls = [];
-      for (const line of lines) {
-        if (!line.startsWith('#') && line.length > 0) {
-          segUrls.push(line.startsWith('http') ? line : baseUrl + line);
-        }
+      for (const line of allLines) {
+        if (line && !line.startsWith('#')) segUrls.push(line.startsWith('http') ? line : baseUrl + line);
       }
-      lines.length = 0;
-      lines.push(...segUrls);
     }
 
-    const totalSegments = lines.length;
-    if (!totalSegments) throw new Error('No segments found in m3u8');
-    console.log(`${jobTag} ${totalSegments} segments to process`);
+    if (!segUrls.length) throw new Error('No segments found');
+    console.log(`${jobTag} ${segUrls.length} segments — downloading to combined.ts`);
 
-    // 2. Write concat file for FFmpeg (use segment URLs directly or via proxy)
-    const concatFile = path.join(tmpDir, 'concat.txt');
-    const concatLines = lines.map(segUrl => {
-      const finalUrl = proxyBase ? `${proxyBase}${encodeURIComponent(segUrl)}` : segUrl;
-      return `file '${finalUrl}'`;
-    });
-    fs.writeFileSync(concatFile, concatLines.join('\n'));
+    // 2. Download all segments → append to combined.ts file
+    const writeStream = fs.createWriteStream(combinedTs);
+    let downloaded = 0;
+    const BATCH = 6;
 
-    // 3. Run FFmpeg: concat demuxer → remux to fragmented MP4 → pipe stdout
+    for (let i = 0; i < segUrls.length; i += BATCH) {
+      const batch = segUrls.slice(i, i + BATCH);
+      const buffers = await Promise.all(batch.map(async (url) => {
+        try {
+          const r = await fetchUrl(url);
+          if (!r.ok) { console.error(`${jobTag} Seg ${i} HTTP ${r.status}`); return Buffer.alloc(0); }
+          return Buffer.from(await r.arrayBuffer());
+        } catch (e) { console.error(`${jobTag} Seg fetch error: ${e.message}`); return Buffer.alloc(0); }
+      }));
+      for (const buf of buffers) {
+        if (buf.length > 0) writeStream.write(buf);
+        downloaded++;
+      }
+      if (downloaded % 30 === 0 || downloaded === segUrls.length) {
+        console.log(`${jobTag} Downloaded ${downloaded}/${segUrls.length} segments`);
+      }
+    }
+
+    await new Promise((resolve, reject) => { writeStream.end(resolve); });
+
+    const tsSize = fs.statSync(combinedTs).size;
+    console.log(`${jobTag} combined.ts = ${(tsSize / 1048576).toFixed(1)} MB — starting FFmpeg remux`);
+
+    if (tsSize < 1000) throw new Error('combined.ts is empty — segments download failed');
+
+    // 3. FFmpeg remux combined.ts → fragmented MP4 → stream to client
     const safeName = (title || 'video').replace(/[<>:"/\\|?*]/g, '').substring(0, 100).trim();
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeName)}.mp4"; filename*=UTF-8''${encodeURIComponent(safeName)}.mp4`);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
-    res.setHeader('Transfer-Encoding', 'chunked');
 
     const ffmpeg = spawn('ffmpeg', [
-      '-y',
-      '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
-      '-f', 'concat',
-      '-safe', '0',
-      '-i', concatFile,
+      '-y', '-i', combinedTs,
       '-c', 'copy',
-      '-movflags', 'frag_keyframe+empty_moov+faststart',
+      '-movflags', 'frag_keyframe+empty_moov',
       '-f', 'mp4',
       'pipe:1'
     ], { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -1122,7 +1130,6 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
 
     ffmpeg.stderr.on('data', chunk => {
       stderrBuf += chunk.toString();
-      // Keep only last 2KB of stderr for debugging
       if (stderrBuf.length > 2048) stderrBuf = stderrBuf.slice(-2048);
     });
 
@@ -1133,14 +1140,8 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
 
     ffmpeg.on('close', code => {
       console.log(`${jobTag} FFmpeg exit code ${code} — ${(bytesSent / 1048576).toFixed(1)} MB sent`);
-      if (code !== 0) {
-        console.error(`${jobTag} FFmpeg stderr: ${stderrBuf.slice(-500)}`);
-        if (!res.headersSent) {
-          res.status(500).json({ error: 'FFmpeg failed', stderr: stderrBuf.slice(-300) });
-        }
-      }
+      if (code !== 0) console.error(`${jobTag} FFmpeg stderr: ${stderrBuf.slice(-500)}`);
       try { res.end(); } catch (e) {}
-      // Cleanup
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
     });
 
@@ -1150,11 +1151,11 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
     });
 
-    // Handle client disconnect
     req.on('close', () => {
       if (!ffmpeg.killed) {
         console.log(`${jobTag} Client disconnected — killing FFmpeg`);
         ffmpeg.kill('SIGTERM');
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
       }
     });
 
