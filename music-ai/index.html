@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.2 — Discovery Engine</title>
+<title>music·ai v3.3 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -441,7 +441,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.2</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.3</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -1884,14 +1884,51 @@ function renderHistory(){
   </div>${topArtist?`<div class="glass" style="padding:12px 14px;margin-bottom:8px;border-radius:14px;display:flex;align-items:center;gap:12px;"><span style="font-size:1.4rem;">🎤</span><div><div style="font-size:9px;color:var(--muted);">Artiste le plus joué</div><div style="font-weight:700;font-size:13px;">${esc(topArtist[0])}</div></div><div style="margin-left:auto;font-size:11px;color:var(--muted);">${topArtist[1]}×</div></div>`:''}${topGenre?`<div class="glass" style="padding:12px 14px;margin-bottom:16px;border-radius:14px;display:flex;align-items:center;gap:12px;"><span style="font-size:1.4rem;">🎸</span><div><div style="font-size:9px;color:var(--muted);">Genre dominant</div><div style="font-weight:700;font-size:13px;">${esc(topGenre[0])}</div></div><div style="margin-left:auto;font-size:11px;color:var(--muted);">${topGenre[1]}×</div></div>`:''}`;
   const aI={like:'👍',dislike:'👎',save:'🔖',suggest:'🎵',chat:'💬'};
   const aC={like:'rgba(34,197,94,.2)',dislike:'rgba(239,68,68,.2)',save:'rgba(245,158,11,.2)',suggest:'rgba(124,58,237,.2)',chat:'rgba(6,182,212,.2)'};
-  const playable=h.slice(0,50);
-  const listHTML=playable.map((item,idx)=>{
+  // Filtres par type
+  const filterHTML=`<div style="display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding:2px 0;">
+    <button class="hist-filter active" data-hf="all" style="padding:6px 14px;border-radius:50px;border:1px solid var(--border);background:var(--card);font-family:inherit;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;flex-shrink:0;">Tout</button>
+    <button class="hist-filter" data-hf="reco" style="padding:6px 14px;border-radius:50px;border:1px solid var(--border);background:var(--card);font-family:inherit;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;flex-shrink:0;">🎵 Recos</button>
+    <button class="hist-filter" data-hf="like" style="padding:6px 14px;border-radius:50px;border:1px solid var(--border);background:var(--card);font-family:inherit;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;flex-shrink:0;">👍 Likes</button>
+    <button class="hist-filter" data-hf="save" style="padding:6px 14px;border-radius:50px;border:1px solid var(--border);background:var(--card);font-family:inherit;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;flex-shrink:0;">🔖 Sauvés</button>
+    <button class="hist-filter" data-hf="dislike" style="padding:6px 14px;border-radius:50px;border:1px solid var(--border);background:var(--card);font-family:inherit;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;flex-shrink:0;">👎 Ignorés</button>
+  </div>`;
+  // Grouper par période temporelle
+  const now=Date.now();const todayStart=new Date();todayStart.setHours(0,0,0,0);
+  const weekStart=new Date(todayStart);weekStart.setDate(weekStart.getDate()-7);
+  const playable=h.slice(0,80);
+  const groups={today:[],week:[],older:[]};
+  playable.forEach((item,idx)=>{
+    const ts=item.ts||0;item._idx=idx;
+    if(ts>=todayStart.getTime())groups.today.push(item);
+    else if(ts>=weekStart.getTime())groups.week.push(item);
+    else groups.older.push(item);
+  });
+  function renderItem(item){
     const d=new Date(item.ts||Date.now());
     const time=d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-    const date=d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
-    return`<div class="history-item" data-hidx="${idx}" style="cursor:pointer;"><div class="action-badge" style="background:${aC[item.action]||aC.suggest};">${aI[item.action]||'🎵'}</div><div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(item.title||'—')}</div><div style="color:var(--muted);font-size:12px;">${esc(item.artist||'')}</div></div><div style="text-align:right;font-size:10px;color:var(--muted);flex-shrink:0;">${time}<br>${date}</div></div>`;
-  }).join('');
-  el.innerHTML=statsHTML+listHTML;
+    const genre=(item.genre||'').split(/[\/,\s]/)[0].trim();
+    return`<div class="history-item" data-hidx="${item._idx}" data-htype="${item.action}" style="cursor:pointer;"><div class="action-badge" style="background:${aC[item.action]||aC.suggest};">${aI[item.action]||'🎵'}</div><div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(item.title||'—')}</div><div style="color:var(--muted);font-size:12px;">${esc(item.artist||'')}${genre?' · <span style="color:var(--accent);font-size:10px;">'+esc(genre)+'</span>':''}</div></div><div style="font-size:10px;color:var(--muted);flex-shrink:0;">${time}</div></div>`;
+  }
+  function renderGroup(label,emoji,items){
+    if(!items.length)return'';
+    return`<div style="margin-bottom:4px;"><div style="display:flex;align-items:center;gap:8px;padding:10px 0 6px;border-bottom:1px solid var(--border);margin-bottom:2px;"><span style="font-size:1rem;">${emoji}</span><span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);">${label}</span><span style="font-size:10px;color:var(--muted);margin-left:auto;">${items.length}</span></div>${items.map(renderItem).join('')}</div>`;
+  }
+  const listHTML=renderGroup("Aujourd'hui",'📅',groups.today)+renderGroup('Cette semaine','📆',groups.week)+renderGroup('Plus ancien','📁',groups.older);
+  el.innerHTML=statsHTML+filterHTML+`<div id="hist-grouped">${listHTML}</div>`;
+  // Filtres
+  el.querySelectorAll('.hist-filter').forEach(btn=>{
+    btn.onclick=function(ev){
+      ev.stopPropagation();
+      el.querySelectorAll('.hist-filter').forEach(b=>{b.classList.remove('active');b.style.borderColor='';b.style.background='';b.style.color='';});
+      this.classList.add('active');this.style.borderColor='var(--accent)';this.style.background='rgba(124,58,237,0.18)';this.style.color='white';
+      const f=this.dataset.hf;
+      el.querySelectorAll('.history-item[data-htype]').forEach(row=>{
+        const t=row.dataset.htype;
+        const show=f==='all'||(f==='reco'&&(t==='suggest'||t==='chat'))||(f===t);
+        row.style.display=show?'':'none';
+      });
+    };
+  });
   // Event delegation — tap sur un item → bottom sheet d'actions
   el.onclick=function(ev){
     const row=ev.target.closest('.history-item[data-hidx]');
