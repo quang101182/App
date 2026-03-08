@@ -1,4 +1,4 @@
-<!-- VideoGrab v4.1 — Video Browser & Downloader — Mobile-First -->
+<!-- VideoGrab v4.2 — Video Browser & Downloader — Mobile-First -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0a0a0f">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="./manifest.json">
-<title>VideoGrab v4.1</title>
+<title>VideoGrab v4.2</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -375,7 +375,7 @@ html,body{max-width:100vw;overflow-x:hidden}
   <div class="browser-frame" id="browserFrame">
     <div class="browser-empty" id="emptyState">
       <div style="width:100%;max-width:600px">
-        <h2 style="text-align:center">VideoGrab v4.1</h2>
+        <h2 style="text-align:center">VideoGrab v4.2</h2>
         <p style="text-align:center;margin-bottom:12px">Entrez une URL ou choisissez un favori</p>
         <div id="bmHome"></div>
       </div>
@@ -392,10 +392,10 @@ html,body{max-width:100vw;overflow-x:hidden}
 
 <script>
 // ═══════════════════════════════════════════════════════════════
-// VideoGrab v4.1 — Core Logic
+// VideoGrab v4.2 — Core Logic
 // ═══════════════════════════════════════════════════════════════
 
-const VERSION = '4.1';
+const VERSION = '4.2';
 const $ = id => document.getElementById(id);
 let _deferredInstall = null;
 
@@ -1026,13 +1026,26 @@ async function startHlsDownload(m3u8Url, filename) {
         dlLog(dl, 'Connexion perdue, reconnexion...', 'warn');
         if (!pollTimer) {
           const pollUrl = `${FLY_URL}/hls2mp4/poll/${dl.jobId}?s=${encodeURIComponent(secret)}`;
+          let lastPollLog = '';
           pollTimer = setInterval(async () => {
             if (dl.status === 'cancelled' || dl.status === 'ready' || dl.status === 'error') { clearInterval(pollTimer); pollTimer = null; return; }
             try {
               const r = await fetch(pollUrl);
+              if (r.status === 404) {
+                // Job cleaned up — check if file is available
+                clearInterval(pollTimer); pollTimer = null;
+                dl.mp4Url = `${FLY_URL}/hls2mp4/file/${dl.jobId}?s=${encodeURIComponent(secret)}`;
+                try {
+                  const fh = await fetch(dl.mp4Url, { method: 'HEAD' });
+                  if (fh.ok) { handleEvt({ type: 'done', status: 'done', mp4Size: parseInt(fh.headers.get('content-length') || '0') }); }
+                  else { handleEvt({ type: 'done', status: 'error', error: 'Job introuvable sur le serveur' }); }
+                } catch(e) { handleEvt({ type: 'done', status: 'error', error: 'Job introuvable' }); }
+                return;
+              }
               if (!r.ok) return;
               const p = await r.json();
-              if (p.lastLog) dlLog(dl, p.lastLog);
+              // Only log if message changed
+              if (p.lastLog && p.lastLog !== lastPollLog) { lastPollLog = p.lastLog; dlLog(dl, p.lastLog); }
               if (p.progress !== undefined) dl.progress = p.progress;
               if (p.status === 'processing') { dl.status = p.progress > 70 ? 'ffmpeg' : 'seg'; renderDlItem(dl); }
               else if (p.status === 'done') { handleEvt({ type: 'done', status: 'done', mp4Size: p.mp4Size }); }
