@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.8.0 — chunkReport[] dans payload final (diagnostic sous-titres incomplets)
+ * Version: 1.9.0 — FFmpeg discardcorrupt + ignore_err pour segments TS corrompus
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -122,7 +122,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.8.0'
+    version: '1.9.0'
   });
 });
 
@@ -1198,9 +1198,11 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
 
     await new Promise((resolve, reject) => {
       const ffmpeg = spawn('ffmpeg', [
-        '-y', '-fflags', '+genpts+igndts',
+        '-y', '-fflags', '+genpts+igndts+discardcorrupt',
+        '-err_detect', 'ignore_err',
         '-i', combinedTs,
         '-c', 'copy', '-bsf:a', 'aac_adtstoasc',
+        '-max_muxing_queue_size', '4096',
         '-movflags', '+faststart',
         outMp4
       ], { stdio: ['pipe', 'pipe', 'pipe'] });
