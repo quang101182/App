@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.14
+ * api-gateway — Cloudflare Worker v1.15
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -517,13 +517,23 @@ async function handleProxy(request, env, ctx, parsedUrl) {
 
   const isRaw = parsedUrl.searchParams.has('raw');
 
-  // Build fetch headers — mobile User-Agent
+  // Build fetch headers — realistic Chrome browser fingerprint
   const fetchHeaders = {
-    'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
-    'Accept': isRaw ? '*/*' : 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Accept-Encoding': 'gzip',
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+    'Accept': isRaw ? '*/*' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9,fr-FR;q=0.8,fr;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br',
     'Referer': target.origin + '/',
+    'Sec-Ch-Ua': '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+    'Sec-Ch-Ua-Mobile': '?1',
+    'Sec-Ch-Ua-Platform': '"Android"',
+    'Sec-Fetch-Dest': isRaw ? 'empty' : 'document',
+    'Sec-Fetch-Mode': isRaw ? 'cors' : 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1',
+    'DNT': '1',
+    'Cache-Control': 'max-age=0',
   };
 
   // Forward Range header (video seeking)
