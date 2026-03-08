@@ -1,4 +1,4 @@
-var CACHE = 'voxsplit-v3.1.2';
+var CACHE = 'voxsplit-v3.1.3';
 var FILES = ['./', './index.html'];
 
 self.addEventListener('install', function(e) {
