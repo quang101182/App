@@ -1110,53 +1110,72 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
 
     if (tsSize < 1000) throw new Error('combined.ts is empty — segments download failed');
 
-    // 3. FFmpeg remux combined.ts → fragmented MP4 → stream to client
+    // 3. FFmpeg remux combined.ts → MP4 file (bsf:a aac_adtstoasc critical for TS→MP4)
     const safeName = (title || 'video').replace(/[<>:"/\\|?*]/g, '').substring(0, 100).trim();
+    const outMp4 = path.join(tmpDir, 'output.mp4');
+
+    await new Promise((resolve, reject) => {
+      const ffmpeg = spawn('ffmpeg', [
+        '-y',
+        '-fflags', '+genpts+igndts',
+        '-i', combinedTs,
+        '-c', 'copy',
+        '-bsf:a', 'aac_adtstoasc',
+        '-movflags', '+faststart',
+        outMp4
+      ], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      let stderrBuf = '';
+      ffmpeg.stderr.on('data', chunk => {
+        stderrBuf += chunk.toString();
+        if (stderrBuf.length > 4096) stderrBuf = stderrBuf.slice(-4096);
+      });
+
+      ffmpeg.on('close', code => {
+        console.log(`${jobTag} FFmpeg exit code ${code}`);
+        if (code !== 0) {
+          console.error(`${jobTag} FFmpeg stderr: ${stderrBuf.slice(-500)}`);
+          reject(new Error(`FFmpeg failed (code ${code})`));
+        } else {
+          resolve();
+        }
+      });
+
+      ffmpeg.on('error', err => reject(err));
+
+      // If client disconnects, kill FFmpeg
+      req.on('close', () => {
+        if (!ffmpeg.killed) {
+          console.log(`${jobTag} Client disconnected — killing FFmpeg`);
+          ffmpeg.kill('SIGTERM');
+          reject(new Error('Client disconnected'));
+        }
+      });
+    });
+
+    // 4. Stream the MP4 file to client
+    const mp4Size = fs.statSync(outMp4).size;
+    console.log(`${jobTag} MP4 ready: ${(mp4Size / 1048576).toFixed(1)} MB — streaming to client`);
+
     res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Length', mp4Size);
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeName)}.mp4"; filename*=UTF-8''${encodeURIComponent(safeName)}.mp4`);
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length');
 
-    const ffmpeg = spawn('ffmpeg', [
-      '-y', '-i', combinedTs,
-      '-c', 'copy',
-      '-movflags', 'frag_keyframe+empty_moov',
-      '-f', 'mp4',
-      'pipe:1'
-    ], { stdio: ['pipe', 'pipe', 'pipe'] });
-
-    let stderrBuf = '';
-    let bytesSent = 0;
-
-    ffmpeg.stderr.on('data', chunk => {
-      stderrBuf += chunk.toString();
-      if (stderrBuf.length > 2048) stderrBuf = stderrBuf.slice(-2048);
+    const fileStream = fs.createReadStream(outMp4);
+    fileStream.pipe(res);
+    fileStream.on('end', () => {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
     });
-
-    ffmpeg.stdout.on('data', chunk => {
-      bytesSent += chunk.length;
-      try { res.write(chunk); } catch (e) {}
-    });
-
-    ffmpeg.on('close', code => {
-      console.log(`${jobTag} FFmpeg exit code ${code} — ${(bytesSent / 1048576).toFixed(1)} MB sent`);
-      if (code !== 0) console.error(`${jobTag} FFmpeg stderr: ${stderrBuf.slice(-500)}`);
+    fileStream.on('error', err => {
+      console.error(`${jobTag} Stream error:`, err.message);
       try { res.end(); } catch (e) {}
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
     });
 
-    ffmpeg.on('error', err => {
-      console.error(`${jobTag} FFmpeg spawn error:`, err.message);
-      if (!res.headersSent) res.status(500).json({ error: err.message });
-      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
-    });
-
     req.on('close', () => {
-      if (!ffmpeg.killed) {
-        console.log(`${jobTag} Client disconnected — killing FFmpeg`);
-        ffmpeg.kill('SIGTERM');
-        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
-      }
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
     });
 
   } catch (err) {
