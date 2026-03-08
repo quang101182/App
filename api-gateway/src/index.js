@@ -37,7 +37,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.12';
+const VERSION = '1.13';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -417,32 +417,79 @@ async function proxyDeepgram(request, env, path) {
 // Web Proxy — GET/POST /proxy?url=...&s=WORKER_SECRET[&raw=1]
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Video sniffer script injected into proxied HTML pages */
-const SNIFFER_SCRIPT = `<script>(function(){
-var D=new Set(),V=/\\.(mp4|webm|m3u8|mov|mkv|flv|avi|ts|mpd)(\\?[^"'\\s<>]*)?/i;
-var M=/video\\//i;
-function R(u,t){if(!u||u.length<8||D.has(u))return;D.add(u);try{parent.postMessage({t:'vg-video',url:u,mt:t},'*')}catch(e){}}
-function S(){document.querySelectorAll('video,audio,source,[src],[data-src],[data-video-src]').forEach(function(e){
-var s=e.src||e.currentSrc||(e.dataset&&(e.dataset.src||e.dataset.videoSrc))||e.getAttribute('src')||'';
-if(s&&(V.test(s)||M.test(e.type||'')))R(s,'dom');
-if(e.tagName==='VIDEO'){if(e.currentSrc)R(e.currentSrc,'cur');
-try{for(var i=0;i<e.children.length;i++){var c=e.children[i];if(c.src)R(c.src,'src')}}catch(x){}}
-});
-document.querySelectorAll('a[href]').forEach(function(a){if(V.test(a.href))R(a.href,'link')});
-document.querySelectorAll('[style]').forEach(function(e){var m=e.getAttribute('style').match(/url\\(["']?([^"')]+\\.mp4[^"')]*)/i);if(m)R(m[1],'css')});
-try{document.querySelectorAll('script:not([src])').forEach(function(s){
-var t=s.textContent||'';var re=/["'](https?:\\/\\/[^"'\\s]+\\.(?:mp4|m3u8|webm)(?:\\?[^"'\\s]*)?)["']/gi;var m;
-while((m=re.exec(t))!==null)R(m[1],'js')})}catch(x){}}
+/**
+ * Build sniffer script dynamically — needs the proxy secret for request proxying.
+ * This script does 3 things:
+ * 1. Proxifies ALL fetch/XHR through the Worker (fixes CORS)
+ * 2. Detects video URLs and reports to parent via postMessage
+ * 3. Suppresses pushState/replaceState SecurityErrors
+ */
+function buildSnifferScript(secret) {
+  const esc = secret.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  return `<script>(function(){
+var PB=location.origin+'/proxy?s=${encodeURIComponent(esc)}&raw=1&url=';
+var PP=location.origin+'/proxy?s=${encodeURIComponent(esc)}&url=';
+var V=/\\.(mp4|webm|m3u8|mov|mkv|flv|avi|ts|mpd)(\\?[^"'\\s<>]*)?/i;
+var DT=new Set();
+function isExt(u){return typeof u==='string'&&u.startsWith('http')&&!u.includes('/proxy?s=');}
+function R(u,t){if(!u||u.length<8||DT.has(u))return;DT.add(u);try{parent.postMessage({t:'vg-video',url:u,mt:t},'*')}catch(e){}}
+
+/* ── 1. Proxy ALL fetch requests ── */
+var OF=window.fetch;
+window.fetch=function(i,o){
+  var u=typeof i==='string'?i:(i&&i.url)||'';
+  if(V.test(u))R(u,'fetch');
+  if(isExt(u)){
+    var pu=PB+encodeURIComponent(u);
+    if(typeof i==='string')return OF.call(this,pu,o);
+    try{return OF.call(this,new Request(pu,{method:(o&&o.method)||i.method||'GET',headers:(o&&o.headers)||i.headers,body:(o&&o.body)||i.body,mode:'cors',credentials:'omit'}))}catch(e){return OF.call(this,pu,o)}
+  }
+  return OF.apply(this,arguments);
+};
+
+/* ── 2. Proxy ALL XHR requests ── */
 var XO=XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open=function(m,u){if(typeof u==='string'){if(V.test(u))R(u,'xhr');if(u.indexOf('.m3u8')>-1||u.indexOf('.mpd')>-1||u.indexOf('/manifest')>-1)R(u,'manifest')}return XO.apply(this,arguments)};
-var FO=window.fetch;window.fetch=function(i,o){var u=typeof i==='string'?i:(i&&i.url)||'';if(V.test(u))R(u,'fetch');if(u.indexOf('.m3u8')>-1||u.indexOf('.mpd')>-1)R(u,'manifest');return FO.apply(this,arguments)};
-var CE=document.createElement;document.createElement=function(t){var el=CE.apply(this,arguments);if(t==='video'||t==='source'){var origSet=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'src')||Object.getOwnPropertyDescriptor(Element.prototype,'src');
-if(origSet&&origSet.set){var oSet=origSet.set;Object.defineProperty(el,'src',{set:function(v){if(V.test(v))R(v,'create');return oSet.call(this,v)},get:origSet.get,configurable:true})}}return el};
-try{var params=new URLSearchParams(location.search);var pu=params.get('url');if(pu)parent.postMessage({t:'vg-nav',url:pu},'*')}catch(x){}
-var obs=new MutationObserver(S);obs.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','data-src']});
+XMLHttpRequest.prototype.open=function(m,u){
+  if(typeof u==='string'){
+    if(V.test(u))R(u,'xhr');
+    if(isExt(u))u=PB+encodeURIComponent(u);
+  }
+  return XO.call(this,m,u,true);
+};
+
+/* ── 3. Suppress pushState/replaceState SecurityError ── */
+var oPS=history.pushState,oRS=history.replaceState;
+history.pushState=function(){try{return oPS.apply(this,arguments)}catch(e){}};
+history.replaceState=function(){try{return oRS.apply(this,arguments)}catch(e){}};
+
+/* ── 4. Mock localStorage if blocked ── */
+try{localStorage.getItem('_t')}catch(e){
+  var _s={};
+  Object.defineProperty(window,'localStorage',{value:{getItem:function(k){return _s[k]||null},setItem:function(k,v){_s[k]=String(v)},removeItem:function(k){delete _s[k]},clear:function(){_s={}},get length(){return Object.keys(_s).length},key:function(i){return Object.keys(_s)[i]||null}},configurable:true});
+}
+
+/* ── 5. Detect video URLs in DOM ── */
+function S(){
+  document.querySelectorAll('video,audio,source,[src],[data-src],[data-video-src]').forEach(function(e){
+    var s=e.src||e.currentSrc||(e.dataset&&(e.dataset.src||e.dataset.videoSrc))||e.getAttribute('src')||'';
+    if(s&&V.test(s))R(s,'dom');
+    if(e.tagName==='VIDEO'&&e.currentSrc)R(e.currentSrc,'cur');
+  });
+  document.querySelectorAll('a[href]').forEach(function(a){if(V.test(a.href))R(a.href,'link')});
+  try{document.querySelectorAll('script:not([src])').forEach(function(s){
+    var t=s.textContent||'';var re=/["'](https?:\\/\\/[^"'\\s]+\\.(?:mp4|m3u8|webm)(?:\\?[^"'\\s]*)?)["']/gi;var m;
+    while((m=re.exec(t))!==null)R(m[1],'js')})}catch(x){}
+}
+
+/* ── 6. Report current page URL to parent ── */
+try{var pu=new URLSearchParams(location.search).get('url');if(pu)parent.postMessage({t:'vg-nav',url:pu},'*')}catch(x){}
+
+/* ── 7. Observe DOM changes ── */
+new MutationObserver(S).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','data-src']});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',S);else S();
-setInterval(S,2500);
+setInterval(S,3000);
 })();</scrip`+`t>`;
+}
 
 async function handleProxy(request, env, ctx, parsedUrl) {
   // Auth via query param 's'
@@ -572,10 +619,11 @@ async function handleProxy(request, env, ctx, parsedUrl) {
   html = html.replace(/<meta\s[^>]*http-equiv\s*=\s*["']Content-Security-Policy["'][^>]*>/gi, '');
 
   // Inject sniffer script before </body> (or at end)
+  const snifferScript = buildSnifferScript(secret);
   if (/<\/body>/i.test(html)) {
-    html = html.replace(/<\/body>/i, SNIFFER_SCRIPT + '</body>');
+    html = html.replace(/<\/body>/i, snifferScript + '</body>');
   } else {
-    html += SNIFFER_SCRIPT;
+    html += snifferScript;
   }
 
   // Return clean HTML — NO X-Frame-Options, NO CSP
