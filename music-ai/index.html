@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.1 — Discovery Engine</title>
+<title>music·ai v3.2 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -441,7 +441,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.1</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.2</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -1884,13 +1884,56 @@ function renderHistory(){
   </div>${topArtist?`<div class="glass" style="padding:12px 14px;margin-bottom:8px;border-radius:14px;display:flex;align-items:center;gap:12px;"><span style="font-size:1.4rem;">🎤</span><div><div style="font-size:9px;color:var(--muted);">Artiste le plus joué</div><div style="font-weight:700;font-size:13px;">${esc(topArtist[0])}</div></div><div style="margin-left:auto;font-size:11px;color:var(--muted);">${topArtist[1]}×</div></div>`:''}${topGenre?`<div class="glass" style="padding:12px 14px;margin-bottom:16px;border-radius:14px;display:flex;align-items:center;gap:12px;"><span style="font-size:1.4rem;">🎸</span><div><div style="font-size:9px;color:var(--muted);">Genre dominant</div><div style="font-weight:700;font-size:13px;">${esc(topGenre[0])}</div></div><div style="margin-left:auto;font-size:11px;color:var(--muted);">${topGenre[1]}×</div></div>`:''}`;
   const aI={like:'👍',dislike:'👎',save:'🔖',suggest:'🎵',chat:'💬'};
   const aC={like:'rgba(34,197,94,.2)',dislike:'rgba(239,68,68,.2)',save:'rgba(245,158,11,.2)',suggest:'rgba(124,58,237,.2)',chat:'rgba(6,182,212,.2)'};
-  const listHTML=h.slice(0,50).map(item=>{
+  const playable=h.slice(0,50);
+  const listHTML=playable.map((item,idx)=>{
     const d=new Date(item.ts||Date.now());
     const time=d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
     const date=d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
-    return`<div class="history-item"><div class="action-badge" style="background:${aC[item.action]||aC.suggest};">${aI[item.action]||'🎵'}</div><div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(item.title||'—')}</div><div style="color:var(--muted);font-size:12px;">${esc(item.artist||'')}</div></div><div style="text-align:right;font-size:10px;color:var(--muted);flex-shrink:0;">${time}<br>${date}</div></div>`;
+    return`<div class="history-item" data-hidx="${idx}" style="cursor:pointer;"><div class="action-badge" style="background:${aC[item.action]||aC.suggest};">${aI[item.action]||'🎵'}</div><div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(item.title||'—')}</div><div style="color:var(--muted);font-size:12px;">${esc(item.artist||'')}</div></div><div style="text-align:right;font-size:10px;color:var(--muted);flex-shrink:0;">${time}<br>${date}</div></div>`;
   }).join('');
   el.innerHTML=statsHTML+listHTML;
+  // Event delegation — tap sur un item → bottom sheet d'actions
+  el.onclick=function(ev){
+    const row=ev.target.closest('.history-item[data-hidx]');
+    if(!row)return;
+    const item=playable[parseInt(row.dataset.hidx)];
+    if(item&&item.title)showHistoryActions(item);
+  };
+}
+function showHistoryActions(item){
+  const title=item.title||'—',artist=item.artist||'';
+  const ytQ=`${artist} ${title} official audio`;
+  const ytUrl=`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`;
+  const track={title,artist,ytQuery:ytQ,ytUrl};
+  const hasYT=!!getYtKey();
+  const oid='hact_'+Date.now();
+  const html=`<div id="${oid}" class="sheet-overlay open" onclick="if(event.target===this)this.remove()">
+    <div class="sheet-panel">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+        <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">🎵</div>
+        <div style="flex:1;min-width:0;">
+          <div class="syne" style="font-weight:800;font-size:1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(title)}</div>
+          <div style="color:var(--muted);font-size:12px;">${esc(artist)}</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button data-a="play" class="btn-primary" style="width:100%;font-size:14px;padding:13px;">${hasYT?'▶ Écouter in-app':'▶ Ouvrir sur YouTube'}</button>
+        <div style="display:flex;gap:8px;">
+          <button data-a="playlist" style="flex:1;padding:11px;border-radius:50px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);color:#f59e0b;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;">💿 Playlist</button>
+          ${hasYT?`<button data-a="queue" style="flex:1;padding:11px;border-radius:50px;background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.35);color:#06b6d4;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;">+ File d'attente</button>`:''}
+        </div>
+        <button data-a="share" style="width:100%;padding:11px;border-radius:50px;background:var(--card);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:13px;cursor:pointer;">📤 Partager</button>
+        <button data-a="close" style="width:100%;padding:11px;border-radius:12px;background:none;border:1px solid var(--border);color:var(--muted);font-family:inherit;font-size:13px;cursor:pointer;margin-top:4px;">Fermer</button>
+      </div>
+    </div>
+  </div>`;
+  const div=document.createElement('div');div.innerHTML=html;document.body.appendChild(div.firstElementChild);
+  const sheet=document.getElementById(oid);
+  sheet.querySelector('[data-a="play"]').onclick=()=>{sheet.remove();hasYT?ytPlay(track):window.open(ytUrl,'_blank','noopener');};
+  sheet.querySelector('[data-a="playlist"]').onclick=()=>{sheet.remove();addToPlaylist(track);};
+  if(hasYT&&sheet.querySelector('[data-a="queue"]'))sheet.querySelector('[data-a="queue"]').onclick=()=>{sheet.remove();if(!ST.queue.find(t=>t.ytQuery===track.ytQuery)){ST.queue.push({...track});toast('🎵 Ajouté à la file');renderQueueList();}else toast('Déjà dans la file');};
+  sheet.querySelector('[data-a="share"]').onclick=()=>{sheet.remove();shareTrack(title,artist);};
+  sheet.querySelector('[data-a="close"]').onclick=()=>sheet.remove();
 }
 
 // ── SETTINGS ──
