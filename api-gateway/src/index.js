@@ -480,12 +480,30 @@ try{localStorage.getItem('_t')}catch(e){
 var ADS=/(\\.|-)(magsrv|tsyndicate|exoclick|trafficjunky|juicyads|popads|adsterra|clickaine|pushame|ad-maven|hilltopads|plugrush|ero-advertising|trafficstars|crakrevenue|largeconfusion|exosrv|syndication)\\.|(doubleclick|googlesyndication)\\.com/i;
 function isAd(u){return typeof u==='string'&&ADS.test(u);}
 
+/* ── 5b. Intercept video.src / source.src setter ── */
+try{
+  var _vDesc=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'src');
+  if(_vDesc&&_vDesc.set){Object.defineProperty(HTMLMediaElement.prototype,'src',{set:function(v){if(v&&V.test(v)&&!isAd(v))R(v,'src-set');return _vDesc.set.call(this,v)},get:_vDesc.get,configurable:true})}
+  var _sDesc=Object.getOwnPropertyDescriptor(HTMLSourceElement.prototype,'src');
+  if(_sDesc&&_sDesc.set){Object.defineProperty(HTMLSourceElement.prototype,'src',{set:function(v){if(v&&V.test(v)&&!isAd(v))R(v,'source-set');return _sDesc.set.call(this,v)},get:_sDesc.get,configurable:true})}
+}catch(x){}
+
+/* ── 5c. Intercept MediaSource / HLS — catch blob URL creation ── */
+try{
+  var _cOU=URL.createObjectURL;
+  URL.createObjectURL=function(o){var r=_cOU.apply(this,arguments);if(o&&o._vgSrc)R(o._vgSrc,'mse');return r};
+  var _aS=MediaSource.prototype.addSourceBuffer;
+  MediaSource.prototype.addSourceBuffer=function(){return _aS.apply(this,arguments)};
+}catch(x){}
+
 /* ── 6. Detect video URLs in DOM ── */
 function S(){
   document.querySelectorAll('video,audio,source,[src],[data-src],[data-video-src]').forEach(function(e){
     var s=e.src||e.currentSrc||(e.dataset&&(e.dataset.src||e.dataset.videoSrc))||e.getAttribute('src')||'';
+    /* Resolve proxied URLs back to original */
+    if(s&&s.includes('/proxy?')){try{var qs=new URL(s).searchParams.get('url');if(qs)s=qs}catch(x){}}
     if(s&&V.test(s)&&!isAd(s))R(s,'dom');
-    if(e.tagName==='VIDEO'&&e.currentSrc&&!isAd(e.currentSrc))R(e.currentSrc,'cur');
+    if(e.tagName==='VIDEO'&&e.currentSrc){var cs=e.currentSrc;if(cs.includes('/proxy?')){try{cs=new URL(cs).searchParams.get('url')||cs}catch(x){}}if(!isAd(cs)&&V.test(cs))R(cs,'cur')}
   });
   document.querySelectorAll('a[href]').forEach(function(a){if(V.test(a.href)&&!isAd(a.href))R(a.href,'link')});
   /* JSON-LD VideoObject detection */
@@ -503,12 +521,17 @@ function S(){
   try{document.querySelectorAll('script:not([src])').forEach(function(s){
     var t=s.textContent||'';var re=/["'](https?:\\/\\/[^"'\\s]+\\.(?:mp4|m3u8|webm|mpd)(?:\\?[^"'\\s]*)?)["']/gi;var m;
     while((m=re.exec(t))!==null){if(!isAd(m[1]))R(m[1],'js')}})}catch(x){}
+  /* Scan nested iframes (same-origin only) */
+  try{document.querySelectorAll('iframe').forEach(function(f){try{var fd=f.contentDocument;if(fd){fd.querySelectorAll('video,source,[src]').forEach(function(e){
+    var s=e.src||e.currentSrc||e.getAttribute('src')||'';
+    if(s&&s.includes('/proxy?')){try{s=new URL(s).searchParams.get('url')||s}catch(x){}}
+    if(s&&V.test(s)&&!isAd(s))R(s,'iframe-dom')})}}catch(x){}})}catch(x){}
 }
 
-/* ── 6. Report current page URL to parent ── */
-try{var pu=new URLSearchParams(location.search).get('url');if(pu)parent.postMessage({t:'vg-nav',url:pu},'*')}catch(x){}
+/* ── 7. Report current page URL to parent ── */
+try{var pu=new URLSearchParams(location.search).get('url');if(pu){_lastNav=pu;parent.postMessage({t:'vg-nav',url:pu},'*')}}catch(x){}
 
-/* ── 7. Observe DOM changes ── */
+/* ── 8. Observe DOM changes ── */
 new MutationObserver(S).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','data-src']});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',S);else S();
 setInterval(S,3000);
