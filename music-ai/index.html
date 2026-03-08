@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.9.5 — Discovery Engine</title>
+<title>music·ai v3.9.6 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -443,7 +443,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.9.5</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.9.6</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -464,6 +464,7 @@
           <button class="prov-pill" data-p="openai" onclick="quickSwitchProvider('openai')">OpenAI</button>
         </div>
       </div>
+      <div id="yt-stats-line" style="font-size:10px;color:var(--muted);text-align:right;min-height:14px;"></div>
     </div>
 
     <div id="tab-content" style="flex:1;overflow:hidden;position:relative;">
@@ -735,7 +736,22 @@ function getTotalQuota(){const keys=getAllYtKeys();let used=0,total=0;keys.forEa
 // Legacy compat
 function getQuota(){const k=getYtKey();return k?getQuotaForKey(k):{count:0,date:new Date().toISOString().slice(0,10)};}
 function incQuota(){const k=getYtKey();if(k)incQuotaForKey(k);}
-function updateQuotaDisplay(){const{used,total}=getTotalQuota();const srvKeys=ST.ytServerKeys||0;const hasGw=!!getGwSecret();const hasLocal=getAllYtKeys().length>0;const el=document.getElementById('yt-quota-display');if(el){let txt='YT';if(hasLocal&&hasGw){txt=_ytLastSource==='S'?'S·'+srvKeys+'k':used+'/'+total;}else if(hasLocal){txt=used+'/'+total;}else if(hasGw){txt='S·'+(srvKeys||'…')+'k';}el.textContent=txt;}const dot=document.getElementById('adotYT');if(dot&&!dot.classList.contains('blink')){if(!hasLocal&&!hasGw){dot.className='adot';}else if(_ytLastSource==='S'){dot.className='adot ok';dot.style.background='#06b6d4';dot.style.boxShadow='0 0 6px #06b6d4';}else if(_ytLastSource==='L'){dot.className='adot ok';dot.style.background='';dot.style.boxShadow='';}else{dot.style.background='';dot.style.boxShadow='';dot.className='adot'+((hasLocal||hasGw)?(hasLocal&&used>=total&&!hasGw?' err':used>=total*0.8&&!hasGw?' key':' ok'):' ');}}}
+// ── Compteur recherches serveur (côté client) ──
+const LS_YT_SRV_QUOTA='music_ai_yt_srv';
+function getSrvSearchCount(){try{const d=JSON.parse(localStorage.getItem(LS_YT_SRV_QUOTA));const today=new Date().toISOString().slice(0,10);if(!d||d.date!==today)return 0;return d.count||0;}catch{return 0;}}
+function incSrvSearchCount(){const today=new Date().toISOString().slice(0,10);const cur=getSrvSearchCount();localStorage.setItem(LS_YT_SRV_QUOTA,JSON.stringify({date:today,count:cur+1}));updateQuotaDisplay();}
+function updateQuotaDisplay(){
+  const{used,total}=getTotalQuota();const srvKeys=ST.ytServerKeys||0;const hasGw=!!getGwSecret();const hasLocal=getAllYtKeys().length>0;const srvUsed=getSrvSearchCount();const localKeys=getAllYtKeys().length;
+  // LED label simple
+  const el=document.getElementById('yt-quota-display');
+  if(el){let txt='YT';if(hasLocal||hasGw)txt=_ytLastSource==='S'?'☁S':_ytLastSource==='L'?'🔑L':'YT';el.textContent=txt;}
+  // LED dot color
+  const dot=document.getElementById('adotYT');
+  if(dot&&!dot.classList.contains('blink')){if(!hasLocal&&!hasGw){dot.className='adot';}else if(_ytLastSource==='S'){dot.className='adot ok';dot.style.background='#06b6d4';dot.style.boxShadow='0 0 6px #06b6d4';}else if(_ytLastSource==='L'){dot.className='adot ok';dot.style.background='';dot.style.boxShadow='';}else{dot.style.background='';dot.style.boxShadow='';dot.className='adot'+((hasLocal||hasGw)?' ok':' ');}}
+  // Stats line
+  const line=document.getElementById('yt-stats-line');
+  if(line){const parts=[];if(hasLocal)parts.push('🔑 '+used+'/'+total+' · '+localKeys+' clé'+(localKeys>1?'s':''));if(hasGw)parts.push('☁ '+srvUsed+' rech · '+(srvKeys||'…')+' clé'+(srvKeys>1?'s':''));line.textContent=parts.join('  ·  ')||'';}
+}
 function getProfile(){try{return JSON.parse(localStorage.getItem(LS_PROFILE))}catch(e){return null}}
 function saveProfile(p){localStorage.setItem(LS_PROFILE,JSON.stringify(p))}
 function getConfig(){try{const c=JSON.parse(localStorage.getItem(LS_CONFIG));if(!c)return{provider:'claude',model:'claude-opus-4-6',keys:{claude:'',gemini:'',openai:''}};if('apiKey'in c&&!c.keys){const keys={claude:'',gemini:'',openai:''};keys[c.provider||'claude']=c.apiKey||'';const migrated={provider:c.provider||'claude',model:c.model||'claude-opus-4-6',keys};saveConfig(migrated);return migrated;}if(!c.keys)c.keys={claude:'',gemini:'',openai:''};return c;}catch(e){return{provider:'claude',model:'claude-opus-4-6',keys:{claude:'',gemini:'',openai:''}}}}
@@ -770,7 +786,7 @@ async function ytSearchGateway(query){
     const r=await fetch(GATEWAY_URL+'/api/youtube-search',{method:'POST',headers:{'Authorization':'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify({q:query}),signal:ctrl.signal});
     if(!r.ok)return null;
     const d=await r.json();
-    if(d.videoId){_ytVidCache[query]=d.videoId;saveVidCache();return d.videoId;}
+    if(d.videoId){_ytVidCache[query]=d.videoId;saveVidCache();incSrvSearchCount();return d.videoId;}
     return null;
   }catch(e){console.warn('[YT-GW] error:',e);return null;}
 }
