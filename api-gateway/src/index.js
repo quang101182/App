@@ -37,7 +37,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.11';
+const VERSION = '1.12';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -126,6 +126,11 @@ export default {
         if (path === '/admin/keys/status') return await adminKeysStatus(env);
 
         return jsonResponse({ error: 'unknown admin route' }, 404);
+      }
+
+      // ── Web Proxy route (GET/POST) ─────────────────────────────────────
+      if ((method === 'GET' || method === 'POST') && path === '/proxy') {
+        return await handleProxy(request, env, ctx, url);
       }
 
       return jsonResponse({ error: 'not found' }, 404);
@@ -406,6 +411,182 @@ async function proxyDeepgram(request, env, path) {
   for (const [k, v] of Object.entries(CORS_HEADERS)) respHeaders.set(k, v);
 
   return new Response(upstreamResp.body, { status: upstreamResp.status, headers: respHeaders });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Web Proxy — GET/POST /proxy?url=...&s=WORKER_SECRET[&raw=1]
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Video sniffer script injected into proxied HTML pages */
+const SNIFFER_SCRIPT = `<script>(function(){
+var D=new Set(),V=/\\.(mp4|webm|m3u8|mov|mkv|flv|avi|ts|mpd)(\\?[^"'\\s<>]*)?/i;
+var M=/video\\//i;
+function R(u,t){if(!u||u.length<8||D.has(u))return;D.add(u);try{parent.postMessage({t:'vg-video',url:u,mt:t},'*')}catch(e){}}
+function S(){document.querySelectorAll('video,audio,source,[src],[data-src],[data-video-src]').forEach(function(e){
+var s=e.src||e.currentSrc||(e.dataset&&(e.dataset.src||e.dataset.videoSrc))||e.getAttribute('src')||'';
+if(s&&(V.test(s)||M.test(e.type||'')))R(s,'dom');
+if(e.tagName==='VIDEO'){if(e.currentSrc)R(e.currentSrc,'cur');
+try{for(var i=0;i<e.children.length;i++){var c=e.children[i];if(c.src)R(c.src,'src')}}catch(x){}}
+});
+document.querySelectorAll('a[href]').forEach(function(a){if(V.test(a.href))R(a.href,'link')});
+document.querySelectorAll('[style]').forEach(function(e){var m=e.getAttribute('style').match(/url\\(["']?([^"')]+\\.mp4[^"')]*)/i);if(m)R(m[1],'css')});
+try{document.querySelectorAll('script:not([src])').forEach(function(s){
+var t=s.textContent||'';var re=/["'](https?:\\/\\/[^"'\\s]+\\.(?:mp4|m3u8|webm)(?:\\?[^"'\\s]*)?)["']/gi;var m;
+while((m=re.exec(t))!==null)R(m[1],'js')})}catch(x){}}
+var XO=XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open=function(m,u){if(typeof u==='string'){if(V.test(u))R(u,'xhr');if(u.indexOf('.m3u8')>-1||u.indexOf('.mpd')>-1||u.indexOf('/manifest')>-1)R(u,'manifest')}return XO.apply(this,arguments)};
+var FO=window.fetch;window.fetch=function(i,o){var u=typeof i==='string'?i:(i&&i.url)||'';if(V.test(u))R(u,'fetch');if(u.indexOf('.m3u8')>-1||u.indexOf('.mpd')>-1)R(u,'manifest');return FO.apply(this,arguments)};
+var CE=document.createElement;document.createElement=function(t){var el=CE.apply(this,arguments);if(t==='video'||t==='source'){var origSet=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'src')||Object.getOwnPropertyDescriptor(Element.prototype,'src');
+if(origSet&&origSet.set){var oSet=origSet.set;Object.defineProperty(el,'src',{set:function(v){if(V.test(v))R(v,'create');return oSet.call(this,v)},get:origSet.get,configurable:true})}}return el};
+try{var params=new URLSearchParams(location.search);var pu=params.get('url');if(pu)parent.postMessage({t:'vg-nav',url:pu},'*')}catch(x){}
+var obs=new MutationObserver(S);obs.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','data-src']});
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',S);else S();
+setInterval(S,2500);
+})();</scrip`+`t>`;
+
+async function handleProxy(request, env, ctx, parsedUrl) {
+  // Auth via query param 's'
+  const secret = parsedUrl.searchParams.get('s') || '';
+  if (!env.WORKER_SECRET || !(await timingSafeEqual(secret, env.WORKER_SECRET))) {
+    return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
+  }
+
+  const targetUrl = parsedUrl.searchParams.get('url');
+  if (!targetUrl) return jsonResponse({ error: 'missing url parameter' }, 400);
+
+  // Validate URL
+  let target;
+  try { target = new URL(targetUrl); } catch { return jsonResponse({ error: 'invalid url' }, 400); }
+
+  // Block obvious dangerous schemes
+  if (!['http:', 'https:'].includes(target.protocol)) {
+    return jsonResponse({ error: 'only http/https allowed' }, 400);
+  }
+
+  // Rate limit: 120 req/min for proxy (generous for browsing)
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const rlErr = await checkRateLimit(env, ctx, 'prx', ip, 120);
+  if (rlErr) return rlErr;
+
+  const isRaw = parsedUrl.searchParams.has('raw');
+
+  // Build fetch headers — mobile User-Agent
+  const fetchHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+    'Accept': isRaw ? '*/*' : 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip',
+    'Referer': target.origin + '/',
+  };
+
+  // Forward Range header (video seeking)
+  const range = request.headers.get('Range');
+  if (range) fetchHeaders['Range'] = range;
+
+  // Forward cookies if provided
+  const cookie = request.headers.get('X-Proxy-Cookie');
+  if (cookie) fetchHeaders['Cookie'] = cookie;
+
+  // For POST requests, forward the body
+  let fetchBody = undefined;
+  if (request.method === 'POST') {
+    fetchBody = request.body;
+    const ct = request.headers.get('Content-Type');
+    if (ct) fetchHeaders['Content-Type'] = ct;
+  }
+
+  let resp;
+  try {
+    resp = await fetch(targetUrl, {
+      method: request.method,
+      headers: fetchHeaders,
+      body: fetchBody,
+      redirect: 'follow',
+    });
+  } catch (err) {
+    return jsonResponse({ error: 'fetch failed: ' + err.message }, 502);
+  }
+
+  const contentType = resp.headers.get('content-type') || '';
+
+  // ── Raw mode or non-HTML → stream directly ──
+  if (isRaw || !contentType.includes('text/html')) {
+    const headers = new Headers();
+    headers.set('Access-Control-Allow-Origin', '*');
+    headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    headers.set('Access-Control-Allow-Headers', 'Range, X-Proxy-Cookie');
+    headers.set('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges, Content-Disposition');
+    if (contentType) headers.set('Content-Type', contentType);
+    for (const h of ['content-length', 'accept-ranges', 'content-range', 'content-disposition', 'last-modified', 'etag']) {
+      const v = resp.headers.get(h);
+      if (v) headers.set(h, v);
+    }
+    return new Response(resp.body, { status: resp.status, headers });
+  }
+
+  // ── HTML mode → rewrite for iframe navigation ──
+  let html = await resp.text();
+  const finalUrl = resp.url || targetUrl;
+  const base = new URL(finalUrl);
+  const basePath = base.origin + base.pathname.replace(/[^/]*$/, '');
+  const proxyPrefix = `/proxy?s=${encodeURIComponent(secret)}&url=`;
+
+  // Remove existing <base> tags
+  html = html.replace(/<base\s[^>]*>/gi, '');
+
+  // Insert <base> tag for resource resolution (images, css, js load directly from origin)
+  if (/<head/i.test(html)) {
+    html = html.replace(/<head([^>]*)>/i, `<head$1><base href="${basePath}" target="_self">`);
+  } else {
+    html = `<base href="${basePath}" target="_self">` + html;
+  }
+
+  // Rewrite <a href> and <area href> for navigation within proxy
+  html = html.replace(/(<(?:a|area)\s[^>]*href\s*=\s*["'])([^"']*)(["'])/gi, (m, pre, href, post) => {
+    if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('data:') || href.startsWith('mailto:') || href.startsWith('tel:')) return m;
+    try {
+      const abs = new URL(href, finalUrl).href;
+      return `${pre}${proxyPrefix}${encodeURIComponent(abs)}${post}`;
+    } catch { return m; }
+  });
+
+  // Rewrite <form action>
+  html = html.replace(/(<form\s[^>]*action\s*=\s*["'])([^"']*)(["'])/gi, (m, pre, action, post) => {
+    if (!action || action.startsWith('javascript:')) return m;
+    try {
+      const abs = new URL(action || finalUrl, finalUrl).href;
+      return `${pre}${proxyPrefix}${encodeURIComponent(abs)}${post}`;
+    } catch { return m; }
+  });
+
+  // Rewrite <iframe src> so nested iframes also go through proxy
+  html = html.replace(/(<iframe\s[^>]*src\s*=\s*["'])([^"']*)(["'])/gi, (m, pre, src, post) => {
+    if (!src || src.startsWith('about:') || src.startsWith('javascript:') || src.startsWith('data:')) return m;
+    try {
+      const abs = new URL(src, finalUrl).href;
+      return `${pre}${proxyPrefix}${encodeURIComponent(abs)}${post}`;
+    } catch { return m; }
+  });
+
+  // Remove CSP meta tags
+  html = html.replace(/<meta\s[^>]*http-equiv\s*=\s*["']Content-Security-Policy["'][^>]*>/gi, '');
+
+  // Inject sniffer script before </body> (or at end)
+  if (/<\/body>/i.test(html)) {
+    html = html.replace(/<\/body>/i, SNIFFER_SCRIPT + '</body>');
+  } else {
+    html += SNIFFER_SCRIPT;
+  }
+
+  // Return clean HTML — NO X-Frame-Options, NO CSP
+  return new Response(html, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'no-store',
+    },
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

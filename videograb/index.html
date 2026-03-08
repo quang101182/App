@@ -1,703 +1,673 @@
-<!-- VideoGrab v1.0 — Téléchargeur vidéo universel — Single-file HTML -->
+<!-- VideoGrab v2.0 — Video Browser & Downloader — Mobile-First -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VideoGrab v1.0</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a0a0f">
+<title>VideoGrab v2.0</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0a0a0f;--card:rgba(255,255,255,0.05);--card-border:rgba(255,255,255,0.08);
-  --text:#e4e4e7;--text-dim:#71717a;--accent1:#7c6af7;--accent2:#4facfe;
-  --radius:16px;--blur:20px;
+  --bg:#0a0a0f;--bg2:#111118;--card:rgba(255,255,255,0.05);--card2:rgba(255,255,255,0.08);
+  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);
+  --text:#e8e8ed;--dim:#71717a;--muted:#3f3f46;
+  --accent:#7c6af7;--accent2:#4facfe;--green:#34d399;--red:#f87171;--yellow:#facc15;
+  --radius:14px;--safe-b:env(safe-area-inset-bottom,0px);
 }
-html{scrollbar-width:thin;scrollbar-color:#27272a #0a0a0f}
-::-webkit-scrollbar{width:6px}
-::-webkit-scrollbar-track{background:#0a0a0f}
-::-webkit-scrollbar-thumb{background:#27272a;border-radius:3px}
-body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
-a{color:var(--accent2);text-decoration:none}
+html,body{height:100%;overflow:hidden}
+body{font-family:-apple-system,system-ui,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--muted);border-radius:2px}
+input,button,select{font-family:inherit;font-size:inherit}
 
-/* Toast */
-#toast-container{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:10px}
-.toast{padding:14px 20px;border-radius:12px;font-size:.875rem;backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);animation:toastIn .3s ease;max-width:380px;display:flex;align-items:center;gap:10px;cursor:pointer}
-.toast.hide{animation:toastOut .3s ease forwards}
-.toast-success{background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.3);color:#4ade80}
-.toast-error{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.3);color:#f87171}
-.toast-warning{background:rgba(234,179,8,.15);border-color:rgba(234,179,8,.3);color:#facc15}
-.toast-info{background:rgba(59,130,246,.15);border-color:rgba(59,130,246,.3);color:#60a5fa}
-@keyframes toastIn{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:translateX(0)}}
-@keyframes toastOut{to{opacity:0;transform:translateX(60px)}}
+/* ═══ App Layout ═══ */
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh}
 
-/* Layout */
-.app{max-width:780px;margin:0 auto;padding:24px 16px 60px}
-header{text-align:center;margin-bottom:32px}
-header h1{font-size:1.8rem;font-weight:800;background:linear-gradient(135deg,var(--accent1),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-.5px}
-header .ver{font-family:monospace;font-size:.7rem;color:var(--text-dim);margin-top:2px}
-.top-btns{position:absolute;top:20px;right:20px;display:flex;gap:8px}
-.icon-btn{width:40px;height:40px;border-radius:12px;background:var(--card);border:1px solid var(--card-border);color:var(--text-dim);cursor:pointer;display:grid;place-items:center;font-size:1.1rem;transition:.2s}
-.icon-btn:hover{background:rgba(255,255,255,.1);color:var(--text)}
+/* ═══ Top Nav Bar ═══ */
+.navbar{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10}
+.nav-btn{width:36px;height:36px;border-radius:10px;background:transparent;border:none;color:var(--dim);cursor:pointer;display:grid;place-items:center;font-size:1.1rem;transition:.15s;flex-shrink:0}
+.nav-btn:active{background:var(--card2);color:var(--text);transform:scale(.92)}
+.nav-btn.active{color:var(--accent)}
+.url-bar{flex:1;display:flex;align-items:center;gap:0;background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;min-width:0;transition:border-color .2s}
+.url-bar:focus-within{border-color:var(--accent)}
+.url-bar input{flex:1;background:transparent;border:none;color:var(--text);padding:9px 12px;font-size:.85rem;outline:none;min-width:0}
+.url-bar input::placeholder{color:var(--muted)}
+.url-go{padding:9px 14px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff;font-weight:700;font-size:.8rem;cursor:pointer;letter-spacing:.3px;transition:.15s}
+.url-go:active{opacity:.8}
 
-/* Card */
-.card{background:var(--card);backdrop-filter:blur(var(--blur));border:1px solid var(--card-border);border-radius:var(--radius);padding:24px;margin-bottom:20px}
-
-/* Input row */
-.input-row{display:flex;gap:10px}
-.input-row input{flex:1;background:rgba(255,255,255,.06);border:1px solid var(--card-border);border-radius:12px;padding:14px 16px;color:var(--text);font-size:.95rem;outline:none;transition:border .2s}
-.input-row input:focus{border-color:var(--accent1)}
-.input-row input::placeholder{color:var(--text-dim)}
-.btn-paste,.btn-clear{background:rgba(255,255,255,.08);border:1px solid var(--card-border);border-radius:12px;padding:0 14px;color:var(--text-dim);cursor:pointer;font-size:1rem;transition:.2s}
-.btn-paste:hover,.btn-clear:hover{background:rgba(255,255,255,.14);color:var(--text)}
-
-/* Platform badge */
-.platform-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-family:monospace;font-size:.8rem;font-weight:600;margin-top:12px;animation:badgePulse .6s ease;border:1px solid transparent}
-@keyframes badgePulse{0%{opacity:0;transform:scale(.8)}50%{transform:scale(1.05)}100%{opacity:1;transform:scale(1)}}
-.badge-youtube{background:rgba(255,0,0,.12);color:#ff4444;border-color:rgba(255,0,0,.25)}
-.badge-twitter{background:rgba(29,161,242,.12);color:#1da1f2;border-color:rgba(29,161,242,.25)}
-.badge-tiktok{background:rgba(254,44,85,.12);color:#fe2c55;border-color:rgba(254,44,85,.25)}
-.badge-instagram{background:rgba(225,48,108,.12);color:#e1306c;border-color:rgba(225,48,108,.25)}
-.badge-reddit{background:rgba(255,69,0,.12);color:#ff4500;border-color:rgba(255,69,0,.25)}
-.badge-facebook{background:rgba(24,119,242,.12);color:#1877f2;border-color:rgba(24,119,242,.25)}
-.badge-vimeo{background:rgba(26,183,234,.12);color:#1ab7ea;border-color:rgba(26,183,234,.25)}
-.badge-dailymotion{background:rgba(0,128,255,.12);color:#0080ff;border-color:rgba(0,128,255,.25)}
-.badge-twitch{background:rgba(145,70,255,.12);color:#9146ff;border-color:rgba(145,70,255,.25)}
-.badge-bilibili{background:rgba(0,174,236,.12);color:#00a1d6;border-color:rgba(0,174,236,.25)}
-.badge-soundcloud{background:rgba(255,85,0,.12);color:#ff5500;border-color:rgba(255,85,0,.25)}
-.badge-pinterest{background:rgba(230,0,35,.12);color:#e60023;border-color:rgba(230,0,35,.25)}
-.badge-direct{background:rgba(124,106,247,.12);color:#7c6af7;border-color:rgba(124,106,247,.25)}
-
-/* Quality + Mode */
-.options-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;align-items:center}
-.opt-label{font-size:.75rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-right:4px}
-.q-btn{padding:7px 14px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid var(--card-border);color:var(--text-dim);cursor:pointer;font-family:monospace;font-size:.8rem;transition:.2s}
-.q-btn:hover{background:rgba(255,255,255,.1);color:var(--text)}
-.q-btn.active{background:linear-gradient(135deg,rgba(124,106,247,.25),rgba(79,172,254,.25));border-color:var(--accent1);color:#fff}
-.mode-btn{padding:7px 14px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid var(--card-border);color:var(--text-dim);cursor:pointer;font-size:.8rem;transition:.2s}
-.mode-btn.active{background:linear-gradient(135deg,rgba(124,106,247,.25),rgba(79,172,254,.25));border-color:var(--accent1);color:#fff}
-
-/* Analyze button */
-.btn-analyze{width:100%;margin-top:18px;padding:15px;border:none;border-radius:14px;background:linear-gradient(135deg,var(--accent1),var(--accent2));color:#fff;font-size:1rem;font-weight:700;cursor:pointer;transition:transform .15s,box-shadow .15s;position:relative;overflow:hidden}
-.btn-analyze:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 30px rgba(124,106,247,.35)}
-.btn-analyze:active:not(:disabled){transform:translateY(0)}
-.btn-analyze:disabled{opacity:.55;cursor:not-allowed}
-.btn-analyze .spinner{display:none;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;margin-right:8px}
-.btn-analyze.loading .spinner{display:inline-block}
-.btn-analyze.loading .btn-text{opacity:.8}
+/* ═══ Browser Frame ═══ */
+.browser-frame{flex:1;position:relative;overflow:hidden;background:#000}
+.browser-frame iframe{width:100%;height:100%;border:none;background:#fff}
+.browser-loading{position:absolute;inset:0;display:none;place-items:center;background:rgba(10,10,15,.85);z-index:5}
+.browser-loading.active{display:grid}
+.loader{width:40px;height:40px;border:3px solid var(--muted);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.browser-empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:40px;color:var(--dim)}
+.browser-empty h2{font-size:1.3rem;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}
+.browser-empty p{font-size:.85rem;line-height:1.5}
 
-/* Player */
-.player-card{animation:fadeUp .4s ease}
-@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-.video-wrap{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden}
-.video-wrap video,.video-wrap audio{width:100%;height:100%;object-fit:contain}
-.video-wrap audio{height:60px;position:absolute;bottom:0}
+/* ═══ Video Badge (floating) ═══ */
+.video-badge{position:absolute;bottom:16px;right:16px;z-index:20;display:none;align-items:center;gap:6px;padding:10px 16px;border-radius:28px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-weight:700;font-size:.85rem;cursor:pointer;box-shadow:0 4px 20px rgba(124,106,247,.5);animation:badgeBounce .5s ease;-webkit-tap-highlight-color:transparent}
+.video-badge.show{display:flex}
+.video-badge .badge-dot{width:8px;height:8px;border-radius:50%;background:#fff;animation:pulse 1.5s infinite}
+@keyframes badgeBounce{0%{transform:scale(0) translateY(20px)}50%{transform:scale(1.1)}100%{transform:scale(1)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
-/* Download area */
-.dl-section{margin-top:16px}
-.dl-row{display:flex;gap:10px;flex-wrap:wrap}
-.btn-dl{flex:1;min-width:140px;padding:12px 16px;border-radius:12px;border:1px solid var(--card-border);background:rgba(255,255,255,.06);color:var(--text);cursor:pointer;font-size:.85rem;font-weight:600;transition:.2s;text-align:center}
-.btn-dl:hover{background:rgba(124,106,247,.18);border-color:var(--accent1)}
-.btn-dl.primary{background:linear-gradient(135deg,rgba(124,106,247,.25),rgba(79,172,254,.25));border-color:var(--accent1)}
+/* ═══ Bottom Sheet ═══ */
+.sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;opacity:0;visibility:hidden;transition:.3s}
+.sheet-overlay.open{opacity:1;visibility:visible}
+.bottom-sheet{position:fixed;bottom:0;left:0;right:0;z-index:51;background:var(--bg2);border-top-left-radius:20px;border-top-right-radius:20px;transform:translateY(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);max-height:75vh;display:flex;flex-direction:column}
+.bottom-sheet.open{transform:translateY(0)}
+.sheet-handle{width:40px;height:4px;border-radius:2px;background:var(--muted);margin:10px auto 6px;flex-shrink:0;cursor:grab}
+.sheet-header{display:flex;align-items:center;justify-content:space-between;padding:8px 16px 12px;flex-shrink:0}
+.sheet-header h3{font-size:.95rem;font-weight:700}
+.sheet-close{background:none;border:none;color:var(--dim);font-size:1.4rem;cursor:pointer;padding:4px 8px}
+.sheet-body{flex:1;overflow-y:auto;padding:0 16px 16px;padding-bottom:calc(16px + var(--safe-b))}
 
-/* Progress */
-.progress-wrap{margin-top:14px;display:none}
-.progress-wrap.active{display:block}
-.progress-bar-bg{height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden}
-.progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent1),var(--accent2));border-radius:3px;width:0%;transition:width .2s}
-.progress-info{display:flex;justify-content:space-between;margin-top:6px;font-size:.75rem;color:var(--text-dim);font-family:monospace}
+/* ═══ Video List Items ═══ */
+.vid-item{display:flex;align-items:center;gap:12px;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;transition:.15s}
+.vid-item:active{background:var(--card2)}
+.vid-icon{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,rgba(124,106,247,.15),rgba(79,172,254,.15));display:grid;place-items:center;font-size:1.2rem;flex-shrink:0;color:var(--accent)}
+.vid-info{flex:1;min-width:0}
+.vid-name{font-size:.82rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vid-meta{font-size:.7rem;color:var(--dim);margin-top:3px;display:flex;gap:8px}
+.vid-meta span{display:flex;align-items:center;gap:3px}
+.vid-actions{display:flex;gap:6px;flex-shrink:0}
+.vid-btn{width:38px;height:38px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--dim);cursor:pointer;display:grid;place-items:center;font-size:1rem;transition:.15s}
+.vid-btn:active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.vid-btn.dl-btn{background:linear-gradient(135deg,rgba(52,211,153,.12),rgba(52,211,153,.06));color:var(--green);border-color:rgba(52,211,153,.2)}
+.vid-empty{text-align:center;color:var(--dim);padding:30px;font-size:.85rem}
 
-/* Picker grid */
-.picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:16px}
-.picker-item{background:rgba(255,255,255,.04);border:1px solid var(--card-border);border-radius:12px;overflow:hidden;cursor:pointer;transition:.2s}
-.picker-item:hover{border-color:var(--accent1);transform:translateY(-2px)}
-.picker-item img{width:100%;aspect-ratio:16/9;object-fit:cover}
-.picker-item .pi-info{padding:10px;font-size:.8rem;color:var(--text-dim)}
+/* ═══ Player Modal ═══ */
+.player-overlay{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:100;display:none;flex-direction:column}
+.player-overlay.open{display:flex}
+.player-top{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;flex-shrink:0}
+.player-top h3{font-size:.9rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:12px}
+.player-close{background:none;border:none;color:var(--dim);font-size:1.6rem;cursor:pointer;padding:4px 8px}
+.player-video{flex:1;display:grid;place-items:center;padding:8px;min-height:0}
+.player-video video{width:100%;max-height:100%;border-radius:12px;background:#000;object-fit:contain}
+.player-bottom{padding:12px 16px;padding-bottom:calc(12px + var(--safe-b));display:flex;gap:10px;flex-shrink:0}
+.player-dl-btn{flex:1;padding:14px;border-radius:var(--radius);border:none;font-weight:700;font-size:.9rem;cursor:pointer;transition:.15s}
+.player-dl-btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.player-dl-btn.primary:active{opacity:.8}
+.player-dl-btn.secondary{background:var(--card);border:1px solid var(--border);color:var(--text)}
 
-/* History panel */
-.history-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;opacity:0;visibility:hidden;transition:.3s}
-.history-overlay.open{opacity:1;visibility:visible}
-.history-panel{position:fixed;top:0;right:0;width:340px;max-width:90vw;height:100vh;background:#111118;border-left:1px solid var(--card-border);z-index:101;transform:translateX(100%);transition:transform .3s ease;display:flex;flex-direction:column}
-.history-panel.open{transform:translateX(0)}
-.hp-header{padding:20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--card-border)}
-.hp-header h3{font-size:1rem}
-.hp-close{background:none;border:none;color:var(--text-dim);font-size:1.3rem;cursor:pointer}
-.hp-list{flex:1;overflow-y:auto;padding:12px}
-.hp-item{padding:12px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--card-border);margin-bottom:8px;cursor:pointer;transition:.2s}
-.hp-item:hover{background:rgba(255,255,255,.06)}
-.hp-item .hp-url{font-size:.8rem;color:var(--accent2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hp-item .hp-meta{font-size:.7rem;color:var(--text-dim);margin-top:4px;display:flex;justify-content:space-between}
-.hp-empty{text-align:center;color:var(--text-dim);padding:40px 20px;font-size:.85rem}
-.hp-clear{width:100%;padding:14px;border:none;background:rgba(239,68,68,.1);color:#f87171;cursor:pointer;font-size:.85rem;font-weight:600}
-.hp-clear:hover{background:rgba(239,68,68,.18)}
+/* ═══ Progress ═══ */
+.dl-progress{margin-top:10px;display:none}
+.dl-progress.active{display:block}
+.dl-bar-bg{height:5px;background:var(--card);border-radius:3px;overflow:hidden}
+.dl-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));width:0%;transition:width .2s;border-radius:3px}
+.dl-stats{display:flex;justify-content:space-between;font-size:.7rem;color:var(--dim);margin-top:5px;font-family:monospace}
 
-/* Settings modal */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:none;place-items:center}
-.modal-overlay.open{display:grid}
-.modal{background:#16161e;border:1px solid var(--card-border);border-radius:var(--radius);padding:28px;width:420px;max-width:90vw;animation:fadeUp .3s ease}
-.modal h3{margin-bottom:20px;font-size:1.1rem}
-.modal label{display:block;font-size:.8rem;color:var(--text-dim);margin-bottom:6px;margin-top:14px}
-.modal input,.modal select{width:100%;padding:11px 14px;background:rgba(255,255,255,.06);border:1px solid var(--card-border);border-radius:10px;color:var(--text);font-size:.85rem;outline:none}
-.modal input:focus{border-color:var(--accent1)}
-.modal-btns{display:flex;gap:10px;margin-top:24px}
-.modal-btns button{flex:1;padding:12px;border-radius:12px;border:none;cursor:pointer;font-weight:600;font-size:.85rem}
-.modal-btns .btn-save{background:linear-gradient(135deg,var(--accent1),var(--accent2));color:#fff}
-.modal-btns .btn-cancel{background:rgba(255,255,255,.08);color:var(--text-dim)}
+/* ═══ Settings Modal ═══ */
+.settings-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;place-items:center}
+.settings-overlay.open{display:grid}
+.settings-modal{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:24px;width:380px;max-width:92vw;animation:slideUp .3s ease}
+@keyframes slideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+.settings-modal h3{font-size:1.1rem;font-weight:700;margin-bottom:20px}
+.setting-group{margin-bottom:16px}
+.setting-group label{display:block;font-size:.75rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.setting-group input{width:100%;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:.85rem;outline:none}
+.setting-group input:focus{border-color:var(--accent)}
+.setting-group .hint{font-size:.7rem;color:var(--muted);margin-top:4px}
+.settings-btns{display:flex;gap:10px;margin-top:20px}
+.settings-btns button{flex:1;padding:13px;border-radius:12px;border:none;cursor:pointer;font-weight:700;font-size:.85rem;transition:.15s}
+.btn-save{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.btn-cancel{background:var(--card);color:var(--dim);border:1px solid var(--border)!important}
 
-/* Rate limit */
-.rate-limit-msg{text-align:center;padding:20px;color:#facc15;font-size:.9rem}
-.rate-limit-msg .countdown{font-family:monospace;font-size:1.4rem;font-weight:700;color:#facc15;margin-top:8px}
+/* ═══ Toast ═══ */
+#toasts{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:999;display:flex;flex-direction:column;gap:8px;width:90%;max-width:380px;pointer-events:none}
+.toast{padding:12px 16px;border-radius:12px;font-size:.82rem;font-weight:500;backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.08);animation:toastIn .3s ease;pointer-events:auto;cursor:pointer;text-align:center}
+.toast.out{animation:toastOut .25s ease forwards}
+.toast-s{background:rgba(52,211,153,.15);color:var(--green);border-color:rgba(52,211,153,.2)}
+.toast-e{background:rgba(248,113,113,.15);color:var(--red);border-color:rgba(248,113,113,.2)}
+.toast-i{background:rgba(79,172,254,.15);color:var(--accent2);border-color:rgba(79,172,254,.2)}
+.toast-w{background:rgba(250,204,21,.15);color:var(--yellow);border-color:rgba(250,204,21,.2)}
+@keyframes toastIn{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes toastOut{to{opacity:0;transform:translateY(-20px)}}
 
-/* CORS help */
-.cors-help{padding:16px;background:rgba(234,179,8,.06);border:1px solid rgba(234,179,8,.15);border-radius:12px;margin-top:14px;font-size:.82rem;color:var(--text-dim);line-height:1.6}
-.cors-help strong{color:#facc15}
-.cors-help a{color:var(--accent2)}
-
-/* Responsive */
-@media(max-width:600px){
-  .input-row{flex-direction:column}
-  .btn-paste,.btn-clear{padding:12px}
-  .top-btns{top:12px;right:12px}
-  .dl-row{flex-direction:column}
-  .picker-grid{grid-template-columns:1fr 1fr}
-  .history-panel{width:100%}
-}
+/* ═══ First Run Setup ═══ */
+.setup-screen{position:fixed;inset:0;background:var(--bg);z-index:300;display:grid;place-items:center;padding:24px}
+.setup-card{width:380px;max-width:100%;text-align:center}
+.setup-card h1{font-size:1.6rem;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
+.setup-card .sub{font-size:.8rem;color:var(--dim);margin-bottom:28px}
+.setup-card .setting-group{text-align:left}
+.setup-card button{width:100%;padding:15px;border:none;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:1rem;font-weight:700;cursor:pointer;margin-top:8px;transition:.15s}
+.setup-card button:active{transform:scale(.97)}
 </style>
 </head>
 <body>
 
-<div id="toast-container"></div>
+<div id="toasts"></div>
 
-<!-- Top buttons -->
-<div class="top-btns">
-  <button class="icon-btn" onclick="toggleHistory()" title="Historique">&#128337;</button>
-  <button class="icon-btn" onclick="openSettings()" title="Paramètres">&#9881;</button>
-</div>
-
-<!-- History panel -->
-<div class="history-overlay" id="histOverlay" onclick="toggleHistory()"></div>
-<div class="history-panel" id="histPanel">
-  <div class="hp-header"><h3>Historique</h3><button class="hp-close" onclick="toggleHistory()">&times;</button></div>
-  <div class="hp-list" id="histList"></div>
-  <button class="hp-clear" onclick="clearHistory()">Effacer l'historique</button>
-</div>
-
-<!-- Settings modal -->
-<div class="modal-overlay" id="settingsModal">
-  <div class="modal">
-    <h3>Paramètres</h3>
-    <label>URL Cobalt API</label>
-    <input id="setCobaltUrl" placeholder="https://api.cobalt.tools/">
-    <label>URL Proxy CORS</label>
-    <input id="setProxyUrl" placeholder="https://corsproxy.io/?">
-    <label>Qualité par défaut</label>
-    <select id="setDefaultQuality">
-      <option value="360">360p</option>
-      <option value="480">480p</option>
-      <option value="720">720p</option>
-      <option value="1080" selected>1080p</option>
-      <option value="2160">4K</option>
-      <option value="max">Best</option>
-    </select>
-    <div class="modal-btns">
-      <button class="btn-cancel" onclick="closeSettings()">Annuler</button>
-      <button class="btn-save" onclick="saveSettings()">Enregistrer</button>
-    </div>
-  </div>
-</div>
-
-<!-- Main app -->
-<div class="app">
-  <header>
+<!-- ═══ First Run Setup ═══ -->
+<div class="setup-screen" id="setupScreen" style="display:none">
+  <div class="setup-card">
     <h1>VideoGrab</h1>
-    <div class="ver">v1.0</div>
-  </header>
+    <div class="sub">v2.0 — Configuration initiale</div>
+    <div class="setting-group">
+      <label>URL du Gateway</label>
+      <input id="setupGw" placeholder="https://api-gateway.xxxxx.workers.dev">
+      <div class="hint">Ton Cloudflare Worker avec la route /proxy</div>
+    </div>
+    <div class="setting-group">
+      <label>Secret (WORKER_SECRET)</label>
+      <input id="setupSecret" type="password" placeholder="Ton secret d'authentification">
+    </div>
+    <button onclick="saveSetup()">Commencer</button>
+  </div>
+</div>
 
-  <!-- Input card -->
-  <div class="card">
-    <div class="input-row">
-      <input type="text" id="urlInput" placeholder="Coller une URL vidéo..." autocomplete="off" spellcheck="false">
-      <button class="btn-paste" onclick="pasteUrl()" title="Coller">&#128203;</button>
-      <button class="btn-clear" onclick="clearInput()" title="Effacer">&times;</button>
+<!-- ═══ Settings Modal ═══ -->
+<div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-modal">
+    <h3>Paramètres</h3>
+    <div class="setting-group">
+      <label>URL du Gateway</label>
+      <input id="setGw">
     </div>
-    <div id="badgeWrap"></div>
-    <div class="options-row">
-      <span class="opt-label">Qualité</span>
-      <button class="q-btn" data-q="360">360p</button>
-      <button class="q-btn" data-q="480">480p</button>
-      <button class="q-btn" data-q="720">720p</button>
-      <button class="q-btn active" data-q="1080">1080p</button>
-      <button class="q-btn" data-q="2160">4K</button>
-      <button class="q-btn" data-q="max">Best</button>
+    <div class="setting-group">
+      <label>Secret</label>
+      <input id="setSecret" type="password">
     </div>
-    <div class="options-row">
-      <span class="opt-label">Mode</span>
-      <button class="mode-btn active" data-m="auto" onclick="setMode('auto',this)">Video</button>
-      <button class="mode-btn" data-m="audio" onclick="setMode('audio',this)">Audio</button>
+    <div class="settings-btns">
+      <button class="btn-cancel" onclick="closeSettings()">Annuler</button>
+      <button class="btn-save" onclick="saveSettingsModal()">Enregistrer</button>
     </div>
-    <button class="btn-analyze" id="btnAnalyze" onclick="analyze()">
-      <span class="spinner"></span><span class="btn-text">Analyser</span>
-    </button>
+  </div>
+</div>
+
+<!-- ═══ Player Modal ═══ -->
+<div class="player-overlay" id="playerOverlay">
+  <div class="player-top">
+    <h3 id="playerTitle">-</h3>
+    <button class="player-close" onclick="closePlayer()">&times;</button>
+  </div>
+  <div class="player-video">
+    <video id="playerVideo" controls playsinline></video>
+  </div>
+  <div class="player-bottom">
+    <button class="player-dl-btn secondary" onclick="closePlayer()">Fermer</button>
+    <button class="player-dl-btn primary" id="playerDlBtn" onclick="downloadCurrent()">Telecharger</button>
+  </div>
+  <div class="dl-progress" id="dlProgress">
+    <div class="dl-bar-bg"><div class="dl-bar" id="dlBar"></div></div>
+    <div class="dl-stats"><span id="dlPct">0%</span><span id="dlSpeed">--</span><span id="dlEta">--</span></div>
+  </div>
+</div>
+
+<!-- ═══ Bottom Sheet ═══ -->
+<div class="sheet-overlay" id="sheetOverlay" onclick="closeSheet()"></div>
+<div class="bottom-sheet" id="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <h3 id="sheetTitle">Videos detectees</h3>
+    <button class="sheet-close" onclick="closeSheet()">&times;</button>
+  </div>
+  <div class="sheet-body" id="sheetBody">
+    <div class="vid-empty">Naviguez vers une page pour detecter les videos</div>
+  </div>
+</div>
+
+<!-- ═══ Main App ═══ -->
+<div class="app">
+  <!-- Nav Bar -->
+  <div class="navbar">
+    <button class="nav-btn" onclick="navBack()" title="Retour">&#9664;</button>
+    <button class="nav-btn" onclick="navForward()" title="Suivant">&#9654;</button>
+    <button class="nav-btn" onclick="navRefresh()" title="Recharger">&#8635;</button>
+    <div class="url-bar">
+      <input type="url" id="urlInput" placeholder="Entrer une URL..." enterkeyhint="go" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="url-go" onclick="navigate()">GO</button>
+    </div>
+    <button class="nav-btn" onclick="openSettings()" title="Parametres">&#9881;</button>
   </div>
 
-  <!-- Result area -->
-  <div id="resultArea"></div>
+  <!-- Browser -->
+  <div class="browser-frame" id="browserFrame">
+    <div class="browser-empty" id="emptyState">
+      <div>
+        <h2>VideoGrab v2.0</h2>
+        <p>Entrez une URL dans la barre pour commencer a naviguer.<br>Les videos seront detectees automatiquement.</p>
+      </div>
+    </div>
+    <div class="browser-loading" id="browserLoading"><div class="loader"></div></div>
+    <iframe id="browserIframe" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" style="display:none"></iframe>
+    <!-- Floating video badge -->
+    <div class="video-badge" id="videoBadge" onclick="openSheet()">
+      <span class="badge-dot"></span>
+      <span id="badgeCount">0</span> video(s)
+    </div>
+  </div>
 </div>
 
 <script>
-// === State ===
-let currentQuality = '1080';
-let currentMode = 'auto';
-let currentStreamUrl = null;
-let currentFilename = null;
+// ═══════════════════════════════════════════════════════════════
+// VideoGrab v2.0 — Core Logic
+// ═══════════════════════════════════════════════════════════════
+
+const VERSION = '2.0';
+const $ = id => document.getElementById(id);
+
+// ── State ──
+let gateway = '', secret = '';
+let navHistory = [], navIndex = -1;
+let detectedVideos = []; // [{url, type, ts}]
 let hlsInstance = null;
-let rateLimitEnd = 0;
+let currentDlUrl = null;
 
-// === Settings ===
-function getSettings() {
-  const d = { cobaltUrl: 'https://api.cobalt.tools/', proxyUrl: 'https://corsproxy.io/?', defaultQuality: '1080' };
-  try { return Object.assign(d, JSON.parse(localStorage.getItem('vg_settings') || '{}')); } catch { return d; }
+// ── Init ──
+function init() {
+  gateway = localStorage.getItem('vg_gw') || '';
+  secret = localStorage.getItem('vg_secret') || '';
+
+  if (!gateway || !secret) {
+    $('setupScreen').style.display = 'grid';
+  }
+
+  // Listen for messages from sniffer
+  window.addEventListener('message', handleMessage);
+
+  // URL bar enter key
+  $('urlInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); navigate(); }
+  });
+
+  // Auto-focus URL bar on load
+  setTimeout(() => $('urlInput').focus(), 300);
 }
-function loadSettings() {
-  const s = getSettings();
-  document.getElementById('setCobaltUrl').value = s.cobaltUrl;
-  document.getElementById('setProxyUrl').value = s.proxyUrl;
-  document.getElementById('setDefaultQuality').value = s.defaultQuality;
-  currentQuality = s.defaultQuality;
-  document.querySelectorAll('.q-btn').forEach(b => b.classList.toggle('active', b.dataset.q === currentQuality));
+
+// ── Setup ──
+function saveSetup() {
+  const gw = $('setupGw').value.trim().replace(/\/+$/, '');
+  const s = $('setupSecret').value.trim();
+  if (!gw || !s) { toast('Remplir les deux champs', 'w'); return; }
+  localStorage.setItem('vg_gw', gw);
+  localStorage.setItem('vg_secret', s);
+  gateway = gw; secret = s;
+  $('setupScreen').style.display = 'none';
+  toast('Configuration sauvegardee', 's');
 }
-function openSettings() { loadSettings(); document.getElementById('settingsModal').classList.add('open'); }
-function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
-function saveSettings() {
-  const s = {
-    cobaltUrl: document.getElementById('setCobaltUrl').value.trim() || 'https://api.cobalt.tools/',
-    proxyUrl: document.getElementById('setProxyUrl').value.trim() || 'https://corsproxy.io/?',
-    defaultQuality: document.getElementById('setDefaultQuality').value
-  };
-  localStorage.setItem('vg_settings', JSON.stringify(s));
-  currentQuality = s.defaultQuality;
-  document.querySelectorAll('.q-btn').forEach(b => b.classList.toggle('active', b.dataset.q === currentQuality));
+
+// ── Settings ──
+function openSettings() {
+  $('setGw').value = gateway;
+  $('setSecret').value = secret;
+  $('settingsOverlay').classList.add('open');
+}
+function closeSettings() { $('settingsOverlay').classList.remove('open'); }
+function saveSettingsModal() {
+  const gw = $('setGw').value.trim().replace(/\/+$/, '');
+  const s = $('setSecret').value.trim();
+  if (!gw || !s) { toast('Remplir les deux champs', 'w'); return; }
+  localStorage.setItem('vg_gw', gw); localStorage.setItem('vg_secret', s);
+  gateway = gw; secret = s;
   closeSettings();
-  toast('Paramètres enregistrés', 'success');
+  toast('Parametres sauvegardes', 's');
 }
 
-// === Toast ===
-function toast(msg, type = 'info') {
-  const c = document.getElementById('toast-container');
-  const el = document.createElement('div');
-  el.className = `toast toast-${type}`;
-  el.textContent = msg;
-  el.onclick = () => { el.classList.add('hide'); setTimeout(() => el.remove(), 300); };
-  c.appendChild(el);
-  setTimeout(() => { if (el.parentNode) { el.classList.add('hide'); setTimeout(() => el.remove(), 300); } }, 4000);
+// ── Navigation ──
+function buildProxyUrl(targetUrl) {
+  return `${gateway}/proxy?s=${encodeURIComponent(secret)}&url=${encodeURIComponent(targetUrl)}`;
+}
+function buildRawUrl(targetUrl) {
+  return `${gateway}/proxy?s=${encodeURIComponent(secret)}&raw=1&url=${encodeURIComponent(targetUrl)}`;
 }
 
-// === Platform detection ===
-const PLATFORMS = [
-  { id:'youtube', name:'YouTube', re:/(?:youtube\.com|youtu\.be|youtube-nocookie\.com)/i },
-  { id:'twitter', name:'Twitter / X', re:/(?:twitter\.com|x\.com|t\.co)/i },
-  { id:'tiktok', name:'TikTok', re:/(?:tiktok\.com|vm\.tiktok\.com)/i },
-  { id:'instagram', name:'Instagram', re:/instagram\.com/i },
-  { id:'reddit', name:'Reddit', re:/(?:reddit\.com|redd\.it)/i },
-  { id:'facebook', name:'Facebook', re:/(?:facebook\.com|fb\.watch|fb\.com)/i },
-  { id:'vimeo', name:'Vimeo', re:/vimeo\.com/i },
-  { id:'dailymotion', name:'Dailymotion', re:/(?:dailymotion\.com|dai\.ly)/i },
-  { id:'twitch', name:'Twitch', re:/twitch\.tv/i },
-  { id:'bilibili', name:'Bilibili', re:/bilibili\.com/i },
-  { id:'soundcloud', name:'SoundCloud', re:/soundcloud\.com/i },
-  { id:'pinterest', name:'Pinterest', re:/pinterest\./i },
-];
-const DIRECT_EXT = /\.(mp4|webm|ogg|mov|avi|mkv|m3u8|flv)(\?.*)?$/i;
+function navigate(url) {
+  url = url || $('urlInput').value.trim();
+  if (!url) return;
+  if (!url.startsWith('http')) url = 'https://' + url;
+  try { new URL(url); } catch { toast('URL invalide', 'w'); return; }
+  if (!gateway || !secret) { $('setupScreen').style.display = 'grid'; return; }
 
-function detectPlatform(url) {
-  if (!url) return null;
-  if (DIRECT_EXT.test(url)) return { id: 'direct', name: 'URL directe' };
-  for (const p of PLATFORMS) { if (p.re.test(url)) return p; }
-  return null;
+  // Clear detected videos for new page
+  detectedVideos = [];
+  updateBadge();
+
+  // Update nav history
+  navHistory = navHistory.slice(0, navIndex + 1);
+  navHistory.push(url);
+  navIndex = navHistory.length - 1;
+
+  $('urlInput').value = url;
+  loadInIframe(url);
 }
 
-function showBadge(platform) {
-  const w = document.getElementById('badgeWrap');
-  if (!platform) { w.innerHTML = ''; return; }
-  w.innerHTML = `<span class="platform-badge badge-${platform.id}">${platform.name}</span>`;
-}
+function loadInIframe(url) {
+  const iframe = $('browserIframe');
+  const loading = $('browserLoading');
+  const empty = $('emptyState');
 
-// === Input ===
-const urlInput = document.getElementById('urlInput');
-urlInput.addEventListener('input', () => showBadge(detectPlatform(urlInput.value.trim())));
-urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') analyze(); });
+  empty.style.display = 'none';
+  iframe.style.display = 'block';
+  loading.classList.add('active');
 
-async function pasteUrl() {
-  try {
-    const text = await navigator.clipboard.readText();
-    urlInput.value = text;
-    urlInput.dispatchEvent(new Event('input'));
-    toast('URL collée', 'info');
-  } catch { toast('Impossible de lire le presse-papiers', 'warning'); }
-}
-function clearInput() { urlInput.value = ''; showBadge(null); document.getElementById('resultArea').innerHTML = ''; destroyHls(); }
+  const proxyUrl = buildProxyUrl(url);
+  iframe.src = proxyUrl;
 
-// === Quality & Mode ===
-document.querySelectorAll('.q-btn').forEach(b => {
-  b.addEventListener('click', () => {
-    document.querySelectorAll('.q-btn').forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
-    currentQuality = b.dataset.q;
-  });
-});
-function setMode(m, el) {
-  currentMode = m;
-  document.querySelectorAll('.mode-btn').forEach(x => x.classList.remove('active'));
-  el.classList.add('active');
-}
-
-// === HLS ===
-function destroyHls() { if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; } }
-
-function setupPlayer(url, isAudio) {
-  destroyHls();
-  const area = document.getElementById('resultArea');
-  const isHls = /\.m3u8/i.test(url);
-  const tag = isAudio ? 'audio' : 'video';
-  let html = `<div class="card player-card"><div class="video-wrap">`;
-  html += `<${tag} id="mediaPlayer" controls playsinline crossorigin="anonymous"></${tag}>`;
-  html += `</div><div class="dl-section"><div class="dl-row">`;
-  html += `<button class="btn-dl primary" onclick="downloadMedia()">Telecharger</button>`;
-  html += `</div><div class="progress-wrap" id="progressWrap"><div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div><div class="progress-info"><span id="progressPct">0%</span><span id="progressSpeed">--</span><span id="progressEta">--</span></div></div></div></div>`;
-  area.innerHTML = html;
-
-  const player = document.getElementById('mediaPlayer');
-  if (isHls && Hls.isSupported()) {
-    hlsInstance = new Hls();
-    hlsInstance.loadSource(url);
-    hlsInstance.attachMedia(player);
-    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => player.play().catch(()=>{}));
-  } else {
-    player.src = url;
-    player.play().catch(()=>{});
-  }
-  currentStreamUrl = url;
-}
-
-// === Cobalt API call with CORS cascade ===
-async function callCobalt(url) {
-  const s = getSettings();
-  const body = JSON.stringify({
-    url,
-    videoQuality: currentQuality === 'max' ? '4320' : currentQuality,
-    downloadMode: currentMode,
-    youtubeVideoCodec: 'h264',
-    filenameStyle: 'pretty'
-  });
-  const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
-
-  // Level 1: direct
-  try {
-    const r = await fetch(s.cobaltUrl, { method: 'POST', headers, body });
-    if (r.ok) return await r.json();
-    const err = await r.json().catch(() => null);
-    if (r.status === 429) throw { rateLimit: true };
-    if (err && err.error) throw { cobaltError: err.error.code || err.error };
-    throw new Error('HTTP ' + r.status);
-  } catch (e) {
-    if (e.rateLimit || e.cobaltError) throw e;
-    // Level 2: corsproxy
-    try {
-      const proxyUrl = s.proxyUrl + encodeURIComponent(s.cobaltUrl);
-      const r2 = await fetch(proxyUrl, { method: 'POST', headers, body });
-      if (r2.ok) return await r2.json();
-      const err2 = await r2.json().catch(() => null);
-      if (r2.status === 429) throw { rateLimit: true };
-      if (err2 && err2.error) throw { cobaltError: err2.error.code || err2.error };
-      throw new Error('proxy failed');
-    } catch (e2) {
-      if (e2.rateLimit || e2.cobaltError) throw e2;
-      throw { corsBlocked: true };
-    }
-  }
-}
-
-// === Analyze ===
-async function analyze() {
-  const url = urlInput.value.trim();
-  if (!url) { toast('Veuillez entrer une URL', 'warning'); return; }
-  try { new URL(url); } catch { toast('URL invalide', 'warning'); return; }
-
-  // Rate limit check
-  if (Date.now() < rateLimitEnd) {
-    const sec = Math.ceil((rateLimitEnd - Date.now()) / 1000);
-    toast(`Rate limit actif, attendez ${sec}s`, 'warning');
-    return;
-  }
-
-  const btn = document.getElementById('btnAnalyze');
-  btn.classList.add('loading');
-  btn.disabled = true;
-  const area = document.getElementById('resultArea');
-  area.innerHTML = '';
-  destroyHls();
-
-  const platform = detectPlatform(url);
-
-  try {
-    // Direct URL
-    if (platform && platform.id === 'direct') {
-      const isAudio = /\.(ogg|mp3|wav|flac|aac)(\?.*)?$/i.test(url);
-      const ext = url.match(/\.(\w+)(\?.*)?$/);
-      currentFilename = 'video.' + (ext ? ext[1] : 'mp4');
-      setupPlayer(url, isAudio);
-      addHistory(url, platform.name);
-      toast('Lecture directe', 'success');
-      return;
-    }
-
-    // Cobalt API
-    const data = await callCobalt(url);
-    handleCobaltResponse(data, url, platform);
-
-  } catch (e) {
-    if (e.rateLimit) {
-      rateLimitEnd = Date.now() + 30000;
-      showRateLimit(area);
-    } else if (e.cobaltError) {
-      const msg = translateCobaltError(e.cobaltError);
-      toast(msg, 'error');
-    } else if (e.corsBlocked) {
-      showCorsHelp(area);
-    } else {
-      toast('Erreur: ' + (e.message || 'inconnue'), 'error');
-    }
-  } finally {
-    btn.classList.remove('loading');
-    btn.disabled = false;
-  }
-}
-
-function handleCobaltResponse(data, url, platform) {
-  const status = data.status;
-  if (status === 'error') {
-    toast(translateCobaltError(data.error?.code || data.error || 'Erreur inconnue'), 'error');
-    return;
-  }
-  if (status === 'tunnel' || status === 'redirect' || status === 'stream') {
-    const streamUrl = data.url;
-    currentFilename = data.filename || 'video.mp4';
-    const isAudio = currentMode === 'audio' || /\.(mp3|ogg|wav|opus|m4a)$/i.test(currentFilename);
-    setupPlayer(streamUrl, isAudio);
-    addHistory(url, platform ? platform.name : 'Inconnu');
-    toast('Vidéo prête', 'success');
-    return;
-  }
-  if (status === 'picker') {
-    showPicker(data.picker || data.audio ? [].concat(data.picker || [], data.audio ? [{ url: data.audio, type: 'audio' }] : []) : [], url, platform);
-    return;
-  }
-  // Fallback: if there is a url field
-  if (data.url) {
-    currentFilename = data.filename || 'video.mp4';
-    setupPlayer(data.url, currentMode === 'audio');
-    addHistory(url, platform ? platform.name : 'Inconnu');
-    toast('Vidéo prête', 'success');
-    return;
-  }
-  toast('Réponse inattendue du serveur', 'error');
-}
-
-function showPicker(items, origUrl, platform) {
-  const area = document.getElementById('resultArea');
-  let html = '<div class="card"><h3 style="margin-bottom:12px;font-size:.95rem;">Choisissez un média</h3><div class="picker-grid">';
-  items.forEach((item, i) => {
-    const thumb = item.thumb || '';
-    const label = item.type || (item.url && item.url.includes('audio') ? 'Audio' : `Option ${i+1}`);
-    html += `<div class="picker-item" onclick="pickItem('${escHtml(item.url)}','${escHtml(origUrl)}','${platform?platform.name:''}')">`;
-    if (thumb) html += `<img src="${escHtml(thumb)}" alt="" loading="lazy">`;
-    html += `<div class="pi-info">${escHtml(label)}</div></div>`;
-  });
-  html += '</div></div>';
-  area.innerHTML = html;
-}
-
-function pickItem(streamUrl, origUrl, platformName) {
-  currentFilename = 'video.mp4';
-  const isAudio = currentMode === 'audio' || /audio/i.test(streamUrl);
-  setupPlayer(streamUrl, isAudio);
-  addHistory(origUrl, platformName);
-  toast('Média sélectionné', 'success');
-}
-
-function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;'); }
-
-// === Rate limit countdown ===
-function showRateLimit(area) {
-  area.innerHTML = `<div class="card"><div class="rate-limit-msg">Limite de requêtes atteinte. Veuillez patienter.<div class="countdown" id="rlCountdown">30s</div></div></div>`;
-  const el = document.getElementById('rlCountdown');
-  const iv = setInterval(() => {
-    const sec = Math.ceil((rateLimitEnd - Date.now()) / 1000);
-    if (sec <= 0) { clearInterval(iv); el.textContent = 'Prêt !'; toast('Vous pouvez réessayer', 'info'); return; }
-    el.textContent = sec + 's';
-  }, 1000);
-}
-
-// === CORS help ===
-function showCorsHelp(area) {
-  area.innerHTML = `<div class="cors-help">
-    <strong>Accès bloqué par CORS</strong><br><br>
-    Le serveur Cobalt n'autorise pas les requêtes depuis un navigateur. Solutions :<br><br>
-    1. Installez l'extension <a href="https://chromewebstore.google.com/detail/cors-unblock/lfhmikememgdcahcdlaciloancbhjino" target="_blank">CORS Unblock</a> pour Chrome<br>
-    2. Utilisez directement le site <a href="https://cobalt.tools" target="_blank">cobalt.tools</a><br>
-    3. Modifiez l'URL Cobalt API dans les paramètres pour pointer vers une instance auto-hébergée<br>
-    4. Lancez Chrome avec <code style="background:rgba(255,255,255,.1);padding:2px 6px;border-radius:4px">--disable-web-security</code> (dev uniquement)
-  </div>`;
-  toast('CORS bloqué — voir les suggestions ci-dessous', 'warning');
-}
-
-// === Translate cobalt errors ===
-function translateCobaltError(code) {
-  const map = {
-    'error.api.link.invalid': 'URL invalide ou non supportée',
-    'error.api.rate_exceeded': 'Trop de requêtes, réessayez plus tard',
-    'error.api.link.unsupported': 'Cette plateforme n\'est pas supportée',
-    'error.api.fetch.fail': 'Impossible de récupérer la vidéo (privée ou indisponible)',
-    'error.api.fetch.rate': 'Rate limit de la plateforme atteint',
-    'error.api.content.video.unavailable': 'Vidéo indisponible ou privée',
-    'error.api.content.video.live': 'Les lives en cours ne sont pas supportés',
-    'error.api.content.video.age': 'Vidéo avec restriction d\'âge, connexion requise',
-    'error.api.content.post.unavailable': 'Publication indisponible ou supprimée',
-    'error.api.youtube.decipher': 'Impossible de déchiffrer la vidéo YouTube',
-    'error.api.youtube.login': 'Cette vidéo nécessite une connexion YouTube',
+  iframe.onload = () => {
+    loading.classList.remove('active');
   };
-  if (typeof code === 'string' && map[code]) return map[code];
-  if (typeof code === 'string') return code.replace(/^error\.api\./, '').replace(/\./g, ' ');
-  return 'Erreur du serveur';
+  // Timeout fallback
+  setTimeout(() => loading.classList.remove('active'), 12000);
 }
 
-// === Download with progress ===
-async function downloadMedia() {
-  if (!currentStreamUrl) { toast('Aucun média à télécharger', 'warning'); return; }
-  const wrap = document.getElementById('progressWrap');
-  const fill = document.getElementById('progressFill');
-  const pct = document.getElementById('progressPct');
-  const speed = document.getElementById('progressSpeed');
-  const eta = document.getElementById('progressEta');
-  wrap.classList.add('active');
-  fill.style.width = '0%';
+function navBack() {
+  if (navIndex > 0) {
+    navIndex--;
+    const url = navHistory[navIndex];
+    $('urlInput').value = url;
+    detectedVideos = [];
+    updateBadge();
+    loadInIframe(url);
+  }
+}
+function navForward() {
+  if (navIndex < navHistory.length - 1) {
+    navIndex++;
+    const url = navHistory[navIndex];
+    $('urlInput').value = url;
+    detectedVideos = [];
+    updateBadge();
+    loadInIframe(url);
+  }
+}
+function navRefresh() {
+  if (navIndex >= 0) {
+    detectedVideos = [];
+    updateBadge();
+    loadInIframe(navHistory[navIndex]);
+  }
+}
+
+// ── Message handler (from sniffer) ──
+function handleMessage(e) {
+  if (!e.data || typeof e.data !== 'object') return;
+
+  // Video detected
+  if (e.data.t === 'vg-video') {
+    const url = resolveVideoUrl(e.data.url);
+    if (!url) return;
+    // Deduplicate
+    if (detectedVideos.some(v => v.url === url)) return;
+    detectedVideos.push({ url, type: e.data.mt || 'unknown', ts: Date.now() });
+    updateBadge();
+    // Subtle toast for first detection
+    if (detectedVideos.length === 1) toast('Video detectee !', 's');
+  }
+
+  // Navigation update
+  if (e.data.t === 'vg-nav' && e.data.url) {
+    // Update URL bar with the actual page URL
+    $('urlInput').value = e.data.url;
+    // Update history
+    if (navHistory[navIndex] !== e.data.url) {
+      navHistory = navHistory.slice(0, navIndex + 1);
+      navHistory.push(e.data.url);
+      navIndex = navHistory.length - 1;
+    }
+  }
+}
+
+function resolveVideoUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  url = url.trim();
+  if (url.startsWith('blob:') || url.startsWith('data:')) return null;
+  // If relative, try to resolve against current page
+  if (!url.startsWith('http')) {
+    try {
+      const base = navHistory[navIndex] || '';
+      if (base) url = new URL(url, base).href;
+      else return null;
+    } catch { return null; }
+  }
+  return url;
+}
+
+// ── Badge ──
+function updateBadge() {
+  const badge = $('videoBadge');
+  const count = detectedVideos.length;
+  $('badgeCount').textContent = count;
+  badge.classList.toggle('show', count > 0);
+}
+
+// ── Bottom Sheet ──
+function openSheet() {
+  $('sheetOverlay').classList.add('open');
+  $('sheet').classList.add('open');
+  renderVideoList();
+}
+function closeSheet() {
+  $('sheetOverlay').classList.remove('open');
+  $('sheet').classList.remove('open');
+}
+
+function renderVideoList() {
+  const body = $('sheetBody');
+  if (!detectedVideos.length) {
+    body.innerHTML = '<div class="vid-empty">Aucune video detectee sur cette page</div>';
+    return;
+  }
+
+  $('sheetTitle').textContent = `${detectedVideos.length} video(s) detectee(s)`;
+
+  body.innerHTML = detectedVideos.map((v, i) => {
+    const ext = getExtension(v.url);
+    const isHls = ext === 'm3u8' || ext === 'mpd';
+    const icon = isHls ? '&#127909;' : '&#9654;&#65039;';
+    const name = getFilename(v.url);
+    const badge = ext.toUpperCase();
+    const source = v.type;
+    return `<div class="vid-item">
+      <div class="vid-icon">${icon}</div>
+      <div class="vid-info">
+        <div class="vid-name" title="${esc(v.url)}">${esc(name)}</div>
+        <div class="vid-meta">
+          <span>${badge}</span>
+          <span>${source}</span>
+        </div>
+      </div>
+      <div class="vid-actions">
+        <button class="vid-btn" onclick="previewVideo(${i})" title="Preview">&#9654;</button>
+        <button class="vid-btn dl-btn" onclick="downloadVideo(${i})" title="Telecharger">&#11015;</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Player ──
+function previewVideo(index) {
+  const v = detectedVideos[index];
+  if (!v) return;
+  closeSheet();
+
+  const overlay = $('playerOverlay');
+  const video = $('playerVideo');
+  const ext = getExtension(v.url);
+
+  $('playerTitle').textContent = getFilename(v.url);
+  currentDlUrl = v.url;
+
+  // Destroy previous HLS
+  if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+
+  if ((ext === 'm3u8') && Hls.isSupported()) {
+    hlsInstance = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60 });
+    hlsInstance.loadSource(buildRawUrl(v.url));
+    hlsInstance.attachMedia(video);
+    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
+    hlsInstance.on(Hls.Events.ERROR, (_, data) => {
+      if (data.fatal) toast('Erreur HLS: ' + data.type, 'e');
+    });
+  } else {
+    // Direct URL — proxy via raw for CORS
+    video.src = buildRawUrl(v.url);
+    video.play().catch(()=>{});
+  }
+
+  overlay.classList.add('open');
+}
+
+function closePlayer() {
+  const video = $('playerVideo');
+  video.pause();
+  video.removeAttribute('src');
+  video.load();
+  if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+  $('playerOverlay').classList.remove('open');
+  $('dlProgress').classList.remove('active');
+  currentDlUrl = null;
+}
+
+// ── Download ──
+function downloadVideo(index) {
+  const v = detectedVideos[index];
+  if (!v) return;
+  currentDlUrl = v.url;
+  startDownload(v.url, getFilename(v.url));
+}
+
+function downloadCurrent() {
+  if (!currentDlUrl) return;
+  startDownload(currentDlUrl, getFilename(currentDlUrl));
+}
+
+async function startDownload(url, filename) {
+  const ext = getExtension(url);
+  // For HLS/m3u8, open raw proxy URL in new tab (browser handles it)
+  if (ext === 'm3u8' || ext === 'mpd') {
+    toast('Stream HLS — ouverture directe', 'i');
+    window.open(buildRawUrl(url), '_blank');
+    return;
+  }
+
+  const progress = $('dlProgress');
+  const bar = $('dlBar');
+  const pct = $('dlPct');
+  const speed = $('dlSpeed');
+  const eta = $('dlEta');
+
+  progress.classList.add('active');
+  bar.style.width = '0%';
   pct.textContent = '0%';
   speed.textContent = '--';
   eta.textContent = '--';
 
   try {
-    const resp = await fetch(currentStreamUrl);
+    const rawUrl = buildRawUrl(url);
+    const resp = await fetch(rawUrl);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const contentLength = resp.headers.get('content-length');
-    const total = contentLength ? parseInt(contentLength) : 0;
+
+    const total = parseInt(resp.headers.get('content-length') || '0');
     const reader = resp.body.getReader();
     const chunks = [];
     let received = 0;
-    const startTime = Date.now();
+    const t0 = Date.now();
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(value);
       received += value.length;
-      const elapsed = (Date.now() - startTime) / 1000;
+
+      const elapsed = (Date.now() - t0) / 1000;
       const bps = received / elapsed;
 
       if (total) {
-        const p = Math.min(100, Math.round((received / total) * 100));
-        fill.style.width = p + '%';
+        const p = Math.min(100, Math.round(received / total * 100));
+        bar.style.width = p + '%';
         pct.textContent = p + '%';
-        const remaining = (total - received) / bps;
-        eta.textContent = formatTime(remaining);
+        eta.textContent = fmtTime((total - received) / bps);
       } else {
-        pct.textContent = formatSize(received);
-        eta.textContent = '--';
+        pct.textContent = fmtSize(received);
       }
-      speed.textContent = formatSize(bps) + '/s';
+      speed.textContent = fmtSize(bps) + '/s';
     }
 
-    fill.style.width = '100%';
+    bar.style.width = '100%';
     pct.textContent = '100%';
-    eta.textContent = 'Terminé';
+    eta.textContent = 'OK';
 
     const blob = new Blob(chunks);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = currentFilename || 'video.mp4';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    toast('Téléchargement terminé', 'success');
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    toast('Telechargement termine !', 's');
+
+    // Save to history
+    saveToHistory(url, filename, blob.size);
+
   } catch (e) {
     // Fallback: open in new tab
-    toast('Téléchargement blob échoué, ouverture directe...', 'warning');
-    const a = document.createElement('a');
-    a.href = currentStreamUrl;
-    a.download = currentFilename || 'video.mp4';
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    toast('Fallback: ouverture directe', 'w');
+    window.open(buildRawUrl(url), '_blank');
   } finally {
-    setTimeout(() => wrap.classList.remove('active'), 3000);
+    setTimeout(() => progress.classList.remove('active'), 3000);
   }
 }
 
-function formatSize(bytes) {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
-  return (bytes / 1073741824).toFixed(2) + ' GB';
-}
-function formatTime(sec) {
-  if (!isFinite(sec) || sec < 0) return '--';
-  if (sec < 60) return Math.ceil(sec) + 's';
-  return Math.floor(sec / 60) + 'm ' + Math.ceil(sec % 60) + 's';
+// ── History ──
+function saveToHistory(url, filename, size) {
+  const h = JSON.parse(localStorage.getItem('vg_hist') || '[]');
+  h.unshift({ url, filename, size, date: new Date().toISOString() });
+  localStorage.setItem('vg_hist', JSON.stringify(h.slice(0, 50)));
 }
 
-// === History ===
-function getHistory() { try { return JSON.parse(localStorage.getItem('vg_history') || '[]'); } catch { return []; } }
-function saveHistory(h) { localStorage.setItem('vg_history', JSON.stringify(h.slice(0, 50))); }
-function addHistory(url, platform) {
-  const h = getHistory();
-  h.unshift({ url, platform, date: new Date().toISOString() });
-  saveHistory(h);
-}
-function toggleHistory() {
-  const panel = document.getElementById('histPanel');
-  const overlay = document.getElementById('histOverlay');
-  const isOpen = panel.classList.toggle('open');
-  overlay.classList.toggle('open', isOpen);
-  if (isOpen) renderHistory();
-}
-function renderHistory() {
-  const list = document.getElementById('histList');
-  const h = getHistory();
-  if (!h.length) { list.innerHTML = '<div class="hp-empty">Aucun historique</div>'; return; }
-  list.innerHTML = h.map(item => {
-    const d = new Date(item.date);
-    const dateStr = d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    return `<div class="hp-item" onclick="loadFromHistory('${escHtml(item.url)}')">
-      <div class="hp-url">${escHtml(item.url)}</div>
-      <div class="hp-meta"><span>${escHtml(item.platform)}</span><span>${dateStr}</span></div>
-    </div>`;
-  }).join('');
-}
-function loadFromHistory(url) {
-  urlInput.value = url;
-  urlInput.dispatchEvent(new Event('input'));
-  toggleHistory();
-  analyze();
-}
-function clearHistory() {
-  localStorage.removeItem('vg_history');
-  renderHistory();
-  toast('Historique effacé', 'info');
+// ── Toast ──
+function toast(msg, type = 'i') {
+  const c = $('toasts');
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + type;
+  el.textContent = msg;
+  el.onclick = () => { el.classList.add('out'); setTimeout(() => el.remove(), 250); };
+  c.appendChild(el);
+  setTimeout(() => { if (el.parentNode) { el.classList.add('out'); setTimeout(() => el.remove(), 250); } }, 3500);
 }
 
-// === Init ===
-loadSettings();
+// ── Utils ──
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+function getExtension(url) {
+  try {
+    const path = new URL(url).pathname;
+    const m = path.match(/\.(\w+)$/);
+    return m ? m[1].toLowerCase() : 'mp4';
+  } catch { return 'mp4'; }
+}
+
+function getFilename(url) {
+  try {
+    const path = new URL(url).pathname;
+    const parts = path.split('/');
+    const last = parts[parts.length - 1];
+    if (last && last.includes('.')) return decodeURIComponent(last).slice(0, 60);
+    return 'video.' + getExtension(url);
+  } catch { return 'video.mp4'; }
+}
+
+function fmtSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  if (b < 1073741824) return (b/1048576).toFixed(1) + ' MB';
+  return (b/1073741824).toFixed(2) + ' GB';
+}
+
+function fmtTime(s) {
+  if (!isFinite(s) || s < 0) return '--';
+  if (s < 60) return Math.ceil(s) + 's';
+  return Math.floor(s/60) + 'm' + Math.ceil(s%60) + 's';
+}
+
+// ═══ Start ═══
+init();
 </script>
 </body>
 </html>
