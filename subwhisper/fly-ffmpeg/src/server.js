@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.9.0 — FFmpeg discardcorrupt + ignore_err pour segments TS corrompus
+ * Version: 1.10.0 — FFmpeg copy→re-encode fallback pour segments TS corrompus
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -122,7 +122,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.9.0'
+    version: '1.10.0'
   });
 });
 
@@ -1189,59 +1189,76 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
     jobLog(job, `combined.ts = ${(tsSize / 1048576).toFixed(1)} MB`);
     if (tsSize < 1000) throw new Error('Fichier TS vide — echec telechargement');
 
-    // 3. FFmpeg remux
-    jobLog(job, 'FFmpeg remux TS → MP4...');
+    // 3. FFmpeg remux (copy first, re-encode fallback if stuck)
     jobProgress(job, 75);
     const safeName = (title || 'video').replace(/[<>:"/\\|?*]/g, '').substring(0, 100).trim();
     job.safeName = safeName;
     const outMp4 = path.join(tmpDir, 'output.mp4');
 
-    await new Promise((resolve, reject) => {
-      const ffmpeg = spawn('ffmpeg', [
-        '-y', '-fflags', '+genpts+igndts+discardcorrupt',
-        '-err_detect', 'ignore_err',
-        '-i', combinedTs,
-        '-c', 'copy', '-bsf:a', 'aac_adtstoasc',
-        '-max_muxing_queue_size', '4096',
-        '-movflags', '+faststart',
-        outMp4
-      ], { stdio: ['pipe', 'pipe', 'pipe'] });
+    function runFFmpeg(mode) {
+      const label = mode === 'copy' ? 'remux' : 're-encode';
+      jobLog(job, `FFmpeg ${label} TS → MP4...`);
+      const args = ['-y', '-fflags', '+genpts+igndts+discardcorrupt', '-err_detect', 'ignore_err', '-i', combinedTs];
+      if (mode === 'copy') {
+        args.push('-c', 'copy', '-bsf:a', 'aac_adtstoasc');
+      } else {
+        args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '18', '-c:a', 'aac', '-b:a', '192k');
+      }
+      args.push('-max_muxing_queue_size', '4096', '-movflags', '+faststart', outMp4);
 
-      // Kill FFmpeg if stuck for more than 10 minutes
-      let lastProgress = '';
-      let stuckCount = 0;
-      const ffmpegWatchdog = setInterval(() => {
-        const timeMatch = stderrBuf.match(/time=(\d+:\d+:\d+\.\d+)/);
-        const cur = timeMatch ? timeMatch[1] : '';
-        if (cur && cur === lastProgress) { stuckCount++; } else { stuckCount = 0; }
-        lastProgress = cur;
-        if (stuckCount >= 20) { // 20 * 3s = 60s stuck on same timestamp
-          clearInterval(ffmpegWatchdog);
-          jobLog(job, `FFmpeg bloque a ${cur} — kill`);
-          ffmpeg.kill('SIGKILL');
-          reject(new Error(`FFmpeg stuck at ${cur}`));
-        }
-      }, 3000);
+      return new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+        let lastProgress = '';
+        let stuckCount = 0;
+        let stderrBuf = '';
+        const stuckLimit = mode === 'copy' ? 20 : 40; // 60s copy, 120s re-encode
 
-      let stderrBuf = '';
-      ffmpeg.stderr.on('data', chunk => {
-        stderrBuf += chunk.toString();
-        if (stderrBuf.length > 4096) stderrBuf = stderrBuf.slice(-4096);
-        const timeMatch = stderrBuf.match(/time=(\d+:\d+:\d+\.\d+)/);
-        if (timeMatch) jobLog(job, `FFmpeg: ${timeMatch[1]}`);
+        const watchdog = setInterval(() => {
+          const m = stderrBuf.match(/time=(\d+:\d+:\d+\.\d+)/);
+          const cur = m ? m[1] : '';
+          if (cur && cur === lastProgress) { stuckCount++; } else { stuckCount = 0; }
+          lastProgress = cur;
+          if (stuckCount >= stuckLimit) {
+            clearInterval(watchdog);
+            jobLog(job, `FFmpeg ${label} bloque a ${cur} — kill`);
+            ff.kill('SIGKILL');
+            reject(new Error(`FFmpeg stuck at ${cur}`));
+          }
+        }, 3000);
+
+        ff.stderr.on('data', chunk => {
+          stderrBuf += chunk.toString();
+          if (stderrBuf.length > 4096) stderrBuf = stderrBuf.slice(-4096);
+          const m = stderrBuf.match(/time=(\d+:\d+:\d+\.\d+)/);
+          if (m) jobLog(job, `FFmpeg: ${m[1]}`);
+        });
+
+        ff.on('close', code => {
+          clearInterval(watchdog);
+          if (code !== 0) {
+            console.error(`[hls2mp4:${job.id}] FFmpeg ${label} stderr: ${stderrBuf.slice(-500)}`);
+            reject(new Error(`FFmpeg ${label} code ${code}: ${stderrBuf.slice(-200)}`));
+          } else {
+            resolve();
+          }
+        });
+        ff.on('error', e => { clearInterval(watchdog); reject(e); });
       });
+    }
 
-      ffmpeg.on('close', code => {
-        clearInterval(ffmpegWatchdog);
-        if (code !== 0) {
-          console.error(`[hls2mp4:${job.id}] FFmpeg stderr: ${stderrBuf.slice(-500)}`);
-          reject(new Error(`FFmpeg code ${code}: ${stderrBuf.slice(-200)}`));
-        } else {
-          resolve();
-        }
-      });
-      ffmpeg.on('error', e => { clearInterval(ffmpegWatchdog); reject(e); });
-    });
+    // Try copy first, fallback to re-encode if stuck
+    try {
+      await runFFmpeg('copy');
+    } catch (copyErr) {
+      if (copyErr.message.includes('stuck')) {
+        jobLog(job, 'Copy bloque — fallback re-encode...');
+        jobProgress(job, 78);
+        try { fs.unlinkSync(outMp4); } catch (e) {}
+        await runFFmpeg('reencode');
+      } else {
+        throw copyErr;
+      }
+    }
 
     jobProgress(job, 95);
     job.mp4Path = outMp4;
