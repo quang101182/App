@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.20
+ * api-gateway — Cloudflare Worker v1.21
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -541,25 +541,34 @@ function S(){
     }}catch(x){}})}catch(x){}
 }
 
-/* ── 6b. Intercept clicks on links → delegate to parent (single navigation path) ── */
-var SKIP=/^(javascript:|#|mailto:|tel:|data:|blob:)/i;
-document.addEventListener('click',function(e){
+/* ── 6b. Intercept clicks — stopImmediatePropagation blocks site SPA handlers ── */
+var SKIP=/^(javascript:|mailto:|tel:|data:|blob:)/i;
+window.addEventListener('click',function(e){
   var a=e.target.closest('a[href]');if(!a)return;
   var h=a.getAttribute('href');if(!h||SKIP.test(h))return;
+  if(h==='#'||h.startsWith('#')&&h.indexOf('/')< 0)return;
   e.preventDefault();
+  e.stopImmediatePropagation();
+  e.stopPropagation();
   try{var abs=new URL(h,window.__vg_origHref||location.href).href;
-  if(abs.startsWith('http'))parent.postMessage({t:'vg-click',url:abs},'*')}catch(x){}
+  if(abs.startsWith('http')){
+    document.body.style.pointerEvents='none';document.body.style.opacity='0.5';
+    parent.postMessage({t:'vg-click',url:abs},'*')
+  }}catch(x){}
 },true);
-/* Intercept form submissions from dynamic forms */
-document.addEventListener('submit',function(e){
+/* ── 6c. Block SPA navigation via History API ── */
+var _oPush=history.pushState,_oRepl=history.replaceState;
+history.pushState=function(s,t,u){if(u){try{var abs=new URL(u,window.__vg_origHref||location.href).href;
+  parent.postMessage({t:'vg-click',url:abs},'*')}catch(x){}}return};
+history.replaceState=function(s,t,u){if(u){try{var abs=new URL(u,window.__vg_origHref||location.href).href;
+  parent.postMessage({t:'vg-click',url:abs},'*')}catch(x){}}return};
+/* ── 6d. Intercept form submissions ── */
+window.addEventListener('submit',function(e){
   var f=e.target;if(!f||f.tagName!=='FORM')return;
+  e.preventDefault();e.stopImmediatePropagation();
   var act=f.getAttribute('action')||'';
-  if(act.indexOf('/proxy?s=')!==-1)return;
-  if(act&&!act.startsWith('javascript:')){
-    try{var abs=new URL(act,window.__vg_origHref||location.href).href;
-    f.setAttribute('action',PP+encodeURIComponent(abs))}catch(x){}}
-  else if(!act){
-    try{f.setAttribute('action',PP+encodeURIComponent(window.__vg_origHref||location.href))}catch(x){}}
+  try{var abs=new URL(act||window.__vg_origHref||location.href,window.__vg_origHref||location.href).href;
+  parent.postMessage({t:'vg-click',url:abs},'*')}catch(x){}
 },true);
 
 /* ── 7. Report current page URL to parent ── */
