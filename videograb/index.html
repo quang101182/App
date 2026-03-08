@@ -1,4 +1,4 @@
-<!-- VideoGrab v2.6 — Video Browser & Downloader — Mobile-First -->
+<!-- VideoGrab v2.7 — Video Browser & Downloader — Mobile-First -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0a0f">
-<title>VideoGrab v2.6</title>
+<title>VideoGrab v2.7</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -342,7 +342,7 @@ html,body{max-width:100vw;overflow-x:hidden}
   <div class="browser-frame" id="browserFrame">
     <div class="browser-empty" id="emptyState">
       <div>
-        <h2>VideoGrab v2.6</h2>
+        <h2>VideoGrab v2.7</h2>
         <p>Entrez une URL dans la barre pour commencer a naviguer.<br>Les videos seront detectees automatiquement.</p>
       </div>
     </div>
@@ -358,10 +358,10 @@ html,body{max-width:100vw;overflow-x:hidden}
 
 <script>
 // ═══════════════════════════════════════════════════════════════
-// VideoGrab v2.6 — Core Logic
+// VideoGrab v2.7 — Core Logic
 // ═══════════════════════════════════════════════════════════════
 
-const VERSION = '2.6';
+const VERSION = '2.7';
 const $ = id => document.getElementById(id);
 
 // ── State ──
@@ -741,6 +741,9 @@ function updateDlBadge() {
 
 function renderDlItem(dl) {
   let el = document.getElementById('dl-' + dl.id);
+  const logsEl = document.getElementById('dl-logs-' + dl.id);
+  const logsOpen = logsEl ? logsEl.classList.contains('open') : false;
+
   if (!el) {
     el = document.createElement('div');
     el.id = 'dl-' + dl.id;
@@ -750,7 +753,7 @@ function renderDlItem(dl) {
   }
 
   const statusMap = {
-    pending: ['seg','Attente...'], seg: ['seg','Segments...'], ffmpeg: ['ffmpeg','FFmpeg...'],
+    pending: ['seg','Attente...'], queued: ['seg','File...'], seg: ['seg','Segments...'], ffmpeg: ['ffmpeg','FFmpeg...'],
     ready: ['ready','Pret'], downloading: ['downloading','DL...'],
     done: ['done','OK'], error: ['error','Erreur'], cancelled: ['cancelled','Annule'],
   };
@@ -760,13 +763,15 @@ function renderDlItem(dl) {
   if (dl.status === 'ready') {
     actions = `<button class="dl-item-btn-save" onclick="saveDlItem('${dl.id}')">Enregistrer MP4</button>`;
   }
-  if (['seg','ffmpeg','pending','downloading'].includes(dl.status)) {
+  if (['seg','ffmpeg','pending','queued','downloading'].includes(dl.status)) {
     actions += `<button class="dl-item-btn-cancel" onclick="cancelDlItem('${dl.id}')">Annuler</button>`;
   }
   if (['done','error','cancelled'].includes(dl.status)) {
     actions = `<button class="dl-item-btn-remove" onclick="removeDlItem('${dl.id}')">Retirer</button>`;
   }
   actions += `<button class="dl-item-btn-logs" onclick="toggleDlLogs('${dl.id}')">Logs</button>`;
+  actions += `<button class="dl-item-btn-logs" onclick="copyDlLogs('${dl.id}')">Copier</button>`;
+  actions += `<button class="dl-item-btn-logs" onclick="exportDlLogs('${dl.id}')">Export</button>`;
 
   const barCls = ['done','ready'].includes(dl.status) ? 'dl-item-bar complete' : 'dl-item-bar';
   const sizeText = dl.mp4Size ? fmtSize(dl.mp4Size) : (dl.received ? fmtSize(dl.received) : '--');
@@ -779,9 +784,14 @@ function renderDlItem(dl) {
     </div>
     <div class="dl-item-bar-bg"><div class="${barCls}" style="width:${dl.progress}%"></div></div>
     <div class="dl-item-info"><span>${dl.progress}%</span><span>${sizeText}</span><span>${speedText}</span></div>
-    <div class="dl-item-logs" id="dl-logs-${dl.id}">${dl.logs.map(l => `<div class="log-line${l.cls ? ' '+l.cls : ''}">${esc(l.msg)}</div>`).join('')}</div>
+    <div class="dl-item-logs${logsOpen ? ' open' : ''}" id="dl-logs-${dl.id}">${dl.logs.map(l => `<div class="log-line${l.cls ? ' '+l.cls : ''}">${esc(l.msg)}</div>`).join('')}</div>
     <div class="dl-item-actions">${actions}</div>
   `;
+  // Auto-scroll logs if open
+  if (logsOpen) {
+    const newLogsEl = document.getElementById('dl-logs-' + dl.id);
+    if (newLogsEl) newLogsEl.scrollTop = newLogsEl.scrollHeight;
+  }
   updateDlBadge();
 }
 
@@ -797,6 +807,22 @@ function dlLog(dl, msg, cls) {
 function toggleDlLogs(id) {
   const el = document.getElementById('dl-logs-' + id);
   if (el) { el.classList.toggle('open'); if (el.classList.contains('open')) el.scrollTop = el.scrollHeight; }
+}
+
+function copyDlLogs(id) {
+  const dl = dlQueue.find(d => d.id === id);
+  if (!dl) return;
+  const text = dl.logs.map(l => l.msg).join('\n');
+  navigator.clipboard.writeText(text).then(() => toast('Logs copies', 's')).catch(() => toast('Echec copie', 'e'));
+}
+
+function exportDlLogs(id) {
+  const dl = dlQueue.find(d => d.id === id);
+  if (!dl) return;
+  const text = `VideoGrab Log — ${dl.title}\nJob: ${dl.jobId || 'N/A'}\nStatus: ${dl.status}\nDate: ${new Date().toISOString()}\n${'─'.repeat(40)}\n${dl.logs.map(l => l.msg).join('\n')}`;
+  const blob = new Blob([text], { type: 'text/plain' });
+  triggerBlobDownload(blob, `videograb-log-${dl.title.substring(0,30).replace(/\s+/g,'_')}.txt`);
+  toast('Log exporte', 's');
 }
 
 function removeDlItem(id) {
@@ -850,15 +876,15 @@ async function startHlsDownload(m3u8Url, filename) {
       body: JSON.stringify({ m3u8Url, title: safeName, proxyBase }),
     });
     if (!resp.ok) throw new Error(`Serveur: ${await resp.text().catch(() => resp.statusText)}`);
-    const { jobId } = await resp.json();
-    dl.jobId = jobId;
-    dl.status = 'seg';
-    dlLog(dl, `Job: ${jobId}`, 'ok');
+    const respData = await resp.json();
+    dl.jobId = respData.jobId;
+    dl.status = respData.position > 0 ? 'queued' : 'seg';
+    dlLog(dl, `Job: ${respData.jobId}${respData.position > 0 ? ` (file d'attente #${respData.position})` : ''}`, 'ok');
 
     // SSE progress
     await new Promise((resolve, reject) => {
       if (dl.status === 'cancelled') return reject(new Error('cancelled'));
-      const es = new EventSource(`${FLY_URL}/hls2mp4/events/${jobId}?s=${encodeURIComponent(secret)}`);
+      const es = new EventSource(`${FLY_URL}/hls2mp4/events/${dl.jobId}?s=${encodeURIComponent(secret)}`);
       dl.eventSource = es;
 
       es.onmessage = (e) => {
@@ -868,17 +894,19 @@ async function startHlsDownload(m3u8Url, filename) {
           if (evt.type === 'log') {
             dlLog(dl, evt.data);
             if (evt.progress !== undefined) dl.progress = evt.progress;
+            if (dl.status === 'queued' && evt.progress > 0) dl.status = 'seg';
             if (evt.progress > 70 && dl.status === 'seg') dl.status = 'ffmpeg';
             renderDlItem(dl);
           } else if (evt.type === 'progress') {
             dl.progress = evt.data;
+            if (dl.status === 'queued' && evt.data > 0) dl.status = 'seg';
             if (evt.data > 70 && dl.status === 'seg') dl.status = 'ffmpeg';
             renderDlItem(dl);
           } else if (evt.type === 'done') {
             es.close(); dl.eventSource = null;
             if (evt.status === 'done') {
               dl.progress = 100; dl.mp4Size = evt.mp4Size;
-              dl.mp4Url = `${FLY_URL}/hls2mp4/file/${jobId}?s=${encodeURIComponent(secret)}`;
+              dl.mp4Url = `${FLY_URL}/hls2mp4/file/${dl.jobId}?s=${encodeURIComponent(secret)}`;
               dl.status = 'ready';
               dlLog(dl, `MP4 pret: ${fmtSize(evt.mp4Size)}`, 'ok');
               renderDlItem(dl);
@@ -895,8 +923,8 @@ async function startHlsDownload(m3u8Url, filename) {
       es.onerror = () => {};
     });
 
-    // Auto-trigger save
-    await saveDlItem(dl.id);
+    // Auto-download via <a download> — va directement dans le dossier DL du navigateur
+    autoDownloadMp4(dl);
 
   } catch (e) {
     if (dl.status !== 'cancelled' && e.message !== 'cancelled') {
@@ -908,92 +936,33 @@ async function startHlsDownload(m3u8Url, filename) {
   }
 }
 
-async function saveDlItem(id) {
-  const dl = dlQueue.find(d => d.id === id);
-  if (!dl || !dl.mp4Url || dl.status === 'downloading') return;
-
+function autoDownloadMp4(dl) {
+  if (!dl || !dl.mp4Url) return;
   const mp4Name = dl.title + '.mp4';
-  dl.status = 'downloading'; dl.progress = 0; dl.received = 0;
-  dlLog(dl, 'Telechargement MP4...');
+  dl.status = 'downloading';
+  dlLog(dl, `Telechargement auto → dossier Downloads...`);
   renderDlItem(dl);
 
-  try {
-    // Desktop: stream directly to file via showSaveFilePicker (no RAM buffering!)
-    if (window.showSaveFilePicker) {
-      let handle;
-      try {
-        handle = await window.showSaveFilePicker({
-          suggestedName: mp4Name,
-          types: [{ description: 'Video MP4', accept: { 'video/mp4': ['.mp4'] } }],
-        });
-      } catch (e) {
-        if (e.name === 'AbortError') { dl.status = 'ready'; dlLog(dl, 'Annule par utilisateur'); renderDlItem(dl); return; }
-        throw e;
-      }
+  // Le serveur envoie Content-Disposition: attachment — le navigateur telecharge directement
+  const a = document.createElement('a');
+  a.href = dl.mp4Url;
+  a.download = mp4Name;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 
-      const writable = await handle.createWritable();
-      const abortCtrl = new AbortController();
-      dl.abortCtrl = abortCtrl;
+  dl.status = 'done'; dl.progress = 100;
+  dlLog(dl, `Telecharge: ${mp4Name} (${fmtSize(dl.mp4Size)})`, 'ok');
+  renderDlItem(dl);
+  toast(`Telecharge: ${mp4Name}`, 's');
+  saveToHistory(dl.m3u8Url, mp4Name, dl.mp4Size);
+}
 
-      const resp = await fetch(dl.mp4Url, { signal: abortCtrl.signal });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const total = parseInt(resp.headers.get('content-length') || '0') || dl.mp4Size;
-      const reader = resp.body.getReader();
-      const t0 = Date.now();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        await writable.write(value);
-        dl.received += value.length;
-        const elapsed = (Date.now() - t0) / 1000;
-        dl.speed = elapsed > 0 ? dl.received / elapsed : 0;
-        if (total) dl.progress = Math.min(100, Math.round(dl.received / total * 100));
-        renderDlItem(dl);
-      }
-      await writable.close();
-      dl.status = 'done'; dl.progress = 100;
-      dlLog(dl, `Enregistre: ${mp4Name}`, 'ok');
-      renderDlItem(dl);
-      toast(`Enregistre: ${mp4Name}`, 's');
-      saveToHistory(dl.m3u8Url, mp4Name, dl.received);
-      return;
-    }
-
-    // Mobile fallback: download to blob then trigger <a download>
-    const abortCtrl = new AbortController();
-    dl.abortCtrl = abortCtrl;
-    const resp = await fetch(dl.mp4Url, { signal: abortCtrl.signal });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const total = parseInt(resp.headers.get('content-length') || '0') || dl.mp4Size;
-    const reader = resp.body.getReader();
-    const chunks = [];
-    const t0 = Date.now();
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      dl.received += value.length;
-      const elapsed = (Date.now() - t0) / 1000;
-      dl.speed = elapsed > 0 ? dl.received / elapsed : 0;
-      if (total) dl.progress = Math.min(100, Math.round(dl.received / total * 100));
-      renderDlItem(dl);
-    }
-
-    const blob = new Blob(chunks, { type: 'video/mp4' });
-    triggerBlobDownload(blob, mp4Name);
-    dl.status = 'done'; dl.progress = 100;
-    dlLog(dl, `Telecharge: ${mp4Name}`, 'ok');
-    renderDlItem(dl);
-    toast(`Telecharge: ${mp4Name} (${fmtSize(blob.size)})`, 's');
-    saveToHistory(dl.m3u8Url, mp4Name, blob.size);
-
-  } catch (e) {
-    if (e.name === 'AbortError') { dl.status = 'cancelled'; dlLog(dl, 'Annule'); }
-    else { dl.status = 'error'; dlLog(dl, e.message, 'err'); toast('Erreur: ' + e.message, 'e'); }
-    renderDlItem(dl);
-  }
+async function saveDlItem(id) {
+  const dl = dlQueue.find(d => d.id === id);
+  if (!dl || !dl.mp4Url) return;
+  autoDownloadMp4(dl);
 }
 
 // ── Fallback: direct segment download if Fly.io fails ──

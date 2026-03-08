@@ -1022,6 +1022,21 @@ app.get('/webproxy', requireAnySecret, async (req, res) => {
 // ---------------------------------------------------------------------------
 
 const hlsJobs = new Map(); // jobId → { status, logs[], progress, mp4Path, tmpDir, mp4Size, safeName, error }
+const MAX_HLS_CONCURRENT = 2;
+const hlsQueue = []; // pending job processing functions
+
+function hlsActiveCount() {
+  let c = 0;
+  for (const j of hlsJobs.values()) { if (j.status === 'processing') c++; }
+  return c;
+}
+
+function hlsTryNext() {
+  while (hlsQueue.length > 0 && hlsActiveCount() < MAX_HLS_CONCURRENT) {
+    const next = hlsQueue.shift();
+    next();
+  }
+}
 
 // Cleanup old jobs after 10 minutes
 setInterval(() => {
@@ -1063,16 +1078,21 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
   fs.mkdirSync(tmpDir, { recursive: true });
 
   const job = {
-    id: jobId, status: 'processing', logs: [], progress: 0,
+    id: jobId, status: 'queued', logs: [], progress: 0,
     mp4Path: null, mp4Size: 0, tmpDir, safeName: '',
     created: Date.now(), listeners: new Set(),
   };
   hlsJobs.set(jobId, job);
 
-  // Return jobId immediately
-  res.json({ jobId });
+  const active = hlsActiveCount();
+  const queued = hlsQueue.length;
+  res.json({ jobId, position: active >= MAX_HLS_CONCURRENT ? queued + 1 : 0 });
 
-  // Process in background
+  // Process function (called immediately or from queue)
+  const processJob = async () => {
+  job.status = 'processing';
+  jobLog(job, 'Demarrage du traitement...');
+
   const combinedTs = path.join(tmpDir, 'combined.ts');
 
   // Direct fetch first, proxy fallback only if needed
@@ -1218,6 +1238,16 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
     jobLog(job, `ERREUR: ${err.message}`);
     jobDone(job, 'error', err.message);
     // Don't cleanup tmpDir yet — let the cleanup interval handle it
+  }
+  hlsTryNext(); // process next queued job
+  }; // end processJob
+
+  // Queue or start immediately
+  if (hlsActiveCount() < MAX_HLS_CONCURRENT) {
+    processJob();
+  } else {
+    jobLog(job, `File d'attente — position ${hlsQueue.length + 1} (max ${MAX_HLS_CONCURRENT} simultanes)`);
+    hlsQueue.push(processJob);
   }
 });
 
