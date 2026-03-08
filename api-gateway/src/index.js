@@ -445,8 +445,8 @@ async function proxyYoutubeSearch(request, env) {
   let lastError = null;
   for (const apiKey of keys) {
     try {
-      // Search top 5 results
-      const ytUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
+      // Search top 8 results (more candidates for duration filter)
+      const ytUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
       const resp = await fetch(ytUrl);
       if (resp.status === 403) {
         lastError = 'quota exceeded';
@@ -477,6 +477,14 @@ async function proxyYoutubeSearch(request, env) {
               return secs >= 90 && secs <= 300;
             });
             if (valid) { bestId = valid.id; bestTitle = valid.snippet?.title || bestTitle; }
+            else {
+              // No video in 90-300s range — prefer "audio"/"lyric" version (less ads)
+              const audioVid = (vData.items || []).find(v => {
+                const t = (v.snippet?.title || '').toLowerCase();
+                return t.includes('audio') || t.includes('lyric');
+              });
+              if (audioVid) { bestId = audioVid.id; bestTitle = audioVid.snippet?.title || bestTitle; }
+            }
           }
         } catch (_) { /* duration check failed, use first result */ }
       }
