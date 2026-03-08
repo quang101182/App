@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.6 — Discovery Engine</title>
+<title>music·ai v3.7 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -441,7 +441,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.6</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.7</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -610,8 +610,16 @@
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;">YouTube Data API v3</div>
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">Clé API YouTube <span style="color:var(--accent3)">— player in-app</span></label>
           <input type="password" id="cfg-ytkey" class="field" placeholder="AIza..." style="margin-bottom:8px;" autocomplete="off">
-          <p style="font-size:11px;color:var(--muted);margin:0 0 12px;line-height:1.6;">Google Cloud Console → YouTube Data API v3 → Credentials. Quota gratuit : ~100 recherches/jour.</p>
+          <p style="font-size:11px;color:var(--muted);margin:0 0 12px;line-height:1.6;">Google Cloud Console → YouTube Data API v3 → Credentials. Quota : ~100 recherches/jour <b>par clé</b>.</p>
           <button onclick="saveYtKey()" class="btn-ghost" style="width:100%;font-size:13px;">Sauvegarder clé YT</button>
+          <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:12px;color:var(--muted);">Clés supplémentaires (rotation auto)</span>
+              <button onclick="addExtraYtKey()" class="btn-ghost" style="padding:4px 12px;font-size:11px;">+ Ajouter</button>
+            </div>
+            <div id="extra-yt-keys" style="display:flex;flex-direction:column;gap:6px;"></div>
+            <p style="font-size:10px;color:var(--muted);margin:8px 0 0;line-height:1.5;">Ajoutez plusieurs clés pour multiplier le quota. Rotation automatique quand une clé est épuisée. Cache persistant des vidéos déjà trouvées.</p>
+          </div>
         </div>
         <div class="glass" style="padding:18px;margin-bottom:14px;">
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;">Profil musical</div>
@@ -702,11 +710,25 @@ function toggleTheme(){
   const curr=document.documentElement.classList.contains('light')?'light':'dark';
   applyTheme(curr==='light'?'dark':'light');
 }
-const YT_QUOTA_MAX=100;
-let _ytVidCache={};// session cache: ytQuery→videoId (évite double quota)
-function getQuota(){try{const q=JSON.parse(localStorage.getItem(LS_YT_QUOTA));const today=new Date().toISOString().slice(0,10);if(!q||q.date!==today)return{count:0,date:today};return q;}catch{return{count:0,date:new Date().toISOString().slice(0,10)}}}
-function incQuota(){const q=getQuota();q.count++;localStorage.setItem(LS_YT_QUOTA,JSON.stringify(q));updateQuotaDisplay();return q.count;}
-function updateQuotaDisplay(){const q=getQuota();const c=q.count;const el=document.getElementById('yt-quota-display');if(el)el.textContent=c+'/'+YT_QUOTA_MAX;const dot=document.getElementById('adotYT');if(dot)dot.className='adot'+(getYtKey()?(c>=YT_QUOTA_MAX?' err':c>=80?' key':' ok'):' ');}
+const YT_QUOTA_PER_KEY=100;
+// ── Persistent video cache (survit aux reloads) ──
+const LS_VID_CACHE='music_ai_vid_cache';
+let _ytVidCache={};
+function loadVidCache(){try{const r=localStorage.getItem(LS_VID_CACHE);if(r){const p=JSON.parse(r);if(p&&typeof p==='object')_ytVidCache=p;}}catch(_){}}
+function saveVidCache(){try{const keys=Object.keys(_ytVidCache);if(keys.length>500){const trim=keys.slice(-300);const o={};trim.forEach(k=>o[k]=_ytVidCache[k]);_ytVidCache=o;}localStorage.setItem(LS_VID_CACHE,JSON.stringify(_ytVidCache));}catch(_){}}
+loadVidCache();
+// ── Multi-key rotation ──
+const LS_YT_KEYS='music_ai_yt_keys';// JSON array of extra keys
+function getYtKeys(){try{const r=localStorage.getItem(LS_YT_KEYS);return r?JSON.parse(r):[];}catch{return[];}}
+function getAllYtKeys(){const primary=getYtKey();const extras=getYtKeys();const all=primary?[primary,...extras.filter(k=>k!==primary)]:extras;return all.filter(Boolean);}
+function getQuotaForKey(key){try{const q=JSON.parse(localStorage.getItem(LS_YT_QUOTA+'_'+key));const today=new Date().toISOString().slice(0,10);if(!q||q.date!==today)return{count:0,date:today,key};return{...q,key};}catch{return{count:0,date:new Date().toISOString().slice(0,10),key}}}
+function incQuotaForKey(key){const q=getQuotaForKey(key);q.count++;localStorage.setItem(LS_YT_QUOTA+'_'+key,JSON.stringify(q));updateQuotaDisplay();}
+function pickBestKey(){const keys=getAllYtKeys();if(!keys.length)return null;for(const k of keys){const q=getQuotaForKey(k);if(q.count<YT_QUOTA_PER_KEY)return k;}return null;/* all exhausted */}
+function getTotalQuota(){const keys=getAllYtKeys();let used=0,total=0;keys.forEach(k=>{const q=getQuotaForKey(k);used+=q.count;total+=YT_QUOTA_PER_KEY;});return{used,total:total||YT_QUOTA_PER_KEY};}
+// Legacy compat
+function getQuota(){const k=getYtKey();return k?getQuotaForKey(k):{count:0,date:new Date().toISOString().slice(0,10)};}
+function incQuota(){const k=getYtKey();if(k)incQuotaForKey(k);}
+function updateQuotaDisplay(){const{used,total}=getTotalQuota();const el=document.getElementById('yt-quota-display');if(el)el.textContent=used+'/'+total;const dot=document.getElementById('adotYT');if(dot)dot.className='adot'+(getAllYtKeys().length?(used>=total?' err':used>=total*0.8?' key':' ok'):' ');}
 function getProfile(){try{return JSON.parse(localStorage.getItem(LS_PROFILE))}catch(e){return null}}
 function saveProfile(p){localStorage.setItem(LS_PROFILE,JSON.stringify(p))}
 function getConfig(){try{const c=JSON.parse(localStorage.getItem(LS_CONFIG));if(!c)return{provider:'claude',model:'claude-opus-4-6',keys:{claude:'',gemini:'',openai:''}};if('apiKey'in c&&!c.keys){const keys={claude:'',gemini:'',openai:''};keys[c.provider||'claude']=c.apiKey||'';const migrated={provider:c.provider||'claude',model:c.model||'claude-opus-4-6',keys};saveConfig(migrated);return migrated;}if(!c.keys)c.keys={claude:'',gemini:'',openai:''};return c;}catch(e){return{provider:'claude',model:'claude-opus-4-6',keys:{claude:'',gemini:'',openai:''}}}}
@@ -732,33 +754,38 @@ function toast(msg,dur=2400){const el=document.getElementById('toast');el.textCo
 function parseDuration(iso){if(!iso)return 0;const m=iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);if(!m)return 0;return(parseInt(m[1]||0)*3600)+(parseInt(m[2]||0)*60)+parseInt(m[3]||0);}
 const YT_DUR_MIN=90,YT_DUR_MAX=300; // 1m30 → 5min
 async function ytSearch(query){
-  const key=getYtKey();if(!key)return null;
+  if(!getAllYtKeys().length)return null;
   if(_ytVidCache[query])return _ytVidCache[query];// cache hit → 0 quota
-  const q=getQuota();
-  if(q.count>=YT_QUOTA_MAX){toast('🚫 Quota YT épuisé (100/100) — recharge demain',4000);return null;}
+  const key=pickBestKey();
+  if(!key){const{used,total}=getTotalQuota();toast(`🚫 Quota YT épuisé (${used}/${total}) — recharge demain`,4000);return null;}
   try{
     const r=await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${key}`);
     if(!r.ok){
-      if(r.status===403){toast('🚫 Quota YT Google épuisé ou clé invalide — vérifier ⚙️',5000);}
+      if(r.status===403){
+        // Marquer cette clé comme épuisée et retry avec la suivante
+        const q=getQuotaForKey(key);q.count=YT_QUOTA_PER_KEY;localStorage.setItem(LS_YT_QUOTA+'_'+key,JSON.stringify(q));
+        const nextKey=pickBestKey();
+        if(nextKey){toast('🔄 Rotation clé YT…');return ytSearch(query);}
+        toast('🚫 Toutes les clés YT épuisées — recharge demain',5000);
+      }
       return null;
     }
-    incQuota();
+    incQuotaForKey(key);
     const d=await r.json();
     const ids=(d.items||[]).map(x=>x.id?.videoId).filter(Boolean);
     if(!ids.length)return null;
-    // Vérifier durées via videos.list (coût : 1 unité quota)
+    // Vérifier durées via videos.list (même clé, coût 1 unité)
     try{
       const vr=await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${ids.join(',')}&key=${key}`);
       if(vr.ok){
         const vd=await vr.json();
         const valid=(vd.items||[]).find(item=>{const dur=parseDuration(item.contentDetails?.duration);return dur>=YT_DUR_MIN&&dur<=YT_DUR_MAX;});
-        if(valid){_ytVidCache[query]=valid.id;return valid.id;}
-        // Aucun dans la plage → fallback au premier résultat
+        if(valid){_ytVidCache[query]=valid.id;saveVidCache();return valid.id;}
         toast('⚠️ Aucun résultat dans 1m30–5min, fallback',3000);
       }
     }catch(_){console.warn('[YT] Duration check failed');}
     const finalVid=ids[0]||null;
-    if(finalVid)_ytVidCache[query]=finalVid;
+    if(finalVid){_ytVidCache[query]=finalVid;saveVidCache();}
     return finalVid;
   }catch(e){console.warn('[YT] Search error:',e);return null}
 }
@@ -2014,6 +2041,7 @@ function loadSettingsUI(){
   fillModelSelect('cfg-model',cfg.provider||'claude');
   const sel=document.getElementById('cfg-model');if(sel&&cfg.model)[...sel.options].forEach(o=>{o.selected=o.value===cfg.model});
   document.getElementById('cfg-ytkey').value=getYtKey();
+  renderExtraYtKeys();
   const gwSec=document.getElementById('cfg-gw-secret');
   if(gwSec)gwSec.value=getGwSecret();
   const p=getProfile();
@@ -2022,12 +2050,15 @@ function loadSettingsUI(){
     const ta=document.getElementById('cfg-artists');if(ta)ta.value=(p.artists||[]).join('\n');
   }
   const h=getHistory();
-  const _q=getQuota();document.getElementById('stats-display').innerHTML=`Interactions : ${p?.interactions||0}<br>Likes : ${h.filter(x=>x.action==='like').length}<br>Dislikes : ${h.filter(x=>x.action==='dislike').length}<br>Recos : ${h.filter(x=>x.action==='suggest'||x.action==='chat').length}<br>File : ${ST.queue.length} titre(s)<br>Fil de session : ${ST.sessionThread.length} titre(s)<br>API IA : ${(()=>{const _c=getConfig();const _gw=!!getGwSecret();const _dk=!!(_c?.keys?.[_c?.provider]);return _gw?'✅ Gateway':_dk?'✅':'❌ non configurée'})()}<br>API YouTube : ${getYtKey()?'✅':'❌ non configurée'}<br>Quota YT : <span style="color:${_q.count>=100?'#ef4444':_q.count>=80?'#f59e0b':'inherit'}">${_q.count}/${YT_QUOTA_MAX} aujourd\'hui</span>`;
+  const _q=getTotalQuota();const _nk=getAllYtKeys().length;document.getElementById('stats-display').innerHTML=`Interactions : ${p?.interactions||0}<br>Likes : ${h.filter(x=>x.action==='like').length}<br>Dislikes : ${h.filter(x=>x.action==='dislike').length}<br>Recos : ${h.filter(x=>x.action==='suggest'||x.action==='chat').length}<br>File : ${ST.queue.length} titre(s)<br>Fil de session : ${ST.sessionThread.length} titre(s)<br>API IA : ${(()=>{const _c=getConfig();const _gw=!!getGwSecret();const _dk=!!(_c?.keys?.[_c?.provider]);return _gw?'✅ Gateway':_dk?'✅':'❌ non configurée'})()}<br>API YouTube : ${_nk?'✅ '+_nk+' clé(s)':'❌ non configurée'}<br>Quota YT : <span style="color:${_q.used>=_q.total?'#ef4444':_q.used>=_q.total*0.8?'#f59e0b':'inherit'}">${_q.used}/${_q.total} aujourd\'hui</span><br>Cache vidéos : ${Object.keys(_ytVidCache).length} entrées`;
 }
 function saveSettings(){const k=document.getElementById('cfg-apikey').value.trim();const gwOk=!!(getGwUrl()&&getGwSecret());if(!k&&!gwOk){toast('⚠️ Clé API ou Gateway requis');return}const m=document.getElementById('cfg-model').value;const cfg=getConfig();if(!cfg.keys)cfg.keys={claude:'',gemini:'',openai:''};cfg.keys[ST.cfgProvider]=k;cfg.provider=ST.cfgProvider;cfg.model=m;saveConfig(cfg);toast('✅ Config IA sauvegardée');updateApiStatus()}
 function saveGateway(){const s=document.getElementById('cfg-gw-secret').value.trim();if(s)localStorage.setItem(LS_GW_SECRET,s);else localStorage.removeItem(LS_GW_SECRET);toast(s?'✅ Gateway sauvegardé':'⚠️ Gateway effacé');updateApiStatus();}
 function quickSwitchProvider(p){const cfg=getConfig();cfg.provider=p;const defaultModels={claude:'claude-sonnet-4-6',gemini:'gemini-2.0-flash',openai:'gpt-4o-mini'};const curModel=cfg.model||'';const wrongProvider=!curModel.startsWith(p==='claude'?'claude':p==='gemini'?'gemini':'gpt');if(wrongProvider)cfg.model=defaultModels[p];saveConfig(cfg);document.querySelectorAll('.prov-pill').forEach(btn=>btn.classList.toggle('active',btn.dataset.p===p));if(document.getElementById('screen-settings')?.classList.contains('active')){loadSettingsUI();}toast('IA → '+p.charAt(0).toUpperCase()+p.slice(1)+' ('+cfg.model+')');}
-function saveYtKey(){const k=document.getElementById('cfg-ytkey').value.trim();setYtKey(k);toast(k?'✅ Clé YouTube sauvegardée':'⚠️ Clé YT effacée');updateApiStatus()}
+function saveYtKey(){const k=document.getElementById('cfg-ytkey').value.trim();setYtKey(k);toast(k?'✅ Clé YouTube sauvegardée':'⚠️ Clé YT effacée');updateApiStatus();renderExtraYtKeys()}
+function addExtraYtKey(){const k=prompt('Colle ta clé YouTube API supplémentaire :');if(!k||!k.trim())return;const extras=getYtKeys();const v=k.trim();if(getAllYtKeys().includes(v)){toast('⚠️ Clé déjà présente');return}extras.push(v);localStorage.setItem(LS_YT_KEYS,JSON.stringify(extras));toast('✅ Clé ajoutée ('+getAllYtKeys().length+' clés au total)');renderExtraYtKeys();updateApiStatus();updateQuotaDisplay()}
+function removeExtraYtKey(idx){const extras=getYtKeys();extras.splice(idx,1);localStorage.setItem(LS_YT_KEYS,JSON.stringify(extras));toast('🗑 Clé supprimée');renderExtraYtKeys();updateApiStatus();updateQuotaDisplay()}
+function renderExtraYtKeys(){const c=document.getElementById('extra-yt-keys');if(!c)return;const extras=getYtKeys();if(!extras.length){c.innerHTML='<span style="font-size:11px;color:var(--muted);font-style:italic;">Aucune clé supplémentaire</span>';return}c.innerHTML=extras.map((k,i)=>{const q=getQuotaForKey(k);return'<div style="display:flex;align-items:center;gap:8px;"><span style="flex:1;font-size:12px;font-family:monospace;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+k.slice(0,8)+'…'+k.slice(-4)+'</span><span style="font-size:10px;color:'+(q.count>=YT_QUOTA_PER_KEY?'#ef4444':q.count>=80?'#f59e0b':'var(--muted)')+';">'+q.count+'/'+YT_QUOTA_PER_KEY+'</span><button onclick="removeExtraYtKey('+i+')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:2px 6px;">✕</button></div>'}).join('')}
 function saveArtists(){const p=getProfile();if(!p){toast('⚠️ Profil introuvable');return}p.artists=document.getElementById('cfg-artists').value.split('\n').map(x=>x.trim()).filter(Boolean);saveProfile(p);toast('✅ Artistes mis à jour');document.getElementById('profile-summary').innerHTML=`<span style="color:var(--muted);font-size:11px;">Genres</span><br>${(p.genres||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Époques</span><br>${(p.eras&&p.eras.length?p.eras.map(id=>{const e=ERAS.find(x=>x.id===id);return e?e.label:id}).join(', '):'Toutes')}<br><span style="color:var(--muted);font-size:11px;">Contextes</span><br>${(p.contexts||[]).join(', ')||'—'}<br><span style="color:var(--muted);font-size:11px;">Aventure</span><br>${Math.round((p.adventurousness||0)*100)}%`}
 function editProfile(){ST.editProfileMode=true;ST.editProfileMaxStep=4;ST.selGenres=[];ST.selEras=[];ST.selContexts=[];ST.obStep=1;showScreen('onboard');initOnboarding();setTimeout(()=>{const b=document.getElementById('ob-back');if(b)b.style.display='inline-flex';},60);}
 function resetHistory(){if(!confirm('Effacer tout l\'historique d\'écoute ?\nTon profil musical sera conservé.'))return;localStorage.removeItem(LS_HISTORY);ST.sessionThread=[];localStorage.removeItem(LS_THREAD);toast('✅ Historique effacé');loadSettingsUI();}
