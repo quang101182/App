@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.10.5 — Discovery Engine</title>
+<title>music·ai v3.10.6 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -472,7 +472,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.10.5</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.10.6</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -848,23 +848,27 @@ async function ytSearchLocal(query){
     return finalVid;
   }catch(e){console.warn('[YT] Search error:',e);return null}
 }
+const _ytSearchInFlight={};
 async function ytSearch(query){
   // 1. Cache local persistant
   if(_ytVidCache[query])return _ytVidCache[query];
+  // 1b. Dedup: si même query déjà en vol, attendre le résultat
+  if(_ytSearchInFlight[query])return _ytSearchInFlight[query];
   const hasLocal=getAllYtKeys().length>0;
   const hasGw=!!getGwSecret();
   if(!hasLocal&&!hasGw){toast('⚠️ Aucune clé YouTube (locale ou serveur)',3000);return null;}
-  ytBlinkOn();
-  try{
-    // 2. Clés locales d'abord (pas de latence réseau gateway)
-    if(hasLocal){const localKey=pickBestKey();if(localKey){const r=await ytSearchLocal(query);if(r){_ytLastSource='L';return r;}}}
-    // 3. Gateway serveur (fallback ou pas de clé locale)
-    if(hasGw){const r=await ytSearchGateway(query);if(r){_ytLastSource='S';return r;}}
-    // 4. Tout épuisé
-    if(hasLocal){const{used,total}=getTotalQuota();toast(`🚫 Quota YT épuisé (${used}/${total})`,4000);}
-    else toast('🚫 Clés serveur épuisées',4000);
-    return null;
-  }finally{ytBlinkOff();}
+  const p=(async()=>{
+    ytBlinkOn();
+    try{
+      if(hasLocal){const localKey=pickBestKey();if(localKey){const r=await ytSearchLocal(query);if(r){_ytLastSource='L';return r;}}}
+      if(hasGw){const r=await ytSearchGateway(query);if(r){_ytLastSource='S';return r;}}
+      if(hasLocal){const{used,total}=getTotalQuota();toast(`🚫 Quota YT épuisé (${used}/${total})`,4000);}
+      else toast('🚫 Clés serveur épuisées',4000);
+      return null;
+    }finally{ytBlinkOff();delete _ytSearchInFlight[query];}
+  })();
+  _ytSearchInFlight[query]=p;
+  return p;
 }
 window.onYouTubeIframeAPIReady=function(){
   // On cible le DIV — l'API YT crée elle-même l'iframe dans ce div
