@@ -1128,7 +1128,10 @@ mark {
     </div>
 
     <!-- Log -->
-    <div class="log-console" id="log-console"></div>
+    <div style="position:relative">
+      <div class="log-console" id="log-console"></div>
+      <button id="btn-copy-log" onclick="copyLog()" style="display:none;position:absolute;top:8px;right:8px;font-family:var(--mono);font-size:9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;padding:3px 10px;transition:all .2s;z-index:2" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">Copier log</button>
+    </div>
   </div>
 
   <!-- Results Section -->
@@ -1400,14 +1403,35 @@ function formatSize(bytes) {
 // ─────────────────────────────────────────────────────────────────────
 
 function log(msg, level = '') {
-  const console = document.getElementById('log-console');
-  console.classList.add('visible');
+  const logEl = document.getElementById('log-console');
+  logEl.classList.add('visible');
+  const btn = document.getElementById('btn-copy-log');
+  if (btn) btn.style.display = 'inline-block';
   const ts = new Date().toLocaleTimeString('fr-FR');
   const div = document.createElement('div');
   div.className = 'log-entry' + (level ? ' ' + level : '');
   div.textContent = `[${ts}] ${msg}`;
-  console.appendChild(div);
-  console.scrollTop = console.scrollHeight;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function copyLog() {
+  const logEl = document.getElementById('log-console');
+  if (!logEl) return;
+  const entries = logEl.querySelectorAll('.log-entry');
+  const txt = 'VoxSplit v2.3 — Log\n' + '='.repeat(40) + '\n' +
+    Array.from(entries).map(e => e.textContent).join('\n');
+  if (!txt.trim()) { toast('Log vide', 'warn'); return; }
+  navigator.clipboard.writeText(txt).then(() => {
+    toast('Log copié (' + entries.length + ' lignes)');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('Log copié');
+  });
 }
 
 function setProgress(pct, label) {
@@ -1469,8 +1493,11 @@ async function startTranscription() {
   params.set('paragraphs', 'true');
 
   log(`Fichier: ${selectedFile.name} (${formatSize(selectedFile.size)})`, 'info');
+  log(`Type: ${selectedFile.type || 'auto-detect'}`, 'info');
   log(`Modèle: ${document.getElementById('opt-model').value}`, 'info');
-  log(`Diarization: ${params.has('diarize') ? 'OUI' : 'NON'}`, 'info');
+  log(`Langue: ${lang || 'auto-détection'}`, 'info');
+  log(`Diarization: ${params.has('diarize') ? 'OUI' : 'NON'} | Ponctuation: ${params.has('punctuate') ? 'OUI' : 'NON'} | Smart Format: ${params.has('smart_format') ? 'OUI' : 'NON'}`, 'info');
+  log(`Route: ${selectedFile.size >= 95 * 1024 * 1024 ? 'R2 + Fly.io (gros fichier)' : 'Gateway direct'}`, 'info');
   setProgress(5, 'Préparation...');
 
   const startTime = Date.now();
@@ -1515,12 +1542,22 @@ async function startTranscription() {
     if (json.results?.channels?.[0]?.detected_language) {
       log(`Langue détectée: ${json.results.channels[0].detected_language}`, 'info');
     }
+    // Détails Deepgram
+    const ch = json.results?.channels?.[0];
+    if (ch?.alternatives?.[0]) {
+      const alt = ch.alternatives[0];
+      const wordCount = alt.words?.length || 0;
+      const duration = json.metadata?.duration || 0;
+      log(`Mots transcrits: ${wordCount} | Durée audio: ${duration ? (duration / 60).toFixed(1) + ' min' : 'N/A'}`, 'info');
+      if (json.metadata?.models) log(`Modèle Deepgram: ${json.metadata.models[0]}`, 'info');
+    }
 
     setProgress(90, 'Analyse des locuteurs...');
     processResults(json);
 
     setProgress(100, 'Terminé');
     log(`${parsedUtterances.length} segments, ${Object.keys(speakerNames).length} locuteurs identifiés`, 'success');
+    log(`Temps total: ${elapsed}s`, 'success');
 
     renderResults();
     document.getElementById('results-section').classList.add('visible');
@@ -1554,7 +1591,8 @@ async function uploadViaR2(flyUrl, dgParams, contentType, file, startTime) {
 
   // 1. Presign
   setProgress(2, 'Préparation upload R2...');
-  log('Demande presigned URLs...', 'info');
+  log(`Mode multipart: ${isMultipart ? 'OUI (' + Math.ceil(file.size / CHUNK_SIZE) + ' chunks de 100 MB)' : 'NON (upload direct)'}`, 'info');
+  log('Demande presigned URLs au CF Worker...', 'info');
   const presignRes = await fetch(`${CLOUD_WORKER_URL}/upload-presign`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1562,8 +1600,10 @@ async function uploadViaR2(flyUrl, dgParams, contentType, file, startTime) {
   });
   if (!presignRes.ok) throw new Error('Presign failed: ' + presignRes.status);
   const presign = await presignRes.json();
+  log(`Presign OK — R2 key: ${presign.r2Key}`, 'success');
 
   // 2. Upload to R2
+  const uploadStart = Date.now();
   if (!isMultipart) {
     setProgress(5, 'Upload R2...');
     log(`Upload direct vers R2 (${formatSize(file.size)})...`, 'info');
@@ -1573,16 +1613,19 @@ async function uploadViaR2(flyUrl, dgParams, contentType, file, startTime) {
       body: file
     });
     if (!upRes.ok) throw new Error('Upload R2: ' + upRes.status);
-    log('Upload R2 terminé', 'success');
+    const upElapsed = ((Date.now() - uploadStart) / 1000).toFixed(1);
+    log(`Upload R2 terminé en ${upElapsed}s`, 'success');
   } else {
     const totalParts = presign.chunkPresignedUrls.length;
     const parts = [];
+    log(`Début upload multipart: ${totalParts} parties`, 'info');
     for (let i = 0; i < totalParts; i++) {
       const start = i * CHUNK_SIZE;
       const end = Math.min(start + CHUNK_SIZE, file.size);
       const chunk = file.slice(start, end);
       const pct = Math.round(((i + 1) / totalParts) * 60);
       setProgress(5 + pct, `Upload R2: ${i + 1}/${totalParts} (${formatSize(end)})`);
+      const chunkStart = Date.now();
       log(`Upload partie ${i + 1}/${totalParts} (${formatSize(start)}→${formatSize(end)})...`, 'info');
       const partRes = await fetch(presign.chunkPresignedUrls[i].url, {
         method: 'PUT',
@@ -1591,19 +1634,26 @@ async function uploadViaR2(flyUrl, dgParams, contentType, file, startTime) {
       if (!partRes.ok) throw new Error(`Upload part ${i + 1}: ${partRes.status}`);
       const etag = partRes.headers.get('ETag') || '';
       parts.push({ ETag: etag.replace(/"/g, ''), PartNumber: i + 1 });
+      const chunkElapsed = ((Date.now() - chunkStart) / 1000).toFixed(1);
+      const speed = ((end - start) / 1048576 / (chunkElapsed || 0.1)).toFixed(1);
+      log(`Partie ${i + 1} OK (${chunkElapsed}s, ${speed} MB/s)`, 'success');
     }
     // Complete multipart — but don't trigger SubWhisper processing
+    log('Finalisation multipart upload...', 'info');
     const completeRes = await fetch(`${CLOUD_WORKER_URL}/upload-complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ uploadId: presign.uploadId, r2Key: presign.r2Key, jobId: presign.jobId, parts, skipDispatch: true })
     });
     if (!completeRes.ok) throw new Error('Multipart complete: ' + completeRes.status);
-    log('Upload R2 multipart terminé', 'success');
+    const totalUpElapsed = ((Date.now() - uploadStart) / 1000).toFixed(1);
+    const avgSpeed = (file.size / 1048576 / (totalUpElapsed || 0.1)).toFixed(1);
+    log(`Upload R2 complet: ${formatSize(file.size)} en ${totalUpElapsed}s (${avgSpeed} MB/s)`, 'success');
   }
 
   // 3. Get presigned download URL
   setProgress(68, 'Préparation download URL...');
+  log('Génération URL de téléchargement R2...', 'info');
   const dlRes = await fetch(`${CLOUD_WORKER_URL}/presigned-download`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1611,10 +1661,12 @@ async function uploadViaR2(flyUrl, dgParams, contentType, file, startTime) {
   });
   if (!dlRes.ok) throw new Error('Presigned download failed: ' + dlRes.status);
   const { downloadUrl } = await dlRes.json();
+  log('URL de téléchargement obtenue', 'success');
 
   // 4. Call Fly.io /deepgram with source_url — streaming NDJSON progress
   setProgress(70, 'Fly.io traitement en cours...');
-  log('Fly.io: téléchargement + FFmpeg + Deepgram...', 'info');
+  log('Envoi requête Fly.io (source_url mode)...', 'info');
+  log(`Fly.io: ${flyUrl}/deepgram`, 'info');
   const secret = getSecret();
   const flyRes = await fetch(`${flyUrl}/deepgram?source_url=${encodeURIComponent(downloadUrl)}&${dgParams.toString()}`, {
     method: 'POST',
