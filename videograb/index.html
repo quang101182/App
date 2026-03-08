@@ -1,4 +1,4 @@
-<!-- VideoGrab v3.7 — Video Browser & Downloader — Mobile-First -->
+<!-- VideoGrab v3.8 — Video Browser & Downloader — Mobile-First -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -7,7 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0a0f">
-<title>VideoGrab v3.7</title>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="./manifest.json">
+<title>VideoGrab v3.8</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -233,11 +235,25 @@ html,body{max-width:100vw;overflow-x:hidden}
   .dl-item-actions button{padding:5px 8px;font-size:.65rem}
   .dl-fab{width:42px;height:42px;bottom:14px;left:14px}
 }
+
+/* ═══ SW Update Banner ═══ */
+.sw-banner{display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:999;padding:10px 20px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#9b7aff);color:#fff;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(124,106,247,.4);align-items:center;gap:8px;animation:fadeSlideDown .3s ease;white-space:nowrap}
+.sw-banner.visible{display:flex}
+.sw-banner .spin{display:inline-block;animation:spin 2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeSlideDown{from{opacity:0;transform:translateX(-50%) translateY(-20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* ═══ PWA Install Button ═══ */
+.pwa-install{display:none;padding:5px 10px;border-radius:9px;border:1px solid rgba(52,211,153,.3);background:rgba(52,211,153,.08);color:var(--green);font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;align-items:center;gap:4px;white-space:nowrap}
+.pwa-install.show{display:inline-flex}
+.pwa-install:hover{background:rgba(52,211,153,.15);border-color:rgba(52,211,153,.5);transform:translateY(-1px)}
 </style>
 </head>
 <body>
 
 <div id="toasts"></div>
+<!-- SW Update Banner -->
+<div class="sw-banner" id="swBanner" onclick="location.reload()"><span class="spin">&#8635;</span> Nouvelle version disponible — cliquer pour recharger</div>
 
 <!-- ═══ First Run Setup ═══ -->
 <div class="setup-screen" id="setupScreen" style="display:none">
@@ -335,6 +351,7 @@ html,body{max-width:100vw;overflow-x:hidden}
       <input type="url" id="urlInput" placeholder="Entrer une URL..." enterkeyhint="go" autocomplete="off" autocapitalize="off" spellcheck="false">
       <button class="url-go" onclick="navigate()">GO</button>
     </div>
+    <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app">&#8615; Install</button>
     <button class="nav-btn" onclick="openSettings()" title="Parametres">&#9881;</button>
   </div>
 
@@ -342,7 +359,7 @@ html,body{max-width:100vw;overflow-x:hidden}
   <div class="browser-frame" id="browserFrame">
     <div class="browser-empty" id="emptyState">
       <div>
-        <h2>VideoGrab v3.7</h2>
+        <h2>VideoGrab v3.8</h2>
         <p>Entrez une URL dans la barre pour commencer a naviguer.<br>Les videos seront detectees automatiquement.</p>
       </div>
     </div>
@@ -358,11 +375,12 @@ html,body{max-width:100vw;overflow-x:hidden}
 
 <script>
 // ═══════════════════════════════════════════════════════════════
-// VideoGrab v3.7 — Core Logic
+// VideoGrab v3.8 — Core Logic
 // ═══════════════════════════════════════════════════════════════
 
-const VERSION = '3.7';
+const VERSION = '3.8';
 const $ = id => document.getElementById(id);
+let _deferredInstall = null;
 
 // ── State ──
 let gateway = '', secret = '';
@@ -391,6 +409,20 @@ function init() {
 
   // Auto-focus URL bar on load
   setTimeout(() => $('urlInput').focus(), 300);
+
+  // Register Service Worker + update notifications
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data?.type === 'SW_UPDATED') $('swBanner').classList.add('visible');
+    });
+  }
+  // PWA install prompt
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    _deferredInstall = e;
+    $('pwaInstall').classList.add('show');
+  });
 }
 
 // ── Setup ──
@@ -758,6 +790,9 @@ let dlPanelOpen = false;
 function toggleDlPanel() {
   dlPanelOpen = !dlPanelOpen;
   $('dlPanel').classList.toggle('open', dlPanelOpen);
+  // Hide floating buttons when panel is open to avoid overlap
+  $('dlFab').style.visibility = dlPanelOpen ? 'hidden' : 'visible';
+  $('videoBadge').style.visibility = dlPanelOpen ? 'hidden' : 'visible';
 }
 
 function updateDlBadge() {
@@ -1108,6 +1143,15 @@ function fmtTime(s) {
   if (!isFinite(s) || s < 0) return '--';
   if (s < 60) return Math.ceil(s) + 's';
   return Math.floor(s/60) + 'm' + Math.ceil(s%60) + 's';
+}
+
+// ── PWA Install ──
+async function installPWA() {
+  if (!_deferredInstall) return;
+  _deferredInstall.prompt();
+  const r = await _deferredInstall.userChoice;
+  if (r.outcome === 'accepted') { toast('App installee !', 's'); $('pwaInstall').classList.remove('show'); }
+  _deferredInstall = null;
 }
 
 // ═══ Start ═══
