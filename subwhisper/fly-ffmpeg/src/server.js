@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.13.0 — fix disk full: delete TS before faststart, 1 HLS job at a time
+ * Version: 1.14.0 — no faststart (saves disk), delete TS on ffmpeg close, 1 HLS job
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -122,7 +122,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.13.0'
+    version: '1.14.0'
   });
 });
 
@@ -1203,11 +1203,8 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
     job.safeName = safeName;
     const outMp4 = path.join(tmpDir, 'output.mp4');
 
-    // Delete combined.ts AFTER remux but BEFORE faststart to save disk
-    // Instead: remux without faststart, then delete TS, then run faststart pass
-    const outTmp = path.join(tmpDir, 'output_tmp.mp4');
-
-    function runFFmpegPass(mode) {
+    // Remux TS → MP4 (no faststart — saves disk, not needed for direct download)
+    function runFFmpegRemux(mode) {
       const label = mode === 'copy' ? 'remux' : 're-encode';
       jobLog(job, `FFmpeg ${label} TS → MP4...`);
       const args = ['-y',
@@ -1220,13 +1217,7 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
       } else {
         args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '18', '-c:a', 'aac', '-b:a', '192k');
       }
-      args.push('-max_muxing_queue_size', '9999', outTmp); // NO faststart here
-      return runFFmpeg(mode, args);
-    }
-
-    function runFFmpeg(mode, customArgs) {
-      const label = mode === 'copy' ? 'remux' : 're-encode';
-      const args = customArgs;
+      args.push('-max_muxing_queue_size', '9999', outMp4);
 
       return new Promise((resolve, reject) => {
         const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -1257,6 +1248,8 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
 
         ff.on('close', code => {
           clearInterval(watchdog);
+          // Delete combined.ts immediately to free disk
+          try { fs.unlinkSync(combinedTs); } catch (e) {}
           if (code !== 0) {
             console.error(`[hls2mp4:${job.id}] FFmpeg ${label} stderr: ${stderrBuf.slice(-500)}`);
             reject(new Error(`FFmpeg ${label} code ${code}: ${stderrBuf.slice(-200)}`));
@@ -1270,33 +1263,17 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
 
     // Try copy first, fallback to re-encode if stuck
     try {
-      await runFFmpegPass('copy');
+      await runFFmpegRemux('copy');
     } catch (copyErr) {
       if (copyErr.message.includes('stuck')) {
         jobLog(job, 'Copy bloque — fallback re-encode...');
         jobProgress(job, 78);
-        try { fs.unlinkSync(outTmp); } catch (e) {}
-        await runFFmpegPass('reencode');
+        try { fs.unlinkSync(outMp4); } catch (e) {}
+        await runFFmpegRemux('reencode');
       } else {
         throw copyErr;
       }
     }
-
-    // Delete combined.ts IMMEDIATELY to free disk before faststart pass
-    try { fs.unlinkSync(combinedTs); } catch (e) {}
-    jobLog(job, 'TS supprime, faststart...');
-
-    // Faststart pass (moves moov atom — needs to rewrite file)
-    await new Promise((resolve, reject) => {
-      const ff = spawn('ffmpeg', ['-y', '-i', outTmp, '-c', 'copy', '-movflags', '+faststart', outMp4],
-        { stdio: ['pipe', 'pipe', 'pipe'] });
-      ff.on('close', code => {
-        try { fs.unlinkSync(outTmp); } catch (e) {}
-        if (code !== 0) reject(new Error(`faststart code ${code}`));
-        else resolve();
-      });
-      ff.on('error', e => reject(e));
-    });
 
     jobProgress(job, 95);
     job.mp4Path = outMp4;
