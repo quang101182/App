@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.22
+ * api-gateway — Cloudflare Worker v1.23
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -740,12 +740,13 @@ window.__vg_origUrl=o;window.__vg_origHref=o.href;
 if(window.parent===window)return;
 var OH=window.__vg_origHref;
 function orig(){return OH||location.href}
-/* Block History API SPA navigation */
+/* Block History API SPA navigation — only pushState with different path triggers nav */
 var _oP=history.pushState,_oR=history.replaceState;
+var _curPath=(function(){try{return new URL(orig()).pathname}catch(x){return location.pathname}})();
 history.pushState=function(s,t,u){if(!u)return _oP.apply(this,arguments);
-  try{var a=new URL(u,orig()).href;parent.postMessage({t:'vg-click',url:a},'*')}catch(x){}};
-history.replaceState=function(s,t,u){if(!u)return _oR.apply(this,arguments);
-  try{var a=new URL(u,orig()).href;parent.postMessage({t:'vg-click',url:a},'*')}catch(x){}};
+  try{var a=new URL(u,orig());if(a.pathname!==_curPath){parent.postMessage({t:'vg-click',url:a.href},'*');return}
+  }catch(x){}return _oP.apply(this,arguments)};
+history.replaceState=function(s,t,u){return _oR.apply(this,arguments)};
 /* Intercept clicks on links — capture phase on window, first handler registered */
 var SK=/^(javascript:|mailto:|tel:|data:|blob:)/i;
 window.addEventListener('click',function(e){
