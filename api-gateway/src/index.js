@@ -541,14 +541,19 @@ function S(){
     }}catch(x){}})}catch(x){}
 }
 
-/* ── 6b. Intercept clicks on dynamic links ── */
+/* ── 6b. Intercept clicks on dynamic links → delegate to parent ── */
 var SKIP=/^(javascript:|#|mailto:|tel:|data:|blob:)/i;
 document.addEventListener('click',function(e){
   var a=e.target.closest('a[href]');if(!a)return;
   var h=a.getAttribute('href');if(!h||SKIP.test(h))return;
-  if(h.indexOf('/proxy?s=')!==-1)return;/* already proxied */
+  if(h.indexOf('/proxy?s=')!==-1){
+    /* Already proxied — extract real URL and tell parent */
+    try{var pu=new URL(h,location.href).searchParams.get('url');
+    if(pu){e.preventDefault();parent.postMessage({t:'vg-click',url:pu},'*')}}catch(x){}
+    return;
+  }
   try{var abs=new URL(h,window.__vg_origHref||location.href).href;
-  if(abs.startsWith('http')){e.preventDefault();location.href=PP+encodeURIComponent(abs)}}catch(x){}
+  if(abs.startsWith('http')){e.preventDefault();parent.postMessage({t:'vg-click',url:abs},'*')}}catch(x){}
 },true);
 /* Intercept form submissions from dynamic forms */
 document.addEventListener('submit',function(e){
