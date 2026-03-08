@@ -469,7 +469,17 @@ async function proxyYoutubeSearch(request, env) {
           const vResp = await fetch(vUrl);
           if (vResp.ok) {
             const vData = await vResp.json();
-            const valid = (vData.items || []).find(v => {
+            // Sort: prefer audio/lyric/topic, deprioritize music video/MV (fewer ads)
+            const sorted = (vData.items || []).sort((a, b) => {
+              const tA = (a.snippet?.title || '').toLowerCase();
+              const tB = (b.snippet?.title || '').toLowerCase();
+              const scoreA = (tA.includes('audio') || tA.includes('lyric') || tA.includes('topic') ? 2 : 0)
+                           - (tA.includes('music video') || tA.includes('official video') || / mv[\s\]|\)]/i.test(tA) ? 2 : 0);
+              const scoreB = (tB.includes('audio') || tB.includes('lyric') || tB.includes('topic') ? 2 : 0)
+                           - (tB.includes('music video') || tB.includes('official video') || / mv[\s\]|\)]/i.test(tB) ? 2 : 0);
+              return scoreB - scoreA;
+            });
+            const valid = sorted.find(v => {
               const dur = v.contentDetails?.duration || '';
               const m = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
               if (!m) return false;
@@ -477,14 +487,7 @@ async function proxyYoutubeSearch(request, env) {
               return secs >= 90 && secs <= 300;
             });
             if (valid) { bestId = valid.id; bestTitle = valid.snippet?.title || bestTitle; }
-            else {
-              // No video in 90-300s range — prefer "audio"/"lyric" version (less ads)
-              const audioVid = (vData.items || []).find(v => {
-                const t = (v.snippet?.title || '').toLowerCase();
-                return t.includes('audio') || t.includes('lyric');
-              });
-              if (audioVid) { bestId = audioVid.id; bestTitle = audioVid.snippet?.title || bestTitle; }
-            }
+            else if (sorted.length) { bestId = sorted[0].id; bestTitle = sorted[0].snippet?.title || bestTitle; }
           }
         } catch (_) { /* duration check failed, use first result */ }
       }

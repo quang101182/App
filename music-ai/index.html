@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.10.6 — Discovery Engine</title>
+<title>music·ai v3.11 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -472,7 +472,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.10.6</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.11</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -751,9 +751,10 @@ function toggleTheme(){
 const YT_QUOTA_PER_KEY=100;
 // ── Persistent video cache (survit aux reloads) ──
 const LS_VID_CACHE='music_ai_vid_cache';
+const VID_CACHE_VER='v3';
 let _ytVidCache={};
-function loadVidCache(){try{const r=localStorage.getItem(LS_VID_CACHE);if(r){const p=JSON.parse(r);if(p&&typeof p==='object')_ytVidCache=p;}}catch(_){}}
-function saveVidCache(){try{const keys=Object.keys(_ytVidCache);if(keys.length>500){const trim=keys.slice(-300);const o={};trim.forEach(k=>o[k]=_ytVidCache[k]);_ytVidCache=o;}localStorage.setItem(LS_VID_CACHE,JSON.stringify(_ytVidCache));}catch(_){}}
+function loadVidCache(){try{const r=localStorage.getItem(LS_VID_CACHE);if(r){const p=JSON.parse(r);if(p&&typeof p==='object'){if(p._ver!==VID_CACHE_VER){_ytVidCache={_ver:VID_CACHE_VER};saveVidCache();return;}_ytVidCache=p;}}}catch(_){}_ytVidCache._ver=VID_CACHE_VER;}
+function saveVidCache(){try{_ytVidCache._ver=VID_CACHE_VER;const keys=Object.keys(_ytVidCache).filter(k=>k!=='_ver');if(keys.length>500){const trim=keys.slice(-300);const o={_ver:VID_CACHE_VER};trim.forEach(k=>o[k]=_ytVidCache[k]);_ytVidCache=o;}localStorage.setItem(LS_VID_CACHE,JSON.stringify(_ytVidCache));}catch(_){}}
 loadVidCache();
 // ── Multi-key rotation ──
 const LS_YT_KEYS='music_ai_yt_keys';// JSON array of extra keys
@@ -836,11 +837,14 @@ async function ytSearchLocal(query){
     const ids=(d.items||[]).map(x=>x.id?.videoId).filter(Boolean);
     if(!ids.length)return null;
     try{
-      const vr=await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${ids.join(',')}&key=${key}`);
+      const vr=await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=${ids.join(',')}&key=${key}`);
       if(vr.ok){
         const vd=await vr.json();
-        const valid=(vd.items||[]).find(item=>{const dur=parseDuration(item.contentDetails?.duration);return dur>=YT_DUR_MIN&&dur<=YT_DUR_MAX;});
+        // Sort: prefer audio/lyric, deprioritize music video (fewer ads)
+        const sorted=(vd.items||[]).sort((a,b)=>{const tA=(a.snippet?.title||'').toLowerCase(),tB=(b.snippet?.title||'').toLowerCase();const sA=(tA.includes('audio')||tA.includes('lyric')?2:0)-(tA.includes('music video')||tA.includes('official video')?2:0);const sB=(tB.includes('audio')||tB.includes('lyric')?2:0)-(tB.includes('music video')||tB.includes('official video')?2:0);return sB-sA;});
+        const valid=sorted.find(item=>{const dur=parseDuration(item.contentDetails?.duration);return dur>=YT_DUR_MIN&&dur<=YT_DUR_MAX;});
         if(valid){_ytVidCache[query]=valid.id;saveVidCache();return valid.id;}
+        if(sorted.length){const best=sorted[0];_ytVidCache[query]=best.id;saveVidCache();return best.id;}
       }
     }catch(_){}
     const finalVid=ids[0]||null;
