@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.12.0 — analyzeduration/probesize/copytb + batch 60 + copy→re-encode fallback
+ * Version: 1.13.0 — fix disk full: delete TS before faststart, 1 HLS job at a time
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -122,7 +122,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.12.0'
+    version: '1.13.0'
   });
 });
 
@@ -1022,7 +1022,7 @@ app.get('/webproxy', requireAnySecret, async (req, res) => {
 // ---------------------------------------------------------------------------
 
 const hlsJobs = new Map(); // jobId → { status, logs[], progress, mp4Path, tmpDir, mp4Size, safeName, error }
-const MAX_HLS_CONCURRENT = 2;
+const MAX_HLS_CONCURRENT = 1; // 1 at a time to avoid disk full (TS+MP4 can be 1.5GB)
 const hlsQueue = []; // pending job processing functions
 
 function hlsActiveCount() {
@@ -1203,10 +1203,13 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
     job.safeName = safeName;
     const outMp4 = path.join(tmpDir, 'output.mp4');
 
-    function runFFmpeg(mode) {
+    // Delete combined.ts AFTER remux but BEFORE faststart to save disk
+    // Instead: remux without faststart, then delete TS, then run faststart pass
+    const outTmp = path.join(tmpDir, 'output_tmp.mp4');
+
+    function runFFmpegPass(mode) {
       const label = mode === 'copy' ? 'remux' : 're-encode';
       jobLog(job, `FFmpeg ${label} TS → MP4...`);
-      // Input flags BEFORE -i (critical for TS analysis)
       const args = ['-y',
         '-fflags', '+genpts+igndts+discardcorrupt',
         '-analyzeduration', '100000000', '-probesize', '50000000',
@@ -1217,14 +1220,20 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
       } else {
         args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '18', '-c:a', 'aac', '-b:a', '192k');
       }
-      args.push('-max_muxing_queue_size', '9999', '-movflags', '+faststart', outMp4);
+      args.push('-max_muxing_queue_size', '9999', outTmp); // NO faststart here
+      return runFFmpeg(mode, args);
+    }
+
+    function runFFmpeg(mode, customArgs) {
+      const label = mode === 'copy' ? 'remux' : 're-encode';
+      const args = customArgs;
 
       return new Promise((resolve, reject) => {
         const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
         let lastProgress = '';
         let stuckCount = 0;
         let stderrBuf = '';
-        const stuckLimit = mode === 'copy' ? 20 : 40; // 60s copy, 120s re-encode
+        const stuckLimit = mode === 'copy' ? 20 : 40;
 
         const watchdog = setInterval(() => {
           const m = stderrBuf.match(/time=(\d+:\d+:\d+\.\d+)/);
@@ -1261,25 +1270,39 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
 
     // Try copy first, fallback to re-encode if stuck
     try {
-      await runFFmpeg('copy');
+      await runFFmpegPass('copy');
     } catch (copyErr) {
       if (copyErr.message.includes('stuck')) {
         jobLog(job, 'Copy bloque — fallback re-encode...');
         jobProgress(job, 78);
-        try { fs.unlinkSync(outMp4); } catch (e) {}
-        await runFFmpeg('reencode');
+        try { fs.unlinkSync(outTmp); } catch (e) {}
+        await runFFmpegPass('reencode');
       } else {
         throw copyErr;
       }
     }
+
+    // Delete combined.ts IMMEDIATELY to free disk before faststart pass
+    try { fs.unlinkSync(combinedTs); } catch (e) {}
+    jobLog(job, 'TS supprime, faststart...');
+
+    // Faststart pass (moves moov atom — needs to rewrite file)
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', ['-y', '-i', outTmp, '-c', 'copy', '-movflags', '+faststart', outMp4],
+        { stdio: ['pipe', 'pipe', 'pipe'] });
+      ff.on('close', code => {
+        try { fs.unlinkSync(outTmp); } catch (e) {}
+        if (code !== 0) reject(new Error(`faststart code ${code}`));
+        else resolve();
+      });
+      ff.on('error', e => reject(e));
+    });
 
     jobProgress(job, 95);
     job.mp4Path = outMp4;
     job.mp4Size = fs.statSync(outMp4).size;
     jobLog(job, `MP4 pret: ${(job.mp4Size / 1048576).toFixed(1)} MB`);
     jobProgress(job, 100);
-    // Remove combined.ts to save disk space
-    try { fs.unlinkSync(combinedTs); } catch (e) {}
     jobDone(job, 'done');
 
   } catch (err) {
