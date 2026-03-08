@@ -37,7 +37,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.9';
+const VERSION = '1.10';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -417,15 +417,7 @@ async function proxyYoutubeSearch(request, env) {
   const query = (body.q || '').trim();
   if (!query) return jsonResponse({ error: 'missing q parameter' }, 400);
 
-  // 0. Increment daily usage counter (fire-and-forget, all requests)
-  const today = new Date().toISOString().slice(0, 10);
-  const usageKey = `ytusage:${today}`;
-  env.GATEWAY_KV.get(usageKey).then(raw => {
-    const count = parseInt(raw || '0', 10) + 1;
-    env.GATEWAY_KV.put(usageKey, String(count), { expirationTtl: 172800 }).catch(() => {});
-  }).catch(() => {});
-
-  // 1. Check KV cache first
+  // 1. Check KV cache first (before counting — cached = free)
   const cacheKey = `ytcache:${query.toLowerCase().replace(/\s+/g, ' ')}`;
   const cached = await env.GATEWAY_KV.get(cacheKey);
   if (cached) {
@@ -435,21 +427,34 @@ async function proxyYoutubeSearch(request, env) {
     } catch { /* cache corrupted, continue to search */ }
   }
 
+  // 0. Increment daily usage counter (only for real API calls, not cached)
+  const today = new Date().toISOString().slice(0, 10);
+  const usageKey = `ytusage:${today}`;
+  env.GATEWAY_KV.get(usageKey).then(raw => {
+    const count = parseInt(raw || '0', 10) + 1;
+    env.GATEWAY_KV.put(usageKey, String(count), { expirationTtl: 172800 }).catch(() => {});
+  }).catch(() => {});
+
   // 2. Load YOUTUBE_KEYS from KV (comma-separated string)
   const keysRaw = await resolveKey(env, 'YOUTUBE_KEYS');
   if (!keysRaw) return jsonResponse({ error: 'YOUTUBE_KEYS not configured' }, 503);
   const keys = keysRaw.split(',').map(k => k.trim()).filter(Boolean);
   if (!keys.length) return jsonResponse({ error: 'YOUTUBE_KEYS is empty' }, 503);
 
-  // 3. Try each key with rotation on 403/quota errors
+  // 3. Try each key with rotation — shuffle to spread load across projects
+  const shuffled = keys.slice().sort(() => Math.random() - 0.5);
   let lastError = null;
-  for (const apiKey of keys) {
+  let quotaHits = 0;
+  for (const apiKey of shuffled) {
+    // After 3 consecutive 403s, all projects are likely exhausted — stop wasting API calls
+    if (quotaHits >= 3) break;
     try {
       // Search top 8 results (more candidates for duration filter)
       const ytUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
       const resp = await fetch(ytUrl);
       if (resp.status === 403) {
         lastError = 'quota exceeded';
+        quotaHits++;
         continue;
       }
       if (!resp.ok) {
