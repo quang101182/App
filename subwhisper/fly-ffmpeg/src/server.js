@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.10.0 — FFmpeg copy→re-encode fallback pour segments TS corrompus
+ * Version: 1.12.0 — analyzeduration/probesize/copytb + batch 60 + copy→re-encode fallback
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -122,7 +122,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.10.0'
+    version: '1.12.0'
   });
 });
 
@@ -1096,11 +1096,13 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
   const combinedTs = path.join(tmpDir, 'combined.ts');
 
   // Direct fetch first, proxy fallback only if needed
-  async function fetchUrl(url, useProxy) {
+  async function fetchUrl(url, useProxy, signal) {
+    const opts = { headers: { ...CHROME_HEADERS, 'Accept': '*/*' } };
+    if (signal) opts.signal = signal;
     if (useProxy && proxyBase) {
-      return fetch(`${proxyBase}${encodeURIComponent(url)}`, { headers: { ...CHROME_HEADERS, 'Accept': '*/*' } });
+      return fetch(`${proxyBase}${encodeURIComponent(url)}`, opts);
     }
-    return fetch(url, { headers: { ...CHROME_HEADERS, 'Accept': '*/*' } });
+    return fetch(url, opts);
   }
 
   try {
@@ -1153,20 +1155,26 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
     if (!segUrls.length) throw new Error('Aucun segment trouve');
     jobLog(job, `${segUrls.length} segments a telecharger`);
 
-    // 2. Download segments (direct first, proxy fallback — batch of 20 for speed)
+    // 2. Download segments (direct first, proxy fallback — batch of 60 for speed)
     const writeStream = fs.createWriteStream(combinedTs);
     let downloaded = 0;
-    const BATCH = 20;
+    const BATCH = 60;
     let useProxy = false; // start direct, switch to proxy if first batch fails
 
     for (let i = 0; i < segUrls.length; i += BATCH) {
       const batch = segUrls.slice(i, i + BATCH);
       const buffers = await Promise.all(batch.map(async (url) => {
         try {
-          let r = await fetchUrl(url, useProxy);
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 15000); // 15s timeout per segment
+          let r = await fetchUrl(url, useProxy, ctrl.signal);
+          clearTimeout(timer);
           if (!r.ok && proxyBase && !useProxy) {
-            r = await fetchUrl(url, true);
-            if (r.ok) useProxy = true; // switch all subsequent to proxy
+            const ctrl2 = new AbortController();
+            const timer2 = setTimeout(() => ctrl2.abort(), 15000);
+            r = await fetchUrl(url, true, ctrl2.signal);
+            clearTimeout(timer2);
+            if (r.ok) useProxy = true;
           }
           if (!r.ok) return Buffer.alloc(0);
           return Buffer.from(await r.arrayBuffer());
@@ -1178,7 +1186,7 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
       }
       const pct = Math.round(downloaded / segUrls.length * 70); // 0-70% for download
       jobProgress(job, pct);
-      if (downloaded % 30 === 0 || downloaded === segUrls.length) {
+      if (downloaded % 60 === 0 || downloaded === segUrls.length) {
         jobLog(job, `Segments: ${downloaded}/${segUrls.length}`);
       }
     }
@@ -1198,13 +1206,18 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
     function runFFmpeg(mode) {
       const label = mode === 'copy' ? 'remux' : 're-encode';
       jobLog(job, `FFmpeg ${label} TS → MP4...`);
-      const args = ['-y', '-fflags', '+genpts+igndts+discardcorrupt', '-err_detect', 'ignore_err', '-i', combinedTs];
+      // Input flags BEFORE -i (critical for TS analysis)
+      const args = ['-y',
+        '-fflags', '+genpts+igndts+discardcorrupt',
+        '-analyzeduration', '100000000', '-probesize', '50000000',
+        '-err_detect', 'ignore_err',
+        '-i', combinedTs];
       if (mode === 'copy') {
-        args.push('-c', 'copy', '-bsf:a', 'aac_adtstoasc');
+        args.push('-c', 'copy', '-copytb', '1', '-bsf:a', 'aac_adtstoasc');
       } else {
         args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '18', '-c:a', 'aac', '-b:a', '192k');
       }
-      args.push('-max_muxing_queue_size', '4096', '-movflags', '+faststart', outMp4);
+      args.push('-max_muxing_queue_size', '9999', '-movflags', '+faststart', outMp4);
 
       return new Promise((resolve, reject) => {
         const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'pipe', 'pipe'] });
