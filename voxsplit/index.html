@@ -492,7 +492,15 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
       <div class="preset-chip" onclick="applyPreset('meeting')">Réunion</div>
     </div>
 
-    <div style="margin-top:20px">
+    <div style="display:flex;align-items:center;gap:12px;margin-top:16px">
+      <label class="auto-toggle" title="AUTO: optimiser automatiquement après transcription" style="margin-left:0">
+        <input type="checkbox" id="autoToggle" onchange="savePrefs()">
+        <span class="at-track"></span>
+        <span class="at-lbl">AUTO</span>
+      </label>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--muted);opacity:.7">Dedup · Merge · Split · Format</span>
+    </div>
+    <div style="margin-top:12px">
       <button class="btn-primary" id="btn-start" onclick="startTranscription()" disabled><i class="fas fa-play"></i><span>Transcrire</span></button>
     </div>
     </div><!-- /collapsible -->
@@ -565,11 +573,6 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
           <button class="export-btn" onclick="startSecondPass()" title="2e passe correction traduction" style="border-color:rgba(0,212,170,.2);color:var(--accent3);opacity:.8"><i class="fas fa-rotate"></i> 2e passe</button>
         </div>
       </div>
-      <label class="auto-toggle" title="AUTO: optimiser automatiquement après transcription">
-        <input type="checkbox" id="autoToggle" onchange="saveAutoToggle()">
-        <span class="at-track"></span>
-        <span class="at-lbl">AUTO</span>
-      </label>
     </div>
 
     <div class="translate-bar" id="translate-bar">
@@ -924,7 +927,7 @@ async function startTranscription(){
       await startTranslation(true);setProgress(100,'Terminé','done');
     }
     // AUTO optimize si toggle activé
-    if(isAutoOn()&&parsedUtterances.length>0){log('AUTO optimize activé','info');autoOptimize()}
+    if(isAutoOn()&&parsedUtterances.length>0){autoOptimize(false)}
     saveToHistory();
     setTimeout(()=>document.getElementById('results-section').scrollIntoView({behavior:'smooth',block:'start'}),300);
   }catch(err){log(`Erreur: ${err.message}`,'error');toast('Erreur: '+err.message,'error');setProgress(0,'Erreur')}
@@ -1446,11 +1449,12 @@ function mergeBlocks(){
 }
 
 // ─── AUTO OPTIMIZE ───────────────────────────────────────
-function autoOptimize(){
-  if(!parsedUtterances.length){toast('Rien à optimiser','warn');return}
+function autoOptimize(silent){
+  if(!parsedUtterances.length){if(!silent)toast('Rien à optimiser','warn');return}
   const MAX_LINE=42,MAX_CHARS=84,MIN_DUR_MS=500;
   let deduped=0,merged=0,split=0,formatted=0;
   const before=parsedUtterances.length;
+  if(!silent){setProgress(92,'⚡ AUTO — Dedup...','transcription');log('⚡ AUTO optimize...','info')}
 
   // Étape 1: Dedup — blocs consécutifs même speaker + texte identique
   for(let i=parsedUtterances.length-1;i>0;i--){
@@ -1464,7 +1468,10 @@ function autoOptimize(){
     }
   }
 
+  if(deduped&&!silent)log(`  ↳ Dedup: ${deduped} doublon${deduped>1?'s':''} supprimé${deduped>1?'s':''}`,'info');
+
   // Étape 2: Merge micro-blocs (<500ms) avec le suivant si même speaker
+  if(!silent)setProgress(94,'⚡ AUTO — Merge courts...','transcription');
   for(let i=parsedUtterances.length-2;i>=0;i--){
     const u=parsedUtterances[i],next=parsedUtterances[i+1];
     const durMs=(u.end-u.start)*1000;
@@ -1479,7 +1486,10 @@ function autoOptimize(){
     }
   }
 
+  if(merged&&!silent)log(`  ↳ Merge: ${merged} micro-bloc${merged>1?'s':''} fusionné${merged>1?'s':''}`,'info');
+
   // Étape 3: Split blocs trop longs (>84 chars)
+  if(!silent)setProgress(96,'⚡ AUTO — Split longs...','transcription');
   for(let i=parsedUtterances.length-1;i>=0;i--){
     const u=parsedUtterances[i];
     const flat=u.text.replace(/\n/g,' ');
@@ -1510,7 +1520,10 @@ function autoOptimize(){
     }
   }
 
+  if(split&&!silent)log(`  ↳ Split: ${split} bloc${split>1?'s':''} découpé${split>1?'s':''}`,'info');
+
   // Étape 4: Format lignes (42 chars/ligne, max 2 lignes)
+  if(!silent)setProgress(98,'⚡ AUTO — Format lignes...','transcription');
   for(const u of parsedUtterances){
     const orig=u.text;let text=u.text.replace(/\n/g,' ').replace(/\s+/g,' ').trim();
     if(text.length>MAX_LINE){
@@ -1525,19 +1538,21 @@ function autoOptimize(){
     if(text!==orig){u.text=text;formatted++}
   }
 
+  if(formatted&&!silent)log(`  ↳ Format: ${formatted} segment${formatted>1?'s':''} reformaté${formatted>1?'s':''}`,'info');
+
   const after=parsedUtterances.length;
-  renderTranscriptBlocks();saveToHistory();
+  renderTranscriptBlocks();if(!silent)saveToHistory();
   const parts=[];
   if(deduped)parts.push(`${deduped} dedup`);
   if(merged)parts.push(`${merged} merge`);
   if(split)parts.push(`${split} split`);
   if(formatted)parts.push(`${formatted} format`);
   const total=deduped+merged+split+formatted;
+  if(!silent)setProgress(100,'Terminé','done');
   toast(total?`⚡ Optimisé: ${parts.join(', ')} (${before}→${after} seg.)`:'⚡ Déjà optimal — aucune modification');
-  log(`AUTO: ${parts.join(', ')||'aucune modif'} (${before}→${after})`,'success');
+  log(total?`⚡ AUTO terminé: ${parts.join(', ')} (${before}→${after} seg.)`:'⚡ AUTO: déjà optimal',total?'success':'info');
 }
 
-function saveAutoToggle(){const on=document.getElementById('autoToggle').checked;savePrefs()}
 function isAutoOn(){return document.getElementById('autoToggle')?.checked||false}
 
 // ─── FORMAT auto (42 chars, max 2 lignes) ────────────────
