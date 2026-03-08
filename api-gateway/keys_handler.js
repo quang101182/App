@@ -19,6 +19,7 @@ const KNOWN_KEYS = [
   { key: 'WORKER_SECRET',  label: 'Worker Secret', usage: 'Secret auth apps → gateway', noPing: true },
   { key: 'DIAG_FOLDER_ID', label: 'DIAG Folder', usage: 'Google Drive folder ID pour DIAG uploads', isConfig: true },
   { key: 'MCP_DRIVE_URL',  label: 'MCP Drive',   usage: 'URL serveur MCP Drive (Render)', isConfig: true },
+  { key: 'YOUTUBE_KEYS',  label: 'YouTube',     usage: 'Clés YT Data API v3 (CSV, rotation auto)', noPing: true },
 ];
 
 const hPost = (url, body) => this.helpers.httpRequest({
@@ -107,7 +108,8 @@ if (text.startsWith('keyset:')) {
 
       const st     = statuses[key];
       const icon   = !hasKey ? '⚪' : (noPing ? '🔒' : (st?.ok ? '✅' : '❌'));
-      const masked = hasKey ? `••• ${presence.length} chars` : 'aucune clé';
+      let masked = hasKey ? `••• ${presence.length} chars` : 'aucune clé';
+      if (key === 'YOUTUBE_KEYS' && hasKey) { const n = presence.split(',').filter(k => k.trim()).length; masked = `${n} clé${n > 1 ? 's' : ''} configurée${n > 1 ? 's' : ''}`; }
       return `${icon} *${label}* (\`${key}\`) ${masked}`;
     }).join('\n');
 
