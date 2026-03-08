@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.19
+ * api-gateway — Cloudflare Worker v1.20
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -541,19 +541,14 @@ function S(){
     }}catch(x){}})}catch(x){}
 }
 
-/* ── 6b. Intercept clicks on dynamic links → delegate to parent ── */
+/* ── 6b. Intercept clicks on links → delegate to parent (single navigation path) ── */
 var SKIP=/^(javascript:|#|mailto:|tel:|data:|blob:)/i;
 document.addEventListener('click',function(e){
   var a=e.target.closest('a[href]');if(!a)return;
   var h=a.getAttribute('href');if(!h||SKIP.test(h))return;
-  if(h.indexOf('/proxy?s=')!==-1){
-    /* Already proxied — extract real URL and tell parent */
-    try{var pu=new URL(h,location.href).searchParams.get('url');
-    if(pu){e.preventDefault();parent.postMessage({t:'vg-click',url:pu},'*')}}catch(x){}
-    return;
-  }
+  e.preventDefault();
   try{var abs=new URL(h,window.__vg_origHref||location.href).href;
-  if(abs.startsWith('http')){e.preventDefault();parent.postMessage({t:'vg-click',url:abs},'*')}}catch(x){}
+  if(abs.startsWith('http'))parent.postMessage({t:'vg-click',url:abs},'*')}catch(x){}
 },true);
 /* Intercept form submissions from dynamic forms */
 document.addEventListener('submit',function(e){
@@ -721,14 +716,8 @@ async function handleProxy(request, env, ctx, parsedUrl) {
     html = `<base href="${basePath}" target="_self">` + html;
   }
 
-  // Rewrite <a href> and <area href> for navigation within proxy
-  html = html.replace(/(<(?:a|area)\s[^>]*href\s*=\s*["'])([^"']*)(["'])/gi, (m, pre, href, post) => {
-    if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('data:') || href.startsWith('blob:') || href.startsWith('mailto:') || href.startsWith('tel:')) return m;
-    try {
-      const abs = new URL(href, finalUrl).href;
-      return `${pre}${proxyPrefix}${encodeURIComponent(abs)}${post}`;
-    } catch { return m; }
-  });
+  // NOTE: <a href> rewriting REMOVED — dynamic click interceptor (vg-click) handles navigation
+  // Static rewriting caused double navigation (iframe follows rewritten link + parent.navigate via vg-click)
 
   // Rewrite <form action>
   html = html.replace(/(<form\s[^>]*action\s*=\s*["'])([^"']*)(["'])/gi, (m, pre, action, post) => {
