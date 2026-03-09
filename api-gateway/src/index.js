@@ -37,7 +37,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.22';
+const VERSION = '1.23';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -478,24 +478,12 @@ try{localStorage.getItem('_t')}catch(e){
   Object.defineProperty(window,'localStorage',{value:{getItem:function(k){return _s[k]||null},setItem:function(k,v){_s[k]=String(v)},removeItem:function(k){delete _s[k]},clear:function(){_s={}},get length(){return Object.keys(_s).length},key:function(i){return Object.keys(_s)[i]||null}},configurable:true});
 }
 
-/* ── 4b. Block window.open popups/popunders ── */
+/* ── 4b. Sniffer-level window.open — detect video URLs in popups (early-inject already blocks) ── */
 var _wOpen=window.open;
 window.open=function(u){
-  if(!u||typeof u!=='string')return null;
-  try{if(isAd(u))return null;}catch(x){}
-  if(V.test(u)&&!isAd(u))R(u,'popup');
-  try{parent.postMessage({t:'vg-click',url:new URL(u,orig?orig():location.href).href},'*')}catch(x){}
+  if(u&&typeof u==='string'&&V.test(u)&&!isAd(u))R(u,'popup');
   return null;
 };
-
-/* ── 4c. Block setTimeout/setInterval redirects ── */
-var _loc=Object.getOwnPropertyDescriptor(window,'location');
-try{
-  var _assign=window.location.assign;
-  window.location.assign=function(u){if(u&&typeof u==='string'){try{parent.postMessage({t:'vg-click',url:new URL(u,location.href).href},'*')}catch(x){}}};
-  var _replace=window.location.replace;
-  window.location.replace=function(u){if(u&&typeof u==='string'){try{parent.postMessage({t:'vg-click',url:new URL(u,location.href).href},'*')}catch(x){}}};
-}catch(x){}
 
 /* ── 5. Ad domain blocklist ── */
 var ADS=/(\\.|-)(magsrv|tsyndicate|exoclick|trafficjunky|juicyads|popads|adsterra|clickaine|pushame|ad-maven|hilltopads|plugrush|ero-advertising|trafficstars|crakrevenue|largeconfusion|exosrv|syndication|propellerads|revcontent|outbrain|taboola|mgid|adnxs|criteo|pubmatic|rubiconproject|openx|spotx|fyber|unity3d|applovin|vungle|chartboost|inmobi|mintegral|clictune|linkvertise|shrinkme|ouo\.io|bc\.vc|1ink\.cc|lootlinks|sub2get|sub2unlock|freecash|monetag|a-ads|coinzilla|bitmedia|adcash|clickadu|richpush|zeroredirect|evadav|notifadz|mondiad|galaksion|clickstar|onclicka|onclickmax|popcash|popunder|clicknox)\\.|(doubleclick|googlesyndication|googleadservices|moatads|amazon-adsystem|facebook.*ads|histats)\\.com/i;
@@ -802,13 +790,48 @@ try{Object.defineProperty(document,'domain',{value:o.hostname,writable:true,conf
 window.__vg_origUrl=o;window.__vg_origHref=o.href;
 }catch(e){}})();</scrip`+`t>`;
 
-  // Early-inject: click interceptor + History patch — MUST run before site scripts
+  // Early-inject: anti-popup + click interceptor + History patch — MUST run before site scripts
   const earlyIntercept = `<script>(function(){
 'use strict';
 if(window.parent===window)return;
 var OH=window.__vg_origHref;
 function orig(){return OH||location.href}
-/* Block History API SPA navigation — only pushState with different path triggers nav */
+
+/* ══ ANTI-PUB: block window.open BEFORE any ad script runs ══ */
+window.open=function(){return null};
+/* Block location redirects */
+try{
+  var _la=window.location.assign,_lr=window.location.replace;
+  window.location.assign=function(u){if(u&&typeof u==='string'){try{parent.postMessage({t:'vg-click',url:new URL(u,orig()).href},'*')}catch(x){}}};
+  window.location.replace=function(u){if(u&&typeof u==='string'){try{parent.postMessage({t:'vg-click',url:new URL(u,orig()).href},'*')}catch(x){}}};
+}catch(x){}
+/* Block document.write ad injections that redirect */
+try{var _dw=document.write,_dwln=document.writeln;
+  document.write=function(h){if(typeof h==='string'&&/<script/i.test(h)&&/window\\.open|location\\s*=|top\\.location/i.test(h))return;return _dw.apply(this,arguments)};
+  document.writeln=function(h){if(typeof h==='string'&&/<script/i.test(h)&&/window\\.open|location\\s*=|top\\.location/i.test(h))return;return _dwln.apply(this,arguments)};
+}catch(x){}
+/* Block touch/click overlay ads — first invisible click stealer */
+window.addEventListener('touchstart',function(e){
+  var el=e.target;if(!el)return;
+  var s=window.getComputedStyle(el);
+  if(s&&(s.opacity==='0'||s.opacity<'0.1')&&(s.position==='fixed'||s.position==='absolute')&&parseInt(s.zIndex||0)>999){
+    e.preventDefault();e.stopImmediatePropagation();try{el.remove()}catch(x){}
+  }
+},true);
+/* Remove known ad overlay patterns on DOM ready */
+function killOverlays(){
+  document.querySelectorAll('div[style*="z-index"][style*="position"]').forEach(function(d){
+    var s=window.getComputedStyle(d);
+    if(!d.querySelector('video,iframe[src*="player"],iframe[src*="embed"]')&&s.position==='fixed'&&parseInt(s.zIndex||0)>9000&&d.offsetWidth>window.innerWidth*0.5){
+      d.remove();
+    }
+  });
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',killOverlays);
+else killOverlays();
+setInterval(killOverlays,2000);
+
+/* ══ Block History API SPA navigation ══ */
 var _oP=history.pushState,_oR=history.replaceState;
 var _curPath=(function(){try{return new URL(orig()).pathname}catch(x){return location.pathname}})();
 history.pushState=function(s,t,u){if(!u)return _oP.apply(this,arguments);
