@@ -37,7 +37,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.23';
+const VERSION = '1.24';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -46,6 +46,39 @@ const CORS_HEADERS = {
   'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges, Content-Disposition, X-Proxy-Status',
   'Access-Control-Max-Age': '86400',
 };
+
+// ── Ad domain blocklist for network-level blocking (proxy only) ──
+const AD_DOMAINS = new Set([
+  'doubleclick.net','googlesyndication.com','googleadservices.com','adnxs.com','pubmatic.com',
+  'openx.net','criteo.com','rubiconproject.com','casalemedia.com','sizmek.com','flashtalking.com',
+  'adform.net','sovrn.com','bidswitch.net','bidvertiser.com','contextweb.com','conversant.com',
+  'exoclick.com','exosrv.com','propellerads.com','popads.net','popcash.net','popunder.net',
+  'juicyads.com','trafficjunky.net','trafficjunky.com','trafficfactory.biz',
+  'adsterra.com','adsterra.net','hilltopads.com','clickadu.com','clickaine.com',
+  'pushame.com','ad-maven.com','plugrush.com','trafficstars.com','crakrevenue.com',
+  'tsyndicate.com','realsrv.com','onclkds.com','onclickds.com','onclickmax.com','onclickrev.com',
+  'magsrv.com','syndication.com','ero-advertising.com','trafficjunkies.com',
+  'monetag.com','a-ads.com','coinzilla.com','bitmedia.io','adcash.com','richpush.net',
+  'evadav.com','notifadz.com','mondiad.com','galaksion.com','clickstar.me',
+  'clictune.com','linkvertise.com','shrinkme.io','lootlinks.co',
+  'amazon-adsystem.com','moatads.com','quantserve.com','scorecardresearch.com',
+  'histats.com','statcounter.com','hotjar.com','mouseflow.com',
+  'googletagmanager.com','google-analytics.com','facebook.net',
+  'spotx.tv','vungle.com','applovin.com','chartboost.com','inmobi.com','mintegral.com',
+  'taboola.com','outbrain.com','mgid.com','revcontent.com','zergnet.com',
+  'liveadsexchange.com','betteradsexchange.com',
+]);
+function isAdDomain(hostname) {
+  if (!hostname) return false;
+  const h = hostname.toLowerCase();
+  if (AD_DOMAINS.has(h)) return true;
+  // Check parent domains (e.g. sub.exoclick.com → exoclick.com)
+  const parts = h.split('.');
+  for (let i = 1; i < parts.length - 1; i++) {
+    if (AD_DOMAINS.has(parts.slice(i).join('.'))) return true;
+  }
+  return false;
+}
 
 /** All recognised key names stored in KV */
 const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS'];
@@ -607,6 +640,11 @@ async function handleProxy(request, env, ctx, parsedUrl) {
     return jsonResponse({ error: 'only http/https allowed' }, 400);
   }
 
+  // ── Network-level ad domain blocking (returns 204 No Content) ──
+  if (isAdDomain(target.hostname)) {
+    return new Response('', { status: 204, headers: CORS_HEADERS });
+  }
+
   // Rate limit: 120 req/min for proxy (generous for browsing)
   const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
   const rlErr = await checkRateLimit(env, ctx, 'prx', ip, 120);
@@ -797,35 +835,60 @@ if(window.parent===window)return;
 var OH=window.__vg_origHref;
 function orig(){return OH||location.href}
 
-/* ══ ANTI-PUB: block window.open BEFORE any ad script runs ══ */
-window.open=function(){return null};
-/* Block location redirects */
+/* ══ ANTI-PUB (4 couches) — runs BEFORE any site script ══ */
+
+/* 1. Smart popup blocker (AdGuard style) — track real user clicks */
+var _lastUserAct=0;
+var _adRx=/popads|popcash|popunder|clickadu|adsterra|hilltopads|propellerads|exoclick|juicyads|trafficjunky|doubleclick|googlesyndication|googleadservices|onclkds|onclickmax|realsrv|tsyndicate|magsrv|monetag|adcash|richpush|evadav|clictune|linkvertise/i;
+document.addEventListener('click',function(){_lastUserAct=Date.now()},true);
+document.addEventListener('touchend',function(){_lastUserAct=Date.now()},true);
+var _wo=window.open;
+window.open=function(u){
+  if(!u||typeof u!=='string')return null;
+  if(_adRx.test(u))return null;
+  var since=Date.now()-_lastUserAct;
+  if(since>1500)return null;
+  try{parent.postMessage({t:'vg-click',url:new URL(u,orig()).href},'*')}catch(x){}
+  return null;
+};
+
+/* 2. Block location redirects */
 try{
-  var _la=window.location.assign,_lr=window.location.replace;
-  window.location.assign=function(u){if(u&&typeof u==='string'){try{parent.postMessage({t:'vg-click',url:new URL(u,orig()).href},'*')}catch(x){}}};
-  window.location.replace=function(u){if(u&&typeof u==='string'){try{parent.postMessage({t:'vg-click',url:new URL(u,orig()).href},'*')}catch(x){}}};
+  window.location.assign=function(u){if(u&&typeof u==='string'){if(_adRx.test(u))return;try{parent.postMessage({t:'vg-click',url:new URL(u,orig()).href},'*')}catch(x){}}};
+  window.location.replace=function(u){if(u&&typeof u==='string'){if(_adRx.test(u))return;try{parent.postMessage({t:'vg-click',url:new URL(u,orig()).href},'*')}catch(x){}}};
 }catch(x){}
-/* Block document.write ad injections that redirect */
+
+/* 3. Block document.write ad script injections */
 try{var _dw=document.write,_dwln=document.writeln;
   document.write=function(h){if(typeof h==='string'&&/<script/i.test(h)&&/window\\.open|location\\s*=|top\\.location/i.test(h))return;return _dw.apply(this,arguments)};
   document.writeln=function(h){if(typeof h==='string'&&/<script/i.test(h)&&/window\\.open|location\\s*=|top\\.location/i.test(h))return;return _dwln.apply(this,arguments)};
 }catch(x){}
-/* Block touch/click overlay ads — first invisible click stealer */
+
+/* 4. Touch/click overlay blocker (mobile anti-clickjack) */
 window.addEventListener('touchstart',function(e){
-  var el=e.target;if(!el)return;
-  var s=window.getComputedStyle(el);
-  if(s&&(s.opacity==='0'||s.opacity<'0.1')&&(s.position==='fixed'||s.position==='absolute')&&parseInt(s.zIndex||0)>999){
-    e.preventDefault();e.stopImmediatePropagation();try{el.remove()}catch(x){}
-  }
+  var el=e.target;if(!el||!el.parentNode)return;
+  try{
+    var s=window.getComputedStyle(el);
+    var op=parseFloat(s.opacity)||1;
+    var zi=parseInt(s.zIndex)||0;
+    if(op<0.15&&(s.position==='fixed'||s.position==='absolute')&&zi>500){
+      e.preventDefault();e.stopImmediatePropagation();el.remove();return;
+    }
+    if(s.position==='fixed'&&zi>9000&&el.offsetWidth>window.innerWidth*0.8&&!el.querySelector('video,iframe[src*="player"],iframe[src*="embed"],.plyr,.video-js')){
+      e.preventDefault();e.stopImmediatePropagation();el.remove();
+    }
+  }catch(x){}
 },true);
-/* Remove known ad overlay patterns on DOM ready */
+
+/* 5. Periodic overlay killer (every 2s) */
 function killOverlays(){
-  document.querySelectorAll('div[style*="z-index"][style*="position"]').forEach(function(d){
+  try{document.querySelectorAll('div,section,aside').forEach(function(d){
     var s=window.getComputedStyle(d);
-    if(!d.querySelector('video,iframe[src*="player"],iframe[src*="embed"]')&&s.position==='fixed'&&parseInt(s.zIndex||0)>9000&&d.offsetWidth>window.innerWidth*0.5){
+    var zi=parseInt(s.zIndex)||0;
+    if(s.position==='fixed'&&zi>9000&&d.offsetWidth>window.innerWidth*0.5&&!d.querySelector('video,iframe[src*="player"],iframe[src*="embed"],.plyr,.video-js,[class*="player"],[id*="player"]')){
       d.remove();
     }
-  });
+  })}catch(x){}
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',killOverlays);
 else killOverlays();
