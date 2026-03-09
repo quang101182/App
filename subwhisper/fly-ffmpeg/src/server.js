@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.16.0 — use /data volume (5GB) for HLS jobs, 2 concurrent jobs
+ * Version: 1.17.0 — fix autostop killing active jobs + idle auto-shutdown 30min
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -66,6 +66,26 @@ let activeJobs = 0;
 const startTime = Date.now();
 
 // ---------------------------------------------------------------------------
+// Auto-shutdown : éteindre la machine après IDLE_SHUTDOWN_MS sans jobs actifs
+// Nécessaire car auto_stop_machines = "off" (empêche Fly.io de tuer les jobs)
+// ---------------------------------------------------------------------------
+const IDLE_SHUTDOWN_MS = 30 * 60 * 1000; // 30 minutes
+let idleTimer = null;
+
+function resetIdleTimer() {
+  if (idleTimer) clearTimeout(idleTimer);
+  if (activeJobs > 0) return; // pas de timer si jobs actifs
+  idleTimer = setTimeout(() => {
+    if (activeJobs === 0) {
+      console.log(`[AUTO-SHUTDOWN] Aucun job depuis ${IDLE_SHUTDOWN_MS / 60000}min — arrêt du serveur.`);
+      process.exit(0); // Fly.io redémarrera la machine à la prochaine requête (auto_start_machines=true)
+    }
+  }, IDLE_SHUTDOWN_MS);
+}
+// Démarrer le timer dès le boot
+resetIdleTimer();
+
+// ---------------------------------------------------------------------------
 // App Express
 // ---------------------------------------------------------------------------
 
@@ -122,7 +142,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.16.0'
+    version: '1.17.0'
   });
 });
 
@@ -144,6 +164,7 @@ app.post('/deepgram', requireAnySecret, async (req, res) => {
     });
   }
   activeJobs++;
+  resetIdleTimer();
 
   const DEEPGRAM_KEY = process.env.DEEPGRAM_KEY || '';
   if (!DEEPGRAM_KEY) {
@@ -356,6 +377,7 @@ app.post('/deepgram', requireAnySecret, async (req, res) => {
     }
   } finally {
     activeJobs--;
+    resetIdleTimer();
     console.log(`[${jobId}] Deepgram job terminé. Jobs actifs: ${activeJobs}`);
     try { fs.unlinkSync(inputPath); } catch (_) {}
     try { fs.unlinkSync(audioPath); } catch (_) {}
@@ -396,6 +418,7 @@ app.post('/extract', requireFlySecret, (req, res) => {
   res.json({ accepted: true, jobId });
 
   activeJobs++;
+  resetIdleTimer();
   const JOB_TIMEOUT_MS = 50 * 60 * 1000; // 50 min max
   const jobTimeout = new Promise((_, reject) =>
     setTimeout(() => reject(new Error('Job timeout 50min dépassé')), JOB_TIMEOUT_MS)
@@ -413,6 +436,7 @@ app.post('/extract', requireFlySecret, (req, res) => {
     })
     .finally(() => {
       activeJobs--;
+      resetIdleTimer();
       console.log(`[${jobId}] Job terminé. Jobs actifs: ${activeJobs}`);
     });
 });
@@ -539,13 +563,16 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, gatewa
           const dataSize = headerAccum.readUInt32LE(40);
           const sampleRate = headerAccum.readUInt32LE(24);
           const numChannels = headerAccum.readUInt16LE(22);
-          console.log(`[${jobId}] Header WAV parsé. Sample rate: ${sampleRate} Hz, Channels: ${numChannels}`);
-          const estimatedChunks = dataSize > 0 ? Math.ceil(dataSize / CHUNK_MAX_BYTES) : '?';
-          const estimatedMin = bytesPerSec > 0 ? (dataSize / bytesPerSec / 60).toFixed(1) : '?';
+          console.log(`[${jobId}] Header WAV parsé. Sample rate: ${sampleRate} Hz, Channels: ${numChannels}, dataSize header: ${dataSize}`);
+          // Note: en mode pipe (pipe:1), FFmpeg ne peut pas seek-back pour écrire la vraie taille
+          // → dataSize est souvent 0 ou un placeholder. On affiche "?" si < 32000 bytes (~1s)
+          const dataValid = dataSize > 32000 && dataSize < 0x7FFFFFFF;
+          const estimatedChunks = dataValid ? Math.ceil(dataSize / CHUNK_MAX_BYTES) : '?';
+          const estimatedMin = dataValid && bytesPerSec > 0 ? (dataSize / bytesPerSec / 60).toFixed(1) : '?';
           updateWorker(workerCallbackUrl, workerSecret, {
             jobId,
             progress: 15,
-            log: `📐 Audio: ${estimatedMin}min détectés — ~${estimatedChunks} chunks estimés`,
+            log: `📐 Audio: ${estimatedMin === '?' ? 'durée inconnue (streaming)' : estimatedMin + 'min détectés'} — ~${estimatedChunks} chunks estimés`,
             status: 'processing'
           }).catch(() => {});
         }
