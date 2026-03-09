@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.24
+ * api-gateway — Cloudflare Worker v1.25
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -37,7 +37,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.19';
+const VERSION = '1.20';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -478,8 +478,27 @@ try{localStorage.getItem('_t')}catch(e){
   Object.defineProperty(window,'localStorage',{value:{getItem:function(k){return _s[k]||null},setItem:function(k,v){_s[k]=String(v)},removeItem:function(k){delete _s[k]},clear:function(){_s={}},get length(){return Object.keys(_s).length},key:function(i){return Object.keys(_s)[i]||null}},configurable:true});
 }
 
+/* ── 4b. Block window.open popups/popunders ── */
+var _wOpen=window.open;
+window.open=function(u){
+  if(!u||typeof u!=='string')return null;
+  try{if(isAd(u))return null;}catch(x){}
+  if(V.test(u)&&!isAd(u))R(u,'popup');
+  try{parent.postMessage({t:'vg-click',url:new URL(u,orig?orig():location.href).href},'*')}catch(x){}
+  return null;
+};
+
+/* ── 4c. Block setTimeout/setInterval redirects ── */
+var _loc=Object.getOwnPropertyDescriptor(window,'location');
+try{
+  var _assign=window.location.assign;
+  window.location.assign=function(u){if(u&&typeof u==='string'){try{parent.postMessage({t:'vg-click',url:new URL(u,location.href).href},'*')}catch(x){}}};
+  var _replace=window.location.replace;
+  window.location.replace=function(u){if(u&&typeof u==='string'){try{parent.postMessage({t:'vg-click',url:new URL(u,location.href).href},'*')}catch(x){}}};
+}catch(x){}
+
 /* ── 5. Ad domain blocklist ── */
-var ADS=/(\\.|-)(magsrv|tsyndicate|exoclick|trafficjunky|juicyads|popads|adsterra|clickaine|pushame|ad-maven|hilltopads|plugrush|ero-advertising|trafficstars|crakrevenue|largeconfusion|exosrv|syndication)\\.|(doubleclick|googlesyndication)\\.com/i;
+var ADS=/(\\.|-)(magsrv|tsyndicate|exoclick|trafficjunky|juicyads|popads|adsterra|clickaine|pushame|ad-maven|hilltopads|plugrush|ero-advertising|trafficstars|crakrevenue|largeconfusion|exosrv|syndication|propellerads|revcontent|outbrain|taboola|mgid|adnxs|criteo|pubmatic|rubiconproject|openx|spotx|fyber|unity3d|applovin|vungle|chartboost|inmobi|mintegral|clictune|linkvertise|shrinkme|ouo\.io|bc\.vc|1ink\.cc|lootlinks|sub2get|sub2unlock|freecash|monetag|a-ads|coinzilla|bitmedia|adcash|clickadu|richpush|zeroredirect|evadav|notifadz|mondiad|galaksion|clickstar|onclicka|onclickmax|popcash|popunder|clicknox)\\.|(doubleclick|googlesyndication|googleadservices|moatads|amazon-adsystem|facebook.*ads|histats)\\.com/i;
 function isAd(u){return typeof u==='string'&&ADS.test(u);}
 
 /* ── 5b. Intercept video.src / source.src setter ── */
@@ -722,6 +741,31 @@ async function handleProxy(request, env, ctx, parsedUrl) {
 
   // Remove CSP meta tags
   html = html.replace(/<meta\s[^>]*http-equiv\s*=\s*["']Content-Security-Policy["'][^>]*>/gi, '');
+
+  // Inject anti-ad CSS — hide common ad overlays, popups, sticky banners
+  const antiAdCSS = `<style id="vg-adblock">
+[id*="pop"]:not(video):not([class*="play"]):not([class*="player"]),
+[class*="popup"]:not(video):not([class*="play"]):not([class*="player"]),
+[class*="popunder"],
+[class*="overlay-ad"],
+[class*="ad-overlay"],
+[id*="overlay"]:not(video):not([class*="play"]):not([class*="player"]):not([class*="video"]),
+.adsb,[class*="adsbygoogle"],
+[class*="ad-banner"],[class*="adbanner"],
+[id*="adcontainer"],[class*="adcontainer"],
+[class*="ad-slot"],[class*="adslot"],
+div[class*="sticky-ad"],div[class*="stickyad"],
+div[onclick*="window.open"],
+a[target="_blank"][rel*="nofollow"][style*="position"]:not([href*="t.me"]):not([href*="telegram"]),
+div[style*="z-index"][style*="position: fixed"]:not([class*="play"]):not([class*="video"]):not([class*="modal"]):not([class*="menu"]):not([class*="nav"]):not([class*="header"]):not([class*="cookie"]):not([class*="consent"]),
+iframe[src*="ad"],iframe[src*="pop"],iframe[src*="banner"]
+{display:none!important;visibility:hidden!important;pointer-events:none!important;height:0!important;width:0!important;overflow:hidden!important}
+</style>`;
+  if (/<head/i.test(html)) {
+    html = html.replace(/<head([^>]*)>/i, `<head$1>${antiAdCSS}`);
+  } else {
+    html = antiAdCSS + html;
+  }
 
   // Build sniffer + location polyfill
   const snifferScript = buildSnifferScript(secret);
