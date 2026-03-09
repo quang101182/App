@@ -37,7 +37,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.21';
+const VERSION = '1.22';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -560,51 +560,29 @@ function S(){
     }}catch(x){}})}catch(x){}
 }
 
-/* ── 6b. Auto-proxy dynamically created iframes ── */
-var _proxyIframes=new WeakSet();
-function proxyIframes(){
+/* ── 6b. Report dynamic iframe URLs (without proxifying — proxifying breaks players) ── */
+var _reportedIframes=new WeakSet();
+function reportIframes(){
   document.querySelectorAll('iframe').forEach(function(f){
-    if(_proxyIframes.has(f))return;
+    if(_reportedIframes.has(f))return;
     var s=f.src||f.getAttribute('src')||'';
     if(!s||s.startsWith('about:')||s.startsWith('javascript:')||s.startsWith('data:')||s.startsWith('blob:'))return;
-    if(s.includes('/proxy?'))return;
+    _reportedIframes.add(f);
+    /* Remove ad iframes */
+    if(isAd(s)){try{f.remove()}catch(x){}return;}
+    /* Report embed/player URLs for video detection */
     try{
       var abs=new URL(s,location.href);
-      if(abs.origin!==location.origin&&abs.protocol.startsWith('http')){
-        if(isAd(abs.href)){f.remove();return;}
-        _proxyIframes.add(f);
-        f.src=PP+encodeURIComponent(abs.href);
+      if(abs.origin!==location.origin&&/embed|player|video|stream/i.test(abs.href)){
+        R(abs.href,'iframe-dyn');
       }
     }catch(x){}
   });
 }
-new MutationObserver(proxyIframes).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});
-proxyIframes();
+new MutationObserver(reportIframes).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});
+reportIframes();
 
-/* ── 6c. Intercept iframe.src setter for dynamic assignment ── */
-try{
-  var _ifDesc=Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype,'src');
-  if(_ifDesc&&_ifDesc.set){
-    Object.defineProperty(HTMLIFrameElement.prototype,'src',{
-      set:function(v){
-        if(v&&typeof v==='string'&&!v.includes('/proxy?')&&!v.startsWith('about:')&&!v.startsWith('javascript:')&&!v.startsWith('data:')){
-          try{
-            var abs=new URL(v,location.href);
-            if(abs.origin!==location.origin&&abs.protocol.startsWith('http')){
-              if(isAd(abs.href)){return;}
-              _proxyIframes.add(this);
-              return _ifDesc.set.call(this,PP+encodeURIComponent(abs.href));
-            }
-          }catch(x){}
-        }
-        return _ifDesc.set.call(this,v);
-      },
-      get:_ifDesc.get,configurable:true
-    });
-  }
-}catch(x){}
-
-/* ── 6d: Click/History/Form interceptors moved to early-inject script in <head> ── */
+/* ── 6c: Click/History/Form interceptors moved to early-inject script in <head> ── */
 
 /* ── 7. Report current page URL to parent ── */
 try{var pu=new URLSearchParams(location.search).get('url');if(pu){_lastNav=pu;parent.postMessage({t:'vg-nav',url:pu},'*')}}catch(x){}
