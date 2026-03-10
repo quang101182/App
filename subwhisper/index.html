@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.17</title>
+<title>SubWhisper v9.18</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1109,7 +1109,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 /* ── DIFF MODAL ── */
 @keyframes diffPulse{0%,100%{border-color:rgba(0,212,170,.5);box-shadow:0 0 8px rgba(0,212,170,.3)}50%{border-color:rgba(0,212,170,.15);box-shadow:none}}
 #diffBtn.has-diff{animation:diffPulse 1.5s ease-in-out infinite;color:var(--accent3);border-color:var(--accent3)}
-#diffModal{position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;flex-direction:column}
+#diffModal{position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;flex-direction:column;max-width:100vw;overflow-x:hidden;box-sizing:border-box}
 #diffModal.vis{display:flex}
 #diffHdr{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid var(--border)}
 #diffHdr span{font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
@@ -1124,7 +1124,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 .diff-cell.empty{opacity:.3;font-style:italic}
 .diff-cell .diff-id{font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:2px}
 #diffActions{display:flex;gap:8px;padding:12px 20px;border-top:1px solid var(--border);justify-content:flex-end}
-@media(max-width:600px){.diff-row{flex-direction:column}.diff-cell{border-left:3px solid transparent}.diff-cell.cell-before{border-left-color:var(--accent)!important}.diff-cell.cell-after{border-left-color:var(--accent3)!important}.diff-row-hdr span{font-size:11px;padding:6px 8px;font-weight:700}}
+@media(max-width:600px){#diffModal{inset:0;width:100vw;max-width:100vw;overflow-x:hidden}#diffHdr{padding:10px 12px;gap:6px;flex-wrap:wrap}#diffHdr button{min-width:36px;min-height:36px;font-size:20px;padding:4px 8px}#diffBody{padding:6px}#diffActions{padding:10px 12px;flex-wrap:wrap}.diff-row{flex-direction:column}.diff-cell{border-left:3px solid transparent;font-size:11px;padding:5px 6px;overflow-wrap:break-word;word-break:break-word}.diff-cell.cell-before{border-left-color:var(--accent)!important}.diff-cell.cell-after{border-left-color:var(--accent3)!important}.diff-row-hdr span{font-size:11px;padding:6px 8px;font-weight:700}}
 </style>
 </head>
 <body>
@@ -1132,7 +1132,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.17</span>
+    <span class="ver-badge">v9.18</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1471,7 +1471,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.17 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.18 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -4096,7 +4096,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.17',
+    version: 'v9.18',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4749,45 +4749,164 @@ function autoFormatSRT() {
       newLines[newLines.length - 2] += newLines[newLines.length - 1];
       newLines.pop();
     }
-    // Max 2 lignes
+    // Max 2 lignes — stocker le texte complet (pas de troncature)
     if (newLines.length > MAX_LINES) {
-      var merged2 = newLines.slice(1).join(' ');
-      if (merged2.length > MAX_LINE) merged2 = merged2.substring(0, MAX_LINE - 1) + '\u2026';
-      newLines = [newLines[0], merged2];
+      newLines = [newLines[0], newLines.slice(1).join(' ')];
     }
     var newText = newLines.join('\n');
     if (newText !== origText) modified++;
     return { id: b.id, timestamp: b.timestamp, text: newText };
   });
 
-  // Étape 1.5 : split blocs trop longs (>84 chars) ou trop rapides (>25 CPS)
+  // Étape 1.5 : split naturel multi-blocs (Stratégie B — zéro perte de texte)
+  // Si un bloc dépasse 84 chars ou >25 CPS, le découper en sous-blocs
+  // aux points de ponctuation naturels avec timestamps proportionnels
   var splitted = [];
   blocks.forEach(function(b) {
-    var charCount = b.text.replace(/\n/g, '').length;
+    var flat = b.text.replace(/\n/g, ' ').trim();
+    var charCount = flat.length;
     var pts = b.timestamp.split(' --> ');
     var startMs = tsToMs(pts[0]), endMs = tsToMs(pts[1]);
     var durMs = endMs - startMs;
     var cps = durMs > 0 ? charCount / (durMs / 1000) : 0;
-    if (charCount > MAX_CHARS || (cps > MAX_CPS && charCount > MAX_LINE)) {
-      var flat = b.text.replace(/\n/g, ' ');
-      var mid = Math.floor(flat.length / 2);
-      var sp = flat.indexOf(' ', mid);
-      var spb = flat.lastIndexOf(' ', mid);
-      var cut = (sp !== -1 && (sp - mid) < (mid - spb || Infinity)) ? sp : (spb > 0 ? spb : mid);
-      var t1 = flat.substring(0, cut).trim();
-      var t2 = flat.substring(cut).trim();
-      if (t1 && t2) {
-        var ratio = t1.length / (t1.length + t2.length);
-        var midMs = Math.round(startMs + (endMs - startMs) * ratio);
-        splitted.push({ id: '', timestamp: msToTs(startMs) + ' --> ' + msToTs(midMs), text: t1 });
-        splitted.push({ id: '', timestamp: msToTs(midMs) + ' --> ' + msToTs(endMs), text: t2 });
-        modified++;
-        return;
+    if (charCount <= MAX_CHARS && (cps <= MAX_CPS || charCount <= MAX_LINE)) {
+      splitted.push(b);
+      return;
+    }
+    // Calculer combien de sous-blocs nécessaires
+    var numSubs = Math.ceil(charCount / MAX_CHARS);
+    if (numSubs < 2) numSubs = 2;
+    var targetLen = Math.ceil(charCount / numSubs);
+    // Trouver les meilleurs points de coupure naturels
+    var cuts = [];
+    for (var si = 1; si < numSubs; si++) {
+      var idealPos = si * targetLen;
+      var bestPos = -1, bestDist = Infinity;
+      // Priorité 1 : ponctuation forte (. ! ? ;)
+      for (var pi = Math.max(0, idealPos - 30); pi < Math.min(flat.length, idealPos + 30); pi++) {
+        if ('.!?;'.indexOf(flat[pi]) !== -1 && pi + 1 < flat.length && flat[pi + 1] === ' ') {
+          var d = Math.abs(pi + 1 - idealPos);
+          if (d < bestDist) { bestDist = d; bestPos = pi + 1; }
+        }
+      }
+      // Priorité 2 : ponctuation faible (, : — -)
+      if (bestPos === -1) {
+        for (var pi2 = Math.max(0, idealPos - 25); pi2 < Math.min(flat.length, idealPos + 25); pi2++) {
+          if (',:'.indexOf(flat[pi2]) !== -1 && pi2 + 1 < flat.length && flat[pi2 + 1] === ' ') {
+            var d2 = Math.abs(pi2 + 1 - idealPos);
+            if (d2 < bestDist) { bestDist = d2; bestPos = pi2 + 1; }
+          }
+        }
+      }
+      // Priorité 3 : dernier espace proche de la position idéale
+      if (bestPos === -1) {
+        var spAfter = flat.indexOf(' ', idealPos);
+        var spBefore = flat.lastIndexOf(' ', idealPos);
+        if (spAfter !== -1 && spBefore > 0) {
+          bestPos = (spAfter - idealPos) < (idealPos - spBefore) ? spAfter : spBefore;
+        } else if (spAfter !== -1) { bestPos = spAfter; }
+        else if (spBefore > 0) { bestPos = spBefore; }
+        else { bestPos = idealPos; }
+      }
+      if (bestPos > 0 && bestPos < flat.length && cuts.indexOf(bestPos) === -1) {
+        cuts.push(bestPos);
       }
     }
-    splitted.push(b);
+    cuts.sort(function(a, b2) { return a - b2; });
+    // Découper le texte aux points de coupure
+    var chunks = [];
+    var prev = 0;
+    for (var ci = 0; ci < cuts.length; ci++) {
+      var chunk = flat.substring(prev, cuts[ci]).trim();
+      if (chunk) chunks.push(chunk);
+      prev = cuts[ci];
+    }
+    var lastChunk = flat.substring(prev).trim();
+    if (lastChunk) chunks.push(lastChunk);
+    // Fusionner les chunks trop courts (<20 chars) avec le voisin
+    for (var fi = chunks.length - 1; fi > 0; fi--) {
+      if (chunks[fi].length < 20) {
+        chunks[fi - 1] += ' ' + chunks[fi];
+        chunks.splice(fi, 1);
+      }
+    }
+    // Distribuer les timestamps proportionnellement
+    var totalChars = 0;
+    for (var ti = 0; ti < chunks.length; ti++) totalChars += chunks[ti].length;
+    var curMs = startMs;
+    for (var bi2 = 0; bi2 < chunks.length; bi2++) {
+      var ratio = chunks[bi2].length / totalChars;
+      var subDur = Math.round(durMs * ratio);
+      var subEnd = (bi2 === chunks.length - 1) ? endMs : Math.min(curMs + subDur, endMs);
+      // Durée minimale 800ms
+      if (subEnd - curMs < 800 && bi2 < chunks.length - 1) subEnd = Math.min(curMs + 800, endMs);
+      splitted.push({ id: '', timestamp: msToTs(curMs) + ' --> ' + msToTs(subEnd), text: chunks[bi2] });
+      curMs = subEnd;
+    }
+    if (chunks.length > 1) modified++;
   });
   blocks = splitted;
+
+  // Étape 1.6 : re-appliquer formatage 2 lignes sur les sous-blocs splittés
+  // Si le texte dépasse encore 2×42 chars, re-splitter en blocs supplémentaires (zéro perte)
+  var rewrapped = [];
+  blocks.forEach(function(b) {
+    var flat = b.text.replace(/\n/g, ' ').trim();
+    if (flat.length <= MAX_LINE) { rewrapped.push({ id: b.id, timestamp: b.timestamp, text: flat }); return; }
+    if (flat.length <= MAX_CHARS) {
+      // Tient en 2 lignes — wrap classique
+      var cut2 = -1;
+      var zone2 = flat.substring(0, MAX_LINE + 1);
+      var nm2 = zone2.match(/^(.+[,;:\u2014\u2013\u2014\-])\s/);
+      if (nm2 && nm2[1].length >= 12 && nm2[1].length <= MAX_LINE) cut2 = nm2[1].length;
+      if (cut2 <= 0) {
+        var cjRx2 = /\s(et |ou |mais |car |que |qui |pour |dans |avec |sur |and |but |or |for |the )/gi;
+        var cm2, bc2 = -1;
+        while ((cm2 = cjRx2.exec(zone2)) !== null) { if (cm2.index >= 12 && cm2.index <= MAX_LINE) bc2 = cm2.index; }
+        if (bc2 > 0) cut2 = bc2;
+      }
+      if (cut2 <= 0) { cut2 = flat.lastIndexOf(' ', MAX_LINE); if (cut2 <= 0) cut2 = MAX_LINE; }
+      var l1 = flat.substring(0, cut2).trimEnd();
+      var l2 = flat.substring(cut2).trimStart();
+      rewrapped.push({ id: b.id, timestamp: b.timestamp, text: l1 + '\n' + l2 });
+    } else {
+      // Dépasse encore 84 chars — re-splitter en sous-blocs supplémentaires
+      var pts2 = b.timestamp.split(' --> ');
+      var sMs = tsToMs(pts2[0]), eMs = tsToMs(pts2[1]), dMs = eMs - sMs;
+      var nSubs = Math.ceil(flat.length / MAX_CHARS);
+      if (nSubs < 2) nSubs = 2;
+      var tLen = Math.ceil(flat.length / nSubs);
+      var cPoints = [];
+      for (var ri = 1; ri < nSubs; ri++) {
+        var iPos = ri * tLen;
+        var rBest = flat.lastIndexOf(' ', iPos);
+        if (rBest <= 0) rBest = flat.indexOf(' ', iPos);
+        if (rBest <= 0) rBest = iPos;
+        if (rBest > 0 && rBest < flat.length) cPoints.push(rBest);
+      }
+      cPoints.sort(function(a, b3) { return a - b3; });
+      var rChunks = [], rPrev = 0;
+      for (var rci = 0; rci < cPoints.length; rci++) {
+        var rc = flat.substring(rPrev, cPoints[rci]).trim();
+        if (rc) rChunks.push(rc);
+        rPrev = cPoints[rci];
+      }
+      var rLast = flat.substring(rPrev).trim();
+      if (rLast) rChunks.push(rLast);
+      var rTotal = 0;
+      for (var rti = 0; rti < rChunks.length; rti++) rTotal += rChunks[rti].length;
+      var rCur = sMs;
+      for (var rbi = 0; rbi < rChunks.length; rbi++) {
+        var rRatio = rChunks[rbi].length / rTotal;
+        var rEnd = (rbi === rChunks.length - 1) ? eMs : Math.min(rCur + Math.round(dMs * rRatio), eMs);
+        if (rEnd - rCur < 800 && rbi < rChunks.length - 1) rEnd = Math.min(rCur + 800, eMs);
+        rewrapped.push({ id: '', timestamp: msToTs(rCur) + ' --> ' + msToTs(rEnd), text: rChunks[rbi] });
+        rCur = rEnd;
+      }
+      modified++;
+    }
+  });
+  blocks = rewrapped;
 
   // Étape 2 : fusionner micro-blocs < MIN_MERGE ms
   var merged = [];
