@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.23</title>
+<title>SubWhisper v9.24</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1132,7 +1132,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.23</span>
+    <span class="ver-badge">v9.24</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1471,7 +1471,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.23 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.24 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -1491,6 +1491,11 @@ var origName = '';
 var pollTimer = null;
 var currentJobId = null;
 var destDirHandle = null;
+var _dirDb = null;
+(function(){var r=indexedDB.open('SubWhisperDB',1);r.onupgradeneeded=function(e){var db=e.target.result;if(!db.objectStoreNames.contains('settings'))db.createObjectStore('settings',{keyPath:'key'})};r.onsuccess=function(){_dirDb=r.result;_restoreDirHandle()};r.onerror=function(){console.warn('IndexedDB non disponible')}})();
+function _saveDirHandle(handle){if(!_dirDb)return;try{var tx=_dirDb.transaction(['settings'],'readwrite');tx.objectStore('settings').put({key:'exportDir',handle:handle})}catch(e){}}
+function _deleteDirHandle(){if(!_dirDb)return;try{var tx=_dirDb.transaction(['settings'],'readwrite');tx.objectStore('settings').delete('exportDir')}catch(e){}}
+function _restoreDirHandle(){if(!_dirDb)return;try{var tx=_dirDb.transaction(['settings'],'readonly');var req=tx.objectStore('settings').get('exportDir');req.onsuccess=function(){if(req.result&&req.result.handle){destDirHandle=req.result.handle;updateDirInfo()}}}catch(e){}}
 var previewVttUrl = null;
 var previewVideoUrl = null;
 var filePrevUrl = null;
@@ -4102,7 +4107,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.23',
+    version: 'v9.24',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4162,23 +4167,32 @@ async function exportDiag() {
 
 // Si dossier mappé actif → écrit directement sans dialogue
 // Sinon → showSaveFilePicker → fallback dlBlob
+async function _verifyDirPermission() {
+  if (!destDirHandle) return false;
+  try {
+    if (await destDirHandle.queryPermission({ mode: 'readwrite' }) === 'granted') return true;
+    if (await destDirHandle.requestPermission({ mode: 'readwrite' }) === 'granted') return true;
+  } catch(e) {}
+  destDirHandle = null; _deleteDirHandle(); updateDirInfo();
+  return false;
+}
+
 async function exportFile(content, ext, mime) {
   var fname = (origName || 'subtitles') + ext;
-  // showSaveFilePicker EN PREMIER — doit être le premier await après le clic (user gesture)
-  if ('showSaveFilePicker' in window) {
+  // 1. Dossier mappé (IndexedDB) — pas besoin de user gesture
+  if (destDirHandle && await _verifyDirPermission()) {
     try {
-      var lastDot = fname.lastIndexOf('.');
-      var simpleExt = lastDot >= 0 ? fname.slice(lastDot) : ext;
-      var handle = await window.showSaveFilePicker({ suggestedName: fname, types: [{ description: mime, accept: { [mime]: [simpleExt] } }] });
-      var writable = await handle.createWritable();
-      await writable.write(content); await writable.close();
+      var fh = await destDirHandle.getFileHandle(fname, { create: true });
+      var w = await fh.createWritable();
+      await w.write(content); await w.close();
+      toast('\ud83d\udcbe ' + fname + ' \u2192 ' + destDirHandle.name);
       return;
     } catch(e) {
       if (e.name === 'AbortError') return;
-      // Écriture échouée (user gesture expiré après picker) → fallback share/blob
+      destDirHandle = null; _deleteDirHandle(); updateDirInfo();
     }
   }
-  // Fallback 1 : navigator.share (mobile — permet de choisir la destination)
+  // 2. Mobile → navigator.share
   if (navigator.canShare) {
     try {
       var file = new File([content], fname, { type: mime });
@@ -4188,20 +4202,24 @@ async function exportFile(content, ext, mime) {
       }
     } catch(e) { if (e.name === 'AbortError') return; }
   }
-  // Fallback 2 : destDirHandle (dossier mappé — desktop uniquement)
-  if (destDirHandle) {
-    try {
-      var fh = await destDirHandle.getFileHandle(fname, { create: true });
-      var w = await fh.createWritable();
-      await w.write(content); await w.close();
-      toast('\ud83d\udcbe ' + fname + ' \u2192 ' + destDirHandle.name);
-      return;
-    } catch(e) {
-      if (e.name === 'AbortError') return;
-      destDirHandle = null; updateDirInfo();
+  // 3. Desktop sans dossier mappé → proposer d'en choisir un
+  if ('showDirectoryPicker' in window) {
+    toast('\u26a0 Choisissez un dossier cible pour les exports');
+    await pickDir();
+    if (destDirHandle) {
+      try {
+        var fh2 = await destDirHandle.getFileHandle(fname, { create: true });
+        var w2 = await fh2.createWritable();
+        await w2.write(content); await w2.close();
+        toast('\ud83d\udcbe ' + fname + ' \u2192 ' + destDirHandle.name);
+        return;
+      } catch(e) {
+        if (e.name === 'AbortError') return;
+      }
     }
+    return;
   }
-  // Fallback 3 : download classique (Downloads par défaut)
+  // 4. Dernier recours — download classique
   dlBlob(content, ext, mime);
 }
 
@@ -4282,6 +4300,7 @@ async function pickDir() {
   if (!('showDirectoryPicker' in window)) { toast('\u26a0 Non support\u00e9 sur ce navigateur'); return; }
   try {
     destDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    _saveDirHandle(destDirHandle);
     updateDirInfo();
     toast('\ud83d\udcc1 Dossier cible : ' + destDirHandle.name);
   } catch(e) {
@@ -4290,7 +4309,7 @@ async function pickDir() {
   }
 }
 
-function clearDir() { destDirHandle = null; updateDirInfo(); toast('Dossier cible effac\u00e9'); }
+function clearDir() { destDirHandle = null; _deleteDirHandle(); updateDirInfo(); toast('Dossier cible effac\u00e9'); }
 
 function updateDirInfo() {
   var el = document.getElementById('dirInfo');
