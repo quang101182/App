@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoxSplit v3.6.0 — Diarization & Transcription</title>
+<title>VoxSplit v3.6.1 — Diarization & Transcription</title>
 <meta name="description" content="Transcription audio/vidéo avec identification des locuteurs (diarization) via Deepgram Nova-2">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#7c6aff">
@@ -413,7 +413,7 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
   <div class="app-header">
     <div><h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1></div>
     <div class="header-actions">
-      <span class="version">v3.6.0</span>
+      <span class="version">v3.6.1</span>
       <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--muted)"><span class="status-dot yellow"></span></span>
       <button class="pwa-install" id="pwa-install" onclick="installPWA()"><i class="fas fa-download"></i> Installer</button>
       <button class="icon-btn" onclick="toggleSettings()" title="Paramètres"><i class="fas fa-gear"></i></button>
@@ -543,7 +543,14 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
           <button class="export-btn" onclick="exportJSON(this)"><i class="fas fa-file-code"></i> JSON</button>
           <button class="export-btn" onclick="exportVTT(this)"><i class="fas fa-closed-captioning"></i> VTT</button>
           <button class="export-btn" onclick="copyToClipboard(this)"><i class="fas fa-copy"></i> Copier</button>
+          <button class="export-btn" onclick="pickDir()" id="saveDirBtn" title="Choisir le dossier d'export"><i class="fas fa-folder"></i> Dossier</button>
         </div>
+      </div>
+      <div id="dirInfo" style="display:none;align-items:center;gap:8px;padding:4px 0;font-family:var(--mono);font-size:10px">
+        <span style="color:var(--muted)">Dossier :</span>
+        <span id="dirName" style="color:var(--accent)"></span>
+        <button onclick="pickDir()" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:9px;padding:3px 8px;cursor:pointer">changer</button>
+        <button onclick="clearDir()" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--accent2);font-size:9px;padding:3px 8px;cursor:pointer">&#x2715;</button>
       </div>
       <div class="btn-sep"></div>
       <div class="btn-grp-wrap"><span class="btn-grp-lbl">Affichage</span>
@@ -743,8 +750,8 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
 </div>
 
 <script>
-// VoxSplit v3.6.0 — Diarization & Transcription via Deepgram
-const VERSION='3.6.0';
+// VoxSplit v3.6.1 — Diarization & Transcription via Deepgram
+const VERSION='3.6.1';
 let _deferredInstallPrompt=null;
 let _histPage=0;const HIST_PER_PAGE=10;const HIST_MAX=50;
 const GATEWAY_DEFAULT='https://api-gateway.quang101182.workers.dev';
@@ -765,6 +772,22 @@ async function _saveDirHandle(h){try{const db=await _openIDB();const tx=db.trans
 async function _deleteDirHandle(){try{const db=await _openIDB();const tx=db.transaction(IDB_STORE,'readwrite');tx.objectStore(IDB_STORE).delete('destDirHandle');await new Promise(r=>{tx.oncomplete=r})}catch(e){}}
 async function _restoreDirHandle(){try{const db=await _openIDB();const tx=db.transaction(IDB_STORE,'readonly');const req=tx.objectStore(IDB_STORE).get('destDirHandle');return new Promise(r=>{req.onsuccess=()=>r(req.result||null);req.onerror=()=>r(null)})}catch(e){return null}}
 async function _verifyDirPermission(h){try{if((await h.queryPermission({mode:'readwrite'}))==='granted')return true;return(await h.requestPermission({mode:'readwrite'}))==='granted'}catch{return false}}
+
+async function pickDir(){
+  if(!('showDirectoryPicker' in window)){toast('Non supporté sur ce navigateur');return}
+  try{
+    destDirHandle=await window.showDirectoryPicker({mode:'readwrite'});
+    await _saveDirHandle(destDirHandle);
+    updateDirInfo();
+    toast('Dossier cible : '+destDirHandle.name);
+  }catch(e){if(e.name==='AbortError')return;toast('Erreur : '+e.message)}
+}
+function clearDir(){destDirHandle=null;_deleteDirHandle();updateDirInfo();toast('Dossier cible effacé')}
+function updateDirInfo(){
+  const el=document.getElementById('dirInfo');
+  if(destDirHandle){document.getElementById('dirName').textContent=destDirHandle.name;el.style.display='flex'}
+  else{el.style.display='none'}
+}
 
 // ─── Config ──────────────────────────────────────────────
 const FLY_DEFAULT='https://subwhisper-ffmpeg.fly.dev';
@@ -883,7 +906,7 @@ function log(msg,level=''){
 }
 function copyLog(){
   const el=document.getElementById('log-console');if(!el)return;const entries=el.querySelectorAll('.log-entry');
-  const txt='VoxSplit v3.6.0 — Log\n'+'='.repeat(40)+'\n'+Array.from(entries).map(e=>e.textContent).join('\n');
+  const txt='VoxSplit v3.6.1 — Log\n'+'='.repeat(40)+'\n'+Array.from(entries).map(e=>e.textContent).join('\n');
   navigator.clipboard.writeText(txt).then(()=>toast('Log copié ('+entries.length+' lignes)')).catch(()=>{const ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('Log copié')});
 }
 function setProgress(pct,label,step){
@@ -1250,7 +1273,7 @@ async function copyToClipboard(btn){
   for(const utt of utts){const name=speakerNames[utt.speaker]||`Locuteur ${utt.speaker+1}`;const text=getExportText(utt,utt.origIdx);if(utt.speaker!==ls){if(txt)txt+='\n';txt+=`[${name}]\n`;ls=utt.speaker}txt+=`${text}\n`}
   try{await navigator.clipboard.writeText(txt);_flashExportBtn(btn,true);toast('Copié')}catch{_flashExportBtn(btn,false);toast('Erreur copie','error')}
 }
-function getExportFilename(ext){return`${selectedFile?selectedFile.name.replace(/\.[^.]+$/,''):'voxsplit'}_voxsplit.${ext}`}
+function getExportFilename(ext){return`${selectedFile?selectedFile.name.replace(/\.[^.]+$/,''):'voxsplit'}.${ext}`}
 async function exportFile(content,filename,mimeType){
   // Priority 1 : destDirHandle from IndexedDB (persistent directory)
   if(destDirHandle){
@@ -1792,11 +1815,11 @@ function init(){
   // Init gateway check
   if(getSecret())setTimeout(fetchGatewayConfig,300);else{checkGateway();setTimeout(()=>toggleSettings(),500)}
   // Restore destDirHandle from IndexedDB
-  _restoreDirHandle().then(h=>{if(h)destDirHandle=h});
+  _restoreDirHandle().then(h=>{if(h){destDirHandle=h;updateDirInfo()}});
 }
 document.addEventListener('DOMContentLoaded',init);
 
-// ── SESSION RESTORE removed in v3.6.0 — history feature covers this ──
+// ── SESSION RESTORE removed in v3.6.1 — history feature covers this ──
 </script>
 </body>
 </html>
