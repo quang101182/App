@@ -2757,12 +2757,14 @@ async function translateGemini(srtContent, sourceLang, targetLang) {
     for (var _tK = _tS; _tK < Math.min(_tS + _tCores, batches.length); _tK++) _tGrp.push(_tK);
     await Promise.all(_tGrp.map(function(b) {
       return (async function() {
+        var _tbStart = Date.now();
         var batchBlocks = batches[b];
         var batchOffset = b * BATCH;
         var promptLines = batchBlocks.map(function(blk, j) {
           return '[' + (batchOffset + j + 1) + '] ' + blk.text.replace(/\n/g, ' | ');
         });
         var prompt = PROMPTS.translate_full.build(tgtName, srcName, typoT, srcSpecificT) + '\n\n' + promptLines.join('\n');
+        var _tbOk = true;
         try {
           var aiText = await callAIText(prompt);
           var lineRx = /^\[(\d+)\]\s*(.*)/gm;
@@ -2776,10 +2778,14 @@ async function translateGemini(srtContent, sourceLang, targetLang) {
             }
           }
         } catch(e2) {
+          _tbOk = false;
           console.warn('Batch ' + b + ' trad erreur (source conservée):', e2.message);
+          appendLog('\u274c Trad full batch ' + (b+1) + '/' + batches.length + ' \u2014 ' + e2.message);
         }
         _tDone++;
+        var _tbDur = ((Date.now() - _tbStart) / 1000).toFixed(1);
         setLog('Traduction ' + engineName + ' ' + _tDone + '/' + batches.length + ' \u2713');
+        appendLog((_tbOk ? '\ud83c\udf10' : '\u26a0\ufe0f') + ' Trad full ' + _tDone + '/' + batches.length + ' (' + batchBlocks.length + ' blocs, ' + _tbDur + 's)');
       })();
     }));
   }
@@ -5037,6 +5043,8 @@ async function cleanAI() {
             return '[' + (globalIdx + 1) + '] ' + origBlocks[globalIdx].text.replace(/\n/g, ' | ');
           });
           var prompt = _promptHeader + '\n\n' + promptLines.join('\n');
+          var _cbStart = Date.now();
+          var _cbOk = true;
           try {
             var aiText = await callAIText(prompt);
             var lineRx = /^\[(\d+)\]\s*(.*)/gm;
@@ -5050,13 +5058,17 @@ async function cleanAI() {
                 if (corrected) correctedTexts[idx] = corrected;
               }
             }
+          } catch(e2) {
+            _cbOk = false;
+            console.warn('Batch ' + bIdx + ' erreur (textes originaux conservés):', e2.message);
+            appendLog('\u274c Clean batch ' + (bIdx+1) + '/' + batches.length + ' \u2014 ' + e2.message);
+          }
             _cDone++;
+            var _cbDur = ((Date.now() - _cbStart) / 1000).toFixed(1);
             setPct(Math.round(_cDone / batches.length * 100), 'IA ' + _cDone + '/' + batches.length);
             toastPersist('✨ Nettoyage ' + engineName + ' ' + _cDone + '/' + batches.length + ' \u2713');
+            appendLog((_cbOk ? '\u2728' : '\u26a0\ufe0f') + ' Clean ' + _cDone + '/' + batches.length + ' (' + batchIndices.length + ' blocs, ' + _cbDur + 's)');
             if (btn) btn.innerHTML = '✨ IA ' + _cDone + '/' + batches.length;
-          } catch(e2) {
-            console.warn('Batch ' + bIdx + ' erreur (textes originaux conservés):', e2.message);
-          }
         })();
       }));
     }
@@ -5420,16 +5432,19 @@ async function translateManual() {
       for (var _fi = 0; _fi < foreignIdx.length; _fi += BATCH) batches.push(foreignIdx.slice(_fi, _fi + BATCH));
       var _pDone = 0;
       var _pCores = getAIEngine() === 'deepseek' ? 4 : 1;
+      var _pT0 = Date.now();
       for (var _pS = 0; _pS < batches.length; _pS += _pCores) {
         var _pGrp = [];
         for (var _pK = _pS; _pK < Math.min(_pS + _pCores, batches.length); _pK++) _pGrp.push(_pK);
         await Promise.all(_pGrp.map(function(bIdx) {
           return (async function() {
+            var _bStart = Date.now();
             var batchIdxs = batches[bIdx];
             var promptLines = batchIdxs.map(function(globalIdx) {
               return '[' + (globalIdx + 1) + '] ' + blocks[globalIdx].text.replace(/\n/g, ' | ');
             });
             var prompt = PROMPTS.translate_targeted.build(tgtName_t, typoRule_t, srcSpecific_t) + '\n\n' + promptLines.join('\n');
+            var _bOk = true;
             try {
               var aiText = await callAIText(prompt);
               var lineRx = /^\[(\d+)\]\s*(.*)/gm;
@@ -5445,11 +5460,15 @@ async function translateManual() {
                 }
               }
             } catch(e2) {
+              _bOk = false;
               console.warn('Batch ' + bIdx + ' erreur:', e2.message);
+              appendLog('\u274c Trad batch ' + (bIdx+1) + '/' + batches.length + ' \u2014 ' + e2.message);
             }
             _pDone++;
+            var _bDur = ((Date.now() - _bStart) / 1000).toFixed(1);
             setPct(Math.round(_pDone / batches.length * 100), 'Trad ' + _pDone + '/' + batches.length);
             toastPersist('\ud83c\udf10 Trad ' + tgt.toUpperCase() + ' ' + engine + ' ' + _pDone + '/' + batches.length + ' \u2713');
+            appendLog((_bOk ? '\ud83c\udf10' : '\u26a0\ufe0f') + ' Trad ' + _pDone + '/' + batches.length + ' (' + batchIdxs.length + ' blocs, ' + _bDur + 's)');
             if (btn) btn.innerHTML = '\ud83c\udf10 ' + _pDone + '/' + batches.length;
           })();
         }));
@@ -5470,11 +5489,13 @@ async function translateManual() {
           for (var _sK = _sS; _sK < Math.min(_sS + _pCores, _sBatches.length); _sK++) _sGrp.push(_sK);
           await Promise.all(_sGrp.map(function(bIdx) {
             return (async function() {
+              var _s2Start = Date.now();
               var batchIdxs = _sBatches[bIdx];
               var promptLines = batchIdxs.map(function(globalIdx) {
                 return '[' + (globalIdx + 1) + '] ' + _secondBlocks[globalIdx].text.replace(/\n/g, ' | ');
               });
               var prompt2 = PROMPTS.translate_second_pass.build(tgtName_t, typoRule_t) + '\n\n' + promptLines.join('\n');
+              var _s2Ok = true;
               try {
                 var aiText2 = await callAIText(prompt2);
                 var lineRx2 = /^\[(\d+)\]\s*(.*)/gm;
@@ -5489,11 +5510,15 @@ async function translateManual() {
                   }
                 }
               } catch(e3) {
+                _s2Ok = false;
                 console.warn('Second pass batch ' + bIdx + ' erreur:', e3.message);
+                appendLog('\u274c 2e passe batch ' + (bIdx+1) + '/' + _sBatches.length + ' \u2014 ' + e3.message);
               }
               _s2Done++;
+              var _s2Dur = ((Date.now() - _s2Start) / 1000).toFixed(1);
               setPct(Math.round(_s2Done / _sBatches.length * 100), 'Trad 2e passe ' + _s2Done + '/' + _sBatches.length);
               toastPersist('\ud83d\udd04 2e passe ' + _s2Done + '/' + _sBatches.length + ' \u2713');
+              appendLog((_s2Ok ? '\ud83d\udd04' : '\u26a0\ufe0f') + ' 2e passe ' + _s2Done + '/' + _sBatches.length + ' (' + batchIdxs.length + ' blocs, ' + _s2Dur + 's)');
             })();
           }));
         }
