@@ -1,4 +1,4 @@
-var CACHE = 'voxsplit-v3.5.2';
+var CACHE = 'voxsplit-v3.6.0';
 var FILES = ['./', './index.html', './icon.svg', './manifest.json'];
 
 self.addEventListener('install', function(e) {
