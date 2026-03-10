@@ -1,4 +1,4 @@
-var CACHE = 'music-ai-v3.11.3';
+var CACHE = 'music-ai-v3.12.0';
 var FILES = ['./', './index.html'];
 
 self.addEventListener('install', function(e) {

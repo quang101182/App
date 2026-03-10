@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.11.3 — Discovery Engine</title>
+<title>music·ai v3.12.0 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -308,6 +308,21 @@
   /* ── IMPROVED CONTRAST ──────────────────────────────── */
   :root{--muted:#7a7a96;}
   .light{--muted:#5a5a7a;}
+  /* ── MOBILE COLLAPSE (v3.12) ── */
+  .mini-reco-btn{display:none;align-items:center;gap:6px;padding:10px 20px;border-radius:50px;background:linear-gradient(135deg,var(--accent),#5b21b6);border:none;color:white;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 0 20px rgba(124,58,237,0.3);margin:12px auto 0;transition:transform 0.15s;}
+  .mini-reco-btn:active{transform:scale(0.95);}
+  @media(max-width:480px){
+    .zone-collapsed .onetap-btn-wrap,
+    .zone-collapsed .pulse-ring,.zone-collapsed .pulse-ring-2,.zone-collapsed .pulse-ring-3,
+    .zone-collapsed .onetap-label{display:none!important;}
+    .zone-collapsed>div:first-child{padding:0!important;}
+    .zone-collapsed .mini-reco-btn{display:inline-flex;}
+    .zone-collapsed .music-card{margin-top:8px;}
+    /* collapse mood/activity/discovery/shuffle big buttons */
+    .zone-collapsed .btn-primary.zone-main-btn{display:none!important;}
+    .zone-collapsed .mood-chip-grid,.zone-collapsed #mood-grid,.zone-collapsed #activity-grid{display:none!important;}
+    .zone-collapsed>p:first-of-type{display:none!important;}
+  }
 </style>
 </head>
 <body>
@@ -472,7 +487,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.11.3</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.12.0</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -513,7 +528,7 @@
               <div class="pulse-ring-3"></div>
               <button class="onetap-btn" id="onetap-btn" onclick="try{navigator.vibrate&&navigator.vibrate(20)}catch(_){};getRecommendation('onetap')"><span id="onetap-icon">♪</span></button>
             </div>
-            <div style="font-size:13px;color:var(--muted);text-align:center;">Appuie pour une reco parfaite<br><span style="font-size:11px;">basée sur ton profil</span></div>
+            <div class="onetap-label" style="font-size:13px;color:var(--muted);text-align:center;">Appuie pour une reco parfaite<br><span style="font-size:11px;">basée sur ton profil</span></div>
           </div>
           <div id="result-onetap" style="display:none;"></div>
         </div>
@@ -785,9 +800,84 @@ function saveProfile(p){localStorage.setItem(LS_PROFILE,JSON.stringify(p))}
 function getConfig(){try{const c=JSON.parse(localStorage.getItem(LS_CONFIG));if(!c)return{provider:'claude',model:'claude-opus-4-6',keys:{claude:'',gemini:'',openai:''}};if('apiKey'in c&&!c.keys){const keys={claude:'',gemini:'',openai:''};keys[c.provider||'claude']=c.apiKey||'';const migrated={provider:c.provider||'claude',model:c.model||'claude-opus-4-6',keys};saveConfig(migrated);return migrated;}if(!c.keys)c.keys={claude:'',gemini:'',openai:''};return c;}catch(e){return{provider:'claude',model:'claude-opus-4-6',keys:{claude:'',gemini:'',openai:''}}}}
 function saveConfig(c){localStorage.setItem(LS_CONFIG,JSON.stringify(c))}
 function getHistory(){try{return JSON.parse(localStorage.getItem(LS_HISTORY))||[]}catch(e){return[]}}
-function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(h.length>120)h.length=120;localStorage.setItem(LS_HISTORY,JSON.stringify(h))}
+function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(h.length>120)h.length=120;localStorage.setItem(LS_HISTORY,JSON.stringify(h));
+  if(e.action==='suggest'&&e.title&&e.artist){addToBlacklist(e.title,e.artist);scheduleSync();}
+}
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
+
+// ── SERVER PROFILE (music-ai v3.12) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.12.0'};
+let _syncTimer=null;
+const MUSICAI_USERID='default';
+async function loadServerProfile(){
+  const secret=getGwSecret();if(!secret)return;
+  try{
+    const r=await fetch(GATEWAY_URL+'/api/music-profile/get',{method:'POST',headers:{'Authorization':'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify({userId:MUSICAI_USERID})});
+    if(!r.ok)return;
+    const d=await r.json();
+    if(d&&typeof d==='object'&&(d.blacklist||d.version)){_serverProfile={..._serverProfile,...d};console.log('[SYNC] Profil serveur chargé:',_serverProfile.blacklist.length,'blacklist,',_serverProfile.likeHistory.length,'likes');}
+  }catch(e){console.warn('[SYNC] Load error:',e);}
+}
+async function saveServerProfile(){
+  const secret=getGwSecret();if(!secret)return;
+  _serverProfile.lastSync=Date.now();
+  try{
+    await fetch(GATEWAY_URL+'/api/music-profile/save',{method:'POST',headers:{'Authorization':'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify({userId:MUSICAI_USERID,profile:_serverProfile})});
+  }catch(e){console.warn('[SYNC] Save error:',e);}
+}
+function scheduleSync(){clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>saveServerProfile(),3000);}
+function addToBlacklist(title,artist){
+  const key=title+'|||'+artist;
+  if(!_serverProfile.blacklist.includes(key)){_serverProfile.blacklist.push(key);_serverProfile.totalSuggestions++;}
+}
+async function generateTasteDNA(){
+  if(_serverProfile.likeHistory.length<5)return;
+  if(_serverProfile.tasteDNA_ts&&Date.now()-_serverProfile.tasteDNA_ts<24*3600*1000)return;
+  try{
+    const likes=_serverProfile.likeHistory.slice(-30);
+    const summary=likes.map(l=>`${l.title} — ${l.artist} (${l.genre||'?'}, ${l.mood||'?'})`).join('\n');
+    const raw=await callAI('Tu es un analyste musical. Analyse les patterns de goût de cet utilisateur en 3-4 phrases concises. Identifie: genres dominants, ambiances préférées, patterns d\'artistes, particularités. Réponds en texte brut, pas de JSON.','Voici ses likes récents:\n'+summary);
+    _serverProfile.tasteDNA=raw.trim().substring(0,500);
+    _serverProfile.tasteDNA_ts=Date.now();
+    scheduleSync();
+    console.log('[SYNC] TasteDNA généré');
+  }catch(e){console.warn('[SYNC] TasteDNA error:',e);}
+}
+
+// ── ERA RANGE MAP ──
+const ERA_RANGE_MAP={vintage:[1950,1979],'80s90s':[1980,1999],'2000s':[2000,2009],recent:[2010,2019],actuel:[2020,2026],mix:[1950,2026]};
+function getEraRange(selectedEras){
+  if(!selectedEras||!selectedEras.length)return null;
+  let minY=9999,maxY=0;
+  selectedEras.forEach(id=>{const r=ERA_RANGE_MAP[id];if(r){minY=Math.min(minY,r[0]);maxY=Math.max(maxY,r[1]);}});
+  return minY<9999?[minY,maxY]:null;
+}
+
+// ── VALIDATION RECO ──
+function validateRecommendation(rec){
+  const errors=[];
+  const p=getProfile()||{};
+  const eraRange=getEraRange(p.eras);
+  // Year check
+  if(eraRange&&rec.year){
+    const y=parseInt(rec.year);
+    if(y<eraRange[0]||y>eraRange[1])errors.push(`year ${y} hors range ${eraRange[0]}-${eraRange[1]}`);
+  }
+  // Blacklist check
+  const key=rec.title+'|||'+rec.artist;
+  if(_serverProfile.blacklist.includes(key))errors.push('déjà dans blacklist');
+  // Genre diversity: pas 3x même genre de suite
+  if(ST.sessionThread.length>=2){
+    const last2=ST.sessionThread.slice(-2).map(x=>(x.genre||'').toLowerCase().split(/[\/,\s]/)[0].trim());
+    const thisGenre=(rec.genre||'').toLowerCase().split(/[\/,\s]/)[0].trim();
+    if(thisGenre&&last2.every(g=>g===thisGenre))errors.push(`3x même genre: ${thisGenre}`);
+  }
+  return{valid:errors.length===0,errors};
+}
+
+// ── TEMPERATURE MAP ──
+const TEMP_MAP={onetap:0.80,mood:0.75,activity:0.75,discovery:1.0,shuffle:1.1,chat:0.70};
 
 const GENRES=[{id:'pop',label:'🎤 Pop'},{id:'rock',label:'🎸 Rock'},{id:'electro',label:'🎛️ Electronic'},{id:'jazz',label:'🎷 Jazz'},{id:'classique',label:'🎻 Classique'},{id:'hip-hop',label:'🎤 Hip-Hop'},{id:'rnb',label:'🎵 R&B'},{id:'indie',label:'🌿 Indie'},{id:'metal',label:'🤘 Metal'},{id:'folk',label:'🪕 Folk'},{id:'soul',label:'💛 Soul'},{id:'reggae',label:'🌴 Reggae'},{id:'latin',label:'💃 Latin'},{id:'ambient',label:'🌫️ Ambient'},{id:'funk',label:'🕺 Funk'},{id:'blues',label:'🎸 Blues'},{id:'country',label:'🤠 Country'},{id:'afrobeat',label:'🥁 Afrobeat'}];
 const ERAS=[{id:'vintage',label:'📻 Vintage',range:'1950–1979'},{id:'80s90s',label:'💿 80s/90s',range:'1980–1999'},{id:'2000s',label:'📀 2000s',range:'2000–2009'},{id:'recent',label:'🆕 2010s',range:'2010–2019'},{id:'actuel',label:'⚡ Actuel',range:'2020+'},{id:'mix',label:'🎲 Mix toutes époques',range:''}];
@@ -1648,7 +1738,24 @@ function initMainApp(){updateApiStatus();
 }
 function selectMood(id,el){document.querySelectorAll('#mood-grid .mood-chip').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');ST.selMood=id;document.getElementById('mood-go').style.display='block'}
 function selectActivity(id,el){document.querySelectorAll('#activity-grid .mood-chip').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');ST.selActivity=id;document.getElementById('activity-go').style.display='block'}
-function setMode(mode){ST.mode=mode;document.querySelectorAll('.mode-chip').forEach(x=>x.classList.toggle('active',x.dataset.mode===mode));['onetap','mood','activity','discovery','shuffle'].forEach(z=>{document.getElementById(`zone-${z}`).style.display=z===mode?'block':'none'})}
+function setMode(mode){ST.mode=mode;document.querySelectorAll('.mode-chip').forEach(x=>x.classList.toggle('active',x.dataset.mode===mode));['onetap','mood','activity','discovery','shuffle'].forEach(z=>{const el=document.getElementById(`zone-${z}`);el.style.display=z===mode?'block':'none';if(z===mode)el.classList.remove('zone-collapsed');})}
+// ── MOBILE COLLAPSE (v3.12) ──
+function collapseZoneOnMobile(mode){
+  if(window.innerWidth>480)return;
+  const zone=document.getElementById(`zone-${mode}`);if(!zone)return;
+  zone.classList.add('zone-collapsed');
+  // Add mini button if not already there
+  const resultEl=document.getElementById(`result-${mode}`);
+  if(resultEl&&!resultEl.parentElement.querySelector('.mini-reco-btn')){
+    const btn=document.createElement('button');
+    btn.className='mini-reco-btn';
+    btn.innerHTML='♪ Suivant';
+    btn.onclick=()=>getRecommendation(mode);
+    resultEl.after(btn);
+  }
+  // Scroll to card
+  setTimeout(()=>{const card=document.getElementById(`result-${mode}`);if(card)card.scrollIntoView({behavior:'smooth',block:'start'});},100);
+}
 
 // ── AI ──
 function deriveSessionVibe(){
@@ -1662,28 +1769,26 @@ function deriveSessionVibe(){
   const discLabel=avgDisc>0.6?'exploratoire':avgDisc>0.3?'équilibré':'confort';
   return [topMood,topGenre,`tendance ${discLabel}`].filter(Boolean).join(', ');
 }
-function buildSystemPrompt(mode){
+function buildSystemPrompt(mode,retryN){
   const p=getProfile()||{};
-  // ALL contexts, not just first
   const allContexts=(p.contexts&&p.contexts.length>0?p.contexts:[]).join(', ')||'général';
-  // mood: only use session mood if explicitly set, else 'neutre'
   const mood=ST.selMood||'neutre';
   const now=new Date();
   const h=now.getHours();
   const dow=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'][now.getDay()];
   const timeSlot=h<6?'nuit profonde':h<9?'petit matin':h<12?'matinée':h<14?'déjeuner':h<17?'après-midi':h<20?'fin de journée':h<23?'soirée':'nuit';
   const hist=getHistory().filter(x=>x.action==='suggest'||x.action==='chat').slice(0,15);
-  // Dedup between sessionThread and history
+  // Anti-repeat: session thread + blacklist serveur (60 titres max)
   const sessionSet=new Set(ST.sessionThread.map(x=>x.title+'|||'+x.artist));
   const histTitles=hist.filter(x=>!sessionSet.has(x.title+'|||'+x.artist)).map(x=>x.title+' — '+x.artist);
   const threadTitles=ST.sessionThread.map(x=>x.title+' — '+x.artist);
-  const recentTitles=[...new Set([...threadTitles,...histTitles])].slice(0,20);
+  const blacklistRecent=_serverProfile.blacklist.slice(-52).map(k=>{const[t,a]=k.split('|||');return t+' — '+a;});
+  const recentTitles=[...new Set([...threadTitles,...histTitles,...blacklistRecent])].slice(0,60);
   const threadDesc=ST.sessionThread.length>0
     ?'PROGRESSION SESSION: '+ST.sessionThread.map((x,i)=>`${i+1}.${x.title}(${x.mood||'?'},score:${Math.round((x.discovery_score||0)*100)}%)`).join(' → ')
     :'Début de session.';
   const vibeStr=deriveSessionVibe();
   const vibeSection=vibeStr?'SESSION VIBE ÉMERGENT: '+vibeStr+' — maintenir/nuancer cette cohérence.':'';
-  // Adventure score drives discovery instructions
   const adv=p.adventurousness??0.4;
   const advInstr=adv>=0.7?'Aventure élevée: propose des artistes peu connus, sous-genres inattendus.'
     :adv<=0.3?'Confort: reste proche des artistes référencés, genres principaux.'
@@ -1692,10 +1797,36 @@ function buildSystemPrompt(mode){
     mode==='onetap'?'ONE-TAP: reco parfaite pour CE moment précis. Variété maximale vs sessions précédentes.':
     mode==='shuffle'?'MODE SHUFFLE: ignore TOTALEMENT le profil. Genre, époque, culture 100% aléatoires. discovery_score > 0.9. Peut être n\'importe quoi : bossa nova 1960, metal norvégien, pop coréenne, blues malien...':'';
   const chatCtx=mode==='chat'&&ST.chatHistory.length>0?'\nCONVERSATION RÉCENTE:\n'+ST.chatHistory.slice(-6).map(m=>(m.role==='user'?'User':'IA')+': '+m.content).join('\n'):'';
-  const antiRepeat=recentTitles.length>0?'ANTI-RÉPÉTITION ABSOLUE — NE JAMAIS proposer ces titres: '+recentTitles.join(' | '):'';
+  const antiRepeat=recentTitles.length>0?'ANTI-RÉPÉTITION ABSOLUE — NE JAMAIS proposer ces titres:\n'+recentTitles.join(' | '):'';
   const dislikedSection=(p.disliked&&p.disliked.length>0)?'GENRES/ARTISTES À ÉVITER (dislikes utilisateur): '+p.disliked.slice(-20).join(', '):'';
-  const likedHistory=getHistory().filter(x=>x.action==='like').slice(-12);
-  const likedSection=likedHistory.length>0?'TITRES AIMÉS (renforcer ces patterns sonores): '+likedHistory.map(x=>x.title+' — '+x.artist+(x.genre?' ('+x.genre+')':'')).join(' | '):'';
+  // Likes renforcés: merge local + serveur, dédupliqués, max 30
+  const localLikes=getHistory().filter(x=>x.action==='like').slice(-20);
+  const serverLikes=(_serverProfile.likeHistory||[]).slice(-20);
+  const allLikesMap=new Map();
+  [...serverLikes,...localLikes].forEach(l=>{const k=(l.title||'')+'|||'+(l.artist||'');allLikesMap.set(k,l);});
+  const mergedLikes=[...allLikesMap.values()].slice(-30);
+  const likedSection=mergedLikes.length>0?'TITRES AIMÉS (renforcer ces patterns sonores): '+mergedLikes.map(x=>(x.title||'?')+' — '+(x.artist||'?')+(x.genre?' ('+x.genre+')':'')).join(' | '):'';
+  // Analyse patterns likes
+  const likeGenres={},likeMoods={};
+  mergedLikes.forEach(l=>{if(l.genre){const g=l.genre.split(/[\/,]/)[0].trim().toLowerCase();likeGenres[g]=(likeGenres[g]||0)+1;}if(l.mood)likeMoods[l.mood]=(likeMoods[l.mood]||0)+1;});
+  const topLikeGenres=Object.entries(likeGenres).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>x[0]);
+  const topLikeMoods=Object.entries(likeMoods).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>x[0]);
+  const patternSection=topLikeGenres.length>0?`PATTERNS LIKES: genres favoris=[${topLikeGenres.join(',')}], moods favoris=[${topLikeMoods.join(',')}]`:'';
+  const tasteDNASection=_serverProfile.tasteDNA?'TASTE DNA (analyse IA): '+_serverProfile.tasteDNA:'';
+  // Era enforcement
+  const eraRange=getEraRange(p.eras);
+  const eraEnforce=eraRange&&!p.eras?.includes('mix')?`CONTRAINTE ANNÉE OBLIGATOIRE: le champ "year" DOIT être entre ${eraRange[0]} et ${eraRange[1]}. Toute chanson hors de cette plage sera REJETÉE automatiquement.`:'';
+  // Anti-mainstream
+  const discMin=mode==='discovery'?0.7:mode==='shuffle'?0.8:0.4;
+  const antiMainstream=`RÈGLE ANTI-MAINSTREAM:
+- INTERDICTION de proposer les "usual suspects" (100M+ streams Spotify)
+- Privilégie: faces B, albums méconnus, artistes indépendants, scènes non-anglophones
+- Score découverte minimum: ${discMin}`;
+  // Diversité genre
+  const last2Genres=ST.sessionThread.slice(-2).map(x=>(x.genre||'').split(/[\/,\s]/)[0].trim()).filter(Boolean);
+  const diversityHint=last2Genres.length>=2?`DIVERSITÉ: les 2 dernières recos étaient [${last2Genres.join(', ')}]. Propose un genre DIFFÉRENT.`:'';
+  // Retry hint
+  const retryHint=retryN?`⚠️ TENTATIVE ${retryN+1}: la précédente a été rejetée (année ou blacklist). Propose un titre COMPLÈTEMENT DIFFÉRENT.`:'';
   return `Tu es un expert mondial en recommandation musicale — connaissance encyclopédique de TOUS genres, époques, cultures, sous-cultures.
 
 PROFIL COMPLET:
@@ -1706,8 +1837,14 @@ PROFIL COMPLET:
 - Humeur actuelle: ${mood}
 - Niveau aventure: ${Math.round(adv*100)}% — ${advInstr}
 
+${eraEnforce}
+${antiMainstream}
+${diversityHint}
+
 ${dislikedSection}
 ${likedSection}
+${patternSection}
+${tasteDNASection}
 
 MOMENT: ${dow} ${timeSlot} (${h}h) — calibre énergie et atmosphère sur ce créneau.
 
@@ -1718,34 +1855,36 @@ ${antiRepeat}
 
 ${modeInstr}
 ${chatCtx}
+${retryHint}
 
 RÈGLE ABSOLUE: JSON UNIQUEMENT. Zéro texte avant/après. Zéro backtick. Zéro markdown.
 {"title":"...","artist":"...","genre":"...","year":2010,"mood":"...","why":"explication émotionnelle max 20 mots","story":"2-3 phrases: contexte création, anecdote, ce que Spotify ne dira jamais","now_reason":"1 phrase: pourquoi MAINTENANT ce ${timeSlot} de ${dow}","youtube_query":"artiste titre official audio","discovery_score":0.0}`;
 }
-async function callAI(sys,msg){
+async function callAI(sys,msg,temperature){
   const cfg=getConfig();const{provider,model}=cfg;
   const gwSecret=getGwSecret();
   const useGateway=!!gwSecret;
   const apiKey=useGateway?'':cfg.keys?.[provider]||'';
   if(!useGateway&&!apiKey)throw new Error('Clé API manquante ou Gateway non configuré — ouvre ⚙️');
   const base=useGateway?getGwUrl().replace(/\/$/,''):'';
+  const temp=temperature||0.85;
   let url,headers,body;
   if(provider==='claude'){
     url=useGateway?base+'/api/claude':'https://api.anthropic.com/v1/messages';
     headers=useGateway?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}
       :{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
-    body=JSON.stringify({model,max_tokens:800,temperature:0.85,system:sys,messages:[{role:'user',content:msg}]});
+    body=JSON.stringify({model,max_tokens:800,temperature:temp,system:sys,messages:[{role:'user',content:msg}]});
   }else if(provider==='gemini'){
     url=useGateway?base+`/api/gemini/v1beta/models/${model}:generateContent`
       :`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     headers=useGateway?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}
       :{'Content-Type':'application/json'};
-    body=JSON.stringify({contents:[{role:'user',parts:[{text:sys+'\n\n'+msg}]}],generationConfig:{maxOutputTokens:800,temperature:0.85}});
+    body=JSON.stringify({contents:[{role:'user',parts:[{text:sys+'\n\n'+msg}]}],generationConfig:{maxOutputTokens:800,temperature:temp}});
   }else{
     url=useGateway?base+'/api/openai':'https://api.openai.com/v1/chat/completions';
     headers=useGateway?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}
       :{'Content-Type':'application/json','Authorization':'Bearer '+apiKey};
-    body=JSON.stringify({model,max_tokens:800,temperature:0.85,messages:[{role:'system',content:sys},{role:'user',content:msg}]});
+    body=JSON.stringify({model,max_tokens:800,temperature:temp,messages:[{role:'system',content:sys},{role:'user',content:msg}]});
   }
   const controller=new AbortController();const _to=setTimeout(()=>controller.abort(),15000);
   let res;try{res=await fetch(url,{method:'POST',headers,body,signal:controller.signal});}catch(fe){clearTimeout(_to);if(fe.name==='AbortError')throw new Error('Timeout IA (15s) — réessaie');throw fe;}finally{clearTimeout(_to);}
@@ -1775,10 +1914,20 @@ async function getRecommendation(mode){
   resultEl.innerHTML=`<div style="display:flex;align-items:center;gap:10px;color:var(--muted);"><div class="dot-typing"><span></span><span></span><span></span></div> L'IA cherche...</div>`;
   if(mode==='onetap')document.getElementById('onetap-icon').textContent='⏳';
   const msgMap={onetap:'Recommande-moi une chanson parfaite maintenant.',mood:`Je me sens ${ST.selMood||'neutre'}. Reco.`,activity:`Je fais: ${ST.selActivity||'quelque chose'}. Reco.`,discovery:'Mode découverte: pépite inattendue.',shuffle:'Mode Shuffle: genre TOTALEMENT aléatoire, hors profil. Ignore mes préférences habituelles. Pioche n\'importe où dans l\'histoire de la musique.'};
+  const temp=TEMP_MAP[mode]||0.85;
   try{
-    const raw=await callAI(buildSystemPrompt(mode),msgMap[mode]||msgMap.onetap);
-    const rec=parseJSON(raw);
+    let rec=null;
+    for(let attempt=0;attempt<3;attempt++){
+      const raw=await callAI(buildSystemPrompt(mode,attempt),msgMap[mode]||msgMap.onetap,temp);
+      rec=parseJSON(raw);
+      const v=validateRecommendation(rec);
+      if(v.valid)break;
+      console.warn(`[RECO] Attempt ${attempt+1} rejeté:`,v.errors.join(', '));
+      if(attempt===2)break;// use last attempt anyway
+    }
     renderCard(resultEl,rec);
+    // Collapse sur mobile
+    collapseZoneOnMobile(mode);
     pushHistory({title:rec.title,artist:rec.artist,genre:rec.genre,action:'suggest',context:mode});
     ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
     if(ST.sessionThread.length>8)ST.sessionThread.shift();
@@ -1856,9 +2005,21 @@ function doFeedback(btnId,action,title,artist,genre){
   btn.classList.add({like:'liked',dislike:'disliked',save:'saved'}[action]);
   btn.style.transform='scale(1.3)';setTimeout(()=>{if(btn)btn.style.transform=''},200);
   try{if(navigator.vibrate)navigator.vibrate(action==='like'?[15]:action==='dislike'?[30,10,30]:[10]);}catch(_){}
-  pushHistory({title,artist,action,context:ST.mode});
-  // Update profile disliked list on thumbs down
+  pushHistory({title,artist,action,context:ST.mode,genre});
+  // Server profile sync
+  if(action==='like'){
+    const mood=ST.sessionThread.find(x=>x.title===title)?.mood||'';
+    _serverProfile.likeHistory.push({title,artist,genre,mood,ts:Date.now()});
+    if(_serverProfile.likeHistory.length>500)_serverProfile.likeHistory=_serverProfile.likeHistory.slice(-500);
+    const gk=(genre||'').split(/[\/,]/)[0].trim().toLowerCase();
+    if(gk)_serverProfile.genreStats[gk]=(_serverProfile.genreStats[gk]||0)+1;
+    scheduleSync();
+    // TasteDNA every 10 likes
+    if(_serverProfile.likeHistory.length%10===0)generateTasteDNA().catch(()=>{});
+  }
   if(action==='dislike'){
+    _serverProfile.dislikeHistory.push({title,artist,genre,ts:Date.now()});
+    if(_serverProfile.dislikeHistory.length>200)_serverProfile.dislikeHistory=_serverProfile.dislikeHistory.slice(-200);
     const p=getProfile();
     if(p){
       if(!p.disliked)p.disliked=[];
@@ -1869,6 +2030,7 @@ function doFeedback(btnId,action,title,artist,genre){
         saveProfile(p);
       }
     }
+    scheduleSync();
   }
   toast({like:'👍 Pris en compte',dislike:'👎 Noté — profil mis à jour',save:'🔖 Sauvegardé'}[action]);
 }
@@ -2284,6 +2446,8 @@ function boot(){
   }
   loadChatHistory();
   initPlaylistsOverlay();
+  // Load server profile (v3.12)
+  if(getGwSecret())loadServerProfile().catch(e=>console.warn('[SYNC] Boot load failed:',e));
   if(p?.completedOnboarding){showScreen('main');initMainApp();setTimeout(updateApiStatus,200)}
   else{showScreen('onboard');initOnboarding();}
 }

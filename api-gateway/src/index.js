@@ -25,6 +25,8 @@
  *   POST /api/azure       → Azure Translator (query params forwarded)
  *   POST /api/claude      → Anthropic Claude API
  *   POST /api/deepgram/*  → Deepgram Nova-2 API (transcription + diarization)
+ *   POST /api/music-profile/get   → Read music AI user profile from KV
+ *   POST /api/music-profile/save  → Write music AI user profile to KV
  *   POST /admin/keys/list
  *   POST /admin/keys/set
  *   POST /admin/keys/delete
@@ -37,7 +39,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.24';
+const VERSION = '1.25';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -141,6 +143,8 @@ export default {
         if (path.startsWith('/api/claude'))   return await proxyClaude(request, env, path);
         if (path.startsWith('/api/deepgram')) return await proxyDeepgram(request, env, path);
         if (path === '/api/youtube-search')  return await proxyYoutubeSearch(request, env);
+        if (path === '/api/music-profile/get')  return await handleMusicProfileGet(request, env);
+        if (path === '/api/music-profile/save') return await handleMusicProfileSave(request, env);
 
         return jsonResponse({ error: 'unknown api route' }, 404);
       }
@@ -1100,6 +1104,35 @@ async function proxyRequest(request, upstreamUrl, authHeaders) {
     status : upstreamResp.status,
     headers: respHeaders,
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/music-profile/get — Read music AI profile from KV
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleMusicProfileGet(request, env) {
+  let userId = 'default';
+  try { const b = await request.json(); userId = b.userId || 'default'; } catch (_) {}
+  const raw = await env.GATEWAY_KV.get(`musicai:profile:${userId}`);
+  return jsonResponse(raw ? JSON.parse(raw) : {});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/music-profile/save — Write music AI profile to KV
+// ─────────────────────────────────────────────────────────────────────────────
+async function handleMusicProfileSave(request, env) {
+  const body = await request.json();
+  const userId = body.userId || 'default';
+  const profile = body.profile;
+  if (!profile || typeof profile !== 'object') {
+    return jsonResponse({ error: 'missing profile object' }, 400);
+  }
+  // Enforce max size ~512KB for safety
+  const json = JSON.stringify(profile);
+  if (json.length > 512 * 1024) {
+    return jsonResponse({ error: 'profile too large (max 512KB)' }, 413);
+  }
+  await env.GATEWAY_KV.put(`musicai:profile:${userId}`, json);
+  return jsonResponse({ ok: true, size: json.length });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
