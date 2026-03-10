@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.26</title>
+<title>SubWhisper v9.27</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -718,6 +718,8 @@ body.light .dz:hover,body.light .dz.over{background:rgba(124,106,255,.04)}
   color:#fff;border-color:transparent;
 }
 .ab.pri:hover{filter:brightness(1.12);transform:translateY(-1px);box-shadow:0 4px 18px rgba(124,106,255,.38)}
+.ab.exp-ok{background:rgba(0,212,170,.2)!important;border-color:var(--success)!important;color:var(--success)!important;transition:all .15s}
+.ab.exp-fail{background:rgba(255,80,80,.2)!important;border-color:var(--danger)!important;color:var(--danger)!important;transition:all .15s}
 .ab.sec{border-color:rgba(0,212,170,.3);color:var(--success)}
 .ab.sec:hover{background:rgba(0,212,170,.08);border-color:var(--success)}
 .sp{
@@ -1132,7 +1134,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.26</span>
+    <span class="ver-badge">v9.27</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1471,7 +1473,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.26 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.27 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -4107,7 +4109,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.26',
+    version: 'v9.27',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4177,8 +4179,18 @@ async function _verifyDirPermission() {
   return false;
 }
 
+function _flashExportBtn(ok) {
+  var btns = document.querySelectorAll('.ab[onclick*="dl"], .ab.pri');
+  btns.forEach(function(b) { b.classList.add(ok ? 'exp-ok' : 'exp-fail'); setTimeout(function() { b.classList.remove('exp-ok','exp-fail'); }, 1200); });
+}
+
 async function exportFile(content, ext, mime) {
   var fname = (origName || 'subtitles') + ext;
+  // Sauvegarder la session AVANT tout await (survie si Android tue l'onglet)
+  try { var sp = document.getElementById('sp'); if (sp && sp.value) {
+    var sk = 'sw_session', data = { t: Date.now(), srt: sp.value, origName: origName || '', detectedLang: detectedLang || '', srcLang: (document.getElementById('srcLangMain') || {}).value || '', outLang: (document.getElementById('outLangMain') || {}).value || '', srtOriginal: srtOriginal || '', rawGroq: (_rawGroqSrt && _rawGroqSrt.length < 500000) ? _rawGroqSrt : '' };
+    localStorage.setItem(sk, JSON.stringify(data));
+  }} catch(e) {}
   // 1. Dossier mappé (IndexedDB) — pas besoin de user gesture
   if (destDirHandle && await _verifyDirPermission()) {
     try {
@@ -4186,19 +4198,21 @@ async function exportFile(content, ext, mime) {
       var w = await fh.createWritable();
       await w.write(content); await w.close();
       toast('\ud83d\udcbe ' + fname + ' \u2192 ' + destDirHandle.name);
+      _flashExportBtn(true);
       return;
     } catch(e) {
       if (e.name === 'AbortError') return;
       destDirHandle = null; _deleteDirHandle(); updateDirInfo();
     }
   }
-  // 2. Mobile → navigator.share
+  // 2. Mobile → navigator.share (toast+flash AVANT car share peut tuer la page)
   if (navigator.canShare) {
     try {
       var file = new File([content], fname, { type: mime });
       if (navigator.canShare({ files: [file] })) {
+        toast('\u2705 ' + fname);
+        _flashExportBtn(true);
         await navigator.share({ files: [file], title: fname });
-        toast('\u2705 ' + fname + ' export\u00e9');
         return;
       }
     } catch(e) { if (e.name === 'AbortError') return; }
@@ -4213,6 +4227,7 @@ async function exportFile(content, ext, mime) {
         var w2 = await fh2.createWritable();
         await w2.write(content); await w2.close();
         toast('\ud83d\udcbe ' + fname + ' \u2192 ' + destDirHandle.name);
+        _flashExportBtn(true);
         return;
       } catch(e) {
         if (e.name === 'AbortError') return;
@@ -4222,7 +4237,8 @@ async function exportFile(content, ext, mime) {
   }
   // 4. Dernier recours — download classique
   dlBlob(content, ext, mime);
-  toast('\u2705 ' + fname + ' t\u00e9l\u00e9charg\u00e9');
+  toast('\u2705 ' + fname);
+  _flashExportBtn(true);
 }
 
 async function dlSRT() {
