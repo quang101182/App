@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.19</title>
+<title>SubWhisper v9.20</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1132,7 +1132,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.19</span>
+    <span class="ver-badge">v9.20</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1471,7 +1471,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.19 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.20 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -4013,6 +4013,7 @@ function copyFfmpegCmd() {
 // ── RAW GROQ EXPORT ───────────────────────────────────────
 // Stocke le SRT brut Groq pour téléchargement via bouton dédié (Batch Lab)
 var _rawGroqSrt = null;
+var _pendingExport = null;
 
 // ── DIAGNOSTIC EXPORT ────────────────────────────────────
 var _diagSteps = {}; // { raw_groq, after_format, after_clean, after_translate }
@@ -4102,7 +4103,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.19',
+    version: 'v9.20',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4166,19 +4167,27 @@ async function exportFile(content, ext, mime) {
   var fname = (origName || 'subtitles') + ext;
   if (destDirHandle) {
     try {
-      var fh = await destDirHandle.getFileHandle(fname, { create: true });
-      var w = await fh.createWritable();
-      await w.write(content); await w.close();
-      toast('\ud83d\udcbe ' + fname + ' \u2192 ' + destDirHandle.name);
-      return;
+      // Vérifier permission AVANT de créer le fichier (évite fichier vide)
+      var perm = await destDirHandle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') perm = await destDirHandle.requestPermission({ mode: 'readwrite' });
+      if (perm === 'granted') {
+        var fh = await destDirHandle.getFileHandle(fname, { create: true });
+        var w = await fh.createWritable();
+        await w.write(content); await w.close();
+        toast('\ud83d\udcbe ' + fname + ' \u2192 ' + destDirHandle.name);
+        return;
+      }
+      // Permission refusée → reset dossier, continuer vers showSaveFilePicker
+      destDirHandle = null; updateDirInfo();
+      toast('\u26a0 Permission dossier perdue \u2014 choisissez \u00e0 nouveau');
     } catch(e) {
       if (e.name === 'AbortError') return;
       if (e.name === 'NotAllowedError' || e.name === 'SecurityError') {
         destDirHandle = null; updateDirInfo();
         toast('\u26a0 Permission dossier perdue \u2014 choisissez \u00e0 nouveau');
       }
-      // Fallback download si écriture dossier échoue
-      dlBlob(content, ext, mime); return;
+      // Ne PAS appeler dlBlob ici (pas de user gesture → crash mobile)
+      // On tombe dans showSaveFilePicker ci-dessous
     }
   }
   if ('showSaveFilePicker' in window) {
@@ -4190,8 +4199,15 @@ async function exportFile(content, ext, mime) {
       var writable = await handle.createWritable();
       await writable.write(content); await writable.close();
       return;
-    } catch(e) { if (e.name === 'AbortError') return; dlBlob(content, ext, mime); }
+    } catch(e) {
+      if (e.name === 'AbortError') return;
+      // Erreur d'écriture picker → stocker pour retry manuel
+      _pendingExport = { content: content, ext: ext, mime: mime };
+      toast('\u26a0 Export \u00e9chou\u00e9 \u2014 appuyez sur le bouton Export pour r\u00e9essayer');
+      return;
+    }
   }
+  // Fallback classique (navigateurs sans File System Access API) — OK car user gesture encore valide
   dlBlob(content, ext, mime);
 }
 
