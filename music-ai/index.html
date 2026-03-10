@@ -877,7 +877,7 @@ function validateRecommendation(rec){
 }
 
 // ── TEMPERATURE MAP ──
-const TEMP_MAP={onetap:0.80,mood:0.75,activity:0.75,discovery:1.0,shuffle:1.1,chat:0.70};
+const TEMP_MAP={onetap:0.80,mood:0.75,activity:0.75,discovery:1.0,shuffle:1.0,chat:0.70};
 
 const GENRES=[{id:'pop',label:'🎤 Pop'},{id:'rock',label:'🎸 Rock'},{id:'electro',label:'🎛️ Electronic'},{id:'jazz',label:'🎷 Jazz'},{id:'classique',label:'🎻 Classique'},{id:'hip-hop',label:'🎤 Hip-Hop'},{id:'rnb',label:'🎵 R&B'},{id:'indie',label:'🌿 Indie'},{id:'metal',label:'🤘 Metal'},{id:'folk',label:'🪕 Folk'},{id:'soul',label:'💛 Soul'},{id:'reggae',label:'🌴 Reggae'},{id:'latin',label:'💃 Latin'},{id:'ambient',label:'🌫️ Ambient'},{id:'funk',label:'🕺 Funk'},{id:'blues',label:'🎸 Blues'},{id:'country',label:'🤠 Country'},{id:'afrobeat',label:'🥁 Afrobeat'}];
 const ERAS=[{id:'vintage',label:'📻 Vintage',range:'1950–1979'},{id:'80s90s',label:'💿 80s/90s',range:'1980–1999'},{id:'2000s',label:'📀 2000s',range:'2000–2009'},{id:'recent',label:'🆕 2010s',range:'2010–2019'},{id:'actuel',label:'⚡ Actuel',range:'2020+'},{id:'mix',label:'🎲 Mix toutes époques',range:''}];
@@ -1060,9 +1060,10 @@ function startProgressTick(){
       if(pct>=80&&ST.continuousMode&&!ST._preFetching&&!ST._preRec){
         ST._preFetching=true;
         const _preMode=ST.mode;
+        const _preTemp=TEMP_MAP[_preMode]||0.85;
         const _msgMap={onetap:'Recommande-moi une chanson parfaite maintenant.',mood:`Je me sens ${ST.selMood||'neutre'}. Reco.`,activity:`Je fais: ${ST.selActivity||'quelque chose'}. Reco.`,discovery:'Mode découverte: pépite inattendue.',shuffle:'Mode Shuffle: genre TOTALEMENT aléatoire.'};
-        callAI(buildSystemPrompt(_preMode),_msgMap[_preMode]||_msgMap.onetap)
-          .then(raw=>{try{ST._preRec=parseJSON(raw);}catch(_){}ST._preFetching=false;})
+        callAI(buildSystemPrompt(_preMode),_msgMap[_preMode]||_msgMap.onetap,_preTemp)
+          .then(raw=>{try{const _pr=parseJSON(raw);const _v=validateRecommendation(_pr);if(_v.valid)ST._preRec=_pr;else{console.warn('[PRE] rejeté:',_v.errors);}}catch(_){}ST._preFetching=false;})
           .catch(()=>{ST._preFetching=false;});
       }
     }catch(_){}
@@ -1917,13 +1918,13 @@ async function getRecommendation(mode){
   const temp=TEMP_MAP[mode]||0.85;
   try{
     let rec=null;
-    for(let attempt=0;attempt<3;attempt++){
+    for(let attempt=0;attempt<2;attempt++){
       const raw=await callAI(buildSystemPrompt(mode,attempt),msgMap[mode]||msgMap.onetap,temp);
       rec=parseJSON(raw);
       const v=validateRecommendation(rec);
       if(v.valid)break;
       console.warn(`[RECO] Attempt ${attempt+1} rejeté:`,v.errors.join(', '));
-      if(attempt===2)break;// use last attempt anyway
+      if(attempt===1)break;// use last attempt anyway
     }
     renderCard(resultEl,rec);
     // Collapse sur mobile
