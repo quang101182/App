@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VoxSplit v3.6.2 — Diarization & Transcription</title>
+<title>VoxSplit v3.6.3 — Diarization & Transcription</title>
 <meta name="description" content="Transcription audio/vidéo avec identification des locuteurs (diarization) via Deepgram Nova-2">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#7c6aff">
@@ -413,7 +413,7 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
   <div class="app-header">
     <div><h1><i class="fas fa-waveform-lines" style="margin-right:8px"></i>VoxSplit</h1></div>
     <div class="header-actions">
-      <span class="version">v3.6.2</span>
+      <span class="version">v3.6.3</span>
       <span id="gw-status" title="Gateway" style="display:flex;align-items:center;font-size:12px;color:var(--muted)"><span class="status-dot yellow"></span></span>
       <button class="pwa-install" id="pwa-install" onclick="installPWA()"><i class="fas fa-download"></i> Installer</button>
       <button class="icon-btn" onclick="toggleSettings()" title="Paramètres"><i class="fas fa-gear"></i></button>
@@ -751,7 +751,7 @@ mark { background:rgba(245,158,11,.25); color:var(--text); border-radius:2px; pa
 </div>
 
 <script>
-// VoxSplit v3.6.2 — Diarization & Transcription via Deepgram
+// VoxSplit v3.6.3 — Diarization & Transcription via Deepgram
 const VERSION='3.6.1';
 let _deferredInstallPrompt=null;
 let _histPage=0;const HIST_PER_PAGE=10;const HIST_MAX=50;
@@ -907,7 +907,7 @@ function log(msg,level=''){
 }
 function copyLog(){
   const el=document.getElementById('log-console');if(!el)return;const entries=el.querySelectorAll('.log-entry');
-  const txt='VoxSplit v3.6.2 — Log\n'+'='.repeat(40)+'\n'+Array.from(entries).map(e=>e.textContent).join('\n');
+  const txt='VoxSplit v3.6.3 — Log\n'+'='.repeat(40)+'\n'+Array.from(entries).map(e=>e.textContent).join('\n');
   navigator.clipboard.writeText(txt).then(()=>toast('Log copié ('+entries.length+' lignes)')).catch(()=>{const ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('Log copié')});
 }
 function setProgress(pct,label,step){
@@ -943,8 +943,9 @@ async function startTranscription(){
   try{
     let ct=selectedFile.type||'audio/mpeg';
     if(!ct||ct==='application/octet-stream'){const ext=selectedFile.name.split('.').pop().toLowerCase();ct={mp3:'audio/mpeg',mp4:'video/mp4',wav:'audio/wav',webm:'audio/webm',ogg:'audio/ogg',flac:'audio/flac',m4a:'audio/mp4',aac:'audio/aac',mkv:'video/x-matroska',avi:'video/x-msvideo',mov:'video/quicktime'}[ext]||'audio/mpeg'}
-    const LARGE=95*1024*1024;let json;
+    const LARGE=95*1024*1024;const GW_SAFE=25*1024*1024;let json;
     if(selectedFile.size>=LARGE){const flyUrl=getFlyUrl();if(!flyUrl)throw new Error('Fichier > 95 MB — configurez Fly.io');log(`Gros fichier → R2 + Fly.io`,'warn');json=await uploadViaR2(flyUrl,params,ct,selectedFile,startTime)}
+    else if(selectedFile.size>=GW_SAFE){const flyUrl=getFlyUrl();if(!flyUrl){log(`Upload gateway → Deepgram (${formatSize(selectedFile.size)})`,'info');json=await uploadWithProgress(`${getGateway()}/api/deepgram/v1/listen?${params}`,getSecret(),ct,selectedFile,startTime,true)}else{log(`Fichier ${formatSize(selectedFile.size)} → Fly.io direct (évite timeout CF)`,'warn');json=await uploadViaFlyDirect(flyUrl,params,ct,selectedFile,startTime)}}
     else{log(`Upload gateway → Deepgram (${formatSize(selectedFile.size)})`,'info');json=await uploadWithProgress(`${getGateway()}/api/deepgram/v1/listen?${params}`,getSecret(),ct,selectedFile,startTime,true)}
     rawResult=json;
     const elapsed=((Date.now()-startTime)/1000).toFixed(1);log(`Transcription reçue en ${elapsed}s`,'success');
@@ -968,6 +969,18 @@ async function startTranscription(){
   }catch(err){log(`Erreur: ${err.message}`,'error');toast('Erreur: '+err.message,'error');setProgress(0,'Erreur')}
   stopChrono();btn.disabled=false;btn.innerHTML='<i class="fas fa-play"></i><span>Transcrire</span>';
   setTimeout(()=>document.getElementById('waveform').classList.remove('visible'),2000);
+}
+
+// ─── Upload Fly.io direct (25-95 MB, évite timeout CF) ──
+async function uploadViaFlyDirect(flyUrl,dgParams,ct,file,startTime){
+  setProgress(5,'Upload Fly.io...','upload');
+  log(`Upload direct → Fly.io /deepgram (${formatSize(file.size)})`,'info');
+  setProgress(10,'Upload en cours...','upload');
+  const flyRes=await fetch(`${flyUrl}/deepgram?${dgParams}`,{method:'POST',headers:{'Authorization':`Bearer ${getSecret()}`,'Content-Type':ct},body:file});
+  if(!flyRes.ok){let em;try{const j=await flyRes.json();em=j.error||flyRes.status}catch(_){em=await flyRes.text()}throw new Error(flyRes.status===503?'Serveur occupé':`Fly.io ${flyRes.status}: ${String(em).substring(0,200)}`)}
+  setProgress(85,'Deepgram traite...','transcription');
+  const json=await flyRes.json();
+  if(!json)throw new Error('Fly.io: réponse vide');return json;
 }
 
 // ─── Upload R2 (gros fichiers) ───────────────────────────
@@ -1825,7 +1838,7 @@ function init(){
 }
 document.addEventListener('DOMContentLoaded',init);
 
-// ── SESSION RESTORE removed in v3.6.2 — history feature covers this ──
+// ── SESSION RESTORE removed in v3.6.3 — history feature covers this ──
 </script>
 </body>
 </html>
