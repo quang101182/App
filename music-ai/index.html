@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.12.0 — Discovery Engine</title>
+<title>music·ai v3.13.0 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -487,7 +487,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.12.0</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.13.0</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -806,8 +806,8 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.12) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.12.0'};
+// ── SERVER PROFILE (music-ai v3.13) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.13.0'};
 let _syncTimer=null;
 const MUSICAI_USERID='default';
 async function loadServerProfile(){
@@ -1082,6 +1082,8 @@ function updateMediaSession(title,artist,thumb){
     navigator.mediaSession.setActionHandler('previoustrack',ytPrev);
     navigator.mediaSession.setActionHandler('nexttrack',ytNext);
     navigator.mediaSession.setActionHandler('stop',ytStop);
+    navigator.mediaSession.setActionHandler('seekbackward',()=>{try{const t=ST.ytPlayer.getCurrentTime();ST.ytPlayer.seekTo(Math.max(0,t-10),true);}catch(_){}});
+    navigator.mediaSession.setActionHandler('seekforward',()=>{try{const t=ST.ytPlayer.getCurrentTime();ST.ytPlayer.seekTo(t+10,true);}catch(_){}});
   }catch(_){}
 }
 // === PWA Audio Keepalive ===
@@ -1413,6 +1415,40 @@ function fpUpdateTrack(){
     setVolume(pct);fpSetVolume(pct);
   }
   wrap.addEventListener('click',fpVol);wrap.addEventListener('touchstart',e=>{e.preventDefault();fpVol(e);},{passive:false});
+})();
+// Full player swipe gestures (next/prev + close) — v3.13.0
+(function(){
+  const overlay=document.getElementById('fp-overlay');
+  if(!overlay)return;
+  const HORIZ_THRESHOLD=60,DOWN_THRESHOLD=80,DEAD_ZONE=10,LOCK_RATIO=1.5;
+  let sx=0,sy=0,lx=0,ly=0,t0=0,dir=null,blocked=false;
+  function isBlocked(e){return !!(e.target.closest('#fp-track-wrap')||e.target.closest('#fp-vol-wrap'));}
+  overlay.addEventListener('touchstart',e=>{
+    if(isBlocked(e)){blocked=true;return;}
+    blocked=false;dir=null;
+    sx=lx=e.touches[0].clientX;sy=ly=e.touches[0].clientY;t0=Date.now();
+  },{passive:true});
+  overlay.addEventListener('touchmove',e=>{
+    if(blocked||!e.touches.length)return;
+    const cx=e.touches[0].clientX,cy=e.touches[0].clientY;
+    const dx=cx-sx,dy=cy-sy;
+    if(!dir&&(Math.abs(dx)>DEAD_ZONE||Math.abs(dy)>DEAD_ZONE)){
+      dir=Math.abs(dx)>Math.abs(dy)*LOCK_RATIO?'h':'v';
+    }
+    if(dir==='h')e.preventDefault();
+    lx=cx;ly=cy;
+  },{passive:false});
+  overlay.addEventListener('touchend',e=>{
+    if(blocked)return;
+    const dx=lx-sx,dy=ly-sy,dt=Date.now()-t0||1;
+    if(dir==='h'){
+      if(dx<-HORIZ_THRESHOLD){ytNext();toast('⏭');}
+      else if(dx>HORIZ_THRESHOLD){ytPrev();toast('⏮');}
+    }else if(dir==='v'&&dy>DOWN_THRESHOLD){
+      fpClose();
+    }
+    dir=null;
+  },{passive:true});
 })();
 function getPlaylists(){try{return JSON.parse(localStorage.getItem(LS_PL))||[]}catch{return[]}}
 function savePlaylists(pl){localStorage.setItem(LS_PL,JSON.stringify(pl))}
