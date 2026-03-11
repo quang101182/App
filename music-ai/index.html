@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.14.0 — Discovery Engine</title>
+<title>music·ai v3.14.1 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -488,7 +488,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.14.0</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.14.1</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -807,8 +807,8 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.14) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.14.0'};
+// ── SERVER PROFILE (music-ai v3.14.1) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.14.1'};
 let _syncTimer=null;
 const MUSICAI_USERID='default';
 async function loadServerProfile(){
@@ -887,7 +887,7 @@ const MOODS=[{id:'energique',label:'Énergie',emoji:'⚡'},{id:'melancolique',la
 const ACTIVITIES=[{id:'running',label:'🏃 Running'},{id:'gym',label:'💪 Gym'},{id:'coding',label:'💻 Coding'},{id:'cuisine',label:'🍳 Cuisine'},{id:'conduite',label:'🚗 Conduite'},{id:'meditation',label:'🧘 Méditation'}];
 const MODELS={claude:['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001'],gemini:['gemini-2.0-flash','gemini-1.5-pro','gemini-1.5-flash'],openai:['gpt-4o','gpt-4o-mini','gpt-4-turbo']};
 const ADVENTURE_LABELS=[[0,'Confort absolu'],[25,'Plutôt classique'],[40,'Équilibré'],[60,'Curieux'],[80,'Aventurier'],[100,'Explorateur']];
-let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,continuousMode:true,volume:80,sleepMinutes:0,sleepTimer:null,sessionThread:[],chatHistory:[],sessionStart:Date.now(),_pendingUnmute:null,_preRec:null,_preFetching:false,editProfileMode:false,ytServerKeys:0,ytServerUsed:0};
+let ST={obStep:1,obProvider:'claude',selGenres:[],selEras:[],selContexts:[],selMood:null,selActivity:null,mode:'onetap',tab:'home',isLoading:false,cfgProvider:'claude',currentTrack:null,queue:[],queueIdx:-1,continuousMode:true,volume:80,sleepMinutes:0,sleepTimer:null,sessionThread:[],chatHistory:[],sessionStart:Date.now(),_pendingUnmute:null,_preRec:null,_preFetching:false,_playToken:0,editProfileMode:false,ytServerKeys:0,ytServerUsed:0};
 
 let _tt=null;
 function toast(msg,dur=2400){const el=document.getElementById('toast');el.textContent=msg;el.classList.remove('hidden');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.add('hidden'),dur)}
@@ -1064,7 +1064,11 @@ function startProgressTick(){
         const _preTemp=TEMP_MAP[_preMode]||0.85;
         const _msgMap={onetap:'Recommande-moi une chanson parfaite maintenant.',mood:`Je me sens ${ST.selMood||'neutre'}. Reco.`,activity:`Je fais: ${ST.selActivity||'quelque chose'}. Reco.`,discovery:'Mode découverte: pépite inattendue.',shuffle:'Mode Shuffle: genre TOTALEMENT aléatoire.'};
         callAI(buildSystemPrompt(_preMode),_msgMap[_preMode]||_msgMap.onetap,_preTemp)
-          .then(raw=>{try{const _pr=parseJSON(raw);const _v=validateRecommendation(_pr);if(_v.valid)ST._preRec=_pr;else{console.warn('[PRE] rejeté:',_v.errors);}}catch(_){}ST._preFetching=false;})
+          .then(raw=>{try{const _pr=parseJSON(raw);const _v=validateRecommendation(_pr);
+            // v3.14.1 — invalider prefetch si mode a changé pendant l'appel IA
+            if(_v.valid&&ST.mode===_preMode)ST._preRec=_pr;
+            else if(_v.valid){console.warn('[PRE] mode changé, reco ignorée');ST._preRec=null;}
+            else{console.warn('[PRE] rejeté:',_v.errors);}}catch(_){}ST._preFetching=false;})
           .catch(()=>{ST._preFetching=false;});
       }
     }catch(_){}
@@ -1153,14 +1157,19 @@ function onTrackEnded(){
 }
 async function ytPlay(track){
   ST._preRec=null;ST._preFetching=false;// reset prefetch sur nouvelle piste manuelle
+  // v3.14.1 — playback token pour annuler les appels concurrents stale
+  const playToken=++ST._playToken;
   ST.currentTrack={...track,videoId:null};
   updateMiniPlayer(track.title,track.artist);
+  fpUpdateTrack();// v3.14.1 — sync full-player titre/artiste immédiatement
   const hasAny=!!(getYtKey()||getAllYtKeys().length||getGwSecret());
   if(!hasAny){ytShowFallbackToast(track);return}
   // PAS d'ouverture modale → lecture en arrière-plan, mini-player uniquement
   toast('🔍 Recherche…');
   const q=track.ytQuery||track.youtube_query||`${track.artist} ${track.title} official audio`;
   const vid=track._videoId||await ytSearch(q);
+  // v3.14.1 — si un nouveau ytPlay() a été lancé pendant la recherche, abandonner
+  if(ST._playToken!==playToken){return}
   if(!vid){ytShowFallbackToast(track);return}
   ST.currentTrack.videoId=vid;
   const _thumb=`https://img.youtube.com/vi/${vid}/mqdefault.jpg`;
@@ -1174,10 +1183,11 @@ async function ytPlay(track){
     ST._ytRetried=false;
     ST.ytPlayer.loadVideoById(vid);
     // Retries escaladés playVideo() — Android Chrome bloque souvent le premier appel
+    // v3.14.1 — vérifier playToken pour ne pas rejouer un track annulé
     [200,600,1200,2500].forEach(delay=>{
       setTimeout(()=>{
         try{
-          if(ST.currentTrack&&ST.currentTrack.videoId===vid&&ST.ytPlayer.getPlayerState&&ST.ytPlayer.getPlayerState()!==1){
+          if(ST._playToken===playToken&&ST.currentTrack&&ST.currentTrack.videoId===vid&&ST.ytPlayer.getPlayerState&&ST.ytPlayer.getPlayerState()!==1){
             ST.ytPlayer.playVideo();
           }
         }catch(_){}
@@ -1186,6 +1196,7 @@ async function ytPlay(track){
     // Re-appliquer volume 800ms après loadVideoById (YT reset audio context sur nouveau load)
     setTimeout(()=>{
       try{
+        if(ST._playToken!==playToken)return;// v3.14.1 — stale
         if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();
         ST.ytPlayer.setVolume(ST.volume);
       }catch(_){}
@@ -1195,7 +1206,7 @@ async function ytPlay(track){
     if(track._pendingRetry){toast('❌ Player YouTube indisponible — ouvre ⚙️');ytShowFallbackToast(track);return;}
     track._pendingRetry=true;
     toast('⏳ Player en initialisation…');
-    setTimeout(()=>ytPlay(track),1000);
+    setTimeout(()=>{if(ST._playToken===playToken)ytPlay(track);},1000);
     return;
   }
   updatePlayPauseUI(true);
@@ -1443,7 +1454,7 @@ function fpUpdateTrack(){
   }
   wrap.addEventListener('click',fpVol);wrap.addEventListener('touchstart',e=>{e.preventDefault();fpVol(e);},{passive:false});
 })();
-// Full player swipe gestures (next/prev + close) — v3.14.0
+// Full player swipe gestures (next/prev + close) — v3.14.1
 (function(){
   const overlay=document.getElementById('fp-overlay');
   if(!overlay)return;
