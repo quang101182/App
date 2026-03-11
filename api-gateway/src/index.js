@@ -83,7 +83,7 @@ function isAdDomain(hostname) {
 }
 
 /** All recognised key names stored in KV */
-const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS'];
+const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'PIAPI_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS'];
 
 /** Rate limit: max requests per minute window */
 const RL_API_MAX   = 20;
@@ -1240,6 +1240,7 @@ async function adminKeysStatus(env) {
     AZURE_KEY     : pingAzure,
     CLAUDE_KEY    : pingClaude,
     DEEPGRAM_KEY  : pingDeepgram,
+    PIAPI_KEY     : pingPiapi,
     // AZURE_REGION, WORKER_URL are config values — skip ping
   };
 
@@ -1340,6 +1341,15 @@ async function pingClaude(apiKey) {
     headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
   });
   return { ok: resp.ok, status: resp.status };
+}
+
+async function pingPiapi(apiKey) {
+  const resp = await fetch('https://api.piapi.ai/api/v1/task/nonexistent', {
+    method : 'GET',
+    headers: { 'X-API-Key': apiKey },
+  });
+  // 400 "failed to find task" = API responds (key valid), 401/403 = bad key
+  return { ok: resp.status === 400 || resp.ok, status: resp.status };
 }
 
 async function pingDeepgram(apiKey) {
