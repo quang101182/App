@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.25
+ * api-gateway — Cloudflare Worker v1.26
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -27,6 +27,8 @@
  *   POST /api/deepgram/*  → Deepgram Nova-2 API (transcription + diarization)
  *   POST /api/music-profile/get   → Read music AI user profile from KV
  *   POST /api/music-profile/save  → Write music AI user profile to KV
+ *   POST /api/send-photo           → Send base64 image to Telegram via multipart
+ *   POST /api/send-video           → Send video URL to Telegram
  *   POST /admin/keys/list
  *   POST /admin/keys/set
  *   POST /admin/keys/delete
@@ -39,7 +41,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.25';
+const VERSION = '1.26';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -119,6 +121,18 @@ export default {
         const authErr = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
         if (authErr) return authErr;
         return await handleConfig(env);
+      }
+
+      // ── Telegram media routes (dual auth: WORKER_SECRET or ADMIN_TOKEN) ──
+      if (method === 'POST' && (path === '/api/send-photo' || path === '/api/send-video')) {
+        const authWS = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
+        const authAT = authWS ? await checkBearer(request, env.ADMIN_TOKEN, 'ADMIN_TOKEN') : null;
+        if (authWS && authAT) return authWS; // both failed → unauthorized
+        const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+        const rlErr = await checkRateLimit(env, ctx, 'api', ip, RL_API_MAX);
+        if (rlErr) return rlErr;
+        if (path === '/api/send-photo') return await handleSendPhoto(request, env);
+        if (path === '/api/send-video') return await handleSendVideo(request, env);
       }
 
       // ── API routes ────────────────────────────────────────────────────────
@@ -1133,6 +1147,93 @@ async function handleMusicProfileSave(request, env) {
   }
   await env.GATEWAY_KV.put(`musicai:profile:${userId}`, json);
   return jsonResponse({ ok: true, size: json.length });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/send-photo — send image to Telegram via multipart (base64 input)
+// POST /api/send-video — send video to Telegram via URL
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/send-photo
+ * Body: { chatId, base64, caption?, botToken }
+ * Decodes base64 → Blob, sends multipart to Telegram sendPhoto.
+ * Max body ~10MB.
+ */
+async function handleSendPhoto(request, env) {
+  const body = await request.json();
+  const { chatId, base64, caption, botToken } = body;
+
+  if (!chatId || !base64 || !botToken) {
+    return jsonResponse({ error: 'missing required fields: chatId, base64, botToken' }, 400);
+  }
+
+  // Guard: ~10MB base64 limit (decoded ~7.5MB)
+  if (base64.length > 10 * 1024 * 1024) {
+    return jsonResponse({ error: 'base64 payload too large (max 10MB)' }, 413);
+  }
+
+  try {
+    // Decode base64 to binary
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'image/png' });
+
+    // Build FormData
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    form.append('photo', blob, 'image.png');
+    if (caption) {
+      form.append('caption', caption);
+      form.append('parse_mode', 'Markdown');
+    }
+
+    // Send to Telegram
+    const resp = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+      method: 'POST',
+      body: form,
+    });
+
+    const data = await resp.json();
+    return jsonResponse(data, resp.ok ? 200 : resp.status);
+  } catch (err) {
+    return jsonResponse({ error: 'send-photo failed: ' + (err.message || String(err)) }, 500);
+  }
+}
+
+/**
+ * POST /api/send-video
+ * Body: { chatId, videoUrl, caption?, botToken }
+ * Sends video URL to Telegram sendVideo (Telegram fetches the URL).
+ */
+async function handleSendVideo(request, env) {
+  const body = await request.json();
+  const { chatId, videoUrl, caption, botToken } = body;
+
+  if (!chatId || !videoUrl || !botToken) {
+    return jsonResponse({ error: 'missing required fields: chatId, videoUrl, botToken' }, 400);
+  }
+
+  try {
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    form.append('video', videoUrl); // Telegram accepts a direct URL
+    if (caption) {
+      form.append('caption', caption);
+      form.append('parse_mode', 'Markdown');
+    }
+
+    const resp = await fetch(`https://api.telegram.org/bot${botToken}/sendVideo`, {
+      method: 'POST',
+      body: form,
+    });
+
+    const data = await resp.json();
+    return jsonResponse(data, resp.ok ? 200 : resp.status);
+  } catch (err) {
+    return jsonResponse({ error: 'send-video failed: ' + (err.message || String(err)) }, 500);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
