@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.13.0 — Discovery Engine</title>
+<title>music·ai v3.14.0 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -218,11 +218,12 @@
   #fp-overlay{position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;overflow:hidden;transform:translateY(100%);opacity:0;pointer-events:none;}
   #fp-overlay.fp-open{animation:fp-slide-up .52s cubic-bezier(.22,1,.36,1) forwards;pointer-events:all;}
   #fp-overlay.fp-closing{animation:fp-slide-down .38s cubic-bezier(.55,0,1,.45) forwards;pointer-events:none;}
+  #fp-overlay.fp-open{overscroll-behavior-x:none;}
   .fp-bg-blur{position:absolute;inset:-40px;background-size:cover;background-position:center;filter:blur(40px) brightness(.28) saturate(1.4);z-index:0;transform:scale(1.08);transition:background-image .6s;}
   .fp-bg-overlay{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(0,0,0,.3) 0%,rgba(0,0,0,.1) 30%,rgba(0,0,0,.1) 60%,rgba(0,0,0,.55) 100%);}
   .light .fp-bg-blur{filter:blur(40px) brightness(.55) saturate(1.2);}
   .light .fp-bg-overlay{background:linear-gradient(180deg,rgba(255,255,255,.38) 0%,rgba(255,255,255,.12) 30%,rgba(255,255,255,.12) 65%,rgba(255,255,255,.65) 100%);}
-  .fp-content{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;flex:1;width:100%;max-width:520px;margin:0 auto;padding:0 24px env(safe-area-inset-bottom,16px);overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .fp-content{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;flex:1;width:100%;max-width:520px;margin:0 auto;padding:0 24px env(safe-area-inset-bottom,16px);overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-y;overscroll-behavior-y:contain;}
   .fp-content::-webkit-scrollbar{display:none;}
   .fp-topbar{width:100%;display:flex;align-items:center;justify-content:space-between;padding:14px 0 8px;flex-shrink:0;}
   .fp-drag-pill{width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,.22);margin:0 auto;flex-shrink:0;}
@@ -487,7 +488,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.13.0</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.14.0</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -806,8 +807,8 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.13) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.13.0'};
+// ── SERVER PROFILE (music-ai v3.14) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.14.0'};
 let _syncTimer=null;
 const MUSICAI_USERID='default';
 async function loadServerProfile(){
@@ -1070,20 +1071,46 @@ function startProgressTick(){
   },500);
 }
 function stopProgressTick(){if(_progressTick){clearInterval(_progressTick);_progressTick=null}}
+// Silent audio proxy — reclaims Media Session ownership from YT iframe
+let _msAudioProxy=null;
+function _ensureMediaProxy(){
+  if(_msAudioProxy)return;
+  try{
+    _msAudioProxy=new Audio('data:audio/wav;base64,UklGRigBAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgEAAA'+('A'.repeat(200)));
+    _msAudioProxy.loop=true;_msAudioProxy.volume=0.001;
+  }catch(_){}
+}
+function _startMediaProxy(){
+  _ensureMediaProxy();
+  if(_msAudioProxy){try{_msAudioProxy.play().catch(()=>{});}catch(_){}}
+}
+function _pauseMediaProxy(){
+  if(_msAudioProxy){try{_msAudioProxy.pause();}catch(_){}}
+}
+function _initMediaSessionHandlers(){
+  if(!('mediaSession' in navigator))return;
+  try{
+    navigator.mediaSession.setActionHandler('play',()=>{try{ST.ytPlayer.playVideo();_startMediaProxy();}catch(_){}});
+    navigator.mediaSession.setActionHandler('pause',()=>{try{ST.ytPlayer.pauseVideo();_pauseMediaProxy();}catch(_){}});
+    navigator.mediaSession.setActionHandler('previoustrack',ytPrev);
+    navigator.mediaSession.setActionHandler('nexttrack',ytNext);
+    navigator.mediaSession.setActionHandler('stop',()=>{ytStop();_pauseMediaProxy();});
+    navigator.mediaSession.setActionHandler('seekbackward',()=>{try{const t=ST.ytPlayer.getCurrentTime();ST.ytPlayer.seekTo(Math.max(0,t-10),true);}catch(_){}});
+    navigator.mediaSession.setActionHandler('seekforward',()=>{try{const t=ST.ytPlayer.getCurrentTime();ST.ytPlayer.seekTo(t+10,true);}catch(_){}});
+  }catch(_){}
+}
+let _msHandlersInit=false;
 function updateMediaSession(title,artist,thumb){
   if(!('mediaSession' in navigator))return;
   try{
+    // Start silent proxy to claim audio focus from YT iframe
+    _startMediaProxy();
     navigator.mediaSession.metadata=new MediaMetadata({
       title:title||'—',artist:artist||'—',album:'music·ai',
       artwork:thumb?[{src:thumb,sizes:'320x180',type:'image/jpeg'}]:[]
     });
-    navigator.mediaSession.setActionHandler('play',()=>{try{ST.ytPlayer.playVideo();}catch(_){}});
-    navigator.mediaSession.setActionHandler('pause',()=>{try{ST.ytPlayer.pauseVideo();}catch(_){}});
-    navigator.mediaSession.setActionHandler('previoustrack',ytPrev);
-    navigator.mediaSession.setActionHandler('nexttrack',ytNext);
-    navigator.mediaSession.setActionHandler('stop',ytStop);
-    navigator.mediaSession.setActionHandler('seekbackward',()=>{try{const t=ST.ytPlayer.getCurrentTime();ST.ytPlayer.seekTo(Math.max(0,t-10),true);}catch(_){}});
-    navigator.mediaSession.setActionHandler('seekforward',()=>{try{const t=ST.ytPlayer.getCurrentTime();ST.ytPlayer.seekTo(t+10,true);}catch(_){}});
+    if(!_msHandlersInit){_initMediaSessionHandlers();_msHandlersInit=true;}
+    navigator.mediaSession.playbackState='playing';
   }catch(_){}
 }
 // === PWA Audio Keepalive ===
@@ -1416,38 +1443,40 @@ function fpUpdateTrack(){
   }
   wrap.addEventListener('click',fpVol);wrap.addEventListener('touchstart',e=>{e.preventDefault();fpVol(e);},{passive:false});
 })();
-// Full player swipe gestures (next/prev + close) — v3.13.0
+// Full player swipe gestures (next/prev + close) — v3.14.0
 (function(){
   const overlay=document.getElementById('fp-overlay');
   if(!overlay)return;
-  const HORIZ_THRESHOLD=60,DOWN_THRESHOLD=80,DEAD_ZONE=10,LOCK_RATIO=1.5;
-  let sx=0,sy=0,lx=0,ly=0,t0=0,dir=null,blocked=false;
-  function isBlocked(e){return !!(e.target.closest('#fp-track-wrap')||e.target.closest('#fp-vol-wrap'));}
+  const HORIZ_MIN=50,DOWN_MIN=80,DEAD=12;
+  let sx=0,sy=0,lx=0,ly=0,dir=null,blocked=false;
+  function isBlocked(e){return !!(e.target.closest('#fp-track-wrap')||e.target.closest('#fp-vol-wrap')||e.target.closest('button'));}
   overlay.addEventListener('touchstart',e=>{
     if(isBlocked(e)){blocked=true;return;}
     blocked=false;dir=null;
-    sx=lx=e.touches[0].clientX;sy=ly=e.touches[0].clientY;t0=Date.now();
-  },{passive:true});
+    sx=lx=e.touches[0].clientX;sy=ly=e.touches[0].clientY;
+  },{passive:false});
   overlay.addEventListener('touchmove',e=>{
     if(blocked||!e.touches.length)return;
     const cx=e.touches[0].clientX,cy=e.touches[0].clientY;
-    const dx=cx-sx,dy=cy-sy;
-    if(!dir&&(Math.abs(dx)>DEAD_ZONE||Math.abs(dy)>DEAD_ZONE)){
-      dir=Math.abs(dx)>Math.abs(dy)*LOCK_RATIO?'h':'v';
+    const dx=cx-sx,dy=cy-sy,adx=Math.abs(dx),ady=Math.abs(dy);
+    if(!dir&&(adx>DEAD||ady>DEAD)){
+      dir=adx>ady?'h':'v';
     }
     if(dir==='h')e.preventDefault();
     lx=cx;ly=cy;
   },{passive:false});
   overlay.addEventListener('touchend',e=>{
-    if(blocked)return;
-    const dx=lx-sx,dy=ly-sy,dt=Date.now()-t0||1;
+    if(blocked){blocked=false;return;}
+    const t=e.changedTouches&&e.changedTouches[0];
+    const ex=t?t.clientX:lx,ey=t?t.clientY:ly;
+    const dx=ex-sx,dy=ey-sy;
     if(dir==='h'){
-      if(dx<-HORIZ_THRESHOLD){ytNext();toast('⏭');}
-      else if(dx>HORIZ_THRESHOLD){ytPrev();toast('⏮');}
-    }else if(dir==='v'&&dy>DOWN_THRESHOLD){
+      if(dx<-HORIZ_MIN){ytNext();toast('⏭ Suivant');}
+      else if(dx>HORIZ_MIN){ytPrev();toast('⏮ Précédent');}
+    }else if(dir==='v'&&dy>DOWN_MIN){
       fpClose();
     }
-    dir=null;
+    dir=null;blocked=false;
   },{passive:true});
 })();
 function getPlaylists(){try{return JSON.parse(localStorage.getItem(LS_PL))||[]}catch{return[]}}
