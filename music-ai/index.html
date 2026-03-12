@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>music·ai v3.15.0-cap — Discovery Engine</title>
+<title>music·ai v3.15.1-cap — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -483,7 +483,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.15.0</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.15.1</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -817,8 +817,8 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.15.0) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.15.0'};
+// ── SERVER PROFILE (music-ai v3.15.1) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.15.1'};
 let _serverProfileReady=null; // v3.14.3 — Promise pour attendre le chargement serveur
 let _syncTimer=null;
 const MUSICAI_USERID='default';
@@ -1125,7 +1125,29 @@ function _initMediaSessionHandlers(){
   const cap=_getCapMediaSession();
   if(cap){
     try{
-      cap.setActionHandler({action:'play'},()=>{try{ST.ytPlayer.playVideo();}catch(_){}try{cap.setPlaybackState({playbackState:'playing'});}catch(_){}});
+      cap.setActionHandler({action:'play'},()=>{
+        console.log('[CAP] play action received');
+        try{
+          // Resume AudioContext first to reclaim audio focus
+          if(_keepAliveCtx&&_keepAliveCtx.state==='suspended')_keepAliveCtx.resume().catch(()=>{});
+          // seekTo current position unblocks YT player on some Android devices
+          try{const t=ST.ytPlayer.getCurrentTime();if(t>0)ST.ytPlayer.seekTo(t,true);}catch(_){}
+          ST.ytPlayer.playVideo();
+          // Retry: if still not playing after 800ms, force reload at same position
+          const tok=++ST._playToken;
+          setTimeout(()=>{
+            try{
+              if(ST._playToken===tok&&ST.ytPlayer&&ST.ytPlayer.getPlayerState&&ST.ytPlayer.getPlayerState()!==1){
+                console.log('[CAP] play retry — reloading video');
+                const pos=ST.ytPlayer.getCurrentTime()||0;
+                const vid=ST.currentTrack&&ST.currentTrack.videoId;
+                if(vid)ST.ytPlayer.loadVideoById({videoId:vid,startSeconds:pos});
+              }
+            }catch(_){}
+          },800);
+        }catch(_){}
+        try{cap.setPlaybackState({playbackState:'playing'});}catch(_){}
+      });
       cap.setActionHandler({action:'pause'},()=>{try{ST.ytPlayer.pauseVideo();}catch(_){}try{cap.setPlaybackState({playbackState:'paused'});}catch(_){}});
       cap.setActionHandler({action:'previoustrack'},ytPrev);
       cap.setActionHandler({action:'nexttrack'},ytNext);
@@ -1138,7 +1160,24 @@ function _initMediaSessionHandlers(){
   // Fallback web MediaSession
   if('mediaSession' in navigator){
     try{
-      navigator.mediaSession.setActionHandler('play',()=>{try{ST.ytPlayer.playVideo();}catch(_){}});
+      navigator.mediaSession.setActionHandler('play',()=>{
+        console.log('[MS] play action received');
+        try{
+          if(_keepAliveCtx&&_keepAliveCtx.state==='suspended')_keepAliveCtx.resume().catch(()=>{});
+          try{const t=ST.ytPlayer.getCurrentTime();if(t>0)ST.ytPlayer.seekTo(t,true);}catch(_){}
+          ST.ytPlayer.playVideo();
+          const tok=++ST._playToken;
+          setTimeout(()=>{
+            try{
+              if(ST._playToken===tok&&ST.ytPlayer&&ST.ytPlayer.getPlayerState&&ST.ytPlayer.getPlayerState()!==1){
+                const pos=ST.ytPlayer.getCurrentTime()||0;
+                const vid=ST.currentTrack&&ST.currentTrack.videoId;
+                if(vid)ST.ytPlayer.loadVideoById({videoId:vid,startSeconds:pos});
+              }
+            }catch(_){}
+          },800);
+        }catch(_){}
+      });
       navigator.mediaSession.setActionHandler('pause',()=>{try{ST.ytPlayer.pauseVideo();}catch(_){}});
       navigator.mediaSession.setActionHandler('previoustrack',ytPrev);
       navigator.mediaSession.setActionHandler('nexttrack',ytNext);
