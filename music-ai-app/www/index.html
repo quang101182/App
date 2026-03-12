@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>music·ai v3.15.1-cap — Discovery Engine</title>
+<title>music·ai v3.15.2-cap — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -483,7 +483,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.15.1</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.15.2</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -817,8 +817,8 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.15.1) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.15.1'};
+// ── SERVER PROFILE (music-ai v3.15.2) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.15.2'};
 let _serverProfileReady=null; // v3.14.3 — Promise pour attendre le chargement serveur
 let _syncTimer=null;
 const MUSICAI_USERID='default';
@@ -1038,7 +1038,7 @@ window.onYouTubeIframeAPIReady=function(){
           startProgressTick();
           try{navigator.mediaSession.playbackState='playing';}catch(_){}
           try{const _c=_getCapMediaSession();if(_c)_c.setPlaybackState({playbackState:'playing'});}catch(_){}
-          startAudioKeepAlive();
+          startAudioKeepAlive();_proxyPlay();// sync silent audio proxy
           try{
             if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();
             ST.ytPlayer.setVolume(ST.volume);
@@ -1047,7 +1047,7 @@ window.onYouTubeIframeAPIReady=function(){
             ['mp-vol-label','ko-vol-label'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=v+'%';});
           }catch(_){}
         }
-        if(e.data===2){updatePlayPauseUI(false);fpSetPaused(true);stopProgressTick();try{navigator.mediaSession.playbackState='paused';}catch(_){}try{const _c=_getCapMediaSession();if(_c)_c.setPlaybackState({playbackState:'paused'});}catch(_){}}
+        if(e.data===2){updatePlayPauseUI(false);fpSetPaused(true);stopProgressTick();_proxyPause();try{navigator.mediaSession.playbackState='paused';}catch(_){}try{const _c=_getCapMediaSession();if(_c)_c.setPlaybackState({playbackState:'paused'});}catch(_){}}
         if(e.data===0){onTrackEnded();}
       },
       onError:function(e){
@@ -1069,6 +1069,8 @@ function unlockAudioContext(){
     ST.ytPlayer.mute();
     ST.ytPlayer.playVideo();
     setTimeout(()=>{ST.ytPlayer.pauseVideo();ST.ytPlayer.unMute();_audioUnlocked=true;
+      // Start silent audio proxy on first user gesture — required by autoplay policy
+      _initSilentAudio();if(_silentAudio)_silentAudio.play().then(()=>{_silentAudio.pause();console.log('[PROXY] Silent audio primed');}).catch(()=>{});
       document.removeEventListener('touchstart',unlockAudioContext);
       document.removeEventListener('click',unlockAudioContext);
     },50);
@@ -1111,8 +1113,25 @@ function startProgressTick(){
   },500);
 }
 function stopProgressTick(){if(_progressTick){clearInterval(_progressTick);_progressTick=null}}
-// Silent audio proxy — reclaims Media Session ownership from YT iframe
-// Proxy Audio supprimé — inutile en Capacitor natif (cause boucle audio parasite)
+// === Silent Audio Proxy — reclaims MediaSession ownership from YT iframe ===
+// YouTube IFrame creates its OWN MediaSession inside the cross-origin iframe,
+// stealing BT/notification controls. A silent <audio> element in the parent page
+// takes ownership back. (source: spotify/web-playback-sdk#105, web.dev/media-session)
+let _silentAudio=null;
+const SILENT_MP3='data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYZHMETIAAAAAAAAAAAAAAAAAAAA//tQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//tQZB8P8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV';
+function _initSilentAudio(){
+  if(_silentAudio)return _silentAudio;
+  try{
+    _silentAudio=new Audio(SILENT_MP3);
+    _silentAudio.loop=true;
+    _silentAudio.volume=0.01;// not 0 — some browsers ignore volume=0
+    console.log('[PROXY] Silent audio proxy created');
+  }catch(e){console.warn('[PROXY] Failed to create silent audio:',e);}
+  return _silentAudio;
+}
+function _proxyPlay(){try{if(_silentAudio){_silentAudio.play().catch(()=>{});}}catch(_){}}
+function _proxyPause(){try{if(_silentAudio)_silentAudio.pause();}catch(_){}}
+
 // --- Native MediaSession via Capacitor plugin (Bluetooth + notification controls) ---
 let _capMS=null;
 let _msHandlersInit=false;
@@ -1121,34 +1140,50 @@ function _getCapMediaSession(){
   try{_capMS=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.MediaSession||false;}catch(_){_capMS=false;}
   return _capMS;
 }
+
+// Common play handler — used by both Capacitor + web MediaSession
+function _handlePlayAction(source){
+  console.log('['+source+'] play action received, ytState='+
+    (ST.ytPlayer&&ST.ytPlayer.getPlayerState?ST.ytPlayer.getPlayerState():'?'));
+  try{
+    // 1. Resume silent audio proxy (reclaims audio focus in WebView)
+    _proxyPlay();
+    // 2. Resume AudioContext keepalive
+    if(_keepAliveCtx&&_keepAliveCtx.state==='suspended')_keepAliveCtx.resume().catch(()=>{});
+    // 3. seekTo current position — unblocks YT player on Android after background
+    try{const t=ST.ytPlayer.getCurrentTime();if(t>0)ST.ytPlayer.seekTo(t,true);}catch(_){}
+    // 4. Play
+    ST.ytPlayer.playVideo();
+    // 5. Retry: if still not playing after 1s, force reload at same position
+    const tok=++ST._playToken;
+    setTimeout(()=>{
+      try{
+        if(ST._playToken===tok&&ST.ytPlayer&&ST.ytPlayer.getPlayerState&&ST.ytPlayer.getPlayerState()!==1){
+          console.log('['+source+'] play retry — reloading video');
+          const pos=ST.ytPlayer.getCurrentTime()||0;
+          const vid=ST.currentTrack&&ST.currentTrack.videoId;
+          if(vid)ST.ytPlayer.loadVideoById({videoId:vid,startSeconds:pos});
+        }
+      }catch(_){}
+    },1000);
+  }catch(e){console.warn('['+source+'] play error:',e);}
+  // Update Capacitor MediaSession state
+  try{const c=_getCapMediaSession();if(c)c.setPlaybackState({playbackState:'playing'});}catch(_){}
+}
+function _handlePauseAction(source){
+  console.log('['+source+'] pause action received');
+  try{ST.ytPlayer.pauseVideo();}catch(_){}
+  _proxyPause();
+  try{const c=_getCapMediaSession();if(c)c.setPlaybackState({playbackState:'paused'});}catch(_){}
+}
+
 function _initMediaSessionHandlers(){
+  _initSilentAudio();
   const cap=_getCapMediaSession();
   if(cap){
     try{
-      cap.setActionHandler({action:'play'},()=>{
-        console.log('[CAP] play action received');
-        try{
-          // Resume AudioContext first to reclaim audio focus
-          if(_keepAliveCtx&&_keepAliveCtx.state==='suspended')_keepAliveCtx.resume().catch(()=>{});
-          // seekTo current position unblocks YT player on some Android devices
-          try{const t=ST.ytPlayer.getCurrentTime();if(t>0)ST.ytPlayer.seekTo(t,true);}catch(_){}
-          ST.ytPlayer.playVideo();
-          // Retry: if still not playing after 800ms, force reload at same position
-          const tok=++ST._playToken;
-          setTimeout(()=>{
-            try{
-              if(ST._playToken===tok&&ST.ytPlayer&&ST.ytPlayer.getPlayerState&&ST.ytPlayer.getPlayerState()!==1){
-                console.log('[CAP] play retry — reloading video');
-                const pos=ST.ytPlayer.getCurrentTime()||0;
-                const vid=ST.currentTrack&&ST.currentTrack.videoId;
-                if(vid)ST.ytPlayer.loadVideoById({videoId:vid,startSeconds:pos});
-              }
-            }catch(_){}
-          },800);
-        }catch(_){}
-        try{cap.setPlaybackState({playbackState:'playing'});}catch(_){}
-      });
-      cap.setActionHandler({action:'pause'},()=>{try{ST.ytPlayer.pauseVideo();}catch(_){}try{cap.setPlaybackState({playbackState:'paused'});}catch(_){}});
+      cap.setActionHandler({action:'play'},()=>_handlePlayAction('CAP'));
+      cap.setActionHandler({action:'pause'},()=>_handlePauseAction('CAP'));
       cap.setActionHandler({action:'previoustrack'},ytPrev);
       cap.setActionHandler({action:'nexttrack'},ytNext);
       cap.setActionHandler({action:'stop'},ytStop);
@@ -1157,28 +1192,11 @@ function _initMediaSessionHandlers(){
       console.log('[CAP] Native MediaSession handlers registered');
     }catch(e){console.warn('[CAP] MediaSession handlers error:',e);}
   }
-  // Fallback web MediaSession
+  // Web MediaSession fallback (also helps reclaim ownership from YT iframe)
   if('mediaSession' in navigator){
     try{
-      navigator.mediaSession.setActionHandler('play',()=>{
-        console.log('[MS] play action received');
-        try{
-          if(_keepAliveCtx&&_keepAliveCtx.state==='suspended')_keepAliveCtx.resume().catch(()=>{});
-          try{const t=ST.ytPlayer.getCurrentTime();if(t>0)ST.ytPlayer.seekTo(t,true);}catch(_){}
-          ST.ytPlayer.playVideo();
-          const tok=++ST._playToken;
-          setTimeout(()=>{
-            try{
-              if(ST._playToken===tok&&ST.ytPlayer&&ST.ytPlayer.getPlayerState&&ST.ytPlayer.getPlayerState()!==1){
-                const pos=ST.ytPlayer.getCurrentTime()||0;
-                const vid=ST.currentTrack&&ST.currentTrack.videoId;
-                if(vid)ST.ytPlayer.loadVideoById({videoId:vid,startSeconds:pos});
-              }
-            }catch(_){}
-          },800);
-        }catch(_){}
-      });
-      navigator.mediaSession.setActionHandler('pause',()=>{try{ST.ytPlayer.pauseVideo();}catch(_){}});
+      navigator.mediaSession.setActionHandler('play',()=>_handlePlayAction('MS'));
+      navigator.mediaSession.setActionHandler('pause',()=>_handlePauseAction('MS'));
       navigator.mediaSession.setActionHandler('previoustrack',ytPrev);
       navigator.mediaSession.setActionHandler('nexttrack',ytNext);
       navigator.mediaSession.setActionHandler('stop',ytStop);
