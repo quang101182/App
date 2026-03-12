@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.15.0 — Discovery Engine</title>
+<title>music·ai v3.15.0-cap — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -740,6 +740,23 @@
 </div>
 
 <script>
+// === Capacitor Background Mode ===
+// Détecte si on tourne dans Capacitor et active le background mode
+(function(){
+  const isCapacitor=typeof window.Capacitor!=='undefined';
+  if(isCapacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.BackgroundMode){
+    const bg=window.Capacitor.Plugins.BackgroundMode;
+    bg.enable();
+    bg.setSettings({
+      title:'music·ai',
+      text:'Lecture en cours…',
+      icon:'ic_launcher',
+      color:'7c3aed',
+      silent:false
+    });
+    console.log('[CAP] Background mode enabled');
+  }
+})();
 const LS_PROFILE='music_ai_profile',LS_CONFIG='music_ai_config',LS_HISTORY='music_ai_history',LS_YT_KEY='music_ai_yt_key',LS_YT_QUOTA='music_ai_yt_quota';
 const LS_THEME='music_ai_theme';
 const LS_CONTINUOUS='music_ai_continuous';
@@ -1137,14 +1154,11 @@ function updateMediaSession(title,artist,thumb){
     navigator.mediaSession.playbackState='playing';
   }catch(_){}
 }
-// === PWA Audio Keepalive ===
-// En mode standalone, l'iframe YT est suspendue quand l'app perd le focus.
-// Un oscillateur silencieux maintient l'AudioContext actif.
+// === Audio Keepalive (Capacitor + PWA) ===
+// AudioContext silencieux maintient l'audio actif en arrière-plan.
 let _keepAliveCtx=null;
 function startAudioKeepAlive(){
   if(_keepAliveCtx)return;
-  const isStandalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone;
-  if(!isStandalone)return;
   try{
     _keepAliveCtx=new(window.AudioContext||window.webkitAudioContext)();
     const osc=_keepAliveCtx.createOscillator();
