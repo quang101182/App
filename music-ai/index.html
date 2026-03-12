@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.14.2 — Discovery Engine</title>
+<title>music·ai v3.14.3 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -481,7 +481,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.14.2</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.14.3</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -802,8 +802,9 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.14.2) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.14.2'};
+// ── SERVER PROFILE (music-ai v3.14.3) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.14.3'};
+let _serverProfileReady=null; // v3.14.3 — Promise pour attendre le chargement serveur
 let _syncTimer=null;
 const MUSICAI_USERID='default';
 async function loadServerProfile(){
@@ -1172,7 +1173,7 @@ async function ytPlay(track){
   // PAS d'ouverture modale → lecture en arrière-plan, mini-player uniquement
   toast('🔍 Recherche…');
   const q=track.ytQuery||track.youtube_query||`${track.artist} ${track.title} official audio`;
-  const vid=track._videoId||await ytSearch(q);
+  const vid=track._videoId||(track._searchPromise?await track._searchPromise:null)||await ytSearch(q);
   // v3.14.2 — si un nouveau ytPlay() a été lancé pendant la recherche, abandonner
   if(ST._playToken!==playToken){return}
   if(!vid){ytShowFallbackToast(track);return}
@@ -1985,6 +1986,8 @@ function parseJSON(raw){
 
 async function getRecommendation(mode){
   if(ST.isLoading)return;ST.isLoading=true;
+  // v3.14.3 — attendre le profil serveur (blacklist, tasteDNA, likes) max 3s
+  if(_serverProfileReady){try{await Promise.race([_serverProfileReady,new Promise(r=>setTimeout(r,3000))])}catch(_){}_serverProfileReady=null;}
   const resultEl=document.getElementById(`result-${mode}`);
   resultEl.style.display='block';resultEl.className='music-card';
   resultEl.innerHTML=`<div style="display:flex;align-items:center;gap:10px;color:var(--muted);"><div class="dot-typing"><span></span><span></span><span></span></div> L'IA cherche...</div>`;
@@ -2052,7 +2055,7 @@ function renderCard(container,rec){
   container.className='music-card appear';
   const title=rec.title||'',artist=rec.artist||'',genre=rec.genre||'',track={title,artist,ytQuery,ytUrl};
   // Charger la vignette YT en arrière-plan pour l'artwork de la carte
-  if(hasYT){ytSearch(ytQuery).then(vid=>{if(vid){track._videoId=vid;const artEl=document.getElementById(`${id}-art`);if(artEl){artEl.style.backgroundImage=`url(https://img.youtube.com/vi/${vid}/mqdefault.jpg)`;artEl.textContent='';}}}).catch(()=>{});}
+  if(hasYT){track._searchPromise=ytSearch(ytQuery).then(vid=>{if(vid){track._videoId=vid;const artEl=document.getElementById(`${id}-art`);if(artEl){artEl.style.backgroundImage=`url(https://img.youtube.com/vi/${vid}/mqdefault.jpg)`;artEl.textContent='';}}return vid||null;}).catch(()=>null);}
   document.getElementById(`${id}-like`).onclick=()=>doFeedback(`${id}-like`,'like',title,artist,genre);
   document.getElementById(`${id}-dislike`).onclick=()=>doFeedback(`${id}-dislike`,'dislike',title,artist,genre);
   document.getElementById(`${id}-save`).onclick=()=>doFeedback(`${id}-save`,'save',title,artist,genre);
@@ -2522,7 +2525,7 @@ function boot(){
   loadChatHistory();
   initPlaylistsOverlay();
   // Load server profile (v3.12)
-  if(getGwSecret())loadServerProfile().catch(e=>console.warn('[SYNC] Boot load failed:',e));
+  if(getGwSecret())_serverProfileReady=loadServerProfile().catch(e=>console.warn('[SYNC] Boot load failed:',e));
   if(p?.completedOnboarding){showScreen('main');initMainApp();setTimeout(updateApiStatus,200)}
   else{showScreen('onboard');initOnboarding();}
 }
