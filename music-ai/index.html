@@ -2,8 +2,8 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.15.0 — Discovery Engine</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>music·ai v3.15.0-cap — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -13,6 +13,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
+    --safe-top: 0px;
+    --safe-bottom: 0px;
     --bg: #060609; --bg2: #0d0d14;
     --card: rgba(255,255,255,0.04); --card-hover: rgba(255,255,255,0.07);
     --border: rgba(255,255,255,0.07); --border-bright: rgba(255,255,255,0.14);
@@ -34,7 +36,7 @@
   html{transition:background 0.3s;}
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html { height: 100%; }
-  body { height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; margin:0; touch-action:manipulation; }
+  body { height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; margin:0; padding-top:var(--safe-top); padding-bottom:0; padding-left:0; padding-right:0; touch-action:manipulation; box-sizing:border-box; }
   .ambient { position:fixed; inset:0; pointer-events:none; z-index:0;
     background: radial-gradient(ellipse 60% 40% at 20% 10%, rgba(124,58,237,0.12) 0%, transparent 70%),
                 radial-gradient(ellipse 50% 50% at 80% 80%, rgba(6,182,212,0.08) 0%, transparent 70%),
@@ -431,7 +433,7 @@
       <div class="ob-step active" id="ob1">
         <h2 class="syne" style="font-size:1.6rem;font-weight:800;margin:0 0 6px;">Tes genres <span style="color:var(--accent)">préférés</span></h2>
         <p style="color:var(--muted);font-size:13px;margin:0 0 18px;">Sélectionne tout ce qui te parle</p>
-        <div id="genre-chips" class="scroll-y" style="flex:1;display:flex;flex-wrap:wrap;gap:10px;align-content:flex-start;padding-bottom:8px;"></div>
+        <div id="genre-chips" class="scroll-y" style="flex:1;display:flex;flex-wrap:wrap;gap:10px;align-content:flex-start;padding-bottom:8px;min-height:200px;"></div>
         <div style="margin-top:12px;"><p style="color:var(--muted);font-size:11px;font-weight:600;letter-spacing:0.05em;margin:0 0 6px;">ÉPOQUE (optionnel)</p><div id="era-chips" style="display:flex;flex-wrap:wrap;gap:6px;"></div></div>
       </div>
       <!-- Step 2 -->
@@ -740,6 +742,19 @@
 </div>
 
 <script>
+// === Capacitor Background Mode ===
+(function(){
+  try{
+    const bg=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.BackgroundMode;
+    if(bg&&typeof bg.enable==='function'){
+      bg.enable();
+      if(typeof bg.setSettings==='function'){
+        bg.setSettings({title:'music·ai',text:'Lecture en cours…',icon:'ic_launcher',color:'7c3aed',silent:false});
+      }
+      console.log('[CAP] Background mode enabled');
+    }
+  }catch(e){console.warn('[CAP] Background mode init error:',e);}
+})();
 const LS_PROFILE='music_ai_profile',LS_CONFIG='music_ai_config',LS_HISTORY='music_ai_history',LS_YT_KEY='music_ai_yt_key',LS_YT_QUOTA='music_ai_yt_quota';
 const LS_THEME='music_ai_theme';
 const LS_CONTINUOUS='music_ai_continuous';
@@ -1022,6 +1037,7 @@ window.onYouTubeIframeAPIReady=function(){
           updatePlayPauseUI(true);fpSetPaused(false);
           startProgressTick();
           try{navigator.mediaSession.playbackState='playing';}catch(_){}
+          try{const _c=_getCapMediaSession();if(_c)_c.setPlaybackState({playbackState:'playing'});}catch(_){}
           startAudioKeepAlive();
           try{
             if(typeof ST.ytPlayer.isMuted==='function'&&ST.ytPlayer.isMuted())ST.ytPlayer.unMute();
@@ -1031,7 +1047,7 @@ window.onYouTubeIframeAPIReady=function(){
             ['mp-vol-label','ko-vol-label'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=v+'%';});
           }catch(_){}
         }
-        if(e.data===2){updatePlayPauseUI(false);fpSetPaused(true);stopProgressTick();try{navigator.mediaSession.playbackState='paused';}catch(_){}}
+        if(e.data===2){updatePlayPauseUI(false);fpSetPaused(true);stopProgressTick();try{navigator.mediaSession.playbackState='paused';}catch(_){}try{const _c=_getCapMediaSession();if(_c)_c.setPlaybackState({playbackState:'paused'});}catch(_){}}
         if(e.data===0){onTrackEnded();}
       },
       onError:function(e){
@@ -1096,60 +1112,83 @@ function startProgressTick(){
 }
 function stopProgressTick(){if(_progressTick){clearInterval(_progressTick);_progressTick=null}}
 // Silent audio proxy — reclaims Media Session ownership from YT iframe
-let _msAudioProxy=null;
-function _ensureMediaProxy(){
-  if(_msAudioProxy)return;
-  try{
-    _msAudioProxy=new Audio('data:audio/wav;base64,UklGRigBAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgEAAA'+('A'.repeat(200)));
-    _msAudioProxy.loop=true;_msAudioProxy.volume=0.001;
-  }catch(_){}
-}
-function _startMediaProxy(){
-  _ensureMediaProxy();
-  if(_msAudioProxy){try{_msAudioProxy.play().catch(()=>{});}catch(_){}}
-}
-function _pauseMediaProxy(){
-  if(_msAudioProxy){try{_msAudioProxy.pause();}catch(_){}}
+// Proxy Audio supprimé — inutile en Capacitor natif (cause boucle audio parasite)
+// --- Native MediaSession via Capacitor plugin (Bluetooth + notification controls) ---
+let _capMS=null;
+let _msHandlersInit=false;
+function _getCapMediaSession(){
+  if(_capMS!==null)return _capMS;
+  try{_capMS=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.MediaSession||false;}catch(_){_capMS=false;}
+  return _capMS;
 }
 function _initMediaSessionHandlers(){
-  if(!('mediaSession' in navigator))return;
-  try{
-    navigator.mediaSession.setActionHandler('play',()=>{try{ST.ytPlayer.playVideo();_startMediaProxy();}catch(_){}});
-    navigator.mediaSession.setActionHandler('pause',()=>{try{ST.ytPlayer.pauseVideo();_pauseMediaProxy();}catch(_){}});
-    navigator.mediaSession.setActionHandler('previoustrack',ytPrev);
-    navigator.mediaSession.setActionHandler('nexttrack',ytNext);
-    navigator.mediaSession.setActionHandler('stop',()=>{ytStop();_pauseMediaProxy();});
-    navigator.mediaSession.setActionHandler('seekbackward',()=>{try{const t=ST.ytPlayer.getCurrentTime();ST.ytPlayer.seekTo(Math.max(0,t-10),true);}catch(_){}});
-    navigator.mediaSession.setActionHandler('seekforward',()=>{try{const t=ST.ytPlayer.getCurrentTime();ST.ytPlayer.seekTo(t+10,true);}catch(_){}});
-  }catch(_){}
+  const cap=_getCapMediaSession();
+  if(cap){
+    try{
+      cap.setActionHandler({action:'play'},()=>{try{ST.ytPlayer.playVideo();}catch(_){}try{cap.setPlaybackState({playbackState:'playing'});}catch(_){}});
+      cap.setActionHandler({action:'pause'},()=>{try{ST.ytPlayer.pauseVideo();}catch(_){}try{cap.setPlaybackState({playbackState:'paused'});}catch(_){}});
+      cap.setActionHandler({action:'previoustrack'},ytPrev);
+      cap.setActionHandler({action:'nexttrack'},ytNext);
+      cap.setActionHandler({action:'stop'},ytStop);
+      cap.setActionHandler({action:'seekbackward'},()=>{try{const t=ST.ytPlayer.getCurrentTime();ST.ytPlayer.seekTo(Math.max(0,t-10),true);}catch(_){}});
+      cap.setActionHandler({action:'seekforward'},()=>{try{const t=ST.ytPlayer.getCurrentTime();ST.ytPlayer.seekTo(t+10,true);}catch(_){}});
+      console.log('[CAP] Native MediaSession handlers registered');
+    }catch(e){console.warn('[CAP] MediaSession handlers error:',e);}
+  }
+  // Fallback web MediaSession
+  if('mediaSession' in navigator){
+    try{
+      navigator.mediaSession.setActionHandler('play',()=>{try{ST.ytPlayer.playVideo();}catch(_){}});
+      navigator.mediaSession.setActionHandler('pause',()=>{try{ST.ytPlayer.pauseVideo();}catch(_){}});
+      navigator.mediaSession.setActionHandler('previoustrack',ytPrev);
+      navigator.mediaSession.setActionHandler('nexttrack',ytNext);
+      navigator.mediaSession.setActionHandler('stop',ytStop);
+      navigator.mediaSession.setActionHandler('seekbackward',()=>{try{const t=ST.ytPlayer.getCurrentTime();ST.ytPlayer.seekTo(Math.max(0,t-10),true);}catch(_){}});
+      navigator.mediaSession.setActionHandler('seekforward',()=>{try{const t=ST.ytPlayer.getCurrentTime();ST.ytPlayer.seekTo(t+10,true);}catch(_){}});
+    }catch(_){}
+  }
 }
-let _msHandlersInit=false;
 function updateMediaSession(title,artist,thumb){
-  if(!('mediaSession' in navigator))return;
-  try{
-    // Start silent proxy to claim audio focus from YT iframe
-    _startMediaProxy();
-    navigator.mediaSession.metadata=new MediaMetadata({
-      title:title||'—',artist:artist||'—',album:'music·ai',
-      artwork:thumb?[{src:thumb,sizes:'320x180',type:'image/jpeg'}]:[]
-    });
-    if(!_msHandlersInit){_initMediaSessionHandlers();_msHandlersInit=true;}
-    navigator.mediaSession.playbackState='playing';
-  }catch(_){}
+  // Register action handlers FIRST — service checks hasActionHandler() on start
+  if(!_msHandlersInit){_initMediaSessionHandlers();_msHandlersInit=true;}
+  const cap=_getCapMediaSession();
+  // Native Capacitor MediaSession — shows notification + handles Bluetooth
+  if(cap){
+    try{
+      cap.setMetadata({
+        title:title||'—',artist:artist||'—',album:'music·ai',
+        artwork:thumb?[{src:thumb,sizes:'320x180',type:'image/jpeg'}]:[]
+      });
+      // setPlaybackState AFTER handlers are registered — triggers service start
+      cap.setPlaybackState({playbackState:'playing'});
+      // Set position so notification shows duration + progress
+      try{
+        const dur=ST.ytPlayer&&ST.ytPlayer.getDuration?ST.ytPlayer.getDuration():0;
+        const pos=ST.ytPlayer&&ST.ytPlayer.getCurrentTime?ST.ytPlayer.getCurrentTime():0;
+        if(dur>0)cap.setPositionState({duration:dur,playbackRate:1.0,position:pos});
+      }catch(_){}
+    }catch(e){console.warn('[CAP] MediaSession metadata error:',e);}
+  }
+  // Web fallback
+  if('mediaSession' in navigator){
+    try{
+      navigator.mediaSession.metadata=new MediaMetadata({
+        title:title||'—',artist:artist||'—',album:'music·ai',
+        artwork:thumb?[{src:thumb,sizes:'320x180',type:'image/jpeg'}]:[]
+      });
+      navigator.mediaSession.playbackState='playing';
+    }catch(_){}
+  }
 }
-// === PWA Audio Keepalive ===
-// En mode standalone, l'iframe YT est suspendue quand l'app perd le focus.
-// Un oscillateur silencieux maintient l'AudioContext actif.
+// AudioContext keepalive — maintient l'audio focus en arrière-plan
 let _keepAliveCtx=null;
 function startAudioKeepAlive(){
   if(_keepAliveCtx)return;
-  const isStandalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone;
-  if(!isStandalone)return;
   try{
     _keepAliveCtx=new(window.AudioContext||window.webkitAudioContext)();
     const osc=_keepAliveCtx.createOscillator();
     const gain=_keepAliveCtx.createGain();
-    gain.gain.value=0.001;
+    gain.gain.value=0;// volume zéro — pas de son parasite
     osc.connect(gain);gain.connect(_keepAliveCtx.destination);
     osc.start();
   }catch(_){}
@@ -1524,6 +1563,69 @@ function fpUpdateTrack(){
     }
     dir=null;blocked=false;
   },{passive:true});
+})();
+// Mini-player swipe gestures — swipe up=full player, left/right=next/prev
+(function(){
+  const mp=document.getElementById('mini-player');
+  if(!mp)return;
+  const HORIZ_MIN=50,UP_MIN=40,DEAD=12;
+  let sx=0,sy=0,dir=null,blocked=false;
+  function isBlocked(e){return !!(e.target.closest('#mp-progress')||e.target.closest('#mp-vol-wrap')||e.target.closest('button')||e.target.closest('input'));}
+  mp.addEventListener('touchstart',e=>{
+    if(isBlocked(e)){blocked=true;return;}
+    blocked=false;dir=null;
+    sx=e.touches[0].clientX;sy=e.touches[0].clientY;
+  },{passive:true});
+  mp.addEventListener('touchmove',e=>{
+    if(blocked||!e.touches.length)return;
+    const dx=Math.abs(e.touches[0].clientX-sx),dy=Math.abs(e.touches[0].clientY-sy);
+    if(!dir&&(dx>DEAD||dy>DEAD))dir=dx>dy?'h':'v';
+  },{passive:true});
+  mp.addEventListener('touchend',e=>{
+    if(blocked){blocked=false;return;}
+    const t=e.changedTouches&&e.changedTouches[0];
+    if(!t){dir=null;return;}
+    const dx=t.clientX-sx,dy=t.clientY-sy;
+    if(dir==='h'){
+      if(dx<-HORIZ_MIN){ytNext();toast('⏭ Suivant');}
+      else if(dx>HORIZ_MIN){ytPrev();toast('⏮ Précédent');}
+    }else if(dir==='v'&&dy<-UP_MIN){
+      fpOpen();
+    }
+    dir=null;blocked=false;
+  },{passive:true});
+})();
+// Music-card swipe gestures — left/right=next/prev
+(function(){
+  function bindCardSwipe(){
+    document.querySelectorAll('.music-card').forEach(card=>{
+      if(card._swipeBound)return;
+      card._swipeBound=true;
+      const HORIZ_MIN=50,DEAD=12;
+      let sx=0,dir=null;
+      card.addEventListener('touchstart',e=>{
+        if(e.target.closest('button'))return;
+        dir=null;sx=e.touches[0].clientX;
+      },{passive:true});
+      card.addEventListener('touchmove',e=>{
+        if(!e.touches.length)return;
+        const dx=Math.abs(e.touches[0].clientX-sx),dy=Math.abs(e.touches[0].clientY-sx?e.touches[0].clientY:0);
+        if(!dir&&dx>DEAD)dir='h';
+      },{passive:true});
+      card.addEventListener('touchend',e=>{
+        const t=e.changedTouches&&e.changedTouches[0];
+        if(!t||dir!=='h')return;
+        const dx=t.clientX-sx;
+        if(dx<-HORIZ_MIN){ytNext();toast('⏭ Suivant');}
+        else if(dx>HORIZ_MIN){ytPrev();toast('⏮ Précédent');}
+        dir=null;
+      },{passive:true});
+    });
+  }
+  // Re-bind after new cards are rendered
+  const obs=new MutationObserver(bindCardSwipe);
+  obs.observe(document.body,{childList:true,subtree:true});
+  bindCardSwipe();
 })();
 function getPlaylists(){try{return JSON.parse(localStorage.getItem(LS_PL))||[]}catch{return[]}}
 function savePlaylists(pl){localStorage.setItem(LS_PL,JSON.stringify(pl))}
@@ -2530,10 +2632,9 @@ function boot(){
   // Listeners réseau
   window.addEventListener('offline',()=>{toast('📶 Hors ligne',3000);ST.isLoading=false;});
   window.addEventListener('online',()=>toast('📶 Connexion rétablie ✓',2000));
-  // Service Worker registration + update notification
-  if('serviceWorker' in navigator){
+  // Service Worker — désactivé en mode Capacitor (pas besoin, cause des conflits cache)
+  if('serviceWorker' in navigator&&!window.Capacitor){
     navigator.serviceWorker.register('./sw.js').catch(()=>{});
-    // Listener enregistré immédiatement (pas de race condition)
     navigator.serviceWorker.addEventListener('message',e=>{
       if(e.data?.type==='SW_UPDATED'){
         const v=e.data.version||'';
@@ -2548,11 +2649,7 @@ function boot(){
         }
       }
     });
-    // Fallback: vérifier si SW a changé via controller change
-    navigator.serviceWorker.addEventListener('controllerchange',()=>{
-      // Nouveau SW a pris le contrôle — si message raté, on reload
-      // (le postMessage dans activate peut arriver avant ce listener)
-    });
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{});
   }
   loadChatHistory();
   initPlaylistsOverlay();
