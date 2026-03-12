@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>music·ai v3.15.2 — Discovery Engine</title>
+<title>music·ai v3.15.3 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -481,7 +481,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.15.2</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.15.3</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -802,8 +802,8 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.15.2) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.15.2'};
+// ── SERVER PROFILE (music-ai v3.15.3) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.15.3'};
 let _serverProfileReady=null; // v3.14.3 — Promise pour attendre le chargement serveur
 let _syncTimer=null;
 const MUSICAI_USERID='default';
@@ -890,7 +890,7 @@ function toast(msg,dur=2400){const el=document.getElementById('toast');el.textCo
 
 // ── YOUTUBE ──
 function parseDuration(iso){if(!iso)return 0;const m=iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);if(!m)return 0;return(parseInt(m[1]||0)*3600)+(parseInt(m[2]||0)*60)+parseInt(m[3]||0);}
-const YT_DUR_MIN=60,YT_DUR_MAX=600; // v3.15.2 — 1min → 10min (élargi pour ne pas rater le bon morceau)
+const YT_DUR_MIN=60,YT_DUR_MAX=600; // v3.15.3 — 1min → 10min (élargi pour ne pas rater le bon morceau)
 let _ytLastSource=''; // 'L' local, 'S' server, '' unknown
 function ytBlinkOn(){const d=document.getElementById('adotYT');if(d)d.className='adot blink';_ytLastSource='';}
 function ytBlinkOff(){updateQuotaDisplay();}
@@ -931,7 +931,7 @@ async function ytSearchLocal(query){
       const vr=await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=${ids.join(',')}&key=${key}`);
       if(vr.ok){
         const vd=await vr.json();
-        // v3.15.2 — scoring intelligent: match titre/artiste + type + durée
+        // v3.15.3 — scoring intelligent: match titre/artiste + type + durée
         const qLow=query.toLowerCase().replace(/official\s*audio/g,'').trim();
         const qWords=qLow.split(/\s+/).filter(w=>w.length>2);
         const scored=(vd.items||[]).map(item=>{
@@ -1095,7 +1095,7 @@ function startProgressTick(){
   },500);
 }
 function stopProgressTick(){if(_progressTick){clearInterval(_progressTick);_progressTick=null}}
-// v3.15.2 — Media Session WITHOUT audio proxy (proxy stole focus from YT iframe → Android killed YT in background)
+// v3.15.3 — Media Session WITHOUT audio proxy (proxy stole focus from YT iframe → Android killed YT in background)
 function _initMediaSessionHandlers(){
   if(!('mediaSession' in navigator))return;
   try{
@@ -1122,7 +1122,7 @@ function updateMediaSession(title,artist,thumb){
 }
 // === Background Audio Keepalive ===
 // AudioContext silencieux maintient l'audio actif en arrière-plan.
-// v3.15.2 — fonctionne en mode browser ET standalone (pas seulement standalone)
+// v3.15.3 — fonctionne en mode browser ET standalone (pas seulement standalone)
 let _keepAliveCtx=null;
 function startAudioKeepAlive(){
   if(_keepAliveCtx)return;
@@ -1135,24 +1135,20 @@ function startAudioKeepAlive(){
     osc.start();
   }catch(_){}
 }
-// v3.15.2 — Background resume: relance YT immédiatement + retries quand on quitte l'app
+// v3.15.3 — Background watchdog (pas de playVideo immédiat — déclenche anti-autoplay Chrome)
 let _bgWatchdog=null;
-function _ytResumeIfPaused(){
-  try{
-    if(ST.ytPlayer&&ST.currentTrack&&ST.currentTrack.videoId&&typeof ST.ytPlayer.getPlayerState==='function'){
-      const ps=ST.ytPlayer.getPlayerState();
-      if(ps===2||ps===-1){ST.ytPlayer.playVideo();}
-    }
-  }catch(_){}
-}
 document.addEventListener('visibilitychange',()=>{
   if(_keepAliveCtx&&_keepAliveCtx.state==='suspended')_keepAliveCtx.resume().catch(()=>{});
   if(document.hidden){
-    // Page en arrière-plan → resume immédiat + retries rapides + watchdog
-    _ytResumeIfPaused();
-    [300,800,1500,3000].forEach(d=>setTimeout(_ytResumeIfPaused,d));
     if(_bgWatchdog)clearInterval(_bgWatchdog);
-    _bgWatchdog=setInterval(_ytResumeIfPaused,5000);
+    _bgWatchdog=setInterval(()=>{
+      try{
+        if(ST.ytPlayer&&ST.currentTrack&&ST.currentTrack.videoId&&typeof ST.ytPlayer.getPlayerState==='function'){
+          const ps=ST.ytPlayer.getPlayerState();
+          if(ps===2||ps===-1){ST.ytPlayer.playVideo();}
+        }
+      }catch(_){}
+    },3000);
   }else{
     if(_bgWatchdog){clearInterval(_bgWatchdog);_bgWatchdog=null;}
   }
@@ -1894,7 +1890,7 @@ function buildSystemPrompt(mode,retryN){
   const advInstr=adv>=0.7?'Aventure élevée: propose des artistes peu connus, sous-genres inattendus. Tu peux t\'éloigner des artistes de référence.'
     :adv<=0.3?'Confort: OBLIGATOIRE — choisis des artistes similaires aux artistes de référence, même univers sonore, même énergie. Reste dans la zone de confort.'
     :'Mix équilibré: alterne entre artistes proches des références (univers similaire) et découvertes modérées.';
-  // v3.15.2 — renforcer artistes de référence
+  // v3.15.3 — renforcer artistes de référence
   const hasRefArtists=(p.artists||[]).length>0;
   const artistEnforce=hasRefArtists&&mode!=='shuffle'?`RÈGLE ARTISTES DE RÉFÉRENCE:
 - Les artistes de référence [${(p.artists||[]).join(', ')}] définissent TON UNIVERS SONORE de base.
