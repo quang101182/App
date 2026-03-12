@@ -124,7 +124,7 @@ export default {
       }
 
       // ── Telegram media routes (dual auth: WORKER_SECRET or ADMIN_TOKEN) ──
-      if (method === 'POST' && (path === '/api/send-photo' || path === '/api/send-video')) {
+      if (method === 'POST' && (path === '/api/send-photo' || path === '/api/send-video' || path === '/api/send-video-openai')) {
         const authWS = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
         const authAT = authWS ? await checkBearer(request, env.ADMIN_TOKEN, 'ADMIN_TOKEN') : null;
         if (authWS && authAT) return authWS; // both failed → unauthorized
@@ -133,6 +133,7 @@ export default {
         if (rlErr) return rlErr;
         if (path === '/api/send-photo') return await handleSendPhoto(request, env);
         if (path === '/api/send-video') return await handleSendVideo(request, env);
+        if (path === '/api/send-video-openai') return await handleSendVideoOpenAI(request, env);
       }
 
       // ── API routes ────────────────────────────────────────────────────────
@@ -1233,6 +1234,58 @@ async function handleSendVideo(request, env) {
     return jsonResponse(data, resp.ok ? 200 : resp.status);
   } catch (err) {
     return jsonResponse({ error: 'send-video failed: ' + (err.message || String(err)) }, 500);
+  }
+}
+
+/**
+ * POST /api/send-video-openai
+ * Body: { videoId, chatId, caption?, botToken }
+ * Downloads video from OpenAI API (using OPENAI_KEY from KV), uploads to Telegram.
+ */
+async function handleSendVideoOpenAI(request, env) {
+  const body = await request.json();
+  const { videoId, chatId, caption, botToken } = body;
+
+  if (!videoId || !chatId || !botToken) {
+    return jsonResponse({ error: 'missing required fields: videoId, chatId, botToken' }, 400);
+  }
+
+  try {
+    const openaiKey = await kvGetKey(env, 'OPENAI_KEY');
+    if (!openaiKey) {
+      return jsonResponse({ error: 'OPENAI_KEY not configured in gateway' }, 500);
+    }
+
+    // Download video from OpenAI
+    const dlResp = await fetch(`https://api.openai.com/v1/videos/${videoId}/content`, {
+      headers: { 'Authorization': `Bearer ${openaiKey}` },
+    });
+
+    if (!dlResp.ok) {
+      const errText = await dlResp.text();
+      return jsonResponse({ error: `OpenAI download failed: ${dlResp.status} ${errText.substring(0, 200)}` }, 502);
+    }
+
+    const videoBlob = await dlResp.blob();
+
+    // Upload to Telegram
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    form.append('video', videoBlob, 'video.mp4');
+    if (caption) {
+      form.append('caption', caption);
+      form.append('parse_mode', 'Markdown');
+    }
+
+    const tgResp = await fetch(`https://api.telegram.org/bot${botToken}/sendVideo`, {
+      method: 'POST',
+      body: form,
+    });
+
+    const tgData = await tgResp.json();
+    return jsonResponse(tgData, tgResp.ok ? 200 : tgResp.status);
+  } catch (err) {
+    return jsonResponse({ error: 'send-video-openai failed: ' + (err.message || String(err)) }, 500);
   }
 }
 
