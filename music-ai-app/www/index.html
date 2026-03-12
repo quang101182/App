@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>music·ai v3.15.2-cap — Discovery Engine</title>
+<title>music·ai v3.15.3-cap — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -483,7 +483,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.15.2</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.15.3</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -673,6 +673,18 @@
           </div>
         </div>
         <div class="glass" style="padding:18px;margin-bottom:14px;">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;">Lecture</div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">Qualité audio</label>
+          <select id="cfg-audio-quality" class="field" style="margin-bottom:8px;cursor:pointer;" onchange="saveAudioQuality(this.value)">
+            <option value="auto">Auto (adaptatif)</option>
+            <option value="small">Éco (~64 kbps)</option>
+            <option value="medium">Standard (~128 kbps)</option>
+            <option value="large">Haute (~192 kbps)</option>
+            <option value="hd720">HD (~256 kbps)</option>
+          </select>
+          <p style="font-size:10px;color:var(--muted);margin:0;line-height:1.5;">Contrôle le bitrate audio via la qualité vidéo YouTube. "Auto" laisse YouTube choisir selon ta connexion.</p>
+        </div>
+        <div class="glass" style="padding:18px;margin-bottom:14px;">
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;">Profil musical</div>
           <div id="profile-summary" style="font-size:13px;line-height:2;color:var(--text);"></div>
           <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
@@ -784,6 +796,10 @@ function saveVidCache(){try{_ytVidCache._ver=VID_CACHE_VER;const keys=Object.key
 loadVidCache();
 // ── Multi-key rotation ──
 const LS_YT_KEYS='music_ai_yt_keys';// JSON array of extra keys
+const LS_AUDIO_Q='music_ai_audio_quality';
+function getAudioQuality(){return localStorage.getItem(LS_AUDIO_Q)||'auto';}
+function saveAudioQuality(q){localStorage.setItem(LS_AUDIO_Q,q);applyAudioQuality();console.log('[YT] Audio quality set:',q);}
+function applyAudioQuality(){try{const q=getAudioQuality();if(q!=='auto'&&ST.ytPlayer&&typeof ST.ytPlayer.setPlaybackQuality==='function')ST.ytPlayer.setPlaybackQuality(q);}catch(_){}}
 function getYtKeys(){try{const r=localStorage.getItem(LS_YT_KEYS);return r?JSON.parse(r):[];}catch{return[];}}
 function getAllYtKeys(){const primary=getYtKey();const extras=getYtKeys();const all=primary?[primary,...extras.filter(k=>k!==primary)]:extras;return all.filter(Boolean);}
 function getQuotaForKey(key){try{const q=JSON.parse(localStorage.getItem(LS_YT_QUOTA+'_'+key));const today=new Date().toISOString().slice(0,10);if(!q||q.date!==today)return{count:0,date:today,key};return{...q,key};}catch{return{count:0,date:new Date().toISOString().slice(0,10),key}}}
@@ -817,8 +833,8 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.15.2) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.15.2'};
+// ── SERVER PROFILE (music-ai v3.15.3) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.15.3'};
 let _serverProfileReady=null; // v3.14.3 — Promise pour attendre le chargement serveur
 let _syncTimer=null;
 const MUSICAI_USERID='default';
@@ -1308,6 +1324,7 @@ async function ytPlay(track){
   if(ST.ytPlayerReady&&ST.ytPlayer&&typeof ST.ytPlayer.loadVideoById==='function'){
     ST._ytRetried=false;
     ST.ytPlayer.loadVideoById(vid);
+    applyAudioQuality();
     // Retries escaladés playVideo() — Android Chrome bloque souvent le premier appel
     // v3.14.2 — vérifier playToken pour ne pas rejouer un track annulé
     [200,600,1200,2500].forEach(delay=>{
@@ -2582,6 +2599,7 @@ function loadSettingsUI(){
   fillModelSelect('cfg-model',cfg.provider||'claude');
   const sel=document.getElementById('cfg-model');if(sel&&cfg.model)[...sel.options].forEach(o=>{o.selected=o.value===cfg.model});
   document.getElementById('cfg-ytkey').value=getYtKey();
+  const aq=document.getElementById('cfg-audio-quality');if(aq)aq.value=getAudioQuality();
   renderExtraYtKeys();
   const srvInfo=document.getElementById('yt-server-info');
   const srvStatus=document.getElementById('yt-server-status');
