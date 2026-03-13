@@ -35,7 +35,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.2.0';
+const VERSION = '1.2.1';
 
 // ── Plan limits (per calendar month) ────────────────────────────────────────
 const PLAN_LIMITS = {
@@ -413,6 +413,24 @@ export default {
     // Health
     if (method === 'GET' && path === '/health') {
       return json({ status: 'ok', version: VERSION, service: 'api-gateway-pro' });
+    }
+
+    // ── Visit counter (landing page) ───────────────────────────────────
+    if (path === '/api/visit') {
+      const today = new Date().toISOString().slice(0, 10);
+      const totalRaw = await env.PRO_KV.get('stats:visits:total');
+      const todayRaw = await env.PRO_KV.get(`stats:visits:${today}`);
+      let total = parseInt(totalRaw) || 0;
+      let todayCount = parseInt(todayRaw) || 0;
+      if (method === 'POST') {
+        total++;
+        todayCount++;
+        ctx.waitUntil(Promise.all([
+          env.PRO_KV.put('stats:visits:total', String(total)),
+          env.PRO_KV.put(`stats:visits:${today}`, String(todayCount), { expirationTtl: 90 * 86400 }),
+        ]));
+      }
+      return json({ total, today: todayCount });
     }
 
     // ── LemonSqueezy webhook ─────────────────────────────────────────────
