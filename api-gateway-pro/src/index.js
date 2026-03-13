@@ -217,6 +217,23 @@ export default {
       return json({ status: 'ok', version: VERSION, service: 'api-gateway-pro' });
     }
 
+    // ── /config — validates pro key and returns available APIs ────────────
+
+    if (path === '/config') {
+      const proKey = request.headers.get('X-Pro-Key') || request.headers.get('Authorization')?.replace('Bearer ', '');
+      if (!proKey) return err('X-Pro-Key required', 401);
+      const proData = await validateProKey(proKey, env);
+      if (!proData) return err('Invalid key', 403);
+      // Check which API keys are configured
+      const apiNames = ['GEMINI', 'GROQ', 'ASSEMBLYAI', 'DEEPSEEK', 'AZURE'];
+      const apis = [];
+      for (const name of apiNames) {
+        const key = await getApiKey(name + '_KEY', env);
+        if (key) apis.push(name);
+      }
+      return json({ apis, plan: proData.plan });
+    }
+
     // ── Admin routes ──────────────────────────────────────────────────────
 
     if (path.startsWith('/admin/')) {
