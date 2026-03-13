@@ -1,5 +1,5 @@
 /**
- * api-gateway-pro — Cloudflare Worker v1.0.0
+ * api-gateway-pro — Cloudflare Worker v1.1.0
  * Isolated gateway for SubWhisper Pro (paid users)
  *
  * Zero dependency on api-gateway — completely independent.
@@ -33,7 +33,14 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
+
+// ── Plan limits (per calendar month) ────────────────────────────────────────
+const PLAN_LIMITS = {
+  pro:   { transcriptions: 50, translations: 500 },
+  trial: { transcriptions: 10, translations: 100 },
+};
+const RATE_LIMIT_PER_MIN = 10;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -62,17 +69,60 @@ async function validateProKey(proKey, env) {
   const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
   if (!data) return null;
   if (data.revoked) return null;
+  // Check expiration
+  if (data.expiresAt && new Date(data.expiresAt) < new Date()) return null;
   return data;
+}
+
+// Get current month key (e.g. "2026-03")
+function monthKey() {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+// Check if usage limit is reached for this month
+function checkUsageLimit(data, type) {
+  const plan = data.plan || 'pro';
+  const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.pro;
+  const mk = monthKey();
+  const monthly = (data.monthlyUsage && data.monthlyUsage[mk]) || { transcriptions: 0, translations: 0 };
+  if (type === 'transcription' && monthly.transcriptions >= limits.transcriptions) {
+    return { blocked: true, reason: `Monthly transcription limit reached (${limits.transcriptions})`, usage: monthly, limits };
+  }
+  if (type === 'translation' && monthly.translations >= limits.translations) {
+    return { blocked: true, reason: `Monthly translation limit reached (${limits.translations})`, usage: monthly, limits };
+  }
+  return { blocked: false, usage: monthly, limits };
 }
 
 async function incrementUsage(proKey, type, env, ctx) {
   const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
   if (!data) return;
+  // Legacy total usage
   if (!data.usage) data.usage = { transcriptions: 0, translations: 0 };
   if (type === 'transcription') data.usage.transcriptions++;
   if (type === 'translation') data.usage.translations++;
+  // Monthly usage tracking
+  const mk = monthKey();
+  if (!data.monthlyUsage) data.monthlyUsage = {};
+  if (!data.monthlyUsage[mk]) data.monthlyUsage[mk] = { transcriptions: 0, translations: 0 };
+  if (type === 'transcription') data.monthlyUsage[mk].transcriptions++;
+  if (type === 'translation') data.monthlyUsage[mk].translations++;
+  // Clean old months (keep last 3)
+  const months = Object.keys(data.monthlyUsage).sort();
+  while (months.length > 3) { delete data.monthlyUsage[months.shift()]; }
   data.lastUsed = new Date().toISOString();
   ctx.waitUntil(env.PRO_KV.put(`pro:${proKey}`, JSON.stringify(data)));
+}
+
+// Simple rate limiter (per key, per minute) using KV
+async function checkRateLimit(proKey, env) {
+  const now = Math.floor(Date.now() / 60000); // minute bucket
+  const rlKey = `rl:${proKey}:${now}`;
+  const count = parseInt(await env.PRO_KV.get(rlKey) || '0');
+  if (count >= RATE_LIMIT_PER_MIN) return false;
+  await env.PRO_KV.put(rlKey, String(count + 1), { expirationTtl: 120 });
+  return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -231,7 +281,10 @@ export default {
         const key = await getApiKey(name + '_KEY', env);
         if (key) apis.push(name);
       }
-      return json({ apis, plan: proData.plan });
+      const mk = monthKey();
+      const monthly = (proData.monthlyUsage && proData.monthlyUsage[mk]) || { transcriptions: 0, translations: 0 };
+      const limits = PLAN_LIMITS[proData.plan] || PLAN_LIMITS.pro;
+      return json({ apis, plan: proData.plan, monthlyUsage: monthly, limits });
     }
 
     // ── Admin routes ──────────────────────────────────────────────────────
@@ -268,8 +321,16 @@ export default {
           plan: body.plan || 'pro',
           created: new Date().toISOString(),
           usage: { transcriptions: 0, translations: 0 },
+          monthlyUsage: {},
           revoked: false,
         };
+        // Optional expiration (e.g. for trial keys): body.expiresIn (days) or body.expiresAt (ISO)
+        if (body.expiresAt) data.expiresAt = body.expiresAt;
+        else if (body.expiresIn) {
+          const exp = new Date();
+          exp.setDate(exp.getDate() + body.expiresIn);
+          data.expiresAt = exp.toISOString();
+        }
         await env.PRO_KV.put(`pro:${key}`, JSON.stringify(data));
         return json({ ok: true, key, ...data });
       }
@@ -309,14 +370,32 @@ export default {
       if (path === '/api/verify') {
         if (!proKey) return err('X-Pro-Key header required', 401);
         const data = await validateProKey(proKey, env);
-        if (!data) return err('Invalid or revoked key', 403);
-        return json({ valid: true, plan: data.plan, email: data.email, usage: data.usage });
+        if (!data) return err('Invalid, expired, or revoked key', 403);
+        const mk = monthKey();
+        const monthly = (data.monthlyUsage && data.monthlyUsage[mk]) || { transcriptions: 0, translations: 0 };
+        const limits = PLAN_LIMITS[data.plan] || PLAN_LIMITS.pro;
+        return json({ valid: true, plan: data.plan, email: data.email, usage: data.usage, monthlyUsage: monthly, limits, expiresAt: data.expiresAt || null });
       }
 
       // All other API routes require valid pro key
       if (!proKey) return err('X-Pro-Key header required', 401);
       const proData = await validateProKey(proKey, env);
-      if (!proData) return err('Invalid or revoked pro key', 403);
+      if (!proData) return err('Invalid, expired, or revoked pro key', 403);
+
+      // Rate limit check
+      if (!await checkRateLimit(proKey, env)) {
+        return err('Rate limit exceeded. Max 10 requests/minute.', 429);
+      }
+
+      // Determine usage type for this route
+      const usageType = (path === '/api/groq' || path === '/api/assemblyai' || path.startsWith('/api/assemblyai/'))
+        ? 'transcription' : 'translation';
+
+      // Check monthly usage limit
+      const limitCheck = checkUsageLimit(proData, usageType);
+      if (limitCheck.blocked) {
+        return json({ error: limitCheck.reason, usage: limitCheck.usage, limits: limitCheck.limits }, 429);
+      }
 
       // Gemini proxy
       if (path.startsWith('/api/gemini')) {
