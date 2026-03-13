@@ -116,6 +116,18 @@ export default {
         return handleHealth();
       }
 
+      // ── Page counter (no auth, public) ─────────────────────────────────────
+      if (method === 'GET' && path === '/api/counter') {
+        const site = url.searchParams.get('site') || 'default';
+        const key = `counter:${site}`;
+        const current = parseInt(await env.GATEWAY_KV.get(key) || '0');
+        const next = current + 1;
+        ctx.waitUntil(env.GATEWAY_KV.put(key, String(next)));
+        return new Response(JSON.stringify({ count: next }), {
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+        });
+      }
+
       // ── Config (auth: WORKER_SECRET) ──────────────────────────────────────
       if (method === 'GET' && path === '/config') {
         const authErr = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
