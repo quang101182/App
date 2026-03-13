@@ -6431,11 +6431,19 @@ if ('serviceWorker' in navigator) {
 <div id="proOnboard" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);align-items:center;justify-content:center">
   <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:16px;padding:32px;max-width:420px;width:90%">
     <h2 style="margin-bottom:12px;font-family:var(--mono)">Welcome to SubWhisper Pro</h2>
-    <p style="color:var(--muted);margin-bottom:20px;font-size:14px">Enter your license key to get started. You can find it in your purchase confirmation email.</p>
-    <input type="text" id="proKeyInput" placeholder="swp_..." style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-family:var(--mono);font-size:14px;margin-bottom:16px">
-    <button onclick="activateProKey()" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px">Activate</button>
-    <p id="proOnboardErr" style="color:var(--accent2);font-size:12px;margin-top:8px;display:none"></p>
-    <p style="color:var(--muted);font-size:11px;margin-top:16px;text-align:center">Don't have a key? <a href="https://se7en-tools.lemonsqueezy.com/checkout/buy/4dd95a35-0be8-48b8-a258-db0a78abb981" target="_blank" style="color:var(--accent)">Get SubWhisper Pro</a></p>
+    <p id="proOnboardDesc" style="color:var(--muted);margin-bottom:20px;font-size:14px">Enter the email you used at checkout to activate your account.</p>
+    <input type="email" id="proEmailInput" placeholder="your@email.com" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-size:14px;margin-bottom:12px">
+    <button onclick="activateByEmail()" id="proEmailBtn" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px">Activate</button>
+    <p id="proOnboardErr" style="color:#ff4d6d;font-size:12px;margin-top:8px;display:none"></p>
+    <p id="proOnboardOk" style="color:var(--accent2);font-size:12px;margin-top:8px;display:none"></p>
+    <details style="margin-top:16px">
+      <summary style="color:var(--muted);font-size:11px;cursor:pointer">Have a license key instead?</summary>
+      <div style="margin-top:8px">
+        <input type="text" id="proKeyInput" placeholder="swp_..." style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-family:var(--mono);font-size:14px;margin-bottom:8px">
+        <button onclick="activateProKey()" style="width:100%;padding:8px;border-radius:8px;border:none;background:var(--surface);color:var(--text);font-weight:500;cursor:pointer;font-size:13px;border:1px solid var(--border2)">Activate Key</button>
+      </div>
+    </details>
+    <p style="color:var(--muted);font-size:11px;margin-top:16px;text-align:center">Don't have an account? <a href="https://se7en-tools.lemonsqueezy.com/checkout/buy/4dd95a35-0be8-48b8-a258-db0a78abb981" target="_blank" style="color:var(--accent)">Get SubWhisper Pro</a></p>
   </div>
 </div>
 <script>
@@ -6443,39 +6451,75 @@ if ('serviceWorker' in navigator) {
 function showProOnboard() {
   document.getElementById('proOnboard').style.display = 'flex';
 }
+function _storeKeyAndClose(key) {
+  document.getElementById('gatewayKey').value = key;
+  try { localStorage.setItem('swp_prokey', key); } catch(e) {}
+  document.getElementById('proOnboard').style.display = 'none';
+  fetchGatewayConfig();
+}
+function _showErr(msg) {
+  var e = document.getElementById('proOnboardErr');
+  e.textContent = msg; e.style.display = 'block';
+  document.getElementById('proOnboardOk').style.display = 'none';
+}
+function _showOk(msg) {
+  var e = document.getElementById('proOnboardOk');
+  e.textContent = msg; e.style.display = 'block';
+  document.getElementById('proOnboardErr').style.display = 'none';
+}
+// Activate by email
+function activateByEmail() {
+  var email = document.getElementById('proEmailInput').value.trim();
+  if (!email || !email.includes('@')) { _showErr('Please enter a valid email.'); return; }
+  var btn = document.getElementById('proEmailBtn');
+  btn.textContent = 'Activating...'; btn.disabled = true;
+  fetch(GATEWAY_URL + '/api/activate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email })
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    btn.textContent = 'Activate'; btn.disabled = false;
+    if (data.ok && data.key) {
+      _showOk('Account activated! Loading...');
+      setTimeout(function() { _storeKeyAndClose(data.key); }, 500);
+    } else {
+      _showErr(data.error || 'Activation failed.');
+    }
+  }).catch(function() {
+    btn.textContent = 'Activate'; btn.disabled = false;
+    _showErr('Connection error. Please try again.');
+  });
+}
+// Activate by key (fallback)
 function activateProKey() {
   var key = document.getElementById('proKeyInput').value.trim();
-  if (!key || !key.startsWith('swp_')) {
-    var e = document.getElementById('proOnboardErr');
-    e.textContent = 'Invalid key format. Keys start with swp_';
-    e.style.display = 'block';
-    return;
-  }
-  // Verify with gateway
+  if (!key || !key.startsWith('swp_')) { _showErr('Invalid key format. Keys start with swp_'); return; }
   fetch(GATEWAY_URL + '/api/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Pro-Key': key }
   }).then(function(r) { return r.json(); }).then(function(data) {
-    if (data.valid) {
-      document.getElementById('gatewayKey').value = key;
-      try { localStorage.setItem('swp_prokey', key); } catch(e) {}
-      document.getElementById('proOnboard').style.display = 'none';
-      fetchGatewayConfig();
-    } else {
-      var e = document.getElementById('proOnboardErr');
-      e.textContent = data.error || 'Invalid key';
-      e.style.display = 'block';
-    }
-  }).catch(function() {
-    var e = document.getElementById('proOnboardErr');
-    e.textContent = 'Connection error. Please try again.';
-    e.style.display = 'block';
-  });
+    if (data.valid) { _storeKeyAndClose(key); }
+    else { _showErr(data.error || 'Invalid key'); }
+  }).catch(function() { _showErr('Connection error. Please try again.'); });
 }
-// Show onboarding if no key stored
-setTimeout(function() {
-  if (!getGatewayKey()) showProOnboard();
-}, 500);
+// Auto-activate from checkout redirect (?activated=1)
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('activated') === '1') {
+    // Clean URL
+    history.replaceState(null, '', window.location.pathname);
+    // Show onboarding with hint
+    setTimeout(function() {
+      showProOnboard();
+      document.getElementById('proOnboardDesc').textContent = 'Payment received! Enter the email you used at checkout to activate.';
+    }, 300);
+    return;
+  }
+  // Normal: show onboarding if no key
+  setTimeout(function() {
+    if (!getGatewayKey()) showProOnboard();
+  }, 500);
+})();
 </script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 /**
- * api-gateway-pro — Cloudflare Worker v1.1.0
+ * api-gateway-pro — Cloudflare Worker v1.2.0
  * Isolated gateway for SubWhisper Pro (paid users)
  *
  * Zero dependency on api-gateway — completely independent.
@@ -25,6 +25,8 @@
  *   POST /api/assemblyai    → Proxy to AssemblyAI API (pro key required)
  *   POST /api/deepseek      → Proxy to DeepSeek API (pro key required)
  *   POST /api/azure         → Proxy to Azure Translator (pro key required)
+ *   POST /webhook/lemonsqueezy → LemonSqueezy webhook (auto-create/revoke keys)
+ *   POST /api/activate        → Activate by email (returns pro key)
  *   POST /admin/keys/set    → Set API keys in KV
  *   POST /admin/keys/list   → List API keys
  *   POST /admin/pro/create  → Create a pro user key
@@ -33,7 +35,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 
 // ── Plan limits (per calendar month) ────────────────────────────────────────
 const PLAN_LIMITS = {
@@ -248,6 +250,152 @@ function generateProKey() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// LemonSqueezy webhook signature verification (HMAC-SHA256)
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function verifyWebhookSignature(rawBody, signature, secret) {
+  if (!secret || !signature) return false;
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(rawBody));
+  const hex = [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('');
+  return hex === signature;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LemonSqueezy webhook handler
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function handleLemonSqueezyWebhook(request, env) {
+  const rawBody = await request.text();
+  const signature = request.headers.get('X-Signature');
+  const secret = await env.PRO_KV.get('cfg:lemonsqueezy_signing_secret');
+
+  // Verify signature if secret is configured
+  if (secret) {
+    if (!await verifyWebhookSignature(rawBody, signature, secret)) {
+      return err('Invalid webhook signature', 401);
+    }
+  }
+
+  let payload;
+  try { payload = JSON.parse(rawBody); } catch { return err('Invalid JSON', 400); }
+
+  const event = payload.meta?.event_name;
+  const attrs = payload.data?.attributes || {};
+  const email = attrs.user_email;
+  const subscriptionId = String(payload.data?.id || '');
+
+  if (!email) return err('No email in webhook payload', 400);
+
+  // subscription_created or order_created → create pro key
+  if (event === 'subscription_created' || event === 'order_created') {
+    const status = attrs.status; // 'active', 'on_trial', 'cancelled', etc.
+    const plan = (status === 'on_trial') ? 'trial' : 'pro';
+    const trialEndsAt = attrs.trial_ends_at || null;
+
+    // Check if email already has a key
+    const existingKey = await env.PRO_KV.get(`email:${email.toLowerCase()}`);
+    if (existingKey) {
+      // Reactivate if revoked
+      const existingData = await env.PRO_KV.get(`pro:${existingKey}`, 'json');
+      if (existingData && existingData.revoked) {
+        existingData.revoked = false;
+        existingData.plan = plan;
+        existingData.subscriptionId = subscriptionId;
+        if (trialEndsAt) existingData.expiresAt = trialEndsAt;
+        else delete existingData.expiresAt;
+        await env.PRO_KV.put(`pro:${existingKey}`, JSON.stringify(existingData));
+      }
+      return json({ ok: true, action: 'reactivated', email });
+    }
+
+    // Create new pro key
+    const key = generateProKey();
+    const data = {
+      email: email.toLowerCase(),
+      plan,
+      created: new Date().toISOString(),
+      subscriptionId,
+      usage: { transcriptions: 0, translations: 0 },
+      monthlyUsage: {},
+      revoked: false,
+    };
+    if (trialEndsAt) data.expiresAt = trialEndsAt;
+
+    await env.PRO_KV.put(`pro:${key}`, JSON.stringify(data));
+    await env.PRO_KV.put(`email:${email.toLowerCase()}`, key);
+
+    return json({ ok: true, action: 'created', email, plan });
+  }
+
+  // subscription_updated → update plan/status
+  if (event === 'subscription_updated') {
+    const proKey = await env.PRO_KV.get(`email:${email.toLowerCase()}`);
+    if (!proKey) return json({ ok: true, action: 'ignored', reason: 'no key for email' });
+    const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
+    if (!data) return json({ ok: true, action: 'ignored' });
+
+    const status = attrs.status;
+    if (status === 'active') {
+      data.plan = 'pro';
+      data.revoked = false;
+      delete data.expiresAt;
+    } else if (status === 'on_trial') {
+      data.plan = 'trial';
+      if (attrs.trial_ends_at) data.expiresAt = attrs.trial_ends_at;
+    } else if (status === 'cancelled' || status === 'expired' || status === 'unpaid') {
+      data.revoked = true;
+    }
+    data.subscriptionId = subscriptionId;
+    await env.PRO_KV.put(`pro:${proKey}`, JSON.stringify(data));
+    return json({ ok: true, action: 'updated', email, status });
+  }
+
+  // subscription_cancelled / subscription_expired → revoke
+  if (event === 'subscription_cancelled' || event === 'subscription_expired') {
+    const proKey = await env.PRO_KV.get(`email:${email.toLowerCase()}`);
+    if (!proKey) return json({ ok: true, action: 'ignored' });
+    const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
+    if (data) {
+      data.revoked = true;
+      await env.PRO_KV.put(`pro:${proKey}`, JSON.stringify(data));
+    }
+    return json({ ok: true, action: 'revoked', email });
+  }
+
+  return json({ ok: true, action: 'ignored', event });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Email activation (customer enters email → gets their key)
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function handleActivate(request, env) {
+  const body = await request.json().catch(() => null);
+  if (!body?.email) return err('email required', 400);
+  const email = body.email.trim().toLowerCase();
+
+  // Rate limit: 5 attempts per email per hour
+  const rlKey = `rl:activate:${email}:${Math.floor(Date.now() / 3600000)}`;
+  const attempts = parseInt(await env.PRO_KV.get(rlKey) || '0');
+  if (attempts >= 5) return err('Too many activation attempts. Try again in 1 hour.', 429);
+  await env.PRO_KV.put(rlKey, String(attempts + 1), { expirationTtl: 3600 });
+
+  // Look up key by email
+  const proKey = await env.PRO_KV.get(`email:${email}`);
+  if (!proKey) return err('No subscription found for this email. Please check your email or complete checkout first.', 404);
+
+  // Validate key is active
+  const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
+  if (!data) return err('Key data missing', 500);
+  if (data.revoked) return err('Subscription cancelled or expired. Please renew.', 403);
+  if (data.expiresAt && new Date(data.expiresAt) < new Date()) return err('Trial expired. Please subscribe to continue.', 403);
+
+  return json({ ok: true, key: proKey, plan: data.plan, email: data.email });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main handler
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -265,6 +413,18 @@ export default {
     // Health
     if (method === 'GET' && path === '/health') {
       return json({ status: 'ok', version: VERSION, service: 'api-gateway-pro' });
+    }
+
+    // ── LemonSqueezy webhook ─────────────────────────────────────────────
+
+    if (path === '/webhook/lemonsqueezy' && method === 'POST') {
+      return handleLemonSqueezyWebhook(request, env);
+    }
+
+    // ── Email activation ──────────────────────────────────────────────────
+
+    if (path === '/api/activate' && method === 'POST') {
+      return handleActivate(request, env);
     }
 
     // ── /config — validates pro key and returns available APIs ────────────
