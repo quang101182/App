@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper Pro v1.0.0</title>
+<title>SubWhisper Pro v1.1.0</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1134,7 +1134,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">Pro v1.0.0</span>
+    <span class="ver-badge">Pro v1.1.0</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées" style="display:none">
@@ -1151,6 +1151,10 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
         <div id="apiLvlBar"><div id="apiLvlFill"></div></div>
         <span id="apiLvlLbl">–</span>
       </div>
+    </div>
+    <div id="usageMeter" style="display:none;font-size:11px;font-family:var(--mono);color:var(--fg);opacity:.85;text-align:right;line-height:1.3;padding:2px 8px;border:1px solid var(--bdr);border-radius:8px;background:var(--card)">
+      <div><span id="usageTx">0</span>/<span id="usageTxMax">50</span> transcriptions</div>
+      <div><span id="usageTr">0</span>/<span id="usageTrMax">500</span> translations</div>
     </div>
     <button class="icon-btn" id="cfgBtn" onclick="toggleConfig()" title="Settings" style="display:none">&#9881;&#65039;</button>
     <button class="icon-btn" id="thmBtn" onclick="toggleTheme()" title="Theme">&#127769;</button>
@@ -1715,7 +1719,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper Pro v1.0.0</span>
+  <span class="ft">SubWhisper Pro v1.1.0</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -2018,6 +2022,17 @@ async function fetchGatewayConfig() {
     setDot('GWY','ok');
     var apis = cfg.apis || [];
     document.getElementById('gatewayInfo').textContent = '✅ ' + apis.length + ' APIs: ' + (apis.join(', ') || '—');
+    // Update usage meter
+    if (cfg.monthlyUsage && cfg.limits) {
+      var mu = cfg.monthlyUsage, li = cfg.limits;
+      document.getElementById('usageTx').textContent = mu.transcriptions || 0;
+      document.getElementById('usageTxMax').textContent = li.transcriptions || 50;
+      document.getElementById('usageTr').textContent = mu.translations || 0;
+      document.getElementById('usageTrMax').textContent = li.translations || 500;
+      document.getElementById('usageMeter').style.display = '';
+    }
+    // Global usage tracker for live counter
+    window._proUsage = { tx: mu.transcriptions || 0, tr: mu.translations || 0, txMax: li.transcriptions || 50, trMax: li.translations || 500 };
     // Allumer les dots individuels selon les APIs actives dans le gateway
     var GW_DOT_MAP = { GROQ:'GRQ', OPENAI:'OAI', GEMINI:'GEM', DEEPSEEK:'DSK', ASSEMBLYAI:'AAI', AZURE:'AZR' };
     Object.keys(GW_DOT_MAP).forEach(function(api) {
@@ -2036,6 +2051,20 @@ async function fetchGatewayConfig() {
   } catch(e) {
     setDot('GWY','err');
     document.getElementById('gatewayInfo').textContent = '❌ Network error';
+  }
+}
+
+// Bump usage counter live (called after each successful API call)
+function bumpUsage(type) {
+  if (!window._proUsage) return;
+  if (type === 'transcription') {
+    window._proUsage.tx++;
+    var el = document.getElementById('usageTx');
+    if (el) el.textContent = window._proUsage.tx;
+  } else if (type === 'translation') {
+    window._proUsage.tr++;
+    var el2 = document.getElementById('usageTr');
+    if (el2) el2.textContent = window._proUsage.tr;
   }
 }
 
@@ -2776,6 +2805,7 @@ async function transcribeChunkGroq(file, srcLang, key, chunkNum, totalChunks, of
     throw new Error('Groq chunk ' + chunkNum + '/' + totalChunks + ' — ' + (errData.error ? errData.error.message : resp.statusText));
   }
   var data = await resp.json();
+  if (_gwKeyGRQ) bumpUsage('transcription');
   var rawLang = (data.language || '').toLowerCase();
   var lang = WHISPER_LANG[rawLang] || srcLang || rawLang || '';
   var maxRelEnd = chunkDurSec || Infinity;
@@ -2960,6 +2990,7 @@ async function callAIText(prompt, _retry) {
       throw new Error('DeepSeek ' + resp.status + ' : ' + (err.error ? err.error.message : resp.statusText));
     }
     var data = await resp.json();
+    if (_gwKeyDSK) bumpUsage('translation');
     return (data.choices[0].message.content || '').trim();
   } else {
     var key = getGeminiKey();
@@ -2982,6 +3013,7 @@ async function callAIText(prompt, _retry) {
       throw new Error('Gemini ' + resp.status + ' : ' + (err.error ? err.error.message : resp.statusText));
     }
     var data = await resp.json();
+    if (_gwKeyGEM) bumpUsage('translation');
     return ((data.candidates[0].content.parts[0].text) || '').replace(/^```[a-z]*\r?\n?/im, '').replace(/```\s*$/m, '').trim();
   }
 }
@@ -4359,7 +4391,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'pro-v1.0.0',
+    version: 'pro-v1.1.0',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
