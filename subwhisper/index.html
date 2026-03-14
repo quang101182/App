@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.33</title>
+<title>SubWhisper v9.34</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1134,7 +1134,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.33</span>
+    <span class="ver-badge">v9.34</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1473,7 +1473,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.33 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.34 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -4115,7 +4115,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.33',
+    version: 'v9.34',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4192,19 +4192,16 @@ function _flashExportBtn(btn, ok) {
   setTimeout(function() { btn.classList.remove('exp-ok','exp-fail'); }, 1200);
 }
 
-function _safeName(n) {
+function _safeName(n, truncate) {
   var clean = n.replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, ' ').trim();
-  if (clean.length > 80) {
-    clean = clean.substring(0, 80).trim();
-    toast('\u26a0 Nom de fichier trop long \u2014 tronqu\u00e9 \u00e0 80 caract\u00e8res');
-  }
+  if (truncate && clean.length > 80) clean = clean.substring(0, 80).trim();
   return clean || 'subtitles';
 }
 
 async function exportFile(content, ext, mime, btn) {
   var fname = _safeName(origName || 'subtitles') + ext;
   if (!content || !content.trim()) { toast('\u274c Rien \u00e0 exporter \u2014 le contenu est vide'); _flashExportBtn(btn, false); return; }
-  // 1. Dossier mappé (IndexedDB) — pas besoin de user gesture
+  // 1. Dossier mapp\u00e9 (IndexedDB) — nom complet, File System API g\u00e8re
   if (destDirHandle && await _verifyDirPermission()) {
     try {
       var fh = await destDirHandle.getFileHandle(fname, { create: true });
@@ -4219,25 +4216,34 @@ async function exportFile(content, ext, mime, btn) {
       destDirHandle = null; _deleteDirHandle(); updateDirInfo();
     }
   }
-  // 2. Mobile → navigator.share
-  if (navigator.canShare) {
-    try {
-      var file = new File([content], fname, { type: mime });
-      if (navigator.canShare({ files: [file] })) {
-        toast('\u2705 ' + fname + ' \u2014 choisissez o\u00f9 enregistrer');
+  // 2. Pas de dossier mapp\u00e9 → obliger l'utilisateur \u00e0 en choisir un
+  if ('showDirectoryPicker' in window) {
+    toast('\ud83d\udcc1 Choisissez un dossier cible pour vos exports');
+    await pickDir();
+    if (destDirHandle) {
+      try {
+        var fh2 = await destDirHandle.getFileHandle(fname, { create: true });
+        var w2 = await fh2.createWritable();
+        await w2.write(content); await w2.close();
+        toast('\u2705 ' + fname + ' \u2192 \ud83d\udcc1 ' + destDirHandle.name);
         _flashExportBtn(btn, true);
-        await navigator.share({ files: [file], title: fname });
+        return;
+      } catch(e) {
+        if (e.name === 'AbortError') return;
+        toast('\u274c Erreur \u00e9criture : ' + e.message);
+        _flashExportBtn(btn, false);
         return;
       }
-    } catch(e) {
-      if (e.name === 'AbortError') { toast('Export annul\u00e9'); return; }
-      toast('\u26a0 Partage \u00e9chou\u00e9 \u2014 tentative download...');
     }
+    toast('\u26a0 Export annul\u00e9 \u2014 aucun dossier s\u00e9lectionn\u00e9');
+    _flashExportBtn(btn, false);
+    return;
   }
-  // 3. Download classique (fonctionne partout)
+  // 3. Dernier recours (navigateur sans File System API) — nom tronqu\u00e9 pour \u00e9viter fichier vide
+  var safeFname = _safeName(origName || 'subtitles', true) + ext;
   try {
-    dlBlob(content, ext, mime);
-    toast('\u2705 ' + fname + ' t\u00e9l\u00e9charg\u00e9');
+    dlBlob(content, ext, mime, safeFname);
+    toast('\u2705 ' + safeFname + ' t\u00e9l\u00e9charg\u00e9');
     _flashExportBtn(btn, true);
   } catch(e) {
     toast('\u274c Erreur export : ' + e.message);
@@ -4307,8 +4313,8 @@ async function dlJSON(btn) {
   await exportFile(JSON.stringify(data, null, 2), '.json', 'application/json', btn);
 }
 
-function dlBlob(content, ext, mime) {
-  var fname = _safeName(origName || 'subtitles') + ext;
+function dlBlob(content, ext, mime, overrideName) {
+  var fname = overrideName || (_safeName(origName || 'subtitles') + ext);
   var blob = new Blob([content], { type: mime + ';charset=utf-8' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
@@ -4335,8 +4341,15 @@ function clearDir() { destDirHandle = null; _deleteDirHandle(); updateDirInfo();
 
 function updateDirInfo() {
   var el = document.getElementById('dirInfo');
-  if (destDirHandle) { document.getElementById('dirName').textContent = destDirHandle.name; el.classList.add('vis'); }
-  else { el.classList.remove('vis'); }
+  if (!el) return;
+  if (destDirHandle) {
+    document.getElementById('dirName').textContent = destDirHandle.name;
+    el.classList.add('vis');
+    el.style.display = 'flex';
+  } else {
+    el.classList.remove('vis');
+    el.style.display = '';
+  }
 }
 
 // ── COPY SRT ──────────────────────────────────────────────
