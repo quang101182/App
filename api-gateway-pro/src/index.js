@@ -430,11 +430,12 @@ export default {
       const today = new Date().toISOString().slice(0, 10);
       // If page=all, return all counters
       if (page === 'all') {
-        const [swpT, ncfT] = await Promise.all([
+        const [swpT, ncfT, nfT] = await Promise.all([
           env.PRO_KV.get('stats:visits:swp:total'),
           env.PRO_KV.get('stats:visits:ncf:total'),
+          env.PRO_KV.get('stats:visits:nf:total'),
         ]);
-        return json({ swp: parseInt(swpT) || 0, ncf: parseInt(ncfT) || 0 });
+        return json({ swp: parseInt(swpT) || 0, ncf: parseInt(ncfT) || 0, nf: parseInt(nfT) || 0 });
       }
       const prefix = `stats:visits:${page}`;
       const totalRaw = await env.PRO_KV.get(`${prefix}:total`);
