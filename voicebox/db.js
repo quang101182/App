@@ -1,4 +1,4 @@
-// VoiceBox DB v0.2.0 — SQLite wrapper
+// VoiceBox DB v0.3.0 — SQLite wrapper
 // Synchronous SQLite database layer using better-sqlite3
 
 const Database = require('better-sqlite3');

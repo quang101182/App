@@ -1,10 +1,12 @@
-// VoiceBox Bot v0.2.0 — Telegram voice transcription + translation + summary
+// VoiceBox Bot v0.3.0 — Telegram voice transcription + translation + summary + payments
 
 const express = require('express');
 const crypto = require('crypto');
-const { upsertUser, checkQuota, incrementUsage, logUsage, getUser, setLang, getLang } = require('./db');
+const { upsertUser, checkQuota, incrementUsage, logUsage, getUser, setLang, getLang, setPlan } = require('./db');
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
+const LEMON_WEBHOOK_SECRET = process.env.LEMON_WEBHOOK_SECRET;
+const LEMON_CHECKOUT_URL = process.env.LEMON_CHECKOUT_URL || '';
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 const GATEWAY_URL = process.env.GATEWAY_URL;
@@ -175,8 +177,16 @@ function handlePlan(chatId, userId) {
   return sendMessage(chatId, text);
 }
 
-function handlePro(chatId) {
-  return sendMessage(chatId, 'Bientôt disponible ! Restez connecté \u{1F680}');
+function handlePro(chatId, userId) {
+  const user = getUser(userId);
+  if (user && user.plan === 'pro') {
+    return sendMessage(chatId, 'Vous etes deja en plan Pro ! Profitez de la traduction et du resume.');
+  }
+  if (!LEMON_CHECKOUT_URL) {
+    return sendMessage(chatId, 'Le plan Pro arrive bientot ! Restez connecte.');
+  }
+  const url = `${LEMON_CHECKOUT_URL}?checkout[custom][telegram_id]=${userId}`;
+  return sendMessage(chatId, `Plan Pro — 3€/mois\n\nTraduction + resume IA illimites\nVocaux jusqu'a 60 min\nSans limite quotidienne\n\nS'abonner : ${url}`);
 }
 
 function handleHelp(chatId) {
@@ -351,7 +361,7 @@ async function handleUpdate(update) {
       case '/lang':
         return handleLang(chatId, msg.from.id, args);
       case '/pro':
-        return handlePro(chatId);
+        return handlePro(chatId, msg.from.id);
       case '/help':
         return handleHelp(chatId);
     }
@@ -368,7 +378,11 @@ async function handleUpdate(update) {
 // ---------------------------------------------------------------------------
 
 const app = express();
-app.use(express.json());
+
+// Raw body needed for HMAC verification on /lemon
+app.use(express.json({
+  verify: (req, _res, buf) => { req.rawBody = buf; },
+}));
 
 // POST /webhook — Telegram updates
 app.post('/webhook', async (req, res) => {
@@ -389,10 +403,83 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
-// POST /lemon — LemonSqueezy webhooks (Phase 3 placeholder)
-app.post('/lemon', (req, res) => {
-  console.log('[lemon] Received webhook:', JSON.stringify(req.body).slice(0, 200));
+// POST /lemon — LemonSqueezy webhooks (HMAC-SHA256 verified)
+app.post('/lemon', async (req, res) => {
+  // 1. Verify HMAC signature
+  if (!LEMON_WEBHOOK_SECRET) {
+    console.warn('[lemon] LEMON_WEBHOOK_SECRET not configured');
+    return res.sendStatus(500);
+  }
+
+  const signature = req.headers['x-signature'] || '';
+  if (!signature || !req.rawBody) {
+    console.warn('[lemon] Missing signature or body');
+    return res.sendStatus(400);
+  }
+
+  const hmac = crypto.createHmac('sha256', LEMON_WEBHOOK_SECRET);
+  hmac.update(req.rawBody);
+  const digest = hmac.digest('hex');
+
+  try {
+    if (!crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(signature))) {
+      console.warn('[lemon] Invalid HMAC signature');
+      return res.sendStatus(403);
+    }
+  } catch (e) {
+    console.warn('[lemon] Signature comparison failed:', e.message);
+    return res.sendStatus(403);
+  }
+
+  // 2. Process event
   res.sendStatus(200);
+
+  try {
+    const event = req.body?.meta?.event_name;
+    const data = req.body?.data?.attributes;
+    const customData = req.body?.meta?.custom_data || data?.first_order_item?.custom_data || {};
+    const telegramId = parseInt(customData.telegram_id || '0');
+    const customerId = String(data?.customer_id || '');
+    const subscriptionId = String(req.body?.data?.id || '');
+
+    console.log(`[lemon] event=${event} telegram_id=${telegramId} customer=${customerId} sub=${subscriptionId}`);
+
+    if (!telegramId) {
+      console.warn('[lemon] No telegram_id in custom data');
+      return;
+    }
+
+    switch (event) {
+      case 'subscription_created':
+      case 'subscription_resumed':
+      case 'subscription_unpaused': {
+        setPlan(telegramId, 'pro', customerId, subscriptionId);
+        console.log(`[lemon] Activated Pro for telegram_id=${telegramId}`);
+        await sendMessage(telegramId, 'Votre plan Pro est active ! Profitez de la traduction et du resume IA.\n\nTapez /lang fr pour activer la traduction.');
+        break;
+      }
+
+      case 'subscription_expired':
+      case 'subscription_cancelled':
+      case 'subscription_paused': {
+        setPlan(telegramId, 'free', customerId, subscriptionId);
+        console.log(`[lemon] Deactivated Pro for telegram_id=${telegramId}`);
+        await sendMessage(telegramId, 'Votre abonnement Pro a expire. Vous repassez au plan gratuit (5 vocaux/jour).\n\nTapez /pro pour vous reabonner.');
+        break;
+      }
+
+      case 'subscription_payment_failed': {
+        console.log(`[lemon] Payment failed for telegram_id=${telegramId}`);
+        await sendMessage(telegramId, 'Echec de paiement pour votre plan Pro. Mettez a jour votre moyen de paiement pour eviter la desactivation.');
+        break;
+      }
+
+      default:
+        console.log(`[lemon] Unhandled event: ${event}`);
+    }
+  } catch (err) {
+    console.error('[lemon] Error processing webhook:', err);
+  }
 });
 
 // GET /health
