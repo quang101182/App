@@ -25,15 +25,18 @@ public class VideoInterceptClient extends WebViewClient {
     private final Context context;
     private final WebView webView;
 
-    // Video file extensions to detect
+    // Video file extensions to detect (NO .ts — causes 100+ false positives from HLS segments)
     private static final Pattern VIDEO_PATTERN = Pattern.compile(
-        "\\.(mp4|m3u8|webm|mov|mkv|mpd|ts|flv|avi|m4v)(\\?|$)", Pattern.CASE_INSENSITIVE
+        "\\.(mp4|m3u8|webm|mov|mkv|mpd|m4v)(\\?|$)", Pattern.CASE_INSENSITIVE
     );
 
-    // Thumbnail/preview patterns to skip
-    private static final Pattern PREVIEW_PATTERN = Pattern.compile(
-        "(preview|thumb|trailer|teaser|sample|poster|icon|logo)", Pattern.CASE_INSENSITIVE
+    // Thumbnail/preview/tracking patterns to skip
+    private static final Pattern SKIP_PATTERN = Pattern.compile(
+        "(preview|thumb|trailer|teaser|sample|poster|icon|logo|pixel|beacon|track|analytics|googlevideo\\.com/videoplayback)", Pattern.CASE_INSENSITIVE
     );
+
+    // Dedup: track already-notified URLs (avoid 171 duplicates)
+    private final Set<String> notifiedUrls = new HashSet<>();
 
     // Ad/tracking domains blocklist (70+ domains from api-gateway)
     private static final Set<String> AD_DOMAINS = new HashSet<>(Arrays.asList(
@@ -87,10 +90,10 @@ public class VideoInterceptClient extends WebViewClient {
             return BLOCKED_RESPONSE;
         }
 
-        // 2. Detect video URLs
+        // 2. Detect video URLs (dedup + skip previews/tracking)
         if (VIDEO_PATTERN.matcher(url).find()) {
-            // Skip tiny preview/thumbnail videos
-            if (!PREVIEW_PATTERN.matcher(url).find()) {
+            if (!SKIP_PATTERN.matcher(url).find() && !notifiedUrls.contains(url)) {
+                notifiedUrls.add(url);
                 String extension = extractExtension(url);
                 Log.d(TAG, "VIDEO detected: " + url + " (" + extension + ")");
                 notifyVideoDetected(url, extension);

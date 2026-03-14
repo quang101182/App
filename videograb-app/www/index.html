@@ -1173,7 +1173,22 @@ function autoDownloadMp4(dl) {
   dlLog(dl, `Telechargement auto → dossier Downloads...`);
   renderDlItem(dl);
 
-  // Le serveur envoie Content-Disposition: attachment — le navigateur telecharge directement
+  // Native APK: use DownloadManager for the Fly.io MP4 URL (direct, no proxy needed)
+  if (IS_NATIVE) {
+    const dlId = window.NativeDownload.startDownload(dl.mp4Url, mp4Name, 'video/mp4');
+    if (dlId && dlId !== '-1') {
+      dl.status = 'done'; dl.progress = 100;
+      dlLog(dl, `Telechargement natif lance: ${mp4Name} (${fmtSize(dl.mp4Size)})`, 'ok');
+      renderDlItem(dl);
+      toast(`Telecharge: ${mp4Name}`, 's');
+      saveToHistory(dl.m3u8Url, mp4Name, dl.mp4Size);
+      return;
+    }
+    // Fallback to <a> if native fails
+    dlLog(dl, 'Native DL echec, fallback navigateur...');
+  }
+
+  // Fallback: <a download> — Content-Disposition: attachment
   const a = document.createElement('a');
   a.href = dl.mp4Url;
   a.download = mp4Name;
