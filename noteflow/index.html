@@ -365,6 +365,10 @@ let animFrameId = null;
 
 const SPEAKER_COLORS = ['#7c6aff','#00d4aa','#ff4d6d','#22c55e','#f59e0b','#60a5fa','#3b82f6','#a855f7','#14b8a6','#f97316'];
 const GW_URL = 'https://api-gateway.quang101182.workers.dev';
+const FLY_URL = 'https://subwhisper-ffmpeg.fly.dev';
+const CLOUD_WORKER_URL = 'https://subwhisper-worker.quang101182.workers.dev';
+const GW_SAFE = 25 * 1024 * 1024;   // 25MB — above this, use Fly.io
+const LARGE = 95 * 1024 * 1024;      // 95MB — above this, use R2 + Fly.io
 
 // ── Init ──
 document.addEventListener('DOMContentLoaded', () => {
@@ -511,9 +515,23 @@ async function handleFile(file) {
     else if (file.name.endsWith('.mp4')) ct = 'video/mp4';
     else if (file.name.endsWith('.webm')) ct = 'video/webm';
 
-    // Upload to Deepgram via gateway
-    const dgUrl = `${GW_URL}/api/deepgram?model=${model}&diarize=true&punctuate=true&utterances=true&smart_format=true`;
-    const json = await uploadWithProgress(dgUrl, key, ct, file);
+    // Route based on file size
+    const dgParams = `model=${model}&diarize=true&punctuate=true&utterances=true&smart_format=true`;
+    let json;
+
+    if (file.size >= LARGE) {
+      // >95MB → R2 upload + Fly.io processing
+      log(`Large file (${formatSize(file.size)}) → R2 + Fly.io`, 'warn');
+      json = await uploadViaR2(dgParams, ct, file);
+    } else if (file.size >= GW_SAFE) {
+      // 25-95MB → Fly.io direct
+      log(`Medium file (${formatSize(file.size)}) → Fly.io direct`, 'warn');
+      json = await uploadViaFlyDirect(dgParams, ct, file);
+    } else {
+      // <25MB → Gateway direct
+      const dgUrl = `${GW_URL}/api/deepgram?${dgParams}`;
+      json = await uploadWithProgress(dgUrl, key, ct, file);
+    }
 
     setProgress(80, 'Processing results...', 'transcription');
     processResults(json);
@@ -548,7 +566,116 @@ async function handleFile(file) {
   }
 }
 
-// ── Upload with Progress (from VoxSplit) ──
+function formatSize(b) { return b > 1024*1024 ? (b/1024/1024).toFixed(1)+'MB' : (b/1024).toFixed(0)+'KB'; }
+
+// ── Upload Fly.io direct (25-95MB) ──
+async function uploadViaFlyDirect(dgParams, ct, file) {
+  const key = document.getElementById('gatewayKey').value;
+  setProgress(5, `Upload Fly.io (${formatSize(file.size)})...`, 'upload');
+  log(`Upload direct → Fly.io /deepgram (${formatSize(file.size)})`, 'info');
+  setProgress(10, 'Uploading to Fly.io...', 'upload');
+  const flyRes = await fetch(`${FLY_URL}/deepgram?${dgParams}`, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': ct },
+    body: file
+  });
+  if (!flyRes.ok) {
+    let em; try { const j = await flyRes.json(); em = j.error || flyRes.status; } catch(_) { em = await flyRes.text(); }
+    throw new Error(flyRes.status === 503 ? 'Server busy — retry later' : `Fly.io ${flyRes.status}: ${String(em).substring(0,200)}`);
+  }
+  setProgress(85, 'Deepgram processing...', 'transcription');
+  const json = await flyRes.json();
+  if (!json) throw new Error('Fly.io: empty response');
+  return json;
+}
+
+// ── Upload R2 (>95MB) ──
+async function uploadViaR2(dgParams, ct, file) {
+  const key = document.getElementById('gatewayKey').value;
+  const CS = 100 * 1024 * 1024;
+  const isMP = file.size > CS;
+  const mt = ct || 'video/mp4';
+
+  setProgress(2, 'Preparing R2 upload...', 'upload');
+  const presignRes = await fetch(`${CLOUD_WORKER_URL}/upload-presign`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: file.name, filesize: file.size, mimeType: mt, multipart: isMP })
+  });
+  if (!presignRes.ok) throw new Error('Presign failed: ' + presignRes.status);
+  const presign = await presignRes.json();
+  log(`Presign OK — R2 key: ${presign.r2Key}`, 'info');
+
+  const us = Date.now();
+  if (!isMP) {
+    setProgress(5, 'Upload R2...', 'upload');
+    const ur = await fetch(presign.presignedUrl, { method: 'PUT', headers: { 'Content-Type': mt }, body: file });
+    if (!ur.ok) throw new Error('Upload R2: ' + ur.status);
+    log(`Upload R2 done in ${((Date.now()-us)/1000).toFixed(1)}s`, 'info');
+  } else {
+    const tp = presign.chunkPresignedUrls.length;
+    const parts = [];
+    for (let i = 0; i < tp; i++) {
+      const s = i * CS, e = Math.min(s + CS, file.size);
+      setProgress(5 + Math.round(((i+1)/tp)*60), `Upload R2: ${i+1}/${tp}`, 'upload');
+      const pr = await fetch(presign.chunkPresignedUrls[i].url, { method: 'PUT', body: file.slice(s, e) });
+      if (!pr.ok) throw new Error(`Part ${i+1}: ${pr.status}`);
+      parts.push({ ETag: (pr.headers.get('ETag')||'').replace(/"/g,''), PartNumber: i+1 });
+    }
+    const cr = await fetch(`${CLOUD_WORKER_URL}/upload-complete`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uploadId: presign.uploadId, r2Key: presign.r2Key, jobId: presign.jobId, parts, skipDispatch: true })
+    });
+    if (!cr.ok) throw new Error('Complete: ' + cr.status);
+    log('Upload R2 complete', 'info');
+  }
+
+  setProgress(68, 'Getting download URL...', 'upload');
+  const dlRes = await fetch(`${CLOUD_WORKER_URL}/presigned-download`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ r2Key: presign.r2Key })
+  });
+  if (!dlRes.ok) throw new Error('Download URL failed');
+  const { downloadUrl } = await dlRes.json();
+
+  setProgress(70, 'Fly.io processing...', 'transcription');
+  const flyRes = await fetch(`${FLY_URL}/deepgram?source_url=${encodeURIComponent(downloadUrl)}&${dgParams}`, {
+    method: 'POST', headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' }
+  });
+  if (!flyRes.ok) { const et = await flyRes.text(); throw new Error(flyRes.status === 503 ? 'Server busy' : `Fly.io ${flyRes.status}: ${et.substring(0,200)}`); }
+
+  // Stream response (progress + result)
+  let resultJson = null, lastStep = '';
+  const reader = flyRes.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n'); buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const msg = JSON.parse(line);
+        if (msg.type === 'progress') {
+          setProgress(70 + Math.round((msg.pct/100)*28), msg.step, 'transcription');
+        } else if (msg.type === 'result') {
+          resultJson = typeof msg.body === 'string' ? JSON.parse(msg.body) : msg.body;
+        } else if (msg.type === 'error') throw new Error(`Fly.io: ${msg.error}`);
+      } catch (e) {
+        if (e.message.startsWith('Fly.io:')) throw e;
+        try { resultJson = JSON.parse(line); } catch(_) {}
+      }
+    }
+  }
+  if (buffer.trim()) {
+    try { const msg = JSON.parse(buffer); if (msg.type === 'result') resultJson = typeof msg.body === 'string' ? JSON.parse(msg.body) : msg.body; else if (!resultJson) resultJson = msg; } catch(_) {}
+  }
+  if (!resultJson) throw new Error('Fly.io: empty response');
+  return resultJson;
+}
+
+// ── Upload with Progress — Gateway direct (<25MB) ──
 function uploadWithProgress(url, secret, ct, file) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
