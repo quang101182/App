@@ -379,10 +379,23 @@ async function handleUpdate(update) {
 
 const app = express();
 
-// Raw body needed for HMAC verification on /lemon
-app.use(express.json({
-  verify: (req, _res, buf) => { req.rawBody = buf; },
-}));
+// Capture raw body for ALL requests (needed for HMAC verification on /lemon)
+app.use((req, _res, next) => {
+  const chunks = [];
+  req.on('data', chunk => chunks.push(chunk));
+  req.on('end', () => {
+    req.rawBody = Buffer.concat(chunks);
+    // Try to parse JSON body manually
+    if (req.headers['content-type']?.includes('application/json') && req.rawBody.length > 0) {
+      try {
+        req.body = JSON.parse(req.rawBody.toString());
+      } catch (e) {
+        // Not valid JSON — leave body empty
+      }
+    }
+    next();
+  });
+});
 
 // POST /webhook — Telegram updates
 app.post('/webhook', async (req, res) => {
@@ -465,6 +478,20 @@ app.post('/lemon', async (req, res) => {
         setPlan(telegramId, 'free', customerId, subscriptionId);
         console.log(`[lemon] Deactivated Pro for telegram_id=${telegramId}`);
         await sendMessage(telegramId, 'Votre abonnement Pro a expire. Vous repassez au plan gratuit (5 vocaux/jour).\n\nTapez /pro pour vous reabonner.');
+        break;
+      }
+
+      case 'subscription_updated':
+      case 'subscription_payment_success': {
+        // Refresh plan status — ensure Pro is active
+        const currentUser = getUser(telegramId);
+        if (currentUser && currentUser.plan !== 'pro') {
+          setPlan(telegramId, 'pro', customerId, subscriptionId);
+          console.log(`[lemon] Re-activated Pro via ${event} for telegram_id=${telegramId}`);
+          await sendMessage(telegramId, 'Votre plan Pro est active ! Profitez de la traduction et du resume IA.\n\nTapez /lang fr pour activer la traduction.');
+        } else {
+          console.log(`[lemon] ${event} for telegram_id=${telegramId} — already Pro`);
+        }
         break;
       }
 
