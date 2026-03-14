@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.32</title>
+<title>SubWhisper v9.33</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1134,7 +1134,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.32</span>
+    <span class="ver-badge">v9.33</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1473,7 +1473,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.32 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.33 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -1497,7 +1497,7 @@ var _dirDb = null;
 (function(){var r=indexedDB.open('SubWhisperDB',1);r.onupgradeneeded=function(e){var db=e.target.result;if(!db.objectStoreNames.contains('settings'))db.createObjectStore('settings',{keyPath:'key'})};r.onsuccess=function(){_dirDb=r.result;_restoreDirHandle()};r.onerror=function(){console.warn('IndexedDB non disponible')}})();
 function _saveDirHandle(handle){if(!_dirDb)return;try{var tx=_dirDb.transaction(['settings'],'readwrite');tx.objectStore('settings').put({key:'exportDir',handle:handle})}catch(e){}}
 function _deleteDirHandle(){if(!_dirDb)return;try{var tx=_dirDb.transaction(['settings'],'readwrite');tx.objectStore('settings').delete('exportDir')}catch(e){}}
-function _restoreDirHandle(){if(!_dirDb)return;try{var tx=_dirDb.transaction(['settings'],'readonly');var req=tx.objectStore('settings').get('exportDir');req.onsuccess=function(){if(req.result&&req.result.handle){destDirHandle=req.result.handle;updateDirInfo()}}}catch(e){}}
+function _restoreDirHandle(){if(!_dirDb)return;try{var tx=_dirDb.transaction(['settings'],'readonly');var req=tx.objectStore('settings').get('exportDir');req.onsuccess=function(){if(req.result&&req.result.handle){destDirHandle=req.result.handle;updateDirInfo();setTimeout(function(){updateDirInfo()},500)}}}catch(e){}}
 var previewVttUrl = null;
 var previewVideoUrl = null;
 var filePrevUrl = null;
@@ -4115,7 +4115,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.32',
+    version: 'v9.33',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4203,54 +4203,46 @@ function _safeName(n) {
 
 async function exportFile(content, ext, mime, btn) {
   var fname = _safeName(origName || 'subtitles') + ext;
+  if (!content || !content.trim()) { toast('\u274c Rien \u00e0 exporter \u2014 le contenu est vide'); _flashExportBtn(btn, false); return; }
   // 1. Dossier mappé (IndexedDB) — pas besoin de user gesture
   if (destDirHandle && await _verifyDirPermission()) {
     try {
       var fh = await destDirHandle.getFileHandle(fname, { create: true });
       var w = await fh.createWritable();
       await w.write(content); await w.close();
-      toast('\ud83d\udcbe ' + fname + ' \u2192 ' + destDirHandle.name);
+      toast('\u2705 ' + fname + ' \u2192 \ud83d\udcc1 ' + destDirHandle.name);
       _flashExportBtn(btn, true);
       return;
     } catch(e) {
       if (e.name === 'AbortError') return;
+      toast('\u26a0 Dossier inaccessible \u2014 permission perdue');
       destDirHandle = null; _deleteDirHandle(); updateDirInfo();
     }
   }
-  // 2. Mobile → navigator.share (toast+flash AVANT car share peut tuer la page)
+  // 2. Mobile → navigator.share
   if (navigator.canShare) {
     try {
       var file = new File([content], fname, { type: mime });
       if (navigator.canShare({ files: [file] })) {
-        toast('\u2705 ' + fname);
+        toast('\u2705 ' + fname + ' \u2014 choisissez o\u00f9 enregistrer');
         _flashExportBtn(btn, true);
         await navigator.share({ files: [file], title: fname });
         return;
       }
-    } catch(e) { if (e.name === 'AbortError') return; }
-  }
-  // 3. Desktop sans dossier mappé → proposer d'en choisir un
-  if ('showDirectoryPicker' in window) {
-    toast('\u26a0 Choisissez un dossier cible pour les exports');
-    await pickDir();
-    if (destDirHandle) {
-      try {
-        var fh2 = await destDirHandle.getFileHandle(fname, { create: true });
-        var w2 = await fh2.createWritable();
-        await w2.write(content); await w2.close();
-        toast('\ud83d\udcbe ' + fname + ' \u2192 ' + destDirHandle.name);
-        _flashExportBtn(btn, true);
-        return;
-      } catch(e) {
-        if (e.name === 'AbortError') return;
-      }
+    } catch(e) {
+      if (e.name === 'AbortError') { toast('Export annul\u00e9'); return; }
+      toast('\u26a0 Partage \u00e9chou\u00e9 \u2014 tentative download...');
     }
-    return;
   }
-  // 4. Dernier recours — download classique
-  dlBlob(content, ext, mime);
-  toast('\u2705 ' + fname);
-  _flashExportBtn(btn, true);
+  // 3. Download classique (fonctionne partout)
+  try {
+    dlBlob(content, ext, mime);
+    toast('\u2705 ' + fname + ' t\u00e9l\u00e9charg\u00e9');
+    _flashExportBtn(btn, true);
+  } catch(e) {
+    toast('\u274c Erreur export : ' + e.message);
+    _flashExportBtn(btn, false);
+  }
 }
 
 async function dlSRT(btn) {
@@ -4316,7 +4308,7 @@ async function dlJSON(btn) {
 }
 
 function dlBlob(content, ext, mime) {
-  var fname = (origName || 'subtitles') + ext;
+  var fname = _safeName(origName || 'subtitles') + ext;
   var blob = new Blob([content], { type: mime + ';charset=utf-8' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
