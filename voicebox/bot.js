@@ -347,7 +347,7 @@ function handleStart(chatId, langCode) {
 function handlePlan(chatId, userId, langCode) {
   const quota = checkQuota(userId);
   const planName = quota.plan === 'pro' ? t(langCode, 'plan_pro') : t(langCode, 'plan_free');
-  const limit = quota.plan === 'pro' ? t(langCode, 'plan_unlimited') : String(quota.limit);
+  const limit = String(quota.limit);
   return sendMessage(chatId, t(langCode, 'plan', planName, quota.dailyCount, limit));
 }
 
