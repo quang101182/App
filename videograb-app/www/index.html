@@ -1256,13 +1256,15 @@ function triggerBlobDownload(blob, filename) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000);
 }
 
-// Native download: bypass blob, use DownloadManager directly
+// Native download: use DownloadManager with proxied URL (gateway handles auth/headers)
 function nativeStartDownload(url, filename) {
   if (!IS_NATIVE) return false;
   const ext = getExtension(url);
   const mimeMap = { mp4:'video/mp4', webm:'video/webm', mov:'video/quicktime', mkv:'video/x-matroska', ts:'video/mp2t', flv:'video/x-flv', avi:'video/x-msvideo', m4v:'video/mp4' };
   const mime = mimeMap[ext] || 'video/mp4';
-  const dlId = window.NativeDownload.startDownload(url, filename, mime);
+  // IMPORTANT: use proxied URL — raw video URLs need gateway for headers/auth/CORS
+  const proxyUrl = buildRawUrl(url);
+  const dlId = window.NativeDownload.startDownload(proxyUrl, filename, mime);
   if (dlId && dlId !== '-1') {
     toast('Telechargement natif lance: ' + filename, 's');
     saveToHistory(url, filename, 0);
