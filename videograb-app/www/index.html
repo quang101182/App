@@ -428,6 +428,11 @@ function handleNativeVideoDetected(url, type) {
   if (url.startsWith('blob:') || url.startsWith('data:')) return;
   // Deduplicate by URL
   if (detectedVideos.some(v => v.url === url)) return;
+  // Deduplicate by filename (same file from different CDN nodes)
+  const fname = getFilename(url);
+  if (fname && fname !== 'video.mp4' && detectedVideos.some(v => getFilename(v.url) === fname)) return;
+  // Skip pure hash filenames (CDN segments, not real videos)
+  if (/^[0-9a-f]{20,}\.(mp4|m4v|webm)$/i.test(fname)) return;
   const vid = { url, type: 'native-' + type, ts: Date.now(), title: '', size: 0 };
   detectedVideos.push(vid);
   updateBadge();
@@ -627,6 +632,9 @@ function handleMessage(e) {
     // Deduplicate by title (avoid listing same video multiple times)
     const title = e.data.title || '';
     if (title && detectedVideos.some(v => v.title === title)) return;
+    // Deduplicate by filename (same file from different CDN nodes)
+    const fname = getFilename(url);
+    if (fname && fname !== 'video.mp4' && detectedVideos.some(v => getFilename(v.url) === fname)) return;
     const vid = { url, type: detType, ts: Date.now(), title, size: 0 };
     detectedVideos.push(vid);
     updateBadge();
@@ -684,12 +692,21 @@ function formatSize(bytes) {
 }
 async function fetchVideoSize(vid) {
   // HLS/DASH playlists don't have a meaningful Content-Length
-  if (/\.(m3u8|mpd)(\?|$)/i.test(vid.url)) { vid.size = -1; return; }
+  if (/\.(m3u8|mpd)(\?|$)/i.test(vid.url)) { vid.size = -1; renderVideoList(); return; }
   try {
     const proxyUrl = buildRawUrl(vid.url);
-    const r = await fetch(proxyUrl, { method: 'HEAD' });
-    const cl = r.headers.get('content-length');
-    if (cl) { vid.size = parseInt(cl); renderVideoList(); }
+    // Try HEAD first
+    let r = await fetch(proxyUrl, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+    let cl = r.headers.get('content-length');
+    // Fallback: range request (some CDNs block HEAD but allow GET with Range)
+    if (!cl || cl === '0') {
+      r = await fetch(proxyUrl, { method: 'GET', headers: { 'Range': 'bytes=0-0' }, signal: AbortSignal.timeout(5000) });
+      const cr = r.headers.get('content-range'); // "bytes 0-0/123456"
+      if (cr) { const m = cr.match(/\/(\d+)/); if (m) cl = m[1]; }
+      // Abort the body since we only needed headers
+      try { r.body?.cancel(); } catch {}
+    }
+    if (cl && parseInt(cl) > 0) { vid.size = parseInt(cl); renderVideoList(); }
   } catch {}
 }
 

@@ -39,13 +39,18 @@ public class VideoInterceptClient extends WebViewClient {
         "\\.(mp4|m3u8|webm|mov|mkv|mpd|m4v)(\\?|$)", Pattern.CASE_INSENSITIVE
     );
 
-    // Skip patterns
+    // Skip patterns (noise URLs)
     private static final Pattern SKIP_PATTERN = Pattern.compile(
-        "(preview|thumb|trailer|teaser|sample|poster|icon|logo|pixel|beacon|track|analytics)", Pattern.CASE_INSENSITIVE
+        "(preview|thumb|trailer|teaser|sample|poster|icon|logo|pixel|beacon|track|analytics|sprite|loading|placeholder)", Pattern.CASE_INSENSITIVE
     );
 
-    // Dedup
-    private final Set<String> notifiedUrls = new HashSet<>();
+    // Segment-like filenames: pure hex/hash strings (CDN chunks, not real videos)
+    private static final Pattern SEGMENT_PATTERN = Pattern.compile(
+        "/[0-9a-f]{20,}\\.(mp4|m4v)", Pattern.CASE_INSENSITIVE
+    );
+
+    // Dedup by normalized path (strip query params)
+    private final Set<String> notifiedPaths = new HashSet<>();
 
     // Ad domains (70+)
     private static final Set<String> AD_DOMAINS = new HashSet<>(Arrays.asList(
@@ -99,10 +104,14 @@ public class VideoInterceptClient extends WebViewClient {
             return BLOCKED;
         }
 
-        // 2. Detect videos
+        // 2. Detect videos (filtered to avoid segment spam)
         if (VIDEO_PATTERN.matcher(url).find()) {
-            if (!SKIP_PATTERN.matcher(url).find() && !notifiedUrls.contains(url)) {
-                notifiedUrls.add(url);
+            String path = uri.getPath();
+            String normalizedPath = path != null ? path : url;
+            if (!SKIP_PATTERN.matcher(url).find()
+                && !SEGMENT_PATTERN.matcher(url).find()
+                && !notifiedPaths.contains(normalizedPath)) {
+                notifiedPaths.add(normalizedPath);
                 String ext = extractExtension(url);
                 Log.d(TAG, "VIDEO: " + url.substring(0, Math.min(url.length(), 120)) + " (" + ext + ")");
                 notifyVideoDetected(url, ext);
