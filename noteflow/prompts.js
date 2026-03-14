@@ -1,4 +1,4 @@
-// NoteFlow v1.1.0 — Prompts IA
+// NoteFlow v1.1.1 — Prompts IA
 const NF_PROMPTS = {
 
   meeting_summary: (lang) => `You are a professional meeting notes assistant. Analyze the following transcript and produce a structured JSON summary.
