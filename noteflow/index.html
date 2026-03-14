@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <meta name="theme-color" content="#080810">
-<title>NoteFlow v1.2.7 — AI Meeting Notes</title>
+<title>NoteFlow v1.2.8 — AI Meeting Notes</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -12,7 +12,7 @@
 <script src="prompts.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-/* ===== NoteFlow v1.2.7 — CSS ===== */
+/* ===== NoteFlow v1.2.8 — CSS ===== */
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
   --bg:#080810;--surface:rgba(255,255,255,.04);--surface2:rgba(255,255,255,.08);
@@ -88,13 +88,7 @@ main{padding:20px 24px;flex:1}
 .drop-zone input{display:none}
 
 /* === Record Button === */
-.rec-section{display:flex;align-items:center;gap:12px;margin-bottom:20px}
-.rec-btn{display:flex;align-items:center;gap:8px;padding:10px 20px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-family:var(--mono);font-size:12px;font-weight:600;transition:all .2s}
-.rec-btn:hover{border-color:var(--accent2);color:var(--accent2)}
-.rec-btn.recording{border-color:var(--accent2);background:rgba(255,77,109,.12);color:var(--accent2);animation:pulse 1.5s infinite}
-.rec-btn i{font-size:14px}
-.rec-timer{font-family:var(--mono);font-size:13px;color:var(--muted)}
-#waveCanvas{height:40px;border-radius:8px;background:var(--surface);border:1px solid var(--border);flex:1;max-width:200px;display:none}
+/* rec-section removed — upload only */
 
 /* === Progress === */
 .pw{margin:0 0 16px;display:none}
@@ -202,7 +196,7 @@ footer{padding:12px 24px;text-align:center;font-family:var(--mono);font-size:9px
   .drop-zone{padding:28px 16px}
   .export-bar.vis{justify-content:center}
 }
-@media(hover:hover){.rec-btn:hover{transform:translateY(-1px)}.ebtn:hover{transform:translateY(-1px)}}
+@media(hover:hover){.ebtn:hover{transform:translateY(-1px)}}
 </style>
 </head>
 <body>
@@ -215,7 +209,7 @@ footer{padding:12px 24px;text-align:center;font-family:var(--mono);font-size:9px
   <div class="logo">
     <img src="icon.svg" alt="NoteFlow">
     <span class="logo-text">NoteFlow</span>
-    <span class="version">v1.2.7</span>
+    <span class="version">v1.2.8</span>
   </div>
   <div class="hdr-right">
     <div class="api-dots" title="API Status">
@@ -343,15 +337,7 @@ footer{padding:12px 24px;text-align:center;font-family:var(--mono);font-size:9px
     <input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.wav,.m4a,.ogg,.flac,.mp4,.webm,.mkv">
   </div>
 
-  <!-- Record Section -->
-  <div class="rec-section">
-    <button class="rec-btn" id="recBtn" onclick="toggleRecording()">
-      <i class="fas fa-microphone"></i>
-      <span id="recLabel">Record Meeting</span>
-    </button>
-    <span class="rec-timer" id="recTimer"></span>
-    <canvas id="waveCanvas"></canvas>
-  </div>
+  <!-- Record section removed — mic permissions unreliable on mobile -->
 
   <!-- Progress -->
   <div class="pw" id="pw">
@@ -410,10 +396,10 @@ footer{padding:12px 24px;text-align:center;font-family:var(--mono);font-size:9px
   </div>
 </main>
 
-<footer>NoteFlow v1.2.7 &mdash; AI Meeting Notes</footer>
+<footer>NoteFlow v1.2.8 &mdash; AI Meeting Notes</footer>
 
 <script>
-/* ===== NoteFlow v1.2.7 — JavaScript ===== */
+/* ===== NoteFlow v1.2.8 — JavaScript ===== */
 
 // ── State ──
 let parsedUtterances = [];
@@ -423,13 +409,7 @@ let currentFileName = '';
 let destDirHandle = null;
 
 // Recording state
-let mediaRecorder = null;
-let audioChunks = [];
-let recStartTime = 0;
-let recInterval = null;
-let audioContext = null;
-let analyserNode = null;
-let animFrameId = null;
+// recording vars removed — upload only
 
 const SPEAKER_COLORS = ['#7c6aff','#00d4aa','#ff4d6d','#22c55e','#f59e0b','#60a5fa','#3b82f6','#a855f7','#14b8a6','#f97316'];
 const GW_URL = 'https://api-gateway.quang101182.workers.dev';
@@ -1121,106 +1101,7 @@ function renderSummary() {
   out.innerHTML = html;
 }
 
-// ── Recording ──
-async function toggleRecording() {
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
-    stopRecording();
-  } else {
-    startRecording();
-  }
-}
-
-async function startRecording() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
-    mediaRecorder = new MediaRecorder(stream, { mimeType });
-    audioChunks = [];
-
-    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-    mediaRecorder.onstop = () => {
-      stream.getTracks().forEach(t => t.stop());
-      const blob = new Blob(audioChunks, { type: mimeType });
-      const file = new File([blob], `recording-${Date.now()}.webm`, { type: mimeType });
-      stopWaveform();
-      handleFile(file);
-    };
-
-    mediaRecorder.start(1000);
-    recStartTime = Date.now();
-    updateRecUI(true);
-    startWaveform(stream);
-    toast('Recording started...');
-  } catch (err) {
-    toast('Microphone access denied');
-    console.error(err);
-  }
-}
-
-function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
-    mediaRecorder.stop();
-    updateRecUI(false);
-    toast('Recording stopped — processing...');
-  }
-}
-
-function updateRecUI(recording) {
-  const btn = document.getElementById('recBtn');
-  const label = document.getElementById('recLabel');
-  const timer = document.getElementById('recTimer');
-
-  if (recording) {
-    btn.classList.add('recording');
-    label.textContent = 'Stop Recording';
-    btn.querySelector('i').className = 'fas fa-stop';
-    recInterval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - recStartTime) / 1000);
-      timer.textContent = formatTime(elapsed);
-    }, 1000);
-  } else {
-    btn.classList.remove('recording');
-    label.textContent = 'Record Meeting';
-    btn.querySelector('i').className = 'fas fa-microphone';
-    clearInterval(recInterval);
-    timer.textContent = '';
-  }
-}
-
-function startWaveform(stream) {
-  const canvas = document.getElementById('waveCanvas');
-  canvas.style.display = 'block';
-  const ctx = canvas.getContext('2d');
-  audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  const source = audioContext.createMediaStreamSource(stream);
-  analyserNode = audioContext.createAnalyser();
-  analyserNode.fftSize = 256;
-  source.connect(analyserNode);
-  const bufLen = analyserNode.frequencyBinCount;
-  const dataArr = new Uint8Array(bufLen);
-
-  function draw() {
-    animFrameId = requestAnimationFrame(draw);
-    analyserNode.getByteFrequencyData(dataArr);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const barW = (canvas.width / bufLen) * 2.5;
-    let x = 0;
-    for (let i = 0; i < bufLen; i++) {
-      const barH = (dataArr[i] / 255) * canvas.height;
-      ctx.fillStyle = `rgba(124,106,255,${0.3 + dataArr[i] / 255 * 0.7})`;
-      ctx.fillRect(x, canvas.height - barH, barW, barH);
-      x += barW + 1;
-    }
-  }
-  draw();
-}
-
-function stopWaveform() {
-  if (animFrameId) cancelAnimationFrame(animFrameId);
-  if (audioContext) audioContext.close().catch(() => {});
-  document.getElementById('waveCanvas').style.display = 'none';
-  audioContext = null; analyserNode = null;
-}
+// ── Recording removed — mic permissions unreliable on mobile ──
 
 // ── Mobile Tabs ──
 function switchTab(tab) {
@@ -1323,7 +1204,7 @@ async function exportPDF(fname) {
 
   // Footer
   doc.setFontSize(7); doc.setTextColor(150);
-  doc.text('Generated by NoteFlow v1.2.7', 20, 290);
+  doc.text('Generated by NoteFlow v1.2.8', 20, 290);
 
   const blob = doc.output('blob');
   await dlBlob(blob, fname + '.pdf', 'application/pdf');
@@ -1358,7 +1239,7 @@ async function exportDOCX(fname) {
     const name = speakerNames[u.speaker] || `Speaker ${u.speaker + 1}`;
     html += `<p class="text"><span class="speaker">[${formatTime(u.start)}] ${name}:</span> ${u.text}</p>`;
   }
-  html += '<p style="font-size:8pt;color:#999;margin-top:20pt">Generated by NoteFlow v1.2.7</p></body></html>';
+  html += '<p style="font-size:8pt;color:#999;margin-top:20pt">Generated by NoteFlow v1.2.8</p></body></html>';
 
   const blob = new Blob([html], { type: 'application/vnd.ms-word;charset=utf-8' });
   await dlBlob(blob, fname + '.doc', 'application/vnd.ms-word');
@@ -1389,7 +1270,7 @@ async function exportMD(fname) {
     const name = speakerNames[u.speaker] || `Speaker ${u.speaker + 1}`;
     md += `**[${formatTime(u.start)}] ${name}:** ${u.text}\n\n`;
   }
-  md += '\n_Generated by NoteFlow v1.2.7_\n';
+  md += '\n_Generated by NoteFlow v1.2.8_\n';
   await dlBlob(new Blob([md], { type: 'text/markdown;charset=utf-8' }), fname + '.md', 'text/markdown');
   toast('Markdown exported');
 }
