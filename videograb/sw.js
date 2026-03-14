@@ -53,6 +53,11 @@ self.addEventListener('activate', function(e) {
   self.clients.claim();
 });
 
+// Force update from client
+self.addEventListener('message', function(e) {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
 self.addEventListener('fetch', function(e) {
   // ── Ad blocking: return empty 204 for ad domains ──
   if (isAdUrl(e.request.url)) {
