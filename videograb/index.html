@@ -1,4 +1,4 @@
-<!-- VideoGrab v4.8 — Video Browser & Downloader — Mobile-First -->
+<!-- VideoGrab v4.9 — Video Browser & Downloader — Mobile-First -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0a0a0f">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="./manifest.json">
-<title>VideoGrab v4.8</title>
+<title>VideoGrab v4.9</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -369,6 +369,7 @@ html,body{max-width:100vw;overflow-x:hidden}
 <div class="app">
   <!-- Nav Bar -->
   <div class="navbar">
+    <button class="nav-btn" onclick="goHome()" title="Accueil">&#8962;</button>
     <button class="nav-btn" onclick="navBack()" title="Retour">&#9664;</button>
     <button class="nav-btn" onclick="navForward()" title="Suivant">&#9654;</button>
     <button class="nav-btn" onclick="navRefresh()" title="Recharger">&#8635;</button>
@@ -386,7 +387,7 @@ html,body{max-width:100vw;overflow-x:hidden}
   <div class="browser-frame" id="browserFrame">
     <div class="browser-empty" id="emptyState">
       <div style="width:100%;max-width:600px">
-        <h2 style="text-align:center">VideoGrab v4.8</h2>
+        <h2 style="text-align:center">VideoGrab v4.9</h2>
         <p style="text-align:center;margin-bottom:12px">Entrez une URL ou choisissez un favori</p>
         <div id="bmHome"></div>
       </div>
@@ -403,7 +404,7 @@ html,body{max-width:100vw;overflow-x:hidden}
 
 <script>
 // ═══════════════════════════════════════════════════════════════
-// VideoGrab v4.8 — Core Logic
+// VideoGrab v4.9 — Core Logic
 // ═══════════════════════════════════════════════════════════════
 
 const VERSION = '4.8';
@@ -584,6 +585,17 @@ function navRefresh() {
     loadInIframe(navHistory[navIndex]);
   }
 }
+function goHome() {
+  const iframe = $('browserIframe');
+  if (iframe) { iframe.src = 'about:blank'; iframe.style.display = 'none'; }
+  $('emptyState').style.display = 'flex';
+  $('urlInput').value = '';
+  detectedVideos = [];
+  updateBadge();
+  navHistory = [];
+  navIndex = -1;
+  initBookmarks();
+}
 
 // ── Message handler (from sniffer) ──
 function handleMessage(e) {
@@ -601,6 +613,9 @@ function handleMessage(e) {
     // Deduplicate by title (avoid listing same video multiple times)
     const title = e.data.title || '';
     if (title && detectedVideos.some(v => v.title === title)) return;
+    // Deduplicate by filename (same file from different CDN nodes)
+    const fname = getFilename(url);
+    if (fname && fname !== 'video.mp4' && detectedVideos.some(v => getFilename(v.url) === fname)) return;
     const vid = { url, type: detType, ts: Date.now(), title, size: 0 };
     detectedVideos.push(vid);
     updateBadge();
@@ -658,12 +673,19 @@ function formatSize(bytes) {
 }
 async function fetchVideoSize(vid) {
   // HLS/DASH playlists don't have a meaningful Content-Length
-  if (/\.(m3u8|mpd)(\?|$)/i.test(vid.url)) { vid.size = -1; return; }
+  if (/\.(m3u8|mpd)(\?|$)/i.test(vid.url)) { vid.size = -1; renderVideoList(); return; }
   try {
     const proxyUrl = buildRawUrl(vid.url);
-    const r = await fetch(proxyUrl, { method: 'HEAD' });
-    const cl = r.headers.get('content-length');
-    if (cl) { vid.size = parseInt(cl); renderVideoList(); }
+    let r = await fetch(proxyUrl, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+    let cl = r.headers.get('content-length');
+    // Fallback: range request (some CDNs block HEAD but allow GET with Range)
+    if (!cl || cl === '0') {
+      r = await fetch(proxyUrl, { method: 'GET', headers: { 'Range': 'bytes=0-0' }, signal: AbortSignal.timeout(5000) });
+      const cr = r.headers.get('content-range');
+      if (cr) { const m = cr.match(/\/(\d+)/); if (m) cl = m[1]; }
+      try { r.body?.cancel(); } catch {}
+    }
+    if (cl && parseInt(cl) > 0) { vid.size = parseInt(cl); renderVideoList(); }
   } catch {}
 }
 
@@ -724,7 +746,7 @@ function renderVideoList() {
         <div class="vid-meta">
           <span>${badge}</span>
           <span>${source}</span>
-          ${v.size > 0 ? `<span style="color:var(--accent)">${formatSize(v.size)}</span>` : v.size === -1 ? '<span style="color:var(--dim)">stream</span>' : '<span style="color:var(--dim)">...</span>'}
+          ${v.size > 0 ? `<span style="color:var(--accent)">${formatSize(v.size)}</span>` : v.size === -1 ? '<span style="color:var(--accent2)">HLS stream</span>' : '<span style="color:var(--dim)">...</span>'}
         </div>
       </div>
       <div class="vid-actions">
