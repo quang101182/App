@@ -1,26 +1,42 @@
-// NoteFlow Service Worker v1.2.5
-const CACHE = 'noteflow-v1.2.5';
-const ASSETS = ['./', 'index.html', 'manifest.json', 'icon.svg', 'prompts.js'];
+// NoteFlow Service Worker v1.2.6
+var CACHE = 'noteflow-v1.2.6';
+var FILES = ['./', './index.html', './manifest.json', './icon.svg', './prompts.js'];
 
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+self.addEventListener('install', function(e) {
+  e.waitUntil(caches.open(CACHE).then(function(c) { return c.addAll(FILES); }));
   self.skipWaiting();
 });
 
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))));
+self.addEventListener('activate', function(e) {
+  e.waitUntil(
+    caches.keys().then(function(keys) {
+      var old = keys.filter(function(k) { return k !== CACHE; });
+      return Promise.all(old.map(function(k) { return caches.delete(k); })).then(function() {
+        if (old.length > 0) {
+          self.clients.matchAll().then(function(clients) {
+            clients.forEach(function(c) { c.postMessage({ type: 'SW_UPDATED', version: CACHE }); });
+          });
+        }
+      });
+    })
+  );
   self.clients.claim();
 });
 
-self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request).then(resp => {
-      if (resp.ok && e.request.url.startsWith(self.location.origin)) {
-        const cl = resp.clone();
-        caches.open(CACHE).then(c => c.put(e.request, cl));
-      }
-      return resp;
-    }).catch(() => caches.match('./index.html')))
-  );
+self.addEventListener('fetch', function(e) {
+  // Network-first for pages — always get latest version
+  if (e.request.mode === 'navigate' || e.request.url.endsWith('index.html') || e.request.url.endsWith('prompts.js')) {
+    e.respondWith(
+      fetch(e.request).then(function(r) {
+        var clone = r.clone();
+        caches.open(CACHE).then(function(c) { c.put(e.request, clone); });
+        return r;
+      }).catch(function() {
+        return caches.match(e.request);
+      })
+    );
+    return;
+  }
+  // All other requests (APIs, CDN, fonts) → network only
+  e.respondWith(fetch(e.request));
 });
