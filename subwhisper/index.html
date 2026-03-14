@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.36</title>
+<title>SubWhisper v9.37</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1134,7 +1134,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.36</span>
+    <span class="ver-badge">v9.37</span>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1473,7 +1473,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.36 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.37 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -1490,7 +1490,7 @@ var selFile = null;
 var srtTxt = '';
 var srtOriginal = '';
 var origName = '';
-function _warnLongName() { if (origName.length > 50) toast('\u26a0 Nom de fichier tr\u00e8s long (' + origName.length + ' car.) \u2014 renommez-le avant d\u2019exporter sinon le fichier sera vide'); }
+function _warnLongName() { if (origName.length > 50) toast('\u26a0 Nom de fichier tr\u00e8s long (' + origName.length + ' car., max conseill\u00e9 50) \u2014 renommez-le avant d\u2019exporter sinon le fichier sera vide'); }
 var pollTimer = null;
 var currentJobId = null;
 var destDirHandle = null;
@@ -4117,7 +4117,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.36',
+    version: 'v9.37',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -4203,11 +4203,13 @@ function _safeName(n, truncate) {
 async function exportFile(content, ext, mime, btn) {
   var fname = _safeName(origName || 'subtitles') + ext;
   if (!content || !content.trim()) { toast('\u274c Rien \u00e0 exporter \u2014 le contenu est vide'); _flashExportBtn(btn, false); return; }
+  // Vérifier permission AVANT prompt() — le clic est encore un user gesture valide
+  var dirReady = destDirHandle && await _verifyDirPermission();
   var userFname = prompt('Nom du fichier :', fname);
   if (!userFname) { toast('Export annulé'); _flashExportBtn(btn, false); return; }
   fname = userFname;
   // 1. Dossier mapp\u00e9 (IndexedDB) — nom complet, File System API g\u00e8re
-  if (destDirHandle && await _verifyDirPermission()) {
+  if (dirReady) {
     try {
       var fh = await destDirHandle.getFileHandle(fname, { create: true });
       var w = await fh.createWritable();
