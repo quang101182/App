@@ -1,11 +1,11 @@
-// NoteFlow v1.2.6 — Prompts IA
+// NoteFlow v1.2.7 — Prompts IA
 const NF_PROMPTS = {
 
   meeting_summary: (lang) => `You are a professional meeting notes assistant. Analyze the following transcript and produce a structured JSON summary.
 
 IMPORTANT: Respond ONLY with valid JSON, no markdown, no explanation.
 
-Output language: ${lang}
+CRITICAL — Output language: ALL text values in the JSON MUST be written in ${lang}. Do NOT use English unless the output language IS English. This applies to title, overview, key_points, decisions, action_items, follow_up, and all other text fields.
 
 JSON structure:
 {
