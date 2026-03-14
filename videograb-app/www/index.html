@@ -259,6 +259,12 @@ html,body{max-width:100vw;overflow-x:hidden}
 .bm-section{margin-top:12px}
 .bm-section-title{font-size:.7rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:1px;padding:0 12px 6px}
 @media(max-width:600px){.bm-del{display:grid}}
+.history-list{display:flex;flex-direction:column;gap:3px;padding:4px 12px}
+.history-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:var(--card);cursor:pointer;transition:.15s;min-width:0}
+.history-item:active{transform:scale(.98);background:var(--card2)}
+.history-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;opacity:.5}
+.history-url{font-size:.72rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.history-time{font-size:.6rem;color:var(--muted);flex-shrink:0;white-space:nowrap}
 
 .pwa-install{display:none;padding:5px 10px;border-radius:9px;border:1px solid rgba(52,211,153,.3);background:rgba(52,211,153,.08);color:var(--green);font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;align-items:center;gap:4px;white-space:nowrap}
 .pwa-install.show{display:inline-flex}
@@ -390,6 +396,7 @@ html,body{max-width:100vw;overflow-x:hidden}
         <h2 style="text-align:center">VideoGrab v4.9 <span style="font-size:.6em;opacity:.5">APK</span></h2>
         <p style="text-align:center;margin-bottom:12px">Entrez une URL ou choisissez un favori</p>
         <div id="bmHome"></div>
+        <div id="navHistoryHome"></div>
       </div>
     </div>
     <div class="browser-loading" id="browserLoading"><div class="loader"></div></div>
@@ -476,8 +483,9 @@ function init() {
     if (e.key === 'Enter') { e.preventDefault(); navigate(); }
   });
 
-  // Init bookmarks
+  // Init bookmarks + history
   initBookmarks();
+  renderNavHistory();
 
   // Restore last visited URL
   const lastUrl = localStorage.getItem('vg_lastUrl');
@@ -573,6 +581,7 @@ function navigate(url) {
 
   $('urlInput').value = url;
   localStorage.setItem('vg_lastUrl', url);
+  saveNavHistory(url);
   updateStarBtn(url);
   loadInIframe(url);
 }
@@ -639,8 +648,9 @@ function goHome() {
   updateBadge();
   navHistory = [];
   navIndex = -1;
-  // Re-render bookmarks on home
+  // Re-render bookmarks + history on home
   initBookmarks();
+  renderNavHistory();
 }
 
 // ── Message handler (from sniffer) ──
@@ -676,6 +686,7 @@ function handleMessage(e) {
     const newUrl = e.data.url;
     $('urlInput').value = newUrl;
     localStorage.setItem('vg_lastUrl', newUrl);
+    saveNavHistory(newUrl);
     // Always reset detected videos on any navigation
     detectedVideos = [];
     updateBadge();
@@ -1410,6 +1421,46 @@ function saveToHistory(url, filename, size) {
   const h = JSON.parse(localStorage.getItem('vg_hist') || '[]');
   h.unshift({ url, filename, size, date: new Date().toISOString() });
   localStorage.setItem('vg_hist', JSON.stringify(h.slice(0, 50)));
+}
+
+// ── Navigation History (last 5 pages, shown on home) ──
+function saveNavHistory(url) {
+  if (!url) return;
+  let h = JSON.parse(localStorage.getItem('vg_navHistory') || '[]');
+  // Remove duplicate if exists
+  h = h.filter(item => item.url !== url);
+  h.unshift({ url, ts: Date.now() });
+  localStorage.setItem('vg_navHistory', JSON.stringify(h.slice(0, 5)));
+}
+
+function renderNavHistory() {
+  const el = $('navHistoryHome');
+  if (!el) return;
+  const h = JSON.parse(localStorage.getItem('vg_navHistory') || '[]');
+  if (h.length === 0) { el.innerHTML = ''; return; }
+  const now = Date.now();
+  let html = '<div class="bm-section"><div class="bm-section-title">Recents</div><div class="history-list">';
+  h.forEach(item => {
+    const ago = formatAgo(now - item.ts);
+    const display = item.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+    html += `<div class="history-item" onclick="navigate('${item.url.replace(/'/g, "\\'")}')">
+      <div class="history-dot"></div>
+      <div class="history-url">${esc(display)}</div>
+      <div class="history-time">${ago}</div>
+    </div>`;
+  });
+  html += '</div></div>';
+  el.innerHTML = html;
+}
+
+function formatAgo(ms) {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return 'maintenant';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + ' min';
+  const hr = Math.floor(m / 60);
+  if (hr < 24) return hr + 'h';
+  return Math.floor(hr / 24) + 'j';
 }
 
 // ── Toast ──
