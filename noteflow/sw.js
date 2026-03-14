@@ -1,5 +1,5 @@
-// NoteFlow Service Worker v1.2.2
-const CACHE = 'noteflow-v1.2.2';
+// NoteFlow Service Worker v1.2.3
+const CACHE = 'noteflow-v1.2.3';
 const ASSETS = ['./', 'index.html', 'manifest.json', 'icon.svg', 'prompts.js'];
 
 self.addEventListener('install', e => {
