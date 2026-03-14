@@ -1,8 +1,17 @@
 package com.videograb.app;
 
-import android.content.Context;
+import android.graphics.Bitmap;
 import android.net.Uri;
+import android.net.http.SslError;
+import android.os.Message;
 import android.util.Log;
+import android.view.KeyEvent;
+import android.webkit.ClientCertRequest;
+import android.webkit.HttpAuthHandler;
+import android.webkit.RenderProcessGoneDetail;
+import android.webkit.SafeBrowsingResponse;
+import android.webkit.SslErrorHandler;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
@@ -15,68 +24,69 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * WebViewClient that intercepts requests to:
- * 1. Block ad/tracking domains (return empty 204 response)
- * 2. Detect video URLs (.mp4, .m3u8, .webm, etc.) and notify JS
+ * Wraps the existing Capacitor BridgeWebViewClient.
+ * Intercepts shouldInterceptRequest for ad blocking + video detection,
+ * delegates EVERYTHING else to the original client (which serves local assets).
  */
 public class VideoInterceptClient extends WebViewClient {
 
     private static final String TAG = "VideoIntercept";
-    private final Context context;
+    private final WebViewClient original;
     private final WebView webView;
 
-    // Video file extensions to detect (NO .ts — causes 100+ false positives from HLS segments)
+    // Video extensions (NO .ts — HLS segments spam)
     private static final Pattern VIDEO_PATTERN = Pattern.compile(
         "\\.(mp4|m3u8|webm|mov|mkv|mpd|m4v)(\\?|$)", Pattern.CASE_INSENSITIVE
     );
 
-    // Thumbnail/preview/tracking patterns to skip
+    // Skip patterns
     private static final Pattern SKIP_PATTERN = Pattern.compile(
-        "(preview|thumb|trailer|teaser|sample|poster|icon|logo|pixel|beacon|track|analytics|googlevideo\\.com/videoplayback)", Pattern.CASE_INSENSITIVE
+        "(preview|thumb|trailer|teaser|sample|poster|icon|logo|pixel|beacon|track|analytics)", Pattern.CASE_INSENSITIVE
     );
 
-    // Dedup: track already-notified URLs (avoid 171 duplicates)
+    // Dedup
     private final Set<String> notifiedUrls = new HashSet<>();
 
-    // Ad/tracking domains blocklist (70+ domains from api-gateway)
+    // Ad domains (70+)
     private static final Set<String> AD_DOMAINS = new HashSet<>(Arrays.asList(
-        "doubleclick.net", "googlesyndication.com", "googleadservices.com",
-        "adnxs.com", "pubmatic.com", "openx.net", "criteo.com",
-        "rubiconproject.com", "casalemedia.com", "sizmek.com", "flashtalking.com",
-        "adform.net", "sovrn.com", "bidswitch.net", "bidvertiser.com",
-        "contextweb.com", "conversant.com",
-        "exoclick.com", "exosrv.com", "propellerads.com",
-        "popads.net", "popcash.net", "popunder.net",
-        "juicyads.com", "trafficjunky.net", "trafficjunky.com", "trafficfactory.biz",
-        "adsterra.com", "adsterra.net", "hilltopads.com",
-        "clickadu.com", "clickaine.com",
-        "pushame.com", "ad-maven.com", "plugrush.com",
-        "trafficstars.com", "crakrevenue.com",
-        "tsyndicate.com", "realsrv.com",
-        "onclkds.com", "onclickds.com", "onclickmax.com", "onclickrev.com",
-        "magsrv.com", "ero-advertising.com",
-        "monetag.com", "a-ads.com", "coinzilla.com", "bitmedia.io",
-        "adcash.com", "richpush.net", "evadav.com",
-        "notifadz.com", "mondiad.com", "galaksion.com", "clickstar.me",
-        "clictune.com", "linkvertise.com", "shrinkme.io", "lootlinks.co",
-        "amazon-adsystem.com", "moatads.com", "quantserve.com", "scorecardresearch.com",
-        "histats.com", "statcounter.com", "hotjar.com", "mouseflow.com",
-        "googletagmanager.com", "google-analytics.com", "facebook.net",
-        "spotx.tv", "vungle.com", "applovin.com", "chartboost.com",
-        "inmobi.com", "mintegral.com",
-        "taboola.com", "outbrain.com", "mgid.com", "revcontent.com", "zergnet.com",
-        "liveadsexchange.com", "betteradsexchange.com"
+        "doubleclick.net","googlesyndication.com","googleadservices.com",
+        "adnxs.com","pubmatic.com","openx.net","criteo.com",
+        "rubiconproject.com","casalemedia.com","sizmek.com","flashtalking.com",
+        "adform.net","sovrn.com","bidswitch.net","bidvertiser.com",
+        "contextweb.com","conversant.com",
+        "exoclick.com","exosrv.com","propellerads.com",
+        "popads.net","popcash.net","popunder.net",
+        "juicyads.com","trafficjunky.net","trafficjunky.com","trafficfactory.biz",
+        "adsterra.com","adsterra.net","hilltopads.com",
+        "clickadu.com","clickaine.com",
+        "pushame.com","ad-maven.com","plugrush.com",
+        "trafficstars.com","crakrevenue.com",
+        "tsyndicate.com","realsrv.com",
+        "onclkds.com","onclickds.com","onclickmax.com","onclickrev.com",
+        "magsrv.com","ero-advertising.com",
+        "monetag.com","a-ads.com","coinzilla.com","bitmedia.io",
+        "adcash.com","richpush.net","evadav.com",
+        "notifadz.com","mondiad.com","galaksion.com","clickstar.me",
+        "clictune.com","linkvertise.com","shrinkme.io","lootlinks.co",
+        "amazon-adsystem.com","moatads.com","quantserve.com","scorecardresearch.com",
+        "histats.com","statcounter.com","hotjar.com","mouseflow.com",
+        "googletagmanager.com","google-analytics.com","facebook.net",
+        "spotx.tv","vungle.com","applovin.com","chartboost.com",
+        "inmobi.com","mintegral.com",
+        "taboola.com","outbrain.com","mgid.com","revcontent.com","zergnet.com",
+        "liveadsexchange.com","betteradsexchange.com"
     ));
 
-    // Empty response for blocked requests
-    private static final WebResourceResponse BLOCKED_RESPONSE = new WebResourceResponse(
+    private static final WebResourceResponse BLOCKED = new WebResourceResponse(
         "text/plain", "UTF-8", new ByteArrayInputStream(new byte[0])
     );
 
-    public VideoInterceptClient(Context context, WebView webView) {
-        this.context = context;
+    public VideoInterceptClient(WebViewClient original, WebView webView) {
+        this.original = original;
         this.webView = webView;
     }
+
+    // ═══ The only method we actually override with custom logic ═══
 
     @Override
     public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -84,33 +94,51 @@ public class VideoInterceptClient extends WebViewClient {
         String host = uri.getHost();
         String url = uri.toString();
 
-        // 1. Block ad domains
+        // 1. Block ads
         if (host != null && isAdDomain(host)) {
-            Log.d(TAG, "BLOCKED ad: " + host);
-            return BLOCKED_RESPONSE;
+            return BLOCKED;
         }
 
-        // 2. Detect video URLs (dedup + skip previews/tracking)
+        // 2. Detect videos
         if (VIDEO_PATTERN.matcher(url).find()) {
             if (!SKIP_PATTERN.matcher(url).find() && !notifiedUrls.contains(url)) {
                 notifiedUrls.add(url);
-                String extension = extractExtension(url);
-                Log.d(TAG, "VIDEO detected: " + url + " (" + extension + ")");
-                notifyVideoDetected(url, extension);
+                String ext = extractExtension(url);
+                Log.d(TAG, "VIDEO: " + url.substring(0, Math.min(url.length(), 120)) + " (" + ext + ")");
+                notifyVideoDetected(url, ext);
             }
         }
 
-        return super.shouldInterceptRequest(view, request);
+        // 3. Delegate to Capacitor's BridgeWebViewClient (serves local assets!)
+        return original.shouldInterceptRequest(view, request);
     }
 
-    /**
-     * Check if a hostname matches any ad domain (including subdomains)
-     */
+    // ═══ Delegate ALL other WebViewClient methods to original ═══
+
+    @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) { return original.shouldOverrideUrlLoading(v, r); }
+    @Override public void onPageStarted(WebView v, String u, Bitmap f) { original.onPageStarted(v, u, f); }
+    @Override public void onPageFinished(WebView v, String u) { original.onPageFinished(v, u); }
+    @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) { original.onReceivedError(v, r, e); }
+    @Override public void onReceivedHttpError(WebView v, WebResourceRequest r, WebResourceResponse e) { original.onReceivedHttpError(v, r, e); }
+    @Override public void onReceivedSslError(WebView v, SslErrorHandler h, SslError e) { original.onReceivedSslError(v, h, e); }
+    @Override public void onReceivedClientCertRequest(WebView v, ClientCertRequest r) { original.onReceivedClientCertRequest(v, r); }
+    @Override public void onReceivedHttpAuthRequest(WebView v, HttpAuthHandler h, String host, String realm) { original.onReceivedHttpAuthRequest(v, h, host, realm); }
+    @Override public boolean onRenderProcessGone(WebView v, RenderProcessGoneDetail d) { return original.onRenderProcessGone(v, d); }
+    @Override public void onReceivedLoginRequest(WebView v, String realm, String account, String args) { original.onReceivedLoginRequest(v, realm, account, args); }
+    @Override public void onFormResubmission(WebView v, Message d, Message r) { original.onFormResubmission(v, d, r); }
+    @Override public void doUpdateVisitedHistory(WebView v, String u, boolean r) { original.doUpdateVisitedHistory(v, u, r); }
+    @Override public void onScaleChanged(WebView v, float o, float n) { original.onScaleChanged(v, o, n); }
+    @Override public boolean shouldOverrideKeyEvent(WebView v, KeyEvent e) { return original.shouldOverrideKeyEvent(v, e); }
+    @Override public void onUnhandledKeyEvent(WebView v, KeyEvent e) { original.onUnhandledKeyEvent(v, e); }
+    @Override public void onLoadResource(WebView v, String u) { original.onLoadResource(v, u); }
+    @Override public void onPageCommitVisible(WebView v, String u) { original.onPageCommitVisible(v, u); }
+    @Override public void onSafeBrowsingHit(WebView v, WebResourceRequest r, int t, SafeBrowsingResponse c) { original.onSafeBrowsingHit(v, r, t, c); }
+
+    // ═══ Helper methods ═══
+
     private boolean isAdDomain(String host) {
         host = host.toLowerCase();
-        // Direct match
         if (AD_DOMAINS.contains(host)) return true;
-        // Subdomain match: split and check parent domains
         String[] parts = host.split("\\.");
         for (int i = 1; i < parts.length - 1; i++) {
             StringBuilder sb = new StringBuilder();
@@ -123,9 +151,6 @@ public class VideoInterceptClient extends WebViewClient {
         return false;
     }
 
-    /**
-     * Extract file extension from URL
-     */
     private String extractExtension(String url) {
         try {
             String path = Uri.parse(url).getPath();
@@ -140,15 +165,11 @@ public class VideoInterceptClient extends WebViewClient {
         return "mp4";
     }
 
-    /**
-     * Notify JS side that a video was detected by the native interceptor
-     */
     private void notifyVideoDetected(String url, String type) {
-        // Must run on UI thread to call evaluateJavascript
         webView.post(() -> {
             String escaped = url.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "");
-            String js = "if(typeof handleNativeVideoDetected==='function')handleNativeVideoDetected('" + escaped + "','" + type + "');";
-            webView.evaluateJavascript(js, null);
+            webView.evaluateJavascript(
+                "if(typeof handleNativeVideoDetected==='function')handleNativeVideoDetected('" + escaped + "','" + type + "');", null);
         });
     }
 }

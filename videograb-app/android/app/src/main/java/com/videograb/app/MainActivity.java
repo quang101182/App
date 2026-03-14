@@ -5,6 +5,7 @@ import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -38,8 +39,10 @@ public class MainActivity extends BridgeActivity {
         NativeDownloadBridge downloadBridge = new NativeDownloadBridge(this);
         webView.addJavascriptInterface(downloadBridge, "NativeDownload");
 
-        // Inject VideoInterceptClient into the existing BridgeWebViewClient
-        VideoInterceptClient interceptClient = new VideoInterceptClient(this, webView);
+        // WRAP the existing Capacitor BridgeWebViewClient (don't replace it!)
+        // The original client handles local asset serving (https://localhost/)
+        WebViewClient originalClient = webView.getWebViewClient();
+        VideoInterceptClient interceptClient = new VideoInterceptClient(originalClient, webView);
         webView.setWebViewClient(interceptClient);
 
         // Apply native padding for status bar / navigation bar
