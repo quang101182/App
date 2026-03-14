@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.18.0 — fix disk cleanup: orphan dirs on startup + immediate error cleanup + disk space check
+ * Version: 1.19.0 — fix orphan file recovery + SSE heartbeat during combined.ts write
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -1103,6 +1103,7 @@ setInterval(() => {
     }
   }
   // Aussi nettoyer les dossiers orphelins (pas dans hlsJobs mais sur le disque)
+  // Mais épargner les dirs avec output.mp4 récent (< 30 min) pour permettre le download
   const hlsBase = fs.existsSync('/data') ? '/data' : null;
   if (hlsBase) {
     try {
@@ -1111,8 +1112,17 @@ setInterval(() => {
         if (entry.startsWith('hls_')) {
           const jobIdFromDir = entry.replace('hls_', '');
           if (!hlsJobs.has(jobIdFromDir)) {
+            const dirPath = path.join(hlsBase, entry);
+            const mp4File = path.join(dirPath, 'output.mp4');
+            // Keep orphan dirs with output.mp4 less than 30 min old (user might still download)
+            if (fs.existsSync(mp4File)) {
+              try {
+                const age = now - fs.statSync(mp4File).mtimeMs;
+                if (age < 1800000) continue; // < 30 min → keep
+              } catch (e) {}
+            }
             try {
-              fs.rmSync(path.join(hlsBase, entry), { recursive: true, force: true });
+              fs.rmSync(dirPath, { recursive: true, force: true });
               console.log(`[CLEANUP-INTERVAL] Orphelin supprime: ${entry}`);
             } catch (e) {}
           }
@@ -1307,7 +1317,13 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
       }
     }
 
+    // Heartbeat pendant le flush du writeStream (peut prendre 30-60s pour 1GB+)
+    // Sans ça, les clients SSE coupent par timeout
+    const flushHeartbeat = setInterval(() => {
+      jobLog(job, 'Ecriture combined.ts en cours...');
+    }, 10000);
     await new Promise((resolve) => { writeStream.end(resolve); });
+    clearInterval(flushHeartbeat);
 
     const tsSize = fs.statSync(combinedTs).size;
     jobLog(job, `combined.ts = ${(tsSize / 1048576).toFixed(1)} MB`);
@@ -1482,28 +1498,48 @@ app.delete('/hls2mp4/:jobId', requireAnySecret, (req, res) => {
 });
 
 // Download completed MP4 (auth via ?s= query param or Authorization header)
+// Also serves orphan files (job completed but Map entry cleaned up)
 app.get('/hls2mp4/file/:jobId', requireAnySecret, (req, res) => {
-  const job = hlsJobs.get(req.params.jobId);
-  if (!job) return res.status(404).json({ error: 'job not found' });
-  if (job.status !== 'done') return res.status(409).json({ error: 'not ready', status: job.status });
-  if (!job.mp4Path || !fs.existsSync(job.mp4Path)) return res.status(410).json({ error: 'file gone' });
+  const jobId = req.params.jobId;
+  const job = hlsJobs.get(jobId);
 
-  const safeName = job.safeName || 'video';
+  // Try job from Map first
+  let mp4Path, mp4Size, safeName, tmpDir;
+  if (job) {
+    if (job.status !== 'done') return res.status(409).json({ error: 'not ready', status: job.status });
+    if (!job.mp4Path || !fs.existsSync(job.mp4Path)) return res.status(410).json({ error: 'file gone' });
+    mp4Path = job.mp4Path;
+    mp4Size = job.mp4Size;
+    safeName = job.safeName || 'video';
+    tmpDir = job.tmpDir;
+  } else {
+    // Orphan recovery: check if file exists on disk even though job is not in Map
+    const hlsBase = fs.existsSync('/data') ? '/data' : os.tmpdir();
+    const orphanDir = path.join(hlsBase, 'hls_' + jobId);
+    const orphanMp4 = path.join(orphanDir, 'output.mp4');
+    if (!fs.existsSync(orphanMp4)) return res.status(404).json({ error: 'job not found' });
+    mp4Path = orphanMp4;
+    mp4Size = fs.statSync(orphanMp4).size;
+    safeName = 'video';
+    tmpDir = orphanDir;
+    console.log(`[hls2mp4:${jobId}] Orphan file recovery: ${(mp4Size / 1048576).toFixed(1)} MB`);
+  }
+
   res.setHeader('Content-Type', 'video/mp4');
-  res.setHeader('Content-Length', job.mp4Size);
+  res.setHeader('Content-Length', mp4Size);
   res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeName)}.mp4"; filename*=UTF-8''${encodeURIComponent(safeName)}.mp4`);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length');
 
-  const fileStream = fs.createReadStream(job.mp4Path);
+  const fileStream = fs.createReadStream(mp4Path);
   fileStream.pipe(res);
   fileStream.on('end', () => {
     // Cleanup after download
-    try { fs.rmSync(job.tmpDir, { recursive: true, force: true }); } catch (e) {}
-    hlsJobs.delete(job.id);
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+    if (job) hlsJobs.delete(job.id);
   });
   fileStream.on('error', err => {
-    console.error(`[hls2mp4:${job.id}] Stream error:`, err.message);
+    console.error(`[hls2mp4:${jobId}] Stream error:`, err.message);
     try { res.end(); } catch (e) {}
   });
 });
@@ -1513,7 +1549,7 @@ app.get('/hls2mp4/file/:jobId', requireAnySecret, (req, res) => {
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.18.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.19.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);

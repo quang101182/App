@@ -1149,56 +1149,66 @@ async function startHlsDownload(m3u8Url, filename) {
         }
       }
 
-      // SSE connection
+      // SSE connection + parallel polling for resilience
       const sseUrl = `${FLY_URL}/hls2mp4/events/${dl.jobId}?s=${encodeURIComponent(secret)}`;
       const es = new EventSource(sseUrl);
       dl.eventSource = es;
-      let pollTimer = null;
+      let sseErrors = 0;
 
       es.onmessage = (e) => {
         if (dl.status === 'cancelled') { cleanup(); return; }
+        sseErrors = 0; // reset on successful message
         try { handleEvt(JSON.parse(e.data)); } catch (err) {}
       };
 
-      // Polling fallback — if SSE drops (mobile sleep, network switch)
+      // Don't close SSE on first error — let EventSource auto-reconnect
+      // Only close after 5 consecutive errors (truly dead connection)
       es.onerror = () => {
-        es.close(); dl.eventSource = null;
-        if (dl.status === 'cancelled' || dl.status === 'ready' || dl.status === 'error') return;
-        dlLog(dl, 'Connexion perdue, reconnexion...', 'warn');
-        if (!pollTimer) {
-          const pollUrl = `${FLY_URL}/hls2mp4/poll/${dl.jobId}?s=${encodeURIComponent(secret)}`;
-          let lastPollLog = '';
-          pollTimer = setInterval(async () => {
-            if (dl.status === 'cancelled' || dl.status === 'ready' || dl.status === 'error') { clearInterval(pollTimer); pollTimer = null; return; }
-            try {
-              const r = await fetch(pollUrl);
-              if (r.status === 404) {
-                // Job cleaned up — check if file is available
-                clearInterval(pollTimer); pollTimer = null;
-                dl.mp4Url = `${FLY_URL}/hls2mp4/file/${dl.jobId}?s=${encodeURIComponent(secret)}`;
-                try {
-                  const fh = await fetch(dl.mp4Url, { method: 'HEAD' });
-                  if (fh.ok) { handleEvt({ type: 'done', status: 'done', mp4Size: parseInt(fh.headers.get('content-length') || '0') }); }
-                  else { handleEvt({ type: 'done', status: 'error', error: 'Job introuvable sur le serveur' }); }
-                } catch(e) { handleEvt({ type: 'done', status: 'error', error: 'Job introuvable' }); }
-                return;
-              }
-              if (!r.ok) return;
-              const p = await r.json();
-              // Only log if message changed
-              if (p.lastLog && p.lastLog !== lastPollLog) { lastPollLog = p.lastLog; dlLog(dl, p.lastLog); }
-              if (p.progress !== undefined) dl.progress = p.progress;
-              if (p.status === 'processing') { dl.status = p.progress > 70 ? 'ffmpeg' : 'seg'; renderDlItem(dl); }
-              else if (p.status === 'done') { handleEvt({ type: 'done', status: 'done', mp4Size: p.mp4Size }); }
-              else if (p.status === 'error') { handleEvt({ type: 'done', status: 'error', error: p.error }); }
-            } catch (e) {}
-          }, 3000);
+        sseErrors++;
+        if (sseErrors >= 5) {
+          es.close(); dl.eventSource = null;
+          if (dl.status !== 'cancelled' && dl.status !== 'ready' && dl.status !== 'error') {
+            dlLog(dl, 'SSE deconnecte, polling actif', 'warn');
+          }
         }
       };
 
+      // Start polling immediately as parallel backup (not just on SSE error)
+      // This ensures we never miss the "done" event even if SSE drops
+      const pollUrl = `${FLY_URL}/hls2mp4/poll/${dl.jobId}?s=${encodeURIComponent(secret)}`;
+      let lastPollLog = '';
+      let poll404Count = 0;
+      const pollTimer = setInterval(async () => {
+        if (dl.status === 'cancelled' || dl.status === 'ready' || dl.status === 'error' || dl.status === 'done') { cleanup(); return; }
+        try {
+          const r = await fetch(pollUrl);
+          if (r.status === 404) {
+            poll404Count++;
+            // Wait for 3 consecutive 404s before checking file (server might be restarting)
+            if (poll404Count < 3) return;
+            clearInterval(pollTimer);
+            dl.mp4Url = `${FLY_URL}/hls2mp4/file/${dl.jobId}?s=${encodeURIComponent(secret)}`;
+            try {
+              const fh = await fetch(dl.mp4Url, { method: 'HEAD' });
+              if (fh.ok) { handleEvt({ type: 'done', status: 'done', mp4Size: parseInt(fh.headers.get('content-length') || '0') }); }
+              else { handleEvt({ type: 'done', status: 'error', error: 'Job introuvable sur le serveur' }); }
+            } catch(e) { handleEvt({ type: 'done', status: 'error', error: 'Job introuvable' }); }
+            return;
+          }
+          poll404Count = 0;
+          if (!r.ok) return;
+          const p = await r.json();
+          if (p.lastLog && p.lastLog !== lastPollLog) { lastPollLog = p.lastLog; dlLog(dl, p.lastLog); }
+          if (p.progress !== undefined) dl.progress = p.progress;
+          if (p.status === 'processing') { dl.status = p.progress > 70 ? 'ffmpeg' : 'seg'; renderDlItem(dl); }
+          else if (p.status === 'done') { handleEvt({ type: 'done', status: 'done', mp4Size: p.mp4Size }); }
+          else if (p.status === 'error') { handleEvt({ type: 'done', status: 'error', error: p.error }); }
+        } catch (e) {} // Network error — silently retry next interval
+      }, 4000);
+
       function cleanup() {
         if (es) { es.close(); dl.eventSource = null; }
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        if (pollTimer) { clearInterval(pollTimer); }
       }
     });
 
