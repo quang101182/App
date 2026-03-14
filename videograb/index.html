@@ -862,7 +862,7 @@ async function processDownloadQueue() {
   const item = pendingDlQueue.shift();
   try {
     if (item.type === 'hls') {
-      await startHlsDownload(item.url, item.filename);
+      await startHlsClientDirect(item.url, item.filename);
     } else {
       await startDirectDownload(item.url, item.filename);
     }
@@ -1080,6 +1080,129 @@ async function cancelDlItem(id) {
   dlLog(dl, 'Annule', 'err');
   renderDlItem(dl);
   toast('Telechargement annule', 'w');
+}
+
+// ── Client-direct HLS download — no server, segments via gateway ──
+async function startHlsClientDirect(m3u8Url, filename) {
+  const vid = detectedVideos.find(v => v.url === m3u8Url || currentDlUrl === v.url);
+  const videoTitle = (vid && vid.title) ? vid.title : filename.replace(/\.\w+$/, '');
+  const safeName = videoTitle.replace(/[<>:"/\\|?*]/g, '').substring(0, 100).trim() || 'video';
+
+  const dl = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+    jobId: null, title: safeName, status: 'seg', progress: 0,
+    mp4Url: null, mp4Size: 0, received: 0, speed: 0,
+    eventSource: null, abortCtrl: new AbortController(), logs: [], m3u8Url,
+  };
+  dlQueue.push(dl);
+  if (!dlPanelOpen) toggleDlPanel();
+  dlLog(dl, 'Telechargement client direct...');
+  renderDlItem(dl);
+
+  try {
+    // 1. Fetch m3u8 playlist
+    let m3u8Resp = await fetch(buildRawUrl(m3u8Url), { signal: dl.abortCtrl.signal });
+    if (!m3u8Resp.ok) throw new Error('m3u8 HTTP ' + m3u8Resp.status);
+    const m3u8Text = await m3u8Resp.text();
+    const allLines = m3u8Text.split('\n').map(l => l.trim()).filter(l => l);
+    const baseUrl = m3u8Url.substring(0, m3u8Url.lastIndexOf('/') + 1);
+
+    // 2. Handle master playlist (select best bandwidth variant)
+    const isMaster = allLines.some(l => l.includes('#EXT-X-STREAM-INF'));
+    let segUrls = [];
+
+    if (isMaster) {
+      let bestBw = 0, bestVariant = '';
+      for (let i = 0; i < allLines.length; i++) {
+        if (allLines[i].includes('#EXT-X-STREAM-INF')) {
+          const bw = parseInt((allLines[i].match(/BANDWIDTH=(\d+)/) || [])[1] || '0');
+          const next = allLines[i + 1];
+          if (next && !next.startsWith('#') && bw >= bestBw) {
+            bestBw = bw;
+            bestVariant = next.startsWith('http') ? next : baseUrl + next;
+          }
+        }
+      }
+      if (!bestVariant) throw new Error('Pas de variante trouvee');
+      dlLog(dl, `Master playlist → ${(bestBw/1000).toFixed(0)} kbps`);
+      const varResp = await fetch(buildRawUrl(bestVariant), { signal: dl.abortCtrl.signal });
+      if (!varResp.ok) throw new Error('Variant HTTP ' + varResp.status);
+      const varText = await varResp.text();
+      const varBase = bestVariant.substring(0, bestVariant.lastIndexOf('/') + 1);
+      for (const vl of varText.split('\n').map(l => l.trim())) {
+        if (vl && !vl.startsWith('#')) segUrls.push(vl.startsWith('http') ? vl : varBase + vl);
+      }
+    } else {
+      for (const line of allLines) {
+        if (line && !line.startsWith('#')) segUrls.push(line.startsWith('http') ? line : baseUrl + line);
+      }
+    }
+
+    if (!segUrls.length) throw new Error('Aucun segment');
+    dlLog(dl, `${segUrls.length} segments a telecharger`);
+
+    // 3. Download segments in parallel batches of 60 (same as Fly.io server)
+    const allChunks = [];
+    let totalBytes = 0;
+    let downloaded = 0;
+    const t0 = Date.now();
+    const BATCH = 60;
+
+    for (let i = 0; i < segUrls.length; i += BATCH) {
+      if (dl.status === 'cancelled') throw new Error('cancelled');
+      const batch = segUrls.slice(i, i + BATCH);
+      const results = await Promise.all(batch.map(async u => {
+        try {
+          const r = await fetch(buildRawUrl(u), { signal: dl.abortCtrl.signal });
+          return r.ok ? await r.arrayBuffer() : new ArrayBuffer(0);
+        } catch (e) { return new ArrayBuffer(0); }
+      }));
+      for (const buf of results) {
+        if (buf.byteLength > 0) { allChunks.push(new Uint8Array(buf)); totalBytes += buf.byteLength; }
+        downloaded++;
+      }
+      dl.progress = Math.round(downloaded / segUrls.length * 95);
+      dl.received = totalBytes;
+      const elapsed = (Date.now() - t0) / 1000;
+      dl.speed = elapsed > 0 ? totalBytes / elapsed : 0;
+      if (downloaded % 60 === 0 || downloaded === segUrls.length) {
+        dlLog(dl, `Segments: ${downloaded}/${segUrls.length} (${fmtSize(totalBytes)}, ${fmtSize(dl.speed)}/s)`);
+      }
+      renderDlItem(dl);
+    }
+
+    if (totalBytes < 1000) throw new Error('Fichier vide — segments inaccessibles');
+
+    // 4. Build blob and trigger download
+    dlLog(dl, `Assemblage ${fmtSize(totalBytes)}...`);
+    dl.progress = 98;
+    renderDlItem(dl);
+
+    const blob = new Blob(allChunks, { type: 'video/mp2t' });
+    const tsName = safeName + '.ts';
+    triggerBlobDownload(blob, tsName);
+
+    dl.status = 'done'; dl.progress = 100; dl.mp4Size = blob.size;
+    dlLog(dl, `Telecharge: ${tsName} (${fmtSize(blob.size)})`, 'ok');
+    renderDlItem(dl);
+    toast(`Telecharge: ${tsName}`, 's');
+    saveToHistory(m3u8Url, tsName, blob.size);
+
+  } catch (e) {
+    if (dl.status === 'cancelled' || e.message === 'cancelled') return;
+    dlLog(dl, `Client direct echoue: ${e.message}`, 'err');
+    dlLog(dl, 'Fallback vers serveur Fly.io...', 'warn');
+    renderDlItem(dl);
+    // Remove failed dl item from panel
+    const idx = dlQueue.indexOf(dl);
+    if (idx >= 0) dlQueue.splice(idx, 1);
+    // Fallback to Fly.io server
+    try {
+      await startHlsDownload(m3u8Url, filename);
+    } catch (e2) {
+      toast('Echec total: ' + e2.message, 'e');
+    }
+  }
 }
 
 async function startHlsDownload(m3u8Url, filename) {
