@@ -268,7 +268,7 @@ footer{padding:12px 24px;text-align:center;font-family:var(--mono);font-size:9px
 <!-- Main -->
 <main>
   <!-- Drop Zone -->
-  <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+  <div class="drop-zone" id="dropZone">
     <i class="fas fa-cloud-upload-alt"></i>
     <div class="dz-title">Drop audio/video file here</div>
     <div class="dz-sub">or click to browse &bull; MP3, WAV, M4A, MP4, WEBM &bull; max 2h</div>
@@ -470,20 +470,35 @@ function hexToRgba(hex, a) {
 function initDropZone() {
   const dz = document.getElementById('dropZone');
   const fi = document.getElementById('fileInput');
-  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); dz.classList.add('drag-over'); });
   dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
-  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
-  fi.addEventListener('change', () => { if (fi.files.length) handleFile(fi.files[0]); });
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation(); dz.classList.remove('drag-over');
+    console.log('[NoteFlow] Drop event, files:', e.dataTransfer.files.length);
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fi.addEventListener('change', () => {
+    console.log('[NoteFlow] File input change, files:', fi.files.length);
+    if (fi.files.length) handleFile(fi.files[0]);
+    fi.value = ''; // reset pour permettre re-selection du meme fichier
+  });
+  // Also handle click properly
+  dz.addEventListener('click', (e) => {
+    if (e.target === fi) return; // avoid double trigger
+    fi.click();
+  });
 }
 
 // ── Main Pipeline ──
 async function handleFile(file) {
+  console.log('[NoteFlow] handleFile called:', file.name, file.size, file.type);
   const key = document.getElementById('gatewayKey').value;
   if (!key) { toast('Set your Gateway secret in Settings'); toggleConfig(); return; }
   saveConfig();
 
   currentFileName = file.name.replace(/\.[^.]+$/, '');
   const model = document.getElementById('dgModel').value;
+  toast(`Processing: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
   log(`Processing: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`, 'info');
   setProgress(5, 'Uploading to Deepgram...', 'upload');
 
@@ -525,9 +540,10 @@ async function handleFile(file) {
     setDot('dotDG', true);
     toast('Transcription + Summary ready!');
   } catch (err) {
+    console.error('[NoteFlow] Pipeline error:', err);
     log('Error: ' + err.message, 'error');
     toast('Error: ' + err.message);
-    hideProgress();
+    setProgress(0, 'Error: ' + err.message, 'upload');
     setDot('dotDG', false);
   }
 }
