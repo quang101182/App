@@ -653,7 +653,7 @@ footer strong{color:#475569}
   <h1>Transcribe Any Voice Message in Seconds</h1>
   <p class="tagline">VoiceBox is a Telegram bot powered by Whisper AI. Send a voice note — get instant text, translation, and AI summary right in your chat.</p>
   <div class="cta-group">
-    <a class="btn-primary" href="https://t.me/VoiceBoxBot">📲 Open in Telegram</a>
+    <a class="btn-primary" href="https://t.me/VoiceBoxTranscBot">📲 Open in Telegram</a>
     <a class="btn-secondary" href="#pricing">View Pricing</a>
   </div>
 </section>
@@ -745,7 +745,7 @@ footer strong{color:#475569}
 </section>
 
 <footer>
-  <p>Powered by <strong>Whisper AI</strong> &amp; <strong>Gemini</strong> &mdash; &copy; ${new Date().getFullYear()} VoiceBox &mdash; <a href="https://t.me/VoiceBoxBot" style="color:#60a5fa">@VoiceBoxBot</a></p>
+  <p>Powered by <strong>Whisper AI</strong> &amp; <strong>Gemini</strong> &mdash; &copy; ${new Date().getFullYear()} VoiceBox &mdash; <a href="https://t.me/VoiceBoxTranscBot" style="color:#60a5fa">@VoiceBoxBot</a></p>
 </footer>
 </body>
 </html>`);
