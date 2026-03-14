@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.17.0 — fix autostop killing active jobs + idle auto-shutdown 30min
+ * Version: 1.18.0 — fix disk cleanup: orphan dirs on startup + immediate error cleanup + disk space check
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -84,6 +84,33 @@ function resetIdleTimer() {
 }
 // Démarrer le timer dès le boot
 resetIdleTimer();
+
+// ---------------------------------------------------------------------------
+// Startup cleanup: supprimer les dossiers /data/hls_* orphelins
+// (survivent aux redémarrages car le volume /data est persistant)
+// ---------------------------------------------------------------------------
+function cleanupOrphanDirs() {
+  const hlsBase = fs.existsSync('/data') ? '/data' : null;
+  if (!hlsBase) return;
+  try {
+    const entries = fs.readdirSync(hlsBase);
+    let cleaned = 0;
+    for (const entry of entries) {
+      if (entry.startsWith('hls_')) {
+        const fullPath = path.join(hlsBase, entry);
+        try {
+          fs.rmSync(fullPath, { recursive: true, force: true });
+          cleaned++;
+          console.log(`[STARTUP-CLEANUP] Supprime orphelin: ${entry}`);
+        } catch (e) {}
+      }
+    }
+    if (cleaned > 0) console.log(`[STARTUP-CLEANUP] ${cleaned} dossier(s) orphelin(s) nettoye(s)`);
+  } catch (e) {
+    console.error('[STARTUP-CLEANUP] Erreur:', e.message);
+  }
+}
+cleanupOrphanDirs();
 
 // ---------------------------------------------------------------------------
 // App Express
@@ -1065,16 +1092,51 @@ function hlsTryNext() {
   }
 }
 
-// Cleanup old jobs after 10 minutes
+// Cleanup old jobs after 10 minutes (safety net)
 setInterval(() => {
   const now = Date.now();
   for (const [id, job] of hlsJobs) {
     if (now - job.created > 600000) {
       try { fs.rmSync(job.tmpDir, { recursive: true, force: true }); } catch (e) {}
       hlsJobs.delete(id);
+      console.log(`[CLEANUP-INTERVAL] Job ${id} supprime (>10min)`);
     }
   }
+  // Aussi nettoyer les dossiers orphelins (pas dans hlsJobs mais sur le disque)
+  const hlsBase = fs.existsSync('/data') ? '/data' : null;
+  if (hlsBase) {
+    try {
+      const entries = fs.readdirSync(hlsBase);
+      for (const entry of entries) {
+        if (entry.startsWith('hls_')) {
+          const jobIdFromDir = entry.replace('hls_', '');
+          if (!hlsJobs.has(jobIdFromDir)) {
+            try {
+              fs.rmSync(path.join(hlsBase, entry), { recursive: true, force: true });
+              console.log(`[CLEANUP-INTERVAL] Orphelin supprime: ${entry}`);
+            } catch (e) {}
+          }
+        }
+      }
+    } catch (e) {}
+  }
 }, 60000);
+
+// Check available disk space (returns MB)
+function getAvailableDiskMB() {
+  try {
+    const { execSync } = require('child_process');
+    const df = execSync('df /data 2>/dev/null || df /tmp', { encoding: 'utf8' });
+    const lines = df.trim().split('\n');
+    if (lines.length >= 2) {
+      const parts = lines[1].split(/\s+/);
+      // df output: Filesystem 1K-blocks Used Available Use% Mounted
+      const availKB = parseInt(parts[3], 10);
+      if (!isNaN(availKB)) return Math.floor(availKB / 1024);
+    }
+  } catch (e) {}
+  return 9999; // fallback: assume OK
+}
 
 function jobLog(job, msg) {
   const ts = new Date().toISOString().split('T')[1].split('.')[0];
@@ -1112,6 +1174,31 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
     created: Date.now(), listeners: new Set(),
   };
   hlsJobs.set(jobId, job);
+
+  // Check disk space before accepting job
+  const availMB = getAvailableDiskMB();
+  if (availMB < 500) {
+    // Emergency cleanup: remove all orphan dirs
+    try {
+      const entries = fs.readdirSync(hlsBase);
+      for (const entry of entries) {
+        if (entry.startsWith('hls_') && entry !== 'hls_' + jobId) {
+          const orphanId = entry.replace('hls_', '');
+          const orphanJob = hlsJobs.get(orphanId);
+          if (!orphanJob || orphanJob.status === 'error' || orphanJob.status === 'done') {
+            try { fs.rmSync(path.join(hlsBase, entry), { recursive: true, force: true }); } catch (e) {}
+            if (orphanJob) hlsJobs.delete(orphanId);
+            console.log(`[DISK-LOW] Nettoyage urgence: ${entry}`);
+          }
+        }
+      }
+    } catch (e) {}
+    const afterCleanMB = getAvailableDiskMB();
+    if (afterCleanMB < 200) {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+      return res.status(507).json({ error: `Espace disque insuffisant: ${afterCleanMB} MB libre (min 200 MB)` });
+    }
+  }
 
   const active = hlsActiveCount();
   const queued = hlsQueue.length;
@@ -1304,6 +1391,10 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
       }
     }
 
+    // Supprimer combined.ts immédiatement après remux — libère ~1GB+
+    try { fs.unlinkSync(combinedTs); } catch (e) {}
+    jobLog(job, 'combined.ts supprime (libere espace)');
+
     jobProgress(job, 95);
     job.mp4Path = outMp4;
     job.mp4Size = fs.statSync(outMp4).size;
@@ -1314,7 +1405,9 @@ app.post('/hls2mp4', requireAnySecret, async (req, res) => {
   } catch (err) {
     jobLog(job, `ERREUR: ${err.message}`);
     jobDone(job, 'error', err.message);
-    // Don't cleanup tmpDir yet — let the cleanup interval handle it
+    // Cleanup immédiat sur erreur — ne pas garder des GB inutiles
+    try { fs.rmSync(job.tmpDir, { recursive: true, force: true }); } catch (e) {}
+    console.log(`[CLEANUP-ERROR] Job ${job.id} nettoye apres erreur`);
   }
   hlsTryNext(); // process next queued job
   }; // end processJob
@@ -1420,7 +1513,7 @@ app.get('/hls2mp4/file/:jobId', requireAnySecret, (req, res) => {
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.8.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.18.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);
