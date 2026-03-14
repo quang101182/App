@@ -126,6 +126,7 @@ input,button,select{font-family:inherit;font-size:inherit}
 .dl-item-status.done{background:rgba(52,211,153,.2);color:var(--green)}
 .dl-item-status.error{background:rgba(248,113,113,.15);color:var(--red)}
 .dl-item-status.cancelled{background:rgba(113,113,122,.15);color:var(--dim)}
+.dl-item-status.waiting{background:rgba(250,204,21,.1);color:var(--yellow)}
 .dl-item-bar-bg{height:5px;background:rgba(255,255,255,.05);border-radius:3px;overflow:hidden;margin-bottom:4px}
 .dl-item-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%;transition:width .3s;border-radius:3px}
 .dl-item-bar.complete{background:linear-gradient(90deg,var(--green),#2dd4bf)}
@@ -419,6 +420,10 @@ const FLY_URL = 'https://subwhisper-ffmpeg.fly.dev';
 let hlsInstance = null;
 let currentDlUrl = null;
 
+// ── Download Queue (1 at a time, auto-chain) ──
+const pendingDlQueue = []; // [{url, filename, index, type:'direct'|'hls'}]
+let dlQueueRunning = false;
+
 // ── API Status Check ──
 async function checkApiStatus() {
   const led = $('apiLed');
@@ -453,8 +458,15 @@ function init() {
   // Init bookmarks
   initBookmarks();
 
-  // Auto-focus URL bar on load
-  setTimeout(() => $('urlInput').focus(), 300);
+  // Restore last visited URL if gateway is configured
+  const lastUrl = localStorage.getItem('vg_lastUrl');
+  if (lastUrl && gateway && secret) {
+    $('urlInput').value = lastUrl;
+    setTimeout(() => navigate(lastUrl), 100);
+  } else {
+    // Auto-focus URL bar on load
+    setTimeout(() => $('urlInput').focus(), 300);
+  }
 
   // Register Service Worker + update notifications
   if ('serviceWorker' in navigator) {
@@ -530,6 +542,7 @@ function navigate(url) {
   navIndex = navHistory.length - 1;
 
   $('urlInput').value = url;
+  localStorage.setItem('vg_lastUrl', url);
   updateStarBtn(url);
   loadInIframe(url);
 }
@@ -590,6 +603,7 @@ function goHome() {
   if (iframe) { iframe.src = 'about:blank'; iframe.style.display = 'none'; }
   $('emptyState').style.display = 'flex';
   $('urlInput').value = '';
+  localStorage.removeItem('vg_lastUrl');
   detectedVideos = [];
   updateBadge();
   navHistory = [];
@@ -629,6 +643,7 @@ function handleMessage(e) {
   if (e.data.t === 'vg-nav' && e.data.url) {
     const newUrl = e.data.url;
     $('urlInput').value = newUrl;
+    localStorage.setItem('vg_lastUrl', newUrl);
     // Always reset detected videos on any navigation
     detectedVideos = [];
     updateBadge();
@@ -801,27 +816,57 @@ function closePlayer() {
   currentDlUrl = null;
 }
 
-// ── Download ──
+// ── Download Queue Logic ──
 function downloadVideo(index) {
   const v = detectedVideos[index];
   if (!v) return;
   currentDlUrl = v.url;
-  startDownload(v.url, getFilename(v.url));
+  const ext = getExtension(v.url);
+  const isHls = ext === 'm3u8';
+  const filename = isHls ? getFilename(v.url).replace(/\.m3u8$/i, '.ts') : getFilename(v.url);
+  enqueueDownload(v.url, filename, isHls ? 'hls' : 'direct');
 }
 
 function downloadCurrent() {
   if (!currentDlUrl) return;
-  startDownload(currentDlUrl, getFilename(currentDlUrl));
+  const ext = getExtension(currentDlUrl);
+  const isHls = ext === 'm3u8';
+  const filename = isHls ? getFilename(currentDlUrl).replace(/\.m3u8$/i, '.ts') : getFilename(currentDlUrl);
+  enqueueDownload(currentDlUrl, filename, isHls ? 'hls' : 'direct');
 }
 
-async function startDownload(url, filename) {
-  const ext = getExtension(url);
-
-  // HLS m3u8 → download all segments and merge
-  if (ext === 'm3u8') {
-    return startHlsDownload(url, filename.replace(/\.m3u8$/i, '.ts'));
+function enqueueDownload(url, filename, type) {
+  pendingDlQueue.push({ url, filename, type });
+  const pos = pendingDlQueue.length;
+  if (pos > 1) {
+    toast(`En file d'attente (${pos - 1} avant)`, 'i');
   }
+  processDownloadQueue();
+}
 
+async function processDownloadQueue() {
+  if (dlQueueRunning) return;
+  if (pendingDlQueue.length === 0) return;
+  dlQueueRunning = true;
+  const item = pendingDlQueue.shift();
+  try {
+    if (item.type === 'hls') {
+      await startHlsDownload(item.url, item.filename);
+    } else {
+      await startDirectDownload(item.url, item.filename);
+    }
+  } catch (e) {
+    // Error already handled inside startDirectDownload/startHlsDownload
+  }
+  dlQueueRunning = false;
+  // Auto-start next in queue
+  if (pendingDlQueue.length > 0) {
+    toast(`Demarrage suivant (${pendingDlQueue.length} restant)`, 'i');
+    processDownloadQueue();
+  }
+}
+
+async function startDirectDownload(url, filename) {
   const progress = $('dlProgress');
   const bar = $('dlBar');
   const pct = $('dlPct');

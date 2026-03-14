@@ -422,6 +422,10 @@ const FLY_URL = 'https://subwhisper-ffmpeg.fly.dev';
 let hlsInstance = null;
 let currentDlUrl = null;
 
+// ── Download Queue (1 at a time, auto-chain) ──
+const videoDownloadQueue = []; // [{index, url, filename, type:'direct'|'hls', status:'waiting'|'active'|'done'|'error'}]
+let queueProcessing = false;
+
 // ── Native Video Detection handler (called from Java VideoInterceptClient) ──
 function handleNativeVideoDetected(url, type) {
   if (!url || typeof url !== 'string') return;
@@ -475,8 +479,15 @@ function init() {
   // Init bookmarks
   initBookmarks();
 
+  // Restore last visited URL
+  const lastUrl = localStorage.getItem('vg_lastUrl');
+  if (lastUrl && gateway && secret) {
+    $('urlInput').value = lastUrl;
+    setTimeout(() => navigate(lastUrl), 100);
+  }
+
   // Auto-focus URL bar on load
-  setTimeout(() => $('urlInput').focus(), 300);
+  if (!lastUrl) setTimeout(() => $('urlInput').focus(), 300);
 
   // Register Service Worker + update notifications (skip in native APK)
   if (!IS_NATIVE && 'serviceWorker' in navigator) {
@@ -561,6 +572,7 @@ function navigate(url) {
   navIndex = navHistory.length - 1;
 
   $('urlInput').value = url;
+  localStorage.setItem('vg_lastUrl', url);
   updateStarBtn(url);
   loadInIframe(url);
 }
@@ -622,6 +634,7 @@ function goHome() {
   if (iframe) { iframe.src = 'about:blank'; iframe.style.display = 'none'; }
   $('emptyState').style.display = 'flex';
   $('urlInput').value = '';
+  localStorage.removeItem('vg_lastUrl');
   detectedVideos = [];
   updateBadge();
   navHistory = [];
@@ -662,6 +675,7 @@ function handleMessage(e) {
   if (e.data.t === 'vg-nav' && e.data.url) {
     const newUrl = e.data.url;
     $('urlInput').value = newUrl;
+    localStorage.setItem('vg_lastUrl', newUrl);
     // Always reset detected videos on any navigation
     detectedVideos = [];
     updateBadge();
@@ -836,17 +850,67 @@ function closePlayer() {
   currentDlUrl = null;
 }
 
-// ── Download ──
+// ── Download Queue ──
 function downloadVideo(index) {
   const v = detectedVideos[index];
   if (!v) return;
-  currentDlUrl = v.url;
-  startDownload(v.url, getFilename(v.url));
+  const url = v.url;
+  const filename = getFilename(url);
+  const ext = getExtension(url);
+  // Avoid duplicate queue entries for the same URL
+  if (videoDownloadQueue.some(q => q.url === url && q.status !== 'done' && q.status !== 'error')) {
+    toast('Deja en file d\'attente', 'w');
+    return;
+  }
+  const qItem = { index, url, filename, type: ext === 'm3u8' ? 'hls' : 'direct', status: 'waiting' };
+  videoDownloadQueue.push(qItem);
+  const waiting = videoDownloadQueue.filter(q => q.status === 'waiting').length;
+  if (waiting > 1) toast(`En attente (${waiting} en file)`, 'i');
+  processDownloadQueue();
 }
 
 function downloadCurrent() {
   if (!currentDlUrl) return;
-  startDownload(currentDlUrl, getFilename(currentDlUrl));
+  const url = currentDlUrl;
+  const filename = getFilename(url);
+  const ext = getExtension(url);
+  if (videoDownloadQueue.some(q => q.url === url && q.status !== 'done' && q.status !== 'error')) {
+    toast('Deja en file d\'attente', 'w');
+    return;
+  }
+  const qItem = { index: -1, url, filename, type: ext === 'm3u8' ? 'hls' : 'direct', status: 'waiting' };
+  videoDownloadQueue.push(qItem);
+  const waiting = videoDownloadQueue.filter(q => q.status === 'waiting').length;
+  if (waiting > 1) toast(`En attente (${waiting} en file)`, 'i');
+  processDownloadQueue();
+}
+
+async function processDownloadQueue() {
+  if (queueProcessing) return;
+  const next = videoDownloadQueue.find(q => q.status === 'waiting');
+  if (!next) return;
+  queueProcessing = true;
+  next.status = 'active';
+  currentDlUrl = next.url;
+  // Show queue position in title
+  const remaining = videoDownloadQueue.filter(q => q.status === 'waiting').length;
+  const done = videoDownloadQueue.filter(q => q.status === 'done' || q.status === 'error').length;
+  const total = done + 1 + remaining;
+  if (total > 1) document.title = `[${done+1}/${total}] VideoGrab v${VERSION}`;
+  try {
+    if (next.type === 'hls') {
+      await startHlsDownload(next.url, next.filename.replace(/\.m3u8$/i, '.ts'));
+    } else {
+      await startDownload(next.url, next.filename);
+    }
+    next.status = 'done';
+  } catch (e) {
+    next.status = 'error';
+  }
+  queueProcessing = false;
+  document.title = `VideoGrab v${VERSION}`;
+  // Auto-chain: process next in queue
+  processDownloadQueue();
 }
 
 async function startDownload(url, filename) {
@@ -866,9 +930,11 @@ async function startDownload(url, filename) {
   const speed = $('dlSpeed');
   const eta = $('dlEta');
 
+  // Show queue status
+  const waiting = videoDownloadQueue.filter(q => q.status === 'waiting').length;
   progress.classList.add('active');
   bar.style.width = '0%';
-  pct.textContent = '0%';
+  pct.textContent = waiting > 0 ? `0% (${waiting} en file)` : '0%';
   speed.textContent = '--';
   eta.textContent = '--';
 
