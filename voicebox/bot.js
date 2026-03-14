@@ -37,7 +37,7 @@ const STRINGS = {
       `\u{1F399} VoiceBox v${v}\n\n` +
       `Envoyez-moi un message vocal et je le transcris instantanement !\n\n` +
       `Plan gratuit : 5 vocaux/jour, max 5 min\n` +
-      `Plan Pro (3€/mois) : illimite, traduction, resume\n\n` +
+      `Plan Pro (3€/mois) : 100/jour, traduction, resume\n\n` +
       `/plan — voir mon plan\n` +
       `/lang XX — langue de traduction (Pro)\n` +
       `/pro — passer en Pro\n` +
@@ -50,7 +50,7 @@ const STRINGS = {
     already_pro: 'Vous etes deja en plan Pro ! Profitez de la traduction et du resume.',
     pro_coming: 'Le plan Pro arrive bientot ! Restez connecte.',
     pro_cta: (url) =>
-      `Plan Pro — 3€/mois\n\nTraduction + resume IA illimites\nVocaux jusqu'a 60 min\nSans limite quotidienne\n\nS'abonner : ${url}`,
+      `Plan Pro — 3€/mois\n\nTraduction + resume IA\n100 vocaux/jour, jusqu'a 60 min\n\nS'abonner : ${url}`,
     help:
       `Comment utiliser VoiceBox :\n\n` +
       `1. Envoyez un message vocal\n` +
@@ -96,7 +96,7 @@ const STRINGS = {
       `\u{1F399} VoiceBox v${v}\n\n` +
       `Send me a voice message and I'll transcribe it instantly!\n\n` +
       `Free plan: 5 voices/day, max 5 min\n` +
-      `Pro plan (€3/mo): unlimited, translation, summary\n\n` +
+      `Pro plan (€3/mo): 100/day, translation, summary\n\n` +
       `/plan — view my plan\n` +
       `/lang XX — translation language (Pro)\n` +
       `/pro — upgrade to Pro\n` +
@@ -109,7 +109,7 @@ const STRINGS = {
     already_pro: 'You are already on the Pro plan! Enjoy translation and AI summary.',
     pro_coming: 'The Pro plan is coming soon! Stay tuned.',
     pro_cta: (url) =>
-      `Pro Plan — €3/mo\n\nUnlimited translation + AI summary\nVoices up to 60 min\nNo daily limit\n\nSubscribe: ${url}`,
+      `Pro Plan — €3/mo\n\nTranslation + AI summary\n100 voices/day, up to 60 min\n\nSubscribe: ${url}`,
     help:
       `How to use VoiceBox:\n\n` +
       `1. Send a voice message\n` +
@@ -567,7 +567,7 @@ app.use((req, _res, next) => {
   });
 });
 
-// GET / — Landing page
+// GET / — Landing page (SEO-optimised v0.4.0)
 app.get('/', (_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!DOCTYPE html>
@@ -575,27 +575,178 @@ app.get('/', (_req, res) => {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoiceBox — Telegram Voice Transcription Bot</title>
+<title>VoiceBox — AI Voice Transcription Bot for Telegram</title>
+<meta name="description" content="VoiceBox is a Telegram bot that instantly transcribes your voice messages using Whisper AI. Includes translation and AI summary on the Pro plan. Free to start.">
+<meta name="keywords" content="telegram voice transcription, voice to text bot, whisper ai telegram, audio transcription bot, voice message translator">
+<link rel="canonical" href="https://voicebox-bot.fly.dev/">
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://voicebox-bot.fly.dev/">
+<meta property="og:title" content="VoiceBox — AI Voice Transcription Bot for Telegram">
+<meta property="og:description" content="Send a voice message on Telegram, get an instant transcription powered by Whisper AI. Translation + summary on Pro plan. Free to start.">
+<meta property="og:site_name" content="VoiceBox">
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="VoiceBox — AI Voice Transcription Bot for Telegram">
+<meta name="twitter:description" content="Instant voice transcription on Telegram powered by Whisper AI. Free plan available. Pro plan with translation &amp; summary at €3/mo.">
+<!-- Favicon: microphone emoji as SVG data URI -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
+<!-- JSON-LD Structured Data -->
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"VoiceBox","applicationCategory":"UtilitiesApplication","operatingSystem":"Telegram","url":"https://voicebox-bot.fly.dev/","description":"Telegram bot that transcribes voice messages instantly using Whisper AI, with Pro plan translation and AI summary.","offers":[{"@type":"Offer","name":"Free","price":"0","priceCurrency":"EUR","description":"5 voice messages per day, max 5 minutes each"},{"@type":"Offer","name":"Pro","price":"3","priceCurrency":"EUR","priceSpecification":{"@type":"UnitPriceSpecification","billingDuration":"P1M"},"description":"Unlimited voices up to 60 min, auto-translation, AI summary"}]}</script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.container{text-align:center;max-width:480px;padding:2rem}
-h1{font-size:2.5rem;margin-bottom:.5rem;background:linear-gradient(135deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.version{font-size:.85rem;color:#64748b;margin-bottom:1.5rem}
-p{font-size:1.1rem;line-height:1.6;color:#94a3b8;margin-bottom:2rem}
-.btn{display:inline-block;padding:.85rem 2rem;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;text-decoration:none;border-radius:12px;font-size:1.1rem;font-weight:600;transition:transform .15s,box-shadow .15s}
-.btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(59,130,246,.35)}
-.features{margin-top:2.5rem;font-size:.95rem;color:#64748b;line-height:1.8}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+a{color:inherit;text-decoration:none}
+/* NAV */
+nav{display:flex;align-items:center;justify-content:space-between;padding:1rem 2rem;border-bottom:1px solid #1e293b}
+.nav-brand{font-weight:700;font-size:1.1rem;background:linear-gradient(135deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.nav-ver{font-size:.75rem;color:#475569}
+/* HERO */
+.hero{text-align:center;padding:4rem 1.5rem 3rem;max-width:620px;margin:0 auto}
+.hero-icon{font-size:3.5rem;margin-bottom:1rem}
+h1{font-size:clamp(2rem,5vw,2.8rem);font-weight:800;margin-bottom:.75rem;background:linear-gradient(135deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1.15}
+.tagline{font-size:1.15rem;color:#94a3b8;line-height:1.7;margin-bottom:2.5rem;max-width:480px;margin-left:auto;margin-right:auto}
+/* CTA BUTTONS */
+.cta-group{display:flex;gap:.85rem;justify-content:center;flex-wrap:wrap;margin-bottom:3rem}
+.btn-primary{display:inline-flex;align-items:center;gap:.5rem;padding:.9rem 1.8rem;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;border-radius:12px;font-size:1.05rem;font-weight:700;transition:transform .15s,box-shadow .15s}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(59,130,246,.4)}
+.btn-secondary{display:inline-flex;align-items:center;gap:.5rem;padding:.9rem 1.8rem;background:transparent;color:#94a3b8;border:1px solid #334155;border-radius:12px;font-size:1.05rem;font-weight:600;transition:border-color .15s,color .15s}
+.btn-secondary:hover{border-color:#60a5fa;color:#60a5fa}
+/* FEATURES */
+.section{padding:3rem 1.5rem;max-width:820px;margin:0 auto}
+.section-title{text-align:center;font-size:1.5rem;font-weight:700;color:#f1f5f9;margin-bottom:2rem}
+.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.25rem}
+.feature-card{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:1.4rem;transition:border-color .2s}
+.feature-card:hover{border-color:#60a5fa}
+.feature-icon{font-size:1.8rem;margin-bottom:.6rem}
+.feature-name{font-weight:700;color:#f1f5f9;margin-bottom:.35rem;font-size:.95rem}
+.feature-desc{font-size:.85rem;color:#64748b;line-height:1.5}
+/* HOW IT WORKS */
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1.25rem}
+.step{text-align:center;padding:1.5rem 1rem}
+.step-num{width:2.4rem;height:2.4rem;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;font-weight:800;font-size:1rem;display:flex;align-items:center;justify-content:center;margin:0 auto .75rem}
+.step-title{font-weight:700;color:#f1f5f9;margin-bottom:.35rem;font-size:.95rem}
+.step-desc{font-size:.85rem;color:#64748b;line-height:1.5}
+/* PRICING */
+.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1.25rem;max-width:540px;margin:0 auto}
+.plan-card{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:1.6rem}
+.plan-card.featured{border-color:#8b5cf6;background:linear-gradient(160deg,#1e1b4b,#1e293b)}
+.plan-name{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:.5rem}
+.plan-price{font-size:2rem;font-weight:800;color:#f1f5f9;margin-bottom:.3rem}
+.plan-price span{font-size:.95rem;font-weight:400;color:#64748b}
+.plan-desc{font-size:.82rem;color:#64748b;margin-bottom:1rem;line-height:1.5}
+.plan-features{list-style:none;font-size:.85rem;color:#94a3b8;line-height:2}
+.plan-features li::before{content:"✓  ";color:#34d399}
+/* FOOTER */
+footer{text-align:center;padding:2rem 1.5rem;border-top:1px solid #1e293b;font-size:.82rem;color:#334155}
+footer strong{color:#475569}
 </style>
 </head>
 <body>
-<div class="container">
-<h1>VoiceBox</h1>
-<p class="version">v${VERSION}</p>
-<p>Send a voice message on Telegram — get an instant transcription powered by AI. Translation and summary included with Pro.</p>
-<a class="btn" href="https://t.me/VoiceBoxBot">Open in Telegram</a>
-<div class="features">Free: 5 voices/day &bull; Pro: unlimited + translation + summary</div>
-</div>
+<nav>
+  <span class="nav-brand">🎙 VoiceBox</span>
+  <span class="nav-ver">v${VERSION}</span>
+</nav>
+
+<section class="hero">
+  <div class="hero-icon">🎙</div>
+  <h1>Transcribe Any Voice Message in Seconds</h1>
+  <p class="tagline">VoiceBox is a Telegram bot powered by Whisper AI. Send a voice note — get instant text, translation, and AI summary right in your chat.</p>
+  <div class="cta-group">
+    <a class="btn-primary" href="https://t.me/VoiceBoxBot">📲 Open in Telegram</a>
+    <a class="btn-secondary" href="#pricing">View Pricing</a>
+  </div>
+</section>
+
+<section class="section">
+  <h2 class="section-title">Features</h2>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">🗣️</div>
+      <div class="feature-name">Instant Transcription</div>
+      <div class="feature-desc">Powered by OpenAI Whisper Large v3 Turbo — accurate transcription in 99 languages in seconds.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🌍</div>
+      <div class="feature-name">Auto Translation</div>
+      <div class="feature-desc">Pro plan. Translate your transcription to any language with one command: <code style="color:#a78bfa">/lang fr</code>.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">✨</div>
+      <div class="feature-name">AI Summary</div>
+      <div class="feature-desc">Pro plan. Get a concise 2–3 bullet-point summary after every transcription, powered by Gemini AI.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <div class="feature-name">Works in Any Chat</div>
+      <div class="feature-desc">Works in private chats and group conversations. No app install needed — just Telegram.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔒</div>
+      <div class="feature-name">Private &amp; Secure</div>
+      <div class="feature-desc">Audio files are processed and discarded immediately. No data is stored or shared.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🎙</div>
+      <div class="feature-name">Long Voice Support</div>
+      <div class="feature-desc">Free plan up to 5 min. Pro plan supports voices up to 60 minutes — perfect for meetings and lectures.</div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2 class="section-title">How It Works</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-title">Open VoiceBox on Telegram</div>
+      <div class="step-desc">Start the bot with /start and send your first voice message — no sign-up required.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-title">Send Any Voice Message</div>
+      <div class="step-desc">Record directly in Telegram or forward a voice note. Whisper AI processes it in real time.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-title">Get Text, Translation &amp; Summary</div>
+      <div class="step-desc">Receive the full transcription instantly. Pro users also get translation and AI-generated bullet points.</div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="pricing">
+  <h2 class="section-title">Pricing</h2>
+  <div class="pricing-grid">
+    <div class="plan-card">
+      <div class="plan-name">Free</div>
+      <div class="plan-price">€0 <span>/ forever</span></div>
+      <div class="plan-desc">Perfect to get started</div>
+      <ul class="plan-features">
+        <li>5 voice messages / day</li>
+        <li>Up to 5 min per voice</li>
+        <li>99 languages supported</li>
+        <li>Instant transcription</li>
+      </ul>
+    </div>
+    <div class="plan-card featured">
+      <div class="plan-name" style="color:#a78bfa">Pro</div>
+      <div class="plan-price">€3 <span>/ month</span></div>
+      <div class="plan-desc">For power users &amp; professionals</div>
+      <ul class="plan-features">
+        <li>Unlimited voices / day</li>
+        <li>Up to 60 min per voice</li>
+        <li>Auto translation (/lang)</li>
+        <li>AI summary (Gemini)</li>
+        <li>Priority processing</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>Powered by <strong>Whisper AI</strong> &amp; <strong>Gemini</strong> &mdash; &copy; ${new Date().getFullYear()} VoiceBox &mdash; <a href="https://t.me/VoiceBoxBot" style="color:#60a5fa">@VoiceBoxBot</a></p>
+</footer>
 </body>
 </html>`);
 });

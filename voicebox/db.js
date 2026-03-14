@@ -120,7 +120,7 @@ const stmts = {
 
 const PLAN_LIMITS = {
   free: { daily: 5, cooldownSec: 10 },
-  pro:  { daily: 999999, cooldownSec: 5 },
+  pro:  { daily: 100, cooldownSec: 5 },
 };
 
 /** Get today's date in UTC as YYYY-MM-DD */
