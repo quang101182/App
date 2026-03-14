@@ -1,5 +1,5 @@
-// NoteFlow Service Worker v1.2.8
-var CACHE = 'noteflow-v1.2.8';
+// NoteFlow Service Worker v1.3.0
+var CACHE = 'noteflow-v1.3.0';
 var FILES = ['./', './index.html', './manifest.json', './icon.svg', './prompts.js'];
 
 self.addEventListener('install', function(e) {

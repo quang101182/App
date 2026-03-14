@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <meta name="theme-color" content="#080810">
-<title>NoteFlow v1.2.8 — AI Meeting Notes</title>
+<title>NoteFlow v1.3.0 — AI Meeting Notes</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -12,7 +12,7 @@
 <script src="prompts.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-/* ===== NoteFlow v1.2.8 — CSS ===== */
+/* ===== NoteFlow v1.3.0 — CSS ===== */
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
   --bg:#080810;--surface:rgba(255,255,255,.04);--surface2:rgba(255,255,255,.08);
@@ -227,7 +227,7 @@ footer{padding:12px 24px;text-align:center;font-family:var(--mono);font-size:9px
   <div class="cfg">
     <div class="crow">
       <span class="clbl">Gateway</span>
-      <input type="password" id="gatewayKey" placeholder="WORKER_SECRET" autocomplete="new-password">
+      <input type="password" id="gatewayKey" placeholder="nf_..." autocomplete="new-password">
       <button class="tbtn" onclick="toggleKey('gatewayKey')" title="Show">&#128065;</button>
     </div>
     <div class="crow">
@@ -396,10 +396,10 @@ footer{padding:12px 24px;text-align:center;font-family:var(--mono);font-size:9px
   </div>
 </main>
 
-<footer>NoteFlow v1.2.8 &mdash; AI Meeting Notes</footer>
+<footer>NoteFlow v1.3.0 &mdash; AI Meeting Notes</footer>
 
 <script>
-/* ===== NoteFlow v1.2.8 — JavaScript ===== */
+/* ===== NoteFlow v1.3.0 — JavaScript ===== */
 
 // ── State ──
 let parsedUtterances = [];
@@ -412,7 +412,7 @@ let destDirHandle = null;
 // recording vars removed — upload only
 
 const SPEAKER_COLORS = ['#7c6aff','#00d4aa','#ff4d6d','#22c55e','#f59e0b','#60a5fa','#3b82f6','#a855f7','#14b8a6','#f97316'];
-const GW_URL = 'https://api-gateway.quang101182.workers.dev';
+const GW_URL = 'https://api-gateway-pro.quang101182.workers.dev';
 const FLY_URL = 'https://subwhisper-ffmpeg.fly.dev';
 const CLOUD_WORKER_URL = 'https://subwhisper-worker.quang101182.workers.dev';
 const GW_SAFE = 25 * 1024 * 1024;   // 25MB — above this, use Fly.io
@@ -446,13 +446,13 @@ document.addEventListener('DOMContentLoaded', () => {
 function loadConfig() {
   const th = localStorage.getItem('nf_theme');
   if (th === 'light') { document.body.classList.add('light'); document.getElementById('thmBtn').textContent = '\u2600\uFE0F'; }
-  document.getElementById('gatewayKey').value = localStorage.getItem('nf_gateway') || '';
+  document.getElementById('gatewayKey').value = localStorage.getItem('nf_prokey') || '';
   document.getElementById('aiEngine').value = localStorage.getItem('nf_engine') || 'gemini';
   document.getElementById('summaryLang').value = localStorage.getItem('nf_lang') || 'French';
   document.getElementById('dgModel').value = localStorage.getItem('nf_dgmodel') || 'nova-2';
 }
 function saveConfig() {
-  localStorage.setItem('nf_gateway', document.getElementById('gatewayKey').value);
+  localStorage.setItem('nf_prokey', document.getElementById('gatewayKey').value);
   localStorage.setItem('nf_engine', document.getElementById('aiEngine').value);
   localStorage.setItem('nf_lang', document.getElementById('summaryLang').value);
   localStorage.setItem('nf_dgmodel', document.getElementById('dgModel').value);
@@ -477,13 +477,20 @@ function toggleKey(id) {
 
 // ── API Check ──
 async function checkAPIs() {
-  const key = document.getElementById('gatewayKey').value;
+  const key = getProKey();
   if (!key) return;
   try {
-    const r = await fetch(GW_URL + '/api/deepgram', { method: 'OPTIONS', headers: { 'Authorization': 'Bearer ' + key } });
-    setDot('dotGW', true);
-    setDot('dotDG', true);
+    const r = await fetch(GW_URL + '/config', { headers: { 'X-Pro-Key': key } });
+    if (r.ok) { setDot('dotGW', true); setDot('dotDG', true); }
+    else setDot('dotGW', false);
   } catch { setDot('dotGW', false); }
+}
+function getProKey() {
+  let v = document.getElementById('gatewayKey').value.trim();
+  if (v) return v;
+  try { v = localStorage.getItem('nf_prokey') || ''; } catch(e) {}
+  if (v) document.getElementById('gatewayKey').value = v;
+  return v;
 }
 function setDot(id, ok) {
   const el = document.getElementById(id);
@@ -644,7 +651,7 @@ async function uploadViaFlyDirect(dgParams, ct, file) {
   setProgress(10, 'Uploading to Fly.io...', 'upload');
   const flyRes = await fetch(`${FLY_URL}/deepgram?${dgParams}`, {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': ct },
+    headers: { 'X-Pro-Key': key, 'Content-Type': ct },
     body: file
   });
   if (!flyRes.ok) {
@@ -722,7 +729,7 @@ async function uploadViaR2(dgParams, ct, file) {
 
   setProgress(70, 'Fly.io processing...', 'transcription');
   const flyRes = await fetch(`${FLY_URL}/deepgram?source_url=${encodeURIComponent(downloadUrl)}&${dgParams}`, {
-    method: 'POST', headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' }
+    method: 'POST', headers: { 'X-Pro-Key': key, 'Content-Type': 'application/json' }
   });
   if (!flyRes.ok) { const et = await flyRes.text(); throw new Error(flyRes.status === 503 ? 'Server busy' : `Fly.io ${flyRes.status}: ${et.substring(0,200)}`); }
 
@@ -800,7 +807,7 @@ function uploadWithProgress(url, secret, ct, file) {
     xhr.addEventListener('error', () => reject(new Error('Network error')));
     xhr.addEventListener('timeout', () => reject(new Error('Timeout 30min')));
     xhr.open('POST', url);
-    xhr.setRequestHeader('Authorization', 'Bearer ' + secret);
+    xhr.setRequestHeader('X-Pro-Key', secret);
     xhr.setRequestHeader('Content-Type', ct);
     xhr.timeout = 1800000;
     xhr.send(file);
@@ -993,7 +1000,7 @@ async function generateSummary() {
 
     const resp = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+      headers: { 'X-Pro-Key': key, 'Content-Type': 'application/json' },
       body
     });
 
@@ -1204,7 +1211,7 @@ async function exportPDF(fname) {
 
   // Footer
   doc.setFontSize(7); doc.setTextColor(150);
-  doc.text('Generated by NoteFlow v1.2.8', 20, 290);
+  doc.text('Generated by NoteFlow v1.3.0', 20, 290);
 
   const blob = doc.output('blob');
   await dlBlob(blob, fname + '.pdf', 'application/pdf');
@@ -1239,7 +1246,7 @@ async function exportDOCX(fname) {
     const name = speakerNames[u.speaker] || `Speaker ${u.speaker + 1}`;
     html += `<p class="text"><span class="speaker">[${formatTime(u.start)}] ${name}:</span> ${u.text}</p>`;
   }
-  html += '<p style="font-size:8pt;color:#999;margin-top:20pt">Generated by NoteFlow v1.2.8</p></body></html>';
+  html += '<p style="font-size:8pt;color:#999;margin-top:20pt">Generated by NoteFlow v1.3.0</p></body></html>';
 
   const blob = new Blob([html], { type: 'application/vnd.ms-word;charset=utf-8' });
   await dlBlob(blob, fname + '.doc', 'application/vnd.ms-word');
@@ -1270,7 +1277,7 @@ async function exportMD(fname) {
     const name = speakerNames[u.speaker] || `Speaker ${u.speaker + 1}`;
     md += `**[${formatTime(u.start)}] ${name}:** ${u.text}\n\n`;
   }
-  md += '\n_Generated by NoteFlow v1.2.8_\n';
+  md += '\n_Generated by NoteFlow v1.3.0_\n';
   await dlBlob(new Blob([md], { type: 'text/markdown;charset=utf-8' }), fname + '.md', 'text/markdown');
   toast('Markdown exported');
 }
@@ -1347,6 +1354,95 @@ async function dlBlob(blob, filename, mimeType) {
 document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.key === ',') { e.preventDefault(); toggleConfig(); }
 });
+// ── Pro Onboarding ──
+function showProOnboard() {
+  document.getElementById('proOnboard').style.display = 'flex';
+}
+function _storeKeyAndClose(key) {
+  document.getElementById('gatewayKey').value = key;
+  try { localStorage.setItem('nf_prokey', key); } catch(e) {}
+  document.getElementById('proOnboard').style.display = 'none';
+  checkAPIs();
+}
+function _showErr(msg) {
+  var e = document.getElementById('proOnboardErr');
+  e.textContent = msg; e.style.display = 'block';
+  document.getElementById('proOnboardOk').style.display = 'none';
+}
+function _showOk(msg) {
+  var e = document.getElementById('proOnboardOk');
+  e.textContent = msg; e.style.display = 'block';
+  document.getElementById('proOnboardErr').style.display = 'none';
+}
+function activateByEmail() {
+  var email = document.getElementById('proEmailInput').value.trim();
+  if (!email || !email.includes('@')) { _showErr('Please enter a valid email.'); return; }
+  var btn = document.getElementById('proEmailBtn');
+  btn.textContent = 'Activating...'; btn.disabled = true;
+  fetch(GW_URL + '/api/activate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email, app: 'nf' })
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    btn.textContent = 'Activate'; btn.disabled = false;
+    if (data.ok && data.key) {
+      _showOk('Account activated! Loading...');
+      setTimeout(function() { _storeKeyAndClose(data.key); }, 500);
+    } else {
+      _showErr(data.error || 'Activation failed.');
+    }
+  }).catch(function() {
+    btn.textContent = 'Activate'; btn.disabled = false;
+    _showErr('Connection error. Please try again.');
+  });
+}
+function activateProKey() {
+  var key = document.getElementById('proKeyInput').value.trim();
+  if (!key || !key.startsWith('nf_')) { _showErr('Invalid key format. Keys start with nf_'); return; }
+  fetch(GW_URL + '/api/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Pro-Key': key }
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    if (data.valid) { _storeKeyAndClose(key); }
+    else { _showErr(data.error || 'Invalid key'); }
+  }).catch(function() { _showErr('Connection error. Please try again.'); });
+}
+// Auto-activate from checkout redirect (?activated=1)
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('activated') === '1') {
+    history.replaceState(null, '', window.location.pathname);
+    setTimeout(function() {
+      showProOnboard();
+      document.getElementById('proOnboardDesc').textContent = 'Payment received! Enter the email you used at checkout to activate.';
+    }, 300);
+    return;
+  }
+  setTimeout(function() {
+    if (!getProKey()) showProOnboard();
+  }, 500);
+})();
 </script>
+
+<!-- Pro Onboarding Modal -->
+<div id="proOnboard" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);align-items:center;justify-content:center">
+  <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:16px;padding:32px;max-width:420px;width:90%">
+    <h2 style="margin-bottom:12px;font-family:var(--mono);font-size:20px">Welcome to NoteFlowing</h2>
+    <p id="proOnboardDesc" style="color:var(--muted);margin-bottom:20px;font-size:14px">Enter the email you used at checkout to activate your account.</p>
+    <input type="email" id="proEmailInput" placeholder="your@email.com" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-size:14px;margin-bottom:12px">
+    <button onclick="activateByEmail()" id="proEmailBtn" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;font-size:14px">Activate</button>
+    <p id="proOnboardErr" style="color:#ff4d6d;font-size:12px;margin-top:8px;display:none"></p>
+    <p id="proOnboardOk" style="color:var(--accent2);font-size:12px;margin-top:8px;display:none"></p>
+    <details style="margin-top:16px">
+      <summary style="color:var(--muted);font-size:11px;cursor:pointer">Have a license key instead?</summary>
+      <div style="margin-top:8px">
+        <input type="text" id="proKeyInput" placeholder="nf_..." style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-family:var(--mono);font-size:14px;margin-bottom:8px">
+        <button onclick="activateProKey()" style="width:100%;padding:8px;border-radius:8px;border:none;background:var(--surface);color:var(--text);font-weight:500;cursor:pointer;font-size:13px;border:1px solid var(--border2)">Activate Key</button>
+      </div>
+    </details>
+    <p style="color:var(--muted);font-size:11px;margin-top:16px;text-align:center">Don't have an account? <a href="https://noteflowing.com" target="_blank" style="color:var(--accent)">Get NoteFlowing Pro</a></p>
+  </div>
+</div>
+
 </body>
 </html>

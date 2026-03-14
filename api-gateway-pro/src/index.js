@@ -1,6 +1,6 @@
 /**
- * api-gateway-pro — Cloudflare Worker v1.2.0
- * Isolated gateway for SubWhisper Pro (paid users)
+ * api-gateway-pro — Cloudflare Worker v1.3.0
+ * Isolated gateway for paid apps (SubWhisper Pro + NoteFlowing)
  *
  * Zero dependency on api-gateway — completely independent.
  *
@@ -35,7 +35,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.2.1';
+const VERSION = '1.3.0';
 
 // ── Plan limits (per calendar month) ────────────────────────────────────────
 const PLAN_LIMITS = {
@@ -242,9 +242,10 @@ function checkAdmin(request, env) {
   return true;
 }
 
-function generateProKey() {
+function generateProKey(app = 'swp') {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  let key = 'swp_';
+  const prefix = app === 'nf' ? 'nf_' : 'swp_';
+  let key = prefix;
   for (let i = 0; i < 24; i++) key += chars[Math.floor(Math.random() * chars.length)];
   return key;
 }
@@ -294,8 +295,9 @@ async function handleLemonSqueezyWebhook(request, env) {
     const plan = (status === 'on_trial') ? 'trial' : 'pro';
     const trialEndsAt = attrs.trial_ends_at || null;
 
-    // Check if email already has a key
-    const existingKey = await env.PRO_KV.get(`email:${email.toLowerCase()}`);
+    // Check if email already has a key (app-scoped first, then legacy)
+    let existingKey = await env.PRO_KV.get(`email:${app}:${email.toLowerCase()}`);
+    if (!existingKey) existingKey = await env.PRO_KV.get(`email:${email.toLowerCase()}`);
     if (existingKey) {
       // Reactivate if revoked
       const existingData = await env.PRO_KV.get(`pro:${existingKey}`, 'json');
@@ -310,11 +312,16 @@ async function handleLemonSqueezyWebhook(request, env) {
       return json({ ok: true, action: 'reactivated', email });
     }
 
+    // Detect app from product (custom_data or variant name)
+    const customData = payload.meta?.custom_data || {};
+    const app = customData.app || 'swp';
+
     // Create new pro key
-    const key = generateProKey();
+    const key = generateProKey(app);
     const data = {
       email: email.toLowerCase(),
       plan,
+      app,
       created: new Date().toISOString(),
       subscriptionId,
       usage: { transcriptions: 0, translations: 0 },
@@ -324,7 +331,7 @@ async function handleLemonSqueezyWebhook(request, env) {
     if (trialEndsAt) data.expiresAt = trialEndsAt;
 
     await env.PRO_KV.put(`pro:${key}`, JSON.stringify(data));
-    await env.PRO_KV.put(`email:${email.toLowerCase()}`, key);
+    await env.PRO_KV.put(`email:${app}:${email.toLowerCase()}`, key);
 
     return json({ ok: true, action: 'created', email, plan });
   }
@@ -375,6 +382,7 @@ async function handleActivate(request, env) {
   const body = await request.json().catch(() => null);
   if (!body?.email) return err('email required', 400);
   const email = body.email.trim().toLowerCase();
+  const app = body.app || 'swp';
 
   // Rate limit: 5 attempts per email per hour
   const rlKey = `rl:activate:${email}:${Math.floor(Date.now() / 3600000)}`;
@@ -382,8 +390,9 @@ async function handleActivate(request, env) {
   if (attempts >= 5) return err('Too many activation attempts. Try again in 1 hour.', 429);
   await env.PRO_KV.put(rlKey, String(attempts + 1), { expirationTtl: 3600 });
 
-  // Look up key by email
-  const proKey = await env.PRO_KV.get(`email:${email}`);
+  // Look up key by email (try app-scoped first, then legacy)
+  let proKey = await env.PRO_KV.get(`email:${app}:${email}`);
+  if (!proKey) proKey = await env.PRO_KV.get(`email:${email}`);
   if (!proKey) return err('No subscription found for this email. Please check your email or complete checkout first.', 404);
 
   // Validate key is active
@@ -415,22 +424,32 @@ export default {
       return json({ status: 'ok', version: VERSION, service: 'api-gateway-pro' });
     }
 
-    // ── Visit counter (landing page) ───────────────────────────────────
+    // ── Visit counter (multi-page: swp, ncf) ─────────────────────────
     if (path === '/api/visit') {
+      const page = url.searchParams.get('page') || 'swp';
       const today = new Date().toISOString().slice(0, 10);
-      const totalRaw = await env.PRO_KV.get('stats:visits:total');
-      const todayRaw = await env.PRO_KV.get(`stats:visits:${today}`);
+      // If page=all, return all counters
+      if (page === 'all') {
+        const [swpT, ncfT] = await Promise.all([
+          env.PRO_KV.get('stats:visits:swp:total'),
+          env.PRO_KV.get('stats:visits:ncf:total'),
+        ]);
+        return json({ swp: parseInt(swpT) || 0, ncf: parseInt(ncfT) || 0 });
+      }
+      const prefix = `stats:visits:${page}`;
+      const totalRaw = await env.PRO_KV.get(`${prefix}:total`);
+      const todayRaw = await env.PRO_KV.get(`${prefix}:${today}`);
       let total = parseInt(totalRaw) || 0;
       let todayCount = parseInt(todayRaw) || 0;
       if (method === 'POST') {
         total++;
         todayCount++;
         ctx.waitUntil(Promise.all([
-          env.PRO_KV.put('stats:visits:total', String(total)),
-          env.PRO_KV.put(`stats:visits:${today}`, String(todayCount), { expirationTtl: 90 * 86400 }),
+          env.PRO_KV.put(`${prefix}:total`, String(total)),
+          env.PRO_KV.put(`${prefix}:${today}`, String(todayCount), { expirationTtl: 90 * 86400 }),
         ]));
       }
-      return json({ total, today: todayCount });
+      return json({ page, total, today: todayCount });
     }
 
     // ── LemonSqueezy webhook ─────────────────────────────────────────────
@@ -493,9 +512,11 @@ export default {
       if (path === '/admin/pro/create' && method === 'POST') {
         const body = await request.json();
         if (!body.email) return err('email required');
-        const key = generateProKey();
+        const app = body.app || 'swp';
+        const key = generateProKey(app);
         const data = {
           email: body.email,
+          app,
           plan: body.plan || 'pro',
           created: new Date().toISOString(),
           usage: { transcriptions: 0, translations: 0 },
@@ -510,6 +531,7 @@ export default {
           data.expiresAt = exp.toISOString();
         }
         await env.PRO_KV.put(`pro:${key}`, JSON.stringify(data));
+        await env.PRO_KV.put(`email:${app}:${body.email.toLowerCase()}`, key);
         return json({ ok: true, key, ...data });
       }
 
