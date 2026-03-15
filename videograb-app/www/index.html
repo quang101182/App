@@ -1,4 +1,4 @@
-<!-- VideoGrab v5.0 APK — Video Browser & Downloader — Native Android -->
+<!-- VideoGrab v5.2 APK — Video Browser & Downloader — Native Android -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0a0a0f">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <!-- manifest not needed in native APK -->
-<title>VideoGrab v5.0 APK</title>
+<title>VideoGrab v5.2 APK</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -289,7 +289,7 @@ html,body{max-width:100vw;overflow-x:hidden}
 <div class="setup-screen" id="setupScreen" style="display:none">
   <div class="setup-card">
     <h1>VideoGrab</h1>
-    <div class="sub">v4.8 — Configuration initiale</div>
+    <div class="sub">v5.2 — Configuration initiale</div>
     <div class="setting-group">
       <label>URL du Gateway</label>
       <input id="setupGw" placeholder="https://api-gateway.xxxxx.workers.dev">
@@ -393,7 +393,7 @@ html,body{max-width:100vw;overflow-x:hidden}
   <div class="browser-frame" id="browserFrame">
     <div class="browser-empty" id="emptyState">
       <div style="width:100%;max-width:600px">
-        <h2 style="text-align:center">VideoGrab v5.0 <span style="font-size:.6em;opacity:.5">APK</span></h2>
+        <h2 style="text-align:center">VideoGrab v5.2 <span style="font-size:.6em;opacity:.5">APK</span></h2>
         <p style="text-align:center;margin-bottom:12px">Entrez une URL ou choisissez un favori</p>
         <div id="bmHome"></div>
         <div id="navHistoryHome"></div>
@@ -411,10 +411,10 @@ html,body{max-width:100vw;overflow-x:hidden}
 
 <script>
 // ═══════════════════════════════════════════════════════════════
-// VideoGrab v5.0 — Core Logic
+// VideoGrab v5.2 — Core Logic
 // ═══════════════════════════════════════════════════════════════
 
-const VERSION = '4.8';
+const VERSION = '5.2';
 const $ = id => document.getElementById(id);
 let _deferredInstall = null;
 
@@ -522,6 +522,13 @@ function init() {
 
   // Check API status
   checkApiStatus();
+
+  // Warn before closing with active downloads
+  window.addEventListener('beforeunload', e => {
+    const active = dlQueue.some(d => ['seg','ffmpeg','pending','queued','downloading'].includes(d.status))
+      || videoDownloadQueue.some(q => q.status === 'active' || q.status === 'waiting');
+    if (active) { e.preventDefault(); e.returnValue = ''; }
+  });
 }
 
 // ── Setup ──
@@ -723,12 +730,7 @@ function resolveVideoUrl(url) {
   return url;
 }
 
-function formatSize(bytes) {
-  if (!bytes || bytes <= 0) return '';
-  if (bytes < 1048576) return (bytes / 1024).toFixed(0) + ' KB';
-  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
-  return (bytes / 1073741824).toFixed(2) + ' GB';
-}
+function formatSize(bytes) { if (!bytes || bytes <= 0) return ''; return fmtSize(bytes); }
 async function fetchVideoSize(vid) {
   // HLS/DASH playlists don't have a meaningful Content-Length
   if (/\.(m3u8|mpd)(\?|$)/i.test(vid.url)) { vid.size = -1; renderVideoList(); return; }
@@ -810,6 +812,7 @@ function renderVideoList() {
         </div>
       </div>
       <div class="vid-actions">
+        <button class="vid-btn" onclick="copyVideoUrl(${i})" title="Copier URL">&#128203;</button>
         <button class="vid-btn" onclick="previewVideo(${i})" title="Preview">&#9654;</button>
         <button class="vid-btn dl-btn" onclick="downloadVideo(${i})" title="Telecharger">&#11015;</button>
       </div>
@@ -859,6 +862,13 @@ function closePlayer() {
   $('playerOverlay').classList.remove('open');
   $('dlProgress').classList.remove('active');
   currentDlUrl = null;
+}
+
+// ── Copy video URL ──
+function copyVideoUrl(index) {
+  const v = detectedVideos[index];
+  if (!v) return;
+  navigator.clipboard.writeText(v.url).then(() => toast('URL copiee', 's')).catch(() => toast('Echec copie', 'e'));
 }
 
 // ── Download Queue ──
@@ -1115,7 +1125,7 @@ function removeDlItem(id) {
 }
 function clearFinishedDls() {
   dlQueue.forEach(dl => {
-    if (dl.status === 'ready' || dl.status === 'error' || dl.status === 'cancelled') {
+    if (['ready','done','error','cancelled'].includes(dl.status)) {
       dl.status = 'removed';
       document.getElementById('dl-' + dl.id)?.remove();
     }
@@ -1350,8 +1360,14 @@ async function startHlsSegmentFallback(m3u8Url, filename) {
     for (let i = 0; i < segmentUrls.length; i += 4) {
       const batch = segmentUrls.slice(i, i + 4);
       const results = await Promise.all(batch.map(async u => {
-        const r = await fetch(buildRawUrl(u));
-        return r.ok ? await r.arrayBuffer() : new ArrayBuffer(0);
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const r = await fetch(buildRawUrl(u));
+            if (r.ok) return await r.arrayBuffer();
+          } catch (e) {}
+          if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        }
+        return new ArrayBuffer(0);
       }));
       for (const buf of results) { allChunks.push(new Uint8Array(buf)); totalBytes += buf.byteLength; }
       const done = Math.min(i + 4, segmentUrls.length);
@@ -1443,7 +1459,7 @@ function renderNavHistory() {
   h.forEach(item => {
     const ago = formatAgo(now - item.ts);
     const display = item.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
-    html += `<div class="history-item" onclick="navigate('${item.url.replace(/'/g, "\\'")}')">
+    html += `<div class="history-item" data-url="${esc(item.url)}" onclick="navigate(this.dataset.url)">
       <div class="history-dot"></div>
       <div class="history-url">${esc(display)}</div>
       <div class="history-time">${ago}</div>
@@ -1538,15 +1554,47 @@ function renderBookmarksHome() {
     const colors = ['#7c6af7','#4facfe','#34d399','#f87171','#facc15','#f472b6','#a78bfa','#38bdf8'];
     const c = colors[i % colors.length];
     const domain = b.url.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,'');
-    h += `<div class="bm-card" onclick="navigate('${b.url.replace(/'/g,"\\'")}')">
+    h += `<div class="bm-card" data-url="${esc(b.url)}" onclick="navigate(this.dataset.url)">
       <div class="bm-icon" style="background:${c}">${b.icon || b.name.charAt(0).toUpperCase()}</div>
-      <div class="bm-name">${b.name}</div>
-      <div class="bm-label">${domain}</div>
+      <div class="bm-name">${esc(b.name)}</div>
+      <div class="bm-label">${esc(domain)}</div>
       <button class="bm-del" onclick="event.stopPropagation();removeBookmark(${i})" title="Supprimer">✕</button>
     </div>`;
   });
+  h += '</div>';
+  h += '<div style="display:flex;gap:6px;padding:8px 12px">';
+  h += '<button onclick="exportBookmarks()" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--dim);font-size:.7rem;font-weight:600;cursor:pointer">Exporter</button>';
+  h += '<button onclick="importBookmarks()" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--dim);font-size:.7rem;font-weight:600;cursor:pointer">Importer</button>';
   h += '</div></div>';
   el.innerHTML = h;
+}
+
+function exportBookmarks() {
+  const bm = getBookmarks();
+  const blob = new Blob([JSON.stringify(bm, null, 2)], { type: 'application/json' });
+  triggerBlobDownload(blob, 'videograb-bookmarks.json');
+  toast('Favoris exportes', 's');
+}
+
+function importBookmarks() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.json';
+  input.onchange = async () => {
+    try {
+      const text = await input.files[0].text();
+      const imported = JSON.parse(text);
+      if (!Array.isArray(imported)) throw new Error('Format invalide');
+      const bm = getBookmarks();
+      let added = 0;
+      for (const b of imported) {
+        if (b.url && !bm.some(x => x.url === b.url)) { bm.push({ name: b.name || b.url, url: b.url, icon: b.icon || '' }); added++; }
+      }
+      saveBookmarks(bm);
+      renderBookmarksHome();
+      toast(`${added} favori(s) importe(s)`, 's');
+    } catch (e) { toast('Erreur import: ' + e.message, 'e'); }
+  };
+  input.click();
 }
 
 function toggleBookmark() {
