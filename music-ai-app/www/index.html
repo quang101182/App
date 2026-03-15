@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>music·ai v3.15.3-cap — Discovery Engine</title>
+<title>music·ai v3.16.0-cap — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -483,7 +483,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.15.3</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.16.0</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -835,10 +835,12 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.15.3) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,version:'3.15.3'};
+// ── SERVER PROFILE (music-ai v3.16.0) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,artistEquity:{influence:{},spotlightIndex:0},version:'3.16.0'};
 let _serverProfileReady=null; // v3.14.3 — Promise pour attendre le chargement serveur
 let _syncTimer=null;
+// ── ARTIST EQUITY CACHE (mémoire session uniquement) ──
+let _artistEquityCache={underrepScores:{},lastShuffledList:[],currentSpotlight:[]};
 const MUSICAI_USERID='default';
 async function loadServerProfile(){
   const secret=getGwSecret();if(!secret)return;
@@ -884,6 +886,73 @@ function getEraRange(selectedEras){
   return minY<9999?[minY,maxY]:null;
 }
 
+// ── ARTIST EQUITY ALGORITHM v3.16.0 ──
+// Shuffle pondéré Efraimidis-Spirakis : artistes sous-représentés montent en tête
+function weightedArtistShuffle(artists){
+  if(artists.length<=1)return[...artists];
+  if(artists.length<=3){// Fisher-Yates classique pour petites listes
+    const a=[...artists];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;
+  }
+  const equity=(_serverProfile.artistEquity||{}).influence||{};
+  const total=Math.max(_serverProfile.totalSuggestions||1,1);
+  const expectedRate=total/artists.length;
+  const scored=artists.map(name=>{
+    const data=equity[name]||{direct:0,indirect:0,lastSeen:0};
+    const totalInfluence=data.direct+data.indirect*0.5;
+    const underrep=Math.max(0,1-(totalInfluence/Math.max(expectedRate,1)));
+    const daysSince=data.lastSeen?(Date.now()-data.lastSeen)/(86400000):30;
+    const freshBonus=Math.min(daysSince/30,0.5);
+    const weight=underrep+freshBonus+0.1;// plancher 0.1
+    // Efraimidis-Spirakis : sortKey = random^(1/weight)
+    return{name,weight,sortKey:Math.pow(Math.random(),1/weight)};
+  });
+  scored.sort((a,b)=>b.sortKey-a.sortKey);
+  const result=scored.map(s=>s.name);
+  // Anti-répétition: si top 3 identique au dernier appel, rotation
+  const last=_artistEquityCache.lastShuffledList;
+  if(last.length===result.length&&result.length>=3&&result.slice(0,3).every((n,i)=>n===last[i])){
+    result.push(...result.splice(0,3));
+  }
+  _artistEquityCache.lastShuffledList=result;
+  _artistEquityCache.underrepScores={};
+  scored.forEach(s=>_artistEquityCache.underrepScores[s.name]=s.weight);
+  return result;
+}
+// Spotlight rotatif : met en avant 2-3 artistes par appel, cycle garanti
+function pickSpotlightArtists(shuffledList){
+  const n=shuffledList.length;
+  if(n===0)return[];
+  if(n<=3){_artistEquityCache.currentSpotlight=[...shuffledList];return[...shuffledList];}
+  const spotSize=n<=6?2:3;
+  if(!_serverProfile.artistEquity)_serverProfile.artistEquity={influence:{},spotlightIndex:0};
+  let idx=_serverProfile.artistEquity.spotlightIndex||0;
+  const spotlight=[];
+  for(let i=0;i<spotSize;i++)spotlight.push(shuffledList[(idx+i)%n]);
+  _serverProfile.artistEquity.spotlightIndex=(idx+spotSize)%n;
+  _artistEquityCache.currentSpotlight=spotlight;
+  return spotlight;
+}
+// Tracking d'influence : MAJ compteurs après chaque reco validée
+function trackArtistInfluence(rec,artists){
+  if(!artists||!artists.length)return;
+  if(!_serverProfile.artistEquity)_serverProfile.artistEquity={influence:{},spotlightIndex:0};
+  const eq=_serverProfile.artistEquity;if(!eq.influence)eq.influence={};
+  const recArtist=(rec.artist||'').toLowerCase();
+  const recWhy=(rec.why||'').toLowerCase();
+  const recStory=(rec.story||'').toLowerCase();
+  const spotlight=(_artistEquityCache.currentSpotlight||[]).map(s=>s.toLowerCase());
+  artists.forEach(name=>{
+    if(!eq.influence[name])eq.influence[name]={direct:0,indirect:0,lastSeen:0};
+    const n=name.toLowerCase();
+    // Influence directe : artiste cité dans why/story, ou c'est l'artiste reco, ou était en spotlight
+    if(recWhy.includes(n)||recStory.includes(n)||recArtist.includes(n)||spotlight.includes(n)){
+      eq.influence[name].direct++;
+      eq.influence[name].lastSeen=Date.now();
+    }
+  });
+  scheduleSync();
+}
+
 // ── VALIDATION RECO ──
 function validateRecommendation(rec){
   const errors=[];
@@ -902,6 +971,14 @@ function validateRecommendation(rec){
     const last2=ST.sessionThread.slice(-2).map(x=>(x.genre||'').toLowerCase().split(/[\/,\s]/)[0].trim());
     const thisGenre=(rec.genre||'').toLowerCase().split(/[\/,\s]/)[0].trim();
     if(thisGenre&&last2.every(g=>g===thisGenre))errors.push(`3x même genre: ${thisGenre}`);
+  }
+  // ArtistEquity: vérifier lien artiste quand aventure basse
+  const adv=p.adventurousness??0.4;
+  const refArtists=p.artists||[];
+  if(adv<=0.3&&refArtists.length>0){
+    const rWhy=(rec.why||'').toLowerCase();const rStory=(rec.story||'').toLowerCase();const rArtist=(rec.artist||'').toLowerCase();
+    const hasLink=refArtists.some(n=>{const nl=n.toLowerCase();return rWhy.includes(nl)||rStory.includes(nl)||rArtist.includes(nl);});
+    if(!hasLink)errors.push('adv_low: aucun lien avec artistes de référence');
   }
   return{valid:errors.length===0,errors};
 }
@@ -2072,12 +2149,16 @@ function buildSystemPrompt(mode,retryN){
   const advInstr=adv>=0.7?'Aventure élevée: propose des artistes peu connus, sous-genres inattendus. Tu peux t\'éloigner des artistes de référence.'
     :adv<=0.3?'Confort: OBLIGATOIRE — choisis des artistes similaires aux artistes de référence, même univers sonore, même énergie. Reste dans la zone de confort.'
     :'Mix équilibré: alterne entre artistes proches des références (univers similaire) et découvertes modérées.';
-  // v3.15.0 — renforcer artistes de référence
-  const hasRefArtists=(p.artists||[]).length>0;
+  // v3.16.0 — ArtistEquity : shuffle pondéré + spotlight rotatif
+  const rawArtists=p.artists||[];
+  const shuffledArtists=weightedArtistShuffle(rawArtists);
+  const spotlight=mode!=='shuffle'?pickSpotlightArtists(shuffledArtists):[];
+  const hasRefArtists=shuffledArtists.length>0;
+  const spotlightSection=spotlight.length>0?`\n🔦 SPOTLIGHT — Cette reco DOIT être spécifiquement influencée par: ${spotlight.join(', ')}.\nCite explicitement le lien avec au moins un de ces artistes dans le champ "why".\nLiens valides: même scène, collaborateur, influence directe, même producteur, même label, même mouvement.`:'';
   const artistEnforce=hasRefArtists&&mode!=='shuffle'?`RÈGLE ARTISTES DE RÉFÉRENCE:
-- Les artistes de référence [${(p.artists||[]).join(', ')}] définissent TON UNIVERS SONORE de base.
+- Les artistes de référence [${shuffledArtists.join(', ')}] définissent TON UNIVERS SONORE de base.
 - ${adv<=0.3?'TOUTES les recos doivent être dans l\'univers sonore de ces artistes (collaborateurs, même label, même scène, même genre/époque).':'Au moins 1 reco sur 3 doit être directement liée à ces artistes (collaborateur, influence, même scène).'}
-- Le champ "youtube_query" doit TOUJOURS être: "NomArtiste NomTitre official audio" (PAS de remix/live/cover sauf demandé).`:'';
+- Le champ "youtube_query" doit TOUJOURS être: "NomArtiste NomTitre official audio" (PAS de remix/live/cover sauf demandé).${spotlightSection}`:'';
   const modeInstr=mode==='discovery'?'MODE DÉCOUVERTE: pépite RADICALEMENT inattendue — artiste inconnu, genre non représenté, époque différente. discovery_score > 0.8. Surprise absolue.':
     mode==='onetap'?'ONE-TAP: reco parfaite pour CE moment précis. Variété maximale vs sessions précédentes.':
     mode==='shuffle'?'MODE SHUFFLE: ignore TOTALEMENT le profil. Genre, époque, culture 100% aléatoires. discovery_score > 0.9. Peut être n\'importe quoi : bossa nova 1960, metal norvégien, pop coréenne, blues malien...':'';
@@ -2117,7 +2198,7 @@ function buildSystemPrompt(mode,retryN){
 PROFIL COMPLET:
 - Genres: ${(p.genres||[]).join(', ')||'non définis'}
 - Époques: ${p.eras&&p.eras.length?p.eras.map(id=>{const e=ERAS.find(x=>x.id===id);return e?e.label+' '+e.range:id}).join(', '):'toutes'}
-- Artistes de référence: ${(p.artists||[]).join(', ')||'non définis'}
+- Artistes de référence: ${shuffledArtists.join(', ')||'non définis'}
 - Contextes d'écoute: ${allContexts}
 - Humeur actuelle: ${mood}
 - Niveau aventure: ${Math.round(adv*100)}% — ${advInstr}
@@ -2221,7 +2302,10 @@ async function getRecommendation(mode){
     ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
     if(ST.sessionThread.length>8)ST.sessionThread.shift();
     saveThread(ST.sessionThread);
-    const p=getProfile();if(p){p.interactions=(p.interactions||0)+1;saveProfile(p)}
+    // v3.16.0 — ArtistEquity tracking
+    const pTrack=getProfile();
+    if(pTrack&&(pTrack.artists||[]).length>0&&mode!=='shuffle')trackArtistInfluence(rec,pTrack.artists);
+    if(pTrack){pTrack.interactions=(pTrack.interactions||0)+1;saveProfile(pTrack)}
     if(ST.continuousMode&&(getYtKey()||getAllYtKeys().length||getGwSecret())){const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;ytPlay({title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`});}
   }catch(e){resultEl.innerHTML=`<div style="color:#ef4444;font-size:13px;">⚠️ ${esc(e.message)}</div>`}
   finally{if(mode==='onetap')document.getElementById('onetap-icon').textContent='♪';ST.isLoading=false;}
