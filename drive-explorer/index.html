@@ -608,8 +608,18 @@ const DriveAPI = {
     await sem.acquire();
     try {
       await AuthModule.ensureToken();
-      const resp = await gapi.client.drive.files.get({ fileId, alt: 'media' });
-      return resp.body;
+      // Try direct download first (works for uploaded files)
+      try {
+        const resp = await gapi.client.drive.files.get({ fileId, alt: 'media' });
+        return resp.body;
+      } catch (e) {
+        // If 403/404, file might be a Google Doc — use export as plain text
+        if (e.status === 403 || e.status === 404) {
+          const resp = await gapi.client.drive.files.export({ fileId, mimeType: 'text/plain' });
+          return resp.body;
+        }
+        throw e;
+      }
     } finally {
       sem.release();
     }
@@ -660,7 +670,7 @@ const Parsers = {
 
     const pm = content.match(/Pas\s*[:=]\s*([\d\s.,]+)/i);
     if (!pm) return null;
-    const steps = parseInt(pm[1].replace(/[\s.,]/g, ''));
+    const steps = parseInt(pm[1].replace(/[\s.,]/g, ''), 10);
     return { date, steps: isNaN(steps) ? 0 : steps };
   },
 
@@ -671,13 +681,13 @@ const Parsers = {
 
     const result = { date, protein: null, carbs: null, fat: null, calories: null, meals: [] };
 
-    // Macros: P Xg | G Xg | L Xg | Cal X kcal
-    const mm = content.match(/P\s*([\d.,]+)\s*g\s*\|\s*G\s*([\d.,]+)\s*g\s*\|\s*L\s*([\d.,]+)\s*g\s*\|\s*Cal\s*([\d.,]+)\s*kcal/i);
+    // Macros: P Xg | G Xg | L Xg | Cal X kcal (Cal peut contenir des espaces: "1 327")
+    const mm = content.match(/P\s*([\d\s.,]+)\s*g\s*\|\s*G\s*([\d\s.,]+)\s*g\s*\|\s*L\s*([\d\s.,]+)\s*g\s*\|\s*Cal\s*([\d\s.,]+)\s*kcal/i);
     if (mm) {
-      result.protein = parseFloat(mm[1].replace(',', '.'));
-      result.carbs = parseFloat(mm[2].replace(',', '.'));
-      result.fat = parseFloat(mm[3].replace(',', '.'));
-      result.calories = parseFloat(mm[4].replace(',', '.'));
+      result.protein = parseFloat(mm[1].replace(/[\s,]/g, c => c === ',' ? '.' : ''));
+      result.carbs = parseFloat(mm[2].replace(/[\s,]/g, c => c === ',' ? '.' : ''));
+      result.fat = parseFloat(mm[3].replace(/[\s,]/g, c => c === ',' ? '.' : ''));
+      result.calories = parseFloat(mm[4].replace(/[\s,]/g, c => c === ',' ? '.' : ''));
     }
 
     // Repas lines
@@ -741,8 +751,10 @@ const Parsers = {
   },
 
   parseVeilleLog(content, filename) {
+    // Support both YYYY-MM-DD and YYYY-WNN (week format)
     const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
-    const date = dateMatch ? dateMatch[1] : null;
+    const weekMatch = filename.match(/(\d{4}-W\d{2})/i);
+    const date = dateMatch ? dateMatch[1] : (weekMatch ? weekMatch[1] : null);
 
     const sections = [];
     let currentProvider = null;
@@ -1118,6 +1130,11 @@ const DataModule = {
     stepData.sort((a, b) => a.date.localeCompare(b.date));
     macroData.sort((a, b) => a.date.localeCompare(b.date));
 
+    console.log('[Fitness] Parsed data:', { weight: weightData.length, steps: stepData.length, macros: macroData.length });
+    if (!weightData.length) console.warn('[Fitness] weightData vide — fichiers weight_sleep trouvés:', weightFiles.length, weightFiles.map(f => f.name));
+    if (!stepData.length) console.warn('[Fitness] stepData vide — fichiers step trouvés:', stepFiles.length, stepFiles.map(f => f.name));
+    if (!macroData.length) console.warn('[Fitness] macroData vide — fichiers fitness_log trouvés:', fitnessLogFiles.length, fitnessLogFiles.map(f => f.name));
+
     State.parsed.fitness = { weight: weightData, steps: stepData, macros: macroData };
     ChartModule.renderFitnessCharts(weightData, stepData, macroData);
   },
@@ -1192,19 +1209,21 @@ const DataModule = {
 
   // ---- VEILLE ----
   async loadVeille() {
-    // Look for veille files in memory folder
-    const veilleFiles = State.data.memory.filter(f => /veille/i.test(f.name));
-
-    if (!veilleFiles.length) {
-      // Try sessions too
-      const sessionVeille = State.data.sessions.filter(f => /veille/i.test(f.name));
-      veilleFiles.push(...sessionVeille);
-    }
+    // Look for veille files in ALL scanned folders (memory, sessions, fitness)
+    const veilleFiles = [];
+    const allSources = [State.data.memory, State.data.sessions, State.data.fitness, State.data.pipeline, State.data.backups];
+    allSources.forEach(source => {
+      source.filter(f => /veille/i.test(f.name)).forEach(f => {
+        // Avoid duplicates by ID
+        if (!veilleFiles.some(v => v.id === f.id)) veilleFiles.push(f);
+      });
+    });
 
     if (!veilleFiles.length) {
       document.getElementById('veilleGrid').innerHTML = '<div class="empty-state"><i class="fas fa-satellite-dish"></i><p>Aucun fichier de veille trouve</p></div>';
       return;
     }
+    console.log('[Veille] Fichiers trouvés:', veilleFiles.map(f => f.name));
 
     const veilleData = [];
     const contents = await Promise.all(
@@ -1227,6 +1246,24 @@ const DataModule = {
     const d = document.createElement('div');
     d.textContent = s;
     return d.innerHTML;
+  },
+
+  // Masquer les noms de fichiers explicites/adultes
+  sanitizeName(name) {
+    if (!name) return 'Sans nom';
+    const EXPLICIT_WORDS = /gloryhole|swallow|eporner|xhamster|xvideos|pornhub|brazzers|bangbros|naughty|blowjob|creampie|gangbang|milf|hentai|threesome|anal|cum|pussy|fuck|dildo|orgasm|squirt|bdsm|fetish|xxx|porn/i;
+    const JAV_CODE = /^[A-Z]{2,5}-\d{2,4}$/;
+    if (EXPLICIT_WORDS.test(name)) {
+      return 'Fichier #' + name.slice(0, 3).toUpperCase() + '***';
+    }
+    // Masquer les noms contenant des mots explicites dans une chaîne plus longue
+    const parts = name.split(/[-_\s.]+/);
+    for (const part of parts) {
+      if (EXPLICIT_WORDS.test(part)) {
+        return 'Fichier #' + name.slice(0, 3).toUpperCase() + '***';
+      }
+    }
+    return name;
   }
 };
 
@@ -1492,7 +1529,7 @@ const ChartModule = {
               callbacks: {
                 label: function(ctx) {
                   const e = scoredEntries[ctx.dataIndex];
-                  return `${e.file_name || '?'}: ${e.score} (${e.grade})`;
+                  return `${DataModule.sanitizeName(e.file_name)}: ${e.score} (${e.grade})`;
                 }
               }
             }
@@ -1657,7 +1694,7 @@ const UIModule = {
       entry.innerHTML = `
         <div class="grade-badge" style="color:${color}">${e.grade || '?'}</div>
         <div class="entry-info">
-          <div class="entry-name">${DataModule.escHtml(e.file_name || 'Sans nom')}</div>
+          <div class="entry-name">${DataModule.escHtml(DataModule.sanitizeName(e.file_name))}</div>
           <div class="entry-meta">${dateStr}${e.action ? ' &middot; ' + DataModule.escHtml(e.action) : ''}</div>
         </div>
         <div class="entry-score" style="color:${color}">${typeof e.score === 'number' ? e.score : '—'}</div>
