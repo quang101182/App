@@ -709,6 +709,7 @@
           <div class="suno-actions">
             <button class="btn-ghost" onclick="generateSunoPrompt()">🔄 Regénérer</button>
             <button class="btn-ghost" onclick="saveSunoToHistory()">💾 Sauvegarder</button>
+            <button class="btn-ghost" onclick="exportSunoHistory('single')">📥 Exporter</button>
           </div>
         </div>
         <!-- History -->
@@ -3150,29 +3151,60 @@ Tu dois retourner un JSON avec EXACTEMENT ces 3 champs:
 
 3. "lyrics": ${isInstrumental?'VIDE "" car instrumental.':
   `Paroles structurées avec tags Suno v5. RÈGLES CRITIQUES:
-   STRUCTURE OBLIGATOIRE (utiliser ces tags entre crochets):
-   - [Intro] — ouverture instrumentale ou vocale douce
-   - [Verse 1], [Verse 2] — couplets (2-6 lignes chacun, 7-10 syllabes/ligne)
-   - [Pre-Chorus] — montée de tension, phrases courtes
-   - [Chorus] — refrain HOOK mémorable (2-3 lignes max, mots percutants). RÉPÉTER en entier à chaque occurrence (pas de raccourci "[repeat chorus]")
-   - [Bridge] — contraste, changement de perspective
-   - [Outro] ou [Fade Out] — conclusion
-   TAGS VOCAUX OPTIONNELS (dans les lyrics): [Whispered], [Spoken Word], [Belted], [Falsetto], [Harmonies], [Ad-libs], [Rapped], [Melodic Rap]
-   TAGS DYNAMIQUES: [Drop], [Build], [Break], [Instrumental], [Guitar Solo], [Breakdown], [Crescendo]
-   FORMATAGE: virgules = micro-pauses, tirets = syllabes étendues (lo-ove), "..." = delivery hésitant
-   LONGUEUR: 30-40 lignes optimal (~200-300 mots). Moins de 15 lignes = trop court.
 
-   ⚠️ TERMES INTERDITS PAR SUNO (rejet automatique):
-   - ZÉRO jurons/vulgarités (fuck, shit, bitch, damn, hell utilisé comme juron, ass, dick, pussy, cunt, cock)
+   ⚠️ LONGUEUR STRICTE: EXACTEMENT 30 à 40 lignes (tags structurels INCLUS dans le compte). Plus de 45 lignes = Suno rushera la fin. Moins de 20 = trop court. COMPTE tes lignes.
+
+   TAGS STRUCTURELS — TOUJOURS entre [CROCHETS], JAMAIS entre (parenthèses):
+   - [Intro] — ouverture instrumentale ou vocale douce (1-2 lignes)
+   - [Verse 1], [Verse 2] — couplets (3-4 lignes chacun, 7-10 syllabes/ligne)
+   - [Pre-Chorus] — montée de tension (2 lignes courtes)
+   - [Chorus] — refrain HOOK mémorable (2-3 lignes max, mots percutants). COPIER le chorus en entier à chaque apparition.
+   - [Bridge] — contraste émotionnel (2-3 lignes)
+   - [Outro] ou [Fade Out] — conclusion (1-2 lignes)
+   TAGS VOCAUX dans les lyrics: [Whispered], [Falsetto], [Harmonies], [Ad-libs], [Belted], [Spoken Word]
+   TAGS DYNAMIQUES: [Drop], [Build], [Break], [Instrumental]
+   FORMATAGE: virgules = micro-pauses, tirets = syllabes étendues (lo-ove), "..." = delivery hésitant
+
+   QUALITÉ POÉTIQUE EXIGÉE:
+   - Images sensorielles FORTES et ORIGINALES (pas de clichés "lonely streets", "broken heart")
+   - Le chorus doit être un EARWORM — simple, percutant, chantable
+   - Chaque section doit avoir sa propre énergie émotionnelle
+   - Variété dans les rimes (pas AABB systématique)
+
+   ⚠️ TERMES INTERDITS PAR SUNO (rejet automatique de la génération):
+   - ZÉRO jurons/vulgarités (fuck, shit, bitch, damn, hell comme juron, ass, dick, pussy, cunt, cock)
    - ZÉRO violence graphique directe ("I'll kill/murder you", "blood pouring")
    - ZÉRO contenu sexuel explicite
    - ZÉRO discours de haine/discrimination
-   - Utilise des MÉTAPHORES plutôt que du langage cru. Le filtre Suno est contextuel et inconsistant — mieux vaut être prudent.`}
+   - Utilise des MÉTAPHORES plutôt que du langage cru.`}
 
 ANTI-REPEAT: Propose quelque chose de DIFFÉRENT à chaque génération.
 
 RÈGLE ABSOLUE: JSON UNIQUEMENT. Zéro texte avant/après. Zéro backtick. Zéro markdown.
 {"title":"...","style":"...","lyrics":"..."}`;
+}
+
+// Force Claude Sonnet for Suno — best lyric quality (batch-tested)
+async function callSunoAI(sys,msg,temperature){
+  const SUNO_MODEL='claude-sonnet-4-6';
+  const gwSecret=getGwSecret();
+  const cfg=getConfig();
+  const useGateway=!!gwSecret;
+  const apiKey=useGateway?'':cfg.keys?.claude||'';
+  if(!useGateway&&!apiKey)throw new Error('Gateway ou clé Claude requise pour Suno — ouvre ⚙️');
+  const base=useGateway?getGwUrl().replace(/\/$/,''):'';
+  const url=useGateway?base+'/api/claude':'https://api.anthropic.com/v1/messages';
+  const headers=useGateway?{'Authorization':'Bearer '+gwSecret,'Content-Type':'application/json'}:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','Content-Type':'application/json'};
+  const body=JSON.stringify({model:SUNO_MODEL,max_tokens:2000,temperature:temperature||0.85,system:sys,messages:[{role:'user',content:msg}]});
+  const ac=new AbortController();
+  const tm=setTimeout(()=>ac.abort(),30000);
+  try{
+    const r=await fetch(url,{method:'POST',headers,body,signal:ac.signal});
+    clearTimeout(tm);
+    if(!r.ok){const t=await r.text();throw new Error(`Claude ${r.status}: ${t.substring(0,150)}`);}
+    const d=await r.json();
+    return(d.content||[])[0]?.text||'';
+  }catch(e){clearTimeout(tm);if(e.name==='AbortError')throw new Error('Timeout 30s — réessaie');throw e;}
 }
 
 async function generateSunoPrompt(){
@@ -3195,7 +3227,8 @@ async function generateSunoPrompt(){
     const sys=buildSunoSystemPrompt(_sunoMode,opts);
     const userMsg=`Génère un prompt Suno v5 maintenant. Mode: ${_sunoMode}.${opts.mood!=='auto'?' Mood: '+opts.mood:''}.${opts.artist?' Artiste ref: '+opts.artist:''}`;
     const temp=_sunoMode==='random'?1.0:_sunoMode==='prefs'?0.8:_sunoMode==='artist'?0.75:0.85;
-    const raw=await callAI(sys,userMsg,temp);
+    // Force Claude Sonnet for best lyric quality (batch test proven)
+    const raw=await callSunoAI(sys,userMsg,temp);
     // Parse response
     let result;
     try{
@@ -3260,9 +3293,12 @@ function renderSunoHistory(){
     const d=new Date(h.ts);
     const dateStr=d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
     const modeLabels={random:'🎲',prefs:'💜',playlist:'💿',artist:'🎤',mix:'✨'};
-    return `<div class="suno-hist-item" onclick="loadSunoFromHistory(${i})">
-      <div class="suno-hist-title">${modeLabels[h.mode]||'🎹'} ${esc(h.title)}</div>
-      <div class="suno-hist-meta">${esc(h.style.substring(0,50))}${h.style.length>50?'...':''} — ${dateStr}</div>
+    return `<div class="suno-hist-item" style="display:flex;align-items:center;gap:8px;">
+      <div style="flex:1;min-width:0;cursor:pointer;" onclick="loadSunoFromHistory(${i})">
+        <div class="suno-hist-title">${modeLabels[h.mode]||'🎹'} ${esc(h.title)}</div>
+        <div class="suno-hist-meta">${esc(h.style.substring(0,50))}${h.style.length>50?'...':''} — ${dateStr}</div>
+      </div>
+      <button class="suno-copy-btn" onclick="event.stopPropagation();exportSunoSingle(${i})" title="Exporter ce prompt" style="flex-shrink:0;">📥</button>
     </div>`;
   }).join('');
 }
@@ -3276,6 +3312,16 @@ function loadSunoFromHistory(idx){
   document.getElementById('suno-result').classList.add('show');
   _sunoLastResult=h;
   toast('📂 Prompt chargé depuis l\'historique');
+}
+
+function exportSunoSingle(idx){
+  const hist=getSunoHistory();
+  const h=hist[idx];if(!h){toast('⚠️ Prompt introuvable');return;}
+  const blob=new Blob([JSON.stringify(h,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='suno_prompt_'+(h.title||'export').replace(/[^a-zA-Z0-9]/g,'_')+'.json';
+  document.body.appendChild(a);a.click();URL.revokeObjectURL(url);a.remove();
+  toast('💾 Prompt "'+h.title+'" exporté');
 }
 
 function exportSunoHistory(mode){
