@@ -1,5 +1,5 @@
-// VideoGrab Service Worker v4.9 — with ad domain blocking
-var CACHE = 'videograb-v5.1';
+// VideoGrab Service Worker v5.2 — with ad domain blocking
+var CACHE = 'videograb-v5.2';
 var FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 // ── Ad domain blocklist (network-level, blocks before request leaves browser) ──

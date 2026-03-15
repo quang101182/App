@@ -1,4 +1,4 @@
-<!-- VideoGrab v5.1 — Video Browser & Downloader — Mobile-First -->
+<!-- VideoGrab v5.2 — Video Browser & Downloader — Mobile-First -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0a0a0f">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="./manifest.json">
-<title>VideoGrab v5.1</title>
+<title>VideoGrab v5.2</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -290,7 +290,7 @@ html,body{max-width:100vw;overflow-x:hidden}
 <div class="setup-screen" id="setupScreen" style="display:none">
   <div class="setup-card">
     <h1>VideoGrab</h1>
-    <div class="sub">v4.8 — Configuration initiale</div>
+    <div class="sub">v5.2 — Configuration initiale</div>
     <div class="setting-group">
       <label>URL du Gateway</label>
       <input id="setupGw" placeholder="https://api-gateway.xxxxx.workers.dev">
@@ -321,7 +321,7 @@ html,body{max-width:100vw;overflow-x:hidden}
       <button class="btn-save" onclick="saveSettingsModal()">Enregistrer</button>
     </div>
     <div style="margin-top:16px;padding-top:12px;border-top:1px solid #333;display:flex;justify-content:space-between;align-items:center">
-      <span style="color:#888;font-size:12px" id="settingsVersion">v5.1</span>
+      <span style="color:#888;font-size:12px" id="settingsVersion">v5.2</span>
       <button onclick="forceUpdate()" style="font-size:12px;padding:5px 14px;border-radius:6px;border:1px solid #555;background:#222;color:#4f4;cursor:pointer">Forcer mise a jour</button>
     </div>
   </div>
@@ -398,7 +398,7 @@ html,body{max-width:100vw;overflow-x:hidden}
   <div class="browser-frame" id="browserFrame">
     <div class="browser-empty" id="emptyState">
       <div style="width:100%;max-width:600px">
-        <h2 style="text-align:center">VideoGrab v5.1</h2>
+        <h2 style="text-align:center">VideoGrab v5.2</h2>
         <p style="text-align:center;margin-bottom:12px">Entrez une URL ou choisissez un favori</p>
         <div id="bmHome"></div>
         <div id="navHistoryHome"></div>
@@ -416,10 +416,10 @@ html,body{max-width:100vw;overflow-x:hidden}
 
 <script>
 // ═══════════════════════════════════════════════════════════════
-// VideoGrab v5.1 — Core Logic
+// VideoGrab v5.2 — Core Logic
 // ═══════════════════════════════════════════════════════════════
 
-const VERSION = '5.1';
+const VERSION = '5.2';
 const $ = id => document.getElementById(id);
 let _deferredInstall = null;
 
@@ -515,6 +515,13 @@ function init() {
 
   // Check API status
   checkApiStatus();
+
+  // Warn before closing with active downloads
+  window.addEventListener('beforeunload', e => {
+    const active = dlQueue.some(d => ['seg','ffmpeg','pending','queued','downloading'].includes(d.status))
+      || pendingDlQueue.length > 0;
+    if (active) { e.preventDefault(); e.returnValue = ''; }
+  });
 }
 
 // ── Setup ──
@@ -715,12 +722,7 @@ function resolveVideoUrl(url) {
   return url;
 }
 
-function formatSize(bytes) {
-  if (!bytes || bytes <= 0) return '';
-  if (bytes < 1048576) return (bytes / 1024).toFixed(0) + ' KB';
-  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
-  return (bytes / 1073741824).toFixed(2) + ' GB';
-}
+function formatSize(bytes) { if (!bytes || bytes <= 0) return ''; return fmtSize(bytes); }
 async function fetchVideoSize(vid) {
   // HLS/DASH playlists don't have a meaningful Content-Length
   if (/\.(m3u8|mpd)(\?|$)/i.test(vid.url)) { vid.size = -1; renderVideoList(); return; }
@@ -800,6 +802,7 @@ function renderVideoList() {
         </div>
       </div>
       <div class="vid-actions">
+        <button class="vid-btn" onclick="copyVideoUrl(${i})" title="Copier URL">&#128203;</button>
         <button class="vid-btn" onclick="previewVideo(${i})" title="Preview">&#9654;</button>
         <button class="vid-btn dl-btn" onclick="downloadVideo(${i})" title="Telecharger">&#11015;</button>
       </div>
@@ -849,6 +852,26 @@ function closePlayer() {
   $('playerOverlay').classList.remove('open');
   $('dlProgress').classList.remove('active');
   currentDlUrl = null;
+}
+
+// ── Copy video URL ──
+function copyVideoUrl(index) {
+  const v = detectedVideos[index];
+  if (!v) return;
+  navigator.clipboard.writeText(v.url).then(() => toast('URL copiee', 's')).catch(() => toast('Echec copie', 'e'));
+}
+
+// ── Estimate HLS size from playlist duration × bandwidth ──
+function estimateHlsSize(m3u8Text) {
+  let duration = 0;
+  for (const line of m3u8Text.split('\n')) {
+    const m = line.match(/#EXTINF:([\d.]+)/);
+    if (m) duration += parseFloat(m[1]);
+  }
+  const bwMatch = m3u8Text.match(/BANDWIDTH=(\d+)/);
+  if (bwMatch && duration > 0) return Math.round(parseInt(bwMatch[1]) / 8 * duration);
+  if (duration > 0) return Math.round(500000 * duration); // fallback ~500kbps
+  return 0;
 }
 
 // ── Download Queue Logic ──
@@ -1080,7 +1103,7 @@ function removeDlItem(id) {
 }
 function clearFinishedDls() {
   dlQueue.forEach(dl => {
-    if (dl.status === 'ready' || dl.status === 'error' || dl.status === 'cancelled') {
+    if (['ready','done','error','cancelled'].includes(dl.status)) {
       dl.status = 'removed';
       document.getElementById('dl-' + dl.id)?.remove();
     }
@@ -1128,6 +1151,8 @@ async function startHlsClientDirect(m3u8Url, filename) {
     let m3u8Resp = await fetch(buildRawUrl(m3u8Url), { signal: dl.abortCtrl.signal });
     if (!m3u8Resp.ok) throw new Error('m3u8 HTTP ' + m3u8Resp.status);
     const m3u8Text = await m3u8Resp.text();
+    const estSize = estimateHlsSize(m3u8Text);
+    if (estSize > 0) dlLog(dl, `Taille estimee: ~${fmtSize(estSize)}`);
     const allLines = m3u8Text.split('\n').map(l => l.trim()).filter(l => l);
     const baseUrl = m3u8Url.substring(0, m3u8Url.lastIndexOf('/') + 1);
 
@@ -1170,16 +1195,20 @@ async function startHlsClientDirect(m3u8Url, filename) {
     let totalBytes = 0;
     let downloaded = 0;
     const t0 = Date.now();
-    const BATCH = 60;
+    const BATCH = 20;
 
     for (let i = 0; i < segUrls.length; i += BATCH) {
       if (dl.status === 'cancelled') throw new Error('cancelled');
       const batch = segUrls.slice(i, i + BATCH);
       const results = await Promise.all(batch.map(async u => {
-        try {
-          const r = await fetch(buildRawUrl(u), { signal: dl.abortCtrl.signal });
-          return r.ok ? await r.arrayBuffer() : new ArrayBuffer(0);
-        } catch (e) { return new ArrayBuffer(0); }
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const r = await fetch(buildRawUrl(u), { signal: dl.abortCtrl.signal });
+            if (r.ok) return await r.arrayBuffer();
+          } catch (e) { if (e.name === 'AbortError') throw e; }
+          if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        }
+        return new ArrayBuffer(0);
       }));
       for (const buf of results) {
         if (buf.byteLength > 0) { allChunks.push(new Uint8Array(buf)); totalBytes += buf.byteLength; }
@@ -1189,7 +1218,7 @@ async function startHlsClientDirect(m3u8Url, filename) {
       dl.received = totalBytes;
       const elapsed = (Date.now() - t0) / 1000;
       dl.speed = elapsed > 0 ? totalBytes / elapsed : 0;
-      if (downloaded % 60 === 0 || downloaded === segUrls.length) {
+      if (downloaded % 20 === 0 || downloaded === segUrls.length) {
         dlLog(dl, `Segments: ${downloaded}/${segUrls.length} (${fmtSize(totalBytes)}, ${fmtSize(dl.speed)}/s)`);
       }
       renderDlItem(dl);
@@ -1401,57 +1430,6 @@ async function saveDlItem(id) {
   autoDownloadMp4(dl);
 }
 
-// ── Fallback: direct segment download if Fly.io fails ──
-async function startHlsSegmentFallback(m3u8Url, filename) {
-  const progress = $('dlProgress');
-  const bar = $('dlBar');
-  const pct = $('dlPct');
-  const speed = $('dlSpeed');
-  const eta = $('dlEta');
-
-  progress.classList.add('active');
-
-  try {
-    const m3u8Resp = await fetch(buildRawUrl(m3u8Url));
-    if (!m3u8Resp.ok) throw new Error('m3u8 HTTP ' + m3u8Resp.status);
-    const m3u8Text = await m3u8Resp.text();
-    const lines = m3u8Text.split('\n').map(l => l.trim()).filter(l => l);
-    const baseUrl = m3u8Url.substring(0, m3u8Url.lastIndexOf('/') + 1);
-
-    const segmentUrls = [];
-    for (const line of lines) {
-      if (!line.startsWith('#') && line.length > 0) {
-        segmentUrls.push(line.startsWith('http') ? line : baseUrl + line);
-      }
-    }
-    if (!segmentUrls.length) throw new Error('No segments');
-
-    const allChunks = [];
-    let totalBytes = 0;
-    const t0 = Date.now();
-
-    for (let i = 0; i < segmentUrls.length; i += 4) {
-      const batch = segmentUrls.slice(i, i + 4);
-      const results = await Promise.all(batch.map(async u => {
-        const r = await fetch(buildRawUrl(u));
-        return r.ok ? await r.arrayBuffer() : new ArrayBuffer(0);
-      }));
-      for (const buf of results) { allChunks.push(new Uint8Array(buf)); totalBytes += buf.byteLength; }
-      const done = Math.min(i + 4, segmentUrls.length);
-      bar.style.width = Math.round(done / segmentUrls.length * 100) + '%';
-      pct.textContent = `${done}/${segmentUrls.length}`;
-      const elapsed = (Date.now() - t0) / 1000;
-      speed.textContent = fmtSize(totalBytes / elapsed) + '/s';
-    }
-
-    const blob = new Blob(allChunks, { type: 'video/mp2t' });
-    triggerBlobDownload(blob, filename);
-    toast(`Telecharge: ${filename} (${fmtSize(blob.size)})`, 's');
-  } catch (e) {
-    toast('Echec total: ' + e.message, 'e');
-  }
-}
-
 function triggerBlobDownload(blob, filename) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1480,7 +1458,7 @@ function renderNavHistory() {
   h.forEach(item => {
     const ago = formatAgo(now - item.ts);
     const display = item.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
-    html += `<div class="history-item" onclick="navigate('${item.url.replace(/'/g, "\\'")}')">
+    html += `<div class="history-item" data-url="${esc(item.url)}" onclick="navigate(this.dataset.url)">
       <div class="history-dot"></div>
       <div class="history-url">${esc(display)}</div>
       <div class="history-time">${ago}</div>
@@ -1582,15 +1560,47 @@ function renderBookmarksHome() {
     const colors = ['#7c6af7','#4facfe','#34d399','#f87171','#facc15','#f472b6','#a78bfa','#38bdf8'];
     const c = colors[i % colors.length];
     const domain = b.url.replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,'');
-    h += `<div class="bm-card" onclick="navigate('${b.url.replace(/'/g,"\\'")}')">
+    h += `<div class="bm-card" data-url="${esc(b.url)}" onclick="navigate(this.dataset.url)">
       <div class="bm-icon" style="background:${c}">${b.icon || b.name.charAt(0).toUpperCase()}</div>
-      <div class="bm-name">${b.name}</div>
-      <div class="bm-label">${domain}</div>
+      <div class="bm-name">${esc(b.name)}</div>
+      <div class="bm-label">${esc(domain)}</div>
       <button class="bm-del" onclick="event.stopPropagation();removeBookmark(${i})" title="Supprimer">✕</button>
     </div>`;
   });
+  h += '</div>';
+  h += '<div style="display:flex;gap:6px;padding:8px 12px">';
+  h += '<button onclick="exportBookmarks()" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--dim);font-size:.7rem;font-weight:600;cursor:pointer">Exporter</button>';
+  h += '<button onclick="importBookmarks()" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--dim);font-size:.7rem;font-weight:600;cursor:pointer">Importer</button>';
   h += '</div></div>';
   el.innerHTML = h;
+}
+
+function exportBookmarks() {
+  const bm = getBookmarks();
+  const blob = new Blob([JSON.stringify(bm, null, 2)], { type: 'application/json' });
+  triggerBlobDownload(blob, 'videograb-bookmarks.json');
+  toast('Favoris exportes', 's');
+}
+
+function importBookmarks() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.json';
+  input.onchange = async () => {
+    try {
+      const text = await input.files[0].text();
+      const imported = JSON.parse(text);
+      if (!Array.isArray(imported)) throw new Error('Format invalide');
+      const bm = getBookmarks();
+      let added = 0;
+      for (const b of imported) {
+        if (b.url && !bm.some(x => x.url === b.url)) { bm.push({ name: b.name || b.url, url: b.url, icon: b.icon || '' }); added++; }
+      }
+      saveBookmarks(bm);
+      renderBookmarksHome();
+      toast(`${added} favori(s) importe(s)`, 's');
+    } catch (e) { toast('Erreur import: ' + e.message, 'e'); }
+  };
+  input.click();
 }
 
 function toggleBookmark() {
