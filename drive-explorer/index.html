@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Drive Explorer v1.0</title>
+<title>Drive Explorer v1.1</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -290,7 +290,7 @@ input{font-family:inherit;color:var(--text)}
     <h1>Drive Explorer</h1>
     <p>Cockpit de visualisation pour votre Google Drive.<br>Lecture seule — aucune modification de vos fichiers.</p>
     <button class="login-btn" id="loginBtn"><i class="fab fa-google"></i> Connexion avec Google</button>
-    <div class="login-version">v1.0</div>
+    <div class="login-version">v1.1</div>
   </div>
 </div>
 
@@ -312,7 +312,7 @@ input{font-family:inherit;color:var(--text)}
       <div class="logo-icon"><i class="fas fa-cube"></i></div>
       <div class="logo-text">
         <h2>Drive Explorer</h2>
-        <span>v1.0</span>
+        <span>v1.1</span>
       </div>
     </div>
     <nav class="sidebar-nav">
@@ -442,7 +442,7 @@ input{font-family:inherit;color:var(--text)}
 
 <script>
 /* ================================================================
-   Drive Explorer v1.0 — Single-file HTML Dashboard (READ-ONLY)
+   Drive Explorer v1.1 — Single-file HTML Dashboard (READ-ONLY)
    ================================================================ */
 
 // ===== CONFIG =====
@@ -539,14 +539,19 @@ const AuthModule = {
     await Promise.all([this.initGapi(), this.initGis()]);
     document.getElementById('loginBtn').addEventListener('click', () => this.login());
     document.getElementById('logoutBtn').addEventListener('click', () => this.logout());
+    // Tenter la restauration silencieuse — évite de redemander l'auth à chaque ouverture
+    await this.tryRestore();
   },
 
   login() {
     if (!this.gisInited) return;
-    this.tokenClient.requestAccessToken({ prompt: 'consent' });
+    // prompt:'' = silencieux si déjà autorisé, consent uniquement la 1ère fois
+    this.tokenClient.requestAccessToken({ prompt: '' });
   },
 
   async onAuth() {
+    // Persister le token pour survivre aux rechargements (session uniquement)
+    sessionStorage.setItem('driveExplorerToken', State.token);
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('app').classList.add('visible');
     document.getElementById('loadingOverlay').classList.remove('hidden');
@@ -560,12 +565,33 @@ const AuthModule = {
     document.getElementById('loadingOverlay').classList.add('hidden');
   },
 
+  // Tenter la restauration silencieuse du token au démarrage
+  async tryRestore() {
+    const saved = sessionStorage.getItem('driveExplorerToken');
+    if (!saved) return false;
+    // Vérifier que le token est encore valide
+    try {
+      const resp = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: 'Bearer ' + saved }
+      });
+      if (!resp.ok) { sessionStorage.removeItem('driveExplorerToken'); return false; }
+      State.token = saved;
+      gapi.client.setToken({ access_token: saved });
+      await this.onAuth();
+      return true;
+    } catch {
+      sessionStorage.removeItem('driveExplorerToken');
+      return false;
+    }
+  },
+
   logout() {
     if (State.token) {
       google.accounts.oauth2.revoke(State.token);
     }
     State.token = null;
     State.user = null;
+    sessionStorage.removeItem('driveExplorerToken');
     State.loadedSections.clear();
     document.getElementById('app').classList.remove('visible');
     document.getElementById('loginScreen').classList.remove('hidden');
@@ -602,6 +628,18 @@ const DriveAPI = {
       pageToken = result.nextPageToken;
     } while (pageToken);
     return all;
+  },
+
+  // Recherche globale Drive (pas limitée à un dossier)
+  async searchFiles(nameQuery) {
+    await AuthModule.ensureToken();
+    const resp = await gapi.client.drive.files.list({
+      q: `name contains '${nameQuery}' and trashed = false`,
+      fields: 'files(id,name,mimeType,modifiedTime,size)',
+      pageSize: 50,
+      orderBy: 'modifiedTime desc'
+    });
+    return resp.result.files || [];
   },
 
   async getFileContent(fileId) {
@@ -1209,18 +1247,31 @@ const DataModule = {
 
   // ---- VEILLE ----
   async loadVeille() {
-    // Look for veille files in ALL scanned folders (memory, sessions, fitness)
+    // 1. Chercher dans les dossiers déjà scannés
     const veilleFiles = [];
     const allSources = [State.data.memory, State.data.sessions, State.data.fitness, State.data.pipeline, State.data.backups];
     allSources.forEach(source => {
       source.filter(f => /veille/i.test(f.name)).forEach(f => {
-        // Avoid duplicates by ID
         if (!veilleFiles.some(v => v.id === f.id)) veilleFiles.push(f);
       });
     });
 
+    // 2. Fallback : recherche globale Drive si rien trouvé dans les dossiers
     if (!veilleFiles.length) {
-      document.getElementById('veilleGrid').innerHTML = '<div class="empty-state"><i class="fas fa-satellite-dish"></i><p>Aucun fichier de veille trouve</p></div>';
+      console.log('[Veille] Rien dans les dossiers scannés, recherche globale Drive...');
+      try {
+        const globalResults = await DriveAPI.searchFiles('veille');
+        globalResults.filter(f => /veille/i.test(f.name)).forEach(f => {
+          if (!veilleFiles.some(v => v.id === f.id)) veilleFiles.push(f);
+        });
+        console.log('[Veille] Recherche globale:', veilleFiles.map(f => f.name));
+      } catch (e) {
+        console.warn('[Veille] Recherche globale échouée:', e);
+      }
+    }
+
+    if (!veilleFiles.length) {
+      document.getElementById('veilleGrid').innerHTML = '<div class="empty-state"><i class="fas fa-satellite-dish"></i><p>Aucun fichier de veille trouv\u00e9</p></div>';
       return;
     }
     console.log('[Veille] Fichiers trouvés:', veilleFiles.map(f => f.name));
