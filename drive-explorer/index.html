@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Drive Explorer v1.1</title>
+<title>Drive Explorer v1.2</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -290,7 +290,7 @@ input{font-family:inherit;color:var(--text)}
     <h1>Drive Explorer</h1>
     <p>Cockpit de visualisation pour votre Google Drive.<br>Lecture seule — aucune modification de vos fichiers.</p>
     <button class="login-btn" id="loginBtn"><i class="fab fa-google"></i> Connexion avec Google</button>
-    <div class="login-version">v1.1</div>
+    <div class="login-version">v1.2</div>
   </div>
 </div>
 
@@ -312,7 +312,7 @@ input{font-family:inherit;color:var(--text)}
       <div class="logo-icon"><i class="fas fa-cube"></i></div>
       <div class="logo-text">
         <h2>Drive Explorer</h2>
-        <span>v1.1</span>
+        <span>v1.2</span>
       </div>
     </div>
     <nav class="sidebar-nav">
@@ -442,7 +442,7 @@ input{font-family:inherit;color:var(--text)}
 
 <script>
 /* ================================================================
-   Drive Explorer v1.1 — Single-file HTML Dashboard (READ-ONLY)
+   Drive Explorer v1.2 — Single-file HTML Dashboard (READ-ONLY)
    ================================================================ */
 
 // ===== CONFIG =====
@@ -545,8 +545,12 @@ const AuthModule = {
 
   login() {
     if (!this.gisInited) return;
-    // prompt:'' = silencieux si déjà autorisé, consent uniquement la 1ère fois
-    this.tokenClient.requestAccessToken({ prompt: '' });
+    const savedEmail = localStorage.getItem('driveExplorerEmail');
+    // hint = pré-sélectionne le compte, prompt:'' = silencieux si déjà autorisé
+    this.tokenClient.requestAccessToken({
+      prompt: '',
+      hint: savedEmail || undefined
+    });
   },
 
   async onAuth() {
@@ -560,6 +564,8 @@ const AuthModule = {
       State.user = resp.result;
       document.getElementById('userName').textContent = State.user.name || 'Utilisateur';
       document.getElementById('userEmail').textContent = State.user.email || '';
+      // Sauvegarder l'email pour hint au prochain login (persiste entre sessions)
+      if (State.user.email) localStorage.setItem('driveExplorerEmail', State.user.email);
     } catch (e) { console.warn('User info failed:', e); }
     await DataModule.loadAll();
     document.getElementById('loadingOverlay').classList.add('hidden');
@@ -592,6 +598,7 @@ const AuthModule = {
     State.token = null;
     State.user = null;
     sessionStorage.removeItem('driveExplorerToken');
+    localStorage.removeItem('driveExplorerEmail');
     State.loadedSections.clear();
     document.getElementById('app').classList.remove('visible');
     document.getElementById('loginScreen').classList.remove('hidden');
@@ -719,8 +726,8 @@ const Parsers = {
 
     const result = { date, protein: null, carbs: null, fat: null, calories: null, meals: [] };
 
-    // Macros: P Xg | G Xg | L Xg | Cal X kcal (Cal peut contenir des espaces: "1 327")
-    const mm = content.match(/P\s*([\d\s.,]+)\s*g\s*\|\s*G\s*([\d\s.,]+)\s*g\s*\|\s*L\s*([\d\s.,]+)\s*g\s*\|\s*Cal\s*([\d\s.,]+)\s*kcal/i);
+    // Macros: P Xg | G Xg | L Xg | Cal X kcal — supporte bold (**), espaces, virgules
+    const mm = content.match(/\*{0,2}P\*{0,2}\s*([\d\s.,]+)\s*g\s*\|\s*\*{0,2}G\*{0,2}\s*([\d\s.,]+)\s*g\s*\|\s*\*{0,2}L\*{0,2}\s*([\d\s.,]+)\s*g\s*\|\s*\*{0,2}Cal\*{0,2}\s*([\d\s.,]+)\s*kcal/i);
     if (mm) {
       result.protein = parseFloat(mm[1].replace(/[\s,]/g, c => c === ',' ? '.' : ''));
       result.carbs = parseFloat(mm[2].replace(/[\s,]/g, c => c === ',' ? '.' : ''));
@@ -1117,11 +1124,25 @@ const DataModule = {
   async loadFitness() {
     const fitnessFiles = State.data.fitness;
     const sessionFiles = State.data.sessions;
+    const allFiles = [...State.data.fitness, ...State.data.sessions, ...State.data.memory, ...State.data.pipeline, ...State.data.backups];
 
-    // Fetch weight/sleep files
-    const weightFiles = fitnessFiles.filter(f => /weight_sleep/i.test(f.name));
-    const stepFiles = fitnessFiles.filter(f => /^step_/i.test(f.name));
-    const fitnessLogFiles = sessionFiles.filter(f => /fitness_log/i.test(f.name));
+    // Fetch weight/sleep files — chercher dans TOUS les dossiers
+    const weightFiles = allFiles.filter(f => /weight_sleep/i.test(f.name));
+    const stepFiles = allFiles.filter(f => /^step_/i.test(f.name));
+    // Chercher fitness_log dans tous les dossiers scannés
+    let fitnessLogFiles = allFiles.filter(f => /fitness_log/i.test(f.name));
+    // Déduplication par ID
+    fitnessLogFiles = [...new Map(fitnessLogFiles.map(f => [f.id, f])).values()];
+
+    // Fallback : recherche globale Drive si aucun fitness_log trouvé
+    if (!fitnessLogFiles.length) {
+      console.log('[Fitness] Aucun fitness_log dans les dossiers, recherche globale Drive...');
+      try {
+        const globalResults = await DriveAPI.searchFiles('fitness_log');
+        fitnessLogFiles = globalResults.filter(f => /fitness_log/i.test(f.name));
+        console.log('[Fitness] Recherche globale:', fitnessLogFiles.map(f => f.name));
+      } catch (e) { console.warn('[Fitness] Recherche globale échouée:', e); }
+    }
 
     const weightData = [];
     const stepData = [];
@@ -1159,8 +1180,14 @@ const DataModule = {
       })
     );
     logContents.filter(Boolean).forEach(({ name, content }) => {
+      // Debug: log first fitness_log content for regex troubleshooting
+      if (macroData.length === 0) console.log('[Fitness] Premier fitness_log contenu (extrait):', name, content.substring(0, 500));
       const parsed = Parsers.parseFitnessLog(content, name);
-      if (parsed && parsed.protein !== null) macroData.push(parsed);
+      if (parsed && parsed.protein !== null) {
+        macroData.push(parsed);
+      } else {
+        console.warn('[Fitness] Macros non parsées pour:', name, '| protein:', parsed?.protein);
+      }
     });
 
     // Sort by date
