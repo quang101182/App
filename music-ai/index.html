@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>music·ai v3.16.0-cap — Discovery Engine</title>
+<title>music·ai v3.16.1-cap — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -483,7 +483,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.16.0</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.16.1</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -835,7 +835,7 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.16.0) ──
+// ── SERVER PROFILE (music-ai v3.16.1) ──
 let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,artistEquity:{influence:{},spotlightIndex:0},version:'3.16.0'};
 let _serverProfileReady=null; // v3.14.3 — Promise pour attendre le chargement serveur
 let _syncTimer=null;
@@ -886,7 +886,7 @@ function getEraRange(selectedEras){
   return minY<9999?[minY,maxY]:null;
 }
 
-// ── ARTIST EQUITY ALGORITHM v3.16.0 ──
+// ── ARTIST EQUITY ALGORITHM v3.16.1 ──
 // Shuffle pondéré Efraimidis-Spirakis : artistes sous-représentés montent en tête
 function weightedArtistShuffle(artists){
   if(artists.length<=1)return[...artists];
@@ -1641,8 +1641,6 @@ function fpSetPaused(paused){
 function fpFeedback(action){
   if(!ST.currentTrack)return;
   const t=ST.currentTrack;const btnMap={like:'fp-like',dislike:'fp-dislike',save:'fp-bookmark'};
-  const btn=document.getElementById(btnMap[action]);
-  if(btn){btn.classList.add({like:'fp-liked',dislike:'fp-disliked',save:'fp-saved'}[action]);}
   doFeedback(btnMap[action],action,t.title||'',t.artist||'',t.genre||'');
 }
 function fpUpdateTrack(){
@@ -2149,7 +2147,7 @@ function buildSystemPrompt(mode,retryN){
   const advInstr=adv>=0.7?'Aventure élevée: propose des artistes peu connus, sous-genres inattendus. Tu peux t\'éloigner des artistes de référence.'
     :adv<=0.3?'Confort: OBLIGATOIRE — choisis des artistes similaires aux artistes de référence, même univers sonore, même énergie. Reste dans la zone de confort.'
     :'Mix équilibré: alterne entre artistes proches des références (univers similaire) et découvertes modérées.';
-  // v3.16.0 — ArtistEquity : shuffle pondéré + spotlight rotatif
+  // v3.16.1 — ArtistEquity : shuffle pondéré + spotlight rotatif
   const rawArtists=p.artists||[];
   const shuffledArtists=weightedArtistShuffle(rawArtists);
   const spotlight=mode!=='shuffle'?pickSpotlightArtists(shuffledArtists):[];
@@ -2302,7 +2300,7 @@ async function getRecommendation(mode){
     ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
     if(ST.sessionThread.length>8)ST.sessionThread.shift();
     saveThread(ST.sessionThread);
-    // v3.16.0 — ArtistEquity tracking
+    // v3.16.1 — ArtistEquity tracking
     const pTrack=getProfile();
     if(pTrack&&(pTrack.artists||[]).length>0&&mode!=='shuffle')trackArtistInfluence(rec,pTrack.artists);
     if(pTrack){pTrack.interactions=(pTrack.interactions||0)+1;saveProfile(pTrack)}
@@ -2375,7 +2373,42 @@ function toggleStory(id){
 }
 function doFeedback(btnId,action,title,artist,genre){
   const btn=document.getElementById(btnId);if(!btn)return;
-  btn.classList.add({like:'liked',dislike:'disliked',save:'saved'}[action]);
+  const clsMap={like:'liked',dislike:'disliked',save:'saved'};
+  const fpClsMap={like:'fp-liked',dislike:'fp-disliked'};
+  const cls=clsMap[action];
+  const isFp=btnId.startsWith('fp-');
+  // Toggle logic for like/dislike (save remains cumulative)
+  if(action==='like'||action==='dislike'){
+    const opposite=action==='like'?'dislike':'like';
+    const oppCls=clsMap[opposite];
+    // Detect current state: check both card-style and fp-style classes
+    const isActive=btn.classList.contains(cls)||btn.classList.contains(fpClsMap[action]||'');
+    if(isActive){
+      // Toggle off — undo
+      btn.classList.remove(cls);btn.classList.remove(fpClsMap[action]||'');
+      _undoFeedback(action,title,artist,genre);
+      btn.style.transform='scale(1.3)';setTimeout(()=>{if(btn)btn.style.transform=''},200);
+      try{if(navigator.vibrate)navigator.vibrate([10]);}catch(_){}
+      // Sync paired buttons (fp ↔ card)
+      _syncPairedBtn(btnId,action,false);
+      toast(action==='like'?'👍 Like retiré':'👎 Dislike retiré');
+      pushHistory({title,artist,action:'un'+action,context:ST.mode,genre});
+      scheduleSync();
+      return;
+    }
+    // Remove opposite if active — find opposite btn by ID pattern
+    const oppBtnId=_getOppositeId(btnId,action,opposite);
+    const oppBtn=oppBtnId?document.getElementById(oppBtnId):null;
+    if(oppBtn&&(oppBtn.classList.contains(oppCls)||oppBtn.classList.contains(fpClsMap[opposite]||''))){
+      oppBtn.classList.remove(oppCls);oppBtn.classList.remove(fpClsMap[opposite]||'');
+      _undoFeedback(opposite,title,artist,genre);
+      _syncPairedBtn(oppBtnId,opposite,false);
+    }
+    btn.classList.add(isFp?fpClsMap[action]:cls);
+    _syncPairedBtn(btnId,action,true);
+  } else {
+    btn.classList.add(cls);
+  }
   btn.style.transform='scale(1.3)';setTimeout(()=>{if(btn)btn.style.transform=''},200);
   try{if(navigator.vibrate)navigator.vibrate(action==='like'?[15]:action==='dislike'?[30,10,30]:[10]);}catch(_){}
   pushHistory({title,artist,action,context:ST.mode,genre});
@@ -2387,7 +2420,6 @@ function doFeedback(btnId,action,title,artist,genre){
     const gk=(genre||'').split(/[\/,]/)[0].trim().toLowerCase();
     if(gk)_serverProfile.genreStats[gk]=(_serverProfile.genreStats[gk]||0)+1;
     scheduleSync();
-    // TasteDNA every 10 likes
     if(_serverProfile.likeHistory.length%10===0)generateTasteDNA().catch(()=>{});
   }
   if(action==='dislike'){
@@ -2406,6 +2438,46 @@ function doFeedback(btnId,action,title,artist,genre){
     scheduleSync();
   }
   toast({like:'👍 Pris en compte',dislike:'👎 Noté — profil mis à jour',save:'🔖 Sauvegardé'}[action]);
+}
+function _getOppositeId(btnId,action,opposite){
+  // fp buttons: fp-like ↔ fp-dislike
+  if(btnId==='fp-like')return 'fp-dislike';
+  if(btnId==='fp-dislike')return 'fp-like';
+  // Card buttons: {id}-like ↔ {id}-dislike, or {id}-like ↔ {id}-dis
+  if(btnId.endsWith('-like'))return document.getElementById(btnId.replace(/-like$/,'-dislike'))?btnId.replace(/-like$/,'-dislike'):btnId.replace(/-like$/,'-dis');
+  if(btnId.endsWith('-dislike'))return btnId.replace(/-dislike$/,'-like');
+  if(btnId.endsWith('-dis'))return btnId.replace(/-dis$/,'-like');
+  return null;
+}
+function _undoFeedback(action,title,artist,genre){
+  if(action==='like'){
+    const idx=_serverProfile.likeHistory.findIndex(x=>x.title===title&&x.artist===artist);
+    if(idx>-1)_serverProfile.likeHistory.splice(idx,1);
+    const gk=(genre||'').split(/[\/,]/)[0].trim().toLowerCase();
+    if(gk&&_serverProfile.genreStats[gk])_serverProfile.genreStats[gk]=Math.max(0,_serverProfile.genreStats[gk]-1);
+  }
+  if(action==='dislike'){
+    const idx=_serverProfile.dislikeHistory.findIndex(x=>x.title===title&&x.artist===artist);
+    if(idx>-1)_serverProfile.dislikeHistory.splice(idx,1);
+    const p=getProfile();
+    if(p&&p.disliked){
+      const entry=genre?`${artist} (${genre})`:artist;
+      const di=p.disliked.indexOf(entry);
+      if(di>-1){p.disliked.splice(di,1);saveProfile(p);}
+    }
+  }
+}
+function _syncPairedBtn(btnId,action,active){
+  const clsMap={like:'liked',dislike:'disliked'};
+  const fpClsMap={like:'fp-liked',dislike:'fp-disliked'};
+  if(btnId.startsWith('fp-')){
+    // Source is full-player → no reliable way to find card btn, skip
+  } else {
+    // Source is card → sync full-player btn
+    const fpId=action==='like'?'fp-like':'fp-dislike';
+    const el=document.getElementById(fpId);
+    if(el){if(active)el.classList.add(fpClsMap[action]);else el.classList.remove(fpClsMap[action]);}
+  }
 }
 
 // ── SEARCH MEMORY ──
