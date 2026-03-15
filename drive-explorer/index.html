@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Drive Explorer v1.2</title>
+<title>Drive Explorer v1.3</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -290,7 +290,7 @@ input{font-family:inherit;color:var(--text)}
     <h1>Drive Explorer</h1>
     <p>Cockpit de visualisation pour votre Google Drive.<br>Lecture seule — aucune modification de vos fichiers.</p>
     <button class="login-btn" id="loginBtn"><i class="fab fa-google"></i> Connexion avec Google</button>
-    <div class="login-version">v1.2</div>
+    <div class="login-version">v1.3</div>
   </div>
 </div>
 
@@ -312,7 +312,7 @@ input{font-family:inherit;color:var(--text)}
       <div class="logo-icon"><i class="fas fa-cube"></i></div>
       <div class="logo-text">
         <h2>Drive Explorer</h2>
-        <span>v1.2</span>
+        <span>v1.3</span>
       </div>
     </div>
     <nav class="sidebar-nav">
@@ -448,7 +448,7 @@ input{font-family:inherit;color:var(--text)}
 
 <script>
 /* ================================================================
-   Drive Explorer v1.2 — Single-file HTML Dashboard (READ-ONLY)
+   Drive Explorer v1.3 — Single-file HTML Dashboard (READ-ONLY)
    ================================================================ */
 
 // ===== CONFIG =====
@@ -533,7 +533,11 @@ const AuthModule = {
       client_id: CONFIG.CLIENT_ID,
       scope: CONFIG.SCOPE,
       callback: (resp) => {
-        if (resp.error) { console.error('Auth error:', resp); return; }
+        if (resp.error) {
+          // prompt:'none' échoue silencieusement — pas grave, l'user cliquera
+          console.log('[Auth] Token response:', resp.error);
+          return;
+        }
         State.token = resp.access_token;
         this.onAuth();
       }
@@ -545,23 +549,40 @@ const AuthModule = {
     await Promise.all([this.initGapi(), this.initGis()]);
     document.getElementById('loginBtn').addEventListener('click', () => this.login());
     document.getElementById('logoutBtn').addEventListener('click', () => this.logout());
-    // Tenter la restauration silencieuse — évite de redemander l'auth à chaque ouverture
-    await this.tryRestore();
+    // 1. Tenter restauration du token sauvegardé
+    const restored = await this.tryRestore();
+    // 2. Si pas de token valide, tenter auto-login silencieux (pas de popup)
+    if (!restored && this.gisInited) {
+      this.autoLogin();
+    }
   },
 
   login() {
     if (!this.gisInited) return;
     const savedEmail = localStorage.getItem('driveExplorerEmail');
-    // hint = pré-sélectionne le compte, prompt:'' = silencieux si déjà autorisé
     this.tokenClient.requestAccessToken({
       prompt: '',
       hint: savedEmail || undefined
     });
   },
 
+  // Auto-login sans interaction — déclenche le flow GIS qui peut auto-grant
+  autoLogin() {
+    const savedEmail = localStorage.getItem('driveExplorerEmail');
+    if (!savedEmail) return; // Pas d'email sauvegardé = première visite, on ne force pas
+    try {
+      this.tokenClient.requestAccessToken({
+        prompt: 'none',
+        hint: savedEmail
+      });
+    } catch (e) {
+      console.log('[Auth] Auto-login silencieux échoué:', e);
+    }
+  },
+
   async onAuth() {
-    // Persister le token pour survivre aux rechargements (session uniquement)
-    sessionStorage.setItem('driveExplorerToken', State.token);
+    // Persister token + email dans localStorage (survit aux onglets + fermetures)
+    localStorage.setItem('driveExplorerToken', State.token);
     document.getElementById('loginScreen').classList.add('hidden');
     document.getElementById('app').classList.add('visible');
     document.getElementById('loadingOverlay').classList.remove('hidden');
@@ -570,29 +591,27 @@ const AuthModule = {
       State.user = resp.result;
       document.getElementById('userName').textContent = State.user.name || 'Utilisateur';
       document.getElementById('userEmail').textContent = State.user.email || '';
-      // Sauvegarder l'email pour hint au prochain login (persiste entre sessions)
       if (State.user.email) localStorage.setItem('driveExplorerEmail', State.user.email);
     } catch (e) { console.warn('User info failed:', e); }
     await DataModule.loadAll();
     document.getElementById('loadingOverlay').classList.add('hidden');
   },
 
-  // Tenter la restauration silencieuse du token au démarrage
+  // Restauration du token sauvegardé en localStorage
   async tryRestore() {
-    const saved = sessionStorage.getItem('driveExplorerToken');
+    const saved = localStorage.getItem('driveExplorerToken');
     if (!saved) return false;
-    // Vérifier que le token est encore valide
     try {
       const resp = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
         headers: { Authorization: 'Bearer ' + saved }
       });
-      if (!resp.ok) { sessionStorage.removeItem('driveExplorerToken'); return false; }
+      if (!resp.ok) { localStorage.removeItem('driveExplorerToken'); return false; }
       State.token = saved;
       gapi.client.setToken({ access_token: saved });
       await this.onAuth();
       return true;
     } catch {
-      sessionStorage.removeItem('driveExplorerToken');
+      localStorage.removeItem('driveExplorerToken');
       return false;
     }
   },
@@ -603,7 +622,7 @@ const AuthModule = {
     }
     State.token = null;
     State.user = null;
-    sessionStorage.removeItem('driveExplorerToken');
+    localStorage.removeItem('driveExplorerToken');
     localStorage.removeItem('driveExplorerEmail');
     State.loadedSections.clear();
     document.getElementById('app').classList.remove('visible');
