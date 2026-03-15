@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suno Prompt Generator — Batch Test v1.0</title>
+<style>
+  :root{--bg:#0a0a14;--card:rgba(255,255,255,0.04);--border:rgba(255,255,255,0.08);--accent:#7c3aed;--accent2:#06b6d4;--text:#e8e8f0;--muted:#52526e;}
+  *{box-sizing:border-box;margin:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:20px;min-height:100vh;}
+  h1{font-size:1.4rem;margin-bottom:8px;}
+  .subtitle{color:var(--muted);font-size:13px;margin-bottom:20px;}
+  .config{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;}
+  .config label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;}
+  .config input,.config select{width:100%;padding:8px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;margin-bottom:10px;}
+  .row{display:flex;gap:12px;flex-wrap:wrap;}
+  .row>*{flex:1;min-width:200px;}
+  button.primary{background:linear-gradient(135deg,var(--accent),#5b21b6);border:none;border-radius:50px;padding:12px 24px;color:white;font-weight:600;font-size:14px;cursor:pointer;}
+  button.primary:disabled{opacity:0.5;cursor:not-allowed;}
+  button.ghost{background:var(--card);border:1px solid var(--border);border-radius:50px;padding:10px 20px;color:var(--text);font-size:13px;cursor:pointer;}
+  .stats{display:flex;gap:12px;margin:16px 0;flex-wrap:wrap;}
+  .stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 16px;min-width:120px;}
+  .stat-val{font-size:1.5rem;font-weight:700;color:var(--accent);}
+  .stat-lbl{font-size:11px;color:var(--muted);margin-top:2px;}
+  #results{margin-top:16px;}
+  .result-item{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;}
+  .result-item.error{border-color:rgba(239,68,68,0.4);}
+  .result-item.success{border-color:rgba(34,197,94,0.2);}
+  .ri-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .ri-mode{font-size:11px;padding:2px 8px;border-radius:50px;background:rgba(124,58,237,0.15);color:var(--accent);}
+  .ri-time{font-size:11px;color:var(--muted);}
+  .ri-title{font-size:15px;font-weight:700;margin-bottom:4px;}
+  .ri-style{font-size:12px;color:var(--accent2);margin-bottom:6px;}
+  .ri-lyrics{font-size:12px;color:var(--muted);white-space:pre-wrap;max-height:100px;overflow-y:auto;border-left:2px solid var(--border);padding-left:8px;}
+  .ri-error{color:#ef4444;font-size:13px;}
+  .quality-bar{display:flex;gap:4px;margin-top:6px;}
+  .q-tag{font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,0.06);color:var(--muted);}
+  .q-tag.ok{background:rgba(34,197,94,0.15);color:#22c55e;}
+  .q-tag.warn{background:rgba(245,158,11,0.15);color:#f59e0b;}
+  .q-tag.bad{background:rgba(239,68,68,0.15);color:#ef4444;}
+  #log{margin-top:16px;background:rgba(0,0,0,0.3);border-radius:8px;padding:12px;font-family:monospace;font-size:11px;max-height:200px;overflow-y:auto;color:var(--muted);}
+</style>
+</head>
+<body>
+<h1>🎹 Suno Prompt — Batch Test</h1>
+<p class="subtitle">Teste la qualité de génération des prompts Suno en batch. Vérifie la diversité, le format, et les contraintes.</p>
+
+<div class="config">
+  <div class="row">
+    <div>
+      <label>Gateway Secret</label>
+      <input id="gw-secret" type="password" placeholder="Bearer token...">
+    </div>
+    <div>
+      <label>Provider</label>
+      <select id="provider" onchange="updateModels()">
+        <option value="claude">Claude (Gateway)</option>
+        <option value="gemini">Gemini (Gateway)</option>
+        <option value="openai">OpenAI (Gateway)</option>
+        <option value="grok">Grok/xAI (Direct)</option>
+      </select>
+    </div>
+    <div>
+      <label>Model</label>
+      <select id="model">
+        <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+        <option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option>
+        <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+        <option value="gpt-4o-mini">gpt-4o-mini</option>
+      </select>
+    </div>
+    <div>
+      <label>Grok API Key (si provider=Grok)</label>
+      <input id="grok-key" type="password" placeholder="xai-...">
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label>Iterations par mode</label>
+      <input id="iterations" type="number" value="3" min="1" max="20">
+    </div>
+    <div>
+      <label>Modes à tester</label>
+      <select id="modes" multiple size="5" style="height:auto;">
+        <option value="random" selected>🎲 Aléatoire</option>
+        <option value="prefs" selected>💜 Mes goûts</option>
+        <option value="artist" selected>🎤 Artiste</option>
+        <option value="mix" selected>✨ Mix</option>
+        <option value="playlist">💿 Playlist</option>
+      </select>
+    </div>
+    <div>
+      <label>Artiste test (pour mode artiste)</label>
+      <input id="test-artist" value="The Weeknd">
+    </div>
+  </div>
+  <div style="margin-top:12px;display:flex;gap:8px;">
+    <button class="primary" id="run-btn" onclick="runBatch()">Lancer le batch test</button>
+    <button class="ghost" onclick="exportResults()">📥 Exporter résultats</button>
+    <button class="ghost" onclick="clearResults()">🗑 Clear</button>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat-card"><div class="stat-val" id="st-total">0</div><div class="stat-lbl">Total</div></div>
+  <div class="stat-card"><div class="stat-val" id="st-success" style="color:#22c55e;">0</div><div class="stat-lbl">Succès</div></div>
+  <div class="stat-card"><div class="stat-val" id="st-fail" style="color:#ef4444;">0</div><div class="stat-lbl">Échecs</div></div>
+  <div class="stat-card"><div class="stat-val" id="st-avg-time">—</div><div class="stat-lbl">Temps moyen</div></div>
+  <div class="stat-card"><div class="stat-val" id="st-style-len">—</div><div class="stat-lbl">Style moy. (chars)</div></div>
+  <div class="stat-card"><div class="stat-val" id="st-unique-genres">—</div><div class="stat-lbl">Genres uniques</div></div>
+</div>
+
+<div id="results"></div>
+<div id="log"></div>
+
+<script>
+const GATEWAY_URL='https://api-gateway.quang101182.workers.dev';
+let allResults=[];
+let running=false;
+
+function log(msg){const el=document.getElementById('log');el.textContent+=new Date().toLocaleTimeString()+' '+msg+'\n';el.scrollTop=el.scrollHeight;}
+
+function updateModels(){
+  const p=document.getElementById('provider').value;
+  const m=document.getElementById('model');
+  const opts={
+    claude:'<option value="claude-sonnet-4-6">claude-sonnet-4-6</option><option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option><option value="claude-opus-4-6">claude-opus-4-6</option>',
+    gemini:'<option value="gemini-2.0-flash">gemini-2.0-flash</option><option value="gemini-1.5-pro">gemini-1.5-pro</option>',
+    openai:'<option value="gpt-4o-mini">gpt-4o-mini</option><option value="gpt-4o">gpt-4o</option>',
+    grok:'<option value="grok-4-1-fast-non-reasoning">grok-4-1-fast (non-reasoning)</option><option value="grok-3-mini">grok-3-mini</option><option value="grok-4-0709">grok-4</option>'
+  };
+  m.innerHTML=opts[p]||opts.claude;
+}
+
+async function callTestAI(sys,msg,temp){
+  const secret=document.getElementById('gw-secret').value;
+  const provider=document.getElementById('provider').value;
+  const model=document.getElementById('model').value;
+  let url,headers,body;
+  // Grok: direct API (compatible OpenAI SDK)
+  if(provider==='grok'){
+    const grokKey=document.getElementById('grok-key').value;
+    if(!grokKey)throw new Error('Grok API key required (xai-...)');
+    url='https://api.x.ai/v1/chat/completions';
+    headers={'Authorization':'Bearer '+grokKey,'Content-Type':'application/json'};
+    body=JSON.stringify({model,max_tokens:1500,temperature:temp,messages:[{role:'system',content:sys},{role:'user',content:msg}]});
+    const r=await fetch(url,{method:'POST',headers,body});
+    if(!r.ok)throw new Error(`Grok API ${r.status}: ${await r.text()}`);
+    const d=await r.json();
+    return d.choices?.[0]?.message?.content||'';
+  }
+  // Gateway providers
+  if(!secret)throw new Error('Gateway secret required');
+  const base=GATEWAY_URL;
+  if(provider==='claude'){
+    url=base+'/api/claude';
+    headers={'Authorization':'Bearer '+secret,'Content-Type':'application/json'};
+    body=JSON.stringify({model,max_tokens:1500,temperature:temp,system:sys,messages:[{role:'user',content:msg}]});
+  }else if(provider==='gemini'){
+    url=base+'/api/gemini';
+    headers={'Authorization':'Bearer '+secret,'Content-Type':'application/json'};
+    body=JSON.stringify({model,contents:[{role:'user',parts:[{text:sys+'\n\n'+msg}]}],generationConfig:{temperature:temp,maxOutputTokens:1500}});
+  }else{
+    url=base+'/api/openai';
+    headers={'Authorization':'Bearer '+secret,'Content-Type':'application/json'};
+    body=JSON.stringify({model,max_tokens:1500,temperature:temp,messages:[{role:'system',content:sys},{role:'user',content:msg}]});
+  }
+  const r=await fetch(url,{method:'POST',headers,body});
+  if(!r.ok)throw new Error(`API ${r.status}: ${await r.text()}`);
+  const d=await r.json();
+  if(provider==='claude')return(d.content||[])[0]?.text||'';
+  if(provider==='gemini')return d.candidates?.[0]?.content?.parts?.[0]?.text||'';
+  return d.choices?.[0]?.message?.content||'';
+}
+
+function buildTestPrompt(mode,artist){
+  const modeInstr=mode==='random'?'MODE ALÉATOIRE: genre, style, époque, culture 100% aléatoires. Surprise totale.':
+    mode==='prefs'?'MODE MES GOÛTS: Genres préférés: electro, hip-hop, rnb, indie. Artistes: The Weeknd, Daft Punk, Tame Impala, Kendrick Lamar. Époques: 2000s-actuel. Taste DNA: synthpop sombre, basses profondes, mélodies planantes.':
+    mode==='artist'?`MODE ARTISTE: génère un prompt qui sonne COMME ${artist}. Analyse son style, ses caractéristiques sonores.`:
+    mode==='mix'?'MODE MIX: combine electro/hip-hop/rnb + touche de surprise. Artistes ref: The Weeknd, Daft Punk.':
+    'MODE PLAYLIST: basé sur une playlist pop/electro/indie avec 20 tracks.';
+  return `Tu es un expert en production musicale et en Suno AI. Tu génères des prompts optimisés pour Suno v5.\n\n${modeInstr}\nLANGUE: auto.\n\nRetourne un JSON avec:\n1. "title": titre créatif (2-5 mots)\n2. "style": tags Suno v5 (<120 chars) incluant: genre, BPM, tonalité, énergie, textures, production, type voix\n3. "lyrics": paroles avec tags [Verse 1], [Chorus], [Bridge] etc. ~200-300 mots\n\nJSON UNIQUEMENT. Zéro texte avant/après.\n{"title":"...","style":"...","lyrics":"..."}`;
+}
+
+function analyzeQuality(result){
+  const tags=[];
+  // Style length (Suno tronque silencieusement au-delà de 200)
+  if(result.style.length<=200)tags.push({text:`Style ${result.style.length}c`,cls:'ok'});
+  else tags.push({text:`Style ${result.style.length}c TROP LONG`,cls:'bad'});
+  // Has BPM
+  if(/\d+\s*BPM/i.test(result.style))tags.push({text:'BPM',cls:'ok'});
+  else tags.push({text:'No BPM',cls:'warn'});
+  // Has key/tonality
+  if(/[A-G][#b]?\s*-?\s*(Major|Minor|major|minor)/i.test(result.style))tags.push({text:'Tonalité',cls:'ok'});
+  else tags.push({text:'No tonalité',cls:'warn'});
+  // Has vocal direction
+  if(/(vocal|voice|tenor|soprano|baritone|breathy|raspy|falsetto)/i.test(result.style))tags.push({text:'Voix',cls:'ok'});
+  else tags.push({text:'No voix',cls:'warn'});
+  // Has negative prompting
+  if(/\bno\s+\w/i.test(result.style))tags.push({text:'Neg prompt',cls:'ok'});
+  // Front-loading check: genre should be in first 30 chars
+  const first30=result.style.substring(0,30).toLowerCase();
+  const genreWords=['pop','rock','hip-hop','trap','house','techno','ambient','folk','jazz','r&b','metal','synthwave','lo-fi','indie','electro','soul','funk','country','blues','edm','k-pop','drill','phonk','amapiano'];
+  if(genreWords.some(g=>first30.includes(g)))tags.push({text:'Front-load',cls:'ok'});
+  else tags.push({text:'Genre pas en tête',cls:'warn'});
+  // Banned words check (CRITICAL)
+  const BANNED=/\b(fuck|shit|bitch|pussy|dick|cunt|cock|goddamn|nigga|nigger|faggot|retard)\b/i;
+  if(result.lyrics&&BANNED.test(result.lyrics))tags.push({text:'MOT INTERDIT',cls:'bad'});
+  else if(result.lyrics)tags.push({text:'Clean',cls:'ok'});
+  // Lyrics structure
+  if(result.lyrics){
+    const hasVerse=/\[Verse/i.test(result.lyrics);
+    const hasChorus=/\[Chorus/i.test(result.lyrics);
+    const hasBridge=/\[Bridge/i.test(result.lyrics);
+    const hasIntro=/\[Intro/i.test(result.lyrics);
+    const structCount=[hasVerse,hasChorus,hasBridge,hasIntro].filter(Boolean).length;
+    if(structCount>=3)tags.push({text:'Structure +++',cls:'ok'});
+    else if(structCount>=2)tags.push({text:'Structure OK',cls:'ok'});
+    else if(structCount>=1)tags.push({text:'Structure min',cls:'warn'});
+    else tags.push({text:'No structure',cls:'bad'});
+    const lineCount=result.lyrics.split('\n').filter(l=>l.trim()).length;
+    if(lineCount>=25&&lineCount<=50)tags.push({text:`${lineCount} lignes`,cls:'ok'});
+    else tags.push({text:`${lineCount} lignes`,cls:lineCount<15?'bad':'warn'});
+  }else{
+    tags.push({text:'Instrumental',cls:'ok'});
+  }
+  return tags;
+}
+
+async function runBatch(){
+  if(running)return;running=true;
+  const btn=document.getElementById('run-btn');btn.disabled=true;btn.textContent='En cours...';
+  const iterations=parseInt(document.getElementById('iterations').value)||3;
+  const modesEl=document.getElementById('modes');
+  const modes=[...modesEl.selectedOptions].map(o=>o.value);
+  const artist=document.getElementById('test-artist').value||'The Weeknd';
+  allResults=[];
+  document.getElementById('results').innerHTML='';
+  log(`Batch start: ${modes.length} modes x ${iterations} iterations = ${modes.length*iterations} tests`);
+  let success=0,fail=0,totalTime=0;
+  const allGenres=new Set();
+  const allStyleLens=[];
+  for(const mode of modes){
+    for(let i=0;i<iterations;i++){
+      const t0=Date.now();
+      try{
+        log(`[${mode}] Iteration ${i+1}/${iterations}...`);
+        const sys=buildTestPrompt(mode,artist);
+        const msg=`Génère un prompt Suno v5. Mode: ${mode}.${mode==='artist'?' Artiste: '+artist:''}`;
+        const temp=mode==='random'?1.0:mode==='artist'?0.75:0.85;
+        const raw=await callTestAI(sys,msg,temp);
+        const cleaned=raw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+        const jsonMatch=cleaned.match(/\{[\s\S]*\}/);
+        if(!jsonMatch)throw new Error('No JSON in response');
+        const result=JSON.parse(jsonMatch[0]);
+        if(!result.title||!result.style)throw new Error('Missing title/style');
+        const elapsed=Date.now()-t0;
+        totalTime+=elapsed;
+        allStyleLens.push(result.style.length);
+        // Extract genre
+        const genre=result.style.split(',')[0].trim().toLowerCase();
+        allGenres.add(genre);
+        const quality=analyzeQuality(result);
+        allResults.push({mode,iteration:i+1,result,elapsed,quality,error:null});
+        success++;
+        renderResult(allResults[allResults.length-1]);
+        log(`[${mode}] ✅ "${result.title}" (${elapsed}ms)`);
+      }catch(err){
+        const elapsed=Date.now()-t0;
+        allResults.push({mode,iteration:i+1,result:null,elapsed,quality:[],error:err.message});
+        fail++;
+        renderResult(allResults[allResults.length-1]);
+        log(`[${mode}] ❌ ${err.message}`);
+      }
+      // Rate limit delay
+      await new Promise(r=>setTimeout(r,1000));
+    }
+  }
+  // Update stats
+  document.getElementById('st-total').textContent=allResults.length;
+  document.getElementById('st-success').textContent=success;
+  document.getElementById('st-fail').textContent=fail;
+  document.getElementById('st-avg-time').textContent=success>0?Math.round(totalTime/success)+'ms':'—';
+  document.getElementById('st-style-len').textContent=allStyleLens.length>0?Math.round(allStyleLens.reduce((a,b)=>a+b,0)/allStyleLens.length):'—';
+  document.getElementById('st-unique-genres').textContent=allGenres.size;
+  log(`Batch done: ${success}/${allResults.length} success, ${allGenres.size} unique genres, avg ${success>0?Math.round(totalTime/success):0}ms`);
+  btn.disabled=false;btn.textContent='Lancer le batch test';running=false;
+}
+
+function renderResult(r){
+  const el=document.createElement('div');
+  el.className='result-item '+(r.error?'error':'success');
+  if(r.error){
+    el.innerHTML=`<div class="ri-header"><span class="ri-mode">${r.mode} #${r.iteration}</span><span class="ri-time">${r.elapsed}ms</span></div><div class="ri-error">❌ ${r.error}</div>`;
+  }else{
+    const q=r.quality.map(t=>`<span class="q-tag ${t.cls}">${t.text}</span>`).join('');
+    el.innerHTML=`<div class="ri-header"><span class="ri-mode">${r.mode} #${r.iteration}</span><span class="ri-time">${r.elapsed}ms</span></div><div class="ri-title">${r.result.title}</div><div class="ri-style">${r.result.style}</div><div class="ri-lyrics">${(r.result.lyrics||'(instrumental)').substring(0,200)}${(r.result.lyrics||'').length>200?'...':''}</div><div class="quality-bar">${q}</div>`;
+  }
+  document.getElementById('results').prepend(el);
+}
+
+function exportResults(){
+  if(!allResults.length){alert('Aucun résultat');return;}
+  const blob=new Blob([JSON.stringify(allResults,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='suno_batch_test_'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);a.click();URL.revokeObjectURL(url);a.remove();
+}
+
+function clearResults(){
+  allResults=[];
+  document.getElementById('results').innerHTML='';
+  document.getElementById('log').textContent='';
+  ['st-total','st-success','st-fail'].forEach(id=>document.getElementById(id).textContent='0');
+  ['st-avg-time','st-style-len','st-unique-genres'].forEach(id=>document.getElementById(id).textContent='—');
+}
+
+// Auto-fill gateway secret from localStorage
+try{const s=localStorage.getItem('music_ai_gw_secret');if(s)document.getElementById('gw-secret').value=s;}catch(e){}
+</script>
+</body>
+</html>
