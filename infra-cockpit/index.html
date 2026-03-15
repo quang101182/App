@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Infra Cockpit v1.0</title>
+<title>Infra Cockpit v1.1</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -345,19 +345,46 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ===== PIPELINE SECTION ===== */
-.pipeline-section { margin-bottom: 40px; }
-.pipeline-chart-wrap {
+/* ===== SITES WEB SECTION ===== */
+.sites-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px; margin-bottom: 40px;
+}
+.site-card {
   background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 24px; min-height: 300px;
-  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius); padding: 24px;
+  transition: all 0.35s var(--spring);
+  opacity: 0; animation: cardIn 0.5s var(--ease) forwards;
 }
-.pipeline-chart-wrap canvas { max-height: 320px; }
-.pipeline-empty {
-  text-align: center; color: var(--text-muted); padding: 40px;
+.site-card:hover {
+  background: var(--bg-card-hover); border-color: var(--border-hover);
+  transform: translateY(-3px);
 }
-.pipeline-empty i { font-size: 2.5rem; margin-bottom: 12px; display: block; color: var(--text-dim); }
-.pipeline-empty p { font-size: 0.9rem; }
+.site-card .card-top {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.site-card .site-name {
+  font-size: 1rem; font-weight: 600; margin-bottom: 2px;
+}
+.site-card .site-url {
+  font-size: 0.75rem; color: var(--text-dim); font-family: 'Space Mono', monospace;
+}
+.site-card .site-stats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  margin-top: 16px; padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.site-card .site-stat-label {
+  font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 0.04em; margin-bottom: 4px;
+}
+.site-card .site-stat-value {
+  font-family: 'Space Mono', monospace; font-size: 1.3rem; font-weight: 700;
+}
+.site-card .site-stat-value.visitors { color: var(--accent); }
+.site-card .site-stat-value.today { color: var(--teal); }
+.site-card .site-stat-value.speed { color: var(--yellow); }
 
 /* ===== SKELETON LOADING ===== */
 .skeleton {
@@ -436,7 +463,7 @@ body {
   <div class="sidebar-brand">
     <div class="logo"><i class="fa-solid fa-satellite-dish"></i></div>
     <h1>Infra Cockpit</h1>
-    <span class="version">v1.0</span>
+    <span class="version">v1.1</span>
   </div>
   <nav class="sidebar-nav">
     <a class="nav-item active" data-section="overview" href="#">
@@ -453,9 +480,10 @@ body {
       <span class="nav-label">GitHub</span>
       <span class="badge" id="nav-repos-count">--</span>
     </a>
-    <a class="nav-item" data-section="pipeline" href="#">
-      <i class="fa-solid fa-diagram-project"></i>
-      <span class="nav-label">Pipeline</span>
+    <a class="nav-item" data-section="sites" href="#">
+      <i class="fa-solid fa-globe"></i>
+      <span class="nav-label">Sites Web</span>
+      <span class="badge" id="nav-sites-count">3</span>
     </a>
   </nav>
   <div class="sidebar-footer">
@@ -497,6 +525,11 @@ body {
         <div class="stat-label">Repos GitHub</div>
         <div class="stat-value" id="stat-repos" style="color:var(--accent)">--</div>
         <div class="stat-sub">publics</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Visiteurs total</div>
+        <div class="stat-value" id="stat-visitors" style="color:var(--orange)">--</div>
+        <div class="stat-sub">sur 3 sites</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Dernier push</div>
@@ -542,26 +575,27 @@ body {
     <div class="repos-grid" id="repos-full"></div>
   </div>
 
-  <!-- ========== PIPELINE ========== -->
-  <div class="section" id="sec-pipeline">
+  <!-- ========== SITES WEB ========== -->
+  <div class="section" id="sec-sites">
     <div class="page-header">
       <div>
-        <h2>Pipeline SubWhisper</h2>
-        <p class="subtitle">Scores et performances du pipeline de transcription</p>
+        <h2>Sites Web</h2>
+        <p class="subtitle">Tes 3 sites publics — statut, visiteurs, performance</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn-refresh" id="btn-refresh-sites" title="Rafraichir sites">
+          <i class="fa-solid fa-arrows-rotate"></i> Refresh
+        </button>
       </div>
     </div>
-    <div class="pipeline-section">
-      <div class="pipeline-chart-wrap" id="pipeline-wrap">
-        <canvas id="pipeline-chart"></canvas>
-      </div>
-    </div>
+    <div class="sites-grid" id="sites-grid"></div>
   </div>
 
 </main>
 
 <script>
 /* ================================================================
-   Infra Cockpit v1.0 — Lecture seule
+   Infra Cockpit v1.1 — Lecture seule
    Single-file HTML dashboard
    ================================================================ */
 
@@ -569,7 +603,7 @@ body {
 const SERVICES = [
   { name: 'API Gateway', url: 'https://api-gateway.quang101182.workers.dev', icon: 'fa-shield-halved', description: 'Cloudflare Worker — proxy API', corsOpen: true },
   { name: 'Fly.io FFmpeg', url: 'https://subwhisper-ffmpeg.fly.dev', icon: 'fa-cloud', description: 'Serveur FFmpeg cloud', corsOpen: false },
-  { name: 'n8n Railway', url: 'https://steadfast-charm-production.up.railway.app', icon: 'fa-robot', description: 'Bot Telegram + workflows', corsOpen: false },
+  { name: 'n8n Railway', url: 'https://steadfast-charm-production.up.railway.app/healthz', icon: 'fa-robot', description: 'Bot Telegram + workflows', corsOpen: false },
   { name: 'MCP Drive', url: 'https://mcp-drive-server-q3dg.onrender.com', icon: 'fa-hard-drive', description: 'Serveur MCP Google Drive', corsOpen: false },
   { name: 'GitHub Pages', url: 'https://quang101182.github.io/App/', icon: 'fa-globe', description: 'Hebergement apps', corsOpen: true }
 ];
@@ -589,7 +623,6 @@ let serviceResults = SERVICES.map(s => ({
   ...s, status: 'checking', responseTime: null, lastCheck: null, history: []
 }));
 let repos = [];
-let pipelineData = null;
 let refreshTimer = null;
 
 // ===== DOM REFS =====
@@ -690,16 +723,54 @@ async function fetchGitHub() {
   }
 }
 
-// ===== PIPELINE FETCH =====
-async function fetchPipeline() {
-  // Attempt to load pipeline_logs.json from a public URL — graceful fallback
+// ===== SITES WEB =====
+const SITES = [
+  { name: 'SubWhisper Pro', url: 'https://sub-whisper.com', page: 'swp', icon: 'fa-microphone-lines', desc: 'Transcription & traduction IA' },
+  { name: 'NoCodeFlow', url: 'https://nocode-flow.com', page: 'ncf', icon: 'fa-pen-nib', desc: 'Blog SEO outils IA' },
+  { name: 'NoteFlowing', url: 'https://noteflowing.com', page: 'nf', icon: 'fa-note-sticky', desc: 'Notes de reunion IA' }
+];
+let sitesData = { swp: { total: 0, today: 0 }, ncf: { total: 0, today: 0 }, nf: { total: 0, today: 0 } };
+let sitesStatus = SITES.map(() => ({ status: 'checking', responseTime: null }));
+
+async function fetchSites() {
+  // 1. Fetch visit stats from gateway-pro
   try {
-    // This URL would need to be publicly accessible; for now we show fallback
-    throw new Error('No public pipeline URL configured');
-  } catch {
-    pipelineData = null;
-    renderPipeline();
-  }
+    const res = await fetch('https://api-gateway-pro.quang101182.workers.dev/api/visit?page=all', { signal: AbortSignal.timeout(8000) });
+    if (res.ok) {
+      const data = await res.json();
+      // data format: { swp: X, ncf: Y, nf: Z } or detailed
+      if (typeof data.swp === 'number') {
+        sitesData.swp.total = data.swp; sitesData.ncf.total = data.ncf; sitesData.nf.total = data.nf;
+      } else if (data.swp && typeof data.swp === 'object') {
+        Object.keys(data).forEach(k => { if (sitesData[k]) sitesData[k] = data[k]; });
+      }
+    }
+  } catch (e) { console.warn('Sites stats fetch failed:', e); }
+
+  // 2. Also fetch today stats individually for each site
+  await Promise.allSettled(SITES.map(async (site, i) => {
+    try {
+      const res = await fetch(`https://api-gateway-pro.quang101182.workers.dev/api/visit?page=${site.page}`, { signal: AbortSignal.timeout(8000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.total !== undefined) sitesData[site.page].total = data.total;
+        if (data.today !== undefined) sitesData[site.page].today = data.today;
+      }
+    } catch {}
+  }));
+
+  // 3. Check health of each site
+  await Promise.allSettled(SITES.map(async (site, i) => {
+    const start = performance.now();
+    try {
+      await fetch(site.url, { mode: 'no-cors', signal: AbortSignal.timeout(10000) });
+      sitesStatus[i] = { status: 'up', responseTime: Math.round(performance.now() - start) };
+    } catch {
+      sitesStatus[i] = { status: 'down', responseTime: Math.round(performance.now() - start) };
+    }
+  }));
+
+  renderSites();
 }
 
 // ===== RENDER: SERVICES =====
@@ -824,47 +895,51 @@ function renderRepos() {
   $('#nav-repos-count').textContent = repos.length;
 }
 
-// ===== RENDER: PIPELINE =====
-function renderPipeline() {
-  if (!pipelineData) {
-    $('#pipeline-wrap').innerHTML = `
-      <div class="pipeline-empty">
-        <i class="fa-solid fa-chart-area"></i>
-        <p>Aucune donnee pipeline disponible.<br>
-        <span style="font-size:0.8rem;color:var(--text-muted)">Connectez Drive Explorer pour voir le pipeline SubWhisper.</span></p>
+// ===== RENDER: SITES WEB =====
+function renderSites() {
+  const grid = $('#sites-grid');
+  grid.innerHTML = SITES.map((site, i) => {
+    const s = sitesStatus[i];
+    const d = sitesData[site.page] || { total: 0, today: 0 };
+    const statusClass = s.status;
+    const statusLabel = s.status === 'up' ? 'UP' : s.status === 'down' ? 'DOWN' : 'CHECK...';
+    const rtClass = s.responseTime === null ? '' :
+      s.responseTime < 500 ? 'fast' : s.responseTime < 2000 ? 'medium' : 'slow';
+    const rtText = s.responseTime !== null ? `${s.responseTime}ms` : '--';
+
+    return `
+      <div class="site-card" style="animation-delay:${i * 0.08}s">
+        <div class="card-top">
+          <div>
+            <div class="site-name"><i class="fa-solid ${site.icon}" style="color:var(--accent);margin-right:8px"></i>${site.name}</div>
+            <div class="site-url">${site.url.replace('https://', '')}</div>
+          </div>
+          <div class="status-badge ${statusClass}"><span class="dot"></span>${statusLabel}</div>
+        </div>
+        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:0">${site.desc}</p>
+        <div class="site-stats">
+          <div>
+            <div class="site-stat-label">Visiteurs total</div>
+            <div class="site-stat-value visitors">${d.total.toLocaleString('fr-FR')}</div>
+          </div>
+          <div>
+            <div class="site-stat-label">Aujourd'hui</div>
+            <div class="site-stat-value today">${d.today}</div>
+          </div>
+          <div>
+            <div class="site-stat-label">Latence</div>
+            <div class="site-stat-value speed ${rtClass}">${rtText}</div>
+          </div>
+          <div>
+            <div class="site-stat-label">Lien</div>
+            <a href="${site.url}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.8rem;font-weight:600">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> Ouvrir
+            </a>
+          </div>
+        </div>
       </div>
     `;
-    return;
-  }
-
-  // If data exists, render Chart.js line chart
-  const ctx = $('#pipeline-chart').getContext('2d');
-  new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: pipelineData.map(d => d.date),
-      datasets: [{
-        label: 'Score',
-        data: pipelineData.map(d => d.score),
-        borderColor: '#7c6aff',
-        backgroundColor: 'rgba(124, 106, 255, 0.1)',
-        fill: true,
-        tension: 0.4,
-        pointRadius: 3,
-        pointBackgroundColor: '#7c6aff'
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { labels: { color: '#8b8a97', font: { family: 'Inter' } } }
-      },
-      scales: {
-        x: { ticks: { color: '#5a5968' }, grid: { color: 'rgba(255,255,255,0.04)' } },
-        y: { ticks: { color: '#5a5968' }, grid: { color: 'rgba(255,255,255,0.04)' } }
-      }
-    }
-  });
+  }).join('');
 }
 
 // ===== UPDATE STATS =====
@@ -878,6 +953,10 @@ function updateStats() {
   $('#stat-up').style.color = up === total ? 'var(--teal)' : up > 0 ? 'var(--yellow)' : 'var(--rose)';
   $('#stat-avg-time').textContent = typeof avg === 'number' ? `${avg}` : '--';
   $('#stat-repos').textContent = repos.length || '--';
+
+  // Visiteurs total (tous les sites)
+  const totalVisitors = Object.values(sitesData).reduce((sum, d) => sum + (d.total || 0), 0);
+  $('#stat-visitors').textContent = totalVisitors > 0 ? totalVisitors.toLocaleString('fr-FR') : '--';
 
   if (repos.length > 0) {
     const latest = repos[0];
@@ -943,7 +1022,7 @@ async function refreshAll() {
   btn.classList.add('spinning');
   $$('.btn-refresh-services').forEach(b => b.classList.add('spinning'));
 
-  await Promise.allSettled([checkAllServices(), fetchGitHub(), fetchPipeline()]);
+  await Promise.allSettled([checkAllServices(), fetchGitHub(), fetchSites()]);
 
   btn.classList.remove('spinning');
   $$('.btn-refresh-services').forEach(b => b.classList.remove('spinning'));
@@ -957,6 +1036,7 @@ function init() {
   // Refresh buttons
   $('#btn-refresh-all').addEventListener('click', refreshAll);
   $$('.btn-refresh-services').forEach(btn => btn.addEventListener('click', refreshAll));
+  $('#btn-refresh-sites').addEventListener('click', fetchSites);
 
   // Initial load
   refreshAll();
