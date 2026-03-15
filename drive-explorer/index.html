@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drive Explorer v1.0</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+/* ===== RESET & VARIABLES ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+--bg:#06060e;--bg-elevated:#0c0c18;
+--surface:rgba(255,255,255,0.03);--surface-2:rgba(255,255,255,0.06);
+--border:rgba(255,255,255,0.06);--border-2:rgba(255,255,255,0.12);
+--text:#ededf5;--text-2:#8888a0;--text-3:#4a4a60;
+--accent:#7c6aff;--teal:#00d4aa;--rose:#ff4d6d;--amber:#f59e0b;--blue:#3b82f6;
+--sidebar-w:220px;--sidebar-collapsed:64px;
+--spring:cubic-bezier(0.34,1.56,0.64,1);
+--ease-out:cubic-bezier(0.22,1,0.36,1);
+}
+html{font-size:16px;scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;height:100vh;width:100vw}
+a{color:var(--accent);text-decoration:none}
+button{cursor:pointer;border:none;background:none;font-family:inherit;color:var(--text)}
+input{font-family:inherit;color:var(--text)}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:var(--text-3)}
+
+/* ===== AMBIENT MESH BG ===== */
+.ambient-mesh{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.ambient-mesh .orb{position:absolute;border-radius:50%;filter:blur(120px);opacity:0.15;animation:orbFloat 20s ease-in-out infinite alternate}
+.ambient-mesh .orb:nth-child(1){width:600px;height:600px;background:var(--accent);top:-200px;left:-100px;animation-delay:0s}
+.ambient-mesh .orb:nth-child(2){width:500px;height:500px;background:var(--teal);bottom:-200px;right:-100px;animation-delay:-7s}
+.ambient-mesh .orb:nth-child(3){width:400px;height:400px;background:var(--rose);top:50%;left:50%;transform:translate(-50%,-50%);animation-delay:-14s}
+@keyframes orbFloat{0%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,-40px) scale(1.1)}100%{transform:translate(-20px,30px) scale(0.95)}}
+
+/* ===== LOGIN SCREEN ===== */
+#loginScreen{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:32px;background:var(--bg);transition:opacity 0.6s var(--ease-out),visibility 0.6s}
+#loginScreen.hidden{opacity:0;visibility:hidden;pointer-events:none}
+.login-card{text-align:center;padding:48px 56px;border-radius:24px;background:var(--bg-elevated);border:1px solid var(--border-2);backdrop-filter:blur(24px);max-width:440px;width:90%;animation:fadeSlideUp 0.8s var(--ease-out) both}
+.login-logo{font-size:48px;margin-bottom:16px;background:linear-gradient(135deg,var(--accent),var(--teal));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.login-card h1{font-size:28px;font-weight:700;letter-spacing:-0.02em;margin-bottom:8px}
+.login-card p{color:var(--text-2);font-size:14px;line-height:1.6;margin-bottom:32px}
+.login-btn{display:inline-flex;align-items:center;gap:12px;padding:14px 32px;border-radius:12px;background:var(--accent);color:#fff;font-size:15px;font-weight:600;transition:all 0.3s var(--spring)}
+.login-btn:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(124,106,255,0.3)}
+.login-btn i{font-size:18px}
+.login-version{color:var(--text-3);font-family:'Space Mono',monospace;font-size:12px;letter-spacing:0.04em;margin-top:16px}
+
+/* ===== APP LAYOUT ===== */
+#app{display:none;height:100vh;width:100vw;position:relative;z-index:1}
+#app.visible{display:flex}
+
+/* ===== SIDEBAR ===== */
+.sidebar{width:var(--sidebar-w);height:100vh;background:var(--bg-elevated);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;position:relative;z-index:100;transition:width 0.3s var(--ease-out)}
+.sidebar-header{padding:20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border)}
+.sidebar-header .logo-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--teal));display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.sidebar-header .logo-text{overflow:hidden;white-space:nowrap}
+.sidebar-header .logo-text h2{font-size:15px;font-weight:700;letter-spacing:-0.02em}
+.sidebar-header .logo-text span{font-family:'Space Mono',monospace;font-size:10px;color:var(--text-3);letter-spacing:0.04em}
+.sidebar-nav{flex:1;padding:12px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;font-size:14px;font-weight:500;color:var(--text-2);transition:all 0.2s ease;position:relative;white-space:nowrap}
+.nav-item i{width:20px;text-align:center;font-size:15px;flex-shrink:0}
+.nav-item:hover{color:var(--text);background:var(--surface-2)}
+.nav-item.active{color:var(--text);background:var(--surface-2)}
+.nav-item.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:20px;border-radius:0 3px 3px 0;background:var(--accent);box-shadow:0 0 12px rgba(124,106,255,0.5)}
+.sidebar-footer{padding:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:12px;overflow:hidden}
+.sidebar-footer .user-avatar{width:32px;height:32px;border-radius:8px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-2);flex-shrink:0}
+.sidebar-footer .user-info{overflow:hidden}
+.sidebar-footer .user-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar-footer .user-email{font-size:11px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar-footer .logout-btn{margin-left:auto;padding:6px;border-radius:6px;color:var(--text-3);transition:all 0.2s ease;flex-shrink:0}
+.sidebar-footer .logout-btn:hover{color:var(--rose);background:rgba(255,77,109,0.1)}
+
+/* ===== MAIN CONTENT ===== */
+.main{flex:1;height:100vh;overflow-y:auto;overflow-x:hidden;position:relative}
+.main-header{position:sticky;top:0;z-index:50;padding:16px 32px;display:flex;align-items:center;justify-content:space-between;background:rgba(6,6,14,0.8);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.main-header h1{font-size:20px;font-weight:700;letter-spacing:-0.02em}
+.header-actions{display:flex;align-items:center;gap:12px}
+.refresh-btn{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border-2);font-size:13px;color:var(--text-2);transition:all 0.2s ease}
+.refresh-btn:hover{color:var(--text);border-color:var(--accent);background:rgba(124,106,255,0.1)}
+.refresh-btn.spinning i{animation:spin 1s linear infinite}
+.stale-banner{padding:8px 16px;background:rgba(245,158,11,0.1);border-bottom:1px solid rgba(245,158,11,0.2);font-size:12px;color:var(--amber);display:none;align-items:center;gap:8px}
+.stale-banner.visible{display:flex}
+.last-refresh{font-family:'Space Mono',monospace;font-size:11px;color:var(--text-3);letter-spacing:0.04em}
+.hamburger{display:none;padding:8px;font-size:20px;color:var(--text-2)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ===== PAGE CONTENT ===== */
+.page-content{padding:24px 32px 48px}
+.section{display:none;animation:fadeSlideUp 0.5s var(--ease-out) both}
+.section.active{display:block}
+@keyframes fadeSlideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+/* ===== STAT CARDS ===== */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:32px}
+.stat-card{padding:24px;border-radius:16px;background:var(--bg-elevated);border:1px solid var(--border);position:relative;overflow:hidden;transition:all 0.3s var(--spring)}
+.stat-card:hover{transform:translateY(-2px);border-color:var(--border-2);box-shadow:0 8px 30px rgba(0,0,0,0.3)}
+.stat-card .stat-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:12px}
+.stat-card .stat-value{font-family:'Space Mono',monospace;font-size:36px;font-weight:700;letter-spacing:-0.02em;line-height:1}
+.stat-card .stat-label{font-size:13px;color:var(--text-2);margin-top:6px}
+.stat-card .stat-glow{position:absolute;top:-50%;right:-50%;width:100%;height:100%;border-radius:50%;filter:blur(60px);opacity:0.08;pointer-events:none}
+
+/* ===== GLASSMORPHISM CARD ===== */
+.glass-card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:16px;padding:24px;backdrop-filter:blur(24px);transition:all 0.3s var(--spring)}
+.glass-card:hover{border-color:var(--border-2)}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.card-header h3{font-size:15px;font-weight:600;letter-spacing:-0.01em}
+.card-header .badge{font-family:'Space Mono',monospace;font-size:11px;padding:4px 10px;border-radius:6px;background:var(--surface-2);color:var(--text-2)}
+
+/* ===== HEATMAP ===== */
+.heatmap-container{overflow-x:auto;padding:8px 0}
+.heatmap{display:grid;grid-template-columns:repeat(53,1fr);grid-template-rows:repeat(7,1fr);gap:3px}
+.heatmap-cell{width:13px;height:13px;border-radius:3px;background:var(--surface);transition:all 0.15s ease}
+.heatmap-cell:hover{transform:scale(1.5);z-index:10}
+.heatmap-cell[data-level="1"]{background:rgba(124,106,255,0.2)}
+.heatmap-cell[data-level="2"]{background:rgba(124,106,255,0.4)}
+.heatmap-cell[data-level="3"]{background:rgba(124,106,255,0.6)}
+.heatmap-cell[data-level="4"]{background:rgba(124,106,255,0.9)}
+.heatmap-months{display:flex;gap:0;margin-bottom:4px;padding-left:0}
+.heatmap-months span{font-size:10px;color:var(--text-3);font-family:'Space Mono',monospace;flex:1;text-align:center}
+.heatmap-days{display:flex;flex-direction:column;gap:3px;margin-right:8px;justify-content:space-around}
+.heatmap-days span{font-size:10px;color:var(--text-3);font-family:'Space Mono',monospace;height:13px;line-height:13px}
+.heatmap-wrapper{display:flex}
+.heatmap-legend{display:flex;align-items:center;gap:4px;margin-top:12px;justify-content:flex-end}
+.heatmap-legend span{font-size:10px;color:var(--text-3);font-family:'Space Mono',monospace}
+.heatmap-legend .cell{width:13px;height:13px;border-radius:3px}
+
+/* ===== PROJECTS GRID ===== */
+.projects-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.project-card{padding:24px;border-radius:16px;background:var(--bg-elevated);border:1px solid var(--border);transition:all 0.3s var(--spring)}
+.project-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 8px 30px rgba(124,106,255,0.1)}
+.project-card .project-name{font-size:16px;font-weight:700;margin-bottom:4px;text-transform:capitalize}
+.project-card .project-count{font-family:'Space Mono',monospace;font-size:24px;font-weight:700;color:var(--accent);margin:12px 0}
+.project-card .project-meta{font-size:12px;color:var(--text-2)}
+.project-card .timeline-dots{display:flex;gap:3px;margin-top:12px;flex-wrap:wrap}
+.project-card .timeline-dot{width:8px;height:8px;border-radius:2px;background:var(--accent);opacity:0.3}
+.project-card .timeline-dot.recent{opacity:1}
+
+/* ===== CHART CONTAINERS ===== */
+.charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px}
+.chart-box{padding:24px;border-radius:16px;background:var(--bg-elevated);border:1px solid var(--border)}
+.chart-box h3{font-size:15px;font-weight:600;margin-bottom:16px}
+.chart-wrapper{position:relative;height:260px}
+.chart-legend{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap}
+.chart-legend .legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2)}
+.chart-legend .legend-dot{width:10px;height:10px;border-radius:3px}
+
+/* ===== TIMELINE ===== */
+.timeline{position:relative;padding-left:32px}
+.timeline::before{content:'';position:absolute;left:11px;top:0;bottom:0;width:2px;background:var(--border)}
+.timeline-item{position:relative;padding:16px 0 24px;animation:fadeSlideUp 0.5s var(--ease-out) both}
+.timeline-item .dot{position:absolute;left:-27px;top:20px;width:12px;height:12px;border-radius:50%;border:2px solid var(--accent);background:var(--bg)}
+.timeline-item .dot.codehtml{border-color:var(--teal)}
+.timeline-item .dot.codemcp{border-color:var(--blue)}
+.timeline-item .dot.divers{border-color:var(--amber)}
+.timeline-card{padding:16px 20px;border-radius:12px;background:var(--bg-elevated);border:1px solid var(--border);transition:all 0.2s ease}
+.timeline-card:hover{border-color:var(--border-2)}
+.timeline-card .tl-date{font-family:'Space Mono',monospace;font-size:11px;color:var(--text-3);letter-spacing:0.04em}
+.timeline-card .tl-title{font-size:14px;font-weight:600;margin:6px 0}
+.timeline-card .tl-details{font-size:12px;color:var(--text-2);line-height:1.6}
+.timeline-card .tl-status{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;font-family:'Space Mono',monospace;margin-top:8px}
+.timeline-card .tl-status.closed{background:rgba(0,212,170,0.1);color:var(--teal)}
+.timeline-card .tl-status.resolved{background:rgba(59,130,246,0.1);color:var(--blue)}
+.timeline-card .tl-status.open{background:rgba(245,158,11,0.1);color:var(--amber)}
+
+/* ===== PIPELINE ===== */
+.pipeline-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
+.pipeline-entry{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:10px;background:var(--surface);border:1px solid var(--border);margin-bottom:8px;transition:all 0.2s ease}
+.pipeline-entry:hover{background:var(--surface-2)}
+.pipeline-entry .grade-badge{font-family:'Space Mono',monospace;font-size:18px;font-weight:700;width:40px;text-align:center}
+.pipeline-entry .entry-info{flex:1;min-width:0}
+.pipeline-entry .entry-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pipeline-entry .entry-meta{font-size:11px;color:var(--text-2);font-family:'Space Mono',monospace}
+.pipeline-entry .entry-score{font-family:'Space Mono',monospace;font-size:14px;font-weight:700}
+
+/* ===== VEILLE CARDS ===== */
+.veille-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+.veille-card{padding:20px;border-radius:16px;background:var(--bg-elevated);border:1px solid var(--border);transition:all 0.3s var(--spring)}
+.veille-card:hover{transform:translateY(-2px);border-color:var(--border-2)}
+.veille-card .veille-date{font-family:'Space Mono',monospace;font-size:11px;color:var(--text-3);margin-bottom:8px}
+.veille-card .veille-provider{font-size:14px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.veille-card .veille-items{list-style:none;padding:0}
+.veille-card .veille-items li{font-size:13px;color:var(--text-2);padding:4px 0;border-bottom:1px solid var(--border);line-height:1.5}
+.veille-card .veille-items li:last-child{border:none}
+.provider-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ===== SKELETON LOADING ===== */
+.skeleton{background:linear-gradient(90deg,var(--surface) 25%,var(--surface-2) 50%,var(--surface) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.skeleton-card{height:120px;border-radius:16px}
+.skeleton-line{height:14px;margin-bottom:8px;border-radius:4px}
+.skeleton-line.short{width:60%}
+.skeleton-line.medium{width:80%}
+
+/* ===== TOOLTIP ===== */
+.custom-tooltip{position:fixed;z-index:9999;padding:8px 12px;border-radius:8px;background:rgba(12,12,24,0.95);border:1px solid rgba(255,255,255,0.1);font-size:12px;color:var(--text);pointer-events:none;opacity:0;transition:opacity 0.15s ease;white-space:nowrap;font-family:'Space Mono',monospace}
+.custom-tooltip.visible{opacity:1}
+
+/* ===== LOADING OVERLAY ===== */
+#loadingOverlay{position:fixed;inset:0;z-index:500;background:rgba(6,6,14,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;transition:opacity 0.5s ease}
+#loadingOverlay.hidden{opacity:0;pointer-events:none}
+.loader-spinner{width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
+.loader-text{font-size:14px;color:var(--text-2)}
+.loader-progress{width:240px;height:3px;background:var(--surface);border-radius:2px;overflow:hidden}
+.loader-progress-bar{height:100%;background:var(--accent);border-radius:2px;width:0%;transition:width 0.3s ease}
+
+/* ===== MOBILE OVERLAY ===== */
+.mobile-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:90}
+.mobile-overlay.visible{display:block}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:1024px){
+  .sidebar{width:var(--sidebar-collapsed)}
+  .sidebar .logo-text,.sidebar .nav-label,.sidebar .user-info,.sidebar .logout-btn{display:none}
+  .sidebar-header{justify-content:center;padding:16px}
+  .nav-item{justify-content:center;padding:12px}
+  .nav-item i{width:auto}
+  .sidebar-footer{justify-content:center;padding:12px}
+  .page-content{padding:20px}
+  .charts-grid{grid-template-columns:1fr}
+}
+@media(max-width:768px){
+  .sidebar{position:fixed;left:-260px;width:260px;transition:left 0.3s var(--ease-out);z-index:100}
+  .sidebar.open{left:0}
+  .sidebar .logo-text,.sidebar .nav-label,.sidebar .user-info,.sidebar .logout-btn{display:block}
+  .hamburger{display:block}
+  .main-header{padding:12px 16px}
+  .page-content{padding:16px}
+  .stats-grid{grid-template-columns:1fr 1fr}
+  .charts-grid{grid-template-columns:1fr}
+  .projects-grid{grid-template-columns:1fr}
+  .veille-grid{grid-template-columns:1fr}
+}
+@media(max-width:480px){
+  .stats-grid{grid-template-columns:1fr}
+}
+
+/* ===== STAGGERED ANIMATION ===== */
+.stagger>*{opacity:0;transform:translateY(16px);animation:fadeSlideUp 0.5s var(--ease-out) both}
+.stagger>*:nth-child(1){animation-delay:0.05s}
+.stagger>*:nth-child(2){animation-delay:0.1s}
+.stagger>*:nth-child(3){animation-delay:0.15s}
+.stagger>*:nth-child(4){animation-delay:0.2s}
+.stagger>*:nth-child(5){animation-delay:0.25s}
+.stagger>*:nth-child(6){animation-delay:0.3s}
+.stagger>*:nth-child(7){animation-delay:0.35s}
+.stagger>*:nth-child(8){animation-delay:0.4s}
+.stagger>*:nth-child(9){animation-delay:0.45s}
+.stagger>*:nth-child(10){animation-delay:0.5s}
+
+/* ===== EMPTY STATE ===== */
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-3)}
+.empty-state i{font-size:48px;margin-bottom:16px;opacity:0.3}
+.empty-state p{font-size:14px}
+
+/* ===== SECTION REFRESH ===== */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.section-header h2{font-size:22px;font-weight:700;letter-spacing:-0.02em}
+.section-refresh{display:flex;align-items:center;gap:12px}
+.section-refresh .last-refresh{font-size:11px}
+.section-refresh button{padding:6px 12px;border-radius:6px;background:var(--surface-2);border:1px solid var(--border);font-size:12px;color:var(--text-2);transition:all 0.2s ease}
+.section-refresh button:hover{color:var(--text);border-color:var(--accent)}
+
+/* ===== FILTER TABS ===== */
+.filter-tabs{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.filter-tab{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:500;color:var(--text-3);background:var(--surface);border:1px solid var(--border);transition:all 0.2s ease}
+.filter-tab:hover{color:var(--text-2);border-color:var(--border-2)}
+.filter-tab.active{color:var(--text);border-color:var(--accent);background:rgba(124,106,255,0.1)}
+</style>
+</head>
+<body>
+
+<!-- AMBIENT BACKGROUND -->
+<div class="ambient-mesh"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
+
+<!-- TOOLTIP -->
+<div class="custom-tooltip" id="tooltip"></div>
+
+<!-- LOGIN SCREEN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo"><i class="fas fa-folder-open"></i></div>
+    <h1>Drive Explorer</h1>
+    <p>Cockpit de visualisation pour votre Google Drive.<br>Lecture seule — aucune modification de vos fichiers.</p>
+    <button class="login-btn" id="loginBtn"><i class="fab fa-google"></i> Connexion avec Google</button>
+    <div class="login-version">v1.0</div>
+  </div>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div id="loadingOverlay" class="hidden">
+  <div class="loader-spinner"></div>
+  <div class="loader-text" id="loaderText">Chargement des données Drive...</div>
+  <div class="loader-progress"><div class="loader-progress-bar" id="loaderBar"></div></div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <!-- MOBILE OVERLAY -->
+  <div class="mobile-overlay" id="mobileOverlay"></div>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-icon"><i class="fas fa-cube"></i></div>
+      <div class="logo-text">
+        <h2>Drive Explorer</h2>
+        <span>v1.0</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-section="overview"><i class="fas fa-chart-pie"></i><span class="nav-label">Overview</span></button>
+      <button class="nav-item" data-section="projects"><i class="fas fa-folder-tree"></i><span class="nav-label">Projets</span></button>
+      <button class="nav-item" data-section="fitness"><i class="fas fa-heartbeat"></i><span class="nav-label">Fitness</span></button>
+      <button class="nav-item" data-section="sessions"><i class="fas fa-terminal"></i><span class="nav-label">Sessions</span></button>
+      <button class="nav-item" data-section="pipeline"><i class="fas fa-flask"></i><span class="nav-label">Pipeline</span></button>
+      <button class="nav-item" data-section="veille"><i class="fas fa-satellite-dish"></i><span class="nav-label">Veille</span></button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-avatar"><i class="fas fa-user"></i></div>
+      <div class="user-info">
+        <div class="user-name" id="userName">—</div>
+        <div class="user-email" id="userEmail">—</div>
+      </div>
+      <button class="logout-btn" id="logoutBtn" title="Déconnexion"><i class="fas fa-sign-out-alt"></i></button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main" id="mainContent">
+    <header class="main-header">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="hamburger" id="hamburgerBtn"><i class="fas fa-bars"></i></button>
+        <h1 id="pageTitle">Overview</h1>
+      </div>
+      <div class="header-actions">
+        <span class="last-refresh" id="globalLastRefresh">—</span>
+        <button class="refresh-btn" id="globalRefreshBtn"><i class="fas fa-sync-alt"></i> Actualiser</button>
+      </div>
+    </header>
+    <div class="stale-banner" id="staleBanner"><i class="fas fa-exclamation-triangle"></i> Données potentiellement obsolètes (>5 min)</div>
+
+    <div class="page-content">
+      <!-- OVERVIEW -->
+      <div class="section active" id="sec-overview">
+        <div class="stats-grid stagger" id="overviewStats">
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+        </div>
+        <div class="glass-card" style="margin-top:8px">
+          <div class="card-header"><h3>Activite — 12 derniers mois</h3><div class="badge" id="heatmapTotal">—</div></div>
+          <div class="heatmap-container" id="heatmapContainer">
+            <div class="skeleton" style="height:120px;width:100%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PROJECTS -->
+      <div class="section" id="sec-projects">
+        <div class="section-header">
+          <h2>Projets</h2>
+          <div class="section-refresh"><span class="last-refresh" id="projectsRefresh">—</span><button onclick="DataModule.loadSection('projects')"><i class="fas fa-sync-alt"></i></button></div>
+        </div>
+        <div class="projects-grid stagger" id="projectsGrid">
+          <div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div>
+        </div>
+      </div>
+
+      <!-- FITNESS -->
+      <div class="section" id="sec-fitness">
+        <div class="section-header">
+          <h2>Fitness</h2>
+          <div class="section-refresh"><span class="last-refresh" id="fitnessRefresh">—</span><button onclick="DataModule.loadSection('fitness')"><i class="fas fa-sync-alt"></i></button></div>
+        </div>
+        <div class="charts-grid" id="fitnessCharts">
+          <div class="chart-box"><h3><i class="fas fa-weight" style="color:var(--accent);margin-right:8px"></i>Poids (kg)</h3><div class="chart-wrapper"><canvas id="chartWeight"></canvas></div></div>
+          <div class="chart-box"><h3><i class="fas fa-moon" style="color:var(--blue);margin-right:8px"></i>Sommeil (h)</h3><div class="chart-wrapper"><canvas id="chartSleep"></canvas></div></div>
+          <div class="chart-box"><h3><i class="fas fa-shoe-prints" style="color:var(--teal);margin-right:8px"></i>Pas quotidiens</h3><div class="chart-wrapper"><canvas id="chartSteps"></canvas></div></div>
+          <div class="chart-box"><h3><i class="fas fa-utensils" style="color:var(--amber);margin-right:8px"></i>Macros (g)</h3><div class="chart-wrapper"><canvas id="chartMacros"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- SESSIONS -->
+      <div class="section" id="sec-sessions">
+        <div class="section-header">
+          <h2>Sessions de travail</h2>
+          <div class="section-refresh"><span class="last-refresh" id="sessionsRefresh">—</span><button onclick="DataModule.loadSection('sessions')"><i class="fas fa-sync-alt"></i></button></div>
+        </div>
+        <div class="filter-tabs" id="sessionFilters">
+          <button class="filter-tab active" data-filter="all">Tous</button>
+          <button class="filter-tab" data-filter="codehtml">Code HTML</button>
+          <button class="filter-tab" data-filter="codemcp">Code MCP</button>
+          <button class="filter-tab" data-filter="divers">Divers</button>
+        </div>
+        <div class="timeline" id="sessionsTimeline">
+          <div class="skeleton skeleton-card" style="margin-bottom:12px"></div>
+          <div class="skeleton skeleton-card" style="margin-bottom:12px"></div>
+        </div>
+      </div>
+
+      <!-- PIPELINE -->
+      <div class="section" id="sec-pipeline">
+        <div class="section-header">
+          <h2>Pipeline</h2>
+          <div class="section-refresh"><span class="last-refresh" id="pipelineRefresh">—</span><button onclick="DataModule.loadSection('pipeline')"><i class="fas fa-sync-alt"></i></button></div>
+        </div>
+        <div class="pipeline-stats stagger" id="pipelineStats">
+          <div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div>
+        </div>
+        <div class="charts-grid" style="margin-bottom:24px">
+          <div class="chart-box"><h3><i class="fas fa-chart-pie" style="color:var(--accent);margin-right:8px"></i>Distribution des grades</h3><div class="chart-wrapper"><canvas id="chartGrades"></canvas></div></div>
+          <div class="chart-box"><h3><i class="fas fa-chart-line" style="color:var(--teal);margin-right:8px"></i>Scores dans le temps</h3><div class="chart-wrapper"><canvas id="chartScores"></canvas></div></div>
+        </div>
+        <div class="glass-card">
+          <div class="card-header"><h3>Dernieres evaluations</h3><div class="badge" id="pipelineCount">—</div></div>
+          <div id="pipelineList"></div>
+        </div>
+      </div>
+
+      <!-- VEILLE -->
+      <div class="section" id="sec-veille">
+        <div class="section-header">
+          <h2>Veille IA</h2>
+          <div class="section-refresh"><span class="last-refresh" id="veilleRefresh">—</span><button onclick="DataModule.loadSection('veille')"><i class="fas fa-sync-alt"></i></button></div>
+        </div>
+        <div class="veille-grid stagger" id="veilleGrid">
+          <div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ================================================================
+   Drive Explorer v1.0 — Single-file HTML Dashboard (READ-ONLY)
+   ================================================================ */
+
+// ===== CONFIG =====
+const CONFIG = {
+  CLIENT_ID: '437621362270-vk0c2q90gthas1op4f30fsnhp1pcg0l8.apps.googleusercontent.com',
+  API_KEY: 'AIzaSyBhhASM8Zzhv_u1zgE1G1vg6RpgqgAGrkQ',
+  SCOPE: 'https://www.googleapis.com/auth/drive.readonly',
+  DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
+  STALE_MS: 5 * 60 * 1000,
+  CONCURRENCY: 5
+};
+
+const FOLDERS = {
+  backups:  '15637EbhZXL_pOCM0PZjQcZcljLR9Esey',
+  fitness:  '1HLg3FpbiPIkbR_zD36wjMWaC5oOl49S_',
+  sessions: '1YvzgWXpr6htnGrhqkub2hRhq0HL2zsW2',
+  pipeline: '1A2XGaXoN7SBwSq4hbXu9JbgFEEZ7bFnT',
+  memory:   '1AlxYCbF78efbdmUNOSQBiUddE24l0Y1h'
+};
+
+const GRADE_COLORS = {
+  A: '#00d4aa', B: '#3b82f6', C: '#f59e0b', F: '#ff4d6d'
+};
+
+const PROVIDER_COLORS = {
+  Anthropic: '#d97706', Google: '#3b82f6', DeepSeek: '#10b981',
+  OpenAI: '#8b5cf6', Meta: '#06b6d4', Mistral: '#ef4444',
+  Stability: '#f59e0b', Default: '#7c6aff'
+};
+
+// ===== GLOBAL STATE =====
+const State = {
+  token: null,
+  user: null,
+  data: { backups: [], fitness: [], sessions: [], pipeline: [], memory: [], veille: [] },
+  parsed: { overview: null, projects: null, fitness: null, sessions: null, pipeline: null, veille: null },
+  refreshTimes: {},
+  loadedSections: new Set(),
+  charts: {}
+};
+
+// ===== SEMAPHORE =====
+class Semaphore {
+  constructor(max) { this.max = max; this.count = 0; this.queue = []; }
+  async acquire() {
+    if (this.count < this.max) { this.count++; return; }
+    return new Promise(r => this.queue.push(r));
+  }
+  release() {
+    this.count--;
+    if (this.queue.length > 0) { this.count++; this.queue.shift()(); }
+  }
+}
+const sem = new Semaphore(CONFIG.CONCURRENCY);
+
+// ===== AUTH MODULE =====
+const AuthModule = {
+  tokenClient: null,
+  gapiInited: false,
+  gisInited: false,
+
+  async initGapi() {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://apis.google.com/js/api.js';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    await new Promise(r => gapi.load('client', r));
+    await gapi.client.init({ apiKey: CONFIG.API_KEY, discoveryDocs: [CONFIG.DISCOVERY_DOC] });
+    this.gapiInited = true;
+  },
+
+  async initGis() {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    this.tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CONFIG.CLIENT_ID,
+      scope: CONFIG.SCOPE,
+      callback: (resp) => {
+        if (resp.error) { console.error('Auth error:', resp); return; }
+        State.token = resp.access_token;
+        this.onAuth();
+      }
+    });
+    this.gisInited = true;
+  },
+
+  async init() {
+    await Promise.all([this.initGapi(), this.initGis()]);
+    document.getElementById('loginBtn').addEventListener('click', () => this.login());
+    document.getElementById('logoutBtn').addEventListener('click', () => this.logout());
+  },
+
+  login() {
+    if (!this.gisInited) return;
+    this.tokenClient.requestAccessToken({ prompt: 'consent' });
+  },
+
+  async onAuth() {
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('app').classList.add('visible');
+    document.getElementById('loadingOverlay').classList.remove('hidden');
+    try {
+      const resp = await gapi.client.request({ path: 'https://www.googleapis.com/oauth2/v2/userinfo' });
+      State.user = resp.result;
+      document.getElementById('userName').textContent = State.user.name || 'Utilisateur';
+      document.getElementById('userEmail').textContent = State.user.email || '';
+    } catch (e) { console.warn('User info failed:', e); }
+    await DataModule.loadAll();
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  },
+
+  logout() {
+    if (State.token) {
+      google.accounts.oauth2.revoke(State.token);
+    }
+    State.token = null;
+    State.user = null;
+    State.loadedSections.clear();
+    document.getElementById('app').classList.remove('visible');
+    document.getElementById('loginScreen').classList.remove('hidden');
+    Object.keys(State.charts).forEach(k => { if (State.charts[k]) { State.charts[k].destroy(); delete State.charts[k]; } });
+  },
+
+  async ensureToken() {
+    if (!State.token) throw new Error('Not authenticated');
+    return State.token;
+  }
+};
+
+// ===== DRIVE API =====
+const DriveAPI = {
+  async listFiles(folderId, pageToken = null) {
+    await AuthModule.ensureToken();
+    const params = {
+      q: `'${folderId}' in parents and trashed = false`,
+      fields: 'nextPageToken,files(id,name,mimeType,modifiedTime,size)',
+      pageSize: 1000,
+      orderBy: 'modifiedTime desc'
+    };
+    if (pageToken) params.pageToken = pageToken;
+    const resp = await gapi.client.drive.files.list(params);
+    return resp.result;
+  },
+
+  async listAllFiles(folderId) {
+    let all = [];
+    let pageToken = null;
+    do {
+      const result = await this.listFiles(folderId, pageToken);
+      all = all.concat(result.files || []);
+      pageToken = result.nextPageToken;
+    } while (pageToken);
+    return all;
+  },
+
+  async getFileContent(fileId) {
+    await sem.acquire();
+    try {
+      await AuthModule.ensureToken();
+      const resp = await gapi.client.drive.files.get({ fileId, alt: 'media' });
+      return resp.body;
+    } finally {
+      sem.release();
+    }
+  }
+};
+
+// ===== PARSERS =====
+const Parsers = {
+  parseWeightSleep(content, filename) {
+    const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
+    const date = dateMatch ? dateMatch[1] : null;
+    if (!date) return null;
+
+    const result = { date, weight: null, bodyFat: null, bmr: null, sleepHours: null, sleepMinutes: null, bedTime: null, wakeTime: null };
+
+    // Poids
+    const wm = content.match(/Poids\s*[:=]\s*([\d.,]+)\s*kg/i);
+    if (wm) result.weight = parseFloat(wm[1].replace(',', '.'));
+
+    // Masse grasse
+    const fm = content.match(/Masse\s+grasse\s*[:=]\s*([\d.,]+)\s*%/i);
+    if (fm) result.bodyFat = parseFloat(fm[1].replace(',', '.'));
+
+    // BMR
+    const bm = content.match(/BMR\s*[:=]\s*([\d.,]+)/i);
+    if (bm) result.bmr = parseFloat(bm[1].replace(',', '.'));
+
+    // Sommeil — format Xh ou XhMM
+    const sm = content.match(/Sommeil\s*[:=]\s*(\d+)h\s*(\d+)?/i);
+    if (sm) {
+      result.sleepHours = parseInt(sm[1]);
+      result.sleepMinutes = sm[2] ? parseInt(sm[2]) : 0;
+    }
+
+    // Horaires
+    const bed = content.match(/Couch[ée]?\s*[:=]\s*(\d{1,2}[h:]\d{2})/i);
+    if (bed) result.bedTime = bed[1];
+    const wake = content.match(/(?:Lev[ée]?|R[ée]veil)\s*[:=]\s*(\d{1,2}[h:]\d{2})/i);
+    if (wake) result.wakeTime = wake[1];
+
+    return result;
+  },
+
+  parseSteps(content, filename) {
+    const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
+    const date = dateMatch ? dateMatch[1] : null;
+    if (!date) return null;
+
+    const pm = content.match(/Pas\s*[:=]\s*([\d\s.,]+)/i);
+    if (!pm) return null;
+    const steps = parseInt(pm[1].replace(/[\s.,]/g, ''));
+    return { date, steps: isNaN(steps) ? 0 : steps };
+  },
+
+  parseFitnessLog(content, filename) {
+    const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
+    const date = dateMatch ? dateMatch[1] : null;
+    if (!date) return null;
+
+    const result = { date, protein: null, carbs: null, fat: null, calories: null, meals: [] };
+
+    // Macros: P Xg | G Xg | L Xg | Cal X kcal
+    const mm = content.match(/P\s*([\d.,]+)\s*g\s*\|\s*G\s*([\d.,]+)\s*g\s*\|\s*L\s*([\d.,]+)\s*g\s*\|\s*Cal\s*([\d.,]+)\s*kcal/i);
+    if (mm) {
+      result.protein = parseFloat(mm[1].replace(',', '.'));
+      result.carbs = parseFloat(mm[2].replace(',', '.'));
+      result.fat = parseFloat(mm[3].replace(',', '.'));
+      result.calories = parseFloat(mm[4].replace(',', '.'));
+    }
+
+    // Repas lines
+    const mealLines = content.match(/^[-•*]\s+.+/gm);
+    if (mealLines) result.meals = mealLines.map(l => l.replace(/^[-•*]\s+/, '').trim());
+
+    return result;
+  },
+
+  parsePipeline(content) {
+    try {
+      const data = JSON.parse(content);
+      return data.entries || data || [];
+    } catch (e) {
+      console.warn('Pipeline parse error:', e);
+      return [];
+    }
+  },
+
+  parseBackupName(filename) {
+    // Format: projet_YYYY-MM-DD.html or projet_vX.Y_YYYY-MM-DD.html
+    const m = filename.match(/^(.+?)(?:_v[\d.]+)?_?(\d{4}-\d{2}-\d{2})\.html$/i);
+    if (!m) {
+      const m2 = filename.match(/^(.+?)\.html$/i);
+      return m2 ? { project: m2[1].replace(/[-_]/g, ' '), date: null } : null;
+    }
+    return { project: m[1].replace(/[-_]/g, ' '), date: m[2] };
+  },
+
+  parseSessionLog(content, filename) {
+    const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
+    const date = dateMatch ? dateMatch[1] : null;
+
+    // Detect category from filename
+    let category = 'divers';
+    const fn = filename.toLowerCase();
+    if (fn.includes('codehtml') || fn.includes('code_html')) category = 'codehtml';
+    else if (fn.includes('codemcp') || fn.includes('code_mcp') || fn.includes('mcp')) category = 'codemcp';
+    else if (fn.includes('fitness')) category = 'fitness';
+
+    // Parse content
+    const lines = content.split('\n');
+    let subject = '';
+    let points = [];
+    let status = 'open';
+
+    for (const line of lines) {
+      const subj = line.match(/(?:Sujet|Titre|Session)\s*[:=]\s*(.+)/i);
+      if (subj && !subject) subject = subj[1].trim();
+
+      if (line.match(/CLOTUR[EÉ]/i)) status = 'closed';
+      else if (line.match(/R[EÉ]SOLU/i)) status = 'resolved';
+
+      const point = line.match(/^[-•*]\s+(.+)/);
+      if (point) points.push(point[1].trim());
+    }
+
+    if (!subject) subject = filename.replace(/\.txt$/i, '').replace(/_/g, ' ');
+
+    return { date, category, subject, points: points.slice(0, 5), status, filename };
+  },
+
+  parseVeilleLog(content, filename) {
+    const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
+    const date = dateMatch ? dateMatch[1] : null;
+
+    const sections = [];
+    let currentProvider = null;
+    let currentItems = [];
+    const lines = content.split('\n');
+
+    for (const line of lines) {
+      // Provider headers: ## Anthropic, ## Google, etc.
+      const providerMatch = line.match(/^#{1,3}\s+(Anthropic|Google|OpenAI|DeepSeek|Meta|Mistral|Stability|.+?)$/i);
+      if (providerMatch) {
+        if (currentProvider) sections.push({ provider: currentProvider, items: currentItems });
+        currentProvider = providerMatch[1].trim();
+        currentItems = [];
+        continue;
+      }
+      // Items
+      const itemMatch = line.match(/^[-•*]\s+(.+)/);
+      if (itemMatch && currentProvider) {
+        currentItems.push(itemMatch[1].trim());
+      }
+    }
+    if (currentProvider) sections.push({ provider: currentProvider, items: currentItems });
+
+    return { date, filename, sections };
+  }
+};
+
+// ===== DATA MODULE =====
+const DataModule = {
+  async loadAll() {
+    const progress = document.getElementById('loaderBar');
+    const text = document.getElementById('loaderText');
+    let step = 0;
+    const totalSteps = 5;
+
+    const updateProgress = (msg) => {
+      step++;
+      const pct = Math.round((step / totalSteps) * 100);
+      progress.style.width = pct + '%';
+      text.textContent = msg;
+    };
+
+    try {
+      // Scan all folders in parallel
+      const [backups, fitness, sessions, pipeline, memory] = await Promise.all([
+        DriveAPI.listAllFiles(FOLDERS.backups).then(f => { updateProgress('Backups chargees...'); return f; }),
+        DriveAPI.listAllFiles(FOLDERS.fitness).then(f => { updateProgress('Fitness charge...'); return f; }),
+        DriveAPI.listAllFiles(FOLDERS.sessions).then(f => { updateProgress('Sessions chargees...'); return f; }),
+        DriveAPI.listAllFiles(FOLDERS.pipeline).then(f => { updateProgress('Pipeline charge...'); return f; }),
+        DriveAPI.listAllFiles(FOLDERS.memory).then(f => { updateProgress('Memoire chargee...'); return f; })
+      ]);
+
+      State.data.backups = backups;
+      State.data.fitness = fitness;
+      State.data.sessions = sessions;
+      State.data.pipeline = pipeline;
+      State.data.memory = memory;
+
+      this.updateGlobalRefresh();
+      // Load overview immediately
+      await this.loadSection('overview');
+    } catch (err) {
+      console.error('loadAll error:', err);
+      if (err.status === 401) AuthModule.logout();
+      else if (err.status === 403 || err.status === 429) alert('Quota Google Drive dépassé. Réessayez dans quelques minutes.');
+      else alert('Erreur de chargement: ' + (err.message || err));
+    }
+  },
+
+  async loadSection(name) {
+    const sectionLoaders = {
+      overview: () => this.loadOverview(),
+      projects: () => this.loadProjects(),
+      fitness: () => this.loadFitness(),
+      sessions: () => this.loadSessions(),
+      pipeline: () => this.loadPipeline(),
+      veille: () => this.loadVeille()
+    };
+
+    if (sectionLoaders[name]) {
+      try {
+        await sectionLoaders[name]();
+        State.loadedSections.add(name);
+        State.refreshTimes[name] = Date.now();
+        this.updateSectionRefresh(name);
+      } catch (err) {
+        console.error(`Error loading ${name}:`, err);
+        if (err.status === 401) AuthModule.logout();
+      }
+    }
+  },
+
+  updateGlobalRefresh() {
+    const now = new Date();
+    document.getElementById('globalLastRefresh').textContent = `Derniere actualisation : ${now.toLocaleTimeString('fr-FR')}`;
+    State.refreshTimes.global = Date.now();
+    this.checkStale();
+  },
+
+  updateSectionRefresh(name) {
+    const el = document.getElementById(name + 'Refresh');
+    if (el) el.textContent = new Date().toLocaleTimeString('fr-FR');
+  },
+
+  checkStale() {
+    const now = Date.now();
+    const globalTime = State.refreshTimes.global || 0;
+    const banner = document.getElementById('staleBanner');
+    if (now - globalTime > CONFIG.STALE_MS) banner.classList.add('visible');
+    else banner.classList.remove('visible');
+  },
+
+  // ---- OVERVIEW ----
+  async loadOverview() {
+    const backups = State.data.backups;
+    const fitness = State.data.fitness;
+    const sessions = State.data.sessions;
+    const pipeline = State.data.pipeline;
+    const memory = State.data.memory;
+
+    const totalFiles = backups.length + fitness.length + sessions.length + pipeline.length + memory.length;
+
+    // Count unique projects from backups
+    const projectSet = new Set();
+    backups.forEach(f => {
+      const parsed = Parsers.parseBackupName(f.name);
+      if (parsed) projectSet.add(parsed.project.toLowerCase());
+    });
+
+    // Latest activity
+    const allFiles = [...backups, ...fitness, ...sessions, ...pipeline, ...memory];
+    allFiles.sort((a, b) => new Date(b.modifiedTime) - new Date(a.modifiedTime));
+    const latestFile = allFiles[0];
+    const latestDate = latestFile ? new Date(latestFile.modifiedTime) : null;
+
+    // Sessions this week
+    const now = new Date();
+    const weekAgo = new Date(now);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const sessionsThisWeek = sessions.filter(f => new Date(f.modifiedTime) >= weekAgo).length;
+
+    // Render stat cards
+    const statsContainer = document.getElementById('overviewStats');
+    statsContainer.innerHTML = '';
+    const cards = [
+      { icon: 'fas fa-file', color: 'var(--accent)', value: totalFiles, label: 'Fichiers total', glow: 'var(--accent)' },
+      { icon: 'fas fa-project-diagram', color: 'var(--teal)', value: projectSet.size, label: 'Projets actifs', glow: 'var(--teal)' },
+      { icon: 'fas fa-clock', color: 'var(--amber)', value: latestDate ? this.timeAgo(latestDate) : '—', label: 'Derniere activite', glow: 'var(--amber)' },
+      { icon: 'fas fa-terminal', color: 'var(--blue)', value: sessionsThisWeek, label: 'Sessions cette semaine', glow: 'var(--blue)' }
+    ];
+
+    cards.forEach((c, i) => {
+      const card = document.createElement('div');
+      card.className = 'stat-card';
+      card.style.animationDelay = (i * 0.08) + 's';
+      card.innerHTML = `
+        <div class="stat-icon" style="background:${c.color}20;color:${c.color}"><i class="${c.icon}"></i></div>
+        <div class="stat-value" data-target="${typeof c.value === 'number' ? c.value : ''}">${typeof c.value === 'number' ? '0' : c.value}</div>
+        <div class="stat-label">${c.label}</div>
+        <div class="stat-glow" style="background:${c.glow}"></div>
+      `;
+      statsContainer.appendChild(card);
+    });
+
+    // Animate counters
+    statsContainer.querySelectorAll('.stat-value[data-target]').forEach(el => {
+      const target = parseInt(el.dataset.target);
+      if (isNaN(target)) return;
+      UIModule.animateCounter(el, 0, target, 800);
+    });
+
+    // Build heatmap
+    this.buildHeatmap(allFiles);
+  },
+
+  buildHeatmap(files) {
+    const container = document.getElementById('heatmapContainer');
+    const now = new Date();
+    const yearAgo = new Date(now);
+    yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+
+    // Count per day
+    const dayCounts = {};
+    files.forEach(f => {
+      const d = new Date(f.modifiedTime);
+      if (d >= yearAgo) {
+        const key = d.toISOString().slice(0, 10);
+        dayCounts[key] = (dayCounts[key] || 0) + 1;
+      }
+    });
+
+    const totalDays = Object.keys(dayCounts).length;
+    document.getElementById('heatmapTotal').textContent = `${totalDays} jours actifs`;
+
+    // Build grid - 53 weeks x 7 days
+    const months = ['Jan', 'Fev', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aou', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const days = ['L', '', 'M', '', 'V', '', 'D'];
+
+    // Find the starting Sunday
+    const start = new Date(yearAgo);
+    start.setDate(start.getDate() - start.getDay());
+
+    let html = '<div class="heatmap-wrapper">';
+    html += '<div class="heatmap-days">';
+    days.forEach(d => { html += `<span>${d}</span>`; });
+    html += '</div><div style="flex:1"><div class="heatmap-months">';
+
+    // Month labels
+    const monthPositions = [];
+    const tempDate = new Date(start);
+    for (let w = 0; w < 53; w++) {
+      const weekDate = new Date(tempDate);
+      weekDate.setDate(weekDate.getDate() + w * 7);
+      if (w === 0 || weekDate.getMonth() !== new Date(tempDate.getTime() + (w - 1) * 7 * 86400000).getMonth()) {
+        monthPositions.push({ week: w, month: weekDate.getMonth() });
+      }
+    }
+    let monthIdx = 0;
+    for (let w = 0; w < 53; w++) {
+      if (monthIdx < monthPositions.length && monthPositions[monthIdx].week === w) {
+        html += `<span>${months[monthPositions[monthIdx].month]}</span>`;
+        monthIdx++;
+      } else {
+        html += '<span></span>';
+      }
+    }
+    html += '</div><div class="heatmap">';
+
+    // Cells
+    const maxCount = Math.max(...Object.values(dayCounts), 1);
+    for (let d = 0; d < 7; d++) {
+      for (let w = 0; w < 53; w++) {
+        const cellDate = new Date(start);
+        cellDate.setDate(cellDate.getDate() + w * 7 + d);
+        const key = cellDate.toISOString().slice(0, 10);
+        const count = dayCounts[key] || 0;
+        let level = 0;
+        if (count > 0) level = Math.min(4, Math.ceil((count / maxCount) * 4));
+        const dateStr = cellDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+        html += `<div class="heatmap-cell" data-level="${level}" data-tooltip="${dateStr}: ${count} fichier${count !== 1 ? 's' : ''}"></div>`;
+      }
+    }
+    html += '</div>';
+    html += '<div class="heatmap-legend"><span>Moins</span>';
+    for (let l = 0; l <= 4; l++) html += `<div class="cell heatmap-cell" data-level="${l}"></div>`;
+    html += '<span>Plus</span></div></div></div>';
+
+    container.innerHTML = html;
+
+    // Tooltip for heatmap cells
+    container.querySelectorAll('.heatmap-cell[data-tooltip]').forEach(cell => {
+      cell.addEventListener('mouseenter', e => UIModule.showTooltip(e, cell.dataset.tooltip));
+      cell.addEventListener('mouseleave', () => UIModule.hideTooltip());
+    });
+  },
+
+  timeAgo(date) {
+    const diff = Date.now() - date.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'A l\'instant';
+    if (mins < 60) return `${mins}min`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h`;
+    const days = Math.floor(hrs / 24);
+    return `${days}j`;
+  },
+
+  // ---- PROJECTS ----
+  async loadProjects() {
+    const backups = State.data.backups;
+    const projects = {};
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    backups.forEach(f => {
+      const parsed = Parsers.parseBackupName(f.name);
+      if (!parsed) return;
+      const key = parsed.project.toLowerCase();
+      if (!projects[key]) projects[key] = { name: parsed.project, count: 0, dates: [], lastDate: null };
+      projects[key].count++;
+      if (parsed.date) projects[key].dates.push(parsed.date);
+      const modDate = new Date(f.modifiedTime);
+      if (!projects[key].lastDate || modDate > projects[key].lastDate) {
+        projects[key].lastDate = modDate;
+      }
+    });
+
+    const grid = document.getElementById('projectsGrid');
+    const sorted = Object.values(projects).sort((a, b) => (b.lastDate || 0) - (a.lastDate || 0));
+
+    if (sorted.length === 0) {
+      grid.innerHTML = '<div class="empty-state"><i class="fas fa-folder-open"></i><p>Aucun backup HTML trouve</p></div>';
+      return;
+    }
+
+    grid.innerHTML = '';
+    sorted.forEach((p, i) => {
+      const card = document.createElement('div');
+      card.className = 'project-card';
+      card.style.animationDelay = (i * 0.06) + 's';
+
+      const sortedDates = p.dates.sort();
+      const dotsHtml = sortedDates.slice(-20).map(d => {
+        const isRecent = new Date(d) >= thirtyDaysAgo;
+        return `<div class="timeline-dot${isRecent ? ' recent' : ''}"></div>`;
+      }).join('');
+
+      const lastDateStr = p.lastDate ? p.lastDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+
+      card.innerHTML = `
+        <div class="project-name">${this.escHtml(p.name)}</div>
+        <div class="project-count">${p.count}</div>
+        <div class="project-meta">backups HTML &middot; Dernier: ${lastDateStr}</div>
+        <div class="timeline-dots">${dotsHtml}</div>
+      `;
+      grid.appendChild(card);
+    });
+  },
+
+  // ---- FITNESS ----
+  async loadFitness() {
+    const fitnessFiles = State.data.fitness;
+    const sessionFiles = State.data.sessions;
+
+    // Fetch weight/sleep files
+    const weightFiles = fitnessFiles.filter(f => /weight_sleep/i.test(f.name));
+    const stepFiles = fitnessFiles.filter(f => /^step_/i.test(f.name));
+    const fitnessLogFiles = sessionFiles.filter(f => /fitness_log/i.test(f.name));
+
+    const weightData = [];
+    const stepData = [];
+    const macroData = [];
+
+    // Fetch and parse weight/sleep
+    const weightContents = await Promise.all(
+      weightFiles.slice(0, 90).map(async f => {
+        try { return { name: f.name, content: await DriveAPI.getFileContent(f.id) }; }
+        catch { return null; }
+      })
+    );
+    weightContents.filter(Boolean).forEach(({ name, content }) => {
+      const parsed = Parsers.parseWeightSleep(content, name);
+      if (parsed) weightData.push(parsed);
+    });
+
+    // Fetch and parse steps
+    const stepContents = await Promise.all(
+      stepFiles.slice(0, 90).map(async f => {
+        try { return { name: f.name, content: await DriveAPI.getFileContent(f.id) }; }
+        catch { return null; }
+      })
+    );
+    stepContents.filter(Boolean).forEach(({ name, content }) => {
+      const parsed = Parsers.parseSteps(content, name);
+      if (parsed) stepData.push(parsed);
+    });
+
+    // Fetch and parse fitness logs
+    const logContents = await Promise.all(
+      fitnessLogFiles.slice(0, 90).map(async f => {
+        try { return { name: f.name, content: await DriveAPI.getFileContent(f.id) }; }
+        catch { return null; }
+      })
+    );
+    logContents.filter(Boolean).forEach(({ name, content }) => {
+      const parsed = Parsers.parseFitnessLog(content, name);
+      if (parsed && parsed.protein !== null) macroData.push(parsed);
+    });
+
+    // Sort by date
+    weightData.sort((a, b) => a.date.localeCompare(b.date));
+    stepData.sort((a, b) => a.date.localeCompare(b.date));
+    macroData.sort((a, b) => a.date.localeCompare(b.date));
+
+    State.parsed.fitness = { weight: weightData, steps: stepData, macros: macroData };
+    ChartModule.renderFitnessCharts(weightData, stepData, macroData);
+  },
+
+  // ---- SESSIONS ----
+  async loadSessions() {
+    const sessionFiles = State.data.sessions.filter(f => /log/i.test(f.name) && !(/fitness_log/i.test(f.name)));
+
+    const sessionData = [];
+    const contents = await Promise.all(
+      sessionFiles.slice(0, 60).map(async f => {
+        try { return { name: f.name, content: await DriveAPI.getFileContent(f.id) }; }
+        catch { return null; }
+      })
+    );
+    contents.filter(Boolean).forEach(({ name, content }) => {
+      const parsed = Parsers.parseSessionLog(content, name);
+      if (parsed) sessionData.push(parsed);
+    });
+
+    sessionData.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    State.parsed.sessions = sessionData;
+    UIModule.renderSessions(sessionData);
+  },
+
+  // ---- PIPELINE ----
+  async loadPipeline() {
+    const pipelineFile = State.data.pipeline.find(f => /pipeline_logs\.json/i.test(f.name));
+    if (!pipelineFile) {
+      document.getElementById('pipelineStats').innerHTML = '<div class="empty-state"><i class="fas fa-flask"></i><p>Fichier pipeline_logs.json introuvable</p></div>';
+      return;
+    }
+
+    const content = await DriveAPI.getFileContent(pipelineFile.id);
+    const entries = Parsers.parsePipeline(content);
+    State.parsed.pipeline = entries;
+
+    if (!entries.length) {
+      document.getElementById('pipelineStats').innerHTML = '<div class="empty-state"><i class="fas fa-flask"></i><p>Aucune entree pipeline</p></div>';
+      return;
+    }
+
+    // Stats
+    const scores = entries.filter(e => typeof e.score === 'number').map(e => e.score);
+    const avgScore = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+    const grades = { A: 0, B: 0, C: 0, F: 0 };
+    entries.forEach(e => { if (e.grade && grades.hasOwnProperty(e.grade)) grades[e.grade]++; });
+
+    const statsContainer = document.getElementById('pipelineStats');
+    statsContainer.innerHTML = '';
+    const pStats = [
+      { icon: 'fas fa-chart-line', color: 'var(--accent)', value: avgScore.toFixed(1), label: 'Score moyen' },
+      { icon: 'fas fa-list', color: 'var(--teal)', value: entries.length, label: 'Evaluations total' },
+      { icon: 'fas fa-trophy', color: 'var(--amber)', value: `${grades.A} A`, label: 'Top grades' }
+    ];
+    pStats.forEach(s => {
+      const d = document.createElement('div');
+      d.className = 'stat-card';
+      d.innerHTML = `
+        <div class="stat-icon" style="background:${s.color}20;color:${s.color}"><i class="${s.icon}"></i></div>
+        <div class="stat-value">${s.value}</div>
+        <div class="stat-label">${s.label}</div>
+      `;
+      statsContainer.appendChild(d);
+    });
+
+    document.getElementById('pipelineCount').textContent = entries.length + ' entrees';
+
+    ChartModule.renderPipelineCharts(entries, grades);
+    UIModule.renderPipelineList(entries);
+  },
+
+  // ---- VEILLE ----
+  async loadVeille() {
+    // Look for veille files in memory folder
+    const veilleFiles = State.data.memory.filter(f => /veille/i.test(f.name));
+
+    if (!veilleFiles.length) {
+      // Try sessions too
+      const sessionVeille = State.data.sessions.filter(f => /veille/i.test(f.name));
+      veilleFiles.push(...sessionVeille);
+    }
+
+    if (!veilleFiles.length) {
+      document.getElementById('veilleGrid').innerHTML = '<div class="empty-state"><i class="fas fa-satellite-dish"></i><p>Aucun fichier de veille trouve</p></div>';
+      return;
+    }
+
+    const veilleData = [];
+    const contents = await Promise.all(
+      veilleFiles.slice(0, 20).map(async f => {
+        try { return { name: f.name, content: await DriveAPI.getFileContent(f.id) }; }
+        catch { return null; }
+      })
+    );
+    contents.filter(Boolean).forEach(({ name, content }) => {
+      const parsed = Parsers.parseVeilleLog(content, name);
+      if (parsed && parsed.sections.length) veilleData.push(parsed);
+    });
+
+    veilleData.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    State.parsed.veille = veilleData;
+    UIModule.renderVeille(veilleData);
+  },
+
+  escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+};
+
+// ===== CHART MODULE =====
+const ChartModule = {
+  defaultOptions: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(12,12,24,0.95)',
+        borderColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 1,
+        cornerRadius: 8,
+        padding: 10,
+        titleFont: { family: 'Space Mono', size: 12 },
+        bodyFont: { family: 'Inter', size: 12 },
+        titleColor: '#ededf5',
+        bodyColor: '#8888a0'
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+        ticks: { color: '#4a4a60', font: { family: 'Space Mono', size: 10 }, maxTicksLimit: 10 }
+      },
+      y: {
+        grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+        ticks: { color: '#4a4a60', font: { family: 'Space Mono', size: 10 } }
+      }
+    }
+  },
+
+  getOptions(overrides = {}) {
+    return this.deepMerge(JSON.parse(JSON.stringify(this.defaultOptions)), overrides);
+  },
+
+  deepMerge(target, source) {
+    for (const key of Object.keys(source)) {
+      if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+        if (!target[key]) target[key] = {};
+        this.deepMerge(target[key], source[key]);
+      } else {
+        target[key] = source[key];
+      }
+    }
+    return target;
+  },
+
+  destroyChart(name) {
+    if (State.charts[name]) { State.charts[name].destroy(); delete State.charts[name]; }
+  },
+
+  renderFitnessCharts(weightData, stepData, macroData) {
+    // Weight chart
+    this.destroyChart('weight');
+    if (weightData.length) {
+      const labels = weightData.map(d => d.date.slice(5));
+      const weights = weightData.map(d => d.weight);
+      State.charts.weight = new Chart(document.getElementById('chartWeight'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            data: weights,
+            borderColor: '#7c6aff',
+            backgroundColor: 'rgba(124,106,255,0.1)',
+            fill: true,
+            tension: 0.35,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: '#7c6aff',
+            borderWidth: 2
+          }]
+        },
+        options: this.getOptions({
+          scales: {
+            y: {
+              grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+              ticks: { color: '#4a4a60', font: { family: 'Space Mono', size: 10 }, callback: v => v + ' kg' }
+            }
+          }
+        })
+      });
+    }
+
+    // Sleep chart
+    this.destroyChart('sleep');
+    if (weightData.length) {
+      const sleepData = weightData.filter(d => d.sleepHours !== null);
+      if (sleepData.length) {
+        const labels = sleepData.map(d => d.date.slice(5));
+        const hours = sleepData.map(d => d.sleepHours + (d.sleepMinutes || 0) / 60);
+        State.charts.sleep = new Chart(document.getElementById('chartSleep'), {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              data: hours,
+              backgroundColor: hours.map(h => h >= 7 ? 'rgba(59,130,246,0.6)' : 'rgba(255,77,109,0.6)'),
+              borderRadius: 4,
+              borderSkipped: false
+            }]
+          },
+          options: this.getOptions({
+            scales: {
+              y: {
+                grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+                ticks: { color: '#4a4a60', font: { family: 'Space Mono', size: 10 }, callback: v => v + 'h' },
+                suggestedMin: 4, suggestedMax: 10
+              }
+            }
+          })
+        });
+      }
+    }
+
+    // Steps chart
+    this.destroyChart('steps');
+    if (stepData.length) {
+      const labels = stepData.map(d => d.date.slice(5));
+      const steps = stepData.map(d => d.steps);
+      State.charts.steps = new Chart(document.getElementById('chartSteps'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            data: steps,
+            backgroundColor: steps.map(s => s >= 10000 ? 'rgba(0,212,170,0.6)' : 'rgba(0,212,170,0.3)'),
+            borderRadius: 4,
+            borderSkipped: false
+          }]
+        },
+        options: this.getOptions({
+          scales: {
+            y: {
+              grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+              ticks: { color: '#4a4a60', font: { family: 'Space Mono', size: 10 }, callback: v => (v/1000).toFixed(0) + 'k' }
+            }
+          }
+        })
+      });
+    }
+
+    // Macros chart
+    this.destroyChart('macros');
+    if (macroData.length) {
+      const labels = macroData.map(d => d.date.slice(5));
+      State.charts.macros = new Chart(document.getElementById('chartMacros'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Proteines', data: macroData.map(d => d.protein), backgroundColor: 'rgba(124,106,255,0.7)', borderRadius: 2, borderSkipped: false },
+            { label: 'Glucides', data: macroData.map(d => d.carbs), backgroundColor: 'rgba(245,158,11,0.7)', borderRadius: 2, borderSkipped: false },
+            { label: 'Lipides', data: macroData.map(d => d.fat), backgroundColor: 'rgba(255,77,109,0.7)', borderRadius: 2, borderSkipped: false }
+          ]
+        },
+        options: this.getOptions({
+          scales: {
+            x: {
+              stacked: true,
+              grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+              ticks: { color: '#4a4a60', font: { family: 'Space Mono', size: 10 }, maxTicksLimit: 10 }
+            },
+            y: {
+              stacked: true,
+              grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+              ticks: { color: '#4a4a60', font: { family: 'Space Mono', size: 10 }, callback: v => v + 'g' }
+            }
+          }
+        })
+      });
+    }
+  },
+
+  renderPipelineCharts(entries, grades) {
+    // Grade distribution pie
+    this.destroyChart('grades');
+    const gradeLabels = Object.keys(grades).filter(g => grades[g] > 0);
+    const gradeValues = gradeLabels.map(g => grades[g]);
+    const gradeColors = gradeLabels.map(g => GRADE_COLORS[g]);
+
+    if (gradeLabels.length) {
+      State.charts.grades = new Chart(document.getElementById('chartGrades'), {
+        type: 'doughnut',
+        data: {
+          labels: gradeLabels,
+          datasets: [{
+            data: gradeValues,
+            backgroundColor: gradeColors,
+            borderWidth: 0,
+            hoverOffset: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '65%',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'rgba(12,12,24,0.95)',
+              borderColor: 'rgba(255,255,255,0.1)',
+              borderWidth: 1,
+              cornerRadius: 8,
+              titleFont: { family: 'Space Mono', size: 12 },
+              bodyFont: { family: 'Inter', size: 12 },
+              titleColor: '#ededf5',
+              bodyColor: '#8888a0'
+            }
+          }
+        }
+      });
+    }
+
+    // Scores scatter
+    this.destroyChart('scores');
+    const scoredEntries = entries.filter(e => typeof e.score === 'number' && e.timestamp);
+    if (scoredEntries.length) {
+      scoredEntries.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      const labels = scoredEntries.map(e => {
+        const d = new Date(e.timestamp);
+        return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+      });
+      const scores = scoredEntries.map(e => e.score);
+      const colors = scoredEntries.map(e => GRADE_COLORS[e.grade] || '#7c6aff');
+
+      State.charts.scores = new Chart(document.getElementById('chartScores'), {
+        type: 'scatter',
+        data: {
+          datasets: [{
+            data: scoredEntries.map((e, i) => ({ x: i, y: e.score })),
+            backgroundColor: colors,
+            pointRadius: 5,
+            pointHoverRadius: 8
+          }]
+        },
+        options: this.getOptions({
+          scales: {
+            x: {
+              grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+              ticks: {
+                color: '#4a4a60',
+                font: { family: 'Space Mono', size: 10 },
+                callback: function(val) { return labels[val] || ''; },
+                maxTicksLimit: 10
+              }
+            },
+            y: {
+              grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+              ticks: { color: '#4a4a60', font: { family: 'Space Mono', size: 10 } },
+              min: 0, max: 100
+            }
+          },
+          plugins: {
+            tooltip: {
+              backgroundColor: 'rgba(12,12,24,0.95)',
+              borderColor: 'rgba(255,255,255,0.1)',
+              borderWidth: 1,
+              cornerRadius: 8,
+              callbacks: {
+                label: function(ctx) {
+                  const e = scoredEntries[ctx.dataIndex];
+                  return `${e.file_name || '?'}: ${e.score} (${e.grade})`;
+                }
+              }
+            }
+          }
+        })
+      });
+    }
+  }
+};
+
+// ===== UI MODULE =====
+const UIModule = {
+  currentSection: 'overview',
+  tooltipEl: document.getElementById('tooltip'),
+
+  init() {
+    // Nav items
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => this.switchSection(item.dataset.section));
+    });
+
+    // Hamburger
+    document.getElementById('hamburgerBtn').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('mobileOverlay').classList.toggle('visible');
+    });
+    document.getElementById('mobileOverlay').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('mobileOverlay').classList.remove('visible');
+    });
+
+    // Global refresh
+    document.getElementById('globalRefreshBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('globalRefreshBtn');
+      btn.classList.add('spinning');
+      try {
+        await DataModule.loadAll();
+        // Reload current section
+        await DataModule.loadSection(this.currentSection);
+      } finally {
+        btn.classList.remove('spinning');
+      }
+    });
+
+    // Session filters
+    document.getElementById('sessionFilters').addEventListener('click', e => {
+      const tab = e.target.closest('.filter-tab');
+      if (!tab) return;
+      document.querySelectorAll('#sessionFilters .filter-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      this.filterSessions(tab.dataset.filter);
+    });
+
+    // Stale check interval
+    setInterval(() => DataModule.checkStale(), 30000);
+  },
+
+  async switchSection(name) {
+    if (name === this.currentSection) return;
+    this.currentSection = name;
+
+    // Update nav
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelector(`.nav-item[data-section="${name}"]`).classList.add('active');
+
+    // Update page title
+    const titles = { overview: 'Overview', projects: 'Projets', fitness: 'Fitness', sessions: 'Sessions', pipeline: 'Pipeline', veille: 'Veille IA' };
+    document.getElementById('pageTitle').textContent = titles[name] || name;
+
+    // Show section
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('sec-' + name).classList.add('active');
+
+    // Close mobile menu
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('mobileOverlay').classList.remove('visible');
+
+    // Lazy load
+    if (!State.loadedSections.has(name)) {
+      await DataModule.loadSection(name);
+    }
+  },
+
+  showTooltip(e, text) {
+    this.tooltipEl.textContent = text;
+    this.tooltipEl.classList.add('visible');
+    const rect = e.target.getBoundingClientRect();
+    this.tooltipEl.style.left = (rect.left + rect.width / 2 - this.tooltipEl.offsetWidth / 2) + 'px';
+    this.tooltipEl.style.top = (rect.top - this.tooltipEl.offsetHeight - 8) + 'px';
+  },
+
+  hideTooltip() {
+    this.tooltipEl.classList.remove('visible');
+  },
+
+  animateCounter(el, from, to, duration) {
+    const start = performance.now();
+    const step = (now) => {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      const current = Math.round(from + (to - from) * eased);
+      el.textContent = current.toLocaleString('fr-FR');
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  },
+
+  renderSessions(data) {
+    const container = document.getElementById('sessionsTimeline');
+    if (!data.length) {
+      container.innerHTML = '<div class="empty-state"><i class="fas fa-terminal"></i><p>Aucune session trouvee</p></div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    data.forEach((s, i) => {
+      const item = document.createElement('div');
+      item.className = 'timeline-item';
+      item.dataset.category = s.category;
+      item.style.animationDelay = (i * 0.05) + 's';
+
+      const statusClass = s.status === 'closed' ? 'closed' : s.status === 'resolved' ? 'resolved' : 'open';
+      const statusLabel = s.status === 'closed' ? 'CLOTURE' : s.status === 'resolved' ? 'RESOLU' : 'EN COURS';
+      const pointsHtml = s.points.length ? '<div class="tl-details">' + s.points.map(p => '&bull; ' + DataModule.escHtml(p)).join('<br>') + '</div>' : '';
+
+      item.innerHTML = `
+        <div class="dot ${s.category}"></div>
+        <div class="timeline-card">
+          <div class="tl-date">${s.date || 'Date inconnue'} &middot; ${s.category}</div>
+          <div class="tl-title">${DataModule.escHtml(s.subject)}</div>
+          ${pointsHtml}
+          <span class="tl-status ${statusClass}">${statusLabel}</span>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  },
+
+  filterSessions(filter) {
+    const items = document.querySelectorAll('#sessionsTimeline .timeline-item');
+    items.forEach(item => {
+      if (filter === 'all' || item.dataset.category === filter) {
+        item.style.display = '';
+      } else {
+        item.style.display = 'none';
+      }
+    });
+  },
+
+  renderPipelineList(entries) {
+    const container = document.getElementById('pipelineList');
+    const sorted = [...entries].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+
+    container.innerHTML = '';
+    sorted.slice(0, 50).forEach(e => {
+      const color = GRADE_COLORS[e.grade] || '#7c6aff';
+      const dateStr = e.timestamp ? new Date(e.timestamp).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—';
+
+      const entry = document.createElement('div');
+      entry.className = 'pipeline-entry';
+      entry.innerHTML = `
+        <div class="grade-badge" style="color:${color}">${e.grade || '?'}</div>
+        <div class="entry-info">
+          <div class="entry-name">${DataModule.escHtml(e.file_name || 'Sans nom')}</div>
+          <div class="entry-meta">${dateStr}${e.action ? ' &middot; ' + DataModule.escHtml(e.action) : ''}</div>
+        </div>
+        <div class="entry-score" style="color:${color}">${typeof e.score === 'number' ? e.score : '—'}</div>
+      `;
+      container.appendChild(entry);
+    });
+  },
+
+  renderVeille(data) {
+    const grid = document.getElementById('veilleGrid');
+    if (!data.length) {
+      grid.innerHTML = '<div class="empty-state"><i class="fas fa-satellite-dish"></i><p>Aucune donnee de veille</p></div>';
+      return;
+    }
+
+    grid.innerHTML = '';
+    data.forEach((v, vi) => {
+      v.sections.forEach((section, si) => {
+        const card = document.createElement('div');
+        card.className = 'veille-card';
+        card.style.animationDelay = ((vi * v.sections.length + si) * 0.06) + 's';
+
+        const providerColor = PROVIDER_COLORS[section.provider] || PROVIDER_COLORS.Default;
+        const itemsHtml = section.items.map(item => `<li>${DataModule.escHtml(item)}</li>`).join('');
+
+        card.innerHTML = `
+          <div class="veille-date">${v.date || v.filename}</div>
+          <div class="veille-provider"><span class="provider-dot" style="background:${providerColor}"></span>${DataModule.escHtml(section.provider)}</div>
+          <ul class="veille-items">${itemsHtml}</ul>
+        `;
+        grid.appendChild(card);
+      });
+    });
+  }
+};
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', async () => {
+  UIModule.init();
+  try {
+    await AuthModule.init();
+  } catch (err) {
+    console.error('Init error:', err);
+    document.querySelector('.login-card p').textContent = 'Erreur d\'initialisation. Verifiez votre connexion.';
+  }
+});
+</script>
+</body>
+</html>
