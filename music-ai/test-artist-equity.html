@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArtistEquity — Simulation Batch v1.0</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#e0e0e0;padding:20px}
+h1{font-size:1.5rem;margin-bottom:10px;color:#fff}
+h2{font-size:1.1rem;margin:20px 0 10px;color:#a78bfa}
+.desc{color:#888;font-size:13px;margin-bottom:20px}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+button{background:#7c3aed;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:14px}
+button:hover{background:#6d28d9}
+button.secondary{background:#374151}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:30px}
+@media(max-width:768px){.grid{grid-template-columns:1fr}}
+.panel{background:#1a1a2e;border-radius:12px;padding:16px;border:1px solid #333}
+.panel h3{font-size:14px;color:#a78bfa;margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #222}
+th{color:#888;font-weight:600}
+.bar-container{width:100%;height:18px;background:#222;border-radius:4px;overflow:hidden;position:relative}
+.bar{height:100%;border-radius:4px;transition:width 0.3s}
+.bar-label{position:absolute;right:4px;top:1px;font-size:11px;color:#fff}
+.good{background:linear-gradient(90deg,#22c55e,#16a34a)}
+.ok{background:linear-gradient(90deg,#f59e0b,#d97706)}
+.bad{background:linear-gradient(90deg,#ef4444,#dc2626)}
+.stat{font-size:24px;font-weight:700;color:#fff}
+.stat-label{font-size:12px;color:#888}
+.stats-row{display:flex;gap:20px;margin-bottom:15px}
+.stat-box{text-align:center}
+#log{background:#111;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;max-height:300px;overflow-y:auto;white-space:pre-wrap;color:#888;margin-top:10px}
+.highlight{color:#22c55e;font-weight:700}
+.warn{color:#f59e0b}
+.err{color:#ef4444}
+</style>
+</head>
+<body>
+<h1>🧪 ArtistEquity — Simulation Batch</h1>
+<p class="desc">Simule N appels de recommandation et mesure la distribution des artistes dans le prompt IA.<br>Compare l'ancien système (ordre fixe) vs le nouveau (shuffle pondéré + spotlight rotatif).</p>
+
+<div class="controls">
+  <button onclick="runSimulation(100)">▶ 100 appels</button>
+  <button onclick="runSimulation(500)">▶ 500 appels</button>
+  <button onclick="runSimulation(1000)">▶ 1000 appels</button>
+  <button class="secondary" onclick="clearResults()">🗑 Reset</button>
+</div>
+
+<div class="grid">
+  <div class="panel">
+    <h3>❌ ANCIEN — Ordre fixe (sans ArtistEquity)</h3>
+    <div id="stats-old"></div>
+    <div id="dist-old"></div>
+  </div>
+  <div class="panel">
+    <h3>✅ NOUVEAU — Shuffle pondéré + Spotlight (ArtistEquity)</h3>
+    <div id="stats-new"></div>
+    <div id="dist-new"></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h3>📊 Comparaison</h3>
+  <div id="comparison"></div>
+</div>
+
+<div class="panel" style="margin-top:20px">
+  <h3>📋 Log détaillé (derniers 20 appels)</h3>
+  <div id="log"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+// Artistes de test (20 artistes, comme un profil réel)
+// ══════════════════════════════════════════════
+const TEST_ARTISTS = [
+  'Jackson Wang', 'Stray Kids', 'Tomorrow X Together', 'Chris Brown',
+  'August Alsina', 'Dean', 'Crush', 'Zico', 'Jay Park', 'BIBI',
+  'Taeyang', 'IU', 'Joji', 'Pink Sweat$', 'Daniel Caesar',
+  'Giveon', 'SZA', 'Brent Faiyaz', 'NIKI', 'Rich Brian'
+];
+
+// ══════════════════════════════════════════════
+// ANCIEN SYSTÈME : ordre fixe, pas de shuffle
+// ══════════════════════════════════════════════
+function oldSystem_buildPromptArtists(artists) {
+  return artists.join(', '); // toujours le même ordre
+}
+
+function oldSystem_simulate(artists, nCalls) {
+  // Simule le biais LLM : probabilité décroissante selon la position
+  // Position 1 = 100% d'attention, position N = ~20% d'attention
+  const results = {};
+  artists.forEach(a => results[a] = { position1: 0, position2: 0, position3: 0, spotlighted: 0, mentioned: 0 });
+
+  for (let i = 0; i < nCalls; i++) {
+    const list = oldSystem_buildPromptArtists(artists);
+    const ordered = list.split(', ');
+
+    // Simuler quel artiste le LLM "choisit" comme influence
+    // Modèle : P(choisir artiste à position k) ∝ 1/(k^0.7) (power law)
+    const weights = ordered.map((_, k) => 1 / Math.pow(k + 1, 0.7));
+    const totalW = weights.reduce((a, b) => a + b, 0);
+    const r = Math.random() * totalW;
+    let cumul = 0;
+    let chosenIdx = 0;
+    for (let k = 0; k < weights.length; k++) {
+      cumul += weights[k];
+      if (r <= cumul) { chosenIdx = k; break; }
+    }
+
+    const chosen = ordered[chosenIdx];
+    results[chosen].mentioned++;
+
+    // Track positions
+    if (ordered[0]) results[ordered[0]].position1++;
+    if (ordered[1]) results[ordered[1]].position2++;
+    if (ordered[2]) results[ordered[2]].position3++;
+  }
+
+  return results;
+}
+
+// ══════════════════════════════════════════════
+// NOUVEAU SYSTÈME : ArtistEquity complet
+// ══════════════════════════════════════════════
+
+// Reproduction exacte de l'algorithme implémenté
+function weightedArtistShuffle(artists, equity, totalSuggestions, lastShuffledList) {
+  if (artists.length <= 1) return { shuffled: [...artists], scores: {} };
+  if (artists.length <= 3) {
+    const a = [...artists];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return { shuffled: a, scores: {} };
+  }
+
+  const total = Math.max(totalSuggestions || 1, 1);
+  const expectedRate = total / artists.length;
+
+  const scored = artists.map(name => {
+    const data = equity[name] || { direct: 0, indirect: 0, lastSeen: 0 };
+    const totalInfluence = data.direct + data.indirect * 0.5;
+    const underrep = Math.max(0, 1 - (totalInfluence / Math.max(expectedRate, 1)));
+    const daysSince = data.lastSeen ? (Date.now() - data.lastSeen) / 86400000 : 30;
+    const freshBonus = Math.min(daysSince / 30, 0.5);
+    const weight = underrep + freshBonus + 0.1;
+    return { name, weight, sortKey: Math.pow(Math.random(), 1 / weight) };
+  });
+
+  scored.sort((a, b) => b.sortKey - a.sortKey);
+  const result = scored.map(s => s.name);
+
+  // Anti-répétition
+  if (lastShuffledList.length === result.length && result.length >= 3 &&
+      result.slice(0, 3).every((n, i) => n === lastShuffledList[i])) {
+    result.push(...result.splice(0, 3));
+  }
+
+  const scores = {};
+  scored.forEach(s => scores[s.name] = s.weight);
+  return { shuffled: result, scores };
+}
+
+function pickSpotlightArtists(shuffledList, spotlightIndex) {
+  const n = shuffledList.length;
+  if (n === 0) return { spotlight: [], newIndex: 0 };
+  if (n <= 3) return { spotlight: [...shuffledList], newIndex: 0 };
+
+  const spotSize = n <= 6 ? 2 : 3;
+  const idx = spotlightIndex || 0;
+  const spotlight = [];
+  for (let i = 0; i < spotSize; i++) spotlight.push(shuffledList[(idx + i) % n]);
+  return { spotlight, newIndex: (idx + spotSize) % n };
+}
+
+function newSystem_simulate(artists, nCalls) {
+  const results = {};
+  artists.forEach(a => results[a] = { position1: 0, position2: 0, position3: 0, spotlighted: 0, mentioned: 0 });
+
+  // État persistant (simule _serverProfile.artistEquity)
+  let equity = {};
+  let spotlightIndex = 0;
+  let totalSuggestions = 0;
+  let lastShuffledList = [];
+  const logs = [];
+
+  for (let i = 0; i < nCalls; i++) {
+    // 1. Shuffle pondéré
+    const { shuffled, scores } = weightedArtistShuffle(artists, equity, totalSuggestions, lastShuffledList);
+    lastShuffledList = shuffled;
+
+    // 2. Spotlight rotatif
+    const { spotlight, newIndex } = pickSpotlightArtists(shuffled, spotlightIndex);
+    spotlightIndex = newIndex;
+
+    // Track positions
+    if (shuffled[0]) results[shuffled[0]].position1++;
+    if (shuffled[1]) results[shuffled[1]].position2++;
+    if (shuffled[2]) results[shuffled[2]].position3++;
+    spotlight.forEach(s => results[s].spotlighted++);
+
+    // 3. Simuler le choix LLM — AVEC spotlight boost
+    // Le spotlight donne un boost x3 à la probabilité d'être choisi
+    const weights = shuffled.map((name, k) => {
+      let w = 1 / Math.pow(k + 1, 0.7); // même power law que l'ancien
+      if (spotlight.includes(name)) w *= 3; // boost spotlight
+      return w;
+    });
+    const totalW = weights.reduce((a, b) => a + b, 0);
+    const r = Math.random() * totalW;
+    let cumul = 0;
+    let chosenIdx = 0;
+    for (let k = 0; k < weights.length; k++) {
+      cumul += weights[k];
+      if (r <= cumul) { chosenIdx = k; break; }
+    }
+
+    const chosen = shuffled[chosenIdx];
+    results[chosen].mentioned++;
+    totalSuggestions++;
+
+    // 4. Tracking d'influence (simule trackArtistInfluence)
+    if (!equity[chosen]) equity[chosen] = { direct: 0, indirect: 0, lastSeen: 0 };
+    equity[chosen].direct++;
+    equity[chosen].lastSeen = Date.now() - Math.random() * 1000; // légère variation
+
+    // Log derniers appels
+    if (i >= nCalls - 20) {
+      logs.push(`#${i + 1} | Top3: [${shuffled.slice(0, 3).join(', ')}] | 🔦 Spotlight: [${spotlight.join(', ')}] | → ${chosen}`);
+    }
+  }
+
+  return { results, logs };
+}
+
+// ══════════════════════════════════════════════
+// MÉTRIQUES
+// ══════════════════════════════════════════════
+function computeMetrics(results, nCalls, nArtists) {
+  const mentions = Object.values(results).map(r => r.mentioned);
+  const idealRate = nCalls / nArtists; // distribution parfaite
+
+  const min = Math.min(...mentions);
+  const max = Math.max(...mentions);
+  const mean = mentions.reduce((a, b) => a + b, 0) / mentions.length;
+  const stddev = Math.sqrt(mentions.reduce((s, x) => s + (x - mean) ** 2, 0) / mentions.length);
+  const cv = stddev / mean; // coefficient de variation (0 = parfait, >0.5 = mauvais)
+
+  // Gini coefficient (0 = égalité parfaite, 1 = un seul artiste monopolise tout)
+  const sorted = [...mentions].sort((a, b) => a - b);
+  let giniNum = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    giniNum += (2 * (i + 1) - sorted.length - 1) * sorted[i];
+  }
+  const gini = giniNum / (sorted.length * sorted.reduce((a, b) => a + b, 0));
+
+  // Artistes "oubliés" (< 50% de la moyenne)
+  const forgotten = mentions.filter(m => m < mean * 0.5).length;
+
+  // Artistes "sur-représentés" (> 200% de la moyenne)
+  const overrep = mentions.filter(m => m > mean * 2).length;
+
+  // Ratio max/min
+  const ratio = min > 0 ? max / min : Infinity;
+
+  return { min, max, mean, stddev, cv, gini, forgotten, overrep, ratio, idealRate };
+}
+
+// ══════════════════════════════════════════════
+// RENDU
+// ══════════════════════════════════════════════
+function renderDistribution(containerId, results, nCalls) {
+  const el = document.getElementById(containerId);
+  const maxMentions = Math.max(...Object.values(results).map(r => r.mentioned));
+  const mean = nCalls / Object.keys(results).length;
+
+  let html = '<table><tr><th>Artiste</th><th>Mentions</th><th style="width:50%">Distribution</th><th>Pos1</th><th>🔦</th></tr>';
+
+  // Trier par mentions décroissantes
+  const sorted = Object.entries(results).sort((a, b) => b[1].mentioned - a[1].mentioned);
+
+  sorted.forEach(([name, data]) => {
+    const pct = (data.mentioned / nCalls * 100).toFixed(1);
+    const barWidth = maxMentions > 0 ? (data.mentioned / maxMentions * 100) : 0;
+    const deviation = data.mentioned / mean;
+    const barClass = deviation >= 0.7 && deviation <= 1.5 ? 'good' : deviation >= 0.5 ? 'ok' : 'bad';
+
+    html += `<tr>
+      <td>${name}</td>
+      <td>${data.mentioned} (${pct}%)</td>
+      <td><div class="bar-container"><div class="bar ${barClass}" style="width:${barWidth}%"></div><div class="bar-label">${pct}%</div></div></td>
+      <td>${data.position1}</td>
+      <td>${data.spotlighted || '-'}</td>
+    </tr>`;
+  });
+
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+function renderStats(containerId, metrics) {
+  const el = document.getElementById(containerId);
+  const giniColor = metrics.gini < 0.15 ? '#22c55e' : metrics.gini < 0.3 ? '#f59e0b' : '#ef4444';
+  const cvColor = metrics.cv < 0.2 ? '#22c55e' : metrics.cv < 0.4 ? '#f59e0b' : '#ef4444';
+
+  el.innerHTML = `
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat" style="color:${giniColor}">${(metrics.gini * 100).toFixed(1)}%</div>
+        <div class="stat-label">Gini (0%=parfait)</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat" style="color:${cvColor}">${(metrics.cv * 100).toFixed(1)}%</div>
+        <div class="stat-label">Coef. Variation</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat">${metrics.ratio === Infinity ? '∞' : metrics.ratio.toFixed(1)}x</div>
+        <div class="stat-label">Ratio max/min</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat" style="color:${metrics.forgotten > 0 ? '#ef4444' : '#22c55e'}">${metrics.forgotten}</div>
+        <div class="stat-label">Artistes oubliés</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:#888">
+      Min: ${metrics.min} | Max: ${metrics.max} | Moyenne: ${metrics.mean.toFixed(1)} | Idéal: ${metrics.idealRate.toFixed(1)} | Écart-type: ${metrics.stddev.toFixed(1)}
+    </div>
+  `;
+}
+
+function renderComparison(oldMetrics, newMetrics) {
+  const el = document.getElementById('comparison');
+  const improvements = [];
+
+  const giniImprove = ((oldMetrics.gini - newMetrics.gini) / oldMetrics.gini * 100).toFixed(0);
+  const cvImprove = ((oldMetrics.cv - newMetrics.cv) / oldMetrics.cv * 100).toFixed(0);
+  const ratioImprove = oldMetrics.ratio !== Infinity && newMetrics.ratio !== Infinity
+    ? ((oldMetrics.ratio - newMetrics.ratio) / oldMetrics.ratio * 100).toFixed(0) : 'N/A';
+
+  el.innerHTML = `
+    <table>
+      <tr><th>Métrique</th><th>Ancien</th><th>Nouveau</th><th>Amélioration</th></tr>
+      <tr>
+        <td>Indice Gini</td>
+        <td>${(oldMetrics.gini * 100).toFixed(1)}%</td>
+        <td>${(newMetrics.gini * 100).toFixed(1)}%</td>
+        <td class="${giniImprove > 0 ? 'highlight' : 'err'}">↓ ${giniImprove}%</td>
+      </tr>
+      <tr>
+        <td>Coef. Variation</td>
+        <td>${(oldMetrics.cv * 100).toFixed(1)}%</td>
+        <td>${(newMetrics.cv * 100).toFixed(1)}%</td>
+        <td class="${cvImprove > 0 ? 'highlight' : 'err'}">↓ ${cvImprove}%</td>
+      </tr>
+      <tr>
+        <td>Ratio max/min</td>
+        <td>${oldMetrics.ratio === Infinity ? '∞' : oldMetrics.ratio.toFixed(1)}x</td>
+        <td>${newMetrics.ratio === Infinity ? '∞' : newMetrics.ratio.toFixed(1)}x</td>
+        <td class="${ratioImprove !== 'N/A' && ratioImprove > 0 ? 'highlight' : 'err'}">↓ ${ratioImprove}%</td>
+      </tr>
+      <tr>
+        <td>Artistes oubliés</td>
+        <td>${oldMetrics.forgotten}</td>
+        <td>${newMetrics.forgotten}</td>
+        <td class="${newMetrics.forgotten < oldMetrics.forgotten ? 'highlight' : newMetrics.forgotten === oldMetrics.forgotten ? '' : 'err'}">${oldMetrics.forgotten - newMetrics.forgotten} de moins</td>
+      </tr>
+      <tr>
+        <td>Sur-représentés</td>
+        <td>${oldMetrics.overrep}</td>
+        <td>${newMetrics.overrep}</td>
+        <td class="${newMetrics.overrep < oldMetrics.overrep ? 'highlight' : ''}">${oldMetrics.overrep - newMetrics.overrep} de moins</td>
+      </tr>
+    </table>
+    <div style="margin-top:15px;padding:12px;background:#111;border-radius:8px;font-size:13px;">
+      <strong>Verdict :</strong>
+      ${newMetrics.gini < oldMetrics.gini * 0.7
+        ? '<span class="highlight">✅ ArtistEquity améliore significativement la distribution (Gini ↓' + giniImprove + '%)</span>'
+        : newMetrics.gini < oldMetrics.gini
+          ? '<span class="warn">⚠️ Amélioration modérée — ajuster les paramètres</span>'
+          : '<span class="err">❌ Pas d\'amélioration détectée — vérifier l\'algorithme</span>'
+      }
+    </div>
+  `;
+}
+
+// ══════════════════════════════════════════════
+// SIMULATION
+// ══════════════════════════════════════════════
+function runSimulation(nCalls) {
+  const artists = TEST_ARTISTS;
+
+  // Ancien système
+  const oldResults = oldSystem_simulate(artists, nCalls);
+  const oldMetrics = computeMetrics(oldResults, nCalls, artists.length);
+
+  // Nouveau système
+  const { results: newResults, logs } = newSystem_simulate(artists, nCalls);
+  const newMetrics = computeMetrics(newResults, nCalls, artists.length);
+
+  // Rendu
+  renderStats('stats-old', oldMetrics);
+  renderDistribution('dist-old', oldResults, nCalls);
+
+  renderStats('stats-new', newMetrics);
+  renderDistribution('dist-new', newResults, nCalls);
+
+  renderComparison(oldMetrics, newMetrics);
+
+  // Log
+  document.getElementById('log').innerHTML = logs.map(l => {
+    return l.replace(/→ (.+)$/, '→ <span class="highlight">$1</span>');
+  }).join('\n');
+}
+
+function clearResults() {
+  ['stats-old', 'dist-old', 'stats-new', 'dist-new', 'comparison', 'log'].forEach(id => {
+    document.getElementById(id).innerHTML = '';
+  });
+}
+
+// Auto-run 100 au chargement
+window.addEventListener('load', () => runSimulation(100));
+</script>
+</body>
+</html>
