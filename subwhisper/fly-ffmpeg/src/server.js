@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.19.0 — fix orphan file recovery + SSE heartbeat during combined.ts write
+ * Version: 1.20.0 — add POST /slideshow for TikTok auto-gen pipeline
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -129,7 +129,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 // Auth middleware that accepts FLY_SECRET or WORKER_SECRET (header or query param ?s=)
 function requireAnySecret(req, res, next) {
@@ -169,7 +169,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.17.0'
+    version: '1.20.0'
   });
 });
 
@@ -1545,11 +1545,144 @@ app.get('/hls2mp4/file/:jobId', requireAnySecret, (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /slideshow — Génère un slideshow vidéo MP4 à partir d'images + audio
+// Input JSON: { images: [base64...], audio: base64, durations: [10,8,...], width: 1080, height: 1920 }
+// Output: MP4 binaire streamé en réponse
+// ---------------------------------------------------------------------------
+
+app.post('/slideshow', requireAnySecret, async (req, res) => {
+  const { images, audio, durations, width = 1080, height = 1920 } = req.body;
+
+  if (!images || !Array.isArray(images) || images.length === 0) {
+    return res.status(400).json({ error: 'images[] required (base64 PNG/JPG)' });
+  }
+  if (!audio) {
+    return res.status(400).json({ error: 'audio required (base64 MP3)' });
+  }
+  if (!durations || !Array.isArray(durations) || durations.length !== images.length) {
+    return res.status(400).json({ error: 'durations[] required, same length as images[]' });
+  }
+
+  const jobId = `slide-${Date.now().toString(36)}`;
+  const tmpDir = path.join(os.tmpdir(), jobId);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  console.log(`[${jobId}] Slideshow: ${images.length} images, ${width}x${height}`);
+
+  try {
+    // Write images to disk
+    const imgPaths = [];
+    for (let i = 0; i < images.length; i++) {
+      const imgBuf = Buffer.from(images[i], 'base64');
+      const imgPath = path.join(tmpDir, `img_${i}.png`);
+      fs.writeFileSync(imgPath, imgBuf);
+      imgPaths.push(imgPath);
+    }
+
+    // Write audio to disk
+    const audioPath = path.join(tmpDir, 'audio.mp3');
+    fs.writeFileSync(audioPath, Buffer.from(audio, 'base64'));
+
+    const outPath = path.join(tmpDir, 'output.mp4');
+
+    // Build FFmpeg command for slideshow with fade transitions
+    const ffArgs = [];
+    const FADE_DUR = 0.5;
+
+    // Input files: each image looped for its duration
+    for (let i = 0; i < imgPaths.length; i++) {
+      ffArgs.push('-loop', '1', '-t', String(durations[i]), '-i', imgPaths[i]);
+    }
+    // Audio input
+    ffArgs.push('-i', audioPath);
+
+    // Build filter_complex: scale + fade out each image, then concat
+    const filters = [];
+    const concatInputs = [];
+
+    for (let i = 0; i < imgPaths.length; i++) {
+      const dur = durations[i];
+      const fadeOutStart = Math.max(0, dur - FADE_DUR);
+      let filter = `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`;
+      // Fade in on first and subsequent slides, fade out on all
+      if (i > 0) {
+        filter += `,fade=in:st=0:d=${FADE_DUR}`;
+      }
+      filter += `,fade=out:st=${fadeOutStart}:d=${FADE_DUR}[v${i}]`;
+      filters.push(filter);
+      concatInputs.push(`[v${i}]`);
+    }
+
+    // Concat all video streams
+    filters.push(`${concatInputs.join('')}concat=n=${imgPaths.length}:v=1:a=0[outv]`);
+
+    const audioIdx = imgPaths.length; // audio is the last input
+    ffArgs.push(
+      '-filter_complex', filters.join(';'),
+      '-map', '[outv]',
+      '-map', `${audioIdx}:a`,
+      '-c:v', 'libx264',
+      '-preset', 'fast',
+      '-crf', '23',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-shortest',
+      '-movflags', '+faststart',
+      '-y', outPath
+    );
+
+    console.log(`[${jobId}] FFmpeg slideshow start...`);
+
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+      ff.stderr.on('data', d => { stderr += d.toString(); });
+      ff.on('close', code => {
+        if (code === 0) resolve();
+        else reject(new Error(`FFmpeg exit ${code}: ${stderr.slice(-500)}`));
+      });
+      ff.on('error', reject);
+
+      // Timeout 120s
+      setTimeout(() => {
+        try { ff.kill('SIGKILL'); } catch (_) {}
+        reject(new Error('FFmpeg timeout 120s'));
+      }, 120000);
+    });
+
+    const mp4Stat = fs.statSync(outPath);
+    console.log(`[${jobId}] Slideshow OK: ${(mp4Stat.size / 1048576).toFixed(1)} MB`);
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Length', mp4Stat.size);
+    res.setHeader('Content-Disposition', `attachment; filename="slideshow-${jobId}.mp4"`);
+
+    const stream = fs.createReadStream(outPath);
+    stream.pipe(res);
+    stream.on('end', () => {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+    stream.on('error', err => {
+      console.error(`[${jobId}] Stream error:`, err.message);
+      try { res.end(); } catch (_) {}
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+
+  } catch (err) {
+    console.error(`[${jobId}] Slideshow error:`, err.message);
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Démarrage du serveur
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.19.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.20.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);
