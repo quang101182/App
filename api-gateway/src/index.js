@@ -41,7 +41,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.29';
+const VERSION = '1.31';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -191,6 +191,8 @@ export default {
         if (path === '/admin/keys/get')    return await adminKeysGet(request, env);
         if (path === '/admin/keys/status') return await adminKeysStatus(env);
         if (path === '/admin/tts' || path === '/admin/speech')  return await adminTTS(request, env);
+        if (path === '/admin/send-video-base64')  return await adminSendVideoBase64(request, env);
+        if (path === '/admin/tinify')  return await adminTinify(request, env);
         if (path === '/admin/tts-test')    return jsonResponse({ ok: true, test: true, ts: Date.now() });
         if (path === '/admin/tts-log') {
           // Log incoming request details to KV for debugging
@@ -1715,6 +1717,141 @@ async function adminTTS(request, env) {
   base64 = btoa(base64);
 
   return jsonResponse({ ok: true, base64, size: bytes.length });
+}
+
+/**
+ * POST /admin/send-video-base64
+ * Body: { chatId, videoBase64, caption?, botToken }
+ * Converts base64 video to binary blob and sends to Telegram via sendVideo.
+ */
+async function adminSendVideoBase64(request, env) {
+  const body = await request.json();
+  const { chatId, videoBase64, caption, botToken } = body;
+
+  if (!chatId || !videoBase64 || !botToken) {
+    return jsonResponse({ error: 'missing required fields: chatId, videoBase64, botToken' }, 400);
+  }
+
+  try {
+    // Convert base64 to binary
+    const binaryStr = atob(videoBase64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+    const videoBlob = new Blob([bytes], { type: 'video/mp4' });
+
+    // Upload to Telegram
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    form.append('video', videoBlob, 'tiktok_autogen.mp4');
+    if (caption) {
+      form.append('caption', caption);
+      form.append('parse_mode', 'HTML');
+    }
+
+    const tgResp = await fetch(`https://api.telegram.org/bot${botToken}/sendVideo`, {
+      method: 'POST',
+      body: form,
+    });
+
+    const tgData = await tgResp.json();
+    return jsonResponse({ ok: tgResp.ok, data: tgData }, tgResp.ok ? 200 : tgResp.status);
+  } catch (err) {
+    return jsonResponse({ error: 'send-video-base64 failed: ' + (err.message || String(err)) }, 500);
+  }
+}
+
+/**
+ * POST /admin/tinify
+ * Body: { imageBase64, width?, height? }
+ * Compresses image via Tinify API, optionally resizes, returns compressed base64.
+ */
+async function adminTinify(request, env) {
+  const body = await request.json();
+  const { imageBase64, width, height } = body;
+
+  if (!imageBase64) {
+    return jsonResponse({ error: 'imageBase64 required' }, 400);
+  }
+
+  const tinifyKey = await env.GATEWAY_KV.get('key:TINIFY_KEY');
+  if (!tinifyKey) {
+    return jsonResponse({ ok: false, error: 'TINIFY_KEY not configured' }, 503);
+  }
+
+  try {
+    // Convert base64 to binary
+    const binaryStr = atob(imageBase64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+
+    // Step 1: Shrink via Tinify
+    const shrinkResp = await fetch('https://api.tinify.com/shrink', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + btoa('api:' + tinifyKey),
+        'Content-Type': 'application/octet-stream',
+      },
+      body: bytes,
+    });
+
+    if (!shrinkResp.ok) {
+      const errText = await shrinkResp.text();
+      return jsonResponse({ ok: false, error: 'Tinify shrink ' + shrinkResp.status, detail: errText.substring(0, 300) });
+    }
+
+    const shrinkData = await shrinkResp.json();
+    const outputUrl = shrinkData.output?.url;
+    if (!outputUrl) {
+      return jsonResponse({ ok: false, error: 'No output URL from Tinify' });
+    }
+
+    // Step 2: Resize + convert to JPEG (if width/height provided)
+    let finalResp;
+    if (width && height) {
+      finalResp = await fetch(outputUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Basic ' + btoa('api:' + tinifyKey),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          resize: { method: 'cover', width, height },
+          convert: { type: 'image/jpeg' },
+        }),
+      });
+    } else {
+      // Just download the compressed version
+      finalResp = await fetch(outputUrl, {
+        headers: { 'Authorization': 'Basic ' + btoa('api:' + tinifyKey) },
+      });
+    }
+
+    if (!finalResp.ok) {
+      return jsonResponse({ ok: false, error: 'Tinify resize/download ' + finalResp.status });
+    }
+
+    // Convert result to base64
+    const resultBuffer = await finalResp.arrayBuffer();
+    const resultBytes = new Uint8Array(resultBuffer);
+    let base64 = '';
+    const CHUNK = 32768;
+    for (let i = 0; i < resultBytes.length; i += CHUNK) {
+      const slice = resultBytes.subarray(i, Math.min(i + CHUNK, resultBytes.length));
+      base64 += String.fromCharCode.apply(null, slice);
+    }
+    base64 = btoa(base64);
+
+    const origKB = Math.round(imageBase64.length * 3 / 4 / 1024);
+    const compKB = Math.round(base64.length * 3 / 4 / 1024);
+
+    return jsonResponse({ ok: true, base64, origKB, compKB });
+  } catch (err) {
+    return jsonResponse({ error: 'tinify failed: ' + (err.message || String(err)) }, 500);
+  }
 }
 
 function jsonResponse(body, status = 200, extraHeaders = {}) {
