@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.20.0 — add POST /slideshow for TikTok auto-gen pipeline
+ * Version: 1.24.0 — /slideshow: optional texts[] overlay via drawtext + DejaVu font
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -1546,12 +1546,12 @@ app.get('/hls2mp4/file/:jobId', requireAnySecret, (req, res) => {
 
 // ---------------------------------------------------------------------------
 // POST /slideshow — Génère un slideshow vidéo MP4 à partir d'images + audio
-// Input JSON: { images: [base64...], audio: base64, durations: [10,8,...], width: 1080, height: 1920 }
+// Input JSON: { images: [base64...], audio: base64, durations: [10,8,...], texts?: [str...], width: 1080, height: 1920 }
 // Output: MP4 binaire streamé en réponse
 // ---------------------------------------------------------------------------
 
 app.post('/slideshow', requireAnySecret, async (req, res) => {
-  const { images, audio, durations, width = 1080, height = 1920 } = req.body;
+  const { images, audio, durations, texts, width = 1080, height = 1920 } = req.body;
 
   if (!images || !Array.isArray(images) || images.length === 0) {
     return res.status(400).json({ error: 'images[] required (base64 PNG/JPG)' });
@@ -1604,6 +1604,11 @@ app.post('/slideshow', requireAnySecret, async (req, res) => {
       const dur = durations[i];
       const fadeOutStart = Math.max(0, dur - FADE_DUR);
       let filter = `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`;
+      // Optional text overlay
+      if (texts && texts[i]) {
+        const safeText = texts[i].replace(/\\/g, '\\\\\\\\').replace(/'/g, "\\u2019").replace(/:/g, '\\\\:').replace(/\[/g, '\\\\[').replace(/]/g, '\\\\]').replace(/%/g, '%%');
+        filter += `,drawtext=fontfile=/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf:text='${safeText}':fontsize=${Math.round(height * 0.042)}:fontcolor=white:x=(w-text_w)/2:y=h*0.18:box=1:boxcolor=black@0.55:boxborderw=14:shadowx=2:shadowy=2:shadowcolor=black@0.8`;
+      }
       // Fade in on first and subsequent slides, fade out on all
       if (i > 0) {
         filter += `,fade=in:st=0:d=${FADE_DUR}`;
@@ -1678,11 +1683,189 @@ app.post('/slideshow', requireAnySecret, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /merge — Merge video + audio (replace audio track)
+// Input: { video: base64_MP4, audio: base64_MP3 }
+// Output: MP4 with original video + new audio
+// ---------------------------------------------------------------------------
+app.post('/merge', requireAnySecret, async (req, res) => {
+  const { video, videoUrl, audio } = req.body;
+
+  if (!video && !videoUrl) return res.status(400).json({ error: 'video (base64) or videoUrl required' });
+  if (!audio) return res.status(400).json({ error: 'audio required (base64 MP3)' });
+
+  const jobId = `merge-${Date.now().toString(36)}`;
+  const tmpDir = path.join(os.tmpdir(), jobId);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  const audioSizeKB = Math.round(audio.length * 3 / 4 / 1024);
+  console.log(`[${jobId}] Merge: ${videoUrl ? 'URL' : `base64 ${Math.round(video.length * 3/4/1024)}KB`} + audio ${audioSizeKB}KB`);
+
+  try {
+    const videoPath = path.join(tmpDir, 'input.mp4');
+    const audioPath = path.join(tmpDir, 'audio.mp3');
+    const outPath = path.join(tmpDir, 'output.mp4');
+
+    // Video: download from URL or decode base64
+    if (videoUrl) {
+      const https = require('https');
+      const http = require('http');
+      await new Promise((resolve, reject) => {
+        const MAX_REDIRECTS = 5;
+        let redirectCount = 0;
+        const timer = setTimeout(() => reject(new Error('Video download timeout 60s')), 60000);
+
+        function doGet(url) {
+          const client = url.startsWith('https') ? https : http;
+          client.get(url, (response) => {
+            // Follow 301/302/303/307/308 redirects
+            if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
+              redirectCount++;
+              if (redirectCount > MAX_REDIRECTS) {
+                clearTimeout(timer);
+                reject(new Error(`Too many redirects (>${MAX_REDIRECTS})`));
+                return;
+              }
+              const redirectUrl = response.headers.location.startsWith('http')
+                ? response.headers.location
+                : new URL(response.headers.location, url).href;
+              console.log(`[${jobId}] Redirect ${redirectCount}: ${response.statusCode} → ${redirectUrl.slice(0, 120)}...`);
+              response.resume(); // drain the response
+              doGet(redirectUrl);
+              return;
+            }
+            if (response.statusCode !== 200) {
+              clearTimeout(timer);
+              reject(new Error(`Video download HTTP ${response.statusCode}`));
+              return;
+            }
+            const fileStream = fs.createWriteStream(videoPath);
+            response.pipe(fileStream);
+            fileStream.on('finish', () => { clearTimeout(timer); fileStream.close(resolve); });
+            fileStream.on('error', (err) => { clearTimeout(timer); reject(err); });
+          }).on('error', (err) => { clearTimeout(timer); reject(err); });
+        }
+
+        doGet(videoUrl);
+      });
+      const dlSize = fs.statSync(videoPath).size;
+      console.log(`[${jobId}] Video downloaded: ${(dlSize / 1048576).toFixed(1)} MB`);
+    } else {
+      fs.writeFileSync(videoPath, Buffer.from(video, 'base64'));
+    }
+    fs.writeFileSync(audioPath, Buffer.from(audio, 'base64'));
+
+    const ffArgs = [
+      '-i', videoPath,
+      '-i', audioPath,
+      '-map', '0:v',
+      '-map', '1:a',
+      '-c:v', 'copy',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-shortest',
+      '-movflags', '+faststart',
+      '-y', outPath
+    ];
+
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+      ff.stderr.on('data', d => { stderr += d.toString(); });
+      ff.on('close', code => {
+        if (code === 0) resolve();
+        else reject(new Error(`FFmpeg exit ${code}: ${stderr.slice(-500)}`));
+      });
+      ff.on('error', reject);
+      setTimeout(() => {
+        try { ff.kill('SIGKILL'); } catch (_) {}
+        reject(new Error('FFmpeg merge timeout 120s'));
+      }, 120000);
+    });
+
+    const mp4Stat = fs.statSync(outPath);
+    console.log(`[${jobId}] Merge OK: ${(mp4Stat.size / 1048576).toFixed(1)} MB`);
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Length', mp4Stat.size);
+    res.setHeader('Content-Disposition', `attachment; filename="merge-${jobId}.mp4"`);
+
+    const stream = fs.createReadStream(outPath);
+    stream.pipe(res);
+    stream.on('end', () => {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+    stream.on('error', err => {
+      console.error(`[${jobId}] Stream error:`, err.message);
+      try { res.end(); } catch (_) {}
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+
+  } catch (err) {
+    console.error(`[${jobId}] Merge error:`, err.message);
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// POST /resize — exact image resize (upscale/downscale + crop to exact dimensions)
+app.post('/resize', requireAnySecret, async (req, res) => {
+  const { image, width, height } = req.body;
+  if (!image) return res.status(400).json({ error: 'image required (base64)' });
+  if (!width || !height) return res.status(400).json({ error: 'width and height required' });
+
+  const jobId = `resize-${Date.now().toString(36)}`;
+  const tmpDir = path.join(os.tmpdir(), jobId);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  console.log(`[${jobId}] Resize: ${Math.round(image.length * 3/4/1024)}KB → ${width}x${height}`);
+
+  try {
+    const inPath = path.join(tmpDir, 'input.jpg');
+    const outPath = path.join(tmpDir, 'output.jpg');
+
+    fs.writeFileSync(inPath, Buffer.from(image, 'base64'));
+
+    // Scale to fill target dimensions (preserving aspect ratio), then crop to exact size
+    const ffArgs = [
+      '-i', inPath,
+      '-vf', `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}`,
+      '-q:v', '2',
+      '-y', outPath
+    ];
+
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+      ff.stderr.on('data', d => { stderr += d.toString(); });
+      ff.on('close', code => {
+        if (code === 0) resolve();
+        else reject(new Error(`FFmpeg exit ${code}: ${stderr.slice(-300)}`));
+      });
+      ff.on('error', reject);
+      setTimeout(() => { try { ff.kill('SIGKILL'); } catch (_) {} reject(new Error('Resize timeout 30s')); }, 30000);
+    });
+
+    const outBuf = fs.readFileSync(outPath);
+    const outBase64 = outBuf.toString('base64');
+    console.log(`[${jobId}] Resize OK: ${(outBuf.length / 1024).toFixed(0)}KB`);
+
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    res.json({ ok: true, base64: outBase64, sizeKB: Math.round(outBuf.length / 1024) });
+  } catch (err) {
+    console.error(`[${jobId}] Resize error:`, err.message);
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Démarrage du serveur
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.20.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.23.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);

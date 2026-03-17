@@ -18,7 +18,7 @@ FROM node:20-alpine AS runtime
 
 # Installer FFmpeg depuis les dépôts Alpine
 # ffmpeg inclut les codecs audio nécessaires (pcm_s16le, wav)
-RUN apk add --no-cache ffmpeg
+RUN apk add --no-cache ffmpeg fontconfig ttf-dejavu && fc-cache -fv
 
 # Créer un utilisateur non-root pour la sécurité
 RUN addgroup -g 1001 -S nodejs && \
