@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>music·ai v3.17.0-cap — Discovery Engine</title>
+<title>music·ai v3.17.1 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -521,7 +521,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.17.0</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.17.1</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -1348,7 +1348,7 @@ function startProgressTick(){
         callAI(buildSystemPrompt(_preMode),_msgMap[_preMode]||_msgMap.onetap,_preTemp)
           .then(raw=>{try{const _pr=parseJSON(raw);const _v=validateRecommendation(_pr);
             // v3.14.2 — invalider prefetch si mode a changé pendant l'appel IA
-            if(_v.valid&&ST.mode===_preMode)ST._preRec=_pr;
+            if(_v.valid&&ST.mode===_preMode){ST._preRec=_pr;ST._preRecMode=_preMode;}
             else if(_v.valid){console.warn('[PRE] mode changé, reco ignorée');ST._preRec=null;}
             else{console.warn('[PRE] rejeté:',_v.errors);}}catch(_){}ST._preFetching=false;})
           .catch(()=>{ST._preFetching=false;});
@@ -1513,8 +1513,8 @@ function onTrackEnded(){
   // Queue: jouer le suivant
   if(ST.queue.length>0&&ST.queueIdx<ST.queue.length-1){ytNext();return}
   // Mode continu (toujours ON): reco IA
-  if(ST._preRec){
-    const rec=ST._preRec;ST._preRec=null;ST._preFetching=false;
+  if(ST._preRec && ST._preRecMode === ST.mode){
+    const rec=ST._preRec;ST._preRec=null;ST._preFetching=false;ST._preRecMode=null;
     const resultEl=document.getElementById(`result-${ST.mode}`);
     if(resultEl){renderCard(resultEl,rec);}
     pushHistory({title:rec.title,artist:rec.artist,genre:rec.genre,action:'suggest',context:ST.mode});
@@ -1529,6 +1529,10 @@ async function ytPlay(track){
   ST._preRec=null;ST._preFetching=false;// reset prefetch sur nouvelle piste manuelle
   // v3.14.2 — playback token pour annuler les appels concurrents stale
   const playToken=++ST._playToken;
+  // v3.17.1 — Pause immédiate pour éviter désync métadonnées/audio pendant ytSearch
+  if(ST.ytPlayerReady && ST.ytPlayer && typeof ST.ytPlayer.getPlayerState === 'function'){
+    try{ const s = ST.ytPlayer.getPlayerState(); if(s===1||s===3) ST.ytPlayer.pauseVideo(); }catch(_){}
+  }
   ST.currentTrack={...track,videoId:null};
   updateMiniPlayer(track.title,track.artist);
   fpUpdateTrack();// v3.14.2 — sync full-player titre/artiste immédiatement
