@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.26
+ * api-gateway — Cloudflare Worker v1.27
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -41,7 +41,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.26';
+const VERSION = '1.29';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -190,6 +190,15 @@ export default {
         if (path === '/admin/keys/delete') return await adminKeysDelete(request, env, ctx, ip);
         if (path === '/admin/keys/get')    return await adminKeysGet(request, env);
         if (path === '/admin/keys/status') return await adminKeysStatus(env);
+        if (path === '/admin/tts' || path === '/admin/speech')  return await adminTTS(request, env);
+        if (path === '/admin/tts-test')    return jsonResponse({ ok: true, test: true, ts: Date.now() });
+        if (path === '/admin/tts-log') {
+          // Log incoming request details to KV for debugging
+          const hdrs = {};
+          for (const [k,v] of request.headers.entries()) hdrs[k] = v;
+          await env.GATEWAY_KV.put('debug:tts-log', JSON.stringify({ ts: Date.now(), headers: hdrs, method }));
+          return await adminTTS(request, env);
+        }
 
         return jsonResponse({ error: 'unknown admin route' }, 404);
       }
@@ -1637,6 +1646,76 @@ async function checkBearer(request, expectedSecret, secretName) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Response helper
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /admin/tts — OpenAI TTS proxy (returns base64 audio)
+// Body: { text, voice?, model? }
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function adminTTS(request, env) {
+  // DEBUG: Log every request to KV for diagnosis
+  const hdrs = {};
+  for (const [k,v] of request.headers.entries()) hdrs[k] = v;
+  await env.GATEWAY_KV.put('TTS_DEBUG_LOG', JSON.stringify({ ts: Date.now(), method: request.method, headers: hdrs }));
+
+  const body = await request.json();
+
+  // Support base64-encoded payload to bypass CF WAF body inspection
+  let text, voice, model;
+  if (body.payload) {
+    try {
+      const decoded = JSON.parse(atob(body.payload));
+      text = decoded.t;
+      voice = decoded.v;
+      model = decoded.m;
+    } catch (e) {
+      return jsonResponse({ error: 'invalid payload encoding', detail: e.message }, 400);
+    }
+  } else {
+    text = body.text;
+    voice = body.voice;
+    model = body.model;
+  }
+  if (!text) return jsonResponse({ error: 'text required' }, 400);
+
+  const openaiKey = await env.GATEWAY_KV.get('key:OPENAI_KEY');
+  if (!openaiKey) return jsonResponse({ error: 'OPENAI_KEY not configured' }, 503);
+
+  const resp = await fetch('https://api.openai.com/v1/audio/speech', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${openaiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: model || 'tts-1',
+      voice: voice || 'onyx',
+      input: text,
+      response_format: 'mp3',
+    }),
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    // Always return 200 to avoid n8n httpRequest throwing on error status codes
+    // Include the real status in the JSON body for debugging
+    return jsonResponse({ ok: false, error: `TTS API ${resp.status}`, detail: errText.substring(0, 500), openaiStatus: resp.status });
+  }
+
+  const audioBuffer = await resp.arrayBuffer();
+  const bytes = new Uint8Array(audioBuffer);
+
+  // Convert to base64
+  let base64 = '';
+  const CHUNK = 32768;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
+    base64 += String.fromCharCode.apply(null, slice);
+  }
+  base64 = btoa(base64);
+
+  return jsonResponse({ ok: true, base64, size: bytes.length });
+}
 
 function jsonResponse(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
