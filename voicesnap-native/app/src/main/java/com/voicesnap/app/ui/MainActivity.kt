@@ -1,9 +1,12 @@
 package com.voicesnap.app.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -66,6 +69,15 @@ class MainActivity : ComponentActivity() {
         }
         if (needed.isNotEmpty()) {
             permissionLauncher.launch(needed.toTypedArray())
+        }
+
+        // Request overlay permission for floating bubble
+        if (!Settings.canDrawOverlays(this)) {
+            val overlayIntent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(overlayIntent)
         }
 
         setContent {
