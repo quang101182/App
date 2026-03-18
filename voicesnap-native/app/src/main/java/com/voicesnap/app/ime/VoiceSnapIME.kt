@@ -68,6 +68,7 @@ class VoiceSnapIME : InputMethodService() {
     private var bannerClipboard: LinearLayout? = null
     private var tvClipboardText: TextView? = null
     private val bannerHandler = Handler(Looper.getMainLooper())
+    private var dismissedClipText: String? = null
 
     // State
     private var isRecording = false
@@ -238,14 +239,18 @@ class VoiceSnapIME : InputMethodService() {
             }
         }
 
-        // Clipboard banner — tap to paste
-        bannerClipboard?.setOnClickListener {
+        // Clipboard banner — tap text to paste, X to dismiss
+        tvClipboardText?.setOnClickListener {
             haptic(it)
             pasteFromClipboard()
         }
         view.findViewById<TextView>(R.id.tv_clipboard_paste)?.setOnClickListener {
             haptic(it)
             pasteFromClipboard()
+        }
+        view.findViewById<FrameLayout>(R.id.btn_clipboard_dismiss)?.setOnClickListener {
+            haptic(it)
+            dismissClipboardBanner()
         }
     }
 
@@ -748,6 +753,11 @@ class VoiceSnapIME : InputMethodService() {
                 bannerClipboard?.visibility = View.GONE
                 return
             }
+            // Skip if user dismissed this exact text
+            if (text == dismissedClipText) {
+                bannerClipboard?.visibility = View.GONE
+                return
+            }
             // Show banner with truncated preview
             tvClipboardText?.text = text.replace('\n', ' ').trim()
             bannerClipboard?.visibility = View.VISIBLE
@@ -766,6 +776,17 @@ class VoiceSnapIME : InputMethodService() {
     private fun hideClipboardBanner() {
         bannerHandler.removeCallbacksAndMessages(null)
         bannerClipboard?.visibility = View.GONE
+    }
+
+    private fun dismissClipboardBanner() {
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            val clip = clipboard?.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                dismissedClipText = clip.getItemAt(0).text?.toString()
+            }
+        } catch (_: Exception) {}
+        hideClipboardBanner()
     }
 
     private fun pasteFromClipboard() {
