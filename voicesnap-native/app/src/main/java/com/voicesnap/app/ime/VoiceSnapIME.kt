@@ -17,6 +17,7 @@ import android.widget.ListPopupWindow
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import android.graphics.drawable.GradientDrawable
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.LinearLayout
@@ -68,6 +69,8 @@ class VoiceSnapIME : InputMethodService() {
     private var bannerClipboard: LinearLayout? = null
     private var tvClipboardText: TextView? = null
     private val bannerHandler = Handler(Looper.getMainLooper())
+    private var tvThemeIcon: TextView? = null
+    private var currentTheme: KeyboardTheme = KeyboardTheme.THEMES[0]
     // dismissedClipText now persisted via PrefsManager
 
     // State
@@ -104,16 +107,19 @@ class VoiceSnapIME : InputMethodService() {
         ledTrd = view.findViewById(R.id.led_trd)
         bannerClipboard = view.findViewById(R.id.banner_clipboard)
         tvClipboardText = view.findViewById(R.id.tv_clipboard_text)
+        tvThemeIcon = view.findViewById(R.id.tv_theme_icon)
 
         // Load prefs
         vadEnabled = prefs.isVadEnabled()
         currentRewriteMode = try { RewriteMode.valueOf(prefs.getRewriteMode()) } catch (_: Exception) { RewriteMode.NEUTRAL }
+        currentTheme = KeyboardTheme.fromName(prefs.getKeyboardTheme())
         updateTogglesUI()
         updateLanguageLabels()
         updateRewriteButtonUI()
         updateUndoRedoUI()
 
         setupListeners(view)
+        applyTheme()
         return view
     }
 
@@ -251,6 +257,12 @@ class VoiceSnapIME : InputMethodService() {
         view.findViewById<FrameLayout>(R.id.btn_clipboard_dismiss)?.setOnClickListener {
             haptic(it)
             dismissClipboardBanner()
+        }
+
+        // Theme toggle button
+        view.findViewById<FrameLayout>(R.id.btn_theme_toggle)?.setOnClickListener {
+            haptic(it)
+            cycleTheme()
         }
     }
 
@@ -679,26 +691,27 @@ class VoiceSnapIME : InputMethodService() {
     }
 
     private fun updateRecordingUI(recording: Boolean) {
+        val t = currentTheme
         if (recording) {
-            btnDictate?.setBackgroundResource(R.drawable.bg_button_recording)
+            btnDictate?.let { applyButtonBg(it, t.bgRecording, t.cornerRadius) }
             tvDictateLabel?.text = "STOP"
-            btnTranslate?.setBackgroundResource(
-                if (translateMode) R.drawable.bg_button_recording else R.drawable.bg_button_translate
-            )
+            btnTranslate?.let {
+                applyButtonBg(it, if (translateMode) t.bgRecording else t.bgTranslate, t.cornerRadius)
+            }
         } else {
-            btnDictate?.setBackgroundResource(R.drawable.bg_button_dictate)
+            btnDictate?.let { applyButtonBg(it, t.bgDictate, t.cornerRadius) }
             tvDictateLabel?.text = "Dicter"
-            btnTranslate?.setBackgroundResource(R.drawable.bg_button_translate)
+            btnTranslate?.let { applyButtonBg(it, t.bgTranslate, t.cornerRadius) }
         }
     }
 
     private fun updateTogglesUI() {
         if (vadEnabled) {
             btnToggleVad?.text = " Auto-stop "
-            btnToggleVad?.setTextColor(0xFF22C55E.toInt())
+            btnToggleVad?.setTextColor(currentTheme.vadOnColor)
         } else {
             btnToggleVad?.text = " Auto-stop "
-            btnToggleVad?.setTextColor(0xFFEF4444.toInt())
+            btnToggleVad?.setTextColor(currentTheme.vadOffColor)
         }
     }
 
@@ -732,6 +745,93 @@ class VoiceSnapIME : InputMethodService() {
 
     private fun setLed(led: View?, success: Boolean) {
         led?.setBackgroundResource(if (success) R.drawable.led_green else R.drawable.led_red)
+    }
+
+    // ---- Theme switching ----
+
+    private fun cycleTheme() {
+        currentTheme = KeyboardTheme.next(currentTheme)
+        prefs.setKeyboardTheme(currentTheme.name)
+        applyTheme()
+        setStatus("Theme: ${currentTheme.name}")
+    }
+
+    private fun applyTheme() {
+        val view = keyboardView ?: return
+        val t = currentTheme
+
+        // Keyboard background
+        view.setBackgroundColor(t.bgKeyboard)
+
+        // Theme toggle icon
+        tvThemeIcon?.text = t.icon
+        tvThemeIcon?.setTextColor(t.textSecondary)
+
+        // Status text
+        tvStatus?.setTextColor(t.textSecondary)
+
+        // Language selectors
+        tvSourceLang?.setTextColor(t.textPrimary)
+        tvTargetLang?.setTextColor(t.textPrimary)
+
+        // Main action buttons
+        btnDictate?.let { applyButtonBg(it, if (isRecording) t.bgRecording else t.bgDictate, t.cornerRadius) }
+        btnTranslate?.let { applyButtonBg(it, if (isRecording && translateMode) t.bgRecording else t.bgTranslate, t.cornerRadius) }
+
+        // Dictate label
+        tvDictateLabel?.setTextColor(t.textPrimary)
+
+        // Utility keys — apply to all bg_key buttons
+        val keyIds = intArrayOf(
+            R.id.key_undo, R.id.key_redo, R.id.key_backspace,
+            R.id.btn_settings, R.id.btn_clear_all, R.id.btn_theme_toggle
+        )
+        for (id in keyIds) {
+            view.findViewById<View>(id)?.let { applyButtonBg(it, t.bgButton, t.cornerRadius) }
+        }
+
+        // Text keys
+        val textKeyIds = intArrayOf(R.id.key_comma, R.id.key_period, R.id.key_question, R.id.key_space, R.id.key_enter)
+        for (id in textKeyIds) {
+            view.findViewById<TextView>(id)?.let { tv ->
+                applyButtonBg(tv, if (id == R.id.key_enter) t.bgDictate else t.bgButton, t.cornerRadius)
+                tv.setTextColor(t.textPrimary)
+            }
+        }
+
+        // Undo/Redo text color
+        tvUndo?.setTextColor(t.textSecondary)
+        tvRedo?.setTextColor(t.textSecondary)
+
+        // VAD toggle
+        updateTogglesUI()
+
+        // Rewrite button
+        view.findViewById<FrameLayout>(R.id.btn_rewrite)?.let { applyButtonBg(it, t.bgButton, t.cornerRadius) }
+        tvRewriteLabel?.setTextColor(t.accentRewrite)
+
+        // Banner clipboard
+        bannerClipboard?.setBackgroundColor(t.bgBanner)
+        tvClipboardText?.setTextColor(t.textSecondary)
+        view.findViewById<TextView>(R.id.tv_clipboard_paste)?.setTextColor(t.textAccent)
+
+        // Language row backgrounds
+        view.findViewById<TextView>(R.id.tv_source_lang)?.let { applyButtonBg(it, t.bgButton, t.cornerRadius) }
+        view.findViewById<TextView>(R.id.tv_target_lang)?.let { applyButtonBg(it, t.bgButton, t.cornerRadius) }
+
+        // Progress bar tint
+        progressBar?.indeterminateTintList = android.content.res.ColorStateList.valueOf(t.bgDictate)
+    }
+
+    private fun applyButtonBg(view: View, color: Int, radius: Float) {
+        val drawable = GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = radius * view.resources.displayMetrics.density
+            if (currentTheme.bgButtonBorder != 0) {
+                setStroke(1, currentTheme.bgButtonBorder)
+            }
+        }
+        view.background = drawable
     }
 
     // ---- Clipboard banner ----

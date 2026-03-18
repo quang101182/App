@@ -77,6 +77,10 @@ class PrefsManager(context: Context) {
     fun getCustomDictionary(): String = prefs.getString("custom_dictionary", "") ?: ""
     fun setCustomDictionary(words: String) = prefs.edit().putString("custom_dictionary", words).apply()
 
+    // Keyboard theme
+    fun getKeyboardTheme(): String = prefs.getString("keyboard_theme", "Solid") ?: "Solid"
+    fun setKeyboardTheme(name: String) = prefs.edit().putString("keyboard_theme", name).apply()
+
     // Dismissed clipboard text (persists across IME lifecycle)
     fun getDismissedClipText(): String? = prefs.getString("dismissed_clip_text", null)
     fun setDismissedClipText(text: String?) = prefs.edit().putString("dismissed_clip_text", text).apply()
