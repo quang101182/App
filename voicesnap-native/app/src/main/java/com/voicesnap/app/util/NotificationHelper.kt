@@ -7,8 +7,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
-import androidx.media.app.NotificationCompat as MediaNotificationCompat
 import com.voicesnap.app.R
 import com.voicesnap.app.service.RecordingService
 import com.voicesnap.app.ui.MainActivity
@@ -62,31 +62,25 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Custom layout with visible STOP button (no expand needed)
+        val customView = RemoteViews(context.packageName, R.layout.notification_recording)
+        customView.setTextViewText(R.id.notif_state, state)
+        customView.setOnClickPendingIntent(R.id.notif_stop_btn, stopPendingIntent)
+
         val builder = NotificationCompat.Builder(context, Constants.CHANNEL_RECORDING)
             .setSmallIcon(R.drawable.ic_tile_mic)
-            .setContentTitle("VoiceSnap")
-            .setContentText(state)
+            .setCustomContentView(customView)
+            .setCustomBigContentView(customView)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            // STOP action — index 0 will be shown in compact MediaStyle
+            // Keep action as fallback
             .addAction(
                 android.R.drawable.ic_media_pause,
                 "STOP",
                 stopPendingIntent
             )
-            // MediaStyle: show action at index 0 in compact view
-            .setStyle(
-                MediaNotificationCompat.MediaStyle()
-                    .setShowActionsInCompactView(0)
-            )
-
-        // Show chronometer only during active recording
-        if (state.contains("coute", ignoreCase = true)) {
-            builder.setUsesChronometer(true)
-                .setWhen(System.currentTimeMillis())
-        }
 
         return builder.build()
     }
