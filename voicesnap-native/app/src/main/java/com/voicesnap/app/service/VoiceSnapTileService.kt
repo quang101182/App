@@ -1,16 +1,11 @@
 package com.voicesnap.app.service
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.drawable.Icon
-import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
-import androidx.core.content.ContextCompat
 import com.voicesnap.app.R
-import com.voicesnap.app.ui.MainActivity
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 
@@ -40,55 +35,32 @@ class VoiceSnapTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        Log.d(TAG, "Tile clicked!")
+        Log.d(TAG, "Tile clicked! Current state: ${RecordingStateHolder.state.value}")
 
-        // Check RECORD_AUDIO permission first
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            Log.w(TAG, "RECORD_AUDIO not granted, opening MainActivity")
-            val intent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                putExtra("request_permission", true)
+        val currentState = RecordingStateHolder.state.value
+
+        // If currently recording → stop
+        // If idle → start
+        // If transcribing/translating → ignore
+        val action = when (currentState) {
+            RecordingState.RECORDING -> RecordingService.ACTION_STOP
+            RecordingState.IDLE -> RecordingService.ACTION_START
+            else -> {
+                Log.d(TAG, "Busy ($currentState), ignoring tap")
+                return
             }
-            startActivityAndCollapse(intent)
-            return
         }
 
-        // If currently recording, stop it
-        if (RecordingStateHolder.state.value == RecordingState.RECORDING) {
-            Log.d(TAG, "Stopping recording")
-            val intent = Intent(this, RecordingService::class.java).apply {
-                action = RecordingService.ACTION_STOP
-            }
-            startService(intent)
-            return
-        }
-
-        // If not idle (transcribing/translating), ignore
-        if (RecordingStateHolder.state.value != RecordingState.IDLE) {
-            Log.d(TAG, "Not idle, ignoring: ${RecordingStateHolder.state.value}")
-            return
-        }
-
-        // Start recording - handle locked screen
-        Log.d(TAG, "Starting recording service")
+        // Launch via TrampolineActivity (guarantees foreground context)
         try {
-            val intent = Intent(this, RecordingService::class.java).apply {
-                action = RecordingService.ACTION_START
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start service", e)
-            // Fallback: open app
-            val intent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            val intent = Intent(this, TrampolineActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION
+                putExtra(TrampolineActivity.EXTRA_ACTION, action)
             }
             startActivityAndCollapse(intent)
+            Log.d(TAG, "Trampoline launched with action=$action")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to launch trampoline", e)
         }
     }
 
