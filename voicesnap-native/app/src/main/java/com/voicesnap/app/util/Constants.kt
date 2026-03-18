@@ -1,7 +1,7 @@
 package com.voicesnap.app.util
 
 object Constants {
-    const val APP_VERSION = "1.0.2"
+    const val APP_VERSION = "1.0.3"
 
     // API Gateway
     const val GATEWAY_URL = "https://api-gateway.quang101182.workers.dev"
@@ -16,6 +16,7 @@ object Constants {
     const val SILENCE_TIMEOUT_MS = 5000L
     const val SILENCE_THRESHOLD_RMS = 500.0
     const val MIN_RECORDING_MS = 1500L
+    const val MAX_RECORDING_MS = 60000L
 
     // Notifications
     const val CHANNEL_RECORDING = "voicesnap_recording"

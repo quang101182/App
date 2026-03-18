@@ -80,8 +80,15 @@ class AudioRecorder {
                 val rms = kotlin.math.sqrt(sum / readCount)
                 onAmplitude?.invoke(rms)
 
-                // VAD — only check after minimum recording time
+                // Check max recording timeout
                 val elapsed = System.currentTimeMillis() - startTime
+                if (elapsed > Constants.MAX_RECORDING_MS) {
+                    Log.w("AudioRecorder", "Max recording duration reached (${Constants.MAX_RECORDING_MS}ms)")
+                    onSilenceDetected?.invoke()
+                    break
+                }
+
+                // VAD — only check after minimum recording time
                 if (elapsed > Constants.MIN_RECORDING_MS) {
                     val result = silenceDetector.feed(buffer, readCount)
                     if (result == SilenceDetector.Result.SPEECH_END) {

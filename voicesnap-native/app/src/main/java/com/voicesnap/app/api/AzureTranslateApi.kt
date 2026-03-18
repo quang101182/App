@@ -25,14 +25,15 @@ object AzureTranslateApi {
                 .addHeader("Content-Type", "application/json")
                 .build()
 
-            val response = ApiClient.client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                val errBody = response.body?.string() ?: ""
-                throw Exception("Translation failed (${response.code}): ${errBody.take(200)}")
-            }
+            ApiClient.client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val errBody = response.body?.string() ?: ""
+                    throw Exception("Translation failed (${response.code}): ${errBody.take(200)}")
+                }
 
-            val data = JSONArray(response.body!!.string())
-            val translations = data.getJSONObject(0).getJSONArray("translations")
-            translations.getJSONObject(0).getString("text")
+                val data = JSONArray(response.body!!.string())
+                val translations = data.getJSONObject(0).getJSONArray("translations")
+                translations.getJSONObject(0).getString("text")
+            }
         }
 }

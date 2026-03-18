@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -37,28 +38,36 @@ class RecordingService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val recorder = AudioRecorder()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val prefs by lazy { PrefsManager(this) }
+    @Volatile private var isProcessing = false
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "onStartCommand action=${intent?.action}")
 
-        // CRITICAL: call startForeground IMMEDIATELY to avoid ANR/crash on Android 14+
-        val notification = NotificationHelper.buildRecordingNotification(this, "D\u00e9marrage...")
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                    Constants.NOTIF_ID_RECORDING,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-                )
-            } else {
-                startForeground(Constants.NOTIF_ID_RECORDING, notification)
+        // Only call startForeground for start/toggle actions, not STOP when already running
+        val isStopAction = intent?.action == ACTION_STOP
+        val isAlreadyRunning = recorder.isActive() || RecordingStateHolder.state.value != RecordingState.IDLE
+        if (!(isStopAction && isAlreadyRunning)) {
+            // CRITICAL: call startForeground IMMEDIATELY to avoid ANR/crash on Android 14+
+            val notification = NotificationHelper.buildRecordingNotification(this, "D\u00e9marrage...")
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(
+                        Constants.NOTIF_ID_RECORDING,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    )
+                } else {
+                    startForeground(Constants.NOTIF_ID_RECORDING, notification)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "startForeground failed", e)
+                stopSelf()
+                return START_NOT_STICKY
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "startForeground failed", e)
-            stopSelf()
-            return START_NOT_STICKY
         }
 
         when (intent?.action) {
@@ -82,6 +91,16 @@ class RecordingService : Service() {
         updateNotification("\u00c9coute...")
         RecordingStateHolder.update(RecordingState.RECORDING)
 
+        // Acquire partial wake lock to keep CPU active during recording
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VoiceSnap::Recording").apply {
+                acquire(Constants.MAX_RECORDING_MS + 30_000L) // max recording + processing buffer
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "WakeLock acquire failed", e)
+        }
+
         recorder.onSilenceDetected = {
             Log.d(TAG, "Silence detected, posting stop to main thread")
             // Must stop on main thread to avoid race conditions
@@ -99,6 +118,10 @@ class RecordingService : Service() {
     }
 
     private fun stopRecording() {
+        if (isProcessing) {
+            Log.d(TAG, "Already processing, ignoring stop")
+            return
+        }
         if (!recorder.isActive()) {
             Log.d(TAG, "Not recording, processing or cleaning up")
             // If we're not recording and not processing, just cleanup
@@ -107,6 +130,7 @@ class RecordingService : Service() {
             }
             return
         }
+        isProcessing = true
 
         Log.d(TAG, "Stopping recording...")
         val wavData = recorder.stop()
@@ -124,7 +148,6 @@ class RecordingService : Service() {
 
         scope.launch {
             try {
-                val prefs = PrefsManager(this@RecordingService)
                 val srcLangCode = prefs.getSourceLang()
                 val langObj = LANGUAGES.find { it.code == srcLangCode }
                 val whisperLang = langObj?.whisperCode
@@ -239,7 +262,14 @@ class RecordingService : Service() {
 
     private fun cleanup() {
         Log.d(TAG, "Cleanup")
+        isProcessing = false
         RecordingStateHolder.update(RecordingState.IDLE)
+        try {
+            wakeLock?.let { if (it.isHeld) it.release() }
+            wakeLock = null
+        } catch (e: Exception) {
+            Log.e(TAG, "WakeLock release error", e)
+        }
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (e: Exception) {

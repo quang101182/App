@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.voicesnap.app.ui.MainActivity
 
@@ -56,6 +57,7 @@ class TrampolineActivity : Activity() {
             Log.d(TAG, "Service started with action=$action")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start service", e)
+            Toast.makeText(this, "VoiceSnap: impossible de démarrer le service", Toast.LENGTH_SHORT).show()
         }
 
         // Close immediately — no UI shown

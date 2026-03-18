@@ -40,17 +40,18 @@ object WhisperApi {
                 .addHeader("X-Api-Path", Constants.WHISPER_API_PATH_HEADER)
                 .build()
 
-            val response = ApiClient.client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                val errBody = response.body?.string() ?: ""
-                throw Exception("Transcription failed (${response.code}): ${errBody.take(200)}")
-            }
+            ApiClient.client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val errBody = response.body?.string() ?: ""
+                    throw Exception("Transcription failed (${response.code}): ${errBody.take(200)}")
+                }
 
-            val json = JSONObject(response.body!!.string())
-            TranscriptionResult(
-                text = json.optString("text", "").trim(),
-                language = if (json.has("language")) json.getString("language") else null,
-                duration = if (json.has("duration")) json.getDouble("duration") else null
-            )
+                val json = JSONObject(response.body!!.string())
+                TranscriptionResult(
+                    text = json.optString("text", "").trim(),
+                    language = if (json.has("language")) json.getString("language") else null,
+                    duration = if (json.has("duration")) json.getDouble("duration") else null
+                )
+            }
         }
 }

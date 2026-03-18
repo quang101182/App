@@ -1,7 +1,9 @@
 package com.voicesnap.app.service
 
+import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.drawable.Icon
+import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
@@ -19,6 +21,7 @@ class VoiceSnapTileService : TileService() {
 
     override fun onStartListening() {
         super.onStartListening()
+        scope?.cancel()
         scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
         scope?.launch {
             RecordingStateHolder.state.collectLatest { state ->
@@ -35,32 +38,49 @@ class VoiceSnapTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        Log.d(TAG, "Tile clicked! Current state: ${RecordingStateHolder.state.value}")
-
         val currentState = RecordingStateHolder.state.value
+        Log.d(TAG, "Tile clicked! state=$currentState")
 
-        // If currently recording → stop
-        // If idle → start
-        // If transcribing/translating → ignore
         val action = when (currentState) {
             RecordingState.RECORDING -> RecordingService.ACTION_STOP
             RecordingState.IDLE -> RecordingService.ACTION_START
             else -> {
-                Log.d(TAG, "Busy ($currentState), ignoring tap")
+                Log.d(TAG, "Busy ($currentState), ignoring")
                 return
             }
         }
 
-        // Launch via TrampolineActivity (guarantees foreground context)
         try {
             val intent = Intent(this, TrampolineActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION
                 putExtra(TrampolineActivity.EXTRA_ACTION, action)
             }
-            startActivityAndCollapse(intent)
-            Log.d(TAG, "Trampoline launched with action=$action")
+
+            // Android 14+ requires PendingIntent version
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val pendingIntent = PendingIntent.getActivity(
+                    this, action.hashCode(), intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                startActivityAndCollapse(pendingIntent)
+                Log.d(TAG, "Launched via PendingIntent (API 34+)")
+            } else {
+                @Suppress("DEPRECATION")
+                startActivityAndCollapse(intent)
+                Log.d(TAG, "Launched via Intent (legacy)")
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to launch trampoline", e)
+            // Fallback: open MainActivity instead of direct service start (which would crash)
+            try {
+                val fallbackIntent = Intent(this, com.voicesnap.app.ui.MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(fallbackIntent)
+                Log.d(TAG, "Fallback: opened MainActivity")
+            } catch (e2: Exception) {
+                Log.e(TAG, "Fallback also failed", e2)
+            }
         }
     }
 
