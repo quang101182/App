@@ -7,22 +7,26 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.widget.RemoteViews
+import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
+import androidx.media.app.NotificationCompat as MediaNotificationCompat
 import com.voicesnap.app.R
 import com.voicesnap.app.service.RecordingService
 import com.voicesnap.app.ui.MainActivity
 
 object NotificationHelper {
 
+    private var mediaSession: MediaSessionCompat? = null
+
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java)
 
-            // Delete old LOW importance channel if it exists, to recreate as HIGH
+            // Delete old channel if importance changed
             try {
                 manager.getNotificationChannel(Constants.CHANNEL_RECORDING)?.let {
-                    if (it.importance != NotificationManager.IMPORTANCE_HIGH) {
+                    if (it.importance != NotificationManager.IMPORTANCE_LOW) {
                         manager.deleteNotificationChannel(Constants.CHANNEL_RECORDING)
                     }
                 }
@@ -31,7 +35,7 @@ object NotificationHelper {
             val recordingChannel = NotificationChannel(
                 Constants.CHANNEL_RECORDING,
                 "Enregistrement",
-                NotificationManager.IMPORTANCE_HIGH
+                NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Notification pendant l'enregistrement vocal"
                 setShowBadge(false)
@@ -41,7 +45,7 @@ object NotificationHelper {
 
             val resultChannel = NotificationChannel(
                 Constants.CHANNEL_RESULT,
-                "Résultats",
+                "R\u00e9sultats",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notification du texte transcrit"
@@ -50,6 +54,42 @@ object NotificationHelper {
             manager.createNotificationChannel(recordingChannel)
             manager.createNotificationChannel(resultChannel)
         }
+    }
+
+    fun getOrCreateMediaSession(context: Context): MediaSessionCompat {
+        mediaSession?.let { return it }
+
+        val session = MediaSessionCompat(context, "VoiceSnapRecorder").apply {
+            val state = PlaybackStateCompat.Builder()
+                .setState(PlaybackStateCompat.STATE_PLAYING, 0L, 1f)
+                .setActions(PlaybackStateCompat.ACTION_STOP or PlaybackStateCompat.ACTION_PAUSE)
+                .build()
+            setPlaybackState(state)
+
+            setCallback(object : MediaSessionCompat.Callback() {
+                override fun onStop() {
+                    val stopIntent = Intent(context, RecordingService::class.java).apply {
+                        action = RecordingService.ACTION_STOP
+                    }
+                    context.startService(stopIntent)
+                }
+                override fun onPause() {
+                    onStop()
+                }
+            })
+
+            isActive = true
+        }
+        mediaSession = session
+        return session
+    }
+
+    fun releaseMediaSession() {
+        mediaSession?.apply {
+            isActive = false
+            release()
+        }
+        mediaSession = null
     }
 
     fun buildRecordingNotification(context: Context, state: String): Notification {
@@ -62,25 +102,32 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Custom layout with visible STOP button (no expand needed)
-        val customView = RemoteViews(context.packageName, R.layout.notification_recording)
-        customView.setTextViewText(R.id.notif_state, state)
-        customView.setOnClickPendingIntent(R.id.notif_stop_btn, stopPendingIntent)
+        val session = getOrCreateMediaSession(context)
 
         val builder = NotificationCompat.Builder(context, Constants.CHANNEL_RECORDING)
             .setSmallIcon(R.drawable.ic_tile_mic)
-            .setCustomContentView(customView)
-            .setCustomBigContentView(customView)
+            .setContentTitle("VoiceSnap")
+            .setContentText(state)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            // Keep action as fallback
+            // STOP action at index 0
             .addAction(
                 android.R.drawable.ic_media_pause,
                 "STOP",
                 stopPendingIntent
             )
+            // MediaStyle with session token — forces action visible in compact view
+            .setStyle(
+                MediaNotificationCompat.MediaStyle()
+                    .setMediaSession(session.sessionToken)
+                    .setShowActionsInCompactView(0)
+            )
+
+        // Show chronometer only during active recording
+        if (state.contains("coute", ignoreCase = true)) {
+            builder.setUsesChronometer(true)
+                .setWhen(System.currentTimeMillis())
+        }
 
         return builder.build()
     }
@@ -99,7 +146,7 @@ object NotificationHelper {
 
         return NotificationCompat.Builder(context, Constants.CHANNEL_RESULT)
             .setSmallIcon(R.drawable.ic_tile_mic)
-            .setContentTitle("Texte copié")
+            .setContentTitle("Texte copi\u00e9")
             .setContentText(preview)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(pendingIntent)

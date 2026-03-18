@@ -271,6 +271,7 @@ class RecordingService : Service() {
         Log.d(TAG, "Cleanup")
         isProcessing = false
         RecordingStateHolder.update(RecordingState.IDLE)
+        NotificationHelper.releaseMediaSession()
         try {
             wakeLock?.let { if (it.isHeld) it.release() }
             wakeLock = null
@@ -288,6 +289,7 @@ class RecordingService : Service() {
     override fun onDestroy() {
         Log.d(TAG, "onDestroy")
         scope.cancel()
+        NotificationHelper.releaseMediaSession()
         if (recorder.isActive()) {
             recorder.stop()
         }

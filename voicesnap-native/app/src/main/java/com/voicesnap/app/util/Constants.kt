@@ -1,7 +1,7 @@
 package com.voicesnap.app.util
 
 object Constants {
-    const val APP_VERSION = "1.1.1"
+    const val APP_VERSION = "1.2.0"
 
     // API Gateway
     const val GATEWAY_URL = "https://api-gateway.quang101182.workers.dev"
@@ -13,9 +13,9 @@ object Constants {
 
     // Audio
     const val SAMPLE_RATE = 16000
-    const val SILENCE_TIMEOUT_MS = 2000L
-    const val SILENCE_THRESHOLD_RMS = 250.0
-    const val SPEECH_FORCE_TIMEOUT_MS = 2000L  // Force hasSpeech=true after this delay
+    const val SILENCE_TIMEOUT_MS = 5000L
+    const val SILENCE_THRESHOLD_RMS = 1500.0
+    const val SPEECH_FORCE_TIMEOUT_MS = 15000L  // Force hasSpeech=true after this delay (safety net)
     const val MIN_RECORDING_MS = 1500L
     const val MAX_RECORDING_MS = 60000L
 
