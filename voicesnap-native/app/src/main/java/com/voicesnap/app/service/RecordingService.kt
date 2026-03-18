@@ -23,6 +23,7 @@ import com.voicesnap.app.data.PrefsManager
 import com.voicesnap.app.data.WHISPER_LANG_MAP
 import com.voicesnap.app.util.ClipboardHelper
 import com.voicesnap.app.util.Constants
+import com.voicesnap.app.util.NetworkHelper
 import com.voicesnap.app.util.NotificationHelper
 import kotlinx.coroutines.*
 
@@ -150,6 +151,14 @@ class RecordingService : Service() {
         }
 
         Log.d(TAG, "WAV data: ${wavData.size} bytes")
+
+        // Check network before calling API
+        if (!NetworkHelper.isNetworkAvailable(this)) {
+            notifyError("Pas de connexion internet")
+            cleanup()
+            return
+        }
+
         updateNotification("Transcription...")
         RecordingStateHolder.update(RecordingState.TRANSCRIBING)
 
@@ -185,9 +194,18 @@ class RecordingService : Service() {
                         updateNotification("Traduction...")
                         RecordingStateHolder.update(RecordingState.TRANSLATING)
                         Log.d(TAG, "Translating ${srcObj.azureCode} -> ${tgtObj.azureCode}...")
-                        translatedText = AzureTranslateApi.translate(result.text, srcObj.azureCode, tgtObj.azureCode)
-                        finalText = translatedText
-                        Log.d(TAG, "Translation: '$translatedText'")
+                        try {
+                            translatedText = AzureTranslateApi.translate(result.text, srcObj.azureCode, tgtObj.azureCode)
+                            if (translatedText != null) {
+                                finalText = translatedText!!
+                                Log.d(TAG, "Translation: '$translatedText'")
+                            } else {
+                                Log.w(TAG, "Translation returned null, keeping original text")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Translation failed, keeping original text", e)
+                            // Keep finalText = result.text (don't lose the transcription)
+                        }
                     }
                 }
 
@@ -207,10 +225,15 @@ class RecordingService : Service() {
                 prefs.addHistory(entry)
 
                 // Result notification
+                val notifText = if (translatedText == null && prefs.isTranslateEnabled()) {
+                    "$finalText\n(traduction \u00e9chou\u00e9e)"
+                } else {
+                    finalText
+                }
                 val notifManager = getSystemService(NotificationManager::class.java)
                 notifManager.notify(
                     Constants.NOTIF_ID_RESULT,
-                    NotificationHelper.buildResultNotification(this@RecordingService, finalText)
+                    NotificationHelper.buildResultNotification(this@RecordingService, notifText)
                 )
 
                 // Vibrate
@@ -219,9 +242,11 @@ class RecordingService : Service() {
                 // Update state
                 RecordingStateHolder.setResult(finalText)
 
+            } catch (e: CancellationException) {
+                Log.d(TAG, "Pipeline cancelled")
             } catch (e: Exception) {
                 Log.e(TAG, "Pipeline error", e)
-                notifyError(e.message ?: "Erreur inconnue")
+                notifyError(NetworkHelper.friendlyErrorMessage(e))
             } finally {
                 cleanup()
             }

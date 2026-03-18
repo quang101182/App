@@ -14,7 +14,7 @@ import androidx.media.app.NotificationCompat as MediaNotificationCompat
 import com.voicesnap.app.R
 import com.voicesnap.app.service.RecordingService
 import com.voicesnap.app.ui.MainActivity
-import com.voicesnap.app.util.CopyReceiver
+import com.voicesnap.app.ui.TextViewerActivity
 
 object NotificationHelper {
 
@@ -134,13 +134,13 @@ object NotificationHelper {
     }
 
     fun buildResultNotification(context: Context, text: String): Notification {
-        // Tap notification → re-copy text to clipboard via CopyReceiver
-        val copyIntent = Intent(context, CopyReceiver::class.java).apply {
-            action = CopyReceiver.ACTION_COPY
-            putExtra(CopyReceiver.EXTRA_TEXT, text)
+        // Tap notification → open full text viewer
+        val viewIntent = Intent(context, TextViewerActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("viewer_text", text)
         }
-        val copyPendingIntent = PendingIntent.getBroadcast(
-            context, text.hashCode(), copyIntent,
+        val viewPendingIntent = PendingIntent.getActivity(
+            context, text.hashCode(), viewIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -148,10 +148,10 @@ object NotificationHelper {
 
         return NotificationCompat.Builder(context, Constants.CHANNEL_RESULT)
             .setSmallIcon(R.drawable.ic_tile_mic)
-            .setContentTitle("Texte copi\u00e9 \u2014 tap pour recopier")
+            .setContentTitle("Transcription")
             .setContentText(preview)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setContentIntent(copyPendingIntent)
+            .setContentIntent(viewPendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
     }

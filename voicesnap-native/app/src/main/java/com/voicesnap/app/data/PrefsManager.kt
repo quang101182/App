@@ -61,6 +61,21 @@ class PrefsManager(context: Context) {
     }
 
     fun clearHistory() = prefs.edit().remove("history_json").apply()
+
+    // VAD toggle (for IME mode)
+    fun isVadEnabled(): Boolean = prefs.getBoolean("vad_enabled", true)
+    fun setVadEnabled(on: Boolean) = prefs.edit().putBoolean("vad_enabled", on).apply()
+
+    // Rewrite mode
+    fun isRewriteEnabled(): Boolean = prefs.getBoolean("rewrite_enabled", false)
+    fun setRewriteEnabled(on: Boolean) = prefs.edit().putBoolean("rewrite_enabled", on).apply()
+
+    fun getRewriteMode(): String = prefs.getString("rewrite_mode", "NEUTRAL") ?: "NEUTRAL"
+    fun setRewriteMode(mode: String) = prefs.edit().putString("rewrite_mode", mode).apply()
+
+    // Custom dictionary (Whisper prompt hint)
+    fun getCustomDictionary(): String = prefs.getString("custom_dictionary", "") ?: ""
+    fun setCustomDictionary(words: String) = prefs.edit().putString("custom_dictionary", words).apply()
 }
 
 data class HistoryEntry(

@@ -18,12 +18,15 @@ data class TranscriptionResult(
 object WhisperApi {
 
     suspend fun transcribe(wavData: ByteArray, languageCode: String?): TranscriptionResult =
+        transcribe(wavData, "recording.wav", "audio/wav", languageCode)
+
+    suspend fun transcribe(audioData: ByteArray, fileName: String, mimeType: String, languageCode: String?): TranscriptionResult =
         withContext(Dispatchers.IO) {
             val bodyBuilder = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart(
-                    "file", "recording.wav",
-                    wavData.toRequestBody("audio/wav".toMediaType())
+                    "file", fileName,
+                    audioData.toRequestBody(mimeType.toMediaType())
                 )
                 .addFormDataPart("model", Constants.WHISPER_MODEL)
                 .addFormDataPart("response_format", "verbose_json")

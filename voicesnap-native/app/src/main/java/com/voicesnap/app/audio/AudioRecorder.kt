@@ -88,13 +88,12 @@ class AudioRecorder {
                     break
                 }
 
-                // VAD — only check after minimum recording time
-                if (elapsed > Constants.MIN_RECORDING_MS) {
-                    val result = silenceDetector.feed(buffer, readCount)
-                    if (result == SilenceDetector.Result.SPEECH_END) {
-                        onSilenceDetected?.invoke()
-                        break
-                    }
+                // VAD — feed ALL buffers from the start (calibration needs ambient noise)
+                // but only act on SPEECH_END after minimum recording time
+                val result = silenceDetector.feed(buffer, readCount)
+                if (elapsed > Constants.MIN_RECORDING_MS && result == SilenceDetector.Result.SPEECH_END) {
+                    onSilenceDetected?.invoke()
+                    break
                 }
             }
         }

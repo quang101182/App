@@ -144,12 +144,14 @@ fun VoiceSnapScreen() {
                 StatusCard(recordingState)
             }
 
-            // Settings section
+            // ===== SECTION: Mode Tuile =====
             item {
-                Text("R\u00e9glages", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = TextPrimary)
+                Text("\uD83D\uDD33 Mode Tuile (presse-papier)", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = AccentVioletLight)
+                Spacer(Modifier.height(4.dp))
+                Text("Ces r\u00e9glages s'appliquent quand vous utilisez la tuile rapide.", color = TextMuted, fontSize = 12.sp)
             }
 
-            // Source language
+            // Source language (Tuile)
             item {
                 LanguageSelector(
                     label = "Langue parl\u00e9e",
@@ -158,7 +160,7 @@ fun VoiceSnapScreen() {
                 )
             }
 
-            // Translate toggle
+            // Translate toggle (Tuile)
             item {
                 Row(
                     modifier = Modifier
@@ -168,7 +170,10 @@ fun VoiceSnapScreen() {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Traduire", color = TextPrimary)
+                    Column {
+                        Text("Traduire", color = TextPrimary)
+                        Text("Traduit automatiquement apr\u00e8s transcription", color = TextMuted, fontSize = 11.sp)
+                    }
                     Switch(
                         checked = translateEnabled,
                         onCheckedChange = {
@@ -194,7 +199,33 @@ fun VoiceSnapScreen() {
                 }
             }
 
-            // Silence timeout slider
+            // Instructions Tuile
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = AccentViolet.copy(alpha = 0.1f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Comment utiliser la tuile :", fontWeight = FontWeight.Medium, color = AccentVioletLight, fontSize = 13.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Text("1. Ajoutez la tuile VoiceSnap dans vos R\u00e9glages rapides", color = TextSecondary, fontSize = 13.sp)
+                        Text("2. Depuis n'importe quelle app, tirez les notifications", color = TextSecondary, fontSize = 13.sp)
+                        Text("3. Appuyez sur la tuile VoiceSnap et parlez", color = TextSecondary, fontSize = 13.sp)
+                        Text("4. Le texte est copi\u00e9 dans le presse-papier", color = TextSecondary, fontSize = 13.sp)
+                    }
+                }
+            }
+
+            // ===== SECTION: R\u00e9glages partag\u00e9s =====
+            item {
+                Spacer(Modifier.height(8.dp))
+                Text("\u2699\uFE0F R\u00e9glages partag\u00e9s", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = TextPrimary)
+                Spacer(Modifier.height(4.dp))
+                Text("Ces r\u00e9glages s'appliquent aux deux modes (tuile et clavier).", color = TextMuted, fontSize = 12.sp)
+            }
+
+            // Silence timeout slider (shared)
             item {
                 Column(
                     modifier = Modifier
@@ -206,7 +237,7 @@ fun VoiceSnapScreen() {
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("D\u00e9lai silence auto", color = TextPrimary)
+                        Text("D\u00e9lai silence auto (Auto-stop)", color = TextPrimary)
                         Text(
                             "${silenceTimeout.toInt()}s",
                             color = AccentVioletLight,
@@ -215,7 +246,7 @@ fun VoiceSnapScreen() {
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Arr\u00eat automatique apr\u00e8s ce d\u00e9lai de silence",
+                        "Arr\u00eat automatique de l'enregistrement apr\u00e8s ce d\u00e9lai de silence",
                         color = TextMuted,
                         fontSize = 12.sp
                     )
@@ -244,59 +275,138 @@ fun VoiceSnapScreen() {
                 }
             }
 
-            // Instructions
+            // ===== SECTION: Mode Clavier =====
+            item {
+                Spacer(Modifier.height(8.dp))
+                Text("\u2328\uFE0F Mode Clavier (insertion directe)", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = AccentCyan)
+                Spacer(Modifier.height(4.dp))
+                Text("Le clavier a ses propres boutons de langue et traduction int\u00e9gr\u00e9s.", color = TextMuted, fontSize = 12.sp)
+            }
+
+            // Instructions Clavier
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = AccentViolet.copy(alpha = 0.1f)),
+                    colors = CardDefaults.cardColors(containerColor = AccentCyan.copy(alpha = 0.1f)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Comment utiliser", fontWeight = FontWeight.SemiBold, color = AccentVioletLight, fontSize = 14.sp)
+                        Text("Mise en route :", fontWeight = FontWeight.Medium, color = AccentCyan, fontSize = 13.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Text("1. Activez VoiceSnap dans Param\u00e8tres > Langues et saisie > Clavier", color = TextSecondary, fontSize = 13.sp)
+                        Text("2. Dans une app, appuyez sur le globe \uD83C\uDF10 pour switcher sur VoiceSnap", color = TextSecondary, fontSize = 13.sp)
+                        Spacer(Modifier.height(10.dp))
+                        Text("Actions principales :", fontWeight = FontWeight.Medium, color = AccentCyan.copy(alpha = 0.8f), fontSize = 13.sp)
+                        Text("\u2022 Dicter = transcrit et ins\u00e8re directement le texte brut", color = TextSecondary, fontSize = 12.sp)
+                        Text("\u2022 Traduire = transcrit + traduit + ins\u00e8re", color = TextSecondary, fontSize = 12.sp)
+                        Text("\u2022 S\u00e9lecteurs de langue int\u00e9gr\u00e9s au clavier (ind\u00e9pendants de la tuile)", color = TextSecondary, fontSize = 12.sp)
                         Spacer(Modifier.height(8.dp))
-                        Text("1. Ajoutez la tuile VoiceSnap dans vos R\u00e9glages rapides", color = TextSecondary, fontSize = 13.sp)
-                        Text("2. Depuis n'importe quelle app, tirez les notifications", color = TextSecondary, fontSize = 13.sp)
-                        Text("3. Appuyez sur la tuile VoiceSnap et parlez", color = TextSecondary, fontSize = 13.sp)
-                        Text("4. Le texte est copi\u00e9 automatiquement dans le presse-papier", color = TextSecondary, fontSize = 13.sp)
+                        Text("Outils :", fontWeight = FontWeight.Medium, color = AccentCyan.copy(alpha = 0.8f), fontSize = 13.sp)
+                        Text("\u2022 \u21B6 \u21B7 Annuler / R\u00e9tablir (s'allument quand disponible)", color = TextSecondary, fontSize = 12.sp)
+                        Text("\u2022 R\u00e9\u00e9crire : tap = reformule le texte avec l'IA", color = TextSecondary, fontSize = 12.sp)
+                        Text("\u2022 R\u00e9\u00e9crire long-press = choisir le mode (Propre/Formel/Concis/D\u00e9velopp\u00e9)", color = TextSecondary, fontSize = 12.sp)
+                        Text("\u2022 \uD83D\uDDD1 Tout effacer : restez appuy\u00e9 (s\u00e9curis\u00e9 contre les faux clics)", color = TextSecondary, fontSize = 12.sp)
+                        Text("\u2022 Auto-stop : active/d\u00e9sactive l'arr\u00eat au silence", color = TextSecondary, fontSize = 12.sp)
+                        Text("\u2022 LED API : 3 points indiquant le statut des services (STT/LLM/Traduction)", color = TextSecondary, fontSize = 12.sp)
                     }
                 }
             }
 
-            // History section
+            // ===== SECTION: Transcrire un audio =====
             item {
-                Row(
+                Spacer(Modifier.height(8.dp))
+                Text("\uD83C\uDFA7 Transcrire un audio re\u00e7u", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = SuccessGreen)
+                Spacer(Modifier.height(4.dp))
+                Text("Transcrivez les vocaux WhatsApp, Telegram, etc. sans micro.", color = TextMuted, fontSize = 12.sp)
+            }
+
+            item {
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    colors = CardDefaults.cardColors(containerColor = SuccessGreen.copy(alpha = 0.1f)),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Historique", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = TextPrimary)
-                    if (history.isNotEmpty()) {
-                        TextButton(onClick = {
-                            prefs.clearHistory()
-                            history = emptyList()
-                        }) {
-                            Text("Effacer", color = TextMuted, fontSize = 12.sp)
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Comment faire :", fontWeight = FontWeight.Medium, color = SuccessGreen, fontSize = 13.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Text("1. Dans WhatsApp/Telegram, restez appuy\u00e9 sur un message vocal", color = TextSecondary, fontSize = 13.sp)
+                        Text("2. Appuyez sur Partager (ou Transf\u00e9rer)", color = TextSecondary, fontSize = 13.sp)
+                        Text("3. Choisissez VoiceSnap dans la liste", color = TextSecondary, fontSize = 13.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Text("R\u00e9sultat :", fontWeight = FontWeight.Medium, color = SuccessGreen.copy(alpha = 0.8f), fontSize = 13.sp)
+                        Text("\u2022 Le texte est copi\u00e9 dans le presse-papier", color = TextSecondary, fontSize = 12.sp)
+                        Text("\u2022 Une notification affiche la transcription", color = TextSecondary, fontSize = 12.sp)
+                        Text("\u2022 Vous restez dans l'app d'origine", color = TextSecondary, fontSize = 12.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Text("Formats accept\u00e9s : opus, ogg, mp3, m4a, wav, webm, flac (max 25 Mo)", color = TextMuted, fontSize = 11.sp)
+                    }
+                }
+            }
+
+            // History section — collapsed by default for privacy
+            item {
+                var historyExpanded by remember { mutableStateOf(false) }
+
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { historyExpanded = !historyExpanded }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Historique", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = TextPrimary)
+                            if (history.isNotEmpty()) {
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "${history.size}",
+                                    fontSize = 12.sp,
+                                    color = TextMuted,
+                                    modifier = Modifier
+                                        .background(BgElevated, RoundedCornerShape(10.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Row {
+                            if (history.isNotEmpty() && historyExpanded) {
+                                TextButton(onClick = {
+                                    prefs.clearHistory()
+                                    history = emptyList()
+                                }) {
+                                    Text("Effacer", color = ErrorRed.copy(alpha = 0.7f), fontSize = 12.sp)
+                                }
+                            }
+                            Text(
+                                if (historyExpanded) "\u25B2" else "\u25BC",
+                                color = TextMuted,
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(start = 8.dp, top = 8.dp)
+                            )
+                        }
+                    }
+
+                    if (historyExpanded) {
+                        if (history.isEmpty()) {
+                            Text(
+                                "Aucune transcription pour le moment",
+                                color = TextMuted,
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(vertical = 16.dp)
+                            )
+                        } else {
+                            history.forEach { entry ->
+                                Spacer(Modifier.height(8.dp))
+                                HistoryCard(entry, onCopy = {
+                                    val text = entry.translatedText ?: entry.text
+                                    ClipboardHelper.copyToClipboard(context, text)
+                                })
+                            }
                         }
                     }
                 }
-            }
-
-            if (history.isEmpty()) {
-                item {
-                    Text(
-                        "Aucune transcription pour le moment",
-                        color = TextMuted,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(vertical = 24.dp)
-                    )
-                }
-            }
-
-            items(history, key = { it.id }) { entry ->
-                HistoryCard(entry, onCopy = {
-                    val text = entry.translatedText ?: entry.text
-                    ClipboardHelper.copyToClipboard(context, text)
-                })
             }
 
             // Bottom spacer
@@ -338,6 +448,7 @@ fun StatusCard(state: RecordingState) {
         RecordingState.IDLE -> "Pr\u00eat" to SuccessGreen
         RecordingState.RECORDING -> "\u00c9coute..." to AccentCyan
         RecordingState.TRANSCRIBING -> "Transcription..." to AccentVioletLight
+        RecordingState.REWRITING -> "R\u00e9\u00e9criture..." to AccentVioletLight
         RecordingState.TRANSLATING -> "Traduction..." to AccentVioletLight
     }
 

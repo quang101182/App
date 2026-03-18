@@ -12,7 +12,8 @@ class SilenceDetector(
 ) {
     companion object {
         private const val TAG = "SilenceDetector"
-        private const val NOISE_MULTIPLIER = 3.0
+        private const val NOISE_MULTIPLIER = 2.0
+        private const val SPEECH_CONFIRM_BUFFERS = 3 // consecutive speech buffers to confirm speech
     }
 
     private var silenceStartTime: Long = 0L
@@ -25,6 +26,12 @@ class SilenceDetector(
     private var adaptiveThreshold: Double = baseThresholdRms
     private var calibrated: Boolean = false
 
+    // Speech confirmation — require N consecutive above-threshold buffers
+    private var consecutiveSpeechBuffers: Int = 0
+
+    // Logging throttle
+    private var totalBuffers: Int = 0
+
     enum class Result {
         SPEECH,           // Voice detected
         SILENCE,          // Silence, no prior speech
@@ -35,12 +42,13 @@ class SilenceDetector(
     fun feed(buffer: ShortArray, readCount: Int): Result {
         val rms = calculateRms(buffer, readCount)
         val now = System.currentTimeMillis()
+        totalBuffers++
 
         if (firstFeedTime == 0L) {
             firstFeedTime = now
         }
 
-        // Phase 1: Calibrate noise floor from first N buffers
+        // Phase 1: Calibrate noise floor from first N buffers (ambient noise BEFORE user speaks)
         if (!calibrated) {
             noiseFloorSum += rms
             calibrationCount++
@@ -48,10 +56,15 @@ class SilenceDetector(
                 val noiseFloor = noiseFloorSum / calibrationCount
                 adaptiveThreshold = maxOf(noiseFloor * NOISE_MULTIPLIER, baseThresholdRms)
                 calibrated = true
-                Log.i(TAG, "Calibration done: noiseFloor=%.1f -> adaptiveThreshold=%.1f (base=%.1f)".format(
-                    noiseFloor, adaptiveThreshold, baseThresholdRms))
+                Log.i(TAG, "Calibration done: noiseFloor=%.1f -> adaptiveThreshold=%.1f (base=%.1f, multiplier=%.1f)".format(
+                    noiseFloor, adaptiveThreshold, baseThresholdRms, NOISE_MULTIPLIER))
             }
             return Result.SILENCE // During calibration, always silence
+        }
+
+        // Log every 50 buffers for diagnostics
+        if (totalBuffers % 50 == 0) {
+            Log.d(TAG, "RMS=%.1f threshold=%.1f hasSpeech=$hasSpeech consecutive=$consecutiveSpeechBuffers".format(rms, adaptiveThreshold))
         }
 
         // Force hasSpeech after long delay (safety net for very quiet environments)
@@ -60,15 +73,16 @@ class SilenceDetector(
             hasSpeech = true
         }
 
-        if (calibrationCount % 50 == 0) {
-            Log.d(TAG, "RMS=%.1f threshold=%.1f hasSpeech=$hasSpeech".format(rms, adaptiveThreshold))
-        }
-
         return if (rms >= adaptiveThreshold) {
-            hasSpeech = true
+            consecutiveSpeechBuffers++
+            if (!hasSpeech && consecutiveSpeechBuffers >= SPEECH_CONFIRM_BUFFERS) {
+                hasSpeech = true
+                Log.i(TAG, "Speech confirmed after $SPEECH_CONFIRM_BUFFERS consecutive buffers (RMS=%.1f)".format(rms))
+            }
             silenceStartTime = 0L
-            Result.SPEECH
+            if (hasSpeech) Result.SPEECH else Result.SILENCE
         } else {
+            consecutiveSpeechBuffers = 0
             if (hasSpeech) {
                 if (silenceStartTime == 0L) silenceStartTime = now
                 val elapsed = now - silenceStartTime
@@ -102,5 +116,7 @@ class SilenceDetector(
         noiseFloorSum = 0.0
         adaptiveThreshold = baseThresholdRms
         calibrated = false
+        consecutiveSpeechBuffers = 0
+        totalBuffers = 0
     }
 }

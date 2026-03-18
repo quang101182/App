@@ -110,6 +110,10 @@ class VoiceSnapTileService : TileService() {
                 tile.state = Tile.STATE_ACTIVE
                 tile.label = "Transcription..."
             }
+            RecordingState.REWRITING -> {
+                tile.state = Tile.STATE_ACTIVE
+                tile.label = "R\u00e9\u00e9criture..."
+            }
             RecordingState.TRANSLATING -> {
                 tile.state = Tile.STATE_ACTIVE
                 tile.label = "Traduction..."

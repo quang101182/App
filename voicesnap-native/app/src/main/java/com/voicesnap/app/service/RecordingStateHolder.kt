@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 enum class RecordingState {
-    IDLE, RECORDING, TRANSCRIBING, TRANSLATING
+    IDLE, RECORDING, TRANSCRIBING, REWRITING, TRANSLATING
 }
 
 object RecordingStateHolder {
