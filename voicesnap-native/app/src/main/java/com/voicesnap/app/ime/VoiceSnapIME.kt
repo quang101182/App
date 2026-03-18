@@ -68,7 +68,7 @@ class VoiceSnapIME : InputMethodService() {
     private var bannerClipboard: LinearLayout? = null
     private var tvClipboardText: TextView? = null
     private val bannerHandler = Handler(Looper.getMainLooper())
-    private var dismissedClipText: String? = null
+    // dismissedClipText now persisted via PrefsManager
 
     // State
     private var isRecording = false
@@ -754,7 +754,7 @@ class VoiceSnapIME : InputMethodService() {
                 return
             }
             // Skip if user dismissed this exact text
-            if (text == dismissedClipText) {
+            if (text == prefs.getDismissedClipText()) {
                 bannerClipboard?.visibility = View.GONE
                 return
             }
@@ -783,7 +783,7 @@ class VoiceSnapIME : InputMethodService() {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             val clip = clipboard?.primaryClip
             if (clip != null && clip.itemCount > 0) {
-                dismissedClipText = clip.getItemAt(0).text?.toString()
+                prefs.setDismissedClipText(clip.getItemAt(0).text?.toString())
             }
         } catch (_: Exception) {}
         hideClipboardBanner()

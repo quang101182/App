@@ -76,6 +76,10 @@ class PrefsManager(context: Context) {
     // Custom dictionary (Whisper prompt hint)
     fun getCustomDictionary(): String = prefs.getString("custom_dictionary", "") ?: ""
     fun setCustomDictionary(words: String) = prefs.edit().putString("custom_dictionary", words).apply()
+
+    // Dismissed clipboard text (persists across IME lifecycle)
+    fun getDismissedClipText(): String? = prefs.getString("dismissed_clip_text", null)
+    fun setDismissedClipText(text: String?) = prefs.edit().putString("dismissed_clip_text", text).apply()
 }
 
 data class HistoryEntry(
