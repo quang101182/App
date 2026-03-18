@@ -17,7 +17,7 @@ class AudioRecorder {
     @Volatile
     private var isRecording = false
     private val pcmOutputStream = ByteArrayOutputStream()
-    private val silenceDetector = SilenceDetector()
+    private var silenceDetector = SilenceDetector()
 
     var onSilenceDetected: (() -> Unit)? = null
     var onAmplitude: ((Double) -> Unit)? = null
@@ -125,6 +125,10 @@ class AudioRecorder {
         }
 
         return WavEncoder.encode(pcmData, sampleRate)
+    }
+
+    fun setSilenceTimeout(timeoutMs: Long) {
+        silenceDetector = SilenceDetector(timeoutMs = timeoutMs)
     }
 
     fun isActive(): Boolean = isRecording

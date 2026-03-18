@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.media.app.NotificationCompat as MediaNotificationCompat
 import com.voicesnap.app.R
 import com.voicesnap.app.service.RecordingService
 import com.voicesnap.app.ui.MainActivity
@@ -63,23 +64,28 @@ object NotificationHelper {
 
         val builder = NotificationCompat.Builder(context, Constants.CHANNEL_RECORDING)
             .setSmallIcon(R.drawable.ic_tile_mic)
-            .setContentTitle("VoiceSnap — $state")
+            .setContentTitle("VoiceSnap")
+            .setContentText(state)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            // STOP action — index 0 will be shown in compact MediaStyle
             .addAction(
-                R.drawable.ic_tile_mic,
-                "ARRÊTER",
+                android.R.drawable.ic_media_pause,
+                "STOP",
                 stopPendingIntent
             )
+            // MediaStyle: show action at index 0 in compact view
+            .setStyle(
+                MediaNotificationCompat.MediaStyle()
+                    .setShowActionsInCompactView(0)
+            )
 
-        // Show chronometer only during active recording (Écoute...)
+        // Show chronometer only during active recording
         if (state.contains("coute", ignoreCase = true)) {
             builder.setUsesChronometer(true)
                 .setWhen(System.currentTimeMillis())
-        } else {
-            builder.setContentText(state)
         }
 
         return builder.build()

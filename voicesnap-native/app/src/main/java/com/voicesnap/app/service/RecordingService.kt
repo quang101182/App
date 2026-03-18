@@ -21,7 +21,6 @@ import com.voicesnap.app.data.HistoryEntry
 import com.voicesnap.app.data.LANGUAGES
 import com.voicesnap.app.data.PrefsManager
 import com.voicesnap.app.data.WHISPER_LANG_MAP
-import com.voicesnap.app.overlay.FloatingBubbleManager
 import com.voicesnap.app.util.ClipboardHelper
 import com.voicesnap.app.util.Constants
 import com.voicesnap.app.util.NotificationHelper
@@ -43,7 +42,6 @@ class RecordingService : Service() {
     @Volatile private var isProcessing = false
     private var processingJob: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    private val bubbleManager by lazy { FloatingBubbleManager(this) }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -94,11 +92,6 @@ class RecordingService : Service() {
         updateNotification("\u00c9coute...")
         RecordingStateHolder.update(RecordingState.RECORDING)
 
-        // Show floating bubble overlay
-        if (android.provider.Settings.canDrawOverlays(this)) {
-            bubbleManager.show()
-        }
-
         // Acquire partial wake lock to keep CPU active during recording
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -114,6 +107,10 @@ class RecordingService : Service() {
             // Must stop on main thread to avoid race conditions
             mainHandler.post { stopRecording() }
         }
+
+        // Pass user-configured silence timeout to recorder
+        val silenceTimeoutMs = prefs.getSilenceTimeoutSec() * 1000L
+        recorder.setSilenceTimeout(silenceTimeoutMs)
 
         val started = recorder.start()
         if (!started) {
@@ -155,7 +152,6 @@ class RecordingService : Service() {
         Log.d(TAG, "WAV data: ${wavData.size} bytes")
         updateNotification("Transcription...")
         RecordingStateHolder.update(RecordingState.TRANSCRIBING)
-        bubbleManager.updateState(RecordingState.TRANSCRIBING)
 
         processingJob = scope.launch {
             try {
@@ -188,7 +184,6 @@ class RecordingService : Service() {
                     if (srcObj?.azureCode != null && tgtObj?.azureCode != null && srcObj.azureCode != tgtObj.azureCode) {
                         updateNotification("Traduction...")
                         RecordingStateHolder.update(RecordingState.TRANSLATING)
-                        bubbleManager.updateState(RecordingState.TRANSLATING)
                         Log.d(TAG, "Translating ${srcObj.azureCode} -> ${tgtObj.azureCode}...")
                         translatedText = AzureTranslateApi.translate(result.text, srcObj.azureCode, tgtObj.azureCode)
                         finalText = translatedText
@@ -275,7 +270,6 @@ class RecordingService : Service() {
     private fun cleanup() {
         Log.d(TAG, "Cleanup")
         isProcessing = false
-        bubbleManager.dismiss()
         RecordingStateHolder.update(RecordingState.IDLE)
         try {
             wakeLock?.let { if (it.isHeld) it.release() }
@@ -294,7 +288,6 @@ class RecordingService : Service() {
     override fun onDestroy() {
         Log.d(TAG, "onDestroy")
         scope.cancel()
-        bubbleManager.dismiss()
         if (recorder.isActive()) {
             recorder.stop()
         }

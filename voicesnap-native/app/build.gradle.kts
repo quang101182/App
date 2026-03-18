@@ -11,8 +11,8 @@ android {
         applicationId = "com.voicesnap.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 6
-        versionName = "1.0.5"
+        versionCode = 7
+        versionName = "1.1.0"
     }
 
     buildTypes {
@@ -57,6 +57,9 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.activity:activity-compose:1.8.2")
+
+    // Media (for MediaStyle notification)
+    implementation("androidx.media:media:1.7.0")
 
     // OkHttp
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

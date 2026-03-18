@@ -1,7 +1,7 @@
 package com.voicesnap.app.util
 
 object Constants {
-    const val APP_VERSION = "1.0.5"
+    const val APP_VERSION = "1.1.0"
 
     // API Gateway
     const val GATEWAY_URL = "https://api-gateway.quang101182.workers.dev"

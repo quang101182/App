@@ -19,6 +19,9 @@ class PrefsManager(context: Context) {
     fun isTranslateEnabled(): Boolean = prefs.getBoolean("translate_enabled", false)
     fun setTranslateEnabled(on: Boolean) = prefs.edit().putBoolean("translate_enabled", on).apply()
 
+    fun getSilenceTimeoutSec(): Int = prefs.getInt("silence_timeout_sec", 5)
+    fun setSilenceTimeoutSec(sec: Int) = prefs.edit().putInt("silence_timeout_sec", sec).apply()
+
     fun getHistory(): List<HistoryEntry> {
         val json = prefs.getString("history_json", "[]") ?: "[]"
         val arr = JSONArray(json)

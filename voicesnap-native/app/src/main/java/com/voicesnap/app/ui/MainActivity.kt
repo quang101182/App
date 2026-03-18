@@ -1,12 +1,9 @@
 package com.voicesnap.app.ui
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -71,15 +68,6 @@ class MainActivity : ComponentActivity() {
             permissionLauncher.launch(needed.toTypedArray())
         }
 
-        // Request overlay permission for floating bubble
-        if (!Settings.canDrawOverlays(this)) {
-            val overlayIntent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName")
-            )
-            startActivity(overlayIntent)
-        }
-
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
@@ -109,6 +97,7 @@ fun VoiceSnapScreen() {
     var sourceLang by remember { mutableStateOf(prefs.getSourceLang()) }
     var targetLang by remember { mutableStateOf(prefs.getTargetLang()) }
     var translateEnabled by remember { mutableStateOf(prefs.isTranslateEnabled()) }
+    var silenceTimeout by remember { mutableStateOf(prefs.getSilenceTimeoutSec().toFloat()) }
     var history by remember { mutableStateOf(prefs.getHistory()) }
     var showSourcePicker by remember { mutableStateOf(false) }
     var showTargetPicker by remember { mutableStateOf(false) }
@@ -202,6 +191,56 @@ fun VoiceSnapScreen() {
                         selectedCode = targetLang,
                         onClick = { showTargetPicker = true }
                     )
+                }
+            }
+
+            // Silence timeout slider
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(BgSurface, RoundedCornerShape(12.dp))
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("D\u00e9lai silence auto", color = TextPrimary)
+                        Text(
+                            "${silenceTimeout.toInt()}s",
+                            color = AccentVioletLight,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Arr\u00eat automatique apr\u00e8s ce d\u00e9lai de silence",
+                        color = TextMuted,
+                        fontSize = 12.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Slider(
+                        value = silenceTimeout,
+                        onValueChange = { silenceTimeout = it },
+                        onValueChangeFinished = {
+                            prefs.setSilenceTimeoutSec(silenceTimeout.toInt())
+                        },
+                        valueRange = 3f..15f,
+                        steps = 11,
+                        colors = SliderDefaults.colors(
+                            thumbColor = AccentViolet,
+                            activeTrackColor = AccentViolet,
+                            inactiveTrackColor = BgElevated
+                        )
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("3s", color = TextMuted, fontSize = 11.sp)
+                        Text("15s", color = TextMuted, fontSize = 11.sp)
+                    }
                 }
             }
 
