@@ -6,7 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -26,6 +28,7 @@ import kotlinx.coroutines.*
 class RecordingService : Service() {
 
     companion object {
+        private const val TAG = "RecordingService"
         const val ACTION_START = "com.voicesnap.START"
         const val ACTION_STOP = "com.voicesnap.STOP"
         const val ACTION_TOGGLE = "com.voicesnap.TOGGLE"
@@ -33,10 +36,31 @@ class RecordingService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val recorder = AudioRecorder()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "onStartCommand action=${intent?.action}")
+
+        // CRITICAL: call startForeground IMMEDIATELY to avoid ANR/crash on Android 14+
+        val notification = NotificationHelper.buildRecordingNotification(this, "D\u00e9marrage...")
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    Constants.NOTIF_ID_RECORDING,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                )
+            } else {
+                startForeground(Constants.NOTIF_ID_RECORDING, notification)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed", e)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         when (intent?.action) {
             ACTION_START -> startRecording()
             ACTION_STOP -> stopRecording()
@@ -49,46 +73,52 @@ class RecordingService : Service() {
     }
 
     private fun startRecording() {
-        if (recorder.isActive()) return
-
-        val notification = NotificationHelper.buildRecordingNotification(this, "\u00c9coute...")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                Constants.NOTIF_ID_RECORDING,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            )
-        } else {
-            startForeground(Constants.NOTIF_ID_RECORDING, notification)
+        if (recorder.isActive()) {
+            Log.d(TAG, "Already recording, ignoring start")
+            return
         }
 
+        Log.d(TAG, "Starting recording...")
+        updateNotification("\u00c9coute...")
         RecordingStateHolder.update(RecordingState.RECORDING)
 
         recorder.onSilenceDetected = {
-            Log.d("RecordingService", "Silence detected, stopping")
-            stopRecording()
+            Log.d(TAG, "Silence detected, posting stop to main thread")
+            // Must stop on main thread to avoid race conditions
+            mainHandler.post { stopRecording() }
         }
 
         val started = recorder.start()
         if (!started) {
-            Log.e("RecordingService", "Failed to start recorder")
+            Log.e(TAG, "Failed to start AudioRecorder")
             notifyError("Impossible de d\u00e9marrer le micro")
             cleanup()
+        } else {
+            Log.d(TAG, "Recording started successfully")
         }
     }
 
     private fun stopRecording() {
-        if (!recorder.isActive()) return
+        if (!recorder.isActive()) {
+            Log.d(TAG, "Not recording, processing or cleaning up")
+            // If we're not recording and not processing, just cleanup
+            if (RecordingStateHolder.state.value == RecordingState.RECORDING) {
+                cleanup()
+            }
+            return
+        }
 
+        Log.d(TAG, "Stopping recording...")
         val wavData = recorder.stop()
 
         if (wavData.isEmpty()) {
-            notifyError("Enregistrement trop court")
+            Log.w(TAG, "WAV data empty (too short)")
+            notifyError("Enregistrement trop court (min 1.5s)")
             cleanup()
             return
         }
 
-        // Update notification
+        Log.d(TAG, "WAV data: ${wavData.size} bytes")
         updateNotification("Transcription...")
         RecordingStateHolder.update(RecordingState.TRANSCRIBING)
 
@@ -99,8 +129,9 @@ class RecordingService : Service() {
                 val langObj = LANGUAGES.find { it.code == srcLangCode }
                 val whisperLang = langObj?.whisperCode
 
-                // 1. Transcribe
+                Log.d(TAG, "Calling Whisper API (lang=$whisperLang)...")
                 val result = WhisperApi.transcribe(wavData, whisperLang)
+                Log.d(TAG, "Whisper result: '${result.text}' (lang=${result.language})")
 
                 if (result.text.isBlank()) {
                     notifyError("Aucune parole d\u00e9tect\u00e9e")
@@ -111,7 +142,7 @@ class RecordingService : Service() {
                 var finalText = result.text
                 var translatedText: String? = null
 
-                // 2. Translate if enabled
+                // Translate if enabled
                 if (prefs.isTranslateEnabled()) {
                     val detectedLang = result.language?.let { WHISPER_LANG_MAP[it.lowercase()] } ?: srcLangCode
                     val srcLang = if (srcLangCode == "auto") detectedLang else srcLangCode
@@ -123,15 +154,18 @@ class RecordingService : Service() {
                     if (srcObj?.azureCode != null && tgtObj?.azureCode != null && srcObj.azureCode != tgtObj.azureCode) {
                         updateNotification("Traduction...")
                         RecordingStateHolder.update(RecordingState.TRANSLATING)
+                        Log.d(TAG, "Translating ${srcObj.azureCode} -> ${tgtObj.azureCode}...")
                         translatedText = AzureTranslateApi.translate(result.text, srcObj.azureCode, tgtObj.azureCode)
                         finalText = translatedText
+                        Log.d(TAG, "Translation: '$translatedText'")
                     }
                 }
 
-                // 3. Copy to clipboard
+                // Copy to clipboard
                 ClipboardHelper.copyToClipboard(this@RecordingService, finalText)
+                Log.d(TAG, "Copied to clipboard: '$finalText'")
 
-                // 4. Save to history
+                // Save to history
                 val entry = HistoryEntry(
                     id = System.currentTimeMillis(),
                     text = result.text,
@@ -142,21 +176,21 @@ class RecordingService : Service() {
                 )
                 prefs.addHistory(entry)
 
-                // 5. Result notification
+                // Result notification
                 val notifManager = getSystemService(NotificationManager::class.java)
                 notifManager.notify(
                     Constants.NOTIF_ID_RESULT,
                     NotificationHelper.buildResultNotification(this@RecordingService, finalText)
                 )
 
-                // 6. Vibrate
+                // Vibrate
                 vibrate()
 
-                // 7. Update state
+                // Update state
                 RecordingStateHolder.setResult(finalText)
 
             } catch (e: Exception) {
-                Log.e("RecordingService", "Pipeline error", e)
+                Log.e(TAG, "Pipeline error", e)
                 notifyError(e.message ?: "Erreur inconnue")
             } finally {
                 cleanup()
@@ -165,39 +199,57 @@ class RecordingService : Service() {
     }
 
     private fun updateNotification(text: String) {
-        val notifManager = getSystemService(NotificationManager::class.java)
-        notifManager.notify(
-            Constants.NOTIF_ID_RECORDING,
-            NotificationHelper.buildRecordingNotification(this, text)
-        )
+        try {
+            val notifManager = getSystemService(NotificationManager::class.java)
+            notifManager.notify(
+                Constants.NOTIF_ID_RECORDING,
+                NotificationHelper.buildRecordingNotification(this, text)
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "updateNotification error", e)
+        }
     }
 
     private fun notifyError(msg: String) {
-        val notifManager = getSystemService(NotificationManager::class.java)
-        notifManager.notify(
-            Constants.NOTIF_ID_RESULT,
-            NotificationHelper.buildErrorNotification(this, msg)
-        )
+        try {
+            val notifManager = getSystemService(NotificationManager::class.java)
+            notifManager.notify(
+                Constants.NOTIF_ID_RESULT,
+                NotificationHelper.buildErrorNotification(this, msg)
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "notifyError error", e)
+        }
     }
 
     private fun vibrate() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vm.defaultVibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
-        } else {
-            @Suppress("DEPRECATION")
-            val v = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-            v.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vm.defaultVibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                val v = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                v.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Vibrate error", e)
         }
     }
 
     private fun cleanup() {
+        Log.d(TAG, "Cleanup")
         RecordingStateHolder.update(RecordingState.IDLE)
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (e: Exception) {
+            Log.e(TAG, "stopForeground error", e)
+        }
         stopSelf()
     }
 
     override fun onDestroy() {
+        Log.d(TAG, "onDestroy")
         scope.cancel()
         if (recorder.isActive()) {
             recorder.stop()
