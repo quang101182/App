@@ -1,7 +1,7 @@
 package com.voicesnap.app.util
 
 object Constants {
-    const val APP_VERSION = "1.2.0"
+    const val APP_VERSION = "1.5.1"
 
     // API Gateway
     const val GATEWAY_URL = "https://api-gateway.quang101182.workers.dev"
@@ -10,12 +10,14 @@ object Constants {
     const val WHISPER_API_PATH_HEADER = "/openai/v1/audio/transcriptions"
     const val WHISPER_MODEL = "whisper-large-v3-turbo"
     const val AZURE_PATH = "/api/azure"
+    const val REWRITE_MODEL = "llama-3.1-8b-instant"
+    const val CHAT_API_PATH_HEADER = "/openai/v1/chat/completions"
 
     // Audio
     const val SAMPLE_RATE = 16000
     const val SILENCE_TIMEOUT_MS = 5000L
-    const val SILENCE_THRESHOLD_RMS = 1500.0
-    const val SPEECH_FORCE_TIMEOUT_MS = 15000L  // Force hasSpeech=true after this delay (safety net)
+    const val SILENCE_THRESHOLD_RMS = 800.0     // Base RMS threshold (lowered: phone mic ambient ~300-600)
+    const val SPEECH_FORCE_TIMEOUT_MS = 20000L  // Force hasSpeech=true after this delay (safety net)
     const val MIN_RECORDING_MS = 1500L
     const val MAX_RECORDING_MS = 60000L
 
