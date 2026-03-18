@@ -40,6 +40,7 @@ class RecordingService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val prefs by lazy { PrefsManager(this) }
     @Volatile private var isProcessing = false
+    private var processingJob: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -119,7 +120,9 @@ class RecordingService : Service() {
 
     private fun stopRecording() {
         if (isProcessing) {
-            Log.d(TAG, "Already processing, ignoring stop")
+            Log.d(TAG, "STOP pressed during processing — cancelling pipeline")
+            processingJob?.cancel()
+            cleanup()
             return
         }
         if (!recorder.isActive()) {
@@ -146,7 +149,7 @@ class RecordingService : Service() {
         updateNotification("Transcription...")
         RecordingStateHolder.update(RecordingState.TRANSCRIBING)
 
-        scope.launch {
+        processingJob = scope.launch {
             try {
                 val srcLangCode = prefs.getSourceLang()
                 val langObj = LANGUAGES.find { it.code == srcLangCode }

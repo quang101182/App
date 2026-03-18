@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.voicesnap.app.R
+import com.voicesnap.app.service.RecordingService
 import com.voicesnap.app.ui.MainActivity
 
 object NotificationHelper {
@@ -17,18 +18,29 @@ object NotificationHelper {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java)
 
+            // Delete old LOW importance channel if it exists, to recreate as HIGH
+            try {
+                manager.getNotificationChannel(Constants.CHANNEL_RECORDING)?.let {
+                    if (it.importance != NotificationManager.IMPORTANCE_HIGH) {
+                        manager.deleteNotificationChannel(Constants.CHANNEL_RECORDING)
+                    }
+                }
+            } catch (_: Exception) {}
+
             val recordingChannel = NotificationChannel(
                 Constants.CHANNEL_RECORDING,
                 "Enregistrement",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notification pendant l'enregistrement vocal"
                 setShowBadge(false)
+                enableVibration(false)
+                setSound(null, null)
             }
 
             val resultChannel = NotificationChannel(
                 Constants.CHANNEL_RESULT,
-                "R\u00e9sultats",
+                "Résultats",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notification du texte transcrit"
@@ -40,15 +52,37 @@ object NotificationHelper {
     }
 
     fun buildRecordingNotification(context: Context, state: String): Notification {
-        return NotificationCompat.Builder(context, Constants.CHANNEL_RECORDING)
+        // PendingIntent to stop recording
+        val stopIntent = Intent(context, RecordingService::class.java).apply {
+            action = RecordingService.ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            context, 100, stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(context, Constants.CHANNEL_RECORDING)
             .setSmallIcon(R.drawable.ic_tile_mic)
-            .setContentTitle("VoiceSnap")
-            .setContentText(state)
+            .setContentTitle("VoiceSnap — $state")
             .setOngoing(true)
-            .setSilent(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .build()
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .addAction(
+                R.drawable.ic_tile_mic,
+                "ARRÊTER",
+                stopPendingIntent
+            )
+
+        // Show chronometer only during active recording (Écoute...)
+        if (state.contains("coute", ignoreCase = true)) {
+            builder.setUsesChronometer(true)
+                .setWhen(System.currentTimeMillis())
+        } else {
+            builder.setContentText(state)
+        }
+
+        return builder.build()
     }
 
     fun buildResultNotification(context: Context, text: String): Notification {
@@ -65,7 +99,7 @@ object NotificationHelper {
 
         return NotificationCompat.Builder(context, Constants.CHANNEL_RESULT)
             .setSmallIcon(R.drawable.ic_tile_mic)
-            .setContentTitle("Texte copi\u00e9")
+            .setContentTitle("Texte copié")
             .setContentText(preview)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(pendingIntent)
