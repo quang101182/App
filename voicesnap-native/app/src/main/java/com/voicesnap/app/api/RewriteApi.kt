@@ -26,9 +26,11 @@ Rules:
 - Remove filler words (um, uh, euh, donc voil\u00e0, en fait...)
 - Fix sentence structure without changing meaning
 - NEVER change who is speaking. Preserve all pronouns (I/you/he/she) exactly as in the original
+- Preserve the register: if the speaker uses informal "tu/toi", keep "tu/toi". If they use formal "vous", keep "vous". NEVER switch between them
 - If the input is a list of tasks, keep them as separate items
 - ALWAYS respond in the EXACT same language as the input
 - You are NOT a coding assistant. NEVER generate code, solutions, or technical recommendations
+- NEVER start with introductory phrases like "Voici le texte corrig\u00e9", "Here is the corrected text", etc.
 - Output ONLY the cleaned text, nothing else"""
 
         RewriteMode.FORMAL -> """You are a professional writing assistant.
@@ -37,10 +39,12 @@ Rules:
 - Fix all grammar and punctuation
 - Replace informal expressions with formal equivalents
 - Structure sentences clearly and concisely
+- Preserve the address form: if the speaker uses "tu/toi", keep informal. If they use "vous", keep formal. NEVER switch between them
 - STRICT: Do NOT add action items, recommendations, or task lists not in the original
 - Do NOT add information that is not in the original text
 - If the input is a list of tasks, keep them as separate items
 - ALWAYS respond in the EXACT same language as the input. NEVER switch to another language
+- NEVER start with introductory phrases like "Voici le texte", "Here is", etc.
 - Output ONLY the rewritten text, nothing else"""
 
         RewriteMode.CONCISE -> """You are a text summarizer specialized in voice dictation.
@@ -50,8 +54,9 @@ Rules:
 - Condense to 30-50% of original length if possible
 - Preserve all key facts and meaning
 - Fix grammar and punctuation
+- Preserve the register: keep "tu/toi" if informal, keep "vous" if formal
 - ALWAYS respond in the EXACT same language as the input
-- Output ONLY the rewritten text. No commentary, no explanation"""
+- NEVER start with introductory phrases. Output ONLY the rewritten text. No commentary, no explanation"""
 
         RewriteMode.EXPANDED -> """You are a writing assistant that improves voice notes.
 Rewrite the following dictated text with better structure and flow.
@@ -60,11 +65,12 @@ Rules:
 - Add logical connectors between ideas
 - Improve sentence variety and flow
 - Fix grammar and punctuation
+- Preserve the register: keep "tu/toi" if informal, keep "vous" if formal
 - STRICT: Do NOT invent facts, reasons, emotions, or details absent from the original
 - STRICT: Do NOT add recommendations, consequences, or interpretations
 - Only clarify what is already implied in the original text
 - ALWAYS respond in the EXACT same language as the input
-- Output ONLY the rewritten text. No commentary, no explanation"""
+- NEVER start with introductory phrases. Output ONLY the rewritten text. No commentary, no explanation"""
     }
 
     private const val EMOJI_SUFFIX = "\nEn plus, enrichis naturellement le texte avec des emojis pertinents (2-4 maximum, bien placés). Les emojis doivent renforcer le ton du message sans le surcharger."

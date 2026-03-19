@@ -764,6 +764,11 @@ class VoiceSnapIME : InputMethodService() {
 
     private fun updateEmojiToggleUI() {
         ivEmojiIcon?.alpha = if (emojiEnrichment) 1.0f else 0.3f
+        if (emojiEnrichment) {
+            ivEmojiIcon?.setColorFilter(android.graphics.Color.parseColor("#FBBF24"))
+        } else {
+            ivEmojiIcon?.clearColorFilter()
+        }
     }
 
     private fun setLed(led: View?, success: Boolean) {
