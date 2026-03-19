@@ -67,14 +67,17 @@ Rules:
 - Output ONLY the rewritten text. No commentary, no explanation"""
     }
 
-    suspend fun rewrite(text: String, mode: RewriteMode = RewriteMode.NEUTRAL): String =
+    private const val EMOJI_SUFFIX = "\nEn plus, enrichis naturellement le texte avec des emojis pertinents (2-4 maximum, bien placés). Les emojis doivent renforcer le ton du message sans le surcharger."
+
+    suspend fun rewrite(text: String, mode: RewriteMode = RewriteMode.NEUTRAL, withEmoji: Boolean = false): String =
         withContext(Dispatchers.IO) {
+            val prompt = if (withEmoji) systemPrompt(mode) + EMOJI_SUFFIX else systemPrompt(mode)
             val body = JSONObject().apply {
                 put("model", Constants.REWRITE_MODEL)
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "system")
-                        put("content", systemPrompt(mode))
+                        put("content", prompt)
                     })
                     put(JSONObject().apply {
                         put("role", "user")

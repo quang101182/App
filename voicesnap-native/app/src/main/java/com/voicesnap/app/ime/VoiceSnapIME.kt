@@ -72,6 +72,7 @@ class VoiceSnapIME : InputMethodService() {
     private var tvClipboardText: TextView? = null
     private val bannerHandler = Handler(Looper.getMainLooper())
     private var tvThemeIcon: TextView? = null
+    private var tvEmojiIcon: TextView? = null
     private var currentTheme: KeyboardTheme = KeyboardTheme.THEMES[0]
     // dismissedClipText now persisted via PrefsManager
 
@@ -80,6 +81,7 @@ class VoiceSnapIME : InputMethodService() {
     private var translateMode = false
     private var vadEnabled = true
     private var currentRewriteMode = RewriteMode.NEUTRAL
+    private var emojiEnrichment = false
     private var processingJob: Job? = null
     private var currentEditorInfo: EditorInfo? = null
 
@@ -110,15 +112,18 @@ class VoiceSnapIME : InputMethodService() {
         bannerClipboard = view.findViewById(R.id.banner_clipboard)
         tvClipboardText = view.findViewById(R.id.tv_clipboard_text)
         tvThemeIcon = view.findViewById(R.id.tv_theme_icon)
+        tvEmojiIcon = view.findViewById(R.id.tv_emoji_icon)
 
         // Load prefs
         vadEnabled = prefs.isVadEnabled()
+        emojiEnrichment = prefs.isEmojiEnrichment()
         currentRewriteMode = try { RewriteMode.valueOf(prefs.getRewriteMode()) } catch (_: Exception) { RewriteMode.NEUTRAL }
         currentTheme = KeyboardTheme.fromName(prefs.getKeyboardTheme())
         updateTogglesUI()
         updateLanguageLabels()
         updateRewriteButtonUI()
         updateUndoRedoUI()
+        updateEmojiToggleUI()
 
         setupListeners(view)
         applyTheme()
@@ -259,6 +264,14 @@ class VoiceSnapIME : InputMethodService() {
         view.findViewById<FrameLayout>(R.id.btn_clipboard_dismiss)?.setOnClickListener {
             haptic(it)
             dismissClipboardBanner()
+        }
+
+        // Emoji enrichment toggle
+        view.findViewById<FrameLayout>(R.id.btn_emoji_toggle)?.setOnClickListener {
+            haptic(it)
+            emojiEnrichment = !emojiEnrichment
+            prefs.setEmojiEnrichment(emojiEnrichment)
+            updateEmojiToggleUI()
         }
 
         // Theme toggle button
@@ -594,7 +607,7 @@ class VoiceSnapIME : InputMethodService() {
 
         processingJob = scope.launch {
             try {
-                val rewritten = RewriteApi.rewrite(text, currentRewriteMode)
+                val rewritten = RewriteApi.rewrite(text, currentRewriteMode, emojiEnrichment)
                 Log.d(TAG, "Rewrite field: '$text' -> '$rewritten'")
 
                 // LED: LLM success
@@ -749,6 +762,10 @@ class VoiceSnapIME : InputMethodService() {
         tvRewriteLabel?.text = currentRewriteMode.label
     }
 
+    private fun updateEmojiToggleUI() {
+        tvEmojiIcon?.alpha = if (emojiEnrichment) 1.0f else 0.3f
+    }
+
     private fun setLed(led: View?, success: Boolean) {
         led?.setBackgroundResource(if (success) R.drawable.led_green else R.drawable.led_red)
     }
@@ -815,6 +832,9 @@ class VoiceSnapIME : InputMethodService() {
         // Rewrite button
         view.findViewById<FrameLayout>(R.id.btn_rewrite)?.let { applyButtonBg(it, t.bgButton, t.cornerRadius) }
         tvRewriteLabel?.setTextColor(t.accentRewrite)
+
+        // Emoji toggle button
+        view.findViewById<FrameLayout>(R.id.btn_emoji_toggle)?.let { applyButtonBg(it, t.bgButton, t.cornerRadius) }
 
         // Banner clipboard
         bannerClipboard?.setBackgroundColor(t.bgBanner)

@@ -81,6 +81,10 @@ class PrefsManager(context: Context) {
     fun getKeyboardTheme(): String = prefs.getString("keyboard_theme", "Solid") ?: "Solid"
     fun setKeyboardTheme(name: String) = prefs.edit().putString("keyboard_theme", name).apply()
 
+    // Emoji enrichment toggle
+    fun isEmojiEnrichment(): Boolean = prefs.getBoolean("emoji_enrichment", false)
+    fun setEmojiEnrichment(on: Boolean) = prefs.edit().putBoolean("emoji_enrichment", on).apply()
+
     // Dismissed clipboard text (persists across IME lifecycle)
     fun getDismissedClipText(): String? = prefs.getString("dismissed_clip_text", null)
     fun setDismissedClipText(text: String?) = prefs.edit().putString("dismissed_clip_text", text).apply()
