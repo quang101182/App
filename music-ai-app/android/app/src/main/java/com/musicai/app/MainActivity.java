@@ -33,8 +33,9 @@ public class MainActivity extends BridgeActivity {
             Insets systemBars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
             );
-            // Push content below status bar, above navigation bar
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            int bottomPadding = Math.max(systemBars.bottom, ime.bottom);
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, bottomPadding);
             return WindowInsetsCompat.CONSUMED;
         });
     }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>music·ai v3.17.1 — Discovery Engine</title>
+<title>music·ai v3.17.2 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -286,6 +286,7 @@
   #chat-messages{flex:1 1 0!important;min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;gap:10px;padding:12px 16px 8px;}
   #chat-messages::-webkit-scrollbar{width:2px;}#chat-messages::-webkit-scrollbar-thumb{background:var(--border-bright);border-radius:2px;}
   .chat-input-wrap{flex-shrink:0;padding:8px 16px;padding-bottom:max(8px,env(safe-area-inset-bottom,8px));background:var(--bg);border-top:1px solid var(--border);}
+  .chat-input{touch-action:auto;}
   .chat-reco-bubble{max-width:96%!important;padding:12px 14px!important;border-radius:18px 18px 18px 4px!important;}
   .crb-header{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
   .crb-artwork{width:48px;height:48px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.25);background-size:cover;background-position:center;}
@@ -521,7 +522,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.17.1</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.17.2</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -603,7 +604,9 @@
         <div id="chat-messages" class="scroll-y"></div>
         <div class="chat-input-wrap">
           <div class="chat-input-area">
-            <input class="chat-input" id="chat-input" placeholder="Ex: mélancolique comme Radiohead mais en français..."
+            <input class="chat-input" id="chat-input" type="text" inputmode="text" enterkeyhint="send"
+              autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true"
+              placeholder="Ex: mélancolique comme Radiohead mais en français..."
               onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}">
             <button class="btn-primary" onclick="sendChat()" style="padding:10px 18px;font-size:14px;flex-shrink:0;">→</button>
           </div>
@@ -3351,6 +3354,32 @@ function clearSunoHistory(){
   renderSunoHistory();
   toast('🗑 Historique Suno effacé');
 }
+
+// ── KEYBOARD VIEWPORT FIX (v3.17.2) ──
+(function(){
+  if(!window.visualViewport) return;
+  var chatWrap=null;
+  function onVVResize(){
+    chatWrap=chatWrap||document.querySelector('.chat-input-wrap');
+    if(!chatWrap) return;
+    var diff=window.innerHeight-visualViewport.height;
+    if(diff>50){
+      chatWrap.style.paddingBottom=diff+'px';
+      var msgs=document.getElementById('chat-messages');
+      if(msgs) msgs.scrollTop=msgs.scrollHeight;
+    } else {
+      chatWrap.style.paddingBottom='';
+    }
+  }
+  visualViewport.addEventListener('resize',onVVResize);
+  document.addEventListener('focusin',function(e){
+    if(e.target&&e.target.id==='chat-input'){
+      setTimeout(function(){
+        e.target.scrollIntoView({block:'center',behavior:'smooth'});
+      },300);
+    }
+  });
+})();
 
 boot();
 </script>
