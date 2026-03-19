@@ -72,7 +72,7 @@ class VoiceSnapIME : InputMethodService() {
     private var tvClipboardText: TextView? = null
     private val bannerHandler = Handler(Looper.getMainLooper())
     private var tvThemeIcon: TextView? = null
-    private var tvEmojiIcon: TextView? = null
+    private var ivEmojiIcon: ImageView? = null
     private var currentTheme: KeyboardTheme = KeyboardTheme.THEMES[0]
     // dismissedClipText now persisted via PrefsManager
 
@@ -112,7 +112,7 @@ class VoiceSnapIME : InputMethodService() {
         bannerClipboard = view.findViewById(R.id.banner_clipboard)
         tvClipboardText = view.findViewById(R.id.tv_clipboard_text)
         tvThemeIcon = view.findViewById(R.id.tv_theme_icon)
-        tvEmojiIcon = view.findViewById(R.id.tv_emoji_icon)
+        ivEmojiIcon = view.findViewById(R.id.iv_emoji_icon)
 
         // Load prefs
         vadEnabled = prefs.isVadEnabled()
@@ -763,7 +763,7 @@ class VoiceSnapIME : InputMethodService() {
     }
 
     private fun updateEmojiToggleUI() {
-        tvEmojiIcon?.alpha = if (emojiEnrichment) 1.0f else 0.3f
+        ivEmojiIcon?.alpha = if (emojiEnrichment) 1.0f else 0.3f
     }
 
     private fun setLed(led: View?, success: Boolean) {
