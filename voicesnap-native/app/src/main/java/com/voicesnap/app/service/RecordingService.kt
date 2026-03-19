@@ -16,6 +16,7 @@ import android.os.VibratorManager
 import android.util.Log
 import com.voicesnap.app.api.AzureTranslateApi
 import com.voicesnap.app.api.WhisperApi
+import com.voicesnap.app.audio.AudioFocusManager
 import com.voicesnap.app.audio.AudioRecorder
 import com.voicesnap.app.data.HistoryEntry
 import com.voicesnap.app.data.LANGUAGES
@@ -43,6 +44,7 @@ class RecordingService : Service() {
     @Volatile private var isProcessing = false
     private var processingJob: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private lateinit var audioFocusManager: AudioFocusManager
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -90,6 +92,10 @@ class RecordingService : Service() {
         }
 
         Log.d(TAG, "Starting recording...")
+        if (!::audioFocusManager.isInitialized) {
+            audioFocusManager = AudioFocusManager(this)
+        }
+        audioFocusManager.requestFocus()
         updateNotification("\u00c9coute...")
         RecordingStateHolder.update(RecordingState.RECORDING)
 
@@ -141,6 +147,7 @@ class RecordingService : Service() {
         isProcessing = true
 
         Log.d(TAG, "Stopping recording...")
+        RecordingStateHolder.update(RecordingState.STOPPING)
         val wavData = recorder.stop()
 
         if (wavData.isEmpty()) {
@@ -295,6 +302,9 @@ class RecordingService : Service() {
     private fun cleanup() {
         Log.d(TAG, "Cleanup")
         isProcessing = false
+        if (::audioFocusManager.isInitialized) {
+            audioFocusManager.abandonFocus()
+        }
         RecordingStateHolder.update(RecordingState.IDLE)
         NotificationHelper.releaseMediaSession()
         try {
@@ -315,6 +325,9 @@ class RecordingService : Service() {
         Log.d(TAG, "onDestroy")
         scope.cancel()
         NotificationHelper.releaseMediaSession()
+        if (::audioFocusManager.isInitialized) {
+            audioFocusManager.abandonFocus()
+        }
         if (recorder.isActive()) {
             recorder.stop()
         }

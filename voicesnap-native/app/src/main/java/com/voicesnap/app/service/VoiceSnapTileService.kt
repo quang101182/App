@@ -18,6 +18,7 @@ class VoiceSnapTileService : TileService() {
     }
 
     private var scope: CoroutineScope? = null
+    private var lastClickTime = 0L
 
     override fun onStartListening() {
         super.onStartListening()
@@ -38,28 +39,48 @@ class VoiceSnapTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
+
+        // Debounce: ignore rapid double-taps within 500ms
+        val now = System.currentTimeMillis()
+        if (now - lastClickTime < 500) {
+            Log.d(TAG, "Debounce: ignoring rapid click")
+            return
+        }
+        lastClickTime = now
+
         val currentState = RecordingStateHolder.state.value
         Log.d(TAG, "Tile clicked! state=$currentState")
 
         val action = when (currentState) {
             RecordingState.RECORDING -> RecordingService.ACTION_STOP
             RecordingState.IDLE -> RecordingService.ACTION_START
+            RecordingState.STOPPING -> {
+                Log.d(TAG, "Stopping in progress, ignoring")
+                return
+            }
             else -> {
                 Log.d(TAG, "Busy ($currentState), ignoring")
                 return
             }
         }
 
+        // Fixed request codes for PendingIntent to avoid hashCode collisions
+        val requestCode = when (action) {
+            RecordingService.ACTION_START -> 1001
+            RecordingService.ACTION_STOP -> 1002
+            else -> 9999
+        }
+
         try {
             val intent = Intent(this, TrampolineActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION
+                flags = Intent.FLAG_ACTIVITY_NO_ANIMATION
                 putExtra(TrampolineActivity.EXTRA_ACTION, action)
             }
 
             // Android 14+ requires PendingIntent version
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 val pendingIntent = PendingIntent.getActivity(
-                    this, action.hashCode(), intent,
+                    this, requestCode, intent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 startActivityAndCollapse(pendingIntent)
@@ -105,6 +126,10 @@ class VoiceSnapTileService : TileService() {
             RecordingState.RECORDING -> {
                 tile.state = Tile.STATE_ACTIVE
                 tile.label = "\u00c9coute..."
+            }
+            RecordingState.STOPPING -> {
+                tile.state = Tile.STATE_ACTIVE
+                tile.label = "Arr\u00eat..."
             }
             RecordingState.TRANSCRIBING -> {
                 tile.state = Tile.STATE_ACTIVE

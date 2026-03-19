@@ -447,6 +447,7 @@ fun StatusCard(state: RecordingState) {
     val (text, color) = when (state) {
         RecordingState.IDLE -> "Pr\u00eat" to SuccessGreen
         RecordingState.RECORDING -> "\u00c9coute..." to AccentCyan
+        RecordingState.STOPPING -> "Arr\u00eat..." to AccentCyan
         RecordingState.TRANSCRIBING -> "Transcription..." to AccentVioletLight
         RecordingState.REWRITING -> "R\u00e9\u00e9criture..." to AccentVioletLight
         RecordingState.TRANSLATING -> "Traduction..." to AccentVioletLight

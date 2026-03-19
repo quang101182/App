@@ -26,6 +26,7 @@ import com.voicesnap.app.api.AzureTranslateApi
 import com.voicesnap.app.api.RewriteApi
 import com.voicesnap.app.api.RewriteMode
 import com.voicesnap.app.api.WhisperApi
+import com.voicesnap.app.audio.AudioFocusManager
 import com.voicesnap.app.audio.AudioRecorder
 import com.voicesnap.app.data.HistoryEntry
 import com.voicesnap.app.data.LANGUAGES
@@ -46,6 +47,7 @@ class VoiceSnapIME : InputMethodService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val recorder = AudioRecorder()
     private val prefs by lazy { PrefsManager(this) }
+    private val audioFocusManager by lazy { AudioFocusManager(this) }
     private val backspaceHandler = Handler(Looper.getMainLooper())
     private var backspaceRepeating = false
 
@@ -434,6 +436,7 @@ class VoiceSnapIME : InputMethodService() {
         }
 
         hideClipboardBanner()
+        audioFocusManager.requestFocus()
         Log.d(TAG, "Starting recording (translate=$translateMode, vad=$vadEnabled)")
         isRecording = true
         updateRecordingUI(true)
@@ -459,6 +462,7 @@ class VoiceSnapIME : InputMethodService() {
             setStatus("Erreur micro")
             isRecording = false
             updateRecordingUI(false)
+            audioFocusManager.abandonFocus()
         } else {
             setStatus(if (translateMode) "\u00c9coute... (traduction)" else "\u00c9coute...")
         }
@@ -474,6 +478,7 @@ class VoiceSnapIME : InputMethodService() {
         if (wavData.isEmpty()) {
             setStatus("Trop court (min 1.5s)")
             updateRecordingUI(false)
+            audioFocusManager.abandonFocus()
             return
         }
 
@@ -566,6 +571,7 @@ class VoiceSnapIME : InputMethodService() {
                 setLed(ledStt, false)
             } finally {
                 showProgress(false)
+                audioFocusManager.abandonFocus()
             }
         }
     }
@@ -914,6 +920,7 @@ class VoiceSnapIME : InputMethodService() {
         Log.d(TAG, "onDestroy")
         processingJob?.cancel()
         scope.cancel()
+        audioFocusManager.abandonFocus()
         backspaceHandler.removeCallbacksAndMessages(null)
         bannerHandler.removeCallbacksAndMessages(null)
         if (recorder.isActive()) {
