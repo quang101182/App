@@ -25,6 +25,7 @@
  *   POST /api/assemblyai    → Proxy to AssemblyAI API (pro key required)
  *   POST /api/deepseek      → Proxy to DeepSeek API (pro key required)
  *   POST /api/azure         → Proxy to Azure Translator (pro key required)
+ *   POST /api/subscribe       → Add email subscriber via LemonSqueezy API
  *   POST /webhook/lemonsqueezy → LemonSqueezy webhook (auto-create/revoke keys)
  *   POST /api/activate        → Activate by email (returns pro key)
  *   POST /admin/keys/set    → Set API keys in KV
@@ -35,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 
 // ── Plan limits (per calendar month) ────────────────────────────────────────
 const PLAN_LIMITS = {
@@ -248,6 +249,40 @@ function generateProKey(app = 'swp') {
   let key = prefix;
   for (let i = 0; i < 24; i++) key += chars[Math.floor(Math.random() * chars.length)];
   return key;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Newsletter subscriber via LemonSqueezy API
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function handleSubscribe(request, env) {
+  const body = await request.json().catch(() => null);
+  if (!body || !body.email) return err('email required', 400);
+
+  const email = body.email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err('Invalid email', 400);
+
+  // Rate limit: 3 subscribes per IP per hour
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rlKey = `rl:subscribe:${ip}`;
+  const rlCount = parseInt(await env.PRO_KV.get(rlKey)) || 0;
+  if (rlCount >= 3) return err('Too many attempts, try again later', 429);
+  await env.PRO_KV.put(rlKey, String(rlCount + 1), { expirationTtl: 3600 });
+
+  // Deduplicate
+  const subKey = `subscriber:${email}`;
+  const existing = await env.PRO_KV.get(subKey);
+  if (existing) return json({ ok: true, message: 'Already subscribed' });
+
+  // Store in KV (LemonSqueezy has no subscriber API — import manually)
+  const data = { email, name: body.name || '', source: body.source || 'nocode-flow', date: new Date().toISOString() };
+  await env.PRO_KV.put(subKey, JSON.stringify(data));
+
+  // Update subscriber count
+  const countRaw = await env.PRO_KV.get('subscribers:count');
+  await env.PRO_KV.put('subscribers:count', String((parseInt(countRaw) || 0) + 1));
+
+  return json({ ok: true, message: 'Subscribed!' });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -558,6 +593,18 @@ export default {
         return json({ ok: true, revoked: body.key });
       }
 
+      // List newsletter subscribers
+      if (path === '/admin/subscribers' && method === 'GET') {
+        const list = await env.PRO_KV.list({ prefix: 'subscriber:' });
+        const subs = [];
+        for (const key of list.keys) {
+          const val = await env.PRO_KV.get(key.name, 'json');
+          if (val) subs.push(val);
+        }
+        const count = await env.PRO_KV.get('subscribers:count');
+        return json({ count: parseInt(count) || subs.length, subscribers: subs });
+      }
+
       return err('Unknown admin route', 404);
     }
 
@@ -576,6 +623,11 @@ export default {
         const monthly = (data.monthlyUsage && data.monthlyUsage[mk]) || { transcriptions: 0, translations: 0 };
         const limits = PLAN_LIMITS[data.plan] || PLAN_LIMITS.pro;
         return json({ valid: true, plan: data.plan, email: data.email, usage: data.usage, monthlyUsage: monthly, limits, expiresAt: data.expiresAt || null });
+      }
+
+      // ── Newsletter subscribe (no pro key needed) ───────────────────────
+      if (path === '/api/subscribe' && method === 'POST') {
+        return handleSubscribe(request, env);
       }
 
       // All other API routes require valid pro key
