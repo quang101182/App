@@ -262,11 +262,11 @@ async function handleSubscribe(request, env) {
   const email = body.email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err('Invalid email', 400);
 
-  // Rate limit: 3 subscribes per IP per hour
+  // Rate limit: 10 subscribes per IP per hour
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   const rlKey = `rl:subscribe:${ip}`;
   const rlCount = parseInt(await env.PRO_KV.get(rlKey)) || 0;
-  if (rlCount >= 3) return err('Too many attempts, try again later', 429);
+  if (rlCount >= 10) return err('Too many attempts, try again later', 429);
   await env.PRO_KV.put(rlKey, String(rlCount + 1), { expirationTtl: 3600 });
 
   // Deduplicate
