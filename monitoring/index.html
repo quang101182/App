@@ -1,0 +1,655 @@
+<!-- Monitoring Dashboard v1.0 -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitoring v1.0</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+:root {
+  --bg-page: #1a1a2e;
+  --bg-card: #16213e;
+  --bg-secondary: #0f3460;
+  --accent: #6D28D9;
+  --accent2: #a78bfa;
+  --text: #e4e4e7;
+  --text2: #9ca3af;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --border: #1e3a5f;
+  --blue: #3b82f6;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-page); color: var(--text); min-height: 100vh; }
+a { color: var(--accent2); }
+
+/* Header */
+.header { position: sticky; top: 0; z-index: 100; background: var(--bg-card); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.header h1 { font-size: 1.2rem; color: var(--accent2); white-space: nowrap; }
+.header-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pill-group { display: flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+.pill { padding: 6px 16px; background: transparent; color: var(--text2); border: none; cursor: pointer; font-size: .85rem; transition: all .2s; }
+.pill.active { background: var(--accent); color: #fff; }
+.pill:hover:not(.active) { background: var(--bg-secondary); }
+.toggle-refresh { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--text2); cursor: pointer; }
+.toggle-refresh input { accent-color: var(--accent); }
+.btn-logout { background: transparent; border: 1px solid var(--error); color: var(--error); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: .85rem; }
+.btn-logout:hover { background: var(--error); color: #fff; }
+
+/* App tabs */
+.app-tabs { display: flex; gap: 8px; padding: 10px 24px; background: var(--bg-page); border-bottom: 1px solid var(--border); overflow-x: auto; }
+.app-tab { padding: 8px 20px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text2); cursor: pointer; font-size: .9rem; white-space: nowrap; transition: all .2s; }
+.app-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.app-tab:hover:not(.active) { background: var(--bg-secondary); }
+
+/* Main */
+.main { max-width: 1400px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+
+/* Trend bar */
+.trend-bar { display: flex; gap: 16px; flex-wrap: wrap; }
+.trend-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px; flex: 1; min-width: 200px; display: flex; align-items: center; gap: 10px; }
+.trend-item .label { font-size: .85rem; color: var(--text2); }
+.trend-item .value { font-size: 1.1rem; font-weight: 700; }
+.trend-item .change { font-size: .85rem; font-weight: 600; padding: 2px 8px; border-radius: 12px; }
+.change.up { background: rgba(16,185,129,.15); color: var(--success); }
+.change.down { background: rgba(239,68,68,.15); color: var(--error); }
+.change.neutral { background: rgba(156,163,175,.15); color: var(--text2); }
+
+/* KPI cards */
+.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
+.kpi-card .kpi-label { font-size: .85rem; color: var(--text2); margin-bottom: 8px; }
+.kpi-card .kpi-value { font-size: 2rem; font-weight: 800; }
+.kpi-card .kpi-sub { font-size: .8rem; color: var(--text2); margin-top: 4px; }
+
+/* Charts */
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.chart-card h3 { font-size: .95rem; color: var(--accent2); margin-bottom: 12px; }
+.chart-wrap { position: relative; height: 280px; }
+
+/* Donuts */
+.donuts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.donut-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
+.donut-card h3 { font-size: .95rem; color: var(--accent2); margin-bottom: 12px; }
+.donut-wrap { position: relative; height: 220px; display: flex; align-items: center; justify-content: center; }
+.no-data { color: var(--text2); font-size: .9rem; font-style: italic; }
+
+/* Table */
+.table-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.table-section h3 { font-size: .95rem; color: var(--accent2); margin-bottom: 12px; }
+.table-summary { font-size: .85rem; color: var(--text2); margin-bottom: 10px; }
+.search-bar { width: 100%; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text); font-size: .9rem; margin-bottom: 12px; outline: none; }
+.search-bar:focus { border-color: var(--accent); }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+th { text-align: left; padding: 10px 8px; color: var(--text2); border-bottom: 1px solid var(--border); font-weight: 600; }
+td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
+.badge { padding: 2px 10px; border-radius: 12px; font-size: .75rem; font-weight: 600; text-transform: uppercase; }
+.badge-pro { background: rgba(109,40,217,.2); color: var(--accent2); }
+.badge-premium { background: rgba(245,158,11,.2); color: var(--warning); }
+.badge-free { background: rgba(156,163,175,.15); color: var(--text2); }
+
+/* Errors */
+.errors-section { background: var(--bg-card); border: 1px solid var(--border); border-left: 4px solid var(--error); border-radius: 12px; padding: 20px; }
+.errors-section h3 { color: var(--error); font-size: .95rem; margin-bottom: 12px; }
+
+/* Costs */
+.costs-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.costs-section h3 { font-size: .95rem; color: var(--accent2); margin-bottom: 16px; }
+.cost-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.cost-row .cost-label { width: 140px; font-size: .85rem; color: var(--text2); }
+.cost-bar-bg { flex: 1; height: 20px; background: var(--bg-secondary); border-radius: 6px; overflow: hidden; }
+.cost-bar { height: 100%; border-radius: 6px; transition: width .5s; }
+.cost-amount { width: 80px; text-align: right; font-size: .85rem; font-weight: 600; }
+.cost-total { font-size: 1.1rem; font-weight: 800; margin-top: 8px; text-align: right; }
+
+/* Footer */
+.footer { text-align: center; padding: 16px; color: var(--text2); font-size: .8rem; border-top: 1px solid var(--border); margin-top: 10px; }
+
+/* Modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 32px; width: 360px; max-width: 90vw; }
+.modal h2 { text-align: center; margin-bottom: 20px; color: var(--accent2); }
+.modal input { width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text); font-size: .95rem; margin-bottom: 14px; outline: none; }
+.modal input:focus { border-color: var(--accent); }
+.modal .btn-login { width: 100%; padding: 10px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: .95rem; font-weight: 600; cursor: pointer; }
+.modal .btn-login:hover { background: #5b21b6; }
+.modal .error-msg { color: var(--error); font-size: .85rem; text-align: center; margin-bottom: 10px; }
+.loading-overlay { position: fixed; inset: 0; background: rgba(26,26,46,.8); z-index: 500; display: flex; align-items: center; justify-content: center; }
+.spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .charts-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+  .donuts-grid { grid-template-columns: 1fr; }
+  .header { padding: 10px 16px; }
+  .main { padding: 14px; }
+  .trend-bar { flex-direction: column; }
+  .app-tabs { padding: 8px 16px; }
+}
+@media (max-width: 480px) {
+  body { font-size: 14px; }
+  .header h1 { font-size: 1rem; }
+  .kpi-card .kpi-value { font-size: 1.5rem; }
+  .chart-wrap { height: 220px; }
+  .main { padding: 10px; gap: 14px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Modal connexion -->
+<div id="loginModal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <h2>Connexion Admin</h2>
+    <div id="loginError" class="error-msg" style="display:none"></div>
+    <input type="password" id="tokenInput" placeholder="Token admin" autocomplete="current-password">
+    <button class="btn-login" onclick="doLogin()">Connexion</button>
+    <div style="text-align:center;margin-top:12px;color:var(--text2);font-size:.8rem">Entrez le token admin Bearer</div>
+  </div>
+</div>
+
+<!-- Loading -->
+<div id="loadingOverlay" class="loading-overlay" style="display:none"><div class="spinner"></div></div>
+
+<!-- Header -->
+<header class="header">
+  <h1>Monitoring v1.0</h1>
+  <div class="header-controls">
+    <div class="pill-group">
+      <button class="pill active" data-period="7d">7j</button>
+      <button class="pill" data-period="30d">30j</button>
+      <button class="pill" data-period="90d">90j</button>
+    </div>
+    <label class="toggle-refresh"><input type="checkbox" id="autoRefresh" checked> Auto 60s</label>
+    <button class="btn-logout" onclick="logout()">Déconnexion</button>
+  </div>
+</header>
+
+<!-- App tabs -->
+<div class="app-tabs" id="appTabs"></div>
+
+<div class="main">
+  <!-- Trend bar -->
+  <div class="trend-bar">
+    <div class="trend-item"><div><div class="label">Requêtes</div><div><span class="value" id="trendReqVal">—</span> <span class="change neutral" id="trendReqChange">—</span></div></div></div>
+    <div class="trend-item"><div><div class="label">Utilisateurs actifs</div><div><span class="value" id="trendDauVal">—</span> <span class="change neutral" id="trendDauChange">—</span></div></div></div>
+    <div class="trend-item"><div><div class="label">Churn</div><div><span id="churnInfo" style="font-size:.9rem">—</span></div></div></div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-label">Appareils total</div><div class="kpi-value" id="kpiDevices">—</div><div class="kpi-sub" id="kpiDevicesSub"></div></div>
+    <div class="kpi-card"><div class="kpi-label">Actifs aujourd'hui</div><div class="kpi-value" id="kpiDau">—</div><div class="kpi-sub" id="kpiDauSub"></div></div>
+    <div class="kpi-card"><div class="kpi-label">Dictées aujourd'hui</div><div class="kpi-value" id="kpiDictees">—</div><div class="kpi-sub" id="kpiDicteesSub"></div></div>
+    <div class="kpi-card"><div class="kpi-label">Coût du mois</div><div class="kpi-value" id="kpiCost">—</div><div class="kpi-sub" id="kpiCostSub"></div></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-grid">
+    <div class="chart-card"><h3>Utilisateurs actifs quotidiens</h3><div class="chart-wrap"><canvas id="dauChart"></canvas></div></div>
+    <div class="chart-card"><h3>Activité quotidienne</h3><div class="chart-wrap"><canvas id="activityChart"></canvas></div></div>
+  </div>
+
+  <!-- Donuts -->
+  <div class="donuts-grid">
+    <div class="donut-card"><h3>Langues dictées</h3><div class="donut-wrap" id="langWrap"><canvas id="langChart"></canvas></div></div>
+    <div class="donut-card"><h3>Modes réécriture</h3><div class="donut-wrap" id="modeWrap"><canvas id="modeChart"></canvas></div></div>
+    <div class="donut-card"><h3>Paires traduction</h3><div class="donut-wrap" id="pairWrap"><canvas id="pairChart"></canvas></div></div>
+  </div>
+
+  <!-- Devices table -->
+  <div class="table-section">
+    <h3>Appareils enregistrés</h3>
+    <div class="table-summary" id="devicesSummary"></div>
+    <input type="text" class="search-bar" id="deviceSearch" placeholder="Rechercher un appareil...">
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Device ID</th>
+            <th>Plateforme</th>
+            <th>Tier</th>
+            <th>Créé le</th>
+            <th>Dernière activité</th>
+          </tr>
+        </thead>
+        <tbody id="devicesBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Errors -->
+  <div class="errors-section" id="errorsSection" style="display:none">
+    <h3>Erreurs récentes</h3>
+    <table><thead><tr><th>Date</th><th>Endpoint</th><th>Message</th></tr></thead><tbody id="errorsBody"></tbody></table>
+  </div>
+
+  <!-- Costs -->
+  <div class="costs-section">
+    <h3>Coûts estimés sur la période sélectionnée</h3>
+    <div id="costBars"></div>
+    <div class="cost-total" id="costTotal"></div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer" id="footer">Monitoring v1.0</div>
+</div>
+
+<script>
+// === Multi-app config ===
+const APPS = {
+  dictokey: {
+    name: 'DictoKey',
+    gateway: 'https://api-gateway-dictokey.quang101182.workers.dev',
+    tokenKey: 'monitoring_admin_token',
+    endpoints: {
+      monitoring: '/admin/monitoring',
+      stats: '/admin/stats',
+      devices: '/admin/devices'
+    }
+  }
+  // futures apps ici
+};
+let currentApp = 'dictokey';
+const LS_TOKEN_KEY = 'monitoring_admin_token';
+let currentPeriod = '7d';
+let refreshInterval = null;
+let charts = {};
+let allDevices = [];
+
+// Lang / mode maps
+const LANG_MAP = { French:'Français', English:'Anglais', Spanish:'Espagnol', German:'Allemand', Italian:'Italien', Portuguese:'Portugais', Dutch:'Néerlandais', Russian:'Russe', Chinese:'Chinois', Japanese:'Japonais', Korean:'Coréen', Arabic:'Arabe' };
+const MODE_MAP = { NEUTRAL:'Propre', FORMAL:'Formel', CONCISE:'Concis', EXPANDED:'Développé' };
+const DONUT_COLORS = ['#6D28D9','#3b82f6','#10b981','#f59e0b','#ef4444','#a78bfa','#06b6d4','#ec4899'];
+
+// === App tabs ===
+function renderAppTabs() {
+  const container = document.getElementById('appTabs');
+  container.innerHTML = Object.entries(APPS).map(([key, app]) =>
+    '<button class="app-tab' + (key === currentApp ? ' active' : '') + '" data-app="' + key + '">' + app.name + '</button>'
+  ).join('');
+  container.querySelectorAll('.app-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      currentApp = this.dataset.app;
+      renderAppTabs();
+      fetchAll().catch(handleAuthError);
+    });
+  });
+}
+
+// === Token (shared) ===
+function getToken() { return localStorage.getItem(LS_TOKEN_KEY); }
+function setToken(t) { localStorage.setItem(LS_TOKEN_KEY, t); }
+function clearToken() { localStorage.removeItem(LS_TOKEN_KEY); }
+
+function getAppConfig() { return APPS[currentApp]; }
+
+// === UI helpers ===
+function showLogin(msg) {
+  document.getElementById('loginModal').style.display = 'flex';
+  var err = document.getElementById('loginError');
+  if (msg) { err.textContent = msg; err.style.display = 'block'; }
+  else { err.style.display = 'none'; }
+}
+function hideLogin() { document.getElementById('loginModal').style.display = 'none'; }
+function showLoading() { document.getElementById('loadingOverlay').style.display = 'flex'; }
+function hideLoading() { document.getElementById('loadingOverlay').style.display = 'none'; }
+
+function handleAuthError(e) {
+  if (e.message === '401') { clearToken(); showLogin('Session expirée'); stopAutoRefresh(); }
+}
+
+async function doLogin() {
+  var token = document.getElementById('tokenInput').value.trim();
+  if (!token) return;
+  setToken(token);
+  hideLogin();
+  try { await fetchAll(); }
+  catch (e) { if (e.message === '401') { clearToken(); showLogin('Token invalide ou expiré'); } }
+}
+
+function logout() { clearToken(); showLogin(); }
+
+// === API ===
+async function apiFetch(path) {
+  var cfg = getAppConfig();
+  var r = await fetch(cfg.gateway + path, { headers: { 'Authorization': 'Bearer ' + getToken() } });
+  if (r.status === 401) throw new Error('401');
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+async function fetchAll() {
+  showLoading();
+  var cfg = getAppConfig();
+  try {
+    var results = await Promise.all([
+      apiFetch(cfg.endpoints.monitoring + '?period=' + currentPeriod),
+      apiFetch(cfg.endpoints.stats),
+      apiFetch(cfg.endpoints.devices)
+    ]);
+    render(results[0], results[1], results[2]);
+  } catch (e) {
+    hideLoading();
+    throw e;
+  }
+  hideLoading();
+}
+
+// === Utilities ===
+function pctChange(today, yesterday) {
+  if (yesterday === 0 && today === 0) return { text: '—', cls: 'neutral' };
+  if (yesterday === 0) return { text: '+∞', cls: 'up' };
+  var p = Math.round(((today - yesterday) / yesterday) * 100);
+  if (p > 0) return { text: '+' + p + '%', cls: 'up' };
+  if (p < 0) return { text: p + '%', cls: 'down' };
+  return { text: '0%', cls: 'neutral' };
+}
+
+function relativeTime(dateStr) {
+  var diff = Date.now() - new Date(dateStr).getTime();
+  var mins = Math.floor(diff / 60000);
+  if (mins < 1) return "À l'instant";
+  if (mins < 60) return 'Il y a ' + mins + 'min';
+  var hours = Math.floor(mins / 60);
+  if (hours < 24) return 'Il y a ' + hours + 'h';
+  var days = Math.floor(hours / 24);
+  return 'Il y a ' + days + 'j';
+}
+
+function fmtDate(dateStr) {
+  var d = new Date(dateStr);
+  return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
+}
+
+function mapLang(k) { return LANG_MAP[k] || k; }
+function mapMode(k) { return MODE_MAP[k] || k; }
+
+function detectPlatform(deviceId) {
+  var id = (deviceId || '').toLowerCase();
+  if (id.startsWith('pc_')) return 'PC';
+  return 'Mobile';
+}
+
+function destroyCharts() {
+  Object.values(charts).forEach(function(c) { c.destroy(); });
+  charts = {};
+}
+
+// === Render ===
+function render(mon, stats, dev) {
+  var s = mon.summary;
+  var t = mon.trend;
+  var cfg = getAppConfig();
+
+  // Trend bar
+  var rc = pctChange(t.requests.today, t.requests.yesterday);
+  document.getElementById('trendReqVal').textContent = t.requests.today;
+  var rcEl = document.getElementById('trendReqChange');
+  rcEl.textContent = rc.text; rcEl.className = 'change ' + rc.cls;
+
+  var dc = pctChange(t.dau.today, t.dau.yesterday);
+  document.getElementById('trendDauVal').textContent = t.dau.today;
+  var dcEl = document.getElementById('trendDauChange');
+  dcEl.textContent = dc.text; dcEl.className = 'change ' + dc.cls;
+
+  var ch = mon.churn;
+  document.getElementById('churnInfo').innerHTML = '<span style="color:var(--success)">↑ ' + ch.upgrades + '</span> / <span style="color:var(--error)">↓ ' + ch.downgrades + '</span>';
+
+  // Devices breakdown for KPI sub
+  var devicesList = dev.devices || [];
+  var mobileCount = 0;
+  var pcCount = 0;
+  var tierCounts = { pro: 0, premium: 0, free: 0 };
+  devicesList.forEach(function(d) {
+    var plat = d.platform || detectPlatform(d.deviceId);
+    if (plat === 'PC') pcCount++; else mobileCount++;
+    var tier = (d.tier || 'free').toLowerCase();
+    if (tierCounts[tier] !== undefined) tierCounts[tier]++;
+    else tierCounts.free++;
+  });
+
+  // KPI: Appareils total
+  document.getElementById('kpiDevices').textContent = dev.count || devicesList.length;
+  document.getElementById('kpiDevicesSub').textContent = mobileCount + ' mobile, ' + pcCount + ' PC';
+
+  // KPI: Actifs aujourd'hui
+  var dauDaily = (mon.dau && mon.dau.daily) || [];
+  var dauToday = dauDaily.length > 0 ? (dauDaily[0].count || 0) : 0;
+  document.getElementById('kpiDau').textContent = dauToday;
+  // Calcul moyenne et pic DAU
+  if (dauDaily.length > 0) {
+    var dauSum = 0;
+    var dauMax = 0;
+    dauDaily.forEach(function(d) {
+      var c = d.count || 0;
+      dauSum += c;
+      if (c > dauMax) dauMax = c;
+    });
+    var dauAvg = Math.round(dauSum / dauDaily.length);
+    document.getElementById('kpiDauSub').textContent = 'moy. ' + dauAvg + ' / pic ' + dauMax;
+  } else {
+    document.getElementById('kpiDauSub').textContent = '';
+  }
+
+  // KPI: Dictées aujourd'hui
+  var todayStats = (stats.stats && stats.stats.today) || {};
+  var transcriptions = todayStats.transcriptions || 0;
+  var rewrites = todayStats.rewrites || 0;
+  var translations = todayStats.translations || 0;
+  document.getElementById('kpiDictees').textContent = transcriptions;
+  document.getElementById('kpiDicteesSub').textContent = '+' + rewrites + ' réécr. +' + translations + ' trad.';
+
+  // KPI: Coût du mois
+  var costMonth = (stats.stats && stats.stats.estimated_cost_month) || {};
+  document.getElementById('kpiCost').textContent = costMonth.total || '$0.00';
+  var whisperCost = costMonth.whisper || costMonth.groq_whisper || '—';
+  var llmCost = costMonth.llm || costMonth.groq_llm || '—';
+  var azureCost = costMonth.azure || costMonth.azure_translate || '—';
+  document.getElementById('kpiCostSub').textContent = 'W:' + whisperCost + ' L:' + llmCost + ' A:' + azureCost;
+
+  destroyCharts();
+
+  // DAU chart
+  var dauChronological = dauDaily.slice().reverse();
+  var dauLabels = dauChronological.map(function(d) { return d.date.slice(5); });
+  var dauMobile = dauChronological.map(function(d) { return (d.by_platform && d.by_platform.mobile) || 0; });
+  var dauPC = dauChronological.map(function(d) { return (d.by_platform && d.by_platform.pc) || 0; });
+
+  charts.dau = new Chart(document.getElementById('dauChart'), {
+    type: 'line',
+    data: {
+      labels: dauLabels,
+      datasets: [
+        { label: 'Mobile', data: dauMobile, borderColor: '#6D28D9', backgroundColor: 'rgba(109,40,217,.15)', fill: true, tension: .3, pointRadius: 3, pointHoverRadius: 6 },
+        { label: 'PC', data: dauPC, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.15)', fill: true, tension: .3, pointRadius: 3, pointHoverRadius: 6 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#9ca3af' } }, tooltip: { mode: 'index', intersect: false } },
+      scales: {
+        x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(30,58,95,.4)' } },
+        y: { beginAtZero: true, ticks: { color: '#9ca3af', stepSize: 1 }, grid: { color: 'rgba(30,58,95,.4)' } }
+      }
+    }
+  });
+
+  // Activity stacked bar
+  var actDaily = (mon.daily || []).slice().reverse();
+  var actLabels = actDaily.map(function(d) { return d.date.slice(5); });
+  charts.activity = new Chart(document.getElementById('activityChart'), {
+    type: 'bar',
+    data: {
+      labels: actLabels,
+      datasets: [
+        { label: 'Dictées', data: actDaily.map(function(d) { return (d.transcribe && d.transcribe.count) || 0; }), backgroundColor: '#6D28D9', borderRadius: 3 },
+        { label: 'Réécritures', data: actDaily.map(function(d) { return (d.rewrite && d.rewrite.count) || 0; }), backgroundColor: '#3b82f6', borderRadius: 3 },
+        { label: 'Traductions', data: actDaily.map(function(d) { return (d.translate && d.translate.count) || 0; }), backgroundColor: '#10b981', borderRadius: 3 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#9ca3af' } }, tooltip: { mode: 'index', intersect: false } },
+      scales: {
+        x: { stacked: true, ticks: { color: '#9ca3af' }, grid: { color: 'rgba(30,58,95,.4)' } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: '#9ca3af' }, grid: { color: 'rgba(30,58,95,.4)' } }
+      }
+    }
+  });
+
+  // Donuts
+  renderDonut('langChart', 'langWrap', s.transcribe.top_langs, mapLang);
+  renderDonut('modeChart', 'modeWrap', s.rewrite.top_modes, mapMode);
+  renderDonut('pairChart', 'pairWrap', s.translate.top_pairs, function(k) { return k; });
+
+  // Devices table
+  allDevices = devicesList.sort(function(a, b) { return new Date(b.lastSeen) - new Date(a.lastSeen); });
+  // Summary
+  var total = dev.count || allDevices.length;
+  document.getElementById('devicesSummary').textContent = total + ' appareils — ' + mobileCount + ' mobile, ' + pcCount + ' PC — ' + tierCounts.pro + ' pro, ' + tierCounts.premium + ' premium, ' + tierCounts.free + ' free';
+  renderDevices(allDevices);
+
+  // Errors
+  if (mon.errors && mon.errors.total > 0) {
+    document.getElementById('errorsSection').style.display = 'block';
+    document.getElementById('errorsBody').innerHTML = (mon.errors.recent || []).map(function(e) {
+      return '<tr><td>' + fmtDate(e.date || e.timestamp) + '</td><td>' + (e.endpoint || '—') + '</td><td>' + (e.message || e.error || '—') + '</td></tr>';
+    }).join('');
+  } else {
+    document.getElementById('errorsSection').style.display = 'none';
+  }
+
+  // Costs (période)
+  var ce = mon.cost_estimate || {};
+  var costs = [
+    { label: 'Groq Whisper', value: ce.groq_whisper || 0, color: '#6D28D9' },
+    { label: 'Groq LLM', value: ce.groq_llm || 0, color: '#3b82f6' },
+    { label: 'Azure Translate', value: ce.azure_translate || 0, color: '#10b981' }
+  ];
+  var maxCost = Math.max.apply(null, costs.map(function(c) { return c.value; }).concat([0.001]));
+  document.getElementById('costBars').innerHTML = costs.map(function(c) {
+    var w = Math.max((c.value / maxCost) * 100, 2);
+    return '<div class="cost-row"><span class="cost-label">' + c.label + '</span><div class="cost-bar-bg"><div class="cost-bar" style="width:' + w + '%;background:' + c.color + '"></div></div><span class="cost-amount">$' + c.value.toFixed(4) + '</span></div>';
+  }).join('');
+  document.getElementById('costTotal').textContent = 'Total période : $' + (ce.total || 0).toFixed(4);
+
+  // Footer
+  var now = new Date();
+  var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
+  document.getElementById('footer').textContent = 'Monitoring v1.0 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+}
+
+function renderDonut(canvasId, wrapId, dataObj, labelFn) {
+  var entries = Object.entries(dataObj || {});
+  var wrap = document.getElementById(wrapId);
+  if (entries.length === 0) {
+    var canvas = document.getElementById(canvasId);
+    canvas.style.display = 'none';
+    if (!wrap.querySelector('.no-data')) {
+      var nd = document.createElement('div');
+      nd.className = 'no-data';
+      nd.textContent = 'Aucune donnée';
+      wrap.appendChild(nd);
+    }
+    return;
+  }
+  var ndEl = wrap.querySelector('.no-data');
+  if (ndEl) ndEl.remove();
+  var canvas = document.getElementById(canvasId);
+  canvas.style.display = 'block';
+
+  charts[canvasId] = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: entries.map(function(e) { return labelFn(e[0]); }),
+      datasets: [{
+        data: entries.map(function(e) { return e[1]; }),
+        backgroundColor: DONUT_COLORS.slice(0, entries.length),
+        borderWidth: 0,
+        hoverOffset: 8
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '55%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#9ca3af', padding: 12, usePointStyle: true, pointStyleWidth: 10 } },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+              var pct = total > 0 ? Math.round((ctx.parsed / total) * 100) : 0;
+              return ' ' + ctx.label + ': ' + ctx.parsed + ' (' + pct + '%)';
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderDevices(list) {
+  document.getElementById('devicesBody').innerHTML = list.map(function(d) {
+    var did = d.deviceId || 'inconnu';
+    var id = did.length > 12 ? did.slice(0, 12) + '...' : did;
+    var tierCls = d.tier === 'pro' ? 'badge-pro' : d.tier === 'premium' ? 'badge-premium' : 'badge-free';
+    var platform = d.platform || detectPlatform(did);
+    return '<tr><td title="' + did + '">' + id + '</td><td>' + platform + '</td><td><span class="badge ' + tierCls + '">' + (d.tier || 'free') + '</span></td><td>' + fmtDate(d.createdAt) + '</td><td>' + relativeTime(d.lastSeen) + '</td></tr>';
+  }).join('');
+}
+
+// Search devices
+document.getElementById('deviceSearch').addEventListener('input', function() {
+  var q = this.value.toLowerCase();
+  var filtered = allDevices.filter(function(d) {
+    return (d.deviceId || '').toLowerCase().includes(q) || (d.tier || '').toLowerCase().includes(q);
+  });
+  renderDevices(filtered);
+});
+
+// Period pills
+document.querySelectorAll('.pill').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.pill').forEach(function(b) { b.classList.remove('active'); });
+    this.classList.add('active');
+    currentPeriod = this.dataset.period;
+    fetchAll().catch(handleAuthError);
+  });
+});
+
+// Auto-refresh
+function startAutoRefresh() {
+  stopAutoRefresh();
+  refreshInterval = setInterval(function() {
+    fetchAll().catch(handleAuthError);
+  }, 60000);
+}
+function stopAutoRefresh() { if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; } }
+
+document.getElementById('autoRefresh').addEventListener('change', function() {
+  if (this.checked) startAutoRefresh(); else stopAutoRefresh();
+});
+
+// Enter key on login
+document.getElementById('tokenInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doLogin();
+});
+
+// Init
+renderAppTabs();
+(function init() {
+  if (!getToken()) { showLogin(); return; }
+  fetchAll().then(function() { if (document.getElementById('autoRefresh').checked) startAutoRefresh(); })
+    .catch(function(e) { if (e.message === '401') { clearToken(); showLogin('Token invalide'); } else { console.error(e); hideLoading(); } });
+})();
+</script>
+</body>
+</html>
