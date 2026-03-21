@@ -234,7 +234,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
   <!-- Costs -->
   <div class="costs-section">
-    <h3>Coûts estimés sur la période sélectionnée</h3>
+    <h3>Coûts estimés ce mois</h3>
     <div id="costBars"></div>
     <div class="cost-total" id="costTotal"></div>
   </div>
@@ -528,19 +528,21 @@ function render(mon, stats, dev) {
     document.getElementById('errorsSection').style.display = 'none';
   }
 
-  // Costs (période)
-  var ce = mon.cost_estimate || {};
+  // Costs — utiliser les données legacy (mois complet, cohérent avec le KPI)
+  var ecm = (stats.stats && stats.stats.estimated_cost_month) || {};
+  var parseCost = function(v) { return parseFloat(String(v || '0').replace('$','')) || 0; };
   var costs = [
-    { label: 'Groq Whisper', value: ce.groq_whisper || 0, color: '#6D28D9' },
-    { label: 'Groq LLM', value: ce.groq_llm || 0, color: '#3b82f6' },
-    { label: 'Azure Translate', value: ce.azure_translate || 0, color: '#10b981' }
+    { label: 'Groq Whisper', value: parseCost(ecm.groq_whisper), color: '#6D28D9' },
+    { label: 'Groq LLM', value: parseCost(ecm.groq_llm), color: '#3b82f6' },
+    { label: 'Azure Translate', value: parseCost(ecm.azure_translate), color: '#10b981' }
   ];
+  var totalCost = parseCost(ecm.total);
   var maxCost = Math.max.apply(null, costs.map(function(c) { return c.value; }).concat([0.001]));
   document.getElementById('costBars').innerHTML = costs.map(function(c) {
     var w = Math.max((c.value / maxCost) * 100, 2);
-    return '<div class="cost-row"><span class="cost-label">' + c.label + '</span><div class="cost-bar-bg"><div class="cost-bar" style="width:' + w + '%;background:' + c.color + '"></div></div><span class="cost-amount">$' + c.value.toFixed(4) + '</span></div>';
+    return '<div class="cost-row"><span class="cost-label">' + c.label + '</span><div class="cost-bar-bg"><div class="cost-bar" style="width:' + w + '%;background:' + c.color + '"></div></div><span class="cost-amount">$' + c.value.toFixed(2) + '</span></div>';
   }).join('');
-  document.getElementById('costTotal').textContent = 'Total période : $' + (ce.total || 0).toFixed(4);
+  document.getElementById('costTotal').textContent = 'Total ce mois : $' + totalCost.toFixed(2);
 
   // Footer
   var now = new Date();
