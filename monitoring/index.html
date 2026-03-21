@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.0 -->
+<!-- Monitoring Dashboard v1.1 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.0</title>
+<title>Monitoring v1.1</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -141,6 +141,57 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   .chart-wrap { height: 220px; }
   .main { padding: 10px; gap: 14px; }
 }
+
+/* === Advanced metrics === */
+.adv-section { margin-top: 0; }
+.adv-section h3 { font-size: .95rem; color: var(--accent2); margin-bottom: 12px; }
+
+/* Retention cards */
+.retention-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.retention-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
+.retention-card .ret-label { font-size: .85rem; color: var(--text2); margin-bottom: 6px; }
+.retention-card .ret-value { font-size: 2rem; font-weight: 800; }
+.retention-card .ret-sub { font-size: .8rem; color: var(--text2); margin-top: 4px; }
+.retention-card .ret-na { font-size: .9rem; color: var(--text2); font-style: italic; }
+.ret-green { color: var(--success); }
+.ret-orange { color: var(--warning); }
+.ret-red { color: var(--error); }
+
+/* Inscriptions chart */
+.signup-chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.signup-chart-card h3 { font-size: .95rem; color: var(--accent2); margin-bottom: 4px; }
+.signup-chart-sub { font-size: .85rem; color: var(--text2); margin-bottom: 12px; }
+.signup-chart-wrap { position: relative; height: 220px; }
+
+/* Usage distribution */
+.usage-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.usage-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
+.usage-card .usage-label { font-size: .85rem; color: var(--text2); margin-bottom: 4px; }
+.usage-card .usage-value { font-size: 1.6rem; font-weight: 800; color: var(--accent2); }
+.usage-card .usage-unit { font-size: .75rem; color: var(--text2); }
+.segments-row { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.segment-badge { padding: 6px 14px; border-radius: 20px; font-size: .85rem; font-weight: 600; background: var(--bg-card); border: 1px solid var(--border); }
+.segment-badge .seg-count { font-weight: 800; color: var(--accent2); }
+
+/* Feature adoption */
+.adoption-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.adoption-card h3 { font-size: .95rem; color: var(--accent2); margin-bottom: 16px; }
+.adoption-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.adoption-row .adopt-label { width: 100px; font-size: .85rem; color: var(--text2); }
+.adopt-bar-bg { flex: 1; height: 22px; background: var(--bg-secondary); border-radius: 6px; overflow: hidden; }
+.adopt-bar { height: 100%; border-radius: 6px; background: var(--accent); transition: width .5s; min-width: 0; }
+.adopt-info { width: 110px; text-align: right; font-size: .8rem; color: var(--text2); white-space: nowrap; }
+
+/* Conversion inline */
+.conversion-info { font-size: .85rem; color: var(--text2); margin-top: 4px; }
+
+@media (max-width: 1024px) {
+  .usage-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 768px) {
+  .retention-grid { grid-template-columns: 1fr; }
+  .usage-grid { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
@@ -161,7 +212,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <!-- Header -->
 <header class="header">
-  <h1>Monitoring v1.0</h1>
+  <h1>Monitoring v1.1</h1>
   <div class="header-controls">
     <div class="pill-group">
       <button class="pill active" data-period="7d">7j</button>
@@ -205,6 +256,32 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <div class="donut-card"><h3>Paires traduction</h3><div class="donut-wrap" id="pairWrap"><canvas id="pairChart"></canvas></div></div>
   </div>
 
+  <!-- Advanced: Rétention -->
+  <div class="adv-section" id="advRetention" style="display:none">
+    <h3>Rétention</h3>
+    <div class="retention-grid" id="retentionGrid"></div>
+  </div>
+
+  <!-- Advanced: Inscriptions -->
+  <div class="signup-chart-card adv-section" id="advSignups" style="display:none">
+    <h3>Nouveaux utilisateurs</h3>
+    <div class="signup-chart-sub" id="signupSub"></div>
+    <div class="signup-chart-wrap"><canvas id="signupChart"></canvas></div>
+  </div>
+
+  <!-- Advanced: Usage distribution -->
+  <div class="adv-section" id="advUsage" style="display:none">
+    <h3>Usage par utilisateur</h3>
+    <div class="usage-grid" id="usageGrid"></div>
+    <div class="segments-row" id="segmentsRow"></div>
+  </div>
+
+  <!-- Advanced: Feature adoption -->
+  <div class="adoption-card adv-section" id="advAdoption" style="display:none">
+    <h3>Adoption des features</h3>
+    <div id="adoptionBars"></div>
+  </div>
+
   <!-- Devices table -->
   <div class="table-section">
     <h3>Appareils enregistrés</h3>
@@ -240,7 +317,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.0</div>
+  <div class="footer" id="footer">Monitoring v1.1</div>
 </div>
 
 <script>
@@ -332,7 +409,7 @@ async function fetchAll() {
   var cfg = getAppConfig();
   try {
     var results = await Promise.all([
-      apiFetch(cfg.endpoints.monitoring + '?period=' + currentPeriod),
+      apiFetch(cfg.endpoints.monitoring + '?period=' + currentPeriod + '&advanced=1'),
       apiFetch(cfg.endpoints.stats),
       apiFetch(cfg.endpoints.devices)
     ]);
@@ -511,6 +588,9 @@ function render(mon, stats, dev) {
   renderDonut('modeChart', 'modeWrap', s.rewrite.top_modes, mapMode);
   renderDonut('pairChart', 'pairWrap', s.translate.top_pairs, function(k) { return k; });
 
+  // === Advanced metrics ===
+  renderAdvanced(mon.advanced);
+
   // Devices table
   allDevices = devicesList.sort(function(a, b) { return new Date(b.lastSeen) - new Date(a.lastSeen); });
   // Summary
@@ -547,7 +627,7 @@ function render(mon, stats, dev) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.0 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.1 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
@@ -596,6 +676,129 @@ function renderDonut(canvasId, wrapId, dataObj, labelFn) {
       }
     }
   });
+}
+
+function renderAdvanced(adv) {
+  var sections = ['advRetention','advSignups','advUsage','advAdoption'];
+  if (!adv) {
+    sections.forEach(function(id) { document.getElementById(id).style.display = 'none'; });
+    return;
+  }
+
+  // --- Rétention ---
+  if (adv.retention) {
+    document.getElementById('advRetention').style.display = 'block';
+    var retGrid = document.getElementById('retentionGrid');
+    var retKeys = [
+      { key: 'd1', label: 'D1' },
+      { key: 'd7', label: 'D7' },
+      { key: 'd30', label: 'D30' }
+    ];
+    retGrid.innerHTML = retKeys.map(function(rk) {
+      var d = adv.retention[rk.key];
+      if (!d) {
+        return '<div class="retention-card"><div class="ret-label">' + rk.label + '</div><div class="ret-na">Pas assez de données</div></div>';
+      }
+      var rate = d.rate;
+      var pct = Math.round(rate * 100) + '%';
+      var cls = rate >= 0.4 ? 'ret-green' : rate >= 0.2 ? 'ret-orange' : 'ret-red';
+      return '<div class="retention-card"><div class="ret-label">' + rk.label + '</div><div class="ret-value ' + cls + '">' + pct + '</div><div class="ret-sub">Cohorte : ' + d.cohort_size + ' utilisateurs</div></div>';
+    }).join('');
+  } else {
+    document.getElementById('advRetention').style.display = 'none';
+  }
+
+  // --- Inscriptions ---
+  if (adv.new_users) {
+    document.getElementById('advSignups').style.display = 'block';
+    document.getElementById('signupSub').textContent = adv.new_users.total_period + ' total sur la période — moy. ' + adv.new_users.avg_per_day + '/jour';
+    var daily = (adv.new_users.daily || []).slice().reverse();
+    var labels = daily.map(function(d) { return d.date.slice(5); });
+    var counts = daily.map(function(d) { return d.count; });
+    if (charts.signup) { charts.signup.destroy(); delete charts.signup; }
+    charts.signup = new Chart(document.getElementById('signupChart'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Nouveaux utilisateurs',
+          data: counts,
+          backgroundColor: '#6D28D9',
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(30,58,95,.4)' } },
+          y: { beginAtZero: true, ticks: { color: '#9ca3af', stepSize: 1 }, grid: { color: 'rgba(30,58,95,.4)' } }
+        }
+      }
+    });
+  } else {
+    document.getElementById('advSignups').style.display = 'none';
+  }
+
+  // --- Usage distribution ---
+  if (adv.usage_distribution) {
+    document.getElementById('advUsage').style.display = 'block';
+    var ud = adv.usage_distribution;
+    var pu = ud.per_user || {};
+    var usageItems = [
+      { label: 'Min', value: pu.min || 0 },
+      { label: 'Max', value: pu.max || 0 },
+      { label: 'Moyenne', value: pu.avg || 0 },
+      { label: 'Médiane', value: pu.median || 0 }
+    ];
+    document.getElementById('usageGrid').innerHTML = usageItems.map(function(u) {
+      return '<div class="usage-card"><div class="usage-label">' + u.label + '</div><div class="usage-value">' + u.value + '</div><div class="usage-unit">dictées/jour</div></div>';
+    }).join('');
+    var seg = ud.segments || {};
+    document.getElementById('segmentsRow').innerHTML =
+      '<div class="segment-badge">Power (&gt;20) : <span class="seg-count">' + (seg.power || 0) + '</span></div>' +
+      '<div class="segment-badge">Régulier (5-20) : <span class="seg-count">' + (seg.regular || 0) + '</span></div>' +
+      '<div class="segment-badge">Occasionnel (&lt;5) : <span class="seg-count">' + (seg.casual || 0) + '</span></div>';
+  } else {
+    document.getElementById('advUsage').style.display = 'none';
+  }
+
+  // --- Feature adoption ---
+  if (adv.feature_adoption) {
+    document.getElementById('advAdoption').style.display = 'block';
+    var fa = adv.feature_adoption;
+    var totalDev = fa.active_devices || 1;
+    var features = [
+      { label: 'Dictée', data: fa.transcribe },
+      { label: 'Réécriture', data: fa.rewrite },
+      { label: 'Traduction', data: fa.translate }
+    ];
+    document.getElementById('adoptionBars').innerHTML = features.map(function(f) {
+      var d = f.data || { users: 0, rate: 0 };
+      var pct = Math.round(d.rate * 100);
+      return '<div class="adoption-row"><span class="adopt-label">' + f.label + '</span><div class="adopt-bar-bg"><div class="adopt-bar" style="width:' + pct + '%"></div></div><span class="adopt-info">' + pct + '% — ' + d.users + '/' + totalDev + ' utilisateurs</span></div>';
+    }).join('');
+  } else {
+    document.getElementById('advAdoption').style.display = 'none';
+  }
+
+  // --- Conversion (sous les KPIs dans la trend bar) ---
+  if (adv.conversion) {
+    var cv = adv.conversion;
+    var existingConv = document.getElementById('conversionInfo');
+    var txt = 'Répartition : ' + cv.pro + ' pro, ' + cv.premium + ' premium, ' + cv.free + ' free — Taux payant : ' + Math.round(cv.paid_rate * 100) + '%';
+    if (existingConv) {
+      existingConv.textContent = txt;
+    } else {
+      var kpiGrid = document.querySelector('.kpi-grid');
+      var div = document.createElement('div');
+      div.id = 'conversionInfo';
+      div.className = 'conversion-info';
+      div.style.gridColumn = '1 / -1';
+      div.textContent = txt;
+      kpiGrid.appendChild(div);
+    }
+  }
 }
 
 function renderDevices(list) {
