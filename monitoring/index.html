@@ -282,24 +282,34 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <div id="adoptionBars"></div>
   </div>
 
-  <!-- Devices table -->
+  <!-- Devices table (collapsible + paginated) -->
   <div class="table-section">
-    <h3>Appareils enregistrés</h3>
+    <h3 class="collapsible-header" onclick="toggleDevices()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+      <span>Appareils enregistrés</span>
+      <span id="devicesToggle" style="font-size:1.2rem;transition:transform .2s">&#9660;</span>
+    </h3>
     <div class="table-summary" id="devicesSummary"></div>
-    <input type="text" class="search-bar" id="deviceSearch" placeholder="Rechercher un appareil...">
-    <div style="overflow-x:auto">
-      <table>
-        <thead>
-          <tr>
-            <th>Device ID</th>
-            <th>Plateforme</th>
-            <th>Tier</th>
-            <th>Créé le</th>
-            <th>Dernière activité</th>
-          </tr>
-        </thead>
-        <tbody id="devicesBody"></tbody>
-      </table>
+    <div id="devicesPanel" style="display:none">
+      <input type="text" class="search-bar" id="deviceSearch" placeholder="Rechercher un appareil...">
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Device ID</th>
+              <th>Plateforme</th>
+              <th>Tier</th>
+              <th>Créé le</th>
+              <th>Dernière activité</th>
+            </tr>
+          </thead>
+          <tbody id="devicesBody"></tbody>
+        </table>
+      </div>
+      <div id="devicesPagination" style="display:flex;justify-content:center;align-items:center;gap:16px;margin-top:12px">
+        <button onclick="devicesPagePrev()" id="devPagePrev" class="pill" style="padding:6px 16px">Précédent</button>
+        <span id="devPageInfo" style="color:var(--text2);font-size:.85rem"></span>
+        <button onclick="devicesPageNext()" id="devPageNext" class="pill" style="padding:6px 16px">Suivant</button>
+      </div>
     </div>
   </div>
 
@@ -801,21 +811,53 @@ function renderAdvanced(adv) {
   }
 }
 
-function renderDevices(list) {
-  document.getElementById('devicesBody').innerHTML = list.map(function(d) {
+var devicesPage = 0;
+var devicesPerPage = 50;
+var filteredDevices = [];
+var devicesExpanded = false;
+
+function toggleDevices() {
+  devicesExpanded = !devicesExpanded;
+  document.getElementById('devicesPanel').style.display = devicesExpanded ? 'block' : 'none';
+  document.getElementById('devicesToggle').style.transform = devicesExpanded ? 'rotate(180deg)' : '';
+}
+
+function renderDevicesPage() {
+  var start = devicesPage * devicesPerPage;
+  var end = Math.min(start + devicesPerPage, filteredDevices.length);
+  var page = filteredDevices.slice(start, end);
+
+  document.getElementById('devicesBody').innerHTML = page.map(function(d) {
     var did = d.deviceId || 'inconnu';
     var id = did.length > 12 ? did.slice(0, 12) + '...' : did;
     var tierCls = d.tier === 'pro' ? 'badge-pro' : d.tier === 'premium' ? 'badge-premium' : 'badge-free';
     var platform = d.platform || detectPlatform(did);
     return '<tr><td title="' + did + '">' + id + '</td><td>' + platform + '</td><td><span class="badge ' + tierCls + '">' + (d.tier || 'free') + '</span></td><td>' + fmtDate(d.createdAt) + '</td><td>' + relativeTime(d.lastSeen) + '</td></tr>';
   }).join('');
+
+  var totalPages = Math.ceil(filteredDevices.length / devicesPerPage);
+  document.getElementById('devPageInfo').textContent = (devicesPage + 1) + ' / ' + Math.max(totalPages, 1) + ' (' + filteredDevices.length + ' appareils)';
+  document.getElementById('devPagePrev').disabled = devicesPage === 0;
+  document.getElementById('devPageNext').disabled = end >= filteredDevices.length;
+
+  // Masquer pagination si tout tient sur une page
+  document.getElementById('devicesPagination').style.display = filteredDevices.length > devicesPerPage ? 'flex' : 'none';
+}
+
+function devicesPagePrev() { if (devicesPage > 0) { devicesPage--; renderDevicesPage(); } }
+function devicesPageNext() { if ((devicesPage + 1) * devicesPerPage < filteredDevices.length) { devicesPage++; renderDevicesPage(); } }
+
+function renderDevices(list) {
+  filteredDevices = list;
+  devicesPage = 0;
+  renderDevicesPage();
 }
 
 // Search devices
 document.getElementById('deviceSearch').addEventListener('input', function() {
   var q = this.value.toLowerCase();
   var filtered = allDevices.filter(function(d) {
-    return (d.deviceId || '').toLowerCase().includes(q) || (d.tier || '').toLowerCase().includes(q);
+    return (d.deviceId || '').toLowerCase().includes(q) || (d.tier || '').toLowerCase().includes(q) || detectPlatform(d.deviceId || '').toLowerCase().includes(q);
   });
   renderDevices(filtered);
 });
