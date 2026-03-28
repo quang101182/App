@@ -1070,6 +1070,7 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
       var eps = Object.keys(summary);
       var container = document.getElementById('latGauges');
 
+      var epLabels = { transcribe: 'Dict\u00e9e', rewrite: 'R\u00e9\u00e9criture', correct: 'Correction', translate: 'Traduction' };
       if (eps.length === 0) {
         container.innerHTML = '<div class="kpi-card" style="grid-column:1/-1"><div class="no-data">Pas encore de donn\u00e9es latence</div></div>';
       } else {
@@ -1079,7 +1080,8 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
           var p95 = d.p95 || 0;
           var cls = p50 < 1000 ? 'gauge-green' : p50 < 3000 ? 'gauge-orange' : 'gauge-red';
           var pct = Math.min((p50 / 5000) * 100, 100);
-          return '<div class="gauge-card ' + cls + '"><div class="gauge-label">' + ep + '</div><div class="gauge-value">' + (p50/1000).toFixed(2) + 's</div><div class="gauge-bar"><div class="gauge-fill" style="width:' + pct + '%"></div></div><div class="gauge-sub">P95: ' + (p95/1000).toFixed(2) + 's \u00B7 avg: ' + ((d.avg||0)/1000).toFixed(2) + 's \u00B7 max: ' + ((d.max||0)/1000).toFixed(2) + 's</div></div>';
+          var label = epLabels[ep] || ep;
+          return '<div class="gauge-card ' + cls + '"><div class="gauge-label">' + label + '</div><div class="gauge-value">' + (p50/1000).toFixed(2) + 's</div><div class="gauge-bar"><div class="gauge-fill" style="width:' + pct + '%"></div></div><div class="gauge-sub">P95: ' + (p95/1000).toFixed(2) + 's \u00B7 avg: ' + ((d.avg||0)/1000).toFixed(2) + 's \u00B7 max: ' + ((d.max||0)/1000).toFixed(2) + 's</div></div>';
         }).join('');
       }
 
@@ -1089,11 +1091,12 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
         if (window._cLatency) window._cLatency.destroy();
         var labels = daily.map(function(d) { return d.date ? d.date.slice(5) : ''; });
         var colors = { transcribe: '#6D28D9', rewrite: '#3b82f6', correct: '#10b981', translate: '#f59e0b' };
+        var epLabelsChart = { transcribe: 'Dict\u00e9e', rewrite: 'R\u00e9\u00e9criture', correct: 'Correction', translate: 'Traduction' };
         var datasets = ['transcribe', 'rewrite', 'correct', 'translate'].filter(function(ep) {
           return daily.some(function(d) { return d[ep]; });
         }).map(function(ep) {
           return {
-            label: ep, borderColor: colors[ep], backgroundColor: 'transparent', tension: .3, pointRadius: 3,
+            label: epLabelsChart[ep] || ep, borderColor: colors[ep], backgroundColor: 'transparent', tension: .3, pointRadius: 3,
             data: daily.map(function(d) { return d[ep] ? (d[ep].p50 || 0) / 1000 : null; }), spanGaps: true
           };
         });
@@ -1117,7 +1120,8 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
       var alerts = [];
       if (mon.errors && mon.errors.total > 10) alerts.push('\u26A0 ' + mon.errors.total + ' erreurs sur la p\u00e9riode');
       var lat = (mon.latency || {}).summary || {};
-      Object.keys(lat).forEach(function(ep) { if (lat[ep].p95 > 5000) alerts.push('\uD83D\uDC0C ' + ep + ' P95: ' + (lat[ep].p95/1000).toFixed(1) + 's'); });
+      var alertLabels = { transcribe: 'Dict\u00e9e', rewrite: 'R\u00e9\u00e9criture', correct: 'Correction', translate: 'Traduction' };
+      Object.keys(lat).forEach(function(ep) { if (lat[ep].p95 > 5000) alerts.push('\uD83D\uDC0C ' + (alertLabels[ep]||ep) + ' P95: ' + (lat[ep].p95/1000).toFixed(1) + 's'); });
       var cost = mon.cost_estimate || {};
       if (cost.total > 5) alerts.push('\uD83D\uDCB0 Co\u00FBt: $' + cost.total.toFixed(2));
       if (mon.trend && mon.trend.dau && mon.trend.dau.today === 0) alerts.push('\uD83D\uDC7B 0 actif aujourd\'hui');
