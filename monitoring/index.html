@@ -228,6 +228,13 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     .badge-renewal{background:rgba(109,40,217,.2);color:var(--accent2)}
     /* ── No data (extended) ── */
     .no-data{text-align:center;color:var(--text2);padding:40px 0;font-size:.9rem}
+    /* ── Info tooltips ── */
+    .info-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;border:1px solid var(--text2);color:var(--text2);font-size:.65rem;font-weight:700;font-style:italic;cursor:pointer;margin-left:6px;vertical-align:middle;opacity:.5;transition:opacity .2s;position:relative;font-family:serif;line-height:1;flex-shrink:0}
+    .info-btn:hover{opacity:1;border-color:var(--accent2);color:var(--accent2)}
+    .info-popup{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--bg-card);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;font-size:.8rem;font-weight:400;font-style:normal;color:var(--text);width:240px;line-height:1.4;z-index:200;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:auto;text-align:left}
+    .info-popup::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--accent)}
+    .info-btn.active .info-popup{display:block}
+    @media(max-width:480px){.info-popup{width:200px;font-size:.75rem;padding:8px 10px}}
 </style>
 </head>
 <body>
@@ -701,6 +708,7 @@ function render(mon, stats, dev) {
   renderRevenue(mon);
   renderLatency(mon);
   checkAlerts(mon);
+  initInfoButtons();
 
   // Devices table
   allDevices = devicesList.sort(function(a, b) { return new Date(b.lastSeen) - new Date(a.lastSeen); });
@@ -1143,6 +1151,67 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
         entries.forEach(function(en) { if (en.isIntersecting) { links.forEach(function(l) { l.classList.toggle('active', l.getAttribute('href') === '#' + en.target.id); }); } });
       }, { rootMargin: '-80px 0px -60% 0px' });
       sections.forEach(function(s) { obs.observe(s); });
+    }
+
+    // ── Info tooltips injection ──
+    function initInfoButtons() {
+      var tips = {
+        // Trend bar
+        'Requ\u00eates': 'Nombre total d\u2019appels API (dict\u00e9es + r\u00e9\u00e9critures + corrections + traductions) sur la p\u00e9riode s\u00e9lectionn\u00e9e.',
+        'Utilisateurs actifs': 'Nombre d\u2019appareils uniques ayant fait au moins 1 requ\u00eate aujourd\u2019hui.',
+        'Churn': 'Mouvements de tier : \u2191 upgrades (free\u2192payant) et \u2193 downgrades (payant\u2192free) sur la p\u00e9riode.',
+        // KPIs
+        'Appareils total': 'Nombre total d\u2019appareils enregistr\u00e9s (mobiles + PC), tous tiers confondus.',
+        'Actifs aujourd\u2019hui': 'Appareils ayant utilis\u00e9 DictoKey aujourd\u2019hui. Moy = moyenne quotidienne, pic = maximum sur la p\u00e9riode.',
+        'Dict\u00e9es aujourd\u2019hui': 'Nombre de transcriptions vocales (Whisper) aujourd\u2019hui. Les r\u00e9\u00e9critures, corrections et traductions sont affich\u00e9es en dessous.',
+        'Co\u00fbt du mois': 'Co\u00fbt estim\u00e9 des APIs ce mois. W = Groq Whisper, L = Groq LLM, A = Azure Translate.',
+        // Revenue
+        'MRR estim\u00e9': 'Monthly Recurring Revenue \u2014 revenu mensuel r\u00e9current. Calcul : nombre d\u2019abonn\u00e9s premium \u00d7 prix mensuel.',
+        'Abonn\u00e9s actifs': 'Nombre d\u2019utilisateurs avec un abonnement actif. Premium = achat Play Store, Pro = offert par l\u2019admin.',
+        'Trials actifs': 'Utilisateurs en p\u00e9riode d\u2019essai gratuit (7 jours). Ils ne g\u00e9n\u00e8rent pas encore de revenu.',
+        'Conv. trial\u2192paid': 'Taux de conversion des essais gratuits en abonnements payants.',
+        // Performance
+        'Performance API': 'Temps de r\u00e9ponse mesur\u00e9 c\u00f4t\u00e9 gateway (Worker \u2192 API provider). Ne mesure PAS la latence r\u00e9seau mobile de l\u2019utilisateur.',
+        'Latence P50 quotidienne': 'P50 = temps m\u00e9dian (50% des requ\u00eates sont plus rapides). Vert < 1s, orange 1-3s, rouge > 3s.',
+        // Activité
+        'Utilisateurs actifs quotidiens': 'Nombre d\u2019appareils uniques par jour, s\u00e9par\u00e9s mobile et PC.',
+        'Activit\u00e9 quotidienne': 'R\u00e9partition des requ\u00eates par type : dict\u00e9es (Whisper), r\u00e9\u00e9critures (LLM), corrections et traductions (Azure).',
+        'Langues dict\u00e9es': 'Langues d\u00e9tect\u00e9es par Whisper lors des dict\u00e9es vocales.',
+        'Modes r\u00e9\u00e9criture': 'R\u00e9partition des modes de r\u00e9\u00e9criture : Propre, Formel, Concis, D\u00e9velopp\u00e9.',
+        'Paires traduction': 'Combinaisons source\u2192cible les plus utilis\u00e9es (ex: fr>en = fran\u00e7ais vers anglais).',
+        // Rétention
+        'R\u00e9tention': 'Pourcentage d\u2019utilisateurs encore actifs X jours apr\u00e8s leur inscription. D1 = le lendemain, D7 = apr\u00e8s 1 semaine.',
+        'Nouveaux utilisateurs': 'Nombre d\u2019appareils enregistr\u00e9s pour la premi\u00e8re fois, par jour.',
+        'Usage par utilisateur': 'Min/max/moyenne/m\u00e9diane de dict\u00e9es par utilisateur actif par jour. Power > 20, R\u00e9gulier 5-20, Occasionnel < 5.',
+        'Adoption des features': 'Pourcentage d\u2019utilisateurs actifs qui ont utilis\u00e9 chaque fonctionnalit\u00e9 au moins une fois sur la p\u00e9riode.',
+        // Devices
+        'Appareils enregistr\u00e9s': 'Liste compl\u00e8te des appareils avec leur tier, derni\u00e8re activit\u00e9 et version de l\u2019app.',
+        // Erreurs
+        'Erreurs r\u00e9centes': 'Derni\u00e8res erreurs API (HTTP 4xx/5xx). R\u00e9initialis\u00e9es chaque jour.',
+        'Co\u00fbts estim\u00e9s ce mois': 'Estimation bas\u00e9e sur le nombre de requ\u00eates \u00d7 co\u00fbt unitaire moyen par API provider.'
+      };
+      document.querySelectorAll('.label, .kpi-label, h3, .gauge-label').forEach(function(el) {
+        var text = el.textContent.trim();
+        var tip = tips[text];
+        if (!tip) return;
+        if (el.querySelector('.info-btn')) return;
+        var btn = document.createElement('span');
+        btn.className = 'info-btn';
+        btn.setAttribute('role', 'button');
+        btn.setAttribute('tabindex', '0');
+        btn.innerHTML = 'i<span class="info-popup">' + tip + '</span>';
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var wasActive = this.classList.contains('active');
+          document.querySelectorAll('.info-btn.active').forEach(function(b) { b.classList.remove('active'); });
+          if (!wasActive) this.classList.add('active');
+        });
+        el.appendChild(btn);
+      });
+      // Close on outside click
+      document.addEventListener('click', function() {
+        document.querySelectorAll('.info-btn.active').forEach(function(b) { b.classList.remove('active'); });
+      });
     }
 
 // Init
