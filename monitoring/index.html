@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.2 -->
+<!-- Monitoring Dashboard v1.3.0 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.2.1</title>
+<title>Monitoring v1.3.0</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -140,6 +140,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   .kpi-card .kpi-value { font-size: 1.5rem; }
   .chart-wrap { height: 220px; }
   .main { padding: 10px; gap: 14px; }
+  .gauge-card .gauge-value{font-size:1.5rem}
 }
 
 /* === Advanced metrics === */
@@ -191,7 +192,42 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 @media (max-width: 768px) {
   .retention-grid { grid-template-columns: 1fr; }
   .usage-grid { grid-template-columns: 1fr; }
+  .section-nav{padding:0 12px}
+  .nav-link{padding:8px 14px;font-size:.8rem}
+  .alert-banner{padding:8px 12px}
+  .alert-msgs{font-size:.8rem}
 }
+
+    /* ── Section nav ── */
+    .section-nav{position:sticky;top:49px;z-index:90;background:var(--bg-page);border-bottom:1px solid var(--border);display:flex;gap:0;padding:0 24px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+    .section-nav::-webkit-scrollbar{display:none}
+    .nav-link{padding:10px 18px;color:var(--text2);text-decoration:none;font-size:.85rem;white-space:nowrap;border-bottom:2px solid transparent;transition:all .2s}
+    .nav-link:hover{color:var(--text)}
+    .nav-link.active{color:var(--accent2);border-bottom-color:var(--accent)}
+    /* ── Alert banner ── */
+    .alert-banner{position:sticky;top:89px;z-index:85;background:rgba(239,68,68,.12);border-bottom:1px solid var(--error);padding:8px 24px;display:none}
+    .alert-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;gap:12px}
+    .alert-badge{background:var(--error);color:#fff;font-size:.75rem;font-weight:700;min-width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .alert-msgs{flex:1;display:flex;gap:16px;flex-wrap:wrap;font-size:.85rem;color:var(--error)}
+    .alert-item{display:flex;align-items:center;gap:6px}
+    .alert-dismiss{background:none;border:none;color:var(--error);font-size:1.2rem;cursor:pointer;padding:4px}
+    /* ── Gauge cards ── */
+    .gauge-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;text-align:center}
+    .gauge-label{font-size:.85rem;color:var(--text2);margin-bottom:8px}
+    .gauge-value{font-size:2rem;font-weight:800}
+    .gauge-bar{height:6px;border-radius:3px;background:var(--bg-secondary);margin-top:10px;overflow:hidden}
+    .gauge-fill{height:100%;border-radius:3px;transition:width .5s}
+    .gauge-green .gauge-value{color:var(--success)}.gauge-green .gauge-fill{background:var(--success)}
+    .gauge-orange .gauge-value{color:var(--warning)}.gauge-orange .gauge-fill{background:var(--warning)}
+    .gauge-red .gauge-value{color:var(--error)}.gauge-red .gauge-fill{background:var(--error)}
+    .gauge-sub{font-size:.75rem;color:var(--text2);margin-top:4px}
+    /* ── Billing badges ── */
+    .badge-purchase{background:rgba(16,185,129,.2);color:var(--success)}
+    .badge-cancel{background:rgba(239,68,68,.2);color:var(--error)}
+    .badge-trial{background:rgba(59,130,246,.2);color:var(--blue)}
+    .badge-renewal{background:rgba(109,40,217,.2);color:var(--accent2)}
+    /* ── No data (extended) ── */
+    .no-data{text-align:center;color:var(--text2);padding:40px 0;font-size:.9rem}
 </style>
 </head>
 <body>
@@ -212,7 +248,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <!-- Header -->
 <header class="header">
-  <h1>Monitoring v1.2.1</h1>
+  <h1>Monitoring v1.3.0</h1>
   <div class="header-controls">
     <div class="pill-group">
       <button class="pill active" data-period="7d">7j</button>
@@ -227,7 +263,27 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <!-- App tabs -->
 <div class="app-tabs" id="appTabs"></div>
 
+    <!-- Section nav -->
+    <nav class="section-nav" id="sectionNav">
+      <a href="#sO" class="nav-link active">Overview</a>
+      <a href="#sR" class="nav-link">Revenue</a>
+      <a href="#sP" class="nav-link">Perf</a>
+      <a href="#sA" class="nav-link">Activit&#233;</a>
+      <a href="#sRet" class="nav-link">R&#233;tention</a>
+      <a href="#sD" class="nav-link">Devices</a>
+      <a href="#sE" class="nav-link">Erreurs</a>
+    </nav>
+    <!-- Alert banner -->
+    <div class="alert-banner" id="alertBanner">
+      <div class="alert-inner">
+        <span class="alert-badge" id="alertCount">0</span>
+        <div class="alert-msgs" id="alertMsgs"></div>
+        <button class="alert-dismiss" onclick="document.getElementById('alertBanner').style.display='none'">&times;</button>
+      </div>
+    </div>
+
 <div class="main">
+  <div id="sO">
   <!-- Trend bar -->
   <div class="trend-bar">
     <div class="trend-item"><div><div class="label">Requêtes</div><div><span class="value" id="trendReqVal">—</span> <span class="change neutral" id="trendReqChange">—</span></div></div></div>
@@ -243,6 +299,31 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <div class="kpi-card"><div class="kpi-label">Coût du mois</div><div class="kpi-value" id="kpiCost">—</div><div class="kpi-sub" id="kpiCostSub"></div></div>
   </div>
 
+  </div><!-- /sO -->
+
+    <!-- ── Revenue ── -->
+    <div id="sR">
+      <h3 style="font-size:1rem;color:var(--accent2);margin:20px 0 12px">Revenue</h3>
+      <div class="kpi-grid" id="revKpis">
+        <div class="kpi-card"><div class="kpi-label">MRR estim&#233;</div><div class="kpi-value" id="kMrr">&mdash;</div><div class="kpi-sub" id="kMrrS"></div></div>
+        <div class="kpi-card"><div class="kpi-label">Abonn&#233;s actifs</div><div class="kpi-value" id="kSubs">&mdash;</div><div class="kpi-sub" id="kSubsS"></div></div>
+        <div class="kpi-card"><div class="kpi-label">Trials actifs</div><div class="kpi-value" id="kTrials">&mdash;</div><div class="kpi-sub" id="kTrialsS"></div></div>
+        <div class="kpi-card"><div class="kpi-label">Conv. trial&rarr;paid</div><div class="kpi-value" id="kConv">&mdash;</div><div class="kpi-sub" id="kConvS"></div></div>
+      </div>
+      <div class="charts-grid" style="margin-top:16px">
+        <div class="chart-card"><h3>&#201;v&#233;nements billing / jour</h3><div class="chart-wrap"><canvas id="billingChart"></canvas></div></div>
+        <div class="chart-card" style="overflow-x:auto"><h3>10 derniers &#233;v&#233;nements</h3><table style="width:100%;margin-top:8px"><thead><tr><th style="text-align:left">Date</th><th>Type</th><th>Tier</th><th>Device</th></tr></thead><tbody id="billTbody"><tr><td colspan="4" class="no-data">Pas de donn&#233;es billing</td></tr></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- ── Performance ── -->
+    <div id="sP">
+      <h3 style="font-size:1rem;color:var(--accent2);margin:20px 0 12px">Performance API</h3>
+      <div class="kpi-grid" id="latGauges"><div class="kpi-card" style="grid-column:1/-1"><div class="no-data">Pas encore de donn&#233;es latence</div></div></div>
+      <div class="chart-card" style="margin-top:16px"><h3>Latence P50 quotidienne</h3><div class="chart-wrap"><canvas id="latChart"></canvas></div></div>
+    </div>
+
+    <div id="sA">
   <!-- Charts -->
   <div class="charts-grid">
     <div class="chart-card"><h3>Utilisateurs actifs quotidiens</h3><div class="chart-wrap"><canvas id="dauChart"></canvas></div></div>
@@ -255,7 +336,9 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <div class="donut-card"><h3>Modes réécriture</h3><div class="donut-wrap" id="modeWrap"><canvas id="modeChart"></canvas></div></div>
     <div class="donut-card"><h3>Paires traduction</h3><div class="donut-wrap" id="pairWrap"><canvas id="pairChart"></canvas></div></div>
   </div>
+    </div><!-- /sA -->
 
+    <div id="sRet">
   <!-- Advanced: Rétention -->
   <div class="adv-section" id="advRetention" style="display:none">
     <h3>Rétention</h3>
@@ -282,8 +365,10 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <div id="adoptionBars"></div>
   </div>
 
+    </div><!-- /sRet -->
+
   <!-- Devices table (collapsible + paginated) -->
-  <div class="table-section">
+  <div id="sD" class="table-section">
     <h3 class="collapsible-header" onclick="toggleDevices()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
       <span>Appareils enregistrés</span>
       <span id="devicesToggle" style="font-size:1.2rem;transition:transform .2s">&#9660;</span>
@@ -313,6 +398,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     </div>
   </div>
 
+  <div id="sE">
   <!-- Errors -->
   <div class="errors-section" id="errorsSection" style="display:none">
     <h3>Erreurs récentes</h3>
@@ -325,9 +411,10 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <div id="costBars"></div>
     <div class="cost-total" id="costTotal"></div>
   </div>
+  </div><!-- /sE -->
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.2.1</div>
+  <div class="footer" id="footer">Monitoring v1.3.0</div>
 </div>
 
 <script>
@@ -607,6 +694,14 @@ function render(mon, stats, dev) {
   // === Advanced metrics ===
   renderAdvanced(mon.advanced);
 
+  // Store devices for revenue calc
+  window._lastDevices = devicesList;
+
+  // New sections
+  renderRevenue(mon);
+  renderLatency(mon);
+  checkAlerts(mon);
+
   // Devices table
   allDevices = devicesList.sort(function(a, b) { return new Date(b.lastSeen) - new Date(a.lastSeen); });
   // Summary
@@ -643,11 +738,18 @@ function render(mon, stats, dev) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.2.1 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.3.0 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
   var entries = Object.entries(dataObj || {});
+  // Mobile: top 5 + Autres
+  if (window.innerWidth < 768 && entries.length > 5) {
+    entries.sort(function(a, b) { return b[1] - a[1]; });
+    var rest = entries.slice(5).reduce(function(s, e) { return s + e[1]; }, 0);
+    entries = entries.slice(0, 5);
+    if (rest > 0) entries.push(['Autres', rest]);
+  }
   var wrap = document.getElementById(wrapId);
   if (entries.length === 0) {
     var canvas = document.getElementById(canvasId);
@@ -897,8 +999,151 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') doLogin();
 });
 
+    // ── Revenue rendering ──
+    function renderRevenue(mon) {
+      var b = mon.billing || {};
+      // Compute MRR from devices
+      var devs = window._lastDevices || [];
+      var premCount = 0, proCount = 0;
+      devs.forEach(function(d) { if (d.tier === 'premium') premCount++; if (d.tier === 'pro') proCount++; });
+      var mrr = premCount * 4.99;
+      document.getElementById('kMrr').textContent = mrr > 0 ? '\u20AC' + mrr.toFixed(2) : '\u2014';
+      document.getElementById('kMrrS').textContent = premCount + ' premium, ' + proCount + ' pro (offert)';
+      document.getElementById('kSubs').textContent = (premCount + proCount) || '\u2014';
+      document.getElementById('kSubsS').textContent = premCount + ' payant, ' + proCount + ' admin';
+
+      // Trials & conversion from billing events
+      var events = b.events || [];
+      var trials = 0, converted = 0;
+      events.forEach(function(e) {
+        if (e.eventType === 'trial_start') trials++;
+        if (e.eventType === 'initial_purchase' && e.previousTier === 'free') converted++;
+      });
+      document.getElementById('kTrials').textContent = trials || '\u2014';
+      document.getElementById('kConv').textContent = trials > 0 ? Math.round(converted / trials * 100) + '%' : '\u2014';
+      document.getElementById('kConvS').textContent = converted + '/' + trials + ' convertis';
+
+      // Billing chart
+      var daily = (b.daily || []).slice().reverse();
+      if (daily.length > 0 && daily.some(function(d) { return d.purchases || d.cancellations || d.trials; })) {
+        if (window._cBilling) window._cBilling.destroy();
+        window._cBilling = new Chart(document.getElementById('billingChart'), {
+          type: 'bar',
+          data: {
+            labels: daily.map(function(d) { return d.date ? d.date.slice(5) : ''; }),
+            datasets: [
+              { label: 'Achats', data: daily.map(function(d) { return d.purchases || 0; }), backgroundColor: '#10b981', borderRadius: 3 },
+              { label: 'Annulations', data: daily.map(function(d) { return d.cancellations || 0; }), backgroundColor: '#ef4444', borderRadius: 3 },
+              { label: 'Trials', data: daily.map(function(d) { return d.trials || 0; }), backgroundColor: '#3b82f6', borderRadius: 3 }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#9ca3af' } } },
+            scales: {
+              x: { stacked: true, ticks: { color: '#9ca3af' }, grid: { color: 'rgba(30,58,95,.4)' } },
+              y: { stacked: true, beginAtZero: true, ticks: { color: '#9ca3af', stepSize: 1 }, grid: { color: 'rgba(30,58,95,.4)' } }
+            }
+          }
+        });
+      }
+
+      // Billing events table
+      var evts = (b.events || []).slice(-10).reverse();
+      var tbody = document.getElementById('billTbody');
+      if (evts.length > 0) {
+        tbody.innerHTML = evts.map(function(e) {
+          var cls = e.eventType === 'cancel' ? 'badge-cancel' : e.eventType === 'trial_start' ? 'badge-trial' : 'badge-purchase';
+          var did = (e.deviceId || '\u2014').slice(0, 8);
+          var dt = e.ts ? new Date(e.ts).toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '\u2014';
+          return '<tr><td>' + dt + '</td><td><span class="badge ' + cls + '">' + (e.eventType || 'purchase') + '</span></td><td>' + (e.tier || '\u2014') + '</td><td title="' + (e.deviceId||'') + '">' + did + '</td></tr>';
+        }).join('');
+      } else {
+        tbody.innerHTML = '<tr><td colspan="4" class="no-data">Pas de donn\u00e9es billing</td></tr>';
+      }
+    }
+
+    // ── Latency rendering ──
+    function renderLatency(mon) {
+      var lat = mon.latency || {};
+      var summary = lat.summary || {};
+      var eps = Object.keys(summary);
+      var container = document.getElementById('latGauges');
+
+      if (eps.length === 0) {
+        container.innerHTML = '<div class="kpi-card" style="grid-column:1/-1"><div class="no-data">Pas encore de donn\u00e9es latence</div></div>';
+      } else {
+        container.innerHTML = eps.map(function(ep) {
+          var d = summary[ep];
+          var p50 = d.p50 || 0;
+          var p95 = d.p95 || 0;
+          var cls = p50 < 1000 ? 'gauge-green' : p50 < 3000 ? 'gauge-orange' : 'gauge-red';
+          var pct = Math.min((p50 / 5000) * 100, 100);
+          return '<div class="gauge-card ' + cls + '"><div class="gauge-label">' + ep + '</div><div class="gauge-value">' + (p50/1000).toFixed(2) + 's</div><div class="gauge-bar"><div class="gauge-fill" style="width:' + pct + '%"></div></div><div class="gauge-sub">P95: ' + (p95/1000).toFixed(2) + 's \u00B7 avg: ' + ((d.avg||0)/1000).toFixed(2) + 's \u00B7 max: ' + ((d.max||0)/1000).toFixed(2) + 's</div></div>';
+        }).join('');
+      }
+
+      // P50 daily chart
+      var daily = (lat.daily || []).slice().reverse();
+      if (daily.length > 0 && daily.some(function(d) { return d.transcribe || d.rewrite || d.correct || d.translate; })) {
+        if (window._cLatency) window._cLatency.destroy();
+        var labels = daily.map(function(d) { return d.date ? d.date.slice(5) : ''; });
+        var colors = { transcribe: '#6D28D9', rewrite: '#3b82f6', correct: '#10b981', translate: '#f59e0b' };
+        var datasets = ['transcribe', 'rewrite', 'correct', 'translate'].filter(function(ep) {
+          return daily.some(function(d) { return d[ep]; });
+        }).map(function(ep) {
+          return {
+            label: ep, borderColor: colors[ep], backgroundColor: 'transparent', tension: .3, pointRadius: 3,
+            data: daily.map(function(d) { return d[ep] ? (d[ep].p50 || 0) / 1000 : null; }), spanGaps: true
+          };
+        });
+        window._cLatency = new Chart(document.getElementById('latChart'), {
+          type: 'line',
+          data: { labels: labels, datasets: datasets },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#9ca3af' } }, tooltip: { mode: 'index', intersect: false, callbacks: { label: function(c) { return ' ' + c.dataset.label + ': ' + (c.parsed.y != null ? c.parsed.y.toFixed(2) + 's' : '\u2014'); } } } },
+            scales: {
+              x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(30,58,95,.4)' } },
+              y: { beginAtZero: true, ticks: { color: '#9ca3af', callback: function(v) { return v + 's'; } }, grid: { color: 'rgba(30,58,95,.4)' } }
+            }
+          }
+        });
+      }
+    }
+
+    // ── Alerts ──
+    function checkAlerts(mon) {
+      var alerts = [];
+      if (mon.errors && mon.errors.total > 10) alerts.push('\u26A0 ' + mon.errors.total + ' erreurs sur la p\u00e9riode');
+      var lat = (mon.latency || {}).summary || {};
+      Object.keys(lat).forEach(function(ep) { if (lat[ep].p95 > 5000) alerts.push('\uD83D\uDC0C ' + ep + ' P95: ' + (lat[ep].p95/1000).toFixed(1) + 's'); });
+      var cost = mon.cost_estimate || {};
+      if (cost.total > 5) alerts.push('\uD83D\uDCB0 Co\u00FBt: $' + cost.total.toFixed(2));
+      if (mon.trend && mon.trend.dau && mon.trend.dau.today === 0) alerts.push('\uD83D\uDC7B 0 actif aujourd\'hui');
+      var banner = document.getElementById('alertBanner');
+      if (alerts.length === 0) { banner.style.display = 'none'; return; }
+      banner.style.display = 'block';
+      document.getElementById('alertCount').textContent = alerts.length;
+      document.getElementById('alertMsgs').innerHTML = alerts.map(function(a) { return '<span class="alert-item">' + a + '</span>'; }).join('');
+    }
+
+    // ── Nav highlight ──
+    function initNav() {
+      document.querySelectorAll('.nav-link').forEach(function(l) {
+        l.addEventListener('click', function(e) { e.preventDefault(); var t = document.querySelector(this.getAttribute('href')); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      });
+      var sections = ['sO','sR','sP','sA','sRet','sD','sE'].map(function(id) { return document.getElementById(id); }).filter(Boolean);
+      var links = document.querySelectorAll('.nav-link');
+      var obs = new IntersectionObserver(function(entries) {
+        entries.forEach(function(en) { if (en.isIntersecting) { links.forEach(function(l) { l.classList.toggle('active', l.getAttribute('href') === '#' + en.target.id); }); } });
+      }, { rootMargin: '-80px 0px -60% 0px' });
+      sections.forEach(function(s) { obs.observe(s); });
+    }
+
 // Init
 renderAppTabs();
+initNav();
 (function init() {
   if (!getToken()) { showLogin(); return; }
   fetchAll().then(function() { if (document.getElementById('autoRefresh').checked) startAutoRefresh(); })
