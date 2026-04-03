@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.3.0 -->
+<!-- Monitoring Dashboard v1.4.0 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.3.0</title>
+<title>Monitoring v1.4.0</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -255,7 +255,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <!-- Header -->
 <header class="header">
-  <h1>Monitoring v1.3.0</h1>
+  <h1>Monitoring v1.4.0</h1>
   <div class="header-controls">
     <div class="pill-group">
       <button class="pill active" data-period="7d">7j</button>
@@ -310,16 +310,22 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
     <!-- ── Revenue ── -->
     <div id="sR">
-      <h3 style="font-size:1rem;color:var(--accent2);margin:20px 0 12px">Revenue</h3>
+      <h3 style="font-size:1rem;color:var(--accent2);margin:20px 0 12px">Revenue &amp; Abonnements</h3>
       <div class="kpi-grid" id="revKpis">
-        <div class="kpi-card"><div class="kpi-label">MRR estim&#233;</div><div class="kpi-value" id="kMrr">&mdash;</div><div class="kpi-sub" id="kMrrS"></div></div>
-        <div class="kpi-card"><div class="kpi-label">Abonn&#233;s actifs</div><div class="kpi-value" id="kSubs">&mdash;</div><div class="kpi-sub" id="kSubsS"></div></div>
-        <div class="kpi-card"><div class="kpi-label">Trials actifs</div><div class="kpi-value" id="kTrials">&mdash;</div><div class="kpi-sub" id="kTrialsS"></div></div>
-        <div class="kpi-card"><div class="kpi-label">Conv. trial&rarr;paid</div><div class="kpi-value" id="kConv">&mdash;</div><div class="kpi-sub" id="kConvS"></div></div>
-      </div>
-      <div class="charts-grid" style="margin-top:16px">
-        <div class="chart-card"><h3>&#201;v&#233;nements billing / jour</h3><div class="chart-wrap"><canvas id="billingChart"></canvas></div></div>
-        <div class="chart-card" style="overflow-x:auto"><h3>10 derniers &#233;v&#233;nements</h3><table style="width:100%;margin-top:8px"><thead><tr><th style="text-align:left">Date</th><th>Type</th><th>Tier</th><th>Device</th></tr></thead><tbody id="billTbody"><tr><td colspan="4" class="no-data">Pas de donn&#233;es billing</td></tr></tbody></table></div>
+        <div class="kpi-card"><div class="kpi-label">Pro (admin offert)</div><div class="kpi-value" id="kSubs">&mdash;</div><div class="kpi-sub" id="kSubsS">set-tier via gateway</div></div>
+        <div class="kpi-card"><div class="kpi-label">Co&#251;t API / mois</div><div class="kpi-value" id="kApiCost">&mdash;</div><div class="kpi-sub" id="kApiCostS">Groq + Azure + LLM</div></div>
+        <div class="kpi-card" style="grid-column: span 2; text-align:left; padding: 24px;">
+          <div class="kpi-label" style="margin-bottom:12px">Billing Premium (Google Play)</div>
+          <div style="font-size:.9rem;color:var(--text2);line-height:1.8">
+            Les abonnements Premium sont g&#233;r&#233;s par Google Play (compte Google, pas device ID).<br>
+            MRR, abonn&#233;s, trials, conversions, annulations &#8594; Play Console.
+          </div>
+          <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+            <a href="https://play.google.com/console/u/0/developers/6851125870426096202/app/4975529498823498622/subscriptions" target="_blank" rel="noopener" style="display:inline-block;padding:8px 18px;background:var(--accent);color:#fff;border-radius:8px;text-decoration:none;font-size:.85rem;font-weight:600">Abonnements Play Console</a>
+            <a href="https://play.google.com/console/u/0/developers/6851125870426096202/app/4975529498823498622/financial-overview" target="_blank" rel="noopener" style="display:inline-block;padding:8px 18px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:8px;text-decoration:none;font-size:.85rem;font-weight:600">Revenus Play Console</a>
+            <a href="https://play.google.com/console/u/0/developers/6851125870426096202/app/4975529498823498622/statistics" target="_blank" rel="noopener" style="display:inline-block;padding:8px 18px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:8px;text-decoration:none;font-size:.85rem;font-weight:600">Statistiques Play Console</a>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -421,7 +427,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div><!-- /sE -->
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.3.0</div>
+  <div class="footer" id="footer">Monitoring v1.4.0</div>
 </div>
 
 <script>
@@ -714,7 +720,9 @@ function render(mon, stats, dev) {
   allDevices = devicesList.sort(function(a, b) { return new Date(b.lastSeen) - new Date(a.lastSeen); });
   // Summary
   var total = dev.count || allDevices.length;
-  document.getElementById('devicesSummary').textContent = total + ' appareils — ' + mobileCount + ' mobile, ' + pcCount + ' PC — ' + tierCounts.pro + ' pro, ' + tierCounts.premium + ' premium, ' + tierCounts.free + ' free';
+  var tierText = tierCounts.pro + ' pro';
+  if (tierCounts.free > 0) tierText += ', ' + tierCounts.free + ' free';
+  document.getElementById('devicesSummary').textContent = total + ' appareils — ' + mobileCount + ' mobile, ' + pcCount + ' PC — ' + tierText + ' — Premium : voir Play Console';
   renderDevices(allDevices);
 
   // Errors
@@ -746,7 +754,7 @@ function render(mon, stats, dev) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.3.0 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.4.0 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
@@ -913,7 +921,7 @@ function renderAdvanced(adv) {
   if (adv.conversion) {
     var cv = adv.conversion;
     var existingConv = document.getElementById('conversionInfo');
-    var txt = 'Répartition : ' + cv.pro + ' pro, ' + cv.premium + ' premium, ' + cv.free + ' free — Taux payant : ' + Math.round(cv.paid_rate * 100) + '%';
+    var txt = 'R\u00e9partition gateway : ' + cv.pro + ' pro (admin), ' + cv.free + ' free \u2014 Premium : voir Play Console';
     if (existingConv) {
       existingConv.textContent = txt;
     } else {
@@ -1009,65 +1017,17 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
 
     // ── Revenue rendering ──
     function renderRevenue(mon) {
-      var b = mon.billing || {};
-      // Compute MRR from devices
       var devs = window._lastDevices || [];
-      var premCount = 0, proCount = 0;
-      devs.forEach(function(d) { if (d.tier === 'premium') premCount++; if (d.tier === 'pro') proCount++; });
-      var mrr = premCount * 4.99;
-      document.getElementById('kMrr').textContent = mrr > 0 ? '\u20AC' + mrr.toFixed(2) : '\u2014';
-      document.getElementById('kMrrS').textContent = premCount + ' premium, ' + proCount + ' pro (offert)';
-      document.getElementById('kSubs').textContent = (premCount + proCount) || '\u2014';
-      document.getElementById('kSubsS').textContent = premCount + ' payant, ' + proCount + ' admin';
+      var proCount = 0;
+      devs.forEach(function(d) { if (d.tier === 'pro') proCount++; });
+      document.getElementById('kSubs').textContent = proCount || '\u2014';
+      document.getElementById('kSubsS').textContent = 'set-tier via gateway';
 
-      // Trials & conversion from billing events
-      var events = b.events || [];
-      var trials = 0, converted = 0;
-      events.forEach(function(e) {
-        if (e.eventType === 'trial_start') trials++;
-        if (e.eventType === 'initial_purchase' && e.previousTier === 'free') converted++;
-      });
-      document.getElementById('kTrials').textContent = trials || '\u2014';
-      document.getElementById('kConv').textContent = trials > 0 ? Math.round(converted / trials * 100) + '%' : '\u2014';
-      document.getElementById('kConvS').textContent = converted + '/' + trials + ' convertis';
-
-      // Billing chart
-      var daily = (b.daily || []).slice().reverse();
-      if (daily.length > 0 && daily.some(function(d) { return d.purchases || d.cancellations || d.trials; })) {
-        if (window._cBilling) window._cBilling.destroy();
-        window._cBilling = new Chart(document.getElementById('billingChart'), {
-          type: 'bar',
-          data: {
-            labels: daily.map(function(d) { return d.date ? d.date.slice(5) : ''; }),
-            datasets: [
-              { label: 'Achats', data: daily.map(function(d) { return d.purchases || 0; }), backgroundColor: '#10b981', borderRadius: 3 },
-              { label: 'Annulations', data: daily.map(function(d) { return d.cancellations || 0; }), backgroundColor: '#ef4444', borderRadius: 3 },
-              { label: 'Trials', data: daily.map(function(d) { return d.trials || 0; }), backgroundColor: '#3b82f6', borderRadius: 3 }
-            ]
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { labels: { color: '#9ca3af' } } },
-            scales: {
-              x: { stacked: true, ticks: { color: '#9ca3af' }, grid: { color: 'rgba(30,58,95,.4)' } },
-              y: { stacked: true, beginAtZero: true, ticks: { color: '#9ca3af', stepSize: 1 }, grid: { color: 'rgba(30,58,95,.4)' } }
-            }
-          }
-        });
-      }
-
-      // Billing events table
-      var evts = (b.events || []).slice(-10).reverse();
-      var tbody = document.getElementById('billTbody');
-      if (evts.length > 0) {
-        tbody.innerHTML = evts.map(function(e) {
-          var cls = e.eventType === 'cancel' ? 'badge-cancel' : e.eventType === 'trial_start' ? 'badge-trial' : 'badge-purchase';
-          var did = (e.deviceId || '\u2014').slice(0, 8);
-          var dt = e.ts ? new Date(e.ts).toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '\u2014';
-          return '<tr><td>' + dt + '</td><td><span class="badge ' + cls + '">' + (e.eventType || 'purchase') + '</span></td><td>' + (e.tier || '\u2014') + '</td><td title="' + (e.deviceId||'') + '">' + did + '</td></tr>';
-        }).join('');
-      } else {
-        tbody.innerHTML = '<tr><td colspan="4" class="no-data">Pas de donn\u00e9es billing</td></tr>';
+      // API cost from monitoring data
+      var cost = mon.cost || {};
+      var monthlyCost = cost.month || null;
+      if (monthlyCost !== null) {
+        document.getElementById('kApiCost').textContent = '$' + monthlyCost.toFixed(2);
       }
     }
 
@@ -1166,7 +1126,7 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
         'Dict\u00e9es aujourd\u2019hui': 'Nombre de transcriptions vocales (Whisper) aujourd\u2019hui. Les r\u00e9\u00e9critures, corrections et traductions sont affich\u00e9es en dessous.',
         'Co\u00fbt du mois': 'Co\u00fbt estim\u00e9 des APIs ce mois. W = Groq Whisper, L = Groq LLM, A = Azure Translate.',
         // Revenue
-        'MRR estim\u00e9': 'Monthly Recurring Revenue \u2014 revenu mensuel r\u00e9current. Calcul : nombre d\u2019abonn\u00e9s premium \u00d7 prix mensuel.',
+        'MRR estim\u00e9': 'Les revenus Premium sont g\u00e9r\u00e9s par Google Play Console (abonnements li\u00e9s au compte Google, pas au device).',
         'Abonn\u00e9s actifs': 'Nombre d\u2019utilisateurs avec un abonnement actif. Premium = achat Play Store, Pro = offert par l\u2019admin.',
         'Trials actifs': 'Utilisateurs en p\u00e9riode d\u2019essai gratuit (7 jours). Ils ne g\u00e9n\u00e8rent pas encore de revenu.',
         'Conv. trial\u2192paid': 'Taux de conversion des essais gratuits en abonnements payants.',
