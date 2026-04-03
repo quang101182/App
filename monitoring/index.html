@@ -600,17 +600,24 @@ function render(mon, stats, dev) {
   var mobileCount = 0;
   var pcCount = 0;
   var tierCounts = { pro: 0, premium: 0, free: 0 };
+  var phantomCount = 0;
   devicesList.forEach(function(d) {
     var plat = d.platform || detectPlatform(d.deviceId);
     if (plat === 'PC') pcCount++; else mobileCount++;
     var tier = (d.tier || 'free').toLowerCase();
     if (tierCounts[tier] !== undefined) tierCounts[tier]++;
     else tierCounts.free++;
+    // Phantom = free tier + zero requests
+    var reqs = d.totalRequests || d.requests || 0;
+    if (tier === 'free' && reqs === 0) phantomCount++;
   });
 
-  // KPI: Appareils total
-  document.getElementById('kpiDevices').textContent = dev.count || devicesList.length;
-  document.getElementById('kpiDevicesSub').textContent = mobileCount + ' mobile, ' + pcCount + ' PC';
+  // KPI: Appareils total (exclude phantoms)
+  var realCount = (dev.count || devicesList.length) - phantomCount;
+  document.getElementById('kpiDevices').textContent = realCount;
+  var subText = mobileCount + ' mobile, ' + pcCount + ' PC';
+  if (phantomCount > 0) subText += ' (' + phantomCount + ' fant\u00f4me' + (phantomCount > 1 ? 's' : '') + ' exclu' + (phantomCount > 1 ? 's' : '') + ')';
+  document.getElementById('kpiDevicesSub').textContent = subText;
 
   // KPI: Actifs aujourd'hui
   var dauDaily = (mon.dau && mon.dau.daily) || [];
@@ -719,10 +726,12 @@ function render(mon, stats, dev) {
   // Devices table
   allDevices = devicesList.sort(function(a, b) { return new Date(b.lastSeen) - new Date(a.lastSeen); });
   // Summary
-  var total = dev.count || allDevices.length;
   var tierText = tierCounts.pro + ' pro';
   if (tierCounts.free > 0) tierText += ', ' + tierCounts.free + ' free';
-  document.getElementById('devicesSummary').textContent = total + ' appareils — ' + mobileCount + ' mobile, ' + pcCount + ' PC — ' + tierText + ' — Premium : voir Play Console';
+  var summaryText = realCount + ' appareils — ' + mobileCount + ' mobile, ' + pcCount + ' PC — ' + tierText;
+  if (phantomCount > 0) summaryText += ' — ' + phantomCount + ' fant\u00f4me' + (phantomCount > 1 ? 's' : '') + ' (free, 0 req)';
+  summaryText += ' — Premium : voir Play Console';
+  document.getElementById('devicesSummary').textContent = summaryText;
   renderDevices(allDevices);
 
   // Errors
@@ -957,7 +966,11 @@ function renderDevicesPage() {
     var id = did.length > 12 ? did.slice(0, 12) + '...' : did;
     var tierCls = d.tier === 'pro' ? 'badge-pro' : d.tier === 'premium' ? 'badge-premium' : 'badge-free';
     var platform = d.platform || detectPlatform(did);
-    return '<tr><td title="' + did + '">' + id + '</td><td>' + platform + '</td><td><span class="badge ' + tierCls + '">' + (d.tier || 'free') + '</span></td><td>' + fmtDate(d.createdAt) + '</td><td>' + relativeTime(d.lastSeen) + '</td></tr>';
+    var reqs = d.totalRequests || d.requests || 0;
+    var isPhantom = (d.tier || 'free') === 'free' && reqs === 0;
+    var rowStyle = isPhantom ? ' style="opacity:0.35"' : '';
+    var phantomTag = isPhantom ? ' <span style="color:var(--error);font-size:.7rem">FANTOME</span>' : '';
+    return '<tr' + rowStyle + '><td title="' + did + '">' + id + phantomTag + '</td><td>' + platform + '</td><td><span class="badge ' + tierCls + '">' + (d.tier || 'free') + '</span></td><td>' + fmtDate(d.createdAt) + '</td><td>' + relativeTime(d.lastSeen) + '</td></tr>';
   }).join('');
 
   var totalPages = Math.ceil(filteredDevices.length / devicesPerPage);
@@ -1103,7 +1116,7 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
     // ── Nav highlight ──
     function initNav() {
       document.querySelectorAll('.nav-link').forEach(function(l) {
-        l.addEventListener('click', function(e) { e.preventDefault(); var t = document.querySelector(this.getAttribute('href')); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+        l.addEventListener('click', function(e) { e.preventDefault(); var t = document.querySelector(this.getAttribute('href')); if (t) { var y = t.getBoundingClientRect().top + window.pageYOffset - 110; window.scrollTo({ top: y, behavior: 'smooth' }); } });
       });
       var sections = ['sO','sR','sP','sA','sRet','sD','sE'].map(function(id) { return document.getElementById(id); }).filter(Boolean);
       var links = document.querySelectorAll('.nav-link');
