@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>music·ai v3.17.3 — Discovery Engine</title>
+<title>music·ai v3.17.4 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -522,7 +522,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.17.3</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.17.4</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -949,6 +949,7 @@ const YT_QUOTA_PER_KEY=100;
 const LS_VID_CACHE='music_ai_vid_cache';
 const VID_CACHE_VER='v3';
 let _ytVidCache={};
+let _ytTitleCache={};// v3.17.4 — videoId → titre YouTube (session only, pour vérification mismatch)
 function loadVidCache(){try{const r=localStorage.getItem(LS_VID_CACHE);if(r){const p=JSON.parse(r);if(p&&typeof p==='object'){if(p._ver!==VID_CACHE_VER){_ytVidCache={_ver:VID_CACHE_VER};saveVidCache();return;}_ytVidCache=p;}}}catch(_){}_ytVidCache._ver=VID_CACHE_VER;}
 function saveVidCache(){try{_ytVidCache._ver=VID_CACHE_VER;const keys=Object.keys(_ytVidCache).filter(k=>k!=='_ver');if(keys.length>500){const trim=keys.slice(-300);const o={_ver:VID_CACHE_VER};trim.forEach(k=>o[k]=_ytVidCache[k]);_ytVidCache=o;}localStorage.setItem(LS_VID_CACHE,JSON.stringify(_ytVidCache));}catch(_){}}
 loadVidCache();
@@ -988,7 +989,7 @@ function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
 // ── SERVER PROFILE (music-ai v3.17.0) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,artistEquity:{influence:{},spotlightIndex:0},version:'3.17.0'};
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,artistEquity:{influence:{},spotlightIndex:0},version:'3.17.4'};
 let _serverProfileReady=null; // v3.14.3 — Promise pour attendre le chargement serveur
 let _syncTimer=null;
 // ── ARTIST EQUITY CACHE (mémoire session uniquement) ──
@@ -1221,7 +1222,7 @@ async function ytSearchLocal(query){
           if(dur>=150&&dur<=270)s+=2;
           return{item,s,dur};
         }).sort((a,b)=>b.s-a.s);
-        if(scored.length){const best=scored[0].item;_ytVidCache[query]=best.id;saveVidCache();return best.id;}
+        if(scored.length){const best=scored[0].item;_ytVidCache[query]=best.id;if(best.snippet?.title)_ytTitleCache[best.id]=best.snippet.title;saveVidCache();return best.id;}
       }
     }catch(_){}
     const finalVid=ids[0]||null;
@@ -1549,6 +1550,16 @@ async function ytPlay(track){
   if(ST._playToken!==playToken){return}
   if(!vid){ytShowFallbackToast(track);return}
   ST.currentTrack.videoId=vid;
+  // v3.17.4 — Vérification croisée titre IA vs titre YouTube
+  const _ytFoundTitle=_ytTitleCache[vid];
+  if(_ytFoundTitle&&track.title){
+    const _norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+    const _aiN=_norm(track.title);const _ytN=_norm(_ytFoundTitle);
+    if(_aiN.length>3&&_ytN.length>3&&!_ytN.includes(_aiN)&&!_aiN.includes(_ytN)){
+      console.warn(`[YT] Mismatch: IA="${track.title}" vs YT="${_ytFoundTitle}"`);
+      toast(`⚠️ Vidéo: ${_ytFoundTitle.substring(0,60)}`,4000);
+    }
+  }
   const _thumb=`https://img.youtube.com/vi/${vid}/mqdefault.jpg`;
   ST.currentTrack.thumb=_thumb;
   updateMiniPlayerArtwork(_thumb);
@@ -2280,6 +2291,23 @@ function deriveSessionVibe(){
   return [topMood,topGenre,`tendance ${discLabel}`].filter(Boolean).join(', ');
 }
 function buildSystemPrompt(mode,retryN){
+  // v3.17.4 — Mode recherche: prompt allégé sans contraintes profil
+  if(mode==='search'){
+    const chatCtx=ST.chatHistory.length>0?'\nCONVERSATION RÉCENTE:\n'+ST.chatHistory.slice(-6).map(m=>(m.role==='user'?'User':'IA')+': '+m.content).join('\n'):'';
+    return `Tu es un expert musical avec une connaissance encyclopédique de TOUS les genres, époques et cultures.
+
+MODE RECHERCHE PRÉCISE: l'utilisateur cherche un titre ou artiste PRÉCIS.
+- Retourne EXACTEMENT le titre/artiste demandé s'il existe.
+- AUCUNE contrainte anti-mainstream, d'année, de diversité ou de profil ne s'applique.
+- Ne substitue JAMAIS un titre par un autre "similaire" ou "dans le même style".
+- Si plusieurs titres correspondent (homonymes, versions), propose le plus connu sauf indication contraire.
+- Si tu ne connais pas le titre exact, retourne le candidat le plus probable avec confidence < 0.5.
+${chatCtx}
+RÈGLE ABSOLUE: JSON UNIQUEMENT. Zéro texte avant/après. Zéro backtick. Zéro markdown.
+RÈGLE youtube_query: DOIT être exactement "NomArtiste NomTitre official audio".
+Si confiance haute: {"title":"...","artist":"...","genre":"...","year":NNNN,"mood":"...","why":"...","youtube_query":"NomArtiste NomTitre official audio","discovery_score":0.0,"search_mode":"found","confidence":0.95}
+Si besoin de précision: {"search_mode":"need_more","question":"[1 question courte]","candidates":[{"title":"...","artist":"...","confidence":0.XX}]}`;
+  }
   const p=getProfile()||{};
   const allContexts=(p.contexts&&p.contexts.length>0?p.contexts:[]).join(', ')||'général';
   const mood=ST.selMood||'neutre';
@@ -2638,14 +2666,26 @@ function _syncPairedBtn(btnId,action,active){
 
 // ── SEARCH MEMORY ──
 const SEARCH_TRIGGERS=['chanson qui','musique qui','quel est','c\'est quoi','souviens','j\'ai entendu','entendu une','passage','paroles','lyric','refrain','ça fait','ça dit','ça sonne','sounds like'];
-const SEARCH_EXCLUDES=['similaire','comme','style','genre','ambiance','mood','dans le','envie de','quelque chose'];
+const SEARCH_EXCLUDES=['similaire','comme','style','genre','ambiance','mood','dans le','envie de','quelque chose','un truc','recommande','propose','suggère','suggere','trouve-moi','donne-moi','mets','passe','joue un','joue du','joue de','fais tourner','balance'];
+const RECO_VERBS=['recommande','propose','suggère','suggere','trouve','donne','mets','passe','joue','fais','balance','envie','veux écouter','play','listen','put on'];
 let _searchContext={active:false,clues:[],attempts:0};
 function isSearchMode(msg){
   const low=msg.toLowerCase();
   if(_searchContext.active)return true;
   // Exclure les demandes de reco (similaire, comme, style...)
   if(SEARCH_EXCLUDES.some(t=>low.includes(t)))return false;
-  return SEARCH_TRIGGERS.some(t=>low.includes(t));
+  // Triggers classiques
+  if(SEARCH_TRIGGERS.some(t=>low.includes(t)))return true;
+  // v3.17.4 — Détection recherche directe (nom d'artiste/titre)
+  // Guillemets explicites = recherche
+  if(/["«»]/.test(msg))return true;
+  // Message court (≤6 mots) sans verbe de reco = probablement un titre/artiste
+  const words=msg.trim().split(/\s+/);
+  if(words.length<=6&&words.length>=1){
+    const hasRecoVerb=RECO_VERBS.some(v=>low.includes(v));
+    if(!hasRecoVerb)return true;
+  }
+  return false;
 }
 function extractClues(msg){
   if(msg.length>3)return[msg.trim()];
@@ -2692,9 +2732,9 @@ async function sendChat(){
   // Après 2 questions sans résultat → forcer une reco directe
   const _forceReco=_isSearch&&_searchContext.attempts>2;
   try{
-    let raw;const _prompt=_isSearch?buildSearchPrompt(_forceReco):`L'utilisateur veut: ${JSON.stringify(msg)}. Recommande une chanson.`;
-    try{raw=await callAI(buildSystemPrompt('chat'),_prompt);}
-    catch(retryErr){if(retryErr.message&&retryErr.message.includes('Timeout')){toast('⏳ Retry IA…');raw=await callAI(buildSystemPrompt('chat'),_prompt);}else throw retryErr;}
+    let raw;const _sysMode=_isSearch?'search':'chat';const _prompt=_isSearch?buildSearchPrompt(_forceReco):`L'utilisateur veut: ${JSON.stringify(msg)}. Recommande une chanson.`;
+    try{raw=await callAI(buildSystemPrompt(_sysMode),_prompt);}
+    catch(retryErr){if(retryErr.message&&retryErr.message.includes('Timeout')){toast('⏳ Retry IA…');raw=await callAI(buildSystemPrompt(_sysMode),_prompt);}else throw retryErr;}
     const parsed=parseJSON(raw);
     // Search mode: need more clues (max 2 fois)
     if(parsed.search_mode==='need_more'&&!_forceReco){
@@ -3355,7 +3395,7 @@ function clearSunoHistory(){
   toast('🗑 Historique Suno effacé');
 }
 
-// ── TEXTAREA AUTO-RESIZE (v3.17.3) ──
+// ── TEXTAREA AUTO-RESIZE (v3.17.4) ──
 (function(){
   var ta=document.getElementById('chat-input');
   if(!ta)return;
