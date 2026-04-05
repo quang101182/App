@@ -1861,11 +1861,187 @@ app.post('/resize', requireAnySecret, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /slideshow-pip — Slideshow with avatar video in PiP overlay
+// Input: { images: base64[], avatarUrl: string, durations: number[], texts?: string[], width?, height?, pipSize?, pipPosition? }
+// Output: MP4 with slides fullscreen + avatar PiP circle overlay, audio from avatar
+// ---------------------------------------------------------------------------
+app.post('/slideshow-pip', requireAnySecret, async (req, res) => {
+  const { images, avatarUrl, avatarVideo, durations, texts, width = 720, height = 1280, pipSize = 30, pipPosition = 'bottom-right' } = req.body;
+
+  if (!images || !Array.isArray(images) || images.length === 0) {
+    return res.status(400).json({ error: 'images[] required (base64 PNG/JPG)' });
+  }
+  if (!avatarUrl && !avatarVideo) {
+    return res.status(400).json({ error: 'avatarUrl or avatarVideo required' });
+  }
+  if (!durations || !Array.isArray(durations) || durations.length !== images.length) {
+    return res.status(400).json({ error: 'durations[] required, same length as images[]' });
+  }
+
+  const jobId = `pip-${Date.now().toString(36)}`;
+  const tmpDir = path.join(os.tmpdir(), jobId);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  console.log(`[${jobId}] Slideshow-PiP: ${images.length} slides, ${width}x${height}, pip=${pipSize}%`);
+
+  try {
+    // Write slide images to disk
+    const imgPaths = [];
+    for (let i = 0; i < images.length; i++) {
+      const imgBuf = Buffer.from(images[i], 'base64');
+      const imgPath = path.join(tmpDir, `img_${i}.png`);
+      fs.writeFileSync(imgPath, imgBuf);
+      imgPaths.push(imgPath);
+    }
+
+    // Download or write avatar video
+    const avatarPath = path.join(tmpDir, 'avatar.mp4');
+    if (avatarVideo) {
+      fs.writeFileSync(avatarPath, Buffer.from(avatarVideo, 'base64'));
+    } else {
+      // Download from URL with redirect support
+      const downloadVideo = (url, dest, redirects = 5) => new Promise((resolve, reject) => {
+        if (redirects <= 0) return reject(new Error('Too many redirects'));
+        const mod = url.startsWith('https') ? require('https') : require('http');
+        mod.get(url, { timeout: 60000 }, (response) => {
+          if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
+            return downloadVideo(response.headers.location, dest, redirects - 1).then(resolve).catch(reject);
+          }
+          if (response.statusCode !== 200) return reject(new Error(`Download failed: HTTP ${response.statusCode}`));
+          const ws = fs.createWriteStream(dest);
+          response.pipe(ws);
+          ws.on('finish', () => ws.close(resolve));
+          ws.on('error', reject);
+        }).on('error', reject);
+      });
+      await downloadVideo(avatarUrl, avatarPath);
+    }
+
+    const avatarStat = fs.statSync(avatarPath);
+    console.log(`[${jobId}] Avatar video: ${(avatarStat.size / 1048576).toFixed(1)} MB`);
+
+    const outPath = path.join(tmpDir, 'output.mp4');
+
+    // Calculate PiP dimensions
+    const pipPx = Math.round(height * pipSize / 100); // pip diameter in pixels
+    const margin = Math.round(height * 0.03); // 3% margin
+
+    // PiP position
+    let pipX, pipY;
+    switch (pipPosition) {
+      case 'bottom-left':  pipX = margin; pipY = `H-${pipPx}-${margin}`; break;
+      case 'top-right':    pipX = `W-${pipPx}-${margin}`; pipY = margin; break;
+      case 'top-left':     pipX = margin; pipY = margin; break;
+      default:             pipX = `W-${pipPx}-${margin}`; pipY = `H-${pipPx}-${margin}`; break; // bottom-right
+    }
+
+    // Build FFmpeg command
+    const ffArgs = [];
+    const FADE_DUR = 0.5;
+
+    // Input: slide images
+    for (let i = 0; i < imgPaths.length; i++) {
+      ffArgs.push('-loop', '1', '-t', String(durations[i]), '-i', imgPaths[i]);
+    }
+    // Input: avatar video
+    ffArgs.push('-i', avatarPath);
+
+    const avatarIdx = imgPaths.length; // avatar input index
+
+    // Build filter_complex
+    const filters = [];
+    const concatInputs = [];
+
+    // 1. Process each slide (scale + text overlay + fade)
+    for (let i = 0; i < imgPaths.length; i++) {
+      const dur = durations[i];
+      const fadeOutStart = Math.max(0, dur - FADE_DUR);
+      let filter = `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`;
+      // Optional text overlay
+      if (texts && texts[i]) {
+        const safeText = texts[i].replace(/\\/g, '\\\\\\\\').replace(/'/g, '\u2019').replace(/:/g, '\\\\:').replace(/\[/g, '\\\\[').replace(/]/g, '\\\\]').replace(/%/g, '%%');
+        filter += `,drawtext=fontfile=/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf:text='${safeText}':fontsize=${Math.round(height * 0.042)}:fontcolor=white:x=(w-text_w)/2:y=h*0.18:box=1:boxcolor=black@0.55:boxborderw=14:shadowx=2:shadowy=2:shadowcolor=black@0.8`;
+      }
+      if (i > 0) filter += `,fade=in:st=0:d=${FADE_DUR}`;
+      filter += `,fade=out:st=${fadeOutStart}:d=${FADE_DUR}[v${i}]`;
+      filters.push(filter);
+      concatInputs.push(`[v${i}]`);
+    }
+
+    // 2. Concat all slides into background
+    filters.push(`${concatInputs.join('')}concat=n=${imgPaths.length}:v=1:a=0[bg]`);
+
+    // 3. Scale avatar to PiP size and crop to circle
+    // Crop to square first, then scale, then create circular mask
+    filters.push(`[${avatarIdx}:v]scale=${pipPx}:${pipPx}:force_original_aspect_ratio=decrease,pad=${pipPx}:${pipPx}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipPx}/2,2)+pow(Y-${pipPx}/2,2),pow(${pipPx}/2-4,2)),0,255)'[pip]`);
+
+    // 4. Overlay PiP on background
+    filters.push(`[bg][pip]overlay=${pipX}:${pipY}:shortest=1[outv]`);
+
+    ffArgs.push(
+      '-filter_complex', filters.join(';'),
+      '-map', '[outv]',
+      '-map', `${avatarIdx}:a`,
+      '-c:v', 'libx264',
+      '-preset', 'fast',
+      '-crf', '23',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-shortest',
+      '-movflags', '+faststart',
+      '-y', outPath
+    );
+
+    console.log(`[${jobId}] FFmpeg slideshow-pip start...`);
+
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+      ff.stderr.on('data', d => { stderr += d.toString(); });
+      ff.on('close', code => {
+        if (code === 0) resolve();
+        else reject(new Error(`FFmpeg exit ${code}: ${stderr.slice(-500)}`));
+      });
+      ff.on('error', reject);
+      setTimeout(() => {
+        try { ff.kill('SIGKILL'); } catch (_) {}
+        reject(new Error('FFmpeg timeout 180s'));
+      }, 180000);
+    });
+
+    const mp4Stat = fs.statSync(outPath);
+    console.log(`[${jobId}] Slideshow-PiP OK: ${(mp4Stat.size / 1048576).toFixed(1)} MB`);
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Length', mp4Stat.size);
+    res.setHeader('Content-Disposition', `attachment; filename="pip-${jobId}.mp4"`);
+
+    const stream = fs.createReadStream(outPath);
+    stream.pipe(res);
+    stream.on('end', () => {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+    stream.on('error', err => {
+      console.error(`[${jobId}] Stream error:`, err.message);
+      try { res.end(); } catch (_) {}
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+
+  } catch (err) {
+    console.error(`[${jobId}] Slideshow-PiP error:`, err.message);
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Démarrage du serveur
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.23.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.25.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);
