@@ -595,9 +595,11 @@ function render(mon, stats, dev) {
     var tier = (d.tier || 'free').toLowerCase();
     if (tierCounts[tier] !== undefined) tierCounts[tier]++;
     else tierCounts.free++;
-    // Phantom = free tier + zero requests
-    var reqs = d.totalRequests || d.requests || 0;
-    if (tier === 'free' && reqs === 0) phantomCount++;
+    // Phantom = free tier + lastSeen très proche de createdAt (< 5 min = jamais vraiment utilisé)
+    var created = new Date(d.createdAt).getTime();
+    var seen = new Date(d.lastSeen).getTime();
+    var activeMinutes = (seen - created) / 60000;
+    if (tier === 'free' && activeMinutes < 2) phantomCount++;
   });
 
   // KPI: Appareils total (exclude phantoms)
@@ -954,8 +956,10 @@ function renderDevicesPage() {
     var id = did.length > 12 ? did.slice(0, 12) + '...' : did;
     var tierCls = d.tier === 'pro' ? 'badge-pro' : d.tier === 'premium' ? 'badge-premium' : 'badge-free';
     var platform = d.platform || detectPlatform(did);
-    var reqs = d.totalRequests || d.requests || 0;
-    var isPhantom = (d.tier || 'free') === 'free' && reqs === 0;
+    var created = new Date(d.createdAt).getTime();
+    var seen = new Date(d.lastSeen).getTime();
+    var activeMinutes = (seen - created) / 60000;
+    var isPhantom = (d.tier || 'free') === 'free' && activeMinutes < 2;
     var rowStyle = isPhantom ? ' style="opacity:0.35"' : '';
     var phantomTag = isPhantom ? ' <span style="color:var(--error);font-size:.7rem">FANTOME</span>' : '';
     return '<tr' + rowStyle + '><td title="' + did + '">' + id + phantomTag + '</td><td>' + platform + '</td><td><span class="badge ' + tierCls + '">' + (d.tier || 'free') + '</span></td><td>' + fmtDate(d.createdAt) + '</td><td>' + relativeTime(d.lastSeen) + '</td></tr>';
