@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PromoClip v0.3.0</title>
+<title>PromoClip v0.3.1</title>
 <style>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.3.0 — Functional App
+   PromoClip v0.3.1 — Functional App
    Dark mode, accent violet #7C3AED, mobile-first
    ═══════════════════════════════════════════════════════ */
 
@@ -982,7 +982,7 @@ body {
 
 <!-- ═══ Screen Navigator (desktop only) ═══ -->
 <div class="screen-nav" id="screenNav">
-  <h3>PromoClip v0.3.0</h3>
+  <h3>PromoClip v0.3.1</h3>
   <div class="screen-nav-item active" data-action="nav-screen" data-screen="home">1. Accueil</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="media">2. Medias</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="product">3. Produit</div>
@@ -1017,7 +1017,7 @@ body {
       <div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</span>
-          <span class="badge badge-accent">v0.3.0</span>
+          <span class="badge badge-accent">v0.3.1</span>
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
       </div>
@@ -1254,6 +1254,18 @@ body {
       <div class="toggle" id="toggleAvatar" data-action="toggle"></div>
     </div>
 
+    <!-- Avatar Options (shown when avatar ON) -->
+    <div id="avatarOptions" style="display:none; padding-left:16px; border-left:2px solid var(--accent-dim); margin:8px 0 8px 24px;">
+      <div class="input-group" style="margin-bottom:8px;">
+        <div class="input-label">Style avatar</div>
+        <div class="chip-row" style="margin:4px 0 0;" id="avatarStyleChips"></div>
+      </div>
+      <div class="input-group" style="margin-bottom:0;">
+        <div class="input-label">Mode affichage</div>
+        <div class="chip-row" style="margin:4px 0 0;" id="avatarModeChips"></div>
+      </div>
+    </div>
+
     <!-- Voiceover -->
     <div class="toggle-row">
       <div>
@@ -1313,6 +1325,7 @@ body {
     </div>
 
     <div style="width:100%; max-width:300px; margin-top:20px;" id="genSteps"></div>
+    <div id="genTimer" style="font-size:16px; font-weight:600; color:var(--accent-light); margin-top:8px; font-variant-numeric:tabular-nums;">00:00</div>
 
     <div style="margin-top:30px; text-align:center;">
       <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">La generation continue en arriere-plan</div>
@@ -1614,7 +1627,7 @@ body {
 
     <div class="divider"></div>
     <div style="text-align:center; padding:16px 0 40px;">
-      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.3.0</div>
+      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.3.1</div>
       <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Build 2026-04-06</div>
     </div>
   </div>
@@ -1729,7 +1742,7 @@ body {
 
 <script>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.3.0 — Complete JS
+   PromoClip v0.3.1 — Complete JS
    ═══════════════════════════════════════════════════════ */
 
 // ──────────────────────────────────────────────────
@@ -1790,6 +1803,8 @@ const defaultState = {
       duration: 15,
       musicStyle: 'Energique',
       avatar: false,
+      avatarStyle: 'female',
+      avatarMode: 'bubble',
       voiceover: true,
       voiceGender: 'male',
       subtitles: true,
@@ -2242,12 +2257,13 @@ async function heygenGenerate(scriptText) {
   const key = state.settings.heygenKey;
   if (!key) throw new Error('Cle HeyGen manquante');
   log('HeyGen: lancement generation avatar...');
+  const avatarId = (state.wizard.config.avatarStyle === 'male') ? 'josh_lite3_20230714' : 'Annie_expressive5_public';
   const r = await fetch('https://api.heygen.com/v2/video/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': key },
     body: JSON.stringify({
       video_inputs: [{
-        character: { type: 'avatar', avatar_id: 'Annie_expressive5_public', avatar_style: 'normal' },
+        character: { type: 'avatar', avatar_id: avatarId, avatar_style: 'normal' },
         voice: { type: 'text', input_text: scriptText, voice_id: 'ffwaswFKk4KL23PVLImO' },
         background: { type: 'color', value: '#00FF00' }
       }],
@@ -2299,7 +2315,7 @@ async function heygenDownloadAsBase64(videoUrl) {
 // Call fly-ffmpeg /promo-assembly to generate final video
 async function ffmpegAssembly(clips, audioBase64, musicBase64, subtitleASS, avatarBase64) {
   const ffmpegUrl = state.settings.ffmpegUrl || DEFAULT_FFMPEG_URL;
-  const bodyStr = JSON.stringify({
+  const bodyObj = {
     clips,
     audio: audioBase64 || undefined,
     music: musicBase64 || undefined,
@@ -2309,7 +2325,12 @@ async function ffmpegAssembly(clips, audioBase64, musicBase64, subtitleASS, avat
     width: 1080,
     height: 1920,
     musicVolume: 0.25
-  });
+  };
+  if (avatarBase64) {
+    bodyObj.avatarVideo = avatarBase64;
+    bodyObj.avatarMode = state.wizard.config.avatarMode || 'bubble';
+  }
+  const bodyStr = JSON.stringify(bodyObj);
   log('FFmpeg: envoi de ' + clips.length + ' clips (' + (bodyStr.length / 1048576).toFixed(1) + ' MB payload) a ' + ffmpegUrl + '/promo-assembly...');
   const r = await fetch(ffmpegUrl + '/promo-assembly', {
     method: 'POST',
@@ -2601,6 +2622,29 @@ function renderConfigScreen() {
   document.getElementById('toggleVoiceover').className = 'toggle' + (cfg.voiceover ? ' on' : '');
   document.getElementById('toggleSubtitles').className = 'toggle' + (cfg.subtitles ? ' on' : '');
 
+  // Avatar options visibility
+  const avatarOpts = document.getElementById('avatarOptions');
+  if (avatarOpts) avatarOpts.style.display = cfg.avatar ? 'block' : 'none';
+
+  // Avatar style chips
+  const asContainer = document.getElementById('avatarStyleChips');
+  if (asContainer) {
+    asContainer.innerHTML = [
+      { id: 'female', label: 'Femme' },
+      { id: 'male', label: 'Homme' }
+    ].map(s => `<div class="chip${cfg.avatarStyle === s.id ? ' selected' : ''}" data-action="set-avatar-style" data-style="${s.id}">${s.label}</div>`).join('');
+  }
+
+  // Avatar mode chips
+  const amContainer = document.getElementById('avatarModeChips');
+  if (amContainer) {
+    amContainer.innerHTML = [
+      { id: 'bubble', label: 'Bulle' },
+      { id: 'split-top', label: 'Split haut' },
+      { id: 'split-bottom', label: 'Split bas' }
+    ].map(m => `<div class="chip${cfg.avatarMode === m.id ? ' selected' : ''}" data-action="set-avatar-mode" data-mode="${m.id}">${m.label}</div>`).join('');
+  }
+
   // Voice gender chips
   const vgContainer = document.getElementById('voiceGenderChips');
   if (vgContainer) {
@@ -2691,19 +2735,22 @@ async function startGeneration() {
 
   _genCancelled = false;
   goScreen('generate');
-  log('Demarrage generation v0.3.0 — pipeline reel');
+  log('Demarrage generation v0.3.1 — pipeline reel');
 
   // Save config from inputs
   state.wizard.config.hookText = document.getElementById('configHook').value;
 
   renderGenSteps();
   updateProgress(0);
+  startGenTimer();
 
   const cfg = state.wizard.config;
+  const steps = getGenSteps();
+  const stepIdx = (id) => steps.findIndex(s => s.id === id);
 
   try {
     // ── STEP 1: Gemini Vision — Analyze captures for bounding boxes ──
-    updateStep(0, 'active');
+    updateStep(stepIdx('analyze'), 'active');
     log('Etape 1: Analyse de ' + selectedMedia.length + ' captures via Gemini Vision');
 
     const clipData = [];
@@ -2731,13 +2778,13 @@ async function startGeneration() {
       updateProgress(Math.round(5 + (i / selectedMedia.length) * 15));
     }
     updateProgress(20);
-    updateStep(0, 'done');
+    updateStep(stepIdx('analyze'), 'done');
     log('Etape 1 terminee: ' + clipData.length + ' captures analysees');
 
     if (_genCancelled) throw new Error('Annule');
 
     // ── STEP 2: Gemini Script — Generate voiceover script ──
-    updateStep(1, 'active');
+    updateStep(stepIdx('script'), 'active');
     let script;
     try {
       script = await geminiScript(product.desc, cfg.hookText || 'Check this out', cfg.language, cfg.duration);
@@ -2747,13 +2794,14 @@ async function startGeneration() {
       script = { voiceover: cfg.hookText || product.desc, cta: cfg.cta || 'Link in bio' };
     }
     updateProgress(30);
-    updateStep(1, 'done');
+    updateStep(stepIdx('script'), 'done');
 
     if (_genCancelled) throw new Error('Annule');
 
-    // ── STEP 2b: HeyGen Avatar (optional, runs in parallel concept) ──
+    // ── STEP 2b: HeyGen Avatar (optional) ──
     let avatarBase64 = null;
     if (cfg.avatar && state.settings.heygenKey) {
+      updateStep(stepIdx('avatar'), 'active');
       try {
         log('Avatar HeyGen active — lancement...');
         const videoId = await heygenGenerate(script.voiceover);
@@ -2761,9 +2809,11 @@ async function startGeneration() {
         const videoUrl = await heygenPoll(videoId, 600000);
         avatarBase64 = await heygenDownloadAsBase64(videoUrl);
         log('Avatar HeyGen OK: ' + (avatarBase64.length / 1024).toFixed(0) + ' KB');
+        updateStep(stepIdx('avatar'), 'done');
       } catch(e) {
         log('Avatar HeyGen echoue: ' + e.message + ' — video sans avatar', 'warn');
         showToast('Avatar indisponible — video sans avatar', true);
+        updateStep(stepIdx('avatar'), 'done');
       }
     } else if (cfg.avatar && !state.settings.heygenKey) {
       log('Avatar active mais cle HeyGen manquante — skip', 'warn');
@@ -2773,7 +2823,7 @@ async function startGeneration() {
     if (_genCancelled) throw new Error('Annule');
 
     // ── STEP 3: TTS — Voice synthesis ──
-    updateStep(2, 'active');
+    updateStep(stepIdx('tts'), 'active');
     let audioBase64 = null;
     if (cfg.voiceover !== false) {
       try {
@@ -2790,12 +2840,12 @@ async function startGeneration() {
       log('Voiceover desactive — skip TTS');
     }
     updateProgress(55);
-    updateStep(2, 'done');
+    updateStep(stepIdx('tts'), 'done');
 
     if (_genCancelled) throw new Error('Annule');
 
     // ── STEP 4: FFmpeg Assembly — Server-side video generation ──
-    updateStep(3, 'active');
+    updateStep(stepIdx('assembly'), 'active');
     log('Envoi a fly-ffmpeg pour assemblage...');
 
     // Build subtitle data if enabled
@@ -2804,12 +2854,12 @@ async function startGeneration() {
     const videoBlob = await ffmpegAssembly(clipData, audioBase64, null, subtitleData, avatarBase64);
     log('Video recue: ' + (videoBlob.size / 1048576).toFixed(1) + ' MB');
     updateProgress(92);
-    updateStep(3, 'done');
+    updateStep(stepIdx('assembly'), 'done');
 
     if (_genCancelled) throw new Error('Annule');
 
     // ── STEP 5: Download & prepare preview ──
-    updateStep(4, 'active');
+    updateStep(stepIdx('download'), 'active');
 
     // Revoke previous blob URL if any
     if (_lastVideoBlobUrl) { URL.revokeObjectURL(_lastVideoBlobUrl); _lastVideoBlobUrl = null; }
@@ -2818,12 +2868,13 @@ async function startGeneration() {
 
     log('Video prete: ' + _lastVideoBlobUrl);
     updateProgress(100);
-    updateStep(4, 'done');
+    updateStep(stepIdx('download'), 'done');
 
     // Add to history
     addToHistory();
     showToast('Video generee ! (' + (videoBlob.size / 1048576).toFixed(1) + ' MB)');
     log('Generation terminee avec succes');
+    stopGenTimer();
 
     // Navigate to preview
     await sleep(500);
@@ -2833,6 +2884,7 @@ async function startGeneration() {
     }
 
   } catch(err) {
+    stopGenTimer();
     if (err.message === 'Annule') {
       log('Generation annulee par utilisateur', 'warn');
       showToast('Generation annulee', true);
@@ -2843,9 +2895,26 @@ async function startGeneration() {
   }
 }
 
+function getGenSteps() {
+  const steps = [
+    { id: 'analyze', label: 'Analyse des captures (Gemini Vision)' },
+    { id: 'script', label: 'Generation du script (Gemini)' },
+  ];
+  if (state.wizard.config.avatar && state.settings.heygenKey) {
+    steps.push({ id: 'avatar', label: 'Generation avatar HeyGen (~3 min)' });
+  }
+  steps.push(
+    { id: 'tts', label: 'Synthese vocale (TTS)' },
+    { id: 'assembly', label: 'Montage video (fly-ffmpeg)' },
+    { id: 'download', label: 'Telechargement video' }
+  );
+  return steps;
+}
+
 function renderGenSteps() {
+  const steps = getGenSteps();
   const container = document.getElementById('genSteps');
-  container.innerHTML = GEN_STEPS.map((s, i) => `
+  container.innerHTML = steps.map((s, i) => `
     <div class="gen-step pending" id="genStep-${i}">
       <div class="gen-step-icon"></div>
       <span class="gen-step-label">${escapeHtml(s.label)}</span>
@@ -2877,8 +2946,28 @@ function updateStep(idx, stepState) {
   }
 }
 
-function cancelGeneration() { _genCancelled = true; }
+function cancelGeneration() { _genCancelled = true; stopGenTimer(); }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+let _genTimerInterval = null;
+let _genTimerStart = 0;
+
+function startGenTimer() {
+  _genTimerStart = Date.now();
+  const el = document.getElementById('genTimer');
+  if (el) el.textContent = '00:00';
+  _genTimerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - _genTimerStart) / 1000);
+    const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const s = String(elapsed % 60).padStart(2, '0');
+    const el = document.getElementById('genTimer');
+    if (el) el.textContent = m + ':' + s;
+  }, 1000);
+}
+
+function stopGenTimer() {
+  if (_genTimerInterval) { clearInterval(_genTimerInterval); _genTimerInterval = null; }
+}
 
 // ──────────────────────────────────────────────────
 // 14. HISTORY
@@ -3350,7 +3439,7 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
     case 'toggle':
       el.classList.toggle('on');
       // Update state based on which toggle
-      if (el.id === 'toggleAvatar') state.wizard.config.avatar = el.classList.contains('on');
+      if (el.id === 'toggleAvatar') { state.wizard.config.avatar = el.classList.contains('on'); renderConfigScreen(); }
       if (el.id === 'toggleVoiceover') state.wizard.config.voiceover = el.classList.contains('on');
       if (el.id === 'toggleSubtitles') state.wizard.config.subtitles = el.classList.contains('on');
       markDirty();
@@ -3407,6 +3496,18 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
 
     case 'set-voice-gender':
       state.wizard.config.voiceGender = el.dataset.gender;
+      markDirty();
+      renderConfigScreen();
+      break;
+
+    case 'set-avatar-style':
+      state.wizard.config.avatarStyle = el.dataset.style;
+      markDirty();
+      renderConfigScreen();
+      break;
+
+    case 'set-avatar-mode':
+      state.wizard.config.avatarMode = el.dataset.mode;
       markDirty();
       renderConfigScreen();
       break;
