@@ -1233,7 +1233,7 @@ body {
       <div class="input-label">Duree cible</div>
       <div class="slider-row">
         <span style="font-size:12px; color:var(--text-muted);">7s</span>
-        <input type="range" class="slider" min="7" max="60" value="15" id="configDuration">
+        <input type="range" class="slider" min="5" max="60" value="15" id="configDuration">
         <span style="font-size:12px; color:var(--text-muted);">60s</span>
       </div>
       <div style="text-align:center;">
@@ -1770,7 +1770,7 @@ const GEN_STEPS = [
 ];
 
 // Minimal silent MP3 (0.5s silence, 128kbps) — fallback when music generation fails
-const SILENT_MP3_BASE64 = '//uQxAAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ==';
+// SILENT_MP3_BASE64 removed — no longer needed (music=null skips audio)
 
 // ──────────────────────────────────────────────────
 // 2. STATE MANAGEMENT
@@ -2191,8 +2191,8 @@ function generateSubtitleASS(text, totalDuration) {
   if (words.length === 0) return null;
 
   const speechDuration = totalDuration * 0.75; // Speech occupies ~75% of video
-  const startOffset = 0.5; // Start 0.5s in
-  const wordsPerChunk = 4;
+  const startOffset = 0.3; // Start 0.3s in for immediate feel
+  const wordsPerChunk = 3; // 3 words per chunk for karaoke effect
   const chunks = [];
   for (let i = 0; i < words.length; i += wordsPerChunk) {
     chunks.push(words.slice(i, i + wordsPerChunk).join(' '));
@@ -2209,7 +2209,7 @@ function generateSubtitleASS(text, totalDuration) {
 
   let ass = '[Script Info]\nScriptType: v4.00+\nWrapStyle: 0\nPlayResX: 1080\nPlayResY: 1920\n\n';
   ass += '[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n';
-  ass += 'Style: Default,Arial,64,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,1,2,40,40,120,1\n\n';
+  ass += 'Style: Default,Arial,72,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,1,2,40,40,120,1\n\n';
   ass += '[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n';
 
   chunks.forEach((chunk, i) => {
@@ -2227,7 +2227,7 @@ async function generateMusic(style, durationSec) {
   try {
     // Gemini ne peut pas generer d'audio — on log et fallback silence
     log('Musique: Lyria/MusicGen non integre — fallback silence', 'warn');
-    return null; // Will use SILENT_MP3_BASE64 in pipeline
+    return null; // No music — pipeline skips audio track
   } catch(e) {
     log('Musique: erreur — ' + e.message + ', fallback silence', 'warn');
     return null;
@@ -2712,7 +2712,7 @@ async function startGeneration() {
         bbox = { x1: 250, y1: 250, x2: 750, y2: 750, element: 'fallback' };
       }
       // Distribute duration across clips
-      const clipDur = Math.max(2, Math.round(cfg.duration / selectedMedia.length));
+      const clipDur = Math.max(3, Math.round(cfg.duration / selectedMedia.length));
       const effects = ['zoom_in', 'pan_right', 'zoom_out', 'pan_down'];
       clipData.push({
         image: b64,
