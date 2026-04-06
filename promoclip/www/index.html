@@ -2020,18 +2020,53 @@ async function geminiGenerateHooks(productDesc, language, count = 5) {
 // 8b. PIPELINE API HELPERS
 // ──────────────────────────────────────────────────
 
-// Convert File object to base64 string (without data: prefix, always clean)
+// Convert File object to PNG base64 string (without data: prefix)
+// Uses canvas to normalize any image format (HEIC, WebP, JPEG, etc.) to PNG
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      // Robustly strip data URI prefix (handles data:image/jpeg;base64, etc.)
-      const raw = reader.result;
-      const b64 = raw.indexOf(',') >= 0 ? raw.substring(raw.indexOf(',') + 1) : raw;
-      resolve(b64);
+    if (file.type.startsWith('video/')) {
+      // For videos, read as-is (no canvas conversion)
+      const reader = new FileReader();
+      reader.onload = () => {
+        const raw = reader.result;
+        resolve(raw.indexOf(',') >= 0 ? raw.substring(raw.indexOf(',') + 1) : raw);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+      return;
+    }
+    // For images: load into canvas → export as PNG (guarantees FFmpeg compatibility)
+    const img = new Image();
+    const objUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        // Cap at 2000px to avoid memory issues while keeping quality
+        const maxDim = 2000;
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if (w > maxDim || h > maxDim) {
+          const scale = maxDim / Math.max(w, h);
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+        }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/png');
+        const b64 = dataUrl.substring(dataUrl.indexOf(',') + 1);
+        URL.revokeObjectURL(objUrl);
+        log('Image convertie en PNG: ' + w + 'x' + h + ' (' + (b64.length / 1024).toFixed(0) + ' KB)');
+        resolve(b64);
+      } catch(e) {
+        URL.revokeObjectURL(objUrl);
+        reject(new Error('Conversion image echouee: ' + e.message));
+      }
     };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(objUrl);
+      reject(new Error('Image illisible: ' + file.name));
+    };
+    img.src = objUrl;
   });
 }
 
