@@ -1972,31 +1972,35 @@ async function pingGateway() {
 // ──────────────────────────────────────────────────
 // 8. GATEWAY & API CALLS
 // ──────────────────────────────────────────────────
-async function gatewayFetch(endpoint, body, opts = {}) {
+// Gateway Gemini helper — sends native Gemini generateContent format
+async function geminiCall(prompt, opts = {}) {
+  const model = opts.model || 'gemini-2.0-flash';
+  const maxTokens = opts.maxTokens || 500;
   const headers = { 'Content-Type': 'application/json' };
   if (state.settings.gatewayKey) headers['Authorization'] = 'Bearer ' + state.settings.gatewayKey;
-  const r = await fetch(GATEWAY_URL + endpoint, {
+  const r = await fetch(GATEWAY_URL + '/api/gemini/v1beta/models/' + model + ':generateContent', {
     method: 'POST',
     headers,
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: maxTokens, temperature: opts.temperature || 0.7 }
+    }),
     signal: opts.signal || AbortSignal.timeout(30000)
   });
-  if (!r.ok) throw new Error('Gateway ' + r.status);
-  return r.json();
+  if (!r.ok) throw new Error('Gemini HTTP ' + r.status);
+  const data = await r.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 async function geminiGenerateHooks(productDesc, language, count = 5) {
   try {
     log('Gemini: generation hooks...');
-    const result = await gatewayFetch('/api/gemini', {
-      model: 'gemini-2.0-flash',
-      prompt: 'Generate ' + count + ' short viral TikTok hook texts (max 8 words each) in ' + language + ' for this product: ' + productDesc + '. Return only a JSON array of strings.',
-      maxTokens: 300
-    });
-    if (result && result.text) {
-      const match = result.text.match(/\[[\s\S]*?\]/);
-      if (match) return JSON.parse(match[0]);
-    }
+    const text = await geminiCall(
+      'Generate ' + count + ' short viral TikTok hook texts (max 8 words each) in ' + language + ' for this product: ' + productDesc + '. Return only a JSON array of strings.',
+      { maxTokens: 300 }
+    );
+    const match = text.match(/\[[\s\S]*?\]/);
+    if (match) return JSON.parse(match[0]);
     return ['Arrete de scroller !', 'Tu savais pas ca...', 'Ce truc change tout', '3 secondes = game changer', 'Regarde ca attentivement'];
   } catch(e) {
     log('Gemini erreur: ' + e.message, 'error');
@@ -2008,12 +2012,14 @@ async function geminiGenerateHooks(productDesc, language, count = 5) {
 // 8b. PIPELINE API HELPERS
 // ──────────────────────────────────────────────────
 
-// Convert File object to base64 string (without data: prefix)
+// Convert File object to base64 string (without data: prefix, always clean)
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
-      const b64 = reader.result.split(',')[1];
+      // Robustly strip data URI prefix (handles data:image/jpeg;base64, etc.)
+      const raw = reader.result;
+      const b64 = raw.indexOf(',') >= 0 ? raw.substring(raw.indexOf(',') + 1) : raw;
       resolve(b64);
     };
     reader.onerror = reject;
@@ -2054,20 +2060,17 @@ async function geminiVision(imageBase64, mimeType) {
 // Call Gemini to generate a TikTok promo script
 async function geminiScript(productDesc, hookText, language, duration) {
   log('Gemini: generation script promo...');
-  const result = await gatewayFetch('/api/gemini', {
-    model: 'gemini-2.0-flash',
-    prompt: `You are a TikTok video copywriter. Generate a voiceover script for a ${duration}-second promo video.
+  const text = await geminiCall(
+    `You are a TikTok video copywriter. Generate a voiceover script for a ${duration}-second promo video.
 Product: ${productDesc}
 Hook: ${hookText}
 Language: ${language}
 Return ONLY a JSON: {"voiceover":"the full voiceover text for TTS (${Math.max(2,Math.round(duration*0.7))} seconds of speech)", "cta":"call to action text (5 words max)"}`,
-    maxTokens: 500
-  });
-  if (result && result.text) {
-    const match = result.text.match(/\{[\s\S]*?\}/);
-    if (match) {
-      try { return JSON.parse(match[0]); } catch(e) {}
-    }
+    { maxTokens: 500 }
+  );
+  const match = text.match(/\{[\s\S]*?\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch(e) {}
   }
   return { voiceover: hookText + '. ' + productDesc, cta: 'Link in bio' };
 }
@@ -2131,20 +2134,8 @@ function generateSubtitleASS(text, totalDuration) {
 async function generateMusic(style, durationSec) {
   log('Musique: tentative generation (' + style + ', ' + durationSec + 's)...');
   try {
-    const promptMap = {
-      'Energique': 'upbeat energetic electronic pop music, perfect for TikTok promo',
-      'Chill': 'calm relaxing lo-fi beats, soft ambient background music',
-      'Epic': 'epic cinematic orchestral music, dramatic build-up',
-      'Corporate': 'professional corporate background music, clean and modern'
-    };
-    const musicPrompt = (promptMap[style] || 'background music for a short promo video') + '. Instrumental only, ' + durationSec + ' seconds.';
-    // Try MusicGen on Replicate via gateway (cheaper, more reliable)
-    const result = await gatewayFetch('/api/gemini', {
-      model: 'gemini-2.0-flash',
-      prompt: 'I need background music for a TikTok promo video. Style: ' + musicPrompt + '\n\nSince you cannot generate audio, please return a JSON with a suggested BPM and mood for the video editor: {"bpm":120,"mood":"' + style.toLowerCase() + '","suggestion":"use royalty-free track"}',
-      maxTokens: 100
-    });
-    log('Musique: pas de generation IA disponible, utilisation du fallback silence', 'warn');
+    // Gemini ne peut pas generer d'audio — on log et fallback silence
+    log('Musique: Lyria/MusicGen non integre — fallback silence', 'warn');
     return null; // Will use SILENT_MP3_BASE64 in pipeline
   } catch(e) {
     log('Musique: erreur — ' + e.message + ', fallback silence', 'warn');
@@ -2163,7 +2154,7 @@ async function heygenGenerate(scriptText) {
     body: JSON.stringify({
       video_inputs: [{
         character: { type: 'avatar', avatar_id: 'Annie_expressive5_public', avatar_style: 'normal' },
-        voice: { type: 'id', voice_id: 'ffwaswFKk4KL23PVLImO', input_text: scriptText },
+        voice: { type: 'text', input_text: scriptText, voice_id: 'ffwaswFKk4KL23PVLImO' },
         background: { type: 'color', value: '#00FF00' }
       }],
       dimension: { width: 540, height: 960 }
@@ -2214,27 +2205,25 @@ async function heygenDownloadAsBase64(videoUrl) {
 // Call fly-ffmpeg /promo-assembly to generate final video
 async function ffmpegAssembly(clips, audioBase64, musicBase64, subtitleASS, avatarBase64) {
   const ffmpegUrl = state.settings.ffmpegUrl || DEFAULT_FFMPEG_URL;
-  log('FFmpeg: envoi de ' + clips.length + ' clips a ' + ffmpegUrl + '/promo-assembly...');
-  const body = {
+  const bodyStr = JSON.stringify({
     clips,
     audio: audioBase64 || undefined,
     music: musicBase64 || undefined,
     hookText: state.wizard.config.hookText || undefined,
     ctaText: state.wizard.config.cta || undefined,
+    subtitles: subtitleASS || undefined,
     width: 1080,
     height: 1920,
-    crf: state.settings.exportCrf || 23,
     musicVolume: 0.25
-  };
-  if (subtitleASS) body.subtitles = subtitleASS;
-  if (avatarBase64) body.avatar = avatarBase64;
+  });
+  log('FFmpeg: envoi de ' + clips.length + ' clips (' + (bodyStr.length / 1048576).toFixed(1) + ' MB payload) a ' + ffmpegUrl + '/promo-assembly...');
   const r = await fetch(ffmpegUrl + '/promo-assembly', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer ' + (state.settings.gatewayKey || '')
     },
-    body: JSON.stringify(body),
+    body: bodyStr,
     signal: AbortSignal.timeout(180000) // 3 min max
   });
   if (!r.ok) {
