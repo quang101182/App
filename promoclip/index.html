@@ -2664,7 +2664,18 @@ function renderConfigScreen() {
 
   // Toggles
   document.getElementById('toggleAvatar').className = 'toggle' + (cfg.avatar ? ' on' : '');
-  document.getElementById('toggleVoiceover').className = 'toggle' + (cfg.voiceover ? ' on' : '');
+  // Voiceover: disabled when avatar is ON (HeyGen includes voice)
+  const voiceoverToggle = document.getElementById('toggleVoiceover');
+  const voiceoverRow = voiceoverToggle ? voiceoverToggle.closest('.toggle-row') : null;
+  if (cfg.avatar) {
+    voiceoverToggle.className = 'toggle';
+    if (voiceoverRow) voiceoverRow.style.opacity = '0.35';
+    voiceoverToggle.style.pointerEvents = 'none';
+  } else {
+    voiceoverToggle.className = 'toggle' + (cfg.voiceover ? ' on' : '');
+    if (voiceoverRow) voiceoverRow.style.opacity = '1';
+    voiceoverToggle.style.pointerEvents = '';
+  }
   document.getElementById('toggleSubtitles').className = 'toggle' + (cfg.subtitles ? ' on' : '');
 
   // Avatar options visibility
@@ -2690,9 +2701,16 @@ function renderConfigScreen() {
     ].map(m => `<div class="chip${cfg.avatarMode === m.id ? ' selected' : ''}" data-action="set-avatar-mode" data-mode="${m.id}">${m.label}</div>`).join('');
   }
 
-  // Voice gender chips
+  // Voice gender chips (hidden when avatar ON — avatar has its own voice)
   const vgContainer = document.getElementById('voiceGenderChips');
   if (vgContainer) {
+    if (cfg.avatar) {
+      vgContainer.parentElement.style.opacity = '0.35';
+      vgContainer.style.pointerEvents = 'none';
+    } else {
+      vgContainer.parentElement.style.opacity = '1';
+      vgContainer.style.pointerEvents = '';
+    }
     const genders = [{ id: 'male', label: 'Homme' }, { id: 'female', label: 'Femme' }];
     vgContainer.innerHTML = genders.map(g =>
       `<div class="chip${cfg.voiceGender === g.id ? ' selected' : ''}" data-action="set-voice-gender" data-gender="${g.id}">${g.label}</div>`
@@ -2870,10 +2888,12 @@ async function startGeneration() {
 
     if (_genCancelled) throw new Error('Annule');
 
-    // ── STEP 3: TTS — Voice synthesis ──
+    // ── STEP 3: TTS — Voice synthesis (skip if avatar handles voice) ──
     updateStep(stepIdx('tts'), 'active');
     let audioBase64 = null;
-    if (cfg.voiceover !== false) {
+    if (avatarBase64) {
+      log('TTS skip — avatar HeyGen inclut la voix');
+    } else if (cfg.voiceover !== false) {
       try {
         // OpenAI TTS voices: male (onyx, echo, fable) / female (nova, shimmer, alloy)
         const voiceMapMale = { 'Francais': 'onyx', 'English': 'echo', 'Espanol': 'echo', 'Deutsch': 'onyx', 'Italiano': 'fable', 'Portugues': 'echo' };
