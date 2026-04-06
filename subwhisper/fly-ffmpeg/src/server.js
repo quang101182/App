@@ -2746,7 +2746,9 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
           '-i', avatarPath,
           '-filter_complex', circleFilter,
           '-map', '[outv]',
+          '-map', '1:a?',
           '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+          '-c:a', 'aac', '-b:a', '128k',
           '-pix_fmt', 'yuv420p',
           '-y', avatarOutPath
         ];
@@ -2781,9 +2783,11 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
           '-i', avatarPath,
           '-filter_complex', filterComplex,
           '-map', '[outv]',
+          '-map', '1:a?',
           '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+          '-c:a', 'aac', '-b:a', '128k',
           '-pix_fmt', 'yuv420p',
-          '-t', String(Math.min(30, clips.length * 10)), // limit to reasonable duration
+          '-t', String(Math.min(30, clips.length * 10)),
           '-y', avatarOutPath
         ];
 
