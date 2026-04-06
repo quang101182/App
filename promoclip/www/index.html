@@ -1266,6 +1266,12 @@ body {
       <div class="toggle on" id="toggleVoiceover" data-action="toggle"></div>
     </div>
 
+    <!-- Voice Gender -->
+    <div class="input-group" style="margin-top:8px; margin-bottom:0;">
+      <div class="input-label">Voix</div>
+      <div class="chip-row" style="margin:4px 0 0;" id="voiceGenderChips"></div>
+    </div>
+
     <!-- Subtitles -->
     <div class="toggle-row">
       <div>
@@ -1789,6 +1795,7 @@ const defaultState = {
       musicStyle: 'Energique',
       avatar: false,
       voiceover: true,
+      voiceGender: 'male',
       subtitles: true,
       cta: 'Link in bio'
     }
@@ -2602,6 +2609,15 @@ function renderConfigScreen() {
   document.getElementById('toggleVoiceover').className = 'toggle' + (cfg.voiceover ? ' on' : '');
   document.getElementById('toggleSubtitles').className = 'toggle' + (cfg.subtitles ? ' on' : '');
 
+  // Voice gender chips
+  const vgContainer = document.getElementById('voiceGenderChips');
+  if (vgContainer) {
+    const genders = [{ id: 'male', label: 'Homme' }, { id: 'female', label: 'Femme' }];
+    vgContainer.innerHTML = genders.map(g =>
+      `<div class="chip${cfg.voiceGender === g.id ? ' selected' : ''}" data-action="set-voice-gender" data-gender="${g.id}">${g.label}</div>`
+    ).join('');
+  }
+
   // CTA chips
   const ctaContainer = document.getElementById('ctaChips');
   ctaContainer.innerHTML = CTA_OPTIONS.map(c =>
@@ -2768,7 +2784,10 @@ async function startGeneration() {
     let audioBase64 = null;
     if (cfg.voiceover !== false) {
       try {
-        const voiceMap = { 'Francais': 'onyx', 'English': 'nova', 'Espanol': 'echo', 'Deutsch': 'alloy', 'Italiano': 'fable', 'Portugues': 'shimmer' };
+        // OpenAI TTS voices: male (onyx, echo, fable) / female (nova, shimmer, alloy)
+        const voiceMapMale = { 'Francais': 'onyx', 'English': 'echo', 'Espanol': 'echo', 'Deutsch': 'onyx', 'Italiano': 'fable', 'Portugues': 'echo' };
+        const voiceMapFemale = { 'Francais': 'nova', 'English': 'nova', 'Espanol': 'shimmer', 'Deutsch': 'alloy', 'Italiano': 'shimmer', 'Portugues': 'nova' };
+        const voiceMap = cfg.voiceGender === 'female' ? voiceMapFemale : voiceMapMale;
         audioBase64 = await generateTTS(script.voiceover, voiceMap[cfg.language] || 'onyx');
       } catch(e) {
         log('TTS echoue: ' + e.message + ' — video sans voix', 'warn');
@@ -3407,6 +3426,12 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
 
     case 'set-cta':
       state.wizard.config.cta = el.dataset.cta;
+      markDirty();
+      renderConfigScreen();
+      break;
+
+    case 'set-voice-gender':
+      state.wizard.config.voiceGender = el.dataset.gender;
       markDirty();
       renderConfigScreen();
       break;
