@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.4.0 -->
+<!-- Monitoring Dashboard v1.4.1 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.4.0</title>
+<title>Monitoring v1.4.1</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -255,7 +255,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <!-- Header -->
 <header class="header">
-  <h1>Monitoring v1.4.0</h1>
+  <h1>Monitoring v1.4.1</h1>
   <div class="header-controls">
     <div class="pill-group">
       <button class="pill active" data-period="7d">7j</button>
@@ -284,7 +284,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
       <div class="alert-inner">
         <span class="alert-badge" id="alertCount">0</span>
         <div class="alert-msgs" id="alertMsgs"></div>
-        <button class="alert-dismiss" onclick="document.getElementById('alertBanner').style.display='none'">&times;</button>
+        <button class="alert-dismiss" onclick="dismissAlerts()">&times;</button>
       </div>
     </div>
 
@@ -415,7 +415,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div><!-- /sI -->
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.4.0</div>
+  <div class="footer" id="footer">Monitoring v1.4.1</div>
 </div>
 
 <script>
@@ -752,7 +752,7 @@ function render(mon, stats, dev) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.4.0 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.4.1 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
@@ -1077,17 +1077,25 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
     }
 
     // ── Alerts ──
+    var _currentAlertHash = '';
+    function dismissAlerts() {
+      document.getElementById('alertBanner').style.display = 'none';
+      if (_currentAlertHash) sessionStorage.setItem('dismissedAlerts', _currentAlertHash);
+    }
     function checkAlerts(mon) {
       var alerts = [];
       if (mon.errors && mon.errors.total > 10) alerts.push('\u26A0 ' + mon.errors.total + ' erreurs sur la p\u00e9riode');
       var lat = (mon.latency || {}).summary || {};
       var alertLabels = { transcribe: 'Dict\u00e9e', rewrite: 'R\u00e9\u00e9criture', correct: 'Correction', translate: 'Traduction' };
-      Object.keys(lat).forEach(function(ep) { if (lat[ep].p95 > 5000) alerts.push('\uD83D\uDC0C ' + (alertLabels[ep]||ep) + ' P95: ' + (lat[ep].p95/1000).toFixed(1) + 's'); });
+      Object.keys(lat).sort().forEach(function(ep) { if (lat[ep].p95 > 5000) alerts.push('\uD83D\uDC0C ' + (alertLabels[ep]||ep) + ' P95: ' + (lat[ep].p95/1000).toFixed(1) + 's'); });
       var cost = mon.cost_estimate || {};
       if (cost.total > 5) alerts.push('\uD83D\uDCB0 Co\u00FBt: $' + cost.total.toFixed(2));
       if (mon.trend && mon.trend.dau && mon.trend.dau.today === 0) alerts.push('\uD83D\uDC7B 0 actif aujourd\'hui');
       var banner = document.getElementById('alertBanner');
-      if (alerts.length === 0) { banner.style.display = 'none'; return; }
+      if (alerts.length === 0) { banner.style.display = 'none'; _currentAlertHash = ''; return; }
+      _currentAlertHash = alerts.join('|');
+      var dismissed = sessionStorage.getItem('dismissedAlerts');
+      if (dismissed === _currentAlertHash) { banner.style.display = 'none'; return; }
       banner.style.display = 'block';
       document.getElementById('alertCount').textContent = alerts.length;
       document.getElementById('alertMsgs').innerHTML = alerts.map(function(a) { return '<span class="alert-item">' + a + '</span>'; }).join('');
