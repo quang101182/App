@@ -1243,10 +1243,7 @@ body {
     </div>
 
     <!-- Musique -->
-    <div class="input-group">
-      <div class="input-label">Style musique</div>
-      <div class="chip-row" style="margin:6px 0 0;" id="musicChips"></div>
-    </div>
+    <!-- Musique retiree — ajoutee via TikTok directement -->
 
     <!-- Avatar -->
     <div class="toggle-row">
@@ -1770,7 +1767,6 @@ const GEN_STEPS = [
   { id: 'analyze', label: 'Analyse des captures (Gemini Vision)' },
   { id: 'script', label: 'Generation du script (Gemini)' },
   { id: 'tts', label: 'Synthese vocale (TTS)' },
-  { id: 'music', label: 'Musique de fond' },
   { id: 'assembly', label: 'Montage video (fly-ffmpeg)' },
   { id: 'download', label: 'Telechargement video' }
 ];
@@ -2598,11 +2594,7 @@ function renderConfigScreen() {
   document.getElementById('configDuration').value = cfg.duration;
   updateDurationDisplay(cfg.duration);
 
-  // Music chips
-  const musicContainer = document.getElementById('musicChips');
-  musicContainer.innerHTML = MUSIC_STYLES.map(m =>
-    `<div class="chip${cfg.musicStyle === m ? ' selected' : ''}" data-action="set-music" data-music="${m}">${m}</div>`
-  ).join('');
+  // Music removed — added via TikTok directly
 
   // Toggles
   document.getElementById('toggleAvatar').className = 'toggle' + (cfg.avatar ? ' on' : '');
@@ -2796,45 +2788,27 @@ async function startGeneration() {
     } else {
       log('Voiceover desactive — skip TTS');
     }
-    updateProgress(50);
+    updateProgress(55);
     updateStep(2, 'done');
 
     if (_genCancelled) throw new Error('Annule');
 
-    // ── STEP 4: Music generation ──
+    // ── STEP 4: FFmpeg Assembly — Server-side video generation ──
     updateStep(3, 'active');
-    let musicBase64 = null;
-    if (cfg.musicStyle && cfg.musicStyle !== 'Sans') {
-      try {
-        musicBase64 = await generateMusic(cfg.musicStyle, cfg.duration);
-      } catch(e) {
-        log('Musique: erreur — ' + e.message, 'warn');
-      }
-      if (!musicBase64) log('Musique: pas de source dispo — video sans musique de fond', 'warn');
-    } else {
-      log('Musique desactivee — skip');
-    }
-    updateProgress(60);
-    updateStep(3, 'done');
-
-    if (_genCancelled) throw new Error('Annule');
-
-    // ── STEP 5: FFmpeg Assembly — Server-side video generation ──
-    updateStep(4, 'active');
     log('Envoi a fly-ffmpeg pour assemblage...');
 
     // Build subtitle data if enabled
     const subtitleData = (cfg.subtitles && script.voiceover) ? generateSubtitleASS(script.voiceover, cfg.duration) : null;
 
-    const videoBlob = await ffmpegAssembly(clipData, audioBase64, musicBase64, subtitleData, avatarBase64);
+    const videoBlob = await ffmpegAssembly(clipData, audioBase64, null, subtitleData, avatarBase64);
     log('Video recue: ' + (videoBlob.size / 1048576).toFixed(1) + ' MB');
     updateProgress(92);
-    updateStep(4, 'done');
+    updateStep(3, 'done');
 
     if (_genCancelled) throw new Error('Annule');
 
-    // ── STEP 6: Download & prepare preview ──
-    updateStep(5, 'active');
+    // ── STEP 5: Download & prepare preview ──
+    updateStep(4, 'active');
 
     // Revoke previous blob URL if any
     if (_lastVideoBlobUrl) { URL.revokeObjectURL(_lastVideoBlobUrl); _lastVideoBlobUrl = null; }
@@ -2843,7 +2817,7 @@ async function startGeneration() {
 
     log('Video prete: ' + _lastVideoBlobUrl);
     updateProgress(100);
-    updateStep(5, 'done');
+    updateStep(4, 'done');
 
     // Add to history
     addToHistory();
