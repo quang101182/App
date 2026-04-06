@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.24.0 — /slideshow: optional texts[] overlay via drawtext + DejaVu font
+ * Version: 1.26.0 — Added /smart-zoom, /speed-ramp, /promo-assembly for PromoClip
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -2204,7 +2204,7 @@ app.post('/ken-burns', requireAnySecret, async (req, res) => {
     const ffArgs = [
       '-loop', '1',
       '-i', imgPath,
-      '-vf', `scale=8000:-1,${zoompanFilter}`,
+      '-vf', `scale=2000:-1,${zoompanFilter}`,
       '-c:v', 'libx264',
       '-preset', 'fast',
       '-crf', '23',
@@ -2259,11 +2259,577 @@ app.post('/ken-burns', requireAnySecret, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /gemini-upload — Upload a file to Gemini Files API (proxy for n8n sandbox)
+// Input: { base64, mimeType, displayName, geminiKey }
+// Output: JSON { ok, file: { name, uri, state, mimeType, sizeBytes } }
+// ---------------------------------------------------------------------------
+
+app.post('/gemini-upload', requireAnySecret, async (req, res) => {
+  const { base64, mimeType, displayName, geminiKey } = req.body || {};
+  if (!base64 || !mimeType || !geminiKey) {
+    return res.status(400).json({ ok: false, error: 'base64, mimeType, geminiKey required' });
+  }
+
+  const jobId = Math.random().toString(36).slice(2, 8);
+  console.log(`[${jobId}] Gemini upload: ${displayName || 'unnamed'} (${mimeType}, ${(base64.length * 0.75 / 1024).toFixed(0)} KB)`);
+
+  try {
+    const fileBuffer = Buffer.from(base64, 'base64');
+    const https = require('https');
+
+    // Resumable upload: Step 1 — Initiate
+    const initResp = await new Promise((resolve, reject) => {
+      const initReq = https.request({
+        hostname: 'generativelanguage.googleapis.com',
+        path: '/upload/v1beta/files?key=' + geminiKey,
+        method: 'POST',
+        headers: {
+          'X-Goog-Upload-Protocol': 'resumable',
+          'X-Goog-Upload-Command': 'start',
+          'X-Goog-Upload-Header-Content-Length': String(fileBuffer.length),
+          'X-Goog-Upload-Header-Content-Type': mimeType,
+          'Content-Type': 'application/json'
+        }
+      }, (r) => {
+        const uploadUrl = r.headers['x-goog-upload-url'];
+        let body = '';
+        r.on('data', c => body += c);
+        r.on('end', () => resolve({ uploadUrl, statusCode: r.statusCode, body }));
+      });
+      initReq.on('error', reject);
+      initReq.write(JSON.stringify({ file: { displayName: displayName || 'upload', mimeType: mimeType } }));
+      initReq.end();
+    });
+
+    if (!initResp.uploadUrl) {
+      return res.status(500).json({ ok: false, error: 'No upload URL from Gemini', status: initResp.statusCode, body: initResp.body.substring(0, 300) });
+    }
+
+    // Resumable upload: Step 2 — Upload bytes
+    const uploadResult = await new Promise((resolve, reject) => {
+      const url = new URL(initResp.uploadUrl);
+      const upReq = https.request({
+        hostname: url.hostname,
+        path: url.pathname + url.search,
+        method: 'POST',
+        headers: {
+          'Content-Length': String(fileBuffer.length),
+          'X-Goog-Upload-Offset': '0',
+          'X-Goog-Upload-Command': 'upload, finalize'
+        }
+      }, (r) => {
+        let data = '';
+        r.on('data', c => data += c);
+        r.on('end', () => {
+          try { resolve(JSON.parse(data)); }
+          catch (e) { reject(new Error('Parse failed: ' + data.substring(0, 200))); }
+        });
+      });
+      upReq.on('error', reject);
+      upReq.write(fileBuffer);
+      upReq.end();
+    });
+
+    console.log(`[${jobId}] Gemini upload OK: ${uploadResult?.file?.name} (${uploadResult?.file?.state})`);
+    res.json({ ok: true, file: uploadResult?.file || uploadResult });
+
+  } catch (err) {
+    console.error(`[${jobId}] Gemini upload error:`, err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /smart-zoom — Image + Gemini bounding box → zoompan towards target element
+// Input: { image (base64), bbox: {x1,y1,x2,y2} (0-1000 coords), duration (1-10), width, height }
+// Output: MP4 stream
+// ---------------------------------------------------------------------------
+
+app.post('/smart-zoom', requireAnySecret, async (req, res) => {
+  const { image, bbox, duration = 4, width = 1080, height = 1920 } = req.body;
+
+  if (!image) return res.status(400).json({ error: 'image required (base64)' });
+  if (!bbox || bbox.x1 == null || bbox.y1 == null || bbox.x2 == null || bbox.y2 == null) {
+    return res.status(400).json({ error: 'bbox required: {x1,y1,x2,y2} in 0-1000 coords' });
+  }
+
+  const dur = Math.min(10, Math.max(1, duration));
+  const fps = 15;
+
+  const jobId = `sz-${Date.now().toString(36)}`;
+  const tmpDir = path.join(os.tmpdir(), jobId);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  console.log(`[${jobId}] Smart-zoom: bbox=(${bbox.x1},${bbox.y1})-(${bbox.x2},${bbox.y2}), dur=${dur}s, ${width}x${height}`);
+
+  try {
+    const imgPath = path.join(tmpDir, 'input.png');
+    fs.writeFileSync(imgPath, Buffer.from(image, 'base64'));
+    const outPath = path.join(tmpDir, 'output.mp4');
+
+    // Convert 0-1000 bounding box to relative 0-1
+    const cx = ((bbox.x1 + bbox.x2) / 2) / 1000;
+    const cy = ((bbox.y1 + bbox.y2) / 2) / 1000;
+    const bboxW = Math.abs(bbox.x2 - bbox.x1) / 1000;
+    const bboxH = Math.abs(bbox.y2 - bbox.y1) / 1000;
+
+    // Zoom level: inverse of bbox size (smaller bbox = more zoom), clamped
+    const zoomTarget = Math.min(3.0, Math.max(1.3, 1 / Math.max(bboxW, bboxH)));
+    const d = Math.round(fps * dur);
+
+    // zoompan: start wide, zoom toward the center of the bounding box
+    const zoompanFilter = `zoompan=z='min(zoom+${((zoomTarget - 1) / d).toFixed(6)},${zoomTarget.toFixed(2)})':d=${d}:x='${cx}*iw-iw/zoom/2':y='${cy}*ih-ih/zoom/2':s=${width}x${height}:fps=${fps}`;
+
+    const ffArgs = [
+      '-loop', '1',
+      '-i', imgPath,
+      '-vf', `scale=2000:-1,${zoompanFilter}`,
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',
+      '-crf', '23',
+      '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart',
+      '-t', String(dur),
+      '-y', outPath
+    ];
+
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+      ff.stderr.on('data', d => { stderr += d.toString(); });
+      ff.on('close', code => {
+        if (code === 0) resolve();
+        else reject(new Error(`FFmpeg exit ${code}: ${stderr.slice(-500)}`));
+      });
+      ff.on('error', reject);
+      setTimeout(() => {
+        try { ff.kill('SIGKILL'); } catch (_) {}
+        reject(new Error('FFmpeg smart-zoom timeout 60s'));
+      }, 60000);
+    });
+
+    const mp4Stat = fs.statSync(outPath);
+    console.log(`[${jobId}] Smart-zoom OK: ${(mp4Stat.size / 1048576).toFixed(1)} MB`);
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Length', mp4Stat.size);
+    res.setHeader('Content-Disposition', `attachment; filename="smartzoom-${jobId}.mp4"`);
+
+    const stream = fs.createReadStream(outPath);
+    stream.pipe(res);
+    stream.on('end', () => {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+    stream.on('error', err => {
+      console.error(`[${jobId}] Stream error:`, err.message);
+      try { res.end(); } catch (_) {}
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+
+  } catch (err) {
+    console.error(`[${jobId}] Smart-zoom error:`, err.message);
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /speed-ramp — Apply variable speed to video segments
+// Input: { video (base64) OR videoUrl, segments: [{start,end,speed}], width, height }
+// Output: MP4 stream
+// ---------------------------------------------------------------------------
+
+app.post('/speed-ramp', requireAnySecret, async (req, res) => {
+  const { video, videoUrl, segments, width = 1080, height = 1920 } = req.body;
+
+  if (!video && !videoUrl) return res.status(400).json({ error: 'video (base64) or videoUrl required' });
+  if (!segments || !Array.isArray(segments) || segments.length === 0) {
+    return res.status(400).json({ error: 'segments required: [{start,end,speed}]' });
+  }
+
+  const jobId = `sr-${Date.now().toString(36)}`;
+  const tmpDir = path.join(os.tmpdir(), jobId);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  console.log(`[${jobId}] Speed-ramp: ${segments.length} segments, ${width}x${height}`);
+
+  try {
+    let videoPath;
+    if (video) {
+      videoPath = path.join(tmpDir, 'input.mp4');
+      fs.writeFileSync(videoPath, Buffer.from(video, 'base64'));
+    } else {
+      // Download video from URL
+      videoPath = path.join(tmpDir, 'input.mp4');
+      await new Promise((resolve, reject) => {
+        const download = (url, redirects = 0) => {
+          if (redirects > 5) return reject(new Error('Too many redirects'));
+          const proto = url.startsWith('https') ? https : require('http');
+          proto.get(url, { timeout: 60000 }, (resp) => {
+            if ([301, 302, 303, 307, 308].includes(resp.statusCode) && resp.headers.location) {
+              return download(resp.headers.location, redirects + 1);
+            }
+            if (resp.statusCode !== 200) return reject(new Error(`HTTP ${resp.statusCode}`));
+            const ws = fs.createWriteStream(videoPath);
+            resp.pipe(ws);
+            ws.on('finish', resolve);
+            ws.on('error', reject);
+          }).on('error', reject);
+        };
+        download(videoUrl);
+      });
+    }
+
+    // Build complex filtergraph for speed ramping
+    // Strategy: split into segments, apply setpts for each, concat
+    const segParts = [];
+    const filterParts = [];
+    const concatInputs = [];
+
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      const speed = Math.min(4.0, Math.max(0.25, seg.speed || 1));
+      const trimFilter = `[0:v]trim=start=${seg.start}:end=${seg.end},setpts=${(1 / speed).toFixed(4)}*(PTS-STARTPTS),scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2[v${i}]`;
+      const atrimFilter = `[0:a]atrim=start=${seg.start}:end=${seg.end},asetpts=PTS-STARTPTS,atempo=${speed}[a${i}]`;
+      filterParts.push(trimFilter);
+      filterParts.push(atrimFilter);
+      concatInputs.push(`[v${i}][a${i}]`);
+    }
+
+    const filterComplex = filterParts.join('; ') + `; ${concatInputs.join('')}concat=n=${segments.length}:v=1:a=1[outv][outa]`;
+
+    const outPath = path.join(tmpDir, 'output.mp4');
+    const ffArgs = [
+      '-i', videoPath,
+      '-filter_complex', filterComplex,
+      '-map', '[outv]', '-map', '[outa]',
+      '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+      '-c:a', 'aac', '-b:a', '128k',
+      '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart',
+      '-y', outPath
+    ];
+
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+      ff.stderr.on('data', d => { stderr += d.toString(); });
+      ff.on('close', code => {
+        if (code === 0) resolve();
+        else reject(new Error(`FFmpeg exit ${code}: ${stderr.slice(-500)}`));
+      });
+      ff.on('error', reject);
+      setTimeout(() => {
+        try { ff.kill('SIGKILL'); } catch (_) {}
+        reject(new Error('FFmpeg speed-ramp timeout 120s'));
+      }, 120000);
+    });
+
+    const mp4Stat = fs.statSync(outPath);
+    console.log(`[${jobId}] Speed-ramp OK: ${(mp4Stat.size / 1048576).toFixed(1)} MB`);
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Length', mp4Stat.size);
+    res.setHeader('Content-Disposition', `attachment; filename="speedramp-${jobId}.mp4"`);
+
+    const stream = fs.createReadStream(outPath);
+    stream.pipe(res);
+    stream.on('end', () => {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+    stream.on('error', err => {
+      console.error(`[${jobId}] Stream error:`, err.message);
+      try { res.end(); } catch (_) {}
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+
+  } catch (err) {
+    console.error(`[${jobId}] Speed-ramp error:`, err.message);
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /promo-assembly — Full promo video pipeline
+// Input: {
+//   clips: [{ image (base64), bbox (optional), effect, duration }],
+//   audio (base64, optional) — voiceover/TTS,
+//   music (base64, optional) — background music,
+//   subtitles (string, optional) — ASS subtitle content,
+//   hookText (string, optional) — text overlay on first clip,
+//   ctaText (string, optional) — text overlay on last clip,
+//   width, height, musicVolume (0-1)
+// }
+// Output: MP4 stream
+// ---------------------------------------------------------------------------
+
+app.post('/promo-assembly', requireAnySecret, async (req, res) => {
+  const {
+    clips, audio, music, subtitles,
+    hookText, ctaText,
+    width = 1080, height = 1920,
+    musicVolume = 0.3
+  } = req.body;
+
+  if (!clips || !Array.isArray(clips) || clips.length === 0) {
+    return res.status(400).json({ error: 'clips required: [{image, bbox?, effect?, duration?}]' });
+  }
+
+  const jobId = `pa-${Date.now().toString(36)}`;
+  const tmpDir = path.join(os.tmpdir(), jobId);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  console.log(`[${jobId}] Promo-assembly: ${clips.length} clips, audio=${!!audio}, music=${!!music}, subs=${!!subtitles}`);
+
+  try {
+    activeJobs++;
+    resetIdleTimer();
+
+    // 1. Write all clip images to disk
+    const clipPaths = [];
+    for (let i = 0; i < clips.length; i++) {
+      const clipPath = path.join(tmpDir, `clip-${i}.png`);
+      fs.writeFileSync(clipPath, Buffer.from(clips[i].image, 'base64'));
+      clipPaths.push(clipPath);
+    }
+
+    // 2. Generate individual clip videos (ken-burns or smart-zoom)
+    const clipVideos = [];
+    for (let i = 0; i < clips.length; i++) {
+      const clip = clips[i];
+      const dur = Math.min(10, Math.max(1, clip.duration || 4));
+      const fps = 15;
+      const d = Math.round(fps * dur);
+      const clipOutPath = path.join(tmpDir, `clip-${i}.mp4`);
+
+      let zoompanFilter;
+      if (clip.bbox && clip.bbox.x1 != null) {
+        // Smart zoom toward bounding box
+        const cx = ((clip.bbox.x1 + clip.bbox.x2) / 2) / 1000;
+        const cy = ((clip.bbox.y1 + clip.bbox.y2) / 2) / 1000;
+        const bboxW = Math.abs(clip.bbox.x2 - clip.bbox.x1) / 1000;
+        const bboxH = Math.abs(clip.bbox.y2 - clip.bbox.y1) / 1000;
+        const zoomTarget = Math.min(3.0, Math.max(1.3, 1 / Math.max(bboxW, bboxH)));
+        zoompanFilter = `zoompan=z='min(zoom+${((zoomTarget - 1) / d).toFixed(6)},${zoomTarget.toFixed(2)})':d=${d}:x='${cx}*iw-iw/zoom/2':y='${cy}*ih-ih/zoom/2':s=${width}x${height}:fps=${fps}`;
+      } else {
+        // Default ken-burns effect
+        const effect = clip.effect || 'zoom_in';
+        switch (effect) {
+          case 'zoom_out':
+            zoompanFilter = `zoompan=z='if(lte(zoom,1.0),1.5,max(1.001,zoom-0.001))':d=${d}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=${fps}`;
+            break;
+          case 'pan_down':
+            zoompanFilter = `zoompan=z=1.3:d=${d}:x='(iw-iw/zoom)/2':y='min((ih-ih/zoom),on*2)':s=${width}x${height}:fps=${fps}`;
+            break;
+          case 'pan_right':
+            zoompanFilter = `zoompan=z=1.2:d=${d}:x='min(on*3,(iw-iw/zoom))':y='(ih-ih/zoom)/2':s=${width}x${height}:fps=${fps}`;
+            break;
+          default: // zoom_in
+            zoompanFilter = `zoompan=z='min(zoom+0.001,1.5)':d=${d}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=${fps}`;
+        }
+      }
+
+      // Add text overlay for hook (first clip) or CTA (last clip)
+      let textFilter = '';
+      if (i === 0 && hookText) {
+        textFilter = `,drawtext=text='${hookText.replace(/'/g, "\\'")}':fontsize=48:fontcolor=white:borderw=3:bordercolor=black:x=(w-tw)/2:y=h*0.15:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf`;
+      } else if (i === clips.length - 1 && ctaText) {
+        textFilter = `,drawtext=text='${ctaText.replace(/'/g, "\\'")}':fontsize=40:fontcolor=white:borderw=3:bordercolor=black:x=(w-tw)/2:y=h*0.80:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf`;
+      }
+
+      const ffArgs = [
+        '-loop', '1',
+        '-i', clipPaths[i],
+        '-vf', `scale=2000:-1,${zoompanFilter}${textFilter}`,
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+        '-pix_fmt', 'yuv420p',
+        '-t', String(dur),
+        '-y', clipOutPath
+      ];
+
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`FFmpeg clip ${i} exit ${code}: ${stderr.slice(-300)}`));
+        });
+        ff.on('error', reject);
+        setTimeout(() => {
+          try { ff.kill('SIGKILL'); } catch (_) {}
+          reject(new Error(`FFmpeg clip ${i} timeout 60s`));
+        }, 60000);
+      });
+
+      clipVideos.push(clipOutPath);
+      console.log(`[${jobId}] Clip ${i}/${clips.length - 1} OK`);
+    }
+
+    // 3. Create concat list
+    const concatList = path.join(tmpDir, 'concat.txt');
+    fs.writeFileSync(concatList, clipVideos.map(p => `file '${p}'`).join('\n'));
+
+    // 4. Concat all clips
+    const concatOut = path.join(tmpDir, 'concat.mp4');
+    const concatArgs = [
+      '-f', 'concat', '-safe', '0',
+      '-i', concatList,
+      '-c', 'copy',
+      '-movflags', '+faststart',
+      '-y', concatOut
+    ];
+
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', concatArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+      ff.stderr.on('data', d => { stderr += d.toString(); });
+      ff.on('close', code => {
+        if (code === 0) resolve();
+        else reject(new Error(`FFmpeg concat exit ${code}: ${stderr.slice(-500)}`));
+      });
+      ff.on('error', reject);
+      setTimeout(() => {
+        try { ff.kill('SIGKILL'); } catch (_) {}
+        reject(new Error('FFmpeg concat timeout 60s'));
+      }, 60000);
+    });
+
+    console.log(`[${jobId}] Concat OK`);
+
+    // 5. Mix audio layers (voiceover + music) if provided
+    let finalOut = concatOut;
+
+    if (audio || music) {
+      finalOut = path.join(tmpDir, 'final.mp4');
+      const mixArgs = ['-i', concatOut];
+
+      if (audio) {
+        const audioPath = path.join(tmpDir, 'voice.mp3');
+        fs.writeFileSync(audioPath, Buffer.from(audio, 'base64'));
+        mixArgs.push('-i', audioPath);
+      }
+      if (music) {
+        const musicPath = path.join(tmpDir, 'music.mp3');
+        fs.writeFileSync(musicPath, Buffer.from(music, 'base64'));
+        mixArgs.push('-i', musicPath);
+      }
+
+      // Build audio mix filtergraph
+      let filterComplex = '';
+      let audioInputIdx = 1;
+
+      if (audio && music) {
+        filterComplex = `[${audioInputIdx}:a]aformat=fltp:44100:stereo[voice]; [${audioInputIdx + 1}:a]aformat=fltp:44100:stereo,volume=${musicVolume}[mus]; [voice][mus]amix=inputs=2:duration=longest[aout]`;
+        mixArgs.push('-filter_complex', filterComplex, '-map', '0:v', '-map', '[aout]');
+      } else if (audio) {
+        mixArgs.push('-map', '0:v', '-map', `${audioInputIdx}:a`);
+      } else if (music) {
+        filterComplex = `[${audioInputIdx}:a]volume=${musicVolume}[aout]`;
+        mixArgs.push('-filter_complex', filterComplex, '-map', '0:v', '-map', '[aout]');
+      }
+
+      mixArgs.push(
+        '-c:v', 'copy',
+        '-c:a', 'aac', '-b:a', '256k',
+        '-shortest',
+        '-movflags', '+faststart',
+        '-y', finalOut
+      );
+
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', mixArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`FFmpeg mix exit ${code}: ${stderr.slice(-500)}`));
+        });
+        ff.on('error', reject);
+        setTimeout(() => {
+          try { ff.kill('SIGKILL'); } catch (_) {}
+          reject(new Error('FFmpeg audio mix timeout 60s'));
+        }, 60000);
+      });
+
+      console.log(`[${jobId}] Audio mix OK`);
+    }
+
+    // 6. Add subtitles if provided
+    if (subtitles) {
+      const subsPath = path.join(tmpDir, 'subs.ass');
+      fs.writeFileSync(subsPath, subtitles);
+      const subsOut = path.join(tmpDir, 'final-subs.mp4');
+
+      const subsArgs = [
+        '-i', finalOut,
+        '-vf', `ass=${subsPath}`,
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '20',
+        '-c:a', 'copy',
+        '-movflags', '+faststart',
+        '-y', subsOut
+      ];
+
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', subsArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`FFmpeg subs exit ${code}: ${stderr.slice(-500)}`));
+        });
+        ff.on('error', reject);
+        setTimeout(() => {
+          try { ff.kill('SIGKILL'); } catch (_) {}
+          reject(new Error('FFmpeg subs timeout 120s'));
+        }, 120000);
+      });
+
+      finalOut = subsOut;
+      console.log(`[${jobId}] Subtitles OK`);
+    }
+
+    const mp4Stat = fs.statSync(finalOut);
+    console.log(`[${jobId}] Promo-assembly COMPLETE: ${(mp4Stat.size / 1048576).toFixed(1)} MB, ${clips.length} clips`);
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Length', mp4Stat.size);
+    res.setHeader('Content-Disposition', `attachment; filename="promo-${jobId}.mp4"`);
+
+    const stream = fs.createReadStream(finalOut);
+    stream.pipe(res);
+    stream.on('end', () => {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+    stream.on('error', err => {
+      console.error(`[${jobId}] Stream error:`, err.message);
+      try { res.end(); } catch (_) {}
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+
+  } catch (err) {
+    console.error(`[${jobId}] Promo-assembly error:`, err.message);
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  } finally {
+    activeJobs--;
+    resetIdleTimer();
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Démarrage du serveur
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.25.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.26.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);

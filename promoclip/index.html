@@ -1,0 +1,3347 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>PromoClip v0.2.0</title>
+<style>
+/* ═══════════════════════════════════════════════════════
+   PromoClip v0.2.0 — Functional App
+   Dark mode, accent violet #7C3AED, mobile-first
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  --bg-primary: #0F0F13;
+  --bg-secondary: #1A1A24;
+  --bg-card: #22222E;
+  --bg-elevated: #2A2A38;
+  --bg-input: #16161F;
+  --accent: #7C3AED;
+  --accent-light: #9F67FF;
+  --accent-dim: #5B21B6;
+  --accent-glow: rgba(124, 58, 237, 0.3);
+  --success: #10B981;
+  --warning: #F59E0B;
+  --error: #EF4444;
+  --cyan: #06B6D4;
+  --text-primary: #F1F1F6;
+  --text-secondary: #9CA3AF;
+  --text-muted: #6B7280;
+  --border: rgba(255,255,255,0.06);
+  --border-active: rgba(124, 58, 237, 0.4);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --shadow-card: 0 2px 12px rgba(0,0,0,0.3);
+  --shadow-elevated: 0 8px 32px rgba(0,0,0,0.5);
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+  height: 100dvh;
+  width: 100vw;
+}
+
+/* ─── Phone Frame (Desktop Preview) ─── */
+.phone-frame {
+  width: 390px;
+  height: 844px;
+  margin: 20px auto;
+  border-radius: 44px;
+  border: 3px solid #333;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-primary);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+@media (max-width: 430px) {
+  .phone-frame { width:100%; height:100dvh; margin:0; border-radius:0; border:none; box-shadow:none; }
+}
+
+/* ─── Screen Stack ─── */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-smooth), transform var(--transition-smooth);
+  transform: translateX(30px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+.screen.active {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateX(0);
+}
+.screen.exit-left {
+  opacity: 0;
+  transform: translateX(-30px);
+}
+
+/* ─── Status Bar ─── */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 24px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+.status-bar .time { font-variant-numeric: tabular-nums; }
+.status-bar .icons { display:flex; gap:4px; align-items:center; }
+.status-bar .icons svg { width:16px; height:16px; fill: var(--text-primary); }
+
+/* ─── Navigation Header ─── */
+.nav-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 20px 12px;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.nav-back {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  flex-shrink: 0;
+}
+.nav-back:active { background: var(--accent-dim); }
+.nav-back svg { width:18px; height:18px; stroke:var(--text-primary); fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.nav-title { font-size:18px; font-weight:700; flex:1; }
+.nav-action {
+  font-size: 13px;
+  color: var(--accent-light);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+.nav-action:active { background: var(--accent-glow); }
+
+/* ─── Content Area ─── */
+.content { flex:1; padding: 0 20px 100px; overflow-y: auto; }
+
+/* ─── Bottom Tab Bar ─── */
+.tab-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 80px;
+  background: linear-gradient(to top, var(--bg-primary) 70%, transparent);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  padding-bottom: 16px;
+  z-index: 100;
+}
+.tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+.tab-item svg { width:22px; height:22px; stroke:var(--text-muted); fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; transition: stroke var(--transition-fast); }
+.tab-item span { font-size:10px; color:var(--text-muted); font-weight:500; transition: color var(--transition-fast); }
+.tab-item.active svg { stroke: var(--accent-light); }
+.tab-item.active span { color: var(--accent-light); }
+.tab-item:active { transform: scale(0.92); }
+
+/* Central FAB in tab bar */
+.tab-fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 20px var(--accent-glow);
+  transition: transform var(--transition-bounce), box-shadow var(--transition-fast);
+}
+.tab-fab:active { transform: scale(0.88); }
+.tab-fab svg { width:26px; height:26px; stroke:#fff; fill:none; stroke-width:2.5; stroke-linecap:round; }
+
+/* ─── Cards ─── */
+.card {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  padding: 16px;
+  margin-bottom: 12px;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+  cursor: pointer;
+}
+.card:active { transform: scale(0.98); border-color: var(--border-active); }
+.card-selected { border-color: var(--accent) !important; box-shadow: 0 0 0 1px var(--accent), 0 0 20px var(--accent-glow); }
+
+/* ─── Chips ─── */
+.chip-row { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+.chip {
+  padding: 8px 16px;
+  border-radius: 100px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+.chip:active { transform: scale(0.95); }
+.chip.selected { background: var(--accent); color:#fff; border-color: var(--accent); }
+
+/* ─── Input ─── */
+.input-group { margin-bottom: 16px; }
+.input-label { font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; }
+.input-field {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 15px;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+.input-field:focus { border-color: var(--accent); }
+.input-field::placeholder { color: var(--text-muted); }
+
+/* ─── Buttons ─── */
+.btn-primary {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  border: none;
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--transition-bounce), opacity var(--transition-fast);
+  box-shadow: 0 4px 20px var(--accent-glow);
+}
+.btn-primary:active { transform: scale(0.97); opacity: 0.9; }
+.btn-primary:disabled { opacity: 0.4; cursor: default; }
+
+.btn-secondary {
+  padding: 12px 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.btn-secondary:active { background: var(--bg-card); border-color: var(--accent); }
+
+.btn-icon {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.btn-icon:active { background: var(--accent-dim); }
+.btn-icon svg { width:20px; height:20px; stroke:var(--text-primary); fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+/* ─── Toggle ─── */
+.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.toggle-label { font-size:14px; color:var(--text-primary); }
+.toggle-sub { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.toggle {
+  width:48px; height:28px;
+  border-radius:14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  position: relative;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  flex-shrink: 0;
+}
+.toggle.on { background: var(--accent); border-color: var(--accent); }
+.toggle::after {
+  content:'';
+  width:22px; height:22px;
+  border-radius:50%;
+  background:#fff;
+  position:absolute;
+  top:2px; left:2px;
+  transition: transform var(--transition-smooth);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.toggle.on::after { transform: translateX(20px); }
+
+/* ─── Progress Ring ─── */
+.progress-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+}
+.progress-ring { position:relative; width:180px; height:180px; }
+.progress-ring svg { transform: rotate(-90deg); }
+.progress-ring circle { fill:none; stroke-width:6; }
+.progress-ring .bg { stroke: var(--bg-elevated); }
+.progress-ring .fg { stroke: var(--accent-light); stroke-linecap:round; transition: stroke-dashoffset 0.5s ease; }
+.progress-percent {
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  font-size:42px;
+  font-weight:800;
+  font-variant-numeric:tabular-nums;
+}
+.progress-percent small { font-size:12px; color:var(--text-muted); font-weight:500; margin-top:4px; }
+
+/* ─── Step indicator (wizard) ─── */
+.step-indicator {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 0 16px;
+}
+.step-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  transition: all var(--transition-smooth);
+}
+.step-dot.active { background: var(--accent); width: 24px; border-radius: 4px; }
+.step-dot.done { background: var(--accent-dim); }
+
+/* ─── Media Grid ─── */
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+}
+.media-thumb {
+  aspect-ratio: 1;
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+.media-thumb:active { opacity: 0.7; }
+.media-thumb .overlay-check {
+  position:absolute; top:6px; right:6px;
+  width:22px; height:22px;
+  border-radius:50%;
+  border: 2px solid rgba(255,255,255,0.6);
+  display:flex; align-items:center; justify-content:center;
+  transition: all var(--transition-fast);
+}
+.media-thumb.selected .overlay-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.media-thumb .overlay-check svg { width:14px; height:14px; stroke:#fff; fill:none; stroke-width:3; opacity:0; transition:opacity var(--transition-fast); }
+.media-thumb.selected .overlay-check svg { opacity:1; }
+.media-thumb .duration {
+  position: absolute;
+  bottom: 4px;
+  right: 6px;
+  font-size: 10px;
+  color: #fff;
+  background: rgba(0,0,0,0.6);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.media-thumb .order-badge {
+  position:absolute; top:6px; left:6px;
+  width:20px; height:20px;
+  border-radius:50%;
+  background: var(--accent);
+  color:#fff;
+  font-size:11px;
+  font-weight:700;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  opacity: 0;
+  transform: scale(0);
+  transition: all var(--transition-bounce);
+}
+.media-thumb.selected .order-badge { opacity:1; transform:scale(1); }
+
+/* ─── Template Card ─── */
+.template-card {
+  width: 150px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+.template-card:active { transform: scale(0.95); }
+.template-preview {
+  width: 150px;
+  height: 200px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  position: relative;
+  border: 2px solid transparent;
+  transition: border-color var(--transition-fast);
+}
+.template-card.selected .template-preview { border-color: var(--accent); }
+.template-name { font-size:12px; color:var(--text-secondary); margin-top:8px; text-align:center; font-weight:500; }
+
+/* ─── Video Player Mock ─── */
+.video-player {
+  width: 100%;
+  aspect-ratio: 9/16;
+  background: #000;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  position: relative;
+  margin: 12px 0;
+}
+.video-player .play-btn {
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer;
+}
+.video-player .play-btn div {
+  width:64px; height:64px;
+  border-radius:50%;
+  background:rgba(255,255,255,0.15);
+  backdrop-filter:blur(10px);
+  display:flex; align-items:center; justify-content:center;
+  transition: transform var(--transition-bounce);
+}
+.video-player .play-btn:active div { transform:scale(0.85); }
+.video-player .play-btn svg { width:28px; height:28px; fill:#fff; margin-left:3px; }
+
+/* ─── Share Button Row ─── */
+.share-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  padding: 16px 0;
+}
+.share-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+.share-btn:active { transform: scale(0.9); }
+.share-icon {
+  width: 52px; height: 52px;
+  border-radius: var(--radius-md);
+  display:flex; align-items:center; justify-content:center;
+}
+.share-label { font-size:11px; color:var(--text-secondary); font-weight:500; }
+
+/* ─── History Item ─── */
+.history-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.history-item:active { border-color: var(--border-active); transform:scale(0.98); }
+.history-thumb {
+  width: 60px;
+  height: 80px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.history-info { flex:1; display:flex; flex-direction:column; justify-content:center; }
+.history-info .title { font-size:14px; font-weight:600; margin-bottom:3px; }
+.history-info .meta { font-size:11px; color:var(--text-muted); }
+.history-info .meta span { margin-right:10px; }
+
+/* ─── Settings Row ─── */
+.settings-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.settings-icon {
+  width:38px; height:38px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+.settings-icon svg { width:18px; height:18px; stroke:var(--accent-light); fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.settings-label { flex:1; font-size:14px; }
+.settings-value { font-size:13px; color:var(--text-muted); }
+.settings-chevron svg { width:16px; height:16px; stroke:var(--text-muted); fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+/* ─── Product Card ─── */
+.product-card {
+  display:flex; align-items:center; gap:14px;
+  padding:14px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+  cursor:pointer;
+  transition: all var(--transition-fast);
+}
+.product-card:active { border-color: var(--border-active); }
+.product-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 16px var(--accent-glow); }
+.product-icon {
+  width:44px; height:44px;
+  border-radius: var(--radius-sm);
+  display:flex; align-items:center; justify-content:center;
+  font-size:20px;
+  flex-shrink:0;
+}
+.product-info { flex:1; }
+.product-info .name { font-size:15px; font-weight:600; }
+.product-info .desc { font-size:12px; color:var(--text-muted); margin-top:2px; }
+
+/* ─── Section Title ─── */
+.section-title {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin: 20px 0 10px;
+}
+
+/* ─── Horizontal Scroll ─── */
+.h-scroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scroll-snap-type: x mandatory;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.h-scroll::-webkit-scrollbar { display:none; }
+.h-scroll > * { scroll-snap-align: start; }
+
+/* ─── Skeleton ─── */
+@keyframes shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-card) 50%, var(--bg-elevated) 75%);
+  background-size: 400px 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* ─── Badge ─── */
+.badge {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.badge-accent { background: var(--accent-glow); color: var(--accent-light); }
+.badge-success { background: rgba(16,185,129,0.15); color: var(--success); }
+.badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
+
+/* ─── Empty State ─── */
+.empty-state {
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  padding: 60px 20px;
+  text-align:center;
+}
+.empty-state svg { width:80px; height:80px; stroke:var(--text-muted); fill:none; stroke-width:1; margin-bottom:20px; opacity:0.4; }
+.empty-state h3 { font-size:18px; color:var(--text-secondary); margin-bottom:8px; }
+.empty-state p { font-size:13px; color:var(--text-muted); line-height:1.5; max-width:260px; }
+
+/* ─── Pulse animation for generation ─── */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px var(--accent-glow); }
+  50% { box-shadow: 0 0 40px rgba(124, 58, 237, 0.5); }
+}
+.pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+
+/* ─── Slide up animation ─── */
+@keyframes slide-up {
+  from { transform: translateY(20px); opacity:0; }
+  to { transform: translateY(0); opacity:1; }
+}
+.slide-up { animation: slide-up 0.4s ease-out forwards; }
+.slide-up-delay-1 { animation-delay: 0.05s; opacity:0; }
+.slide-up-delay-2 { animation-delay: 0.1s; opacity:0; }
+.slide-up-delay-3 { animation-delay: 0.15s; opacity:0; }
+.slide-up-delay-4 { animation-delay: 0.2s; opacity:0; }
+
+/* ─── Slider ─── */
+.slider-row {
+  display:flex; align-items:center; gap:12px;
+  margin:8px 0;
+}
+.slider {
+  flex:1;
+  -webkit-appearance:none;
+  height:4px;
+  border-radius:2px;
+  background: var(--bg-elevated);
+  outline:none;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance:none;
+  width:20px; height:20px;
+  border-radius:50%;
+  background: var(--accent);
+  cursor:pointer;
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.slider-val { font-size:14px; font-weight:600; color:var(--accent-light); min-width:30px; text-align:right; font-variant-numeric:tabular-nums; }
+
+/* ─── Quick Actions Grid ─── */
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 12px 0;
+}
+.quick-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.quick-card:active { transform: scale(0.95); border-color: var(--border-active); }
+.quick-card svg { width:28px; height:28px; stroke:var(--accent-light); fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.quick-card span { font-size:12px; font-weight:600; color:var(--text-secondary); }
+
+/* ─── Divider ─── */
+.divider { height:1px; background:var(--border); margin:16px 0; }
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width:0; }
+
+/* ─── Screen Nav (desktop sidebar) ─── */
+.screen-nav {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 220px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  z-index: 9999;
+  box-shadow: var(--shadow-elevated);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+@media (max-width: 700px) { .screen-nav { display:none; } }
+.screen-nav h3 { font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
+.screen-nav-item {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-bottom: 2px;
+}
+.screen-nav-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+.screen-nav-item.active { background: var(--accent-glow); color: var(--accent-light); }
+
+/* ═══════════════════════════════════════════════════════
+   ADDITIONAL CSS — Toast, Log, Dirty, API Dots, Bottom Sheet, Modal
+   ═══════════════════════════════════════════════════════ */
+
+/* ─── Toast ─── */
+.toast-container {
+  position: absolute;
+  top: 60px;
+  left: 20px;
+  right: 20px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+  animation: toast-in 0.3s ease-out forwards;
+  transition: opacity 0.3s, transform 0.3s;
+}
+.toast.error { border-color: var(--error); background: rgba(239,68,68,0.15); }
+.toast.out { opacity: 0; transform: translateY(-10px); }
+@keyframes toast-in {
+  from { opacity:0; transform:translateY(-10px); }
+  to { opacity:1; transform:translateY(0); }
+}
+
+/* ─── Log Panel ─── */
+.log-panel {
+  position: absolute;
+  bottom: 80px;
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  background: rgba(15,15,19,0.95);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform var(--transition-smooth);
+}
+.log-panel.open { transform: translateY(0); }
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.log-header span { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.log-header-actions { display: flex; gap: 8px; }
+.log-header-actions button {
+  background: none; border: none; color: var(--accent-light); font-size: 11px; font-weight: 600; cursor: pointer; padding: 4px 8px; border-radius: 4px;
+}
+.log-header-actions button:active { background: var(--accent-glow); }
+.log-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.log-entry { color: var(--text-muted); }
+.log-entry.warn { color: var(--warning); }
+.log-entry.error { color: var(--error); }
+.log-entry .log-time { color: var(--text-muted); opacity: 0.5; margin-right: 6px; }
+
+/* ─── Log toggle button ─── */
+.log-toggle-btn {
+  position: absolute;
+  bottom: 84px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 95;
+  transition: all var(--transition-fast);
+}
+.log-toggle-btn:active { background: var(--accent-dim); }
+.log-toggle-btn svg { width: 14px; height: 14px; stroke: var(--text-muted); fill: none; stroke-width: 2; stroke-linecap: round; }
+
+/* ─── Dirty Indicator ─── */
+@keyframes dirty-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+  50% { box-shadow: 0 0 0 4px rgba(245,158,11,0.3); }
+}
+.is-dirty { animation: dirty-pulse 1.5s ease-in-out infinite; border-color: var(--warning) !important; }
+
+/* ─── API Dots ─── */
+.api-dots {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.adot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.adot-circle {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: background var(--transition-fast);
+}
+.adot-circle.ok { background: var(--success); box-shadow: 0 0 6px rgba(16,185,129,0.4); }
+.adot-circle.err { background: var(--error); box-shadow: 0 0 6px rgba(239,68,68,0.4); }
+.adot-circle.key { background: var(--warning); box-shadow: 0 0 6px rgba(245,158,11,0.4); }
+
+/* ─── Bottom Sheet ─── */
+.bottom-sheet-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 150;
+  display: none;
+  align-items: flex-end;
+}
+.bottom-sheet-overlay.open { display: flex; }
+.bottom-sheet {
+  width: 100%;
+  max-height: 85%;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: 20px;
+  overflow-y: auto;
+  animation: slide-up 0.3s ease-out;
+}
+.bottom-sheet .sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-elevated);
+  margin: 0 auto 16px;
+}
+
+/* ─── Modal ─── */
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 160;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  width: 100%;
+  max-width: 340px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  animation: slide-up 0.3s ease-out;
+}
+.modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+.modal p { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5; }
+.modal-actions { display: flex; gap: 10px; }
+.modal-actions button { flex: 1; }
+
+/* ─── Password Toggle ─── */
+.password-wrap {
+  position: relative;
+}
+.password-wrap .eye-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  padding: 4px;
+}
+
+/* ─── Generation Steps ─── */
+.gen-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  transition: opacity var(--transition-fast);
+}
+.gen-step.pending { opacity: 0.4; }
+.gen-step.active { opacity: 1; }
+.gen-step.done { opacity: 0.5; }
+.gen-step.error { opacity: 1; }
+.gen-step-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.gen-step.pending .gen-step-icon { border: 2px solid var(--bg-elevated); }
+.gen-step.active .gen-step-icon { background: var(--accent); }
+.gen-step.done .gen-step-icon { background: var(--success); }
+.gen-step.error .gen-step-icon { background: var(--error); }
+.gen-step-label { font-size: 13px; }
+.gen-step.done .gen-step-label { text-decoration: line-through; color: var(--text-muted); }
+.gen-step.active .gen-step-label { font-weight: 600; }
+
+/* ─── Backup buttons grid ─── */
+.backup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 12px 0;
+}
+.backup-grid .btn-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 10px;
+}
+
+/* ─── Delete button on product cards ─── */
+.product-delete {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(239,68,68,0.1);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+.product-delete:active { background: rgba(239,68,68,0.3); }
+.product-delete svg { width: 16px; height: 16px; stroke: var(--error); fill: none; stroke-width: 2; stroke-linecap: round; }
+
+</style>
+</head>
+<body>
+
+<!-- ═══ Screen Navigator (desktop only) ═══ -->
+<div class="screen-nav" id="screenNav">
+  <h3>PromoClip v0.2.0</h3>
+  <div class="screen-nav-item active" data-action="nav-screen" data-screen="home">1. Accueil</div>
+  <div class="screen-nav-item" data-action="nav-screen" data-screen="media">2. Medias</div>
+  <div class="screen-nav-item" data-action="nav-screen" data-screen="product">3. Produit</div>
+  <div class="screen-nav-item" data-action="nav-screen" data-screen="template">4. Template</div>
+  <div class="screen-nav-item" data-action="nav-screen" data-screen="config">5. Config</div>
+  <div class="screen-nav-item" data-action="nav-screen" data-screen="generate">6. Generation</div>
+  <div class="screen-nav-item" data-action="nav-screen" data-screen="preview">7. Preview</div>
+  <div class="screen-nav-item" data-action="nav-screen" data-screen="share">8. Partage</div>
+  <div class="screen-nav-item" data-action="nav-screen" data-screen="history">9. Historique</div>
+  <div class="screen-nav-item" data-action="nav-screen" data-screen="settings">10. Reglages</div>
+  <div class="screen-nav-item" data-action="nav-screen" data-screen="products">11. Produits</div>
+</div>
+
+<!-- ═══ Phone Frame ═══ -->
+<div class="phone-frame" id="phoneFrame">
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══ SCREEN 1 — ACCUEIL / DASHBOARD ═══ -->
+<div class="screen active" id="screen-home">
+  <div class="status-bar">
+    <span class="time" id="clockHome">9:41</span>
+    <div class="icons">
+      <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg>
+    </div>
+  </div>
+
+  <div style="padding:4px 20px 0;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</span>
+          <span class="badge badge-accent">v0.1.0</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
+      </div>
+      <div class="btn-icon" data-action="go" data-screen="settings" style="width:38px;height:38px;">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="content" style="padding-top:16px;">
+    <!-- Quick Actions -->
+    <div class="quick-grid slide-up">
+      <div class="quick-card" data-action="go" data-screen="media">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        <span>Nouvelle video</span>
+      </div>
+      <div class="quick-card" data-action="go" data-screen="template">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Templates</span>
+      </div>
+      <div class="quick-card" data-action="go" data-screen="products">
+        <svg viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+        <span>Mes produits</span>
+      </div>
+      <div class="quick-card" data-action="go" data-screen="history">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Historique</span>
+      </div>
+    </div>
+
+    <!-- Saved Configs -->
+    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+      <span>Configs favorites</span>
+      <span style="font-size:12px; color:var(--accent-light); cursor:pointer; text-transform:none; letter-spacing:0; font-weight:500;" data-action="go" data-screen="history">Voir tout</span>
+    </div>
+    <div class="h-scroll" id="savedConfigsScroll"></div>
+
+    <!-- Recent History -->
+    <div class="section-title">Dernieres creations</div>
+    <div id="dashboardHistory"></div>
+  </div>
+
+  <!-- Tab Bar -->
+  <div class="tab-bar" id="tabBarHome">
+    <div class="tab-item active" data-action="go" data-screen="home">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Accueil</span>
+    </div>
+    <div class="tab-item" data-action="go" data-screen="history">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Historique</span>
+    </div>
+    <div class="tab-fab" data-action="go" data-screen="media">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </div>
+    <div class="tab-item" data-action="go" data-screen="products">
+      <svg viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+      <span>Produits</span>
+    </div>
+    <div class="tab-item" data-action="go" data-screen="settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span>Reglages</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 2 — SELECTION MEDIAS ═══ -->
+<div class="screen" id="screen-media">
+  <div class="status-bar"><span class="time">9:41</span><div class="icons"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg><svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg></div></div>
+
+  <div class="nav-header">
+    <div class="nav-back" data-action="go" data-screen="home"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></div>
+    <div class="nav-title">Medias <span style="color:var(--accent-light); font-size:14px;" id="mediaCount">(0)</span></div>
+    <div class="nav-action" data-action="go" data-screen="product">Suivant</div>
+  </div>
+
+  <div class="step-indicator">
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <div class="content" style="padding:0 0 100px;">
+    <!-- File input for picking media -->
+    <div style="padding:0 20px 12px;">
+      <label class="btn-secondary" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;cursor:pointer;">
+        <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Ajouter des medias
+        <input type="file" accept="image/*,video/*" multiple id="mediaFileInput" style="display:none;">
+      </label>
+    </div>
+
+    <!-- Media Grid (thumbnails) -->
+    <div class="media-grid" style="padding:0 2px;" id="mediaGrid"></div>
+
+    <div id="mediaEmptyState" class="empty-state" style="display:none;">
+      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      <h3>Aucun media</h3>
+      <p>Ajoute des photos ou videos pour commencer ta promo</p>
+    </div>
+  </div>
+
+  <!-- Bottom selection bar -->
+  <div style="position:absolute; bottom:0; left:0; right:0; padding:12px 20px 24px; background:linear-gradient(to top, var(--bg-primary) 80%, transparent); z-index:10;" id="mediaBottomBar">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+      <div style="flex:1; font-size:12px; color:var(--text-muted);" id="mediaSelectedText">0 medias selectionnes</div>
+    </div>
+    <button class="btn-primary" data-action="go" data-screen="product">Continuer</button>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 3 — CHOIX PRODUIT ═══ -->
+<div class="screen" id="screen-product">
+  <div class="status-bar"><span class="time">9:41</span><div class="icons"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg><svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg></div></div>
+
+  <div class="nav-header">
+    <div class="nav-back" data-action="go" data-screen="media"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></div>
+    <div class="nav-title">Produit</div>
+    <div class="nav-action" data-action="go" data-screen="template">Suivant</div>
+  </div>
+
+  <div class="step-indicator">
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <div class="content">
+    <div style="font-size:15px; color:var(--text-secondary); margin-bottom:16px;">Pour quel produit est cette promo ?</div>
+    <div id="productSelectionList"></div>
+    <div class="divider"></div>
+    <div style="display:flex; align-items:center; gap:12px; padding:10px 0; cursor:pointer; opacity:0.7;" data-action="go" data-screen="products">
+      <div style="width:44px; height:44px; border-radius:var(--radius-sm); border:2px dashed var(--border); display:flex; align-items:center; justify-content:center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" stroke="var(--text-muted)" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </div>
+      <div style="font-size:14px; color:var(--text-muted);">Ajouter un produit</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 4 — CHOIX TEMPLATE ═══ -->
+<div class="screen" id="screen-template">
+  <div class="status-bar"><span class="time">9:41</span><div class="icons"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg><svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg></div></div>
+
+  <div class="nav-header">
+    <div class="nav-back" data-action="go" data-screen="product"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></div>
+    <div class="nav-title">Style</div>
+    <div class="nav-action" data-action="go" data-screen="config">Suivant</div>
+  </div>
+
+  <div class="step-indicator">
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <div class="content">
+    <div class="chip-row" id="templateCategoryChips"></div>
+
+    <div class="section-title">Populaires</div>
+    <div class="h-scroll" id="templateScroll"></div>
+
+    <div class="section-title">Styles rapides</div>
+    <div class="chip-row" id="styleChips"></div>
+
+    <div style="margin-top:20px;">
+      <button class="btn-primary" data-action="go" data-screen="config">Configurer la video</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 5 — CONFIGURATION ═══ -->
+<div class="screen" id="screen-config">
+  <div class="status-bar"><span class="time">9:41</span><div class="icons"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg><svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg></div></div>
+
+  <div class="nav-header">
+    <div class="nav-back" data-action="go" data-screen="template"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></div>
+    <div class="nav-title">Configuration</div>
+    <div class="nav-action" data-action="save-config">Sauver</div>
+  </div>
+
+  <div class="step-indicator">
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+  </div>
+
+  <div class="content">
+    <!-- Hook texte -->
+    <div class="input-group">
+      <div class="input-label">Hook texte (3 premieres secondes)</div>
+      <div style="position:relative;">
+        <input class="input-field" type="text" id="configHook" placeholder="Ex: Arrete de taper, dicte !" style="padding-right:44px;">
+        <div style="position:absolute; right:8px; top:50%; transform:translateY(-50%); width:32px; height:32px; border-radius:50%; background:var(--accent-glow); display:flex; align-items:center; justify-content:center; cursor:pointer;" data-action="generate-hooks" title="Generer avec Gemini">
+          <svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--accent-light)" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
+      </div>
+      <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Tap l'icone IA pour generer des suggestions</div>
+    </div>
+
+    <!-- Langue -->
+    <div class="input-group">
+      <div class="input-label">Langue</div>
+      <div class="chip-row" style="margin:6px 0 0;" id="langChips"></div>
+    </div>
+
+    <!-- Duree -->
+    <div class="input-group">
+      <div class="input-label">Duree cible</div>
+      <div class="slider-row">
+        <span style="font-size:12px; color:var(--text-muted);">7s</span>
+        <input type="range" class="slider" min="7" max="60" value="15" id="configDuration">
+        <span style="font-size:12px; color:var(--text-muted);">60s</span>
+      </div>
+      <div style="text-align:center;">
+        <span class="slider-val" id="configDurationVal">15s</span>
+        <div style="font-size:11px; margin-top:2px;" id="configDurationFeedback">Duree optimale TikTok</div>
+      </div>
+    </div>
+
+    <!-- Musique -->
+    <div class="input-group">
+      <div class="input-label">Style musique</div>
+      <div class="chip-row" style="margin:6px 0 0;" id="musicChips"></div>
+    </div>
+
+    <!-- Avatar -->
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Avatar IA</div>
+        <div class="toggle-sub">Talking head en debut de video</div>
+      </div>
+      <div class="toggle" id="toggleAvatar" data-action="toggle"></div>
+    </div>
+
+    <!-- Voiceover -->
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Voiceover TTS</div>
+        <div class="toggle-sub">Narration vocale sur la video</div>
+      </div>
+      <div class="toggle on" id="toggleVoiceover" data-action="toggle"></div>
+    </div>
+
+    <!-- Subtitles -->
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Sous-titres auto</div>
+        <div class="toggle-sub">Texte anime synchronise</div>
+      </div>
+      <div class="toggle on" id="toggleSubtitles" data-action="toggle"></div>
+    </div>
+
+    <!-- CTA -->
+    <div class="input-group" style="margin-top:16px;">
+      <div class="input-label">Appel a l'action (CTA)</div>
+      <div class="chip-row" style="margin:6px 0 0;" id="ctaChips"></div>
+    </div>
+
+    <div style="margin-top:24px; margin-bottom:20px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <span style="font-size:12px; color:var(--text-muted);" id="configEstimate">Temps estime : ~45s</span>
+      </div>
+      <button class="btn-primary" data-action="start-generation">Generer la video</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 6 — GENERATION ═══ -->
+<div class="screen" id="screen-generate">
+  <div class="status-bar"><span class="time">9:41</span><div class="icons"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg><svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg></div></div>
+
+  <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px;">
+    <div class="progress-container">
+      <div class="progress-ring pulse-glow" style="border-radius:50%;" id="progressRing">
+        <svg width="180" height="180" viewBox="0 0 180 180">
+          <circle class="bg" cx="90" cy="90" r="82"/>
+          <circle class="fg" cx="90" cy="90" r="82" stroke-dasharray="515" stroke-dashoffset="515" id="progressCircle"/>
+        </svg>
+        <div class="progress-percent" id="progressPercent">
+          0<span style="font-size:20px;">%</span>
+          <small>Demarrage...</small>
+        </div>
+      </div>
+    </div>
+
+    <div style="width:100%; max-width:300px; margin-top:20px;" id="genSteps"></div>
+
+    <div style="margin-top:30px; text-align:center;">
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">La generation continue en arriere-plan</div>
+      <div class="btn-secondary" data-action="cancel-generation" style="display:inline-block;">Annuler</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 7 — PREVIEW ═══ -->
+<div class="screen" id="screen-preview">
+  <div class="status-bar"><span class="time">9:41</span><div class="icons"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg><svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg></div></div>
+
+  <div class="nav-header">
+    <div class="nav-back" data-action="go" data-screen="home"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></div>
+    <div class="nav-title">Preview</div>
+    <div class="nav-action" data-action="go" data-screen="share">Partager</div>
+  </div>
+
+  <div class="content" style="padding-top:0;">
+    <div class="video-player" id="previewPlayer" style="background:linear-gradient(180deg,#7C3AED 0%,#2a2a38 30%,#0F0F13 100%); position:relative;">
+      <!-- Real video element (shown when video is generated) -->
+      <video id="previewVideo" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none; border-radius:inherit;" controls playsinline></video>
+      <!-- Fallback mock (shown when no video) -->
+      <div id="previewMock">
+        <div style="position:absolute; top:16px; left:16px; right:16px; text-align:center;">
+          <div style="font-size:24px; font-weight:900; color:#fff; text-shadow:0 2px 8px rgba(0,0,0,0.5);" id="previewHook">HOOK TEXT</div>
+        </div>
+        <div style="position:absolute; bottom:60px; left:50%; transform:translateX(-50%); width:120px; height:200px; border-radius:16px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1);"></div>
+        <div style="position:absolute; bottom:20px; left:16px; right:16px; text-align:center;">
+          <div style="font-size:12px; color:rgba(255,255,255,0.7);" id="previewCta">Produit — CTA</div>
+        </div>
+        <div class="play-btn"><div><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>
+      </div>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 0;">
+      <div>
+        <div style="font-size:15px; font-weight:600;" id="previewTitle">Video Preview</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="previewMeta">15s</div>
+      </div>
+      <span class="badge badge-success">Pret</span>
+    </div>
+
+    <div style="display:flex; gap:10px; margin:8px 0;">
+      <button class="btn-secondary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px;" data-action="go" data-screen="share">
+        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        Partager
+      </button>
+      <button class="btn-secondary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px;" data-action="go" data-screen="config">
+        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+        Regenerer
+      </button>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-title">Resume configuration</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" id="previewSummary"></div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 8 — PARTAGE ═══ -->
+<div class="screen" id="screen-share">
+  <div class="status-bar"><span class="time">9:41</span><div class="icons"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg><svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg></div></div>
+
+  <div class="nav-header">
+    <div class="nav-back" data-action="go" data-screen="preview"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></div>
+    <div class="nav-title">Partager</div>
+  </div>
+
+  <div class="content">
+    <div style="display:flex; gap:14px; padding:16px; background:var(--bg-card); border-radius:var(--radius-md); margin-bottom:20px;">
+      <div style="width:54px; height:72px; border-radius:8px; background:linear-gradient(180deg,#7C3AED,#0F0F13); flex-shrink:0; display:flex; align-items:center; justify-content:center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:14px; font-weight:600;" id="shareTitle">Video</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:3px;" id="shareMeta">15s</div>
+        <div style="display:flex; gap:6px; margin-top:6px;">
+          <span class="badge badge-success">HD</span>
+          <span class="badge badge-accent">9:16</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">Partager vers</div>
+    <div class="share-row" style="justify-content:flex-start; gap:20px; padding:12px 0;">
+      <div class="share-btn" data-action="share-to" data-platform="tiktok">
+        <div class="share-icon" style="background:linear-gradient(135deg,#000,#333);">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.88-2.88 2.89 2.89 0 012.88-2.88c.28 0 .54.04.79.11v-3.5a6.37 6.37 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.34-6.34V8.73a8.35 8.35 0 004.87 1.56V6.84a4.85 4.85 0 01-1.11-.15z"/></svg>
+        </div>
+        <div class="share-label">TikTok</div>
+      </div>
+      <div class="share-btn" data-action="share-to" data-platform="instagram">
+        <div class="share-icon" style="background:linear-gradient(135deg,#833AB4,#E1306C,#F77737);">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1.5"/></svg>
+        </div>
+        <div class="share-label">Instagram</div>
+      </div>
+      <div class="share-btn" data-action="share-to" data-platform="x">
+        <div class="share-icon" style="background:linear-gradient(135deg,#1DA1F2,#0D8BD9);">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </div>
+        <div class="share-label">X</div>
+      </div>
+      <div class="share-btn" data-action="share-to" data-platform="youtube">
+        <div class="share-icon" style="background:linear-gradient(135deg,#FF0000,#CC0000);">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+        </div>
+        <div class="share-label">YouTube</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="input-group">
+      <div class="input-label">Caption (pre-remplie)</div>
+      <textarea class="input-field" rows="3" style="resize:none; font-family:inherit;" id="shareCaption"></textarea>
+      <div style="display:flex; justify-content:space-between; margin-top:4px;">
+        <span style="font-size:11px; color:var(--text-muted);">5 hashtags (max recommande)</span>
+        <span style="font-size:11px; color:var(--accent-light); cursor:pointer;" data-action="regen-caption">Regenerer</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div style="display:flex; gap:10px;">
+      <button class="btn-secondary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px;" data-action="save-gallery">
+        <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Sauver
+      </button>
+      <button class="btn-secondary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px;" data-action="copy-caption">
+        <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        Copier caption
+      </button>
+    </div>
+
+    <div style="margin-top:20px;">
+      <button class="btn-primary" data-action="go" data-screen="home">Termine</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 9 — HISTORIQUE ═══ -->
+<div class="screen" id="screen-history">
+  <div class="status-bar"><span class="time">9:41</span><div class="icons"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg><svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg></div></div>
+
+  <div class="nav-header">
+    <div class="nav-back" data-action="go" data-screen="home"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></div>
+    <div class="nav-title">Historique</div>
+  </div>
+
+  <div class="content">
+    <div class="chip-row" id="historyFilterChips"></div>
+    <div style="display:flex; gap:10px; margin-bottom:16px;" id="historyStats"></div>
+    <div id="historyList"></div>
+  </div>
+
+  <div class="tab-bar">
+    <div class="tab-item" data-action="go" data-screen="home">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Accueil</span>
+    </div>
+    <div class="tab-item active" data-action="go" data-screen="history">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Historique</span>
+    </div>
+    <div class="tab-fab" data-action="go" data-screen="media">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </div>
+    <div class="tab-item" data-action="go" data-screen="products">
+      <svg viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+      <span>Produits</span>
+    </div>
+    <div class="tab-item" data-action="go" data-screen="settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span>Reglages</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 10 — PARAMETRES ═══ -->
+<div class="screen" id="screen-settings">
+  <div class="status-bar"><span class="time">9:41</span><div class="icons"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg><svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg></div></div>
+
+  <div class="nav-header">
+    <div class="nav-back" data-action="go" data-screen="home"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></div>
+    <div class="nav-title">Reglages</div>
+  </div>
+
+  <div class="content">
+    <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Connexion</span>
+      <div class="api-dots" id="apiDots">
+        <div class="adot"><div class="adot-circle" id="dotFfmpeg"></div>FFM</div>
+        <div class="adot"><div class="adot-circle" id="dotGateway"></div>GWY</div>
+        <div class="adot"><div class="adot-circle" id="dotGemini"></div>GEM</div>
+      </div>
+    </div>
+
+    <!-- FFmpeg URL -->
+    <div class="input-group">
+      <div class="input-label">Serveur FFmpeg</div>
+      <input class="input-field" type="text" id="settingsFfmpegUrl" placeholder="https://subwhisper-ffmpeg.fly.dev">
+    </div>
+
+    <!-- Gateway Key -->
+    <div class="input-group">
+      <div class="input-label">Cle Gateway</div>
+      <div class="password-wrap">
+        <input class="input-field" type="password" id="settingsGatewayKey" placeholder="Cle API gateway" style="padding-right:44px;">
+        <button class="eye-toggle" data-action="toggle-password" data-target="settingsGatewayKey">
+          <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Admin Key (for TTS) -->
+    <div class="input-group">
+      <div class="input-label">Cle Admin (TTS)</div>
+      <div class="password-wrap">
+        <input class="input-field" type="password" id="settingsAdminKey" placeholder="Token admin pour TTS" style="padding-right:44px;">
+        <button class="eye-toggle" data-action="toggle-password" data-target="settingsAdminKey">
+          <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Test connection -->
+    <button class="btn-secondary" style="width:100%; margin-bottom:16px;" data-action="test-connection">
+      Tester connexion
+    </button>
+
+    <div class="section-title">Qualite</div>
+
+    <!-- CRF -->
+    <div class="input-group">
+      <div class="input-label">Qualite export (CRF)</div>
+      <div class="slider-row">
+        <span style="font-size:12px; color:var(--text-muted);">18</span>
+        <input type="range" class="slider" min="18" max="35" value="23" id="settingsCrf">
+        <span style="font-size:12px; color:var(--text-muted);">35</span>
+      </div>
+      <div style="text-align:center;">
+        <span class="slider-val" id="settingsCrfVal">23</span>
+      </div>
+    </div>
+
+    <!-- Default Language -->
+    <div class="input-group">
+      <div class="input-label">Langue par defaut</div>
+      <select class="input-field" id="settingsDefaultLang" style="cursor:pointer;">
+        <option value="fr">Francais</option>
+        <option value="en">English</option>
+        <option value="es">Espanol</option>
+        <option value="de">Deutsch</option>
+      </select>
+    </div>
+
+    <div class="section-title">Sauvegarde</div>
+
+    <!-- Drive folder ID -->
+    <div class="input-group">
+      <div class="input-label">Drive Folder ID</div>
+      <input class="input-field" type="text" id="settingsDriveFolderId" placeholder="ID du dossier Google Drive">
+    </div>
+
+    <div class="backup-grid">
+      <button class="btn-secondary" data-action="backup-local">
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Backup local
+      </button>
+      <button class="btn-secondary" data-action="backup-drive">
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Backup Drive
+      </button>
+      <button class="btn-secondary" data-action="restore-local">
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Restore local
+      </button>
+      <button class="btn-secondary" data-action="restore-drive">
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><polyline points="12 18 12 12"/><polyline points="9 15 12 12 15 15"/></svg>
+        Restore Drive
+      </button>
+    </div>
+    <input type="file" accept=".json" id="restoreFileInput" style="display:none;">
+
+    <div class="divider"></div>
+    <div style="text-align:center; padding:16px 0 40px;">
+      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.2.0</div>
+      <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Build 2026-04-06</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 11 — GESTION PRODUITS ═══ -->
+<div class="screen" id="screen-products">
+  <div class="status-bar"><span class="time">9:41</span><div class="icons"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg><svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg></div></div>
+
+  <div class="nav-header">
+    <div class="nav-back" data-action="go" data-screen="home"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></div>
+    <div class="nav-title">Mes produits</div>
+    <div class="nav-action" data-action="add-product">+ Ajouter</div>
+  </div>
+
+  <div class="content">
+    <div id="productsManageList"></div>
+  </div>
+
+  <div class="tab-bar">
+    <div class="tab-item" data-action="go" data-screen="home">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Accueil</span>
+    </div>
+    <div class="tab-item" data-action="go" data-screen="history">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Historique</span>
+    </div>
+    <div class="tab-fab" data-action="go" data-screen="media">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </div>
+    <div class="tab-item active" data-action="go" data-screen="products">
+      <svg viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+      <span>Produits</span>
+    </div>
+    <div class="tab-item" data-action="go" data-screen="settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span>Reglages</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Bottom Sheet (product form) ═══ -->
+<div class="bottom-sheet-overlay" id="productSheet">
+  <div class="bottom-sheet">
+    <div class="sheet-handle"></div>
+    <h3 style="font-size:16px; margin-bottom:16px;" id="productSheetTitle">Nouveau produit</h3>
+    <input type="hidden" id="productEditId">
+    <div class="input-group">
+      <div class="input-label">Nom</div>
+      <input class="input-field" type="text" id="productName" placeholder="Ex: DictoKey">
+    </div>
+    <div class="input-group">
+      <div class="input-label">Description</div>
+      <input class="input-field" type="text" id="productDesc" placeholder="Courte description">
+    </div>
+    <div class="input-group">
+      <div class="input-label">URL</div>
+      <input class="input-field" type="text" id="productUrl" placeholder="https://...">
+    </div>
+    <div class="input-group">
+      <div class="input-label">Couleur</div>
+      <input class="input-field" type="color" id="productColor" value="#7C3AED" style="height:44px;padding:4px;">
+    </div>
+    <div class="input-group">
+      <div class="input-label">CTA par defaut</div>
+      <input class="input-field" type="text" id="productCta" placeholder="Link in bio">
+    </div>
+    <div class="input-group">
+      <div class="input-label">Hashtags</div>
+      <input class="input-field" type="text" id="productHashtags" placeholder="#app #productivity">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px;">
+      <button class="btn-secondary" style="flex:1;" data-action="close-product-sheet">Annuler</button>
+      <button class="btn-primary" style="flex:1;" data-action="save-product">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Modal (confirmations) ═══ -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal">
+    <h3 id="modalTitle">Confirmer</h3>
+    <p id="modalMessage">Es-tu sur ?</p>
+    <div class="modal-actions">
+      <button class="btn-secondary" data-action="modal-cancel">Annuler</button>
+      <button class="btn-primary" style="background:var(--error); box-shadow:none;" data-action="modal-confirm">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Log Panel ═══ -->
+<div class="log-panel" id="logPanel">
+  <div class="log-header">
+    <span>Logs</span>
+    <div class="log-header-actions">
+      <button data-action="log-copy">Copier</button>
+      <button data-action="log-export">Export</button>
+      <button data-action="log-clear">Clear</button>
+      <button data-action="toggle-log">Fermer</button>
+    </div>
+  </div>
+  <div class="log-body" id="logBody"></div>
+</div>
+
+<!-- Log toggle -->
+<div class="log-toggle-btn" data-action="toggle-log">
+  <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+</div>
+
+</div><!-- /phone-frame -->
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   PromoClip v0.2.0 — Complete JS
+   ═══════════════════════════════════════════════════════ */
+
+// ──────────────────────────────────────────────────
+// 1. CONSTANTS & CONFIG
+// ──────────────────────────────────────────────────
+const APP_VERSION = '0.2.0';
+const LS_PREFIX = 'pc_';
+const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
+const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
+const DEFAULT_FFMPEG_URL = 'https://subwhisper-ffmpeg.fly.dev';
+const DEBOUNCE_SAVE_MS = 300;
+const DEBOUNCE_KEY_MS = 600;
+const CIRCUMFERENCE = 2 * Math.PI * 82; // ~515
+
+const DEFAULT_PRODUCTS = [
+  { id: 'prod-dictokey', name: 'DictoKey', desc: 'Clavier IA dictee vocale — Play Store 4.99EUR/mois', url: 'https://play.google.com/store/apps/details?id=com.dictokey', color: '#7C3AED', cta: 'Link in bio', hashtags: '#dictokey #productivity #dictation #ai', createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'prod-subwhisper', name: 'SubWhisper', desc: 'Transcription & sous-titres IA — Web app gratuite', url: 'https://subwhisper.app', color: '#06B6D4', cta: 'Essaie gratuit', hashtags: '#subwhisper #subtitles #transcription #ai', createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'prod-nocodeflow', name: 'NoCodeFlow', desc: 'Blog no-code & automatisation — Affiliation Make.com', url: 'https://nocodeflow.com', color: '#EF4444', cta: 'Link in bio', hashtags: '#nocodeflow #nocode #automation #make', createdAt: '2026-01-01T00:00:00Z' }
+];
+
+const TEMPLATES = [
+  { id: 'tpl-hook', name: 'Hook Viral', category: 'Hook viral', desc: 'Hook texte + demo app + CTA', gradient: 'linear-gradient(180deg,#7C3AED 0%,#1a1a24 50%,#0F0F13 100%)' },
+  { id: 'tpl-avantapres', name: 'Avant / Apres', category: 'Avant/Apres', desc: 'Split screen compare', gradient: 'linear-gradient(180deg,#0F0F13 0%,#1a1a24 100%)' },
+  { id: 'tpl-demo', name: 'Demo Pure', category: 'Demo app', desc: 'Screen recording + captions', gradient: 'linear-gradient(180deg,#06B6D4 0%,#0F0F13 60%)' },
+  { id: 'tpl-avatar', name: 'Avatar Talk', category: 'Temoignage', desc: 'Avatar + voiceover', gradient: 'linear-gradient(135deg,#F59E0B 0%,#0F0F13 60%)' },
+  { id: 'tpl-micro', name: 'Micro 5-8s', category: 'Hook viral', desc: 'Ultra court, impact max', gradient: 'linear-gradient(180deg,#EF4444 0%,#0F0F13 60%)' }
+];
+
+const LANGUAGES = ['Francais', 'English', 'Espanol', 'Deutsch'];
+const MUSIC_STYLES = ['Energique', 'Chill', 'Epic', 'Corporate', 'Sans'];
+const CTA_OPTIONS = ['Link in bio', 'Telecharge', 'Essaie gratuit', 'Custom...'];
+const STYLE_OPTIONS = ['Energique', 'Pro/Clean', 'Fun/Playful', 'Minimaliste', 'Urgence'];
+
+const GEN_STEPS = [
+  { id: 'analyze', label: 'Analyse des captures (Gemini Vision)' },
+  { id: 'script', label: 'Generation du script (Gemini)' },
+  { id: 'tts', label: 'Synthese vocale (TTS)' },
+  { id: 'assembly', label: 'Montage video (fly-ffmpeg)' },
+  { id: 'download', label: 'Telechargement video' }
+];
+
+// ──────────────────────────────────────────────────
+// 2. STATE MANAGEMENT
+// ──────────────────────────────────────────────────
+const defaultState = {
+  products: [],
+  wizard: {
+    mediaFiles: [],
+    selectedProductId: null,
+    selectedTemplateId: 'tpl-hook',
+    selectedStyle: 'Energique',
+    config: {
+      hookText: '',
+      language: 'Francais',
+      duration: 15,
+      musicStyle: 'Energique',
+      avatar: false,
+      voiceover: true,
+      subtitles: true,
+      cta: 'Link in bio'
+    }
+  },
+  savedConfigs: [],
+  history: [],
+  settings: {
+    ffmpegUrl: DEFAULT_FFMPEG_URL,
+    gatewayKey: '',
+    adminKey: '',
+    exportCrf: 23,
+    defaultLang: 'fr'
+  },
+  isDirty: false,
+  lastBackup: null
+};
+
+let state = JSON.parse(JSON.stringify(defaultState));
+let _saveTimer = null;
+let _genCancelled = false;
+let _modalResolve = null;
+let _lastVideoBlob = null; // Stores the generated video MP4 blob
+let _lastVideoBlobUrl = null;
+
+function saveState() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(LS_PREFIX + 'state', JSON.stringify(state));
+    } catch(e) { log('Erreur sauvegarde: ' + e.message, 'error'); }
+  }, DEBOUNCE_SAVE_MS);
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(LS_PREFIX + 'state');
+    if (raw) {
+      const saved = JSON.parse(raw);
+      // Deep merge with defaults
+      state = deepMerge(JSON.parse(JSON.stringify(defaultState)), saved);
+    }
+    // Inject default products if empty
+    if (!state.products || state.products.length === 0) {
+      state.products = JSON.parse(JSON.stringify(DEFAULT_PRODUCTS));
+      saveState();
+    }
+  } catch(e) {
+    log('Erreur chargement state: ' + e.message, 'error');
+    state = JSON.parse(JSON.stringify(defaultState));
+    state.products = JSON.parse(JSON.stringify(DEFAULT_PRODUCTS));
+  }
+}
+
+function deepMerge(target, source) {
+  for (const key in source) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key]) && target[key] && typeof target[key] === 'object') {
+      deepMerge(target[key], source[key]);
+    } else {
+      target[key] = source[key];
+    }
+  }
+  return target;
+}
+
+function markDirty() { state.isDirty = true; saveState(); }
+function clearDirty() { state.isDirty = false; saveState(); }
+
+// ──────────────────────────────────────────────────
+// 3. UTILITIES
+// ──────────────────────────────────────────────────
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function uuid() {
+  return 'xxxx-xxxx'.replace(/x/g, () => ((Math.random()*16)|0).toString(16));
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 3600000) return 'Il y a ' + Math.max(1, Math.floor(diff/60000)) + 'min';
+  if (diff < 86400000) return 'Il y a ' + Math.floor(diff/3600000) + 'h';
+  if (diff < 172800000) return 'Hier';
+  return d.toLocaleDateString('fr-FR');
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+
+// ──────────────────────────────────────────────────
+// 4. TOAST SYSTEM
+// ──────────────────────────────────────────────────
+function showToast(msg, isError = false, duration = 3000) {
+  const container = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.textContent = msg;
+  container.appendChild(t);
+  setTimeout(() => {
+    t.classList.add('out');
+    setTimeout(() => t.remove(), 300);
+  }, duration);
+}
+
+// ──────────────────────────────────────────────────
+// 5. LOG PANEL
+// ──────────────────────────────────────────────────
+let _logs = [];
+const MAX_LOGS = 200;
+
+function log(msg, level = 'info') {
+  const now = new Date();
+  const ts = now.toTimeString().slice(0,8);
+  _logs.push({ ts, msg, level });
+  if (_logs.length > MAX_LOGS) _logs.shift();
+  const body = document.getElementById('logBody');
+  if (body) {
+    const entry = document.createElement('div');
+    entry.className = 'log-entry' + (level !== 'info' ? ' ' + level : '');
+    entry.innerHTML = '<span class="log-time">' + ts + '</span>' + escapeHtml(msg);
+    body.appendChild(entry);
+    body.scrollTop = body.scrollHeight;
+  }
+}
+
+function logClear() { _logs = []; const b = document.getElementById('logBody'); if(b) b.innerHTML = ''; showToast('Logs effaces'); }
+function logCopy() {
+  const text = _logs.map(l => l.ts + ' [' + l.level + '] ' + l.msg).join('\n');
+  navigator.clipboard.writeText(text).then(() => showToast('Logs copies')).catch(() => showToast('Erreur copie', true));
+}
+function logExport() {
+  const text = _logs.map(l => l.ts + ' [' + l.level + '] ' + l.msg).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'promoclip_' + new Date().toISOString().slice(0,10) + '.log';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function toggleLogPanel() {
+  document.getElementById('logPanel').classList.toggle('open');
+}
+
+// ──────────────────────────────────────────────────
+// 7. API DOTS & CONNECTIVITY
+// ──────────────────────────────────────────────────
+function setDot(id, status) {
+  const el = document.getElementById(id);
+  if (el) { el.className = 'adot-circle' + (status ? ' ' + status : ''); }
+}
+
+async function pingFFmpeg() {
+  try {
+    const url = state.settings.ffmpegUrl || DEFAULT_FFMPEG_URL;
+    const r = await fetch(url + '/health', { signal: AbortSignal.timeout(5000) });
+    if (r.ok) { setDot('dotFfmpeg', 'ok'); log('FFmpeg OK'); return true; }
+    setDot('dotFfmpeg', 'err'); log('FFmpeg err: ' + r.status, 'warn'); return false;
+  } catch(e) { setDot('dotFfmpeg', 'err'); log('FFmpeg unreachable: ' + e.message, 'error'); return false; }
+}
+
+async function pingGateway() {
+  try {
+    if (!state.settings.gatewayKey) { setDot('dotGateway', 'key'); log('Gateway: pas de cle', 'warn'); return false; }
+    const r = await fetch(GATEWAY_URL + '/api/config', {
+      headers: { 'X-Gateway-Key': state.settings.gatewayKey },
+      signal: AbortSignal.timeout(5000)
+    });
+    if (r.ok) { setDot('dotGateway', 'ok'); setDot('dotGemini', 'ok'); log('Gateway OK'); return true; }
+    setDot('dotGateway', 'err'); log('Gateway err: ' + r.status, 'warn'); return false;
+  } catch(e) { setDot('dotGateway', 'err'); log('Gateway unreachable: ' + e.message, 'error'); return false; }
+}
+
+// ──────────────────────────────────────────────────
+// 8. GATEWAY & API CALLS
+// ──────────────────────────────────────────────────
+async function gatewayFetch(endpoint, body, opts = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (state.settings.gatewayKey) headers['X-Gateway-Key'] = state.settings.gatewayKey;
+  const r = await fetch(GATEWAY_URL + endpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    signal: opts.signal || AbortSignal.timeout(30000)
+  });
+  if (!r.ok) throw new Error('Gateway ' + r.status);
+  return r.json();
+}
+
+async function geminiGenerateHooks(productDesc, language, count = 5) {
+  try {
+    log('Gemini: generation hooks...');
+    const result = await gatewayFetch('/api/gemini', {
+      model: 'gemini-2.0-flash',
+      prompt: 'Generate ' + count + ' short viral TikTok hook texts (max 8 words each) in ' + language + ' for this product: ' + productDesc + '. Return only a JSON array of strings.',
+      maxTokens: 300
+    });
+    if (result && result.text) {
+      const match = result.text.match(/\[[\s\S]*?\]/);
+      if (match) return JSON.parse(match[0]);
+    }
+    return ['Arrete de scroller !', 'Tu savais pas ca...', 'Ce truc change tout', '3 secondes = game changer', 'Regarde ca attentivement'];
+  } catch(e) {
+    log('Gemini erreur: ' + e.message, 'error');
+    return ['Arrete de scroller !', 'Tu savais pas ca...', 'Ce truc change tout'];
+  }
+}
+
+// ──────────────────────────────────────────────────
+// 8b. PIPELINE API HELPERS
+// ──────────────────────────────────────────────────
+
+// Convert File object to base64 string (without data: prefix)
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const b64 = reader.result.split(',')[1];
+      resolve(b64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Call Gemini Vision to get bounding boxes of UI elements in a screenshot
+async function geminiVision(imageBase64, mimeType) {
+  log('Gemini Vision: analyse capture...');
+  const r = await fetch(GATEWAY_URL + '/api/gemini/v1beta/models/gemini-2.0-flash:generateContent', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + (state.settings.gatewayKey || '')
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { text: 'Analyze this app screenshot. Find the most important UI element (main button, key feature, result area). Return ONLY a JSON object with bounding box coordinates in 0-1000 scale: {"x1":number,"y1":number,"x2":number,"y2":number,"element":"description"}. If no clear element, return {"x1":300,"y1":300,"x2":700,"y2":700,"element":"center"}.' },
+          { inline_data: { mime_type: mimeType || 'image/png', data: imageBase64 } }
+        ]
+      }],
+      generationConfig: { maxOutputTokens: 200, temperature: 0.1 }
+    }),
+    signal: AbortSignal.timeout(20000)
+  });
+  if (!r.ok) throw new Error('Gemini Vision HTTP ' + r.status);
+  const data = await r.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const match = text.match(/\{[\s\S]*?\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch(e) {}
+  }
+  return { x1: 250, y1: 250, x2: 750, y2: 750, element: 'center-fallback' };
+}
+
+// Call Gemini to generate a TikTok promo script
+async function geminiScript(productDesc, hookText, language, duration) {
+  log('Gemini: generation script promo...');
+  const result = await gatewayFetch('/api/gemini', {
+    model: 'gemini-2.0-flash',
+    prompt: `You are a TikTok video copywriter. Generate a voiceover script for a ${duration}-second promo video.
+Product: ${productDesc}
+Hook: ${hookText}
+Language: ${language}
+Return ONLY a JSON: {"voiceover":"the full voiceover text for TTS (${Math.max(2,Math.round(duration*0.7))} seconds of speech)", "cta":"call to action text (5 words max)"}`,
+    maxTokens: 500
+  });
+  if (result && result.text) {
+    const match = result.text.match(/\{[\s\S]*?\}/);
+    if (match) {
+      try { return JSON.parse(match[0]); } catch(e) {}
+    }
+  }
+  return { voiceover: hookText + '. ' + productDesc, cta: 'Link in bio' };
+}
+
+// Generate TTS audio via gateway /admin/tts
+async function generateTTS(text, voice = 'onyx') {
+  log('TTS: synthese vocale (' + voice + ')...');
+  const r = await fetch(GATEWAY_URL + '/admin/tts', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + (state.settings.adminKey || state.settings.gatewayKey || '')
+    },
+    body: JSON.stringify({ text, voice, model: 'tts-1' }),
+    signal: AbortSignal.timeout(30000)
+  });
+  if (!r.ok) throw new Error('TTS HTTP ' + r.status);
+  const data = await r.json();
+  if (!data.ok) throw new Error('TTS: ' + (data.error || 'unknown'));
+  log('TTS OK: ' + (data.size / 1024).toFixed(1) + ' KB');
+  return data.base64; // MP3 base64
+}
+
+// Call fly-ffmpeg /promo-assembly to generate final video
+async function ffmpegAssembly(clips, audioBase64, musicBase64) {
+  const ffmpegUrl = state.settings.ffmpegUrl || DEFAULT_FFMPEG_URL;
+  log('FFmpeg: envoi de ' + clips.length + ' clips a ' + ffmpegUrl + '/promo-assembly...');
+  const r = await fetch(ffmpegUrl + '/promo-assembly', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + (state.settings.gatewayKey || '')
+    },
+    body: JSON.stringify({
+      clips,
+      audio: audioBase64 || undefined,
+      music: musicBase64 || undefined,
+      hookText: state.wizard.config.hookText || undefined,
+      ctaText: state.wizard.config.cta || undefined,
+      width: 1080,
+      height: 1920,
+      musicVolume: 0.25
+    }),
+    signal: AbortSignal.timeout(180000) // 3 min max
+  });
+  if (!r.ok) {
+    const errText = await r.text().catch(() => '');
+    throw new Error('FFmpeg assembly HTTP ' + r.status + ': ' + errText.slice(0, 200));
+  }
+  log('FFmpeg: reception video...');
+  return await r.blob(); // MP4 blob
+}
+
+// ──────────────────────────────────────────────────
+// 9. PRODUCTS CRUD
+// ──────────────────────────────────────────────────
+function renderProducts() {
+  const list = document.getElementById('productsManageList');
+  if (!list) return;
+  if (state.products.length === 0) {
+    list.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg><h3>Aucun produit</h3><p>Ajoute ton premier produit pour commencer</p></div>';
+    return;
+  }
+  list.innerHTML = state.products.map(p => `
+    <div class="product-card" data-action="edit-product" data-id="${p.id}">
+      <div class="product-icon" style="background:linear-gradient(135deg,${p.color},${adjustColor(p.color, -40)});">
+        <span style="font-size:18px;color:#fff;">${escapeHtml(p.name.charAt(0))}</span>
+      </div>
+      <div class="product-info">
+        <div class="name">${escapeHtml(p.name)}</div>
+        <div class="desc">${escapeHtml(p.desc)}</div>
+      </div>
+      <button class="product-delete" data-action="delete-product" data-id="${p.id}" onclick="event.stopPropagation()">
+        <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+      </button>
+    </div>
+  `).join('');
+}
+
+function renderProductSelection() {
+  const list = document.getElementById('productSelectionList');
+  if (!list) return;
+  list.innerHTML = state.products.map(p => `
+    <div class="product-card${state.wizard.selectedProductId === p.id ? ' selected' : ''} slide-up" data-action="select-product" data-id="${p.id}">
+      <div class="product-icon" style="background:linear-gradient(135deg,${p.color},${adjustColor(p.color, -40)});">
+        <span style="font-size:18px;color:#fff;">${escapeHtml(p.name.charAt(0))}</span>
+      </div>
+      <div class="product-info">
+        <div class="name">${escapeHtml(p.name)}</div>
+        <div class="desc">${escapeHtml(p.desc)}</div>
+      </div>
+      ${state.wizard.selectedProductId === p.id ? '<svg width="20" height="20" viewBox="0 0 24 24" stroke="var(--accent)" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+    </div>
+  `).join('');
+}
+
+function adjustColor(hex, amount) {
+  let c = hex.replace('#', '');
+  if (c.length === 3) c = c[0]+c[0]+c[1]+c[1]+c[2]+c[2];
+  const num = parseInt(c, 16);
+  const r = clamp(((num >> 16) & 0xff) + amount, 0, 255);
+  const g = clamp(((num >> 8) & 0xff) + amount, 0, 255);
+  const b = clamp((num & 0xff) + amount, 0, 255);
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+function openProductSheet(product) {
+  document.getElementById('productSheetTitle').textContent = product ? 'Modifier produit' : 'Nouveau produit';
+  document.getElementById('productEditId').value = product ? product.id : '';
+  document.getElementById('productName').value = product ? product.name : '';
+  document.getElementById('productDesc').value = product ? product.desc : '';
+  document.getElementById('productUrl').value = product ? (product.url || '') : '';
+  document.getElementById('productColor').value = product ? product.color : '#7C3AED';
+  document.getElementById('productCta').value = product ? (product.cta || '') : 'Link in bio';
+  document.getElementById('productHashtags').value = product ? (product.hashtags || '') : '';
+  document.getElementById('productSheet').classList.add('open');
+}
+
+function closeProductSheet() {
+  document.getElementById('productSheet').classList.remove('open');
+}
+
+function saveProduct() {
+  const id = document.getElementById('productEditId').value;
+  const name = document.getElementById('productName').value.trim();
+  if (!name) { showToast('Le nom est requis', true); return; }
+  const data = {
+    name,
+    desc: document.getElementById('productDesc').value.trim(),
+    url: document.getElementById('productUrl').value.trim(),
+    color: document.getElementById('productColor').value,
+    cta: document.getElementById('productCta').value.trim() || 'Link in bio',
+    hashtags: document.getElementById('productHashtags').value.trim()
+  };
+  if (id) {
+    const idx = state.products.findIndex(p => p.id === id);
+    if (idx >= 0) Object.assign(state.products[idx], data);
+  } else {
+    state.products.push({ id: 'prod-' + uuid(), ...data, createdAt: new Date().toISOString() });
+  }
+  markDirty();
+  closeProductSheet();
+  renderProducts();
+  renderProductSelection();
+  showToast(id ? 'Produit modifie' : 'Produit ajoute');
+  log('Produit ' + (id ? 'modifie' : 'ajoute') + ': ' + name);
+}
+
+function deleteProduct(id) {
+  showModal('Supprimer ?', 'Ce produit sera supprime definitivement.').then(ok => {
+    if (ok) {
+      state.products = state.products.filter(p => p.id !== id);
+      if (state.wizard.selectedProductId === id) state.wizard.selectedProductId = null;
+      markDirty();
+      renderProducts();
+      renderProductSelection();
+      showToast('Produit supprime');
+      log('Produit supprime: ' + id);
+    }
+  });
+}
+
+// ──────────────────────────────────────────────────
+// 10. MEDIA PICKER
+// ──────────────────────────────────────────────────
+function handleMediaFiles(files) {
+  for (const f of files) {
+    const existing = state.wizard.mediaFiles.find(m => m.name === f.name && m.size === f.size);
+    if (!existing) {
+      state.wizard.mediaFiles.push({
+        id: 'media-' + uuid(),
+        name: f.name,
+        size: f.size,
+        type: f.type,
+        isVideo: f.type.startsWith('video/'),
+        selected: true,
+        order: state.wizard.mediaFiles.filter(m => m.selected).length + 1,
+        _file: f // keep reference
+      });
+    }
+  }
+  markDirty();
+  renderMediaGrid();
+}
+
+function renderMediaGrid() {
+  const grid = document.getElementById('mediaGrid');
+  const emptyEl = document.getElementById('mediaEmptyState');
+  const countEl = document.getElementById('mediaCount');
+  const textEl = document.getElementById('mediaSelectedText');
+
+  const files = state.wizard.mediaFiles;
+  const selected = files.filter(f => f.selected);
+
+  if (countEl) countEl.textContent = '(' + selected.length + ')';
+  if (textEl) textEl.textContent = selected.length + ' media' + (selected.length > 1 ? 's' : '') + ' selectionne' + (selected.length > 1 ? 's' : '');
+
+  if (files.length === 0) {
+    grid.innerHTML = '';
+    if (emptyEl) emptyEl.style.display = 'flex';
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = 'none';
+
+  grid.innerHTML = files.map(f => {
+    const colors = ['#2a2a3a','#1e2a3a','#3a2a2a','#2a3a2a','#3a3a1a','#2a2a3a','#1a2a3a','#3a1a2a'];
+    const bg = colors[Math.abs(hashStr(f.name)) % colors.length];
+    return `
+      <div class="media-thumb${f.selected ? ' selected' : ''}" data-action="toggle-media" data-id="${f.id}" style="background:linear-gradient(135deg,${bg},#1a1a24);">
+        <div class="order-badge">${f.selected ? f.order : ''}</div>
+        <div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+        ${f.isVideo ? '<div class="duration">VID</div>' : ''}
+        <div style="position:absolute;bottom:4px;left:6px;font-size:9px;color:rgba(255,255,255,0.4);max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(f.name)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function hashStr(s) { let h=0; for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0;} return h; }
+
+function toggleMedia(id) {
+  const f = state.wizard.mediaFiles.find(m => m.id === id);
+  if (!f) return;
+  f.selected = !f.selected;
+  // Recompute order
+  let order = 1;
+  state.wizard.mediaFiles.forEach(m => { if (m.selected) m.order = order++; });
+  markDirty();
+  renderMediaGrid();
+}
+
+// ──────────────────────────────────────────────────
+// 11. TEMPLATE SYSTEM
+// ──────────────────────────────────────────────────
+function renderTemplates() {
+  // Category chips
+  const catContainer = document.getElementById('templateCategoryChips');
+  const categories = ['Tous', ...new Set(TEMPLATES.map(t => t.category))];
+  const activeCat = state._templateFilter || 'Tous';
+
+  catContainer.innerHTML = categories.map(c =>
+    `<div class="chip${c === activeCat ? ' selected' : ''}" data-action="filter-template-cat" data-cat="${c}">${c}</div>`
+  ).join('');
+
+  // Template cards
+  const scroll = document.getElementById('templateScroll');
+  const filtered = activeCat === 'Tous' ? TEMPLATES : TEMPLATES.filter(t => t.category === activeCat);
+
+  scroll.innerHTML = filtered.map(t => `
+    <div class="template-card${state.wizard.selectedTemplateId === t.id ? ' selected' : ''}" data-action="select-template" data-id="${t.id}">
+      <div class="template-preview" style="${t.gradient}; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;">
+        <div style="font-size:12px; font-weight:700; color:rgba(255,255,255,0.8); text-align:center; padding:0 8px;">${escapeHtml(t.name)}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.4);padding:0 8px;text-align:center;">${escapeHtml(t.desc)}</div>
+      </div>
+      <div class="template-name">${escapeHtml(t.name)}</div>
+    </div>
+  `).join('');
+
+  // Style chips
+  const styleContainer = document.getElementById('styleChips');
+  styleContainer.innerHTML = STYLE_OPTIONS.map(s =>
+    `<div class="chip${state.wizard.selectedStyle === s ? ' selected' : ''}" data-action="select-style" data-style="${s}">${s}</div>`
+  ).join('');
+}
+
+// ──────────────────────────────────────────────────
+// 12. CONFIGURATION (Wizard)
+// ──────────────────────────────────────────────────
+function renderConfigScreen() {
+  const cfg = state.wizard.config;
+
+  document.getElementById('configHook').value = cfg.hookText || '';
+
+  // Language chips
+  const langContainer = document.getElementById('langChips');
+  langContainer.innerHTML = LANGUAGES.map(l =>
+    `<div class="chip${cfg.language === l ? ' selected' : ''}" data-action="set-lang" data-lang="${l}">${l}</div>`
+  ).join('');
+
+  // Duration
+  document.getElementById('configDuration').value = cfg.duration;
+  updateDurationDisplay(cfg.duration);
+
+  // Music chips
+  const musicContainer = document.getElementById('musicChips');
+  musicContainer.innerHTML = MUSIC_STYLES.map(m =>
+    `<div class="chip${cfg.musicStyle === m ? ' selected' : ''}" data-action="set-music" data-music="${m}">${m}</div>`
+  ).join('');
+
+  // Toggles
+  document.getElementById('toggleAvatar').className = 'toggle' + (cfg.avatar ? ' on' : '');
+  document.getElementById('toggleVoiceover').className = 'toggle' + (cfg.voiceover ? ' on' : '');
+  document.getElementById('toggleSubtitles').className = 'toggle' + (cfg.subtitles ? ' on' : '');
+
+  // CTA chips
+  const ctaContainer = document.getElementById('ctaChips');
+  ctaContainer.innerHTML = CTA_OPTIONS.map(c =>
+    `<div class="chip${cfg.cta === c ? ' selected' : ''}" data-action="set-cta" data-cta="${c}">${c}</div>`
+  ).join('');
+
+  // Estimate
+  let est = 30;
+  if (cfg.avatar) est += 20;
+  if (cfg.voiceover) est += 10;
+  document.getElementById('configEstimate').textContent = 'Temps estime : ~' + est + 's';
+}
+
+function updateDurationDisplay(val) {
+  const v = parseInt(val);
+  document.getElementById('configDurationVal').textContent = v + 's';
+  const fb = document.getElementById('configDurationFeedback');
+  if (v <= 15) { fb.textContent = 'Duree optimale TikTok'; fb.style.color = 'var(--success)'; }
+  else if (v <= 34) { fb.textContent = 'Bon compromis'; fb.style.color = 'var(--warning)'; }
+  else { fb.textContent = 'Risque completion basse'; fb.style.color = 'var(--error)'; }
+}
+
+function saveWizardConfig() {
+  const cfg = state.wizard.config;
+  cfg.hookText = document.getElementById('configHook').value;
+  const product = state.products.find(p => p.id === state.wizard.selectedProductId);
+
+  const savedCfg = {
+    id: 'cfg-' + uuid(),
+    productId: state.wizard.selectedProductId,
+    productName: product ? product.name : 'Sans produit',
+    templateId: state.wizard.selectedTemplateId,
+    config: { ...cfg },
+    createdAt: new Date().toISOString(),
+    useCount: 0
+  };
+  state.savedConfigs.push(savedCfg);
+  markDirty();
+  showToast('Config sauvegardee');
+  log('Config sauvegardee: ' + savedCfg.productName);
+}
+
+// ──────────────────────────────────────────────────
+// 13. GENERATION PIPELINE (simulated)
+// ──────────────────────────────────────────────────
+async function startGeneration() {
+  _genCancelled = false;
+  goScreen('generate');
+  log('Demarrage generation v0.2.0 — pipeline reel');
+
+  // Save config from inputs
+  state.wizard.config.hookText = document.getElementById('configHook').value;
+
+  renderGenSteps();
+  updateProgress(0);
+
+  const product = state.products.find(p => p.id === state.wizard.selectedProductId);
+  if (!product) { showToast('Selectionne un produit !', true); goScreen('product'); return; }
+
+  const selectedMedia = state.wizard.mediaFiles.filter(m => m.selected && m._file);
+  if (selectedMedia.length === 0) { showToast('Ajoute des medias !', true); goScreen('media'); return; }
+
+  const cfg = state.wizard.config;
+
+  try {
+    // ── STEP 1: Gemini Vision — Analyze captures for bounding boxes ──
+    updateStep(0, 'active');
+    log('Etape 1: Analyse de ' + selectedMedia.length + ' captures via Gemini Vision');
+
+    const clipData = [];
+    for (let i = 0; i < selectedMedia.length; i++) {
+      if (_genCancelled) throw new Error('Annule');
+      const media = selectedMedia[i];
+      const b64 = await fileToBase64(media._file);
+      let bbox = null;
+      try {
+        bbox = await geminiVision(b64, media.type || 'image/png');
+        log('  Capture ' + (i+1) + '/' + selectedMedia.length + ': bbox=' + JSON.stringify(bbox));
+      } catch(e) {
+        log('  Capture ' + (i+1) + ': Vision fallback (center) — ' + e.message, 'warn');
+        bbox = { x1: 250, y1: 250, x2: 750, y2: 750, element: 'fallback' };
+      }
+      // Distribute duration across clips
+      const clipDur = Math.max(2, Math.round(cfg.duration / selectedMedia.length));
+      const effects = ['zoom_in', 'pan_right', 'zoom_out', 'pan_down'];
+      clipData.push({
+        image: b64,
+        bbox: bbox,
+        effect: effects[i % effects.length],
+        duration: clipDur
+      });
+      updateProgress(Math.round(5 + (i / selectedMedia.length) * 15));
+    }
+    updateProgress(20);
+    updateStep(0, 'done');
+    log('Etape 1 terminee: ' + clipData.length + ' captures analysees');
+
+    if (_genCancelled) throw new Error('Annule');
+
+    // ── STEP 2: Gemini Script — Generate voiceover script ──
+    updateStep(1, 'active');
+    let script;
+    try {
+      script = await geminiScript(product.desc, cfg.hookText || 'Check this out', cfg.language, cfg.duration);
+      log('Script genere: "' + script.voiceover.slice(0, 60) + '..."');
+    } catch(e) {
+      log('Script fallback: ' + e.message, 'warn');
+      script = { voiceover: cfg.hookText || product.desc, cta: cfg.cta || 'Link in bio' };
+    }
+    updateProgress(35);
+    updateStep(1, 'done');
+
+    if (_genCancelled) throw new Error('Annule');
+
+    // ── STEP 3: TTS — Voice synthesis ──
+    updateStep(2, 'active');
+    let audioBase64 = null;
+    if (cfg.voiceover !== false) {
+      try {
+        const voiceMap = { 'Francais': 'onyx', 'English': 'nova', 'Espanol': 'echo', 'Deutsch': 'alloy' };
+        audioBase64 = await generateTTS(script.voiceover, voiceMap[cfg.language] || 'onyx');
+      } catch(e) {
+        log('TTS echoue: ' + e.message + ' — video sans voix', 'warn');
+        showToast('TTS indisponible — video sans voix', true);
+      }
+    } else {
+      log('Voiceover desactive — skip TTS');
+    }
+    updateProgress(55);
+    updateStep(2, 'done');
+
+    if (_genCancelled) throw new Error('Annule');
+
+    // ── STEP 4: FFmpeg Assembly — Server-side video generation ──
+    updateStep(3, 'active');
+    log('Envoi a fly-ffmpeg pour assemblage...');
+
+    const videoBlob = await ffmpegAssembly(clipData, audioBase64, null);
+    log('Video recue: ' + (videoBlob.size / 1048576).toFixed(1) + ' MB');
+    updateProgress(90);
+    updateStep(3, 'done');
+
+    if (_genCancelled) throw new Error('Annule');
+
+    // ── STEP 5: Download & prepare preview ──
+    updateStep(4, 'active');
+
+    // Revoke previous blob URL if any
+    if (_lastVideoBlobUrl) { URL.revokeObjectURL(_lastVideoBlobUrl); _lastVideoBlobUrl = null; }
+    _lastVideoBlob = videoBlob;
+    _lastVideoBlobUrl = URL.createObjectURL(videoBlob);
+
+    log('Video prete: ' + _lastVideoBlobUrl);
+    updateProgress(100);
+    updateStep(4, 'done');
+
+    // Add to history
+    addToHistory();
+    showToast('Video generee ! (' + (videoBlob.size / 1048576).toFixed(1) + ' MB)');
+    log('Generation terminee avec succes');
+
+    // Navigate to preview
+    await sleep(500);
+    if (!_genCancelled) {
+      renderPreview();
+      goScreen('preview');
+    }
+
+  } catch(err) {
+    if (err.message === 'Annule') {
+      log('Generation annulee par utilisateur', 'warn');
+      showToast('Generation annulee', true);
+    } else {
+      log('ERREUR pipeline: ' + err.message, 'error');
+      showToast('Erreur: ' + err.message, true);
+    }
+  }
+}
+
+function renderGenSteps() {
+  const container = document.getElementById('genSteps');
+  container.innerHTML = GEN_STEPS.map((s, i) => `
+    <div class="gen-step pending" id="genStep-${i}">
+      <div class="gen-step-icon"></div>
+      <span class="gen-step-label">${escapeHtml(s.label)}</span>
+    </div>
+  `).join('');
+}
+
+function updateProgress(percent) {
+  const circle = document.getElementById('progressCircle');
+  const label = document.getElementById('progressPercent');
+  if (circle) {
+    const offset = CIRCUMFERENCE - (percent / 100) * CIRCUMFERENCE;
+    circle.setAttribute('stroke-dashoffset', offset);
+  }
+  if (label) {
+    label.innerHTML = percent + '<span style="font-size:20px;">%</span><small>' + (percent < 100 ? 'Generation en cours...' : 'Termine !') + '</small>';
+  }
+}
+
+function updateStep(idx, stepState) {
+  const el = document.getElementById('genStep-' + idx);
+  if (!el) return;
+  el.className = 'gen-step ' + stepState;
+  const icon = el.querySelector('.gen-step-icon');
+  if (stepState === 'done') {
+    icon.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" stroke="#fff" fill="none" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  } else if (stepState === 'active') {
+    icon.innerHTML = '<div style="width:8px;height:8px;border-radius:50%;background:#fff;"></div>';
+  }
+}
+
+function cancelGeneration() { _genCancelled = true; }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ──────────────────────────────────────────────────
+// 14. HISTORY
+// ──────────────────────────────────────────────────
+function addToHistory() {
+  const product = state.products.find(p => p.id === state.wizard.selectedProductId);
+  const tpl = TEMPLATES.find(t => t.id === state.wizard.selectedTemplateId);
+  const cfg = state.wizard.config;
+
+  state.history.unshift({
+    id: 'hist-' + uuid(),
+    productId: state.wizard.selectedProductId,
+    productName: product ? product.name : 'Sans produit',
+    productColor: product ? product.color : '#7C3AED',
+    templateName: tpl ? tpl.name : 'Custom',
+    hookText: cfg.hookText,
+    duration: cfg.duration,
+    language: cfg.language,
+    musicStyle: cfg.musicStyle,
+    cta: cfg.cta,
+    status: 'draft',
+    createdAt: new Date().toISOString()
+  });
+  markDirty();
+}
+
+function renderHistory(filter) {
+  const container = document.getElementById('historyList');
+  const statsEl = document.getElementById('historyStats');
+  const chipEl = document.getElementById('historyFilterChips');
+  if (!container) return;
+
+  // Filter chips
+  const productNames = [...new Set(state.history.map(h => h.productName))];
+  const activeFilter = filter || state._historyFilter || 'Tous';
+  chipEl.innerHTML = ['Tous', ...productNames].map(n =>
+    `<div class="chip${n === activeFilter ? ' selected' : ''}" data-action="filter-history" data-filter="${n}">${n}</div>`
+  ).join('');
+
+  // Stats
+  const total = state.history.length;
+  const shared = state.history.filter(h => h.status === 'shared').length;
+  const drafts = total - shared;
+  statsEl.innerHTML = `
+    <div style="flex:1; text-align:center; padding:12px; background:var(--bg-card); border-radius:var(--radius-sm);">
+      <div style="font-size:22px; font-weight:800; color:var(--accent-light);">${total}</div>
+      <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Videos creees</div>
+    </div>
+    <div style="flex:1; text-align:center; padding:12px; background:var(--bg-card); border-radius:var(--radius-sm);">
+      <div style="font-size:22px; font-weight:800; color:var(--success);">${shared}</div>
+      <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Partagees</div>
+    </div>
+    <div style="flex:1; text-align:center; padding:12px; background:var(--bg-card); border-radius:var(--radius-sm);">
+      <div style="font-size:22px; font-weight:800; color:var(--warning);">${drafts}</div>
+      <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Brouillons</div>
+    </div>
+  `;
+
+  // List
+  let items = state.history;
+  if (activeFilter !== 'Tous') items = items.filter(h => h.productName === activeFilter);
+
+  if (items.length === 0) {
+    container.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><h3>Aucune video</h3><p>Cree ta premiere promo video en quelques taps !</p></div>';
+    return;
+  }
+
+  container.innerHTML = items.map(h => `
+    <div class="history-item" data-action="view-history" data-id="${h.id}">
+      <div class="history-thumb" style="background:linear-gradient(135deg, ${h.productColor}, #1a1a24); display:flex; align-items:center; justify-content:center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+      <div class="history-info">
+        <div class="title">${escapeHtml(h.productName)} — "${escapeHtml(h.hookText || 'Sans hook')}"</div>
+        <div class="meta">
+          <span>${h.duration}s</span>
+          <span>${h.language ? h.language.substring(0,2).toUpperCase() : ''}</span>
+          <span style="color:${h.status === 'shared' ? 'var(--success)' : 'var(--warning)'};">${h.status === 'shared' ? 'Partage' : 'Brouillon'}</span>
+        </div>
+        <div class="meta" style="margin-top:2px;">${fmtDate(h.createdAt)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function deleteFromHistory(id) {
+  state.history = state.history.filter(h => h.id !== id);
+  markDirty();
+  renderHistory();
+}
+
+// ──────────────────────────────────────────────────
+// 15. SETTINGS UI
+// ──────────────────────────────────────────────────
+function renderSettings() {
+  document.getElementById('settingsFfmpegUrl').value = state.settings.ffmpegUrl || DEFAULT_FFMPEG_URL;
+  document.getElementById('settingsGatewayKey').value = state.settings.gatewayKey || '';
+  document.getElementById('settingsAdminKey').value = state.settings.adminKey || '';
+  document.getElementById('settingsCrf').value = state.settings.exportCrf || 23;
+  document.getElementById('settingsCrfVal').textContent = state.settings.exportCrf || 23;
+  document.getElementById('settingsDefaultLang').value = state.settings.defaultLang || 'fr';
+  document.getElementById('settingsDriveFolderId').value = state.settings.driveFolderId || '';
+}
+
+const debouncedSaveSettings = debounce(() => {
+  state.settings.ffmpegUrl = document.getElementById('settingsFfmpegUrl').value.trim() || DEFAULT_FFMPEG_URL;
+  state.settings.exportCrf = parseInt(document.getElementById('settingsCrf').value);
+  state.settings.defaultLang = document.getElementById('settingsDefaultLang').value;
+  state.settings.driveFolderId = document.getElementById('settingsDriveFolderId').value.trim();
+  document.getElementById('settingsCrfVal').textContent = state.settings.exportCrf;
+  markDirty();
+  log('Settings mis a jour');
+}, DEBOUNCE_SAVE_MS);
+
+const debouncedSaveKey = debounce(() => {
+  state.settings.gatewayKey = document.getElementById('settingsGatewayKey').value.trim();
+  state.settings.adminKey = document.getElementById('settingsAdminKey').value.trim();
+  markDirty();
+  log('Cles mises a jour');
+}, DEBOUNCE_KEY_MS);
+
+// ──────────────────────────────────────────────────
+// 16. BACKUP / RESTORE
+// ──────────────────────────────────────────────────
+function backupLocal() {
+  const data = JSON.parse(JSON.stringify(state));
+  delete data._templateFilter;
+  delete data._historyFilter;
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'promoclip_backup_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  state.lastBackup = new Date().toISOString();
+  clearDirty();
+  showToast('Backup local telecharge');
+  log('Backup local cree');
+}
+
+function restoreLocal() {
+  document.getElementById('restoreFileInput').click();
+}
+
+function handleRestoreFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.products && !data.history && !data.settings) {
+        showToast('Fichier invalide', true);
+        return;
+      }
+      state = deepMerge(JSON.parse(JSON.stringify(defaultState)), data);
+      saveState();
+      clearDirty();
+      renderAll();
+      showToast('Restore effectue');
+      log('State restaure depuis fichier local');
+    } catch(err) {
+      showToast('Erreur parsing: ' + err.message, true);
+      log('Erreur restore: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+async function backupDrive() {
+  const folderId = state.settings.driveFolderId;
+  if (!folderId) { showToast('Drive Folder ID requis', true); return; }
+
+  try {
+    log('Backup Drive en cours...');
+    const data = JSON.stringify(state, null, 2);
+    const today = new Date().toISOString().slice(0,10);
+
+    await fetch(MCP_DRIVE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tool: 'drive_create',
+        params: {
+          name: 'promoclip_backup_' + today + '.json',
+          content: data,
+          folderId: folderId,
+          mimeType: 'application/json'
+        }
+      })
+    });
+
+    state.lastBackup = new Date().toISOString();
+    clearDirty();
+    showToast('Backup Drive effectue');
+    log('Backup Drive OK');
+  } catch(e) {
+    showToast('Erreur Drive: ' + e.message, true);
+    log('Backup Drive erreur: ' + e.message, 'error');
+  }
+}
+
+async function restoreDrive() {
+  const folderId = state.settings.driveFolderId;
+  if (!folderId) { showToast('Drive Folder ID requis', true); return; }
+
+  try {
+    log('Recherche backups Drive...');
+    const r = await fetch(MCP_DRIVE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tool: 'drive_find',
+        params: { query: 'promoclip_backup', folderId: folderId }
+      })
+    });
+    const result = await r.json();
+    if (result && result.files && result.files.length > 0) {
+      showToast('Fichiers trouves: ' + result.files.length + '. Restore du dernier...');
+      // Attempt to read the first file
+      const fileId = result.files[0].id;
+      const r2 = await fetch(MCP_DRIVE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tool: 'drive_read', params: { fileId } })
+      });
+      const data = await r2.json();
+      if (data && data.content) {
+        const parsed = JSON.parse(data.content);
+        state = deepMerge(JSON.parse(JSON.stringify(defaultState)), parsed);
+        saveState();
+        renderAll();
+        showToast('Restore Drive effectue');
+        log('State restaure depuis Drive');
+      }
+    } else {
+      showToast('Aucun backup trouve sur Drive', true);
+    }
+  } catch(e) {
+    showToast('Erreur Drive: ' + e.message, true);
+    log('Restore Drive erreur: ' + e.message, 'error');
+  }
+}
+
+// ──────────────────────────────────────────────────
+// 17. NAVIGATION
+// ──────────────────────────────────────────────────
+let _currentScreen = 'home';
+
+function goScreen(name) {
+  if (name === _currentScreen) return;
+
+  // Exit old
+  const old = document.getElementById('screen-' + _currentScreen);
+  if (old) { old.classList.remove('active'); old.classList.add('exit-left'); }
+
+  // Enter new
+  const next = document.getElementById('screen-' + name);
+  if (next) { next.classList.remove('exit-left'); next.classList.add('active'); }
+
+  _currentScreen = name;
+
+  // Update desktop nav
+  document.querySelectorAll('.screen-nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.screen === name);
+  });
+
+  // Screen-specific renders
+  switch(name) {
+    case 'home': renderDashboard(); break;
+    case 'media': renderMediaGrid(); break;
+    case 'product': renderProductSelection(); break;
+    case 'template': renderTemplates(); break;
+    case 'config': renderConfigScreen(); break;
+    case 'history': renderHistory(); break;
+    case 'settings': renderSettings(); break;
+    case 'products': renderProducts(); break;
+    case 'preview': renderPreview(); break;
+    case 'share': renderShareScreen(); break;
+  }
+
+  // Update tab bar active states across all tab bars
+  document.querySelectorAll('.tab-bar').forEach(bar => {
+    bar.querySelectorAll('.tab-item').forEach(tab => {
+      const tabScreen = tab.dataset.screen || (tab.getAttribute('data-action') === 'go' ? tab.dataset.screen : '');
+      // Check from data-action="go" + data-screen
+      const screen = tab.dataset.screen;
+      tab.classList.toggle('active', screen === name);
+    });
+  });
+
+  log('Navigation: ' + name);
+}
+
+// ──────────────────────────────────────────────────
+// 19. DASHBOARD (Home screen)
+// ──────────────────────────────────────────────────
+function renderDashboard() {
+  renderSavedConfigs();
+  renderDashboardHistory();
+}
+
+function renderSavedConfigs() {
+  const container = document.getElementById('savedConfigsScroll');
+  if (!container) return;
+
+  let html = '';
+  const configs = state.savedConfigs.slice(-5).reverse();
+
+  configs.forEach(cfg => {
+    const product = state.products.find(p => p.id === cfg.productId);
+    const color = product ? product.color : '#7C3AED';
+    html += `
+      <div style="min-width:260px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-md); padding:14px; flex-shrink:0; cursor:pointer;" data-action="load-config" data-id="${cfg.id}">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,${color},${adjustColor(color,-40)});display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;">${cfg.productName ? cfg.productName.charAt(0) : '?'}</div>
+          <div>
+            <div style="font-size:13px; font-weight:600;">${escapeHtml(cfg.productName)} — ${escapeHtml(cfg.config.language)}</div>
+            <div style="font-size:11px; color:var(--text-muted);">${cfg.config.duration}s · ${escapeHtml(cfg.config.musicStyle)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  // Add card
+  html += `
+    <div style="min-width:180px; background:var(--bg-card); border:1px dashed var(--border); border-radius:var(--radius-md); padding:14px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; cursor:pointer; opacity:0.6;" data-action="go" data-screen="config">
+      <svg width="24" height="24" viewBox="0 0 24 24" stroke="var(--text-muted)" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      <span style="font-size:12px; color:var(--text-muted);">Ajouter config</span>
+    </div>
+  `;
+
+  container.innerHTML = html;
+}
+
+function renderDashboardHistory() {
+  const container = document.getElementById('dashboardHistory');
+  if (!container) return;
+  const items = state.history.slice(0, 3);
+
+  if (items.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Aucune creation. Tape "+" pour commencer !</div>';
+    return;
+  }
+
+  container.innerHTML = items.map(h => `
+    <div class="history-item slide-up" data-action="view-history" data-id="${h.id}">
+      <div class="history-thumb" style="background:linear-gradient(135deg, ${h.productColor}, #1a1a24); display:flex; align-items:center; justify-content:center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+      <div class="history-info">
+        <div class="title">${escapeHtml(h.productName)} — "${escapeHtml(h.hookText || 'Sans hook')}"</div>
+        <div class="meta">
+          <span>${h.duration}s</span>
+          <span>${h.language ? h.language.substring(0,2).toUpperCase() : ''}</span>
+          <span style="color:${h.status === 'shared' ? 'var(--success)' : 'var(--text-muted)'};">${h.status === 'shared' ? 'Partage' : 'Brouillon'}</span>
+        </div>
+        <div class="meta" style="margin-top:2px;">${fmtDate(h.createdAt)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ──────────────────────────────────────────────────
+// PREVIEW & SHARE SCREENS
+// ──────────────────────────────────────────────────
+function renderPreview() {
+  const cfg = state.wizard.config;
+  const product = state.products.find(p => p.id === state.wizard.selectedProductId);
+  const tpl = TEMPLATES.find(t => t.id === state.wizard.selectedTemplateId);
+
+  // Show real video if available
+  const videoEl = document.getElementById('previewVideo');
+  const mockEl = document.getElementById('previewMock');
+  if (_lastVideoBlobUrl && videoEl) {
+    videoEl.src = _lastVideoBlobUrl;
+    videoEl.style.display = 'block';
+    if (mockEl) mockEl.style.display = 'none';
+  } else {
+    if (videoEl) videoEl.style.display = 'none';
+    if (mockEl) mockEl.style.display = 'block';
+  }
+
+  document.getElementById('previewHook').textContent = (cfg.hookText || 'HOOK TEXT').toUpperCase();
+  document.getElementById('previewCta').textContent = (product ? product.name : 'Produit') + ' — ' + (cfg.cta || 'CTA');
+  document.getElementById('previewTitle').textContent = (product ? product.name : 'Video') + ' — ' + (cfg.language || '');
+  const sizeInfo = _lastVideoBlob ? ' · ' + (_lastVideoBlob.size / 1048576).toFixed(1) + ' MB' : '';
+  document.getElementById('previewMeta').textContent = cfg.duration + 's · ' + (cfg.language || '') + ' · ' + (cfg.musicStyle || '') + sizeInfo;
+
+  // Summary grid
+  document.getElementById('previewSummary').innerHTML = `
+    <div style="padding:10px; background:var(--bg-card); border-radius:var(--radius-sm);">
+      <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Produit</div>
+      <div style="font-size:13px; font-weight:600; margin-top:2px;">${escapeHtml(product ? product.name : 'N/A')}</div>
+    </div>
+    <div style="padding:10px; background:var(--bg-card); border-radius:var(--radius-sm);">
+      <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Template</div>
+      <div style="font-size:13px; font-weight:600; margin-top:2px;">${escapeHtml(tpl ? tpl.name : 'N/A')}</div>
+    </div>
+    <div style="padding:10px; background:var(--bg-card); border-radius:var(--radius-sm);">
+      <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Duree</div>
+      <div style="font-size:13px; font-weight:600; margin-top:2px;">${cfg.duration}s</div>
+    </div>
+    <div style="padding:10px; background:var(--bg-card); border-radius:var(--radius-sm);">
+      <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Musique</div>
+      <div style="font-size:13px; font-weight:600; margin-top:2px;">${escapeHtml(cfg.musicStyle || 'N/A')}</div>
+    </div>
+  `;
+}
+
+function renderShareScreen() {
+  const cfg = state.wizard.config;
+  const product = state.products.find(p => p.id === state.wizard.selectedProductId);
+  document.getElementById('shareTitle').textContent = (product ? product.name : 'Video') + ' — "' + (cfg.hookText || '') + '"';
+  document.getElementById('shareMeta').textContent = cfg.duration + 's · 1080x1920';
+
+  // Pre-fill caption
+  const caption = document.getElementById('shareCaption');
+  if (!caption.value) {
+    const tags = product && product.hashtags ? ' ' + product.hashtags : '';
+    caption.value = (cfg.hookText || 'Check this out!') + tags + ' #tiktok';
+  }
+}
+
+// ──────────────────────────────────────────────────
+// MODAL
+// ──────────────────────────────────────────────────
+function showModal(title, msg) {
+  return new Promise(resolve => {
+    _modalResolve = resolve;
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalMessage').textContent = msg;
+    document.getElementById('confirmModal').classList.add('open');
+  });
+}
+
+function closeModal(result) {
+  document.getElementById('confirmModal').classList.remove('open');
+  if (_modalResolve) { _modalResolve(result); _modalResolve = null; }
+}
+
+// ──────────────────────────────────────────────────
+// 18. EVENT DELEGATION
+// ──────────────────────────────────────────────────
+function renderAll() {
+  renderDashboard();
+  renderSettings();
+  renderProducts();
+  renderMediaGrid();
+  renderProductSelection();
+  renderTemplates();
+  renderConfigScreen();
+  renderHistory();
+}
+
+document.getElementById('phoneFrame').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+
+  const action = el.dataset.action;
+
+  switch(action) {
+    case 'go':
+    case 'nav-screen':
+      goScreen(el.dataset.screen);
+      break;
+
+    case 'toggle':
+      el.classList.toggle('on');
+      // Update state based on which toggle
+      if (el.id === 'toggleAvatar') state.wizard.config.avatar = el.classList.contains('on');
+      if (el.id === 'toggleVoiceover') state.wizard.config.voiceover = el.classList.contains('on');
+      if (el.id === 'toggleSubtitles') state.wizard.config.subtitles = el.classList.contains('on');
+      markDirty();
+      break;
+
+    case 'toggle-log':
+      toggleLogPanel();
+      break;
+
+    case 'log-copy': logCopy(); break;
+    case 'log-export': logExport(); break;
+    case 'log-clear': logClear(); break;
+
+    case 'select-product':
+      state.wizard.selectedProductId = el.dataset.id;
+      markDirty();
+      renderProductSelection();
+      break;
+
+    case 'select-template':
+      state.wizard.selectedTemplateId = el.dataset.id;
+      markDirty();
+      renderTemplates();
+      break;
+
+    case 'select-style':
+      state.wizard.selectedStyle = el.dataset.style;
+      markDirty();
+      renderTemplates();
+      break;
+
+    case 'filter-template-cat':
+      state._templateFilter = el.dataset.cat;
+      renderTemplates();
+      break;
+
+    case 'set-lang':
+      state.wizard.config.language = el.dataset.lang;
+      markDirty();
+      renderConfigScreen();
+      break;
+
+    case 'set-music':
+      state.wizard.config.musicStyle = el.dataset.music;
+      markDirty();
+      renderConfigScreen();
+      break;
+
+    case 'set-cta':
+      state.wizard.config.cta = el.dataset.cta;
+      markDirty();
+      renderConfigScreen();
+      break;
+
+    case 'save-config':
+      saveWizardConfig();
+      break;
+
+    case 'start-generation':
+      state.wizard.config.hookText = document.getElementById('configHook').value;
+      startGeneration();
+      break;
+
+    case 'cancel-generation':
+      cancelGeneration();
+      goScreen('config');
+      break;
+
+    case 'add-product':
+      openProductSheet(null);
+      break;
+
+    case 'edit-product': {
+      const prod = state.products.find(p => p.id === el.dataset.id);
+      if (prod) openProductSheet(prod);
+      break;
+    }
+
+    case 'delete-product':
+      e.stopPropagation();
+      deleteProduct(el.dataset.id);
+      break;
+
+    case 'save-product':
+      saveProduct();
+      break;
+
+    case 'close-product-sheet':
+      closeProductSheet();
+      break;
+
+    case 'modal-cancel':
+      closeModal(false);
+      break;
+
+    case 'modal-confirm':
+      closeModal(true);
+      break;
+
+    case 'toggle-password': {
+      const input = document.getElementById(el.dataset.target);
+      input.type = input.type === 'password' ? 'text' : 'password';
+      break;
+    }
+
+    case 'test-connection':
+      pingFFmpeg();
+      pingGateway();
+      showToast('Test en cours...');
+      break;
+
+    case 'backup-local': backupLocal(); break;
+    case 'backup-drive': backupDrive(); break;
+    case 'restore-local': restoreLocal(); break;
+    case 'restore-drive': restoreDrive(); break;
+
+    case 'toggle-media':
+      toggleMedia(el.dataset.id);
+      break;
+
+    case 'filter-history':
+      state._historyFilter = el.dataset.filter;
+      renderHistory(el.dataset.filter);
+      break;
+
+    case 'view-history': {
+      const hist = state.history.find(h => h.id === el.dataset.id);
+      if (hist) {
+        // Load this history config into wizard for preview
+        state.wizard.selectedProductId = hist.productId;
+        state.wizard.config.hookText = hist.hookText;
+        state.wizard.config.duration = hist.duration;
+        state.wizard.config.language = hist.language;
+        state.wizard.config.musicStyle = hist.musicStyle;
+        state.wizard.config.cta = hist.cta;
+        // Find matching template
+        const tpl = TEMPLATES.find(t => t.name === hist.templateName);
+        if (tpl) state.wizard.selectedTemplateId = tpl.id;
+        goScreen('preview');
+      }
+      break;
+    }
+
+    case 'load-config': {
+      const cfg = state.savedConfigs.find(c => c.id === el.dataset.id);
+      if (cfg) {
+        state.wizard.selectedProductId = cfg.productId;
+        state.wizard.selectedTemplateId = cfg.templateId;
+        state.wizard.config = { ...state.wizard.config, ...cfg.config };
+        cfg.useCount = (cfg.useCount || 0) + 1;
+        markDirty();
+        goScreen('config');
+        showToast('Config chargee: ' + cfg.productName);
+      }
+      break;
+    }
+
+    case 'generate-hooks': {
+      const product = state.products.find(p => p.id === state.wizard.selectedProductId);
+      if (!product) { showToast('Selectionne un produit d\'abord', true); return; }
+      showToast('Generation IA en cours...');
+      geminiGenerateHooks(product.desc, state.wizard.config.language).then(hooks => {
+        if (hooks && hooks.length > 0) {
+          document.getElementById('configHook').value = hooks[0];
+          state.wizard.config.hookText = hooks[0];
+          showToast('Hook genere: ' + hooks[0]);
+        }
+      });
+      break;
+    }
+
+    case 'share-to': {
+      const platform = el.closest('[data-platform]')?.dataset.platform || el.dataset.platform;
+      // Mark as shared in history
+      if (state.history.length > 0) state.history[0].status = 'shared';
+      markDirty();
+      if (_lastVideoBlob && navigator.share) {
+        const file = new File([_lastVideoBlob], 'promoclip.mp4', { type: 'video/mp4' });
+        navigator.share({ files: [file], title: 'PromoClip', text: document.getElementById('shareCaption')?.value || '' })
+          .then(() => { showToast('Partage reussi !'); log('Share: ' + platform + ' OK'); })
+          .catch(e => { showToast('Partage annule', true); log('Share cancel: ' + e.message, 'warn'); });
+      } else if (_lastVideoBlob) {
+        // Fallback: download
+        const a = document.createElement('a');
+        a.href = _lastVideoBlobUrl || URL.createObjectURL(_lastVideoBlob);
+        a.download = 'promoclip-' + platform + '.mp4';
+        a.click();
+        showToast('Video telechargee — partage manuellement vers ' + platform);
+      } else {
+        showToast('Genere une video d\'abord !', true);
+      }
+      log('Partage: ' + platform);
+      break;
+    }
+
+    case 'copy-caption': {
+      const cap = document.getElementById('shareCaption').value;
+      navigator.clipboard.writeText(cap).then(() => showToast('Caption copiee !')).catch(() => showToast('Erreur copie', true));
+      break;
+    }
+
+    case 'save-gallery':
+      if (_lastVideoBlob) {
+        try {
+          const a = document.createElement('a');
+          a.href = _lastVideoBlobUrl || URL.createObjectURL(_lastVideoBlob);
+          a.download = 'promoclip-' + Date.now() + '.mp4';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          showToast('Video sauvegardee !');
+          log('Save gallery: ' + a.download);
+        } catch(e) { showToast('Erreur sauvegarde: ' + e.message, true); }
+      } else {
+        showToast('Aucune video generee', true);
+      }
+      break;
+
+    case 'regen-caption': {
+      const product = state.products.find(p => p.id === state.wizard.selectedProductId);
+      const tags = product && product.hashtags ? ' ' + product.hashtags : '';
+      document.getElementById('shareCaption').value = (state.wizard.config.hookText || 'New hook!') + ' !!' + tags + ' #viral';
+      showToast('Caption regeneree');
+      break;
+    }
+  }
+});
+
+// Desktop screen nav
+document.getElementById('screenNav').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (el && el.dataset.action === 'nav-screen') goScreen(el.dataset.screen);
+});
+
+// Bottom sheet overlay close
+document.getElementById('productSheet').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeProductSheet();
+});
+
+// Modal overlay close
+document.getElementById('confirmModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeModal(false);
+});
+
+// File inputs
+document.getElementById('mediaFileInput').addEventListener('change', (e) => {
+  if (e.target.files.length > 0) handleMediaFiles(e.target.files);
+  e.target.value = '';
+});
+
+document.getElementById('restoreFileInput').addEventListener('change', (e) => {
+  if (e.target.files[0]) handleRestoreFile(e.target.files[0]);
+  e.target.value = '';
+});
+
+// Settings inputs (debounced)
+['settingsFfmpegUrl', 'settingsCrf', 'settingsDefaultLang', 'settingsDriveFolderId'].forEach(id => {
+  document.getElementById(id).addEventListener('input', debouncedSaveSettings);
+});
+document.getElementById('settingsGatewayKey').addEventListener('input', debouncedSaveKey);
+document.getElementById('settingsAdminKey').addEventListener('input', debouncedSaveKey);
+
+// Duration slider
+document.getElementById('configDuration').addEventListener('input', (e) => {
+  const v = parseInt(e.target.value);
+  state.wizard.config.duration = v;
+  updateDurationDisplay(v);
+  markDirty();
+});
+
+// Hook input
+document.getElementById('configHook').addEventListener('input', debounce((e) => {
+  state.wizard.config.hookText = e.target.value;
+  markDirty();
+}, DEBOUNCE_SAVE_MS));
+
+// ──────────────────────────────────────────────────
+// 20. INIT
+// ──────────────────────────────────────────────────
+function init() {
+  loadState();
+  renderAll();
+
+  // Auto-select first product if none selected
+  if (!state.wizard.selectedProductId && state.products.length > 0) {
+    state.wizard.selectedProductId = state.products[0].id;
+  }
+
+  // Set default language from settings
+  const langMap = { fr: 'Francais', en: 'English', es: 'Espanol', de: 'Deutsch' };
+  if (!state.wizard.config.language && state.settings.defaultLang) {
+    state.wizard.config.language = langMap[state.settings.defaultLang] || 'Francais';
+  }
+
+  // Update clock
+  function updateClock() {
+    const now = new Date();
+    const t = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+    document.querySelectorAll('.status-bar .time').forEach(el => el.textContent = t);
+  }
+  updateClock();
+  setInterval(updateClock, 30000);
+
+  // Auto-ping if key configured
+  if (state.settings.gatewayKey) {
+    setTimeout(() => { pingGateway(); pingFFmpeg(); }, 1000);
+  }
+
+  log('PromoClip v' + APP_VERSION + ' initialise');
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

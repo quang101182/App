@@ -1,0 +1,2128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>PromoClip UI Spec v1.0</title>
+<style>
+/* ═══════════════════════════════════════════════════════
+   PromoClip — UI/UX Specification Prototype v1.0
+   Dark mode, accent violet #7C3AED, mobile-first
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  --bg-primary: #0F0F13;
+  --bg-secondary: #1A1A24;
+  --bg-card: #22222E;
+  --bg-elevated: #2A2A38;
+  --bg-input: #16161F;
+  --accent: #7C3AED;
+  --accent-light: #9F67FF;
+  --accent-dim: #5B21B6;
+  --accent-glow: rgba(124, 58, 237, 0.3);
+  --success: #10B981;
+  --warning: #F59E0B;
+  --error: #EF4444;
+  --cyan: #06B6D4;
+  --text-primary: #F1F1F6;
+  --text-secondary: #9CA3AF;
+  --text-muted: #6B7280;
+  --border: rgba(255,255,255,0.06);
+  --border-active: rgba(124, 58, 237, 0.4);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --shadow-card: 0 2px 12px rgba(0,0,0,0.3);
+  --shadow-elevated: 0 8px 32px rgba(0,0,0,0.5);
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+  height: 100dvh;
+  width: 100vw;
+}
+
+/* ─── Phone Frame (Desktop Preview) ─── */
+.phone-frame {
+  width: 390px;
+  height: 844px;
+  margin: 20px auto;
+  border-radius: 44px;
+  border: 3px solid #333;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-primary);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+@media (max-width: 430px) {
+  .phone-frame { width:100%; height:100dvh; margin:0; border-radius:0; border:none; box-shadow:none; }
+}
+
+/* ─── Screen Stack ─── */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-smooth), transform var(--transition-smooth);
+  transform: translateX(30px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+.screen.active {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateX(0);
+}
+.screen.exit-left {
+  opacity: 0;
+  transform: translateX(-30px);
+}
+
+/* ─── Status Bar ─── */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 24px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+.status-bar .time { font-variant-numeric: tabular-nums; }
+.status-bar .icons { display:flex; gap:4px; align-items:center; }
+.status-bar .icons svg { width:16px; height:16px; fill: var(--text-primary); }
+
+/* ─── Navigation Header ─── */
+.nav-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 20px 12px;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.nav-back {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  flex-shrink: 0;
+}
+.nav-back:active { background: var(--accent-dim); }
+.nav-back svg { width:18px; height:18px; stroke:var(--text-primary); fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.nav-title { font-size:18px; font-weight:700; flex:1; }
+.nav-action {
+  font-size: 13px;
+  color: var(--accent-light);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+.nav-action:active { background: var(--accent-glow); }
+
+/* ─── Content Area ─── */
+.content { flex:1; padding: 0 20px 100px; overflow-y: auto; }
+
+/* ─── Bottom Tab Bar ─── */
+.tab-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 80px;
+  background: linear-gradient(to top, var(--bg-primary) 70%, transparent);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  padding-bottom: 16px;
+  z-index: 100;
+}
+.tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+.tab-item svg { width:22px; height:22px; stroke:var(--text-muted); fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; transition: stroke var(--transition-fast); }
+.tab-item span { font-size:10px; color:var(--text-muted); font-weight:500; transition: color var(--transition-fast); }
+.tab-item.active svg { stroke: var(--accent-light); }
+.tab-item.active span { color: var(--accent-light); }
+.tab-item:active { transform: scale(0.92); }
+
+/* Central FAB in tab bar */
+.tab-fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 20px var(--accent-glow);
+  transition: transform var(--transition-bounce), box-shadow var(--transition-fast);
+}
+.tab-fab:active { transform: scale(0.88); }
+.tab-fab svg { width:26px; height:26px; stroke:#fff; fill:none; stroke-width:2.5; stroke-linecap:round; }
+
+/* ─── Cards ─── */
+.card {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  padding: 16px;
+  margin-bottom: 12px;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+  cursor: pointer;
+}
+.card:active { transform: scale(0.98); border-color: var(--border-active); }
+.card-selected { border-color: var(--accent) !important; box-shadow: 0 0 0 1px var(--accent), 0 0 20px var(--accent-glow); }
+
+/* ─── Chips ─── */
+.chip-row { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+.chip {
+  padding: 8px 16px;
+  border-radius: 100px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+.chip:active { transform: scale(0.95); }
+.chip.selected { background: var(--accent); color:#fff; border-color: var(--accent); }
+
+/* ─── Input ─── */
+.input-group { margin-bottom: 16px; }
+.input-label { font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; }
+.input-field {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 15px;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+.input-field:focus { border-color: var(--accent); }
+.input-field::placeholder { color: var(--text-muted); }
+
+/* ─── Buttons ─── */
+.btn-primary {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  border: none;
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--transition-bounce), opacity var(--transition-fast);
+  box-shadow: 0 4px 20px var(--accent-glow);
+}
+.btn-primary:active { transform: scale(0.97); opacity: 0.9; }
+.btn-primary:disabled { opacity: 0.4; cursor: default; }
+
+.btn-secondary {
+  padding: 12px 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.btn-secondary:active { background: var(--bg-card); border-color: var(--accent); }
+
+.btn-icon {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.btn-icon:active { background: var(--accent-dim); }
+.btn-icon svg { width:20px; height:20px; stroke:var(--text-primary); fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+/* ─── Toggle ─── */
+.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.toggle-label { font-size:14px; color:var(--text-primary); }
+.toggle-sub { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.toggle {
+  width:48px; height:28px;
+  border-radius:14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  position: relative;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  flex-shrink: 0;
+}
+.toggle.on { background: var(--accent); border-color: var(--accent); }
+.toggle::after {
+  content:'';
+  width:22px; height:22px;
+  border-radius:50%;
+  background:#fff;
+  position:absolute;
+  top:2px; left:2px;
+  transition: transform var(--transition-smooth);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.toggle.on::after { transform: translateX(20px); }
+
+/* ─── Progress Ring ─── */
+.progress-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+}
+.progress-ring { position:relative; width:180px; height:180px; }
+.progress-ring svg { transform: rotate(-90deg); }
+.progress-ring circle { fill:none; stroke-width:6; }
+.progress-ring .bg { stroke: var(--bg-elevated); }
+.progress-ring .fg { stroke: var(--accent-light); stroke-linecap:round; transition: stroke-dashoffset 0.5s ease; }
+.progress-percent {
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  font-size:42px;
+  font-weight:800;
+  font-variant-numeric:tabular-nums;
+}
+.progress-percent small { font-size:12px; color:var(--text-muted); font-weight:500; margin-top:4px; }
+
+/* ─── Step indicator (wizard) ─── */
+.step-indicator {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 0 16px;
+}
+.step-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  transition: all var(--transition-smooth);
+}
+.step-dot.active { background: var(--accent); width: 24px; border-radius: 4px; }
+.step-dot.done { background: var(--accent-dim); }
+
+/* ─── Media Grid ─── */
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+}
+.media-thumb {
+  aspect-ratio: 1;
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+.media-thumb:active { opacity: 0.7; }
+.media-thumb .overlay-check {
+  position:absolute; top:6px; right:6px;
+  width:22px; height:22px;
+  border-radius:50%;
+  border: 2px solid rgba(255,255,255,0.6);
+  display:flex; align-items:center; justify-content:center;
+  transition: all var(--transition-fast);
+}
+.media-thumb.selected .overlay-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.media-thumb .overlay-check svg { width:14px; height:14px; stroke:#fff; fill:none; stroke-width:3; opacity:0; transition:opacity var(--transition-fast); }
+.media-thumb.selected .overlay-check svg { opacity:1; }
+.media-thumb .duration {
+  position: absolute;
+  bottom: 4px;
+  right: 6px;
+  font-size: 10px;
+  color: #fff;
+  background: rgba(0,0,0,0.6);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.media-thumb .order-badge {
+  position:absolute; top:6px; left:6px;
+  width:20px; height:20px;
+  border-radius:50%;
+  background: var(--accent);
+  color:#fff;
+  font-size:11px;
+  font-weight:700;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  opacity: 0;
+  transform: scale(0);
+  transition: all var(--transition-bounce);
+}
+.media-thumb.selected .order-badge { opacity:1; transform:scale(1); }
+
+/* ─── Template Card ─── */
+.template-card {
+  width: 150px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+.template-card:active { transform: scale(0.95); }
+.template-preview {
+  width: 150px;
+  height: 200px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  position: relative;
+  border: 2px solid transparent;
+  transition: border-color var(--transition-fast);
+}
+.template-card.selected .template-preview { border-color: var(--accent); }
+.template-name { font-size:12px; color:var(--text-secondary); margin-top:8px; text-align:center; font-weight:500; }
+
+/* ─── Video Player Mock ─── */
+.video-player {
+  width: 100%;
+  aspect-ratio: 9/16;
+  background: #000;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  position: relative;
+  margin: 12px 0;
+}
+.video-player .play-btn {
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer;
+}
+.video-player .play-btn div {
+  width:64px; height:64px;
+  border-radius:50%;
+  background:rgba(255,255,255,0.15);
+  backdrop-filter:blur(10px);
+  display:flex; align-items:center; justify-content:center;
+  transition: transform var(--transition-bounce);
+}
+.video-player .play-btn:active div { transform:scale(0.85); }
+.video-player .play-btn svg { width:28px; height:28px; fill:#fff; margin-left:3px; }
+
+/* ─── Share Button Row ─── */
+.share-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  padding: 16px 0;
+}
+.share-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+.share-btn:active { transform: scale(0.9); }
+.share-icon {
+  width: 52px; height: 52px;
+  border-radius: var(--radius-md);
+  display:flex; align-items:center; justify-content:center;
+}
+.share-label { font-size:11px; color:var(--text-secondary); font-weight:500; }
+
+/* ─── History Item ─── */
+.history-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.history-item:active { border-color: var(--border-active); transform:scale(0.98); }
+.history-thumb {
+  width: 60px;
+  height: 80px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.history-info { flex:1; display:flex; flex-direction:column; justify-content:center; }
+.history-info .title { font-size:14px; font-weight:600; margin-bottom:3px; }
+.history-info .meta { font-size:11px; color:var(--text-muted); }
+.history-info .meta span { margin-right:10px; }
+
+/* ─── Settings Row ─── */
+.settings-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.settings-icon {
+  width:38px; height:38px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+.settings-icon svg { width:18px; height:18px; stroke:var(--accent-light); fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.settings-label { flex:1; font-size:14px; }
+.settings-value { font-size:13px; color:var(--text-muted); }
+.settings-chevron svg { width:16px; height:16px; stroke:var(--text-muted); fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+/* ─── Product Card ─── */
+.product-card {
+  display:flex; align-items:center; gap:14px;
+  padding:14px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+  cursor:pointer;
+  transition: all var(--transition-fast);
+}
+.product-card:active { border-color: var(--border-active); }
+.product-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 16px var(--accent-glow); }
+.product-icon {
+  width:44px; height:44px;
+  border-radius: var(--radius-sm);
+  display:flex; align-items:center; justify-content:center;
+  font-size:20px;
+  flex-shrink:0;
+}
+.product-info { flex:1; }
+.product-info .name { font-size:15px; font-weight:600; }
+.product-info .desc { font-size:12px; color:var(--text-muted); margin-top:2px; }
+
+/* ─── Section Title ─── */
+.section-title {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin: 20px 0 10px;
+}
+
+/* ─── Horizontal Scroll ─── */
+.h-scroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scroll-snap-type: x mandatory;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.h-scroll::-webkit-scrollbar { display:none; }
+.h-scroll > * { scroll-snap-align: start; }
+
+/* ─── Skeleton ─── */
+@keyframes shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-card) 50%, var(--bg-elevated) 75%);
+  background-size: 400px 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* ─── Badge ─── */
+.badge {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.badge-accent { background: var(--accent-glow); color: var(--accent-light); }
+.badge-success { background: rgba(16,185,129,0.15); color: var(--success); }
+.badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
+
+/* ─── Empty State ─── */
+.empty-state {
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  padding: 60px 20px;
+  text-align:center;
+}
+.empty-state svg { width:80px; height:80px; stroke:var(--text-muted); fill:none; stroke-width:1; margin-bottom:20px; opacity:0.4; }
+.empty-state h3 { font-size:18px; color:var(--text-secondary); margin-bottom:8px; }
+.empty-state p { font-size:13px; color:var(--text-muted); line-height:1.5; max-width:260px; }
+
+/* ─── Pulse animation for generation ─── */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px var(--accent-glow); }
+  50% { box-shadow: 0 0 40px rgba(124, 58, 237, 0.5); }
+}
+.pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+
+/* ─── Slide up animation ─── */
+@keyframes slide-up {
+  from { transform: translateY(20px); opacity:0; }
+  to { transform: translateY(0); opacity:1; }
+}
+.slide-up { animation: slide-up 0.4s ease-out forwards; }
+.slide-up-delay-1 { animation-delay: 0.05s; opacity:0; }
+.slide-up-delay-2 { animation-delay: 0.1s; opacity:0; }
+.slide-up-delay-3 { animation-delay: 0.15s; opacity:0; }
+.slide-up-delay-4 { animation-delay: 0.2s; opacity:0; }
+
+/* ─── Spec annotations (design mode) ─── */
+.spec-mode .spec-annotation {
+  display: block !important;
+}
+.spec-annotation {
+  display: none;
+  background: rgba(124,58,237,0.12);
+  border: 1px dashed var(--accent);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  font-size: 11px;
+  color: var(--accent-light);
+  line-height: 1.4;
+}
+
+/* ─── Screen selector sidebar ─── */
+.screen-nav {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 220px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  z-index: 9999;
+  box-shadow: var(--shadow-elevated);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+@media (max-width: 700px) { .screen-nav { display:none; } }
+.screen-nav h3 { font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; }
+.screen-nav-item {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-bottom: 2px;
+}
+.screen-nav-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+.screen-nav-item.active { background: var(--accent-glow); color: var(--accent-light); }
+.screen-nav .toggle-spec {
+  margin-top:10px;
+  padding:8px;
+  text-align:center;
+  font-size:11px;
+  color:var(--accent-light);
+  border:1px dashed var(--accent);
+  border-radius:var(--radius-sm);
+  cursor:pointer;
+}
+
+/* ─── Slider ─── */
+.slider-row {
+  display:flex; align-items:center; gap:12px;
+  margin:8px 0;
+}
+.slider {
+  flex:1;
+  -webkit-appearance:none;
+  height:4px;
+  border-radius:2px;
+  background: var(--bg-elevated);
+  outline:none;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance:none;
+  width:20px; height:20px;
+  border-radius:50%;
+  background: var(--accent);
+  cursor:pointer;
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.slider-val { font-size:14px; font-weight:600; color:var(--accent-light); min-width:30px; text-align:right; font-variant-numeric:tabular-nums; }
+
+/* ─── Quick Actions Grid ─── */
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 12px 0;
+}
+.quick-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.quick-card:active { transform: scale(0.95); border-color: var(--border-active); }
+.quick-card svg { width:28px; height:28px; stroke:var(--accent-light); fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.quick-card span { font-size:12px; font-weight:600; color:var(--text-secondary); }
+
+/* ─── Divider ─── */
+.divider { height:1px; background:var(--border); margin:16px 0; }
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width:0; }
+</style>
+</head>
+<body>
+
+<!-- ═══ Screen Navigator (desktop only) ═══ -->
+<div class="screen-nav" id="screenNav">
+  <h3>PromoClip Screens</h3>
+  <div class="screen-nav-item active" onclick="goScreen('home')">1. Accueil / Dashboard</div>
+  <div class="screen-nav-item" onclick="goScreen('media')">2. Selection medias</div>
+  <div class="screen-nav-item" onclick="goScreen('product')">3. Choix produit</div>
+  <div class="screen-nav-item" onclick="goScreen('template')">4. Choix template</div>
+  <div class="screen-nav-item" onclick="goScreen('config')">5. Configuration</div>
+  <div class="screen-nav-item" onclick="goScreen('generate')">6. Generation</div>
+  <div class="screen-nav-item" onclick="goScreen('preview')">7. Preview video</div>
+  <div class="screen-nav-item" onclick="goScreen('share')">8. Partage</div>
+  <div class="screen-nav-item" onclick="goScreen('history')">9. Historique</div>
+  <div class="screen-nav-item" onclick="goScreen('settings')">10. Parametres</div>
+  <div class="screen-nav-item" onclick="goScreen('products')">11. Gestion produits</div>
+  <div class="toggle-spec" onclick="toggleSpec()">Afficher annotations UX</div>
+</div>
+
+<!-- ═══ Phone Frame ═══ -->
+<div class="phone-frame" id="phoneFrame">
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 1 — ACCUEIL / DASHBOARD
+     Flow principal : 1 tap sur "+" = lancer la creation
+     ═══════════════════════════════════════════════════════ -->
+<div class="screen active" id="screen-home">
+  <div class="status-bar">
+    <span class="time">9:41</span>
+    <div class="icons">
+      <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg>
+    </div>
+  </div>
+
+  <div style="padding:4px 20px 0;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
+      </div>
+      <div class="btn-icon" onclick="goScreen('settings')" style="width:38px;height:38px;">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="content" style="padding-top:16px;">
+    <div class="spec-annotation">DASHBOARD : point d'entree unique. Le FAB central "+" est le CTA principal. Les quick actions offrent des raccourcis. L'historique recent donne du contexte. Design inspire de CapCut (simplicite) + Canva (templates visibles).</div>
+
+    <!-- Quick Actions -->
+    <div class="quick-grid slide-up">
+      <div class="quick-card" onclick="goScreen('media')">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        <span>Nouvelle video</span>
+      </div>
+      <div class="quick-card" onclick="goScreen('template')">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Templates</span>
+      </div>
+      <div class="quick-card" onclick="goScreen('products')">
+        <svg viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+        <span>Mes produits</span>
+      </div>
+      <div class="quick-card" onclick="goScreen('history')">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Historique</span>
+      </div>
+    </div>
+
+    <div class="spec-annotation">QUICK ACTIONS : grille 2x2, tap = navigation directe. "Nouvelle video" = entree du wizard. Animation slide-up staggeree au lancement (50ms entre chaque carte).</div>
+
+    <!-- Favoris / Templates recents -->
+    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+      <span>Configs favorites</span>
+      <span style="font-size:12px; color:var(--accent-light); cursor:pointer; text-transform:none; letter-spacing:0; font-weight:500;">Voir tout</span>
+    </div>
+
+    <div class="h-scroll">
+      <div style="min-width:260px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-md); padding:14px; flex-shrink:0; cursor:pointer;" onclick="goScreen('config')">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#7C3AED,#06B6D4);display:flex;align-items:center;justify-content:center;font-size:14px;">D</div>
+          <div>
+            <div style="font-size:13px; font-weight:600;">DictoKey — Hook FR</div>
+            <div style="font-size:11px; color:var(--text-muted);">15s · Francais · Energique</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <span class="badge badge-accent">Utilise 12x</span>
+          <span class="badge badge-success">Top perf</span>
+        </div>
+      </div>
+      <div style="min-width:260px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-md); padding:14px; flex-shrink:0; cursor:pointer;" onclick="goScreen('config')">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#EF4444,#F59E0B);display:flex;align-items:center;justify-content:center;font-size:14px;">N</div>
+          <div>
+            <div style="font-size:13px; font-weight:600;">NoCodeFlow — EN Demo</div>
+            <div style="font-size:11px; color:var(--text-muted);">21s · Anglais · Pro</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <span class="badge badge-accent">Utilise 8x</span>
+        </div>
+      </div>
+      <div style="min-width:180px; background:var(--bg-card); border:1px dashed var(--border); border-radius:var(--radius-md); padding:14px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; cursor:pointer; opacity:0.6;">
+        <svg width="24" height="24" viewBox="0 0 24 24" stroke="var(--text-muted)" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        <span style="font-size:12px; color:var(--text-muted);">Ajouter config</span>
+      </div>
+    </div>
+
+    <div class="spec-annotation">FAVORIS : scroll horizontal snap. Chaque carte = une config sauvegardee. Tap = pre-remplir le wizard config. Derniere carte = CTA ajout. Badge "Top perf" si la video a eu bon engagement (futur: metrics TikTok).</div>
+
+    <!-- Dernières vidéos -->
+    <div class="section-title">Dernieres creations</div>
+
+    <div class="history-item slide-up slide-up-delay-1" onclick="goScreen('preview')">
+      <div class="history-thumb" style="background:linear-gradient(135deg, #7C3AED, #1a1a24); display:flex; align-items:center; justify-content:center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+      <div class="history-info">
+        <div class="title">DictoKey — "Tape 3x plus vite"</div>
+        <div class="meta">
+          <span>15s</span>
+          <span>Francais</span>
+          <span style="color:var(--success);">Partage TikTok</span>
+        </div>
+        <div class="meta" style="margin-top:2px;">Il y a 2 heures</div>
+      </div>
+    </div>
+
+    <div class="history-item slide-up slide-up-delay-2" onclick="goScreen('preview')">
+      <div class="history-thumb" style="background:linear-gradient(135deg, #EF4444, #1a1a24); display:flex; align-items:center; justify-content:center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+      <div class="history-info">
+        <div class="title">NoCodeFlow — "No code revolution"</div>
+        <div class="meta">
+          <span>21s</span>
+          <span>Anglais</span>
+          <span style="color:var(--text-muted);">Brouillon</span>
+        </div>
+        <div class="meta" style="margin-top:2px;">Hier</div>
+      </div>
+    </div>
+
+    <div class="spec-annotation">DERNIERES CREATIONS : max 3 visibles, "Voir tout" renvoie vers Historique. Chaque item = tap pour preview. Meta: duree, langue, statut partage. Tri chronologique inverse.</div>
+  </div>
+
+  <!-- Tab Bar -->
+  <div class="tab-bar">
+    <div class="tab-item active">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Accueil</span>
+    </div>
+    <div class="tab-item" onclick="goScreen('history')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Historique</span>
+    </div>
+    <div class="tab-fab" onclick="goScreen('media')">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </div>
+    <div class="tab-item" onclick="goScreen('products')">
+      <svg viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+      <span>Produits</span>
+    </div>
+    <div class="tab-item" onclick="goScreen('settings')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span>Reglages</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 2 — SELECTION MEDIAS
+     Gallery picker avec multi-select ordonne
+     ═══════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-media">
+  <div class="status-bar">
+    <span class="time">9:41</span>
+    <div class="icons">
+      <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg>
+    </div>
+  </div>
+
+  <div class="nav-header">
+    <div class="nav-back" onclick="goScreen('home')">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div class="nav-title">Medias <span style="color:var(--accent-light); font-size:14px;" id="mediaCount">(0)</span></div>
+    <div class="nav-action" onclick="goScreen('product')">Suivant</div>
+  </div>
+
+  <!-- Step indicator -->
+  <div class="step-indicator">
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <div class="content" style="padding:0 0 100px;">
+    <div class="spec-annotation" style="margin:0 20px 8px;">GALLERY PICKER : grille 3 colonnes, ratio 1:1. Multi-select avec numero d'ordre (important pour la sequence video). Videos = badge duree en bas-droite. Swipe horizontal sur la selection = reordonner. Long press = preview plein ecran.</div>
+
+    <!-- Filter tabs -->
+    <div style="display:flex; gap:0; padding:0 20px 12px;">
+      <div style="flex:1; text-align:center; padding:10px; font-size:13px; font-weight:600; color:var(--accent-light); border-bottom:2px solid var(--accent);">Tout</div>
+      <div style="flex:1; text-align:center; padding:10px; font-size:13px; font-weight:500; color:var(--text-muted); border-bottom:2px solid transparent;">Photos</div>
+      <div style="flex:1; text-align:center; padding:10px; font-size:13px; font-weight:500; color:var(--text-muted); border-bottom:2px solid transparent;">Videos</div>
+      <div style="flex:1; text-align:center; padding:10px; font-size:13px; font-weight:500; color:var(--text-muted); border-bottom:2px solid transparent;">Screen Rec</div>
+    </div>
+
+    <div class="spec-annotation" style="margin:0 20px 8px;">FILTRES : "Screen Rec" = filtre intelligent qui detecte les screen recordings (via metadata ou dossier DCIM/Screenshots). C'est LE cas d'usage principal (captures d'app). Onglet actif = souligne accent.</div>
+
+    <!-- Media Grid -->
+    <div class="media-grid" style="padding:0 2px;">
+      <!-- Row 1 -->
+      <div class="media-thumb selected" style="background:linear-gradient(135deg,#2a2a3a,#1a1a24);">
+        <div class="order-badge">1</div>
+        <div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+      </div>
+      <div class="media-thumb selected" style="background:linear-gradient(135deg,#1e2a3a,#1a1a24);">
+        <div class="order-badge">2</div>
+        <div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div class="duration">0:08</div>
+      </div>
+      <div class="media-thumb" style="background:linear-gradient(135deg,#3a2a2a,#1a1a24);">
+        <div class="order-badge">3</div>
+        <div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+      </div>
+      <!-- Row 2 -->
+      <div class="media-thumb" style="background:linear-gradient(135deg,#2a3a2a,#1a1a24);">
+        <div class="order-badge">4</div>
+        <div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div class="duration">0:15</div>
+      </div>
+      <div class="media-thumb selected" style="background:linear-gradient(135deg,#3a3a1a,#1a1a24);">
+        <div class="order-badge">3</div>
+        <div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+      </div>
+      <div class="media-thumb" style="background:linear-gradient(135deg,#2a2a3a,#1a1a24);">
+        <div class="order-badge">5</div>
+        <div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div class="duration">0:22</div>
+      </div>
+      <!-- Rows 3-5 -->
+      <div class="media-thumb" style="background:linear-gradient(135deg,#1a2a3a,#1a1a24);"><div class="order-badge">6</div><div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+      <div class="media-thumb" style="background:linear-gradient(135deg,#3a1a2a,#1a1a24);"><div class="order-badge">7</div><div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><div class="duration">0:05</div></div>
+      <div class="media-thumb" style="background:linear-gradient(135deg,#2a3a3a,#1a1a24);"><div class="order-badge">8</div><div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+      <div class="media-thumb" style="background:linear-gradient(135deg,#3a2a1a,#1a1a24);"><div class="order-badge">9</div><div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+      <div class="media-thumb" style="background:linear-gradient(135deg,#1a3a2a,#1a1a24);"><div class="order-badge">10</div><div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><div class="duration">0:12</div></div>
+      <div class="media-thumb" style="background:linear-gradient(135deg,#2a1a3a,#1a1a24);"><div class="order-badge">11</div><div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+      <div class="media-thumb" style="background:linear-gradient(135deg,#3a3a2a,#1a1a24);"><div class="order-badge">12</div><div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+      <div class="media-thumb" style="background:linear-gradient(135deg,#1a1a3a,#1a1a24);"><div class="order-badge">13</div><div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+      <div class="media-thumb" style="background:linear-gradient(135deg,#3a1a1a,#1a1a24);"><div class="order-badge">14</div><div class="overlay-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><div class="duration">0:30</div></div>
+    </div>
+
+    <div class="spec-annotation" style="margin:12px 20px;">INTERACTIONS : Tap = toggle selection + badge numero. L'ordre est crucial (sequence video). Long press = apercu full-screen avec pinch-to-zoom. Drag sur un item selectionne = reordonner. Le compteur "(3)" dans le header se met a jour en temps reel.</div>
+  </div>
+
+  <!-- Bottom selection bar -->
+  <div style="position:absolute; bottom:0; left:0; right:0; padding:12px 20px 24px; background:linear-gradient(to top, var(--bg-primary) 80%, transparent); z-index:10;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+      <div style="display:flex; gap:4px;">
+        <div style="width:36px;height:48px;border-radius:6px;background:linear-gradient(135deg,#2a2a3a,#1a1a24);border:2px solid var(--accent);"></div>
+        <div style="width:36px;height:48px;border-radius:6px;background:linear-gradient(135deg,#1e2a3a,#1a1a24);border:2px solid var(--accent);"></div>
+        <div style="width:36px;height:48px;border-radius:6px;background:linear-gradient(135deg,#3a3a1a,#1a1a24);border:2px solid var(--accent);"></div>
+      </div>
+      <div style="flex:1; font-size:12px; color:var(--text-muted);">3 medias selectionnes</div>
+    </div>
+    <button class="btn-primary" onclick="goScreen('product')">Continuer</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 3 — CHOIX PRODUIT
+     ═══════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-product">
+  <div class="status-bar">
+    <span class="time">9:41</span>
+    <div class="icons">
+      <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg>
+    </div>
+  </div>
+
+  <div class="nav-header">
+    <div class="nav-back" onclick="goScreen('media')">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div class="nav-title">Produit</div>
+    <div class="nav-action" onclick="goScreen('template')">Suivant</div>
+  </div>
+
+  <div class="step-indicator">
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <div class="content">
+    <div class="spec-annotation">CHOIX PRODUIT : selection unique. Chaque produit a une couleur distinctive + icone. Le produit selectionne guide le contexte Gemini pour generer le hook et les textes overlays. "Ajouter" en bas renvoie vers la gestion produits.</div>
+
+    <div style="font-size:15px; color:var(--text-secondary); margin-bottom:16px;">Pour quel produit est cette promo ?</div>
+
+    <div class="product-card selected slide-up">
+      <div class="product-icon" style="background:linear-gradient(135deg,#7C3AED,#5B21B6);">
+        <span style="font-size:18px;">D</span>
+      </div>
+      <div class="product-info">
+        <div class="name">DictoKey</div>
+        <div class="desc">Clavier IA dictee vocale — Play Store 4.99EUR/mois</div>
+      </div>
+      <svg width="20" height="20" viewBox="0 0 24 24" stroke="var(--accent)" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+
+    <div class="product-card slide-up slide-up-delay-1">
+      <div class="product-icon" style="background:linear-gradient(135deg,#06B6D4,#0891B2);">
+        <span style="font-size:18px;">S</span>
+      </div>
+      <div class="product-info">
+        <div class="name">SubWhisper</div>
+        <div class="desc">Transcription & sous-titres IA — Web app gratuite</div>
+      </div>
+    </div>
+
+    <div class="product-card slide-up slide-up-delay-2">
+      <div class="product-icon" style="background:linear-gradient(135deg,#EF4444,#DC2626);">
+        <span style="font-size:18px;">N</span>
+      </div>
+      <div class="product-info">
+        <div class="name">NoCodeFlow</div>
+        <div class="desc">Blog no-code & automatisation — Affiliation Make.com</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div style="display:flex; align-items:center; gap:12px; padding:10px 0; cursor:pointer; opacity:0.7;" onclick="goScreen('products')">
+      <div style="width:44px; height:44px; border-radius:var(--radius-sm); border:2px dashed var(--border); display:flex; align-items:center; justify-content:center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" stroke="var(--text-muted)" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </div>
+      <div style="font-size:14px; color:var(--text-muted);">Ajouter un produit</div>
+    </div>
+
+    <div class="spec-annotation">SELECTION : tap = selectionner (1 seul a la fois). Checkmark anime (scale bounce 0→1). Le produit selectionne a le glow violet. Scroll si +5 produits. "Ajouter" ouvre l'ecran gestion produits.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 4 — CHOIX TEMPLATE / STYLE
+     ═══════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-template">
+  <div class="status-bar">
+    <span class="time">9:41</span>
+    <div class="icons">
+      <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg>
+    </div>
+  </div>
+
+  <div class="nav-header">
+    <div class="nav-back" onclick="goScreen('product')">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div class="nav-title">Style</div>
+    <div class="nav-action" onclick="goScreen('config')">Suivant</div>
+  </div>
+
+  <div class="step-indicator">
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+    <div class="step-dot"></div>
+  </div>
+
+  <div class="content">
+    <div class="spec-annotation">TEMPLATES : previews verticaux 9:16 scrollables horizontalement par categorie. Chaque template a un apercu anime (3s loop, autoplay silencieux). Tap = selectionne avec bordure accent. Categories filtrent par type de contenu.</div>
+
+    <!-- Category chips -->
+    <div class="chip-row">
+      <div class="chip selected">Tous</div>
+      <div class="chip">Hook viral</div>
+      <div class="chip">Demo app</div>
+      <div class="chip">Avant/Apres</div>
+      <div class="chip">Temoignage</div>
+    </div>
+
+    <div class="section-title">Populaires</div>
+    <div class="h-scroll" style="padding-left:0;">
+      <div class="template-card selected">
+        <div class="template-preview" style="background:linear-gradient(180deg,#7C3AED 0%,#1a1a24 50%,#0F0F13 100%); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;">
+          <div style="font-size:22px; font-weight:900; color:#fff; text-align:center; line-height:1.1; padding:0 12px;">STOP<br>SCROLLING</div>
+          <div style="width:80px;height:120px;border-radius:8px;background:rgba(255,255,255,0.1);margin-top:4px;"></div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.5);padding:0 8px;text-align:center;">Hook texte + demo app + CTA</div>
+        </div>
+        <div class="template-name">Hook Viral</div>
+      </div>
+      <div class="template-card">
+        <div class="template-preview" style="background:linear-gradient(180deg,#0F0F13 0%,#1a1a24 100%); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;">
+          <div style="display:flex; gap:4px;">
+            <div style="width:55px;height:90px;border-radius:6px;background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center;font-size:8px;color:rgba(239,68,68,0.6);">AVANT</div>
+            <div style="width:55px;height:90px;border-radius:6px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.3);display:flex;align-items:center;justify-content:center;font-size:8px;color:rgba(16,185,129,0.6);">APRES</div>
+          </div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.5);">Split screen compare</div>
+        </div>
+        <div class="template-name">Avant / Apres</div>
+      </div>
+      <div class="template-card">
+        <div class="template-preview" style="background:linear-gradient(180deg,#06B6D4 0%,#0F0F13 60%); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;">
+          <div style="width:80px;height:130px;border-radius:8px;background:rgba(255,255,255,0.1);"></div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.5);">Screen recording + captions</div>
+        </div>
+        <div class="template-name">Demo Pure</div>
+      </div>
+      <div class="template-card">
+        <div class="template-preview" style="background:linear-gradient(135deg,#F59E0B 0%,#0F0F13 60%); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;">
+          <div style="width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,0.15);"></div>
+          <div style="width:80px;height:8px;border-radius:4px;background:rgba(255,255,255,0.1);"></div>
+          <div style="width:60px;height:8px;border-radius:4px;background:rgba(255,255,255,0.08);"></div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.5);">Avatar + voiceover</div>
+        </div>
+        <div class="template-name">Avatar Talk</div>
+      </div>
+    </div>
+
+    <div class="spec-annotation">PREVIEW TEMPLATES : chaque preview est une mini-representation du layout final. Le template selectionne a une bordure accent + badge check en haut-droite (non montre ici). Les previews font un loop anime subtil (parallax, fade) pour donner vie.</div>
+
+    <div class="section-title">Styles rapides</div>
+    <div class="chip-row">
+      <div class="chip selected">Energique</div>
+      <div class="chip">Pro/Clean</div>
+      <div class="chip">Fun/Playful</div>
+      <div class="chip">Minimaliste</div>
+      <div class="chip">Urgence</div>
+    </div>
+
+    <div class="spec-annotation">STYLES RAPIDES : modifient le rythme de montage, la palette couleur des overlays et le type de transitions. "Energique" = cuts rapides, zooms, texte bold. "Pro" = transitions douces, palette sobre. "Fun" = emojis, couleurs vives. Impact le prompt Gemini.</div>
+
+    <div style="margin-top:20px;">
+      <button class="btn-primary" onclick="goScreen('config')">Configurer la video</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 5 — CONFIGURATION
+     Hook, langue, duree, musique, avatar
+     ═══════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-config">
+  <div class="status-bar">
+    <span class="time">9:41</span>
+    <div class="icons">
+      <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg>
+    </div>
+  </div>
+
+  <div class="nav-header">
+    <div class="nav-back" onclick="goScreen('template')">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div class="nav-title">Configuration</div>
+    <div style="display:flex;gap:8px;">
+      <div class="nav-action" style="font-size:11px; color:var(--text-muted);">Sauver config</div>
+    </div>
+  </div>
+
+  <div class="step-indicator">
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot done"></div>
+    <div class="step-dot active"></div>
+  </div>
+
+  <div class="content">
+    <div class="spec-annotation">CONFIGURATION : derniere etape avant generation. Tous les parametres sont editables. "Hook texte" est le plus important — Gemini peut le generer ou l'user l'ecrit. "Sauver config" = ajouter aux favoris pour reutilisation.</div>
+
+    <!-- Hook texte -->
+    <div class="input-group">
+      <div class="input-label">Hook texte (3 premieres secondes)</div>
+      <div style="position:relative;">
+        <input class="input-field" type="text" placeholder="Ex: Arrete de taper, dicte !" value="Tape 3x plus vite sur ton tel" style="padding-right:44px;">
+        <div style="position:absolute; right:8px; top:50%; transform:translateY(-50%); width:32px; height:32px; border-radius:50%; background:var(--accent-glow); display:flex; align-items:center; justify-content:center; cursor:pointer;" title="Generer avec Gemini">
+          <svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--accent-light)" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
+      </div>
+      <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Tap l'icone IA pour generer des suggestions</div>
+    </div>
+
+    <div class="spec-annotation">HOOK : champ texte libre + bouton IA (Gemini) a droite. Tap IA = bottom sheet avec 3-5 suggestions generees. L'user choisit ou edite. Le hook est le texte affiche dans les 3 premieres secondes — critique pour la retention TikTok (65%+ a 3s = 4-7x impressions).</div>
+
+    <!-- Langue -->
+    <div class="input-group">
+      <div class="input-label">Langue</div>
+      <div class="chip-row" style="margin:6px 0 0;">
+        <div class="chip selected">Francais</div>
+        <div class="chip">English</div>
+        <div class="chip">Espanol</div>
+        <div class="chip">Deutsch</div>
+        <div class="chip">+</div>
+      </div>
+    </div>
+
+    <!-- Duree -->
+    <div class="input-group">
+      <div class="input-label">Duree cible</div>
+      <div class="slider-row">
+        <span style="font-size:12px; color:var(--text-muted);">7s</span>
+        <input type="range" class="slider" min="7" max="60" value="15">
+        <span style="font-size:12px; color:var(--text-muted);">60s</span>
+      </div>
+      <div style="text-align:center;">
+        <span class="slider-val">15s</span>
+        <div style="font-size:11px; color:var(--success); margin-top:2px;">Duree optimale TikTok</div>
+      </div>
+    </div>
+
+    <div class="spec-annotation">DUREE : slider avec feedback visuel. Zone verte 7-15s = "optimal TikTok". Zone jaune 15-34s = "bon compromis". Zone rouge 34-60s = "risque completion basse". Feedback base sur la strategie promo-social (completion 70%+ = viral).</div>
+
+    <!-- Musique -->
+    <div class="input-group">
+      <div class="input-label">Style musique</div>
+      <div class="chip-row" style="margin:6px 0 0;">
+        <div class="chip selected">Energique</div>
+        <div class="chip">Chill</div>
+        <div class="chip">Epic</div>
+        <div class="chip">Corporate</div>
+        <div class="chip">Sans</div>
+      </div>
+    </div>
+
+    <!-- Avatar -->
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Avatar IA</div>
+        <div class="toggle-sub">Talking head en debut de video</div>
+      </div>
+      <div class="toggle" onclick="this.classList.toggle('on')"></div>
+    </div>
+
+    <!-- Voiceover -->
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Voiceover TTS</div>
+        <div class="toggle-sub">Narration vocale sur la video</div>
+      </div>
+      <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+    </div>
+
+    <!-- Subtitles -->
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Sous-titres auto</div>
+        <div class="toggle-sub">Texte anime synchronise</div>
+      </div>
+      <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+    </div>
+
+    <div class="spec-annotation">TOGGLES : animation slide du curseur. "Avatar IA" = generer un avatar talking head (ex: HeyGen/D-ID). "Voiceover TTS" = narration vocale generee. "Sous-titres" = texte anime type CapCut. Chaque option active augmente le temps de generation (affiche en bas).</div>
+
+    <!-- CTA -->
+    <div class="input-group" style="margin-top:16px;">
+      <div class="input-label">Appel a l'action (CTA)</div>
+      <div class="chip-row" style="margin:6px 0 0;">
+        <div class="chip selected">Link in bio</div>
+        <div class="chip">Telecharge</div>
+        <div class="chip">Essaie gratuit</div>
+        <div class="chip">Custom...</div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px; margin-bottom:20px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <span style="font-size:12px; color:var(--text-muted);">Temps estime : ~45s</span>
+        <span style="font-size:12px; color:var(--text-muted);">Credits : 8 restants</span>
+      </div>
+      <button class="btn-primary" onclick="goScreen('generate')">
+        Generer la video
+      </button>
+    </div>
+
+    <div class="spec-annotation">CTA GENERATION : le bouton principal. "Temps estime" et "Credits" donnent de la transparence. Le temps varie selon les options activees (avatar +20s, TTS +10s). Animation pulse sur le bouton pour inciter au tap.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 6 — GENERATION (progression)
+     ═══════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-generate">
+  <div class="status-bar">
+    <span class="time">9:41</span>
+    <div class="icons">
+      <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg>
+    </div>
+  </div>
+
+  <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px;">
+    <div class="spec-annotation" style="align-self:stretch;">GENERATION : ecran immersif, pas de header pour maximiser le focus. Ring progress SVG anime. Les etapes defilent en dessous. L'user peut quitter (la generation continue en background avec notification). Animation pulse-glow sur le ring.</div>
+
+    <div class="progress-container">
+      <div class="progress-ring pulse-glow" style="border-radius:50%;">
+        <svg width="180" height="180" viewBox="0 0 180 180">
+          <circle class="bg" cx="90" cy="90" r="82"/>
+          <circle class="fg" cx="90" cy="90" r="82" stroke-dasharray="515" stroke-dashoffset="180"/>
+        </svg>
+        <div class="progress-percent">
+          65<span style="font-size:20px;">%</span>
+          <small>Generation en cours...</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Steps -->
+    <div style="width:100%; max-width:300px; margin-top:20px;">
+      <div style="display:flex; align-items:center; gap:12px; padding:8px 0; opacity:0.5;">
+        <div style="width:24px;height:24px;border-radius:50%;background:var(--success);display:flex;align-items:center;justify-content:center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" stroke="#fff" fill="none" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <span style="font-size:13px; color:var(--text-muted); text-decoration:line-through;">Analyse des medias</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; padding:8px 0; opacity:0.5;">
+        <div style="width:24px;height:24px;border-radius:50%;background:var(--success);display:flex;align-items:center;justify-content:center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" stroke="#fff" fill="none" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <span style="font-size:13px; color:var(--text-muted); text-decoration:line-through;">Generation du script (Gemini)</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; padding:8px 0;">
+        <div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;">
+          <div style="width:8px;height:8px;border-radius:50%;background:#fff;"></div>
+        </div>
+        <span style="font-size:13px; color:var(--text-primary); font-weight:600;">Assemblage video (FFmpeg)</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; padding:8px 0; opacity:0.4;">
+        <div style="width:24px;height:24px;border-radius:50%;border:2px solid var(--bg-elevated);"></div>
+        <span style="font-size:13px; color:var(--text-muted);">Ajout musique & TTS</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; padding:8px 0; opacity:0.4;">
+        <div style="width:24px;height:24px;border-radius:50%;border:2px solid var(--bg-elevated);"></div>
+        <span style="font-size:13px; color:var(--text-muted);">Export final</span>
+      </div>
+    </div>
+
+    <div class="spec-annotation" style="align-self:stretch; margin-top:16px;">ETAPES : checklist temps reel. Chaque etape passe de gris → accent (en cours, point pulse) → vert (done, check anime). Le pourcentage est calcule sur les etapes completees. Si erreur = etape rouge + message + bouton "Reessayer".</div>
+
+    <div style="margin-top:30px; text-align:center;">
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">La generation continue en arriere-plan</div>
+      <div class="btn-secondary" onclick="goScreen('preview')" style="display:inline-block;">
+        Patienter...
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 7 — PREVIEW VIDEO
+     ═══════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-preview">
+  <div class="status-bar">
+    <span class="time">9:41</span>
+    <div class="icons">
+      <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg>
+    </div>
+  </div>
+
+  <div class="nav-header">
+    <div class="nav-back" onclick="goScreen('home')">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div class="nav-title">Preview</div>
+    <div class="nav-action" onclick="goScreen('share')">Partager</div>
+  </div>
+
+  <div class="content" style="padding-top:0;">
+    <div class="spec-annotation">PREVIEW : lecteur video 9:16 avec controles natifs. En dessous : resume de la config + actions (partager, regenerer, modifier). Le player est le hero element. Swipe left/right si plusieurs variantes generees.</div>
+
+    <!-- Video Player -->
+    <div class="video-player" style="background:linear-gradient(180deg,#7C3AED 0%,#2a2a38 30%,#0F0F13 100%);">
+      <div style="position:absolute; top:16px; left:16px; right:16px; text-align:center;">
+        <div style="font-size:24px; font-weight:900; color:#fff; text-shadow:0 2px 8px rgba(0,0,0,0.5);">TAPE 3X PLUS VITE</div>
+      </div>
+      <div style="position:absolute; bottom:60px; left:50%; transform:translateX(-50%); width:120px; height:200px; border-radius:16px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1);"></div>
+      <div style="position:absolute; bottom:20px; left:16px; right:16px; text-align:center;">
+        <div style="font-size:12px; color:rgba(255,255,255,0.7);">DictoKey — Link in bio</div>
+      </div>
+      <div class="play-btn">
+        <div>
+          <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Video info -->
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 0;">
+      <div>
+        <div style="font-size:15px; font-weight:600;">DictoKey — Hook FR</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">15s · Francais · Energique</div>
+      </div>
+      <span class="badge badge-success">Pret</span>
+    </div>
+
+    <!-- Action buttons -->
+    <div style="display:flex; gap:10px; margin:8px 0;">
+      <button class="btn-secondary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="goScreen('share')">
+        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        Partager
+      </button>
+      <button class="btn-secondary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="goScreen('config')">
+        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+        Regenerer
+      </button>
+    </div>
+
+    <div class="spec-annotation">ACTIONS : "Partager" ouvre l'ecran partage. "Regenerer" revient a la config avec tout pre-rempli (modifier le hook ou un parametre puis relancer). Un futur bouton "Variantes" genererait 3 versions differentes du meme contenu.</div>
+
+    <div class="divider"></div>
+
+    <!-- Config summary -->
+    <div class="section-title">Resume configuration</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+      <div style="padding:10px; background:var(--bg-card); border-radius:var(--radius-sm);">
+        <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Produit</div>
+        <div style="font-size:13px; font-weight:600; margin-top:2px;">DictoKey</div>
+      </div>
+      <div style="padding:10px; background:var(--bg-card); border-radius:var(--radius-sm);">
+        <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Template</div>
+        <div style="font-size:13px; font-weight:600; margin-top:2px;">Hook Viral</div>
+      </div>
+      <div style="padding:10px; background:var(--bg-card); border-radius:var(--radius-sm);">
+        <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Duree</div>
+        <div style="font-size:13px; font-weight:600; margin-top:2px;">15s</div>
+      </div>
+      <div style="padding:10px; background:var(--bg-card); border-radius:var(--radius-sm);">
+        <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Musique</div>
+        <div style="font-size:13px; font-weight:600; margin-top:2px;">Energique</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 8 — PARTAGE
+     ═══════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-share">
+  <div class="status-bar">
+    <span class="time">9:41</span>
+    <div class="icons">
+      <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg>
+    </div>
+  </div>
+
+  <div class="nav-header">
+    <div class="nav-back" onclick="goScreen('preview')">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div class="nav-title">Partager</div>
+  </div>
+
+  <div class="content">
+    <div class="spec-annotation">PARTAGE : ecran dedie (pas un bottom sheet) car c'est une etape importante du workflow. Les plateformes prioritaires sont en haut (TikTok, Instagram = P0/P1). "Sauver galerie" toujours visible. Caption pre-remplie avec hashtags optimaux.</div>
+
+    <!-- Video preview mini -->
+    <div style="display:flex; gap:14px; padding:16px; background:var(--bg-card); border-radius:var(--radius-md); margin-bottom:20px;">
+      <div style="width:54px; height:72px; border-radius:8px; background:linear-gradient(180deg,#7C3AED,#0F0F13); flex-shrink:0; display:flex; align-items:center; justify-content:center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:14px; font-weight:600;">DictoKey — "Tape 3x plus vite"</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:3px;">15s · 1080x1920 · 2.4 MB</div>
+        <div style="display:flex; gap:6px; margin-top:6px;">
+          <span class="badge badge-success">HD</span>
+          <span class="badge badge-accent">9:16</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Share destinations -->
+    <div class="section-title">Partager vers</div>
+    <div class="share-row" style="justify-content:flex-start; gap:20px; padding:12px 0;">
+      <div class="share-btn">
+        <div class="share-icon" style="background:linear-gradient(135deg,#000,#333);">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.88-2.88 2.89 2.89 0 012.88-2.88c.28 0 .54.04.79.11v-3.5a6.37 6.37 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.34-6.34V8.73a8.35 8.35 0 004.87 1.56V6.84a4.85 4.85 0 01-1.11-.15z"/></svg>
+        </div>
+        <div class="share-label">TikTok</div>
+      </div>
+      <div class="share-btn">
+        <div class="share-icon" style="background:linear-gradient(135deg,#833AB4,#E1306C,#F77737);">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1.5"/></svg>
+        </div>
+        <div class="share-label">Instagram</div>
+      </div>
+      <div class="share-btn">
+        <div class="share-icon" style="background:linear-gradient(135deg,#1DA1F2,#0D8BD9);">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </div>
+        <div class="share-label">X</div>
+      </div>
+      <div class="share-btn">
+        <div class="share-icon" style="background:linear-gradient(135deg,#FF0000,#CC0000);">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+        </div>
+        <div class="share-label">YouTube</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Caption -->
+    <div class="input-group">
+      <div class="input-label">Caption (pre-remplie)</div>
+      <textarea class="input-field" rows="3" style="resize:none; font-family:inherit;">Tape 3x plus vite sur ton telephone avec DictoKey !! #dictokey #productivity #dictation #ai #tiktok</textarea>
+      <div style="display:flex; justify-content:space-between; margin-top:4px;">
+        <span style="font-size:11px; color:var(--text-muted);">5 hashtags (max recommande)</span>
+        <span style="font-size:11px; color:var(--accent-light); cursor:pointer;">Regenerer caption</span>
+      </div>
+    </div>
+
+    <div class="spec-annotation">CAPTION : pre-generee par Gemini avec les hashtags optimaux (5 max pour TikTok). Editable. "Regenerer" = nouvelle suggestion. La caption est copiee dans le presse-papier avant ouverture de l'app cible (car TikTok ne supporte pas le pre-fill).</div>
+
+    <div class="divider"></div>
+
+    <!-- Save to gallery -->
+    <div style="display:flex; gap:10px;">
+      <button class="btn-secondary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Sauver galerie
+      </button>
+      <button class="btn-secondary" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        Copier caption
+      </button>
+    </div>
+
+    <div class="spec-annotation">WORKFLOW PARTAGE : 1) Tap "Copier caption" → clipboard 2) Tap plateforme → ouvre l'app avec la video en intent/share 3) L'user colle la caption. Ce flow en 3 taps est le minimum possible (limitation des APIs plateformes).</div>
+
+    <div style="margin-top:20px;">
+      <button class="btn-primary" onclick="goScreen('home')">Termine</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 9 — HISTORIQUE
+     ═══════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-history">
+  <div class="status-bar">
+    <span class="time">9:41</span>
+    <div class="icons">
+      <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg>
+    </div>
+  </div>
+
+  <div class="nav-header">
+    <div class="nav-back" onclick="goScreen('home')">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div class="nav-title">Historique</div>
+    <div class="nav-action">Filtrer</div>
+  </div>
+
+  <div class="content">
+    <div class="spec-annotation">HISTORIQUE : liste chronologique inverse. Chaque item = tap pour preview. Filtres : par produit, par statut (partage/brouillon), par date. Swipe gauche = supprimer (avec confirmation). Long press = menu contextuel (dupliquer config, re-partager, supprimer).</div>
+
+    <!-- Filter chips -->
+    <div class="chip-row">
+      <div class="chip selected">Tous</div>
+      <div class="chip">DictoKey</div>
+      <div class="chip">NoCodeFlow</div>
+      <div class="chip">SubWhisper</div>
+    </div>
+
+    <!-- Stats summary -->
+    <div style="display:flex; gap:10px; margin-bottom:16px;">
+      <div style="flex:1; text-align:center; padding:12px; background:var(--bg-card); border-radius:var(--radius-sm);">
+        <div style="font-size:22px; font-weight:800; color:var(--accent-light);">24</div>
+        <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Videos creees</div>
+      </div>
+      <div style="flex:1; text-align:center; padding:12px; background:var(--bg-card); border-radius:var(--radius-sm);">
+        <div style="font-size:22px; font-weight:800; color:var(--success);">18</div>
+        <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Partagees</div>
+      </div>
+      <div style="flex:1; text-align:center; padding:12px; background:var(--bg-card); border-radius:var(--radius-sm);">
+        <div style="font-size:22px; font-weight:800; color:var(--warning);">6</div>
+        <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Brouillons</div>
+      </div>
+    </div>
+
+    <div class="section-title">Aujourd'hui</div>
+
+    <div class="history-item" onclick="goScreen('preview')">
+      <div class="history-thumb" style="background:linear-gradient(135deg, #7C3AED, #1a1a24); display:flex; align-items:center; justify-content:center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+      <div class="history-info">
+        <div class="title">DictoKey — "Tape 3x plus vite"</div>
+        <div class="meta">
+          <span>15s</span>
+          <span>FR</span>
+          <span style="color:var(--success);">TikTok</span>
+        </div>
+        <div class="meta" style="margin-top:2px;">Il y a 2h</div>
+      </div>
+    </div>
+
+    <div class="history-item" onclick="goScreen('preview')">
+      <div class="history-thumb" style="background:linear-gradient(135deg, #7C3AED, #1a1a24); display:flex; align-items:center; justify-content:center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+      <div class="history-info">
+        <div class="title">DictoKey — "Stop typing, start talking"</div>
+        <div class="meta">
+          <span>21s</span>
+          <span>EN</span>
+          <span style="color:var(--success);">Instagram</span>
+        </div>
+        <div class="meta" style="margin-top:2px;">Il y a 5h</div>
+      </div>
+    </div>
+
+    <div class="section-title">Hier</div>
+
+    <div class="history-item" onclick="goScreen('preview')">
+      <div class="history-thumb" style="background:linear-gradient(135deg, #EF4444, #1a1a24); display:flex; align-items:center; justify-content:center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+      <div class="history-info">
+        <div class="title">NoCodeFlow — "Automate everything"</div>
+        <div class="meta">
+          <span>30s</span>
+          <span>EN</span>
+          <span style="color:var(--warning);">Brouillon</span>
+        </div>
+        <div class="meta" style="margin-top:2px;">Hier 18:30</div>
+      </div>
+    </div>
+
+    <div class="history-item" onclick="goScreen('preview')">
+      <div class="history-thumb" style="background:linear-gradient(135deg, #06B6D4, #1a1a24); display:flex; align-items:center; justify-content:center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+      <div class="history-info">
+        <div class="title">SubWhisper — "Sous-titres en 1 clic"</div>
+        <div class="meta">
+          <span>12s</span>
+          <span>FR</span>
+          <span style="color:var(--success);">TikTok + X</span>
+        </div>
+        <div class="meta" style="margin-top:2px;">Hier 14:00</div>
+      </div>
+    </div>
+
+    <div class="spec-annotation">INTERACTIONS HISTORIQUE : Tap = preview. Swipe left = delete (slide rouge avec icone poubelle + haptic). Long press = bottom sheet avec : "Reutiliser config", "Re-partager", "Dupliquer", "Supprimer". Les couleurs de thumb correspondent au produit.</div>
+
+    <!-- Empty state (hidden, shown when no history) -->
+    <div style="display:none;">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <h3>Aucune video</h3>
+        <p>Cree ta premiere promo video en quelques taps !</p>
+        <button class="btn-primary" style="margin-top:20px; width:auto; padding:12px 32px;" onclick="goScreen('media')">Creer une video</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab Bar -->
+  <div class="tab-bar">
+    <div class="tab-item" onclick="goScreen('home')">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Accueil</span>
+    </div>
+    <div class="tab-item active">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Historique</span>
+    </div>
+    <div class="tab-fab" onclick="goScreen('media')">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </div>
+    <div class="tab-item" onclick="goScreen('products')">
+      <svg viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+      <span>Produits</span>
+    </div>
+    <div class="tab-item" onclick="goScreen('settings')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span>Reglages</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 10 — PARAMETRES
+     ═══════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-settings">
+  <div class="status-bar">
+    <span class="time">9:41</span>
+    <div class="icons">
+      <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg>
+    </div>
+  </div>
+
+  <div class="nav-header">
+    <div class="nav-back" onclick="goScreen('home')">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div class="nav-title">Reglages</div>
+  </div>
+
+  <div class="content">
+    <div class="spec-annotation">PARAMETRES : organises par section. Les cles API sont masquees (bullet points) avec toggle visibilite. Le serveur fly-ffmpeg URL est editable. "Tester connexion" verifie le serveur en un tap. Version app en bas.</div>
+
+    <div class="section-title">Serveur</div>
+
+    <div class="settings-item">
+      <div class="settings-icon">
+        <svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div class="settings-label">Serveur FFmpeg</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">fly-ffmpeg.fly.dev</div>
+      </div>
+      <div class="settings-chevron"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+
+    <div class="settings-item">
+      <div class="settings-icon">
+        <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div class="settings-label">Tester connexion</div>
+      </div>
+      <span class="badge badge-success">OK</span>
+    </div>
+
+    <div class="section-title">Cles API</div>
+
+    <div class="settings-item">
+      <div class="settings-icon">
+        <svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div class="settings-label">Gemini API Key</div>
+        <div style="font-size:11px; color:var(--success); margin-top:2px;">Configuree</div>
+      </div>
+      <div class="settings-chevron"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+
+    <div class="settings-item">
+      <div class="settings-icon">
+        <svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div class="settings-label">Gateway Key</div>
+        <div style="font-size:11px; color:var(--success); margin-top:2px;">Configuree</div>
+      </div>
+      <div class="settings-chevron"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+
+    <div class="settings-item">
+      <div class="settings-icon">
+        <svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div class="settings-label">TTS API Key</div>
+        <div style="font-size:11px; color:var(--warning); margin-top:2px;">Non configuree</div>
+      </div>
+      <div class="settings-chevron"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+
+    <div class="section-title">Export</div>
+
+    <div class="settings-item">
+      <div class="settings-icon">
+        <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div class="settings-label">Qualite export</div>
+      </div>
+      <div class="settings-value">1080p</div>
+      <div class="settings-chevron"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+
+    <div class="settings-item">
+      <div class="settings-icon">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div class="settings-label">Format</div>
+      </div>
+      <div class="settings-value">MP4 H.264</div>
+      <div class="settings-chevron"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Watermark PromoClip</div>
+        <div class="toggle-sub">Petit logo en coin (desactiver = premium)</div>
+      </div>
+      <div class="toggle" onclick="this.classList.toggle('on')"></div>
+    </div>
+
+    <div class="section-title">A propos</div>
+
+    <div class="settings-item" style="border:none;">
+      <div class="settings-icon">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div class="settings-label">PromoClip</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">v1.0 — par @se7en.video.ai</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab Bar -->
+  <div class="tab-bar">
+    <div class="tab-item" onclick="goScreen('home')">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Accueil</span>
+    </div>
+    <div class="tab-item" onclick="goScreen('history')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Historique</span>
+    </div>
+    <div class="tab-fab" onclick="goScreen('media')">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </div>
+    <div class="tab-item" onclick="goScreen('products')">
+      <svg viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+      <span>Produits</span>
+    </div>
+    <div class="tab-item active">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span>Reglages</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SCREEN 11 — GESTION DES PRODUITS
+     ═══════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-products">
+  <div class="status-bar">
+    <span class="time">9:41</span>
+    <div class="icons">
+      <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg>
+    </div>
+  </div>
+
+  <div class="nav-header">
+    <div class="nav-back" onclick="goScreen('home')">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div class="nav-title">Mes produits</div>
+    <div class="nav-action">+ Ajouter</div>
+  </div>
+
+  <div class="content">
+    <div class="spec-annotation">GESTION PRODUITS : liste editable. Chaque produit a un nom, une description (contexte pour Gemini), une couleur, un lien (Play Store, site web). "Ajouter" ouvre un formulaire inline ou bottom sheet. Swipe left = supprimer. Tap = editer.</div>
+
+    <!-- Product list -->
+    <div class="product-card slide-up" style="cursor:pointer;">
+      <div class="product-icon" style="background:linear-gradient(135deg,#7C3AED,#5B21B6);">
+        <span style="font-size:18px;">D</span>
+      </div>
+      <div class="product-info" style="flex:1;">
+        <div class="name">DictoKey</div>
+        <div class="desc">Clavier IA dictee vocale — Play Store 4.99EUR/mois</div>
+        <div style="display:flex; gap:6px; margin-top:6px;">
+          <span class="badge badge-accent">P0 — Monetise</span>
+          <span class="badge badge-success">12 videos</span>
+        </div>
+      </div>
+      <div class="settings-chevron"><svg viewBox="0 0 24 24" stroke="var(--text-muted)" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+
+    <div class="product-card slide-up slide-up-delay-1" style="cursor:pointer;">
+      <div class="product-icon" style="background:linear-gradient(135deg,#06B6D4,#0891B2);">
+        <span style="font-size:18px;">S</span>
+      </div>
+      <div class="product-info" style="flex:1;">
+        <div class="name">SubWhisper</div>
+        <div class="desc">Transcription & sous-titres IA — Web app gratuite</div>
+        <div style="display:flex; gap:6px; margin-top:6px;">
+          <span class="badge badge-accent">Gratuit</span>
+          <span class="badge badge-success">4 videos</span>
+        </div>
+      </div>
+      <div class="settings-chevron"><svg viewBox="0 0 24 24" stroke="var(--text-muted)" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+
+    <div class="product-card slide-up slide-up-delay-2" style="cursor:pointer;">
+      <div class="product-icon" style="background:linear-gradient(135deg,#EF4444,#DC2626);">
+        <span style="font-size:18px;">N</span>
+      </div>
+      <div class="product-info" style="flex:1;">
+        <div class="name">NoCodeFlow</div>
+        <div class="desc">Blog no-code & automatisation — Affiliation Make.com 35%</div>
+        <div style="display:flex; gap:6px; margin-top:6px;">
+          <span class="badge badge-warning">P1 — Affiliation</span>
+          <span class="badge badge-success">8 videos</span>
+        </div>
+      </div>
+      <div class="settings-chevron"><svg viewBox="0 0 24 24" stroke="var(--text-muted)" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="spec-annotation">FORMULAIRE AJOUT PRODUIT (bottom sheet au tap "+") : Nom du produit, Description pour le contexte IA (2-3 phrases), URL (Play Store/site), Couleur accent (picker), CTA par defaut. La description est envoyee a Gemini comme contexte pour generer des hooks pertinents.</div>
+
+    <!-- Add product form (inline preview) -->
+    <div style="padding:16px; background:var(--bg-card); border-radius:var(--radius-md); border:1px dashed var(--border);">
+      <div style="font-size:14px; font-weight:600; margin-bottom:12px; color:var(--text-secondary);">Ajouter un produit</div>
+      <div class="input-group">
+        <div class="input-label">Nom</div>
+        <input class="input-field" type="text" placeholder="Ex: MonApp">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Description (contexte IA)</div>
+        <textarea class="input-field" rows="2" style="resize:none; font-family:inherit;" placeholder="Decris ton produit en 2-3 phrases pour aider l'IA a generer des hooks pertinents..."></textarea>
+      </div>
+      <div class="input-group">
+        <div class="input-label">Lien</div>
+        <input class="input-field" type="url" placeholder="https://play.google.com/...">
+      </div>
+      <div class="input-group">
+        <div class="input-label">Couleur</div>
+        <div class="chip-row" style="margin:6px 0 0;">
+          <div class="chip" style="background:#7C3AED;color:#fff;border-color:#7C3AED;">Violet</div>
+          <div class="chip" style="background:#06B6D4;color:#fff;border-color:#06B6D4;">Cyan</div>
+          <div class="chip" style="background:#EF4444;color:#fff;border-color:#EF4444;">Rouge</div>
+          <div class="chip" style="background:#10B981;color:#fff;border-color:#10B981;">Vert</div>
+          <div class="chip" style="background:#F59E0B;color:#000;border-color:#F59E0B;">Jaune</div>
+        </div>
+      </div>
+      <button class="btn-primary" style="margin-top:8px;">Sauvegarder</button>
+    </div>
+  </div>
+
+  <!-- Tab Bar -->
+  <div class="tab-bar">
+    <div class="tab-item" onclick="goScreen('home')">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Accueil</span>
+    </div>
+    <div class="tab-item" onclick="goScreen('history')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Historique</span>
+    </div>
+    <div class="tab-fab" onclick="goScreen('media')">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </div>
+    <div class="tab-item active">
+      <svg viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+      <span>Produits</span>
+    </div>
+    <div class="tab-item" onclick="goScreen('settings')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span>Reglages</span>
+    </div>
+  </div>
+</div>
+
+</div><!-- end phone-frame -->
+
+<script>
+/* ═══ Navigation ═══ */
+let currentScreen = 'home';
+const screenHistory = ['home'];
+
+function goScreen(id) {
+  if (id === currentScreen) return;
+  const prev = document.getElementById('screen-' + currentScreen);
+  const next = document.getElementById('screen-' + id);
+  if (!prev || !next) return;
+
+  prev.classList.remove('active');
+  prev.classList.add('exit-left');
+  setTimeout(() => prev.classList.remove('exit-left'), 300);
+
+  next.classList.add('active');
+  currentScreen = id;
+  screenHistory.push(id);
+
+  // Update nav
+  document.querySelectorAll('.screen-nav-item').forEach(el => {
+    el.classList.remove('active');
+    if (el.textContent.toLowerCase().includes(id.substring(0, 4))) {
+      el.classList.add('active');
+    }
+  });
+}
+
+/* ═══ Spec mode toggle ═══ */
+function toggleSpec() {
+  document.getElementById('phoneFrame').classList.toggle('spec-mode');
+  const btn = document.querySelector('.toggle-spec');
+  if (document.getElementById('phoneFrame').classList.contains('spec-mode')) {
+    btn.textContent = 'Masquer annotations UX';
+  } else {
+    btn.textContent = 'Afficher annotations UX';
+  }
+}
+
+/* ═══ Interactive elements ═══ */
+document.addEventListener('click', (e) => {
+  // Chips
+  if (e.target.classList.contains('chip') && !e.target.textContent.includes('+')) {
+    const row = e.target.closest('.chip-row');
+    if (row) {
+      row.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+      e.target.classList.add('selected');
+    }
+  }
+  // Media thumbs
+  if (e.target.closest('.media-thumb')) {
+    const thumb = e.target.closest('.media-thumb');
+    thumb.classList.toggle('selected');
+    // Update count
+    const count = document.querySelectorAll('.media-thumb.selected').length;
+    const counter = document.getElementById('mediaCount');
+    if (counter) counter.textContent = '(' + count + ')';
+  }
+  // Product cards (single select)
+  if (e.target.closest('.product-card') && e.target.closest('#screen-product')) {
+    const cards = e.target.closest('.content').querySelectorAll('.product-card');
+    cards.forEach(c => c.classList.remove('selected'));
+    e.target.closest('.product-card').classList.add('selected');
+  }
+  // Template cards
+  if (e.target.closest('.template-card')) {
+    document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
+    e.target.closest('.template-card').classList.add('selected');
+  }
+});
+
+/* ═══ Slider value display ═══ */
+document.querySelectorAll('.slider').forEach(slider => {
+  slider.addEventListener('input', () => {
+    const val = slider.parentElement.nextElementSibling;
+    if (val) {
+      const v = val.querySelector('.slider-val');
+      if (v) v.textContent = slider.value + 's';
+      const hint = val.querySelector('div');
+      if (hint) {
+        const n = parseInt(slider.value);
+        if (n <= 15) { hint.textContent = 'Duree optimale TikTok'; hint.style.color = 'var(--success)'; }
+        else if (n <= 34) { hint.textContent = 'Bon compromis'; hint.style.color = 'var(--warning)'; }
+        else { hint.textContent = 'Risque completion basse'; hint.style.color = 'var(--error)'; }
+      }
+    }
+  });
+});
+
+/* ═══ Progress animation (demo) ═══ */
+let progressVal = 65;
+function animateProgress() {
+  const fg = document.querySelector('.progress-ring .fg');
+  if (!fg) return;
+  const circumference = 2 * Math.PI * 82;
+  fg.style.strokeDasharray = circumference;
+
+  setInterval(() => {
+    if (currentScreen !== 'generate') return;
+    progressVal = Math.min(progressVal + 1, 100);
+    const offset = circumference - (progressVal / 100) * circumference;
+    fg.style.strokeDashoffset = offset;
+    const pct = document.querySelector('.progress-percent');
+    if (pct) pct.innerHTML = progressVal + '<span style="font-size:20px;">%</span><small>' +
+      (progressVal >= 100 ? 'Termine !' : 'Generation en cours...') + '</small>';
+    if (progressVal >= 100) {
+      setTimeout(() => goScreen('preview'), 1000);
+      progressVal = 65;
+    }
+  }, 200);
+}
+animateProgress();
+</script>
+
+</body>
+</html>
