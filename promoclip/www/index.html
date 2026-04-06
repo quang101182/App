@@ -1576,6 +1576,8 @@ body {
         <option value="en">English</option>
         <option value="es">Espanol</option>
         <option value="de">Deutsch</option>
+        <option value="it">Italiano</option>
+        <option value="pt">Portugues</option>
       </select>
     </div>
 
@@ -1753,7 +1755,7 @@ const TEMPLATES = [
   { id: 'tpl-micro', name: 'Micro 5-8s', category: 'Hook viral', desc: 'Ultra court, impact max', gradient: 'linear-gradient(180deg,#EF4444 0%,#0F0F13 60%)' }
 ];
 
-const LANGUAGES = ['Francais', 'English', 'Espanol', 'Deutsch'];
+const LANGUAGES = ['Francais', 'English', 'Espanol', 'Deutsch', 'Italiano', 'Portugues'];
 const MUSIC_STYLES = ['Energique', 'Chill', 'Epic', 'Corporate', 'Sans'];
 const CTA_OPTIONS = ['Link in bio', 'Telecharge', 'Essaie gratuit', 'Custom...'];
 const STYLE_OPTIONS = ['Energique', 'Pro/Clean', 'Fun/Playful', 'Minimaliste', 'Urgence'];
@@ -2023,7 +2025,7 @@ async function geminiGenerateHooks(productDesc, language, count = 5) {
 // Convert File object to PNG base64 string (without data: prefix)
 // Uses canvas to normalize any image format (HEIC, WebP, JPEG, etc.) to PNG
 function fileToBase64(file) {
-  log('fileToBase64: ' + file.name + ' type=' + file.type + ' size=' + (file.size/1024).toFixed(0) + 'KB');
+  log('Fichier: ' + file.name + ' (' + file.type + ', ' + (file.size/1024).toFixed(0) + ' KB)');
   return new Promise((resolve, reject) => {
     if (file.type.startsWith('video/')) {
       // For videos: extract a frame at 0.5s and convert to PNG via canvas
@@ -2091,9 +2093,34 @@ function fileToBase64(file) {
   });
 }
 
+// Compress image for Gemini Vision (smaller = faster + avoids 400 on large images)
+function compressForVision(fullBase64) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 768; // Gemini Vision doesn't need full res
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > maxDim || h > maxDim) {
+        const scale = maxDim / Math.max(w, h);
+        w = Math.round(w * scale); h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      resolve(dataUrl.substring(dataUrl.indexOf(',') + 1));
+    };
+    img.onerror = () => resolve(fullBase64); // fallback to original
+    img.src = 'data:image/png;base64,' + fullBase64;
+  });
+}
+
 // Call Gemini Vision to get bounding boxes of UI elements in a screenshot
 async function geminiVision(imageBase64, mimeType) {
   log('Gemini Vision: analyse capture...');
+  // Compress for vision to reduce payload and avoid 400
+  const visionB64 = await compressForVision(imageBase64);
+  log('  Vision payload: ' + (visionB64.length / 1024).toFixed(0) + ' KB (compresse)');
   const r = await fetch(GATEWAY_URL + '/api/gemini/v1beta/models/gemini-2.0-flash:generateContent', {
     method: 'POST',
     headers: {
@@ -2104,7 +2131,7 @@ async function geminiVision(imageBase64, mimeType) {
       contents: [{
         parts: [
           { text: 'Analyze this app screenshot. Find the most important UI element (main button, key feature, result area). Return ONLY a JSON object with bounding box coordinates in 0-1000 scale: {"x1":number,"y1":number,"x2":number,"y2":number,"element":"description"}. If no clear element, return {"x1":300,"y1":300,"x2":700,"y2":700,"element":"center"}.' },
-          { inline_data: { mime_type: mimeType || 'image/png', data: imageBase64 } }
+          { inline_data: { mime_type: 'image/jpeg', data: visionB64 } }
         ]
       }],
       generationConfig: { maxOutputTokens: 200, temperature: 0.1 }
@@ -2741,7 +2768,7 @@ async function startGeneration() {
     let audioBase64 = null;
     if (cfg.voiceover !== false) {
       try {
-        const voiceMap = { 'Francais': 'onyx', 'English': 'nova', 'Espanol': 'echo', 'Deutsch': 'alloy' };
+        const voiceMap = { 'Francais': 'onyx', 'English': 'nova', 'Espanol': 'echo', 'Deutsch': 'alloy', 'Italiano': 'fable', 'Portugues': 'shimmer' };
         audioBase64 = await generateTTS(script.voiceover, voiceMap[cfg.language] || 'onyx');
       } catch(e) {
         log('TTS echoue: ' + e.message + ' — video sans voix', 'warn');
@@ -3620,7 +3647,7 @@ function init() {
   }
 
   // Set default language from settings
-  const langMap = { fr: 'Francais', en: 'English', es: 'Espanol', de: 'Deutsch' };
+  const langMap = { fr: 'Francais', en: 'English', es: 'Espanol', de: 'Deutsch', it: 'Italiano', pt: 'Portugues' };
   if (!state.wizard.config.language && state.settings.defaultLang) {
     state.wizard.config.language = langMap[state.settings.defaultLang] || 'Francais';
   }
