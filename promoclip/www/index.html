@@ -2302,14 +2302,17 @@ async function heygenGenerate(scriptText) {
   const key = state.settings.heygenKey;
   if (!key) throw new Error('Cle HeyGen manquante');
   log('HeyGen: lancement generation avatar...');
-  const avatarId = (state.wizard.config.avatarStyle === 'male') ? 'Adrian_public_3_20240312' : 'Annie_expressive5_public';
+  const isMale = state.wizard.config.avatarStyle === 'male';
+  const avatarId = isMale ? 'Andrew_public_pro1_20230614' : 'Annie_expressive5_public';
+  const voiceId = isMale ? 'f38a635bee7a4d1f9b0a654a31d050d2' : 'ffwaswFKk4KL23PVLImO';
+  log('HeyGen: avatar=' + avatarId + ' voice=' + (isMale ? 'male' : 'female'));
   const r = await fetch('https://api.heygen.com/v2/video/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': key },
     body: JSON.stringify({
       video_inputs: [{
         character: { type: 'avatar', avatar_id: avatarId, avatar_style: 'normal' },
-        voice: { type: 'text', input_text: scriptText, voice_id: 'ffwaswFKk4KL23PVLImO' },
+        voice: { type: 'text', input_text: scriptText, voice_id: voiceId },
         background: { type: 'color', value: '#0F0F13' }
       }],
       dimension: { width: 540, height: 960 }
@@ -2725,9 +2728,12 @@ function renderConfigScreen() {
 
   // Estimate
   let est = 30;
-  if (cfg.avatar) est += 20;
-  if (cfg.voiceover) est += 10;
-  document.getElementById('configEstimate').textContent = 'Temps estime : ~' + est + 's';
+  if (cfg.avatar) est += 180; // HeyGen ~3 min
+  else if (cfg.voiceover) est += 10;
+  const estMin = Math.floor(est / 60);
+  const estSec = est % 60;
+  const estText = estMin > 0 ? '~' + estMin + 'min' + (estSec > 0 ? estSec + 's' : '') : '~' + est + 's';
+  document.getElementById('configEstimate').textContent = 'Temps estime : ' + estText;
 
   // Validation: enable/disable generate button
   const genBtn = document.querySelector('[data-action="start-generation"]');
