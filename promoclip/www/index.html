@@ -1310,26 +1310,39 @@ body {
 <div class="screen" id="screen-generate">
   <div class="status-bar"><span class="time">9:41</span><div class="icons"><svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 00-6 0zm-4-4l2 2a7.074 7.074 0 0110 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg><svg viewBox="0 0 24 24"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg></div></div>
 
-  <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:8px 20px 0;">
+  <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:8px 20px 0; overflow-y:auto;">
+    <!-- Progress ring (% only, no text inside) -->
     <div class="progress-container" style="margin:0 auto;">
-      <div class="progress-ring pulse-glow" style="border-radius:50%; width:150px; height:150px; margin:0 auto;" id="progressRing">
-        <svg width="150" height="150" viewBox="0 0 180 180" style="display:block; margin:0 auto;">
+      <div class="progress-ring pulse-glow" style="border-radius:50%; width:130px; height:130px; margin:0 auto; position:relative;" id="progressRing">
+        <svg width="130" height="130" viewBox="0 0 180 180" style="display:block;">
           <circle class="bg" cx="90" cy="90" r="82"/>
           <circle class="fg" cx="90" cy="90" r="82" stroke-dasharray="515" stroke-dashoffset="515" id="progressCircle"/>
         </svg>
-        <div class="progress-percent" id="progressPercent">
-          0<span style="font-size:20px;">%</span>
-          <small>Demarrage...</small>
+        <div class="progress-percent" id="progressPercent" style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+          0<span style="font-size:18px;">%</span>
         </div>
       </div>
     </div>
-    <div id="genTimer" style="font-size:15px; font-weight:600; color:var(--accent-light); margin:6px 0 10px; font-variant-numeric:tabular-nums;">00:00</div>
+    <div id="genStatusText" style="font-size:12px; color:var(--text-muted); margin:4px 0 2px;">Demarrage...</div>
+    <div id="genTimer" style="font-size:15px; font-weight:600; color:var(--accent-light); margin:2px 0 10px; font-variant-numeric:tabular-nums;">00:00</div>
 
     <div style="width:100%; max-width:300px;" id="genSteps"></div>
 
-    <div style="margin-top:12px; text-align:center;">
+    <div style="margin-top:10px; text-align:center;">
       <div style="font-size:11px; color:var(--text-muted); margin-bottom:6px;">La generation continue en arriere-plan</div>
       <div class="btn-secondary" data-action="cancel-generation" style="display:inline-block; padding:8px 20px;">Annuler</div>
+    </div>
+
+    <!-- Inline logs (sous Annuler) -->
+    <div id="genLogsInline" style="width:100%; margin-top:10px; background:var(--bg-input); border-radius:var(--radius-sm); border:1px solid var(--border); overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:5px 10px; border-bottom:1px solid var(--border);">
+        <span style="font-size:11px; color:var(--text-muted); font-weight:600;">LOGS</span>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <span style="font-size:13px; color:var(--accent-light); cursor:pointer; user-select:none;" data-action="gen-logs-resize" data-dir="down">▼</span>
+          <span style="font-size:13px; color:var(--accent-light); cursor:pointer; user-select:none;" data-action="gen-logs-resize" data-dir="up">▲</span>
+        </div>
+      </div>
+      <div id="genLogsBody" style="font-size:11px; font-family:monospace; color:var(--text-secondary); padding:4px 8px; overflow-y:auto; max-height:80px; line-height:1.4;"></div>
     </div>
   </div>
 </div>
@@ -1935,6 +1948,10 @@ function showToast(msg, isError = false, duration = 3000) {
 let _logs = [];
 const MAX_LOGS = 200;
 
+// Gen logs inline: height levels persisted
+const GEN_LOG_HEIGHTS = [40, 80, 120, 180];
+let _genLogLevel = parseInt(localStorage.getItem(LS_PREFIX + 'genLogLevel') || '1');
+
 function log(msg, level = 'info') {
   const now = new Date();
   const ts = now.toTimeString().slice(0,8);
@@ -1948,6 +1965,28 @@ function log(msg, level = 'info') {
     body.appendChild(entry);
     body.scrollTop = body.scrollHeight;
   }
+  // Mirror to inline gen logs
+  const genBody = document.getElementById('genLogsBody');
+  if (genBody) {
+    const color = level === 'error' ? 'var(--error)' : level === 'warn' ? 'var(--warning)' : 'var(--text-secondary)';
+    const line = document.createElement('div');
+    line.style.color = color;
+    line.textContent = ts.slice(0,5) + ' ' + msg;
+    genBody.appendChild(line);
+    genBody.scrollTop = genBody.scrollHeight;
+  }
+}
+
+function resizeGenLogs(dir) {
+  if (dir === 'up' && _genLogLevel < GEN_LOG_HEIGHTS.length - 1) _genLogLevel++;
+  if (dir === 'down' && _genLogLevel > 0) _genLogLevel--;
+  localStorage.setItem(LS_PREFIX + 'genLogLevel', String(_genLogLevel));
+  applyGenLogHeight();
+}
+
+function applyGenLogHeight() {
+  const el = document.getElementById('genLogsBody');
+  if (el) el.style.maxHeight = GEN_LOG_HEIGHTS[_genLogLevel] + 'px';
 }
 
 function logClear() { _logs = []; const b = document.getElementById('logBody'); if(b) b.innerHTML = ''; showToast('Logs effaces'); }
@@ -2743,6 +2782,9 @@ async function startGeneration() {
   renderGenSteps();
   updateProgress(0);
   startGenTimer();
+  const _glb = document.getElementById('genLogsBody');
+  if (_glb) _glb.innerHTML = '';
+  applyGenLogHeight();
 
   const cfg = state.wizard.config;
   const steps = getGenSteps();
@@ -2930,7 +2972,12 @@ function updateProgress(percent) {
     circle.setAttribute('stroke-dashoffset', offset);
   }
   if (label) {
-    label.innerHTML = percent + '<span style="font-size:20px;">%</span><small>' + (percent < 100 ? 'Generation en cours...' : 'Termine !') + '</small>';
+    label.innerHTML = percent + '<span style="font-size:18px;">%</span>';
+  }
+  const statusEl = document.getElementById('genStatusText');
+  if (statusEl) {
+    statusEl.textContent = percent < 100 ? 'Generation en cours...' : 'Termine !';
+    statusEl.style.color = percent >= 100 ? 'var(--success)' : 'var(--text-muted)';
   }
 }
 
@@ -3230,6 +3277,16 @@ function goScreen(name) {
 
   _currentScreen = name;
 
+  // Hide global log panel on generation screen (inline logs replace it)
+  const logPanel = document.getElementById('logPanel');
+  const logToggle = document.querySelector('.log-toggle-btn');
+  if (name === 'generate') {
+    if (logPanel) logPanel.classList.remove('open');
+    if (logToggle) logToggle.style.display = 'none';
+  } else {
+    if (logToggle) logToggle.style.display = '';
+  }
+
   // Update desktop nav
   document.querySelectorAll('.screen-nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.screen === name);
@@ -3452,6 +3509,7 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
     case 'log-copy': logCopy(); break;
     case 'log-export': logExport(); break;
     case 'log-clear': logClear(); break;
+    case 'gen-logs-resize': resizeGenLogs(el.dataset.dir); break;
 
     case 'select-product':
       state.wizard.selectedProductId = el.dataset.id;
