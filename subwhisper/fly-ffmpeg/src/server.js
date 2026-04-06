@@ -2572,6 +2572,7 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
   const {
     clips, audio, music, subtitles,
     hookText, ctaText,
+    avatarUrl, avatarVideo, avatarMode, avatarPosition,
     width = 1080, height = 1920,
     musicVolume = 0.3
   } = req.body;
@@ -2702,12 +2703,115 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
 
     console.log(`[${jobId}] Concat OK`);
 
+    // ── Avatar overlay (optional) ──
+    let videoForMix = concatOut; // default: no avatar
+    if (avatarVideo || avatarUrl) {
+      const avatarPath = path.join(tmpDir, 'avatar.mp4');
+      if (avatarVideo) {
+        fs.writeFileSync(avatarPath, Buffer.from(avatarVideo, 'base64'));
+      } else if (avatarUrl) {
+        // Download avatar from URL
+        await new Promise((resolve, reject) => {
+          const file = fs.createWriteStream(avatarPath);
+          const proto = avatarUrl.startsWith('https') ? require('https') : require('http');
+          proto.get(avatarUrl, (response) => {
+            if (response.statusCode === 301 || response.statusCode === 302) {
+              proto.get(response.headers.location, (r2) => { r2.pipe(file); file.on('finish', () => { file.close(); resolve(); }); }).on('error', reject);
+            } else {
+              response.pipe(file);
+              file.on('finish', () => { file.close(); resolve(); });
+            }
+          }).on('error', reject);
+        });
+      }
+
+      const mode = avatarMode || 'bubble';
+      const avatarOutPath = path.join(tmpDir, 'with-avatar.mp4');
+      console.log(`[${jobId}] Avatar: mode=${mode}, has avatar=${!!(avatarVideo||avatarUrl)}`);
+
+      if (mode === 'bubble') {
+        // Circular PiP overlay
+        const pipPx = Math.round(height * 0.25); // 25% of height
+        const margin = Math.round(height * 0.03);
+        const pos = avatarPosition || 'bottom-right';
+        let pipX, pipY;
+        if (pos === 'bottom-right') { pipX = `W-${pipPx}-${margin}`; pipY = `H-${pipPx}-${margin}`; }
+        else if (pos === 'bottom-left') { pipX = `${margin}`; pipY = `H-${pipPx}-${margin}`; }
+        else { pipX = `W-${pipPx}-${margin}`; pipY = `H-${pipPx}-${margin}`; }
+
+        const circleFilter = `[1:v]scale=${pipPx}:${pipPx}:force_original_aspect_ratio=decrease,pad=${pipPx}:${pipPx}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipPx}/2,2)+pow(Y-${pipPx}/2,2),pow(${pipPx}/2-4,2)),0,255)'[pip];[0:v][pip]overlay=${pipX}:${pipY}:shortest=1[outv]`;
+
+        const ffArgs = [
+          '-i', videoForMix,
+          '-i', avatarPath,
+          '-filter_complex', circleFilter,
+          '-map', '[outv]',
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+          '-pix_fmt', 'yuv420p',
+          '-y', avatarOutPath
+        ];
+
+        await new Promise((resolve, reject) => {
+          const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+          let stderr = '';
+          ff.stderr.on('data', d => { stderr += d.toString(); });
+          ff.on('close', code => {
+            if (code === 0) resolve();
+            else reject(new Error(`FFmpeg avatar-pip exit ${code}: ${stderr.slice(-300)}`));
+          });
+          ff.on('error', reject);
+        });
+
+        console.log(`[${jobId}] Avatar bubble overlay done`);
+
+      } else if (mode === 'split-top' || mode === 'split-bottom') {
+        // Split screen: avatar takes top or bottom half
+        const halfH = Math.round(height / 2);
+        let filterComplex;
+        if (mode === 'split-top') {
+          // Avatar on top, clips on bottom
+          filterComplex = `[1:v]scale=${width}:${halfH}:force_original_aspect_ratio=decrease,pad=${width}:${halfH}:(ow-iw)/2:(oh-ih)/2[av];[0:v]scale=${width}:${halfH}:force_original_aspect_ratio=decrease,pad=${width}:${halfH}:(ow-iw)/2:(oh-ih)/2[cl];[av][cl]vstack=inputs=2[outv]`;
+        } else {
+          // Clips on top, avatar on bottom
+          filterComplex = `[0:v]scale=${width}:${halfH}:force_original_aspect_ratio=decrease,pad=${width}:${halfH}:(ow-iw)/2:(oh-ih)/2[cl];[1:v]scale=${width}:${halfH}:force_original_aspect_ratio=decrease,pad=${width}:${halfH}:(ow-iw)/2:(oh-ih)/2[av];[cl][av]vstack=inputs=2[outv]`;
+        }
+
+        const ffArgs = [
+          '-i', videoForMix,
+          '-i', avatarPath,
+          '-filter_complex', filterComplex,
+          '-map', '[outv]',
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+          '-pix_fmt', 'yuv420p',
+          '-t', String(Math.min(30, clips.length * 10)), // limit to reasonable duration
+          '-y', avatarOutPath
+        ];
+
+        await new Promise((resolve, reject) => {
+          const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+          let stderr = '';
+          ff.stderr.on('data', d => { stderr += d.toString(); });
+          ff.on('close', code => {
+            if (code === 0) resolve();
+            else reject(new Error(`FFmpeg avatar-split exit ${code}: ${stderr.slice(-300)}`));
+          });
+          ff.on('error', reject);
+        });
+
+        console.log(`[${jobId}] Avatar split (${mode}) done`);
+      }
+
+      if (fs.existsSync(avatarOutPath)) {
+        videoForMix = avatarOutPath;
+      }
+    }
+
     // 5. Mix audio layers (voiceover + music) if provided
-    let finalOut = concatOut;
+    let finalOut = videoForMix;
 
     if (audio || music) {
       finalOut = path.join(tmpDir, 'final.mp4');
-      const mixArgs = ['-i', concatOut];
+      const mixArgs = ['-i', videoForMix];
 
       if (audio) {
         const audioPath = path.join(tmpDir, 'voice.mp3');
