@@ -2023,16 +2023,37 @@ async function geminiGenerateHooks(productDesc, language, count = 5) {
 // Convert File object to PNG base64 string (without data: prefix)
 // Uses canvas to normalize any image format (HEIC, WebP, JPEG, etc.) to PNG
 function fileToBase64(file) {
+  log('fileToBase64: ' + file.name + ' type=' + file.type + ' size=' + (file.size/1024).toFixed(0) + 'KB');
   return new Promise((resolve, reject) => {
     if (file.type.startsWith('video/')) {
-      // For videos, read as-is (no canvas conversion)
-      const reader = new FileReader();
-      reader.onload = () => {
-        const raw = reader.result;
-        resolve(raw.indexOf(',') >= 0 ? raw.substring(raw.indexOf(',') + 1) : raw);
+      // For videos: extract a frame at 0.5s and convert to PNG via canvas
+      log('Video detectee — extraction frame...');
+      const video = document.createElement('video');
+      video.muted = true;
+      video.preload = 'auto';
+      const objUrl = URL.createObjectURL(file);
+      video.src = objUrl;
+      video.onloadeddata = () => { video.currentTime = Math.min(0.5, video.duration || 0.5); };
+      video.onseeked = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const maxDim = 2000;
+          let w = video.videoWidth, h = video.videoHeight;
+          if (w > maxDim || h > maxDim) {
+            const scale = maxDim / Math.max(w, h);
+            w = Math.round(w * scale); h = Math.round(h * scale);
+          }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL('image/png');
+          const b64 = dataUrl.substring(dataUrl.indexOf(',') + 1);
+          URL.revokeObjectURL(objUrl);
+          log('Video frame extraite en PNG: ' + w + 'x' + h + ' (' + (b64.length / 1024).toFixed(0) + ' KB)');
+          resolve(b64);
+        } catch(e) { URL.revokeObjectURL(objUrl); reject(new Error('Frame extraction echouee: ' + e.message)); }
       };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
+      video.onerror = () => { URL.revokeObjectURL(objUrl); reject(new Error('Video illisible: ' + file.name)); };
+      setTimeout(() => { URL.revokeObjectURL(objUrl); reject(new Error('Video frame timeout')); }, 10000);
       return;
     }
     // For images: load into canvas → export as PNG (guarantees FFmpeg compatibility)
