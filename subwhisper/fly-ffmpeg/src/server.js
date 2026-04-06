@@ -2037,6 +2037,228 @@ app.post('/slideshow-pip', requireAnySecret, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /extract-frames — Extract frames from video at specific timestamps
+// Input: { videoUrl, timestamps[], width?, height? }
+// Output: { ok: true, frames: [{ timestamp, base64 }] }
+// ---------------------------------------------------------------------------
+
+app.post('/extract-frames', requireAnySecret, async (req, res) => {
+  const { videoUrl, timestamps, width = 1080, height = 1920 } = req.body;
+
+  if (!videoUrl) return res.status(400).json({ error: 'videoUrl required' });
+  if (!timestamps || !Array.isArray(timestamps) || timestamps.length === 0) {
+    return res.status(400).json({ error: 'timestamps[] required (array of seconds)' });
+  }
+  if (timestamps.length > 10) {
+    return res.status(400).json({ error: 'Max 10 timestamps allowed' });
+  }
+
+  const jobId = `frames-${Date.now().toString(36)}`;
+  const tmpDir = path.join(os.tmpdir(), jobId);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  console.log(`[${jobId}] Extract-frames: ${timestamps.length} timestamps, ${width}x${height}, url=${videoUrl.slice(0, 80)}...`);
+
+  try {
+    // Download video from URL (same pattern as /merge videoUrl)
+    const videoPath = path.join(tmpDir, 'input.mp4');
+    const http = require('http');
+    await new Promise((resolve, reject) => {
+      const MAX_REDIRECTS = 5;
+      let redirectCount = 0;
+      const timer = setTimeout(() => reject(new Error('Video download timeout 60s')), 60000);
+
+      function doGet(url) {
+        const client = url.startsWith('https') ? https : http;
+        client.get(url, (response) => {
+          if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
+            redirectCount++;
+            if (redirectCount > MAX_REDIRECTS) {
+              clearTimeout(timer);
+              reject(new Error(`Too many redirects (>${MAX_REDIRECTS})`));
+              return;
+            }
+            const redirectUrl = response.headers.location.startsWith('http')
+              ? response.headers.location
+              : new URL(response.headers.location, url).href;
+            console.log(`[${jobId}] Redirect ${redirectCount}: ${response.statusCode} → ${redirectUrl.slice(0, 120)}...`);
+            response.resume();
+            doGet(redirectUrl);
+            return;
+          }
+          if (response.statusCode !== 200) {
+            clearTimeout(timer);
+            reject(new Error(`Video download HTTP ${response.statusCode}`));
+            return;
+          }
+          const fileStream = fs.createWriteStream(videoPath);
+          response.pipe(fileStream);
+          fileStream.on('finish', () => { clearTimeout(timer); fileStream.close(resolve); });
+          fileStream.on('error', (err) => { clearTimeout(timer); reject(err); });
+        }).on('error', (err) => { clearTimeout(timer); reject(err); });
+      }
+
+      doGet(videoUrl);
+    });
+
+    const dlSize = fs.statSync(videoPath).size;
+    console.log(`[${jobId}] Video downloaded: ${(dlSize / 1048576).toFixed(1)} MB`);
+
+    // Extract frame at each timestamp
+    const frames = [];
+    for (let i = 0; i < timestamps.length; i++) {
+      const t = timestamps[i];
+      const framePath = path.join(tmpDir, `frame_${i}.jpg`);
+
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', [
+          '-ss', String(t),
+          '-i', videoPath,
+          '-frames:v', '1',
+          '-vf', `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`,
+          '-y', framePath
+        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`FFmpeg frame ${i} exit ${code}: ${stderr.slice(-300)}`));
+        });
+        ff.on('error', reject);
+
+        // Timeout 60s per frame
+        setTimeout(() => {
+          try { ff.kill('SIGKILL'); } catch (_) {}
+          reject(new Error(`FFmpeg frame ${i} timeout 60s`));
+        }, 60000);
+      });
+
+      const frameData = fs.readFileSync(framePath);
+      frames.push({ timestamp: t, base64: frameData.toString('base64') });
+      console.log(`[${jobId}] Frame ${i}: t=${t}s → ${(frameData.length / 1024).toFixed(0)} KB`);
+    }
+
+    console.log(`[${jobId}] Extract-frames OK: ${frames.length} frames`);
+    res.json({ ok: true, frames });
+
+  } catch (err) {
+    console.error(`[${jobId}] Extract-frames error:`, err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ken-burns — Apply Ken Burns effect to a still image → MP4
+// Input: { image (base64), effect, duration?, width?, height? }
+// Output: MP4 binary stream
+// ---------------------------------------------------------------------------
+
+app.post('/ken-burns', requireAnySecret, async (req, res) => {
+  const { image, effect = 'zoom_in', duration = 5, width = 1080, height = 1920 } = req.body;
+
+  if (!image) return res.status(400).json({ error: 'image required (base64)' });
+
+  const validEffects = ['zoom_in', 'zoom_out', 'pan_down', 'pan_right'];
+  if (!validEffects.includes(effect)) {
+    return res.status(400).json({ error: `effect must be one of: ${validEffects.join(', ')}` });
+  }
+
+  const dur = Math.min(10, Math.max(1, duration));
+  const fps = 30;
+
+  const jobId = `kb-${Date.now().toString(36)}`;
+  const tmpDir = path.join(os.tmpdir(), jobId);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  console.log(`[${jobId}] Ken-Burns: effect=${effect}, duration=${dur}s, ${width}x${height}`);
+
+  try {
+    // Write image to disk
+    const imgPath = path.join(tmpDir, 'input.png');
+    fs.writeFileSync(imgPath, Buffer.from(image, 'base64'));
+    const outPath = path.join(tmpDir, 'output.mp4');
+
+    // Build zoompan filter based on effect
+    const d = Math.round(fps * dur);
+    let zoompanFilter;
+    switch (effect) {
+      case 'zoom_in':
+        zoompanFilter = `zoompan=z='min(zoom+0.001,1.5)':d=${d}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=${fps}`;
+        break;
+      case 'zoom_out':
+        zoompanFilter = `zoompan=z='if(lte(zoom,1.0),1.5,max(1.001,zoom-0.001))':d=${d}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=${fps}`;
+        break;
+      case 'pan_down':
+        zoompanFilter = `zoompan=z=1.3:d=${d}:x='(iw-iw/zoom)/2':y='min((ih-ih/zoom),on*2)':s=${width}x${height}:fps=${fps}`;
+        break;
+      case 'pan_right':
+        zoompanFilter = `zoompan=z=1.2:d=${d}:x='min(on*3,(iw-iw/zoom))':y='(ih-ih/zoom)/2':s=${width}x${height}:fps=${fps}`;
+        break;
+    }
+
+    const ffArgs = [
+      '-loop', '1',
+      '-i', imgPath,
+      '-vf', `scale=8000:-1,${zoompanFilter}`,
+      '-c:v', 'libx264',
+      '-preset', 'fast',
+      '-crf', '23',
+      '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart',
+      '-t', String(dur),
+      '-y', outPath
+    ];
+
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+      ff.stderr.on('data', d => { stderr += d.toString(); });
+      ff.on('close', code => {
+        if (code === 0) resolve();
+        else reject(new Error(`FFmpeg exit ${code}: ${stderr.slice(-500)}`));
+      });
+      ff.on('error', reject);
+
+      // Timeout 60s
+      setTimeout(() => {
+        try { ff.kill('SIGKILL'); } catch (_) {}
+        reject(new Error('FFmpeg ken-burns timeout 60s'));
+      }, 60000);
+    });
+
+    const mp4Stat = fs.statSync(outPath);
+    console.log(`[${jobId}] Ken-Burns OK: ${(mp4Stat.size / 1048576).toFixed(1)} MB`);
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Length', mp4Stat.size);
+    res.setHeader('Content-Disposition', `attachment; filename="kenburns-${jobId}.mp4"`);
+
+    const stream = fs.createReadStream(outPath);
+    stream.pipe(res);
+    stream.on('end', () => {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+    stream.on('error', err => {
+      console.error(`[${jobId}] Stream error:`, err.message);
+      try { res.end(); } catch (_) {}
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+
+  } catch (err) {
+    console.error(`[${jobId}] Ken-Burns error:`, err.message);
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Démarrage du serveur
 // ---------------------------------------------------------------------------
 
