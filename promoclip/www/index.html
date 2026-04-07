@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PromoClip v0.5.4</title>
+<title>PromoClip v0.5.5</title>
 <style>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.5.4 — Functional App
+   PromoClip v0.5.5 — Functional App
    Dark mode, accent violet #7C3AED, mobile-first
    ═══════════════════════════════════════════════════════ */
 
@@ -986,7 +986,7 @@ body {
 
 <!-- ═══ Screen Navigator (desktop only) ═══ -->
 <div class="screen-nav" id="screenNav">
-  <h3>PromoClip v0.5.4</h3>
+  <h3>PromoClip v0.5.5</h3>
   <div class="screen-nav-item active" data-action="nav-screen" data-screen="home">1. Accueil</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="media">2. Medias</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="product">3. Produit</div>
@@ -1021,7 +1021,7 @@ body {
       <div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</span>
-          <span class="badge badge-accent">v0.5.4</span>
+          <span class="badge badge-accent">v0.5.5</span>
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
       </div>
@@ -1222,12 +1222,15 @@ body {
     <div class="input-group" id="hookGroup">
       <div class="input-label">Hook texte (3 premieres secondes)</div>
       <div style="position:relative;">
-        <input class="input-field" type="text" id="configHook" placeholder="Ex: Arrete de taper, dicte !" style="padding-right:44px;">
+        <input class="input-field" type="text" id="configHook" placeholder="Ex: Arrete de taper, dicte !" style="padding-right:80px;">
+        <div style="position:absolute; right:44px; top:50%; transform:translateY(-50%); width:32px; height:32px; border-radius:50%; background:var(--bg-elevated); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer;" data-action="show-hook-history" title="Historique des hooks">
+          <svg width="14" height="14" viewBox="0 0 24 24" stroke="var(--text-muted)" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
         <div style="position:absolute; right:8px; top:50%; transform:translateY(-50%); width:32px; height:32px; border-radius:50%; background:var(--accent-glow); display:flex; align-items:center; justify-content:center; cursor:pointer;" data-action="generate-hooks" title="Generer avec Gemini">
           <svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--accent-light)" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
         </div>
       </div>
-      <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Tap l'icone IA pour generer des suggestions</div>
+      <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Horloge = historique · IA = generer des suggestions</div>
     </div>
 
     <!-- Langue -->
@@ -1654,7 +1657,7 @@ body {
 
     <div class="divider"></div>
     <div style="text-align:center; padding:16px 0 40px;">
-      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.5.4</div>
+      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.5.5</div>
       <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Build 2026-04-06</div>
     </div>
   </div>
@@ -1734,6 +1737,18 @@ body {
   </div>
 </div>
 
+<!-- ═══ Bottom Sheet (hook history) ═══ -->
+<div class="bottom-sheet-overlay" id="hookHistorySheet">
+  <div class="bottom-sheet" style="max-height:70vh;">
+    <div class="sheet-handle"></div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h3 style="font-size:16px; margin:0;">Hooks sauvegardes</h3>
+      <div style="font-size:11px; color:var(--text-muted);" id="hookHistoryCount"></div>
+    </div>
+    <div id="hookHistoryList" style="overflow-y:auto; max-height:50vh;"></div>
+  </div>
+</div>
+
 <!-- ═══ Modal (confirmations) ═══ -->
 <div class="modal-overlay" id="confirmModal">
   <div class="modal">
@@ -1770,13 +1785,13 @@ body {
 
 <script>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.5.4 — Complete JS
+   PromoClip v0.5.5 — Complete JS
    ═══════════════════════════════════════════════════════ */
 
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.5.4';
+const APP_VERSION = '0.5.5';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -1844,6 +1859,7 @@ const defaultState = {
     }
   },
   savedConfigs: [],
+  hookHistory: [],
   history: [],
   settings: {
     ffmpegUrl: DEFAULT_FFMPEG_URL,
@@ -2957,6 +2973,74 @@ function updateDurationDisplay(val) {
   else { fb.textContent = 'Risque completion basse'; fb.style.color = 'var(--error)'; }
 }
 
+// ── Hook History ──
+const MAX_HOOK_HISTORY = 20;
+
+function addHookToHistory(text, productId) {
+  if (!text || text.trim().length < 3) return;
+  const trimmed = text.trim();
+  // Remove existing duplicate (will re-add at top)
+  state.hookHistory = (state.hookHistory || []).filter(h => h.text !== trimmed);
+  // Add at top (most recent)
+  state.hookHistory.unshift({ text: trimmed, productId: productId || null, usedAt: new Date().toISOString() });
+  // Enforce limit
+  if (state.hookHistory.length > MAX_HOOK_HISTORY) state.hookHistory = state.hookHistory.slice(0, MAX_HOOK_HISTORY);
+  markDirty();
+}
+
+function deleteHookFromHistory(index) {
+  if (state.hookHistory && state.hookHistory[index] != null) {
+    state.hookHistory.splice(index, 1);
+    markDirty();
+    renderHookHistory();
+  }
+}
+
+function renderHookHistory() {
+  const list = document.getElementById('hookHistoryList');
+  const count = document.getElementById('hookHistoryCount');
+  if (!list) return;
+  const hooks = state.hookHistory || [];
+  if (count) count.textContent = hooks.length + '/' + MAX_HOOK_HISTORY;
+  if (hooks.length === 0) {
+    list.innerHTML = '<div style="text-align:center; color:var(--text-muted); padding:20px; font-size:12px;">Aucun hook sauvegarde.<br>Les hooks sont sauvegardes automatiquement a chaque generation.</div>';
+    return;
+  }
+  // Group by product
+  const byProduct = {};
+  hooks.forEach((h, i) => {
+    const pid = h.productId || '_none';
+    if (!byProduct[pid]) byProduct[pid] = [];
+    byProduct[pid].push({ ...h, _idx: i });
+  });
+  let html = '';
+  for (const pid of Object.keys(byProduct)) {
+    const product = state.products.find(p => p.id === pid);
+    const pName = product ? product.name : 'Sans produit';
+    const pColor = product ? product.color : 'var(--text-muted)';
+    html += `<div style="margin-bottom:12px;">`;
+    html += `<div style="font-size:11px; font-weight:700; color:${pColor}; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">${escapeHtml(pName)}</div>`;
+    byProduct[pid].forEach(h => {
+      html += `<div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--bg-card); border-radius:var(--radius-sm); margin-bottom:4px; cursor:pointer;" data-action="select-hook" data-text="${escapeHtml(h.text)}">`;
+      html += `<div style="flex:1; font-size:12px; color:var(--text-primary); line-height:1.4;">${escapeHtml(h.text)}</div>`;
+      html += `<div style="flex-shrink:0; width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:50%; cursor:pointer;" data-action="delete-hook" data-idx="${h._idx}">`;
+      html += `<svg width="14" height="14" viewBox="0 0 24 24" stroke="var(--error)" fill="none" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>`;
+      html += `</div></div>`;
+    });
+    html += `</div>`;
+  }
+  list.innerHTML = html;
+}
+
+function showHookHistory() {
+  renderHookHistory();
+  document.getElementById('hookHistorySheet').classList.add('open');
+}
+
+function hideHookHistory() {
+  document.getElementById('hookHistorySheet').classList.remove('open');
+}
+
 function saveWizardConfig() {
   const cfg = state.wizard.config;
   cfg.hookText = document.getElementById('configHook').value;
@@ -3134,15 +3218,20 @@ async function startGeneration() {
 
   // Route to Pro pipeline if Pro mode
   if (isProMode()) {
-    log('Demarrage generation v0.5.4 — Mode Pro');
+    // Save hook to history (Pro mode, optional guidance)
+    var proHook = document.getElementById('configHook').value;
+    addHookToHistory(proHook, state.wizard.selectedProductId);
+    log('Demarrage generation v0.5.5 — Mode Pro');
     await startGenerationPro(product, selectedMedia);
     return;
   }
 
-  log('Demarrage generation v0.5.4 — pipeline reel');
+  log('Demarrage generation v0.5.5 — pipeline reel');
 
   // Save config from inputs
   state.wizard.config.hookText = document.getElementById('configHook').value;
+  // Save hook to history
+  addHookToHistory(state.wizard.config.hookText, state.wizard.selectedProductId);
 
   renderGenSteps();
   updateProgress(0);
@@ -4068,6 +4157,12 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
       break;
     }
 
+    case 'show-hook-history':
+      showHookHistory();
+      break;
+
+    // select-hook and delete-hook handled by hookHistorySheet listener (avoids double-fire)
+
     case 'generate-hooks': {
       const product = state.products.find(p => p.id === state.wizard.selectedProductId);
       if (!product) { showToast('Selectionne un produit d\'abord', true); return; }
@@ -4148,6 +4243,22 @@ document.getElementById('screenNav').addEventListener('click', (e) => {
 // Bottom sheet overlay close
 document.getElementById('productSheet').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeProductSheet();
+});
+
+// Hook history sheet overlay close
+document.getElementById('hookHistorySheet').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) hideHookHistory();
+  // Handle actions inside the sheet
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  if (el.dataset.action === 'select-hook') {
+    document.getElementById('configHook').value = el.dataset.text;
+    state.wizard.config.hookText = el.dataset.text;
+    hideHookHistory();
+    showToast('Hook selectionne');
+  } else if (el.dataset.action === 'delete-hook') {
+    deleteHookFromHistory(parseInt(el.dataset.idx));
+  }
 });
 
 // Modal overlay close
