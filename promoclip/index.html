@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PromoClip v0.5.2</title>
+<title>PromoClip v0.5.3</title>
 <style>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.5.2 — Functional App
+   PromoClip v0.5.3 — Functional App
    Dark mode, accent violet #7C3AED, mobile-first
    ═══════════════════════════════════════════════════════ */
 
@@ -986,7 +986,7 @@ body {
 
 <!-- ═══ Screen Navigator (desktop only) ═══ -->
 <div class="screen-nav" id="screenNav">
-  <h3>PromoClip v0.5.2</h3>
+  <h3>PromoClip v0.5.3</h3>
   <div class="screen-nav-item active" data-action="nav-screen" data-screen="home">1. Accueil</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="media">2. Medias</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="product">3. Produit</div>
@@ -1021,7 +1021,7 @@ body {
       <div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</span>
-          <span class="badge badge-accent">v0.5.2</span>
+          <span class="badge badge-accent">v0.5.3</span>
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
       </div>
@@ -1651,7 +1651,7 @@ body {
 
     <div class="divider"></div>
     <div style="text-align:center; padding:16px 0 40px;">
-      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.5.2</div>
+      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.5.3</div>
       <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Build 2026-04-06</div>
     </div>
   </div>
@@ -1767,13 +1767,13 @@ body {
 
 <script>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.5.2 — Complete JS
+   PromoClip v0.5.3 — Complete JS
    ═══════════════════════════════════════════════════════ */
 
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.5.2';
+const APP_VERSION = '0.5.3';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -2364,37 +2364,77 @@ async function generateTTS(text, voice = 'onyx') {
   return data.base64; // MP3 base64
 }
 
+// Clean text for subtitle display
+function cleanSubtitleText(text) {
+  let t = text;
+  // Remove emojis (Unicode emoji ranges)
+  t = t.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA00}-\u{1FA9F}\u{200D}]/gu, '');
+  // Normalize double/triple punctuation → single
+  t = t.replace(/!{2,}/g, '!').replace(/\?{2,}/g, '?').replace(/\.{3,}/g, '...').replace(/,{2,}/g, ',');
+  // Remove guillemets and quotes (they split badly across chunks)
+  t = t.replace(/[«»""]/g, '').replace(/"/g, '');
+  // Normalize ellipsis: detach from word so chunking can handle it
+  t = t.replace(/\.\.\./g, '.').replace(/…/g, '.');
+  // Clean up extra spaces
+  t = t.replace(/\s+/g, ' ').trim();
+  return t;
+}
+
+// Escape text for ASS format
+function escapeASS(text) {
+  return text.replace(/\\/g, '\\\\').replace(/\{/g, '\\{').replace(/\}/g, '\\}').replace(/,/g, '\\,');
+}
+
 // Generate subtitle file in ASS format from voiceover text
 function generateSubtitleASS(text, totalDuration) {
-  const words = text.split(/\s+/).filter(w => w);
+  const cleaned = cleanSubtitleText(text);
+  const words = cleaned.split(/\s+/).filter(w => w);
   if (words.length === 0) return null;
 
-  const speechDuration = totalDuration * 0.75; // Speech occupies ~75% of video
-  const startOffset = 0.3; // Start 0.3s in for immediate feel
-  const wordsPerChunk = 3; // 3 words per chunk for karaoke effect
+  const speechDuration = totalDuration * 0.75;
+  const startOffset = 0.3;
+
+  // Smart chunking: split on sentence boundaries first, then pack 3-4 words per chunk
   const chunks = [];
-  for (let i = 0; i < words.length; i += wordsPerChunk) {
-    chunks.push(words.slice(i, i + wordsPerChunk).join(' '));
+  let current = [];
+  for (let i = 0; i < words.length; i++) {
+    current.push(words[i]);
+    const word = words[i];
+    const endsPhrase = /[.!?:;]$/.test(word); // word ends with sentence punctuation
+    const atLimit = current.length >= 3;
+    const isLast = i === words.length - 1;
+    if ((atLimit && endsPhrase) || current.length >= 4 || isLast) {
+      chunks.push(current.join(' '));
+      current = [];
+    }
+  }
+  // Merge last chunk if too short (1 word) with previous
+  if (chunks.length > 1 && chunks[chunks.length - 1].split(/\s+/).length === 1) {
+    const last = chunks.pop();
+    chunks[chunks.length - 1] += ' ' + last;
   }
 
   const chunkDur = speechDuration / chunks.length;
 
   function fmtTime(sec) {
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    return h + ':' + String(m).padStart(2, '0') + ':' + s.toFixed(2).padStart(5, '0');
+    // Fix: normalize carry to avoid 60.00 seconds
+    const totalCs = Math.round(sec * 100);
+    const h = Math.floor(totalCs / 360000);
+    const m = Math.floor((totalCs % 360000) / 6000);
+    const s = Math.floor((totalCs % 6000) / 100);
+    const cs = totalCs % 100;
+    return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') + '.' + String(cs).padStart(2, '0');
   }
 
   let ass = '[Script Info]\nScriptType: v4.00+\nWrapStyle: 0\nPlayResX: 1080\nPlayResY: 1920\n\n';
   ass += '[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n';
-  ass += 'Style: Default,Arial,72,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,1,2,40,40,120,1\n\n';
+  ass += 'Style: Default,Arial,72,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,1,2,40,40,120,0\n\n';
   ass += '[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n';
 
   chunks.forEach((chunk, i) => {
     const start = startOffset + i * chunkDur;
     const end = startOffset + (i + 1) * chunkDur;
-    ass += 'Dialogue: 0,' + fmtTime(start) + ',' + fmtTime(end) + ',Default,,0,0,0,,' + chunk.replace(/,/g, '\\,') + '\n';
+    ass += 'Dialogue: 0,' + fmtTime(start) + ',' + fmtTime(end) + ',Default,,0,0,0,,' + escapeASS(chunk) + '\n';
   });
 
   return ass;
@@ -3073,12 +3113,12 @@ async function startGeneration() {
 
   // Route to Pro pipeline if Pro mode
   if (isProMode()) {
-    log('Demarrage generation v0.5.2 — Mode Pro');
+    log('Demarrage generation v0.5.3 — Mode Pro');
     await startGenerationPro(product, selectedMedia);
     return;
   }
 
-  log('Demarrage generation v0.5.2 — pipeline reel');
+  log('Demarrage generation v0.5.3 — pipeline reel');
 
   // Save config from inputs
   state.wizard.config.hookText = document.getElementById('configHook').value;
