@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.29.0 — Added /smart-zoom, /speed-ramp, /promo-assembly, /promo-assembly-pro, zoom effects, xfade transitions
+ * Version: 1.30.0 — Added /smart-zoom, /speed-ramp, /promo-assembly, /promo-assembly-pro, zoom effects, xfade transitions
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -169,7 +169,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.29.0'
+    version: '1.30.0'
   });
 });
 
@@ -2965,7 +2965,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
     return res.status(503).json({ error: 'Server busy, try again later' });
   }
 
-  const { video, videoMime, moments, avatarVideo, avatarMode, subtitles, width, height } = req.body;
+  const { video, videoMime, moments, avatarVideo, avatarMode, subtitles, width, height, introClip, outroClip, introDuration, outroDuration } = req.body;
   if (!video) return res.status(400).json({ error: 'Missing video (base64)' });
 
   const tmpDir = path.join(os.tmpdir(), jobId);
@@ -3102,6 +3102,96 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
       }, 120000);
     });
 
+    // ── Intro/Outro assembly (optional) ──
+    if (introClip || outroClip) {
+      const XFADE_DUR = 0.3;
+      const clips = []; // {path, duration}
+
+      // Generate intro clip video from image (Ken Burns static, 3s)
+      if (introClip) {
+        const introImgPath = path.join(tmpDir, 'intro.png');
+        fs.writeFileSync(introImgPath, Buffer.from(introClip, 'base64'));
+        const introVidPath = path.join(tmpDir, 'intro.mp4');
+        const iDur = introDuration || 3;
+        await new Promise((resolve, reject) => {
+          const ff = spawn('ffmpeg', [
+            '-loop', '1', '-i', introImgPath,
+            '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1,zoompan=z='min(zoom+0.0003,1.05)':d=${iDur * 15}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${outWidth}x${outHeight}:fps=15`,
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p',
+            '-t', String(iDur), '-y', introVidPath
+          ], { stdio: ['ignore', 'pipe', 'pipe'] });
+          let stderr = '';
+          ff.stderr.on('data', d => { stderr += d.toString(); });
+          ff.on('close', code => code === 0 ? resolve() : reject(new Error('Intro clip: ' + stderr.slice(-200))));
+          ff.on('error', reject);
+          setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro timeout')); }, 30000);
+        });
+        clips.push({ path: introVidPath, duration: iDur });
+        console.log(`[${jobId}] Intro clip OK`);
+      }
+
+      // Main video (already rendered)
+      const mainDur = Math.min(probeDur, 60);
+      clips.push({ path: outputPath, duration: mainDur });
+
+      // Generate outro clip video from image
+      if (outroClip) {
+        const outroImgPath = path.join(tmpDir, 'outro.png');
+        fs.writeFileSync(outroImgPath, Buffer.from(outroClip, 'base64'));
+        const outroVidPath = path.join(tmpDir, 'outro.mp4');
+        const oDur = outroDuration || 3;
+        await new Promise((resolve, reject) => {
+          const ff = spawn('ffmpeg', [
+            '-loop', '1', '-i', outroImgPath,
+            '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1,zoompan=z=1:d=${oDur * 15}:x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':s=${outWidth}x${outHeight}:fps=15`,
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p',
+            '-t', String(oDur), '-y', outroVidPath
+          ], { stdio: ['ignore', 'pipe', 'pipe'] });
+          let stderr = '';
+          ff.stderr.on('data', d => { stderr += d.toString(); });
+          ff.on('close', code => code === 0 ? resolve() : reject(new Error('Outro clip: ' + stderr.slice(-200))));
+          ff.on('error', reject);
+          setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Outro timeout')); }, 30000);
+        });
+        clips.push({ path: outroVidPath, duration: oDur });
+        console.log(`[${jobId}] Outro clip OK`);
+      }
+
+      // Xfade assembly if more than 1 clip
+      if (clips.length > 1) {
+        const finalPath = path.join(tmpDir, 'final.mp4');
+        const xInputs = clips.map(c => ['-i', c.path]).flat();
+        const xFilters = [];
+        let prevLabel = '[0:v]';
+        for (let i = 1; i < clips.length; i++) {
+          let offset = 0;
+          for (let j = 0; j < i; j++) offset += clips[j].duration;
+          offset -= i * XFADE_DUR;
+          const outLabel = i < clips.length - 1 ? `[x${i}]` : '[outv]';
+          xFilters.push(`${prevLabel}[${i}:v]xfade=transition=fade:duration=${XFADE_DUR}:offset=${Math.max(0, offset).toFixed(2)}${outLabel}`);
+          prevLabel = outLabel;
+        }
+        await new Promise((resolve, reject) => {
+          const ff = spawn('ffmpeg', [
+            ...xInputs,
+            '-filter_complex', xFilters.join(';'),
+            '-map', '[outv]', '-map', `${introClip ? 1 : 0}:a?`,
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+            '-c:a', 'aac', '-b:a', '128k', '-pix_fmt', 'yuv420p',
+            '-movflags', '+faststart', '-y', finalPath
+          ], { stdio: ['ignore', 'pipe', 'pipe'] });
+          let stderr = '';
+          ff.stderr.on('data', d => { stderr += d.toString(); });
+          ff.on('close', code => code === 0 ? resolve() : reject(new Error('Xfade Pro: ' + stderr.slice(-300))));
+          ff.on('error', reject);
+          setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Xfade Pro timeout')); }, 60000);
+        });
+        // Replace output with final
+        fs.renameSync(finalPath, outputPath);
+        console.log(`[${jobId}] Intro/Outro xfade OK`);
+      }
+    }
+
     const mp4Stat = fs.statSync(outputPath);
     console.log(`[${jobId}] Pro output: ${(mp4Stat.size / 1048576).toFixed(1)} MB`);
 
@@ -3137,7 +3227,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.29.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.30.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);
