@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PromoClip v0.4.1</title>
+<title>PromoClip v0.4.2</title>
 <style>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.4.1 — Functional App
+   PromoClip v0.4.2 — Functional App
    Dark mode, accent violet #7C3AED, mobile-first
    ═══════════════════════════════════════════════════════ */
 
@@ -982,7 +982,7 @@ body {
 
 <!-- ═══ Screen Navigator (desktop only) ═══ -->
 <div class="screen-nav" id="screenNav">
-  <h3>PromoClip v0.4.1</h3>
+  <h3>PromoClip v0.4.2</h3>
   <div class="screen-nav-item active" data-action="nav-screen" data-screen="home">1. Accueil</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="media">2. Medias</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="product">3. Produit</div>
@@ -1017,7 +1017,7 @@ body {
       <div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</span>
-          <span class="badge badge-accent">v0.4.1</span>
+          <span class="badge badge-accent">v0.4.2</span>
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
       </div>
@@ -1252,10 +1252,10 @@ body {
     <!-- Musique retiree — ajoutee via TikTok directement -->
 
     <!-- Avatar -->
-    <div class="toggle-row">
+    <div class="toggle-row" id="avatarRow">
       <div>
         <div class="toggle-label">Avatar IA</div>
-        <div class="toggle-sub">Talking head en debut de video</div>
+        <div class="toggle-sub" id="avatarSub">Talking head en debut de video</div>
       </div>
       <div class="toggle" id="toggleAvatar" data-action="toggle"></div>
     </div>
@@ -1273,7 +1273,7 @@ body {
     </div>
 
     <!-- Voiceover -->
-    <div class="toggle-row">
+    <div class="toggle-row" id="voiceoverRow">
       <div>
         <div class="toggle-label">Voiceover TTS</div>
         <div class="toggle-sub">Narration vocale sur la video</div>
@@ -1282,7 +1282,7 @@ body {
     </div>
 
     <!-- Voice Gender -->
-    <div class="input-group" style="margin-top:8px; margin-bottom:0;">
+    <div class="input-group" style="margin-top:8px; margin-bottom:0;" id="voiceGenderGroup">
       <div class="input-label">Voix</div>
       <div class="chip-row" style="margin:4px 0 0;" id="voiceGenderChips"></div>
     </div>
@@ -1649,7 +1649,7 @@ body {
 
     <div class="divider"></div>
     <div style="text-align:center; padding:16px 0 40px;">
-      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.4.1</div>
+      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.4.2</div>
       <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Build 2026-04-06</div>
     </div>
   </div>
@@ -1765,13 +1765,13 @@ body {
 
 <script>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.4.1 — Complete JS
+   PromoClip v0.4.2 — Complete JS
    ═══════════════════════════════════════════════════════ */
 
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.4.1';
+const APP_VERSION = '0.4.2';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -2758,14 +2758,27 @@ function renderConfigScreen() {
   const cfg = state.wizard.config;
   const pro = isProMode();
 
-  // Pro mode: show banner, hide hook/duration, force avatar ON
+  // Pro mode: show banner, hide irrelevant controls, lock avatar ON
   document.getElementById('proModeBanner').style.display = pro ? 'block' : 'none';
   document.getElementById('hookGroup').style.display = pro ? 'none' : '';
   document.getElementById('durationGroup').style.display = pro ? 'none' : '';
+  // Avatar: lock ON, disable toggle, show "inclus"
+  const avatarRow = document.getElementById('avatarRow');
+  const avatarSub = document.getElementById('avatarSub');
   if (pro) {
     cfg.avatar = true;
-    cfg.avatarMode = cfg.avatarMode === 'bubble' ? 'split-top' : cfg.avatarMode; // default split for Pro
+    cfg.avatarMode = cfg.avatarMode === 'bubble' ? 'split-top' : cfg.avatarMode;
+    if (avatarRow) { avatarRow.style.opacity = '0.5'; avatarRow.style.pointerEvents = 'none'; }
+    if (avatarSub) avatarSub.textContent = 'Inclus en Mode Pro';
+  } else {
+    if (avatarRow) { avatarRow.style.opacity = '1'; avatarRow.style.pointerEvents = ''; }
+    if (avatarSub) avatarSub.textContent = 'Talking head en debut de video';
   }
+  // Voiceover + voice gender: hide in Pro (avatar handles voice)
+  const voiceoverRowEl = document.getElementById('voiceoverRow');
+  const voiceGenderGroup = document.getElementById('voiceGenderGroup');
+  if (voiceoverRowEl) voiceoverRowEl.style.display = pro ? 'none' : '';
+  if (voiceGenderGroup) voiceGenderGroup.style.display = pro ? 'none' : '';
 
   document.getElementById('configHook').value = cfg.hookText || '';
 
@@ -3060,12 +3073,12 @@ async function startGeneration() {
 
   // Route to Pro pipeline if Pro mode
   if (isProMode()) {
-    log('Demarrage generation v0.4.1 — Mode Pro');
+    log('Demarrage generation v0.4.2 — Mode Pro');
     await startGenerationPro(product, selectedMedia);
     return;
   }
 
-  log('Demarrage generation v0.4.1 — pipeline reel');
+  log('Demarrage generation v0.4.2 — pipeline reel');
 
   // Save config from inputs
   state.wizard.config.hookText = document.getElementById('configHook').value;
