@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.28.0 — Added /smart-zoom, /speed-ramp, /promo-assembly, /promo-assembly-pro, zoom effects
+ * Version: 1.29.0 — Added /smart-zoom, /speed-ramp, /promo-assembly, /promo-assembly-pro, zoom effects, xfade transitions
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -169,7 +169,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.28.1'
+    version: '1.29.0'
   });
 });
 
@@ -2672,36 +2672,58 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
       console.log(`[${jobId}] Clip ${i}/${clips.length - 1} OK`);
     }
 
-    // 3. Create concat list
-    const concatList = path.join(tmpDir, 'concat.txt');
-    fs.writeFileSync(concatList, clipVideos.map(p => `file '${p}'`).join('\n'));
-
-    // 4. Concat all clips
+    // 3. Concat clips with xfade transitions (0.3s fade between each)
     const concatOut = path.join(tmpDir, 'concat.mp4');
-    const concatArgs = [
-      '-f', 'concat', '-safe', '0',
-      '-i', concatList,
-      '-c', 'copy',
-      '-movflags', '+faststart',
-      '-y', concatOut
-    ];
+    const XFADE_DUR = 0.3;
 
-    await new Promise((resolve, reject) => {
-      const ff = spawn('ffmpeg', concatArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-      let stderr = '';
-      ff.stderr.on('data', d => { stderr += d.toString(); });
-      ff.on('close', code => {
-        if (code === 0) resolve();
-        else reject(new Error(`FFmpeg concat exit ${code}: ${stderr.slice(-500)}`));
+    if (clipVideos.length === 1) {
+      // Single clip: just rename, no xfade needed
+      fs.renameSync(clipVideos[0], concatOut);
+    } else {
+      // Build xfade filter chain: [0][1]xfade→[x1], [x1][2]xfade→[x2], ...
+      const xfadeInputs = clipVideos.map((p, i) => ['-i', p]).flat();
+      const xfadeFilters = [];
+      let prevLabel = '[0:v]';
+      for (let i = 1; i < clipVideos.length; i++) {
+        const clipDur = clips[i - 1] ? Math.min(10, Math.max(1, clips[i - 1].duration || 4)) : 4;
+        // offset = cumulative duration of previous clips minus cumulative xfade overlaps
+        let offset = 0;
+        for (let j = 0; j < i; j++) {
+          offset += Math.min(10, Math.max(1, (clips[j] && clips[j].duration) || 4));
+        }
+        offset -= i * XFADE_DUR; // each xfade overlaps by XFADE_DUR
+        const outLabel = i < clipVideos.length - 1 ? `[x${i}]` : '[outv]';
+        xfadeFilters.push(`${prevLabel}[${i}:v]xfade=transition=fade:duration=${XFADE_DUR}:offset=${Math.max(0, offset).toFixed(2)}${outLabel}`);
+        prevLabel = outLabel;
+      }
+
+      const xfadeArgs = [
+        ...xfadeInputs,
+        '-filter_complex', xfadeFilters.join(';'),
+        '-map', '[outv]',
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        '-y', concatOut
+      ];
+
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', xfadeArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`FFmpeg xfade exit ${code}: ${stderr.slice(-500)}`));
+        });
+        ff.on('error', reject);
+        setTimeout(() => {
+          try { ff.kill('SIGKILL'); } catch (_) {}
+          reject(new Error('FFmpeg xfade timeout 60s'));
+        }, 60000);
       });
-      ff.on('error', reject);
-      setTimeout(() => {
-        try { ff.kill('SIGKILL'); } catch (_) {}
-        reject(new Error('FFmpeg concat timeout 60s'));
-      }, 60000);
-    });
+    }
 
-    console.log(`[${jobId}] Concat OK`);
+    console.log(`[${jobId}] Concat+xfade OK`);
 
     // ── Avatar overlay (optional) ──
     let videoForMix = concatOut; // default: no avatar
@@ -2772,10 +2794,10 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
         let filterComplex;
         if (mode === 'split-top') {
           // Avatar on top, clips on bottom
-          filterComplex = `[1:v]scale=${width}:${halfH}:force_original_aspect_ratio=decrease,pad=${width}:${halfH}:(ow-iw)/2:(oh-ih)/2[av];[0:v]scale=${width}:${halfH}:force_original_aspect_ratio=decrease,pad=${width}:${halfH}:(ow-iw)/2:(oh-ih)/2[cl];[av][cl]vstack=inputs=2[outv]`;
+          filterComplex = `[1:v]scale=${width}:${halfH}:force_original_aspect_ratio=increase,crop=${width}:${halfH},setsar=1[av];[0:v]scale=${width}:${halfH}:force_original_aspect_ratio=increase,crop=${width}:${halfH},setsar=1[cl];[av][cl]vstack=inputs=2[outv]`;
         } else {
           // Clips on top, avatar on bottom
-          filterComplex = `[0:v]scale=${width}:${halfH}:force_original_aspect_ratio=decrease,pad=${width}:${halfH}:(ow-iw)/2:(oh-ih)/2[cl];[1:v]scale=${width}:${halfH}:force_original_aspect_ratio=decrease,pad=${width}:${halfH}:(ow-iw)/2:(oh-ih)/2[av];[cl][av]vstack=inputs=2[outv]`;
+          filterComplex = `[0:v]scale=${width}:${halfH}:force_original_aspect_ratio=increase,crop=${width}:${halfH},setsar=1[cl];[1:v]scale=${width}:${halfH}:force_original_aspect_ratio=increase,crop=${width}:${halfH},setsar=1[av];[cl][av]vstack=inputs=2[outv]`;
         }
 
         const ffArgs = [
@@ -2997,8 +3019,8 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         const avatarH = Math.round(outHeight * 0.3);
         const recordH = outHeight - avatarH;
         filterComplex = [
-          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${avatarH}:(ow-iw)/2:(oh-ih)/2,setsar=1[avatar]`,
-          `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
+          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH},setsar=1[avatar]`,
+          `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=increase,crop=${outWidth}:${recordH},setsar=1[record]`,
           `[avatar][record]vstack=inputs=2[outv]`
         ].join(';');
       } else if (mode === 'split-bottom') {
@@ -3006,8 +3028,8 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         const avatarH = Math.round(outHeight * 0.3);
         const recordH = outHeight - avatarH;
         filterComplex = [
-          `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
-          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${avatarH}:(ow-iw)/2:(oh-ih)/2,setsar=1[avatar]`,
+          `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=increase,crop=${outWidth}:${recordH},setsar=1[record]`,
+          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH},setsar=1[avatar]`,
           `[record][avatar]vstack=inputs=2[outv]`
         ].join(';');
       } else {
@@ -3115,7 +3137,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.28.1] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.29.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);
