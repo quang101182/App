@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PromoClip v0.3.3</title>
+<title>PromoClip v0.3.4</title>
 <style>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.3.3 — Functional App
+   PromoClip v0.3.4 — Functional App
    Dark mode, accent violet #7C3AED, mobile-first
    ═══════════════════════════════════════════════════════ */
 
@@ -982,7 +982,7 @@ body {
 
 <!-- ═══ Screen Navigator (desktop only) ═══ -->
 <div class="screen-nav" id="screenNav">
-  <h3>PromoClip v0.3.3</h3>
+  <h3>PromoClip v0.3.4</h3>
   <div class="screen-nav-item active" data-action="nav-screen" data-screen="home">1. Accueil</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="media">2. Medias</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="product">3. Produit</div>
@@ -1017,7 +1017,7 @@ body {
       <div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</span>
-          <span class="badge badge-accent">v0.3.3</span>
+          <span class="badge badge-accent">v0.3.4</span>
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
       </div>
@@ -1643,7 +1643,7 @@ body {
 
     <div class="divider"></div>
     <div style="text-align:center; padding:16px 0 40px;">
-      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.3.3</div>
+      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.3.4</div>
       <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Build 2026-04-06</div>
     </div>
   </div>
@@ -1744,6 +1744,7 @@ body {
       <button data-action="log-export">Export</button>
       <button data-action="log-clear">Clear</button>
       <button data-action="toggle-log" id="logToggleBtn" style="font-size:14px; line-height:1;">▾</button>
+      <button data-action="close-log" style="font-size:14px; line-height:1; color:var(--text-muted);">✕</button>
     </div>
   </div>
   <div class="log-body" id="logBody"></div>
@@ -1758,7 +1759,7 @@ body {
 
 <script>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.3.3 — Complete JS
+   PromoClip v0.3.4 — Complete JS
    ═══════════════════════════════════════════════════════ */
 
 // ──────────────────────────────────────────────────
@@ -2006,11 +2007,27 @@ function logExport() {
   a.click();
   URL.revokeObjectURL(a.href);
 }
+let _closeLogTimer = null;
 function toggleLogPanel() {
   const panel = document.getElementById('logPanel');
-  panel.classList.toggle('open');
+  // Cancel pending close animation
+  if (_closeLogTimer) { clearTimeout(_closeLogTimer); _closeLogTimer = null; }
+  // If panel is hidden (closed via X), open it
+  if (panel.style.display === 'none') {
+    panel.style.display = '';
+    panel.classList.add('open');
+  } else {
+    panel.classList.toggle('open');
+  }
   const btn = document.getElementById('logToggleBtn');
   if (btn) btn.textContent = panel.classList.contains('open') ? '▴' : '▾';
+}
+function closeLogPanel() {
+  const panel = document.getElementById('logPanel');
+  panel.classList.remove('open');
+  // Wait for slide-down animation then hide
+  if (_closeLogTimer) clearTimeout(_closeLogTimer);
+  _closeLogTimer = setTimeout(() => { panel.style.display = 'none'; _closeLogTimer = null; }, 350);
 }
 
 // ──────────────────────────────────────────────────
@@ -2805,7 +2822,7 @@ async function startGeneration() {
 
   _genCancelled = false;
   goScreen('generate');
-  log('Demarrage generation v0.3.3 — pipeline reel');
+  log('Demarrage generation v0.3.4 — pipeline reel');
 
   // Save config from inputs
   state.wizard.config.hookText = document.getElementById('configHook').value;
@@ -3317,9 +3334,9 @@ function goScreen(name) {
     if (logPanel) { logPanel.classList.remove('open'); logPanel.style.display = 'none'; }
     if (logToggle) logToggle.style.display = 'none';
   } else {
-    if (logPanel) logPanel.style.display = '';
+    // Show toggle bubble, but don't force-open the panel (user may have closed it via X)
     if (logToggle) logToggle.style.display = '';
-    // Sync chevron state
+    // Sync chevron state if panel is visible
     const lBtn = document.getElementById('logToggleBtn');
     if (lBtn && logPanel) lBtn.textContent = logPanel.classList.contains('open') ? '▴' : '▾';
   }
@@ -3543,6 +3560,7 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
       toggleLogPanel();
       break;
 
+    case 'close-log': closeLogPanel(); break;
     case 'log-copy': logCopy(); break;
     case 'log-export': logExport(); break;
     case 'log-clear': logClear(); break;
@@ -3861,6 +3879,10 @@ function init() {
   if (state.settings.gatewayKey) {
     setTimeout(() => { pingGateway(); pingFFmpeg(); }, 1000);
   }
+
+  // Panel log ferme par defaut
+  const _initLogPanel = document.getElementById('logPanel');
+  if (_initLogPanel) _initLogPanel.style.display = 'none';
 
   log('PromoClip v' + APP_VERSION + ' initialise');
 }
