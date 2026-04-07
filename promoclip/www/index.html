@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PromoClip v0.5.1</title>
+<title>PromoClip v0.5.2</title>
 <style>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.5.1 — Functional App
+   PromoClip v0.5.2 — Functional App
    Dark mode, accent violet #7C3AED, mobile-first
    ═══════════════════════════════════════════════════════ */
 
@@ -415,24 +415,28 @@ body {
 .media-thumb.selected .order-badge { opacity:1; transform:scale(1); }
 
 /* ─── Template Card ─── */
+.template-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
 .template-card {
-  width: 150px;
-  flex-shrink: 0;
   cursor: pointer;
   transition: transform var(--transition-fast);
 }
-.template-card:active { transform: scale(0.95); }
+.template-card:active { transform: scale(0.97); }
 .template-preview {
-  width: 150px;
-  height: 200px;
+  width: 100%;
+  padding: 16px 10px;
   border-radius: var(--radius-md);
   overflow: hidden;
   position: relative;
   border: 2px solid transparent;
   transition: border-color var(--transition-fast);
+  min-height: 72px;
 }
-.template-card.selected .template-preview { border-color: var(--accent); }
-.template-name { font-size:12px; color:var(--text-secondary); margin-top:8px; text-align:center; font-weight:500; }
+.template-card.selected .template-preview { border-color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+.template-name { font-size:11px; color:var(--text-secondary); margin-top:6px; text-align:center; font-weight:500; }
 
 /* ─── Video Player Mock ─── */
 .video-player {
@@ -982,7 +986,7 @@ body {
 
 <!-- ═══ Screen Navigator (desktop only) ═══ -->
 <div class="screen-nav" id="screenNav">
-  <h3>PromoClip v0.5.1</h3>
+  <h3>PromoClip v0.5.2</h3>
   <div class="screen-nav-item active" data-action="nav-screen" data-screen="home">1. Accueil</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="media">2. Medias</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="product">3. Produit</div>
@@ -1017,7 +1021,7 @@ body {
       <div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</span>
-          <span class="badge badge-accent">v0.5.1</span>
+          <span class="badge badge-accent">v0.5.2</span>
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
       </div>
@@ -1178,10 +1182,8 @@ body {
   </div>
 
   <div class="content">
-    <div class="chip-row" id="templateCategoryChips"></div>
-
-    <div class="section-title">Populaires</div>
-    <div class="h-scroll" id="templateScroll"></div>
+    <div class="section-title">Templates</div>
+    <div class="template-grid" id="templateScroll"></div>
 
     <div class="section-title">Styles rapides</div>
     <div class="chip-row" id="styleChips"></div>
@@ -1649,7 +1651,7 @@ body {
 
     <div class="divider"></div>
     <div style="text-align:center; padding:16px 0 40px;">
-      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.5.1</div>
+      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.5.2</div>
       <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Build 2026-04-06</div>
     </div>
   </div>
@@ -1765,13 +1767,13 @@ body {
 
 <script>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.5.1 — Complete JS
+   PromoClip v0.5.2 — Complete JS
    ═══════════════════════════════════════════════════════ */
 
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.5.1';
+const APP_VERSION = '0.5.2';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -2730,27 +2732,15 @@ function toggleMedia(id) {
 // 11. TEMPLATE SYSTEM
 // ──────────────────────────────────────────────────
 function renderTemplates() {
-  // Category chips
-  const catContainer = document.getElementById('templateCategoryChips');
-  const categories = ['Tous', ...new Set(TEMPLATES.map(t => t.category))];
-  const activeCat = state._templateFilter || 'Tous';
-
-  catContainer.innerHTML = categories.map(c =>
-    `<div class="chip${c === activeCat ? ' selected' : ''}" data-action="filter-template-cat" data-cat="${c}">${c}</div>`
-  ).join('');
-
-  // Template cards
-  const scroll = document.getElementById('templateScroll');
-  const filtered = activeCat === 'Tous' ? TEMPLATES : TEMPLATES.filter(t => t.category === activeCat);
-
-  scroll.innerHTML = filtered.map(t => `
+  // All templates in grid (no category filter)
+  const grid = document.getElementById('templateScroll');
+  grid.innerHTML = TEMPLATES.map(t => `
     <div class="template-card${state.wizard.selectedTemplateId === t.id ? ' selected' : ''}" data-action="select-template" data-id="${t.id}">
-      <div class="template-preview" style="${t.gradient}; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; position:relative;">
+      <div class="template-preview" style="${t.gradient}; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; position:relative;">
         ${t.id === 'tpl-pro' ? '<div style="position:absolute;top:6px;right:6px;background:var(--success);color:#000;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:0.5px;">PRO</div>' : ''}
-        <div style="font-size:12px; font-weight:700; color:rgba(255,255,255,0.8); text-align:center; padding:0 8px;">${escapeHtml(t.name)}</div>
-        <div style="font-size:10px;color:rgba(255,255,255,0.4);padding:0 8px;text-align:center;">${escapeHtml(t.desc)}</div>
+        <div style="font-size:12px; font-weight:700; color:rgba(255,255,255,0.9); text-align:center; padding:0 4px;">${escapeHtml(t.name)}</div>
+        <div style="font-size:10px; color:rgba(255,255,255,0.5); padding:0 4px; text-align:center; line-height:1.3;">${escapeHtml(t.desc)}</div>
       </div>
-      <div class="template-name">${escapeHtml(t.name)}</div>
     </div>
   `).join('');
 
@@ -3083,12 +3073,12 @@ async function startGeneration() {
 
   // Route to Pro pipeline if Pro mode
   if (isProMode()) {
-    log('Demarrage generation v0.5.1 — Mode Pro');
+    log('Demarrage generation v0.5.2 — Mode Pro');
     await startGenerationPro(product, selectedMedia);
     return;
   }
 
-  log('Demarrage generation v0.5.1 — pipeline reel');
+  log('Demarrage generation v0.5.2 — pipeline reel');
 
   // Save config from inputs
   state.wizard.config.hookText = document.getElementById('configHook').value;
@@ -3860,21 +3850,7 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
       renderTemplates();
       break;
 
-    case 'filter-template-cat': {
-      const cat = el.dataset.cat;
-      state._templateFilter = cat;
-      // Auto-select first template if current selection is not in this category
-      if (cat !== 'Tous') {
-        const catTemplates = TEMPLATES.filter(t => t.category === cat);
-        const currentInCat = catTemplates.some(t => t.id === state.wizard.selectedTemplateId);
-        if (!currentInCat && catTemplates.length > 0) {
-          state.wizard.selectedTemplateId = catTemplates[0].id;
-          markDirty();
-        }
-      }
-      renderTemplates();
-      break;
-    }
+    // filter-template-cat removed — all templates shown in grid
 
     case 'set-lang':
       state.wizard.config.language = el.dataset.lang;
