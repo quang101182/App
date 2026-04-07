@@ -2938,11 +2938,189 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// /promo-assembly-pro — Pro mode: screen recording + avatar split-screen
+// ---------------------------------------------------------------------------
+app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, res) => {
+  const jobId = `pro-${Date.now().toString(36)}`;
+  console.log(`[${jobId}] /promo-assembly-pro start`);
+
+  if (activeJobs >= MAX_CONCURRENT_JOBS) {
+    return res.status(503).json({ error: 'Server busy, try again later' });
+  }
+
+  const { video, videoMime, moments, avatarVideo, avatarMode, subtitles, width, height } = req.body;
+  if (!video) return res.status(400).json({ error: 'Missing video (base64)' });
+
+  const tmpDir = path.join(os.tmpdir(), jobId);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  try {
+    activeJobs++;
+    resetIdleTimer();
+
+    const outWidth = width || 1080;
+    const outHeight = height || 1920;
+
+    // 1. Write screen recording to disk
+    const ext = (videoMime || 'video/mp4').includes('webm') ? 'webm' : 'mp4';
+    const recordingPath = path.join(tmpDir, `recording.${ext}`);
+    fs.writeFileSync(recordingPath, Buffer.from(video, 'base64'));
+    console.log(`[${jobId}] Recording: ${(fs.statSync(recordingPath).size / 1048576).toFixed(1)} MB`);
+
+    // 2. Get recording duration via ffprobe
+    const probeDur = await new Promise((resolve, reject) => {
+      const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', recordingPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+      let out = '';
+      ff.stdout.on('data', d => { out += d.toString(); });
+      ff.on('close', code => {
+        if (code === 0) resolve(parseFloat(out.trim()) || 30);
+        else resolve(30);
+      });
+      ff.on('error', () => resolve(30));
+      setTimeout(() => { try { ff.kill(); } catch(_){} resolve(30); }, 10000);
+    });
+    console.log(`[${jobId}] Recording duration: ${probeDur.toFixed(1)}s`);
+
+    // 3. Write avatar video if provided
+    let avatarPath = null;
+    if (avatarVideo) {
+      avatarPath = path.join(tmpDir, 'avatar.mp4');
+      fs.writeFileSync(avatarPath, Buffer.from(avatarVideo, 'base64'));
+      console.log(`[${jobId}] Avatar: ${(fs.statSync(avatarPath).size / 1048576).toFixed(1)} MB`);
+    }
+
+    // 4. Build FFmpeg command for split-screen assembly
+    const mode = avatarMode || 'split-top';
+    const outputPath = path.join(tmpDir, 'output.mp4');
+    let ffArgs;
+
+    if (avatarPath) {
+      // Split-screen: avatar + recording
+      let filterComplex;
+      if (mode === 'split-top') {
+        // Avatar top 30%, recording bottom 70%
+        const avatarH = Math.round(outHeight * 0.3);
+        const recordH = outHeight - avatarH;
+        filterComplex = [
+          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${avatarH}:(ow-iw)/2:(oh-ih)/2,setsar=1[avatar]`,
+          `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
+          `[avatar][record]vstack=inputs=2[outv]`
+        ].join(';');
+      } else if (mode === 'split-bottom') {
+        // Recording top 70%, avatar bottom 30%
+        const avatarH = Math.round(outHeight * 0.3);
+        const recordH = outHeight - avatarH;
+        filterComplex = [
+          `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
+          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${avatarH}:(ow-iw)/2:(oh-ih)/2,setsar=1[avatar]`,
+          `[record][avatar]vstack=inputs=2[outv]`
+        ].join(';');
+      } else {
+        // Bubble mode: recording fullscreen + avatar PiP circle
+        const pipSize = Math.round(outWidth * 0.28);
+        const pipX = outWidth - pipSize - 20;
+        const pipY = outHeight - pipSize - 120;
+        filterComplex = [
+          `[1:v]scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
+          `[0:v]scale=${pipSize}:${pipSize}:force_original_aspect_ratio=decrease,pad=${pipSize}:${pipSize}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipSize}/2,2)+pow(Y-${pipSize}/2,2),pow(${pipSize}/2-4,2)),0,255)'[pip]`,
+          `[record][pip]overlay=${pipX}:${pipY}:shortest=1[outv]`
+        ].join(';');
+      }
+
+      // Add subtitles if provided
+      let subFilter = '';
+      if (subtitles) {
+        const subPath = path.join(tmpDir, 'subs.ass');
+        fs.writeFileSync(subPath, subtitles, 'utf8');
+        subFilter = `,ass=${subPath}`;
+      }
+
+      ffArgs = [
+        '-i', avatarPath,
+        '-i', recordingPath,
+        '-filter_complex', filterComplex + (subFilter ? `;[outv]${subFilter.slice(1)}[final]` : ''),
+        '-map', subFilter ? '[final]' : '[outv]',
+        '-map', '0:a?',
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        '-shortest',
+        '-t', String(Math.min(probeDur, 60)),
+        '-y', outputPath
+      ];
+    } else {
+      // No avatar — just format the recording for TikTok
+      let subFilter = '';
+      if (subtitles) {
+        const subPath = path.join(tmpDir, 'subs.ass');
+        fs.writeFileSync(subPath, subtitles, 'utf8');
+        subFilter = `,ass=${subPath}`;
+      }
+      ffArgs = [
+        '-i', recordingPath,
+        '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1${subFilter}`,
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        '-t', String(Math.min(probeDur, 60)),
+        '-y', outputPath
+      ];
+    }
+
+    console.log(`[${jobId}] FFmpeg Pro start (mode: ${mode}, avatar: ${!!avatarPath})...`);
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+      ff.stderr.on('data', d => { stderr += d.toString(); });
+      ff.on('close', code => {
+        if (code === 0) resolve();
+        else reject(new Error(`FFmpeg Pro exit ${code}: ${stderr.slice(-500)}`));
+      });
+      ff.on('error', reject);
+      setTimeout(() => {
+        try { ff.kill('SIGKILL'); } catch (_) {}
+        reject(new Error('FFmpeg Pro timeout 120s'));
+      }, 120000);
+    });
+
+    const mp4Stat = fs.statSync(outputPath);
+    console.log(`[${jobId}] Pro output: ${(mp4Stat.size / 1048576).toFixed(1)} MB`);
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Length', mp4Stat.size);
+    res.setHeader('Content-Disposition', `attachment; filename="promo-pro-${jobId}.mp4"`);
+
+    const stream = fs.createReadStream(outputPath);
+    stream.pipe(res);
+    stream.on('end', () => {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+    stream.on('error', err => {
+      console.error(`[${jobId}] Stream error:`, err.message);
+      try { res.end(); } catch (_) {}
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+
+  } catch (err) {
+    console.error(`[${jobId}] Promo-assembly-pro error:`, err.message);
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  } finally {
+    activeJobs--;
+    resetIdleTimer();
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Démarrage du serveur
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.26.2] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.27.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);
