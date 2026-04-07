@@ -3020,7 +3020,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         const recordH = outHeight - avatarH;
         filterComplex = [
           `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
-          `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=increase,crop=${outWidth}:${recordH},setsar=1[record]`,
+          `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
           `[avatar][record]vstack=inputs=2[outv]`
         ].join(';');
       } else if (mode === 'split-bottom') {
@@ -3028,7 +3028,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         const avatarH = Math.round(outHeight * 0.3);
         const recordH = outHeight - avatarH;
         filterComplex = [
-          `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=increase,crop=${outWidth}:${recordH},setsar=1[record]`,
+          `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
           `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
           `[record][avatar]vstack=inputs=2[outv]`
         ].join(';');
@@ -3076,7 +3076,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
       }
       ffArgs = [
         '-i', recordingPath,
-        '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1${subFilter}`,
+        '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1${subFilter}`,
         '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
         '-c:a', 'aac', '-b:a', '128k',
         '-pix_fmt', 'yuv420p',
