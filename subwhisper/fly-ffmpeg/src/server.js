@@ -2600,6 +2600,8 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
     }
 
     // 2. Generate individual clip videos (ken-burns or smart-zoom)
+    // Escape like /slideshow: backslash, apostrophe→smart quote, colon, brackets, percent
+    const escapeDrawtext = (t) => t.replace(/\\/g, '\\\\\\\\').replace(/'/g, "\u2019").replace(/:/g, '\\\\:').replace(/\[/g, '\\\\[').replace(/]/g, '\\\\]').replace(/%/g, '%%');
     const clipVideos = [];
     for (let i = 0; i < clips.length; i++) {
       const clip = clips[i];
@@ -2638,9 +2640,9 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
       // Add text overlay for hook (first clip) or CTA (last clip)
       let textFilter = '';
       if (i === 0 && hookText) {
-        textFilter = `,drawtext=text='${hookText.replace(/'/g, "\\'")}':fontsize=48:fontcolor=white:borderw=3:bordercolor=black:x=(w-tw)/2:y=h*0.15:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf`;
+        textFilter = `,drawtext=text='${escapeDrawtext(hookText)}':fontsize=48:fontcolor=white:borderw=3:bordercolor=black:x=(w-tw)/2:y=h*0.15:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf`;
       } else if (i === clips.length - 1 && ctaText) {
-        textFilter = `,drawtext=text='${ctaText.replace(/'/g, "\\'")}':fontsize=40:fontcolor=white:borderw=3:bordercolor=black:x=(w-tw)/2:y=h*0.80:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf`;
+        textFilter = `,drawtext=text='${escapeDrawtext(ctaText)}':fontsize=40:fontcolor=white:borderw=3:bordercolor=black:x=(w-tw)/2:y=h*0.80:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf`;
       }
 
       const ffArgs = [
@@ -2937,7 +2939,7 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.26.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.26.1] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);
