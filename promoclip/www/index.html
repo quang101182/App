@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PromoClip v0.4.4</title>
+<title>PromoClip v0.4.5</title>
 <style>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.4.4 — Functional App
+   PromoClip v0.4.5 — Functional App
    Dark mode, accent violet #7C3AED, mobile-first
    ═══════════════════════════════════════════════════════ */
 
@@ -982,7 +982,7 @@ body {
 
 <!-- ═══ Screen Navigator (desktop only) ═══ -->
 <div class="screen-nav" id="screenNav">
-  <h3>PromoClip v0.4.4</h3>
+  <h3>PromoClip v0.4.5</h3>
   <div class="screen-nav-item active" data-action="nav-screen" data-screen="home">1. Accueil</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="media">2. Medias</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="product">3. Produit</div>
@@ -1017,7 +1017,7 @@ body {
       <div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</span>
-          <span class="badge badge-accent">v0.4.4</span>
+          <span class="badge badge-accent">v0.4.5</span>
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
       </div>
@@ -1649,7 +1649,7 @@ body {
 
     <div class="divider"></div>
     <div style="text-align:center; padding:16px 0 40px;">
-      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.4.4</div>
+      <div style="font-size:11px; color:var(--text-muted);">PromoClip v0.4.5</div>
       <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Build 2026-04-06</div>
     </div>
   </div>
@@ -1765,13 +1765,13 @@ body {
 
 <script>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.4.4 — Complete JS
+   PromoClip v0.4.5 — Complete JS
    ═══════════════════════════════════════════════════════ */
 
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.4.4';
+const APP_VERSION = '0.4.5';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -2115,10 +2115,7 @@ async function geminiGenerateHooks(productDesc, language, count = 5) {
 function fileToRawBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const b64 = reader.result.split(',')[1];
-      resolve(b64);
-    };
+    reader.onload = () => resolve(reader.result.split(',')[1]);
     reader.onerror = () => reject(new Error('Lecture fichier echouee: ' + file.name));
     reader.readAsDataURL(file);
   });
@@ -2305,17 +2302,16 @@ Keep it to 4-6 key moments maximum. The avatar lines should be TikTok-style: sho
   });
   if (!r.ok) {
     const errBody = await r.text().catch(() => '');
-    log('Gemini Video Analysis HTTP ' + r.status + ': ' + errBody.slice(0, 300), 'error');
+    log('Gemini Video HTTP ' + r.status + ': ' + errBody.slice(0, 200), 'error');
     throw new Error('Gemini Video Analysis HTTP ' + r.status);
   }
   const data = await r.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  log('Gemini Pro reponse: ' + text.slice(0, 200));
+  log('Gemini Pro reponse (' + text.length + ' chars): ' + text.slice(0, 150));
   if (!text) {
-    const reason = data?.candidates?.[0]?.finishReason || 'unknown';
-    log('Gemini Pro: pas de texte, finishReason=' + reason, 'warn');
+    log('Gemini Pro: finishReason=' + (data?.candidates?.[0]?.finishReason || 'unknown'), 'warn');
   }
-  // Strip markdown code block markers (```json ... ```)
+  // Strip markdown code block markers
   const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
   const match = cleaned.match(/\[[\s\S]*\]/);
   if (match) {
@@ -2323,10 +2319,9 @@ Keep it to 4-6 key moments maximum. The avatar lines should be TikTok-style: sho
       const moments = JSON.parse(match[0]);
       log('Gemini Pro: ' + moments.length + ' moments cles detectes');
       return moments;
-    } catch(parseErr) {
-      log('Gemini Pro: JSON parse echoue: ' + parseErr.message, 'error');
-      log('Gemini Pro: JSON brut: ' + match[0].slice(0, 300), 'error');
-    } catch(e) {}
+    } catch(e) {
+      log('Gemini Pro JSON parse: ' + e.message, 'error');
+    }
   }
   throw new Error('Gemini n\'a pas retourne de moments valides');
 }
@@ -2772,13 +2767,13 @@ function renderConfigScreen() {
   const cfg = state.wizard.config;
   const pro = isProMode();
 
-  // Pro mode: show banner, hide irrelevant controls, lock avatar ON
+  // Pro mode: show banner, hide duration, keep hook visible (optional guidance), lock avatar ON
   document.getElementById('proModeBanner').style.display = pro ? 'block' : 'none';
-  document.getElementById('hookGroup').style.display = ''; // visible en Pro aussi (optionnel, guide Gemini)
+  document.getElementById('hookGroup').style.display = ''; // visible in Pro (optional, guides Gemini)
   document.getElementById('durationGroup').style.display = pro ? 'none' : '';
-  // Avatar: lock ON, disable toggle, show "inclus"
-  const avatarRow = document.getElementById('avatarRow');
-  const avatarSub = document.getElementById('avatarSub');
+  // Avatar row: lock ON + grayed in Pro
+  var avatarRow = document.getElementById('avatarRow');
+  var avatarSub = document.getElementById('avatarSub');
   if (pro) {
     cfg.avatar = true;
     cfg.avatarMode = cfg.avatarMode === 'bubble' ? 'split-top' : cfg.avatarMode;
@@ -2789,8 +2784,8 @@ function renderConfigScreen() {
     if (avatarSub) avatarSub.textContent = 'Talking head en debut de video';
   }
   // Voiceover + voice gender: hide in Pro (avatar handles voice)
-  const voiceoverRowEl = document.getElementById('voiceoverRow');
-  const voiceGenderGroup = document.getElementById('voiceGenderGroup');
+  var voiceoverRowEl = document.getElementById('voiceoverRow');
+  var voiceGenderGroup = document.getElementById('voiceGenderGroup');
   if (voiceoverRowEl) voiceoverRowEl.style.display = pro ? 'none' : '';
   if (voiceGenderGroup) voiceGenderGroup.style.display = pro ? 'none' : '';
 
@@ -2955,7 +2950,7 @@ async function startGenerationPro(product, selectedMedia) {
     updateStep(stepIdx('analyze'), 'active');
     log('Etape 1: Analyse du screen recording (' + (videoMedia.size / 1024).toFixed(0) + ' KB)');
     const videoB64 = await fileToRawBase64(videoMedia._file);
-    log('Video brute encodee en base64: ' + (videoB64.length / 1024).toFixed(0) + ' KB');
+    log('Video encodee en base64: ' + (videoB64.length / 1024).toFixed(0) + ' KB');
     const moments = await geminiAnalyzeVideo(videoB64, videoMedia.type || 'video/mp4', product.desc, cfg.language);
     log('Moments detectes: ' + moments.map(m => m.event_type + ' @' + m.start_time + 's').join(', '));
     updateProgress(20);
@@ -3087,12 +3082,12 @@ async function startGeneration() {
 
   // Route to Pro pipeline if Pro mode
   if (isProMode()) {
-    log('Demarrage generation v0.4.4 — Mode Pro');
+    log('Demarrage generation v0.4.5 — Mode Pro');
     await startGenerationPro(product, selectedMedia);
     return;
   }
 
-  log('Demarrage generation v0.4.4 — pipeline reel');
+  log('Demarrage generation v0.4.5 — pipeline reel');
 
   // Save config from inputs
   state.wizard.config.hookText = document.getElementById('configHook').value;
