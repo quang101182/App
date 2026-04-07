@@ -169,7 +169,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.28.0'
+    version: '1.28.1'
   });
 });
 
@@ -2641,23 +2641,12 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
         }
       }
 
-      // Add text overlay for hook (first clip) or CTA (last clip)
-      // Use textfile= instead of text= to avoid all FFmpeg escaping issues (apostrophes, colons, etc.)
-      let textFilter = '';
-      if (i === 0 && hookText) {
-        const hookFile = path.join(tmpDir, `hook-${i}.txt`);
-        fs.writeFileSync(hookFile, hookText, 'utf8');
-        textFilter = `,drawtext=textfile=${hookFile}:fontsize=48:fontcolor=white:borderw=3:bordercolor=black:x=(w-tw)/2:y=h*0.15:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf`;
-      } else if (i === clips.length - 1 && ctaText) {
-        const ctaFile = path.join(tmpDir, `cta-${i}.txt`);
-        fs.writeFileSync(ctaFile, ctaText, 'utf8');
-        textFilter = `,drawtext=textfile=${ctaFile}:fontsize=40:fontcolor=white:borderw=3:bordercolor=black:x=(w-tw)/2:y=h*0.80:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf`;
-      }
+      // Hook/CTA drawtext overlays removed — ASS subtitles handle all text display
 
       const ffArgs = [
         '-loop', '1',
         '-i', clipPaths[i],
-        '-vf', `scale=2000:-1,${zoompanFilter}${textFilter}`,
+        '-vf', `scale=2000:-1,${zoompanFilter}`,
         '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
         '-pix_fmt', 'yuv420p',
         '-t', String(dur),
@@ -3126,7 +3115,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.28.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.28.1] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);
