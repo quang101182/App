@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.26.0 — Added /smart-zoom, /speed-ramp, /promo-assembly for PromoClip
+ * Version: 1.28.0 — Added /smart-zoom, /speed-ramp, /promo-assembly, /promo-assembly-pro, zoom effects
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -169,7 +169,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.20.0'
+    version: '1.28.0'
   });
 });
 
@@ -2609,8 +2609,15 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
       const clipOutPath = path.join(tmpDir, `clip-${i}.mp4`);
 
       let zoompanFilter;
-      if (clip.bbox && clip.bbox.x1 != null) {
-        // Smart zoom toward bounding box
+      const effect = clip.effect || 'zoom_in';
+      if (effect === 'none') {
+        // Static: no zoom, just hold the image at 1x for the duration
+        zoompanFilter = `zoompan=z=1:d=${d}:x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':s=${width}x${height}:fps=${fps}`;
+      } else if (effect === 'subtle') {
+        // Subtle: very gentle zoom in (1.0 → 1.05)
+        zoompanFilter = `zoompan=z='min(zoom+0.0003,1.05)':d=${d}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=${fps}`;
+      } else if (clip.bbox && clip.bbox.x1 != null) {
+        // Smart zoom toward bounding box (auto mode)
         const cx = ((clip.bbox.x1 + clip.bbox.x2) / 2) / 1000;
         const cy = ((clip.bbox.y1 + clip.bbox.y2) / 2) / 1000;
         const bboxW = Math.abs(clip.bbox.x2 - clip.bbox.x1) / 1000;
@@ -2618,8 +2625,7 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
         const zoomTarget = Math.min(3.0, Math.max(1.3, 1 / Math.max(bboxW, bboxH)));
         zoompanFilter = `zoompan=z='min(zoom+${((zoomTarget - 1) / d).toFixed(6)},${zoomTarget.toFixed(2)})':d=${d}:x='${cx}*iw-iw/zoom/2':y='${cy}*ih-ih/zoom/2':s=${width}x${height}:fps=${fps}`;
       } else {
-        // Default ken-burns effect
-        const effect = clip.effect || 'zoom_in';
+        // Named effects fallback
         switch (effect) {
           case 'zoom_out':
             zoompanFilter = `zoompan=z='if(lte(zoom,1.0),1.5,max(1.001,zoom-0.001))':d=${d}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=${fps}`;
@@ -3120,7 +3126,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.27.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v1.28.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);

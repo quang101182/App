@@ -1250,8 +1250,11 @@ body {
       </div>
     </div>
 
-    <!-- Musique -->
-    <!-- Musique retiree — ajoutee via TikTok directement -->
+    <!-- Effet captures -->
+    <div class="input-group" id="zoomEffectGroup">
+      <div class="input-label">Effet sur les captures</div>
+      <div class="chip-row" style="margin:6px 0 0;" id="zoomEffectChips"></div>
+    </div>
 
     <!-- Avatar -->
     <div class="toggle-row" id="avatarRow">
@@ -1836,6 +1839,7 @@ const defaultState = {
       voiceover: true,
       voiceGender: 'male',
       subtitles: true,
+      zoomEffect: 'auto',
       cta: 'Link in bio'
     }
   },
@@ -2891,6 +2895,21 @@ function renderConfigScreen() {
     ).join('');
   }
 
+  // Zoom effect chips (hidden in Pro — Pro uses video not images)
+  const zoomEffectGroup = document.getElementById('zoomEffectGroup');
+  if (zoomEffectGroup) zoomEffectGroup.style.display = pro ? 'none' : '';
+  const zoomChips = document.getElementById('zoomEffectChips');
+  if (zoomChips) {
+    const zoomOptions = [
+      { id: 'auto', label: 'Auto (IA)' },
+      { id: 'static', label: 'Statique' },
+      { id: 'subtle', label: 'Subtil' }
+    ];
+    zoomChips.innerHTML = zoomOptions.map(z =>
+      `<div class="chip${cfg.zoomEffect === z.id ? ' selected' : ''}" data-action="set-zoom-effect" data-zoom="${z.id}">${z.label}</div>`
+    ).join('');
+  }
+
   // CTA chips
   const ctaContainer = document.getElementById('ctaChips');
   ctaContainer.innerHTML = CTA_OPTIONS.map(c =>
@@ -3156,11 +3175,21 @@ async function startGeneration() {
       }
       // Distribute duration across clips
       const clipDur = Math.max(3, Math.round(cfg.duration / selectedMedia.length));
-      const effects = ['zoom_in', 'pan_right', 'zoom_out', 'pan_down'];
+      // Zoom effect based on user config
+      let clipEffect;
+      if (cfg.zoomEffect === 'static') {
+        clipEffect = 'none';
+      } else if (cfg.zoomEffect === 'subtle') {
+        clipEffect = 'subtle';
+      } else {
+        // Auto: cycle through effects
+        const effects = ['zoom_in', 'pan_right', 'zoom_out', 'pan_down'];
+        clipEffect = effects[i % effects.length];
+      }
       clipData.push({
         image: b64,
         bbox: bbox,
-        effect: effects[i % effects.length],
+        effect: clipEffect,
         duration: clipDur
       });
       updateProgress(Math.round(5 + (i / selectedMedia.length) * 15));
@@ -3908,6 +3937,12 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
 
     case 'set-cta':
       state.wizard.config.cta = el.dataset.cta;
+      markDirty();
+      renderConfigScreen();
+      break;
+
+    case 'set-zoom-effect':
+      state.wizard.config.zoomEffect = el.dataset.zoom;
       markDirty();
       renderConfigScreen();
       break;
