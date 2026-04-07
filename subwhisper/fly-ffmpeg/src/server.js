@@ -2793,11 +2793,11 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
         const halfH = Math.round(height / 2);
         let filterComplex;
         if (mode === 'split-top') {
-          // Avatar on top, clips on bottom. Avatar crop top-aligned (keep head visible)
-          filterComplex = `[1:v]scale=${width}:${halfH}:force_original_aspect_ratio=increase,crop=${width}:${halfH}:0:0,setsar=1[av];[0:v]scale=${width}:${halfH}:force_original_aspect_ratio=increase,crop=${width}:${halfH},setsar=1[cl];[av][cl]vstack=inputs=2[outv]`;
+          // Avatar on top, clips on bottom. Avatar crop 15% from top (face framing)
+          filterComplex = `[1:v]scale=${width}:${halfH}:force_original_aspect_ratio=increase,crop=${width}:${halfH}:0:(ih-${halfH})*0.15,setsar=1[av];[0:v]scale=${width}:${halfH}:force_original_aspect_ratio=increase,crop=${width}:${halfH},setsar=1[cl];[av][cl]vstack=inputs=2[outv]`;
         } else {
-          // Clips on top, avatar on bottom. Avatar crop top-aligned (keep head visible)
-          filterComplex = `[0:v]scale=${width}:${halfH}:force_original_aspect_ratio=increase,crop=${width}:${halfH},setsar=1[cl];[1:v]scale=${width}:${halfH}:force_original_aspect_ratio=increase,crop=${width}:${halfH}:0:0,setsar=1[av];[cl][av]vstack=inputs=2[outv]`;
+          // Clips on top, avatar on bottom. Avatar crop 15% from top (face framing)
+          filterComplex = `[0:v]scale=${width}:${halfH}:force_original_aspect_ratio=increase,crop=${width}:${halfH},setsar=1[cl];[1:v]scale=${width}:${halfH}:force_original_aspect_ratio=increase,crop=${width}:${halfH}:0:(ih-${halfH})*0.15,setsar=1[av];[cl][av]vstack=inputs=2[outv]`;
         }
 
         const ffArgs = [
@@ -3019,7 +3019,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         const avatarH = Math.round(outHeight * 0.3);
         const recordH = outHeight - avatarH;
         filterComplex = [
-          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:0,setsar=1[avatar]`,
+          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.15,setsar=1[avatar]`,
           `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=increase,crop=${outWidth}:${recordH},setsar=1[record]`,
           `[avatar][record]vstack=inputs=2[outv]`
         ].join(';');
@@ -3029,7 +3029,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         const recordH = outHeight - avatarH;
         filterComplex = [
           `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=increase,crop=${outWidth}:${recordH},setsar=1[record]`,
-          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:0,setsar=1[avatar]`,
+          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.15,setsar=1[avatar]`,
           `[record][avatar]vstack=inputs=2[outv]`
         ].join(';');
       } else {
