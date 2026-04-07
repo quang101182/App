@@ -3157,25 +3157,36 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         console.log(`[${jobId}] Outro clip OK`);
       }
 
-      // Xfade assembly if more than 1 clip
+      // Xfade assembly if more than 1 clip — normalize all to same resolution/fps first
       if (clips.length > 1) {
         const finalPath = path.join(tmpDir, 'final.mp4');
         const xInputs = clips.map(c => ['-i', c.path]).flat();
+        const mainIdx = introClip ? 1 : 0; // index of main video in clips array
+
+        // Normalize: scale + fps + format for each input before xfade
+        const normFilters = [];
+        for (let i = 0; i < clips.length; i++) {
+          normFilters.push(`[${i}:v]scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,fps=30,format=yuv420p,setsar=1[n${i}]`);
+        }
+
+        // Xfade chain on normalized streams
         const xFilters = [];
-        let prevLabel = '[0:v]';
+        let prevLabel = '[n0]';
         for (let i = 1; i < clips.length; i++) {
           let offset = 0;
           for (let j = 0; j < i; j++) offset += clips[j].duration;
           offset -= i * XFADE_DUR;
           const outLabel = i < clips.length - 1 ? `[x${i}]` : '[outv]';
-          xFilters.push(`${prevLabel}[${i}:v]xfade=transition=fade:duration=${XFADE_DUR}:offset=${Math.max(0, offset).toFixed(2)}${outLabel}`);
+          xFilters.push(`${prevLabel}[n${i}]xfade=transition=fade:duration=${XFADE_DUR}:offset=${Math.max(0, offset).toFixed(2)}${outLabel}`);
           prevLabel = outLabel;
         }
+
+        const fullFilter = [...normFilters, ...xFilters].join(';');
         await new Promise((resolve, reject) => {
           const ff = spawn('ffmpeg', [
             ...xInputs,
-            '-filter_complex', xFilters.join(';'),
-            '-map', '[outv]', '-map', `${introClip ? 1 : 0}:a?`,
+            '-filter_complex', fullFilter,
+            '-map', '[outv]', '-map', `${mainIdx}:a?`,
             '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
             '-c:a', 'aac', '-b:a', '128k', '-pix_fmt', 'yuv420p',
             '-movflags', '+faststart', '-y', finalPath
