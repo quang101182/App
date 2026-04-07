@@ -2965,7 +2965,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
     return res.status(503).json({ error: 'Server busy, try again later' });
   }
 
-  const { video, videoMime, moments, avatarVideo, avatarMode, subtitles, width, height, introClip, outroClip, introDuration, outroDuration } = req.body;
+  const { video, videoMime, moments, avatarVideo, avatarMode, subtitles, width, height, outroClip, outroDuration } = req.body;
   if (!video) return res.status(400).json({ error: 'Missing video (base64)' });
 
   const tmpDir = path.join(os.tmpdir(), jobId);
@@ -3102,35 +3102,12 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
       }, 120000);
     });
 
-    // ── Intro/Outro assembly (optional) ──
-    if (introClip || outroClip) {
+    // ── Outro image assembly (optional, added AFTER main video) ──
+    if (outroClip) {
       const XFADE_DUR = 0.3;
       const clips = []; // {path, duration}
 
-      // Generate intro clip video from image (Ken Burns static, 3s)
-      if (introClip) {
-        const introImgPath = path.join(tmpDir, 'intro.png');
-        fs.writeFileSync(introImgPath, Buffer.from(introClip, 'base64'));
-        const introVidPath = path.join(tmpDir, 'intro.mp4');
-        const iDur = introDuration || 3;
-        await new Promise((resolve, reject) => {
-          const ff = spawn('ffmpeg', [
-            '-loop', '1', '-i', introImgPath,
-            '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1,zoompan=z='min(zoom+0.0003,1.05)':d=${iDur * 15}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${outWidth}x${outHeight}:fps=15`,
-            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p',
-            '-t', String(iDur), '-y', introVidPath
-          ], { stdio: ['ignore', 'pipe', 'pipe'] });
-          let stderr = '';
-          ff.stderr.on('data', d => { stderr += d.toString(); });
-          ff.on('close', code => code === 0 ? resolve() : reject(new Error('Intro clip: ' + stderr.slice(-200))));
-          ff.on('error', reject);
-          setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro timeout')); }, 30000);
-        });
-        clips.push({ path: introVidPath, duration: iDur });
-        console.log(`[${jobId}] Intro clip OK`);
-      }
-
-      // Main video (already rendered)
+      // Main video first (already rendered, audio synced)
       const mainDur = Math.min(probeDur, 60);
       clips.push({ path: outputPath, duration: mainDur });
 
@@ -3161,7 +3138,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
       if (clips.length > 1) {
         const finalPath = path.join(tmpDir, 'final.mp4');
         const xInputs = clips.map(c => ['-i', c.path]).flat();
-        const mainIdx = introClip ? 1 : 0; // index of main video in clips array
+        const mainIdx = 0; // main video is always first (no intro)
 
         // Normalize: scale + fps + format for each input before xfade
         const normFilters = [];
