@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.4.1 -->
+<!-- Monitoring Dashboard v1.4.2 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.4.1</title>
+<title>Monitoring v1.4.2</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -177,11 +177,11 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 /* Feature adoption */
 .adoption-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
 .adoption-card h3 { font-size: .95rem; color: var(--accent2); margin-bottom: 16px; }
-.adoption-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.adoption-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; overflow: hidden; }
 .adoption-row .adopt-label { width: 100px; font-size: .85rem; color: var(--text2); }
 .adopt-bar-bg { flex: 1; height: 22px; background: var(--bg-secondary); border-radius: 6px; overflow: hidden; }
 .adopt-bar { height: 100%; border-radius: 6px; background: var(--accent); transition: width .5s; min-width: 0; }
-.adopt-info { width: 110px; text-align: right; font-size: .8rem; color: var(--text2); white-space: nowrap; }
+.adopt-info { width: 110px; text-align: right; font-size: .75rem; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
 
 /* Conversion inline */
 .conversion-info { font-size: .85rem; color: var(--text2); margin-top: 4px; }
@@ -255,7 +255,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <!-- Header -->
 <header class="header">
-  <h1>Monitoring v1.4.1</h1>
+  <h1>Monitoring v1.4.2</h1>
   <div class="header-controls">
     <div class="pill-group">
       <button class="pill active" data-period="7d">7j</button>
@@ -415,7 +415,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div><!-- /sI -->
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.4.1</div>
+  <div class="footer" id="footer">Monitoring v1.4.2</div>
 </div>
 
 <script>
@@ -439,6 +439,7 @@ let currentPeriod = '7d';
 let refreshInterval = null;
 let charts = {};
 let allDevices = [];
+let isAutoRefresh = false;
 
 // Lang / mode maps
 const LANG_MAP = { French:'Français', English:'Anglais', Spanish:'Espagnol', German:'Allemand', Italian:'Italien', Portuguese:'Portugais', Dutch:'Néerlandais', Russian:'Russe', Chinese:'Chinois', Japanese:'Japonais', Korean:'Coréen', Arabic:'Arabe' };
@@ -583,15 +584,15 @@ function render(mon, stats, dev) {
   var ch = mon.churn;
   document.getElementById('churnInfo').innerHTML = '<span style="color:var(--success)">↑ ' + ch.upgrades + '</span> / <span style="color:var(--error)">↓ ' + ch.downgrades + '</span>';
 
-  // Devices breakdown for KPI sub
-  var devicesList = dev.devices || [];
+  // Devices breakdown for KPI sub — exclure les devices PC (préfixe pc_)
+  var devicesList = (dev.devices || []).filter(function(d) {
+    return !(d.deviceId || '').toLowerCase().startsWith('pc_');
+  });
   var mobileCount = 0;
-  var pcCount = 0;
   var tierCounts = { pro: 0, premium: 0, free: 0 };
   var phantomCount = 0;
   devicesList.forEach(function(d) {
-    var plat = d.platform || detectPlatform(d.deviceId);
-    if (plat === 'PC') pcCount++; else mobileCount++;
+    mobileCount++;
     var tier = (d.tier || 'free').toLowerCase();
     if (tierCounts[tier] !== undefined) tierCounts[tier]++;
     else tierCounts.free++;
@@ -602,9 +603,9 @@ function render(mon, stats, dev) {
   });
 
   // KPI: Appareils total (exclude phantoms)
-  var realCount = (dev.count || devicesList.length) - phantomCount;
+  var realCount = devicesList.length - phantomCount;
   document.getElementById('kpiDevices').textContent = realCount;
-  var subText = mobileCount + ' mobile, ' + pcCount + ' PC';
+  var subText = mobileCount + ' mobile';
   if (phantomCount > 0) subText += ' (' + phantomCount + ' fant\u00f4me' + (phantomCount > 1 ? 's' : '') + ' exclu' + (phantomCount > 1 ? 's' : '') + ')';
   document.getElementById('kpiDevicesSub').textContent = subText;
 
@@ -715,13 +716,14 @@ function render(mon, stats, dev) {
   // Devices table
   allDevices = devicesList.sort(function(a, b) { return new Date(b.lastSeen) - new Date(a.lastSeen); });
   // Summary
+  var realFree = tierCounts.free - phantomCount;
   var tierText = tierCounts.pro + ' pro';
-  if (tierCounts.free > 0) tierText += ', ' + tierCounts.free + ' free';
-  var summaryText = realCount + ' appareils — ' + mobileCount + ' mobile, ' + pcCount + ' PC — ' + tierText;
+  if (realFree > 0) tierText += ', ' + realFree + ' free';
+  var summaryText = realCount + ' appareils — ' + mobileCount + ' mobile — ' + tierText;
   if (phantomCount > 0) summaryText += ' — ' + phantomCount + ' fant\u00f4me' + (phantomCount > 1 ? 's' : '') + ' (free, 0 req)';
   summaryText += ' — Premium : voir Play Console';
   document.getElementById('devicesSummary').textContent = summaryText;
-  renderDevices(allDevices);
+  renderDevices(allDevices, !isAutoRefresh);
 
   // Errors
   if (mon.errors && mon.errors.total > 0) {
@@ -752,18 +754,11 @@ function render(mon, stats, dev) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.4.1 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.4.2 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
   var entries = Object.entries(dataObj || {});
-  // Mobile: top 5 + Autres
-  if (window.innerWidth < 768 && entries.length > 5) {
-    entries.sort(function(a, b) { return b[1] - a[1]; });
-    var rest = entries.slice(5).reduce(function(s, e) { return s + e[1]; }, 0);
-    entries = entries.slice(0, 5);
-    if (rest > 0) entries.push(['Autres', rest]);
-  }
   var wrap = document.getElementById(wrapId);
   if (entries.length === 0) {
     var canvas = document.getElementById(canvasId);
@@ -909,7 +904,7 @@ function renderAdvanced(adv) {
     document.getElementById('adoptionBars').innerHTML = features.map(function(f) {
       var d = f.data || { users: 0, rate: 0 };
       var pct = Math.round(d.rate * 100);
-      return '<div class="adoption-row"><span class="adopt-label">' + f.label + '</span><div class="adopt-bar-bg"><div class="adopt-bar" style="width:' + pct + '%"></div></div><span class="adopt-info">' + pct + '% — ' + d.users + '/' + totalDev + ' utilisateurs</span></div>';
+      return '<div class="adoption-row"><span class="adopt-label">' + f.label + '</span><div class="adopt-bar-bg"><div class="adopt-bar" style="width:' + pct + '%"></div></div><span class="adopt-info" title="' + pct + '% — ' + d.users + '/' + totalDev + ' utilisateurs">' + pct + '% — ' + d.users + '/' + totalDev + ' util.</span></div>';
     }).join('');
   } else {
     document.getElementById('advAdoption').style.display = 'none';
@@ -975,9 +970,9 @@ function renderDevicesPage() {
 function devicesPagePrev() { if (devicesPage > 0) { devicesPage--; renderDevicesPage(); } }
 function devicesPageNext() { if ((devicesPage + 1) * devicesPerPage < filteredDevices.length) { devicesPage++; renderDevicesPage(); } }
 
-function renderDevices(list) {
+function renderDevices(list, resetPage) {
   filteredDevices = list;
-  devicesPage = 0;
+  if (resetPage !== false) devicesPage = 0;
   renderDevicesPage();
 }
 
@@ -1004,7 +999,8 @@ document.querySelectorAll('.pill').forEach(function(btn) {
 function startAutoRefresh() {
   stopAutoRefresh();
   refreshInterval = setInterval(function() {
-    fetchAll().catch(handleAuthError);
+    isAutoRefresh = true;
+    fetchAll().catch(handleAuthError).finally(function() { isAutoRefresh = false; });
   }, 60000);
 }
 function stopAutoRefresh() { if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; } }
