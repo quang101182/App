@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.4.7 -->
+<!-- Monitoring Dashboard v1.4.8 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.4.7</title>
+<title>Monitoring v1.4.8</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -161,6 +161,9 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 .time-sub { font-size: .72rem; color: var(--text2); opacity: .7; margin-top: 2px; line-height: 1.2; }
 .id-sub { font-size: .72rem; color: var(--text2); opacity: .8; margin-top: 2px; line-height: 1.2; white-space: nowrap; }
 .id-sub img { vertical-align: middle; margin-left: 0 !important; margin-right: 2px; }
+/* v1.4.8: tier effectif (runtime) différent du tier KV (static admin) */
+.tier-kv-sub { font-size: .64rem; color: var(--text2); opacity: .55; margin-top: 2px; line-height: 1.1; white-space: nowrap; text-transform: none; letter-spacing: 0; }
+.badge-premium-runtime { background: rgba(245,158,11,.22); color: var(--warning); box-shadow: 0 0 0 1px rgba(245,158,11,.35) inset; }
 
 /* === Devices bulk actions (Tout déplier / Tout replier) === */
 .dev-bulk-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
@@ -331,7 +334,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring v1.4.7</h1>
+    <h1>Monitoring v1.4.8</h1>
     <div class="header-controls">
       <div class="pill-group">
         <button class="pill active" data-period="7d">7j</button>
@@ -501,7 +504,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div><!-- /sI -->
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.4.7</div>
+  <div class="footer" id="footer">Monitoring v1.4.8</div>
 </div>
 
 <script>
@@ -825,7 +828,13 @@ function render(mon, stats, dev) {
   if (realFree > 0) tierText += ', ' + realFree + ' free';
   var summaryText = realCount + ' appareils — ' + tierText;
   if (phantomCount > 0) summaryText += ' — ' + phantomCount + ' fant\u00f4me' + (phantomCount > 1 ? 's' : '') + ' (free, 0 req)';
-  summaryText += ' — Premium : voir Play Console';
+  // v1.4.8: compter les Premium détectés au runtime (effectiveTier, hors pro qui est déjà compté)
+  var premiumRuntime = devicesList.filter(function(d) { return d.effectiveTier === 'premium'; }).length;
+  if (premiumRuntime > 0) {
+    summaryText += ' — 💎 ' + premiumRuntime + ' premium runtime détecté';
+  } else {
+    summaryText += ' — Premium : voir Play Console';
+  }
   document.getElementById('devicesSummary').textContent = summaryText;
   renderDevices(allDevices, !isAutoRefresh);
 
@@ -858,7 +867,7 @@ function render(mon, stats, dev) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.4.7 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.4.8 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
@@ -1052,19 +1061,32 @@ function renderDevicesPage() {
   document.getElementById('devicesBody').innerHTML = page.map(function(d) {
     var did = d.deviceId || 'inconnu';
     var id = did.length > 12 ? did.slice(0, 12) + '...' : did;
-    var tierCls = d.tier === 'pro' ? 'badge-pro' : d.tier === 'premium' ? 'badge-premium' : 'badge-free';
+    var kvTier = d.tier || 'free';
+    // v1.4.8: effective tier (runtime) écrase le KV tier pour l'affichage principal si défini
+    // Permet de détecter les Premium Google Play qui ont tier KV='free' mais effectiveTier='premium'
+    var effective = d.effectiveTier || null;
+    var displayTier = effective || kvTier;
+    var showSubTier = effective && effective !== kvTier;
+    var tierCls = displayTier === 'pro' ? 'badge-pro'
+      : displayTier === 'premium' ? (effective === 'premium' && kvTier !== 'premium' ? 'badge-premium badge-premium-runtime' : 'badge-premium')
+      : 'badge-free';
     var country = d.country || '—';
     var flag = countryFlag(d.country);
     var created = new Date(d.createdAt).getTime();
     var seen = new Date(d.lastSeen).getTime();
-    var isPhantom = (d.tier || 'free') === 'free' && seen <= created;
+    // Phantom = free KV ET jamais vu (pas de premium runtime non plus)
+    var isPhantom = kvTier === 'free' && !effective && seen <= created;
     var rowStyle = isPhantom ? ' style="opacity:0.35"' : '';
     var phantomTag = isPhantom ? ' <span style="color:var(--error);font-size:.7rem">FANTOME</span>' : '';
     var idSubContent = (d.country && d.country !== '—') ? (flag + d.country) : '';
     var idCell = '<div>' + id + phantomTag + '</div>' + (idSubContent ? '<div class="id-sub">' + idSubContent + '</div>' : '');
     var seenCell = relativeTime(d.lastSeen) + '<div class="time-sub">' + fmtTimeOnly(d.lastSeen) + '</div>';
+    var tierCell = '<span class="badge ' + tierCls + '">' + displayTier + '</span>';
+    if (showSubTier) {
+      tierCell += '<div class="tier-kv-sub">KV: ' + kvTier + '</div>';
+    }
     var expandedCls = expandedDeviceIds.has(did) ? ' dev-expanded' : '';
-    return '<tr class="dev-row' + expandedCls + '" data-device-id="' + escapeHtml(did) + '"' + rowStyle + '><td title="' + escapeHtml(did) + '">' + idCell + '</td><td><span class="badge ' + tierCls + '">' + (d.tier || 'free') + '</span></td><td>' + fmtDateStack(d.createdAt) + '</td><td>' + seenCell + '</td></tr>';
+    return '<tr class="dev-row' + expandedCls + '" data-device-id="' + escapeHtml(did) + '"' + rowStyle + '><td title="' + escapeHtml(did) + '">' + idCell + '</td><td>' + tierCell + '</td><td>' + fmtDateStack(d.createdAt) + '</td><td>' + seenCell + '</td></tr>';
   }).join('');
 
   // Réinsérer les panels des devices qui sont visibles sur CETTE page (état conservé au travers de la pagination)
@@ -1090,7 +1112,7 @@ function renderDevicesPage() {
 }
 
 // === Device expand details (clic ligne → panel avec stats today/7j/30j) ===
-// Support multi-panels ouverts simultanément (v1.4.7)
+// Support multi-panels ouverts simultanément (v1.4.8)
 var expandedDeviceIds = new Set();
 var expandedDeviceDataMap = {}; // { deviceId: data }
 var _fetchCounters = {}; // { deviceId: N } — guard contre race conditions par device
@@ -1105,7 +1127,7 @@ function cssEscape(s) {
   return String(s || '').replace(/"/g, '\\"');
 }
 
-// v1.4.7: plus d'id DOM généré depuis deviceId (risque de collision après normalisation).
+// v1.4.8: plus d'id DOM généré depuis deviceId (risque de collision après normalisation).
 // On utilise partout un selector sur l'attribut data-expand-for qui contient le deviceId brut,
 // ce qui garantit l'unicité. findExpandRow(did) est la seule API pour récupérer la ligne expand.
 function findExpandRow(did) {
@@ -1159,12 +1181,12 @@ function closeOneDeviceExpand(did) {
   if (tr) tr.classList.remove('dev-expanded');
   expandedDeviceIds.delete(did);
   delete expandedDeviceDataMap[did];
-  delete _fetchCounters[did]; // v1.4.7: cleanup memory
+  delete _fetchCounters[did]; // v1.4.8: cleanup memory
   updateBulkButtonsState();
 }
 
 function closeAllDeviceExpands() {
-  // v1.4.7: annule un bulk en cours (period change, app switch, Escape pendant "Tout déplier")
+  // v1.4.8: annule un bulk en cours (period change, app switch, Escape pendant "Tout déplier")
   if (_bulkInProgress) {
     _bulkCancelled = true;
     _bulkInProgress = false;
@@ -1173,7 +1195,7 @@ function closeAllDeviceExpands() {
   document.querySelectorAll('#devicesBody tr.dev-expanded').forEach(function(tr) { tr.classList.remove('dev-expanded'); });
   expandedDeviceIds.clear();
   expandedDeviceDataMap = {};
-  _fetchCounters = {}; // v1.4.7: cleanup memory
+  _fetchCounters = {}; // v1.4.8: cleanup memory
   var status = document.getElementById('devBulkStatus');
   if (status) { status.classList.remove('loading'); status.textContent = ''; }
   updateBulkButtonsState();
@@ -1209,7 +1231,7 @@ function renderDevicePanel(did, data) { renderDevicePanelFor(did, data); }
 
 // === Bulk actions (Tout déplier / Tout replier) ===
 var _bulkInProgress = false;
-var _bulkCancelled = false; // v1.4.7: flag d'annulation si closeAll pendant un bulk
+var _bulkCancelled = false; // v1.4.8: flag d'annulation si closeAll pendant un bulk
 
 function updateBulkButtonsState() {
   var expandBtn = document.getElementById('btnExpandAll');
@@ -1268,7 +1290,7 @@ async function expandAllVisibleDevices() {
   var done = 0;
   try {
     for (var i = 0; i < toFetch.length; i += batchSize) {
-      if (_bulkCancelled) break; // v1.4.7: annulation (closeAllDeviceExpands appelé pendant le bulk)
+      if (_bulkCancelled) break; // v1.4.8: annulation (closeAllDeviceExpands appelé pendant le bulk)
       var batch = toFetch.slice(i, i + batchSize);
       await Promise.all(batch.map(function(d) {
         var did = d.deviceId;
@@ -1291,7 +1313,7 @@ async function expandAllVisibleDevices() {
       }));
     }
   } finally {
-    // v1.4.7: cleanup systématique même si annulé/erreur (try/finally pour garantir reset UI)
+    // v1.4.8: cleanup systématique même si annulé/erreur (try/finally pour garantir reset UI)
     _bulkInProgress = false;
     _bulkCancelled = false;
     if (status) { status.classList.remove('loading'); }
@@ -1377,7 +1399,9 @@ function buildDevicePanelHtml(did, data) {
   // Chercher des infos supplémentaires dans la liste allDevices
   var devInfo = (allDevices || []).find(function(x) { return x.deviceId === did; }) || {};
   var appVersion = devInfo.appVersion || '—';
-  var tier = devInfo.tier || 'free';
+  var kvTier = devInfo.tier || 'free';
+  var effectiveTier = devInfo.effectiveTier || null;
+  var effectiveTierAt = devInfo.effectiveTierAt || null;
   var country = devInfo.country || '—';
 
   var langsChips = topLangs.length ? topLangs.map(function(l) { return '<span class="dev-chip">' + escapeHtml(l[0]) + ' (' + l[1] + ')</span>'; }).join('') : '<span class="dev-meta-val" style="opacity:.5">aucune</span>';
@@ -1386,6 +1410,20 @@ function buildDevicePanelHtml(did, data) {
 
   var audioLabel = month.audio_sec > 0 ? fmtDuration(month.audio_sec) : '0s';
   var wordsLabel = month.words > 0 ? month.words.toLocaleString('fr-FR') : '0';
+
+  // v1.4.8: affichage tier effectif avec distinction KV
+  var tierDisplay;
+  if (effectiveTier && effectiveTier !== kvTier) {
+    var effIcon = effectiveTier === 'premium' ? '💎 ' : effectiveTier === 'pro' ? '⭐ ' : '';
+    tierDisplay = effIcon + escapeHtml(effectiveTier) + ' <span style="opacity:.55;font-size:.72rem;font-weight:400">(KV: ' + escapeHtml(kvTier) + ')</span>';
+    if (effectiveTierAt) {
+      tierDisplay += ' <span style="opacity:.5;font-size:.7rem">· ' + relativeTime(effectiveTierAt) + '</span>';
+    }
+  } else if (effectiveTier) {
+    tierDisplay = escapeHtml(effectiveTier);
+  } else {
+    tierDisplay = escapeHtml(kvTier) + ' <span style="opacity:.5;font-size:.7rem">(pas encore détecté au runtime)</span>';
+  }
 
   return '<div class="dev-panel">' +
     '<div class="dev-panel-grid">' +
@@ -1404,7 +1442,7 @@ function buildDevicePanelHtml(did, data) {
       '</div>' +
       '<div class="dev-meta-row">' +
         '<span class="dev-meta-label">Version app</span><span class="dev-meta-val">' + escapeHtml(appVersion) + '</span>' +
-        '<span class="dev-meta-label">Tier</span><span class="dev-meta-val">' + escapeHtml(tier) + '</span>' +
+        '<span class="dev-meta-label">Tier effectif</span><span class="dev-meta-val">' + tierDisplay + '</span>' +
         '<span class="dev-meta-label">Pays</span><span class="dev-meta-val">' + escapeHtml(country) + '</span>' +
       '</div>' +
       '<div class="dev-meta-row" style="margin-top:2px"><span class="dev-meta-label">Device ID</span><span class="dev-copy-id">' + escapeHtml(did) + '</span></div>' +
