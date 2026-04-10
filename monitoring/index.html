@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.4.10 -->
+<!-- Monitoring Dashboard v1.4.11 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.4.10</title>
+<title>Monitoring v1.4.11</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -161,9 +161,32 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 .time-sub { font-size: .72rem; color: var(--text2); opacity: .7; margin-top: 2px; line-height: 1.2; }
 .id-sub { font-size: .72rem; color: var(--text2); opacity: .8; margin-top: 2px; line-height: 1.2; white-space: nowrap; }
 .id-sub img { vertical-align: middle; margin-left: 0 !important; margin-right: 2px; }
-/* v1.4.10: tier effectif (runtime) différent du tier KV (static admin) */
+/* v1.4.11: tier effectif (runtime) différent du tier KV (static admin) */
 .tier-kv-sub { font-size: .64rem; color: var(--text2); opacity: .55; margin-top: 2px; line-height: 1.1; white-space: nowrap; text-transform: none; letter-spacing: 0; }
 .badge-premium-runtime { background: rgba(245,158,11,.22); color: var(--warning); box-shadow: 0 0 0 1px rgba(245,158,11,.35) inset; }
+
+/* === Tier filter pills (v1.4.11) === */
+.tier-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.tier-filter-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text2); font-size: .78rem; font-weight: 600; cursor: pointer; transition: all .15s; font-family: inherit; }
+.tier-filter-pill:hover { border-color: var(--text2); color: var(--text); }
+.tier-filter-pill .tier-filter-count { opacity: .5; font-weight: 700; font-variant-numeric: tabular-nums; background: rgba(255,255,255,.05); padding: 1px 7px; border-radius: 10px; font-size: .72rem; }
+.tier-filter-pro.active { background: rgba(109,40,217,.22); border-color: var(--accent2); color: var(--accent2); }
+.tier-filter-pro.active .tier-filter-count { background: rgba(109,40,217,.3); color: var(--accent2); opacity: 1; }
+.tier-filter-premium.active { background: rgba(245,158,11,.22); border-color: var(--warning); color: var(--warning); }
+.tier-filter-premium.active .tier-filter-count { background: rgba(245,158,11,.3); color: var(--warning); opacity: 1; }
+.tier-filter-free.active { background: rgba(156,163,175,.18); border-color: rgba(156,163,175,.5); color: var(--text); }
+.tier-filter-free.active .tier-filter-count { background: rgba(156,163,175,.3); color: var(--text); opacity: 1; }
+.tier-filter-pill:not(.active) { opacity: .55; }
+.tier-filter-pill:not(.active):hover { opacity: .85; }
+@media (max-width: 480px) {
+  .tier-filter-pill { padding: 5px 10px; font-size: .72rem; flex: 1 1 auto; justify-content: center; gap: 4px; }
+  .tier-filter-pill .tier-filter-count { font-size: .68rem; padding: 0 6px; }
+  .tier-filters { gap: 4px; }
+}
+
+/* Empty state row dans la table devices (v1.4.11) */
+.devices-empty-row td { text-align: center !important; padding: 24px 12px !important; color: var(--text2); font-style: italic; font-size: .85rem; }
+.devices-empty-row td a { color: var(--accent2); cursor: pointer; text-decoration: underline; }
 
 /* === Devices bulk actions (Tout déplier / Tout replier) === */
 .dev-bulk-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
@@ -334,7 +357,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring v1.4.10</h1>
+    <h1>Monitoring v1.4.11</h1>
     <div class="header-controls">
       <div class="pill-group">
         <button class="pill active" data-period="7d">7j</button>
@@ -458,6 +481,20 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <div class="table-summary" id="devicesSummary"></div>
     <div id="devicesPanel" style="display:none">
       <input type="text" class="search-bar" id="deviceSearch" placeholder="Rechercher un appareil...">
+      <div class="tier-filters" id="tierFilters">
+        <button type="button" class="tier-filter-pill tier-filter-pro" data-tier="pro" onclick="toggleTierFilter('pro')">
+          <span class="tier-filter-label">Pro</span>
+          <span class="tier-filter-count" id="tfCount-pro">—</span>
+        </button>
+        <button type="button" class="tier-filter-pill tier-filter-premium" data-tier="premium" onclick="toggleTierFilter('premium')">
+          <span class="tier-filter-label">💎 Premium</span>
+          <span class="tier-filter-count" id="tfCount-premium">—</span>
+        </button>
+        <button type="button" class="tier-filter-pill tier-filter-free" data-tier="free" onclick="toggleTierFilter('free')">
+          <span class="tier-filter-label">Free</span>
+          <span class="tier-filter-count" id="tfCount-free">—</span>
+        </button>
+      </div>
       <div class="dev-bulk-actions">
         <button class="dev-bulk-btn" id="btnExpandAll" onclick="expandAllVisibleDevices()">
           <span class="dev-bulk-icon">&#9662;</span> Tout déplier
@@ -504,7 +541,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div><!-- /sI -->
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.4.10</div>
+  <div class="footer" id="footer">Monitoring v1.4.11</div>
 </div>
 
 <script>
@@ -696,13 +733,13 @@ function render(mon, stats, dev) {
   var mobileCount = 0;
   var tierCounts = { pro: 0, premium: 0, free: 0 };
   var phantomCount = 0;
-  var premiumRuntimeCount = 0; // v1.4.10: Premium Google Play détectés via effectiveTier (KV tier = free mais effective = premium)
+  var premiumRuntimeCount = 0; // v1.4.11: Premium Google Play détectés via effectiveTier (KV tier = free mais effective = premium)
   devicesList.forEach(function(d) {
     mobileCount++;
     var tier = (d.tier || 'free').toLowerCase();
     if (tierCounts[tier] !== undefined) tierCounts[tier]++;
     else tierCounts.free++;
-    // v1.4.10: détecter Premium runtime (effectiveTier=premium && tier KV != pro pour éviter double comptage)
+    // v1.4.11: détecter Premium runtime (effectiveTier=premium && tier KV != pro pour éviter double comptage)
     if (d.effectiveTier === 'premium' && tier !== 'pro') {
       premiumRuntimeCount++;
     }
@@ -712,14 +749,14 @@ function render(mon, stats, dev) {
     if (tier === 'free' && !d.effectiveTier && seen <= created) phantomCount++;
   });
 
-  // v1.4.10: répartition effective — 1 device est soit pro, soit premium runtime, soit free
+  // v1.4.11: répartition effective — 1 device est soit pro, soit premium runtime, soit free
   // Math: total = pro + premiumRuntime + effectiveFree (incluant phantoms)
   var effectiveFree = tierCounts.free - premiumRuntimeCount; // les "free" KV qui ne sont PAS premium runtime
 
   // KPI: Appareils total (exclude phantoms)
   var realCount = devicesList.length - phantomCount;
   document.getElementById('kpiDevices').textContent = realCount;
-  // v1.4.10: sub-text avec répartition complète
+  // v1.4.11: sub-text avec répartition complète
   var subParts = [];
   if (tierCounts.pro > 0) subParts.push(tierCounts.pro + ' pro');
   if (premiumRuntimeCount > 0) subParts.push('💎 ' + premiumRuntimeCount);
@@ -838,7 +875,7 @@ function render(mon, stats, dev) {
 
   // Devices table
   allDevices = devicesList.sort(function(a, b) { return new Date(b.lastSeen) - new Date(a.lastSeen); });
-  // Summary — v1.4.10: répartition complète (pro + premium runtime + free), somme = realCount
+  // Summary — v1.4.11: répartition complète (pro + premium runtime + free), somme = realCount
   var realFreeCount = effectiveFree - phantomCount;
   var sumParts = [];
   sumParts.push(tierCounts.pro + ' pro');
@@ -850,7 +887,10 @@ function render(mon, stats, dev) {
     summaryText += ' — Premium Google : voir Play Console';
   }
   document.getElementById('devicesSummary').textContent = summaryText;
-  renderDevices(allDevices, !isAutoRefresh);
+  // v1.4.11: appliquer les filtres tier (persistés localStorage) au lieu de tout afficher
+  updateTierFilterCounts();
+  updateTierPillsUI();
+  applyAllDeviceFilters(!isAutoRefresh); // garde la page courante pendant auto-refresh
 
   // Errors
   if (mon.errors && mon.errors.total > 0) {
@@ -881,7 +921,7 @@ function render(mon, stats, dev) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.4.10 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.4.11 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
@@ -1041,7 +1081,7 @@ function renderAdvanced(adv, tierCounts, realFree, premiumRuntimeCount) {
   if (adv.conversion) {
     var cv = adv.conversion;
     var existingConv = document.getElementById('conversionInfo');
-    // v1.4.10: répartition complète avec Premium runtime
+    // v1.4.11: répartition complète avec Premium runtime
     var effectiveFreeAdv = (realFree || 0) - (premiumRuntimeCount || 0);
     var parts = [tierCounts.pro + ' pro (admin)'];
     if (premiumRuntimeCount > 0) parts.push('💎 ' + premiumRuntimeCount + ' premium (runtime)');
@@ -1067,6 +1107,87 @@ var devicesPerPage = 50;
 var filteredDevices = [];
 var devicesExpanded = false;
 
+// v1.4.11: tier filters persistés en localStorage
+var LS_TIER_FILTERS = 'monitoring_tier_filters';
+var tierFilters = loadTierFilters();
+
+function loadTierFilters() {
+  try {
+    var stored = localStorage.getItem(LS_TIER_FILTERS);
+    if (stored) {
+      var p = JSON.parse(stored);
+      return { pro: p.pro !== false, premium: p.premium !== false, free: p.free !== false };
+    }
+  } catch (e) {}
+  return { pro: true, premium: true, free: true };
+}
+
+function saveTierFilters() {
+  try { localStorage.setItem(LS_TIER_FILTERS, JSON.stringify(tierFilters)); } catch (e) {}
+}
+
+function getDeviceCategory(d) {
+  // Catégorie effective pour filtrage/affichage
+  // Pro KV = pro (admin-set, cadeau à vie)
+  // Premium runtime = effectiveTier premium (vrai acheteur Google Play)
+  // Free = le reste
+  var kvTier = (d.tier || 'free').toLowerCase();
+  if (kvTier === 'pro') return 'pro';
+  if (d.effectiveTier === 'premium') return 'premium';
+  return 'free';
+}
+
+function updateTierFilterCounts() {
+  var counts = { pro: 0, premium: 0, free: 0 };
+  (allDevices || []).forEach(function(d) {
+    var cat = getDeviceCategory(d);
+    counts[cat] = (counts[cat] || 0) + 1;
+  });
+  var elPro = document.getElementById('tfCount-pro');
+  var elPrem = document.getElementById('tfCount-premium');
+  var elFree = document.getElementById('tfCount-free');
+  if (elPro) elPro.textContent = counts.pro;
+  if (elPrem) elPrem.textContent = counts.premium;
+  if (elFree) elFree.textContent = counts.free;
+}
+
+function updateTierPillsUI() {
+  document.querySelectorAll('.tier-filter-pill').forEach(function(btn) {
+    var tier = btn.getAttribute('data-tier');
+    btn.classList.toggle('active', !!tierFilters[tier]);
+  });
+}
+
+function toggleTierFilter(tier) {
+  tierFilters[tier] = !tierFilters[tier];
+  saveTierFilters();
+  updateTierPillsUI();
+  applyAllDeviceFilters();
+}
+
+function reactivateAllTierFilters() {
+  tierFilters = { pro: true, premium: true, free: true };
+  saveTierFilters();
+  updateTierPillsUI();
+  applyAllDeviceFilters();
+}
+
+function applyAllDeviceFilters(resetPage) {
+  var q = (document.getElementById('deviceSearch').value || '').toLowerCase();
+  var filtered = (allDevices || []).filter(function(d) {
+    var cat = getDeviceCategory(d);
+    if (!tierFilters[cat]) return false;
+    if (!q) return true;
+    var id = (d.deviceId || '').toLowerCase();
+    var platform = detectPlatform(d.deviceId || '').toLowerCase();
+    var country = (d.country || '').toLowerCase();
+    if (id.includes(q) || cat.includes(q) || platform.includes(q) || country.includes(q)) return true;
+    return false;
+  });
+  // resetPage === false: garde la page courante (auto-refresh). undefined/true: reset à 0 (clic user).
+  renderDevices(filtered, resetPage);
+}
+
 function toggleDevices() {
   devicesExpanded = !devicesExpanded;
   document.getElementById('devicesPanel').style.display = devicesExpanded ? 'block' : 'none';
@@ -1078,11 +1199,26 @@ function renderDevicesPage() {
   var end = Math.min(start + devicesPerPage, filteredDevices.length);
   var page = filteredDevices.slice(start, end);
 
+  // v1.4.11: empty state (aucun tier coché OU filtres trop restrictifs)
+  if (filteredDevices.length === 0) {
+    var noTier = !tierFilters.pro && !tierFilters.premium && !tierFilters.free;
+    var msg = noTier
+      ? 'Aucun tier sélectionné — <a onclick="reactivateAllTierFilters()">Tout réactiver</a>'
+      : 'Aucun appareil ne correspond aux filtres';
+    document.getElementById('devicesBody').innerHTML = '<tr class="devices-empty-row"><td colspan="4">' + msg + '</td></tr>';
+    document.getElementById('devPageInfo').textContent = '0 / 0 (0 appareils)';
+    document.getElementById('devPagePrev').disabled = true;
+    document.getElementById('devPageNext').disabled = true;
+    document.getElementById('devicesPagination').style.display = 'none';
+    updateBulkButtonsState();
+    return;
+  }
+
   document.getElementById('devicesBody').innerHTML = page.map(function(d) {
     var did = d.deviceId || 'inconnu';
     var id = did.length > 12 ? did.slice(0, 12) + '...' : did;
     var kvTier = d.tier || 'free';
-    // v1.4.10: effective tier (runtime) écrase le KV tier pour l'affichage principal si défini
+    // v1.4.11: effective tier (runtime) écrase le KV tier pour l'affichage principal si défini
     // Permet de détecter les Premium Google Play qui ont tier KV='free' mais effectiveTier='premium'
     var effective = d.effectiveTier || null;
     var displayTier = effective || kvTier;
@@ -1101,7 +1237,7 @@ function renderDevicesPage() {
     var idSubContent = (d.country && d.country !== '—') ? (flag + d.country) : '';
     var idCell = '<div>' + id + phantomTag + '</div>' + (idSubContent ? '<div class="id-sub">' + idSubContent + '</div>' : '');
     var seenCell = relativeTime(d.lastSeen) + '<div class="time-sub">' + fmtTimeOnly(d.lastSeen) + '</div>';
-    // v1.4.10+: abréger "premium" → "prem" dans la table pour gagner de la place (garder version complète dans le panel expand)
+    // v1.4.11+: abréger "premium" → "prem" dans la table pour gagner de la place (garder version complète dans le panel expand)
     var badgeLabel = displayTier === 'premium' ? 'prem' : displayTier;
     var tierCell = '<span class="badge ' + tierCls + '">' + badgeLabel + '</span>';
     if (showSubTier) {
@@ -1134,7 +1270,7 @@ function renderDevicesPage() {
 }
 
 // === Device expand details (clic ligne → panel avec stats today/7j/30j) ===
-// Support multi-panels ouverts simultanément (v1.4.10)
+// Support multi-panels ouverts simultanément (v1.4.11)
 var expandedDeviceIds = new Set();
 var expandedDeviceDataMap = {}; // { deviceId: data }
 var _fetchCounters = {}; // { deviceId: N } — guard contre race conditions par device
@@ -1149,7 +1285,7 @@ function cssEscape(s) {
   return String(s || '').replace(/"/g, '\\"');
 }
 
-// v1.4.10: plus d'id DOM généré depuis deviceId (risque de collision après normalisation).
+// v1.4.11: plus d'id DOM généré depuis deviceId (risque de collision après normalisation).
 // On utilise partout un selector sur l'attribut data-expand-for qui contient le deviceId brut,
 // ce qui garantit l'unicité. findExpandRow(did) est la seule API pour récupérer la ligne expand.
 function findExpandRow(did) {
@@ -1203,12 +1339,12 @@ function closeOneDeviceExpand(did) {
   if (tr) tr.classList.remove('dev-expanded');
   expandedDeviceIds.delete(did);
   delete expandedDeviceDataMap[did];
-  delete _fetchCounters[did]; // v1.4.10: cleanup memory
+  delete _fetchCounters[did]; // v1.4.11: cleanup memory
   updateBulkButtonsState();
 }
 
 function closeAllDeviceExpands() {
-  // v1.4.10: annule un bulk en cours (period change, app switch, Escape pendant "Tout déplier")
+  // v1.4.11: annule un bulk en cours (period change, app switch, Escape pendant "Tout déplier")
   if (_bulkInProgress) {
     _bulkCancelled = true;
     _bulkInProgress = false;
@@ -1217,7 +1353,7 @@ function closeAllDeviceExpands() {
   document.querySelectorAll('#devicesBody tr.dev-expanded').forEach(function(tr) { tr.classList.remove('dev-expanded'); });
   expandedDeviceIds.clear();
   expandedDeviceDataMap = {};
-  _fetchCounters = {}; // v1.4.10: cleanup memory
+  _fetchCounters = {}; // v1.4.11: cleanup memory
   var status = document.getElementById('devBulkStatus');
   if (status) { status.classList.remove('loading'); status.textContent = ''; }
   updateBulkButtonsState();
@@ -1253,7 +1389,7 @@ function renderDevicePanel(did, data) { renderDevicePanelFor(did, data); }
 
 // === Bulk actions (Tout déplier / Tout replier) ===
 var _bulkInProgress = false;
-var _bulkCancelled = false; // v1.4.10: flag d'annulation si closeAll pendant un bulk
+var _bulkCancelled = false; // v1.4.11: flag d'annulation si closeAll pendant un bulk
 
 function updateBulkButtonsState() {
   var expandBtn = document.getElementById('btnExpandAll');
@@ -1312,7 +1448,7 @@ async function expandAllVisibleDevices() {
   var done = 0;
   try {
     for (var i = 0; i < toFetch.length; i += batchSize) {
-      if (_bulkCancelled) break; // v1.4.10: annulation (closeAllDeviceExpands appelé pendant le bulk)
+      if (_bulkCancelled) break; // v1.4.11: annulation (closeAllDeviceExpands appelé pendant le bulk)
       var batch = toFetch.slice(i, i + batchSize);
       await Promise.all(batch.map(function(d) {
         var did = d.deviceId;
@@ -1335,7 +1471,7 @@ async function expandAllVisibleDevices() {
       }));
     }
   } finally {
-    // v1.4.10: cleanup systématique même si annulé/erreur (try/finally pour garantir reset UI)
+    // v1.4.11: cleanup systématique même si annulé/erreur (try/finally pour garantir reset UI)
     _bulkInProgress = false;
     _bulkCancelled = false;
     if (status) { status.classList.remove('loading'); }
@@ -1420,7 +1556,7 @@ function buildDevicePanelHtml(did, data) {
 
   // Chercher des infos supplémentaires dans la liste allDevices
   var devInfo = (allDevices || []).find(function(x) { return x.deviceId === did; }) || {};
-  // v1.4.10: appVersion removed — l'app ne l'envoie jamais, Play Console a cette info
+  // v1.4.11: appVersion removed — l'app ne l'envoie jamais, Play Console a cette info
   var kvTier = devInfo.tier || 'free';
   var effectiveTier = devInfo.effectiveTier || null;
   var effectiveTierAt = devInfo.effectiveTierAt || null;
@@ -1433,7 +1569,7 @@ function buildDevicePanelHtml(did, data) {
   var audioLabel = month.audio_sec > 0 ? fmtDuration(month.audio_sec) : '0s';
   var wordsLabel = month.words > 0 ? month.words.toLocaleString('fr-FR') : '0';
 
-  // v1.4.10: affichage tier effectif avec distinction KV
+  // v1.4.11: affichage tier effectif avec distinction KV
   var tierDisplay;
   if (effectiveTier && effectiveTier !== kvTier) {
     var effIcon = effectiveTier === 'premium' ? '💎 ' : effectiveTier === 'pro' ? '⭐ ' : '';
@@ -1497,14 +1633,8 @@ function renderDevices(list, resetPage) {
   renderDevicesPage();
 }
 
-// Search devices
-document.getElementById('deviceSearch').addEventListener('input', function() {
-  var q = this.value.toLowerCase();
-  var filtered = allDevices.filter(function(d) {
-    return (d.deviceId || '').toLowerCase().includes(q) || (d.tier || '').toLowerCase().includes(q) || detectPlatform(d.deviceId || '').toLowerCase().includes(q);
-  });
-  renderDevices(filtered);
-});
+// Search devices — v1.4.11: délégué à applyAllDeviceFilters (combine search + tier filters)
+document.getElementById('deviceSearch').addEventListener('input', applyAllDeviceFilters);
 
 // Click sur ligne device → expand details (délégation sur tbody)
 document.getElementById('devicesBody').addEventListener('click', function(e) {
@@ -1761,6 +1891,7 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
 // Init
 renderAppTabs();
 initNav();
+updateTierPillsUI(); // v1.4.11: applique l'état visuel des pills tier depuis localStorage au chargement
 (function init() {
   if (!getToken()) { showLogin(); return; }
   fetchAll().then(function() { if (document.getElementById('autoRefresh').checked) startAutoRefresh(); })
