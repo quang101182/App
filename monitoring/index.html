@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.4.3 -->
+<!-- Monitoring Dashboard v1.4.4 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.4.3</title>
+<title>Monitoring v1.4.4</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -141,7 +141,15 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   .chart-wrap { height: 220px; }
   .main { padding: 10px; gap: 14px; }
   .gauge-card .gauge-value{font-size:1.5rem}
+  #sD table { font-size: .78rem; }
+  #sD table th, #sD table td { padding: 6px 4px; }
 }
+
+/* === Devices table — 2-line cells === */
+#sD table td { vertical-align: top; }
+.time-sub { font-size: .72rem; color: var(--text2); opacity: .7; margin-top: 2px; line-height: 1.2; }
+.id-sub { font-size: .72rem; color: var(--text2); opacity: .8; margin-top: 2px; line-height: 1.2; white-space: nowrap; }
+.id-sub img { vertical-align: middle; margin-left: 0 !important; margin-right: 2px; }
 
 /* === Advanced metrics === */
 .adv-section { margin-top: 0; }
@@ -255,7 +263,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <!-- Header -->
 <header class="header">
-  <h1>Monitoring v1.4.3</h1>
+  <h1>Monitoring v1.4.4</h1>
   <div class="header-controls">
     <div class="pill-group">
       <button class="pill active" data-period="7d">7j</button>
@@ -382,7 +390,6 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
           <thead>
             <tr>
               <th>Device ID</th>
-              <th>Pays</th>
               <th>Tier</th>
               <th>Créé le</th>
               <th>Dernière activité</th>
@@ -415,7 +422,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div><!-- /sI -->
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.4.3</div>
+  <div class="footer" id="footer">Monitoring v1.4.4</div>
 </div>
 
 <script>
@@ -548,6 +555,20 @@ function fmtDate(dateStr) {
 function fmtDateTime(dateStr) {
   var d = new Date(dateStr);
   return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear() + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function fmtDateStack(dateStr) {
+  if (!dateStr) return '—';
+  var d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '—';
+  var date = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
+  var time = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  return date + '<div class="time-sub">' + time + '</div>';
+}
+function fmtTimeOnly(dateStr) {
+  if (!dateStr) return '';
+  var d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
 
 function mapLang(k) { return LANG_MAP[k] || k; }
@@ -757,7 +778,7 @@ function render(mon, stats, dev) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.4.3 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.4.4 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
@@ -959,7 +980,10 @@ function renderDevicesPage() {
     var isPhantom = (d.tier || 'free') === 'free' && seen <= created;
     var rowStyle = isPhantom ? ' style="opacity:0.35"' : '';
     var phantomTag = isPhantom ? ' <span style="color:var(--error);font-size:.7rem">FANTOME</span>' : '';
-    return '<tr' + rowStyle + '><td title="' + did + '">' + id + phantomTag + '</td><td>' + country + ' ' + flag + '</td><td><span class="badge ' + tierCls + '">' + (d.tier || 'free') + '</span></td><td>' + fmtDate(d.createdAt) + '</td><td>' + relativeTime(d.lastSeen) + '</td></tr>';
+    var idSubContent = (d.country && d.country !== '—') ? (flag + d.country) : '';
+    var idCell = '<div>' + id + phantomTag + '</div>' + (idSubContent ? '<div class="id-sub">' + idSubContent + '</div>' : '');
+    var seenCell = relativeTime(d.lastSeen) + '<div class="time-sub">' + fmtTimeOnly(d.lastSeen) + '</div>';
+    return '<tr' + rowStyle + '><td title="' + did + '">' + idCell + '</td><td><span class="badge ' + tierCls + '">' + (d.tier || 'free') + '</span></td><td>' + fmtDateStack(d.createdAt) + '</td><td>' + seenCell + '</td></tr>';
   }).join('');
 
   var totalPages = Math.ceil(filteredDevices.length / devicesPerPage);
