@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.4.5 -->
+<!-- Monitoring Dashboard v1.4.6 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.4.5</title>
+<title>Monitoring v1.4.6</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -162,13 +162,26 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 .id-sub { font-size: .72rem; color: var(--text2); opacity: .8; margin-top: 2px; line-height: 1.2; white-space: nowrap; }
 .id-sub img { vertical-align: middle; margin-left: 0 !important; margin-right: 2px; }
 
+/* === Devices bulk actions (Tout déplier / Tout replier) === */
+.dev-bulk-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.dev-bulk-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text); font-size: .8rem; font-weight: 600; cursor: pointer; transition: all .15s; }
+.dev-bulk-btn:hover:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
+.dev-bulk-btn:disabled { opacity: .4; cursor: not-allowed; }
+.dev-bulk-btn .dev-bulk-icon { font-size: .9rem; line-height: 1; }
+.dev-bulk-status { font-size: .78rem; color: var(--text2); margin-left: 4px; }
+.dev-bulk-status.loading::before { content: ''; display: inline-block; width: 10px; height: 10px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin-right: 6px; vertical-align: middle; }
+@media (max-width: 480px) {
+  .dev-bulk-btn { padding: 5px 10px; font-size: .72rem; }
+  .dev-bulk-status { font-size: .7rem; width: 100%; margin-left: 0; }
+}
+
 /* === Devices expand panel (clic sur ligne pour détails) === */
-#devicesBody tr { cursor: pointer; transition: background .15s; }
-#devicesBody tr:hover:not(#devExpandRow) { background: rgba(109, 40, 217, .08); }
-#devicesBody tr.dev-expanded { background: rgba(109, 40, 217, .18); }
-#devicesBody tr#devExpandRow { cursor: default; background: rgba(10, 10, 25, .5); }
-#devicesBody tr#devExpandRow:hover { background: rgba(10, 10, 25, .5); }
-#devicesBody tr#devExpandRow > td { padding: 0 !important; border-bottom: 2px solid rgba(109, 40, 217, .4); }
+#devicesBody tr.dev-row { cursor: pointer; transition: background .15s; }
+#devicesBody tr.dev-row:hover { background: rgba(109, 40, 217, .08); }
+#devicesBody tr.dev-row.dev-expanded { background: rgba(109, 40, 217, .18); }
+#devicesBody tr.dev-expand-row { cursor: default; background: rgba(10, 10, 25, .5); }
+#devicesBody tr.dev-expand-row:hover { background: rgba(10, 10, 25, .5); }
+#devicesBody tr.dev-expand-row > td { padding: 0 !important; border-bottom: 2px solid rgba(109, 40, 217, .4); }
 .dev-panel { padding: 14px; background: var(--bg-secondary); }
 .dev-panel-loading, .dev-panel-error { text-align: center; padding: 24px; color: var(--text2); font-size: .85rem; }
 .dev-panel-error { color: var(--error); }
@@ -318,7 +331,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring v1.4.5</h1>
+    <h1>Monitoring v1.4.6</h1>
     <div class="header-controls">
       <div class="pill-group">
         <button class="pill active" data-period="7d">7j</button>
@@ -442,6 +455,15 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <div class="table-summary" id="devicesSummary"></div>
     <div id="devicesPanel" style="display:none">
       <input type="text" class="search-bar" id="deviceSearch" placeholder="Rechercher un appareil...">
+      <div class="dev-bulk-actions">
+        <button class="dev-bulk-btn" id="btnExpandAll" onclick="expandAllVisibleDevices()">
+          <span class="dev-bulk-icon">&#9662;</span> Tout déplier
+        </button>
+        <button class="dev-bulk-btn" id="btnCollapseAll" onclick="closeAllDeviceExpands()">
+          <span class="dev-bulk-icon">&#9652;</span> Tout replier
+        </button>
+        <span class="dev-bulk-status" id="devBulkStatus"></span>
+      </div>
       <div style="overflow-x:auto">
         <table>
           <thead>
@@ -479,7 +501,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div><!-- /sI -->
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.4.5</div>
+  <div class="footer" id="footer">Monitoring v1.4.6</div>
 </div>
 
 <script>
@@ -836,7 +858,7 @@ function render(mon, stats, dev) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.4.5 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.4.6 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
@@ -1041,21 +1063,18 @@ function renderDevicesPage() {
     var idSubContent = (d.country && d.country !== '—') ? (flag + d.country) : '';
     var idCell = '<div>' + id + phantomTag + '</div>' + (idSubContent ? '<div class="id-sub">' + idSubContent + '</div>' : '');
     var seenCell = relativeTime(d.lastSeen) + '<div class="time-sub">' + fmtTimeOnly(d.lastSeen) + '</div>';
-    var expandedCls = (expandedDeviceId === did) ? ' dev-expanded' : '';
+    var expandedCls = expandedDeviceIds.has(did) ? ' dev-expanded' : '';
     return '<tr class="dev-row' + expandedCls + '" data-device-id="' + escapeHtml(did) + '"' + rowStyle + '><td title="' + escapeHtml(did) + '">' + idCell + '</td><td><span class="badge ' + tierCls + '">' + (d.tier || 'free') + '</span></td><td>' + fmtDateStack(d.createdAt) + '</td><td>' + seenCell + '</td></tr>';
   }).join('');
 
-  // Si un device était déplié et est toujours visible sur cette page, réinsérer son panel
-  if (expandedDeviceId) {
-    var stillVisible = page.some(function(d) { return d.deviceId === expandedDeviceId; });
-    if (stillVisible) {
-      var tr = document.querySelector('#devicesBody tr.dev-row[data-device-id="' + cssEscape(expandedDeviceId) + '"]');
-      if (tr) insertExpandRow(tr, expandedDeviceData);
-    } else {
-      // Device plus visible (filtré/page changée) → reset l'état
-      expandedDeviceId = null;
-      expandedDeviceData = null;
-    }
+  // Réinsérer les panels des devices qui sont visibles sur CETTE page (état conservé au travers de la pagination)
+  if (expandedDeviceIds.size > 0) {
+    var visibleIds = new Set(page.map(function(d) { return d.deviceId; }));
+    Array.from(expandedDeviceIds).forEach(function(did) {
+      if (!visibleIds.has(did)) return; // Device pas sur cette page — on garde son state pour plus tard
+      var tr = document.querySelector('#devicesBody tr.dev-row[data-device-id="' + cssEscape(did) + '"]');
+      if (tr) insertExpandRow(tr, did, expandedDeviceDataMap[did]);
+    });
   }
 
   var totalPages = Math.ceil(filteredDevices.length / devicesPerPage);
@@ -1065,12 +1084,16 @@ function renderDevicesPage() {
 
   // Masquer pagination si tout tient sur une page
   document.getElementById('devicesPagination').style.display = filteredDevices.length > devicesPerPage ? 'flex' : 'none';
+
+  // Mettre à jour l'état des boutons bulk
+  updateBulkButtonsState();
 }
 
 // === Device expand details (clic ligne → panel avec stats today/7j/30j) ===
-var expandedDeviceId = null;
-var expandedDeviceData = null; // cache du dernier fetch pour réinsertion après re-render
-var _currentFetchId = 0;
+// Support multi-panels ouverts simultanément (v1.4.6)
+var expandedDeviceIds = new Set();
+var expandedDeviceDataMap = {}; // { deviceId: data }
+var _fetchCounters = {}; // { deviceId: N } — guard contre race conditions par device
 
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
@@ -1082,66 +1105,181 @@ function cssEscape(s) {
   return String(s || '').replace(/"/g, '\\"');
 }
 
+function expandRowIdFor(did) {
+  // ID DOM sûr (deviceId peut contenir des caractères spéciaux théoriques)
+  return 'devExpandRow-' + did.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
 async function toggleDeviceExpand(did, trElement) {
-  // Clic sur le device déjà ouvert → fermer
-  if (expandedDeviceId === did) {
-    closeDeviceExpand();
+  // Clic sur un device déjà ouvert → fermer UNIQUEMENT celui-ci
+  if (expandedDeviceIds.has(did)) {
+    closeOneDeviceExpand(did);
     return;
   }
-  // Fermer le précédent s'il y en a un
-  closeDeviceExpand();
+  // Sinon ouvrir (sans fermer les autres)
+  await openDeviceExpand(did, trElement);
+}
 
-  expandedDeviceId = did;
-  expandedDeviceData = null;
+async function openDeviceExpand(did, trElement) {
+  if (!trElement || expandedDeviceIds.has(did)) return;
+  expandedDeviceIds.add(did);
   trElement.classList.add('dev-expanded');
 
   // Insérer un panel de loading tout de suite
   var loadingTr = document.createElement('tr');
-  loadingTr.id = 'devExpandRow';
-  loadingTr.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-loading">Chargement des détails du device…</div></div></td>';
+  loadingTr.id = expandRowIdFor(did);
+  loadingTr.className = 'dev-expand-row';
+  loadingTr.setAttribute('data-expand-for', did);
+  loadingTr.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-loading">Chargement des détails…</div></div></td>';
   trElement.parentNode.insertBefore(loadingTr, trElement.nextSibling);
 
-  // Fetch
-  var fetchId = ++_currentFetchId;
+  updateBulkButtonsState();
+
+  // Fetch avec guard par device
+  var fetchId = (_fetchCounters[did] = (_fetchCounters[did] || 0) + 1);
   try {
     var data = await apiFetch('/admin/monitoring?device=' + encodeURIComponent(did) + '&period=30d');
-    if (fetchId !== _currentFetchId || expandedDeviceId !== did) return; // fetch obsolète
-    expandedDeviceData = data;
-    renderDevicePanel(did, data);
+    if (_fetchCounters[did] !== fetchId || !expandedDeviceIds.has(did)) return; // fetch obsolète
+    expandedDeviceDataMap[did] = data;
+    renderDevicePanelFor(did, data);
   } catch (e) {
-    if (fetchId !== _currentFetchId || expandedDeviceId !== did) return;
-    var row = document.getElementById('devExpandRow');
+    if (_fetchCounters[did] !== fetchId || !expandedDeviceIds.has(did)) return;
+    var row = document.getElementById(expandRowIdFor(did));
     if (row) row.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-error">Erreur de chargement : ' + escapeHtml(e.message || 'inconnue') + '</div></div></td>';
   }
 }
 
-function closeDeviceExpand() {
-  var existing = document.getElementById('devExpandRow');
-  if (existing) existing.remove();
-  document.querySelectorAll('#devicesBody tr.dev-expanded').forEach(function(tr) { tr.classList.remove('dev-expanded'); });
-  expandedDeviceId = null;
-  expandedDeviceData = null;
+function closeOneDeviceExpand(did) {
+  var row = document.getElementById(expandRowIdFor(did));
+  if (row) row.remove();
+  var tr = document.querySelector('#devicesBody tr.dev-row[data-device-id="' + cssEscape(did) + '"]');
+  if (tr) tr.classList.remove('dev-expanded');
+  expandedDeviceIds.delete(did);
+  delete expandedDeviceDataMap[did];
+  updateBulkButtonsState();
 }
 
-function insertExpandRow(trElement, cachedData) {
+function closeAllDeviceExpands() {
+  document.querySelectorAll('#devicesBody tr.dev-expand-row').forEach(function(tr) { tr.remove(); });
+  document.querySelectorAll('#devicesBody tr.dev-expanded').forEach(function(tr) { tr.classList.remove('dev-expanded'); });
+  expandedDeviceIds.clear();
+  expandedDeviceDataMap = {};
+  updateBulkButtonsState();
+}
+
+// Alias de rétrocompat (appelé par period change, app switch, Escape key)
+function closeDeviceExpand() { closeAllDeviceExpands(); }
+
+function insertExpandRow(trElement, did, cachedData) {
   // Utilisé lors de re-render pour réinsérer le panel d'un device qui reste visible
-  var existing = document.getElementById('devExpandRow');
+  var existing = document.getElementById(expandRowIdFor(did));
   if (existing) existing.remove();
   trElement.classList.add('dev-expanded');
   var tr = document.createElement('tr');
-  tr.id = 'devExpandRow';
+  tr.id = expandRowIdFor(did);
+  tr.className = 'dev-expand-row';
+  tr.setAttribute('data-expand-for', did);
   if (cachedData) {
-    tr.innerHTML = '<td colspan="4">' + buildDevicePanelHtml(expandedDeviceId, cachedData) + '</td>';
+    tr.innerHTML = '<td colspan="4">' + buildDevicePanelHtml(did, cachedData) + '</td>';
   } else {
     tr.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-loading">Chargement…</div></div></td>';
   }
   trElement.parentNode.insertBefore(tr, trElement.nextSibling);
 }
 
-function renderDevicePanel(did, data) {
-  var row = document.getElementById('devExpandRow');
+function renderDevicePanelFor(did, data) {
+  var row = document.getElementById(expandRowIdFor(did));
   if (!row) return;
   row.innerHTML = '<td colspan="4">' + buildDevicePanelHtml(did, data) + '</td>';
+}
+
+// Conserve l'ancien nom pour compat si appelé ailleurs
+function renderDevicePanel(did, data) { renderDevicePanelFor(did, data); }
+
+// === Bulk actions (Tout déplier / Tout replier) ===
+var _bulkInProgress = false;
+
+function updateBulkButtonsState() {
+  var expandBtn = document.getElementById('btnExpandAll');
+  var collapseBtn = document.getElementById('btnCollapseAll');
+  var status = document.getElementById('devBulkStatus');
+  if (!expandBtn || !collapseBtn) return;
+
+  var start = devicesPage * devicesPerPage;
+  var end = Math.min(start + devicesPerPage, filteredDevices.length);
+  var page = filteredDevices.slice(start, end);
+  var pageCount = page.length;
+  var expandedOnPage = page.filter(function(d) { return expandedDeviceIds.has(d.deviceId); }).length;
+
+  expandBtn.disabled = _bulkInProgress || pageCount === 0 || expandedOnPage === pageCount;
+  collapseBtn.disabled = _bulkInProgress || expandedDeviceIds.size === 0;
+
+  if (!_bulkInProgress && status && !status.classList.contains('loading')) {
+    if (expandedDeviceIds.size > 0) {
+      status.textContent = expandedDeviceIds.size + '/' + pageCount + ' dépliés';
+    } else {
+      status.textContent = '';
+    }
+  }
+}
+
+async function expandAllVisibleDevices() {
+  if (_bulkInProgress) return;
+  var start = devicesPage * devicesPerPage;
+  var end = Math.min(start + devicesPerPage, filteredDevices.length);
+  var page = filteredDevices.slice(start, end);
+  var toFetch = page.filter(function(d) { return d.deviceId && !expandedDeviceIds.has(d.deviceId); });
+  if (toFetch.length === 0) return;
+
+  _bulkInProgress = true;
+  updateBulkButtonsState();
+  var status = document.getElementById('devBulkStatus');
+  if (status) { status.classList.add('loading'); status.textContent = 'Chargement 0/' + toFetch.length + '…'; }
+
+  // Insérer les loading rows immédiatement
+  toFetch.forEach(function(d) {
+    var tr = document.querySelector('#devicesBody tr.dev-row[data-device-id="' + cssEscape(d.deviceId) + '"]');
+    if (!tr) return;
+    if (expandedDeviceIds.has(d.deviceId)) return;
+    expandedDeviceIds.add(d.deviceId);
+    tr.classList.add('dev-expanded');
+    var loadingTr = document.createElement('tr');
+    loadingTr.id = expandRowIdFor(d.deviceId);
+    loadingTr.className = 'dev-expand-row';
+    loadingTr.setAttribute('data-expand-for', d.deviceId);
+    loadingTr.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-loading">Chargement…</div></div></td>';
+    tr.parentNode.insertBefore(loadingTr, tr.nextSibling);
+  });
+
+  // Fetch par batches de 6 pour ne pas saturer la connexion mobile
+  var batchSize = 6;
+  var done = 0;
+  for (var i = 0; i < toFetch.length; i += batchSize) {
+    var batch = toFetch.slice(i, i + batchSize);
+    await Promise.all(batch.map(function(d) {
+      var did = d.deviceId;
+      var fetchId = (_fetchCounters[did] = (_fetchCounters[did] || 0) + 1);
+      return apiFetch('/admin/monitoring?device=' + encodeURIComponent(did) + '&period=30d')
+        .then(function(data) {
+          if (_fetchCounters[did] !== fetchId || !expandedDeviceIds.has(did)) return;
+          expandedDeviceDataMap[did] = data;
+          renderDevicePanelFor(did, data);
+        })
+        .catch(function(e) {
+          if (_fetchCounters[did] !== fetchId || !expandedDeviceIds.has(did)) return;
+          var row = document.getElementById(expandRowIdFor(did));
+          if (row) row.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-error">Erreur : ' + escapeHtml(e.message || 'échec') + '</div></div></td>';
+        })
+        .finally(function() {
+          done++;
+          if (status) status.textContent = 'Chargement ' + done + '/' + toFetch.length + '…';
+        });
+    }));
+  }
+
+  _bulkInProgress = false;
+  if (status) status.classList.remove('loading');
+  updateBulkButtonsState();
 }
 
 function aggregateDaily(daily, days) {
@@ -1269,6 +1407,17 @@ function renderDevices(list, resetPage) {
     var maxPage = Math.max(0, Math.ceil(filteredDevices.length / devicesPerPage) - 1);
     if (devicesPage > maxPage) devicesPage = maxPage;
   }
+  // Purger l'état expand pour les devices qui ne sont plus dans la liste filtrée
+  // (cas: search qui exclut un device ouvert, ou fetchAll qui retire un device)
+  if (expandedDeviceIds.size > 0) {
+    var idsInList = new Set(list.map(function(d) { return d.deviceId; }));
+    Array.from(expandedDeviceIds).forEach(function(did) {
+      if (!idsInList.has(did)) {
+        expandedDeviceIds.delete(did);
+        delete expandedDeviceDataMap[did];
+      }
+    });
+  }
   renderDevicesPage();
 }
 
@@ -1283,8 +1432,8 @@ document.getElementById('deviceSearch').addEventListener('input', function() {
 
 // Click sur ligne device → expand details (délégation sur tbody)
 document.getElementById('devicesBody').addEventListener('click', function(e) {
-  // Ignorer les clics sur le panel lui-même (copie device ID, etc.)
-  if (e.target.closest('#devExpandRow')) return;
+  // Ignorer les clics à l'intérieur d'un panel déjà ouvert (copie device ID, etc.)
+  if (e.target.closest('tr.dev-expand-row')) return;
   var tr = e.target.closest('tr.dev-row');
   if (!tr) return;
   var did = tr.getAttribute('data-device-id');
@@ -1292,9 +1441,9 @@ document.getElementById('devicesBody').addEventListener('click', function(e) {
   toggleDeviceExpand(did, tr);
 });
 
-// Échap = fermer le panel expand
+// Échap = fermer tous les panels expand
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape' && expandedDeviceId) closeDeviceExpand();
+  if (e.key === 'Escape' && expandedDeviceIds.size > 0) closeAllDeviceExpands();
 });
 
 // Period pills
