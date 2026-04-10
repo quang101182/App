@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PromoClip v0.6.6</title>
+<title>PromoClip v0.6.7</title>
 <style>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.6.6 — Functional App
+   PromoClip v0.6.7 — Functional App
    Dark mode, accent violet #7C3AED, mobile-first
    ═══════════════════════════════════════════════════════ */
 
@@ -1029,7 +1029,7 @@ body {
 
 <!-- ═══ Screen Navigator (desktop only) ═══ -->
 <div class="screen-nav" id="screenNav">
-  <h3 id="appVersionNav">PromoClip v0.6.6</h3>
+  <h3 id="appVersionNav">PromoClip v0.6.7</h3>
   <div class="screen-nav-item active" data-action="nav-screen" data-screen="home">1. Accueil</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="template">2. Template</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="media">3. Medias</div>
@@ -1064,7 +1064,7 @@ body {
       <div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</span>
-          <span class="badge badge-accent" id="appVersionBadge">v0.6.6</span>
+          <span class="badge badge-accent" id="appVersionBadge">v0.6.7</span>
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
       </div>
@@ -1712,7 +1712,7 @@ body {
 
     <div class="divider"></div>
     <div style="text-align:center; padding:16px 0 40px;">
-      <div style="font-size:11px; color:var(--text-muted);" id="appVersionFooter">PromoClip v0.6.6</div>
+      <div style="font-size:11px; color:var(--text-muted);" id="appVersionFooter">PromoClip v0.6.7</div>
       <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Build 2026-04-06</div>
     </div>
   </div>
@@ -1843,13 +1843,13 @@ body {
 
 <script>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.6.6 — Complete JS
+   PromoClip v0.6.7 — Complete JS
    ═══════════════════════════════════════════════════════ */
 
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.6.6';
+const APP_VERSION = '0.6.7';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -1935,6 +1935,7 @@ const defaultState = {
 let state = JSON.parse(JSON.stringify(defaultState));
 let _saveTimer = null;
 let _genCancelled = false;
+let _genAbortCtrl = null; // Aborted when user cancels generation
 let _modalResolve = null;
 let _lastVideoBlob = null; // Stores the generated video MP4 blob
 let _lastVideoBlobUrl = null;
@@ -2518,6 +2519,208 @@ function escapeASS(text) {
   // Strip chars that break ASS rendering (braces = override tags, backslash = escape prefix)
   // Commas are safe in Text field (last field in Dialogue line)
   return text.replace(/[\\{}]/g, '');
+}
+
+// ──────────────────────────────────────────────────
+// WHISPER TIMESTAMPS — real-time sync for subtitles
+// ──────────────────────────────────────────────────
+// Language label ("Francais") → ISO-639 code expected by Whisper
+const LANG_TO_ISO = {
+  'Francais': 'fr', 'French': 'fr',
+  'English': 'en',
+  'Espanol': 'es', 'Spanish': 'es',
+  'Deutsch': 'de', 'German': 'de',
+  'Italiano': 'it', 'Italian': 'it',
+  'Portugues': 'pt', 'Portuguese': 'pt'
+};
+
+// Convert base64 (no prefix) to Blob
+function base64ToBlob(b64, mime = 'application/octet-stream') {
+  const bin = atob(b64);
+  const len = bin.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+// Measure audio/video duration from a Blob via HTMLMediaElement (used as Whisper fallback)
+function measureMediaDuration(blob) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const el = blob.type.startsWith('video/') ? document.createElement('video') : document.createElement('audio');
+    el.preload = 'metadata';
+    el.muted = true;
+    el.src = url;
+    const done = (d) => { URL.revokeObjectURL(url); resolve(Number.isFinite(d) && d > 0 ? d : null); };
+    el.onloadedmetadata = () => done(el.duration);
+    el.onerror = () => done(null);
+    // Safety timeout
+    setTimeout(() => done(null), 5000);
+  });
+}
+
+// Compose an AbortSignal that fires on external abort OR timeout.
+// Avoids relying on AbortSignal.any (not universally supported on older WebViews).
+function composeAbortSignal(externalSignal, timeoutMs) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(new Error('Timeout ' + timeoutMs + 'ms')), timeoutMs);
+  if (externalSignal) {
+    if (externalSignal.aborted) { clearTimeout(t); ctrl.abort(externalSignal.reason); }
+    else externalSignal.addEventListener('abort', () => { clearTimeout(t); ctrl.abort(externalSignal.reason); }, { once: true });
+  }
+  return { signal: ctrl.signal, clear: () => clearTimeout(t) };
+}
+
+// Call Groq Whisper via api-gateway and return { words, segments, language, duration }
+// Reuses the exact same flow as SubWhisper (transcribeChunkGroq).
+async function whisperTimestamps(blob, languageLabel, filename, externalSignal) {
+  if (!state.settings.gatewayKey) throw new Error('Cle Gateway manquante');
+  const form = new FormData();
+  form.append('file', blob, filename || 'audio.mp3');
+  form.append('model', 'whisper-large-v3-turbo');
+  form.append('response_format', 'verbose_json');
+  form.append('timestamp_granularities[]', 'word');
+  form.append('timestamp_granularities[]', 'segment');
+  const iso = LANG_TO_ISO[languageLabel];
+  if (iso) form.append('language', iso);
+
+  log('Whisper: sync sous-titres (' + (iso || 'auto') + ', ' + (blob.size / 1024).toFixed(0) + ' KB)...');
+  const composed = composeAbortSignal(externalSignal, 60000);
+  let r;
+  try {
+    r = await fetch(GATEWAY_URL + '/api/groq', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + state.settings.gatewayKey,
+        'X-Api-Path': '/openai/v1/audio/transcriptions'
+      },
+      body: form,
+      signal: composed.signal
+    });
+  } finally {
+    composed.clear();
+  }
+  if (!r.ok) {
+    const errText = await r.text().catch(() => '');
+    throw new Error('Whisper HTTP ' + r.status + ': ' + errText.slice(0, 200));
+  }
+  const data = await r.json();
+  const words = Array.isArray(data.words) ? data.words : [];
+  const segments = Array.isArray(data.segments) ? data.segments : [];
+  log('Whisper OK: ' + words.length + ' mots, ' + segments.length + ' segments, lang=' + (data.language || '?'));
+  return { words, segments, language: data.language, duration: data.duration };
+}
+
+// Generate ASS subtitle string from word-level Whisper timestamps
+// Same visual style as generateSubtitleASS (3-4 words per chunk, 72pt) but timings are REAL.
+function generateSubtitleASSFromWords(words) {
+  if (!words || words.length === 0) return null;
+
+  // Normalize: clean each word, keep only those with valid times
+  const normalized = words
+    .filter(w => w && typeof w.start === 'number' && typeof w.end === 'number' && w.word)
+    .map(w => ({ word: cleanSubtitleText(w.word).trim(), start: w.start, end: w.end }))
+    .filter(w => w.word.length > 0);
+  if (normalized.length === 0) return null;
+
+  // Smart chunking — same rules as generateSubtitleASS (3-4 words, break on sentence punctuation)
+  const chunks = [];
+  let current = [];
+  for (let i = 0; i < normalized.length; i++) {
+    current.push(normalized[i]);
+    const w = normalized[i].word;
+    const endsPhrase = /[.!?:;]$/.test(w);
+    const atLimit = current.length >= 3;
+    const isLast = i === normalized.length - 1;
+    if ((atLimit && endsPhrase) || current.length >= 4 || isLast) {
+      chunks.push(current);
+      current = [];
+    }
+  }
+  // Merge orphan trailing 1-word chunk
+  if (chunks.length > 1 && chunks[chunks.length - 1].length === 1) {
+    const last = chunks.pop();
+    chunks[chunks.length - 1].push(...last);
+  }
+
+  function fmtTime(sec) {
+    const totalCs = Math.round(Math.max(0, sec) * 100);
+    const h = Math.floor(totalCs / 360000);
+    const m = Math.floor((totalCs % 360000) / 6000);
+    const s = Math.floor((totalCs % 6000) / 100);
+    const cs = totalCs % 100;
+    return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') + '.' + String(cs).padStart(2, '0');
+  }
+
+  let ass = '[Script Info]\nScriptType: v4.00+\nWrapStyle: 0\nPlayResX: 1080\nPlayResY: 1920\n\n';
+  ass += '[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n';
+  ass += 'Style: Default,Arial,72,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,1,2,40,40,120,0\n\n';
+  ass += '[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n';
+
+  chunks.forEach(chunk => {
+    const start = chunk[0].start;
+    const end = chunk[chunk.length - 1].end;
+    const text = chunk.map(c => c.word).join(' ');
+    ass += 'Dialogue: 0,' + fmtTime(start) + ',' + fmtTime(end) + ',Default,,0,0,0,,' + escapeASS(text) + '\n';
+  });
+
+  return ass;
+}
+
+// Cascade: try Whisper (perfect sync) → fallback to heuristic with real measured duration
+// Returns { ass, method } or { ass: null, method: 'none' }
+async function buildSyncedSubtitles(audioBlob, voiceoverText, languageLabel, fallbackDuration, externalSignal) {
+  if (!audioBlob || !voiceoverText) {
+    return { ass: null, method: 'none' };
+  }
+  // Step 1 — try Whisper word-level timestamps
+  try {
+    const result = await whisperTimestamps(audioBlob, languageLabel, 'voice.mp3', externalSignal);
+    if (result.words && result.words.length > 0) {
+      const ass = generateSubtitleASSFromWords(result.words);
+      if (ass) return { ass, method: 'whisper-word' };
+    }
+    // No word-level (very rare) — try segments as a second-best
+    if (result.segments && result.segments.length > 0) {
+      // Flatten segments as one "word" per segment for the heuristic chunker
+      const pseudoWords = [];
+      result.segments.forEach(seg => {
+        const text = (seg.text || '').trim();
+        if (!text) return;
+        const tokens = text.split(/\s+/);
+        const dur = Math.max(0.1, (seg.end || 0) - (seg.start || 0));
+        const per = dur / tokens.length;
+        tokens.forEach((tok, i) => {
+          pseudoWords.push({ word: tok, start: seg.start + i * per, end: seg.start + (i + 1) * per });
+        });
+      });
+      const ass = generateSubtitleASSFromWords(pseudoWords);
+      if (ass) return { ass, method: 'whisper-segment' };
+    }
+    throw new Error('Whisper: pas de timestamps exploitables');
+  } catch(e) {
+    // Bail out fast if user cancelled — don't run heuristic fallback in vain
+    if (externalSignal && externalSignal.aborted) throw e;
+    log('Whisper fallback: ' + e.message, 'warn');
+  }
+  // Step 2 — heuristic with REAL audio duration (better than cfg.duration)
+  try {
+    const realDuration = await measureMediaDuration(audioBlob);
+    if (realDuration) {
+      const ass = generateSubtitleASS(voiceoverText, realDuration);
+      if (ass) {
+        log('Sous-titres: heuristique avec duree reelle ' + realDuration.toFixed(2) + 's');
+        return { ass, method: 'heuristic-real' };
+      }
+    }
+  } catch(e) { log('Heuristic real-duration echec: ' + e.message, 'warn'); }
+  // Step 3 — final fallback with estimated duration
+  const ass = generateSubtitleASS(voiceoverText, fallbackDuration);
+  if (ass) {
+    log('Sous-titres: heuristique avec duree estimee ' + fallbackDuration + 's', 'warn');
+    return { ass, method: 'heuristic-estimated' };
+  }
+  return { ass: null, method: 'none' };
 }
 
 // Generate subtitle file in ASS format from voiceover text
@@ -3393,13 +3596,36 @@ async function startGenerationPro(product, selectedMedia) {
 
     if (_genCancelled) throw new Error('Annule');
 
+    // ── STEP 3b: Whisper — sync sous-titres (real timings) ──
+    const videoDuration = moments.length > 0 ? moments[moments.length - 1].end_time : 30;
+    let subtitleData = null;
+    if (cfg.subtitles && script.voiceover) {
+      updateStep(stepIdx('sync'), 'active');
+      if (avatarBase64) {
+        try {
+          const syncBlob = base64ToBlob(avatarBase64, 'video/mp4');
+          const r = await buildSyncedSubtitles(syncBlob, script.voiceover, cfg.language, videoDuration, _genAbortCtrl && _genAbortCtrl.signal);
+          if (_genCancelled) throw new Error('Annule');
+          subtitleData = r.ass;
+          log('Sous-titres Pro: methode=' + r.method);
+        } catch(e) {
+          if (_genCancelled) throw new Error('Annule');
+          log('Sync sous-titres Pro echec: ' + e.message, 'error');
+          subtitleData = generateSubtitleASS(script.voiceover, videoDuration);
+        }
+      } else {
+        log('Sous-titres Pro: pas d\'avatar — fallback heuristique', 'warn');
+        subtitleData = generateSubtitleASS(script.voiceover, videoDuration);
+      }
+      updateStep(stepIdx('sync'), 'done');
+      updateProgress(75);
+    }
+
+    if (_genCancelled) throw new Error('Annule');
+
     // ── STEP 4: FFmpeg Assembly — Split-screen video + avatar ──
     updateStep(stepIdx('assembly'), 'active');
     log('Envoi a fly-ffmpeg pour assemblage Pro...');
-
-    // Build subtitle data from script
-    const videoDuration = moments.length > 0 ? moments[moments.length - 1].end_time : 30;
-    const subtitleData = cfg.subtitles ? generateSubtitleASS(script.voiceover, videoDuration) : null;
 
     // Convert intro/outro images if present
     // Convert outro image if present
@@ -3495,6 +3721,7 @@ async function startGeneration() {
   if (selectedMedia.length === 0) { showToast('Ajoute des medias !', true); goScreen('media'); return; }
 
   _genCancelled = false;
+  _genAbortCtrl = new AbortController();
   goScreen('generate');
 
   // Save hook from input (for both Quick and Pro)
@@ -3641,12 +3868,44 @@ async function startGeneration() {
 
     if (_genCancelled) throw new Error('Annule');
 
+    // ── STEP 3b: Whisper — sync sous-titres (real timings) ──
+    let subtitleData = null;
+    if (cfg.subtitles && script.voiceover) {
+      updateStep(stepIdx('sync'), 'active');
+      // Prefer HeyGen avatar video (real avatar voice) else TTS audio
+      let syncBlob = null;
+      let syncFilename = 'voice.mp3';
+      if (avatarBase64) {
+        syncBlob = base64ToBlob(avatarBase64, 'video/mp4');
+        syncFilename = 'avatar.mp4';
+      } else if (audioBase64) {
+        syncBlob = base64ToBlob(audioBase64, 'audio/mp3');
+        syncFilename = 'voice.mp3';
+      }
+      if (syncBlob) {
+        try {
+          const r = await buildSyncedSubtitles(syncBlob, script.voiceover, cfg.language, cfg.duration, _genAbortCtrl && _genAbortCtrl.signal);
+          if (_genCancelled) throw new Error('Annule');
+          subtitleData = r.ass;
+          log('Sous-titres: methode=' + r.method);
+        } catch(e) {
+          if (_genCancelled) throw new Error('Annule');
+          log('Sync sous-titres echec total: ' + e.message, 'error');
+          subtitleData = generateSubtitleASS(script.voiceover, cfg.duration);
+        }
+      } else {
+        log('Sous-titres: aucun audio disponible — fallback heuristique', 'warn');
+        subtitleData = generateSubtitleASS(script.voiceover, cfg.duration);
+      }
+      updateStep(stepIdx('sync'), 'done');
+      updateProgress(60);
+    }
+
+    if (_genCancelled) throw new Error('Annule');
+
     // ── STEP 4: FFmpeg Assembly — Server-side video generation ──
     updateStep(stepIdx('assembly'), 'active');
     log('Envoi a fly-ffmpeg pour assemblage...');
-
-    // Build subtitle data if enabled
-    const subtitleData = (cfg.subtitles && script.voiceover) ? generateSubtitleASS(script.voiceover, cfg.duration) : null;
 
     const videoBlob = await ffmpegAssembly(clipData, audioBase64, null, subtitleData, avatarBase64);
     log('Video recue: ' + (videoBlob.size / 1048576).toFixed(1) + ' MB');
@@ -3694,13 +3953,19 @@ async function startGeneration() {
 
 function getGenSteps() {
   if (isProMode()) {
-    return [
+    const proSteps = [
       { id: 'analyze', label: 'Analyse video (Gemini Vision)' },
       { id: 'script', label: 'Script avatar synchronise (Gemini)' },
-      { id: 'avatar', label: 'Generation avatar HeyGen (~3 min)' },
+      { id: 'avatar', label: 'Generation avatar HeyGen (~3 min)' }
+    ];
+    if (state.wizard.config.subtitles) {
+      proSteps.push({ id: 'sync', label: 'Synchronisation sous-titres (Whisper)' });
+    }
+    proSteps.push(
       { id: 'assembly', label: 'Montage split-screen (fly-ffmpeg)' },
       { id: 'download', label: 'Telechargement video' }
-    ];
+    );
+    return proSteps;
   }
   const steps = [
     { id: 'analyze', label: 'Analyse des captures (Gemini Vision)' },
@@ -3709,8 +3974,11 @@ function getGenSteps() {
   if (state.wizard.config.avatar && state.settings.heygenKey) {
     steps.push({ id: 'avatar', label: 'Generation avatar HeyGen (~3 min)' });
   }
+  steps.push({ id: 'tts', label: 'Synthese vocale (TTS)' });
+  if (state.wizard.config.subtitles) {
+    steps.push({ id: 'sync', label: 'Synchronisation sous-titres (Whisper)' });
+  }
   steps.push(
-    { id: 'tts', label: 'Synthese vocale (TTS)' },
     { id: 'assembly', label: 'Montage video (fly-ffmpeg)' },
     { id: 'download', label: 'Telechargement video' }
   );
@@ -3757,7 +4025,11 @@ function updateStep(idx, stepState) {
   }
 }
 
-function cancelGeneration() { _genCancelled = true; stopGenTimer(); }
+function cancelGeneration() {
+  _genCancelled = true;
+  if (_genAbortCtrl) { try { _genAbortCtrl.abort(); } catch(e) {} }
+  stopGenTimer();
+}
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 let _genTimerInterval = null;
