@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.4.6 -->
+<!-- Monitoring Dashboard v1.4.7 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.4.6</title>
+<title>Monitoring v1.4.7</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -331,7 +331,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring v1.4.6</h1>
+    <h1>Monitoring v1.4.7</h1>
     <div class="header-controls">
       <div class="pill-group">
         <button class="pill active" data-period="7d">7j</button>
@@ -501,7 +501,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div><!-- /sI -->
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.4.6</div>
+  <div class="footer" id="footer">Monitoring v1.4.7</div>
 </div>
 
 <script>
@@ -858,7 +858,7 @@ function render(mon, stats, dev) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.4.6 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.4.7 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
@@ -1090,7 +1090,7 @@ function renderDevicesPage() {
 }
 
 // === Device expand details (clic ligne → panel avec stats today/7j/30j) ===
-// Support multi-panels ouverts simultanément (v1.4.6)
+// Support multi-panels ouverts simultanément (v1.4.7)
 var expandedDeviceIds = new Set();
 var expandedDeviceDataMap = {}; // { deviceId: data }
 var _fetchCounters = {}; // { deviceId: N } — guard contre race conditions par device
@@ -1105,9 +1105,11 @@ function cssEscape(s) {
   return String(s || '').replace(/"/g, '\\"');
 }
 
-function expandRowIdFor(did) {
-  // ID DOM sûr (deviceId peut contenir des caractères spéciaux théoriques)
-  return 'devExpandRow-' + did.replace(/[^a-zA-Z0-9_-]/g, '_');
+// v1.4.7: plus d'id DOM généré depuis deviceId (risque de collision après normalisation).
+// On utilise partout un selector sur l'attribut data-expand-for qui contient le deviceId brut,
+// ce qui garantit l'unicité. findExpandRow(did) est la seule API pour récupérer la ligne expand.
+function findExpandRow(did) {
+  return document.querySelector('#devicesBody tr.dev-expand-row[data-expand-for="' + cssEscape(did) + '"]');
 }
 
 async function toggleDeviceExpand(did, trElement) {
@@ -1126,8 +1128,9 @@ async function openDeviceExpand(did, trElement) {
   trElement.classList.add('dev-expanded');
 
   // Insérer un panel de loading tout de suite
+  var existingLoading = findExpandRow(did);
+  if (existingLoading) existingLoading.remove();
   var loadingTr = document.createElement('tr');
-  loadingTr.id = expandRowIdFor(did);
   loadingTr.className = 'dev-expand-row';
   loadingTr.setAttribute('data-expand-for', did);
   loadingTr.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-loading">Chargement des détails…</div></div></td>';
@@ -1144,26 +1147,35 @@ async function openDeviceExpand(did, trElement) {
     renderDevicePanelFor(did, data);
   } catch (e) {
     if (_fetchCounters[did] !== fetchId || !expandedDeviceIds.has(did)) return;
-    var row = document.getElementById(expandRowIdFor(did));
+    var row = findExpandRow(did);
     if (row) row.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-error">Erreur de chargement : ' + escapeHtml(e.message || 'inconnue') + '</div></div></td>';
   }
 }
 
 function closeOneDeviceExpand(did) {
-  var row = document.getElementById(expandRowIdFor(did));
+  var row = findExpandRow(did);
   if (row) row.remove();
   var tr = document.querySelector('#devicesBody tr.dev-row[data-device-id="' + cssEscape(did) + '"]');
   if (tr) tr.classList.remove('dev-expanded');
   expandedDeviceIds.delete(did);
   delete expandedDeviceDataMap[did];
+  delete _fetchCounters[did]; // v1.4.7: cleanup memory
   updateBulkButtonsState();
 }
 
 function closeAllDeviceExpands() {
+  // v1.4.7: annule un bulk en cours (period change, app switch, Escape pendant "Tout déplier")
+  if (_bulkInProgress) {
+    _bulkCancelled = true;
+    _bulkInProgress = false;
+  }
   document.querySelectorAll('#devicesBody tr.dev-expand-row').forEach(function(tr) { tr.remove(); });
   document.querySelectorAll('#devicesBody tr.dev-expanded').forEach(function(tr) { tr.classList.remove('dev-expanded'); });
   expandedDeviceIds.clear();
   expandedDeviceDataMap = {};
+  _fetchCounters = {}; // v1.4.7: cleanup memory
+  var status = document.getElementById('devBulkStatus');
+  if (status) { status.classList.remove('loading'); status.textContent = ''; }
   updateBulkButtonsState();
 }
 
@@ -1172,11 +1184,10 @@ function closeDeviceExpand() { closeAllDeviceExpands(); }
 
 function insertExpandRow(trElement, did, cachedData) {
   // Utilisé lors de re-render pour réinsérer le panel d'un device qui reste visible
-  var existing = document.getElementById(expandRowIdFor(did));
+  var existing = findExpandRow(did);
   if (existing) existing.remove();
   trElement.classList.add('dev-expanded');
   var tr = document.createElement('tr');
-  tr.id = expandRowIdFor(did);
   tr.className = 'dev-expand-row';
   tr.setAttribute('data-expand-for', did);
   if (cachedData) {
@@ -1188,7 +1199,7 @@ function insertExpandRow(trElement, did, cachedData) {
 }
 
 function renderDevicePanelFor(did, data) {
-  var row = document.getElementById(expandRowIdFor(did));
+  var row = findExpandRow(did);
   if (!row) return;
   row.innerHTML = '<td colspan="4">' + buildDevicePanelHtml(did, data) + '</td>';
 }
@@ -1198,6 +1209,7 @@ function renderDevicePanel(did, data) { renderDevicePanelFor(did, data); }
 
 // === Bulk actions (Tout déplier / Tout replier) ===
 var _bulkInProgress = false;
+var _bulkCancelled = false; // v1.4.7: flag d'annulation si closeAll pendant un bulk
 
 function updateBulkButtonsState() {
   var expandBtn = document.getElementById('btnExpandAll');
@@ -1232,6 +1244,7 @@ async function expandAllVisibleDevices() {
   if (toFetch.length === 0) return;
 
   _bulkInProgress = true;
+  _bulkCancelled = false;
   updateBulkButtonsState();
   var status = document.getElementById('devBulkStatus');
   if (status) { status.classList.add('loading'); status.textContent = 'Chargement 0/' + toFetch.length + '…'; }
@@ -1244,7 +1257,6 @@ async function expandAllVisibleDevices() {
     expandedDeviceIds.add(d.deviceId);
     tr.classList.add('dev-expanded');
     var loadingTr = document.createElement('tr');
-    loadingTr.id = expandRowIdFor(d.deviceId);
     loadingTr.className = 'dev-expand-row';
     loadingTr.setAttribute('data-expand-for', d.deviceId);
     loadingTr.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-loading">Chargement…</div></div></td>';
@@ -1254,32 +1266,37 @@ async function expandAllVisibleDevices() {
   // Fetch par batches de 6 pour ne pas saturer la connexion mobile
   var batchSize = 6;
   var done = 0;
-  for (var i = 0; i < toFetch.length; i += batchSize) {
-    var batch = toFetch.slice(i, i + batchSize);
-    await Promise.all(batch.map(function(d) {
-      var did = d.deviceId;
-      var fetchId = (_fetchCounters[did] = (_fetchCounters[did] || 0) + 1);
-      return apiFetch('/admin/monitoring?device=' + encodeURIComponent(did) + '&period=30d')
-        .then(function(data) {
-          if (_fetchCounters[did] !== fetchId || !expandedDeviceIds.has(did)) return;
-          expandedDeviceDataMap[did] = data;
-          renderDevicePanelFor(did, data);
-        })
-        .catch(function(e) {
-          if (_fetchCounters[did] !== fetchId || !expandedDeviceIds.has(did)) return;
-          var row = document.getElementById(expandRowIdFor(did));
-          if (row) row.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-error">Erreur : ' + escapeHtml(e.message || 'échec') + '</div></div></td>';
-        })
-        .finally(function() {
-          done++;
-          if (status) status.textContent = 'Chargement ' + done + '/' + toFetch.length + '…';
-        });
-    }));
+  try {
+    for (var i = 0; i < toFetch.length; i += batchSize) {
+      if (_bulkCancelled) break; // v1.4.7: annulation (closeAllDeviceExpands appelé pendant le bulk)
+      var batch = toFetch.slice(i, i + batchSize);
+      await Promise.all(batch.map(function(d) {
+        var did = d.deviceId;
+        var fetchId = (_fetchCounters[did] = (_fetchCounters[did] || 0) + 1);
+        return apiFetch('/admin/monitoring?device=' + encodeURIComponent(did) + '&period=30d')
+          .then(function(data) {
+            if (_bulkCancelled || _fetchCounters[did] !== fetchId || !expandedDeviceIds.has(did)) return;
+            expandedDeviceDataMap[did] = data;
+            renderDevicePanelFor(did, data);
+          })
+          .catch(function(e) {
+            if (_bulkCancelled || _fetchCounters[did] !== fetchId || !expandedDeviceIds.has(did)) return;
+            var row = findExpandRow(did);
+            if (row) row.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-error">Erreur : ' + escapeHtml(e.message || 'échec') + '</div></div></td>';
+          })
+          .finally(function() {
+            done++;
+            if (status && !_bulkCancelled) status.textContent = 'Chargement ' + done + '/' + toFetch.length + '…';
+          });
+      }));
+    }
+  } finally {
+    // v1.4.7: cleanup systématique même si annulé/erreur (try/finally pour garantir reset UI)
+    _bulkInProgress = false;
+    _bulkCancelled = false;
+    if (status) { status.classList.remove('loading'); }
+    updateBulkButtonsState();
   }
-
-  _bulkInProgress = false;
-  if (status) status.classList.remove('loading');
-  updateBulkButtonsState();
 }
 
 function aggregateDaily(daily, days) {
