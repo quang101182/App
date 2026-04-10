@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.4.4 -->
+<!-- Monitoring Dashboard v1.4.5 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.4.4</title>
+<title>Monitoring v1.4.5</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -25,8 +25,11 @@
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-page); color: var(--text); min-height: 100vh; }
 a { color: var(--accent2); }
 
+/* Sticky wrapper (contient header + tabs + nav + alertes) */
+.sticky-top { position: sticky; top: 0; z-index: 100; background: var(--bg-page); }
+
 /* Header */
-.header { position: sticky; top: 0; z-index: 100; background: var(--bg-card); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.header { background: var(--bg-card); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
 .header h1 { font-size: 1.2rem; color: var(--accent2); white-space: nowrap; }
 .header-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .pill-group { display: flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
@@ -129,20 +132,28 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 @media (max-width: 768px) {
   .kpi-grid { grid-template-columns: 1fr; }
   .donuts-grid { grid-template-columns: 1fr; }
-  .header { padding: 10px 16px; }
+  .header { padding: 8px 12px; gap: 6px; }
+  .header h1 { font-size: 1rem; }
+  .header-controls { gap: 6px; }
+  .pill { padding: 5px 12px; font-size: .8rem; }
+  .toggle-refresh { font-size: .78rem; }
+  .btn-logout { padding: 5px 10px; font-size: .78rem; }
   .main { padding: 14px; }
   .trend-bar { flex-direction: column; }
-  .app-tabs { padding: 8px 16px; }
+  .app-tabs { padding: 6px 12px; }
+  .app-tab { padding: 6px 14px; font-size: .8rem; }
 }
 @media (max-width: 480px) {
   body { font-size: 14px; }
-  .header h1 { font-size: 1rem; }
+  .header h1 { font-size: .95rem; }
   .kpi-card .kpi-value { font-size: 1.5rem; }
   .chart-wrap { height: 220px; }
   .main { padding: 10px; gap: 14px; }
   .gauge-card .gauge-value{font-size:1.5rem}
   #sD table { font-size: .78rem; }
   #sD table th, #sD table td { padding: 6px 4px; }
+  .pill { padding: 4px 10px; font-size: .75rem; }
+  .app-tab { padding: 5px 10px; font-size: .75rem; }
 }
 
 /* === Devices table — 2-line cells === */
@@ -150,6 +161,39 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 .time-sub { font-size: .72rem; color: var(--text2); opacity: .7; margin-top: 2px; line-height: 1.2; }
 .id-sub { font-size: .72rem; color: var(--text2); opacity: .8; margin-top: 2px; line-height: 1.2; white-space: nowrap; }
 .id-sub img { vertical-align: middle; margin-left: 0 !important; margin-right: 2px; }
+
+/* === Devices expand panel (clic sur ligne pour détails) === */
+#devicesBody tr { cursor: pointer; transition: background .15s; }
+#devicesBody tr:hover:not(#devExpandRow) { background: rgba(109, 40, 217, .08); }
+#devicesBody tr.dev-expanded { background: rgba(109, 40, 217, .18); }
+#devicesBody tr#devExpandRow { cursor: default; background: rgba(10, 10, 25, .5); }
+#devicesBody tr#devExpandRow:hover { background: rgba(10, 10, 25, .5); }
+#devicesBody tr#devExpandRow > td { padding: 0 !important; border-bottom: 2px solid rgba(109, 40, 217, .4); }
+.dev-panel { padding: 14px; background: var(--bg-secondary); }
+.dev-panel-loading, .dev-panel-error { text-align: center; padding: 24px; color: var(--text2); font-size: .85rem; }
+.dev-panel-error { color: var(--error); }
+.dev-panel-loading::before { content: ''; display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin-right: 8px; vertical-align: middle; }
+.dev-panel-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.dev-col { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.dev-col-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent2); margin-bottom: 8px; font-weight: 800; display: flex; align-items: center; justify-content: space-between; }
+.dev-col-total { color: var(--text); font-weight: 700; text-transform: none; letter-spacing: 0; font-size: .8rem; }
+.dev-metric { display: flex; justify-content: space-between; align-items: center; font-size: .82rem; padding: 4px 0; border-bottom: 1px dashed rgba(156,163,175,.1); }
+.dev-metric:last-child { border-bottom: none; }
+.dev-metric-label { color: var(--text2); display: flex; align-items: center; gap: 6px; }
+.dev-metric-icon { font-size: .85rem; }
+.dev-metric-val { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.dev-metric-zero .dev-metric-val { color: var(--text2); opacity: .5; }
+.dev-meta { margin-top: 12px; padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; font-size: .78rem; color: var(--text2); display: flex; flex-direction: column; gap: 6px; }
+.dev-meta-row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.dev-meta-label { color: var(--text2); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+.dev-meta-val { color: var(--text); font-weight: 600; }
+.dev-chip { display: inline-block; padding: 2px 8px; background: rgba(109,40,217,.15); color: var(--accent2); border-radius: 10px; font-size: .72rem; font-weight: 600; margin: 0 2px; }
+.dev-copy-id { font-family: 'Courier New', monospace; font-size: .72rem; color: var(--text2); background: var(--bg-page); padding: 4px 8px; border-radius: 6px; user-select: all; word-break: break-all; }
+@media (min-width: 720px) {
+  .dev-panel-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .dev-panel { padding: 16px; }
+  .dev-meta-row { gap: 6px 14px; }
+}
 
 /* === Advanced metrics === */
 .adv-section { margin-top: 0; }
@@ -205,15 +249,24 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   .alert-banner{padding:8px 12px}
   .alert-msgs{font-size:.8rem}
 }
+/* Nav 2 lignes mobile : DOIT rester après @media 768px pour que la cascade fonctionne */
+@media (max-width: 600px) {
+  .section-nav { flex-wrap: wrap; justify-content: center; gap: 2px; padding: 4px 8px; overflow-x: visible; }
+  .nav-link { padding: 6px 10px; font-size: .72rem; flex: 1 1 auto; text-align: center; min-width: 0; }
+}
+@media (max-width: 480px) {
+  .section-nav { padding: 4px 4px; gap: 2px; }
+  .nav-link { padding: 5px 6px; font-size: .7rem; }
+}
 
     /* ── Section nav ── */
-    .section-nav{position:sticky;top:49px;z-index:90;background:var(--bg-page);border-bottom:1px solid var(--border);display:flex;gap:0;padding:0 24px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+    .section-nav{background:var(--bg-page);border-bottom:1px solid var(--border);display:flex;gap:0;padding:0 24px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
     .section-nav::-webkit-scrollbar{display:none}
     .nav-link{padding:10px 18px;color:var(--text2);text-decoration:none;font-size:.85rem;white-space:nowrap;border-bottom:2px solid transparent;transition:all .2s}
     .nav-link:hover{color:var(--text)}
     .nav-link.active{color:var(--accent2);border-bottom-color:var(--accent)}
     /* ── Alert banner ── */
-    .alert-banner{position:sticky;top:89px;z-index:85;background:rgba(239,68,68,.12);border-bottom:1px solid var(--error);padding:8px 24px;display:none}
+    .alert-banner{background:rgba(239,68,68,.12);border-bottom:1px solid var(--error);padding:8px 24px;display:none}
     .alert-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;gap:12px}
     .alert-badge{background:var(--error);color:#fff;font-size:.75rem;font-weight:700;min-width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
     .alert-msgs{flex:1;display:flex;gap:16px;flex-wrap:wrap;font-size:.85rem;color:var(--error)}
@@ -261,40 +314,44 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <!-- Loading -->
 <div id="loadingOverlay" class="loading-overlay" style="display:none"><div class="spinner"></div></div>
 
-<!-- Header -->
-<header class="header">
-  <h1>Monitoring v1.4.4</h1>
-  <div class="header-controls">
-    <div class="pill-group">
-      <button class="pill active" data-period="7d">7j</button>
-      <button class="pill" data-period="30d">30j</button>
-      <button class="pill" data-period="90d">90j</button>
-    </div>
-    <label class="toggle-refresh"><input type="checkbox" id="autoRefresh" checked> Auto 60s</label>
-    <button class="btn-logout" onclick="logout()">Déconnexion</button>
-  </div>
-</header>
-
-<!-- App tabs -->
-<div class="app-tabs" id="appTabs"></div>
-
-    <!-- Section nav -->
-    <nav class="section-nav" id="sectionNav">
-      <a href="#sO" class="nav-link active">Overview</a>
-      <a href="#sP" class="nav-link">Perf</a>
-      <a href="#sA" class="nav-link">Activit&#233;</a>
-      <a href="#sRet" class="nav-link">R&#233;tention</a>
-      <a href="#sD" class="nav-link">Devices</a>
-      <a href="#sI" class="nav-link">Infra</a>
-    </nav>
-    <!-- Alert banner -->
-    <div class="alert-banner" id="alertBanner">
-      <div class="alert-inner">
-        <span class="alert-badge" id="alertCount">0</span>
-        <div class="alert-msgs" id="alertMsgs"></div>
-        <button class="alert-dismiss" onclick="dismissAlerts()">&times;</button>
+<!-- Sticky wrapper: header + tabs + nav + alerts restent toujours visibles au scroll -->
+<div class="sticky-top" id="stickyTop">
+  <!-- Header -->
+  <header class="header">
+    <h1>Monitoring v1.4.5</h1>
+    <div class="header-controls">
+      <div class="pill-group">
+        <button class="pill active" data-period="7d">7j</button>
+        <button class="pill" data-period="30d">30j</button>
+        <button class="pill" data-period="90d">90j</button>
       </div>
+      <label class="toggle-refresh"><input type="checkbox" id="autoRefresh" checked> Auto 60s</label>
+      <button class="btn-logout" onclick="logout()">Déconnexion</button>
     </div>
+  </header>
+
+  <!-- App tabs -->
+  <div class="app-tabs" id="appTabs"></div>
+
+  <!-- Section nav -->
+  <nav class="section-nav" id="sectionNav">
+    <a href="#sO" class="nav-link active">Overview</a>
+    <a href="#sP" class="nav-link">Perf</a>
+    <a href="#sA" class="nav-link">Activit&#233;</a>
+    <a href="#sRet" class="nav-link">R&#233;tention</a>
+    <a href="#sD" class="nav-link">Devices</a>
+    <a href="#sI" class="nav-link">Infra</a>
+  </nav>
+
+  <!-- Alert banner -->
+  <div class="alert-banner" id="alertBanner">
+    <div class="alert-inner">
+      <span class="alert-badge" id="alertCount">0</span>
+      <div class="alert-msgs" id="alertMsgs"></div>
+      <button class="alert-dismiss" onclick="dismissAlerts()">&times;</button>
+    </div>
+  </div>
+</div><!-- /sticky-top -->
 
 <div class="main">
   <div id="sO">
@@ -422,7 +479,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div><!-- /sI -->
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.4.4</div>
+  <div class="footer" id="footer">Monitoring v1.4.5</div>
 </div>
 
 <script>
@@ -462,6 +519,7 @@ function renderAppTabs() {
   container.querySelectorAll('.app-tab').forEach(function(btn) {
     btn.addEventListener('click', function() {
       currentApp = this.dataset.app;
+      if (typeof closeDeviceExpand === 'function') closeDeviceExpand();
       renderAppTabs();
       fetchAll().catch(handleAuthError);
     });
@@ -778,7 +836,7 @@ function render(mon, stats, dev) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.4.4 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.4.5 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
@@ -983,8 +1041,22 @@ function renderDevicesPage() {
     var idSubContent = (d.country && d.country !== '—') ? (flag + d.country) : '';
     var idCell = '<div>' + id + phantomTag + '</div>' + (idSubContent ? '<div class="id-sub">' + idSubContent + '</div>' : '');
     var seenCell = relativeTime(d.lastSeen) + '<div class="time-sub">' + fmtTimeOnly(d.lastSeen) + '</div>';
-    return '<tr' + rowStyle + '><td title="' + did + '">' + idCell + '</td><td><span class="badge ' + tierCls + '">' + (d.tier || 'free') + '</span></td><td>' + fmtDateStack(d.createdAt) + '</td><td>' + seenCell + '</td></tr>';
+    var expandedCls = (expandedDeviceId === did) ? ' dev-expanded' : '';
+    return '<tr class="dev-row' + expandedCls + '" data-device-id="' + escapeHtml(did) + '"' + rowStyle + '><td title="' + escapeHtml(did) + '">' + idCell + '</td><td><span class="badge ' + tierCls + '">' + (d.tier || 'free') + '</span></td><td>' + fmtDateStack(d.createdAt) + '</td><td>' + seenCell + '</td></tr>';
   }).join('');
+
+  // Si un device était déplié et est toujours visible sur cette page, réinsérer son panel
+  if (expandedDeviceId) {
+    var stillVisible = page.some(function(d) { return d.deviceId === expandedDeviceId; });
+    if (stillVisible) {
+      var tr = document.querySelector('#devicesBody tr.dev-row[data-device-id="' + cssEscape(expandedDeviceId) + '"]');
+      if (tr) insertExpandRow(tr, expandedDeviceData);
+    } else {
+      // Device plus visible (filtré/page changée) → reset l'état
+      expandedDeviceId = null;
+      expandedDeviceData = null;
+    }
+  }
 
   var totalPages = Math.ceil(filteredDevices.length / devicesPerPage);
   document.getElementById('devPageInfo').textContent = (devicesPage + 1) + ' / ' + Math.max(totalPages, 1) + ' (' + filteredDevices.length + ' appareils)';
@@ -993,6 +1065,196 @@ function renderDevicesPage() {
 
   // Masquer pagination si tout tient sur une page
   document.getElementById('devicesPagination').style.display = filteredDevices.length > devicesPerPage ? 'flex' : 'none';
+}
+
+// === Device expand details (clic ligne → panel avec stats today/7j/30j) ===
+var expandedDeviceId = null;
+var expandedDeviceData = null; // cache du dernier fetch pour réinsertion après re-render
+var _currentFetchId = 0;
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+}
+function cssEscape(s) {
+  // Simple escape pour attribut selector — deviceId est hex/alphanumeric donc safe, mais on ceinture+bretelles
+  return String(s || '').replace(/"/g, '\\"');
+}
+
+async function toggleDeviceExpand(did, trElement) {
+  // Clic sur le device déjà ouvert → fermer
+  if (expandedDeviceId === did) {
+    closeDeviceExpand();
+    return;
+  }
+  // Fermer le précédent s'il y en a un
+  closeDeviceExpand();
+
+  expandedDeviceId = did;
+  expandedDeviceData = null;
+  trElement.classList.add('dev-expanded');
+
+  // Insérer un panel de loading tout de suite
+  var loadingTr = document.createElement('tr');
+  loadingTr.id = 'devExpandRow';
+  loadingTr.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-loading">Chargement des détails du device…</div></div></td>';
+  trElement.parentNode.insertBefore(loadingTr, trElement.nextSibling);
+
+  // Fetch
+  var fetchId = ++_currentFetchId;
+  try {
+    var data = await apiFetch('/admin/monitoring?device=' + encodeURIComponent(did) + '&period=30d');
+    if (fetchId !== _currentFetchId || expandedDeviceId !== did) return; // fetch obsolète
+    expandedDeviceData = data;
+    renderDevicePanel(did, data);
+  } catch (e) {
+    if (fetchId !== _currentFetchId || expandedDeviceId !== did) return;
+    var row = document.getElementById('devExpandRow');
+    if (row) row.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-error">Erreur de chargement : ' + escapeHtml(e.message || 'inconnue') + '</div></div></td>';
+  }
+}
+
+function closeDeviceExpand() {
+  var existing = document.getElementById('devExpandRow');
+  if (existing) existing.remove();
+  document.querySelectorAll('#devicesBody tr.dev-expanded').forEach(function(tr) { tr.classList.remove('dev-expanded'); });
+  expandedDeviceId = null;
+  expandedDeviceData = null;
+}
+
+function insertExpandRow(trElement, cachedData) {
+  // Utilisé lors de re-render pour réinsérer le panel d'un device qui reste visible
+  var existing = document.getElementById('devExpandRow');
+  if (existing) existing.remove();
+  trElement.classList.add('dev-expanded');
+  var tr = document.createElement('tr');
+  tr.id = 'devExpandRow';
+  if (cachedData) {
+    tr.innerHTML = '<td colspan="4">' + buildDevicePanelHtml(expandedDeviceId, cachedData) + '</td>';
+  } else {
+    tr.innerHTML = '<td colspan="4"><div class="dev-panel"><div class="dev-panel-loading">Chargement…</div></div></td>';
+  }
+  trElement.parentNode.insertBefore(tr, trElement.nextSibling);
+}
+
+function renderDevicePanel(did, data) {
+  var row = document.getElementById('devExpandRow');
+  if (!row) return;
+  row.innerHTML = '<td colspan="4">' + buildDevicePanelHtml(did, data) + '</td>';
+}
+
+function aggregateDaily(daily, days) {
+  var agg = { transcribe: 0, rewrite: 0, correct: 0, translate: 0, words: 0, audio_sec: 0, langs: {}, modes: {}, pairs: {}, latSum: 0, latCount: 0, latMax: 0 };
+  if (!Array.isArray(daily)) return agg;
+  var limit = Math.min(days, daily.length);
+  for (var i = 0; i < limit; i++) {
+    var d = daily[i];
+    if (!d) continue;
+    if (d.transcribe) {
+      agg.transcribe += d.transcribe.count || 0;
+      agg.words += d.transcribe.words || 0;
+      agg.audio_sec += d.transcribe.audio_sec || 0;
+      if (d.transcribe.langs) Object.keys(d.transcribe.langs).forEach(function(k) { agg.langs[k] = (agg.langs[k] || 0) + d.transcribe.langs[k]; });
+    }
+    if (d.rewrite) {
+      agg.rewrite += d.rewrite.count || 0;
+      if (d.rewrite.modes) Object.keys(d.rewrite.modes).forEach(function(k) { agg.modes[k] = (agg.modes[k] || 0) + d.rewrite.modes[k]; });
+    }
+    if (d.correct) agg.correct += d.correct.count || 0;
+    if (d.translate) {
+      agg.translate += d.translate.count || 0;
+      if (d.translate.pairs) Object.keys(d.translate.pairs).forEach(function(k) { agg.pairs[k] = (agg.pairs[k] || 0) + d.translate.pairs[k]; });
+    }
+    ['transcribe','rewrite','correct','translate'].forEach(function(ep) {
+      if (d[ep] && d[ep].latency) {
+        agg.latSum += d[ep].latency.sum || 0;
+        agg.latCount += d[ep].latency.count || 0;
+        if ((d[ep].latency.max || 0) > agg.latMax) agg.latMax = d[ep].latency.max || 0;
+      }
+    });
+  }
+  return agg;
+}
+
+function topN(obj, n) {
+  return Object.keys(obj).map(function(k) { return [k, obj[k]]; }).sort(function(a, b) { return b[1] - a[1]; }).slice(0, n);
+}
+
+function fmtDuration(sec) {
+  if (!sec) return '0s';
+  if (sec < 60) return Math.round(sec) + 's';
+  var m = Math.floor(sec / 60);
+  var s = Math.round(sec - m * 60);
+  return m + 'min' + (s ? ' ' + s + 's' : '');
+}
+
+function buildDevicePanelHtml(did, data) {
+  var daily = (data && data.daily) || [];
+  if (!daily.length) {
+    return '<div class="dev-panel"><div class="dev-panel-loading" style="font-style:italic">Aucune activité enregistrée sur les 30 derniers jours.</div><div class="dev-meta" style="margin-top:10px"><div class="dev-meta-row"><span class="dev-meta-label">Device ID</span><span class="dev-copy-id">' + escapeHtml(did) + '</span></div></div></div>';
+  }
+
+  var today = aggregateDaily(daily, 1);
+  var week = aggregateDaily(daily, 7);
+  var month = aggregateDaily(daily, 30);
+
+  function col(label, agg) {
+    var total = agg.transcribe + agg.rewrite + agg.correct + agg.translate;
+    function row(icon, name, val) {
+      var zero = val === 0 ? ' dev-metric-zero' : '';
+      return '<div class="dev-metric' + zero + '"><span class="dev-metric-label"><span class="dev-metric-icon">' + icon + '</span>' + name + '</span><span class="dev-metric-val">' + val + '</span></div>';
+    }
+    return '<div class="dev-col">' +
+      '<div class="dev-col-label">' + label + '<span class="dev-col-total">' + total + ' req</span></div>' +
+      row('🎙', 'Dictées', agg.transcribe) +
+      row('✏', 'Réécritures', agg.rewrite) +
+      row('🔧', 'Corrections', agg.correct) +
+      row('🌐', 'Traductions', agg.translate) +
+      '</div>';
+  }
+
+  var topLangs = topN(month.langs, 3);
+  var topModes = topN(month.modes, 3);
+  var topPairs = topN(month.pairs, 3);
+  var avgLat = month.latCount > 0 ? Math.round(month.latSum / month.latCount) : 0;
+
+  // Chercher des infos supplémentaires dans la liste allDevices
+  var devInfo = (allDevices || []).find(function(x) { return x.deviceId === did; }) || {};
+  var appVersion = devInfo.appVersion || '—';
+  var tier = devInfo.tier || 'free';
+  var country = devInfo.country || '—';
+
+  var langsChips = topLangs.length ? topLangs.map(function(l) { return '<span class="dev-chip">' + escapeHtml(l[0]) + ' (' + l[1] + ')</span>'; }).join('') : '<span class="dev-meta-val" style="opacity:.5">aucune</span>';
+  var modesChips = topModes.length ? topModes.map(function(m) { return '<span class="dev-chip">' + escapeHtml(m[0]) + ' (' + m[1] + ')</span>'; }).join('') : '<span class="dev-meta-val" style="opacity:.5">aucun</span>';
+  var pairsChips = topPairs.length ? topPairs.map(function(p) { return '<span class="dev-chip">' + escapeHtml(p[0]) + ' (' + p[1] + ')</span>'; }).join('') : '<span class="dev-meta-val" style="opacity:.5">aucune</span>';
+
+  var audioLabel = month.audio_sec > 0 ? fmtDuration(month.audio_sec) : '0s';
+  var wordsLabel = month.words > 0 ? month.words.toLocaleString('fr-FR') : '0';
+
+  return '<div class="dev-panel">' +
+    '<div class="dev-panel-grid">' +
+      col('Aujourd\'hui', today) +
+      col('7 derniers jours', week) +
+      col('30 derniers jours', month) +
+    '</div>' +
+    '<div class="dev-meta">' +
+      '<div class="dev-meta-row"><span class="dev-meta-label">Langues dictées (30j)</span>' + langsChips + '</div>' +
+      '<div class="dev-meta-row"><span class="dev-meta-label">Modes réécriture (30j)</span>' + modesChips + '</div>' +
+      '<div class="dev-meta-row"><span class="dev-meta-label">Paires traduction (30j)</span>' + pairsChips + '</div>' +
+      '<div class="dev-meta-row">' +
+        '<span class="dev-meta-label">Audio total</span><span class="dev-meta-val">' + audioLabel + '</span>' +
+        '<span class="dev-meta-label">Mots</span><span class="dev-meta-val">' + wordsLabel + '</span>' +
+        '<span class="dev-meta-label">Latence moy</span><span class="dev-meta-val">' + (avgLat || '—') + (avgLat ? ' ms' : '') + '</span>' +
+      '</div>' +
+      '<div class="dev-meta-row">' +
+        '<span class="dev-meta-label">Version app</span><span class="dev-meta-val">' + escapeHtml(appVersion) + '</span>' +
+        '<span class="dev-meta-label">Tier</span><span class="dev-meta-val">' + escapeHtml(tier) + '</span>' +
+        '<span class="dev-meta-label">Pays</span><span class="dev-meta-val">' + escapeHtml(country) + '</span>' +
+      '</div>' +
+      '<div class="dev-meta-row" style="margin-top:2px"><span class="dev-meta-label">Device ID</span><span class="dev-copy-id">' + escapeHtml(did) + '</span></div>' +
+    '</div>' +
+    '</div>';
 }
 
 function devicesPagePrev() { if (devicesPage > 0) { devicesPage--; renderDevicesPage(); } }
@@ -1019,12 +1281,30 @@ document.getElementById('deviceSearch').addEventListener('input', function() {
   renderDevices(filtered);
 });
 
+// Click sur ligne device → expand details (délégation sur tbody)
+document.getElementById('devicesBody').addEventListener('click', function(e) {
+  // Ignorer les clics sur le panel lui-même (copie device ID, etc.)
+  if (e.target.closest('#devExpandRow')) return;
+  var tr = e.target.closest('tr.dev-row');
+  if (!tr) return;
+  var did = tr.getAttribute('data-device-id');
+  if (!did) return;
+  toggleDeviceExpand(did, tr);
+});
+
+// Échap = fermer le panel expand
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && expandedDeviceId) closeDeviceExpand();
+});
+
 // Period pills
 document.querySelectorAll('.pill[data-period]').forEach(function(btn) {
   btn.addEventListener('click', function() {
     document.querySelectorAll('.pill[data-period]').forEach(function(b) { b.classList.remove('active'); });
     this.classList.add('active');
     currentPeriod = this.dataset.period;
+    // Fermer un éventuel panel déplié pour éviter confusion avec nouvelle période
+    if (typeof closeDeviceExpand === 'function') closeDeviceExpand();
     fetchAll().catch(handleAuthError);
   });
 });
@@ -1131,17 +1411,65 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
       document.getElementById('alertMsgs').innerHTML = alerts.map(function(a) { return '<span class="alert-item">' + a + '</span>'; }).join('');
     }
 
-    // ── Nav highlight ──
-    function initNav() {
-      document.querySelectorAll('.nav-link').forEach(function(l) {
-        l.addEventListener('click', function(e) { e.preventDefault(); var t = document.querySelector(this.getAttribute('href')); if (t) { var y = t.getBoundingClientRect().top + window.pageYOffset - 110; window.scrollTo({ top: y, behavior: 'smooth' }); } });
+    // ── Sticky height tracking (dynamique, s'adapte au wrap header sur mobile) ──
+    window._stickyH = 100; // fallback initial raisonnable
+    var _rebuildNavDebounce = null;
+    function updateStickyHeight() {
+      var el = document.getElementById('stickyTop');
+      if (!el) return;
+      var h = el.offsetHeight || 100;
+      if (h === window._stickyH) return;
+      window._stickyH = h;
+      document.documentElement.style.setProperty('--sticky-h', h + 'px');
+      // Reconstruire l'observer seulement quand la hauteur change vraiment (debounced)
+      clearTimeout(_rebuildNavDebounce);
+      _rebuildNavDebounce = setTimeout(rebuildNavObserver, 100);
+    }
+    window.addEventListener('resize', updateStickyHeight);
+    // ResizeObserver pour détecter les changements de hauteur du sticky-top (header wrap, alert banner show/hide, etc.)
+    if (typeof ResizeObserver !== 'undefined') {
+      var _stickyRO = new ResizeObserver(updateStickyHeight);
+      // Observer attaché après initNav (#stickyTop existe à l'init)
+      window.addEventListener('DOMContentLoaded', function() {
+        var el = document.getElementById('stickyTop');
+        if (el) _stickyRO.observe(el);
       });
+      // Fallback si DOMContentLoaded déjà passé
+      setTimeout(function() {
+        var el = document.getElementById('stickyTop');
+        if (el) { try { _stickyRO.observe(el); } catch (e) {} }
+      }, 50);
+    }
+
+    // ── Nav highlight ──
+    var _navObs = null;
+    function rebuildNavObserver() {
+      if (_navObs) { _navObs.disconnect(); _navObs = null; }
       var sections = ['sO','sP','sA','sRet','sD','sI'].map(function(id) { return document.getElementById(id); }).filter(Boolean);
       var links = document.querySelectorAll('.nav-link');
-      var obs = new IntersectionObserver(function(entries) {
+      if (!sections.length || !links.length) return;
+      var topMargin = (window._stickyH || 100) + 10;
+      _navObs = new IntersectionObserver(function(entries) {
         entries.forEach(function(en) { if (en.isIntersecting) { links.forEach(function(l) { l.classList.toggle('active', l.getAttribute('href') === '#' + en.target.id); }); } });
-      }, { rootMargin: '-80px 0px -60% 0px' });
-      sections.forEach(function(s) { obs.observe(s); });
+      }, { rootMargin: '-' + topMargin + 'px 0px -60% 0px' });
+      sections.forEach(function(s) { _navObs.observe(s); });
+    }
+
+    function initNav() {
+      updateStickyHeight();
+      document.querySelectorAll('.nav-link').forEach(function(l) {
+        l.addEventListener('click', function(e) {
+          e.preventDefault();
+          var t = document.querySelector(this.getAttribute('href'));
+          if (t) {
+            updateStickyHeight(); // au cas où le header a changé de taille
+            var offset = (window._stickyH || 100) + 12;
+            var y = t.getBoundingClientRect().top + window.pageYOffset - offset;
+            window.scrollTo({ top: y, behavior: 'smooth' });
+          }
+        });
+      });
+      rebuildNavObserver();
     }
 
     // ── Info tooltips injection ──
