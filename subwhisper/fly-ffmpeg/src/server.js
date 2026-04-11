@@ -101,16 +101,78 @@ function cleanupOrphanDirs() {
         try {
           fs.rmSync(fullPath, { recursive: true, force: true });
           cleaned++;
-          console.log(`[STARTUP-CLEANUP] Supprime orphelin: ${entry}`);
+          console.log(`[STARTUP-CLEANUP] Supprime orphelin HLS: ${entry}`);
         } catch (e) {}
       }
     }
-    if (cleaned > 0) console.log(`[STARTUP-CLEANUP] ${cleaned} dossier(s) orphelin(s) nettoye(s)`);
+    if (cleaned > 0) console.log(`[STARTUP-CLEANUP] ${cleaned} dossier(s) HLS orphelin(s) nettoye(s)`);
   } catch (e) {
-    console.error('[STARTUP-CLEANUP] Erreur:', e.message);
+    console.error('[STARTUP-CLEANUP] Erreur HLS:', e.message);
   }
 }
 cleanupOrphanDirs();
+
+// ---------------------------------------------------------------------------
+// Auto-cleanup des tmpDir orphelins (jobs crashés, streams coupés, timeouts)
+// Scanne os.tmpdir() + /app/tmp pour tous les prefixes de jobIds connus et supprime
+// ceux dont la modification time est > MAX_AGE. Evite l'accumulation de donnees
+// a long terme sur la machine Fly.
+// ---------------------------------------------------------------------------
+const TMP_JOB_PREFIXES = ['dg-', 'slide-', 'merge-', 'resize-', 'pip-', 'frames-', 'kb-', 'sz-', 'sr-', 'pa-', 'pro-', 'conv-', 'whisper-', 'ex-'];
+const TMP_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
+
+function cleanupOrphanTmpDirs() {
+  const bases = [];
+  const prodTmp = '/app/tmp';
+  if (fs.existsSync(prodTmp)) bases.push(prodTmp);
+  try {
+    const sysT = os.tmpdir();
+    if (sysT && sysT !== prodTmp && fs.existsSync(sysT)) bases.push(sysT);
+  } catch (_) {}
+
+  const now = Date.now();
+  let totalCleaned = 0;
+  let totalBytes = 0;
+
+  for (const base of bases) {
+    let entries;
+    try { entries = fs.readdirSync(base); } catch (_) { continue; }
+    for (const entry of entries) {
+      if (!TMP_JOB_PREFIXES.some(p => entry.startsWith(p))) continue;
+      const fullPath = path.join(base, entry);
+      try {
+        const stats = fs.statSync(fullPath);
+        if (!stats.isDirectory()) continue;
+        const age = now - stats.mtimeMs;
+        if (age < TMP_MAX_AGE_MS) continue;
+        // Recursive size (best-effort, optional for logs)
+        let size = 0;
+        try {
+          const walk = (p) => {
+            const st = fs.statSync(p);
+            if (st.isDirectory()) {
+              for (const f of fs.readdirSync(p)) walk(path.join(p, f));
+            } else {
+              size += st.size;
+            }
+          };
+          walk(fullPath);
+        } catch (_) {}
+        fs.rmSync(fullPath, { recursive: true, force: true });
+        totalCleaned++;
+        totalBytes += size;
+      } catch (_) {}
+    }
+  }
+
+  if (totalCleaned > 0) {
+    console.log(`[TMP-CLEANUP] ${totalCleaned} dossier(s) orphelin(s) > 30min nettoye(s) (${(totalBytes / 1048576).toFixed(1)} MB liberes)`);
+  }
+}
+
+// Run once at startup + then every 15 minutes
+cleanupOrphanTmpDirs();
+setInterval(cleanupOrphanTmpDirs, 15 * 60 * 1000);
 
 // ---------------------------------------------------------------------------
 // App Express
@@ -169,7 +231,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.30.2'
+    version: '1.30.3'
   });
 });
 
@@ -3035,6 +3097,13 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
     const outputPath = path.join(tmpDir, 'output.mp4');
     let ffArgs;
 
+    // Write subtitles file ONCE at job level — reused by both main assembly AND hero intro
+    let subPath = null;
+    if (subtitles) {
+      subPath = path.join(tmpDir, 'subs.ass');
+      fs.writeFileSync(subPath, subtitles, 'utf8');
+    }
+
     if (avatarPath) {
       // Split-screen: avatar + recording
       // Apply tpad to [1:v] (recording) BEFORE scale/crop/pad if avatar > recording → freeze last frame.
@@ -3074,13 +3143,8 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         ].join(';');
       }
 
-      // Add subtitles if provided
-      let subFilter = '';
-      if (subtitles) {
-        const subPath = path.join(tmpDir, 'subs.ass');
-        fs.writeFileSync(subPath, subtitles, 'utf8');
-        subFilter = `,ass=${subPath}`;
-      }
+      // Add subtitles if provided (subPath already written above at job level)
+      const subFilter = subPath ? `,ass=${subPath}` : '';
 
       // No more -shortest — explicit -t maxMainDur caps the duration at max(recording, avatar).
       // Audio comes from avatar (0:a) and plays in full.
@@ -3098,13 +3162,8 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         '-y', outputPath
       ];
     } else {
-      // No avatar — just format the recording for TikTok
-      let subFilter = '';
-      if (subtitles) {
-        const subPath = path.join(tmpDir, 'subs.ass');
-        fs.writeFileSync(subPath, subtitles, 'utf8');
-        subFilter = `,ass=${subPath}`;
-      }
+      // No avatar — just format the recording for TikTok (subPath already written at job level)
+      const subFilter = subPath ? `,ass=${subPath}` : '';
       ffArgs = [
         '-i', recordingPath,
         '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1${subFilter}`,
@@ -3145,11 +3204,15 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
 
       console.log(`[${jobId}] Hero intro: avatar fullscreen ${introDur}s`);
 
-      // Step 1: build fullscreen intro clip from avatar (scale cover + audio)
+      // Step 1: build fullscreen intro clip from avatar (scale cover + audio + subtitles if any)
+      // CRITICAL: must burn subtitles during intro — they were missing in v1.30.2, causing
+      // silent gap during the first `introDur` seconds of hero intro. The ASS filter displays
+      // dialogues by time, so subs [0..introDur] naturally appear on the intro clip.
+      const introSubFilter = subPath ? `,ass=${subPath}` : '';
       await new Promise((resolve, reject) => {
         const ff = spawn('ffmpeg', [
           '-i', avatarPath,
-          '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=increase,crop=${outWidth}:${outHeight}:(iw-${outWidth})/2:(ih-${outHeight})/2,setsar=1,fps=30,format=yuv420p`,
+          '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=increase,crop=${outWidth}:${outHeight}:(iw-${outWidth})/2:(ih-${outHeight})/2,setsar=1,fps=30,format=yuv420p${introSubFilter}`,
           '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
           '-c:a', 'aac', '-b:a', '128k',
           '-t', String(introDur),
