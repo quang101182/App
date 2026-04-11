@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PromoClip v0.6.12</title>
+<title>PromoClip v0.6.13</title>
 <style>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.6.12 — Functional App
+   PromoClip v0.6.13 — Functional App
    Dark mode, accent violet #7C3AED, mobile-first
    ═══════════════════════════════════════════════════════ */
 
@@ -1068,9 +1068,9 @@ body {
   pointer-events: none;
 }
 
-/* Fullscreen modal backdrop + sheet */
+/* Fullscreen modal backdrop + sheet — contraint dans .phone-frame (position absolute) */
 .hook-modal {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 2000;
   display: flex;
@@ -1088,11 +1088,7 @@ body {
 }
 .hook-modal-sheet {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  /* Dynamic viewport + visualViewport fallback to keep the modal keyboard-safe on Android */
-  height: var(--hm-vh, 100dvh);
+  inset: 0;
   background: var(--bg-primary);
   display: flex;
   flex-direction: column;
@@ -1360,7 +1356,7 @@ body.modal-open {
 
 /* Confirm mini-modal (tap-short poubelle) */
 .hook-confirm {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 2100;
   background: rgba(0, 0, 0, 0.6);
@@ -1402,7 +1398,7 @@ body.modal-open {
 
 /* Undo toast (after AI improvement) */
 .hook-undo-toast {
-  position: fixed;
+  position: absolute;
   left: 50%;
   bottom: calc(env(safe-area-inset-bottom, 0) + 20px);
   transform: translate(-50%, 20px);
@@ -1440,7 +1436,7 @@ body.modal-open {
 
 /* AI suggestions bottom sheet (3 proposals when hook is empty) */
 .hook-ai-sheet {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 2150;
   background: rgba(0, 0, 0, 0.6);
@@ -1497,7 +1493,7 @@ body.modal-open {
 
 <!-- ═══ Screen Navigator (desktop only) ═══ -->
 <div class="screen-nav" id="screenNav">
-  <h3 id="appVersionNav">PromoClip v0.6.12</h3>
+  <h3 id="appVersionNav">PromoClip v0.6.13</h3>
   <div class="screen-nav-item active" data-action="nav-screen" data-screen="home">1. Accueil</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="template">2. Template</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="media">3. Medias</div>
@@ -1532,7 +1528,7 @@ body.modal-open {
       <div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</span>
-          <span class="badge badge-accent" id="appVersionBadge">v0.6.12</span>
+          <span class="badge badge-accent" id="appVersionBadge">v0.6.13</span>
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
       </div>
@@ -1788,9 +1784,20 @@ body.modal-open {
         <div class="input-label">Style avatar</div>
         <div class="chip-row" style="margin:4px 0 0;" id="avatarStyleChips"></div>
       </div>
-      <div class="input-group" style="margin-bottom:0;">
+      <div class="input-group" style="margin-bottom:8px;">
         <div class="input-label">Mode affichage</div>
         <div class="chip-row" style="margin:4px 0 0;" id="avatarModeChips"></div>
+      </div>
+      <div class="toggle-row" id="avatarIntroRow" style="padding:8px 0; border-top:1px solid var(--border); margin-top:8px;">
+        <div>
+          <div class="toggle-label" style="font-size:13px;">Intro plein ecran</div>
+          <div class="toggle-sub" style="font-size:10px;">Avatar en grand au debut de la video</div>
+        </div>
+        <div class="toggle on" id="toggleAvatarIntro" data-action="toggle-avatar-intro"></div>
+      </div>
+      <div class="input-group" style="margin-bottom:0; display:none;" id="avatarIntroDurationGroup">
+        <div class="input-label">Duree intro</div>
+        <div class="chip-row" style="margin:4px 0 0;" id="avatarIntroDurationChips"></div>
       </div>
     </div>
 
@@ -2181,7 +2188,7 @@ body.modal-open {
 
     <div class="divider"></div>
     <div style="text-align:center; padding:16px 0 40px;">
-      <div style="font-size:11px; color:var(--text-muted);" id="appVersionFooter">PromoClip v0.6.12</div>
+      <div style="font-size:11px; color:var(--text-muted);" id="appVersionFooter">PromoClip v0.6.13</div>
       <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Build 2026-04-06</div>
     </div>
   </div>
@@ -2447,13 +2454,13 @@ body.modal-open {
 
 <script>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.6.12 — Complete JS
+   PromoClip v0.6.13 — Complete JS
    ═══════════════════════════════════════════════════════ */
 
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.6.12';
+const APP_VERSION = '0.6.13';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -2514,6 +2521,8 @@ const defaultState = {
       avatar: false,
       avatarStyle: 'female',
       avatarMode: 'bubble',
+      avatarIntroFullscreen: true,
+      avatarIntroDuration: 2,
       voiceover: true,
       voiceGender: 'male',
       subtitles: true,
@@ -3147,10 +3156,12 @@ const WORDS_PER_SEC = {
 };
 function wordsTargetForDuration(durationSec, language) {
   const wps = WORDS_PER_SEC[language] || WORDS_PER_SEC.default;
-  // ~75% of video time is actual speech (rest = intro/outro/natural pauses)
-  const speechTime = Math.max(2, durationSec * 0.75);
+  // 70% of video time is actual speech (30% buffer for intro/outro/pauses/render overhead).
+  // Asymmetric tolerance: accept shorter (down to target*0.70) but NEVER exceed target (max = target*1.00).
+  // Rationale: better a voiceover that finishes early (small silence) than one cut at the end.
+  const speechTime = Math.max(2, durationSec * 0.70);
   const target = Math.max(6, Math.round(wps * speechTime));
-  return { target, min: Math.max(4, Math.round(target * 0.80)), max: Math.round(target * 1.20), wps };
+  return { target, min: Math.max(4, Math.round(target * 0.70)), max: target, wps };
 }
 function countWords(text) {
   return (text || '').trim().split(/\s+/).filter(Boolean).length;
@@ -3190,19 +3201,67 @@ STRICT RULES:
   return voiceover; // fallback to original on any failure
 }
 
-// Validate word count vs target, retry once if out of range
+// Truncate a voiceover to at most `maxWords` words, preferring to cut at the last
+// sentence boundary (. ! ?) before that limit. Fallback : hard cut at word N.
+function truncateVoiceoverToMaxWords(text, maxWords) {
+  if (!text) return text;
+  const words = text.trim().split(/\s+/);
+  if (words.length <= maxWords) return text;
+  const clipped = words.slice(0, maxWords).join(' ');
+  // Find the last sentence boundary within the clipped range
+  const m = clipped.match(/^(.*[.!?])\s/);
+  if (m && m[1].length >= clipped.length * 0.5) {
+    return m[1].trim();
+  }
+  // No good boundary — hard cut, add ellipsis-like closing period if missing
+  return clipped.trim().replace(/[,;:]?\s*$/, '') + '.';
+}
+
+// Validate word count vs target, retry up to 2 times with progressively stricter target.
+// Asymmetric rule: over-length is not tolerated (max = target). Under-length is fine (min safety net).
+// Last resort: hard truncate manually if Gemini can't get the length right.
 async function validateAndFitVoiceover(voiceover, durationSec, language, label) {
   const { target, min, max } = wordsTargetForDuration(durationSec, language);
   let words = countWords(voiceover);
   let result = voiceover;
-  if (words < min || words > max) {
-    const action = words < min ? 'expand' : 'shorten';
-    log((label || 'Script') + ' ' + words + ' mots hors range ' + min + '-' + max + ' — retry ' + action);
-    result = await adjustVoiceoverLength(voiceover, action, target, language);
-    words = countWords(result);
+
+  if (words >= min && words <= max) {
+    const est = estimatedSpeechDuration(result, language);
+    log((label || 'Script') + ' OK: ' + words + ' mots / target ' + target + ' (duree estimee ' + est + 's / ' + durationSec + 's)');
+    return result;
   }
+
+  // Attempt 1 — normal retry
+  const action1 = words < min ? 'expand' : 'shorten';
+  log((label || 'Script') + ' ' + words + ' mots hors range ' + min + '-' + max + ' — retry 1 ' + action1);
+  result = await adjustVoiceoverLength(voiceover, action1, target, language);
+  words = countWords(result);
+
+  if (words >= min && words <= max) {
+    const est = estimatedSpeechDuration(result, language);
+    log((label || 'Script') + ' final (retry1): ' + words + ' mots / target ' + target + ' (duree estimee ' + est + 's / ' + durationSec + 's)');
+    return result;
+  }
+
+  // Attempt 2 — stricter target: aim for target-2 (more aggressive shortening)
+  const stricterTarget = Math.max(min, target - 2);
+  const action2 = words < min ? 'expand' : 'shorten';
+  log((label || 'Script') + ' ' + words + ' mots hors range — retry 2 (target strict ' + stricterTarget + ')');
+  result = await adjustVoiceoverLength(result, action2, stricterTarget, language);
+  words = countWords(result);
+
+  if (words <= max) {
+    const est = estimatedSpeechDuration(result, language);
+    log((label || 'Script') + ' final (retry2): ' + words + ' mots / target ' + target + ' (duree estimee ' + est + 's / ' + durationSec + 's)');
+    return result;
+  }
+
+  // Last resort — hard truncate manually to guarantee voice finishes before video end
+  log((label || 'Script') + ' ' + words + ' mots encore hors max — truncate manuel a ' + max + ' mots', 'warn');
+  result = truncateVoiceoverToMaxWords(result, max);
+  words = countWords(result);
   const est = estimatedSpeechDuration(result, language);
-  log((label || 'Script') + ' final: ' + words + ' mots / target ' + target + ' (duree estimee ' + est + 's / ' + durationSec + 's)');
+  log((label || 'Script') + ' final (truncate): ' + words + ' mots / target ' + target + ' (duree estimee ' + est + 's / ' + durationSec + 's)');
   return result;
 }
 
@@ -3361,7 +3420,8 @@ function composeAbortSignal(externalSignal, timeoutMs) {
 
 // Call Groq Whisper via api-gateway and return { words, segments, language, duration }
 // Reuses the exact same flow as SubWhisper (transcribeChunkGroq).
-async function whisperTimestamps(blob, languageLabel, filename, externalSignal) {
+// promptText (optional) — guides Whisper recognition toward specific vocabulary / proper nouns
+async function whisperTimestamps(blob, languageLabel, filename, externalSignal, promptText) {
   if (!state.settings.gatewayKey) throw new Error('Cle Gateway manquante');
   const form = new FormData();
   form.append('file', blob, filename || 'audio.mp3');
@@ -3371,8 +3431,14 @@ async function whisperTimestamps(blob, languageLabel, filename, externalSignal) 
   form.append('timestamp_granularities[]', 'segment');
   const iso = LANG_TO_ISO[languageLabel];
   if (iso) form.append('language', iso);
+  // Whisper prompt: steers recognition toward the expected vocabulary (proper nouns, brand names etc)
+  if (promptText && promptText.trim()) {
+    // API caps prompt ~224 tokens — truncate to ~800 chars max for safety
+    const cappedPrompt = promptText.trim().slice(0, 800);
+    form.append('prompt', cappedPrompt);
+  }
 
-  log('Whisper: sync sous-titres (' + (iso || 'auto') + ', ' + (blob.size / 1024).toFixed(0) + ' KB)...');
+  log('Whisper: sync sous-titres (' + (iso || 'auto') + ', ' + (blob.size / 1024).toFixed(0) + ' KB)' + (promptText ? ' [prompt]' : '') + '...');
   const composed = composeAbortSignal(externalSignal, 60000);
   let r;
   try {
@@ -3397,6 +3463,82 @@ async function whisperTimestamps(blob, languageLabel, filename, externalSignal) 
   const segments = Array.isArray(data.segments) ? data.segments : [];
   log('Whisper OK: ' + words.length + ' mots, ' + segments.length + ' segments, lang=' + (data.language || '?'));
   return { words, segments, language: data.language, duration: data.duration };
+}
+
+// ── Align Whisper words to a reference voiceover text ──
+// Whisper can mis-transcribe proper nouns and invented words (e.g. "Dictokey" → "Dictoquet").
+// We know the exact voiceover that was spoken, so we can replace mis-transcribed words with
+// the originals while keeping Whisper's precise word-level timestamps.
+// Algorithm: sequential walk with up-to-2 look-ahead for skip-alignment. O(n).
+function levSimilarity(a, b) {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const la = a.length, lb = b.length;
+  if (la === 0 || lb === 0) return 0;
+  // Quick early exit on very different lengths
+  if (Math.abs(la - lb) / Math.max(la, lb) > 0.6) return 0;
+  const row = new Array(la + 1);
+  for (let i = 0; i <= la; i++) row[i] = i;
+  for (let j = 1; j <= lb; j++) {
+    let prev = row[0];
+    row[0] = j;
+    for (let i = 1; i <= la; i++) {
+      const tmp = row[i];
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row[i] = Math.min(row[i] + 1, row[i - 1] + 1, prev + cost);
+      prev = tmp;
+    }
+  }
+  const dist = row[la];
+  return 1 - dist / Math.max(la, lb);
+}
+function _normalizeWordForMatch(w) {
+  return (w || '').toLowerCase().replace(/[.,;:!?'"()\[\]\-—«»]/g, '').trim();
+}
+function _wordSimilarity(a, b) {
+  const na = _normalizeWordForMatch(a);
+  const nb = _normalizeWordForMatch(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+  return levSimilarity(na, nb);
+}
+function alignWordsToReference(whisperWords, referenceText) {
+  if (!whisperWords || whisperWords.length === 0 || !referenceText) return whisperWords;
+  const refTokens = referenceText.trim().split(/\s+/).filter(Boolean);
+  if (refTokens.length === 0) return whisperWords;
+
+  const aligned = [];
+  let refIdx = 0;
+  const MAX_SKIP = 2;        // allow up to 2 ref words to be skipped when looking for a match
+  const SIM_THRESHOLD = 0.70; // Levenshtein similarity (stricter → avoids false positives, keeps whisper verbatim on weak matches)
+  let replaceCount = 0;
+
+  for (const wWord of whisperWords) {
+    if (refIdx >= refTokens.length) {
+      // Ran out of reference words — keep whisper word verbatim
+      aligned.push({ ...wWord });
+      continue;
+    }
+    // Look for the best match at refIdx..refIdx+MAX_SKIP
+    let bestIdx = -1;
+    let bestSim = 0;
+    for (let skip = 0; skip <= MAX_SKIP && refIdx + skip < refTokens.length; skip++) {
+      const sim = _wordSimilarity(wWord.word, refTokens[refIdx + skip]);
+      if (sim > bestSim) { bestSim = sim; bestIdx = refIdx + skip; }
+    }
+    if (bestIdx >= 0 && bestSim >= SIM_THRESHOLD) {
+      const refWord = refTokens[bestIdx];
+      // Replace whisper's word with reference word (keeps original casing/punctuation)
+      if (_normalizeWordForMatch(wWord.word) !== _normalizeWordForMatch(refWord)) replaceCount++;
+      aligned.push({ ...wWord, word: refWord });
+      refIdx = bestIdx + 1;
+    } else {
+      // No match — keep whisper verbatim
+      aligned.push({ ...wWord });
+    }
+  }
+  if (replaceCount > 0) log('Whisper align: ' + replaceCount + ' mot(s) corrige(s) vs reference');
+  return aligned;
 }
 
 // Generate ASS subtitle string from word-level Whisper timestamps
@@ -3461,12 +3603,14 @@ async function buildSyncedSubtitles(audioBlob, voiceoverText, languageLabel, fal
   if (!audioBlob || !voiceoverText) {
     return { ass: null, method: 'none' };
   }
-  // Step 1 — try Whisper word-level timestamps
+  // Step 1 — try Whisper word-level timestamps (with voiceover as prompt to guide recognition)
   try {
-    const result = await whisperTimestamps(audioBlob, languageLabel, 'voice.mp3', externalSignal);
+    const result = await whisperTimestamps(audioBlob, languageLabel, 'voice.mp3', externalSignal, voiceoverText);
     if (result.words && result.words.length > 0) {
-      const ass = generateSubtitleASSFromWords(result.words);
-      if (ass) return { ass, method: 'whisper-word' };
+      // Post-process: align whisper words to the original voiceover to fix proper-noun mis-transcriptions
+      const aligned = alignWordsToReference(result.words, voiceoverText);
+      const ass = generateSubtitleASSFromWords(aligned);
+      if (ass) return { ass, method: 'whisper-word-aligned' };
     }
     // No word-level (very rare) — try segments as a second-best
     if (result.segments && result.segments.length > 0) {
@@ -3794,7 +3938,7 @@ function deleteProduct(id) {
 // ──────────────────────────────────────────────────
 // Non-blocking media handler: pushes all entries immediately to state, loads
 // thumbnails + ArrayBuffers in the background, rafraichit la grille à chaque callback.
-// BUG fix v0.6.12: l'ancienne version await-ait generateVideoThumbnail dans for...of,
+// BUG fix v0.6.13: l'ancienne version await-ait generateVideoThumbnail dans for...of,
 // bloquant l'ajout de l'image suivante (jusqu'a 5s de timeout vidéo). Résultat : sélection
 // mixte image+vidéo n'ajoutait que la vidéo et l'user pensait l'image perdue.
 function handleMediaFiles(files) {
@@ -4133,6 +4277,18 @@ function renderConfigScreen() {
       { id: 'split-top', label: 'Split haut' },
       { id: 'split-bottom', label: 'Split bas' }
     ].map(m => `<div class="chip${cfg.avatarMode === m.id ? ' selected' : ''}" data-action="set-avatar-mode" data-mode="${m.id}">${m.label}</div>`).join('');
+  }
+
+  // Avatar hero intro toggle + duration chips
+  const introToggle = document.getElementById('toggleAvatarIntro');
+  if (introToggle) introToggle.className = 'toggle' + (cfg.avatarIntroFullscreen ? ' on' : '');
+  const introDurGroup = document.getElementById('avatarIntroDurationGroup');
+  if (introDurGroup) introDurGroup.style.display = cfg.avatarIntroFullscreen ? '' : 'none';
+  const introDurChips = document.getElementById('avatarIntroDurationChips');
+  if (introDurChips) {
+    introDurChips.innerHTML = [1, 2, 3, 4, 5]
+      .map(d => `<div class="chip${cfg.avatarIntroDuration === d ? ' selected' : ''}" data-action="set-avatar-intro-duration" data-duration="${d}">${d}s</div>`)
+      .join('');
   }
 
   // Voice gender chips (hidden when avatar effectively ON — avatar has its own voice)
@@ -4492,6 +4648,8 @@ async function startGenerationPro(product, selectedMedia) {
       moments: moments,
       avatarVideo: avatarBase64 || undefined,
       avatarMode: cfg.avatarMode || 'split-top',
+      avatarIntroFullscreen: cfg.avatarIntroFullscreen || false,
+      avatarIntroDuration: cfg.avatarIntroDuration || 2,
       subtitles: subtitleData || undefined,
       outroClip: outroClipB64 || undefined,
       outroDuration: outroClipB64 ? 3 : undefined,
@@ -5507,6 +5665,18 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
 
     case 'set-avatar-mode':
       state.wizard.config.avatarMode = el.dataset.mode;
+      markDirty();
+      renderConfigScreen();
+      break;
+
+    case 'toggle-avatar-intro':
+      state.wizard.config.avatarIntroFullscreen = !state.wizard.config.avatarIntroFullscreen;
+      markDirty();
+      renderConfigScreen();
+      break;
+
+    case 'set-avatar-intro-duration':
+      state.wizard.config.avatarIntroDuration = parseInt(el.dataset.duration) || 2;
       markDirty();
       renderConfigScreen();
       break;

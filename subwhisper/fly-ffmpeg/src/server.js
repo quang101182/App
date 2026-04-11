@@ -169,7 +169,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.30.1'
+    version: '1.30.2'
   });
 });
 
@@ -2965,7 +2965,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
     return res.status(503).json({ error: 'Server busy, try again later' });
   }
 
-  const { video, videoMime, moments, avatarVideo, avatarMode, subtitles, width, height, outroClip, outroDuration } = req.body;
+  const { video, videoMime, moments, avatarVideo, avatarMode, subtitles, width, height, outroClip, outroDuration, avatarIntroFullscreen, avatarIntroDuration } = req.body;
   if (!video) return res.status(400).json({ error: 'Missing video (base64)' });
 
   const tmpDir = path.join(os.tmpdir(), jobId);
@@ -2998,12 +2998,36 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
     });
     console.log(`[${jobId}] Recording duration: ${probeDur.toFixed(1)}s`);
 
-    // 3. Write avatar video if provided
+    // 3. Write avatar video if provided + probe its duration
     let avatarPath = null;
+    let avatarDur = 0;
     if (avatarVideo) {
       avatarPath = path.join(tmpDir, 'avatar.mp4');
       fs.writeFileSync(avatarPath, Buffer.from(avatarVideo, 'base64'));
       console.log(`[${jobId}] Avatar: ${(fs.statSync(avatarPath).size / 1048576).toFixed(1)} MB`);
+      // Probe avatar duration — if longer than recording, we'll freeze the recording's last frame
+      // to let the avatar's voice finish instead of truncating it.
+      avatarDur = await new Promise((resolve) => {
+        const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', avatarPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let out = '';
+        ff.stdout.on('data', d => { out += d.toString(); });
+        ff.on('close', code => {
+          if (code === 0) resolve(parseFloat(out.trim()) || 0);
+          else resolve(0);
+        });
+        ff.on('error', () => resolve(0));
+        setTimeout(() => { try { ff.kill(); } catch(_){} resolve(0); }, 5000);
+      });
+      console.log(`[${jobId}] Avatar duration: ${avatarDur.toFixed(2)}s (recording: ${probeDur.toFixed(2)}s)`);
+    }
+
+    // Computed max duration for the main video assembly — avatar can be longer than recording
+    const maxMainDur = Math.min(60, Math.max(probeDur, avatarDur || probeDur));
+    // If avatar outlasts recording, freeze the recording's last frame for (avatarDur - probeDur) seconds
+    const needsFreeze = avatarDur > probeDur + 0.1;
+    const freezeExtra = needsFreeze ? (avatarDur - probeDur) : 0;
+    if (needsFreeze) {
+      console.log(`[${jobId}] Freeze last frame of recording for ${freezeExtra.toFixed(2)}s (avatar outlasts recording)`);
     }
 
     // 4. Build FFmpeg command for split-screen assembly
@@ -3013,6 +3037,11 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
 
     if (avatarPath) {
       // Split-screen: avatar + recording
+      // Apply tpad to [1:v] (recording) BEFORE scale/crop/pad if avatar > recording → freeze last frame.
+      // This prevents the recording from being looped or the video being truncated.
+      const recordPrefilter = needsFreeze
+        ? `tpad=stop_mode=clone:stop_duration=${freezeExtra.toFixed(2)},`
+        : '';
       let filterComplex;
       if (mode === 'split-top') {
         // Avatar top 30%, recording bottom 70%
@@ -3020,7 +3049,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         const recordH = outHeight - avatarH;
         filterComplex = [
           `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
-          `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
+          `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
           `[avatar][record]vstack=inputs=2[outv]`
         ].join(';');
       } else if (mode === 'split-bottom') {
@@ -3028,19 +3057,20 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         const avatarH = Math.round(outHeight * 0.3);
         const recordH = outHeight - avatarH;
         filterComplex = [
-          `[1:v]scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
+          `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
           `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
           `[record][avatar]vstack=inputs=2[outv]`
         ].join(';');
       } else {
         // Bubble mode: recording fullscreen + avatar PiP circle
+        // NOTE: shortest=1 removed — we rely on -t maxMainDur to cap the duration explicitly
         const pipSize = Math.round(outWidth * 0.28);
         const pipX = outWidth - pipSize - 20;
         const pipY = outHeight - pipSize - 120;
         filterComplex = [
-          `[1:v]scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
+          `[1:v]${recordPrefilter}scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
           `[0:v]scale=${pipSize}:${pipSize}:force_original_aspect_ratio=decrease,pad=${pipSize}:${pipSize}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipSize}/2,2)+pow(Y-${pipSize}/2,2),pow(${pipSize}/2-4,2)),0,255)'[pip]`,
-          `[record][pip]overlay=${pipX}:${pipY}:shortest=1[outv]`
+          `[record][pip]overlay=${pipX}:${pipY}[outv]`
         ].join(';');
       }
 
@@ -3052,6 +3082,8 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         subFilter = `,ass=${subPath}`;
       }
 
+      // No more -shortest — explicit -t maxMainDur caps the duration at max(recording, avatar).
+      // Audio comes from avatar (0:a) and plays in full.
       ffArgs = [
         '-i', avatarPath,
         '-i', recordingPath,
@@ -3062,8 +3094,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         '-c:a', 'aac', '-b:a', '128k',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
-        '-shortest',
-        '-t', String(Math.min(probeDur, 60)),
+        '-t', String(maxMainDur),
         '-y', outputPath
       ];
     } else {
@@ -3101,6 +3132,78 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
         reject(new Error('FFmpeg Pro timeout 120s'));
       }, 120000);
     });
+
+    // ── Hero intro avatar fullscreen (optional, REPLACES outputPath with [intro+main] video) ──
+    // User wants the avatar to appear in fullscreen for 1-5s at the beginning, then switch to
+    // the chosen mode (bubble / split-top / split-bottom). Audio stays continuous throughout
+    // because we take the avatar's audio from its own track.
+    if (avatarPath && avatarIntroFullscreen) {
+      const introDur = Math.max(1, Math.min(5, Number(avatarIntroDuration) || 2));
+      const introPath = path.join(tmpDir, 'intro-fs.mp4');
+      const mainTrimPath = path.join(tmpDir, 'main-trim.mp4');
+      const withIntroPath = path.join(tmpDir, 'with-intro.mp4');
+
+      console.log(`[${jobId}] Hero intro: avatar fullscreen ${introDur}s`);
+
+      // Step 1: build fullscreen intro clip from avatar (scale cover + audio)
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', [
+          '-i', avatarPath,
+          '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=increase,crop=${outWidth}:${outHeight}:(iw-${outWidth})/2:(ih-${outHeight})/2,setsar=1,fps=30,format=yuv420p`,
+          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+          '-c:a', 'aac', '-b:a', '128k',
+          '-t', String(introDur),
+          '-movflags', '+faststart',
+          '-y', introPath
+        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => code === 0 ? resolve() : reject(new Error('Intro build: ' + stderr.slice(-200))));
+        ff.on('error', reject);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro build timeout')); }, 60000);
+      });
+
+      // Step 2: trim the main assembly starting at introDur (skip first N seconds)
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', [
+          '-ss', String(introDur),
+          '-i', outputPath,
+          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+          '-c:a', 'aac', '-b:a', '128k',
+          '-fflags', '+genpts',
+          '-movflags', '+faststart',
+          '-y', mainTrimPath
+        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => code === 0 ? resolve() : reject(new Error('Main trim: ' + stderr.slice(-200))));
+        ff.on('error', reject);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Main trim timeout')); }, 60000);
+      });
+
+      // Step 3: concat intro + main-trim (re-encode to normalize)
+      const concatListPath = path.join(tmpDir, 'concat-intro.txt');
+      fs.writeFileSync(concatListPath, `file '${introPath.replace(/'/g, "'\\''")}'\nfile '${mainTrimPath.replace(/'/g, "'\\''")}'\n`);
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', [
+          '-f', 'concat', '-safe', '0', '-i', concatListPath,
+          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+          '-c:a', 'aac', '-b:a', '128k',
+          '-pix_fmt', 'yuv420p',
+          '-movflags', '+faststart',
+          '-y', withIntroPath
+        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => code === 0 ? resolve() : reject(new Error('Intro concat: ' + stderr.slice(-200))));
+        ff.on('error', reject);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro concat timeout')); }, 60000);
+      });
+
+      // Replace outputPath with the intro-enhanced version
+      fs.renameSync(withIntroPath, outputPath);
+      console.log(`[${jobId}] Hero intro applied`);
+    }
 
     // ── Outro image assembly (optional, added AFTER main video) ──
     if (outroClip) {
