@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PromoClip v0.6.8</title>
+<title>PromoClip v0.6.9</title>
 <style>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.6.8 — Functional App
+   PromoClip v0.6.9 — Functional App
    Dark mode, accent violet #7C3AED, mobile-first
    ═══════════════════════════════════════════════════════ */
 
@@ -1088,7 +1088,11 @@ body {
 }
 .hook-modal-sheet {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  /* Dynamic viewport + visualViewport fallback to keep the modal keyboard-safe on Android */
+  height: var(--hm-vh, 100dvh);
   background: var(--bg-primary);
   display: flex;
   flex-direction: column;
@@ -1097,6 +1101,12 @@ body {
   will-change: transform;
   padding-top: env(safe-area-inset-top, 0);
   padding-bottom: env(safe-area-inset-bottom, 0);
+}
+/* Body scroll lock when any fullscreen modal is open */
+body.modal-open {
+  overflow: hidden;
+  touch-action: none;
+  -webkit-overflow-scrolling: auto;
 }
 .hook-modal.open .hook-modal-sheet {
   transform: translateY(0);
@@ -1362,7 +1372,7 @@ body {
 
 <!-- ═══ Screen Navigator (desktop only) ═══ -->
 <div class="screen-nav" id="screenNav">
-  <h3 id="appVersionNav">PromoClip v0.6.8</h3>
+  <h3 id="appVersionNav">PromoClip v0.6.9</h3>
   <div class="screen-nav-item active" data-action="nav-screen" data-screen="home">1. Accueil</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="template">2. Template</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="media">3. Medias</div>
@@ -1397,7 +1407,7 @@ body {
       <div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</span>
-          <span class="badge badge-accent" id="appVersionBadge">v0.6.8</span>
+          <span class="badge badge-accent" id="appVersionBadge">v0.6.9</span>
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
       </div>
@@ -2046,7 +2056,7 @@ body {
 
     <div class="divider"></div>
     <div style="text-align:center; padding:16px 0 40px;">
-      <div style="font-size:11px; color:var(--text-muted);" id="appVersionFooter">PromoClip v0.6.8</div>
+      <div style="font-size:11px; color:var(--text-muted);" id="appVersionFooter">PromoClip v0.6.9</div>
       <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Build 2026-04-06</div>
     </div>
   </div>
@@ -2291,13 +2301,13 @@ body {
 
 <script>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.6.8 — Complete JS
+   PromoClip v0.6.9 — Complete JS
    ═══════════════════════════════════════════════════════ */
 
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.6.8';
+const APP_VERSION = '0.6.9';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -5584,6 +5594,48 @@ document.getElementById('configDuration').addEventListener('input', (e) => {
 // (see openHookModal / updateHookPreview). No listener here anymore.
 
 // ──────────────────────────────────────────────────
+// 19. MODAL VIEWPORT HELPERS (keyboard-safe, body scroll lock)
+// ──────────────────────────────────────────────────
+let _activeModalsCount = 0;
+let _vvResizeHandler = null;
+
+function updateModalViewportHeight() {
+  // Use visualViewport when available (Android keyboard shrinks it) — fallback to dvh via CSS
+  if (window.visualViewport) {
+    const h = Math.round(window.visualViewport.height);
+    document.documentElement.style.setProperty('--hm-vh', h + 'px');
+  } else {
+    document.documentElement.style.removeProperty('--hm-vh');
+  }
+}
+
+function lockBodyScroll() {
+  _activeModalsCount++;
+  if (_activeModalsCount === 1) {
+    document.body.classList.add('modal-open');
+    updateModalViewportHeight();
+    if (window.visualViewport && !_vvResizeHandler) {
+      _vvResizeHandler = () => updateModalViewportHeight();
+      window.visualViewport.addEventListener('resize', _vvResizeHandler);
+      window.visualViewport.addEventListener('scroll', _vvResizeHandler);
+    }
+  }
+}
+
+function unlockBodyScroll() {
+  _activeModalsCount = Math.max(0, _activeModalsCount - 1);
+  if (_activeModalsCount === 0) {
+    document.body.classList.remove('modal-open');
+    if (window.visualViewport && _vvResizeHandler) {
+      window.visualViewport.removeEventListener('resize', _vvResizeHandler);
+      window.visualViewport.removeEventListener('scroll', _vvResizeHandler);
+      _vvResizeHandler = null;
+    }
+    document.documentElement.style.removeProperty('--hm-vh');
+  }
+}
+
+// ──────────────────────────────────────────────────
 // 19a. PREVIEW SCRIPT MODAL (dry-run generation)
 // ──────────────────────────────────────────────────
 let _previewModalOpen = false;
@@ -5612,6 +5664,7 @@ async function openPreviewModal() {
     if (imgs.length === 0) { showToast('Ajoute au moins une capture', true); return; }
   }
   _previewModalOpen = true;
+  lockBodyScroll();
   const modal = document.getElementById('previewModal');
   modal.classList.add('open');
   try { history.pushState({ previewModal: true }, '', location.href); } catch(_) {}
@@ -5622,6 +5675,7 @@ async function openPreviewModal() {
 function closePreviewModal(fromPopState) {
   if (!_previewModalOpen) return;
   _previewModalOpen = false;
+  unlockBodyScroll();
   document.getElementById('previewModal').classList.remove('open');
   if (_previewInFlight) { try { _previewInFlight.abort(); } catch(_) {} _previewInFlight = null; }
   if (!fromPopState) {
@@ -5873,6 +5927,7 @@ function updateHookCounters(text) {
 function openHookModal() {
   if (_hookModalOpen) return;
   _hookModalOpen = true;
+  lockBodyScroll();
   const modal = document.getElementById('hookModal');
   const textarea = document.getElementById('hookModalTextarea');
   const current = state.wizard.config.hookText || '';
@@ -5891,6 +5946,7 @@ function openHookModal() {
 function closeHookModal(fromPopState) {
   if (!_hookModalOpen) return;
   _hookModalOpen = false;
+  unlockBodyScroll();
   const modal = document.getElementById('hookModal');
   modal.classList.remove('open');
   // Also close any stacked sub-sheets
