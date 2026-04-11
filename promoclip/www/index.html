@@ -2460,7 +2460,7 @@ body.modal-open {
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.6.17';
+const APP_VERSION = '0.6.18';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -5363,10 +5363,22 @@ async function restoreDrive() {
 // 17. NAVIGATION
 // ──────────────────────────────────────────────────
 let _currentScreen = 'home';
-// Flag set while we are handling a browser-back, so goScreen() knows NOT to push a new state
+// Navigation stack for Android hardware/gesture back button (v0.6.18: native @capacitor/app plugin)
+let _navStack = ['home'];
+// Flag set while we are handling a back-button pop, so goScreen() does NOT re-push onto the stack
 let _handlingPopScreen = false;
-// Seed the initial history entry with the home marker so Android back works from any subscreen
-try { history.replaceState({ screen: 'home', __promoclipNav: true }, '', location.href); } catch(_) {}
+
+// Maintain the navigation stack in sync with screen transitions.
+// If the target screen is already in the stack (user navigates "back" to a parent),
+// truncate the stack to that point instead of duplicating. Otherwise push as usual.
+function navTrackScreen(name) {
+  const idx = _navStack.lastIndexOf(name);
+  if (idx >= 0) {
+    _navStack = _navStack.slice(0, idx + 1);
+  } else {
+    _navStack.push(name);
+  }
+}
 
 function goScreen(name) {
   if (name === _currentScreen) return;
@@ -5381,10 +5393,9 @@ function goScreen(name) {
 
   _currentScreen = name;
 
-  // Push a history state so Android/browser back returns to the previous screen
-  // instead of quitting the app. Skip when we are already handling a pop (avoid loop).
+  // Keep the navigation stack in sync unless we are currently popping it (via back button)
   if (!_handlingPopScreen) {
-    try { history.pushState({ screen: name, __promoclipNav: true }, '', location.href); } catch(_) {}
+    navTrackScreen(name);
   }
 
   // Hide global log panel + toggle on generation screen (inline logs replace it)
@@ -6284,22 +6295,52 @@ function setupPreviewModalListeners() {
 // Single centralized handler for Android back button + ESC across ALL app modals
 // Priority order: preview modal > hook modal > (future modals)
 function setupGlobalModalNavHandlers() {
+  // popstate: browser/desktop back button only handles modals (Android back is handled
+  // via the native @capacitor/app plugin in setupAndroidBackButton below — more reliable)
   window.addEventListener('popstate', (e) => {
-    // Close whichever modal is topmost
     if (_previewModalOpen) { closePreviewModal(true); return; }
     if (_hookModalOpen) { closeHookModal('back', true); return; }
-    // Screen navigation: if the popped state points to another screen, navigate to it
-    // without re-pushing a new history entry (handled via _handlingPopScreen flag)
-    if (e.state && e.state.__promoclipNav && e.state.screen && e.state.screen !== _currentScreen) {
-      _handlingPopScreen = true;
-      try { goScreen(e.state.screen); } finally { _handlingPopScreen = false; }
-    }
   });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (_previewModalOpen) { closePreviewModal(false); return; }
     if (_hookModalOpen) { closeHookModal('esc', false); return; }
   });
+}
+
+// Native Android back button handler via @capacitor/app plugin.
+// Priority order: modals > screen navigation stack > exit app.
+// This is more reliable than webview popstate on Honor/Huawei which don't always
+// propagate the back event to the web layer.
+async function handleAndroidBack() {
+  // 1) Topmost modals priority (manually invoke close handlers)
+  if (_previewModalOpen) { closePreviewModal(false); return; }
+  if (_hookModalOpen) { closeHookModal('back', false); return; }
+  // 2) Screen navigation via stack
+  if (_navStack.length > 1) {
+    _navStack.pop();
+    const prev = _navStack[_navStack.length - 1] || 'home';
+    _handlingPopScreen = true;
+    try { goScreen(prev); } finally { _handlingPopScreen = false; }
+    return;
+  }
+  // 3) On home with empty stack → exit app natively
+  try {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+      await window.Capacitor.Plugins.App.exitApp();
+    }
+  } catch (_) {}
+}
+
+function setupAndroidBackButton() {
+  try {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+      window.Capacitor.Plugins.App.addListener('backButton', handleAndroidBack);
+      log('Android back button listener registered (@capacitor/app)');
+    }
+  } catch (e) {
+    log('backButton listener setup error: ' + e.message, 'warn');
+  }
 }
 
 // ──────────────────────────────────────────────────
@@ -7015,6 +7056,7 @@ function init() {
   setupPreviewModalListeners();
   // Single centralized popstate/ESC handler for all modals (priority ordered)
   setupGlobalModalNavHandlers();
+  setupAndroidBackButton();
 
   log('PromoClip v' + APP_VERSION + ' initialise');
 }

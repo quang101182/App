@@ -4,6 +4,7 @@
  *            v1.0.1 — Preserve aspect ratio for non-9:16 clip images (letterbox + static zoom)
  *            v1.0.2 — Asymmetric ratio tolerance [0.394, 0.619] to accept modern smartphones (19.5:9, 20:9, 21:9)
  *            v1.0.3 — Retrait -shortest dans mix audio /promo-assembly (fixait la truncation video a la duree TTS court)
+ *            v1.0.4 — Xfade Pro timeout 60s -> 180s (crash sur full re-encode intro+main+outro avec avatar)
  *
  * Heberge UNIQUEMENT /health + /promo-assembly + /promo-assembly-pro.
  * Le reste des routes (slideshow, merge, ken-burns, smart-zoom, etc) reste
@@ -38,7 +39,7 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
-const VERSION = '1.0.3';
+const VERSION = '1.0.4';
 
 // ---------------------------------------------------------------------------
 // Etat global
@@ -912,7 +913,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
           ff.stderr.on('data', d => { stderr += d.toString(); });
           ff.on('close', code => code === 0 ? resolve() : reject(new Error('Xfade Pro: ' + stderr.slice(-300))));
           ff.on('error', reject);
-          setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Xfade Pro timeout')); }, 60000);
+          setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Xfade Pro timeout 180s')); }, 180000);
         });
         fs.renameSync(finalPath, outputPath);
         console.log(`[${jobId}] Intro/Outro xfade OK`);
