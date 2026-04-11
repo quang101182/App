@@ -2460,7 +2460,7 @@ body.modal-open {
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.6.15';
+const APP_VERSION = '0.6.16';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -4737,6 +4737,28 @@ async function startGeneration() {
   const selectedMedia = state.wizard.mediaFiles.filter(m => m.selected && m._file);
   if (selectedMedia.length === 0) { showToast('Ajoute des medias !', true); goScreen('media'); return; }
 
+  // Warning UX: if each image would be shown less than 1.5s on the final video, warn the user.
+  // Mode Pro is duration-driven by the screen recording, so this check does not apply.
+  if (!isProMode() && state.wizard.config.duration && selectedMedia.length) {
+    const perImage = state.wizard.config.duration / selectedMedia.length;
+    if (perImage < 1.5) {
+      const formatted = perImage.toFixed(2);
+      const ok = confirm(
+        'Chaque image s\'affichera seulement ' + formatted + 's dans la video.\n\n' +
+        'Pour une bonne lisibilite, il est recommande d\'avoir au moins 1.5s par image.\n\n' +
+        'Tu peux :\n' +
+        '- Augmenter la duree dans Configuration\n' +
+        '- Reduire le nombre d\'images selectionnees\n\n' +
+        'Continuer quand meme ?'
+      );
+      if (!ok) {
+        log('Generation annulee: ratio duree/images trop bas (' + formatted + 's/image)');
+        return;
+      }
+      log('Warning ratio duree/images accepte par l\'user (' + formatted + 's/image)');
+    }
+  }
+
   _genCancelled = false;
   _genAbortCtrl = new AbortController();
   goScreen('generate');
@@ -4786,8 +4808,10 @@ async function startGeneration() {
         log('  Capture ' + (i+1) + ': Vision fallback (center) — ' + e.message, 'warn');
         bbox = { x1: 250, y1: 250, x2: 750, y2: 750, element: 'fallback' };
       }
-      // Distribute duration across clips
-      const clipDur = Math.max(3, Math.round(cfg.duration / selectedMedia.length));
+      // Distribute the user-requested duration evenly across the clips.
+      // Floor = 1s (minimum readable). Preserve fractions (float) so 5s / 3 clips = 1.67s each,
+      // matching what the user asked for instead of silently forcing 3s/clip.
+      const clipDur = Math.max(1, cfg.duration / selectedMedia.length);
       // Zoom effect based on user config
       let clipEffect;
       if (cfg.zoomEffect === 'static') {

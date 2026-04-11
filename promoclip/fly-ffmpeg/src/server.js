@@ -3,6 +3,7 @@
  * Version: 1.0.1 — Split from subwhisper-ffmpeg (2026-04-11)
  *            v1.0.1 — Preserve aspect ratio for non-9:16 clip images (letterbox + static zoom)
  *            v1.0.2 — Asymmetric ratio tolerance [0.394, 0.619] to accept modern smartphones (19.5:9, 20:9, 21:9)
+ *            v1.0.3 — Retrait -shortest dans mix audio /promo-assembly (fixait la truncation video a la duree TTS court)
  *
  * Heberge UNIQUEMENT /health + /promo-assembly + /promo-assembly-pro.
  * Le reste des routes (slideshow, merge, ken-burns, smart-zoom, etc) reste
@@ -37,7 +38,7 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 
 // ---------------------------------------------------------------------------
 // Etat global
@@ -507,10 +508,14 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
         mixArgs.push('-filter_complex', filterComplex, '-map', '0:v', '-map', '[aout]');
       }
 
+      // NO -shortest: we want the video to keep its full concat duration even if the
+      // voiceover finishes earlier. The client-side design says "small silence at the
+      // end is OK" (cf wordsTargetForDuration comment) but -shortest was contradicting it
+      // by truncating the whole MP4 to the audio length. FFmpeg falls back to the longest
+      // stream when -shortest is absent, producing a valid MP4 with trailing silence.
       mixArgs.push(
         '-c:v', 'copy',
         '-c:a', 'aac', '-b:a', '256k',
-        '-shortest',
         '-movflags', '+faststart',
         '-y', finalOut
       );
