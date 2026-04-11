@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PromoClip v0.6.9</title>
+<title>PromoClip v0.6.10</title>
 <style>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.6.9 — Functional App
+   PromoClip v0.6.10 — Functional App
    Dark mode, accent violet #7C3AED, mobile-first
    ═══════════════════════════════════════════════════════ */
 
@@ -1372,7 +1372,7 @@ body.modal-open {
 
 <!-- ═══ Screen Navigator (desktop only) ═══ -->
 <div class="screen-nav" id="screenNav">
-  <h3 id="appVersionNav">PromoClip v0.6.9</h3>
+  <h3 id="appVersionNav">PromoClip v0.6.10</h3>
   <div class="screen-nav-item active" data-action="nav-screen" data-screen="home">1. Accueil</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="template">2. Template</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="media">3. Medias</div>
@@ -1407,7 +1407,7 @@ body.modal-open {
       <div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</span>
-          <span class="badge badge-accent" id="appVersionBadge">v0.6.9</span>
+          <span class="badge badge-accent" id="appVersionBadge">v0.6.10</span>
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
       </div>
@@ -2056,7 +2056,7 @@ body.modal-open {
 
     <div class="divider"></div>
     <div style="text-align:center; padding:16px 0 40px;">
-      <div style="font-size:11px; color:var(--text-muted);" id="appVersionFooter">PromoClip v0.6.9</div>
+      <div style="font-size:11px; color:var(--text-muted);" id="appVersionFooter">PromoClip v0.6.10</div>
       <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Build 2026-04-06</div>
     </div>
   </div>
@@ -2301,13 +2301,13 @@ body.modal-open {
 
 <script>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.6.9 — Complete JS
+   PromoClip v0.6.10 — Complete JS
    ═══════════════════════════════════════════════════════ */
 
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.6.9';
+const APP_VERSION = '0.6.10';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -2512,6 +2512,12 @@ function log(msg, level = 'info') {
   const ts = now.toTimeString().slice(0,8);
   _logs.push({ ts, msg, level });
   if (_logs.length > MAX_LOGS) _logs.shift();
+  // Mirror to devtools console (easier debug on PC / chrome://inspect on Android)
+  try {
+    if (level === 'error') console.error('[PromoClip]', msg);
+    else if (level === 'warn') console.warn('[PromoClip]', msg);
+    else console.log('[PromoClip]', msg);
+  } catch(_) {}
   const body = document.getElementById('logBody');
   if (body) {
     const entry = document.createElement('div');
@@ -3613,41 +3619,58 @@ function deleteProduct(id) {
 // ──────────────────────────────────────────────────
 // 10. MEDIA PICKER
 // ──────────────────────────────────────────────────
-async function handleMediaFiles(files) {
+// Non-blocking media handler: pushes all entries immediately to state, loads
+// thumbnails + ArrayBuffers in the background, rafraichit la grille à chaque callback.
+// BUG fix v0.6.10: l'ancienne version await-ait generateVideoThumbnail dans for...of,
+// bloquant l'ajout de l'image suivante (jusqu'a 5s de timeout vidéo). Résultat : sélection
+// mixte image+vidéo n'ajoutait que la vidéo et l'user pensait l'image perdue.
+function handleMediaFiles(files) {
+  const count = files.length;
+  log('Picker: ' + count + ' fichier(s) — ' + Array.from(files).map(f => (f.name || '?') + '(' + (f.type || 'unknown') + ',' + (f.size/1024).toFixed(0) + 'KB)').join(' | '));
+  try { console.log('[Picker]', count, 'files:', Array.from(files).map(f => ({ name: f.name, type: f.type, size: f.size }))); } catch(_) {}
+
   for (const f of files) {
     const existing = state.wizard.mediaFiles.find(m => m.name === f.name && m.size === f.size);
-    if (!existing) {
-      const isVideo = (f.type || '').startsWith('video/');
-      let thumbUrl = null;
-      let buffer = null;
-      let bufferType = null;
-      if (isVideo) {
-        // Videos: keep File reference only (too heavy to preload into memory)
-        thumbUrl = await generateVideoThumbnail(f);
-      } else {
-        // Images: preload ArrayBuffer at selection time — immune to content:// URI expiry (Honor Photos, Android MediaStore, etc)
-        try {
-          buffer = await f.arrayBuffer();
-          bufferType = f.type || 'image/*';
-          thumbUrl = URL.createObjectURL(new Blob([buffer], { type: bufferType }));
-          log('Image prechargee: ' + (f.name || '?') + ' (' + (buffer.byteLength/1024).toFixed(0) + ' KB)');
-        } catch(e) {
-          log('Preload image echec (' + (f.name || '?') + '): ' + e.message, 'warn');
-          thumbUrl = URL.createObjectURL(f);
-        }
-      }
-      state.wizard.mediaFiles.push({
-        id: 'media-' + uuid(),
-        name: f.name,
-        size: f.size,
-        type: f.type,
-        isVideo,
-        selected: true,
-        order: state.wizard.mediaFiles.filter(m => m.selected).length + 1,
-        _file: f,
-        _buffer: buffer,         // ArrayBuffer for images, null for videos
-        _bufferType: bufferType, // MIME for images, null for videos
-        _thumbUrl: thumbUrl
+    if (existing) continue;
+
+    const isVideo = (f.type || '').startsWith('video/');
+    const mediaEntry = {
+      id: 'media-' + uuid(),
+      name: f.name,
+      size: f.size,
+      type: f.type,
+      isVideo,
+      selected: true,
+      order: state.wizard.mediaFiles.filter(m => m.selected).length + 1,
+      _file: f,
+      _buffer: null,         // ArrayBuffer for images (async), null for videos
+      _bufferType: null,     // MIME for images (async), null for videos
+      _thumbUrl: null        // async update
+    };
+    // Push immediately — the UI can render the entry even without a thumbnail
+    state.wizard.mediaFiles.push(mediaEntry);
+
+    // Background: load thumbnail + (for images) preload ArrayBuffer
+    if (isVideo) {
+      generateVideoThumbnail(f).then(url => {
+        mediaEntry._thumbUrl = url;
+        renderMediaGrid();
+      }).catch(e => {
+        log('Thumbnail video echec (' + (f.name || '?') + '): ' + e.message, 'warn');
+        renderMediaGrid();
+      });
+    } else {
+      // Images: preload ArrayBuffer → immune to content:// URI expiry (Honor Photos, Android MediaStore)
+      f.arrayBuffer().then(buf => {
+        mediaEntry._buffer = buf;
+        mediaEntry._bufferType = f.type || 'image/*';
+        mediaEntry._thumbUrl = URL.createObjectURL(new Blob([buf], { type: mediaEntry._bufferType }));
+        log('Image prechargee: ' + (f.name || '?') + ' (' + (buf.byteLength/1024).toFixed(0) + ' KB)');
+        renderMediaGrid();
+      }).catch(e => {
+        log('Preload image echec (' + (f.name || '?') + '): ' + e.message, 'warn');
+        try { mediaEntry._thumbUrl = URL.createObjectURL(f); } catch(_) {}
+        renderMediaGrid();
       });
     }
   }
@@ -5560,12 +5583,7 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
 // File inputs
 document.getElementById('mediaFileInput').addEventListener('change', (e) => {
   const files = e.target.files;
-  if (files.length > 0) {
-    // Diag log for mixed picker issue (image + video from Honor Photos, Xiaomi Gallery, etc)
-    const summary = Array.from(files).map(f => (f.name || '?') + '(' + (f.type || 'unknown') + ',' + (f.size/1024).toFixed(0) + 'KB)').join(' | ');
-    log('Picker: ' + files.length + ' fichier(s) — ' + summary);
-    handleMediaFiles(files);
-  }
+  if (files.length > 0) handleMediaFiles(files);
   e.target.value = '';
 });
 
