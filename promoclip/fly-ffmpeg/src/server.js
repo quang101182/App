@@ -1,6 +1,7 @@
 /**
  * PromoClip Fly.io FFmpeg Server
- * Version: 1.0.0 — Split from subwhisper-ffmpeg (2026-04-11)
+ * Version: 1.0.1 — Split from subwhisper-ffmpeg (2026-04-11)
+ *            v1.0.1 — Preserve aspect ratio for non-9:16 clip images (letterbox + static zoom)
  *
  * Heberge UNIQUEMENT /health + /promo-assembly + /promo-assembly-pro.
  * Le reste des routes (slideshow, merge, ken-burns, smart-zoom, etc) reste
@@ -35,7 +36,7 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 
 // ---------------------------------------------------------------------------
 // Etat global
@@ -217,6 +218,12 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
     }
 
     // 2. Generate individual clip videos (ken-burns or smart-zoom)
+    // Aspect ratio handling:
+    //   - Native 9:16 screenshots (ratio 0.56 ±10%) get the full cover + ken-burns treatment
+    //   - Other ratios (landscape, square, 4:3, etc) are letterboxed on a dark canvas
+    //     with a STATIC zoompan to avoid revealing the padded bars while zooming
+    const TARGET_RATIO = width / height; // 1080/1920 = 0.5625
+    const RATIO_TOLERANCE = 0.10; // ±10% → accepts ~0.506..0.619 (9:16 + small variants)
     const clipVideos = [];
     for (let i = 0; i < clips.length; i++) {
       const clip = clips[i];
@@ -225,11 +232,24 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
       const d = Math.round(fps * dur);
       const clipOutPath = path.join(tmpDir, `clip-${i}.mp4`);
 
+      // Decide whether this clip needs letterboxing based on its original aspect ratio.
+      // If the client provided width+height, compare to the target (9:16). Otherwise assume native.
+      let needsLetterbox = false;
+      if (clip.width > 0 && clip.height > 0) {
+        const srcRatio = clip.width / clip.height;
+        const deviation = Math.abs(srcRatio - TARGET_RATIO) / TARGET_RATIO;
+        needsLetterbox = deviation > RATIO_TOLERANCE;
+      }
+
       let zoompanFilter;
       const effect = clip.effect || 'zoom_in';
-      if (effect === 'none') {
+      // When letterboxing, force a STATIC zoompan regardless of user effect,
+      // otherwise the zoom would reveal the dark padding bars during animation.
+      const effectiveEffect = needsLetterbox ? 'none' : effect;
+
+      if (effectiveEffect === 'none') {
         zoompanFilter = `zoompan=z=1:d=${d}:x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':s=${width}x${height}:fps=${fps}`;
-      } else if (effect === 'subtle') {
+      } else if (effectiveEffect === 'subtle') {
         zoompanFilter = `zoompan=z='min(zoom+0.0003,1.05)':d=${d}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=${fps}`;
       } else if (clip.bbox && clip.bbox.x1 != null) {
         const cx = ((clip.bbox.x1 + clip.bbox.x2) / 2) / 1000;
@@ -239,7 +259,7 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
         const zoomTarget = Math.min(3.0, Math.max(1.3, 1 / Math.max(bboxW, bboxH)));
         zoompanFilter = `zoompan=z='min(zoom+${((zoomTarget - 1) / d).toFixed(6)},${zoomTarget.toFixed(2)})':d=${d}:x='${cx}*iw-iw/zoom/2':y='${cy}*ih-ih/zoom/2':s=${width}x${height}:fps=${fps}`;
       } else {
-        switch (effect) {
+        switch (effectiveEffect) {
           case 'zoom_out':
             zoompanFilter = `zoompan=z='if(lte(zoom,1.0),1.5,max(1.001,zoom-0.001))':d=${d}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=${fps}`;
             break;
@@ -254,10 +274,21 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
         }
       }
 
+      // Pre-filter: letterbox (contain) for non-9:16 images, legacy cover for native.
+      // - Letterbox: scale-fit to target + pad dark to preserve aspect ratio (no stretch, no crop)
+      // - Cover: scale width 2000 (legacy) → zoompan fills canvas by cropping (fine for 9:16)
+      const preFilter = needsLetterbox
+        ? `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1`
+        : `scale=2000:-1`;
+
+      if (needsLetterbox) {
+        console.log(`[${jobId}] Clip ${i}: letterbox (src ${clip.width}x${clip.height}, ratio ${(clip.width / clip.height).toFixed(3)} vs target ${TARGET_RATIO.toFixed(3)})`);
+      }
+
       const ffArgs = [
         '-loop', '1',
         '-i', clipPaths[i],
-        '-vf', `scale=2000:-1,${zoompanFilter}`,
+        '-vf', `${preFilter},${zoompanFilter}`,
         '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
         '-pix_fmt', 'yuv420p',
         '-t', String(dur),
