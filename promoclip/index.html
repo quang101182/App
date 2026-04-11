@@ -2460,7 +2460,7 @@ body.modal-open {
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.6.16';
+const APP_VERSION = '0.6.17';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -5363,6 +5363,10 @@ async function restoreDrive() {
 // 17. NAVIGATION
 // ──────────────────────────────────────────────────
 let _currentScreen = 'home';
+// Flag set while we are handling a browser-back, so goScreen() knows NOT to push a new state
+let _handlingPopScreen = false;
+// Seed the initial history entry with the home marker so Android back works from any subscreen
+try { history.replaceState({ screen: 'home', __promoclipNav: true }, '', location.href); } catch(_) {}
 
 function goScreen(name) {
   if (name === _currentScreen) return;
@@ -5376,6 +5380,12 @@ function goScreen(name) {
   if (next) { next.classList.remove('exit-left'); next.classList.add('active'); }
 
   _currentScreen = name;
+
+  // Push a history state so Android/browser back returns to the previous screen
+  // instead of quitting the app. Skip when we are already handling a pop (avoid loop).
+  if (!_handlingPopScreen) {
+    try { history.pushState({ screen: name, __promoclipNav: true }, '', location.href); } catch(_) {}
+  }
 
   // Hide global log panel + toggle on generation screen (inline logs replace it)
   const logPanel = document.getElementById('logPanel');
@@ -6278,6 +6288,12 @@ function setupGlobalModalNavHandlers() {
     // Close whichever modal is topmost
     if (_previewModalOpen) { closePreviewModal(true); return; }
     if (_hookModalOpen) { closeHookModal('back', true); return; }
+    // Screen navigation: if the popped state points to another screen, navigate to it
+    // without re-pushing a new history entry (handled via _handlingPopScreen flag)
+    if (e.state && e.state.__promoclipNav && e.state.screen && e.state.screen !== _currentScreen) {
+      _handlingPopScreen = true;
+      try { goScreen(e.state.screen); } finally { _handlingPopScreen = false; }
+    }
   });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
