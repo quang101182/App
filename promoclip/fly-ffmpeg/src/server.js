@@ -2,6 +2,7 @@
  * PromoClip Fly.io FFmpeg Server
  * Version: 1.0.1 — Split from subwhisper-ffmpeg (2026-04-11)
  *            v1.0.1 — Preserve aspect ratio for non-9:16 clip images (letterbox + static zoom)
+ *            v1.0.2 — Asymmetric ratio tolerance [0.394, 0.619] to accept modern smartphones (19.5:9, 20:9, 21:9)
  *
  * Heberge UNIQUEMENT /health + /promo-assembly + /promo-assembly-pro.
  * Le reste des routes (slideshow, merge, ken-burns, smart-zoom, etc) reste
@@ -36,7 +37,7 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 
 // ---------------------------------------------------------------------------
 // Etat global
@@ -218,12 +219,15 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
     }
 
     // 2. Generate individual clip videos (ken-burns or smart-zoom)
-    // Aspect ratio handling:
-    //   - Native 9:16 screenshots (ratio 0.56 ±10%) get the full cover + ken-burns treatment
-    //   - Other ratios (landscape, square, 4:3, etc) are letterboxed on a dark canvas
-    //     with a STATIC zoompan to avoid revealing the padded bars while zooming
+    // Aspect ratio handling (asymmetric tolerance):
+    //   - Accepts native smartphone ratios (9:16, 19.5:9, 20:9, 21:9) for full cover + ken-burns
+    //   - Letterboxes images that are WIDER than 9:16+10% (true landscape, square, 4:3, 4:5)
+    //   - Also letterboxes images that are MUCH TALLER than 9:16 (very elongated screenshots)
+    //   - Letterbox uses a STATIC zoompan to avoid revealing the padded bars while zooming
     const TARGET_RATIO = width / height; // 1080/1920 = 0.5625
-    const RATIO_TOLERANCE = 0.10; // ±10% → accepts ~0.506..0.619 (9:16 + small variants)
+    const RATIO_MAX = TARGET_RATIO * 1.10; // 0.619 — anything wider is letterboxed
+    const RATIO_MIN = TARGET_RATIO * 0.70; // 0.394 — anything narrower is letterboxed
+    // Accepted range [0.394, 0.619] → 9:16, 19.5:9, 20:9, 21:9 all pass as native
     const clipVideos = [];
     for (let i = 0; i < clips.length; i++) {
       const clip = clips[i];
@@ -237,8 +241,7 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
       let needsLetterbox = false;
       if (clip.width > 0 && clip.height > 0) {
         const srcRatio = clip.width / clip.height;
-        const deviation = Math.abs(srcRatio - TARGET_RATIO) / TARGET_RATIO;
-        needsLetterbox = deviation > RATIO_TOLERANCE;
+        needsLetterbox = (srcRatio > RATIO_MAX) || (srcRatio < RATIO_MIN);
       }
 
       let zoompanFilter;
