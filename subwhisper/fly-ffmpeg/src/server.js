@@ -169,7 +169,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.30.0'
+    version: '1.30.1'
   });
 });
 
@@ -3107,8 +3107,26 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
       const XFADE_DUR = 0.3;
       const clips = []; // {path, duration}
 
+      // CRITICAL FIX (v1.30.1): ffprobe the actual output duration, not probeDur.
+      // The 1st-stage FFmpeg uses -shortest which truncates to the shortest stream
+      // (often the avatar audio, shorter than the recording). If we use probeDur
+      // (recording source duration) here, the xfade offset lands AFTER the end of
+      // the stream and ffmpeg silently drops the outro.
+      const actualMainDur = await new Promise((resolve) => {
+        const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', outputPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let out = '';
+        ff.stdout.on('data', d => { out += d.toString(); });
+        ff.on('close', code => {
+          if (code === 0) resolve(parseFloat(out.trim()) || probeDur);
+          else resolve(probeDur);
+        });
+        ff.on('error', () => resolve(probeDur));
+        setTimeout(() => { try { ff.kill(); } catch(_){} resolve(probeDur); }, 5000);
+      });
+      console.log(`[${jobId}] Main video actual duration: ${actualMainDur.toFixed(2)}s (probeDur was ${probeDur.toFixed(2)}s)`);
+
       // Main video first (already rendered, audio synced)
-      const mainDur = Math.min(probeDur, 60);
+      const mainDur = Math.min(actualMainDur, 60);
       clips.push({ path: outputPath, duration: mainDur });
 
       // Generate outro clip video from image
