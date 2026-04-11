@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PromoClip v0.6.7</title>
+<title>PromoClip v0.6.8</title>
 <style>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.6.7 — Functional App
+   PromoClip v0.6.8 — Functional App
    Dark mode, accent violet #7C3AED, mobile-first
    ═══════════════════════════════════════════════════════ */
 
@@ -1023,13 +1023,346 @@ body {
 .product-delete:active { background: rgba(239,68,68,0.3); }
 .product-delete svg { width: 16px; height: 16px; stroke: var(--error); fill: none; stroke-width: 2; stroke-linecap: round; }
 
+/* ──────────────────────────────────────────────────
+   HOOK EDITOR MODAL (fullscreen, slide-up)
+   ────────────────────────────────────────────────── */
+.hook-preview {
+  position: relative;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 44px 12px 14px;
+  min-height: 54px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all var(--transition-fast);
+  overflow: hidden;
+}
+.hook-preview:hover { border-color: var(--accent-dim); }
+.hook-preview:active { transform: scale(0.99); background: var(--bg-hover); }
+.hook-preview-text {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+.hook-preview-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.hook-preview-edit-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  color: var(--accent-light);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Fullscreen modal backdrop + sheet */
+.hook-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.22s;
+}
+.hook-modal.open {
+  opacity: 1;
+  visibility: visible;
+}
+.hook-modal-sheet {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+  padding-top: env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.hook-modal.open .hook-modal-sheet {
+  transform: translateY(0);
+}
+.hook-modal-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-primary);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.hook-modal-title { font-size: 17px; font-weight: 700; color: var(--text-primary); }
+.hook-modal-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.hook-modal-close {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.hook-modal-close:active { background: var(--bg-hover); transform: scale(0.95); }
+.hook-modal-close svg { width: 18px; height: 18px; stroke: var(--text-primary); fill: none; stroke-width: 2.5; stroke-linecap: round; }
+
+.hook-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.hook-textarea {
+  width: 100%;
+  min-height: 140px;
+  max-height: 50vh;
+  background: var(--bg-elevated);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 16px;
+  line-height: 1.55;
+  padding: 14px 16px;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+.hook-textarea:focus { border-color: var(--accent); }
+.hook-textarea::placeholder { color: var(--text-muted); font-style: italic; }
+
+.hook-counter {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 10px;
+  padding: 0 4px;
+}
+.hook-counter .ok { color: var(--success); }
+.hook-counter .warn { color: var(--warning); }
+
+/* Action bar: delete | AI | history */
+.hook-actions {
+  display: flex;
+  gap: 10px;
+  padding-top: 6px;
+}
+.hook-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 52px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all var(--transition-fast);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.hook-action-btn:active { transform: scale(0.97); background: var(--bg-hover); }
+.hook-action-btn svg { width: 18px; height: 18px; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.hook-action-btn.delete { color: var(--error); }
+.hook-action-btn.delete svg { stroke: var(--error); }
+.hook-action-btn.ai { color: var(--accent-light); }
+.hook-action-btn.ai svg { stroke: var(--accent-light); }
+.hook-action-btn.history svg { stroke: var(--text-muted); }
+.hook-action-btn:disabled { opacity: 0.5; pointer-events: none; }
+
+/* Delete button long-press ring progress (SVG overlay) */
+.hook-delete-ring {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hook-delete-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.hook-delete-ring circle {
+  fill: none;
+  stroke: var(--error);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 150;
+  stroke-dashoffset: 150;
+  transition: stroke-dashoffset 0.6s linear;
+}
+.hook-action-btn.delete.charging .hook-delete-ring circle { stroke-dashoffset: 0; }
+
+/* Confirm mini-modal (tap-short poubelle) */
+.hook-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  background: rgba(0, 0, 0, 0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.hook-confirm.open { display: flex; }
+.hook-confirm-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 22px 20px 16px;
+  max-width: 320px;
+  width: 100%;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  animation: slide-up 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hook-confirm-title { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+.hook-confirm-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5; }
+.hook-confirm-actions { display: flex; gap: 10px; }
+.hook-confirm-actions button {
+  flex: 1; height: 42px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.hook-confirm-actions button.danger {
+  background: var(--error);
+  border-color: var(--error);
+  color: white;
+}
+.hook-confirm-actions button:active { transform: scale(0.97); }
+
+/* Undo toast (after AI improvement) */
+.hook-undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0) + 20px);
+  transform: translate(-50%, 20px);
+  z-index: 2200;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent-dim);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  max-width: 90vw;
+}
+.hook-undo-toast.open {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+.hook-undo-toast button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* AI suggestions bottom sheet (3 proposals when hook is empty) */
+.hook-ai-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 2150;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-end;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.22s, visibility 0.22s;
+}
+.hook-ai-sheet.open { opacity: 1; visibility: visible; }
+.hook-ai-sheet-body {
+  background: var(--bg-primary);
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  width: 100%;
+  max-height: 70vh;
+  padding: 18px 16px calc(env(safe-area-inset-bottom, 0) + 18px);
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow-y: auto;
+}
+.hook-ai-sheet.open .hook-ai-sheet-body { transform: translateY(0); }
+.hook-ai-sheet-title { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+.hook-ai-sheet-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+.hook-ai-option {
+  padding: 14px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.hook-ai-option:active { transform: scale(0.98); background: var(--bg-hover); border-color: var(--accent-dim); }
+
+/* Loading spinner for AI button */
+.hook-ai-loading {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--accent-dim);
+  border-top-color: var(--accent-light);
+  border-radius: 50%;
+  animation: ai-spin 0.7s linear infinite;
+}
+@keyframes ai-spin { to { transform: rotate(360deg); } }
+
 </style>
 </head>
 <body>
 
 <!-- ═══ Screen Navigator (desktop only) ═══ -->
 <div class="screen-nav" id="screenNav">
-  <h3 id="appVersionNav">PromoClip v0.6.7</h3>
+  <h3 id="appVersionNav">PromoClip v0.6.8</h3>
   <div class="screen-nav-item active" data-action="nav-screen" data-screen="home">1. Accueil</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="template">2. Template</div>
   <div class="screen-nav-item" data-action="nav-screen" data-screen="media">3. Medias</div>
@@ -1064,7 +1397,7 @@ body {
       <div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:24px; font-weight:800; letter-spacing:-0.5px;">PromoClip</span>
-          <span class="badge badge-accent" id="appVersionBadge">v0.6.7</span>
+          <span class="badge badge-accent" id="appVersionBadge">v0.6.8</span>
         </div>
         <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Cree des promos qui convertissent</div>
       </div>
@@ -1267,19 +1600,16 @@ body {
       <div style="font-size:11px; color:var(--text-secondary); line-height:1.5;">Gemini analysera votre recording pour identifier les moments cles et generer un script avatar synchronise automatiquement.</div>
     </div>
 
-    <!-- Hook texte -->
+    <!-- Hook texte (clickable preview → opens fullscreen modal) -->
     <div class="input-group" id="hookGroup">
-      <div class="input-label">Hook texte (3 premieres secondes)</div>
-      <div style="position:relative;">
-        <input class="input-field" type="text" id="configHook" placeholder="Ex: Arrete de taper, dicte !" style="padding-right:80px;">
-        <div style="position:absolute; right:44px; top:50%; transform:translateY(-50%); width:32px; height:32px; border-radius:50%; background:var(--bg-elevated); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer;" data-action="show-hook-history" title="Historique des hooks">
-          <svg width="14" height="14" viewBox="0 0 24 24" stroke="var(--text-muted)" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        </div>
-        <div style="position:absolute; right:8px; top:50%; transform:translateY(-50%); width:32px; height:32px; border-radius:50%; background:var(--accent-glow); display:flex; align-items:center; justify-content:center; cursor:pointer;" data-action="generate-hooks" title="Generer avec Gemini">
-          <svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--accent-light)" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-        </div>
+      <div class="input-label">Hook texte</div>
+      <div class="hook-preview" id="hookPreview" data-action="open-hook-modal" role="button" tabindex="0" aria-label="Editer le hook texte">
+        <div class="hook-preview-text hook-preview-empty" id="hookPreviewText">Clique pour ajouter un hook</div>
+        <svg class="hook-preview-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
       </div>
-      <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Horloge = historique · IA = generer des suggestions</div>
+      <div style="font-size:11px; color:var(--text-muted); margin-top:4px;" id="hookPreviewSub">Apparait au debut du voiceover</div>
+      <!-- Hidden input kept for backward compat with existing flows reading configHook.value -->
+      <input type="hidden" id="configHook">
     </div>
 
     <!-- Langue -->
@@ -1364,6 +1694,10 @@ body {
         <span style="font-size:12px; color:var(--text-muted);" id="configEstimate">Temps estime : ~45s</span>
       </div>
       <div id="configValidationHint" style="display:none; font-size:12px; color:var(--warning); margin-bottom:8px; text-align:center;"></div>
+      <button class="btn-secondary" data-action="open-preview-modal" style="margin-bottom:10px; display:flex; align-items:center; justify-content:center; gap:8px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/></svg>
+        Apercu du script (rapide)
+      </button>
       <button class="btn-primary" data-action="start-generation">Generer la video</button>
     </div>
   </div>
@@ -1712,7 +2046,7 @@ body {
 
     <div class="divider"></div>
     <div style="text-align:center; padding:16px 0 40px;">
-      <div style="font-size:11px; color:var(--text-muted);" id="appVersionFooter">PromoClip v0.6.7</div>
+      <div style="font-size:11px; color:var(--text-muted);" id="appVersionFooter">PromoClip v0.6.8</div>
       <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">Build 2026-04-06</div>
     </div>
   </div>
@@ -1792,6 +2126,120 @@ body {
   </div>
 </div>
 
+<!-- ═══ Fullscreen Preview Script Modal (dry-run generation) ═══ -->
+<div class="hook-modal" id="previewModal" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
+  <div class="hook-modal-sheet">
+    <div class="hook-modal-header">
+      <div>
+        <div class="hook-modal-title" id="previewModalTitle">Apercu du script</div>
+        <div class="hook-modal-subtitle" id="previewModalSubtitle">Voiceover qui sera utilise pour la video</div>
+      </div>
+      <div class="hook-modal-close" id="previewModalClose" role="button" tabindex="0" aria-label="Fermer">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </div>
+    </div>
+    <div class="hook-modal-body">
+      <div id="previewLoadingState" style="text-align:center; padding:40px 20px;">
+        <div class="hook-ai-loading" style="width:32px; height:32px; border-width:3px; margin-bottom:16px;"></div>
+        <div style="font-size:14px; color:var(--text-secondary);" id="previewLoadingLabel">Generation du script...</div>
+      </div>
+      <div id="previewContentState" style="display:none;">
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">Voiceover (editable)</div>
+        <textarea class="hook-textarea" id="previewVoiceover" style="min-height:180px; max-height:40vh;" spellcheck="true"></textarea>
+        <div class="hook-counter" id="previewCounter" style="margin-top:6px;">
+          <span id="previewCounterWords">0 mots</span>
+          <span id="previewCounterTarget">target 0</span>
+          <span id="previewCounterDur">~0s / 0s</span>
+        </div>
+        <div id="previewCaptionBlock" style="margin-top:14px; display:none;">
+          <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">Description sociale</div>
+          <div id="previewCaptionText" style="background:var(--bg-elevated); border:1px solid var(--border); border-radius:10px; padding:12px; font-size:13px; color:var(--text-primary); line-height:1.5;"></div>
+          <div id="previewHashtags" style="margin-top:8px; font-size:12px; color:var(--accent-light);"></div>
+        </div>
+        <div class="hook-actions" style="margin-top:18px;">
+          <button class="hook-action-btn ai" id="previewBtnRegenerate" type="button">
+            <svg viewBox="0 0 24 24" stroke="currentColor"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/><path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/></svg>
+            <span>Regenerer</span>
+          </button>
+          <button class="hook-action-btn" id="previewBtnValidate" type="button" style="background:var(--accent); color:white; border-color:var(--accent);">
+            <svg viewBox="0 0 24 24" stroke="currentColor"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Valider et lancer</span>
+          </button>
+        </div>
+      </div>
+      <div id="previewErrorState" style="display:none; text-align:center; padding:24px; color:var(--error);">
+        <div style="font-size:14px; margin-bottom:12px;" id="previewErrorMsg">Erreur</div>
+        <button class="btn-secondary" id="previewBtnRetry">Reessayer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Fullscreen Hook Editor Modal ═══ -->
+<div class="hook-modal" id="hookModal" role="dialog" aria-modal="true" aria-labelledby="hookModalTitle">
+  <div class="hook-modal-sheet">
+    <div class="hook-modal-header">
+      <div>
+        <div class="hook-modal-title" id="hookModalTitle">Hook de la video</div>
+        <div class="hook-modal-subtitle">Apparait textuellement au debut du voiceover</div>
+      </div>
+      <div class="hook-modal-close" id="hookModalClose" role="button" tabindex="0" aria-label="Fermer">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </div>
+    </div>
+    <div class="hook-modal-body">
+      <textarea class="hook-textarea" id="hookModalTextarea" placeholder="Tape ton hook ici. Ex: Arrete de taper, dicte !" rows="4" maxlength="500" spellcheck="true" autocomplete="off" autocapitalize="sentences"></textarea>
+      <div class="hook-counter" id="hookModalCounter">
+        <span id="hookCounterChars">0 caracteres</span>
+        <span id="hookCounterWords">0 mots</span>
+        <span id="hookCounterDur">~0s</span>
+      </div>
+      <div class="hook-actions">
+        <button class="hook-action-btn delete" id="hookBtnDelete" type="button" aria-label="Effacer le hook">
+          <div class="hook-delete-ring"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/></svg></div>
+          <svg viewBox="0 0 24 24" stroke="currentColor"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+          <span>Effacer</span>
+        </button>
+        <button class="hook-action-btn ai" id="hookBtnAI" type="button" aria-label="Generer ou ameliorer avec IA">
+          <svg viewBox="0 0 24 24" stroke="currentColor"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"/></svg>
+          <span id="hookBtnAILabel">Generer</span>
+        </button>
+        <button class="hook-action-btn history" id="hookBtnHistory" type="button" aria-label="Historique des hooks">
+          <svg viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Historique</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Hook confirm delete mini-modal (short-tap poubelle) ═══ -->
+<div class="hook-confirm" id="hookConfirm" role="dialog" aria-modal="true">
+  <div class="hook-confirm-box">
+    <div class="hook-confirm-title">Effacer le hook ?</div>
+    <div class="hook-confirm-desc">Astuce : reste appuye sur la poubelle pour effacer directement.</div>
+    <div class="hook-confirm-actions">
+      <button id="hookConfirmCancel" type="button">Annuler</button>
+      <button id="hookConfirmDelete" class="danger" type="button">Effacer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Hook AI suggestions bottom sheet (when empty → 3 propositions) ═══ -->
+<div class="hook-ai-sheet" id="hookAISheet" role="dialog" aria-modal="true">
+  <div class="hook-ai-sheet-body">
+    <div class="hook-ai-sheet-title">Suggestions IA</div>
+    <div class="hook-ai-sheet-sub">Choisis un hook (ou appuie a cote pour fermer)</div>
+    <div id="hookAISheetOptions"></div>
+  </div>
+</div>
+
+<!-- ═══ Hook undo toast (after IA improvement) ═══ -->
+<div class="hook-undo-toast" id="hookUndoToast" role="status" aria-live="polite">
+  <span>Hook ameliore par IA</span>
+  <button id="hookUndoBtn" type="button">Annuler</button>
+</div>
+
 <!-- ═══ Bottom Sheet (hook history) ═══ -->
 <div class="bottom-sheet-overlay" id="hookHistorySheet">
   <div class="bottom-sheet" style="max-height:70vh;">
@@ -1843,13 +2291,13 @@ body {
 
 <script>
 /* ═══════════════════════════════════════════════════════
-   PromoClip v0.6.7 — Complete JS
+   PromoClip v0.6.8 — Complete JS
    ═══════════════════════════════════════════════════════ */
 
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.6.7';
+const APP_VERSION = '0.6.8';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -2205,75 +2653,136 @@ function fileToRawBase64(file) {
   });
 }
 
-// Convert File object to PNG base64 string (without data: prefix)
-// Uses canvas to normalize any image format (HEIC, WebP, JPEG, etc.) to PNG
-function fileToBase64(file) {
-  log('Fichier: ' + file.name + ' (' + file.type + ', ' + (file.size/1024).toFixed(0) + ' KB)');
+// ── Image decoding pipeline ──
+// Decode any Blob/File as PNG base64 via canvas (internal helper)
+function blobToPngBase64(blob, logLabel) {
   return new Promise((resolve, reject) => {
-    if (file.type.startsWith('video/')) {
-      // For videos: extract a frame at 0.5s and convert to PNG via canvas
-      log('Video detectee — extraction frame...');
-      const video = document.createElement('video');
-      video.muted = true;
-      video.preload = 'auto';
-      const objUrl = URL.createObjectURL(file);
-      video.src = objUrl;
-      video.onloadeddata = () => { video.currentTime = Math.min(0.5, video.duration || 0.5); };
-      video.onseeked = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          const maxDim = 2000;
-          let w = video.videoWidth, h = video.videoHeight;
-          if (w > maxDim || h > maxDim) {
-            const scale = maxDim / Math.max(w, h);
-            w = Math.round(w * scale); h = Math.round(h * scale);
-          }
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(video, 0, 0, w, h);
-          const dataUrl = canvas.toDataURL('image/png');
-          const b64 = dataUrl.substring(dataUrl.indexOf(',') + 1);
-          URL.revokeObjectURL(objUrl);
-          log('Video frame extraite en PNG: ' + w + 'x' + h + ' (' + (b64.length / 1024).toFixed(0) + ' KB)');
-          resolve(b64);
-        } catch(e) { URL.revokeObjectURL(objUrl); reject(new Error('Frame extraction echouee: ' + e.message)); }
-      };
-      video.onerror = () => { URL.revokeObjectURL(objUrl); reject(new Error('Video illisible: ' + file.name)); };
-      setTimeout(() => { URL.revokeObjectURL(objUrl); reject(new Error('Video frame timeout')); }, 10000);
-      return;
-    }
-    // For images: load into canvas → export as PNG (guarantees FFmpeg compatibility)
     const img = new Image();
-    const objUrl = URL.createObjectURL(file);
+    const objUrl = URL.createObjectURL(blob);
+    let done = false;
+    const cleanup = () => { if (!done) { done = true; URL.revokeObjectURL(objUrl); } };
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas');
-        // Cap at 2000px to avoid memory issues while keeping quality
         const maxDim = 2000;
         let w = img.naturalWidth, h = img.naturalHeight;
+        if (!w || !h) { cleanup(); reject(new Error('Dimensions nulles apres decode')); return; }
         if (w > maxDim || h > maxDim) {
           const scale = maxDim / Math.max(w, h);
-          w = Math.round(w * scale);
-          h = Math.round(h * scale);
+          w = Math.round(w * scale); h = Math.round(h * scale);
         }
-        canvas.width = w;
-        canvas.height = h;
+        canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
         const dataUrl = canvas.toDataURL('image/png');
         const b64 = dataUrl.substring(dataUrl.indexOf(',') + 1);
-        URL.revokeObjectURL(objUrl);
-        log('Image convertie en PNG: ' + w + 'x' + h + ' (' + (b64.length / 1024).toFixed(0) + ' KB)');
+        cleanup();
+        log((logLabel || 'Image') + ' convertie en PNG: ' + w + 'x' + h + ' (' + (b64.length / 1024).toFixed(0) + ' KB)');
         resolve(b64);
-      } catch(e) {
-        URL.revokeObjectURL(objUrl);
-        reject(new Error('Conversion image echouee: ' + e.message));
-      }
+      } catch(e) { cleanup(); reject(new Error('Conversion canvas: ' + e.message)); }
     };
-    img.onerror = () => {
-      URL.revokeObjectURL(objUrl);
-      reject(new Error('Image illisible: ' + file.name));
-    };
+    img.onerror = () => { cleanup(); reject(new Error('new Image() decoder failed')); };
     img.src = objUrl;
   });
+}
+
+// Read first 16 bytes to diagnose image format via magic bytes (diag only, called on error)
+async function detectMagicBytes(source) {
+  try {
+    const slice = source.slice ? source.slice(0, 16) : source;
+    const buf = await (slice.arrayBuffer ? slice.arrayBuffer() : Promise.resolve(slice));
+    const bytes = new Uint8Array(buf);
+    const hex = Array.from(bytes).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
+    let fmt = 'unknown';
+    if (hex.startsWith('ffd8ff')) fmt = 'JPEG';
+    else if (hex.startsWith('89504e47')) fmt = 'PNG';
+    else if (bytes.length >= 12 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
+      const brand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+      fmt = 'ftyp(' + brand + ')'; // heic/heix/mif1/avif/mp4/etc
+    }
+    else if (hex.startsWith('52494646')) fmt = 'RIFF (WebP?)';
+    else if (hex.startsWith('47494638')) fmt = 'GIF';
+    else if (hex.startsWith('424d')) fmt = 'BMP';
+    return { hex, format: fmt };
+  } catch(e) {
+    return { hex: 'READ_ERROR', format: 'unreadable: ' + e.message };
+  }
+}
+
+// Read raw video file and extract a PNG frame at 0.5s (unchanged behavior)
+function videoFileToPngBase64(file) {
+  return new Promise((resolve, reject) => {
+    log('Video detectee — extraction frame...');
+    const video = document.createElement('video');
+    video.muted = true;
+    video.preload = 'auto';
+    const objUrl = URL.createObjectURL(file);
+    let done = false;
+    const cleanup = () => { if (!done) { done = true; URL.revokeObjectURL(objUrl); } };
+    video.src = objUrl;
+    video.onloadeddata = () => { video.currentTime = Math.min(0.5, video.duration || 0.5); };
+    video.onseeked = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const maxDim = 2000;
+        let w = video.videoWidth, h = video.videoHeight;
+        if (w > maxDim || h > maxDim) {
+          const scale = maxDim / Math.max(w, h);
+          w = Math.round(w * scale); h = Math.round(h * scale);
+        }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/png');
+        const b64 = dataUrl.substring(dataUrl.indexOf(',') + 1);
+        cleanup();
+        log('Video frame extraite en PNG: ' + w + 'x' + h + ' (' + (b64.length / 1024).toFixed(0) + ' KB)');
+        resolve(b64);
+      } catch(e) { cleanup(); reject(new Error('Frame extraction echouee: ' + e.message)); }
+    };
+    video.onerror = () => { cleanup(); reject(new Error('Video illisible: ' + (file.name || '?'))); };
+    setTimeout(() => { cleanup(); reject(new Error('Video frame timeout')); }, 10000);
+  });
+}
+
+// Robust File → PNG base64 with retry via ArrayBuffer fallback + magic bytes diag on failure
+// Used as last-resort path when media._buffer is not pre-loaded (videos) or when buffer decode failed
+async function fileToBase64(file) {
+  log('Fichier: ' + (file.name || '?') + ' (' + (file.type || 'unknown') + ', ' + (file.size/1024).toFixed(0) + ' KB)');
+  if (file.type && file.type.startsWith('video/')) {
+    return videoFileToPngBase64(file);
+  }
+  // Attempt 1: direct File via new Image() + canvas
+  try {
+    return await blobToPngBase64(file, 'Image');
+  } catch(e1) {
+    log('Image decode #1 echec (' + e1.message + ') — retry via ArrayBuffer', 'warn');
+  }
+  // Attempt 2: read bytes manually, wrap in fresh Blob — bypasses stale content:// URIs
+  try {
+    const ab = await file.arrayBuffer();
+    const freshBlob = new Blob([ab], { type: file.type || 'image/*' });
+    return await blobToPngBase64(freshBlob, 'Image (retry)');
+  } catch(e2) {
+    log('Image decode #2 echec (' + e2.message + ')', 'error');
+  }
+  // Both failed — gather magic bytes diag before rejecting
+  const diag = await detectMagicBytes(file);
+  log('Magic bytes diag: ' + diag.hex + ' — format=' + diag.format, 'error');
+  throw new Error('Image illisible: ' + (file.name || '?') + ' (format=' + diag.format + ')');
+}
+
+// Convert a media object to PNG base64, preferring the pre-loaded buffer (immune to URI expiry)
+async function mediaToBase64(media) {
+  if (media && media._buffer) {
+    const blob = new Blob([media._buffer], { type: media._bufferType || media.type || 'image/*' });
+    log('Fichier (buffer): ' + (media.name || '?') + ' (' + (media.size/1024).toFixed(0) + ' KB)');
+    try {
+      return await blobToPngBase64(blob, 'Image (buffer)');
+    } catch(e) {
+      log('Buffer decode echec (' + e.message + ') — fallback sur File', 'warn');
+    }
+  }
+  // Fallback to File path (videos always go here, images only if preload failed or buffer decode crashed)
+  return fileToBase64(media._file || media);
 }
 
 // Compress image for Gemini Vision (smaller = faster + avoids 400 on large images)
@@ -2386,12 +2895,17 @@ Return ONLY raw JSON (no markdown, no code block):
 
 async function geminiScript(productDesc, hookText, language, duration) {
   log('Gemini: generation script promo...');
+  const { target, min, max } = wordsTargetForDuration(duration, language);
   const text = await geminiCall(
     `You are a TikTok video copywriter. Generate a voiceover script for a ${duration}-second promo video.
 Product: ${productDesc}
 Hook: ${hookText}
 Language: ${language}
-Return ONLY a JSON: {"voiceover":"the full voiceover text for TTS (${Math.max(2,Math.round(duration*0.7))} seconds of speech)", "cta":"call to action text (5 words max)"}`,
+
+HARD LENGTH CONSTRAINT: the voiceover MUST be ${min}-${max} words (ideal: ${target} words).
+Count your words carefully. This is critical — too long will be cut off, too short leaves silence.
+
+Return ONLY a JSON: {"voiceover":"the full voiceover text in ${language} — ${target} words target", "cta":"call to action text (5 words max)"}`,
     { maxTokens: 500 }
   );
   const match = text.match(/\{[\s\S]*?\}/);
@@ -2461,6 +2975,91 @@ Return ONLY a raw JSON array (no markdown, no code blocks, no explanation):
     }
   }
   throw new Error('Gemini n\'a pas retourne de moments valides');
+}
+
+// ── Speech rate per language (words per second at natural TTS/avatar pace) ──
+const WORDS_PER_SEC = {
+  'Francais': 2.3, 'English': 2.5, 'Espagnol': 3.0,
+  'Portugais': 2.7, 'Italien': 2.5, 'Deutsch': 2.2,
+  default: 2.4
+};
+function wordsTargetForDuration(durationSec, language) {
+  const wps = WORDS_PER_SEC[language] || WORDS_PER_SEC.default;
+  // ~75% of video time is actual speech (rest = intro/outro/natural pauses)
+  const speechTime = Math.max(2, durationSec * 0.75);
+  const target = Math.max(6, Math.round(wps * speechTime));
+  return { target, min: Math.max(4, Math.round(target * 0.80)), max: Math.round(target * 1.20), wps };
+}
+function countWords(text) {
+  return (text || '').trim().split(/\s+/).filter(Boolean).length;
+}
+function estimatedSpeechDuration(text, language) {
+  const wps = WORDS_PER_SEC[language] || WORDS_PER_SEC.default;
+  const words = countWords(text);
+  return +(words / (wps * 0.75)).toFixed(1); // total duration including 25% silence/pauses
+}
+
+// Retry Gemini to expand or shorten a voiceover to fit the word target
+async function adjustVoiceoverLength(voiceover, action, target, language) {
+  const verb = action === 'expand'
+    ? 'EXPAND to approximately ' + target + ' words (add more concrete detail, keep the same tone and core message)'
+    : 'SHORTEN to approximately ' + target + ' words (remove filler and repetition, keep the core message and hook)';
+  const prompt = `You are editing a TikTok voiceover script for a short video.
+Current voiceover: "${voiceover}"
+Language: ${language}
+Task: ${verb}
+
+STRICT RULES:
+- Keep the SAME language: ${language}
+- Keep the same meaning, tone and style
+- If a hook/first sentence is present, KEEP IT INTACT
+- Do NOT wrap in quotes, do NOT add markdown or code blocks
+- Return ONLY the adjusted voiceover text, nothing else`;
+  try {
+    const text = await geminiCall(prompt, { maxTokens: 400, temperature: 0.3 });
+    const cleaned = text.trim()
+      .replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '')
+      .replace(/^["']|["']$/g, '')
+      .trim();
+    if (cleaned && cleaned.length > 5) return cleaned;
+  } catch(e) {
+    log('adjustVoiceoverLength error: ' + e.message, 'warn');
+  }
+  return voiceover; // fallback to original on any failure
+}
+
+// Validate word count vs target, retry once if out of range
+async function validateAndFitVoiceover(voiceover, durationSec, language, label) {
+  const { target, min, max } = wordsTargetForDuration(durationSec, language);
+  let words = countWords(voiceover);
+  let result = voiceover;
+  if (words < min || words > max) {
+    const action = words < min ? 'expand' : 'shorten';
+    log((label || 'Script') + ' ' + words + ' mots hors range ' + min + '-' + max + ' — retry ' + action);
+    result = await adjustVoiceoverLength(voiceover, action, target, language);
+    words = countWords(result);
+  }
+  const est = estimatedSpeechDuration(result, language);
+  log((label || 'Script') + ' final: ' + words + ' mots / target ' + target + ' (duree estimee ' + est + 's / ' + durationSec + 's)');
+  return result;
+}
+
+// ── Hook prepend: guarantee user's hook text appears literally at the start of the voiceover ──
+// Fuzzy anti-doublon: if the first 20 chars of the hook (lowercase) are already in the voiceover, skip
+function prependHookIfMissing(voiceover, hookText) {
+  if (!hookText) return voiceover;
+  const hook = hookText.trim();
+  if (!hook) return voiceover;
+  const vo = (voiceover || '').trim();
+  if (!vo) return hook;
+  const needle = hook.toLowerCase().slice(0, Math.min(20, hook.length));
+  if (needle.length >= 4 && vo.toLowerCase().includes(needle)) {
+    // Hook already present (Gemini used it) — do not duplicate
+    return vo;
+  }
+  // Prepend with proper punctuation
+  const sep = /[.!?]$/.test(hook) ? ' ' : '. ';
+  return hook + sep + vo;
 }
 
 // ── PRO MODE: Generate avatar script from moments ──
@@ -3008,12 +3607,24 @@ async function handleMediaFiles(files) {
   for (const f of files) {
     const existing = state.wizard.mediaFiles.find(m => m.name === f.name && m.size === f.size);
     if (!existing) {
-      const isVideo = f.type.startsWith('video/');
+      const isVideo = (f.type || '').startsWith('video/');
       let thumbUrl = null;
+      let buffer = null;
+      let bufferType = null;
       if (isVideo) {
+        // Videos: keep File reference only (too heavy to preload into memory)
         thumbUrl = await generateVideoThumbnail(f);
       } else {
-        thumbUrl = URL.createObjectURL(f);
+        // Images: preload ArrayBuffer at selection time — immune to content:// URI expiry (Honor Photos, Android MediaStore, etc)
+        try {
+          buffer = await f.arrayBuffer();
+          bufferType = f.type || 'image/*';
+          thumbUrl = URL.createObjectURL(new Blob([buffer], { type: bufferType }));
+          log('Image prechargee: ' + (f.name || '?') + ' (' + (buffer.byteLength/1024).toFixed(0) + ' KB)');
+        } catch(e) {
+          log('Preload image echec (' + (f.name || '?') + '): ' + e.message, 'warn');
+          thumbUrl = URL.createObjectURL(f);
+        }
       }
       state.wizard.mediaFiles.push({
         id: 'media-' + uuid(),
@@ -3024,6 +3635,8 @@ async function handleMediaFiles(files) {
         selected: true,
         order: state.wizard.mediaFiles.filter(m => m.selected).length + 1,
         _file: f,
+        _buffer: buffer,         // ArrayBuffer for images, null for videos
+        _bufferType: bufferType, // MIME for images, null for videos
         _thumbUrl: thumbUrl
       });
     }
@@ -3236,6 +3849,9 @@ function renderTemplates() {
 function renderConfigScreen() {
   const cfg = state.wizard.config;
   const pro = isProMode();
+  // Pro mode forces avatar visually ON (avatar pipeline is imposed regardless of cfg.avatar)
+  // effectiveAvatar decouples UI display from cfg state — we never mutate cfg.avatar
+  const effectiveAvatar = pro || cfg.avatar;
 
   // Pro mode: UI-only overrides (NEVER mutate cfg here — Pro forces avatar in generation pipeline only)
   document.getElementById('proModeBanner').style.display = pro ? 'block' : 'none';
@@ -3260,6 +3876,7 @@ function renderConfigScreen() {
   if (voiceGenderGroup) voiceGenderGroup.style.display = pro ? 'none' : '';
 
   document.getElementById('configHook').value = cfg.hookText || '';
+  updateHookPreview();
 
   // Language chips
   const langContainer = document.getElementById('langChips');
@@ -3274,11 +3891,11 @@ function renderConfigScreen() {
   // Music removed — added via TikTok directly
 
   // Toggles
-  document.getElementById('toggleAvatar').className = 'toggle' + (cfg.avatar ? ' on' : '');
+  document.getElementById('toggleAvatar').className = 'toggle' + (effectiveAvatar ? ' on' : '');
   // Voiceover: disabled when avatar is ON (HeyGen includes voice)
   const voiceoverToggle = document.getElementById('toggleVoiceover');
   const voiceoverRow = voiceoverToggle ? voiceoverToggle.closest('.toggle-row') : null;
-  if (cfg.avatar) {
+  if (effectiveAvatar) {
     voiceoverToggle.className = 'toggle';
     if (voiceoverRow) voiceoverRow.style.opacity = '0.35';
     voiceoverToggle.style.pointerEvents = 'none';
@@ -3289,9 +3906,9 @@ function renderConfigScreen() {
   }
   document.getElementById('toggleSubtitles').className = 'toggle' + (cfg.subtitles ? ' on' : '');
 
-  // Avatar options visibility
+  // Avatar options visibility — visible when effectively ON (forced in Pro or toggled by user)
   const avatarOpts = document.getElementById('avatarOptions');
-  if (avatarOpts) avatarOpts.style.display = cfg.avatar ? 'block' : 'none';
+  if (avatarOpts) avatarOpts.style.display = effectiveAvatar ? 'block' : 'none';
 
   // Avatar style chips
   const asContainer = document.getElementById('avatarStyleChips');
@@ -3312,10 +3929,10 @@ function renderConfigScreen() {
     ].map(m => `<div class="chip${cfg.avatarMode === m.id ? ' selected' : ''}" data-action="set-avatar-mode" data-mode="${m.id}">${m.label}</div>`).join('');
   }
 
-  // Voice gender chips (hidden when avatar ON — avatar has its own voice)
+  // Voice gender chips (hidden when avatar effectively ON — avatar has its own voice)
   const vgContainer = document.getElementById('voiceGenderChips');
   if (vgContainer) {
-    if (cfg.avatar) {
+    if (effectiveAvatar) {
       vgContainer.parentElement.style.opacity = '0.35';
       vgContainer.style.pointerEvents = 'none';
     } else {
@@ -3352,7 +3969,7 @@ function renderConfigScreen() {
   // Estimate
   let est = 30;
   if (pro) est = 240; // Pro: ~4 min (Gemini analyse + script + HeyGen + assembly)
-  else if (cfg.avatar) est += 180; // HeyGen ~3 min
+  else if (effectiveAvatar) est += 180; // HeyGen ~3 min
   else if (cfg.voiceover) est += 10;
   const estMin = Math.floor(est / 60);
   const estSec = est % 60;
@@ -3548,12 +4165,21 @@ async function startGenerationPro(product, selectedMedia) {
     if (outroMedia) log('Image de sortie detectee: ' + outroMedia.name);
 
     // ── STEP 1: Gemini Vision — Analyze video for key moments ──
+    // (SKIP if a valid preview is cached — saves ~15s)
     updateStep(stepIdx('analyze'), 'active');
-    log('Etape 1: Analyse du screen recording (' + (videoMedia.size / 1024).toFixed(0) + ' KB)');
-    const videoB64 = await fileToRawBase64(videoMedia._file);
-    log('Video encodee en base64: ' + (videoB64.length / 1024).toFixed(0) + ' KB');
-    const moments = await geminiAnalyzeVideo(videoB64, videoMedia.type || 'video/mp4', product.desc, cfg.language, cfg.hookText);
-    log('Moments detectes: ' + moments.map(m => m.event_type + ' @' + m.start_time + 's').join(', '));
+    let moments, script, videoB64;
+    const useCachedPreview = isPreviewValidForCurrentConfig() && _previewedScript && _previewedScript.mode === 'pro' && _previewedScript.moments;
+    if (useCachedPreview) {
+      log('Etape 1: Utilisation apercu cache (skip analyse video)');
+      moments = _previewedScript.moments;
+      videoB64 = await fileToRawBase64(videoMedia._file);
+    } else {
+      log('Etape 1: Analyse du screen recording (' + (videoMedia.size / 1024).toFixed(0) + ' KB)');
+      videoB64 = await fileToRawBase64(videoMedia._file);
+      log('Video encodee en base64: ' + (videoB64.length / 1024).toFixed(0) + ' KB');
+      moments = await geminiAnalyzeVideo(videoB64, videoMedia.type || 'video/mp4', product.desc, cfg.language, cfg.hookText);
+      log('Moments detectes: ' + moments.map(m => m.event_type + ' @' + m.start_time + 's').join(', '));
+    }
     updateProgress(20);
     updateStep(stepIdx('analyze'), 'done');
 
@@ -3561,9 +4187,26 @@ async function startGenerationPro(product, selectedMedia) {
 
     // ── STEP 2: Build synchronized avatar script from moments ──
     updateStep(stepIdx('script'), 'active');
-    const script = buildProScript(moments, cfg.language);
-    log('Script Pro: "' + script.voiceover.slice(0, 80) + '..."');
+    if (useCachedPreview) {
+      script = { voiceover: _previewedScript.voiceover, cta: _previewedScript.cta || 'Link in bio', moments };
+      log('Script Pro (cache): "' + script.voiceover.slice(0, 80) + '..."');
+    } else {
+      script = buildProScript(moments, cfg.language);
+      // Guarantee user hook appears at the start of the voiceover (fuzzy anti-doublon)
+      if (cfg.hookText && cfg.hookText.trim()) {
+        const withHook = prependHookIfMissing(script.voiceover, cfg.hookText);
+        if (withHook !== script.voiceover) {
+          log('Hook prepended in Pro voiceover');
+          script.voiceover = withHook;
+        }
+      }
+      // Validate word count vs detected video duration + retry if out of range
+      const proDurationSec = moments.length > 0 ? moments[moments.length - 1].end_time : 15;
+      script.voiceover = await validateAndFitVoiceover(script.voiceover, proDurationSec, cfg.language, 'Script Pro');
+      log('Script Pro: "' + script.voiceover.slice(0, 80) + '..."');
+    }
     _lastScriptVoiceover = script.voiceover;
+    if (useCachedPreview) { _previewedScript = null; } // consume once
     // Social caption (description + 5 hashtags) — non-blocking best-effort
     try {
       _lastSocialCaption = await geminiSocialCaption(product.desc, cfg.hookText || '', script.voiceover, cfg.language, product.hashtags);
@@ -3631,7 +4274,7 @@ async function startGenerationPro(product, selectedMedia) {
     // Convert outro image if present
     let outroClipB64 = null;
     if (outroMedia && !outroMedia.isVideo) {
-      outroClipB64 = await fileToBase64(outroMedia._file);
+      outroClipB64 = await mediaToBase64(outroMedia);
       log('Image de sortie convertie: ' + (outroClipB64.length / 1024).toFixed(0) + ' KB');
     }
 
@@ -3760,7 +4403,7 @@ async function startGeneration() {
     for (let i = 0; i < selectedMedia.length; i++) {
       if (_genCancelled) throw new Error('Annule');
       const media = selectedMedia[i];
-      const b64 = await fileToBase64(media._file);
+      const b64 = await mediaToBase64(media);
       let bbox = null;
       try {
         bbox = await geminiVision(b64, media.type || 'image/png');
@@ -3797,14 +4440,32 @@ async function startGeneration() {
     if (_genCancelled) throw new Error('Annule');
 
     // ── STEP 2: Gemini Script — Generate voiceover script ──
+    // (SKIP if a valid preview is cached — saves ~5s)
     updateStep(stepIdx('script'), 'active');
     let script;
-    try {
-      script = await geminiScript(product.desc, cfg.hookText || 'Check this out', cfg.language, cfg.duration);
-      log('Script genere: "' + script.voiceover.slice(0, 60) + '..."');
-    } catch(e) {
-      log('Script fallback: ' + e.message, 'warn');
-      script = { voiceover: cfg.hookText || product.desc, cta: cfg.cta || 'Link in bio' };
+    const useCachedPreviewQ = isPreviewValidForCurrentConfig() && _previewedScript && _previewedScript.mode === 'quick';
+    if (useCachedPreviewQ) {
+      script = { voiceover: _previewedScript.voiceover, cta: _previewedScript.cta || 'Link in bio' };
+      log('Script (cache apercu): "' + script.voiceover.slice(0, 60) + '..."');
+      _previewedScript = null; // consume once
+    } else {
+      try {
+        script = await geminiScript(product.desc, cfg.hookText || 'Check this out', cfg.language, cfg.duration);
+        log('Script genere: "' + script.voiceover.slice(0, 60) + '..."');
+      } catch(e) {
+        log('Script fallback: ' + e.message, 'warn');
+        script = { voiceover: cfg.hookText || product.desc, cta: cfg.cta || 'Link in bio' };
+      }
+      // Guarantee user hook appears at the start of the voiceover (fuzzy anti-doublon)
+      if (cfg.hookText && cfg.hookText.trim()) {
+        const withHook = prependHookIfMissing(script.voiceover, cfg.hookText);
+        if (withHook !== script.voiceover) {
+          log('Hook prepended in voiceover');
+          script.voiceover = withHook;
+        }
+      }
+      // Validate word count vs cfg.duration + retry if out of range
+      script.voiceover = await validateAndFitVoiceover(script.voiceover, cfg.duration, cfg.language, 'Script');
     }
     _lastScriptVoiceover = script.voiceover;
     // Social caption (description + 5 hashtags) — non-blocking best-effort
@@ -4646,6 +5307,11 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
       startGeneration();
       break;
 
+    case 'open-preview-modal':
+      state.wizard.config.hookText = document.getElementById('configHook').value;
+      openPreviewModal();
+      break;
+
     case 'cancel-generation':
       cancelGeneration();
       goScreen('config');
@@ -4720,6 +5386,7 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
         // Load this history config into wizard for re-generation
         state.wizard.selectedProductId = hist.productId;
         state.wizard.config.hookText = hist.hookText;
+        updateHookPreview();
         state.wizard.config.duration = hist.duration;
         state.wizard.config.language = hist.language;
         state.wizard.config.musicStyle = hist.musicStyle;
@@ -4760,8 +5427,8 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
       showToast('Generation IA en cours...');
       geminiGenerateHooks(product.desc, state.wizard.config.language).then(hooks => {
         if (hooks && hooks.length > 0) {
-          document.getElementById('configHook').value = hooks[0];
           state.wizard.config.hookText = hooks[0];
+          updateHookPreview();
           showToast('Hook genere: ' + hooks[0]);
         }
       });
@@ -4863,8 +5530,8 @@ document.getElementById('hookHistorySheet').addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
   if (!el) return;
   if (el.dataset.action === 'select-hook') {
-    document.getElementById('configHook').value = el.dataset.text;
     state.wizard.config.hookText = el.dataset.text;
+    updateHookPreview();
     hideHookHistory();
     showToast('Hook selectionne');
   } else if (el.dataset.action === 'delete-hook') {
@@ -4882,7 +5549,13 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
 
 // File inputs
 document.getElementById('mediaFileInput').addEventListener('change', (e) => {
-  if (e.target.files.length > 0) handleMediaFiles(e.target.files);
+  const files = e.target.files;
+  if (files.length > 0) {
+    // Diag log for mixed picker issue (image + video from Honor Photos, Xiaomi Gallery, etc)
+    const summary = Array.from(files).map(f => (f.name || '?') + '(' + (f.type || 'unknown') + ',' + (f.size/1024).toFixed(0) + 'KB)').join(' | ');
+    log('Picker: ' + files.length + ' fichier(s) — ' + summary);
+    handleMediaFiles(files);
+  }
   e.target.value = '';
 });
 
@@ -4907,11 +5580,555 @@ document.getElementById('configDuration').addEventListener('input', (e) => {
   markDirty();
 });
 
-// Hook input
-document.getElementById('configHook').addEventListener('input', debounce((e) => {
-  state.wizard.config.hookText = e.target.value;
+// Hook input — configHook is now a hidden input, kept in sync from the fullscreen hook modal
+// (see openHookModal / updateHookPreview). No listener here anymore.
+
+// ──────────────────────────────────────────────────
+// 19a. PREVIEW SCRIPT MODAL (dry-run generation)
+// ──────────────────────────────────────────────────
+let _previewModalOpen = false;
+let _previewedScript = null; // { voiceover, cta, moments, hookSnapshot, language, duration, mode, timestamp }
+let _previewInFlight = null; // AbortController
+
+function showPreviewState(state) {
+  // state: 'loading' | 'content' | 'error'
+  document.getElementById('previewLoadingState').style.display = state === 'loading' ? 'block' : 'none';
+  document.getElementById('previewContentState').style.display = state === 'content' ? 'block' : 'none';
+  document.getElementById('previewErrorState').style.display = state === 'error' ? 'block' : 'none';
+}
+
+async function openPreviewModal() {
+  if (_previewModalOpen) return;
+  // Validation de base : produit + config + medias si Pro
+  const product = state.products.find(p => p.id === state.wizard.selectedProductId);
+  if (!product) { showToast('Selectionne un produit d\'abord', true); return; }
+  const cfg = state.wizard.config;
+  const pro = isProMode();
+  if (pro) {
+    const videos = state.wizard.mediaFiles.filter(m => m.selected && m.isVideo);
+    if (videos.length === 0) { showToast('Mode Pro : ajoute un screen recording video', true); return; }
+  } else {
+    const imgs = state.wizard.mediaFiles.filter(m => m.selected && !m.isVideo);
+    if (imgs.length === 0) { showToast('Ajoute au moins une capture', true); return; }
+  }
+  _previewModalOpen = true;
+  const modal = document.getElementById('previewModal');
+  modal.classList.add('open');
+  try { history.pushState({ previewModal: true }, '', location.href); } catch(_) {}
+  showPreviewState('loading');
+  await generatePreviewScript(product, cfg, pro);
+}
+
+function closePreviewModal(fromPopState) {
+  if (!_previewModalOpen) return;
+  _previewModalOpen = false;
+  document.getElementById('previewModal').classList.remove('open');
+  if (_previewInFlight) { try { _previewInFlight.abort(); } catch(_) {} _previewInFlight = null; }
+  if (!fromPopState) {
+    try { if (history.state && history.state.previewModal) history.back(); } catch(_) {}
+  }
+}
+
+async function generatePreviewScript(product, cfg, pro) {
+  showPreviewState('loading');
+  const loadingLabel = document.getElementById('previewLoadingLabel');
+  try {
+    let voiceover = '';
+    let cta = 'Link in bio';
+    let moments = null;
+    let durationSec = cfg.duration;
+
+    if (pro) {
+      loadingLabel.textContent = 'Analyse video Gemini Pro...';
+      // Find the video file in selection
+      const sorted = state.wizard.mediaFiles.filter(m => m.selected).slice().sort((a,b) => (a.order||0)-(b.order||0));
+      const videoMedia = sorted.find(m => m.isVideo);
+      const videoB64 = await fileToRawBase64(videoMedia._file);
+      moments = await geminiAnalyzeVideo(videoB64, videoMedia.type || 'video/mp4', product.desc, cfg.language, cfg.hookText);
+      loadingLabel.textContent = 'Construction du script...';
+      const built = buildProScript(moments, cfg.language);
+      voiceover = built.voiceover;
+      cta = built.cta;
+      durationSec = moments.length > 0 ? moments[moments.length - 1].end_time : cfg.duration;
+    } else {
+      loadingLabel.textContent = 'Generation du script...';
+      const script = await geminiScript(product.desc, cfg.hookText || 'Check this out', cfg.language, cfg.duration);
+      voiceover = script.voiceover;
+      cta = script.cta || 'Link in bio';
+      durationSec = cfg.duration;
+    }
+
+    // Prepend hook if missing
+    if (cfg.hookText && cfg.hookText.trim()) {
+      const withHook = prependHookIfMissing(voiceover, cfg.hookText);
+      if (withHook !== voiceover) voiceover = withHook;
+    }
+    // Validate + retry if out of range
+    voiceover = await validateAndFitVoiceover(voiceover, durationSec, cfg.language, 'Apercu');
+
+    // Social caption (best-effort)
+    let caption = null;
+    try {
+      loadingLabel.textContent = 'Description sociale...';
+      caption = await geminiSocialCaption(product.desc, cfg.hookText || '', voiceover, cfg.language, product.hashtags);
+    } catch(e) { /* ignore */ }
+
+    // Store for "Valider et lancer" — full context snapshot for strict validity check later
+    _previewedScript = {
+      voiceover, cta, moments,
+      hookSnapshot: cfg.hookText || '',
+      language: cfg.language,
+      duration: durationSec,
+      durationCfg: cfg.duration,
+      mode: pro ? 'pro' : 'quick',
+      productId: state.wizard.selectedProductId,
+      mediaFingerprint: mediaSelectionFingerprint(),
+      caption,
+      timestamp: Date.now()
+    };
+
+    renderPreviewContent(_previewedScript);
+  } catch(e) {
+    log('Apercu erreur: ' + e.message, 'error');
+    showPreviewState('error');
+    document.getElementById('previewErrorMsg').textContent = 'Erreur: ' + e.message;
+  }
+}
+
+function renderPreviewContent(preview) {
+  document.getElementById('previewVoiceover').value = preview.voiceover;
+  updatePreviewCounters();
+  // Subtitle
+  const sub = preview.mode === 'pro'
+    ? 'Voiceover synchronise avec la video (' + preview.duration + 's detectees)'
+    : 'Voiceover pour ' + preview.duration + 's';
+  document.getElementById('previewModalSubtitle').textContent = sub;
+  // Caption
+  const captionBlock = document.getElementById('previewCaptionBlock');
+  if (preview.caption && preview.caption.description) {
+    captionBlock.style.display = 'block';
+    document.getElementById('previewCaptionText').textContent = preview.caption.description;
+    document.getElementById('previewHashtags').textContent = (preview.caption.hashtags || []).join(' ');
+  } else {
+    captionBlock.style.display = 'none';
+  }
+  showPreviewState('content');
+}
+
+function updatePreviewCounters() {
+  if (!_previewedScript) return;
+  const text = document.getElementById('previewVoiceover').value;
+  const words = countWords(text);
+  const { target, min, max } = wordsTargetForDuration(_previewedScript.duration, _previewedScript.language);
+  const est = estimatedSpeechDuration(text, _previewedScript.language);
+  const wordsEl = document.getElementById('previewCounterWords');
+  const targetEl = document.getElementById('previewCounterTarget');
+  const durEl = document.getElementById('previewCounterDur');
+  wordsEl.textContent = words + ' mots';
+  targetEl.textContent = 'target ' + min + '-' + max;
+  durEl.textContent = '~' + est + 's / ' + _previewedScript.duration + 's';
+  // Color feedback
+  wordsEl.className = '';
+  if (words >= min && words <= max) wordsEl.classList.add('ok');
+  else wordsEl.classList.add('warn');
+}
+
+// Build a stable fingerprint of the media selection for validity check
+function mediaSelectionFingerprint() {
+  const sel = state.wizard.mediaFiles.filter(m => m.selected);
+  return sel.map(m => (m.name || '?') + ':' + (m.size || 0) + ':' + (m.order || 0)).join('|');
+}
+
+// Validate + lock previewed script, then start the real generation
+function validateAndLaunchFromPreview() {
+  if (!_previewedScript) return;
+  const currentCfg = state.wizard.config;
+  // Update with edited voiceover
+  _previewedScript.voiceover = document.getElementById('previewVoiceover').value.trim();
+  // Snapshot full context to detect drift
+  _previewedScript.hookSnapshot = currentCfg.hookText || '';
+  _previewedScript.language = currentCfg.language;
+  _previewedScript.productId = state.wizard.selectedProductId;
+  _previewedScript.mediaFingerprint = mediaSelectionFingerprint();
+  _previewedScript.durationCfg = currentCfg.duration;
+  closePreviewModal(false);
+  // Navigate to generation screen and start directly (no synthetic click — unreliable)
+  setTimeout(() => {
+    goScreen('generate');
+    // Sync hookText from hidden input for backward compat
+    state.wizard.config.hookText = document.getElementById('configHook').value;
+    startGeneration();
+  }, 350);
+}
+
+function isPreviewValidForCurrentConfig() {
+  if (!_previewedScript) return false;
+  const cfg = state.wizard.config;
+  const pro = isProMode();
+  // Mode (Pro vs Quick)
+  if (_previewedScript.mode !== (pro ? 'pro' : 'quick')) return false;
+  // Language
+  if (_previewedScript.language !== cfg.language) return false;
+  // Hook text (must match exactly, since it's prepended to voiceover)
+  if (_previewedScript.hookSnapshot !== (cfg.hookText || '')) return false;
+  // Product (different product = different context)
+  if (_previewedScript.productId !== state.wizard.selectedProductId) return false;
+  // Media selection (fingerprint must match exact selection + order)
+  if (_previewedScript.mediaFingerprint !== mediaSelectionFingerprint()) return false;
+  // Quick mode: duration slider must match
+  if (!pro && _previewedScript.durationCfg !== cfg.duration) return false;
+  // Cache expires after 5 minutes (live review, not cold storage)
+  if (Date.now() - _previewedScript.timestamp > 5 * 60 * 1000) return false;
+  return true;
+}
+
+function setupPreviewModalListeners() {
+  document.getElementById('previewModalClose').addEventListener('click', () => closePreviewModal(false));
+  document.getElementById('previewBtnRegenerate').addEventListener('click', () => {
+    const product = state.products.find(p => p.id === state.wizard.selectedProductId);
+    if (!product) return;
+    generatePreviewScript(product, state.wizard.config, isProMode());
+  });
+  document.getElementById('previewBtnValidate').addEventListener('click', validateAndLaunchFromPreview);
+  document.getElementById('previewBtnRetry').addEventListener('click', () => {
+    const product = state.products.find(p => p.id === state.wizard.selectedProductId);
+    if (!product) return;
+    generatePreviewScript(product, state.wizard.config, isProMode());
+  });
+  document.getElementById('previewVoiceover').addEventListener('input', updatePreviewCounters);
+  // Popstate + ESC handlers are unified in setupGlobalModalNavHandlers (called from init)
+}
+
+// Single centralized handler for Android back button + ESC across ALL app modals
+// Priority order: preview modal > hook modal > (future modals)
+function setupGlobalModalNavHandlers() {
+  window.addEventListener('popstate', (e) => {
+    // Close whichever modal is topmost
+    if (_previewModalOpen) { closePreviewModal(true); return; }
+    if (_hookModalOpen) { closeHookModal(true); return; }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (_previewModalOpen) { closePreviewModal(false); return; }
+    if (_hookModalOpen) { closeHookModal(false); return; }
+  });
+}
+
+// ──────────────────────────────────────────────────
+// 19b. HOOK EDITOR MODAL (fullscreen)
+// ──────────────────────────────────────────────────
+let _hookModalOpen = false;
+let _hookSavedBeforeEdit = '';   // snapshot for undo (IA improvement)
+let _hookUndoTimer = null;
+let _hookDeletePressTimer = null;
+let _hookDeleteFired = false;
+
+function updateHookPreview() {
+  const txt = (state.wizard.config.hookText || '').trim();
+  const el = document.getElementById('hookPreviewText');
+  if (!el) return;
+  if (txt) {
+    el.textContent = txt;
+    el.classList.remove('hook-preview-empty');
+  } else {
+    el.textContent = 'Clique pour ajouter un hook';
+    el.classList.add('hook-preview-empty');
+  }
+  // Keep hidden input in sync for backward-compat code paths
+  const hidden = document.getElementById('configHook');
+  if (hidden) hidden.value = state.wizard.config.hookText || '';
+  // If modal is currently open, also refresh textarea + counters
+  if (_hookModalOpen) {
+    const textarea = document.getElementById('hookModalTextarea');
+    if (textarea && textarea.value !== (state.wizard.config.hookText || '')) {
+      textarea.value = state.wizard.config.hookText || '';
+    }
+    updateHookCounters(state.wizard.config.hookText || '');
+  }
+}
+
+function updateHookCounters(text) {
+  const t = (text || '').trim();
+  const chars = t.length;
+  const words = countWords(t);
+  const lang = state.wizard.config.language || 'Francais';
+  const dur = estimatedSpeechDuration(t, lang);
+  const charsEl = document.getElementById('hookCounterChars');
+  const wordsEl = document.getElementById('hookCounterWords');
+  const durEl = document.getElementById('hookCounterDur');
+  if (charsEl) charsEl.textContent = chars + ' caracteres';
+  if (wordsEl) wordsEl.textContent = words + ' mots';
+  if (durEl) {
+    durEl.textContent = '~' + dur + 's';
+    // Optimal hook: 2-4 seconds
+    durEl.className = '';
+    if (dur >= 1 && dur <= 4.5) durEl.classList.add('ok');
+    else if (dur > 4.5) durEl.classList.add('warn');
+  }
+  // Update AI button label based on content (empty → Generer, filled → Ameliorer)
+  const aiLabel = document.getElementById('hookBtnAILabel');
+  if (aiLabel) aiLabel.textContent = t ? 'Ameliorer' : 'Generer';
+}
+
+function openHookModal() {
+  if (_hookModalOpen) return;
+  _hookModalOpen = true;
+  const modal = document.getElementById('hookModal');
+  const textarea = document.getElementById('hookModalTextarea');
+  const current = state.wizard.config.hookText || '';
+  textarea.value = current;
+  updateHookCounters(current);
+  modal.classList.add('open');
+  // Push state for Android back button support
+  try { history.pushState({ hookModal: true }, '', location.href); } catch(_) {}
+  // Focus auto only when empty (avoid forcing keyboard on review)
+  if (!current) {
+    setTimeout(() => { try { textarea.focus(); } catch(_) {} }, 300);
+  }
+  log('Hook modal ouverte');
+}
+
+function closeHookModal(fromPopState) {
+  if (!_hookModalOpen) return;
+  _hookModalOpen = false;
+  const modal = document.getElementById('hookModal');
+  modal.classList.remove('open');
+  // Also close any stacked sub-sheets
+  document.getElementById('hookAISheet').classList.remove('open');
+  document.getElementById('hookConfirm').classList.remove('open');
+  hideHookUndoToast();
+  // Commit to state (already done live via input listener, but defensive)
+  const textarea = document.getElementById('hookModalTextarea');
+  state.wizard.config.hookText = textarea.value.trim();
+  updateHookPreview();
   markDirty();
-}, DEBOUNCE_SAVE_MS));
+  // Pop history state cleanly (unless we got here via popstate already)
+  if (!fromPopState) {
+    try { if (history.state && history.state.hookModal) history.back(); } catch(_) {}
+  }
+}
+
+// Poubelle Wii-style : long press 600ms → direct delete, tap court → confirm modal
+function setupHookDeleteButton() {
+  const btn = document.getElementById('hookBtnDelete');
+  if (!btn) return;
+  const start = (e) => {
+    e.preventDefault();
+    _hookDeleteFired = false;
+    btn.classList.add('charging');
+    _hookDeletePressTimer = setTimeout(() => {
+      _hookDeleteFired = true;
+      btn.classList.remove('charging');
+      doHookDelete(true);
+    }, 600);
+  };
+  const cancel = () => {
+    if (_hookDeletePressTimer) { clearTimeout(_hookDeletePressTimer); _hookDeletePressTimer = null; }
+    btn.classList.remove('charging');
+  };
+  const end = (e) => {
+    const wasLong = _hookDeleteFired;
+    cancel();
+    if (!wasLong) {
+      // Short tap → show confirm modal
+      document.getElementById('hookConfirm').classList.add('open');
+    }
+  };
+  btn.addEventListener('pointerdown', start);
+  btn.addEventListener('pointerup', end);
+  btn.addEventListener('pointerleave', cancel);
+  btn.addEventListener('pointercancel', cancel);
+}
+
+function doHookDelete(withHaptic) {
+  const textarea = document.getElementById('hookModalTextarea');
+  textarea.value = '';
+  updateHookCounters('');
+  state.wizard.config.hookText = '';
+  updateHookPreview();
+  markDirty();
+  document.getElementById('hookConfirm').classList.remove('open');
+  if (withHaptic) tryHaptic('medium');
+  showToast('Hook efface');
+  try { textarea.focus(); } catch(_) {}
+}
+
+function tryHaptic(style) {
+  try {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) {
+      window.Capacitor.Plugins.Haptics.impact({ style: style || 'medium' });
+    } else if (navigator.vibrate) {
+      navigator.vibrate(style === 'heavy' ? 30 : 15);
+    }
+  } catch(_) {}
+}
+
+// Bouton IA contextuel : vide → 3 propositions, plein → amelioration directe avec undo
+async function handleHookAIClick() {
+  const aiBtn = document.getElementById('hookBtnAI');
+  const textarea = document.getElementById('hookModalTextarea');
+  const current = textarea.value.trim();
+  const product = state.products.find(p => p.id === state.wizard.selectedProductId);
+  if (!product) { showToast('Selectionne un produit d\'abord', true); return; }
+  const lang = state.wizard.config.language || 'Francais';
+  // Loading state
+  const labelEl = document.getElementById('hookBtnAILabel');
+  const origLabel = labelEl.textContent;
+  aiBtn.disabled = true;
+  labelEl.innerHTML = '<span class="hook-ai-loading"></span>';
+  try {
+    if (!current) {
+      // Generate 3 fresh hook proposals
+      const hooks = await geminiGenerateHooks(product.desc, lang, 3);
+      if (!hooks || hooks.length === 0) { showToast('Aucune proposition', true); return; }
+      showHookAISheet(hooks);
+    } else {
+      // Improve existing hook (minimal changes)
+      const improved = await geminiImproveHook(current, lang);
+      if (!improved || improved === current) { showToast('Hook deja optimal'); return; }
+      _hookSavedBeforeEdit = current;
+      textarea.value = improved;
+      updateHookCounters(improved);
+      state.wizard.config.hookText = improved;
+      updateHookPreview();
+      markDirty();
+      showHookUndoToast();
+    }
+  } catch(e) {
+    log('Hook IA erreur: ' + e.message, 'error');
+    showToast('Erreur IA: ' + e.message, true);
+  } finally {
+    aiBtn.disabled = false;
+    labelEl.textContent = origLabel;
+  }
+}
+
+async function geminiImproveHook(current, language) {
+  const prompt = `You are editing a TikTok promo video hook. Apply MINIMAL changes only:
+- Fix spelling errors
+- Add missing punctuation (. , ! ?)
+- Fix obvious grammar errors
+- If the phrase is SEVERELY malformed, rephrase minimally to make it readable
+- DO NOT change the meaning, tone, or creative intent
+- DO NOT add new ideas or content
+- DO NOT paraphrase for style if the original is acceptable
+- Keep the SAME language (detected from the original)
+
+Original hook: "${current}"
+Target language (confirm match): ${language}
+
+Return ONLY the improved text. No quotes, no markdown, no explanation, no code blocks.`;
+  const text = await geminiCall(prompt, { maxTokens: 120, temperature: 0.2 });
+  let cleaned = (text || '').trim()
+    .replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '')
+    .replace(/^["']|["']$/g, '')
+    .trim();
+  // Validation: reject if suspiciously long or contains JSON/markdown
+  if (!cleaned || cleaned.length > 300) return current;
+  if (/^[\[{]/.test(cleaned)) return current;
+  return cleaned;
+}
+
+function showHookAISheet(options) {
+  const sheet = document.getElementById('hookAISheet');
+  const container = document.getElementById('hookAISheetOptions');
+  container.innerHTML = options.map((opt, i) =>
+    `<div class="hook-ai-option" data-hook-option="${i}">${escapeHtml(opt)}</div>`
+  ).join('');
+  // Attach click handlers
+  Array.from(container.querySelectorAll('.hook-ai-option')).forEach((el, i) => {
+    el.addEventListener('click', () => {
+      const picked = options[i];
+      const textarea = document.getElementById('hookModalTextarea');
+      textarea.value = picked;
+      updateHookCounters(picked);
+      state.wizard.config.hookText = picked;
+      updateHookPreview();
+      markDirty();
+      sheet.classList.remove('open');
+    });
+  });
+  sheet.classList.add('open');
+}
+
+function showHookUndoToast() {
+  const toast = document.getElementById('hookUndoToast');
+  toast.classList.add('open');
+  if (_hookUndoTimer) clearTimeout(_hookUndoTimer);
+  _hookUndoTimer = setTimeout(() => hideHookUndoToast(), 5000);
+}
+function hideHookUndoToast() {
+  const toast = document.getElementById('hookUndoToast');
+  if (toast) toast.classList.remove('open');
+  if (_hookUndoTimer) { clearTimeout(_hookUndoTimer); _hookUndoTimer = null; }
+}
+function undoHookAIChange() {
+  if (!_hookSavedBeforeEdit) return;
+  const textarea = document.getElementById('hookModalTextarea');
+  textarea.value = _hookSavedBeforeEdit;
+  updateHookCounters(_hookSavedBeforeEdit);
+  state.wizard.config.hookText = _hookSavedBeforeEdit;
+  updateHookPreview();
+  markDirty();
+  _hookSavedBeforeEdit = '';
+  hideHookUndoToast();
+  showToast('Amelioration annulee');
+}
+
+function setupHookModalListeners() {
+  // Open triggers
+  const preview = document.getElementById('hookPreview');
+  if (preview) {
+    preview.addEventListener('click', openHookModal);
+    preview.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openHookModal(); }
+    });
+  }
+  // Close button
+  const closeBtn = document.getElementById('hookModalClose');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => closeHookModal(false));
+  }
+  // Textarea live update
+  const textarea = document.getElementById('hookModalTextarea');
+  if (textarea) {
+    textarea.addEventListener('input', (e) => {
+      const v = e.target.value;
+      updateHookCounters(v);
+      state.wizard.config.hookText = v.trim();
+      updateHookPreview();
+      // Defer markDirty to avoid storm
+      if (!textarea._dirtyDebounce) {
+        textarea._dirtyDebounce = setTimeout(() => {
+          markDirty();
+          textarea._dirtyDebounce = null;
+        }, 300);
+      }
+    });
+  }
+  // Delete button (long press Wii-style)
+  setupHookDeleteButton();
+  // Confirm delete modal
+  const confirmCancel = document.getElementById('hookConfirmCancel');
+  const confirmDelete = document.getElementById('hookConfirmDelete');
+  if (confirmCancel) confirmCancel.addEventListener('click', () => document.getElementById('hookConfirm').classList.remove('open'));
+  if (confirmDelete) confirmDelete.addEventListener('click', () => doHookDelete(true));
+  // AI button
+  const aiBtn = document.getElementById('hookBtnAI');
+  if (aiBtn) aiBtn.addEventListener('click', handleHookAIClick);
+  // History button (reuse existing bottom sheet)
+  const histBtn = document.getElementById('hookBtnHistory');
+  if (histBtn) histBtn.addEventListener('click', () => showHookHistory());
+  // Undo button
+  const undoBtn = document.getElementById('hookUndoBtn');
+  if (undoBtn) undoBtn.addEventListener('click', undoHookAIChange);
+  // AI sheet tap outside to dismiss
+  const aiSheet = document.getElementById('hookAISheet');
+  if (aiSheet) aiSheet.addEventListener('click', (e) => {
+    if (e.target === aiSheet) aiSheet.classList.remove('open');
+  });
+  // Popstate + ESC handled globally by setupGlobalModalNavHandlers (priority-ordered across all modals)
+}
 
 // ──────────────────────────────────────────────────
 // 20. INIT
@@ -4965,6 +6182,14 @@ function init() {
   // Panel log ferme par defaut
   const _initLogPanel = document.getElementById('logPanel');
   if (_initLogPanel) _initLogPanel.style.display = 'none';
+
+  // Hook editor modal listeners (fullscreen)
+  setupHookModalListeners();
+  updateHookPreview();
+  // Preview script modal listeners (dry-run)
+  setupPreviewModalListeners();
+  // Single centralized popstate/ESC handler for all modals (priority ordered)
+  setupGlobalModalNavHandlers();
 
   log('PromoClip v' + APP_VERSION + ' initialise');
 }
