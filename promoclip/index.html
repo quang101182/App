@@ -3202,13 +3202,14 @@ function estimatedSpeechDuration(text, language) {
 }
 
 // Retry Gemini to expand or shorten a voiceover to fit the word target
-async function adjustVoiceoverLength(voiceover, action, target, language) {
+async function adjustVoiceoverLength(voiceover, action, target, language, productContext) {
   const verb = action === 'expand'
-    ? 'EXPAND to approximately ' + target + ' words (add more concrete detail, keep the same tone and core message)'
+    ? 'EXPAND to approximately ' + target + ' words (add more concrete detail about the product, keep the same tone and core message)'
     : 'SHORTEN to approximately ' + target + ' words (remove filler and repetition, keep the core message and hook)';
+  const contextLine = productContext ? '\nProduct context (use this to add relevant detail): ' + productContext : '';
   const prompt = `You are editing a TikTok voiceover script for a short video.
 Current voiceover: "${voiceover}"
-Language: ${language}
+Language: ${language}${contextLine}
 Task: ${verb}
 
 STRICT RULES:
@@ -3249,7 +3250,7 @@ function truncateVoiceoverToMaxWords(text, maxWords) {
 // Validate word count vs target, retry up to 2 times with progressively stricter target.
 // Asymmetric rule: over-length is not tolerated (max = target). Under-length is fine (min safety net).
 // Last resort: hard truncate manually if Gemini can't get the length right.
-async function validateAndFitVoiceover(voiceover, durationSec, language, label) {
+async function validateAndFitVoiceover(voiceover, durationSec, language, label, productContext) {
   const { target, min, max } = wordsTargetForDuration(durationSec, language);
   let words = countWords(voiceover);
   let result = voiceover;
@@ -3260,10 +3261,10 @@ async function validateAndFitVoiceover(voiceover, durationSec, language, label) 
     return result;
   }
 
-  // Attempt 1 — normal retry
+  // Attempt 1 — normal retry (with product context for expand)
   const action1 = words < min ? 'expand' : 'shorten';
   log((label || 'Script') + ' ' + words + ' mots hors range ' + min + '-' + max + ' — retry 1 ' + action1);
-  result = await adjustVoiceoverLength(voiceover, action1, target, language);
+  result = await adjustVoiceoverLength(voiceover, action1, target, language, productContext);
   words = countWords(result);
 
   if (words >= min && words <= max) {
@@ -3272,25 +3273,28 @@ async function validateAndFitVoiceover(voiceover, durationSec, language, label) 
     return result;
   }
 
-  // Attempt 2 — stricter target: aim for target-2 (more aggressive shortening)
-  const stricterTarget = Math.max(min, target - 2);
+  // Attempt 2 — stricter target
+  const stricterTarget = words < min ? target + 2 : Math.max(min, target - 2);
   const action2 = words < min ? 'expand' : 'shorten';
   log((label || 'Script') + ' ' + words + ' mots hors range — retry 2 (target strict ' + stricterTarget + ')');
-  result = await adjustVoiceoverLength(result, action2, stricterTarget, language);
+  result = await adjustVoiceoverLength(result, action2, stricterTarget, language, productContext);
   words = countWords(result);
 
-  if (words <= max) {
+  if (words >= min && words <= max) {
     const est = estimatedSpeechDuration(result, language);
     log((label || 'Script') + ' final (retry2): ' + words + ' mots / target ' + target + ' (duree estimee ' + est + 's / ' + durationSec + 's)');
     return result;
   }
 
-  // Last resort — hard truncate manually to guarantee voice finishes before video end
-  log((label || 'Script') + ' ' + words + ' mots encore hors max — truncate manuel a ' + max + ' mots', 'warn');
-  result = truncateVoiceoverToMaxWords(result, max);
+  if (words > max) {
+    // Too long — hard truncate
+    log((label || 'Script') + ' ' + words + ' mots encore hors max — truncate manuel a ' + max + ' mots', 'warn');
+    result = truncateVoiceoverToMaxWords(result, max);
+  }
+  // If still too short after 2 retries, accept it (better short voiceover than infinite loop)
   words = countWords(result);
   const est = estimatedSpeechDuration(result, language);
-  log((label || 'Script') + ' final (truncate): ' + words + ' mots / target ' + target + ' (duree estimee ' + est + 's / ' + durationSec + 's)');
+  log((label || 'Script') + ' final: ' + words + ' mots / target ' + target + ' (duree estimee ' + est + 's / ' + durationSec + 's)' + (words < min ? ' [court]' : ''));
   return result;
 }
 
@@ -4601,7 +4605,10 @@ async function startGenerationPro(product, selectedMedia) {
     // ── STEP 2: Build synchronized avatar script from moments ──
     updateStep(stepIdx('script'), 'active');
     if (useCachedPreview) {
-      script = { voiceover: _previewedScript.voiceover, cta: _previewedScript.cta || 'Link in bio', moments };
+      // Re-validate length even from cache (user may have edited voiceover in preview modal)
+      const proCachedDur = moments.length > 0 ? moments[moments.length - 1].end_time : 15;
+      let cachedVo = await validateAndFitVoiceover(_previewedScript.voiceover, proCachedDur, cfg.language, 'Script Pro (cache)', product.desc);
+      script = { voiceover: cachedVo, cta: _previewedScript.cta || 'Link in bio', moments };
       log('Script Pro (cache): "' + script.voiceover.slice(0, 80) + '..."');
     } else {
       script = buildProScript(moments, cfg.language);
@@ -4615,7 +4622,7 @@ async function startGenerationPro(product, selectedMedia) {
       }
       // Validate word count vs detected video duration + retry if out of range
       const proDurationSec = moments.length > 0 ? moments[moments.length - 1].end_time : 15;
-      script.voiceover = await validateAndFitVoiceover(script.voiceover, proDurationSec, cfg.language, 'Script Pro');
+      script.voiceover = await validateAndFitVoiceover(script.voiceover, proDurationSec, cfg.language, 'Script Pro', product.desc);
       log('Script Pro: "' + script.voiceover.slice(0, 80) + '..."');
     }
     _lastScriptVoiceover = script.voiceover;
@@ -4889,7 +4896,9 @@ async function startGeneration() {
     let script;
     const useCachedPreviewQ = isPreviewValidForCurrentConfig() && _previewedScript && _previewedScript.mode === 'quick';
     if (useCachedPreviewQ) {
-      script = { voiceover: _previewedScript.voiceover, cta: _previewedScript.cta || 'Link in bio' };
+      // Re-validate length even from cache (user may have edited voiceover in preview modal)
+      let cachedVo = await validateAndFitVoiceover(_previewedScript.voiceover, cfg.duration, cfg.language, 'Script (cache)', product.desc);
+      script = { voiceover: cachedVo, cta: _previewedScript.cta || 'Link in bio' };
       log('Script (cache apercu): "' + script.voiceover.slice(0, 60) + '..."');
       _previewedScript = null; // consume once
     } else {
@@ -4906,7 +4915,7 @@ async function startGeneration() {
           if (withHook !== voiceover) { log('Hook prepended'); voiceover = withHook; }
         }
         // Validate + fit to duration
-        voiceover = await validateAndFitVoiceover(voiceover, cfg.duration, cfg.language, 'Script');
+        voiceover = await validateAndFitVoiceover(voiceover, cfg.duration, cfg.language, 'Script', product.desc);
         // Cache for consistency (reuse if user regenerates within 30min)
         _previewedScript = {
           voiceover, cta, moments: null,
@@ -5729,12 +5738,17 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
 
     case 'select-product':
       state.wizard.selectedProductId = el.dataset.id;
+      _lastSocialCaption = null; // caption is product-specific
       markDirty();
       renderProductSelection();
       break;
 
     case 'select-template':
       state.wizard.selectedTemplateId = el.dataset.id;
+      // Invalidate all cached state from previous mode to prevent contamination
+      _previewedScript = null;
+      _lastScriptVoiceover = null;
+      _lastSocialCaption = null;
       markDirty();
       renderTemplates();
       break;
@@ -6221,7 +6235,7 @@ async function generatePreviewScript(product, cfg, pro) {
       if (withHook !== voiceover) voiceover = withHook;
     }
     // Validate + retry if out of range
-    voiceover = await validateAndFitVoiceover(voiceover, durationSec, cfg.language, 'Apercu');
+    voiceover = await validateAndFitVoiceover(voiceover, durationSec, cfg.language, 'Apercu', product.desc);
 
     // Social caption (best-effort)
     let caption = null;
@@ -6306,11 +6320,12 @@ function validateAndLaunchFromPreview() {
   // Update with edited voiceover
   _previewedScript.voiceover = document.getElementById('previewVoiceover').value.trim();
   // Snapshot full context to detect drift
-  _previewedScript.hookSnapshot = currentCfg.hookText || '';
+  _previewedScript.hookSnapshot = (currentCfg.hookText || '').trim();
   _previewedScript.language = currentCfg.language;
   _previewedScript.productId = state.wizard.selectedProductId;
   _previewedScript.mediaFingerprint = mediaSelectionFingerprint();
   _previewedScript.durationCfg = currentCfg.duration;
+  _previewedScript.timestamp = Date.now(); // refresh TTL so cache survives editing time
   closePreviewModal(false);
   // Navigate to generation screen and start directly (no synthetic click — unreliable)
   setTimeout(() => {
@@ -6322,7 +6337,7 @@ function validateAndLaunchFromPreview() {
 }
 
 function isPreviewValidForCurrentConfig() {
-  if (!_previewedScript) { log('Cache apercu: absent', 'warn'); return false; }
+  if (!_previewedScript) return false;
   const cfg = state.wizard.config;
   const pro = isProMode();
   const currentHook = (cfg.hookText || '').trim();
