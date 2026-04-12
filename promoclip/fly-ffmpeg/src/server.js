@@ -9,6 +9,7 @@
  *            v1.0.6 — Hero intro timeouts 60s → 120-180s (shared-cpu too slow for re-encode)
  *            v1.0.7 — Main trim: stream copy (cut only, no re-encode needed — instant vs 3min)
  *            v1.0.8 — Hero intro pipeline: fps=30 norm + concat -c copy + ultrafast intro build
+ *            v1.0.9 — force_key_frames at intro cut point (eliminates frame skip at intro→split transition)
  *
  * Heberge UNIQUEMENT /health + /promo-assembly + /promo-assembly-pro.
  * Le reste des routes (slideshow, merge, ken-burns, smart-zoom, etc) reste
@@ -43,7 +44,7 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
-const VERSION = '1.0.8';
+const VERSION = '1.0.9';
 
 // ---------------------------------------------------------------------------
 // Etat global
@@ -750,6 +751,8 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         '-map', subFilter ? '[final]' : '[outv]',
         '-map', '0:a?',
         '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+        // Force keyframe at exact intro cut point so -c copy trim lands precisely (no frame skip)
+        ...(avatarIntroFullscreen ? ['-force_key_frames', String(Math.max(1, Math.min(5, Number(avatarIntroDuration) || 2)))] : []),
         '-c:a', 'aac', '-b:a', '128k', ...(avatarIntroFullscreen ? ['-ar', '44100'] : []),
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
