@@ -773,8 +773,8 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
       ff.on('error', reject);
       setTimeout(() => {
         try { ff.kill('SIGKILL'); } catch (_) {}
-        reject(new Error('FFmpeg Pro timeout 120s'));
-      }, 120000);
+        reject(new Error('FFmpeg Pro timeout 180s'));
+      }, 180000);
     });
 
     // Hero intro avatar fullscreen (optional)
@@ -801,7 +801,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => code === 0 ? resolve() : reject(new Error('Intro build: ' + stderr.slice(-200))));
         ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro build timeout')); }, 60000);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro build timeout')); }, 180000);
       });
 
       await new Promise((resolve, reject) => {
@@ -818,7 +818,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => code === 0 ? resolve() : reject(new Error('Main trim: ' + stderr.slice(-200))));
         ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Main trim timeout')); }, 120000);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Main trim timeout')); }, 180000);
       });
 
       const concatListPath = path.join(tmpDir, 'concat-intro.txt');
@@ -836,11 +836,26 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => code === 0 ? resolve() : reject(new Error('Intro concat: ' + stderr.slice(-200))));
         ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro concat timeout')); }, 120000);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro concat timeout')); }, 180000);
       });
 
-      fs.renameSync(withIntroPath, outputPath);
-      console.log(`[${jobId}] Hero intro applied`);
+      // The concat re-encode can produce corrupted duration metadata.
+      // Remux with -t to enforce correct duration (fast, no re-encode).
+      const fixedPath = path.join(tmpDir, 'fixed-dur.mp4');
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', [
+          '-i', withIntroPath,
+          '-c', 'copy', '-t', String(maxMainDur),
+          '-movflags', '+faststart', '-y', fixedPath
+        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => code === 0 ? resolve() : reject(new Error('Duration fix: ' + stderr.slice(-200))));
+        ff.on('error', reject);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Duration fix timeout')); }, 30000);
+      });
+      fs.renameSync(fixedPath, outputPath);
+      console.log(`[${jobId}] Hero intro applied (duration capped to ${maxMainDur}s)`);
     }
 
     // Outro image assembly (optional)
