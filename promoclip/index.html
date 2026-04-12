@@ -4612,6 +4612,17 @@ async function startGenerationPro(product, selectedMedia) {
       log('Script Pro (cache): "' + script.voiceover.slice(0, 80) + '..."');
     } else {
       script = buildProScript(moments, cfg.language);
+      const proDurationSec = moments.length > 0 ? moments[moments.length - 1].end_time : 15;
+      // If moments produced a too-short voiceover, regenerate via geminiScript
+      const { min: proMinW } = wordsTargetForDuration(proDurationSec, cfg.language);
+      if (countWords(script.voiceover) < proMinW) {
+        log('Script Pro trop court (' + countWords(script.voiceover) + ' mots / min ' + proMinW + ') — regeneration via geminiScript');
+        try {
+          const regen = await geminiScript(product.desc, cfg.hookText || script.voiceover, cfg.language, proDurationSec);
+          script.voiceover = regen.voiceover;
+          script.cta = regen.cta || script.cta;
+        } catch(e) { log('Regen fallback: ' + e.message, 'warn'); }
+      }
       // Guarantee user hook appears at the start of the voiceover (language-aware: translate if mismatch)
       if (cfg.hookText && cfg.hookText.trim()) {
         const withHook = await prependHookInTargetLanguage(script.voiceover, cfg.hookText, cfg.language);
@@ -4621,7 +4632,6 @@ async function startGenerationPro(product, selectedMedia) {
         }
       }
       // Validate word count vs detected video duration + retry if out of range
-      const proDurationSec = moments.length > 0 ? moments[moments.length - 1].end_time : 15;
       script.voiceover = await validateAndFitVoiceover(script.voiceover, proDurationSec, cfg.language, 'Script Pro', product.desc);
       log('Script Pro: "' + script.voiceover.slice(0, 80) + '..."');
     }
@@ -6221,6 +6231,18 @@ async function generatePreviewScript(product, cfg, pro) {
       voiceover = built.voiceover;
       cta = built.cta;
       durationSec = moments.length > 0 ? moments[moments.length - 1].end_time : cfg.duration;
+      // If moments produced a too-short voiceover, regenerate via geminiScript (same as Quick)
+      // buildProScript concatenates short avatar lines — often <15 words for 20s+ videos
+      const { min: proMin } = wordsTargetForDuration(durationSec, cfg.language);
+      if (countWords(voiceover) < proMin) {
+        log('Script Pro trop court (' + countWords(voiceover) + ' mots / min ' + proMin + ') — regeneration via geminiScript');
+        loadingLabel.textContent = 'Enrichissement du script...';
+        try {
+          const regen = await geminiScript(product.desc, cfg.hookText || voiceover, cfg.language, durationSec);
+          voiceover = regen.voiceover;
+          cta = regen.cta || cta;
+        } catch(e) { log('Regen fallback: ' + e.message, 'warn'); }
+      }
     } else {
       loadingLabel.textContent = 'Generation du script...';
       const script = await geminiScript(product.desc, cfg.hookText || 'Check this out', cfg.language, cfg.duration);
