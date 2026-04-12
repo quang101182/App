@@ -2462,7 +2462,7 @@ body.modal-open > .screen.active { pointer-events: none; }
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.6.19';
+const APP_VERSION = '0.6.20';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -4871,23 +4871,39 @@ async function startGeneration() {
       log('Script (cache apercu): "' + script.voiceover.slice(0, 60) + '..."');
       _previewedScript = null; // consume once
     } else {
+      // Auto-generate via the same pipeline as the preview modal (single source of truth)
+      // This ensures the script quality is always the same whether the user clicked "Apercu" or not
+      log('Script auto-generation (meme pipeline que apercu)...');
       try {
-        script = await geminiScript(product.desc, cfg.hookText || 'Check this out', cfg.language, cfg.duration);
-        log('Script genere: "' + script.voiceover.slice(0, 60) + '..."');
+        const autoScript = await geminiScript(product.desc, cfg.hookText || 'Check this out', cfg.language, cfg.duration);
+        let voiceover = autoScript.voiceover;
+        let cta = autoScript.cta || 'Link in bio';
+        // Prepend hook (language-aware translation if mismatch)
+        if (cfg.hookText && cfg.hookText.trim()) {
+          const withHook = await prependHookInTargetLanguage(voiceover, cfg.hookText, cfg.language);
+          if (withHook !== voiceover) { log('Hook prepended'); voiceover = withHook; }
+        }
+        // Validate + fit to duration
+        voiceover = await validateAndFitVoiceover(voiceover, cfg.duration, cfg.language, 'Script');
+        // Cache for consistency (reuse if user regenerates within 30min)
+        _previewedScript = {
+          voiceover, cta, moments: null,
+          hookSnapshot: cfg.hookText || '',
+          language: cfg.language,
+          duration: cfg.duration,
+          durationCfg: cfg.duration,
+          mode: 'quick',
+          productId: state.wizard.selectedProductId,
+          mediaFingerprint: mediaSelectionFingerprint(),
+          caption: null,
+          timestamp: Date.now()
+        };
+        script = { voiceover, cta };
+        log('Script auto-genere: "' + voiceover.slice(0, 80) + '..."');
       } catch(e) {
         log('Script fallback: ' + e.message, 'warn');
         script = { voiceover: cfg.hookText || product.desc, cta: cfg.cta || 'Link in bio' };
       }
-      // Guarantee user hook appears at the start of the voiceover (language-aware: translate if mismatch)
-      if (cfg.hookText && cfg.hookText.trim()) {
-        const withHook = await prependHookInTargetLanguage(script.voiceover, cfg.hookText, cfg.language);
-        if (withHook !== script.voiceover) {
-          log('Hook prepended in voiceover');
-          script.voiceover = withHook;
-        }
-      }
-      // Validate word count vs cfg.duration + retry if out of range
-      script.voiceover = await validateAndFitVoiceover(script.voiceover, cfg.duration, cfg.language, 'Script');
     }
     _lastScriptVoiceover = script.voiceover;
     // Social caption (description + 5 hashtags) — non-blocking best-effort
@@ -6274,23 +6290,18 @@ function validateAndLaunchFromPreview() {
 }
 
 function isPreviewValidForCurrentConfig() {
-  if (!_previewedScript) return false;
+  if (!_previewedScript) { log('Cache apercu: absent', 'warn'); return false; }
   const cfg = state.wizard.config;
   const pro = isProMode();
-  // Mode (Pro vs Quick)
-  if (_previewedScript.mode !== (pro ? 'pro' : 'quick')) return false;
-  // Language
-  if (_previewedScript.language !== cfg.language) return false;
-  // Hook text (must match exactly, since it's prepended to voiceover)
-  if (_previewedScript.hookSnapshot !== (cfg.hookText || '')) return false;
-  // Product (different product = different context)
-  if (_previewedScript.productId !== state.wizard.selectedProductId) return false;
-  // Media selection (fingerprint must match exact selection + order)
-  if (_previewedScript.mediaFingerprint !== mediaSelectionFingerprint()) return false;
-  // Quick mode: duration slider must match
-  if (!pro && _previewedScript.durationCfg !== cfg.duration) return false;
-  // Cache expires after 5 minutes (live review, not cold storage)
-  if (Date.now() - _previewedScript.timestamp > 5 * 60 * 1000) return false;
+  const currentHook = (cfg.hookText || '').trim();
+  const cachedHook = (_previewedScript.hookSnapshot || '').trim();
+  if (_previewedScript.mode !== (pro ? 'pro' : 'quick')) { log('Cache apercu: mode mismatch ' + _previewedScript.mode + ' vs ' + (pro?'pro':'quick'), 'warn'); return false; }
+  if (_previewedScript.language !== cfg.language) { log('Cache apercu: langue mismatch', 'warn'); return false; }
+  if (cachedHook !== currentHook) { log('Cache apercu: hook mismatch "' + cachedHook.slice(0,30) + '" vs "' + currentHook.slice(0,30) + '"', 'warn'); return false; }
+  if (_previewedScript.productId !== state.wizard.selectedProductId) { log('Cache apercu: produit mismatch', 'warn'); return false; }
+  if (_previewedScript.mediaFingerprint !== mediaSelectionFingerprint()) { log('Cache apercu: medias mismatch', 'warn'); return false; }
+  if (!pro && _previewedScript.durationCfg !== cfg.duration) { log('Cache apercu: duree mismatch ' + _previewedScript.durationCfg + ' vs ' + cfg.duration, 'warn'); return false; }
+  if (Date.now() - _previewedScript.timestamp > 30 * 60 * 1000) { log('Cache apercu: expire (>30min)', 'warn'); return false; }
   return true;
 }
 
