@@ -6,7 +6,7 @@
  *            v1.0.3 — Retrait -shortest dans mix audio /promo-assembly (fixait la truncation video a la duree TTS court)
  *            v1.0.4 — Xfade Pro timeout 60s -> 180s (crash sur full re-encode intro+main+outro avec avatar)
  *            v1.0.5 — Symmetric tpad: freeze avatar last frame when recording > avatar (vstack stall fix)
- *            v1.0.6 — Main trim: stream copy instead of re-encode (was timing out on shared-cpu)
+ *            v1.0.6 — Hero intro timeouts 60s → 120-180s (shared-cpu too slow for re-encode)
  *
  * Heberge UNIQUEMENT /health + /promo-assembly + /promo-assembly-pro.
  * Le reste des routes (slideshow, merge, ken-burns, smart-zoom, etc) reste
@@ -805,15 +805,15 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => code === 0 ? resolve() : reject(new Error('Intro build: ' + stderr.slice(-200))));
         ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro build timeout')); }, 60000);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro build timeout')); }, 120000);
       });
 
       await new Promise((resolve, reject) => {
-        // Stream copy (no re-encode) — trim is just cutting, 100x faster than re-encode
         const ff = spawn('ffmpeg', [
           '-ss', String(introDur),
           '-i', outputPath,
-          '-c', 'copy',
+          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+          '-c:a', 'aac', '-b:a', '128k',
           '-fflags', '+genpts',
           '-movflags', '+faststart',
           '-y', mainTrimPath
@@ -822,7 +822,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => code === 0 ? resolve() : reject(new Error('Main trim: ' + stderr.slice(-200))));
         ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Main trim timeout')); }, 120000);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Main trim timeout')); }, 180000);
       });
 
       const concatListPath = path.join(tmpDir, 'concat-intro.txt');
@@ -840,7 +840,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => code === 0 ? resolve() : reject(new Error('Intro concat: ' + stderr.slice(-200))));
         ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro concat timeout')); }, 60000);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro concat timeout')); }, 180000);
       });
 
       fs.renameSync(withIntroPath, outputPath);
