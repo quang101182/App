@@ -2705,18 +2705,33 @@ function applyGenLogHeight() {
   if (el) el.style.maxHeight = GEN_LOG_HEIGHTS[_genLogLevel] + 'px';
 }
 
-function logClear() { _logs = []; const b = document.getElementById('logBody'); if(b) b.innerHTML = ''; showToast('Logs effaces'); }
+function logClear() { _logs = []; const b = document.getElementById('logBody'); if(b) b.innerHTML = ''; const g = document.getElementById('genLogsBody'); if(g) g.innerHTML = ''; showToast('Logs effaces'); }
 function logCopy() {
   const text = _logs.map(l => l.ts + ' [' + l.level + '] ' + l.msg).join('\n');
   navigator.clipboard.writeText(text).then(() => showToast('Logs copies')).catch(() => showToast('Erreur copie', true));
 }
-function logExport() {
+async function logExport() {
   const text = _logs.map(l => l.ts + ' [' + l.level + '] ' + l.msg).join('\n');
+  const filename = 'promoclip_' + new Date().toISOString().slice(0, 10) + '.log';
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
+    try {
+      await window.Capacitor.Plugins.Filesystem.writeFile({
+        path: filename,
+        data: btoa(unescape(encodeURIComponent(text))),
+        directory: 'DOCUMENTS',
+        recursive: true
+      });
+      showToast('Log sauvegarde : Documents/' + filename);
+      return;
+    } catch(e) { log('Filesystem writeFile: ' + e.message, 'warn'); }
+  }
   const blob = new Blob([text], { type: 'text/plain' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'promoclip_' + new Date().toISOString().slice(0,10) + '.log';
+  a.download = filename;
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
 }
 let _closeLogTimer = null;
@@ -4083,6 +4098,28 @@ function updateMediaCompatBanner() {
   } else {
     banner.style.display = 'none';
   }
+}
+
+// Returns { ok: true } if media selection is valid for the current template, or { ok: false, reason: '...' }
+function isMediaSelectionValid() {
+  const pro = isProMode();
+  const selected = state.wizard.mediaFiles.filter(f => f.selected);
+  const videos = selected.filter(f => f.isVideo);
+  const images = selected.filter(f => !f.isVideo);
+
+  if (selected.length === 0) return { ok: false, reason: pro ? 'Ajoute un screen recording video pour le Mode Pro' : 'Ajoute au moins une capture d\'ecran' };
+
+  if (pro) {
+    if (videos.length === 0) return { ok: false, reason: 'Mode Pro : un screen recording video est requis' };
+    if (videos.length > 1) return { ok: false, reason: 'Mode Pro : une seule video est autorisee (' + videos.length + ' detectees)' };
+    if (images.length > 1) return { ok: false, reason: 'Mode Pro : max 1 image de sortie (' + images.length + ' images)' };
+    if (videos.length === 1 && images.length === 1) {
+      const vidOrder = videos[0].order || 0;
+      const imgOrder = images[0].order || 0;
+      if (vidOrder >= imgOrder) return { ok: false, reason: 'Mode Pro : la video doit etre AVANT l\'image de sortie' };
+    }
+  }
+  return { ok: true };
 }
 
 function renderMediaGrid() {
@@ -5637,9 +5674,15 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
 
   switch(action) {
     case 'go':
-    case 'nav-screen':
-      goScreen(el.dataset.screen);
+    case 'nav-screen': {
+      const target = el.dataset.screen;
+      if (target === 'product' && _currentScreen === 'media') {
+        const check = isMediaSelectionValid();
+        if (!check.ok) { showToast(check.reason, true, 4000); break; }
+      }
+      goScreen(target);
       break;
+    }
 
     case 'toggle':
       el.classList.toggle('on');
