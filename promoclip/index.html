@@ -2460,7 +2460,7 @@ body.modal-open {
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.6.18';
+const APP_VERSION = '0.6.19';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -6456,27 +6456,35 @@ function updateHookLangBadges(targetLang, detectedLang, isLoading) {
   }
 }
 
+let _hookLangLoadingIndicatorTimer = null;
 function scheduleHookLanguageDetection(text) {
   if (_hookLangDetectionTimer) { clearTimeout(_hookLangDetectionTimer); _hookLangDetectionTimer = null; }
+  if (_hookLangLoadingIndicatorTimer) { clearTimeout(_hookLangLoadingIndicatorTimer); _hookLangLoadingIndicatorTimer = null; }
   const trimmed = (text || '').trim();
   if (trimmed.length < 4) {
     updateHookLangBadges(state.wizard.config.language, null, false);
     _hookLangLastDetected = null;
     return;
   }
-  // Show loading state immediately (subtle feedback)
-  if (_hookModalOpen) updateHookLangBadges(state.wizard.config.language, null, true);
+  // Show loading indicator after 1.1s idle (only visible if detection takes > 200ms)
+  _hookLangLoadingIndicatorTimer = setTimeout(() => {
+    if (_hookModalOpen) updateHookLangBadges(state.wizard.config.language, null, true);
+  }, 1100);
+  // Actual detection after 1.3s idle (was 800ms — increased to reduce noise while typing)
   _hookLangDetectionTimer = setTimeout(async () => {
     try {
       const detected = await detectHookLanguage(trimmed);
       _hookLangLastDetected = detected;
+      if (_hookLangLoadingIndicatorTimer) { clearTimeout(_hookLangLoadingIndicatorTimer); _hookLangLoadingIndicatorTimer = null; }
       if (_hookModalOpen) updateHookLangBadges(state.wizard.config.language, detected, false);
     } catch(e) {
+      if (_hookLangLoadingIndicatorTimer) { clearTimeout(_hookLangLoadingIndicatorTimer); _hookLangLoadingIndicatorTimer = null; }
       if (_hookModalOpen) updateHookLangBadges(state.wizard.config.language, null, false);
     }
-  }, 800);
+  }, 1200);
 }
 
+let _hookInputInProgress = false;
 function updateHookPreview() {
   const txt = (state.wizard.config.hookText || '').trim();
   const el = document.getElementById('hookPreviewText');
@@ -6490,12 +6498,15 @@ function updateHookPreview() {
   }
   // Keep hidden input in sync for backward-compat code paths
   const hidden = document.getElementById('configHook');
-  if (hidden) hidden.value = state.wizard.config.hookText || '';
-  // If modal is currently open, also refresh textarea + counters
+  if (hidden) hidden.value = (state.wizard.config.hookText || '').trim();
+  // If modal is currently open, refresh counters but NEVER overwrite textarea during active typing
+  // (overwriting kills trailing spaces and cursor position on mobile keyboards)
   if (_hookModalOpen) {
-    const textarea = document.getElementById('hookModalTextarea');
-    if (textarea && textarea.value !== (state.wizard.config.hookText || '')) {
-      textarea.value = state.wizard.config.hookText || '';
+    if (!_hookInputInProgress) {
+      const textarea = document.getElementById('hookModalTextarea');
+      if (textarea && textarea.value !== (state.wizard.config.hookText || '')) {
+        textarea.value = state.wizard.config.hookText || '';
+      }
     }
     updateHookCounters(state.wizard.config.hookText || '');
   }
@@ -6507,17 +6518,26 @@ function updateHookCounters(text) {
   const words = countWords(t);
   const lang = state.wizard.config.language || 'Francais';
   const dur = estimatedSpeechDuration(t, lang);
+  const pro = isProMode();
   const charsEl = document.getElementById('hookCounterChars');
   const wordsEl = document.getElementById('hookCounterWords');
   const durEl = document.getElementById('hookCounterDur');
-  if (charsEl) charsEl.textContent = chars + ' caracteres';
+  if (charsEl) charsEl.textContent = chars + ' car.';
   if (wordsEl) wordsEl.textContent = words + ' mots';
   if (durEl) {
-    durEl.textContent = '~' + dur + 's';
-    // Optimal hook: 2-4 seconds
-    durEl.className = '';
-    if (dur >= 1 && dur <= 4.5) durEl.classList.add('ok');
-    else if (dur > 4.5) durEl.classList.add('warn');
+    // In Pro mode the hook is just the opener — video duration is auto-detected from the recording
+    // Show speech duration as informational only, not as a limit
+    if (pro) {
+      durEl.textContent = '~' + dur + 's parole';
+      durEl.className = '';
+      // Gentle feedback: hooks over 6s are long but never "wrong" in Pro
+      if (dur >= 1 && dur <= 6) durEl.classList.add('ok');
+    } else {
+      durEl.textContent = '~' + dur + 's';
+      durEl.className = '';
+      if (dur >= 1 && dur <= 4.5) durEl.classList.add('ok');
+      else if (dur > 4.5) durEl.classList.add('warn');
+    }
   }
   // Update AI button label based on content (empty → Generer, filled → Ameliorer)
   const aiLabel = document.getElementById('hookBtnAILabel');
@@ -6940,8 +6960,9 @@ function setupHookModalListeners() {
     textarea.addEventListener('input', (e) => {
       const v = e.target.value;
       updateHookCounters(v);
-      state.wizard.config.hookText = v.trim();
-      updateHookPreview();
+      state.wizard.config.hookText = v;
+      // Update preview text + hidden input WITHOUT overwriting textarea (avoid trim killing trailing spaces)
+      try { _hookInputInProgress = true; updateHookPreview(); } finally { _hookInputInProgress = false; }
       // Push to undo history (debounced)
       hookHistoryPush(v, false);
       // Re-detect language when text changes significantly
