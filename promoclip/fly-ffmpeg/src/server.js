@@ -7,6 +7,7 @@
  *            v1.0.4 — Xfade Pro timeout 60s -> 180s (crash sur full re-encode intro+main+outro avec avatar)
  *            v1.0.5 — Symmetric tpad: freeze avatar last frame when recording > avatar (vstack stall fix)
  *            v1.0.6 — Hero intro timeouts 60s → 120-180s (shared-cpu too slow for re-encode)
+ *            v1.0.7 — Main trim: stream copy (cut only, no re-encode needed — instant vs 3min)
  *
  * Heberge UNIQUEMENT /health + /promo-assembly + /promo-assembly-pro.
  * Le reste des routes (slideshow, merge, ken-burns, smart-zoom, etc) reste
@@ -41,7 +42,7 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
-const VERSION = '1.0.6';
+const VERSION = '1.0.7';
 
 // ---------------------------------------------------------------------------
 // Etat global
@@ -809,11 +810,12 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
       });
 
       await new Promise((resolve, reject) => {
+        // Stream copy for trim: output.mp4 is already H264/AAC, no need to re-encode just to cut 2s
+        // This is instant vs 3+ min re-encode on shared-cpu
         const ff = spawn('ffmpeg', [
           '-ss', String(introDur),
           '-i', outputPath,
-          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-          '-c:a', 'aac', '-b:a', '128k',
+          '-c', 'copy',
           '-fflags', '+genpts',
           '-movflags', '+faststart',
           '-y', mainTrimPath
@@ -822,7 +824,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => code === 0 ? resolve() : reject(new Error('Main trim: ' + stderr.slice(-200))));
         ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Main trim timeout')); }, 180000);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Main trim timeout')); }, 60000);
       });
 
       const concatListPath = path.join(tmpDir, 'concat-intro.txt');
