@@ -2714,29 +2714,10 @@ function logCopy() {
 }
 function logExport() {
   const text = _logs.map(l => l.ts + ' [' + l.level + '] ' + l.msg).join('\n');
-  const filename = 'promoclip_' + new Date().toISOString().slice(0,10) + '.log';
-  // Try navigator.share with file, then text-only share, then clipboard copy
-  if (navigator.share) {
-    try {
-      const file = new File([text], filename, { type: 'text/plain' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: filename }).catch(() => {});
-        return;
-      }
-    } catch(_) {}
-    // Fallback: share as text (no file — works on all Android)
-    navigator.share({ title: filename, text: text }).catch(() => {});
-    return;
-  }
-  // Desktop fallback
-  const blob = new Blob([text], { type: 'text/plain' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(a.href);
+  // Clipboard copy (proven to work in this WebView)
+  navigator.clipboard.writeText(text)
+    .then(() => showToast('Logs copies — colle dans un fichier texte'))
+    .catch(() => showToast('Erreur export', true));
 }
 let _closeLogTimer = null;
 function toggleLogPanel() {

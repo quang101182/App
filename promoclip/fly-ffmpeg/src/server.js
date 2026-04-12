@@ -8,6 +8,7 @@
  *            v1.0.5 — Symmetric tpad: freeze avatar last frame when recording > avatar (vstack stall fix)
  *            v1.0.6 — Hero intro timeouts 60s → 120-180s (shared-cpu too slow for re-encode)
  *            v1.0.7 — Main trim: stream copy (cut only, no re-encode needed — instant vs 3min)
+ *            v1.0.8 — Hero intro pipeline: fps=30 norm + concat -c copy + ultrafast intro build
  *
  * Heberge UNIQUEMENT /health + /promo-assembly + /promo-assembly-pro.
  * Le reste des routes (slideshow, merge, ken-burns, smart-zoom, etc) reste
@@ -42,7 +43,7 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
-const VERSION = '1.0.7';
+const VERSION = '1.0.8';
 
 // ---------------------------------------------------------------------------
 // Etat global
@@ -709,21 +710,24 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
       const avatarPrefilter = needsFreezeAvatar
         ? `tpad=stop_mode=clone:stop_duration=${freezeAvatarExtra.toFixed(2)},`
         : '';
+      // Normalize fps to 30 when hero intro is enabled — required for -c copy concat later
+      // (intro-fs.mp4 is encoded at fps=30, output.mp4 must match exactly)
+      const fpsNorm = avatarIntroFullscreen ? ',fps=30' : '';
       let filterComplex;
       if (mode === 'split-top') {
         const avatarH = Math.round(outHeight * 0.3);
         const recordH = outHeight - avatarH;
         filterComplex = [
-          `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
-          `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
+          `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1${fpsNorm}[avatar]`,
+          `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1${fpsNorm}[record]`,
           `[avatar][record]vstack=inputs=2[outv]`
         ].join(';');
       } else if (mode === 'split-bottom') {
         const avatarH = Math.round(outHeight * 0.3);
         const recordH = outHeight - avatarH;
         filterComplex = [
-          `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
-          `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
+          `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1${fpsNorm}[record]`,
+          `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1${fpsNorm}[avatar]`,
           `[record][avatar]vstack=inputs=2[outv]`
         ].join(';');
       } else {
@@ -731,8 +735,8 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         const pipX = outWidth - pipSize - 20;
         const pipY = outHeight - pipSize - 120;
         filterComplex = [
-          `[1:v]${recordPrefilter}scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
-          `[0:v]${avatarPrefilter}scale=${pipSize}:${pipSize}:force_original_aspect_ratio=decrease,pad=${pipSize}:${pipSize}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipSize}/2,2)+pow(Y-${pipSize}/2,2),pow(${pipSize}/2-4,2)),0,255)'[pip]`,
+          `[1:v]${recordPrefilter}scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1${fpsNorm}[record]`,
+          `[0:v]${avatarPrefilter}scale=${pipSize}:${pipSize}:force_original_aspect_ratio=decrease,pad=${pipSize}:${pipSize}:(ow-iw)/2:(oh-ih)/2,setsar=1${fpsNorm},format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipSize}/2,2)+pow(Y-${pipSize}/2,2),pow(${pipSize}/2-4,2)),0,255)'[pip]`,
           `[record][pip]overlay=${pipX}:${pipY}[outv]`
         ].join(';');
       }
@@ -746,7 +750,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         '-map', subFilter ? '[final]' : '[outv]',
         '-map', '0:a?',
         '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-        '-c:a', 'aac', '-b:a', '128k',
+        '-c:a', 'aac', '-b:a', '128k', ...(avatarIntroFullscreen ? ['-ar', '44100'] : []),
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
         '-t', String(maxMainDur),
@@ -794,11 +798,11 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
       const introSubFilter = subPath ? `,ass=${subPath}` : '';
       await new Promise((resolve, reject) => {
         const ff = spawn('ffmpeg', [
+          '-t', String(introDur),          // input-level: limit decoding to introDur (skip rest of avatar)
           '-i', avatarPath,
           '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=increase,crop=${outWidth}:${outHeight}:(iw-${outWidth})/2:(ih-${outHeight})/2,setsar=1,fps=30,format=yuv420p${introSubFilter}`,
-          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-          '-c:a', 'aac', '-b:a', '128k',
-          '-t', String(introDur),
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+          '-c:a', 'aac', '-b:a', '128k', '-ar', '44100',
           '-movflags', '+faststart',
           '-y', introPath
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -829,12 +833,16 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
 
       const concatListPath = path.join(tmpDir, 'concat-intro.txt');
       fs.writeFileSync(concatListPath, `file '${introPath.replace(/'/g, "'\\''")}'\nfile '${mainTrimPath.replace(/'/g, "'\\''")}'\n`);
+      console.log(`[${jobId}] Intro concat: -c copy (both segments already H264/AAC@30fps)`);
       await new Promise((resolve, reject) => {
+        // Stream copy: both intro-fs.mp4 and main-trim.mp4 are H264/AAC with same params
+        // (fps=30 normalized in assembly, same encoder/crf/preset)
+        // This takes ~1-2s instead of 180s+ re-encode
         const ff = spawn('ffmpeg', [
           '-f', 'concat', '-safe', '0', '-i', concatListPath,
-          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-          '-c:a', 'aac', '-b:a', '128k',
-          '-pix_fmt', 'yuv420p',
+          '-c', 'copy',
+          '-fflags', '+genpts',
+          '-avoid_negative_ts', 'make_zero',
           '-movflags', '+faststart',
           '-y', withIntroPath
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -842,7 +850,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => code === 0 ? resolve() : reject(new Error('Intro concat: ' + stderr.slice(-200))));
         ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro concat timeout')); }, 180000);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro concat timeout')); }, 30000);
       });
 
       fs.renameSync(withIntroPath, outputPath);
