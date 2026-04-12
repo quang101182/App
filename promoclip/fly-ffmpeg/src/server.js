@@ -705,47 +705,106 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
       const avatarPrefilter = needsFreezeAvatar
         ? `tpad=stop_mode=clone:stop_duration=${freezeAvatarExtra.toFixed(2)},`
         : '';
-      let filterComplex;
-      if (mode === 'split-top') {
-        const avatarH = Math.round(outHeight * 0.3);
-        const recordH = outHeight - avatarH;
-        filterComplex = [
-          `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
-          `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
-          `[avatar][record]vstack=inputs=2[outv]`
-        ].join(';');
-      } else if (mode === 'split-bottom') {
-        const avatarH = Math.round(outHeight * 0.3);
-        const recordH = outHeight - avatarH;
-        filterComplex = [
-          `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
-          `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
-          `[record][avatar]vstack=inputs=2[outv]`
-        ].join(';');
-      } else {
-        const pipSize = Math.round(outWidth * 0.28);
-        const pipX = outWidth - pipSize - 20;
-        const pipY = outHeight - pipSize - 120;
-        filterComplex = [
-          `[1:v]${recordPrefilter}scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
-          `[0:v]${avatarPrefilter}scale=${pipSize}:${pipSize}:force_original_aspect_ratio=decrease,pad=${pipSize}:${pipSize}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipSize}/2,2)+pow(Y-${pipSize}/2,2),pow(${pipSize}/2-4,2)),0,255)'[pip]`,
-          `[record][pip]overlay=${pipX}:${pipY}[outv]`
-        ].join(';');
-      }
 
-      const subFilter = subPath ? `,ass=${subPath}` : '';
+      const introDur = avatarIntroFullscreen
+        ? Math.max(1, Math.min(5, Number(avatarIntroDuration) || 2))
+        : 0;
+
+      let filterComplex;
+      let mapVideo;
+      let totalDur;
+
+      if (introDur > 0) {
+        // ── SINGLE-PASS: hero intro fullscreen + split-screen via concat FILTER ──
+        totalDur = introDur + maxMainDur;
+        console.log(`[${jobId}] Hero intro ${introDur}s (single-pass concat filter, total ${totalDur.toFixed(1)}s)`);
+
+        // Branch A: intro fullscreen (avatar only, trimmed to introDur)
+        const introFilter = `[0:v]trim=0:${introDur},setpts=PTS-STARTPTS,scale=${outWidth}:${outHeight}:force_original_aspect_ratio=increase,crop=${outWidth}:${outHeight}:(iw-${outWidth})/2:(ih-${outHeight})/2,setsar=1,fps=30[intro]`;
+
+        // Branch B: split-screen (mode-dependent, with tpad)
+        let splitFilter;
+        if (mode === 'split-top') {
+          const avatarH = Math.round(outHeight * 0.3);
+          const recordH = outHeight - avatarH;
+          splitFilter = [
+            `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
+            `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
+            `[avatar][record]vstack=inputs=2[split]`
+          ].join(';');
+        } else if (mode === 'split-bottom') {
+          const avatarH = Math.round(outHeight * 0.3);
+          const recordH = outHeight - avatarH;
+          splitFilter = [
+            `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
+            `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
+            `[record][avatar]vstack=inputs=2[split]`
+          ].join(';');
+        } else {
+          const pipSize = Math.round(outWidth * 0.28);
+          const pipX = outWidth - pipSize - 20;
+          const pipY = outHeight - pipSize - 120;
+          splitFilter = [
+            `[1:v]${recordPrefilter}scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
+            `[0:v]${avatarPrefilter}scale=${pipSize}:${pipSize}:force_original_aspect_ratio=decrease,pad=${pipSize}:${pipSize}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipSize}/2,2)+pow(Y-${pipSize}/2,2),pow(${pipSize}/2-4,2)),0,255)'[pip]`,
+            `[record][pip]overlay=${pipX}:${pipY}[split]`
+          ].join(';');
+        }
+
+        // Concat filter: intro + split → single output
+        const concatF = `[intro][split]concat=n=2:v=1:a=0[outv]`;
+        // Subtitles applied AFTER concat (timestamps match full audio timeline)
+        const subFilter = subPath ? `;[outv]ass=${subPath}[final]` : '';
+        mapVideo = subFilter ? '[final]' : '[outv]';
+        filterComplex = [introFilter, splitFilter, concatF].join(';') + subFilter;
+
+      } else {
+        // ── NO HERO INTRO: original split-screen only ──
+        totalDur = maxMainDur;
+
+        if (mode === 'split-top') {
+          const avatarH = Math.round(outHeight * 0.3);
+          const recordH = outHeight - avatarH;
+          filterComplex = [
+            `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
+            `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
+            `[avatar][record]vstack=inputs=2[outv]`
+          ].join(';');
+        } else if (mode === 'split-bottom') {
+          const avatarH = Math.round(outHeight * 0.3);
+          const recordH = outHeight - avatarH;
+          filterComplex = [
+            `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
+            `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
+            `[record][avatar]vstack=inputs=2[outv]`
+          ].join(';');
+        } else {
+          const pipSize = Math.round(outWidth * 0.28);
+          const pipX = outWidth - pipSize - 20;
+          const pipY = outHeight - pipSize - 120;
+          filterComplex = [
+            `[1:v]${recordPrefilter}scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
+            `[0:v]${avatarPrefilter}scale=${pipSize}:${pipSize}:force_original_aspect_ratio=decrease,pad=${pipSize}:${pipSize}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipSize}/2,2)+pow(Y-${pipSize}/2,2),pow(${pipSize}/2-4,2)),0,255)'[pip]`,
+            `[record][pip]overlay=${pipX}:${pipY}[outv]`
+          ].join(';');
+        }
+
+        const subFilter = subPath ? `,ass=${subPath}` : '';
+        filterComplex = filterComplex + (subFilter ? `;[outv]${subFilter.slice(1)}[final]` : '');
+        mapVideo = subFilter ? '[final]' : '[outv]';
+      }
 
       ffArgs = [
         '-i', avatarPath,
         '-i', recordingPath,
-        '-filter_complex', filterComplex + (subFilter ? `;[outv]${subFilter.slice(1)}[final]` : ''),
-        '-map', subFilter ? '[final]' : '[outv]',
+        '-filter_complex', filterComplex,
+        '-map', mapVideo,
         '-map', '0:a?',
         '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
         '-c:a', 'aac', '-b:a', '128k',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
-        '-t', String(maxMainDur),
+        '-t', String(totalDur),
         '-y', outputPath
       ];
     } else {
@@ -762,7 +821,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
       ];
     }
 
-    console.log(`[${jobId}] FFmpeg Pro start (mode: ${mode}, avatar: ${!!avatarPath})...`);
+    console.log(`[${jobId}] FFmpeg Pro start (mode: ${mode}, avatar: ${!!avatarPath}, intro: ${avatarIntroFullscreen ? 'yes' : 'no'})...`);
     await new Promise((resolve, reject) => {
       const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
       let stderr = '';
@@ -774,76 +833,9 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
       ff.on('error', reject);
       setTimeout(() => {
         try { ff.kill('SIGKILL'); } catch (_) {}
-        reject(new Error('FFmpeg Pro timeout 120s'));
-      }, 120000);
+        reject(new Error('FFmpeg Pro timeout 180s'));
+      }, 180000);
     });
-
-    // Hero intro avatar fullscreen (optional)
-    if (avatarPath && avatarIntroFullscreen) {
-      const introDur = Math.max(1, Math.min(5, Number(avatarIntroDuration) || 2));
-      const introPath = path.join(tmpDir, 'intro-fs.mp4');
-      const mainTrimPath = path.join(tmpDir, 'main-trim.mp4');
-      const withIntroPath = path.join(tmpDir, 'with-intro.mp4');
-
-      console.log(`[${jobId}] Hero intro: avatar fullscreen ${introDur}s`);
-
-      const introSubFilter = subPath ? `,ass=${subPath}` : '';
-      await new Promise((resolve, reject) => {
-        const ff = spawn('ffmpeg', [
-          '-i', avatarPath,
-          '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=increase,crop=${outWidth}:${outHeight}:(iw-${outWidth})/2:(ih-${outHeight})/2,setsar=1,fps=30,format=yuv420p${introSubFilter}`,
-          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-          '-c:a', 'aac', '-b:a', '128k',
-          '-t', String(introDur),
-          '-movflags', '+faststart',
-          '-y', introPath
-        ], { stdio: ['ignore', 'pipe', 'pipe'] });
-        let stderr = '';
-        ff.stderr.on('data', d => { stderr += d.toString(); });
-        ff.on('close', code => code === 0 ? resolve() : reject(new Error('Intro build: ' + stderr.slice(-200))));
-        ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro build timeout')); }, 60000);
-      });
-
-      await new Promise((resolve, reject) => {
-        const ff = spawn('ffmpeg', [
-          '-ss', String(introDur),
-          '-i', outputPath,
-          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-          '-c:a', 'aac', '-b:a', '128k',
-          '-fflags', '+genpts',
-          '-movflags', '+faststart',
-          '-y', mainTrimPath
-        ], { stdio: ['ignore', 'pipe', 'pipe'] });
-        let stderr = '';
-        ff.stderr.on('data', d => { stderr += d.toString(); });
-        ff.on('close', code => code === 0 ? resolve() : reject(new Error('Main trim: ' + stderr.slice(-200))));
-        ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Main trim timeout')); }, 60000);
-      });
-
-      const concatListPath = path.join(tmpDir, 'concat-intro.txt');
-      fs.writeFileSync(concatListPath, `file '${introPath.replace(/'/g, "'\\''")}'\nfile '${mainTrimPath.replace(/'/g, "'\\''")}'\n`);
-      await new Promise((resolve, reject) => {
-        const ff = spawn('ffmpeg', [
-          '-f', 'concat', '-safe', '0', '-i', concatListPath,
-          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-          '-c:a', 'aac', '-b:a', '128k',
-          '-pix_fmt', 'yuv420p',
-          '-t', String(maxMainDur),
-          '-movflags', '+faststart',
-          '-y', withIntroPath
-        ], { stdio: ['ignore', 'pipe', 'pipe'] });
-        let stderr = '';
-        ff.stderr.on('data', d => { stderr += d.toString(); });
-        ff.on('close', code => code === 0 ? resolve() : reject(new Error('Intro concat: ' + stderr.slice(-200))));
-        ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro concat timeout')); }, 60000);
-      });
-
-      fs.renameSync(withIntroPath, outputPath);
-      console.log(`[${jobId}] Hero intro applied`);
-    }
 
     // Outro image assembly (optional)
     if (outroClip) {
