@@ -1101,11 +1101,9 @@ body {
 /* Body scroll lock when any fullscreen modal is open */
 body.modal-open {
   overflow: hidden;
-  /* touch-action: none REMOVED — it blocks Gboard swipe typing and IME gestures on Android */
+  touch-action: none;
   -webkit-overflow-scrolling: auto;
 }
-/* Prevent background scroll behind modals via CSS only (without breaking IME touch) */
-body.modal-open > .screen.active { pointer-events: none; }
 .hook-modal.open .hook-modal-sheet {
   transform: translateY(0);
 }
@@ -2347,7 +2345,7 @@ body.modal-open > .screen.active { pointer-events: none; }
       <span class="hook-lang-badge hook-lang-warn" id="hookLangBadgeDetected" style="display:none;"></span>
     </div>
     <div class="hook-modal-body">
-      <textarea class="hook-textarea" id="hookModalTextarea" placeholder="Tape ton hook ici. Ex: Arrete de taper, dicte !" rows="4" maxlength="500" spellcheck="true" autocapitalize="sentences"></textarea>
+      <textarea class="hook-textarea" id="hookModalTextarea" placeholder="Tape ton hook ici. Ex: Arrete de taper, dicte !" rows="4" maxlength="500" spellcheck="true" autocomplete="off" autocapitalize="sentences"></textarea>
       <div class="hook-counter" id="hookModalCounter">
         <span id="hookCounterChars">0 caracteres</span>
         <span id="hookCounterWords">0 mots</span>
@@ -2462,7 +2460,7 @@ body.modal-open > .screen.active { pointer-events: none; }
 // ──────────────────────────────────────────────────
 // 1. CONSTANTS & CONFIG
 // ──────────────────────────────────────────────────
-const APP_VERSION = '0.6.20';
+const APP_VERSION = '0.6.18';
 const LS_PREFIX = 'pc_';
 const GATEWAY_URL = 'https://api-gateway.quang101182.workers.dev';
 const MCP_DRIVE_URL = 'https://mcp-drive-server-q3dg.onrender.com/api/tool';
@@ -2707,35 +2705,18 @@ function applyGenLogHeight() {
   if (el) el.style.maxHeight = GEN_LOG_HEIGHTS[_genLogLevel] + 'px';
 }
 
-function logClear() { _logs = []; const b = document.getElementById('logBody'); if(b) b.innerHTML = ''; const g = document.getElementById('genLogsBody'); if(g) g.innerHTML = ''; showToast('Logs effaces'); }
+function logClear() { _logs = []; const b = document.getElementById('logBody'); if(b) b.innerHTML = ''; showToast('Logs effaces'); }
 function logCopy() {
   const text = _logs.map(l => l.ts + ' [' + l.level + '] ' + l.msg).join('\n');
   navigator.clipboard.writeText(text).then(() => showToast('Logs copies')).catch(() => showToast('Erreur copie', true));
 }
-async function logExport() {
+function logExport() {
   const text = _logs.map(l => l.ts + ' [' + l.level + '] ' + l.msg).join('\n');
-  const filename = 'promoclip_' + new Date().toISOString().slice(0, 10) + '.log';
-  // Capacitor Filesystem → save to Documents folder on Android
-  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
-    try {
-      await window.Capacitor.Plugins.Filesystem.writeFile({
-        path: filename,
-        data: btoa(unescape(encodeURIComponent(text))),
-        directory: 'DOCUMENTS',
-        recursive: true
-      });
-      showToast('Log sauvegarde : Documents/' + filename);
-      return;
-    } catch(e) { log('Filesystem writeFile: ' + e.message, 'warn'); }
-  }
-  // Desktop fallback (browser)
   const blob = new Blob([text], { type: 'text/plain' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  document.body.appendChild(a);
+  a.download = 'promoclip_' + new Date().toISOString().slice(0,10) + '.log';
   a.click();
-  document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
 }
 let _closeLogTimer = null;
@@ -2795,7 +2776,7 @@ async function pingGateway() {
 // ──────────────────────────────────────────────────
 // Gateway Gemini helper — sends native Gemini generateContent format
 async function geminiCall(prompt, opts = {}) {
-  const model = opts.model || 'gemini-2.5-flash';
+  const model = opts.model || 'gemini-2.0-flash';
   const maxTokens = opts.maxTokens || 500;
   const headers = { 'Content-Type': 'application/json' };
   if (state.settings.gatewayKey) headers['Authorization'] = 'Bearer ' + state.settings.gatewayKey;
@@ -2804,7 +2785,7 @@ async function geminiCall(prompt, opts = {}) {
     headers,
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: maxTokens, temperature: opts.temperature || 0.3 }
+      generationConfig: { maxOutputTokens: maxTokens, temperature: opts.temperature || 0.7 }
     }),
     signal: opts.signal || AbortSignal.timeout(30000)
   });
@@ -3202,14 +3183,13 @@ function estimatedSpeechDuration(text, language) {
 }
 
 // Retry Gemini to expand or shorten a voiceover to fit the word target
-async function adjustVoiceoverLength(voiceover, action, target, language, productContext) {
+async function adjustVoiceoverLength(voiceover, action, target, language) {
   const verb = action === 'expand'
-    ? 'EXPAND to approximately ' + target + ' words (add more concrete detail about the product, keep the same tone and core message)'
+    ? 'EXPAND to approximately ' + target + ' words (add more concrete detail, keep the same tone and core message)'
     : 'SHORTEN to approximately ' + target + ' words (remove filler and repetition, keep the core message and hook)';
-  const contextLine = productContext ? '\nProduct context (use this to add relevant detail): ' + productContext : '';
   const prompt = `You are editing a TikTok voiceover script for a short video.
 Current voiceover: "${voiceover}"
-Language: ${language}${contextLine}
+Language: ${language}
 Task: ${verb}
 
 STRICT RULES:
@@ -3250,7 +3230,7 @@ function truncateVoiceoverToMaxWords(text, maxWords) {
 // Validate word count vs target, retry up to 2 times with progressively stricter target.
 // Asymmetric rule: over-length is not tolerated (max = target). Under-length is fine (min safety net).
 // Last resort: hard truncate manually if Gemini can't get the length right.
-async function validateAndFitVoiceover(voiceover, durationSec, language, label, productContext) {
+async function validateAndFitVoiceover(voiceover, durationSec, language, label) {
   const { target, min, max } = wordsTargetForDuration(durationSec, language);
   let words = countWords(voiceover);
   let result = voiceover;
@@ -3261,10 +3241,10 @@ async function validateAndFitVoiceover(voiceover, durationSec, language, label, 
     return result;
   }
 
-  // Attempt 1 — normal retry (with product context for expand)
+  // Attempt 1 — normal retry
   const action1 = words < min ? 'expand' : 'shorten';
   log((label || 'Script') + ' ' + words + ' mots hors range ' + min + '-' + max + ' — retry 1 ' + action1);
-  result = await adjustVoiceoverLength(voiceover, action1, target, language, productContext);
+  result = await adjustVoiceoverLength(voiceover, action1, target, language);
   words = countWords(result);
 
   if (words >= min && words <= max) {
@@ -3273,28 +3253,25 @@ async function validateAndFitVoiceover(voiceover, durationSec, language, label, 
     return result;
   }
 
-  // Attempt 2 — stricter target
-  const stricterTarget = words < min ? target + 2 : Math.max(min, target - 2);
+  // Attempt 2 — stricter target: aim for target-2 (more aggressive shortening)
+  const stricterTarget = Math.max(min, target - 2);
   const action2 = words < min ? 'expand' : 'shorten';
   log((label || 'Script') + ' ' + words + ' mots hors range — retry 2 (target strict ' + stricterTarget + ')');
-  result = await adjustVoiceoverLength(result, action2, stricterTarget, language, productContext);
+  result = await adjustVoiceoverLength(result, action2, stricterTarget, language);
   words = countWords(result);
 
-  if (words >= min && words <= max) {
+  if (words <= max) {
     const est = estimatedSpeechDuration(result, language);
     log((label || 'Script') + ' final (retry2): ' + words + ' mots / target ' + target + ' (duree estimee ' + est + 's / ' + durationSec + 's)');
     return result;
   }
 
-  if (words > max) {
-    // Too long — hard truncate
-    log((label || 'Script') + ' ' + words + ' mots encore hors max — truncate manuel a ' + max + ' mots', 'warn');
-    result = truncateVoiceoverToMaxWords(result, max);
-  }
-  // If still too short after 2 retries, accept it (better short voiceover than infinite loop)
+  // Last resort — hard truncate manually to guarantee voice finishes before video end
+  log((label || 'Script') + ' ' + words + ' mots encore hors max — truncate manuel a ' + max + ' mots', 'warn');
+  result = truncateVoiceoverToMaxWords(result, max);
   words = countWords(result);
   const est = estimatedSpeechDuration(result, language);
-  log((label || 'Script') + ' final: ' + words + ' mots / target ' + target + ' (duree estimee ' + est + 's / ' + durationSec + 's)' + (words < min ? ' [court]' : ''));
+  log((label || 'Script') + ' final (truncate): ' + words + ' mots / target ' + target + ' (duree estimee ' + est + 's / ' + durationSec + 's)');
   return result;
 }
 
@@ -4108,28 +4085,6 @@ function updateMediaCompatBanner() {
   }
 }
 
-// Returns { ok: true } if media selection is valid for the current template, or { ok: false, reason: '...' }
-function isMediaSelectionValid() {
-  const pro = isProMode();
-  const selected = state.wizard.mediaFiles.filter(f => f.selected);
-  const videos = selected.filter(f => f.isVideo);
-  const images = selected.filter(f => !f.isVideo);
-
-  if (selected.length === 0) return { ok: false, reason: pro ? 'Ajoute un screen recording video pour le Mode Pro' : 'Ajoute au moins une capture d\'ecran' };
-
-  if (pro) {
-    if (videos.length === 0) return { ok: false, reason: 'Mode Pro : un screen recording video est requis' };
-    if (videos.length > 1) return { ok: false, reason: 'Mode Pro : une seule video est autorisee (' + videos.length + ' detectees)' };
-    if (images.length > 1) return { ok: false, reason: 'Mode Pro : max 1 image de sortie (' + images.length + ' images)' };
-    if (videos.length === 1 && images.length === 1) {
-      const vidOrder = videos[0].order || 0;
-      const imgOrder = images[0].order || 0;
-      if (vidOrder >= imgOrder) return { ok: false, reason: 'Mode Pro : la video doit etre AVANT l\'image de sortie' };
-    }
-  }
-  return { ok: true };
-}
-
 function renderMediaGrid() {
   const grid = document.getElementById('mediaGrid');
   const emptyEl = document.getElementById('mediaEmptyState');
@@ -4605,24 +4560,10 @@ async function startGenerationPro(product, selectedMedia) {
     // ── STEP 2: Build synchronized avatar script from moments ──
     updateStep(stepIdx('script'), 'active');
     if (useCachedPreview) {
-      // Re-validate length even from cache (user may have edited voiceover in preview modal)
-      const proCachedDur = moments.length > 0 ? moments[moments.length - 1].end_time : 15;
-      let cachedVo = await validateAndFitVoiceover(_previewedScript.voiceover, proCachedDur, cfg.language, 'Script Pro (cache)', product.desc);
-      script = { voiceover: cachedVo, cta: _previewedScript.cta || 'Link in bio', moments };
+      script = { voiceover: _previewedScript.voiceover, cta: _previewedScript.cta || 'Link in bio', moments };
       log('Script Pro (cache): "' + script.voiceover.slice(0, 80) + '..."');
     } else {
       script = buildProScript(moments, cfg.language);
-      const proDurationSec = moments.length > 0 ? moments[moments.length - 1].end_time : 15;
-      // If moments produced a too-short voiceover, regenerate via geminiScript
-      const { min: proMinW } = wordsTargetForDuration(proDurationSec, cfg.language);
-      if (countWords(script.voiceover) < proMinW) {
-        log('Script Pro trop court (' + countWords(script.voiceover) + ' mots / min ' + proMinW + ') — regeneration via geminiScript');
-        try {
-          const regen = await geminiScript(product.desc, cfg.hookText || script.voiceover, cfg.language, proDurationSec);
-          script.voiceover = regen.voiceover;
-          script.cta = regen.cta || script.cta;
-        } catch(e) { log('Regen fallback: ' + e.message, 'warn'); }
-      }
       // Guarantee user hook appears at the start of the voiceover (language-aware: translate if mismatch)
       if (cfg.hookText && cfg.hookText.trim()) {
         const withHook = await prependHookInTargetLanguage(script.voiceover, cfg.hookText, cfg.language);
@@ -4632,7 +4573,8 @@ async function startGenerationPro(product, selectedMedia) {
         }
       }
       // Validate word count vs detected video duration + retry if out of range
-      script.voiceover = await validateAndFitVoiceover(script.voiceover, proDurationSec, cfg.language, 'Script Pro', product.desc);
+      const proDurationSec = moments.length > 0 ? moments[moments.length - 1].end_time : 15;
+      script.voiceover = await validateAndFitVoiceover(script.voiceover, proDurationSec, cfg.language, 'Script Pro');
       log('Script Pro: "' + script.voiceover.slice(0, 80) + '..."');
     }
     _lastScriptVoiceover = script.voiceover;
@@ -4906,45 +4848,27 @@ async function startGeneration() {
     let script;
     const useCachedPreviewQ = isPreviewValidForCurrentConfig() && _previewedScript && _previewedScript.mode === 'quick';
     if (useCachedPreviewQ) {
-      // Re-validate length even from cache (user may have edited voiceover in preview modal)
-      let cachedVo = await validateAndFitVoiceover(_previewedScript.voiceover, cfg.duration, cfg.language, 'Script (cache)', product.desc);
-      script = { voiceover: cachedVo, cta: _previewedScript.cta || 'Link in bio' };
+      script = { voiceover: _previewedScript.voiceover, cta: _previewedScript.cta || 'Link in bio' };
       log('Script (cache apercu): "' + script.voiceover.slice(0, 60) + '..."');
       _previewedScript = null; // consume once
     } else {
-      // Auto-generate via the same pipeline as the preview modal (single source of truth)
-      // This ensures the script quality is always the same whether the user clicked "Apercu" or not
-      log('Script auto-generation (meme pipeline que apercu)...');
       try {
-        const autoScript = await geminiScript(product.desc, cfg.hookText || 'Check this out', cfg.language, cfg.duration);
-        let voiceover = autoScript.voiceover;
-        let cta = autoScript.cta || 'Link in bio';
-        // Prepend hook (language-aware translation if mismatch)
-        if (cfg.hookText && cfg.hookText.trim()) {
-          const withHook = await prependHookInTargetLanguage(voiceover, cfg.hookText, cfg.language);
-          if (withHook !== voiceover) { log('Hook prepended'); voiceover = withHook; }
-        }
-        // Validate + fit to duration
-        voiceover = await validateAndFitVoiceover(voiceover, cfg.duration, cfg.language, 'Script', product.desc);
-        // Cache for consistency (reuse if user regenerates within 30min)
-        _previewedScript = {
-          voiceover, cta, moments: null,
-          hookSnapshot: cfg.hookText || '',
-          language: cfg.language,
-          duration: cfg.duration,
-          durationCfg: cfg.duration,
-          mode: 'quick',
-          productId: state.wizard.selectedProductId,
-          mediaFingerprint: mediaSelectionFingerprint(),
-          caption: null,
-          timestamp: Date.now()
-        };
-        script = { voiceover, cta };
-        log('Script auto-genere: "' + voiceover.slice(0, 80) + '..."');
+        script = await geminiScript(product.desc, cfg.hookText || 'Check this out', cfg.language, cfg.duration);
+        log('Script genere: "' + script.voiceover.slice(0, 60) + '..."');
       } catch(e) {
         log('Script fallback: ' + e.message, 'warn');
         script = { voiceover: cfg.hookText || product.desc, cta: cfg.cta || 'Link in bio' };
       }
+      // Guarantee user hook appears at the start of the voiceover (language-aware: translate if mismatch)
+      if (cfg.hookText && cfg.hookText.trim()) {
+        const withHook = await prependHookInTargetLanguage(script.voiceover, cfg.hookText, cfg.language);
+        if (withHook !== script.voiceover) {
+          log('Hook prepended in voiceover');
+          script.voiceover = withHook;
+        }
+      }
+      // Validate word count vs cfg.duration + retry if out of range
+      script.voiceover = await validateAndFitVoiceover(script.voiceover, cfg.duration, cfg.language, 'Script');
     }
     _lastScriptVoiceover = script.voiceover;
     // Social caption (description + 5 hashtags) — non-blocking best-effort
@@ -5713,19 +5637,9 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
 
   switch(action) {
     case 'go':
-    case 'nav-screen': {
-      const target = el.dataset.screen;
-      // Block navigation from media screen to product if media selection is invalid
-      if (target === 'product' && _currentScreen === 'media') {
-        const check = isMediaSelectionValid();
-        if (!check.ok) {
-          showToast(check.reason, true, 4000);
-          break;
-        }
-      }
-      goScreen(target);
+    case 'nav-screen':
+      goScreen(el.dataset.screen);
       break;
-    }
 
     case 'toggle':
       el.classList.toggle('on');
@@ -5748,17 +5662,12 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
 
     case 'select-product':
       state.wizard.selectedProductId = el.dataset.id;
-      _lastSocialCaption = null; // caption is product-specific
       markDirty();
       renderProductSelection();
       break;
 
     case 'select-template':
       state.wizard.selectedTemplateId = el.dataset.id;
-      // Invalidate all cached state from previous mode to prevent contamination
-      _previewedScript = null;
-      _lastScriptVoiceover = null;
-      _lastSocialCaption = null;
       markDirty();
       renderTemplates();
       break;
@@ -6231,18 +6140,6 @@ async function generatePreviewScript(product, cfg, pro) {
       voiceover = built.voiceover;
       cta = built.cta;
       durationSec = moments.length > 0 ? moments[moments.length - 1].end_time : cfg.duration;
-      // If moments produced a too-short voiceover, regenerate via geminiScript (same as Quick)
-      // buildProScript concatenates short avatar lines — often <15 words for 20s+ videos
-      const { min: proMin } = wordsTargetForDuration(durationSec, cfg.language);
-      if (countWords(voiceover) < proMin) {
-        log('Script Pro trop court (' + countWords(voiceover) + ' mots / min ' + proMin + ') — regeneration via geminiScript');
-        loadingLabel.textContent = 'Enrichissement du script...';
-        try {
-          const regen = await geminiScript(product.desc, cfg.hookText || voiceover, cfg.language, durationSec);
-          voiceover = regen.voiceover;
-          cta = regen.cta || cta;
-        } catch(e) { log('Regen fallback: ' + e.message, 'warn'); }
-      }
     } else {
       loadingLabel.textContent = 'Generation du script...';
       const script = await geminiScript(product.desc, cfg.hookText || 'Check this out', cfg.language, cfg.duration);
@@ -6257,7 +6154,7 @@ async function generatePreviewScript(product, cfg, pro) {
       if (withHook !== voiceover) voiceover = withHook;
     }
     // Validate + retry if out of range
-    voiceover = await validateAndFitVoiceover(voiceover, durationSec, cfg.language, 'Apercu', product.desc);
+    voiceover = await validateAndFitVoiceover(voiceover, durationSec, cfg.language, 'Apercu');
 
     // Social caption (best-effort)
     let caption = null;
@@ -6342,12 +6239,11 @@ function validateAndLaunchFromPreview() {
   // Update with edited voiceover
   _previewedScript.voiceover = document.getElementById('previewVoiceover').value.trim();
   // Snapshot full context to detect drift
-  _previewedScript.hookSnapshot = (currentCfg.hookText || '').trim();
+  _previewedScript.hookSnapshot = currentCfg.hookText || '';
   _previewedScript.language = currentCfg.language;
   _previewedScript.productId = state.wizard.selectedProductId;
   _previewedScript.mediaFingerprint = mediaSelectionFingerprint();
   _previewedScript.durationCfg = currentCfg.duration;
-  _previewedScript.timestamp = Date.now(); // refresh TTL so cache survives editing time
   closePreviewModal(false);
   // Navigate to generation screen and start directly (no synthetic click — unreliable)
   setTimeout(() => {
@@ -6362,15 +6258,20 @@ function isPreviewValidForCurrentConfig() {
   if (!_previewedScript) return false;
   const cfg = state.wizard.config;
   const pro = isProMode();
-  const currentHook = (cfg.hookText || '').trim();
-  const cachedHook = (_previewedScript.hookSnapshot || '').trim();
-  if (_previewedScript.mode !== (pro ? 'pro' : 'quick')) { log('Cache apercu: mode mismatch ' + _previewedScript.mode + ' vs ' + (pro?'pro':'quick'), 'warn'); return false; }
-  if (_previewedScript.language !== cfg.language) { log('Cache apercu: langue mismatch', 'warn'); return false; }
-  if (cachedHook !== currentHook) { log('Cache apercu: hook mismatch "' + cachedHook.slice(0,30) + '" vs "' + currentHook.slice(0,30) + '"', 'warn'); return false; }
-  if (_previewedScript.productId !== state.wizard.selectedProductId) { log('Cache apercu: produit mismatch', 'warn'); return false; }
-  if (_previewedScript.mediaFingerprint !== mediaSelectionFingerprint()) { log('Cache apercu: medias mismatch', 'warn'); return false; }
-  if (!pro && _previewedScript.durationCfg !== cfg.duration) { log('Cache apercu: duree mismatch ' + _previewedScript.durationCfg + ' vs ' + cfg.duration, 'warn'); return false; }
-  if (Date.now() - _previewedScript.timestamp > 30 * 60 * 1000) { log('Cache apercu: expire (>30min)', 'warn'); return false; }
+  // Mode (Pro vs Quick)
+  if (_previewedScript.mode !== (pro ? 'pro' : 'quick')) return false;
+  // Language
+  if (_previewedScript.language !== cfg.language) return false;
+  // Hook text (must match exactly, since it's prepended to voiceover)
+  if (_previewedScript.hookSnapshot !== (cfg.hookText || '')) return false;
+  // Product (different product = different context)
+  if (_previewedScript.productId !== state.wizard.selectedProductId) return false;
+  // Media selection (fingerprint must match exact selection + order)
+  if (_previewedScript.mediaFingerprint !== mediaSelectionFingerprint()) return false;
+  // Quick mode: duration slider must match
+  if (!pro && _previewedScript.durationCfg !== cfg.duration) return false;
+  // Cache expires after 5 minutes (live review, not cold storage)
+  if (Date.now() - _previewedScript.timestamp > 5 * 60 * 1000) return false;
   return true;
 }
 
@@ -6555,35 +6456,27 @@ function updateHookLangBadges(targetLang, detectedLang, isLoading) {
   }
 }
 
-let _hookLangLoadingIndicatorTimer = null;
 function scheduleHookLanguageDetection(text) {
   if (_hookLangDetectionTimer) { clearTimeout(_hookLangDetectionTimer); _hookLangDetectionTimer = null; }
-  if (_hookLangLoadingIndicatorTimer) { clearTimeout(_hookLangLoadingIndicatorTimer); _hookLangLoadingIndicatorTimer = null; }
   const trimmed = (text || '').trim();
   if (trimmed.length < 4) {
     updateHookLangBadges(state.wizard.config.language, null, false);
     _hookLangLastDetected = null;
     return;
   }
-  // Show loading indicator after 1.1s idle (only visible if detection takes > 200ms)
-  _hookLangLoadingIndicatorTimer = setTimeout(() => {
-    if (_hookModalOpen) updateHookLangBadges(state.wizard.config.language, null, true);
-  }, 1100);
-  // Actual detection after 1.3s idle (was 800ms — increased to reduce noise while typing)
+  // Show loading state immediately (subtle feedback)
+  if (_hookModalOpen) updateHookLangBadges(state.wizard.config.language, null, true);
   _hookLangDetectionTimer = setTimeout(async () => {
     try {
       const detected = await detectHookLanguage(trimmed);
       _hookLangLastDetected = detected;
-      if (_hookLangLoadingIndicatorTimer) { clearTimeout(_hookLangLoadingIndicatorTimer); _hookLangLoadingIndicatorTimer = null; }
       if (_hookModalOpen) updateHookLangBadges(state.wizard.config.language, detected, false);
     } catch(e) {
-      if (_hookLangLoadingIndicatorTimer) { clearTimeout(_hookLangLoadingIndicatorTimer); _hookLangLoadingIndicatorTimer = null; }
       if (_hookModalOpen) updateHookLangBadges(state.wizard.config.language, null, false);
     }
-  }, 1200);
+  }, 800);
 }
 
-let _hookInputInProgress = false;
 function updateHookPreview() {
   const txt = (state.wizard.config.hookText || '').trim();
   const el = document.getElementById('hookPreviewText');
@@ -6597,15 +6490,12 @@ function updateHookPreview() {
   }
   // Keep hidden input in sync for backward-compat code paths
   const hidden = document.getElementById('configHook');
-  if (hidden) hidden.value = (state.wizard.config.hookText || '').trim();
-  // If modal is currently open, refresh counters but NEVER overwrite textarea during active typing
-  // (overwriting kills trailing spaces and cursor position on mobile keyboards)
+  if (hidden) hidden.value = state.wizard.config.hookText || '';
+  // If modal is currently open, also refresh textarea + counters
   if (_hookModalOpen) {
-    if (!_hookInputInProgress) {
-      const textarea = document.getElementById('hookModalTextarea');
-      if (textarea && textarea.value !== (state.wizard.config.hookText || '')) {
-        textarea.value = state.wizard.config.hookText || '';
-      }
+    const textarea = document.getElementById('hookModalTextarea');
+    if (textarea && textarea.value !== (state.wizard.config.hookText || '')) {
+      textarea.value = state.wizard.config.hookText || '';
     }
     updateHookCounters(state.wizard.config.hookText || '');
   }
@@ -6617,26 +6507,17 @@ function updateHookCounters(text) {
   const words = countWords(t);
   const lang = state.wizard.config.language || 'Francais';
   const dur = estimatedSpeechDuration(t, lang);
-  const pro = isProMode();
   const charsEl = document.getElementById('hookCounterChars');
   const wordsEl = document.getElementById('hookCounterWords');
   const durEl = document.getElementById('hookCounterDur');
-  if (charsEl) charsEl.textContent = chars + ' car.';
+  if (charsEl) charsEl.textContent = chars + ' caracteres';
   if (wordsEl) wordsEl.textContent = words + ' mots';
   if (durEl) {
-    // In Pro mode the hook is just the opener — video duration is auto-detected from the recording
-    // Show speech duration as informational only, not as a limit
-    if (pro) {
-      durEl.textContent = '~' + dur + 's parole';
-      durEl.className = '';
-      // Gentle feedback: hooks over 6s are long but never "wrong" in Pro
-      if (dur >= 1 && dur <= 6) durEl.classList.add('ok');
-    } else {
-      durEl.textContent = '~' + dur + 's';
-      durEl.className = '';
-      if (dur >= 1 && dur <= 4.5) durEl.classList.add('ok');
-      else if (dur > 4.5) durEl.classList.add('warn');
-    }
+    durEl.textContent = '~' + dur + 's';
+    // Optimal hook: 2-4 seconds
+    durEl.className = '';
+    if (dur >= 1 && dur <= 4.5) durEl.classList.add('ok');
+    else if (dur > 4.5) durEl.classList.add('warn');
   }
   // Update AI button label based on content (empty → Generer, filled → Ameliorer)
   const aiLabel = document.getElementById('hookBtnAILabel');
@@ -7059,9 +6940,8 @@ function setupHookModalListeners() {
     textarea.addEventListener('input', (e) => {
       const v = e.target.value;
       updateHookCounters(v);
-      state.wizard.config.hookText = v;
-      // Update preview text + hidden input WITHOUT overwriting textarea (avoid trim killing trailing spaces)
-      try { _hookInputInProgress = true; updateHookPreview(); } finally { _hookInputInProgress = false; }
+      state.wizard.config.hookText = v.trim();
+      updateHookPreview();
       // Push to undo history (debounced)
       hookHistoryPush(v, false);
       // Re-detect language when text changes significantly
