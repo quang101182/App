@@ -2712,12 +2712,30 @@ function logCopy() {
   const text = _logs.map(l => l.ts + ' [' + l.level + '] ' + l.msg).join('\n');
   navigator.clipboard.writeText(text).then(() => showToast('Logs copies')).catch(() => showToast('Erreur copie', true));
 }
-function logExport() {
+async function logExport() {
   const text = _logs.map(l => l.ts + ' [' + l.level + '] ' + l.msg).join('\n');
-  // Clipboard copy (proven to work in this WebView)
-  navigator.clipboard.writeText(text)
-    .then(() => showToast('Logs copies — colle dans un fichier texte'))
-    .catch(() => showToast('Erreur export', true));
+  const filename = 'promoclip_' + new Date().toISOString().slice(0, 10) + '.log';
+  // Capacitor Filesystem → save to Documents folder on Android
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
+    try {
+      await window.Capacitor.Plugins.Filesystem.writeFile({
+        path: filename,
+        data: btoa(unescape(encodeURIComponent(text))),
+        directory: 'DOCUMENTS'
+      });
+      showToast('Log sauvegarde dans Documents/' + filename);
+      return;
+    } catch(e) { log('Filesystem writeFile: ' + e.message, 'warn'); }
+  }
+  // Desktop fallback (browser)
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
 }
 let _closeLogTimer = null;
 function toggleLogPanel() {
