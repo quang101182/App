@@ -751,7 +751,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         '-filter_complex', filterComplex + (subFilter ? `;[outv]${subFilter.slice(1)}[final]` : ''),
         '-map', subFilter ? '[final]' : '[outv]',
         '-map', '0:a?',
-        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
         // Force keyframe at exact intro cut point so -c copy trim lands precisely (no frame skip)
         ...(avatarIntroFullscreen ? ['-force_key_frames', String(Math.max(1, Math.min(5, Number(avatarIntroDuration) || 2)))] : []),
         '-c:a', 'aac', '-b:a', '128k', ...(avatarIntroFullscreen ? ['-ar', '44100'] : []),
@@ -786,8 +786,8 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
       ff.on('error', reject);
       setTimeout(() => {
         try { ff.kill('SIGKILL'); } catch (_) {}
-        reject(new Error('FFmpeg Pro timeout 120s'));
-      }, 120000);
+        reject(new Error('FFmpeg Pro timeout 300s'));
+      }, 300000);
     });
 
     // Hero intro avatar fullscreen (optional)
