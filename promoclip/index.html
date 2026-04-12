@@ -1101,9 +1101,11 @@ body {
 /* Body scroll lock when any fullscreen modal is open */
 body.modal-open {
   overflow: hidden;
-  touch-action: none;
+  /* touch-action: none REMOVED — it blocks Gboard swipe typing and IME gestures on Android */
   -webkit-overflow-scrolling: auto;
 }
+/* Prevent background scroll behind modals via CSS only (without breaking IME touch) */
+body.modal-open > .screen.active { pointer-events: none; }
 .hook-modal.open .hook-modal-sheet {
   transform: translateY(0);
 }
@@ -2712,11 +2714,22 @@ function logCopy() {
 }
 function logExport() {
   const text = _logs.map(l => l.ts + ' [' + l.level + '] ' + l.msg).join('\n');
+  const filename = 'promoclip_' + new Date().toISOString().slice(0,10) + '.log';
+  // Try navigator.share (works in Capacitor WebView), fallback to anchor download (desktop)
+  if (navigator.share && navigator.canShare) {
+    const file = new File([text], filename, { type: 'text/plain' });
+    if (navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: filename }).catch(() => {});
+      return;
+    }
+  }
   const blob = new Blob([text], { type: 'text/plain' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'promoclip_' + new Date().toISOString().slice(0,10) + '.log';
+  a.download = filename;
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
 }
 let _closeLogTimer = null;

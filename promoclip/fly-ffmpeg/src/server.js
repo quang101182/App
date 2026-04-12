@@ -5,6 +5,7 @@
  *            v1.0.2 — Asymmetric ratio tolerance [0.394, 0.619] to accept modern smartphones (19.5:9, 20:9, 21:9)
  *            v1.0.3 — Retrait -shortest dans mix audio /promo-assembly (fixait la truncation video a la duree TTS court)
  *            v1.0.4 — Xfade Pro timeout 60s -> 180s (crash sur full re-encode intro+main+outro avec avatar)
+ *            v1.0.5 — Symmetric tpad: freeze avatar last frame when recording > avatar (vstack stall fix)
  *
  * Heberge UNIQUEMENT /health + /promo-assembly + /promo-assembly-pro.
  * Le reste des routes (slideshow, merge, ken-burns, smart-zoom, etc) reste
@@ -39,7 +40,7 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
-const VERSION = '1.0.4';
+const VERSION = '1.0.5';
 
 // ---------------------------------------------------------------------------
 // Etat global
@@ -674,10 +675,17 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
 
     // Computed max duration for the main video assembly
     const maxMainDur = Math.min(60, Math.max(probeDur, avatarDur || probeDur));
-    const needsFreeze = avatarDur > probeDur + 0.1;
-    const freezeExtra = needsFreeze ? (avatarDur - probeDur) : 0;
-    if (needsFreeze) {
-      console.log(`[${jobId}] Freeze last frame of recording for ${freezeExtra.toFixed(2)}s (avatar outlasts recording)`);
+    // Symmetric tpad: freeze last frame of whichever stream is shorter
+    // so that vstack/overlay always has both inputs for the full duration
+    const needsFreezeRecord = avatarDur > probeDur + 0.1;
+    const freezeRecordExtra = needsFreezeRecord ? (avatarDur - probeDur) : 0;
+    const needsFreezeAvatar = avatarDur > 0 && probeDur > avatarDur + 0.1;
+    const freezeAvatarExtra = needsFreezeAvatar ? (Math.min(probeDur, 60) - avatarDur) : 0;
+    if (needsFreezeRecord) {
+      console.log(`[${jobId}] Freeze last frame of RECORDING for ${freezeRecordExtra.toFixed(2)}s (avatar outlasts recording)`);
+    }
+    if (needsFreezeAvatar) {
+      console.log(`[${jobId}] Freeze last frame of AVATAR for ${freezeAvatarExtra.toFixed(2)}s (recording outlasts avatar)`);
     }
 
     // 4. Build FFmpeg command for split-screen assembly
@@ -693,15 +701,18 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
     }
 
     if (avatarPath) {
-      const recordPrefilter = needsFreeze
-        ? `tpad=stop_mode=clone:stop_duration=${freezeExtra.toFixed(2)},`
+      const recordPrefilter = needsFreezeRecord
+        ? `tpad=stop_mode=clone:stop_duration=${freezeRecordExtra.toFixed(2)},`
+        : '';
+      const avatarPrefilter = needsFreezeAvatar
+        ? `tpad=stop_mode=clone:stop_duration=${freezeAvatarExtra.toFixed(2)},`
         : '';
       let filterComplex;
       if (mode === 'split-top') {
         const avatarH = Math.round(outHeight * 0.3);
         const recordH = outHeight - avatarH;
         filterComplex = [
-          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
+          `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
           `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
           `[avatar][record]vstack=inputs=2[outv]`
         ].join(';');
@@ -710,7 +721,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         const recordH = outHeight - avatarH;
         filterComplex = [
           `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
-          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
+          `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
           `[record][avatar]vstack=inputs=2[outv]`
         ].join(';');
       } else {
@@ -719,7 +730,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         const pipY = outHeight - pipSize - 120;
         filterComplex = [
           `[1:v]${recordPrefilter}scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
-          `[0:v]scale=${pipSize}:${pipSize}:force_original_aspect_ratio=decrease,pad=${pipSize}:${pipSize}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipSize}/2,2)+pow(Y-${pipSize}/2,2),pow(${pipSize}/2-4,2)),0,255)'[pip]`,
+          `[0:v]${avatarPrefilter}scale=${pipSize}:${pipSize}:force_original_aspect_ratio=decrease,pad=${pipSize}:${pipSize}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipSize}/2,2)+pow(Y-${pipSize}/2,2),pow(${pipSize}/2-4,2)),0,255)'[pip]`,
           `[record][pip]overlay=${pipX}:${pipY}[outv]`
         ].join(';');
       }
