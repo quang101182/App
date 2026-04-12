@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.4.12</title>
+<title>Monitoring v1.4.13</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -357,7 +357,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring v1.4.12</h1>
+    <h1>Monitoring v1.4.13</h1>
     <div class="header-controls">
       <div class="pill-group">
         <button class="pill active" data-period="7d">7j</button>
@@ -541,7 +541,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div><!-- /sI -->
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.4.12</div>
+  <div class="footer" id="footer">Monitoring v1.4.13</div>
 </div>
 
 <script>
@@ -718,8 +718,12 @@ function render(mon, stats, dev) {
   var rcEl = document.getElementById('trendReqChange');
   rcEl.textContent = rc.text; rcEl.className = 'change ' + rc.cls;
 
-  var dc = pctChange(t.dau.today, t.dau.yesterday);
-  document.getElementById('trendDauVal').textContent = t.dau.today;
+  // DAU trend — mobile only (exclure PC via by_platform)
+  var dauDailyForTrend = (mon.dau && mon.dau.daily) || [];
+  var dauTodayMobile = dauDailyForTrend.length > 0 ? ((dauDailyForTrend[0].by_platform && dauDailyForTrend[0].by_platform.mobile) || 0) : 0;
+  var dauYesterdayMobile = dauDailyForTrend.length > 1 ? ((dauDailyForTrend[1].by_platform && dauDailyForTrend[1].by_platform.mobile) || 0) : 0;
+  var dc = pctChange(dauTodayMobile, dauYesterdayMobile);
+  document.getElementById('trendDauVal').textContent = dauTodayMobile;
   var dcEl = document.getElementById('trendDauChange');
   dcEl.textContent = dc.text; dcEl.className = 'change ' + dc.cls;
 
@@ -766,16 +770,16 @@ function render(mon, stats, dev) {
   if (phantomCount > 0) subText += ' (+' + phantomCount + ' fant' + (phantomCount > 1 ? 'ômes' : 'ôme') + ')';
   document.getElementById('kpiDevicesSub').textContent = subText;
 
-  // KPI: Actifs aujourd'hui
+  // KPI: Actifs aujourd'hui — mobile only (exclure PC)
   var dauDaily = (mon.dau && mon.dau.daily) || [];
-  var dauToday = dauDaily.length > 0 ? (dauDaily[0].count || 0) : 0;
-  document.getElementById('kpiDau').textContent = dauToday;
-  // Calcul moyenne et pic DAU
+  var dauTodayVal = dauDaily.length > 0 ? ((dauDaily[0].by_platform && dauDaily[0].by_platform.mobile) || 0) : 0;
+  document.getElementById('kpiDau').textContent = dauTodayVal;
+  // Calcul moyenne et pic DAU — mobile only
   if (dauDaily.length > 0) {
     var dauSum = 0;
     var dauMax = 0;
     dauDaily.forEach(function(d) {
-      var c = d.count || 0;
+      var c = (d.by_platform && d.by_platform.mobile) || 0;
       dauSum += c;
       if (c > dauMax) dauMax = c;
     });
@@ -808,15 +812,13 @@ function render(mon, stats, dev) {
   var dauChronological = dauDaily.slice().reverse();
   var dauLabels = dauChronological.map(function(d) { return d.date.slice(5); });
   var dauMobile = dauChronological.map(function(d) { return (d.by_platform && d.by_platform.mobile) || 0; });
-  var dauPC = dauChronological.map(function(d) { return (d.by_platform && d.by_platform.pc) || 0; });
 
   charts.dau = new Chart(document.getElementById('dauChart'), {
     type: 'line',
     data: {
       labels: dauLabels,
       datasets: [
-        { label: 'Mobile', data: dauMobile, borderColor: '#6D28D9', backgroundColor: 'rgba(109,40,217,.15)', fill: true, tension: .3, pointRadius: 3, pointHoverRadius: 6 },
-        { label: 'PC', data: dauPC, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.15)', fill: true, tension: .3, pointRadius: 3, pointHoverRadius: 6 }
+        { label: 'Appareils actifs', data: dauMobile, borderColor: '#6D28D9', backgroundColor: 'rgba(109,40,217,.15)', fill: true, tension: .3, pointRadius: 3, pointHoverRadius: 6 }
       ]
     },
     options: {
@@ -921,7 +923,7 @@ function render(mon, stats, dev) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.4.12 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.4.13 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
@@ -1549,7 +1551,7 @@ function buildDevicePanelHtml(did, data) {
       '</div>';
   }
 
-  // v1.4.12: top 10 au lieu de top 3 pour voir davantage de langues/modes/paires en un coup d'oeil.
+  // v1.4.13: top 10 au lieu de top 3 pour voir davantage de langues/modes/paires en un coup d'oeil.
   // Le wrap CSS (.dev-meta-row flex-wrap: wrap) gere le retour a la ligne proprement PC + mobile.
   var topLangs = topN(month.langs, 10);
   var topModes = topN(month.modes, 10);
@@ -1837,7 +1839,7 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
         'Utilisateurs actifs': 'Nombre d\u2019appareils uniques ayant fait au moins 1 requ\u00eate aujourd\u2019hui.',
         'Churn': 'Mouvements de tier : \u2191 upgrades (free\u2192payant) et \u2193 downgrades (payant\u2192free) sur la p\u00e9riode.',
         // KPIs
-        'Appareils total': 'Nombre total d\u2019appareils enregistr\u00e9s (mobiles + PC), tous tiers confondus.',
+        'Appareils total': 'Nombre total d\u2019appareils Android enregistr\u00e9s, tous tiers confondus (PC exclus).',
         'Actifs aujourd\u2019hui': 'Appareils ayant utilis\u00e9 DictoKey aujourd\u2019hui. Moy = moyenne quotidienne, pic = maximum sur la p\u00e9riode.',
         'Dict\u00e9es aujourd\u2019hui': 'Nombre de transcriptions vocales (Whisper) aujourd\u2019hui. Les r\u00e9\u00e9critures, corrections et traductions sont affich\u00e9es en dessous.',
         'Co\u00fbt du mois': 'Co\u00fbt estim\u00e9 des APIs ce mois. W = Groq Whisper, L = Groq LLM, A = Azure Translate.',
