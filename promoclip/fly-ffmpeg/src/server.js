@@ -10,6 +10,7 @@
  *            v1.0.7 — Main trim: stream copy (cut only, no re-encode needed — instant vs 3min)
  *            v1.0.8 — Hero intro pipeline: fps=30 norm + concat -c copy + ultrafast intro build
  *            v1.0.9 — force_key_frames at intro cut point (eliminates frame skip at intro→split transition)
+ *            v1.0.10 — Fix outro truncated: remove fps=30 normalization on main video in xfade
  *
  * Heberge UNIQUEMENT /health + /promo-assembly + /promo-assembly-pro.
  * Le reste des routes (slideshow, merge, ken-burns, smart-zoom, etc) reste
@@ -44,7 +45,7 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
-const VERSION = '1.0.9';
+const VERSION = '1.0.10';
 
 // ---------------------------------------------------------------------------
 // Etat global
@@ -908,6 +909,22 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         const xInputs = clips.map(c => ['-i', c.path]).flat();
         const mainIdx = 0;
 
+        // Probe main video frame count to compute duration at normalized 30fps
+        // (fps normalization can change effective duration vs file duration)
+        const mainFrameCount = await new Promise((resolve) => {
+          const ff = spawn('ffprobe', ['-v', 'error', '-count_frames', '-select_streams', 'v:0',
+            '-show_entries', 'stream=nb_read_frames', '-of', 'csv=p=0', clips[0].path],
+            { stdio: ['ignore', 'pipe', 'pipe'] });
+          let out = '';
+          ff.stdout.on('data', d => { out += d.toString(); });
+          ff.on('close', () => resolve(parseInt(out.trim()) || Math.round(clips[0].duration * 30)));
+          ff.on('error', () => resolve(Math.round(clips[0].duration * 30)));
+          setTimeout(() => { try { ff.kill(); } catch(_){} resolve(Math.round(clips[0].duration * 30)); }, 10000);
+        });
+        // Use frame-accurate duration at 30fps for xfade offset calculation
+        clips[0].duration = mainFrameCount / 30;
+        console.log(`[${jobId}] Main video: ${mainFrameCount} frames → ${clips[0].duration.toFixed(2)}s at 30fps`);
+
         const normFilters = [];
         for (let i = 0; i < clips.length; i++) {
           normFilters.push(`[${i}:v]scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,fps=30,format=yuv420p,setsar=1[n${i}]`);
@@ -930,7 +947,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
             ...xInputs,
             '-filter_complex', fullFilter,
             '-map', '[outv]', '-map', `${mainIdx}:a?`,
-            '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
             '-c:a', 'aac', '-b:a', '128k', '-pix_fmt', 'yuv420p',
             '-movflags', '+faststart', '-y', finalPath
           ], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -938,7 +955,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
           ff.stderr.on('data', d => { stderr += d.toString(); });
           ff.on('close', code => code === 0 ? resolve() : reject(new Error('Xfade Pro: ' + stderr.slice(-300))));
           ff.on('error', reject);
-          setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Xfade Pro timeout 180s')); }, 180000);
+          setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Xfade Pro timeout 300s')); }, 300000);
         });
         fs.renameSync(finalPath, outputPath);
         console.log(`[${jobId}] Intro/Outro xfade OK`);
