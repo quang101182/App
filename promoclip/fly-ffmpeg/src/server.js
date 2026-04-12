@@ -39,7 +39,7 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
-const VERSION = '1.1.0';
+const VERSION = '1.0.4';
 
 // ---------------------------------------------------------------------------
 // Etat global
@@ -674,15 +674,10 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
 
     // Computed max duration for the main video assembly
     const maxMainDur = Math.min(60, Math.max(probeDur, avatarDur || probeDur));
-    const needsFreezeRecord = avatarDur > probeDur + 0.1;
-    const freezeRecordExtra = needsFreezeRecord ? (avatarDur - probeDur) : 0;
-    const needsFreezeAvatar = avatarDur > 0 && probeDur > avatarDur + 0.1;
-    const freezeAvatarExtra = needsFreezeAvatar ? (Math.min(probeDur, 60) - avatarDur) : 0;
-    if (needsFreezeRecord) {
-      console.log(`[${jobId}] Freeze last frame of RECORDING for ${freezeRecordExtra.toFixed(2)}s (avatar outlasts recording)`);
-    }
-    if (needsFreezeAvatar) {
-      console.log(`[${jobId}] Freeze last frame of AVATAR for ${freezeAvatarExtra.toFixed(2)}s (recording outlasts avatar)`);
+    const needsFreeze = avatarDur > probeDur + 0.1;
+    const freezeExtra = needsFreeze ? (avatarDur - probeDur) : 0;
+    if (needsFreeze) {
+      console.log(`[${jobId}] Freeze last frame of recording for ${freezeExtra.toFixed(2)}s (avatar outlasts recording)`);
     }
 
     // 4. Build FFmpeg command for split-screen assembly
@@ -698,18 +693,15 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
     }
 
     if (avatarPath) {
-      const recordPrefilter = needsFreezeRecord
-        ? `tpad=stop_mode=clone:stop_duration=${freezeRecordExtra.toFixed(2)},`
-        : '';
-      const avatarPrefilter = needsFreezeAvatar
-        ? `tpad=stop_mode=clone:stop_duration=${freezeAvatarExtra.toFixed(2)},`
+      const recordPrefilter = needsFreeze
+        ? `tpad=stop_mode=clone:stop_duration=${freezeExtra.toFixed(2)},`
         : '';
       let filterComplex;
       if (mode === 'split-top') {
         const avatarH = Math.round(outHeight * 0.3);
         const recordH = outHeight - avatarH;
         filterComplex = [
-          `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
+          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
           `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
           `[avatar][record]vstack=inputs=2[outv]`
         ].join(';');
@@ -718,7 +710,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         const recordH = outHeight - avatarH;
         filterComplex = [
           `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
-          `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
+          `[0:v]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
           `[record][avatar]vstack=inputs=2[outv]`
         ].join(';');
       } else {
@@ -727,7 +719,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         const pipY = outHeight - pipSize - 120;
         filterComplex = [
           `[1:v]${recordPrefilter}scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
-          `[0:v]${avatarPrefilter}scale=${pipSize}:${pipSize}:force_original_aspect_ratio=decrease,pad=${pipSize}:${pipSize}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipSize}/2,2)+pow(Y-${pipSize}/2,2),pow(${pipSize}/2-4,2)),0,255)'[pip]`,
+          `[0:v]scale=${pipSize}:${pipSize}:force_original_aspect_ratio=decrease,pad=${pipSize}:${pipSize}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipSize}/2,2)+pow(Y-${pipSize}/2,2),pow(${pipSize}/2-4,2)),0,255)'[pip]`,
           `[record][pip]overlay=${pipX}:${pipY}[outv]`
         ].join(';');
       }
@@ -740,7 +732,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         '-filter_complex', filterComplex + (subFilter ? `;[outv]${subFilter.slice(1)}[final]` : ''),
         '-map', subFilter ? '[final]' : '[outv]',
         '-map', '0:a?',
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
         '-c:a', 'aac', '-b:a', '128k',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
@@ -752,7 +744,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
       ffArgs = [
         '-i', recordingPath,
         '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1${subFilter}`,
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
         '-c:a', 'aac', '-b:a', '128k',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
@@ -773,8 +765,8 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
       ff.on('error', reject);
       setTimeout(() => {
         try { ff.kill('SIGKILL'); } catch (_) {}
-        reject(new Error('FFmpeg Pro timeout 180s'));
-      }, 180000);
+        reject(new Error('FFmpeg Pro timeout 120s'));
+      }, 120000);
     });
 
     // Hero intro avatar fullscreen (optional)
@@ -791,7 +783,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         const ff = spawn('ffmpeg', [
           '-i', avatarPath,
           '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=increase,crop=${outWidth}:${outHeight}:(iw-${outWidth})/2:(ih-${outHeight})/2,setsar=1,fps=30,format=yuv420p${introSubFilter}`,
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
           '-c:a', 'aac', '-b:a', '128k',
           '-t', String(introDur),
           '-movflags', '+faststart',
@@ -801,14 +793,14 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => code === 0 ? resolve() : reject(new Error('Intro build: ' + stderr.slice(-200))));
         ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro build timeout')); }, 180000);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro build timeout')); }, 60000);
       });
 
       await new Promise((resolve, reject) => {
         const ff = spawn('ffmpeg', [
           '-ss', String(introDur),
           '-i', outputPath,
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
           '-c:a', 'aac', '-b:a', '128k',
           '-fflags', '+genpts',
           '-movflags', '+faststart',
@@ -818,7 +810,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => code === 0 ? resolve() : reject(new Error('Main trim: ' + stderr.slice(-200))));
         ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Main trim timeout')); }, 180000);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Main trim timeout')); }, 60000);
       });
 
       const concatListPath = path.join(tmpDir, 'concat-intro.txt');
@@ -826,7 +818,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
       await new Promise((resolve, reject) => {
         const ff = spawn('ffmpeg', [
           '-f', 'concat', '-safe', '0', '-i', concatListPath,
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
           '-c:a', 'aac', '-b:a', '128k',
           '-pix_fmt', 'yuv420p',
           '-movflags', '+faststart',
@@ -836,26 +828,11 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => code === 0 ? resolve() : reject(new Error('Intro concat: ' + stderr.slice(-200))));
         ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro concat timeout')); }, 180000);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Intro concat timeout')); }, 60000);
       });
 
-      // The concat re-encode can produce corrupted duration metadata.
-      // Remux with -t to enforce correct duration (fast, no re-encode).
-      const fixedPath = path.join(tmpDir, 'fixed-dur.mp4');
-      await new Promise((resolve, reject) => {
-        const ff = spawn('ffmpeg', [
-          '-i', withIntroPath,
-          '-c', 'copy', '-t', String(maxMainDur),
-          '-movflags', '+faststart', '-y', fixedPath
-        ], { stdio: ['ignore', 'pipe', 'pipe'] });
-        let stderr = '';
-        ff.stderr.on('data', d => { stderr += d.toString(); });
-        ff.on('close', code => code === 0 ? resolve() : reject(new Error('Duration fix: ' + stderr.slice(-200))));
-        ff.on('error', reject);
-        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Duration fix timeout')); }, 30000);
-      });
-      fs.renameSync(fixedPath, outputPath);
-      console.log(`[${jobId}] Hero intro applied (duration capped to ${maxMainDur}s)`);
+      fs.renameSync(withIntroPath, outputPath);
+      console.log(`[${jobId}] Hero intro applied`);
     }
 
     // Outro image assembly (optional)
@@ -874,12 +851,9 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         ff.on('error', () => resolve(probeDur));
         setTimeout(() => { try { ff.kill(); } catch(_){} resolve(probeDur); }, 5000);
       });
-      // Sanity check: if ffprobe returns an absurd duration (corrupted metadata from concat),
-      // fall back to the known maxMainDur which we calculated from the inputs
-      const saneMainDur = (actualMainDur > maxMainDur * 2) ? maxMainDur : actualMainDur;
-      console.log(`[${jobId}] Main video actual duration: ${actualMainDur.toFixed(2)}s (sane: ${saneMainDur.toFixed(2)}s, probeDur was ${probeDur.toFixed(2)}s)`);
+      console.log(`[${jobId}] Main video actual duration: ${actualMainDur.toFixed(2)}s (probeDur was ${probeDur.toFixed(2)}s)`);
 
-      const mainDur = Math.min(saneMainDur, 60);
+      const mainDur = Math.min(actualMainDur, 60);
       clips.push({ path: outputPath, duration: mainDur });
 
       if (outroClip) {
@@ -931,7 +905,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
             ...xInputs,
             '-filter_complex', fullFilter,
             '-map', '[outv]', '-map', `${mainIdx}:a?`,
-            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
             '-c:a', 'aac', '-b:a', '128k', '-pix_fmt', 'yuv420p',
             '-movflags', '+faststart', '-y', finalPath
           ], { stdio: ['ignore', 'pipe', 'pipe'] });
