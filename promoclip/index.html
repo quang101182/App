@@ -2795,7 +2795,7 @@ async function pingGateway() {
 // ──────────────────────────────────────────────────
 // Gateway Gemini helper — sends native Gemini generateContent format
 async function geminiCall(prompt, opts = {}) {
-  const model = opts.model || 'gemini-2.0-flash';
+  const model = opts.model || 'gemini-2.5-flash';
   const maxTokens = opts.maxTokens || 500;
   const headers = { 'Content-Type': 'application/json' };
   if (state.settings.gatewayKey) headers['Authorization'] = 'Bearer ' + state.settings.gatewayKey;
@@ -2804,7 +2804,7 @@ async function geminiCall(prompt, opts = {}) {
     headers,
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: maxTokens, temperature: opts.temperature || 0.7 }
+      generationConfig: { maxOutputTokens: maxTokens, temperature: opts.temperature || 0.3 }
     }),
     signal: opts.signal || AbortSignal.timeout(30000)
   });
@@ -4102,6 +4102,28 @@ function updateMediaCompatBanner() {
   } else {
     banner.style.display = 'none';
   }
+}
+
+// Returns { ok: true } if media selection is valid for the current template, or { ok: false, reason: '...' }
+function isMediaSelectionValid() {
+  const pro = isProMode();
+  const selected = state.wizard.mediaFiles.filter(f => f.selected);
+  const videos = selected.filter(f => f.isVideo);
+  const images = selected.filter(f => !f.isVideo);
+
+  if (selected.length === 0) return { ok: false, reason: pro ? 'Ajoute un screen recording video pour le Mode Pro' : 'Ajoute au moins une capture d\'ecran' };
+
+  if (pro) {
+    if (videos.length === 0) return { ok: false, reason: 'Mode Pro : un screen recording video est requis' };
+    if (videos.length > 1) return { ok: false, reason: 'Mode Pro : une seule video est autorisee (' + videos.length + ' detectees)' };
+    if (images.length > 1) return { ok: false, reason: 'Mode Pro : max 1 image de sortie (' + images.length + ' images)' };
+    if (videos.length === 1 && images.length === 1) {
+      const vidOrder = videos[0].order || 0;
+      const imgOrder = images[0].order || 0;
+      if (vidOrder >= imgOrder) return { ok: false, reason: 'Mode Pro : la video doit etre AVANT l\'image de sortie' };
+    }
+  }
+  return { ok: true };
 }
 
 function renderMediaGrid() {
@@ -5672,9 +5694,19 @@ document.getElementById('phoneFrame').addEventListener('click', (e) => {
 
   switch(action) {
     case 'go':
-    case 'nav-screen':
-      goScreen(el.dataset.screen);
+    case 'nav-screen': {
+      const target = el.dataset.screen;
+      // Block navigation from media screen to product if media selection is invalid
+      if (target === 'product' && _currentScreen === 'media') {
+        const check = isMediaSelectionValid();
+        if (!check.ok) {
+          showToast(check.reason, true, 4000);
+          break;
+        }
+      }
+      goScreen(target);
       break;
+    }
 
     case 'toggle':
       el.classList.toggle('on');
