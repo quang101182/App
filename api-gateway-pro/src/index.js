@@ -489,6 +489,51 @@ export default {
       return json({ page, total, today: todayCount });
     }
 
+    // ── Click counter (Play Store CTA tracking) ────────────────────────
+    if (path === '/api/click') {
+      const page = url.searchParams.get('page') || 'dk';
+      const btn = url.searchParams.get('btn') || 'unknown';
+      const today = new Date().toISOString().slice(0, 10);
+      const prefix = `stats:clicks:${page}`;
+      if (method === 'POST') {
+        const totalRaw = await env.PRO_KV.get(`${prefix}:total`);
+        const todayRaw = await env.PRO_KV.get(`${prefix}:${today}`);
+        const btnRaw = await env.PRO_KV.get(`${prefix}:btn:${btn}:total`);
+        let total = parseInt(totalRaw) || 0;
+        let todayCount = parseInt(todayRaw) || 0;
+        let btnTotal = parseInt(btnRaw) || 0;
+        total++;
+        todayCount++;
+        btnTotal++;
+        ctx.waitUntil(Promise.all([
+          env.PRO_KV.put(`${prefix}:total`, String(total)),
+          env.PRO_KV.put(`${prefix}:${today}`, String(todayCount), { expirationTtl: 90 * 86400 }),
+          env.PRO_KV.put(`${prefix}:btn:${btn}:total`, String(btnTotal)),
+        ]));
+        return json({ page, btn, total, today: todayCount });
+      }
+      // GET: return all click stats
+      const [totalRaw, todayRaw, heroRaw, pricingRaw, navRaw, ctaRaw, stickyRaw] = await Promise.all([
+        env.PRO_KV.get(`${prefix}:total`),
+        env.PRO_KV.get(`${prefix}:${today}`),
+        env.PRO_KV.get(`${prefix}:btn:hero:total`),
+        env.PRO_KV.get(`${prefix}:btn:pricing:total`),
+        env.PRO_KV.get(`${prefix}:btn:nav:total`),
+        env.PRO_KV.get(`${prefix}:btn:cta:total`),
+        env.PRO_KV.get(`${prefix}:btn:sticky:total`),
+      ]);
+      return json({
+        page, total: parseInt(totalRaw) || 0, today: parseInt(todayRaw) || 0,
+        by_btn: {
+          hero: parseInt(heroRaw) || 0,
+          pricing: parseInt(pricingRaw) || 0,
+          nav: parseInt(navRaw) || 0,
+          cta: parseInt(ctaRaw) || 0,
+          sticky: parseInt(stickyRaw) || 0,
+        }
+      });
+    }
+
     // ── LemonSqueezy webhook ─────────────────────────────────────────────
 
     if (path === '/webhook/lemonsqueezy' && method === 'POST') {
