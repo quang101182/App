@@ -62,6 +62,7 @@ a { color: var(--accent2); }
 
 /* KPI cards */
 .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.kpi-grid-funnel { grid-template-columns: repeat(3, 1fr); }
 .kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
 .kpi-card .kpi-label { font-size: .85rem; color: var(--text2); margin-bottom: 8px; }
 .kpi-card .kpi-value { font-size: 2rem; font-weight: 800; }
@@ -409,6 +410,13 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <div class="kpi-card"><div class="kpi-label">Coût du mois</div><div class="kpi-value" id="kpiCost">—</div><div class="kpi-sub" id="kpiCostSub"></div></div>
   </div>
 
+  <!-- Site funnel KPIs -->
+  <div class="kpi-grid kpi-grid-funnel">
+    <div class="kpi-card"><div class="kpi-label">Visites site</div><div class="kpi-value" id="kpiSiteVisits">—</div><div class="kpi-sub" id="kpiSiteVisitsSub"></div></div>
+    <div class="kpi-card"><div class="kpi-label">Clics Play Store</div><div class="kpi-value" id="kpiPlayClicks">—</div><div class="kpi-sub" id="kpiPlayClicksSub"></div></div>
+    <div class="kpi-card"><div class="kpi-label">Taux clic site → Play</div><div class="kpi-value" id="kpiClickRate">—</div><div class="kpi-sub" id="kpiClickRateSub"></div></div>
+  </div>
+
   <!-- Play Console links bar -->
   <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
     <span style="font-size:.85rem;color:var(--text2)">Billing Premium &#8594;</span>
@@ -637,9 +645,11 @@ async function fetchAll() {
     var results = await Promise.all([
       apiFetch(cfg.endpoints.monitoring + '?period=' + currentPeriod + '&advanced=1'),
       apiFetch(cfg.endpoints.stats),
-      apiFetch(cfg.endpoints.devices)
+      apiFetch(cfg.endpoints.devices),
+      fetch('https://api-gateway-pro.quang101182.workers.dev/api/visit?page=dk').then(function(r){return r.json()}).catch(function(){return {total:0,today:0}}),
+      fetch('https://api-gateway-pro.quang101182.workers.dev/api/click?page=dk').then(function(r){return r.json()}).catch(function(){return {total:0,today:0,by_btn:{}}})
     ]);
-    render(results[0], results[1], results[2]);
+    render(results[0], results[1], results[2], results[3], results[4]);
   } catch (e) {
     hideLoading();
     throw e;
@@ -707,7 +717,7 @@ function destroyCharts() {
 }
 
 // === Render ===
-function render(mon, stats, dev) {
+function render(mon, stats, dev, siteVisits, siteClicks) {
   var s = mon.summary;
   var t = mon.trend;
   var cfg = getAppConfig();
@@ -805,6 +815,30 @@ function render(mon, stats, dev) {
   var llmCost = costMonth.llm || costMonth.groq_llm || '—';
   var azureCost = costMonth.azure || costMonth.azure_translate || '—';
   document.getElementById('kpiCostSub').textContent = 'W:' + whisperCost + ' L:' + llmCost + ' A:' + azureCost;
+
+  // KPI: Site funnel (visites, clics, taux)
+  if (siteVisits && siteClicks) {
+    var sv = siteVisits.total || 0;
+    var svToday = siteVisits.today || 0;
+    var sc = siteClicks.total || 0;
+    var scToday = siteClicks.today || 0;
+    var rate = sv > 0 ? ((sc / sv) * 100).toFixed(1) : '0.0';
+    var rateToday = svToday > 0 ? ((scToday / svToday) * 100).toFixed(1) : '0.0';
+    document.getElementById('kpiSiteVisits').textContent = sv.toLocaleString('fr-FR');
+    document.getElementById('kpiSiteVisitsSub').textContent = "auj. +" + svToday;
+    document.getElementById('kpiPlayClicks').textContent = sc.toLocaleString('fr-FR');
+    var btnParts = [];
+    if (siteClicks.by_btn) {
+      var b = siteClicks.by_btn;
+      if (b.hero) btnParts.push('hero ' + b.hero);
+      if (b.pricing) btnParts.push('pricing ' + b.pricing);
+      if (b.nav) btnParts.push('nav ' + b.nav);
+      if (b.cta) btnParts.push('cta ' + b.cta);
+    }
+    document.getElementById('kpiPlayClicksSub').textContent = btnParts.length ? btnParts.join(' · ') : "auj. +" + scToday;
+    document.getElementById('kpiClickRate').textContent = rate + '%';
+    document.getElementById('kpiClickRateSub').textContent = "auj. " + rateToday + '%';
+  }
 
   destroyCharts();
 
