@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.5.1</title>
+<title>Monitoring v1.5.2</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -342,7 +342,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     body:not(.app-swp) #swpView { display: none !important; }
     body.app-swp #sO, body.app-swp #sP, body.app-swp #sA, body.app-swp #sRet,
     body.app-swp #sD, body.app-swp #sI, body.app-swp #sectionNav,
-    body.app-swp .pill-group, body.app-swp .toggle-refresh,
+    body.app-swp .pill-group,
     body.app-swp #footer, body.app-swp #alertBanner { display: none !important; }
     body.app-swp #swpView { display: block; }
 
@@ -390,7 +390,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring v1.5.1</h1>
+    <h1>Monitoring v1.5.2</h1>
     <div class="header-controls">
       <div class="pill-group">
         <button class="pill active" data-period="7d">7j</button>
@@ -591,7 +591,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.5.1</div>
+  <div class="footer" id="footer">Monitoring v1.5.2</div>
 </div>
 
 <script>
@@ -657,7 +657,7 @@ function switchApp(newApp) {
   // login modal if no token for this app
   if (!getToken()) { showLogin(); return; }
   fetchAll().then(function() {
-    if (newApp === 'dictokey' && document.getElementById('autoRefresh').checked) startAutoRefresh();
+    if (document.getElementById('autoRefresh').checked) startAutoRefresh();
   }).catch(handleAuthError);
 }
 
@@ -1159,7 +1159,7 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.5.1 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.5.2 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
@@ -1905,12 +1905,10 @@ document.querySelectorAll('.pill[data-period]').forEach(function(btn) {
   });
 });
 
-// Auto-refresh (v1.5.0: DictoKey-only — SWP uses manual refresh only)
+// Auto-refresh (v1.5.2: active for both DictoKey and SWP — fetchAll dispatches correctly)
 function startAutoRefresh() {
   stopAutoRefresh();
-  if (currentApp !== 'dictokey') return;
   refreshInterval = setInterval(function() {
-    if (currentApp !== 'dictokey') { stopAutoRefresh(); return; } // guard late tick after switch
     isAutoRefresh = true;
     fetchAll().catch(handleAuthError).finally(function() { isAutoRefresh = false; });
   }, 60000);
@@ -1918,7 +1916,7 @@ function startAutoRefresh() {
 function stopAutoRefresh() { if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; } }
 
 document.getElementById('autoRefresh').addEventListener('change', function() {
-  if (this.checked && currentApp === 'dictokey') startAutoRefresh(); else stopAutoRefresh();
+  if (this.checked) startAutoRefresh(); else stopAutoRefresh();
 });
 
 // Enter key on login
@@ -2139,7 +2137,7 @@ updateTierPillsUI(); // v1.4.11: applique l'état visuel des pills tier depuis l
 (function init() {
   if (!getToken()) { showLogin(); return; }
   fetchAll().then(function() {
-    if (currentApp === 'dictokey' && document.getElementById('autoRefresh').checked) startAutoRefresh();
+    if (document.getElementById('autoRefresh').checked) startAutoRefresh();
   }).catch(function(e) {
     if (e.message === '401') { clearToken(); showLogin('Token invalide'); }
     else { console.error(e); hideLoading(); }
