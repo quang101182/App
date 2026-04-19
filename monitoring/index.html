@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.4.13</title>
+<title>Monitoring v1.5.0</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -336,6 +336,37 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     .info-popup::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--accent)}
     .info-btn.active .info-popup{display:block}
     @media(max-width:480px){.info-popup{width:200px;font-size:.75rem;padding:8px 10px}}
+
+    /* ── v1.5.0 Multi-app isolation ── */
+    /* By default SWP view is hidden. Body.app-swp flips visibility atomically. */
+    body:not(.app-swp) #swpView { display: none !important; }
+    body.app-swp #sO, body.app-swp #sP, body.app-swp #sA, body.app-swp #sRet,
+    body.app-swp #sD, body.app-swp #sI, body.app-swp #sectionNav,
+    body.app-swp .pill-group, body.app-swp .toggle-refresh { display: none !important; }
+    body.app-swp #swpView { display: block; }
+
+    .swp-section { padding: 8px 0 24px; }
+    .swp-kpi-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 20px; }
+    .swp-kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+    .swp-kpi-label { font-size: .75rem; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+    .swp-kpi-value { font-size: 1.9rem; font-weight: 700; line-height: 1.1; }
+    .swp-kpi-sub { font-size: .72rem; color: var(--text2); margin-top: 6px; }
+    .swp-kpi-card.trial .swp-kpi-value { color: #eab308; }
+    .swp-kpi-card.pro .swp-kpi-value { color: #22c55e; }
+    .swp-kpi-card.revoked .swp-kpi-value { color: #ef4444; }
+    .swp-kpi-card.usage .swp-kpi-value { color: var(--accent2); }
+    .swp-section-title { font-size: .85rem; font-weight: 600; margin: 24px 0 12px; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; }
+    .swp-table { width: 100%; border-collapse: collapse; background: var(--bg-card); border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+    .swp-table th, .swp-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: .85rem; }
+    .swp-table th { background: var(--bg-secondary); color: var(--text2); font-weight: 600; text-transform: uppercase; font-size: .7rem; letter-spacing: .5px; }
+    .swp-table tr:last-child td { border-bottom: none; }
+    .swp-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: .7rem; font-weight: 600; text-transform: uppercase; }
+    .swp-badge.trial { background: rgba(234, 179, 8, .15); color: #eab308; }
+    .swp-badge.pro { background: rgba(34, 197, 94, .15); color: #22c55e; }
+    .swp-badge.revoked { background: rgba(239, 68, 68, .15); color: #ef4444; }
+    .swp-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .8rem; }
+    .swp-muted { color: var(--text2); }
+    .swp-empty { text-align: center; padding: 40px; color: var(--text2); }
 </style>
 </head>
 <body>
@@ -358,7 +389,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring v1.4.13</h1>
+    <h1>Monitoring v1.5.0</h1>
     <div class="header-controls">
       <div class="pill-group">
         <button class="pill active" data-period="7d">7j</button>
@@ -548,8 +579,18 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
   </div><!-- /sI -->
 
+  <!-- SWP view (v1.5.0) — isolated from DictoKey sections via body.app-swp -->
+  <div id="swpView" class="swp-section">
+    <div class="swp-kpi-grid" id="swpKpis"></div>
+    <div class="swp-section-title" id="swpUsageTitle">Usage</div>
+    <div class="swp-kpi-grid" id="swpUsageKpis"></div>
+    <div class="swp-section-title">Clients</div>
+    <div id="swpCustomers"></div>
+    <div style="font-size:.8rem;color:var(--text2);margin-top:12px" id="swpLastUpdated"></div>
+  </div>
+
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.4.13</div>
+  <div class="footer" id="footer">Monitoring v1.5.0</div>
 </div>
 
 <script>
@@ -564,16 +605,22 @@ const APPS = {
       stats: '/admin/stats',
       devices: '/admin/devices'
     }
+  },
+  swp: {
+    name: 'SubWhisper Pro',
+    gateway: 'https://api-gateway-pro.quang101182.workers.dev',
+    tokenKey: 'monitoring_swp_token',
+    endpoints: { overview: '/admin/swp/overview' }
   }
-  // futures apps ici
 };
 let currentApp = 'dictokey';
-const LS_TOKEN_KEY = 'monitoring_admin_token';
+const LS_TOKEN_KEY_LEGACY = 'monitoring_admin_token'; // fallback for old sessions
 let currentPeriod = '7d';
 let refreshInterval = null;
 let charts = {};
 let allDevices = [];
 let isAutoRefresh = false;
+let currentAbortCtrl = null; // v1.5.0: cancel in-flight fetches on tab switch
 
 // Lang / mode maps
 const LANG_MAP = { French:'Français', English:'Anglais', Spanish:'Espagnol', German:'Allemand', Italian:'Italien', Portuguese:'Portugais', Dutch:'Néerlandais', Russian:'Russe', Chinese:'Chinois', Japanese:'Japonais', Korean:'Coréen', Arabic:'Arabe' };
@@ -588,18 +635,52 @@ function renderAppTabs() {
   ).join('');
   container.querySelectorAll('.app-tab').forEach(function(btn) {
     btn.addEventListener('click', function() {
-      currentApp = this.dataset.app;
-      if (typeof closeDeviceExpand === 'function') closeDeviceExpand();
-      renderAppTabs();
-      fetchAll().catch(handleAuthError);
+      var newApp = this.dataset.app;
+      if (newApp === currentApp) return;
+      switchApp(newApp);
     });
   });
 }
 
-// === Token (shared) ===
-function getToken() { return localStorage.getItem(LS_TOKEN_KEY); }
-function setToken(t) { localStorage.setItem(LS_TOKEN_KEY, t); }
-function clearToken() { localStorage.removeItem(LS_TOKEN_KEY); }
+// v1.5.0: atomic tab switch with full isolation (abort, chart destroy, interval clear, view toggle)
+function switchApp(newApp) {
+  if (currentAbortCtrl) { currentAbortCtrl.abort(); currentAbortCtrl = null; }
+  stopAutoRefresh();
+  if (currentApp === 'dictokey' && newApp !== 'dictokey') {
+    destroyCharts();
+    if (typeof closeDeviceExpand === 'function') closeDeviceExpand();
+  }
+  currentApp = newApp;
+  setActiveAppView(newApp);
+  renderAppTabs();
+  // login modal if no token for this app
+  if (!getToken()) { showLogin(); return; }
+  fetchAll().then(function() {
+    if (newApp === 'dictokey' && document.getElementById('autoRefresh').checked) startAutoRefresh();
+  }).catch(handleAuthError);
+}
+
+function setActiveAppView(appId) {
+  document.body.classList.toggle('app-swp', appId === 'swp');
+  document.body.dataset.activeApp = appId;
+}
+
+// === Token (per-app, v1.5.0; legacy key migrated for DictoKey) ===
+function getToken() {
+  var k = (APPS[currentApp] && APPS[currentApp].tokenKey) || LS_TOKEN_KEY_LEGACY;
+  var t = localStorage.getItem(k);
+  // Migration: if DictoKey token missing under new key, fallback to legacy
+  if (!t && currentApp === 'dictokey') t = localStorage.getItem(LS_TOKEN_KEY_LEGACY);
+  return t;
+}
+function setToken(t) {
+  var k = (APPS[currentApp] && APPS[currentApp].tokenKey) || LS_TOKEN_KEY_LEGACY;
+  localStorage.setItem(k, t);
+}
+function clearToken() {
+  var k = (APPS[currentApp] && APPS[currentApp].tokenKey) || LS_TOKEN_KEY_LEGACY;
+  localStorage.removeItem(k);
+}
 
 function getAppConfig() { return APPS[currentApp]; }
 
@@ -630,31 +711,135 @@ async function doLogin() {
 function logout() { clearToken(); showLogin(); }
 
 // === API ===
-async function apiFetch(path) {
+async function apiFetch(path, signal) {
   var cfg = getAppConfig();
-  var r = await fetch(cfg.gateway + path, { headers: { 'Authorization': 'Bearer ' + getToken() } });
+  var r = await fetch(cfg.gateway + path, {
+    headers: { 'Authorization': 'Bearer ' + getToken() },
+    signal: signal
+  });
   if (r.status === 401) throw new Error('401');
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }
 
+// v1.5.0: dispatcher — each app has its own fetch + render path. No shared assumptions.
 async function fetchAll() {
+  if (currentAbortCtrl) currentAbortCtrl.abort();
+  currentAbortCtrl = new AbortController();
+  var signal = currentAbortCtrl.signal;
+  var thisApp = currentApp;
   showLoading();
-  var cfg = getAppConfig();
   try {
-    var results = await Promise.all([
-      apiFetch(cfg.endpoints.monitoring + '?period=' + currentPeriod + '&advanced=1'),
-      apiFetch(cfg.endpoints.stats),
-      apiFetch(cfg.endpoints.devices),
-      fetch('https://api-gateway-pro.quang101182.workers.dev/api/visit?page=dk').then(function(r){return r.json()}).catch(function(){return {total:0,today:0}}),
-      fetch('https://api-gateway-pro.quang101182.workers.dev/api/click?page=dk').then(function(r){return r.json()}).catch(function(){return {total:0,today:0,by_btn:{}}})
-    ]);
-    render(results[0], results[1], results[2], results[3], results[4]);
+    if (thisApp === 'swp') {
+      await fetchAllSwp(signal);
+    } else {
+      await fetchAllDictoKey(signal);
+    }
   } catch (e) {
+    if (e.name === 'AbortError') return; // swallow aborts silently
     hideLoading();
     throw e;
   }
+  // Guard: if user switched tabs while we were fetching, don't render stale
+  if (thisApp !== currentApp) return;
   hideLoading();
+}
+
+async function fetchAllDictoKey(signal) {
+  var cfg = APPS.dictokey;
+  var results = await Promise.all([
+    apiFetch(cfg.endpoints.monitoring + '?period=' + currentPeriod + '&advanced=1', signal),
+    apiFetch(cfg.endpoints.stats, signal),
+    apiFetch(cfg.endpoints.devices, signal),
+    fetch('https://api-gateway-pro.quang101182.workers.dev/api/visit?page=dk', { signal: signal }).then(function(r){return r.json()}).catch(function(){return {total:0,today:0}}),
+    fetch('https://api-gateway-pro.quang101182.workers.dev/api/click?page=dk', { signal: signal }).then(function(r){return r.json()}).catch(function(){return {total:0,today:0,by_btn:{}}})
+  ]);
+  if (currentApp !== 'dictokey') return; // late response on wrong tab → drop
+  render(results[0], results[1], results[2], results[3], results[4]);
+}
+
+async function fetchAllSwp(signal) {
+  var data = await apiFetch(APPS.swp.endpoints.overview, signal);
+  if (currentApp !== 'swp') return;
+  renderSwp(data);
+}
+
+// === SWP rendering (v1.5.0) ===
+function swpEscape(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c];
+  });
+}
+function swpFmtDate(iso) {
+  if (!iso) return '<span class="swp-muted">—</span>';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '<span class="swp-muted">—</span>';
+  return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
+}
+function swpFmtRelative(iso) {
+  if (!iso) return '<span class="swp-muted">jamais</span>';
+  var diffMs = Date.now() - new Date(iso).getTime();
+  var diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays < 0) return 'dans le futur';
+  if (diffDays === 0) return "aujourd'hui";
+  if (diffDays === 1) return 'hier';
+  if (diffDays < 30) return 'il y a ' + diffDays + 'j';
+  if (diffDays < 365) return 'il y a ' + Math.floor(diffDays/30) + ' mois';
+  return 'il y a ' + Math.floor(diffDays/365) + ' an(s)';
+}
+function swpPlanBadge(c) {
+  if (c.revoked) return '<span class="swp-badge revoked">Revoked</span>';
+  if (c.plan === 'trial') return '<span class="swp-badge trial">Trial</span>';
+  if (c.plan === 'pro') return '<span class="swp-badge pro">Pro</span>';
+  return '<span class="swp-badge">' + swpEscape(c.plan || '?') + '</span>';
+}
+
+function renderSwp(data) {
+  if (!data) return;
+  var c = data.customers || {};
+  var u = data.usage_this_month || { transcriptions: 0, translations: 0 };
+  var v = data.site_visits || { total: 0, today: 0 };
+  var lims = data.limits_per_plan || {};
+  var limTrial = lims.trial || { transcriptions: '?', translations: '?' };
+  var limPro = lims.pro || { transcriptions: '?', translations: '?' };
+
+  document.getElementById('swpKpis').innerHTML = [
+    '<div class="swp-kpi-card"><div class="swp-kpi-label">Total clients SWP</div><div class="swp-kpi-value">' + (c.total||0) + '</div><div class="swp-kpi-sub">' + ((c.trial||0) + (c.pro||0)) + ' actifs · ' + (c.revoked||0) + ' revoked</div></div>',
+    '<div class="swp-kpi-card trial"><div class="swp-kpi-label">Trial</div><div class="swp-kpi-value">' + (c.trial||0) + '</div><div class="swp-kpi-sub">en période d\u2019essai</div></div>',
+    '<div class="swp-kpi-card pro"><div class="swp-kpi-label">Pro (payant)</div><div class="swp-kpi-value">' + (c.pro||0) + '</div><div class="swp-kpi-sub">abonnements actifs</div></div>',
+    '<div class="swp-kpi-card revoked"><div class="swp-kpi-label">Revoked</div><div class="swp-kpi-value">' + (c.revoked||0) + '</div><div class="swp-kpi-sub">annulés / expirés</div></div>'
+  ].join('');
+
+  document.getElementById('swpUsageTitle').textContent = 'Usage ' + (data.month || '');
+  document.getElementById('swpUsageKpis').innerHTML = [
+    '<div class="swp-kpi-card usage"><div class="swp-kpi-label">Transcriptions ce mois</div><div class="swp-kpi-value">' + (u.transcriptions||0) + '</div><div class="swp-kpi-sub">limites : ' + limTrial.transcriptions + ' (trial) / ' + limPro.transcriptions + ' (pro) par client</div></div>',
+    '<div class="swp-kpi-card usage"><div class="swp-kpi-label">Traductions ce mois</div><div class="swp-kpi-value">' + (u.translations||0) + '</div><div class="swp-kpi-sub">limites : ' + limTrial.translations + ' (trial) / ' + limPro.translations + ' (pro) par client</div></div>',
+    '<div class="swp-kpi-card"><div class="swp-kpi-label">Visites site</div><div class="swp-kpi-value">' + (v.total||0) + '</div><div class="swp-kpi-sub">+' + (v.today||0) + " aujourd'hui</div></div>"
+  ].join('');
+
+  var list = data.customers_list || [];
+  if (list.length === 0) {
+    document.getElementById('swpCustomers').innerHTML = '<div class="swp-empty">Aucun client pour le moment.</div>';
+  } else {
+    var rows = list.map(function(cu) {
+      return '<tr>' +
+        '<td>' + swpEscape(cu.email) + '</td>' +
+        '<td>' + swpPlanBadge(cu) + '</td>' +
+        '<td>' + swpFmtDate(cu.created) + '</td>' +
+        '<td>' + swpFmtDate(cu.expiresAt) + '</td>' +
+        '<td title="' + swpEscape(cu.lastUsed || '') + '">' + swpFmtRelative(cu.lastUsed) + '</td>' +
+        '<td class="swp-mono">' + (cu.usageMonth.transcriptions||0) + 't / ' + (cu.usageMonth.translations||0) + 'tr</td>' +
+        '<td class="swp-mono swp-muted">' + (cu.usageTotal.transcriptions||0) + 't / ' + (cu.usageTotal.translations||0) + 'tr</td>' +
+      '</tr>';
+    }).join('');
+    document.getElementById('swpCustomers').innerHTML =
+      '<div style="overflow-x:auto"><table class="swp-table"><thead><tr>' +
+      '<th>Email</th><th>Statut</th><th>Créé le</th><th>Expire le</th><th>Dernière activité</th><th>Usage ' + swpEscape(data.month||'') + '</th><th>Usage total</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  document.getElementById('swpLastUpdated').textContent = 'Dernière mise à jour : ' +
+    new Date(data.generatedAt || Date.now()).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
 }
 
 // === Utilities ===
@@ -958,7 +1143,7 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.4.13 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.5.0 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
@@ -1691,9 +1876,10 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape' && expandedDeviceIds.size > 0) closeAllDeviceExpands();
 });
 
-// Period pills
+// Period pills (v1.5.0: no-op if not on DictoKey)
 document.querySelectorAll('.pill[data-period]').forEach(function(btn) {
   btn.addEventListener('click', function() {
+    if (currentApp !== 'dictokey') return;
     document.querySelectorAll('.pill[data-period]').forEach(function(b) { b.classList.remove('active'); });
     this.classList.add('active');
     currentPeriod = this.dataset.period;
@@ -1703,10 +1889,12 @@ document.querySelectorAll('.pill[data-period]').forEach(function(btn) {
   });
 });
 
-// Auto-refresh
+// Auto-refresh (v1.5.0: DictoKey-only — SWP uses manual refresh only)
 function startAutoRefresh() {
   stopAutoRefresh();
+  if (currentApp !== 'dictokey') return;
   refreshInterval = setInterval(function() {
+    if (currentApp !== 'dictokey') { stopAutoRefresh(); return; } // guard late tick after switch
     isAutoRefresh = true;
     fetchAll().catch(handleAuthError).finally(function() { isAutoRefresh = false; });
   }, 60000);
@@ -1714,7 +1902,7 @@ function startAutoRefresh() {
 function stopAutoRefresh() { if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; } }
 
 document.getElementById('autoRefresh').addEventListener('change', function() {
-  if (this.checked) startAutoRefresh(); else stopAutoRefresh();
+  if (this.checked && currentApp === 'dictokey') startAutoRefresh(); else stopAutoRefresh();
 });
 
 // Enter key on login
@@ -1928,13 +2116,18 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
     }
 
 // Init
+setActiveAppView(currentApp); // v1.5.0: set body class before rendering
 renderAppTabs();
 initNav();
 updateTierPillsUI(); // v1.4.11: applique l'état visuel des pills tier depuis localStorage au chargement
 (function init() {
   if (!getToken()) { showLogin(); return; }
-  fetchAll().then(function() { if (document.getElementById('autoRefresh').checked) startAutoRefresh(); })
-    .catch(function(e) { if (e.message === '401') { clearToken(); showLogin('Token invalide'); } else { console.error(e); hideLoading(); } });
+  fetchAll().then(function() {
+    if (currentApp === 'dictokey' && document.getElementById('autoRefresh').checked) startAutoRefresh();
+  }).catch(function(e) {
+    if (e.message === '401') { clearToken(); showLogin('Token invalide'); }
+    else { console.error(e); hideLoading(); }
+  });
 })();
 </script>
 </body>
