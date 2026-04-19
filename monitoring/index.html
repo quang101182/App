@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.5.0</title>
+<title>Monitoring v1.5.1</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -389,7 +389,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring v1.5.0</h1>
+    <h1>Monitoring v1.5.1</h1>
     <div class="header-controls">
       <div class="pill-group">
         <button class="pill active" data-period="7d">7j</button>
@@ -590,7 +590,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.5.0</div>
+  <div class="footer" id="footer">Monitoring v1.5.1</div>
 </div>
 
 <script>
@@ -737,12 +737,11 @@ async function fetchAll() {
     }
   } catch (e) {
     if (e.name === 'AbortError') return; // swallow aborts silently
-    hideLoading();
     throw e;
+  } finally {
+    // Always clear overlay — even on abort, on error, or on stale tab switch
+    hideLoading();
   }
-  // Guard: if user switched tabs while we were fetching, don't render stale
-  if (thisApp !== currentApp) return;
-  hideLoading();
 }
 
 async function fetchAllDictoKey(signal) {
@@ -803,18 +802,32 @@ function renderSwp(data) {
   var limTrial = lims.trial || { transcriptions: '?', translations: '?' };
   var limPro = lims.pro || { transcriptions: '?', translations: '?' };
 
+  var cTotal = swpEscape(c.total || 0);
+  var cTrial = swpEscape(c.trial || 0);
+  var cPro = swpEscape(c.pro || 0);
+  var cRevoked = swpEscape(c.revoked || 0);
+  var cActive = swpEscape((c.trial || 0) + (c.pro || 0));
   document.getElementById('swpKpis').innerHTML = [
-    '<div class="swp-kpi-card"><div class="swp-kpi-label">Total clients SWP</div><div class="swp-kpi-value">' + (c.total||0) + '</div><div class="swp-kpi-sub">' + ((c.trial||0) + (c.pro||0)) + ' actifs · ' + (c.revoked||0) + ' revoked</div></div>',
-    '<div class="swp-kpi-card trial"><div class="swp-kpi-label">Trial</div><div class="swp-kpi-value">' + (c.trial||0) + '</div><div class="swp-kpi-sub">en période d\u2019essai</div></div>',
-    '<div class="swp-kpi-card pro"><div class="swp-kpi-label">Pro (payant)</div><div class="swp-kpi-value">' + (c.pro||0) + '</div><div class="swp-kpi-sub">abonnements actifs</div></div>',
-    '<div class="swp-kpi-card revoked"><div class="swp-kpi-label">Revoked</div><div class="swp-kpi-value">' + (c.revoked||0) + '</div><div class="swp-kpi-sub">annulés / expirés</div></div>'
+    '<div class="swp-kpi-card"><div class="swp-kpi-label">Total clients SWP</div><div class="swp-kpi-value">' + cTotal + '</div><div class="swp-kpi-sub">' + cActive + ' actifs · ' + cRevoked + ' revoked</div></div>',
+    '<div class="swp-kpi-card trial"><div class="swp-kpi-label">Trial</div><div class="swp-kpi-value">' + cTrial + '</div><div class="swp-kpi-sub">en période d\u2019essai</div></div>',
+    '<div class="swp-kpi-card pro"><div class="swp-kpi-label">Pro (payant)</div><div class="swp-kpi-value">' + cPro + '</div><div class="swp-kpi-sub">abonnements actifs</div></div>',
+    '<div class="swp-kpi-card revoked"><div class="swp-kpi-label">Revoked</div><div class="swp-kpi-value">' + cRevoked + '</div><div class="swp-kpi-sub">annulés / expirés</div></div>'
   ].join('');
 
   document.getElementById('swpUsageTitle').textContent = 'Usage ' + (data.month || '');
+  // Escape all API-sourced values before innerHTML injection (defense in depth)
+  var limTrialT = swpEscape(limTrial.transcriptions);
+  var limTrialTr = swpEscape(limTrial.translations);
+  var limProT = swpEscape(limPro.transcriptions);
+  var limProTr = swpEscape(limPro.translations);
+  var uT = swpEscape(u.transcriptions || 0);
+  var uTr = swpEscape(u.translations || 0);
+  var vTotal = swpEscape(v.total || 0);
+  var vToday = swpEscape(v.today || 0);
   document.getElementById('swpUsageKpis').innerHTML = [
-    '<div class="swp-kpi-card usage"><div class="swp-kpi-label">Transcriptions ce mois</div><div class="swp-kpi-value">' + (u.transcriptions||0) + '</div><div class="swp-kpi-sub">limites : ' + limTrial.transcriptions + ' (trial) / ' + limPro.transcriptions + ' (pro) par client</div></div>',
-    '<div class="swp-kpi-card usage"><div class="swp-kpi-label">Traductions ce mois</div><div class="swp-kpi-value">' + (u.translations||0) + '</div><div class="swp-kpi-sub">limites : ' + limTrial.translations + ' (trial) / ' + limPro.translations + ' (pro) par client</div></div>',
-    '<div class="swp-kpi-card"><div class="swp-kpi-label">Visites site</div><div class="swp-kpi-value">' + (v.total||0) + '</div><div class="swp-kpi-sub">+' + (v.today||0) + " aujourd'hui</div></div>"
+    '<div class="swp-kpi-card usage"><div class="swp-kpi-label">Transcriptions ce mois</div><div class="swp-kpi-value">' + uT + '</div><div class="swp-kpi-sub">limites : ' + limTrialT + ' (trial) / ' + limProT + ' (pro) par client</div></div>',
+    '<div class="swp-kpi-card usage"><div class="swp-kpi-label">Traductions ce mois</div><div class="swp-kpi-value">' + uTr + '</div><div class="swp-kpi-sub">limites : ' + limTrialTr + ' (trial) / ' + limProTr + ' (pro) par client</div></div>',
+    '<div class="swp-kpi-card"><div class="swp-kpi-label">Visites site</div><div class="swp-kpi-value">' + vTotal + '</div><div class="swp-kpi-sub">+' + vToday + " aujourd'hui</div></div>"
   ].join('');
 
   var list = data.customers_list || [];
@@ -822,14 +835,16 @@ function renderSwp(data) {
     document.getElementById('swpCustomers').innerHTML = '<div class="swp-empty">Aucun client pour le moment.</div>';
   } else {
     var rows = list.map(function(cu) {
+      var um = cu.usageMonth || {};
+      var ut = cu.usageTotal || {};
       return '<tr>' +
         '<td>' + swpEscape(cu.email) + '</td>' +
         '<td>' + swpPlanBadge(cu) + '</td>' +
         '<td>' + swpFmtDate(cu.created) + '</td>' +
         '<td>' + swpFmtDate(cu.expiresAt) + '</td>' +
         '<td title="' + swpEscape(cu.lastUsed || '') + '">' + swpFmtRelative(cu.lastUsed) + '</td>' +
-        '<td class="swp-mono">' + (cu.usageMonth.transcriptions||0) + 't / ' + (cu.usageMonth.translations||0) + 'tr</td>' +
-        '<td class="swp-mono swp-muted">' + (cu.usageTotal.transcriptions||0) + 't / ' + (cu.usageTotal.translations||0) + 'tr</td>' +
+        '<td class="swp-mono">' + swpEscape(um.transcriptions || 0) + 't / ' + swpEscape(um.translations || 0) + 'tr</td>' +
+        '<td class="swp-mono swp-muted">' + swpEscape(ut.transcriptions || 0) + 't / ' + swpEscape(ut.translations || 0) + 'tr</td>' +
       '</tr>';
     }).join('');
     document.getElementById('swpCustomers').innerHTML =
@@ -1143,7 +1158,7 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.5.0 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footer').textContent = 'Monitoring v1.5.1 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
