@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.4.0';
+const VERSION = '1.4.1';
 
 // ── Plan limits (per calendar month) ────────────────────────────────────────
 const PLAN_LIMITS = {
@@ -330,6 +330,10 @@ async function handleLemonSqueezyWebhook(request, env) {
     const plan = (status === 'on_trial') ? 'trial' : 'pro';
     const trialEndsAt = attrs.trial_ends_at || null;
 
+    // Detect app from product (custom_data or variant name)
+    const customData = payload.meta?.custom_data || {};
+    const app = customData.app || 'swp';
+
     // Check if email already has a key (app-scoped first, then legacy)
     let existingKey = await env.PRO_KV.get(`email:${app}:${email.toLowerCase()}`);
     if (!existingKey) existingKey = await env.PRO_KV.get(`email:${email.toLowerCase()}`);
@@ -346,10 +350,6 @@ async function handleLemonSqueezyWebhook(request, env) {
       }
       return json({ ok: true, action: 'reactivated', email });
     }
-
-    // Detect app from product (custom_data or variant name)
-    const customData = payload.meta?.custom_data || {};
-    const app = customData.app || 'swp';
 
     // Create new pro key
     const key = generateProKey(app);
@@ -373,7 +373,10 @@ async function handleLemonSqueezyWebhook(request, env) {
 
   // subscription_updated → update plan/status
   if (event === 'subscription_updated') {
-    const proKey = await env.PRO_KV.get(`email:${email.toLowerCase()}`);
+    const customData = payload.meta?.custom_data || {};
+    const app = customData.app || 'swp';
+    let proKey = await env.PRO_KV.get(`email:${app}:${email.toLowerCase()}`);
+    if (!proKey) proKey = await env.PRO_KV.get(`email:${email.toLowerCase()}`);
     if (!proKey) return json({ ok: true, action: 'ignored', reason: 'no key for email' });
     const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
     if (!data) return json({ ok: true, action: 'ignored' });
@@ -396,7 +399,10 @@ async function handleLemonSqueezyWebhook(request, env) {
 
   // subscription_cancelled / subscription_expired → revoke
   if (event === 'subscription_cancelled' || event === 'subscription_expired') {
-    const proKey = await env.PRO_KV.get(`email:${email.toLowerCase()}`);
+    const customData = payload.meta?.custom_data || {};
+    const app = customData.app || 'swp';
+    let proKey = await env.PRO_KV.get(`email:${app}:${email.toLowerCase()}`);
+    if (!proKey) proKey = await env.PRO_KV.get(`email:${email.toLowerCase()}`);
     if (!proKey) return json({ ok: true, action: 'ignored' });
     const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
     if (data) {
