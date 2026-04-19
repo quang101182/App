@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.4.1';
+const VERSION = '1.4.2';
 
 // ── Plan limits (per calendar month) ────────────────────────────────────────
 const PLAN_LIMITS = {
@@ -643,6 +643,65 @@ export default {
         data.revoked = true;
         await env.PRO_KV.put(`pro:${body.key}`, JSON.stringify(data));
         return json({ ok: true, revoked: body.key });
+      }
+
+      // SWP-only overview (monitoring dashboard)
+      if (path === '/admin/swp/overview' && method === 'GET') {
+        const list = await env.PRO_KV.list({ prefix: 'pro:' });
+        const mk = monthKey();
+        const today = new Date().toISOString().slice(0, 10);
+        let total = 0, trial = 0, pro = 0, revoked = 0;
+        let mTranscriptions = 0, mTranslations = 0;
+        const customers = [];
+        for (const k of list.keys) {
+          const data = await env.PRO_KV.get(k.name, 'json');
+          if (!data) continue;
+          const keyName = k.name.replace('pro:', '');
+          const isSwp = data.app === 'swp' || (!data.app && keyName.startsWith('swp_'));
+          if (!isSwp) continue;
+          total++;
+          if (data.revoked) revoked++;
+          else if (data.plan === 'trial') trial++;
+          else if (data.plan === 'pro') pro++;
+          const monthly = (data.monthlyUsage && data.monthlyUsage[mk]) || { transcriptions: 0, translations: 0 };
+          if (!data.revoked) {
+            mTranscriptions += monthly.transcriptions || 0;
+            mTranslations += monthly.translations || 0;
+          }
+          customers.push({
+            key: keyName,
+            email: data.email,
+            plan: data.plan,
+            revoked: !!data.revoked,
+            created: data.created || null,
+            expiresAt: data.expiresAt || null,
+            lastUsed: data.lastUsed || null,
+            subscriptionId: data.subscriptionId || null,
+            usageMonth: monthly,
+            usageTotal: data.usage || { transcriptions: 0, translations: 0 },
+          });
+        }
+        customers.sort((a, b) => {
+          const ka = a.lastUsed || a.created || '';
+          const kb = b.lastUsed || b.created || '';
+          return kb.localeCompare(ka);
+        });
+        const [visitsTotalRaw, visitsTodayRaw] = await Promise.all([
+          env.PRO_KV.get('stats:visits:swp:total'),
+          env.PRO_KV.get(`stats:visits:swp:${today}`),
+        ]);
+        return json({
+          generatedAt: new Date().toISOString(),
+          month: mk,
+          customers: { total, trial, pro, revoked },
+          usage_this_month: { transcriptions: mTranscriptions, translations: mTranslations },
+          limits_per_plan: PLAN_LIMITS,
+          site_visits: {
+            total: parseInt(visitsTotalRaw) || 0,
+            today: parseInt(visitsTodayRaw) || 0,
+          },
+          customers_list: customers,
+        });
       }
 
       // List newsletter subscribers
