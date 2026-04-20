@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.4.2';
+const VERSION = '1.4.3';
 
 // ── Plan limits (per calendar month) ────────────────────────────────────────
 const PLAN_LIMITS = {
@@ -44,6 +44,33 @@ const PLAN_LIMITS = {
   trial: { transcriptions: 10, translations: 100 },
 };
 const RATE_LIMIT_PER_MIN = 10;
+
+// ── LemonSqueezy product dispatch ───────────────────────────────────────────
+// variant_id → which app handles this product in the gateway.
+// Source of truth: LS API (store 314871). Update when creating/recreating variants.
+// Unhandled variants are acknowledged (200) but ignored — they belong to other services
+// (e.g. VoiceBox has its own bot endpoint) or don't need a gateway key (Prompt Pack).
+const LS_VARIANTS = {
+  '1427150': { app: 'swp', handled: true  }, // SubWhisper Pro   €9/mo
+  '1427188': { app: 'nf',  handled: true  }, // NoteFlowing Pro  €15/mo
+  '1427180': { app: 'vb',  handled: false }, // VoiceBox Pro     €3/mo (handled by bot /lemon)
+  '1427191': { app: 'pp',  handled: false }, // SubWhisper Prompt Pack €19 (one-time, no key)
+};
+
+function extractVariantId(payload) {
+  const a = payload?.data?.attributes || {};
+  const id = a.variant_id
+    || a.first_order_item?.variant_id
+    || a.first_subscription_item?.variant_id
+    || null;
+  return id == null ? null : String(id);
+}
+
+function resolveApp(payload) {
+  const variantId = extractVariantId(payload);
+  const entry = variantId ? LS_VARIANTS[variantId] : null;
+  return { variantId, app: entry?.app || null, handled: !!entry?.handled };
+}
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -324,19 +351,24 @@ async function handleLemonSqueezyWebhook(request, env) {
 
   if (!email) return err('No email in webhook payload', 400);
 
+  // Dispatch by LS variant_id. Variants not in LS_VARIANTS are acknowledged but ignored.
+  const route = resolveApp(payload);
+  if (!route.handled) {
+    return json({ ok: true, action: 'ignored', reason: 'variant not handled by gateway', variantId: route.variantId, app: route.app });
+  }
+  const app = route.app;
+  const emailKey = `email:${app}:${email.toLowerCase()}`;
+  const emailLegacyKey = `email:${email.toLowerCase()}`;
+
   // subscription_created or order_created → create pro key
   if (event === 'subscription_created' || event === 'order_created') {
     const status = attrs.status; // 'active', 'on_trial', 'cancelled', etc.
     const plan = (status === 'on_trial') ? 'trial' : 'pro';
     const trialEndsAt = attrs.trial_ends_at || null;
 
-    // Detect app from product (custom_data or variant name)
-    const customData = payload.meta?.custom_data || {};
-    const app = customData.app || 'swp';
-
     // Check if email already has a key (app-scoped first, then legacy)
-    let existingKey = await env.PRO_KV.get(`email:${app}:${email.toLowerCase()}`);
-    if (!existingKey) existingKey = await env.PRO_KV.get(`email:${email.toLowerCase()}`);
+    let existingKey = await env.PRO_KV.get(emailKey);
+    if (!existingKey) existingKey = await env.PRO_KV.get(emailLegacyKey);
     if (existingKey) {
       // Reactivate if revoked
       const existingData = await env.PRO_KV.get(`pro:${existingKey}`, 'json');
@@ -366,17 +398,15 @@ async function handleLemonSqueezyWebhook(request, env) {
     if (trialEndsAt) data.expiresAt = trialEndsAt;
 
     await env.PRO_KV.put(`pro:${key}`, JSON.stringify(data));
-    await env.PRO_KV.put(`email:${app}:${email.toLowerCase()}`, key);
+    await env.PRO_KV.put(emailKey, key);
 
-    return json({ ok: true, action: 'created', email, plan });
+    return json({ ok: true, action: 'created', email, app, plan });
   }
 
   // subscription_updated → update plan/status
   if (event === 'subscription_updated') {
-    const customData = payload.meta?.custom_data || {};
-    const app = customData.app || 'swp';
-    let proKey = await env.PRO_KV.get(`email:${app}:${email.toLowerCase()}`);
-    if (!proKey) proKey = await env.PRO_KV.get(`email:${email.toLowerCase()}`);
+    let proKey = await env.PRO_KV.get(emailKey);
+    if (!proKey) proKey = await env.PRO_KV.get(emailLegacyKey);
     if (!proKey) return json({ ok: true, action: 'ignored', reason: 'no key for email' });
     const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
     if (!data) return json({ ok: true, action: 'ignored' });
@@ -394,25 +424,23 @@ async function handleLemonSqueezyWebhook(request, env) {
     }
     data.subscriptionId = subscriptionId;
     await env.PRO_KV.put(`pro:${proKey}`, JSON.stringify(data));
-    return json({ ok: true, action: 'updated', email, status });
+    return json({ ok: true, action: 'updated', email, app, status });
   }
 
   // subscription_cancelled / subscription_expired → revoke
   if (event === 'subscription_cancelled' || event === 'subscription_expired') {
-    const customData = payload.meta?.custom_data || {};
-    const app = customData.app || 'swp';
-    let proKey = await env.PRO_KV.get(`email:${app}:${email.toLowerCase()}`);
-    if (!proKey) proKey = await env.PRO_KV.get(`email:${email.toLowerCase()}`);
+    let proKey = await env.PRO_KV.get(emailKey);
+    if (!proKey) proKey = await env.PRO_KV.get(emailLegacyKey);
     if (!proKey) return json({ ok: true, action: 'ignored' });
     const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
     if (data) {
       data.revoked = true;
       await env.PRO_KV.put(`pro:${proKey}`, JSON.stringify(data));
     }
-    return json({ ok: true, action: 'revoked', email });
+    return json({ ok: true, action: 'revoked', email, app });
   }
 
-  return json({ ok: true, action: 'ignored', event });
+  return json({ ok: true, action: 'ignored', event, app });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
