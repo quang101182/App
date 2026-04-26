@@ -1,17 +1,18 @@
-<!-- Monitoring Dashboard v1.4.11 -->
+<!-- Monitoring Dashboard v1.5.4 (refonte CSS 8 sous-étapes + fix légendes donuts custom + persistance période LS) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.5.2</title>
+<title>Monitoring v1.5.4</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
-  --bg-page: #1a1a2e;
-  --bg-card: #16213e;
-  --bg-secondary: #0f3460;
-  --accent: #6D28D9;
+  /* === Legacy palette (v1.4.x) — valeurs basculées progressivement vers la nouvelle palette === */
+  --bg-page: #0e1116;        /* sous-étape 2/8 : bascule depuis #1a1a2e — affecte body, sticky-top, app-tabs */
+  --bg-card: #161b22;        /* sous-étape 5/8 : bascule depuis #16213e — affecte KPI cards, charts, donuts, table, trend-bar */
+  --bg-secondary: #1c2128;   /* sous-étape 7/8 : bascule depuis #0f3460 — affecte search-bar, tier-filter-pill, dev-bulk-btn, dev-panel, modal-input, cost-bar-bg */
+  --accent: #6D28D9;         /* à basculer en sous-étape 3-4 (pills, tabs actifs) */
   --accent2: #a78bfa;
   --text: #e4e4e7;
   --text2: #9ca3af;
@@ -20,6 +21,29 @@
   --error: #ef4444;
   --border: #1e3a5f;
   --blue: #3b82f6;
+
+  /* === New palette v1.5.4 (refonte CSS étape 1/8 — non utilisée tant que les étapes suivantes ne basculent pas)
+     Convention de naming uniforme : tous les nouveaux tokens ont le suffixe `-new`.
+     Les étapes 2-8 basculeront progressivement les valeurs des variables legacy
+     vers ces nouvelles, puis le suffixe `-new` sera supprimé en fin de refonte. === */
+  --bg-new: #0e1116;
+  --bg-card-new: #161b22;
+  --bg-elev-new: #1c2128;
+  --bg-hover-new: #21262d;
+  --accent-new: #7c3aed;
+  --accent2-new: #a78bfa;
+  --teal-new: #2dd4bf;
+  --teal-soft-new: #5eead4;
+  --green-new: #3fb950;
+  --orange-new: #f0883e;
+  --red-new: #f85149;
+  --blue-new: #58a6ff;
+  --yellow-new: #eab308;
+  --text-new: #e6edf3;
+  --text-dim-new: #8b949e;
+  --text-mute-new: #6e7681;
+  --border-new: #30363d;
+  --border-soft-new: #21262d;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-page); color: var(--text); min-height: 100vh; }
@@ -30,63 +54,89 @@ a { color: var(--accent2); }
 
 /* Header */
 .header { background: var(--bg-card); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-.header h1 { font-size: 1.2rem; color: var(--accent2); white-space: nowrap; }
+.header h1 { font-size: 1.2rem; font-weight: 600; color: var(--accent2); white-space: nowrap; letter-spacing: -0.01em; display: inline-flex; align-items: center; gap: 8px; }
+/* Version pill v1.5.4 — petit badge gradient à côté du titre */
+.version-pill { background: linear-gradient(135deg, var(--accent-new), var(--accent2-new)); color: #fff; padding: 2px 9px; border-radius: 10px; font-size: .62rem; font-weight: 700; letter-spacing: .4px; line-height: 1.4; }
+/* Snapshot hint v1.5.4 — rappel discret du keyword "snapshot DictoKey" pour Claude */
+.snapshot-hint { color: var(--text-mute-new); font-size: .7rem; font-weight: 400; opacity: .75; letter-spacing: 0; margin-left: 4px; }
+.snapshot-hint code { background: rgba(124,58,237,.15); color: var(--accent2-new); padding: 1px 6px; border-radius: 4px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .68rem; margin: 0 2px; }
+@media (max-width: 900px) { .snapshot-hint { display: none; } }  /* Mobile : caché en header (reste visible en footer) */
 .header-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.pill-group { display: flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
-.pill { padding: 6px 16px; background: transparent; color: var(--text2); border: none; cursor: pointer; font-size: .85rem; transition: all .2s; }
+/* Pill group v1.5.4 : padding interne, gap entre pills, persistance LS via dot vert */
+.pill-group { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border); }
+.pill { padding: 5px 12px; background: transparent; color: var(--text2); border: none; cursor: pointer; font-size: .8rem; font-weight: 600; border-radius: 6px; transition: all .15s; display: inline-flex; align-items: center; gap: 5px; font-family: inherit; }
+.pill:hover:not(.active) { color: var(--text); background: rgba(255,255,255,.04); }
 .pill.active { background: var(--accent); color: #fff; }
-.pill:hover:not(.active) { background: var(--bg-secondary); }
+.pill .dot-saved { display: none; width: 6px; height: 6px; border-radius: 50%; background: var(--green-new); box-shadow: 0 0 0 1px rgba(255,255,255,.35); }
+.pill-group.has-saved .pill.active .dot-saved { display: inline-block; }
 .toggle-refresh { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--text2); cursor: pointer; }
 .toggle-refresh input { accent-color: var(--accent); }
 .btn-logout { background: transparent; border: 1px solid var(--error); color: var(--error); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: .85rem; }
 .btn-logout:hover { background: var(--error); color: #fff; }
 
-/* App tabs */
-.app-tabs { display: flex; gap: 8px; padding: 10px 24px; background: var(--bg-page); border-bottom: 1px solid var(--border); overflow-x: auto; }
-.app-tab { padding: 8px 20px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text2); cursor: pointer; font-size: .9rem; white-space: nowrap; transition: all .2s; }
-.app-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-.app-tab:hover:not(.active) { background: var(--bg-secondary); }
+/* App tabs v1.5.4 : style underline (cohérent avec section-nav, plus moderne) */
+.app-tabs { display: flex; gap: 0; padding: 0 24px; background: var(--bg-page); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.app-tabs::-webkit-scrollbar { display: none; }
+.app-tab { padding: 11px 20px; border-radius: 0; border: none; background: transparent; color: var(--text2); cursor: pointer; font-size: .88rem; font-weight: 600; white-space: nowrap; border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; }
+.app-tab:hover:not(.active) { color: var(--text); }
+/* v1.5.4 fix Kimi : differenciation app-tabs vs section-nav par fond colore subtil + underline + font-weight 600 (vs section-nav qui n'a que underline) */
+.app-tab.active { background: rgba(124,58,237,.10); color: var(--accent2); border-bottom-color: var(--accent); }
 
 /* Main */
 .main { max-width: 1400px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
 
-/* Trend bar */
-.trend-bar { display: flex; gap: 16px; flex-wrap: wrap; }
-.trend-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px; flex: 1; min-width: 200px; display: flex; align-items: center; gap: 10px; }
-.trend-item .label { font-size: .85rem; color: var(--text2); }
-.trend-item .value { font-size: 1.1rem; font-weight: 700; }
-.trend-item .change { font-size: .85rem; font-weight: 600; padding: 2px 8px; border-radius: 12px; }
+/* Trend bar v1.5.4 : card unique avec 3 colonnes (au lieu de 3 cards séparées) */
+.trend-bar { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.trend-item { background: transparent; border: none; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.trend-item .label { font-size: .7rem; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+.trend-item .value { font-size: 1.15rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.trend-item .change { font-size: .75rem; font-weight: 600; padding: 2px 8px; border-radius: 12px; display: inline-block; margin-top: 2px; }
 .change.up { background: rgba(16,185,129,.15); color: var(--success); }
 .change.down { background: rgba(239,68,68,.15); color: var(--error); }
 .change.neutral { background: rgba(156,163,175,.15); color: var(--text2); }
 
-/* KPI cards */
-.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-.kpi-grid-funnel { grid-template-columns: repeat(3, 1fr); }
-.kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
-.kpi-card .kpi-label { font-size: .85rem; color: var(--text2); margin-bottom: 8px; }
-.kpi-card .kpi-value { font-size: 2rem; font-weight: 800; }
-.kpi-card .kpi-sub { font-size: .8rem; color: var(--text2); margin-top: 4px; }
+/* KPI cards v1.5.4 : alignement gauche, hover violet glow, valeurs tabulaires */
+.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.kpi-grid-funnel { grid-template-columns: repeat(3, 1fr); border-left: 3px solid var(--accent2-new); padding-left: 14px; }
+.kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; text-align: left; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.kpi-card:hover { border-color: var(--accent2-new); box-shadow: 0 2px 14px rgba(124,58,237,.10); transform: translateY(-1px); }
+.kpi-card .kpi-label { font-size: .72rem; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+.kpi-card .kpi-value { font-size: 1.65rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.kpi-card .kpi-sub { font-size: .72rem; color: var(--text2); margin-top: 6px; }
 
-/* Charts */
-.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
-.chart-card h3 { font-size: .95rem; color: var(--accent2); margin-bottom: 12px; }
+/* Charts v1.5.4 : conteneurs alignés avec KPI cards (radius/padding cohérent) */
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; transition: border-color .15s; }
+.chart-card:hover { border-color: rgba(167,139,250,.4); }
+.chart-card h3 { font-size: .82rem; color: var(--accent2); margin-bottom: 10px; font-weight: 600; letter-spacing: .2px; }
 .chart-wrap { position: relative; height: 280px; }
 
-/* Donuts */
-.donuts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
-.donut-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
-.donut-card h3 { font-size: .95rem; color: var(--accent2); margin-bottom: 12px; }
+/* Donuts v1.5.4 : conteneurs cohérents avec chart-card */
+.donuts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
+.donut-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; text-align: center; transition: border-color .15s; }
+.donut-card:hover { border-color: rgba(167,139,250,.4); }
+.donut-card h3 { font-size: .82rem; color: var(--accent2); margin-bottom: 10px; font-weight: 600; letter-spacing: .2px; }
 .donut-wrap { position: relative; min-height: 220px; display: flex; align-items: center; justify-content: center; }
 .no-data { color: var(--text2); font-size: .9rem; font-style: italic; }
 
-/* Table */
-.table-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
-.table-section h3 { font-size: .95rem; color: var(--accent2); margin-bottom: 12px; }
-.table-summary { font-size: .85rem; color: var(--text2); margin-bottom: 10px; }
-.search-bar { width: 100%; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text); font-size: .9rem; margin-bottom: 12px; outline: none; }
-.search-bar:focus { border-color: var(--accent); }
+/* Custom legend HTML pour donuts (v1.5.4 fix sous-étape 7.5 : remplace la legend Chart.js qui tronquait les paires de traduction) */
+.donut-legend { max-height: 140px; overflow-y: auto; margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: center; padding: 4px 6px; }
+.donut-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; color: var(--text2); cursor: pointer; transition: opacity .15s; line-height: 1.3; user-select: none; }
+.donut-legend-item:hover { color: var(--text); }
+.donut-legend-item.disabled { opacity: .35; text-decoration: line-through; }
+.donut-legend-swatch { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 1px rgba(255,255,255,.05); }
+.donut-legend::-webkit-scrollbar { width: 6px; }
+.donut-legend::-webkit-scrollbar-track { background: transparent; }
+.donut-legend::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.donut-legend::-webkit-scrollbar-thumb:hover { background: var(--text2); }
+@media (max-width: 768px) { .donut-legend { max-height: 110px; } }
+
+/* Table v1.5.4 : coque alignée avec KPI/chart cards (radius 10, padding 16-18, h3 plus discret) */
+.table-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+.table-section h3 { font-size: .82rem; color: var(--accent2); margin-bottom: 12px; font-weight: 600; letter-spacing: .2px; }
+.table-summary { font-size: .78rem; color: var(--text2); margin-bottom: 10px; }
+.search-bar { width: 100%; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text); font-size: .85rem; margin-bottom: 12px; outline: none; transition: border-color .15s; }
+.search-bar:focus { border-color: var(--accent2-new); box-shadow: 0 0 0 2px rgba(124,58,237,.15); }
 table { width: 100%; border-collapse: collapse; font-size: .85rem; }
 th { text-align: left; padding: 10px 8px; color: var(--text2); border-bottom: 1px solid var(--border); font-weight: 600; }
 td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
@@ -140,21 +190,25 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   .toggle-refresh { font-size: .78rem; }
   .btn-logout { padding: 5px 10px; font-size: .78rem; }
   .main { padding: 14px; }
-  .trend-bar { flex-direction: column; }
-  .app-tabs { padding: 6px 12px; }
-  .app-tab { padding: 6px 14px; font-size: .8rem; }
+  .trend-bar { grid-template-columns: 1fr; gap: 10px; padding: 12px 14px; }
+  .app-tabs { padding: 0 12px; }
+  .app-tab { padding: 8px 14px; font-size: .8rem; }
 }
 @media (max-width: 480px) {
   body { font-size: 14px; }
   .header h1 { font-size: .95rem; }
-  .kpi-card .kpi-value { font-size: 1.5rem; }
+  .kpi-card .kpi-value { font-size: 1.4rem; }
+  .kpi-card { padding: 12px 14px; }
+  .kpi-card .kpi-label { font-size: .65rem; letter-spacing: .3px; }
+  .kpi-card .kpi-sub { font-size: .68rem; }
+  .footer { padding: 12px 8px; font-size: .7rem; }
   .chart-wrap { height: 220px; }
   .main { padding: 10px; gap: 14px; }
   .gauge-card .gauge-value{font-size:1.5rem}
   #sD table { font-size: .78rem; }
   #sD table th, #sD table td { padding: 6px 4px; }
   .pill { padding: 4px 10px; font-size: .75rem; }
-  .app-tab { padding: 5px 10px; font-size: .75rem; }
+  .app-tab { padding: 7px 10px; font-size: .75rem; }
 }
 
 /* === Devices table — 2-line cells === */
@@ -390,12 +444,13 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring v1.5.2</h1>
+    <h1>Monitoring<span class="version-pill">v1.5.4</span></h1>
+    <small class="snapshot-hint" title="Dis &quot;snapshot DictoKey&quot; à Claude pour archiver l'état actuel dans Drive (DIAG)">💡 dis <code>snapshot DictoKey</code> à Claude</small>
     <div class="header-controls">
-      <div class="pill-group">
-        <button class="pill active" data-period="7d">7j</button>
-        <button class="pill" data-period="30d">30j</button>
-        <button class="pill" data-period="90d">90j</button>
+      <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
+        <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
+        <button class="pill" data-period="30d">30j<span class="dot-saved" title="Persisté"></span></button>
+        <button class="pill" data-period="90d">90j<span class="dot-saved" title="Persisté"></span></button>
       </div>
       <label class="toggle-refresh"><input type="checkbox" id="autoRefresh" checked> Auto 60s</label>
       <button class="btn-logout" onclick="logout()">Déconnexion</button>
@@ -477,9 +532,9 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
   <!-- Donuts -->
   <div class="donuts-grid">
-    <div class="donut-card"><h3>Langues dictées</h3><div class="donut-wrap" id="langWrap"><canvas id="langChart"></canvas></div></div>
-    <div class="donut-card"><h3>Modes réécriture</h3><div class="donut-wrap" id="modeWrap"><canvas id="modeChart"></canvas></div></div>
-    <div class="donut-card"><h3>Paires traduction</h3><div class="donut-wrap" id="pairWrap"><canvas id="pairChart"></canvas></div></div>
+    <div class="donut-card"><h3>Langues dictées</h3><div class="donut-wrap" id="langWrap"><canvas id="langChart"></canvas></div><div class="donut-legend" id="langLegend"></div></div>
+    <div class="donut-card"><h3>Modes réécriture</h3><div class="donut-wrap" id="modeWrap"><canvas id="modeChart"></canvas></div><div class="donut-legend" id="modeLegend"></div></div>
+    <div class="donut-card"><h3>Paires traduction</h3><div class="donut-wrap" id="pairWrap"><canvas id="pairChart"></canvas></div><div class="donut-legend" id="pairLegend"></div></div>
   </div>
     </div><!-- /sA -->
 
@@ -591,7 +646,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer">Monitoring v1.5.2</div>
+  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.5.4</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
@@ -1049,6 +1104,8 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
   var dauLabels = dauChronological.map(function(d) { return d.date.slice(5); });
   var dauMobile = dauChronological.map(function(d) { return (d.by_platform && d.by_platform.mobile) || 0; });
 
+  // v1.5.4 fix task #11 : destroy chart precedent avant recreation (anti-leak Chart.js sur auto-refresh 60s)
+  if (charts.dau) { charts.dau.destroy(); }
   charts.dau = new Chart(document.getElementById('dauChart'), {
     type: 'line',
     data: {
@@ -1070,6 +1127,8 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
   // Activity stacked bar
   var actDaily = (mon.daily || []).slice().reverse();
   var actLabels = actDaily.map(function(d) { return d.date.slice(5); });
+  // v1.5.4 fix task #11 : destroy chart precedent avant recreation (anti-leak Chart.js sur auto-refresh 60s)
+  if (charts.activity) { charts.activity.destroy(); }
   charts.activity = new Chart(document.getElementById('activityChart'), {
     type: 'bar',
     data: {
@@ -1159,15 +1218,21 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
   // Footer
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('footer').textContent = 'Monitoring v1.5.2 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  // v1.5.4 fix Kimi : update du span dynamique seulement, le snapshot tip HTML reste preserve
+  document.getElementById('footerDyn').textContent = 'Monitoring v1.5.4 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
+// v1.5.4 (sous-étape 7.5) : legend Chart.js désactivée + legend HTML custom scrollable rendue dans #${wrapId.replace('Wrap','Legend')}
+// Pourquoi : Chart.js avec maintainAspectRatio:true tronquait les paires de traduction (>12 entries).
 function renderDonut(canvasId, wrapId, dataObj, labelFn) {
   var entries = Object.entries(dataObj || {});
   var wrap = document.getElementById(wrapId);
+  var legendId = wrapId.replace(/Wrap$/, 'Legend');
+  var legendEl = document.getElementById(legendId);
   if (entries.length === 0) {
     var canvas = document.getElementById(canvasId);
     canvas.style.display = 'none';
+    if (legendEl) legendEl.innerHTML = '';
     if (!wrap.querySelector('.no-data')) {
       var nd = document.createElement('div');
       nd.className = 'no-data';
@@ -1181,13 +1246,21 @@ function renderDonut(canvasId, wrapId, dataObj, labelFn) {
   var canvas = document.getElementById(canvasId);
   canvas.style.display = 'block';
 
-  charts[canvasId] = new Chart(canvas, {
+  var labels = entries.map(function(e) { return labelFn(e[0]); });
+  var data = entries.map(function(e) { return e[1]; });
+  var colors = entries.map(function(_, i) { return DONUT_COLORS[i % DONUT_COLORS.length]; });
+  var total = data.reduce(function(a, b) { return a + b; }, 0);
+
+  // v1.5.4 fix : detruire l'instance precedente avant recreation (leak Chart.js sur auto-refresh 60s)
+  if (charts[canvasId]) { charts[canvasId].destroy(); }
+
+  var chart = new Chart(canvas, {
     type: 'doughnut',
     data: {
-      labels: entries.map(function(e) { return labelFn(e[0]); }),
+      labels: labels,
       datasets: [{
-        data: entries.map(function(e) { return e[1]; }),
-        backgroundColor: DONUT_COLORS.slice(0, entries.length),
+        data: data,
+        backgroundColor: colors,
         borderWidth: 0,
         hoverOffset: 8
       }]
@@ -1195,11 +1268,10 @@ function renderDonut(canvasId, wrapId, dataObj, labelFn) {
     options: {
       responsive: true, maintainAspectRatio: true, cutout: '55%',
       plugins: {
-        legend: { position: 'bottom', labels: { color: '#9ca3af', padding: 12, usePointStyle: true, pointStyleWidth: 10 } },
+        legend: { display: false }, // legend custom HTML rendue séparément (cf. ci-dessous)
         tooltip: {
           callbacks: {
             label: function(ctx) {
-              var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
               var pct = total > 0 ? Math.round((ctx.parsed / total) * 100) : 0;
               return ' ' + ctx.label + ': ' + ctx.parsed + ' (' + pct + '%)';
             }
@@ -1208,6 +1280,39 @@ function renderDonut(canvasId, wrapId, dataObj, labelFn) {
       }
     }
   });
+  charts[canvasId] = chart;
+
+  // Génère la legend HTML custom (scrollable, click-to-toggle, jamais tronquée)
+  if (legendEl) {
+    legendEl.innerHTML = '';
+    labels.forEach(function(label, i) {
+      var item = document.createElement('span');
+      item.className = 'donut-legend-item';
+      item.title = label + ' : ' + data[i] + ' (' + (total > 0 ? Math.round(data[i] / total * 100) : 0) + '%)';
+      // v1.5.4 fix a11y : role=button + tabindex + aria-pressed + support clavier Enter/Space
+      item.setAttribute('role', 'button');
+      item.setAttribute('tabindex', '0');
+      item.setAttribute('aria-pressed', 'true');
+      var swatch = document.createElement('span');
+      swatch.className = 'donut-legend-swatch';
+      swatch.style.background = colors[i];
+      var text = document.createTextNode(label);
+      item.appendChild(swatch);
+      item.appendChild(text);
+      var toggleSlice = function() {
+        var visible = chart.getDataVisibility(i);
+        chart.toggleDataVisibility(i);
+        chart.update();
+        item.classList.toggle('disabled', visible); // visible AVANT toggle = désactivé APRÈS
+        item.setAttribute('aria-pressed', visible ? 'false' : 'true');
+      };
+      item.addEventListener('click', toggleSlice);
+      item.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSlice(); }
+      });
+      legendEl.appendChild(item);
+    });
+  }
 }
 
 function renderAdvanced(adv, tierCounts, realFree, premiumRuntimeCount) {
@@ -1892,20 +1997,47 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape' && expandedDeviceIds.size > 0) closeAllDeviceExpands();
 });
 
-// Period pills (v1.5.0: no-op if not on DictoKey)
+// Period pills (v1.5.0 : no-op si pas DictoKey ; v1.5.4 : persistance localStorage avec dot vert)
+const PERIOD_LS_KEY = 'dk-monitoring-period';
+const VALID_PERIODS = ['7d', '30d', '90d'];
+
+function setPeriodActive(period) {
+  document.querySelectorAll('.pill[data-period]').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.period === period);
+  });
+  currentPeriod = period;
+}
+
+function markPeriodPersisted() {
+  var group = document.getElementById('periodPillGroup');
+  if (group) group.classList.add('has-saved');
+}
+
 document.querySelectorAll('.pill[data-period]').forEach(function(btn) {
   btn.addEventListener('click', function() {
     if (currentApp !== 'dictokey') return;
-    document.querySelectorAll('.pill[data-period]').forEach(function(b) { b.classList.remove('active'); });
-    this.classList.add('active');
-    currentPeriod = this.dataset.period;
+    setPeriodActive(this.dataset.period);
+    try {
+      localStorage.setItem(PERIOD_LS_KEY, this.dataset.period);
+      markPeriodPersisted();
+    } catch (e) { /* localStorage indisponible : silencieux */ }
     // Fermer un éventuel panel déplié pour éviter confusion avec nouvelle période
     if (typeof closeDeviceExpand === 'function') closeDeviceExpand();
     fetchAll().catch(handleAuthError);
   });
 });
 
-// Auto-refresh (v1.5.2: active for both DictoKey and SWP — fetchAll dispatches correctly)
+function restorePeriodFromLS() {
+  try {
+    var saved = localStorage.getItem(PERIOD_LS_KEY);
+    if (saved && VALID_PERIODS.indexOf(saved) !== -1) {
+      setPeriodActive(saved);
+      markPeriodPersisted();
+    }
+  } catch (e) { /* localStorage indisponible : silencieux, défaut '7d' garde la main */ }
+}
+
+// Auto-refresh (v1.5.4: active for both DictoKey and SWP — fetchAll dispatches correctly)
 function startAutoRefresh() {
   stopAutoRefresh();
   refreshInterval = setInterval(function() {
@@ -2134,6 +2266,7 @@ setActiveAppView(currentApp); // v1.5.0: set body class before rendering
 renderAppTabs();
 initNav();
 updateTierPillsUI(); // v1.4.11: applique l'état visuel des pills tier depuis localStorage au chargement
+restorePeriodFromLS(); // v1.5.4: applique la période persistée depuis localStorage avant le 1er fetch
 (function init() {
   if (!getToken()) { showLogin(); return; }
   fetchAll().then(function() {
