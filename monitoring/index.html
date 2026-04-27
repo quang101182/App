@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.7.16 (KPI "nouveaux appareils du jour" KV live, double affichage hero + summary) -->
+<!-- Monitoring Dashboard v1.7.17 (Play Store KPI : restructure en 2 blocs Adoption globale [installs cumulés / actifs / pertes] + Activité 28j. Suppression KPI Désinstalls biaisé et Acquisitions exploration non implémenté) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.7.16</title>
+<title>Monitoring v1.7.17</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -526,7 +526,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.7.16</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.7.17</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -601,20 +601,21 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   <!-- TODO live : remplacer constantes statiques par fetch /admin/playstore-stats après setup Service Account Google -->
   <!-- ══════════════════════════════════════════════════════════════ -->
   <h3 style="margin:24px 0 10px;font-size:.85rem;color:var(--accent2);font-weight:600;letter-spacing:.5px;text-transform:uppercase;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-    🎯 Acquisition Play Store
+    🎯 Adoption globale (depuis publication)
     <span id="playStoreStatusBadge" style="font-size:.65rem;font-weight:500;color:var(--orange-new);text-transform:none;letter-spacing:0;background:rgba(240,136,62,.12);padding:2px 8px;border-radius:10px;">⏳ Chargement…</span>
     <span style="font-size:.65rem;font-weight:500;color:var(--text-mute-new);text-transform:none;letter-spacing:0;">données J-2 (Play Console)</span>
   </h3>
+  <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);">
+    <div class="kpi-card play-card"><div class="kpi-label">📥 Installations totales</div><div class="kpi-value" id="kpiPlayInstallsCumul">—</div><div class="kpi-sub" id="kpiPlayInstallsCumulSub">cumul depuis publication</div></div>
+    <div class="kpi-card play-card"><div class="kpi-label">📱 Appareils actifs</div><div class="kpi-value" id="kpiPlayActive">—</div><div class="kpi-sub" id="kpiPlayActiveSub">aujourd'hui (J-2 Google)</div></div>
+    <div class="kpi-card play-card"><div class="kpi-label">🚪 Pertes</div><div class="kpi-value" id="kpiPlayLost">—</div><div class="kpi-sub" id="kpiPlayLostSub">= installs − actifs</div></div>
+  </div>
+  <h3 style="margin:24px 0 10px;font-size:.85rem;color:var(--accent2);font-weight:600;letter-spacing:.5px;text-transform:uppercase;">📈 Activité 28 j glissants</h3>
   <div class="kpi-grid">
     <div class="kpi-card play-card"><div class="kpi-label">👁 Visiteurs fiche</div><div class="kpi-value" id="kpiPlayVisitors">—</div><div class="kpi-sub" id="kpiPlayVisitorsSub">28 j · J-2</div></div>
     <div class="kpi-card play-card"><div class="kpi-label">⬇ Installs</div><div class="kpi-value" id="kpiPlayInstalls">—</div><div class="kpi-sub" id="kpiPlayInstallsSub">28 j</div></div>
-    <div class="kpi-card play-card"><div class="kpi-label">🗑 Désinstalls</div><div class="kpi-value" id="kpiPlayUninstalls">—</div><div class="kpi-sub" id="kpiPlayUninstallsSub">28 j</div></div>
     <div class="kpi-card play-card"><div class="kpi-label">🎯 Conversion fiche</div><div class="kpi-value" id="kpiPlayConversion">—</div><div class="kpi-sub" id="kpiPlayConversionSub">vs benchmark 2-5%</div></div>
-  </div>
-  <div class="kpi-grid" style="margin-top:12px;grid-template-columns:repeat(3,1fr);">
-    <div class="kpi-card play-card"><div class="kpi-label">📱 Devices Play actifs</div><div class="kpi-value" id="kpiPlayActive">—</div><div class="kpi-sub" id="kpiPlayActiveSub">= installs − désinstalls</div></div>
     <div class="kpi-card play-card"><div class="kpi-label">⭐ Note moyenne</div><div class="kpi-value" id="kpiPlayRating">—</div><div class="kpi-sub" id="kpiPlayRatingSub">avis · 0 nouveaux 7j</div></div>
-    <div class="kpi-card play-card"><div class="kpi-label">🔍 Acquisitions exploration</div><div class="kpi-value" id="kpiPlayExploration">—</div><div class="kpi-sub" id="kpiPlayExplorationSub">90 j · ASO</div></div>
   </div>
 
   <!-- ══════════════════════════════════════════════════════════════ -->
@@ -1445,22 +1446,26 @@ function renderPlayStoreKPIs() {
   }
   if (live && live.aggregated) {
     var a = live.aggregated;
+    // Bloc 1 : adoption globale (cumul depuis publication)
+    var pubDate = a.publication_date ? new Date(a.publication_date).toLocaleDateString('fr-FR', {day:'2-digit', month:'short', year:'numeric'}) : 'publication';
+    setKpi('kpiPlayInstallsCumul', a.installs_cumulative || '—', 'depuis ' + pubDate);
+    setKpi('kpiPlayActive', a.active_devices_net || '—', 'aujourd\'hui (J-2 Google)');
+    var lostPct = a.installs_cumulative > 0 ? Math.round(a.lost_total / a.installs_cumulative * 100) : 0;
+    setKpi('kpiPlayLost', a.lost_total != null ? a.lost_total : '—', a.installs_cumulative > 0 ? '= ' + lostPct + '% des installs' : '= installs − actifs');
+    // Bloc 2 : activité 28j glissants (tendance)
     setKpi('kpiPlayVisitors', a.store_visitors_28d || '—', '28 j · LIVE Play Console');
     setKpi('kpiPlayInstalls', a.installs_28d || '—', '28 j · LIVE');
-    setKpi('kpiPlayUninstalls', a.uninstalls_28d || '—', a.installs_28d > 0 ? Math.round(a.uninstalls_28d / a.installs_28d * 100) + '% des installs' : '');
     setKpi('kpiPlayConversion', (a.conversion_rate_28d || 0).toFixed(1) + ' %', '28 j · LIVE');
-    setKpi('kpiPlayActive', a.active_devices_net || '—', '= installs − désinstalls');
-    setKpi('kpiPlayRating', (a.rating_avg || 0).toFixed(2), a.rating_count != null ? a.rating_count + ' avis' : '—');
-    setKpi('kpiPlayExploration', '—', 'À implémenter (Play API)');
+    setKpi('kpiPlayRating', (a.rating_avg || 0).toFixed(2), a.rating_count != null ? a.rating_count + ' avis' : 'cumul');
   } else {
     // En attente propagation Google : afficher placeholder partout
+    setKpi('kpiPlayInstallsCumul', '⏳', 'En attente activation');
+    setKpi('kpiPlayActive', '⏳', 'En attente activation');
+    setKpi('kpiPlayLost', '⏳', 'En attente activation');
     setKpi('kpiPlayVisitors', '⏳', 'En attente activation');
     setKpi('kpiPlayInstalls', '⏳', 'En attente activation');
-    setKpi('kpiPlayUninstalls', '⏳', 'En attente activation');
     setKpi('kpiPlayConversion', '⏳', 'En attente activation');
-    setKpi('kpiPlayActive', '⏳', 'En attente activation');
     setKpi('kpiPlayRating', '⏳', 'En attente activation');
-    setKpi('kpiPlayExploration', '⏳', 'En attente activation');
   }
 }
 
