@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.7.15 (refonte CSS 8 sous-étapes + fix légendes donuts custom + persistance période LS) -->
+<!-- Monitoring Dashboard v1.7.16 (KPI "nouveaux appareils du jour" KV live, double affichage hero + summary) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.7.15</title>
+<title>Monitoring v1.7.16</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -108,6 +108,8 @@ a { color: var(--accent2); }
 .kpi-card .kpi-label { font-size: .72rem; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
 .kpi-card .kpi-value { font-size: 1.65rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.15; }
 .kpi-card .kpi-sub { font-size: .72rem; color: var(--text2); margin-top: 6px; }
+/* v1.7.16 : 2e ligne sub-text "live KV" sous le hero appareils — distincte visuellement du sub Play Console J-2 (couleur accent + opacité) */
+.kpi-card .kpi-sub-live { font-size: .7rem; color: var(--accent2); margin-top: 3px; opacity: .9; cursor: help; }
 
 /* v1.7.15 : KPI cards Play Store (Volet 2 B+) — fond légèrement teinté pour les distinguer des cards gateway */
 .kpi-card.play-card { border-color: rgba(167,139,250,.25); background: linear-gradient(135deg, rgba(167,139,250,.04), rgba(124,58,237,.02)); }
@@ -524,7 +526,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.7.15</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.7.16</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -570,7 +572,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
   <!-- KPIs -->
   <div class="kpi-grid">
-    <div class="kpi-card kpi-hero"><div class="kpi-label">Appareils réels actifs</div><div class="kpi-value" id="kpiDevices">—</div><div class="kpi-sub" id="kpiDevicesSub"></div></div>
+    <div class="kpi-card kpi-hero"><div class="kpi-label">Appareils réels actifs</div><div class="kpi-value" id="kpiDevices">—</div><div class="kpi-sub" id="kpiDevicesSub"></div><div class="kpi-sub-live" id="kpiDevicesSubLive" title="Compteur basé sur les nouveaux deviceId enregistrés dans le KV gateway depuis 00h00 (heure locale du navigateur)">⚡ —</div></div>
     <div class="kpi-card"><div class="kpi-label">Actifs aujourd'hui</div><div class="kpi-value" id="kpiDau">—</div><div class="kpi-sub" id="kpiDauSub"></div></div>
     <div class="kpi-card"><div class="kpi-label">Dictées aujourd'hui</div><div class="kpi-value" id="kpiDictees">—</div><div class="kpi-sub" id="kpiDicteesSub"></div></div>
     <div class="kpi-card"><div class="kpi-label">Coût du mois</div><div class="kpi-value" id="kpiCost">—</div><div class="kpi-sub" id="kpiCostSub"></div></div>
@@ -1137,11 +1139,28 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
   // Math: total = pro + premiumRuntime + effectiveFree (incluant phantoms)
   var effectiveFree = tierCounts.free - premiumRuntimeCount; // les "free" KV qui ne sont PAS premium runtime
 
+  // v1.7.16 : compteur "nouveaux appareils du jour" depuis le KV gateway (live, fuseau local du navigateur).
+  // Compare le createdAt ISO (UTC) au timestamp 00:00:00 local — la comparaison se fait sur les ms absolues.
+  // Migration ANDROID_ID v2.18.0 : createdAt préservé côté Worker, donc une migration ne crée PAS un faux nouveau.
+  // Réinstall même device : register idempotent (Worker ligne 271), donc pas double-compté.
+  var startOfTodayLocal = new Date();
+  startOfTodayLocal.setHours(0, 0, 0, 0);
+  var startOfTodayMs = startOfTodayLocal.getTime();
+  var newDevicesToday = devicesList.filter(function(d) {
+    if (!d.createdAt) return false;
+    var t = new Date(d.createdAt).getTime();
+    return !isNaN(t) && t >= startOfTodayMs;
+  }).length;
+
   // v1.7.15 fix race condition : on stocke le contexte global pour que updateKpiDevices()
   // puisse être ré-appelé par fetchPlayStoreLive() une fois PLAYSTORE_STATS_LIVE rempli
   // (sinon kpiDevices reste figé sur le fallback cumul KV du 1er render synchrone).
-  window._kpiDevicesCtx = { devicesList: devicesList, tierCounts: tierCounts, premiumRuntimeCount: premiumRuntimeCount, phantomCount: phantomCount, effectiveFree: effectiveFree };
+  window._kpiDevicesCtx = { devicesList: devicesList, tierCounts: tierCounts, premiumRuntimeCount: premiumRuntimeCount, phantomCount: phantomCount, effectiveFree: effectiveFree, newDevicesToday: newDevicesToday };
   updateKpiDevices();
+
+  // v1.7.16 : 2e ligne sub-text live KV sous le hero appareils
+  var elSubLive = document.getElementById('kpiDevicesSubLive');
+  if (elSubLive) elSubLive.textContent = '⚡ +' + newDevicesToday + ' aujourd\u2019hui (KV live)';
 
   // KPI: Actifs aujourd'hui — mobile only (exclure PC)
   var dauDaily = (mon.dau && mon.dau.daily) || [];
@@ -1330,6 +1349,8 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
   if (premiumRuntimeCount === 0) {
     summaryText += ' — Premium Google : voir Play Console';
   }
+  // v1.7.16 : suffixe live KV (compteur calculé plus haut dans la même fonction)
+  summaryText += ' — \u26a1 +' + newDevicesToday + ' aujourd\u2019hui';
   document.getElementById('devicesSummary').textContent = summaryText;
   // v1.4.11: appliquer les filtres tier (persistés localStorage) au lieu de tout afficher
   updateTierFilterCounts();
