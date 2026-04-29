@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.36
+ * api-gateway — Cloudflare Worker v1.37
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -43,7 +43,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.36';
+const VERSION = '1.37';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -387,7 +387,10 @@ async function proxyElevenlabs(request, env, path) {
   let subPath = path.slice('/api/elevenlabs'.length) || '/v1/voices';
   if (!subPath.startsWith('/')) subPath = '/' + subPath;
 
-  const upstream = `https://api.elevenlabs.io${subPath}`;
+  // FIX v1.37: preserve query string (output_format, optimize_streaming_latency, etc.)
+  // Sans ça ElevenLabs retournait MP3 par défaut malgré ?output_format=pcm_22050.
+  const search = new URL(request.url).search;
+  const upstream = `https://api.elevenlabs.io${subPath}${search}`;
 
   // Forward body (TTS POST = JSON, list voices = empty body OK)
   const body = await request.arrayBuffer();
