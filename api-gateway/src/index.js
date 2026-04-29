@@ -1,5 +1,5 @@
 /**
- * api-gateway — Cloudflare Worker v1.27
+ * api-gateway — Cloudflare Worker v1.36
  *
  * Bindings required (wrangler.toml):
  *   env.GATEWAY_KV   — KV namespace for rate limiting, API keys, audit logs
@@ -10,7 +10,7 @@
  *
  * Keys stored in KV via /admin/keys/set:
  *   GEMINI_KEY, GROQ_KEY, OPENAI_KEY, DEEPL_KEY, ASSEMBLYAI_KEY
- *   DEEPSEEK_KEY, AZURE_KEY, CLAUDE_KEY, DEEPGRAM_KEY
+ *   DEEPSEEK_KEY, AZURE_KEY, CLAUDE_KEY, DEEPGRAM_KEY, MOONSHOT_KEY, ELEVENLABS_KEY
  *
  * Config in KV:
  *   cfg:azure:region  — Azure Translator region (e.g. "francecentral")
@@ -22,9 +22,11 @@
  *   POST /api/deepl       → DeepL Translation API
  *   POST /api/assemblyai  → AssemblyAI Transcription API
  *   POST /api/deepseek    → DeepSeek API
+ *   POST /api/kimi        → Moonshot AI (Kimi K2.6, OpenAI-compatible)
  *   POST /api/azure       → Azure Translator (query params forwarded)
  *   POST /api/claude      → Anthropic Claude API
  *   POST /api/deepgram/*  → Deepgram Nova-2 API (transcription + diarization)
+ *   POST /api/elevenlabs/* → ElevenLabs API (TTS streaming, voices, voice clone)
  *   POST /api/music-profile/get   → Read music AI user profile from KV
  *   POST /api/music-profile/save  → Write music AI user profile to KV
  *   POST /api/send-photo           → Send base64 image to Telegram via multipart
@@ -41,7 +43,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.31';
+const VERSION = '1.36';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -85,7 +87,7 @@ function isAdDomain(hostname) {
 }
 
 /** All recognised key names stored in KV */
-const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'PIAPI_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS'];
+const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'PIAPI_KEY', 'MOONSHOT_KEY', 'ELEVENLABS_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS'];
 
 /** Rate limit: max requests per minute window */
 const RL_API_MAX   = 20;
@@ -166,9 +168,11 @@ export default {
         if (path === '/api/deepl')            return await proxyDeepl(request, env);
         if (path === '/api/assemblyai')       return await proxyAssemblyai(request, env);
         if (path === '/api/deepseek')         return await proxyDeepSeek(request, env);
+        if (path === '/api/kimi')             return await proxyMoonshot(request, env);
         if (path === '/api/azure')            return await proxyAzure(request, env, url);
         if (path.startsWith('/api/claude'))   return await proxyClaude(request, env, path);
         if (path.startsWith('/api/deepgram')) return await proxyDeepgram(request, env, path);
+        if (path.startsWith('/api/elevenlabs')) return await proxyElevenlabs(request, env, path);
         if (path === '/api/youtube-search')  return await proxyYoutubeSearch(request, env);
         if (path === '/api/music-profile/get')  return await handleMusicProfileGet(request, env);
         if (path === '/api/music-profile/save') return await handleMusicProfileSave(request, env);
@@ -193,6 +197,8 @@ export default {
         if (path === '/admin/tts' || path === '/admin/speech')  return await adminTTS(request, env);
         if (path === '/admin/send-video-base64')  return await adminSendVideoBase64(request, env);
         if (path === '/admin/tinify')  return await adminTinify(request, env);
+        if (path === '/admin/proxy-get')  return await adminProxyGet(request, env);
+        if (path === '/admin/sora-img2vid') return await adminSoraImg2Vid(request, env);
         if (path === '/admin/tts-test')    return jsonResponse({ ok: true, test: true, ts: Date.now() });
         if (path === '/admin/tts-log') {
           // Log incoming request details to KV for debugging
@@ -311,6 +317,22 @@ async function proxyDeepSeek(request, env) {
 }
 
 /**
+ * POST /api/kimi → https://api.moonshot.ai/v1/chat/completions
+ *
+ * Moonshot API is OpenAI-compatible. Default path /v1/chat/completions.
+ * Header X-Api-Path overrides (e.g. /v1/models to list available models).
+ * Auth: Bearer MOONSHOT_KEY.
+ */
+async function proxyMoonshot(request, env) {
+  const apiKey = await resolveKey(env, 'MOONSHOT_KEY');
+  if (!apiKey) return jsonResponse({ error: 'MOONSHOT_KEY not configured' }, 503);
+
+  const apiPath  = safeApiPath(request, '/v1/chat/completions');
+  const upstream = `https://api.moonshot.ai${apiPath}`;
+  return proxyRequest(request, upstream, { 'Authorization': `Bearer ${apiKey}` });
+}
+
+/**
  * POST /api/claude/* → https://api.anthropic.com
  *
  * Sub-path: /api/claude → /v1/messages (default)
@@ -349,6 +371,50 @@ async function proxyClaude(request, env, path) {
 
   return new Response(upstreamResp.body, { status: upstreamResp.status, headers: respHeaders });
 }
+
+/**
+ * POST /api/elevenlabs/* → https://api.elevenlabs.io
+ *
+ * Sub-path: /api/elevenlabs/v1/text-to-speech/{voice_id}/stream → /v1/text-to-speech/{voice_id}/stream
+ * Default sub-path: /v1/voices (list voices for sanity check)
+ * Auth: xi-api-key header (NOT Bearer).
+ * Streams binary audio back (PCM/MP3 according to Accept header).
+ */
+async function proxyElevenlabs(request, env, path) {
+  const apiKey = await resolveKey(env, 'ELEVENLABS_KEY');
+  if (!apiKey) return jsonResponse({ error: 'ELEVENLABS_KEY not configured' }, 503);
+
+  let subPath = path.slice('/api/elevenlabs'.length) || '/v1/voices';
+  if (!subPath.startsWith('/')) subPath = '/' + subPath;
+
+  const upstream = `https://api.elevenlabs.io${subPath}`;
+
+  // Forward body (TTS POST = JSON, list voices = empty body OK)
+  const body = await request.arrayBuffer();
+  const forwardHeaders = new Headers();
+  forwardHeaders.set('xi-api-key', apiKey);
+  const contentType = request.headers.get('Content-Type');
+  if (contentType) forwardHeaders.set('Content-Type', contentType);
+  const accept = request.headers.get('Accept');
+  if (accept) forwardHeaders.set('Accept', accept);
+
+  const upstreamResp = await fetch(upstream, {
+    method : request.method,
+    headers: forwardHeaders,
+    body   : body.byteLength > 0 ? body : undefined,
+  });
+
+  // Stream-friendly response (audio binary or JSON)
+  const respHeaders = new Headers();
+  for (const h of ['content-type', 'content-length', 'transfer-encoding']) {
+    const val = upstreamResp.headers.get(h);
+    if (val) respHeaders.set(h, val);
+  }
+  for (const [k, v] of Object.entries(CORS_HEADERS)) respHeaders.set(k, v);
+
+  return new Response(upstreamResp.body, { status: upstreamResp.status, headers: respHeaders });
+}
+
 
 /**
  * POST /api/azure → https://api.cognitive.microsofttranslator.com/translate
@@ -1767,6 +1833,79 @@ async function adminSendVideoBase64(request, env) {
  * Body: { imageBase64, width?, height? }
  * Compresses image via Tinify API, optionally resizes, returns compressed base64.
  */
+/**
+ * POST /admin/sora-img2vid
+ * Body: { imageBase64, prompt, seconds?, size? }
+ * Sends a screenshot to Sora image-to-video API and returns the job ID.
+ */
+async function adminSoraImg2Vid(request, env) {
+  try {
+    const body = await request.json();
+    const { imageBase64, prompt, seconds, size } = body;
+    if (!imageBase64 || !prompt) return jsonResponse({ error: 'imageBase64 and prompt required' }, 400);
+
+    const openaiKey = await env.GATEWAY_KV.get('key:OPENAI_KEY');
+    if (!openaiKey) return jsonResponse({ error: 'OPENAI_KEY not set' }, 500);
+
+    // Step 1: Upload image to OpenAI Files API
+    const binary = atob(imageBase64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'image/jpeg' });
+
+    const uploadForm = new FormData();
+    uploadForm.append('file', blob, 'screenshot.jpg');
+    uploadForm.append('purpose', 'user_data');
+
+    const uploadResp = await fetch('https://api.openai.com/v1/files', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + openaiKey },
+      body: uploadForm
+    });
+    const uploadData = await uploadResp.json();
+    if (!uploadResp.ok) return jsonResponse({ ok: false, error: 'File upload failed: ' + (uploadData.error?.message || JSON.stringify(uploadData)) }, uploadResp.status);
+
+    // Step 2: Create video with JSON body + input_reference as object
+    const videoBody = {
+      model: 'sora-2',
+      prompt: prompt,
+      size: size || '720x1280',
+      seconds: String(seconds || '12'),
+      input_reference: { file_id: uploadData.id }
+    };
+
+    const resp = await fetch('https://api.openai.com/v1/videos', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + openaiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify(videoBody)
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) return jsonResponse({ ok: false, error: data.error?.message || JSON.stringify(data) }, resp.status);
+    return jsonResponse({ ok: true, id: data.id });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
+/**
+ * POST /admin/proxy-get
+ * Body: { url }
+ * Fetches URL via GET and returns the JSON response. Used to proxy API polls from n8n.
+ */
+async function adminProxyGet(request, env) {
+  try {
+    const body = await request.json();
+    const url = body.url;
+    if (!url) return jsonResponse({ error: 'url required' }, 400);
+    const resp = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } });
+    const data = await resp.json();
+    return jsonResponse({ ok: true, status: resp.status, data });
+  } catch (e) {
+    return jsonResponse({ ok: false, error: e.message }, 500);
+  }
+}
+
 async function adminTinify(request, env) {
   const body = await request.json();
   const { imageBase64, width, height } = body;
