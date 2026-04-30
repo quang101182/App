@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.7.22 (P2: mode replier/déplier hybride mobile-first — wrap JS au load de chaque section principale dans un header cliquable + bouton global Tout déplier/replier + état persisté localStorage. Mobile par défaut = sO ouvert, reste fermé. Desktop = tout ouvert.) -->
+<!-- Monitoring Dashboard v1.7.23 (2 fixes : (1) double header sur sD/sChurn — ces sections ont déjà leur self-toggle interne, exclues du wrapper externe ; (2) régression SWP — sChurn ajouté à la règle body.app-swp + wrappers/bouton global cachés en mode SubWhisper Pro) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.7.22</title>
+<title>Monitoring v1.7.23</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -479,8 +479,9 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     /* By default SWP view is hidden. Body.app-swp flips visibility atomically. */
     body:not(.app-swp) #swpView { display: none !important; }
     body.app-swp #sO, body.app-swp #sP, body.app-swp #sA, body.app-swp #sRet,
-    body.app-swp #sD, body.app-swp #sI, body.app-swp #sectionNav,
+    body.app-swp #sChurn, body.app-swp #sD, body.app-swp #sI, body.app-swp #sectionNav,
     body.app-swp .pill-group,
+    body.app-swp .section-collapsible-header, body.app-swp .btn-toggle-all,
     body.app-swp #footer, body.app-swp #alertBanner { display: none !important; }
     body.app-swp #swpView { display: block; }
 
@@ -579,7 +580,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.7.22</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.7.23</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -844,12 +845,12 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.22</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
+  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.23</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.7.22';
+const DASHBOARD_VERSION = 'v1.7.23';
 
 // === Multi-app config ===
 const APPS = {
@@ -2709,14 +2710,16 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
     // ════════════════════════════════════════════════════════════════════════════════════════
     // v1.7.21 — Sections collapsibles (mode replier/déplier hybride mobile-first)
     // ════════════════════════════════════════════════════════════════════════════════════════
-    var SECTION_IDS_COLLAPSIBLE = ['sO', 'sP', 'sA', 'sRet', 'sChurn', 'sD', 'sI'];
+    // v1.7.23 : sD (Appareils enregistrés) et sChurn (Mouvements de tier) ont déjà leur propre
+    // toggle interne (h3 cliquable avec caret) — on les exclut du wrapper externe pour éviter le
+    // double header. Ces 2 sections ne réagissent pas au bouton global "Tout déplier/replier"
+    // mais conservent leur self-toggle individuel.
+    var SECTION_IDS_COLLAPSIBLE = ['sO', 'sP', 'sA', 'sRet', 'sI'];
     var SECTION_TITLES_COLLAPSIBLE = {
       sO:     '\ud83d\udcca Overview',
       sP:     '\u26a1 Performance API',
       sA:     '\ud83d\udcc8 Activit\u00e9',
       sRet:   '\ud83d\udd04 R\u00e9tention',
-      sChurn: '\ud83d\udd00 Mouvements de tier',
-      sD:     '\ud83d\udcf1 Appareils enregistr\u00e9s',
       sI:     '\ud83d\udcb0 Co\u00fbts & erreurs'
     };
     var LS_SECTION_STATE = 'dashboard_section_state_v1';
