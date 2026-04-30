@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.7.28 (P3.a Phase 2 : afficher device model + Android version dans sub-text de la table devices si présents en KV (null tant que release Android v2.60 pas faite — backward-compat)) -->
+<!-- Monitoring Dashboard v1.7.29 (Sub-text Device ID en 2 lignes : ligne 1 drapeau+pays+version app, ligne 2 modèle smartphone+version Android. Évite le scroll horizontal en mobile. Ligne 2 conditionnelle (anciennes versions app sans deviceModel restent 1 ligne)) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.7.28</title>
+<title>Monitoring v1.7.29</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -658,7 +658,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.7.28</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.7.29</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -923,12 +923,12 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.28</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
+  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.29</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.7.28';
+const DASHBOARD_VERSION = 'v1.7.29';
 
 // === Multi-app config ===
 const APPS = {
@@ -2203,13 +2203,21 @@ function renderDevicesPage() {
     var phantomTag = isPhantom ? ' <span style="color:var(--error);font-size:.7rem">FANTOME</span>' : '';
     // v1.7.21 : ajouter version app dans le sub-text (donnée déjà en KV via updateLastSeen côté gateway)
     // v1.7.28 : ajouter device model + Android version (P3.a Phase 2 — null pour anciennes versions app, OK)
-    var idSubParts = [];
-    if (d.country && d.country !== '—') idSubParts.push(flag + d.country);
-    if (d.appVersion) idSubParts.push('v' + d.appVersion);
-    if (d.deviceModel) idSubParts.push(escapeHtml(d.deviceModel));
-    if (d.androidVersion) idSubParts.push('A' + d.androidVersion);
-    var idSubContent = idSubParts.join(' · ');
-    var idCell = '<div>' + id + phantomTag + '</div>' + (idSubContent ? '<div class="id-sub">' + idSubContent + '</div>' : '');
+    // v1.7.29 : split en 2 lignes (drapeau+version sur ligne 1, modèle+Android sur ligne 2)
+    //   pour éviter le scroll horizontal en mobile. Ligne 2 affichée seulement si données présentes
+    //   (anciennes versions app < 2.60.0 sans deviceModel restent en 1 ligne, comportement préservé).
+    var idSubLine1Parts = [];
+    if (d.country && d.country !== '—') idSubLine1Parts.push(flag + d.country);
+    if (d.appVersion) idSubLine1Parts.push('v' + d.appVersion);
+    var idSubLine2Parts = [];
+    if (d.deviceModel) idSubLine2Parts.push(escapeHtml(d.deviceModel));
+    if (d.androidVersion) idSubLine2Parts.push('A' + d.androidVersion);
+    var idSubLine1 = idSubLine1Parts.join(' · ');
+    var idSubLine2 = idSubLine2Parts.join(' · ');
+    var idSubHtml = '';
+    if (idSubLine1) idSubHtml += '<div class="id-sub">' + idSubLine1 + '</div>';
+    if (idSubLine2) idSubHtml += '<div class="id-sub">' + idSubLine2 + '</div>';
+    var idCell = '<div>' + id + phantomTag + '</div>' + idSubHtml;
     var seenCell = relativeTime(d.lastSeen) + '<div class="time-sub">' + fmtTimeOnly(d.lastSeen) + '</div>';
     // v1.4.11+: abréger "premium" → "prem" dans la table pour gagner de la place (garder version complète dans le panel expand)
     var badgeLabel = displayTier === 'premium' ? 'prem' : displayTier;
