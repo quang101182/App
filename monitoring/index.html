@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.7.30 (CSS .id-sub : retrait white-space:nowrap pour permettre le wrap des modèles smartphone longs sans élargir la cellule Device ID. overflow-wrap:anywhere garantit le wrap même sur chaînes sans espace) -->
+<!-- Monitoring Dashboard v1.7.31 (Sub-text Device ID en 3 sub-lignes fixes : drapeau+pays+version app / modèle smartphone dédié / Android version dédiée. Hauteur cellule uniforme. Affiche — si data manquante (anciennes versions pré-v2.60). Plus jamais de wrap forcé du modèle) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.7.30</title>
+<title>Monitoring v1.7.31</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -659,7 +659,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.7.30</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.7.31</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -924,12 +924,12 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.30</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
+  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.31</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.7.30';
+const DASHBOARD_VERSION = 'v1.7.31';
 
 // === Multi-app config ===
 const APPS = {
@@ -2207,17 +2207,19 @@ function renderDevicesPage() {
     // v1.7.29 : split en 2 lignes (drapeau+version sur ligne 1, modèle+Android sur ligne 2)
     //   pour éviter le scroll horizontal en mobile. Ligne 2 affichée seulement si données présentes
     //   (anciennes versions app < 2.60.0 sans deviceModel restent en 1 ligne, comportement préservé).
+    // v1.7.31 : 3 sub-lignes fixes (drapeau+pays+version app / modèle smartphone / Android version)
+    //   pour hauteur uniforme entre toutes les cellules + jamais de wrap forcé du modèle.
+    //   Affiche '—' si data manquante (anciennes versions app pré-v2.60.0 sans deviceModel/androidVersion).
     var idSubLine1Parts = [];
     if (d.country && d.country !== '—') idSubLine1Parts.push(flag + d.country);
     if (d.appVersion) idSubLine1Parts.push('v' + d.appVersion);
-    var idSubLine2Parts = [];
-    if (d.deviceModel) idSubLine2Parts.push(escapeHtml(d.deviceModel));
-    if (d.androidVersion) idSubLine2Parts.push('A' + d.androidVersion);
     var idSubLine1 = idSubLine1Parts.join(' · ');
-    var idSubLine2 = idSubLine2Parts.join(' · ');
+    var idSubLine2 = d.deviceModel ? escapeHtml(d.deviceModel) : '\u2014';
+    var idSubLine3 = d.androidVersion ? 'A' + d.androidVersion : '\u2014';
     var idSubHtml = '';
     if (idSubLine1) idSubHtml += '<div class="id-sub">' + idSubLine1 + '</div>';
-    if (idSubLine2) idSubHtml += '<div class="id-sub">' + idSubLine2 + '</div>';
+    idSubHtml += '<div class="id-sub">' + idSubLine2 + '</div>';
+    idSubHtml += '<div class="id-sub">' + idSubLine3 + '</div>';
     var idCell = '<div>' + id + phantomTag + '</div>' + idSubHtml;
     var seenCell = relativeTime(d.lastSeen) + '<div class="time-sub">' + fmtTimeOnly(d.lastSeen) + '</div>';
     // v1.4.11+: abréger "premium" → "prem" dans la table pour gagner de la place (garder version complète dans le panel expand)
