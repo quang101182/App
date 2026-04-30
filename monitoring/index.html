@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.7.23 (2 fixes : (1) double header sur sD/sChurn — ces sections ont déjà leur self-toggle interne, exclues du wrapper externe ; (2) régression SWP — sChurn ajouté à la règle body.app-swp + wrappers/bouton global cachés en mode SubWhisper Pro) -->
+<!-- Monitoring Dashboard v1.7.24 (UX collapsible : (1) animation fluide max-height + opacity pendant déplier/replier ; (2) cadre visuel par bloc — chaque section wrappée a une bordure + fond légèrement contrasté + header avec gradient violet, qui regroupe titre et contenu pour clarté visuelle ; (3) reduced-motion respect ; (4) sélecteur #sO élargi car déplacé dans .section-content-inner) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.7.23</title>
+<title>Monitoring v1.7.24</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -87,8 +87,9 @@ a { color: var(--accent2); }
 /* v1.7.15 : section Overview (#sO) uniquement — propager le gap aux enfants car le gap du .main
    ne s'applique qu'à ses enfants directs (les <div id="sX">), pas à l'intérieur de #sO qui
    regroupe trend-bar + kpi-grid + kpi-grid-funnel. Restreint à #sO pour ne pas casser les
-   autres sections (Devices, Perf, etc.) qui ont leur propre layout interne. */
-.main > #sO { display: flex; flex-direction: column; gap: 20px; }
+   autres sections (Devices, Perf, etc.) qui ont leur propre layout interne.
+   v1.7.24 : sélecteur élargi car #sO est désormais wrappé dans .section-content-inner. */
+#sO { display: flex; flex-direction: column; gap: 20px; }
 
 /* Trend bar v1.7.15 : card unique avec 3 colonnes (au lieu de 3 cards séparées) */
 .trend-bar { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
@@ -481,7 +482,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     body.app-swp #sO, body.app-swp #sP, body.app-swp #sA, body.app-swp #sRet,
     body.app-swp #sChurn, body.app-swp #sD, body.app-swp #sI, body.app-swp #sectionNav,
     body.app-swp .pill-group,
-    body.app-swp .section-collapsible-header, body.app-swp .btn-toggle-all,
+    body.app-swp .section-block, body.app-swp .btn-toggle-all,
     body.app-swp #footer, body.app-swp #alertBanner { display: none !important; }
     body.app-swp #swpView { display: block; }
 
@@ -508,21 +509,40 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     .swp-muted { color: var(--text2); }
     .swp-empty { text-align: center; padding: 40px; color: var(--text2); }
 
-/* v1.7.21 — Sections collapsibles (mode replier/déplier hybride mobile-first) */
+/* v1.7.24 — Sections collapsibles : bloc englobant + animation grid-template-rows */
+/* .section-block enveloppe le header + le contenu pour créer un cadre visuel net qui regroupe les éléments d'une même section. */
+.section-block {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-top: 0; /* le parent .main a gap: 20px qui suffit */
+  overflow: hidden; /* contient les coins arrondis pendant les transitions */
+  background: rgba(255,255,255,.012); /* léger contraste pour distinguer les blocs */
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.section-block:hover { border-color: rgba(124,58,237,.45); box-shadow: 0 0 0 1px rgba(124,58,237,.08) inset; }
+.section-block.is-collapsed { border-color: var(--border); }
+.section-block.is-collapsed:hover { border-color: rgba(124,58,237,.3); }
+
+/* Header (titre cliquable) — fait partie du bloc, pas de border individuelle */
 .section-collapsible-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 18px;
+  background: linear-gradient(180deg, rgba(124,58,237,.08), rgba(124,58,237,.03));
+  border: none;
+  border-radius: 0;
+  padding: 13px 18px;
   cursor: pointer;
   user-select: none;
-  margin-top: 14px;
-  transition: background .15s, border-color .15s;
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  transition: background .2s ease, border-bottom-color .2s ease;
 }
-.section-collapsible-header:hover { border-color: var(--accent); background: rgba(124,58,237,.04); }
+.section-collapsible-header:hover { background: linear-gradient(180deg, rgba(124,58,237,.14), rgba(124,58,237,.06)); }
+.section-block.is-collapsed > .section-collapsible-header {
+  border-bottom-color: transparent; /* pas de séparateur quand replié */
+  background: linear-gradient(180deg, rgba(124,58,237,.04), rgba(124,58,237,.01));
+}
 .section-collapsible-header .section-title {
   font-size: .92rem;
   font-weight: 600;
@@ -535,10 +555,30 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 .section-collapsible-header .section-caret {
   font-size: .9rem;
   color: var(--text2);
-  transition: transform .25s;
+  transition: transform .3s ease, color .2s ease;
 }
+.section-collapsible-header:hover .section-caret { color: var(--accent2); }
 .section-collapsible-header.is-open .section-caret { transform: rotate(180deg); }
-.section-collapsed { display: none !important; }
+
+/* Conteneur du contenu — animation via max-height (compatible padding interne, simple) */
+.section-content-wrap {
+  max-height: 8000px; /* assez large pour les sections longues */
+  overflow: hidden;
+  transition: max-height .45s cubic-bezier(.4, 0, .2, 1), opacity .3s ease;
+  opacity: 1;
+}
+.section-block.is-collapsed > .section-content-wrap {
+  max-height: 0;
+  opacity: 0;
+}
+.section-content-wrap > .section-content-inner { padding: 14px 16px 16px; }
+@media (max-width: 900px) {
+  .section-content-wrap > .section-content-inner { padding: 10px 10px 12px; }
+}
+/* Le contenu lui-même (#sX) a déjà ses styles — on neutralise les marges qui font doublon avec le wrapper */
+.section-content-wrap > .section-content-inner > [id^="s"] { margin: 0; }
+
+/* Bouton global "Tout déplier / Tout replier" */
 .btn-toggle-all {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -549,14 +589,21 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   font-size: .78rem;
   font-weight: 600;
   font-family: inherit;
-  transition: border-color .15s, color .15s;
+  transition: border-color .15s, color .15s, background .15s;
   white-space: nowrap;
 }
-.btn-toggle-all:hover { border-color: var(--accent); color: var(--accent2); }
+.btn-toggle-all:hover { border-color: var(--accent); color: var(--accent2); background: rgba(124,58,237,.08); }
+
 @media (max-width: 900px) {
-  .section-collapsible-header { padding: 10px 14px; margin-top: 12px; }
-  .section-collapsible-header .section-title { font-size: .82rem; }
+  .section-block { border-radius: 10px; }
+  .section-collapsible-header { padding: 11px 14px; }
+  .section-collapsible-header .section-title { font-size: .85rem; }
   .btn-toggle-all { padding: 5px 10px; font-size: .72rem; }
+}
+
+/* Animation reduced-motion pour utilisateurs avec préférence d'accessibilité */
+@media (prefers-reduced-motion: reduce) {
+  .section-content-wrap, .section-collapsible-header .section-caret, .section-block { transition: none; }
 }
 </style>
 </head>
@@ -580,7 +627,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.7.23</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.7.24</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -845,12 +892,12 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.23</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
+  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.24</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.7.23';
+const DASHBOARD_VERSION = 'v1.7.24';
 
 // === Multi-app config ===
 const APPS = {
@@ -2753,15 +2800,30 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
         var section = document.getElementById(id);
         if (!section) return;
         // Skip si déjà wrappé (idempotent au cas où setup serait appelé 2 fois)
-        var prev = section.previousElementSibling;
-        if (prev && prev.classList && prev.classList.contains('section-collapsible-header') && prev.getAttribute('data-section-id') === id) return;
+        if (section.parentElement && section.parentElement.classList && section.parentElement.classList.contains('section-content-inner')) return;
+        // v1.7.24 : créer un wrapper .section-block englobant header + contenu pour cadre visuel
+        // et animation grid-template-rows (1fr → 0fr).
+        var block = document.createElement('div');
+        block.className = 'section-block' + (state[id] ? '' : ' is-collapsed');
+        block.setAttribute('data-section-id', id);
+
         var header = document.createElement('div');
         header.className = 'section-collapsible-header' + (state[id] ? ' is-open' : '');
         header.setAttribute('data-section-id', id);
         header.innerHTML = '<span class="section-title">' + SECTION_TITLES_COLLAPSIBLE[id] + '</span><span class="section-caret">&#9660;</span>';
         header.addEventListener('click', function() { toggleSection(id); });
-        section.parentNode.insertBefore(header, section);
-        if (!state[id]) section.classList.add('section-collapsed');
+
+        var contentWrap = document.createElement('div');
+        contentWrap.className = 'section-content-wrap';
+        var contentInner = document.createElement('div');
+        contentInner.className = 'section-content-inner';
+
+        // Insère le bloc à l'emplacement original de la section, puis y déplace la section
+        section.parentNode.insertBefore(block, section);
+        block.appendChild(header);
+        block.appendChild(contentWrap);
+        contentWrap.appendChild(contentInner);
+        contentInner.appendChild(section); // déplace la section #sX dans .section-content-inner
       });
       updateToggleAllButton();
     }
@@ -2772,17 +2834,21 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
       var state = loadSectionState();
       state[id] = !state[id];
       saveSectionState(state);
+      var block = document.querySelector('.section-block[data-section-id="' + id + '"]');
       var header = document.querySelector('.section-collapsible-header[data-section-id="' + id + '"]');
       if (state[id]) {
-        section.classList.remove('section-collapsed');
+        if (block) block.classList.remove('is-collapsed');
         if (header) header.classList.add('is-open');
       } else {
-        section.classList.add('section-collapsed');
+        if (block) block.classList.add('is-collapsed');
         if (header) header.classList.remove('is-open');
       }
       updateToggleAllButton();
-      // Recompute observer après collapse/expand pour que le scroll-nav ne traque pas une section masquée
-      if (typeof rebuildNavObserver === 'function') { try { rebuildNavObserver(); } catch (e) {} }
+      // Recompute observer après collapse/expand pour que le scroll-nav ne traque pas une section masquée.
+      // Délai de 400ms pour laisser la transition grid-template-rows finir avant la mesure.
+      if (typeof rebuildNavObserver === 'function') {
+        setTimeout(function() { try { rebuildNavObserver(); } catch (e) {} }, 420);
+      }
     }
 
     function toggleAllSections() {
@@ -2791,20 +2857,21 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
       var newOpen = !anyOpen;
       SECTION_IDS_COLLAPSIBLE.forEach(function(id) {
         state[id] = newOpen;
-        var section = document.getElementById(id);
+        var block = document.querySelector('.section-block[data-section-id="' + id + '"]');
         var header = document.querySelector('.section-collapsible-header[data-section-id="' + id + '"]');
-        if (!section) return;
         if (newOpen) {
-          section.classList.remove('section-collapsed');
+          if (block) block.classList.remove('is-collapsed');
           if (header) header.classList.add('is-open');
         } else {
-          section.classList.add('section-collapsed');
+          if (block) block.classList.add('is-collapsed');
           if (header) header.classList.remove('is-open');
         }
       });
       saveSectionState(state);
       updateToggleAllButton();
-      if (typeof rebuildNavObserver === 'function') { try { rebuildNavObserver(); } catch (e) {} }
+      if (typeof rebuildNavObserver === 'function') {
+        setTimeout(function() { try { rebuildNavObserver(); } catch (e) {} }, 420);
+      }
     }
 
     function updateToggleAllButton() {
