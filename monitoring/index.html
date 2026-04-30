@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.7.25 (Sticky bar mobile compactée : nav-section passe de 2 lignes wrap à 1 ligne scrollable horizontale + header padding/font réduits + masquage texte "Auto 60s" sur très petit écran (≤480px) = ~40px de hauteur sticky libérés) -->
+<!-- Monitoring Dashboard v1.7.26 (Fix persistance localStorage des self-toggles internes : devicesExpanded (sD) et churnDetailsExpanded (sChurn) sont désormais restaurés au refresh — avant ils repassaient toujours à false) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.7.25</title>
+<title>Monitoring v1.7.26</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -651,7 +651,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.7.25</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.7.26</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -916,12 +916,12 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.25</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
+  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.26</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.7.25';
+const DASHBOARD_VERSION = 'v1.7.26';
 
 // === Multi-app config ===
 const APPS = {
@@ -2002,7 +2002,10 @@ function renderAdvanced(adv, tierCounts, realFree, premiumRuntimeCount) {
 var devicesPage = 0;
 var devicesPerPage = 50;
 var filteredDevices = [];
-var devicesExpanded = false;
+// v1.7.26 : restaurer l'état depuis localStorage (avant c'était toujours false au refresh)
+var devicesExpanded = (function() {
+  try { return localStorage.getItem('dashboard_devicesExpanded') === 'true'; } catch (e) { return false; }
+})();
 
 // v1.4.11: tier filters persistés en localStorage
 var LS_TIER_FILTERS = 'monitoring_tier_filters';
@@ -2087,16 +2090,39 @@ function applyAllDeviceFilters(resetPage) {
 
 function toggleDevices() {
   devicesExpanded = !devicesExpanded;
+  // v1.7.26 : persister dans localStorage pour conservation au refresh
+  try { localStorage.setItem('dashboard_devicesExpanded', String(devicesExpanded)); } catch (e) {}
   document.getElementById('devicesPanel').style.display = devicesExpanded ? 'block' : 'none';
   document.getElementById('devicesToggle').style.transform = devicesExpanded ? 'rotate(180deg)' : '';
 }
 
 // v1.7.21 : section "Mouvements de tier" — affiche mon.churn.details (déjà retournée par /admin/monitoring)
-var churnDetailsExpanded = false;
+// v1.7.26 : restauration depuis localStorage au load
+var churnDetailsExpanded = (function() {
+  try { return localStorage.getItem('dashboard_churnDetailsExpanded') === 'true'; } catch (e) { return false; }
+})();
 function toggleChurnDetails() {
   churnDetailsExpanded = !churnDetailsExpanded;
+  try { localStorage.setItem('dashboard_churnDetailsExpanded', String(churnDetailsExpanded)); } catch (e) {}
   document.getElementById('churnDetailsPanel').style.display = churnDetailsExpanded ? 'block' : 'none';
   document.getElementById('churnDetailsToggle').style.transform = churnDetailsExpanded ? 'rotate(180deg)' : '';
+}
+
+// v1.7.26 : appliquer l'état restauré au DOM au load (avant ces panels étaient toujours fermés au refresh
+// même si localStorage avait sauvé "expanded")
+function applyInternalToggleStates() {
+  if (devicesExpanded) {
+    var dp = document.getElementById('devicesPanel');
+    var dt = document.getElementById('devicesToggle');
+    if (dp) dp.style.display = 'block';
+    if (dt) dt.style.transform = 'rotate(180deg)';
+  }
+  if (churnDetailsExpanded) {
+    var cp = document.getElementById('churnDetailsPanel');
+    var ct = document.getElementById('churnDetailsToggle');
+    if (cp) cp.style.display = 'block';
+    if (ct) ct.style.transform = 'rotate(180deg)';
+  }
 }
 
 function renderChurnDetails(churn) {
@@ -2991,6 +3017,7 @@ initNav();
 updateTierPillsUI(); // v1.4.11: applique l'état visuel des pills tier depuis localStorage au chargement
 restorePeriodFromLS(); // v1.7.15: applique la période persistée depuis localStorage avant le 1er fetch
 setupCollapsibleSections(); // v1.7.21: mode replier/déplier hybride mobile-first
+applyInternalToggleStates(); // v1.7.26: restaure devicesExpanded et churnDetailsExpanded depuis localStorage
 (function init() {
   if (!getToken()) { showLogin(); return; }
   fetchAll().then(function() {
