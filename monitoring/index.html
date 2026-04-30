@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.7.26 (Fix persistance localStorage des self-toggles internes : devicesExpanded (sD) et churnDetailsExpanded (sChurn) sont désormais restaurés au refresh — avant ils repassaient toujours à false) -->
+<!-- Monitoring Dashboard v1.7.27 (Compactage header mobile : bouton Déconnexion → icône 🚪 sur ≤600px, bouton Replier tout/Déplier tout → texte court "Replier"/"Déplier" sur mobile, listener resize pour update label sur rotation) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.7.26</title>
+<title>Monitoring v1.7.27</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -71,8 +71,15 @@ a { color: var(--accent2); }
 .pill-group.has-saved .pill.active .dot-saved { display: inline-block; }
 .toggle-refresh { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--text2); cursor: pointer; }
 .toggle-refresh input { accent-color: var(--accent); }
-.btn-logout { background: transparent; border: 1px solid var(--error); color: var(--error); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: .85rem; }
+.btn-logout { background: transparent; border: 1px solid var(--error); color: var(--error); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: .85rem; font-family: inherit; line-height: 1; }
 .btn-logout:hover { background: var(--error); color: #fff; }
+/* v1.7.27 : swap text/icon selon mobile pour gagner de la hauteur sticky */
+.btn-logout .btn-icon-only { display: none; }
+@media (max-width: 600px) {
+  .btn-logout .btn-text-full { display: none; }
+  .btn-logout .btn-icon-only { display: inline; font-size: 1.05rem; }
+  .btn-logout { padding: 4px 9px; }
+}
 
 /* App tabs v1.7.15 : style underline (cohérent avec section-nav, plus moderne) */
 .app-tabs { display: flex; gap: 0; padding: 0 24px; background: var(--bg-page); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
@@ -651,7 +658,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.7.26</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.7.27</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -660,7 +667,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
       </div>
       <label class="toggle-refresh"><input type="checkbox" id="autoRefresh" checked> Auto 60s</label>
       <button class="btn-toggle-all" id="btnToggleAllSections" onclick="toggleAllSections()" title="Replier ou déplier toutes les sections d'un coup"><span id="btnToggleAllText">Replier tout</span></button>
-      <button class="btn-logout" onclick="logout()">Déconnexion</button>
+      <button class="btn-logout" onclick="logout()" title="Déconnexion"><span class="btn-text-full">Déconnexion</span><span class="btn-icon-only" aria-hidden="true">🚪</span></button>
     </div>
   </header>
 
@@ -916,12 +923,12 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.26</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
+  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.27</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.7.26';
+const DASHBOARD_VERSION = 'v1.7.27';
 
 // === Multi-app config ===
 const APPS = {
@@ -2929,7 +2936,11 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
       if (!btn) return;
       var state = loadSectionState();
       var anyOpen = SECTION_IDS_COLLAPSIBLE.some(function(id) { return state[id]; });
-      btn.textContent = anyOpen ? 'Replier tout' : 'D\u00e9plier tout';
+      // v1.7.27 : texte court sur mobile (≤600px) pour économiser de la place sticky
+      var isMobile = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+      btn.textContent = isMobile
+        ? (anyOpen ? 'Replier' : 'D\u00e9plier')
+        : (anyOpen ? 'Replier tout' : 'D\u00e9plier tout');
     }
 
     function initNav() {
@@ -3018,6 +3029,10 @@ updateTierPillsUI(); // v1.4.11: applique l'état visuel des pills tier depuis l
 restorePeriodFromLS(); // v1.7.15: applique la période persistée depuis localStorage avant le 1er fetch
 setupCollapsibleSections(); // v1.7.21: mode replier/déplier hybride mobile-first
 applyInternalToggleStates(); // v1.7.26: restaure devicesExpanded et churnDetailsExpanded depuis localStorage
+// v1.7.27 : update du label bouton "Replier/Déplier" sur resize (passage mobile↔desktop)
+window.addEventListener('resize', function() {
+  if (typeof updateToggleAllButton === 'function') updateToggleAllButton();
+});
 (function init() {
   if (!getToken()) { showLogin(); return; }
   fetchAll().then(function() {
