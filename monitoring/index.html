@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.7.20 (Fix CSS .kpi-label min-height 2.2em pour aligner verticalement les values quand labels wrappent en mobile - bug 'Pertes' décalé sur smartphone) -->
+<!-- Monitoring Dashboard v1.7.21 (P1: section Mouvements de tier consume mon.churn.details + colonne Version dans table devices + edge case décompte tier=premium fixé + sync footer version dynamique) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.7.20</title>
+<title>Monitoring v1.7.21</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -528,7 +528,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.7.20</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.7.21</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -549,6 +549,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <a href="#sP" class="nav-link">Perf</a>
     <a href="#sA" class="nav-link">Activit&#233;</a>
     <a href="#sRet" class="nav-link">R&#233;tention</a>
+    <a href="#sChurn" class="nav-link">Mouvements</a>
     <a href="#sD" class="nav-link">Devices</a>
     <a href="#sI" class="nav-link">Infra</a>
   </nav>
@@ -686,6 +687,32 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
     </div><!-- /sRet -->
 
+  <!-- v1.7.21 : Mouvements de tier (consume mon.churn.details du gateway, déjà tracké via /admin/monitoring) -->
+  <div id="sChurn" class="table-section">
+    <h3 class="collapsible-header" onclick="toggleChurnDetails()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
+      <span>Mouvements de tier</span>
+      <span id="churnDetailsToggle" style="font-size:1.2rem;transition:transform .2s">&#9660;</span>
+    </h3>
+    <div class="table-summary" id="churnDetailsSummary"></div>
+    <div id="churnDetailsPanel" style="display:none">
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Device</th>
+              <th>Transition</th>
+            </tr>
+          </thead>
+          <tbody id="churnDetailsBody"></tbody>
+        </table>
+      </div>
+      <div style="font-size:.7rem;color:var(--text2);margin-top:8px;opacity:.85;line-height:1.5">
+        &#9432; Liste des passages payant&rarr;free (downgrades) sur la p&eacute;riode. Les upgrades sont en agr&eacute;gat seulement (cf trend bar Churn). Source : <code style="background:rgba(124,58,237,.12);padding:1px 5px;border-radius:3px;font-size:.85em">mon.churn.details</code> via <code style="background:rgba(124,58,237,.12);padding:1px 5px;border-radius:3px;font-size:.85em">/admin/monitoring</code>.
+      </div>
+    </div>
+  </div>
+
   <!-- Devices table (collapsible + paginated) -->
   <div id="sD" class="table-section">
     <h3 class="collapsible-header" onclick="toggleDevices()" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between">
@@ -765,10 +792,13 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.15</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
+  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.7.21</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
+// === Dashboard version (single source of truth — bump à chaque release) ===
+const DASHBOARD_VERSION = 'v1.7.21';
+
 // === Multi-app config ===
 const APPS = {
   dictokey: {
@@ -1114,6 +1144,8 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
 
   var ch = mon.churn;
   document.getElementById('churnInfo').innerHTML = '<span style="color:var(--success)">↑ ' + ch.upgrades + '</span> / <span style="color:var(--error)">↓ ' + ch.downgrades + '</span>';
+  // v1.7.21 : alimenter la section "Mouvements de tier" avec les détails downgrades
+  renderChurnDetails(ch);
 
   // Devices breakdown for KPI sub — exclure les devices PC (préfixe pc_)
   var devicesList = (dev.devices || []).filter(function(d) {
@@ -1128,8 +1160,11 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
     var tier = (d.tier || 'free').toLowerCase();
     if (tierCounts[tier] !== undefined) tierCounts[tier]++;
     else tierCounts.free++;
-    // v1.4.11: détecter Premium runtime (effectiveTier=premium && tier KV != pro pour éviter double comptage)
-    if (d.effectiveTier === 'premium' && tier !== 'pro') {
+    // v1.7.21: détecter Premium runtime UNIQUEMENT si KV='free' && effective='premium'.
+    // Les KV='premium' explicites sont déjà comptés dans tierCounts.premium et gérés via totalPremium.
+    // Avant v1.7.21 la condition était `tier !== 'pro'` qui incluait à tort les KV='premium', faisant
+    // que `effectiveFree = tierCounts.free - premiumRuntimeCount` soustrayait à tort des free légitimes.
+    if (d.effectiveTier === 'premium' && tier === 'free') {
       premiumRuntimeCount++;
     }
     // Phantom = free tier + jamais utilisé ET pas détecté Premium runtime (sinon ce n'est pas un fantôme)
@@ -1141,6 +1176,10 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
   // v1.4.11: répartition effective — 1 device est soit pro, soit premium runtime, soit free
   // Math: total = pro + premiumRuntime + effectiveFree (incluant phantoms)
   var effectiveFree = tierCounts.free - premiumRuntimeCount; // les "free" KV qui ne sont PAS premium runtime
+  // v1.7.21 : totalPremium combine les 2 sources Premium pour affichage unifié.
+  //  - tierCounts.premium = KV explicite (`/device/restore` ou `/device/update-tier` ont écrit `tier='premium'`)
+  //  - premiumRuntimeCount = côté app PremiumManager.googlePremium=true mais KV reste 'free'
+  var totalPremium = tierCounts.premium + premiumRuntimeCount;
 
   // v1.7.16 : compteur "nouveaux appareils du jour" depuis le KV gateway (live, fuseau local du navigateur).
   // Compare le createdAt ISO (UTC) au timestamp 00:00:00 local — la comparaison se fait sur les ms absolues.
@@ -1158,7 +1197,7 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
   // v1.7.15 fix race condition : on stocke le contexte global pour que updateKpiDevices()
   // puisse être ré-appelé par fetchPlayStoreLive() une fois PLAYSTORE_STATS_LIVE rempli
   // (sinon kpiDevices reste figé sur le fallback cumul KV du 1er render synchrone).
-  window._kpiDevicesCtx = { devicesList: devicesList, tierCounts: tierCounts, premiumRuntimeCount: premiumRuntimeCount, phantomCount: phantomCount, effectiveFree: effectiveFree, newDevicesToday: newDevicesToday };
+  window._kpiDevicesCtx = { devicesList: devicesList, tierCounts: tierCounts, premiumRuntimeCount: premiumRuntimeCount, totalPremium: totalPremium, phantomCount: phantomCount, effectiveFree: effectiveFree, newDevicesToday: newDevicesToday };
   updateKpiDevices();
 
   // v1.7.16 : 2e ligne sub-text live KV sous le hero appareils
@@ -1343,13 +1382,14 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
   // crashait → sections #sD (Devices) et #sI (Coûts) ne se rendaient plus.
   var realCount = devicesList.length - phantomCount;
   var realFreeCount = effectiveFree - phantomCount;
+  // v1.7.21 : `totalPremium` est déjà calculé plus haut (cf bloc kpiDevices) et inclus dans _kpiDevicesCtx.
   var sumParts = [];
   sumParts.push(tierCounts.pro + ' pro');
-  if (premiumRuntimeCount > 0) sumParts.push('💎 ' + premiumRuntimeCount + ' premium');
+  if (totalPremium > 0) sumParts.push('💎 ' + totalPremium + ' premium');
   sumParts.push(realFreeCount + ' free');
   var summaryText = realCount + ' appareils — ' + sumParts.join(', ');
   if (phantomCount > 0) summaryText += ' — ' + phantomCount + ' fant\u00f4me' + (phantomCount > 1 ? 's' : '') + ' (free, 0 req)';
-  if (premiumRuntimeCount === 0) {
+  if (totalPremium === 0) {
     summaryText += ' — Premium Google : voir Play Console';
   }
   // v1.7.16 : suffixe live KV (compteur calculé plus haut dans la même fonction)
@@ -1390,7 +1430,7 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
   var now = new Date();
   var hms = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
   // v1.7.15 fix Kimi : update du span dynamique seulement, le snapshot tip HTML reste preserve
-  document.getElementById('footerDyn').textContent = 'Monitoring v1.7.15 — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
+  document.getElementById('footerDyn').textContent = 'Monitoring ' + DASHBOARD_VERSION + ' — ' + cfg.name + ' — Période ' + (mon.from || '?') + ' → ' + (mon.to || '?') + ' — Mis à jour à ' + hms;
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════
@@ -1513,12 +1553,14 @@ function updateKpiDevices() {
   var elVal = document.getElementById('kpiDevices');
   var elSub = document.getElementById('kpiDevicesSub');
   if (!elVal || !elSub) return;
+  // v1.7.21 : utiliser ctx.totalPremium (= tierCounts.premium + premiumRuntimeCount) pour ne pas perdre
+  //   les Premium KV explicites dans l'affichage.
   if (psActive && psActive > 0) {
     elVal.textContent = psActive;
-    var freeDeduced = Math.max(0, psActive - ctx.tierCounts.pro - ctx.premiumRuntimeCount);
+    var freeDeduced = Math.max(0, psActive - ctx.tierCounts.pro - ctx.totalPremium);
     var subParts = [];
     if (ctx.tierCounts.pro > 0) subParts.push(ctx.tierCounts.pro + ' pro');
-    if (ctx.premiumRuntimeCount > 0) subParts.push('💎 ' + ctx.premiumRuntimeCount + ' premium');
+    if (ctx.totalPremium > 0) subParts.push('💎 ' + ctx.totalPremium + ' premium');
     subParts.push('~' + freeDeduced + ' free');
     elSub.textContent = subParts.join(' · ') + ' · Play Console J-2';
   } else {
@@ -1526,7 +1568,7 @@ function updateKpiDevices() {
     elVal.textContent = realCount;
     var subParts = [];
     if (ctx.tierCounts.pro > 0) subParts.push(ctx.tierCounts.pro + ' pro');
-    if (ctx.premiumRuntimeCount > 0) subParts.push('💎 ' + ctx.premiumRuntimeCount);
+    if (ctx.totalPremium > 0) subParts.push('💎 ' + ctx.totalPremium);
     var realFreeForSub = ctx.effectiveFree - ctx.phantomCount;
     if (realFreeForSub > 0) subParts.push(realFreeForSub + ' free');
     var subText = subParts.join(' · ');
@@ -1925,6 +1967,43 @@ function toggleDevices() {
   document.getElementById('devicesToggle').style.transform = devicesExpanded ? 'rotate(180deg)' : '';
 }
 
+// v1.7.21 : section "Mouvements de tier" — affiche mon.churn.details (déjà retournée par /admin/monitoring)
+var churnDetailsExpanded = false;
+function toggleChurnDetails() {
+  churnDetailsExpanded = !churnDetailsExpanded;
+  document.getElementById('churnDetailsPanel').style.display = churnDetailsExpanded ? 'block' : 'none';
+  document.getElementById('churnDetailsToggle').style.transform = churnDetailsExpanded ? 'rotate(180deg)' : '';
+}
+
+function renderChurnDetails(churn) {
+  var summary = document.getElementById('churnDetailsSummary');
+  var body = document.getElementById('churnDetailsBody');
+  if (!summary || !body) return;
+  var details = (churn && churn.details) || [];
+  var ups = (churn && churn.upgrades) || 0;
+  var dns = (churn && churn.downgrades) || 0;
+  summary.innerHTML = '<span style="color:var(--success);font-weight:600">&uarr; ' + ups + ' upgrades</span>'
+    + ' &middot; <span style="color:var(--error);font-weight:600">&darr; ' + dns + ' downgrades</span>'
+    + ' &middot; <span style="color:var(--text2)">' + details.length + ' d&eacute;tail' + (details.length > 1 ? 's' : '') + ' affich&eacute;' + (details.length > 1 ? 's' : '') + '</span>';
+  if (details.length === 0) {
+    body.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text2);padding:24px">Aucun mouvement de tier sur la p&eacute;riode</td></tr>';
+    return;
+  }
+  // Tri descendant par date (plus récent en haut)
+  var sorted = details.slice().sort(function(a, b) {
+    var ta = new Date(a.ts || a.date).getTime();
+    var tb = new Date(b.ts || b.date).getTime();
+    return tb - ta;
+  });
+  body.innerHTML = sorted.map(function(d) {
+    var did = d.deviceId || 'inconnu';
+    var idShort = did.length > 12 ? did.slice(0, 12) + '...' : did;
+    var ts = d.ts || d.date;
+    var fromTo = (d.from || '?') + ' &rarr; ' + (d.to || '?');
+    return '<tr><td>' + fmtDateTime(ts) + '</td><td title="' + escapeHtml(did) + '" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85em">' + idShort + '</td><td><span style="color:var(--error);font-weight:600">' + fromTo + '</span></td></tr>';
+  }).join('');
+}
+
 function renderDevicesPage() {
   var start = devicesPage * devicesPerPage;
   var end = Math.min(start + devicesPerPage, filteredDevices.length);
@@ -1965,7 +2044,11 @@ function renderDevicesPage() {
     var isPhantom = kvTier === 'free' && !effective && seen <= created;
     var rowStyle = isPhantom ? ' style="opacity:0.35"' : '';
     var phantomTag = isPhantom ? ' <span style="color:var(--error);font-size:.7rem">FANTOME</span>' : '';
-    var idSubContent = (d.country && d.country !== '—') ? (flag + d.country) : '';
+    // v1.7.21 : ajouter version app dans le sub-text (donnée déjà en KV via updateLastSeen côté gateway)
+    var idSubParts = [];
+    if (d.country && d.country !== '—') idSubParts.push(flag + d.country);
+    if (d.appVersion) idSubParts.push('v' + d.appVersion);
+    var idSubContent = idSubParts.join(' · ');
     var idCell = '<div>' + id + phantomTag + '</div>' + (idSubContent ? '<div class="id-sub">' + idSubContent + '</div>' : '');
     var seenCell = relativeTime(d.lastSeen) + '<div class="time-sub">' + fmtTimeOnly(d.lastSeen) + '</div>';
     // v1.4.11+: abréger "premium" → "prem" dans la table pour gagner de la place (garder version complète dans le panel expand)
