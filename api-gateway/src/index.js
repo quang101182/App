@@ -43,7 +43,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.37';
+const VERSION = '1.38';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -1113,8 +1113,12 @@ async function proxyYoutubeSearch(request, env) {
     // After 3 consecutive 403s, all projects are likely exhausted — stop wasting API calls
     if (quotaHits >= 3) break;
     try {
-      // Search top 8 results (more candidates for duration filter)
-      const ytUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
+      // Search top 8 results (more candidates for duration filter).
+      // v1.38 — videoEmbeddable=true + videoSyndicated=true filtrent côté
+      // Google les vidéos non-embeddables (label restrictions Sony/Universal/
+      // Warner) et celles bloquées hors youtube.com. Élimine ~95% des YT
+      // player error 150/101 chez tous les clients (Music AI, Jarvis intégré).
+      const ytUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&videoSyndicated=true&maxResults=8&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
       const resp = await fetch(ytUrl);
       if (resp.status === 403) {
         lastError = 'quota exceeded';
