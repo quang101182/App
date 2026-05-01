@@ -43,7 +43,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.38';
+const VERSION = '1.39';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -1113,12 +1113,14 @@ async function proxyYoutubeSearch(request, env) {
     // After 3 consecutive 403s, all projects are likely exhausted — stop wasting API calls
     if (quotaHits >= 3) break;
     try {
-      // Search top 8 results (more candidates for duration filter).
+      // Search top 12 results (more candidates pour filtrage post-search).
       // v1.38 — videoEmbeddable=true + videoSyndicated=true filtrent côté
-      // Google les vidéos non-embeddables (label restrictions Sony/Universal/
-      // Warner) et celles bloquées hors youtube.com. Élimine ~95% des YT
-      // player error 150/101 chez tous les clients (Music AI, Jarvis intégré).
-      const ytUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&videoSyndicated=true&maxResults=8&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
+      // Google les vidéos non-embeddables global flag + non-syndicated.
+      // v1.39 — regionCode=FR + check additionnel post-search (status.embeddable
+      // + regionRestriction) car YouTube laisse passer des vidéos avec
+      // status.embeddable=true mais bloquées dans certaines régions par les
+      // labels Sony/Universal/Warner. Le user est en France → on cible FR.
+      const ytUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&videoSyndicated=true&regionCode=FR&relevanceLanguage=fr&maxResults=12&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
       const resp = await fetch(ytUrl);
       if (resp.status === 403) {
         lastError = 'quota exceeded';
@@ -1134,11 +1136,15 @@ async function proxyYoutubeSearch(request, env) {
       if (!items.length) return jsonResponse({ videoId: null, title: null, cached: false });
 
       const ids = items.map(i => i.id?.videoId).filter(Boolean);
-      // Duration filter: 90s–300s (same as client-side ytSearchLocal)
+      // Duration filter: 90s–300s + v1.39 status/region filter
       let bestId = ids[0], bestTitle = items[0].snippet?.title || '';
       if (ids.length > 0) {
         try {
-          const vUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=${ids.join(',')}&key=${encodeURIComponent(apiKey)}`;
+          // v1.39 — part=status,contentDetails,snippet pour avoir embeddable +
+          // regionRestriction. status.embeddable peut être TRUE alors que la
+          // vidéo est region-restricted (label upload). Le double check filtre
+          // ces faux positifs qui causent error 150 dans l'iframe player.
+          const vUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet,status&id=${ids.join(',')}&key=${encodeURIComponent(apiKey)}`;
           const vResp = await fetch(vUrl);
           if (vResp.ok) {
             const vData = await vResp.json();
@@ -1152,17 +1158,35 @@ async function proxyYoutubeSearch(request, env) {
                            - (tB.includes('music video') || tB.includes('official video') || / mv[\s\]|\)]/i.test(tB) ? 2 : 0);
               return scoreB - scoreA;
             });
-            const valid = sorted.find(v => {
+            // v1.39 — Filtre dur sur status.embeddable + regionRestriction FR.
+            // Une vidéo passe le filter SEULEMENT si :
+            //   1. status.embeddable === true (flag global)
+            //   2. status.privacyStatus === 'public'
+            //   3. PAS dans contentDetails.regionRestriction.blocked.includes('FR')
+            //   4. Si .allowed existe et n'inclut pas 'FR' → exclue
+            const isPlayableInFR = (v) => {
+              const st = v.status || {};
+              if (!st.embeddable) return false;
+              if (st.privacyStatus !== 'public') return false;
+              const rr = v.contentDetails?.regionRestriction || {};
+              if (Array.isArray(rr.blocked) && rr.blocked.includes('FR')) return false;
+              if (Array.isArray(rr.allowed) && rr.allowed.length && !rr.allowed.includes('FR')) return false;
+              return true;
+            };
+            const isDurationOk = (v) => {
               const dur = v.contentDetails?.duration || '';
               const m = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
               if (!m) return false;
               const secs = (parseInt(m[1]||0)*3600) + (parseInt(m[2]||0)*60) + parseInt(m[3]||0);
               return secs >= 90 && secs <= 300;
-            });
+            };
+            // Ordre de préférence : durée OK + region OK > region OK seul > rien
+            const valid = sorted.find(v => isPlayableInFR(v) && isDurationOk(v))
+                       || sorted.find(v => isPlayableInFR(v));
             if (valid) { bestId = valid.id; bestTitle = valid.snippet?.title || bestTitle; }
             else if (sorted.length) { bestId = sorted[0].id; bestTitle = sorted[0].snippet?.title || bestTitle; }
           }
-        } catch (_) { /* duration check failed, use first result */ }
+        } catch (_) { /* status check failed, use first result */ }
       }
 
       // 4. Cache result in KV (fire-and-forget)
