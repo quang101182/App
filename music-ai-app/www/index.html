@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>music·ai v3.17.4 — Discovery Engine</title>
+<title>music·ai v3.18.0 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -522,7 +522,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.17.4</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.18.0</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -947,9 +947,23 @@ function toggleTheme(){
 const YT_QUOTA_PER_KEY=100;
 // ── Persistent video cache (survit aux reloads) ──
 const LS_VID_CACHE='music_ai_vid_cache';
-const VID_CACHE_VER='v3';
+const VID_CACHE_VER='v4';// v3.18.0 — purge anciennes associations potentiellement empoisonnées (titre IA ≠ vidéo)
 let _ytVidCache={};
 let _ytTitleCache={};// v3.17.4 — videoId → titre YouTube (session only, pour vérification mismatch)
+let _ytAuthorCache={};// v3.18.0 — videoId → author_name YouTube (oEmbed, hydrate si cache title manquant)
+async function fetchYtMetadata(vid){
+  if(_ytTitleCache[vid])return{title:_ytTitleCache[vid],author:_ytAuthorCache[vid]||''};
+  if(!vid)return null;
+  try{
+    const ctrl=new AbortController();const tm=setTimeout(()=>ctrl.abort(),5000);
+    const r=await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${vid}&format=json`,{signal:ctrl.signal});
+    clearTimeout(tm);
+    if(!r.ok)return null;
+    const d=await r.json();
+    if(d&&d.title){_ytTitleCache[vid]=d.title;if(d.author_name)_ytAuthorCache[vid]=d.author_name;return{title:d.title,author:d.author_name||''};}
+  }catch(_){}
+  return null;
+}
 function loadVidCache(){try{const r=localStorage.getItem(LS_VID_CACHE);if(r){const p=JSON.parse(r);if(p&&typeof p==='object'){if(p._ver!==VID_CACHE_VER){_ytVidCache={_ver:VID_CACHE_VER};saveVidCache();return;}_ytVidCache=p;}}}catch(_){}_ytVidCache._ver=VID_CACHE_VER;}
 function saveVidCache(){try{_ytVidCache._ver=VID_CACHE_VER;const keys=Object.keys(_ytVidCache).filter(k=>k!=='_ver');if(keys.length>500){const trim=keys.slice(-300);const o={_ver:VID_CACHE_VER};trim.forEach(k=>o[k]=_ytVidCache[k]);_ytVidCache=o;}localStorage.setItem(LS_VID_CACHE,JSON.stringify(_ytVidCache));}catch(_){}}
 loadVidCache();
@@ -988,8 +1002,8 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.17.0) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,artistEquity:{influence:{},spotlightIndex:0},version:'3.17.4'};
+// ── SERVER PROFILE (music-ai v3.18.0) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,artistEquity:{influence:{},spotlightIndex:0},version:'3.18.0'};
 let _serverProfileReady=null; // v3.14.3 — Promise pour attendre le chargement serveur
 let _syncTimer=null;
 // ── ARTIST EQUITY CACHE (mémoire session uniquement) ──
@@ -1550,14 +1564,22 @@ async function ytPlay(track){
   if(ST._playToken!==playToken){return}
   if(!vid){ytShowFallbackToast(track);return}
   ST.currentTrack.videoId=vid;
-  // v3.17.4 — Vérification croisée titre IA vs titre YouTube
+  // v3.18.0 — Hydrater metadata via oEmbed si absent (path gateway/cache empoisonné)
+  if(!_ytTitleCache[vid]){await fetchYtMetadata(vid);if(ST._playToken!==playToken)return;}
+  // v3.18.0 — Si mismatch IA↔YouTube, réécrire l'UI avec le titre YT canonical
+  // _iaTitle/_iaArtist conservés pour fpFeedback (préserve le profil utilisateur)
   const _ytFoundTitle=_ytTitleCache[vid];
+  const _ytFoundAuthor=_ytAuthorCache[vid]||'';
   if(_ytFoundTitle&&track.title){
     const _norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
     const _aiN=_norm(track.title);const _ytN=_norm(_ytFoundTitle);
     if(_aiN.length>3&&_ytN.length>3&&!_ytN.includes(_aiN)&&!_aiN.includes(_ytN)){
-      console.warn(`[YT] Mismatch: IA="${track.title}" vs YT="${_ytFoundTitle}"`);
-      toast(`⚠️ Vidéo: ${_ytFoundTitle.substring(0,60)}`,4000);
+      console.warn(`[YT] Mismatch corrigé: IA="${track.title}" → YT="${_ytFoundTitle}"`);
+      ST.currentTrack._iaTitle=track.title;ST.currentTrack._iaArtist=track.artist;
+      ST.currentTrack.title=_ytFoundTitle;
+      if(_ytFoundAuthor)ST.currentTrack.artist=_ytFoundAuthor;
+      updateMiniPlayer(ST.currentTrack.title,ST.currentTrack.artist);
+      fpUpdateTrack();
     }
   }
   const _thumb=`https://img.youtube.com/vi/${vid}/mqdefault.jpg`;
@@ -1808,7 +1830,8 @@ function fpSetPaused(paused){
 function fpFeedback(action){
   if(!ST.currentTrack)return;
   const t=ST.currentTrack;const btnMap={like:'fp-like',dislike:'fp-dislike',save:'fp-bookmark'};
-  doFeedback(btnMap[action],action,t.title||'',t.artist||'',t.genre||'');
+  // v3.18.0 — Préfère titre/artist IA quand UI affiche le titre YT canonical (preserve profil)
+  doFeedback(btnMap[action],action,t._iaTitle||t.title||'',t._iaArtist||t.artist||'',t.genre||'');
 }
 function fpUpdateTrack(){
   if(!ST.currentTrack)return;const t=ST.currentTrack;
