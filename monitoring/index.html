@@ -1,10 +1,10 @@
-<!-- Monitoring Dashboard v1.8.0 (Refonte labels Play Console : remplacement des labels en dur "J-2"/"LIVE"/"28j" par des labels dynamiques basés sur last_data_date + window_first/last_date. Bannière warning si données figées >3j. Sub-text hero "Appareils réels actifs" : suppression du breakdown pro/premium/free quand source = Play Console (mélangeait stock Play + cumul KV, mathématiquement fallacieux). Note moyenne : label "cumul" remplacé par "note globale toutes périodes". Labels HTML statiques cohérents avec labels JS dynamiques.) -->
+<!-- Monitoring Dashboard v1.9.0 (Refonte labels Play Console : remplacement des labels en dur "J-2"/"LIVE"/"28j" par des labels dynamiques basés sur last_data_date + window_first/last_date. Bannière warning si données figées >3j. Sub-text hero "Appareils réels actifs" : suppression du breakdown pro/premium/free quand source = Play Console (mélangeait stock Play + cumul KV, mathématiquement fallacieux). Note moyenne : label "cumul" remplacé par "note globale toutes périodes". Labels HTML statiques cohérents avec labels JS dynamiques.) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.8.0</title>
+<title>Monitoring v1.9.0</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -659,7 +659,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.8.0</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.9.0</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -740,7 +740,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <span id="playStoreStatusBadge" style="font-size:.65rem;font-weight:500;color:var(--orange-new);text-transform:none;letter-spacing:0;background:rgba(240,136,62,.12);padding:2px 8px;border-radius:10px;">⏳ Chargement…</span>
     <span style="font-size:.65rem;font-weight:500;color:var(--text-mute-new);text-transform:none;letter-spacing:0;">snapshot Google (CSV mensuel)</span>
   </h3>
-  <!-- v1.8.0 : bannière warning si CSV Google figé > 3 jours (latence Google sur petites apps), affichée par renderPlayStoreKPIs() -->
+  <!-- v1.9.0 : bannière warning si CSV Google figé > 3 jours (latence Google sur petites apps), affichée par renderPlayStoreKPIs() -->
   <div id="playStoreStaleWarning" style="display:none;margin:0 0 12px;padding:10px 14px;background:rgba(240,136,62,.10);border:1px solid rgba(240,136,62,.4);border-radius:8px;font-size:.78rem;color:var(--orange-new);line-height:1.4;"></div>
   <div class="kpi-grid-adoption">
     <div class="kpi-card play-card"><div class="kpi-label">📥 Installations totales</div><div class="kpi-value" id="kpiPlayInstallsCumul">—</div><div class="kpi-sub" id="kpiPlayInstallsCumulSub">cumul depuis publication</div></div>
@@ -753,6 +753,33 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <div class="kpi-card play-card"><div class="kpi-label">⬇ Installs</div><div class="kpi-value" id="kpiPlayInstalls">—</div><div class="kpi-sub" id="kpiPlayInstallsSub">fenêtre 28 j</div></div>
     <div class="kpi-card play-card"><div class="kpi-label">🎯 Conversion fiche</div><div class="kpi-value" id="kpiPlayConversion">—</div><div class="kpi-sub" id="kpiPlayConversionSub">vs benchmark 2-5%</div></div>
     <div class="kpi-card play-card"><div class="kpi-label">⭐ Note moyenne</div><div class="kpi-value" id="kpiPlayRating">—</div><div class="kpi-sub" id="kpiPlayRatingSub">note globale</div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- FIREBASE ANALYTICS (v1.9.0) - DictoKey only -->
+  <!-- Source : /admin/firebase-stats (GA4 Data API, cache KV 1h, fraîcheur J-1) -->
+  <!-- Sémantique : engagement & comportement in-app, ≠ Play stock, ≠ KV cumul -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <h3 style="margin:28px 0 10px;font-size:.85rem;color:var(--accent2);font-weight:600;letter-spacing:.5px;text-transform:uppercase;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    📊 Activation &amp; engagement (Firebase J-1)
+    <span id="firebaseStatusBadge" style="font-size:.65rem;font-weight:500;color:var(--orange-new);text-transform:none;letter-spacing:0;background:rgba(240,136,62,.12);padding:2px 8px;border-radius:10px;">⏳ Chargement…</span>
+    <span style="font-size:.65rem;font-weight:500;color:var(--text-mute-new);text-transform:none;letter-spacing:0;">comportement in-app · désinstalls trackés · sources d'acquisition</span>
+  </h3>
+  <div class="kpi-grid">
+    <div class="kpi-card play-card"><div class="kpi-label">👥 Actifs 7j</div><div class="kpi-value" id="kpiFbActive7d">—</div><div class="kpi-sub" id="kpiFbActive7dSub">utilisateurs avec session</div></div>
+    <div class="kpi-card play-card"><div class="kpi-label">✨ Nouveaux 7j</div><div class="kpi-value" id="kpiFbNew7d">—</div><div class="kpi-sub" id="kpiFbNew7dSub">first_open</div></div>
+    <div class="kpi-card play-card"><div class="kpi-label">🔁 Sessions 7j</div><div class="kpi-value" id="kpiFbSessions7d">—</div><div class="kpi-sub" id="kpiFbSessions7dSub">engagement —</div></div>
+    <div class="kpi-card play-card"><div class="kpi-label">📤 Désinstalls 7j</div><div class="kpi-value" id="kpiFbRemove7d">—</div><div class="kpi-sub" id="kpiFbRemove7dSub">app_remove · Firebase</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;" id="firebaseDetailsGrid">
+    <div class="kpi-card play-card" style="text-align:left;padding:14px 16px;">
+      <div style="font-size:.72rem;font-weight:600;color:var(--accent2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px;">🎯 Funnel d'activation 7j</div>
+      <div id="firebaseFunnel" style="font-size:.82rem;line-height:1.7;color:var(--text2);">⏳ En attente data…</div>
+    </div>
+    <div class="kpi-card play-card" style="text-align:left;padding:14px 16px;">
+      <div style="font-size:.72rem;font-weight:600;color:var(--accent2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px;">🌍 Sources d'acquisition 7j</div>
+      <div id="firebaseSources" style="font-size:.82rem;line-height:1.7;color:var(--text2);">⏳ En attente data…</div>
+    </div>
   </div>
 
   <!-- ══════════════════════════════════════════════════════════════ -->
@@ -926,12 +953,12 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.8.0</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
+  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.9.0</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.8.0';
+const DASHBOARD_VERSION = 'v1.9.0';
 
 // === Multi-app config ===
 const APPS = {
@@ -1491,6 +1518,8 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
     renderUnifiedFunnel(allDevices, devicesList);
     // Fetch LIVE en background (auto bascule LIVE quand propagation Google finie)
     fetchPlayStoreLive();
+    // v1.9.0 : fetch Firebase Analytics (engagement J-1, désinstalls, sources d'acquisition)
+    fetchFirebaseLive();
   }
 
   // Calcul realFree (avant renderAdvanced qui en a besoin)
@@ -1609,7 +1638,7 @@ function setPlayStoreStatusBadge(state, msg) {
   el.textContent = msg || s.txt;
 }
 
-// v1.8.0 helpers : formatage date YYYY-MM-DD → "DD MMM" (fr-FR), et delta jours vs aujourd'hui (UTC).
+// v1.9.0 helpers : formatage date YYYY-MM-DD → "DD MMM" (fr-FR), et delta jours vs aujourd'hui (UTC).
 // Pourquoi UTC : `last_data_date`, `window_*_date` viennent du Worker qui parse les CSV Google en UTC.
 // Comparer en UTC garantit qu'on ne décale pas d'1 jour selon le fuseau du navigateur.
 function _formatPlayDate(isoDate) {
@@ -1636,7 +1665,7 @@ function renderPlayStoreKPIs() {
       if (subEl) subEl.textContent = sub;
     }
   }
-  // v1.8.0 : bannière warning si CSV Google figé > 3 jours (cas latence Google petites apps)
+  // v1.9.0 : bannière warning si CSV Google figé > 3 jours (cas latence Google petites apps)
   var warnEl = document.getElementById('playStoreStaleWarning');
   if (warnEl) {
     if (live && live.aggregated && live.aggregated.last_data_date) {
@@ -1656,21 +1685,21 @@ function renderPlayStoreKPIs() {
     // Bloc 1 : adoption globale (cumul depuis publication)
     var pubDate = a.publication_date ? new Date(a.publication_date + 'T00:00:00Z').toLocaleDateString('fr-FR', {day:'2-digit', month:'short', year:'numeric', timeZone:'UTC'}) : 'publication';
     setKpi('kpiPlayInstallsCumul', a.installs_cumulative || '—', 'depuis ' + pubDate);
-    // v1.8.0 : label "snapshot Google au DD MMM (J-N)" au lieu de "aujourd'hui (J-2 Google)" trompeur
+    // v1.9.0 : label "snapshot Google au DD MMM (J-N)" au lieu de "aujourd'hui (J-2 Google)" trompeur
     var snapAge = _daysSinceUtc(a.last_data_date);
     var snapLabel = a.last_data_date ? ('snapshot au ' + _formatPlayDate(a.last_data_date) + (snapAge !== null ? ' (J-' + snapAge + ')' : '')) : 'snapshot Google';
     setKpi('kpiPlayActive', a.active_devices_net || '—', snapLabel);
     var lostPct = a.installs_cumulative > 0 ? Math.round(a.lost_total / a.installs_cumulative * 100) : 0;
     setKpi('kpiPlayLost', a.lost_total != null ? a.lost_total : '—', a.installs_cumulative > 0 ? '= ' + lostPct + '% des installs' : '= installs − actifs');
     // Bloc 2 : activité — fenêtre 28j (calculée par le Worker à partir de last_data_date)
-    // v1.8.0 : remplace "28 j · LIVE" par la vraie fenêtre datée. Si Google ne publie pas, la fenêtre reste figée.
+    // v1.9.0 : remplace "28 j · LIVE" par la vraie fenêtre datée. Si Google ne publie pas, la fenêtre reste figée.
     var winLabel = (a.window_first_date && a.window_last_date)
       ? ('du ' + _formatPlayDate(a.window_first_date) + ' au ' + _formatPlayDate(a.window_last_date))
       : 'fenêtre 28 j';
     setKpi('kpiPlayVisitors', a.store_visitors_28d || '—', winLabel);
     setKpi('kpiPlayInstalls', a.installs_28d || '—', winLabel);
     setKpi('kpiPlayConversion', (a.conversion_rate_28d || 0).toFixed(1) + ' %', winLabel);
-    // v1.8.0 : "cumul" remplacé par "note globale (toutes périodes)" — le CSV bulk Google ne donne pas le rating_count
+    // v1.9.0 : "cumul" remplacé par "note globale (toutes périodes)" — le CSV bulk Google ne donne pas le rating_count
     setKpi('kpiPlayRating', (a.rating_avg || 0).toFixed(2), a.rating_count != null ? a.rating_count + ' avis' : 'note globale (toutes périodes)');
   } else {
     // En attente propagation Google : afficher placeholder partout
@@ -1684,6 +1713,110 @@ function renderPlayStoreKPIs() {
   }
 }
 
+// ════════════════════════════════════════════════════════════════════════════════════════
+// v1.9.0 — FIREBASE ANALYTICS (GA4 Data API via /admin/firebase-stats)
+// Bloc complémentaire au snapshot Play Console : engagement quotidien J-1 fiable,
+// désinstalls trackés (`app_remove`), sources d'acquisition. Cache KV 1h côté worker.
+// ════════════════════════════════════════════════════════════════════════════════════════
+var FIREBASE_STATS_LIVE = null;
+
+function setFirebaseStatusBadge(state, msg) {
+  var el = document.getElementById('firebaseStatusBadge');
+  if (!el) return;
+  var styles = {
+    loading: { color: 'var(--orange-new)',  bg: 'rgba(240,136,62,.12)', txt: '⏳ Chargement…' },
+    live:    { color: 'var(--success-new)', bg: 'rgba(34,197,94,.12)',  txt: '✅ LIVE' },
+    error:   { color: 'var(--danger-new)',  bg: 'rgba(239,68,68,.12)',  txt: '❌ Erreur' },
+  };
+  var s = styles[state] || styles.loading;
+  el.style.color = s.color;
+  el.style.background = s.bg;
+  el.textContent = msg || s.txt;
+}
+
+async function fetchFirebaseLive() {
+  setFirebaseStatusBadge('loading');
+  try {
+    var data = await apiFetch('/admin/firebase-stats?period=7d');
+    if (data && data.ok && data.aggregated && data.aggregated.d7) {
+      FIREBASE_STATS_LIVE = data;
+      var cacheTxt = data.cached ? (' · cache ' + (data.age_minutes || 0) + 'min') : '';
+      setFirebaseStatusBadge('live', '✅ Données J-1 Firebase' + cacheTxt);
+    } else {
+      FIREBASE_STATS_LIVE = null;
+      setFirebaseStatusBadge('error', '❌ Pas de data Firebase');
+    }
+  } catch (e) {
+    FIREBASE_STATS_LIVE = null;
+    setFirebaseStatusBadge('error', '❌ ' + (e.message || 'Erreur').slice(0, 60));
+    console.error('[firebase live]', e);
+  }
+  renderFirebaseKPIs();
+}
+
+function renderFirebaseKPIs() {
+  var live = FIREBASE_STATS_LIVE;
+  function setV(id, val, sub) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = (typeof val === 'number') ? val.toLocaleString('fr-FR') : (val || '—');
+    if (sub !== undefined) {
+      var sEl = document.getElementById(id + 'Sub');
+      if (sEl) sEl.textContent = sub;
+    }
+  }
+  if (live && live.aggregated && live.aggregated.d7) {
+    var a = live.aggregated;
+    var d7 = a.d7;
+    var ev = a.events || {};
+    setV('kpiFbActive7d', d7.active_users, 'utilisateurs avec session');
+    setV('kpiFbNew7d', d7.new_users, 'first_open');
+    var engagementPct = Math.round((d7.engagement_rate || 0) * 100);
+    var avgMin = Math.round((d7.avg_session_duration_sec || 0) / 60);
+    setV('kpiFbSessions7d', d7.sessions, engagementPct + '% engagement · ' + avgMin + ' min/session');
+    var rmCount = (ev.app_remove && ev.app_remove.count) || 0;
+    var rmUsers = (ev.app_remove && ev.app_remove.users) || 0;
+    setV('kpiFbRemove7d', rmCount, rmUsers + ' users distincts');
+
+    // Funnel d'activation : first_open → bulle/IME → first_dictation → premium_purchase
+    var fnEl = document.getElementById('firebaseFunnel');
+    if (fnEl) {
+      function v(name) { return (ev[name] && ev[name].count) || 0; }
+      function pct(num, den) { return den > 0 ? ' <span style="color:var(--text-mute-new);font-size:.78rem;">(' + Math.round(num / den * 100) + '%)</span>' : ''; }
+      var fo = v('first_open'), bf = v('bubble_first_use'), imef = v('ime_first_use');
+      var fd = v('first_dictation'), dd = v('daily_dictation'), pp = v('premium_purchase');
+      var qe = v('quota_exceeded');
+      fnEl.innerHTML =
+        '<div>📲 first_open : <b>' + fo.toLocaleString('fr-FR') + '</b></div>' +
+        '<div style="margin-left:1.2em">↳ 🫧 bulle : <b>' + bf + '</b>' + pct(bf, fo) + '</div>' +
+        '<div style="margin-left:1.2em">↳ ⌨ IME : <b>' + imef + '</b>' + pct(imef, fo) + '</div>' +
+        '<div>🎤 first_dictation : <b>' + fd + '</b>' + pct(fd, fo) + '</div>' +
+        '<div>🔁 daily_dictation : <b>' + dd.toLocaleString('fr-FR') + '</b></div>' +
+        '<div>🚪 quota_exceeded : <b>' + qe + '</b></div>' +
+        '<div>💎 premium_purchase : <b>' + pp + '</b>' + pct(pp, fo) + '</div>';
+    }
+
+    // Sources d'acquisition (sessionDefaultChannelGroup)
+    var srcEl = document.getElementById('firebaseSources');
+    if (srcEl) {
+      var ch = a.acquisition_channels || [];
+      if (ch.length === 0) {
+        srcEl.textContent = 'Aucune donnée';
+      } else {
+        srcEl.innerHTML = ch.slice(0, 8).map(function(c) {
+          return '<div>' + c.channel + ' : <b>' + c.new_users + '</b> nouveaux · ' + c.sessions + ' sessions</div>';
+        }).join('');
+      }
+    }
+  } else {
+    ['kpiFbActive7d', 'kpiFbNew7d', 'kpiFbSessions7d', 'kpiFbRemove7d'].forEach(function(id) { setV(id, '⏳', '—'); });
+    var fnEl = document.getElementById('firebaseFunnel');
+    if (fnEl) fnEl.textContent = '⏳ En attente data…';
+    var srcEl = document.getElementById('firebaseSources');
+    if (srcEl) srcEl.textContent = '⏳ En attente data…';
+  }
+}
+
 // Fetch live Play Store stats depuis le Worker - tolère les erreurs (propagation Google peut prendre 1-2h après setup SA)
 async function fetchPlayStoreLive() {
   setPlayStoreStatusBadge('loading');
@@ -1694,7 +1827,7 @@ async function fetchPlayStoreLive() {
     var hasData = data && data.aggregated && (data.aggregated.installs_28d > 0 || data.aggregated.store_visitors_28d > 0);
     if (hasData) {
       PLAYSTORE_STATS_LIVE = data;
-      // v1.8.0 : badge précise "données du DD MMM" + heure du fetch — au lieu de "LIVE" trompeur
+      // v1.9.0 : badge précise "données du DD MMM" + heure du fetch — au lieu de "LIVE" trompeur
       //   (le LIVE laissait croire à du temps réel alors que les données peuvent être figées plusieurs jours).
       var _fetchTime = new Date(data.fetched_at).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
       var _dataDate = (data.aggregated && data.aggregated.last_data_date) ? _formatPlayDate(data.aggregated.last_data_date) : null;
@@ -1732,7 +1865,7 @@ function updateKpiDevices() {
   if (!elVal || !elSub) return;
   // v1.7.21 : utiliser ctx.totalPremium (= tierCounts.premium + premiumRuntimeCount) pour ne pas perdre
   //   les Premium KV explicites dans l'affichage.
-  // v1.8.0 : quand source = Play Console (psActive), NE PLUS afficher le breakdown pro/premium/free ici —
+  // v1.9.0 : quand source = Play Console (psActive), NE PLUS afficher le breakdown pro/premium/free ici —
   //   on retranchait des cumuls KV (37 pro + 8 premium) d'un stock Play (104), ce qui suppose à tort que
   //   tous les pro/premium KV sont encore actifs côté Google. Mathématiquement fallacieux. Le breakdown
   //   tiers reste affiché correctement dans le bloc "Appareils enregistrés" en bas (source KV cumul).
@@ -1785,7 +1918,7 @@ function renderUnifiedFunnel(allDevicesList, devicesListNow) {
   // Premieres ouvertures = vraie valeur Play Console (46), plus aucune estimation
   var firstOpens = ps.first_opens_28d;
 
-  // v1.8.0 : label Play Console dynamique basé sur last_data_date au lieu de "(J-2)" en dur
+  // v1.9.0 : label Play Console dynamique basé sur last_data_date au lieu de "(J-2)" en dur
   var playSrc = 'Play Console (snapshot Google)';
   if (typeof _formatPlayDate === 'function' && PLAYSTORE_STATS_LIVE && PLAYSTORE_STATS_LIVE.aggregated && PLAYSTORE_STATS_LIVE.aggregated.last_data_date) {
     var _d = PLAYSTORE_STATS_LIVE.aggregated.last_data_date;
