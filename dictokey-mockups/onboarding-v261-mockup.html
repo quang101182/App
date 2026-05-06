@@ -205,6 +205,9 @@ Si l'utilisateur saute la bulle, le tuto se termine après <b>SlideThreeWays</b>
             <span class="tag optional">recommandé</span>
           </div>
           <div class="section-desc">Bouton qui apparaît au-dessus du clavier dans toutes les apps. Plus rapide qu'un changement de clavier.</div>
+          <div style="background:rgba(34,197,94,.06);border-left:3px solid var(--success);padding:8px 11px;margin:0 0 10px;border-radius:5px;font-size:.7rem;color:var(--text2);line-height:1.5">
+            <b style="color:var(--success)">👁 Pas une verrue permanente</b> — la bulle apparaît seulement quand ton clavier s'ouvre, et disparaît avec lui. Tu peux aussi la masquer à tout moment depuis la barre de notifications.
+          </div>
           <div class="perm-row">
             <div class="perm-icon done">📲</div>
             <div class="perm-text">
@@ -632,11 +635,58 @@ Au tap sur n'importe quel bouton de permission (Overlay / Accessibility / Clavie
   </table>
 </div>
 
+<h1 style="margin-top:36px">📊 Events Firebase à ajouter dans v2.61.0</h1>
+<p class="lead">
+Profitons de la release pour combler les angles morts d'analyse révélés par les data Firebase actuelles. <b>5 events critiques</b> à instrumenter pour mesurer le funnel précisément + le succès de la refonte.
+</p>
+
+<div class="diff">
+  <h3>Liste des events à ajouter (priorité décroissante)</h3>
+  <table>
+    <tr><th>Event</th><th>Bundle params</th><th>Pourquoi</th></tr>
+    <tr>
+      <td><code>onboarding_completed</code></td>
+      <td><code>flow: "ime_only" | "with_bubble"</code></td>
+      <td>Ratio user IME-only vs full après v2.61.0. Critique pour mesurer si la refonte réduit le drop. Sans ça on est aveugle sur l'impact du changement.</td>
+    </tr>
+    <tr>
+      <td><code>onboarding_step_view</code></td>
+      <td><code>step: "welcome" | "language" | "mega_activation" | "three_ways" | "demo"</code></td>
+      <td>Granularité drop-off précise par slide. Aujourd'hui on a juste <code>screen_view</code> auto sans semantique métier. Permet d'identifier l'étape exacte où users abandonnent.</td>
+    </tr>
+    <tr>
+      <td><code>permission_denied</code></td>
+      <td><code>permission: "overlay" | "accessibility" | "mic" | "notif" | "battery"</code></td>
+      <td>Aujourd'hui on n'a aucun signal explicite quand l'user refuse. On déduit par absence de l'event d'usage. Avec ça on mesure précisément où la friction tape.</td>
+    </tr>
+    <tr>
+      <td><code>bubble_activation_post_onboarding</code></td>
+      <td><code>started: bool · completed: bool · trigger: "main_banner" | "settings" | "notif"</code></td>
+      <td>Mesure conversion du nouveau bandeau orange "Active la bulle" vers une activation effective. Permet de valider que le mockup C+D fonctionne en prod.</td>
+    </tr>
+    <tr>
+      <td><code>first_dictation</code> (enrichir l'existant)</td>
+      <td>Ajouter <code>source: "bubble" | "ime" | "demo_slide"</code></td>
+      <td>L'event <code>first_dictation</code> existe mais sans param source. Avec ça on saura par où les users dictent en premier (utile pour onboarding A/B + comprendre rétention).</td>
+    </tr>
+    <tr>
+      <td><code>bubble_visibility_toggled</code></td>
+      <td><code>action: "show" | "hide" · source: "notif" | "bubble_long_press"</code></td>
+      <td>Bonus : mesure usage feature "masquer la bulle". Si beaucoup de users la cachent, signal qu'elle dérange. Permet de questionner la mise en avant produit.</td>
+    </tr>
+  </table>
+</div>
+
+<p class="lead" style="margin-top:18px">
+<b>Effort total events</b> : ~30 lignes Kotlin dans <code>AnalyticsManager.kt</code> + appels aux endroits stratégiques (~15 min).<br>
+<b>Marquer key events</b> dans Firebase Console : <code>onboarding_completed</code>, <code>bubble_activation_post_onboarding</code>, <code>permission_denied</code> = conversions à suivre. Action côté toi (Firebase Console mobile suffit).
+</p>
+
 <p class="footnote">
 Mockup HTML statique — pas une vraie capture d'app. Le rendu final Compose pourra varier (tailles, palette exacte, animations).<br>
 Code à modifier : <code>MegaActivationSlide.kt</code> (~80 l) · <code>OnboardingScreenV2.kt</code> (~10 l) · <code>SlideDemo.kt</code> (saut conditionnel) · strings FR+EN.<br>
 Bundle dans <b>v2.61.0</b> (avec fix BadTokenException) — pas de release dédiée.<br>
-v0.3 mockup · 2026-05-06 (+ mockups C/D post-onboarding bandeau MainActivity + flow réactivation bulle, + mockup E preuve PermissionGuideDialog conservé, + flag wasBubbleEverActivated dans diff)
+v0.4 mockup · 2026-05-06 (+ note "bulle pas une verrue permanente, apparaît avec le clavier", + section 5 events Firebase à ajouter v2.61.0)
 </p>
 
 </body>
