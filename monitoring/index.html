@@ -1,3 +1,4 @@
+<!-- Monitoring Dashboard v1.11.0 (Persistance localStorage de la checkbox auto-refresh `dk-monitoring-auto-refresh` : si user décoche, l'état est conservé entre sessions/reloads. Défaut HTML reste "checked" si jamais setté.) -->
 <!-- Monitoring Dashboard v1.10.0 (Refonte labels Play Console : remplacement des labels en dur "J-2"/"LIVE"/"28j" par des labels dynamiques basés sur last_data_date + window_first/last_date. Bannière warning si données figées >3j. Sub-text hero "Appareils réels actifs" : suppression du breakdown pro/premium/free quand source = Play Console (mélangeait stock Play + cumul KV, mathématiquement fallacieux). Note moyenne : label "cumul" remplacé par "note globale toutes périodes". Labels HTML statiques cohérents avec labels JS dynamiques.) -->
 <!DOCTYPE html>
 <html lang="fr">
@@ -3031,6 +3032,7 @@ document.addEventListener('keydown', function(e) {
 
 // Period pills (v1.5.0 : no-op si pas DictoKey ; v1.7.15 : persistance localStorage avec dot vert)
 const PERIOD_LS_KEY = 'dk-monitoring-period';
+const AUTO_REFRESH_LS_KEY = 'dk-monitoring-auto-refresh'; // v1.11.0 : "1" si coché, "0" si décoché. Absent = défaut HTML (checked).
 const VALID_PERIODS = ['7d', '30d', '90d'];
 
 function setPeriodActive(period) {
@@ -3081,7 +3083,18 @@ function stopAutoRefresh() { if (refreshInterval) { clearInterval(refreshInterva
 
 document.getElementById('autoRefresh').addEventListener('change', function() {
   if (this.checked) startAutoRefresh(); else stopAutoRefresh();
+  // v1.11.0 : persiste l'état entre sessions
+  try { localStorage.setItem(AUTO_REFRESH_LS_KEY, this.checked ? '1' : '0'); } catch (e) { /* localStorage indisponible : silencieux */ }
 });
+
+// v1.11.0 : restaure l'état coché/décoché depuis localStorage. Doit être appelé AVANT le 1er check sur .checked au boot.
+function restoreAutoRefreshFromLS() {
+  try {
+    var saved = localStorage.getItem(AUTO_REFRESH_LS_KEY);
+    if (saved === null) return; // jamais setté → défaut HTML (checked) garde la main
+    document.getElementById('autoRefresh').checked = (saved === '1');
+  } catch (e) { /* localStorage indisponible : silencieux */ }
+}
 
 // Enter key on login
 document.getElementById('tokenInput').addEventListener('keydown', function(e) {
@@ -3431,6 +3444,7 @@ renderAppTabs();
 initNav();
 updateTierPillsUI(); // v1.4.11: applique l'état visuel des pills tier depuis localStorage au chargement
 restorePeriodFromLS(); // v1.7.15: applique la période persistée depuis localStorage avant le 1er fetch
+restoreAutoRefreshFromLS(); // v1.11.0 : applique l'état coché/décoché de la checkbox auto-refresh AVANT le 1er fetch (sinon le check ligne `if (autoRefresh.checked) startAutoRefresh()` lit le défaut HTML, pas la pref user)
 setupCollapsibleSections(); // v1.7.21: mode replier/déplier hybride mobile-first
 applyInternalToggleStates(); // v1.7.26: restaure devicesExpanded et churnDetailsExpanded depuis localStorage
 // v1.7.27 : update du label bouton "Replier/Déplier" sur resize (passage mobile↔desktop)
