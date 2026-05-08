@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.20.3</title>
+<title>FRIDAY · v1.21.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -993,6 +993,53 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
   box-shadow:inset 0 0 10px rgba(0,212,255,.18);
 }
 
+/* === v1.21.0 — Streaming MAP / COSMOS : <img> plein écran + placeholder === */
+.remote-stream-wrap{
+  flex:1 1 auto;
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#000;
+  border:1px solid var(--primary-dim);
+  border-radius:6px;
+  overflow:hidden;
+  min-height:280px;
+}
+.remote-stream-img{
+  display:none;
+  max-width:100%;
+  max-height:100%;
+  width:100%;
+  object-fit:contain;
+  image-rendering:auto;
+}
+.remote-stream-img.active{display:block;}
+.remote-stream-placeholder{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:14px;
+  text-align:center;
+  padding:24px;
+  color:var(--text-1);
+  opacity:.85;
+}
+.remote-stream-placeholder.hidden{display:none;}
+.rsp-icon{font-size:48px;opacity:.7;}
+.rsp-title{
+  font:700 12px 'JetBrains Mono',monospace;
+  letter-spacing:3px;
+  color:var(--primary);
+  text-shadow:0 0 8px var(--primary-glow);
+}
+.rsp-hint{
+  font:400 11px/1.4 'JetBrains Mono',monospace;
+  color:var(--text-1);
+  opacity:.55;
+  max-width:300px;
+}
+
 /* === Bouton dictée rectangulaire === */
 /* v1.17.0i — Bouton 2 lignes : flex column. Hauteur 60px (de 54 à 60 pour
    loger 2 lignes confortables). .mic-text wrappe les 2 spans verticalement. */
@@ -1633,8 +1680,19 @@ body.conv-mode-continuous .conv-stop-fab{
 
 /* Common zone behavior : DIM par défaut, brille en active */
 .cortex-variant .v-zone{transition:filter .4s, opacity .4s}
-.cortex-variant .v-zone.dim{opacity:.18; filter:saturate(.2) brightness(.7)}
-.cortex-variant .v-zone.active{opacity:1; filter:saturate(1.2) brightness(1.1) drop-shadow(0 0 6px currentColor)}
+/* v1.21.0 — Toutes zones visibles en permanence (Quang feedback : 'au repos
+   minimum d'animation, je veux tout voir'). dim = opacity 0.45 (pas 0.18
+   comme avant qui les rendait quasi invisibles). active = full bright avec
+   glow électrique (animation visible quand zones sollicitées). */
+.cortex-variant .v-zone{transition:opacity .4s ease, filter .4s ease}
+.cortex-variant .v-zone.dim{opacity:.45; filter:saturate(.65) brightness(.85)}
+.cortex-variant .v-zone.active{opacity:1; filter:saturate(1.3) brightness(1.15) drop-shadow(0 0 8px currentColor)}
+/* Pendant SPEAKING : la zone broca clignote en plus pour effet "Friday parle".
+   La CSS var --rms-speak (0..1) est posée par audio_level event mobile. */
+body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
+  filter:saturate(1.4) brightness(calc(1.1 + var(--rms-speak, .3) * .9))
+         drop-shadow(0 0 calc(8px + var(--rms-speak, .3) * 14px) currentColor);
+}
 
 /* ---------- VARIANT A — CONSTELLATION ---------- */
 #cv-a .a-link{stroke:rgba(255,255,255,.06); stroke-width:.7; fill:none; transition:stroke .4s, stroke-width .4s}
@@ -1947,7 +2005,7 @@ body.conv-mode-continuous .conv-stop-fab{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.20</span>
+        <span class="version-tag version-badge">· v1.21</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2068,10 +2126,10 @@ body.conv-mode-continuous .conv-stop-fab{
            panneau central, (3) panels CONTEXT/FEED/MUSIC/ACTIVITY tout en bas.
            Bouton DICTER reste dans le footer toujours visible. -->
 
-      <!-- v1.18.0 — Ligne de toggles à 5 boutons : MUSIC / ACTIVITY (slots) +
-           BOOST (Haiku↔Sonnet) + $ (panel usage) + 🔇 MUTE (couper voix Friday). -->
+      <!-- v1.21.0 — Ligne de toggles 4 boutons (MUSIC retiré, exclu du mobile :
+           pas de streaming audio musique propre sans effet de bord PC, cf
+           validation Quang). ACTIVITY + BOOST + $ + 🔇 MUTE. -->
       <div class="slot-toggles">
-        <button class="slot-toggle" data-slot="music">+ MUSIC</button>
         <button class="slot-toggle" data-slot="activity">+ ACTIVITY</button>
         <button class="slot-toggle" id="btnBoost" title="Switch modèle Claude : Haiku 4.5 (économique) ↔ Sonnet 4.6 (raisonnement avancé). Garde l'historique.">💪 BOOST</button>
         <button class="slot-toggle" id="btnUsage" title="Affiche/cache le panneau de consommation API (Claude / ElevenLabs / Groq) en temps réel">$</button>
@@ -2130,15 +2188,9 @@ body.conv-mode-continuous .conv-stop-fab{
           </div>
         </article>
 
-        <!-- MUSIC (hidden by default) -->
-        <article class="hud-panel hidden-slot" id="panel-music">
-          <div class="hud-panel-header">
-            <span>MUSIC</span><span class="ico">♪</span>
-          </div>
-          <div class="hud-panel-content" id="panel-music-content">
-            <div class="hud-panel-line dim">—</div>
-          </div>
-        </article>
+        <!-- v1.21.0 — Panel MUSIC retiré (musique exclue du mobile, validation
+             Quang : 'soit ça streame proprement, soit on l'exclut'). Le HUD PC
+             garde son YouTube IFrame Player normal. -->
 
         <!-- ACTIVITY (hidden by default) -->
         <article class="hud-panel hidden-slot" id="panel-activity">
@@ -2153,38 +2205,31 @@ body.conv-mode-continuous .conv-stop-fab{
 
     </section>
 
-    <!-- VIEW : MAP -->
+    <!-- v1.21.0 — VIEW MAP : streamée depuis le HUD PC (MapLibre canvas
+         capturé toutes les ~320ms en JPEG q=0.6, downscale max 720px). Le
+         mobile pilote par voix uniquement (pas de tactile direct). -->
     <section class="view" id="view-map">
-      <div class="map-view">
-        <div class="map-grid"></div>
-        <div class="map-pin"></div>
-        <div class="map-label">Lyon 7 · 45.74° N · 4.85° E</div>
-        <div class="map-coord">GPS · ±8m · live</div>
-      </div>
-      <article class="hud-panel full">
-        <div class="hud-panel-header">
-          <span>NEAR YOU</span><span class="ico">⌖</span>
+      <div class="remote-stream-wrap" id="mapStreamWrap">
+        <img id="mapStreamImg" alt="Carte streamée" class="remote-stream-img">
+        <div class="remote-stream-placeholder" id="mapStreamPlaceholder">
+          <div class="rsp-icon">🗺</div>
+          <div class="rsp-title">CARTE — streaming PC</div>
+          <div class="rsp-hint">En attente du flux… dis "Friday, ouvre la carte" ou ouvre la map sur le PC</div>
         </div>
-        <div class="hud-panel-line accent">Carrefour Express · 120m</div>
-        <div class="hud-panel-line dim">Métro Jean Macé · 320m</div>
-        <div class="hud-panel-line dim">Boulangerie Pozzoli · 80m</div>
-      </article>
+      </div>
     </section>
 
-    <!-- VIEW : COSMOS -->
+    <!-- v1.21.0 — VIEW COSMOS : streamée depuis le HUD PC (canvas iframe
+         cosmos POC capturé en JPEG). Pilotage vocal uniquement. -->
     <section class="view" id="view-cosmos">
-      <div class="cosmos-view">
-        <div class="cosmos-stars"></div>
-        <div class="cosmos-label">Cosmos · placeholder mock</div>
-      </div>
-      <article class="hud-panel full">
-        <div class="hud-panel-header">
-          <span>SOL SYSTEM</span><span class="ico">☉</span>
+      <div class="remote-stream-wrap" id="cosmosStreamWrap">
+        <img id="cosmosStreamImg" alt="Cosmos streamé" class="remote-stream-img">
+        <div class="remote-stream-placeholder" id="cosmosStreamPlaceholder">
+          <div class="rsp-icon">🌌</div>
+          <div class="rsp-title">COSMOS — streaming PC</div>
+          <div class="rsp-hint">En attente du flux… dis "Friday, ouvre cosmos" ou ouvre cosmos sur le PC</div>
         </div>
-        <div class="hud-panel-line accent">Lune · gibbeuse 78%</div>
-        <div class="hud-panel-line dim">Mars · visible 22:14</div>
-        <div class="hud-panel-line dim">ISS · passage 23:48</div>
-      </article>
+      </div>
     </section>
 
   </main>
@@ -2382,7 +2427,7 @@ body.conv-mode-continuous .conv-stop-fab{
   //   et envoie 'tts_speak_text' au mobile → window.speechSynthesis.speak
   //   (Friday parle dans le HP du tel via TTS OS natif).
   // + glide-typing fix (autocomplete on, enterkeyhint=send, inputmode=text).
-  const VERSION = '1.20.3';
+  const VERSION = '1.21.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -2504,6 +2549,17 @@ body.conv-mode-continuous .conv-stop-fab{
   }
 
   // ----- VIEW SWITCHING -----
+  // v1.21.0 — Quand l'user change d'onglet (ACCUEIL / CARTE / COSMOS), on
+  // signale au HUD PC quelle vue est active sur le mobile via remote_view_request.
+  // Le HUD PC adapte sa capture (économie bande passante : pas de stream si
+  // le mobile n'est pas sur la vue map/cosmos).
+  function _signalRemoteView(viewKey){
+    if(typeof wsSendJson !== 'function') return;
+    const kind = (viewKey === 'map') ? 'map'
+              : (viewKey === 'cosmos') ? 'cosmos'
+              : 'none';
+    try { wsSendJson({ type: 'remote_view_request', kind }); } catch(_) {}
+  }
   $$('.mode-btn').forEach(btn=>{
     btn.addEventListener('click',()=>{
       $$('.mode-btn').forEach(b=>b.classList.remove('active'));
@@ -2516,6 +2572,8 @@ body.conv-mode-continuous .conv-stop-fab{
       // V1.3 : persiste le view actif
       config.view = v;
       saveConfig();
+      // v1.21.0 — Signale au HUD PC pour streaming carte/cosmos
+      _signalRemoteView(v);
     });
   });
 
@@ -2924,50 +2982,98 @@ body.conv-mode-continuous .conv-stop-fab{
       return '<div class="hud-panel-line ' + cls + '">' + txt + '</div>';
     }).join('');
   }
+  // v1.21.0 — Aligné sur format réel backend : ACTIVE_CONTEXT
+  // (active_context.py:49) keys = {project, summary, mood, ts}.
+  // Plus de location/weather (étaient dans mes anciennes suppositions).
   function applyContextState(msg){
     if(!msg) return;
     const ctx = msg.context || msg;
     const lines = [];
-    if(ctx.project)  lines.push({ accent:true, text: ctx.project });
-    if(ctx.summary)  lines.push({ dim:true, text: ctx.summary });
-    if(ctx.mood)     lines.push({ dim:true, text: '🌡 ' + ctx.mood });
-    if(ctx.location) lines.push({ text: '📍 ' + ctx.location });
-    if(ctx.weather)  lines.push({ dim:true, text: ctx.weather });
+    if(ctx.project) lines.push({ accent:true, text: ctx.project });
+    if(ctx.summary) lines.push({ dim:true,    text: ctx.summary });
+    if(ctx.mood)    lines.push({ dim:true,    text: '🌡 ' + ctx.mood });
     _setPanelLines('panel-context', lines);
   }
+  // v1.21.0 — Aligné sur format réel backend : feed_state.entries =
+  // [{ts:int_ms, icon:str, text:str, kind:str}] (jarvis_backend.py:3697).
   function applyFeedState(msg){
     if(!msg) return;
-    const events = msg.events || msg.feed || [];
-    if(!Array.isArray(events) || events.length === 0){
+    const entries = (msg.entries || []);
+    if(!Array.isArray(entries) || entries.length === 0){
       _setPanelLines('panel-feed', []);
       return;
     }
-    const lines = [{ accent:true, text: events.length + ' event' + (events.length>1?'s':'') }];
-    events.slice(0, 4).forEach(ev => {
-      const ts = ev.ts ? new Date(ev.ts).toLocaleTimeString().slice(0,5) : '';
-      lines.push({ dim:true, text: (ts ? ts + ' · ' : '') + (ev.label || ev.type || '?') });
+    const lines = [{ accent:true, text: entries.length + ' event' + (entries.length>1?'s':'') }];
+    entries.slice(0, 4).forEach(ev => {
+      let ts = '';
+      if(ev.ts){
+        try {
+          const d = new Date(typeof ev.ts === 'number' ? ev.ts : Date.parse(ev.ts));
+          ts = String(d.getHours()).padStart(2,'0') + ':' +
+               String(d.getMinutes()).padStart(2,'0');
+        } catch(_) {}
+      }
+      const icon = ev.icon ? ev.icon + ' ' : '';
+      lines.push({ dim:true, text: (ts ? ts + ' · ' : '') + icon + (ev.text || '?') });
     });
     _setPanelLines('panel-feed', lines);
   }
-  function applyMusicState(msg){
-    if(!msg) return;
-    const m = msg.music || msg;
-    const lines = [];
-    if(m.title)  lines.push({ accent:true, text: m.title });
-    if(m.artist) lines.push({ dim:true, text: m.artist + (m.album ? ' · ' + m.album : '') });
-    if(m.elapsed_s != null && m.duration_s){
-      const mm = Math.floor(m.elapsed_s/60), ss = String(Math.floor(m.elapsed_s%60)).padStart(2,'0');
-      lines.push({ dim:true, text: `${mm}:${ss} / ${Math.floor(m.duration_s/60)}:${String(Math.floor(m.duration_s%60)).padStart(2,'0')}` });
+  // v1.21.0 — applyMusicState retiré (panel MUSIC exclu du mobile).
+
+  // v1.21.0 — Streaming carte/cosmos : reçoit un frame JPEG du HUD PC et
+  // l'affiche dans l'<img> correspondant. Cache le placeholder dès le 1er
+  // frame reçu. Ne fait rien si l'utilisateur n'est pas sur la vue concernée.
+  function applyRemoteFrame(m){
+    if(!m || !m.kind || !m.data_b64) return;
+    const kind = m.kind;
+    const mime = m.mime || 'image/jpeg';
+    if(kind !== 'map' && kind !== 'cosmos') return;
+    const img = document.getElementById(kind + 'StreamImg');
+    const placeholder = document.getElementById(kind + 'StreamPlaceholder');
+    if(!img) return;
+    // Set le src en data URI. Le browser cache pas les data URIs donc pas
+    // de fuite mémoire (chaque set remplace).
+    img.src = 'data:' + mime + ';base64,' + m.data_b64;
+    if(!img.classList.contains('active')){
+      img.classList.add('active');
+      if(placeholder) placeholder.classList.add('hidden');
     }
-    _setPanelLines('panel-music', lines);
   }
+  // v1.21.0 — Aligné sur format réel backend (jarvis_backend.py:3565) :
+  // {session_minutes, tool_count_total, tool_count_dominant, top_tools:[{name,count}],
+  //  last_tool, last_tool_age_s, project, ts}.
   function applyActivityState(msg){
     if(!msg) return;
-    const a = msg.activity || msg;
     const lines = [];
-    if(a.session_tools_n != null) lines.push({ accent:true, text: a.session_tools_n + ' tool' + (a.session_tools_n>1?'s':'') });
-    if(a.last_tool)              lines.push({ dim:true, text: '↳ ' + a.last_tool });
-    if(a.uptime_min != null)     lines.push({ dim:true, text: a.uptime_min + ' min uptime' });
+    // 1ère ligne : nombre de tools dominants en accent (ignore meta/internes)
+    if(typeof msg.tool_count_dominant === 'number'){
+      const n = msg.tool_count_dominant;
+      lines.push({ accent:true, text: n + ' tool' + (n>1?'s':'') + ' actifs' });
+    }
+    // Last tool : nom + age relatif si dispo (ex. "↳ globe_arc · il y a 12s")
+    if(msg.last_tool){
+      let suffix = '';
+      const age = msg.last_tool_age_s;
+      if(typeof age === 'number'){
+        if(age < 60) suffix = ' · il y a ' + age + 's';
+        else if(age < 3600) suffix = ' · il y a ' + Math.round(age/60) + 'min';
+        else suffix = ' · il y a ' + (age/3600).toFixed(1) + 'h';
+      }
+      lines.push({ dim:true, text: '↳ ' + msg.last_tool + suffix });
+    }
+    // Top 2 tools (utile pour voir ce que Friday fait beaucoup)
+    if(Array.isArray(msg.top_tools) && msg.top_tools.length > 0){
+      const top2 = msg.top_tools.slice(0, 2)
+        .map(t => t.name + ' ×' + t.count).join(' · ');
+      lines.push({ dim:true, text: top2 });
+    }
+    // Session minutes : durée écoulée depuis le démarrage backend
+    if(typeof msg.session_minutes === 'number'){
+      const m = msg.session_minutes;
+      const txt = m < 60 ? m + ' min session'
+        : (m/60).toFixed(1) + 'h session';
+      lines.push({ dim:true, text: txt });
+    }
     _setPanelLines('panel-activity', lines);
   }
 
@@ -3947,11 +4053,18 @@ body.conv-mode-continuous .conv-stop-fab{
     if(zones) cortexFlashZones(zones, 1100);
   }
 
-  /* ---------- Apply state to active variant ---------- */
+  /* ---------- v1.21.0 — Apply state : toutes zones visibles en permanence ----
+     (Quang feedback : 'finalement il faut afficher en permanence d'une certaine
+     manière toutes les zones, le même principe que sur PC. l'activité cérébrale,
+     je veux tout voir').
+     - Zones non-actives : opacity 0.45 (dim ≠ caché ≠ très visible)
+     - Zones actives selon state : full bright + glow + animation
+     - Pendant SPEAKING : la CSS .v-zone[data-zone="broca"] palpite avec
+       --rms-speak (cf onAudioLevel)
+  --------------------------------------------------------------------- */
   function applyCortexState(){
     if(!pip.active || pip.contentKind!=='cortex') return;
     const active = CORTEX_STATE_MAP[ui.state] || [];
-    // toutes les variantes : DIM/active selon zones actives
     VARIANT_LIST.forEach(L=>{
       const root = document.getElementById(`cv-${L.toLowerCase()}`);
       if(!root) return;
@@ -3962,8 +4075,18 @@ body.conv-mode-continuous .conv-stop-fab{
         else z.classList.add('dim');
       });
       clearVariantPulses(L);
-      spawnVariantPulses(L, active);
+      // Zones brillantes selon state : pulses focalisés. Sinon (idle), l'effet
+      // ambient est géré par la boucle _cortexTick (pulse 1 zone aléatoire toutes
+      // les 5s avec opacity 0.42).
+      if(active.length){
+        spawnVariantPulses(L, active);
+      }
     });
+    // v1.21.0 — Reset --rms-speak quand on quitte speaking (sinon broca reste en
+    // mode pulsé visuel même en idle).
+    if(ui.state !== 'speaking'){
+      document.documentElement.style.removeProperty('--rms-speak');
+    }
   }
 
   /* ---------- Apply variant : show only the chosen layer ---------- */
@@ -4809,6 +4932,14 @@ body.conv-mode-continuous .conv-stop-fab{
     const rms = typeof m.rms === 'number' ? m.rms : 0;
     const v = Math.max(0, Math.min(100, Math.round(rms * 100)));
     applyRms(v);
+    // v1.21.0 — Pose aussi --rms-speak (0..1) pour piloter la zone broca du
+    // cortex pendant SPEAKING (CSS calc dans .v-zone[data-zone="broca"]).
+    // Petite smoothness : amorti exponentiel (alpha 0.6) pour éviter clignotage.
+    if(ui.state === 'speaking'){
+      const prev = parseFloat(document.documentElement.style.getPropertyValue('--rms-speak') || '0.3');
+      const smooth = (prev * 0.4) + (rms * 0.6);
+      document.documentElement.style.setProperty('--rms-speak', smooth.toFixed(3));
+    }
   }
   function onTranscriptFinal(m){
     const text = (m.text || '').trim();
@@ -5065,6 +5196,10 @@ body.conv-mode-continuous .conv-stop-fab{
             if(status){ status.classList.add('mobile-primary'); status.textContent = '🎤 mic mobile'; }
           } catch(_) {}
           break;
+        // v1.21.0 — Frame stream carte/cosmos depuis le HUD PC
+        case 'remote_frame':
+          try { applyRemoteFrame(m); } catch(_) {}
+          break;
         // v1.18.0 — Hydratation panels satellite via events WS
         case 'context_state':
           try { applyContextState(m); } catch(_) {}
@@ -5073,7 +5208,11 @@ body.conv-mode-continuous .conv-stop-fab{
           try { applyFeedState(m); } catch(_) {}
           break;
         case 'music':
-          try { applyMusicState(m); } catch(_) {}
+          /* v1.21.0 — musique exclue du mobile, ignorée silencieusement */
+          break;
+        case 'music_search_failed':
+        case 'music_cascade_failed':
+          /* v1.21.0 — events musique liés exclus aussi du mobile */
           break;
         case 'activity_state':
           try { applyActivityState(m); } catch(_) {}
