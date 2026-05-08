@@ -551,6 +551,90 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
   text-shadow:0 0 4px var(--primary-glow);
   box-shadow:inset 0 0 10px rgba(0,212,255,.18);
 }
+/* v1.17.0e — Variante BOOST actif : violet (#c44dff = thinking color) pour
+   distinguer du toggle de panel. Indique "modèle Sonnet/Opus actif". */
+.slot-toggle.boost-on{
+  border-color:#c44dff;
+  color:#c44dff;
+  text-shadow:0 0 4px rgba(196,77,255,.6);
+  box-shadow:inset 0 0 10px rgba(196,77,255,.22);
+}
+
+/* === USAGE PANEL (mobile) === */
+.usage-panel-mobile{
+  position:fixed;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%) scale(.96);
+  width:min(92vw, 360px);
+  max-height:80vh;
+  background:linear-gradient(180deg,rgba(0,30,52,.92),rgba(0,18,32,.96));
+  border:1px solid var(--primary-dim);
+  border-radius:6px;
+  box-shadow:0 8px 36px rgba(0,212,255,.18), 0 0 0 1px rgba(0,212,255,.08);
+  backdrop-filter:blur(14px) saturate(140%);
+  -webkit-backdrop-filter:blur(14px) saturate(140%);
+  z-index:60;
+  opacity:0;pointer-events:none;
+  transition:opacity .22s ease, transform .22s ease;
+  overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.usage-panel-mobile.show{
+  opacity:1;
+  transform:translate(-50%,-50%) scale(1);
+  pointer-events:auto;
+}
+.upm-header{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 12px;
+  border-bottom:1px solid var(--primary-dim);
+  font:600 10px 'JetBrains Mono',monospace;
+  letter-spacing:2px;color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+}
+.upm-close{
+  background:transparent;border:none;color:var(--text-1);
+  font-size:14px;cursor:pointer;padding:0 4px;line-height:1;
+}
+.upm-close:hover{color:var(--primary);text-shadow:0 0 6px var(--primary-glow);}
+.upm-warnings{
+  padding:6px 10px;border-bottom:1px solid rgba(255,184,0,.25);
+  background:rgba(255,184,0,.08);
+}
+.upm-warn-row{
+  font:600 9px 'JetBrains Mono',monospace;
+  color:#ffb547;letter-spacing:.5px;padding:2px 0;
+}
+.upm-body{
+  padding:8px 10px 10px;overflow-y:auto;
+}
+.upm-section{
+  margin-bottom:10px;
+  padding-bottom:8px;
+  border-bottom:1px dashed rgba(0,212,255,.18);
+}
+.upm-section:last-of-type{border-bottom:none;margin-bottom:6px;}
+.upm-section-head{
+  display:flex;justify-content:space-between;
+  font:700 9px 'JetBrains Mono',monospace;
+  letter-spacing:1.6px;text-transform:uppercase;
+  color:var(--primary);text-shadow:0 0 4px var(--primary-glow);
+  padding:2px 0 4px;
+}
+.upm-cost{color:var(--text-1);font-weight:600;}
+.upm-row{
+  display:flex;justify-content:space-between;align-items:baseline;
+  font:500 9.5px 'JetBrains Mono',monospace;
+  padding:2px 0;color:var(--text-1);
+}
+.upm-svc{color:var(--text-1);opacity:.7;letter-spacing:1px;}
+.upm-detail{color:var(--text-1);opacity:.95;font-size:9px;text-align:right;}
+.upm-fxrate{
+  text-align:right;
+  font:500 8.5px 'JetBrains Mono',monospace;
+  color:var(--text-1);opacity:.55;letter-spacing:.5px;
+  padding-top:4px;
+}
 
 /* === Transcript panel === */
 .transcript-panel{
@@ -1601,7 +1685,9 @@ body.conv-mode-continuous .conv-stop-fab{
     <div class="header-top">
       <div class="brand">
         <span class="brand-dot"></span>
-        <span>FRIDAY</span>
+        <!-- v1.17.0e — id pour update dynamique JARVIS/FRIDAY selon voix backend
+             via event WS voice_avatar_hint (assistant_name = 'JARVIS' ou 'FRIDAY'). -->
+        <span id="brandName">FRIDAY</span>
       </div>
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
@@ -1722,10 +1808,14 @@ body.conv-mode-continuous .conv-stop-fab{
         <!-- Rempli par JS selon le trigger (cortex / autre) -->
       </div>
 
-      <!-- Toggles slots cachés -->
+      <!-- v1.17.0e — Ligne de toggles à 4 boutons : MUSIC / ACTIVITY (slots panneaux satellites)
+           + BOOST (toggle Claude Haiku↔Sonnet, miroir du HUD PC #btn-boost)
+           + $ (toggle panel USAGE conso API, miroir du HUD PC #btn-usage). -->
       <div class="slot-toggles">
         <button class="slot-toggle" data-slot="music">+ MUSIC</button>
         <button class="slot-toggle" data-slot="activity">+ ACTIVITY</button>
+        <button class="slot-toggle" id="btnBoost" title="Switch modèle Claude : Haiku 4.5 (économique) ↔ Sonnet 4.6 (raisonnement avancé). Garde l'historique.">💪 BOOST</button>
+        <button class="slot-toggle" id="btnUsage" title="Affiche/cache le panneau de consommation API (Claude / ElevenLabs / Groq) en temps réel">$</button>
       </div>
 
       <!-- Cadre satellite : 4 panneaux -->
@@ -1883,6 +1973,38 @@ body.conv-mode-continuous .conv-stop-fab{
   </div>
 </aside>
 
+<!-- v1.17.0e — Panel USAGE (toggle via bouton $ dans la slot-toggles row).
+     Hydraté par event WS 'usage_state' du backend (mêmes champs que HUD PC :
+     session/today/month + usd_to_eur + warnings). Style HOLO compact mobile. -->
+<aside class="usage-panel-mobile" id="usagePanelMobile" aria-hidden="true">
+  <div class="upm-header">
+    <span>$ COÛT API · TEMPS RÉEL</span>
+    <button class="upm-close" id="upmClose" aria-label="Fermer">✕</button>
+  </div>
+  <div class="upm-warnings" id="upmWarnings" hidden></div>
+  <div class="upm-body" id="upmBody">
+    <div class="upm-section" data-period="session">
+      <div class="upm-section-head"><span>SESSION</span><span class="upm-cost" data-cost>—</span></div>
+      <div class="upm-row" data-svc="llm"><span class="upm-svc">LLM</span><span class="upm-detail" data-detail>—</span></div>
+      <div class="upm-row" data-svc="tts"><span class="upm-svc">TTS</span><span class="upm-detail" data-detail>—</span></div>
+      <div class="upm-row" data-svc="stt"><span class="upm-svc">STT</span><span class="upm-detail" data-detail>—</span></div>
+    </div>
+    <div class="upm-section" data-period="today">
+      <div class="upm-section-head"><span>AUJOURD'HUI</span><span class="upm-cost" data-cost>—</span></div>
+      <div class="upm-row" data-svc="llm"><span class="upm-svc">LLM</span><span class="upm-detail" data-detail>—</span></div>
+      <div class="upm-row" data-svc="tts"><span class="upm-svc">TTS</span><span class="upm-detail" data-detail>—</span></div>
+      <div class="upm-row" data-svc="stt"><span class="upm-svc">STT</span><span class="upm-detail" data-detail>—</span></div>
+    </div>
+    <div class="upm-section" data-period="month">
+      <div class="upm-section-head"><span>MOIS</span><span class="upm-cost" data-cost>—</span></div>
+      <div class="upm-row" data-svc="llm"><span class="upm-svc">LLM</span><span class="upm-detail" data-detail>—</span></div>
+      <div class="upm-row" data-svc="tts"><span class="upm-svc">TTS</span><span class="upm-detail" data-detail>—</span></div>
+      <div class="upm-row" data-svc="stt"><span class="upm-svc">STT</span><span class="upm-detail" data-detail>—</span></div>
+    </div>
+    <div class="upm-fxrate">Taux : 1 USD ≈ <span id="upmFxrate">0.92</span> €</div>
+  </div>
+</aside>
+
 <!-- V1.2 : STOP flottant (visible uniquement en mode CONTINUOUS via body.conv-mode-continuous) -->
 <button class="conv-stop-fab" id="convStopFab" type="button" aria-label="Stop continuous mode">
   <span class="stop-dot"></span><span>STOP</span>
@@ -1927,14 +2049,10 @@ body.conv-mode-continuous .conv-stop-fab{
   const WS_URL = (function(){
     const override = QUERY.get('ws');
     if (override) return override;
-    // v1.17.0 GitHub Pages variant : si servi depuis github.io, le mobile ne
-    // peut pas joindre localhost du PC → on tape Tailscale Serve qui bridge
-    // tailnet:8445 → backend Friday WS 127.0.0.1:8765. Mapping côté PC :
-    // `tailscale serve --bg --tls-terminated-tcp=8445 tcp://localhost:8765`.
+    // v1.17.0 GitHub Pages variant : tailnet:8445 → backend Friday WS 127.0.0.1:8765.
     if (location.hostname === 'quang101182.github.io') {
       return 'wss://desktop-97pf6l1.tailc503e.ts.net:8445/?kind=mobile';
     }
-    // Default : même host que la page, port 8765 (servi par backend Friday HTTP localement)
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = location.hostname || '127.0.0.1';
     return `${proto}//${host}:8765/?kind=mobile`;
@@ -2082,7 +2200,10 @@ body.conv-mode-continuous .conv-stop-fab{
       saveConfig();
     }
   }
+  // v1.17.0e — Filtrer : seuls les .slot-toggle avec data-slot sont toggles de panels.
+  // Les autres (#btnBoost, #btnUsage) ont leurs propres handlers ci-dessous.
   $$('.slot-toggle').forEach(btn=>{
+    if(!btn.dataset.slot) return;
     btn.addEventListener('click',()=>{
       const slot=btn.dataset.slot;
       const panel=$('#panel-'+slot);
@@ -2093,6 +2214,125 @@ body.conv-mode-continuous .conv-stop-fab{
       try{ navigator.vibrate && navigator.vibrate(10);}catch(e){}
     });
   });
+
+  /* =========================================================================
+     v1.17.0e — BOOST (toggle Claude Haiku 4.5 ↔ Sonnet 4.6)
+     Miroir du #btn-boost du HUD PC : envoie config WS, le visuel reflète
+     ensuite l'event 'config_state' broadcast par le backend.
+     ========================================================================= */
+  const HAIKU_MODEL  = 'claude-haiku-4-5-20251001';
+  const SONNET_MODEL = 'claude-sonnet-4-6';
+  function refreshBoostBtn(currentModel){
+    const btn = $('#btnBoost');
+    if(!btn) return;
+    const isBoost = (currentModel || '').includes('sonnet') || (currentModel || '').includes('opus');
+    btn.classList.toggle('boost-on', isBoost);
+    btn.textContent = isBoost ? '💪 SONNET' : '💪 BOOST';
+    btn.title = isBoost
+      ? 'Sonnet 4.6 actif (raisonnement avancé). Tap → revenir à Haiku 4.5.'
+      : 'Haiku 4.5 actif (rapide, économique). Tap → escalader vers Sonnet 4.6.';
+  }
+  $('#btnBoost').addEventListener('click',()=>{
+    const cur = (mobileConfigState && mobileConfigState.claude_model) || HAIKU_MODEL;
+    const isBoost = cur.includes('sonnet') || cur.includes('opus');
+    const next = isBoost ? HAIKU_MODEL : SONNET_MODEL;
+    wsSendJson({ type: 'config', key: 'claude_model', value: next });
+    toast(isBoost ? 'CLAUDE → HAIKU 4.5' : 'CLAUDE → SONNET 4.6');
+    try{ navigator.vibrate && navigator.vibrate(12);}catch(e){}
+    // Feedback visuel immédiat avant retour config_state du backend
+    refreshBoostBtn(next);
+    if(mobileConfigState) mobileConfigState.claude_model = next;
+  });
+
+  /* =========================================================================
+     v1.17.0e — USAGE panel toggle ($) — miroir #btn-usage HUD PC
+     Hydraté par event WS 'usage_state'. Persistance localStorage.
+     ========================================================================= */
+  const UPM_KEY = 'friday.mobile.usage_panel_visible';
+  function fmtTokens(n){
+    n = Number(n) || 0;
+    if(n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M';
+    if(n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
+    return String(n);
+  }
+  function fmtSeconds(s){
+    s = Number(s) || 0;
+    if(s >= 3600) return (s / 3600).toFixed(2) + 'h';
+    if(s >= 60) return (s / 60).toFixed(1) + 'min';
+    return s.toFixed(1) + 's';
+  }
+  function fmtCost(usd, eur){
+    usd = Number(usd) || 0;
+    const usdStr = usd >= 1 ? '$' + usd.toFixed(2) : '$' + usd.toFixed(4);
+    const eurStr = (eur && !isNaN(eur))
+      ? (eur >= 1 ? eur.toFixed(2) + '€' : eur.toFixed(4) + '€')
+      : '';
+    return eurStr ? eurStr + ' · ' + usdStr : usdStr;
+  }
+  function refreshUsagePanel(data){
+    const panel = $('#usagePanelMobile');
+    if(!panel || !data) return;
+    const fx = Number(data.usd_to_eur) || 0.92;
+    const fxEl = $('#upmFxrate'); if(fxEl) fxEl.textContent = fx.toFixed(2);
+    // Warnings (quotas etc.)
+    const wrapW = $('#upmWarnings');
+    const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+    if(warnings.length === 0){
+      wrapW.hidden = true; wrapW.innerHTML = '';
+    } else {
+      wrapW.hidden = false;
+      wrapW.innerHTML = warnings.map(w =>
+        '<div class="upm-warn-row">⚠ ' +
+        String(w.msg || '').replace(/[<>]/g, c => ({'<':'&lt;','>':'&gt;'}[c])) +
+        '</div>'
+      ).join('');
+    }
+    for(const period of ['session', 'today', 'month']){
+      const bucket = data[period] || {};
+      const sec = panel.querySelector('.upm-section[data-period="' + period + '"]');
+      if(!sec) continue;
+      const cost = Number(bucket.cost_usd) || 0;
+      const eur = cost * fx;
+      sec.querySelector('[data-cost]').textContent = fmtCost(cost, eur);
+      const llmTot = (bucket.llm_input || 0) + (bucket.llm_output || 0)
+                   + (bucket.llm_cache_w || 0) + (bucket.llm_cache_r || 0);
+      sec.querySelector('.upm-row[data-svc="llm"] [data-detail]').textContent =
+        fmtTokens(llmTot) + ' tok · ' + fmtCost(bucket.llm_cost_usd || 0) +
+        ' (' + (bucket.llm_n || 0) + ')';
+      sec.querySelector('.upm-row[data-svc="tts"] [data-detail]').textContent =
+        fmtTokens(bucket.tts_chars || 0) + ' c · ' +
+        fmtCost(bucket.tts_cost_usd || 0) + ' (' + (bucket.tts_n || 0) + ')';
+      sec.querySelector('.upm-row[data-svc="stt"] [data-detail]').textContent =
+        fmtSeconds(bucket.stt_seconds || 0) + ' · ' +
+        fmtCost(bucket.stt_cost_usd || 0) + ' (' + (bucket.stt_n || 0) + ')';
+    }
+  }
+  function showUsagePanel(){
+    $('#usagePanelMobile').classList.add('show');
+    $('#usagePanelMobile').setAttribute('aria-hidden','false');
+    $('#btnUsage').classList.add('on');
+    try { localStorage.setItem(UPM_KEY, '1'); } catch(_) {}
+  }
+  function hideUsagePanel(){
+    $('#usagePanelMobile').classList.remove('show');
+    $('#usagePanelMobile').setAttribute('aria-hidden','true');
+    $('#btnUsage').classList.remove('on');
+    try { localStorage.setItem(UPM_KEY, '0'); } catch(_) {}
+  }
+  function toggleUsagePanel(){
+    const isOpen = $('#usagePanelMobile').classList.contains('show');
+    if(isOpen) hideUsagePanel(); else showUsagePanel();
+  }
+  $('#btnUsage').addEventListener('click', ()=>{
+    toggleUsagePanel();
+    try{ navigator.vibrate && navigator.vibrate(10);}catch(e){}
+  });
+  $('#upmClose').addEventListener('click', hideUsagePanel);
+  // Restore visibility persistée au boot
+  try { if(localStorage.getItem(UPM_KEY) === '1') showUsagePanel(); } catch(_) {}
+
+  // Cache dernier config_state reçu pour que BOOST sache quel modèle est actif.
+  let mobileConfigState = { claude_model: HAIKU_MODEL };
 
   // v1.17.0d — DEBUG BUTTONS retirés (debug bar mockup supprimée). En live,
   // setState() est appelé par le router WS via l'event 'state' du backend.
@@ -2258,6 +2498,32 @@ body.conv-mode-continuous .conv-stop-fab{
     }, 600);
   }
 
+  // v1.17.0e — assistantName dynamique (FRIDAY voix femme par défaut, JARVIS
+  // voix homme). Mis à jour via event WS voice_avatar_hint (assistant_name).
+  // Affecte : (1) header brand-name en haut-gauche, (2) préfixe transcript.
+  let assistantName = 'Friday';
+  function applyAssistantName(name){
+    if(!name) return;
+    // Normalise : 'JARVIS' / 'FRIDAY' attendus du backend (cf voice_avatar_hint).
+    const upper = String(name).toUpperCase();
+    if(upper === 'JARVIS' || upper === 'FRIDAY'){
+      assistantName = upper === 'JARVIS' ? 'Jarvis' : 'Friday';
+      const brand = document.getElementById('brandName');
+      if(brand) brand.textContent = upper;
+      // Met à jour les bulles existantes du transcript (préfixe ancien speaker).
+      try {
+        document.querySelectorAll('#transcriptList .bubble.friday .who').forEach(el => {
+          // Format "<Old> · HH:MM" → remplace seulement le nom avant " · ".
+          const t = el.textContent || '';
+          const idx = t.indexOf(' · ');
+          if(idx > 0) el.textContent = assistantName + t.slice(idx);
+        });
+      } catch(_) {}
+      // Update document.title si pas en mock
+      try { document.title = upper + ' · v' + VERSION + ' mock'.replace('mock','live'); } catch(_) {}
+    }
+  }
+
   function addBubble(who, text){
     const list=$('#transcriptList');
     const b=document.createElement('div');
@@ -2265,7 +2531,8 @@ body.conv-mode-continuous .conv-stop-fab{
     const now=new Date();
     const hh=String(now.getHours()).padStart(2,'0');
     const mm=String(now.getMinutes()).padStart(2,'0');
-    b.innerHTML='<div class="who">'+(who==='user'?'Quang':'Friday')+' · '+hh+':'+mm+'</div>'+escapeHtml(text);
+    const speaker = who === 'user' ? 'Quang' : assistantName;
+    b.innerHTML='<div class="who">'+speaker+' · '+hh+':'+mm+'</div>'+escapeHtml(text);
     list.appendChild(b);
     list.scrollTop=list.scrollHeight;
   }
@@ -3218,8 +3485,15 @@ body.conv-mode-continuous .conv-stop-fab{
     try {
       stopMicAnalyser();
       const Ctx = window.AudioContext || window.webkitAudioContext;
-      if(!Ctx) return;
+      if(!Ctx) { console.warn('[mic-analyser] AudioContext unsupported'); return; }
       _micAudioCtx = new Ctx();
+      // v1.17.0e — Sur Chrome Android et Safari iOS, l'AudioContext démarre en
+      // état "suspended" tant que `.resume()` n'est pas appelé après une
+      // interaction utilisateur (le tap PTT est l'interaction). Sans ce resume,
+      // le tick() RAF tourne mais l'analyser lit toujours du silence (RMS = 0).
+      if(_micAudioCtx.state === 'suspended'){
+        _micAudioCtx.resume().catch(err => console.warn('[mic-analyser] resume failed:', err));
+      }
       const src = _micAudioCtx.createMediaStreamSource(stream);
       _micAnalyser = _micAudioCtx.createAnalyser();
       _micAnalyser.fftSize = 512;            // 256 bins, latence très basse
@@ -3227,6 +3501,7 @@ body.conv-mode-continuous .conv-stop-fab{
       src.connect(_micAnalyser);
       _micTimeBuf = new Uint8Array(_micAnalyser.fftSize);
       _micFreqBuf = new Uint8Array(_micAnalyser.frequencyBinCount);
+      console.log('[mic-analyser] started, ctx.state=', _micAudioCtx.state);
       const tick = () => {
         if(!_micAnalyser) return;
         // RMS depuis le domaine temporel (moyenne quadratique des samples [-1..1])
@@ -3572,14 +3847,24 @@ body.conv-mode-continuous .conv-stop-fab{
         case 'tts_error':         onError({code:'TTS', msg: m.error}); break;
         case 'wake_detected':     onWakeDetected(m); break;
         case 'error':             onError(m); break;
+        // v1.17.0e — events branchés (BOOST + USAGE + JARVIS/FRIDAY label)
+        case 'config_state':
+          if(m && m.claude_model){
+            mobileConfigState.claude_model = m.claude_model;
+            try { refreshBoostBtn(m.claude_model); } catch(_) {}
+          }
+          break;
+        case 'usage_state':
+          try { refreshUsagePanel(m); } catch(_) {}
+          break;
+        case 'voice_avatar_hint':
+          try { applyAssistantName(m && m.assistant_name); } catch(_) {}
+          break;
         // Compat HUD PC (handshake hydratation, ignorés en 5a) :
         case 'log_init':
         case 'context_state':
-        case 'usage_state':
         case 'system_health':
         case 'windows_state':
-        case 'voice_avatar_hint':
-        case 'config_state':
         case 'feed_state':
         case 'activity_state':
         case 'globe_state':
