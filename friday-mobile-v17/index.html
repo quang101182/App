@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.21.1</title>
+<title>FRIDAY · v1.21.5</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -991,6 +991,113 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
   color:var(--primary);
   text-shadow:0 0 6px var(--primary-glow);
   box-shadow:inset 0 0 10px rgba(0,212,255,.18);
+}
+
+/* === v1.21.5 — Live Captions overlay (éphémère, mobile uniquement) === */
+.live-captions-container{
+  position:fixed;
+  left:50%;
+  transform:translateX(-50%);
+  width:min(92vw, 460px);
+  z-index:55; /* au-dessus tout sauf modals (60+) */
+  pointer-events:none;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  padding:0 8px;
+}
+.live-captions-container[data-position="top"]{
+  top:60px; /* sous header (~52px) + petit gap */
+}
+.live-captions-container[data-position="bottom"]{
+  bottom:160px; /* au-dessus du footer DICTER + satellite-row */
+  flex-direction:column-reverse;
+}
+.live-cap{
+  background:rgba(0,18,32,0.85);
+  backdrop-filter:blur(12px) saturate(140%);
+  -webkit-backdrop-filter:blur(12px) saturate(140%);
+  border:1px solid var(--primary-dim);
+  border-radius:6px;
+  padding:8px 12px;
+  font:500 13px/1.35 -apple-system, system-ui, 'Segoe UI', sans-serif;
+  color:var(--text-1);
+  pointer-events:auto;
+  cursor:pointer;
+  opacity:0;
+  transform:translateY(-12px);
+  transition:opacity .3s ease, transform .3s cubic-bezier(.2, 1, .3, 1);
+  box-shadow:0 4px 18px rgba(0,0,0,.35);
+  max-height:80px;
+  overflow:hidden;
+}
+.live-captions-container[data-position="bottom"] .live-cap{transform:translateY(12px);}
+.live-cap.show{opacity:1;transform:translateY(0);}
+.live-cap.fading{opacity:0;}
+.live-cap .lc-prefix{
+  display:inline-block;
+  font:700 9px 'JetBrains Mono',monospace;
+  letter-spacing:2px;
+  margin-right:8px;
+  vertical-align:middle;
+}
+.live-cap.lc-user{
+  border-color:var(--primary);
+  box-shadow:0 4px 18px rgba(0,212,255,.18), 0 0 0 1px rgba(0,212,255,.12);
+}
+.live-cap.lc-user .lc-prefix{color:var(--primary);text-shadow:0 0 4px var(--primary-glow);}
+.live-cap.lc-friday{
+  border-color:#44e8a0;
+  box-shadow:0 4px 18px rgba(68,232,160,.18), 0 0 0 1px rgba(68,232,160,.12);
+}
+.live-cap.lc-friday .lc-prefix{color:#44e8a0;text-shadow:0 0 4px rgba(68,232,160,.55);}
+.live-cap .lc-text{
+  display:inline;
+  vertical-align:middle;
+}
+/* Truncate sur 3 lignes max pour reste lisible d'un coup d'œil */
+.live-cap .lc-text{
+  display:-webkit-box;
+  -webkit-line-clamp:3;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+  vertical-align:top;
+}
+
+/* === v1.21.5 — Plein écran map/cosmos sur mobile (vues remote streamées) ===
+   Mode "fullscreen viewer" : quand l'utilisateur est sur l'onglet CARTE ou
+   COSMOS, on cache toggles + transcript + panels CONTEXT/FEED, et l'<img>
+   stream prend tout l'espace dispo entre le header et le footer DICTER.
+   object-fit: contain → préserve toute la carte (pas de crop), bandes noires
+   éventuelles haut/bas (ratio map ~4:3 vs écran mobile 9:19 — choix Quang). */
+body[data-current-view="map"] .slot-toggles,
+body[data-current-view="map"] .text-input-form,
+body[data-current-view="map"] .transcript-primary,
+body[data-current-view="map"] .sat-grid,
+body[data-current-view="cosmos"] .slot-toggles,
+body[data-current-view="cosmos"] .text-input-form,
+body[data-current-view="cosmos"] .transcript-primary,
+body[data-current-view="cosmos"] .sat-grid{
+  display:none !important;
+}
+body[data-current-view="map"] #view-map .remote-stream-wrap,
+body[data-current-view="cosmos"] #view-cosmos .remote-stream-wrap{
+  position:fixed;
+  top:60px;       /* sous header */
+  left:0; right:0;
+  bottom:130px;   /* au-dessus footer DICTER + satellite-row */
+  z-index:4;
+  border-radius:0;
+  border:none;
+  margin:0;
+  min-height:0;
+  height:auto;
+}
+body[data-current-view="map"] #view-map .remote-stream-img,
+body[data-current-view="cosmos"] #view-cosmos .remote-stream-img{
+  width:100%;
+  height:100%;
+  object-fit:contain; /* option A : préserve tout le contenu */
 }
 
 /* === v1.21.0 — Streaming MAP / COSMOS : <img> plein écran + placeholder === */
@@ -2126,14 +2233,14 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
            panneau central, (3) panels CONTEXT/FEED/MUSIC/ACTIVITY tout en bas.
            Bouton DICTER reste dans le footer toujours visible. -->
 
-      <!-- v1.21.0 — Ligne de toggles 4 boutons (MUSIC retiré, exclu du mobile :
-           pas de streaming audio musique propre sans effet de bord PC, cf
-           validation Quang). ACTIVITY + BOOST + $ + 🔇 MUTE. -->
+      <!-- v1.21.5 — Ligne de toggles 5 boutons : ACT + BOOST + $ + MUTE + CAP
+           (ACTIVITY → ACT pour gain de largeur 5 boutons sur 1 ligne mobile). -->
       <div class="slot-toggles">
-        <button class="slot-toggle" data-slot="activity">+ ACTIVITY</button>
+        <button class="slot-toggle" data-slot="activity" title="Affiche/cache le panneau ACTIVITY (compteur tools session, last tool, top tools)">+ ACT</button>
         <button class="slot-toggle" id="btnBoost" title="Switch modèle Claude : Haiku 4.5 (économique) ↔ Sonnet 4.6 (raisonnement avancé). Garde l'historique.">💪 BOOST</button>
         <button class="slot-toggle" id="btnUsage" title="Affiche/cache le panneau de consommation API (Claude / ElevenLabs / Groq) en temps réel">$</button>
         <button class="slot-toggle" id="btnMute" title="Couper la voix de Friday/Jarvis. Les réponses arrivent uniquement via le transcript (utile en environnement silencieux).">🔇 MUTE</button>
+        <button class="slot-toggle" id="btnCaptions" title="Live captions : sous-titres éphémères de tes messages + réponses Friday, visibles sur toutes les pages. Tap pour activer/désactiver.">💬 CAP</button>
       </div>
 
       <!-- v1.18.0 — Champ texte saisie : envoie text_input au backend
@@ -2344,6 +2451,19 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <span class="settings-label">Vibrations PTT</span>
       <button class="settings-btn settings-btn-toggle" id="settingsVibrate">ON</button>
     </div>
+    <div class="settings-row">
+      <span class="settings-label">Captions live</span>
+      <button class="settings-btn settings-btn-toggle" id="settingsCapEnabled">ON</button>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Captions durée</span>
+      <input type="range" class="settings-slider" id="settingsCapTimeout" min="3" max="15" step="1" value="7">
+      <span class="settings-val" id="settingsCapTimeoutVal">7s</span>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Captions position</span>
+      <button class="settings-btn settings-btn-toggle" id="settingsCapPosition">↑ HAUT</button>
+    </div>
     <div class="settings-row settings-info">
       <span id="settingsTtsEngine" class="settings-meta">moteur : —</span>
     </div>
@@ -2352,6 +2472,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     </div>
   </div>
 </aside>
+
+<!-- v1.21.5 — Live Captions overlay (éphémère, fixed, sur toutes les vues).
+     Affiche en temps réel ce que tu dis (TOI · ...) et ce que Friday/Jarvis
+     répond (FRIDAY · ... ou JARVIS · ...). Auto-fade après timeout
+     configurable (Settings). Position haut/bas configurable. Tap = dismiss. -->
+<div class="live-captions-container" id="liveCaptionsContainer" data-position="top"></div>
 
 <!-- v1.17.0e — Panel USAGE (toggle via bouton $ dans la slot-toggles row).
      Hydraté par event WS 'usage_state' du backend (mêmes champs que HUD PC :
@@ -2427,7 +2553,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   //   et envoie 'tts_speak_text' au mobile → window.speechSynthesis.speak
   //   (Friday parle dans le HP du tel via TTS OS natif).
   // + glide-typing fix (autocomplete on, enterkeyhint=send, inputmode=text).
-  const VERSION = '1.21.1';
+  const VERSION = '1.21.5';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -2576,6 +2702,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       $$('.view').forEach(x=>x.classList.remove('active'));
       const target=$('#view-'+v);
       if(target) target.classList.add('active');
+      // v1.21.5 — Pose data-current-view sur body pour que le CSS active le
+      // plein écran map/cosmos (cache toggles + transcript + panels) et
+      // l'<img> stream prenne tout l'espace entre header et footer DICTER.
+      document.body.setAttribute('data-current-view', v);
       try{ navigator.vibrate && navigator.vibrate(8);}catch(e){}
       // V1.3 : persiste le view actif
       config.view = v;
@@ -2586,6 +2716,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       _pilotPcViewMode(v);
     });
   });
+  // v1.21.5 — Pose data-current-view au boot selon config persisté
+  document.body.setAttribute('data-current-view', config.view || 'home');
 
   // ----- SLOT TOGGLES -----
   function applySlotState(slot, visible, opts){
@@ -2871,6 +3003,37 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     });
     window.__vibrationsOn = vibrationsOn;
 
+    // v1.21.5 — Live Captions options : enabled toggle + timeout slider + position toggle
+    const capEnBtn = $('#settingsCapEnabled');
+    const capTo    = $('#settingsCapTimeout');
+    const capToVal = $('#settingsCapTimeoutVal');
+    const capPosBtn = $('#settingsCapPosition');
+    function _refreshCapUi(){
+      const c = LiveCaptions.getCfg();
+      capEnBtn.textContent = c.enabled ? 'ON' : 'OFF';
+      capEnBtn.classList.toggle('on', c.enabled);
+      capTo.value = c.timeout_s;
+      capToVal.textContent = c.timeout_s + 's';
+      capPosBtn.textContent = (c.position === 'bottom') ? '↓ BAS' : '↑ HAUT';
+      capPosBtn.classList.toggle('on', c.position === 'bottom');
+    }
+    _refreshCapUi();
+    capEnBtn.addEventListener('click', () => {
+      const c = LiveCaptions.getCfg();
+      LiveCaptions.setEnabled(!c.enabled);
+      _refreshCapUi();
+    });
+    capTo.addEventListener('input', e => {
+      const v = parseInt(e.target.value, 10);
+      LiveCaptions.setTimeout(v);
+      capToVal.textContent = v + 's';
+    });
+    capPosBtn.addEventListener('click', () => {
+      const c = LiveCaptions.getCfg();
+      LiveCaptions.setPosition(c.position === 'bottom' ? 'top' : 'bottom');
+      _refreshCapUi();
+    });
+
     // Reset config
     $('#settingsReset').addEventListener('click', () => {
       if(!confirm('Effacer toute la config Friday Mobile (variantes cortex, MUTE, voix TTS, vibrations) ?')) return;
@@ -3029,6 +3192,106 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     _setPanelLines('panel-feed', lines);
   }
   // v1.21.0 — applyMusicState retiré (panel MUSIC exclu du mobile).
+
+  /* =========================================================================
+     v1.21.5 — Live Captions overlay (mobile uniquement). Sous-titres
+     éphémères pour TOUTES les pages. Configurable via Settings (timeout,
+     position haut/bas) + toggle ON/OFF rapide via bouton 💬 CAP.
+     Persistance : friday.mobile.captions.{enabled, timeout_s, position}.
+     ========================================================================= */
+  const LiveCaptions = (() => {
+    const KEY = 'friday.mobile.captions';
+    const DEFAULTS = { enabled: true, timeout_s: 7, position: 'top' };
+    let cfg = Object.assign({}, DEFAULTS);
+    try {
+      const saved = localStorage.getItem(KEY);
+      if(saved) cfg = Object.assign(cfg, JSON.parse(saved));
+    } catch(_) {}
+    function save(){ try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch(_) {} }
+    const container = document.getElementById('liveCaptionsContainer');
+    function applyPosition(){
+      if(!container) return;
+      container.setAttribute('data-position', cfg.position === 'bottom' ? 'bottom' : 'top');
+    }
+    applyPosition();
+    // Map des bulles actives par role : on garde une seule bulle user et une
+    // seule friday visibles. Si une nouvelle arrive, on remplace l'ancienne.
+    const active = { user: null, friday: null };
+    function _scheduleFade(el, role){
+      const ttl = Math.max(2, Math.min(30, cfg.timeout_s || 7)) * 1000;
+      el._timer = setTimeout(() => _dismiss(el, role), ttl);
+    }
+    function _dismiss(el, role){
+      if(!el || !el.isConnected) return;
+      if(el._timer) { clearTimeout(el._timer); el._timer = null; }
+      el.classList.remove('show');
+      el.classList.add('fading');
+      setTimeout(() => { try { el.remove(); } catch(_) {} }, 350);
+      if(active[role] === el) active[role] = null;
+    }
+    function add(role, text){
+      if(!cfg.enabled) return;
+      if(!container) return;
+      if(!text || typeof text !== 'string') return;
+      text = text.trim();
+      if(!text) return;
+      // Supprime la bulle précédente du même role (remplacement instantané)
+      if(active[role]) _dismiss(active[role], role);
+      const el = document.createElement('div');
+      el.className = 'live-cap lc-' + (role === 'user' ? 'user' : 'friday');
+      const prefix = (role === 'user') ? 'TOI'
+        : (typeof assistantName !== 'undefined' && assistantName === 'Jarvis' ? 'JARVIS' : 'FRIDAY');
+      el.innerHTML = '<span class="lc-prefix">' + prefix + ' ·</span><span class="lc-text"></span>';
+      el.querySelector('.lc-text').textContent = text;
+      el.addEventListener('click', () => _dismiss(el, role));
+      // Insertion : bulle 'user' au-dessus de friday quand position=top
+      if(cfg.position === 'top'){
+        if(role === 'user' && active.friday){
+          container.insertBefore(el, active.friday);
+        } else {
+          container.appendChild(el);
+        }
+      } else {
+        // bottom : reverse, on insère en haut pour que la dernière soit en bas visuel
+        container.insertBefore(el, container.firstChild);
+      }
+      active[role] = el;
+      // Animation slide+fade in
+      requestAnimationFrame(() => el.classList.add('show'));
+      _scheduleFade(el, role);
+    }
+    function setEnabled(v){
+      cfg.enabled = !!v;
+      save();
+      if(!cfg.enabled){
+        // Hide all current captions
+        if(active.user) _dismiss(active.user, 'user');
+        if(active.friday) _dismiss(active.friday, 'friday');
+      }
+      // Update bouton CAP visuel
+      const btn = document.getElementById('btnCaptions');
+      if(btn){
+        btn.classList.toggle('on', cfg.enabled);
+        btn.textContent = cfg.enabled ? '💬 CAP' : '💬 OFF';
+      }
+    }
+    function setTimeout_s(s){ cfg.timeout_s = s; save(); }
+    function setPosition(p){ cfg.position = (p === 'bottom') ? 'bottom' : 'top'; save(); applyPosition(); }
+    function getCfg(){ return Object.assign({}, cfg); }
+    return { add, setEnabled, setTimeout: setTimeout_s, setPosition, getCfg };
+  })();
+  // Init bouton CAP toggle
+  (function(){
+    const btn = document.getElementById('btnCaptions');
+    if(!btn) return;
+    const cfg = LiveCaptions.getCfg();
+    btn.classList.toggle('on', cfg.enabled);
+    btn.textContent = cfg.enabled ? '💬 CAP' : '💬 OFF';
+    btn.addEventListener('click', () => {
+      LiveCaptions.setEnabled(!LiveCaptions.getCfg().enabled);
+      try{ navigator.vibrate && navigator.vibrate(8);}catch(e){}
+    });
+  })();
 
   // v1.21.0 — Streaming carte/cosmos : reçoit un frame JPEG du HUD PC et
   // l'affiche dans l'<img> correspondant. Cache le placeholder dès le 1er
@@ -4954,10 +5217,9 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   function onTranscriptFinal(m){
     const text = (m.text || '').trim();
     if(!text) return;
-    // Transcript du HUD PC = phrase user finale (STT). Côté mobile, on l'affiche
-    // comme bulle 'user'. Le backend enverra ensuite la réponse Friday via
-    // d'autres canaux (history → speak), pas de champ 'who' explicite ici.
     addBubble('user', text);
+    // v1.21.5 — Live caption éphémère "TOI · ..."
+    try { LiveCaptions.add('user', text); } catch(_) {}
   }
   function onTranscriptPartial(m){
     // Optionnel : flash/bandeau partial. Pour 5a on log juste, pas de bulle.
@@ -5104,6 +5366,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     const text = (m && (m.full_response || m.text || '')).trim();
     if(!text) return;
     addBubble('friday', text);
+    // v1.21.5 — Live caption éphémère "FRIDAY · ..." (ou JARVIS selon voix)
+    try { LiveCaptions.add('friday', text); } catch(_) {}
   }
 
   function onTtsStart(m){
