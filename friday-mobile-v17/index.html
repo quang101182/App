@@ -798,10 +798,35 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
 }
 
 /* === Bouton dictée rectangulaire === */
+/* v1.17.0i — Bouton 2 lignes : flex column. Hauteur 60px (de 54 à 60 pour
+   loger 2 lignes confortables). .mic-text wrappe les 2 spans verticalement. */
+.mic-btn-2lines{ flex-direction:row; }
+.mic-text{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  line-height:1.15;
+  gap:2px;
+}
+.mic-counter{
+  font:600 10px 'JetBrains Mono',monospace;
+  letter-spacing:1.5px;
+  color:inherit;
+  opacity:.85;
+  text-shadow:none;
+  text-transform:uppercase;
+  /* Réservé : invisible quand le bouton est idle (TAP TO TALK), revient en
+     recording. Géré par JS via toggle innerHTML / contenu vide. */
+}
 .mic-btn{
   width:72%;
   align-self:center;
-  height:54px;
+  height:60px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
   background:linear-gradient(180deg,rgba(0,30,52,.85),rgba(0,18,32,.95));
   border:2px solid var(--primary);
   border-radius:6px;
@@ -1942,13 +1967,19 @@ body.conv-mode-continuous .conv-stop-fab{
   <footer class="bottombar">
 
     <!-- Bouton dictée rectangulaire -->
-    <button class="mic-btn" id="micBtn" aria-label="Dictée">
+    <!-- v1.17.0i — Bouton 2 lignes : ligne 1 = état (TAP TO TALK / RECORDING /
+         HOLD / 10s avant fin), ligne 2 = chrono "Xs / 60s" pendant le rec. -->
+    <button class="mic-btn mic-btn-2lines" id="micBtn" aria-label="Dictée">
       <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="9" y="3" width="6" height="11" rx="3"/>
         <path d="M5 11a7 7 0 0 0 14 0"/>
         <line x1="12" y1="18" x2="12" y2="22"/>
       </svg>
-      <span id="micLabel">TAP TO TALK</span>
+      <!-- v1.17.0i — 2 lignes : texte état (haut) + chrono Xs / 60s (bas) -->
+      <span class="mic-text">
+        <span id="micLabel">TAP TO TALK</span>
+        <span id="micCounter" class="mic-counter"></span>
+      </span>
     </button>
 
     <!-- Satellite row : compactée (V1.1 : ajout 🧠 Cortex · V1.2 : Persona remplacé par Conv Mode) -->
@@ -2484,21 +2515,23 @@ body.conv-mode-continuous .conv-stop-fab{
       // v1.17.0h — Affichage "X / 60s" + warning visuel approche fin :
       //   - 50s+ (10s avant fin) : pulse ambre 1s + label "(10s left)"
       //   - 55s+ (5s avant fin)  : pulse rouge 0.55s + label "(5s left)"
-      let suffix = '';
+      // v1.17.0i — 2 lignes : ligne 1 = état seulement, ligne 2 = chrono X / 60s.
+      let stateLabel = hold ? 'HOLD' : 'RECORDING';
       if(remaining <= 5 && remaining >= 0){
         micBtn.classList.add('warn-critical');
         micBtn.classList.remove('warn-near-end');
-        suffix = ' · ' + remaining + 's restantes';
-        // 1 vibration courte par seconde dans la zone critique
+        stateLabel = '⚠ ' + remaining + 's RESTANTES';
         try{ navigator.vibrate && navigator.vibrate(20);}catch(e){}
       } else if(remaining <= 10){
         micBtn.classList.add('warn-near-end');
         micBtn.classList.remove('warn-critical');
-        suffix = ' · ' + remaining + 's avant fin';
+        stateLabel = (hold?'HOLD · ':'RECORDING · ') + remaining + 's avant fin';
       } else {
         micBtn.classList.remove('warn-near-end','warn-critical');
       }
-      micLabel.textContent = (hold?'HOLD · ':'RECORDING · ') + sec + 's / 60s' + suffix;
+      micLabel.textContent = stateLabel;
+      const cnt = document.getElementById('micCounter');
+      if(cnt) cnt.textContent = sec + 's / 60s';
       if(ui.elapsed>=MAX_DURATION){
         toast('max 60s atteint');
         stopRecording(true);
@@ -2514,6 +2547,9 @@ body.conv-mode-continuous .conv-stop-fab{
     micBtn.classList.remove('recording','hold','warn-near-end','warn-critical');
     micBtn.style.setProperty('--rec-progress','0%');
     micLabel.textContent='TAP TO TALK';
+    // v1.17.0i — Vide la 2e ligne (chrono) au stop : seul "TAP TO TALK" affiché en idle.
+    const cnt2 = document.getElementById('micCounter');
+    if(cnt2) cnt2.textContent = '';
     // v1.17.0g — Release audio focus IMMÉDIATEMENT (synchronous) au stop pour
     // que le contrôle de volume Android repasse sur "médias" sans attendre.
     try { releaseAudioFocus(); } catch(_) {}
