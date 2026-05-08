@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.20.1</title>
+<title>FRIDAY · v1.20.2</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2082,18 +2082,19 @@ body.conv-mode-continuous .conv-stop-fab{
            (équivalent du #text-input du HUD PC). Submit (Entrée) → message
            apparaît comme bulle user dans le transcript via le retour
            transcript_final du backend. -->
-      <form class="text-input-form" id="textInputForm" onsubmit="return false;">
-        <!-- v1.18.2 — autocomplete="off" + autocorrect="off" cassaient le
-             glide-typing Gboard (Quang feedback : 'le slide de mon clavier ne
-             fonctionne pas'). Pattern PromoClip fonctionnel : laisser
-             autocomplete + autocorrect actifs, ajouter enterkeyhint="send" et
-             inputmode="text" pour un meilleur clavier mobile. -->
+      <!-- v1.20.2 — Glide-typing Gboard 2e tentative : retire le <form>
+           wrapper. Pattern PromoClip qui marche = <input type="text"> seul,
+           pas de form, pas de onsubmit. Le form + onsubmit="return false;"
+           peut bloquer les events compositionend que les claviers gesture
+           utilisent. Maintenant : un simple <div class="text-input-form">
+           avec event listeners keydown et click sur le bouton →. -->
+      <div class="text-input-form" id="textInputForm">
         <input type="text" class="text-input" id="textInput"
                placeholder="…ou tape pour parler à Friday"
                autocomplete="on" spellcheck="true"
                enterkeyhint="send" inputmode="text">
-        <button type="submit" class="text-input-send" id="textInputSend" aria-label="Envoyer">→</button>
-      </form>
+        <button type="button" class="text-input-send" id="textInputSend" aria-label="Envoyer">→</button>
+      </div>
 
       <!-- v1.18.1 — TRANSCRIPT central (panneau le plus important pour Quang).
            flex:1 (prend tout l'espace restant) avec scroll auto stickyBottom.
@@ -2381,7 +2382,7 @@ body.conv-mode-continuous .conv-stop-fab{
   //   et envoie 'tts_speak_text' au mobile → window.speechSynthesis.speak
   //   (Friday parle dans le HP du tel via TTS OS natif).
   // + glide-typing fix (autocomplete on, enterkeyhint=send, inputmode=text).
-  const VERSION = '1.20.1';
+  const VERSION = '1.20.2';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -2857,10 +2858,11 @@ body.conv-mode-continuous .conv-stop-fab{
      du #text-input HUD PC). Submit → backend traite comme un user_turn vocal,
      le retour transcript_final fera apparaître la bulle user automatiquement.
      ========================================================================= */
+  // v1.20.2 — handlers via button click + keydown Enter (plus de submit form
+   // pour ne pas bloquer compositionend du glide-typing Gboard).
   const textInput = $('#textInput');
-  const textInputForm = $('#textInputForm');
-  textInputForm.addEventListener('submit', (e) => {
-    e.preventDefault();
+  const textInputSend = $('#textInputSend');
+  function _sendTypedText(){
     const text = (textInput.value || '').trim();
     if(!text) return;
     if(typeof wsSendJson === 'function'){
@@ -2868,12 +2870,12 @@ body.conv-mode-continuous .conv-stop-fab{
     }
     textInput.value = '';
     try{ navigator.vibrate && navigator.vibrate(8);}catch(e){}
-  });
-  // Entrée submit (mobile keyboard)
+  }
+  textInputSend.addEventListener('click', _sendTypedText);
   textInput.addEventListener('keydown', (e) => {
     if(e.key === 'Enter'){
       e.preventDefault();
-      textInputForm.dispatchEvent(new Event('submit', { cancelable: true }));
+      _sendTypedText();
     }
   });
 
@@ -3872,6 +3874,71 @@ body.conv-mode-continuous .conv-stop-fab{
     });
   }
 
+  /* ---------- v1.20.2 — Pulse transitoire de zones spécifiques ----------
+     Aligné sur le pattern HUD PC NeuralViz.handleBackendEvent : chaque event
+     backend (transcript_final, assistant_done, tool_call, wake_detected,
+     etc.) déclenche un flash court sur la zone cérébrale concernée. À la fin
+     du flash (durationMs), on re-applyCortexState pour revenir au mapping
+     basé sur le state global (idle/listening/thinking/speaking).
+     Pas de file d'attente : si plusieurs flashs se chevauchent, le dernier
+     setTimeout gagne (acceptable pour ce visu).
+  --------------------------------------------------------------------- */
+  let _cortexFlashTimer = null;
+  function cortexFlashZones(zones, durationMs){
+    if(!pip.active || pip.contentKind!=='cortex') return;
+    if(!zones || !zones.length) return;
+    durationMs = durationMs || 1200;
+    // Active visuellement les zones flashées (override du dim courant)
+    VARIANT_LIST.forEach(L=>{
+      const root = document.getElementById(`cv-${L.toLowerCase()}`);
+      if(!root) return;
+      root.querySelectorAll('.v-zone').forEach(z=>{
+        const zn = z.getAttribute('data-zone');
+        if(zones.includes(zn)){
+          z.classList.remove('dim');
+          z.classList.add('active');
+        }
+      });
+      // Spawn pulses sur les liens connectés aux zones flashées
+      spawnVariantPulses(L, zones);
+    });
+    // Reset auto après durationMs : revert au state global
+    if(_cortexFlashTimer){ clearTimeout(_cortexFlashTimer); }
+    _cortexFlashTimer = setTimeout(()=>{
+      _cortexFlashTimer = null;
+      if(pip.active && pip.contentKind==='cortex') applyCortexState();
+    }, durationMs);
+  }
+  // Mapping event WS → zones cérébrales (miroir HUD PC NEURAL_ZONES events).
+  // Si un type d'event n'est pas listé, on ne flash pas (le state global suffit).
+  const CORTEX_EVENT_ZONE_MAP = {
+    'transcript_final':       ['wernicke'],         // STT
+    'transcript_partial':     ['wernicke'],
+    'transcript':             ['wernicke'],         // POC
+    'assistant_chunk':        ['prefrontal'],       // LLM streaming
+    'assistant_done':         ['prefrontal','broca'],// LLM done + TTS imminent
+    'tts_start':              ['broca'],            // TTS speaking
+    'tts_audio_meta':         ['broca'],
+    'wake_detected':          ['cerebellum'],       // Wake word
+    'tool_call':              ['motor'],            // Tool exec
+    'tool_result':            ['motor','prefrontal'],
+    'holo_frame':             ['occipital'],        // Vision
+    'webcam_capture':         ['occipital'],
+    'ocr_capture':            ['occipital'],
+    'screenshot_describe':    ['occipital'],
+    'remember_fact':          ['hippocampus'],      // Mémoire
+    'remember_lesson':        ['hippocampus'],
+    'memory_search':          ['hippocampus'],
+    'record_output':          ['hippocampus'],
+    'config_state':           ['limbic'],           // Mood / context
+    'set_active_context':     ['limbic'],
+    'sleep_consolidation_run':['hippocampus','limbic'],
+  };
+  function cortexHandleEvent(type){
+    const zones = CORTEX_EVENT_ZONE_MAP[type];
+    if(zones) cortexFlashZones(zones, 1100);
+  }
+
   /* ---------- Apply state to active variant ---------- */
   function applyCortexState(){
     if(!pip.active || pip.contentKind!=='cortex') return;
@@ -4847,6 +4914,16 @@ body.conv-mode-continuous .conv-stop-fab{
     }
     pendingTtsMeta = m;
   }
+  // v1.20.2 — Friday/Jarvis a fini son turn LLM : push la bulle finale dans
+  // le transcript mobile. m.full_response contient le texte complet (avec
+  // tools chain potentiel concaténé). Skip si vide (cas rare où le tour s'est
+  // terminé sans texte parlé — un tool result silencieux par exemple).
+  function onAssistantDone(m){
+    const text = (m && (m.full_response || m.text || '')).trim();
+    if(!text) return;
+    addBubble('friday', text);
+  }
+
   function onTtsStart(m){
     // Si un texte est fourni, on le pousse comme bulle Friday.
     const text = (m && (m.text || m.utterance) || '').trim();
@@ -4892,6 +4969,11 @@ body.conv-mode-continuous .conv-stop-fab{
       let m;
       try { m = JSON.parse(ev.data); } catch(_) { return; }
       const t = m && m.type;
+      // v1.20.2 — Routing fin cortex (miroir HUD PC NeuralViz.handleBackendEvent).
+      // Pulse la zone cérébrale concernée par chaque event backend (STT/LLM/
+      // tools/wake/TTS/vision/mémoire). NoOp si type non mappé ou cortex
+      // inactif. Try/catch silencieux : ne doit JAMAIS bloquer le routing UI.
+      try { if (typeof cortexHandleEvent === 'function') cortexHandleEvent(t); } catch(_) {}
       switch(t){
         case 'meta':              onMeta(m); break;
         case 'state':             onState(m); break;
@@ -4900,6 +4982,15 @@ body.conv-mode-continuous .conv-stop-fab{
         case 'transcript_partial':onTranscriptPartial(m); break;
         case 'transcript_pending':/* POC : "STT en cours" — ignoré (state=thinking suffit) */ break;
         case 'transcript':        onPocTranscript(m); break;  // POC server.py
+        // v1.20.2 — Texte de Friday/Jarvis dans le transcript mobile (Quang
+        // feedback v1.20.1 : 'plus de retour de texte dans le transcript').
+        // Le pipeline LLM broadcast assistant_chunk en streaming + assistant_done
+        // avec le full text à la fin. Le mobile écoute assistant_done (path
+        // simple : 1 bulle finale, pas de streaming chunks) — suffit pour le
+        // transcript lisible. assistant_chunk = ignoré côté mobile pour éviter
+        // l'overhead de streaming (HUD PC fait du streaming, mobile reste simple).
+        case 'assistant_chunk':   /* streaming HUD PC seulement, mobile attend assistant_done */ break;
+        case 'assistant_done':    onAssistantDone(m); break;
         case 'tts_pending':       onTtsPending(m); break;
         case 'tts_audio_meta':    onTtsAudioMeta(m); break;
         case 'tts_start':         onTtsStart(m); break;
