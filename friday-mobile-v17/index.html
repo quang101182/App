@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.21.0</title>
+<title>FRIDAY · v1.21.1</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2427,7 +2427,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   //   et envoie 'tts_speak_text' au mobile → window.speechSynthesis.speak
   //   (Friday parle dans le HP du tel via TTS OS natif).
   // + glide-typing fix (autocomplete on, enterkeyhint=send, inputmode=text).
-  const VERSION = '1.21.0';
+  const VERSION = '1.21.1';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -2549,16 +2549,24 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   }
 
   // ----- VIEW SWITCHING -----
-  // v1.21.0 — Quand l'user change d'onglet (ACCUEIL / CARTE / COSMOS), on
-  // signale au HUD PC quelle vue est active sur le mobile via remote_view_request.
-  // Le HUD PC adapte sa capture (économie bande passante : pas de stream si
-  // le mobile n'est pas sur la vue map/cosmos).
+  // v1.21.0 — remote_view_request : info au HUD PC sur quelle vue le mobile
+  // regarde (purement informatif depuis v1.21.1, le streamer capture si HUD
+  // PC sur map/cosmos peu importe l'onglet mobile).
+  // v1.21.1 — ui_mode_change : pilote bidirectionnel mobile→PC. Tap CARTE
+  // sur mobile → ouvre la carte sur le PC. Idem ACCUEIL/COSMOS.
   function _signalRemoteView(viewKey){
     if(typeof wsSendJson !== 'function') return;
     const kind = (viewKey === 'map') ? 'map'
               : (viewKey === 'cosmos') ? 'cosmos'
               : 'none';
     try { wsSendJson({ type: 'remote_view_request', kind }); } catch(_) {}
+  }
+  function _pilotPcViewMode(viewKey){
+    if(typeof wsSendJson !== 'function') return;
+    // viewKey = 'home' | 'map' | 'cosmos' (mêmes valeurs que dataset.view).
+    const mode = (viewKey === 'home' || viewKey === 'map' || viewKey === 'cosmos')
+      ? viewKey : 'home';
+    try { wsSendJson({ type: 'ui_mode_change', mode, source: 'mobile' }); } catch(_) {}
   }
   $$('.mode-btn').forEach(btn=>{
     btn.addEventListener('click',()=>{
@@ -2572,8 +2580,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       // V1.3 : persiste le view actif
       config.view = v;
       saveConfig();
-      // v1.21.0 — Signale au HUD PC pour streaming carte/cosmos
+      // v1.21.0 — Signale au HUD PC quelle vue le mobile regarde (info)
       _signalRemoteView(v);
+      // v1.21.1 — Pilote le HUD PC pour qu'il ouvre la même vue (bidirectionnel)
+      _pilotPcViewMode(v);
     });
   });
 
