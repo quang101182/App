@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.17.0</title>
+<title>FRIDAY · v1.18.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -353,15 +353,15 @@ body[data-state="speaking"] .edge-glow{
 }
 
 /* === Main scrollable area === */
+/* v1.18.0 — Plus de scroll global sur .main : seul .transcript-list scrolle.
+   Comme ça transcript flex-grow occupe tout l'espace dispo entre la sphère
+   et le footer (boutons + input texte). */
 .main{
   flex:1 1 auto;
-  overflow-y:auto;
-  overflow-x:hidden;
-  -webkit-overflow-scrolling:touch;
+  overflow:hidden;
   padding:0 12px 8px;
   display:flex;flex-direction:column;gap:10px;
-  scrollbar-width:thin;
-  scrollbar-color:var(--primary-dim) transparent;
+  min-height:0;
 }
 .main::-webkit-scrollbar{width:3px}
 .main::-webkit-scrollbar-thumb{background:var(--primary-dim)}
@@ -558,6 +558,97 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
   color:#c44dff;
   text-shadow:0 0 4px rgba(196,77,255,.6);
   box-shadow:inset 0 0 10px rgba(196,77,255,.22);
+}
+/* v1.18.0 — Variante MUTE actif : rouge orangé pour signaler "Friday silencieux". */
+.slot-toggle.mute-on{
+  border-color:#ff7a47;
+  color:#ff7a47;
+  text-shadow:0 0 4px rgba(255,122,71,.55);
+  box-shadow:inset 0 0 10px rgba(255,122,71,.22);
+}
+
+/* v1.18.0 — Champ texte saisie ('type to friday' style HUD PC). Apparaît sous
+   la rangée de boutons satellite, format compact ~36px haut. */
+.text-input-form{
+  display:flex;align-items:stretch;
+  gap:6px;
+  padding:6px 10px 0;
+  width:100%;
+  box-sizing:border-box;
+}
+.text-input{
+  flex:1;min-width:0;
+  background:rgba(0,18,32,.72);
+  border:1px solid var(--primary-dim);
+  border-radius:4px;
+  padding:6px 10px;
+  color:var(--text-1);
+  font:500 12px 'JetBrains Mono',monospace;
+  letter-spacing:.5px;
+  outline:none;
+  transition:border-color .2s, box-shadow .2s;
+}
+.text-input::placeholder{color:var(--text-1);opacity:.4;font-style:italic;}
+.text-input:focus{
+  border-color:var(--primary);
+  box-shadow:0 0 8px rgba(0,212,255,.18);
+}
+.text-input-send{
+  width:36px;height:auto;
+  background:rgba(0,212,255,.10);
+  border:1px solid var(--primary-dim);
+  border-radius:4px;
+  color:var(--primary);
+  font:700 16px 'JetBrains Mono',monospace;
+  cursor:pointer;
+  transition:all .15s;
+}
+.text-input-send:hover, .text-input-send:active{
+  background:rgba(0,212,255,.22);
+  border-color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+}
+.text-input-send:disabled{opacity:.4;cursor:not-allowed;}
+
+/* v1.18.0 — Transcript primary : fait flex-grow pour occuper tout l'espace
+   disponible entre la sphère et le footer. Scroll auto via JS (MutationObserver
+   pattern stickyBottom du HUD PC v1.9.37). */
+.transcript-primary{
+  flex:1 1 auto;
+  min-height:120px;
+  display:flex;flex-direction:column;
+  margin:8px 10px 4px;
+}
+.transcript-primary .transcript-list{
+  flex:1 1 auto;
+  overflow-y:auto;
+  min-height:0;
+}
+.transcript-status{color:var(--text-1);opacity:.55;}
+.transcript-status.muted::before{content:'🔇 ';opacity:1;}
+
+/* v1.18.0 — main passe en flex column pour que .transcript-primary puisse
+   réellement flex-grow (parent doit être flex-direction:column). */
+.main{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+.view{
+  display:none;
+  flex:1 1 auto;
+  flex-direction:column;
+  min-height:0;
+}
+.view.active{display:flex;}
+
+/* v1.18.0 — hud-panel-content wrap pour permettre l'hydratation dynamique
+   sans casser le layout des panels (les lignes sont injectées dans ce
+   container par les handlers WS context_state / feed_state / music / activity_state). */
+.hud-panel-content{
+  display:flex;flex-direction:column;
+  gap:2px;
+  overflow:hidden;
 }
 
 /* === USAGE PANEL (mobile) === */
@@ -1014,11 +1105,22 @@ body[data-state="speaking"] .wave-arc{
 }
 .pip-trail.show{opacity:.6}
 
-/* Corners (4 positions snap-able) — calcul via CSS vars */
-.sphere-wrap.pip.corner-tl{top:60px;left:12px}
-.sphere-wrap.pip.corner-tr{top:60px;right:12px;left:auto}
-.sphere-wrap.pip.corner-bl{bottom:170px;left:12px;top:auto}
-.sphere-wrap.pip.corner-br{bottom:170px;right:12px;left:auto;top:auto}
+/* Corners (4 positions snap-able) — calcul via CSS vars.
+   v1.18.0 — Avec append dynamique de .sphere-wrap dans .pip-content au moment
+   du PiP cortex, ces positions sont relatives au cadre cortex (pip-content
+   passe en position:relative). Plus de débordement hors du cadre. */
+.sphere-wrap.pip{
+  /* Réduction taille sphère mini dans le cortex (de 96 à 72px) pour ne pas
+     manger trop d'espace dans le cadre 1:1 ratio. */
+  width:72px !important;
+  height:72px !important;
+  max-width:72px !important;
+}
+.sphere-wrap.pip.corner-tl{top:8px;left:8px}
+.sphere-wrap.pip.corner-tr{top:8px;right:8px;left:auto}
+.sphere-wrap.pip.corner-bl{bottom:8px;left:8px;top:auto}
+.sphere-wrap.pip.corner-br{bottom:8px;right:8px;left:auto;top:auto}
+.pip-content{position:relative;}
 
 /* Pendant la sphère est en PiP, le state-label/hint cachés */
 .sphere-wrap.pip .sphere-state{display:none}
@@ -1856,27 +1958,30 @@ body.conv-mode-continuous .conv-stop-fab{
         <!-- Rempli par JS selon le trigger (cortex / autre) -->
       </div>
 
-      <!-- v1.17.0e — Ligne de toggles à 4 boutons : MUSIC / ACTIVITY (slots panneaux satellites)
-           + BOOST (toggle Claude Haiku↔Sonnet, miroir du HUD PC #btn-boost)
-           + $ (toggle panel USAGE conso API, miroir du HUD PC #btn-usage). -->
-      <div class="slot-toggles">
-        <button class="slot-toggle" data-slot="music">+ MUSIC</button>
-        <button class="slot-toggle" data-slot="activity">+ ACTIVITY</button>
-        <button class="slot-toggle" id="btnBoost" title="Switch modèle Claude : Haiku 4.5 (économique) ↔ Sonnet 4.6 (raisonnement avancé). Garde l'historique.">💪 BOOST</button>
-        <button class="slot-toggle" id="btnUsage" title="Affiche/cache le panneau de consommation API (Claude / ElevenLabs / Groq) en temps réel">$</button>
-      </div>
+      <!-- v1.18.0 — TRANSCRIPT remonté juste sous la sphère (panneau le plus
+           important pour Quang). flex-grow:1 + auto-scroll via MutationObserver.
+           Données fake vidées : la liste est remplie uniquement par les events
+           WS transcript_final/transcript_partial/onTtsStart du backend. -->
+      <article class="transcript-panel transcript-primary">
+        <div class="transcript-header">
+          <span>TRANSCRIPT</span>
+          <span class="transcript-status" id="transcriptStatus">live</span>
+        </div>
+        <div class="transcript-list" id="transcriptList"></div>
+      </article>
 
-      <!-- Cadre satellite : 4 panneaux -->
+      <!-- v1.18.0 — Cadre satellite remonté SOUS le transcript. Données fake
+           vidées : remplies par events WS context_state/feed_state/music/
+           activity_state du backend. -->
       <div class="sat-grid">
         <!-- CONTEXT -->
         <article class="hud-panel" id="panel-context">
           <div class="hud-panel-header">
             <span>CONTEXT</span><span class="ico">◇</span>
           </div>
-          <div class="hud-panel-line accent">Domicile · Lyon 7</div>
-          <div class="hud-panel-line dim">21:14 · jeu 8 mai</div>
-          <div class="hud-panel-line dim">14°C · ciel clair</div>
-          <div class="hud-panel-line">Wi-Fi · STARK-NET</div>
+          <div class="hud-panel-content" id="panel-context-content">
+            <div class="hud-panel-line dim">—</div>
+          </div>
         </article>
 
         <!-- FEED -->
@@ -1884,10 +1989,9 @@ body.conv-mode-continuous .conv-stop-fab{
           <div class="hud-panel-header">
             <span>FEED</span><span class="ico">⚡</span>
           </div>
-          <div class="hud-panel-line accent">3 nouveaux events</div>
-          <div class="hud-panel-line dim">15:02 · DictoKey ↑</div>
-          <div class="hud-panel-line dim">14:48 · Build OK</div>
-          <div class="hud-panel-line dim">14:21 · Note saved</div>
+          <div class="hud-panel-content" id="panel-feed-content">
+            <div class="hud-panel-line dim">—</div>
+          </div>
         </article>
 
         <!-- MUSIC (hidden by default) -->
@@ -1895,9 +1999,9 @@ body.conv-mode-continuous .conv-stop-fab{
           <div class="hud-panel-header">
             <span>MUSIC</span><span class="ico">♪</span>
           </div>
-          <div class="hud-panel-line accent">Daft Punk</div>
-          <div class="hud-panel-line dim">Discovery · 2:34</div>
-          <div class="hud-panel-bar" style="--hud-fill:42%"></div>
+          <div class="hud-panel-content" id="panel-music-content">
+            <div class="hud-panel-line dim">—</div>
+          </div>
         </article>
 
         <!-- ACTIVITY (hidden by default) -->
@@ -1905,25 +2009,32 @@ body.conv-mode-continuous .conv-stop-fab{
           <div class="hud-panel-header">
             <span>ACTIVITY</span><span class="ico">◈</span>
           </div>
-          <div class="hud-panel-bigval">7 412</div>
-          <div class="hud-panel-line dim">pas aujourd'hui</div>
-          <div class="hud-panel-bar" style="--hud-fill:74%"></div>
+          <div class="hud-panel-content" id="panel-activity-content">
+            <div class="hud-panel-line dim">—</div>
+          </div>
         </article>
       </div>
 
-      <!-- TRANSCRIPT (toujours visible) -->
-      <article class="transcript-panel">
-        <div class="transcript-header">
-          <span>Transcript</span>
-          <span style="color:var(--text-1);opacity:.6">live</span>
-        </div>
-        <div class="transcript-list" id="transcriptList">
-          <div class="bubble user"><div class="who">Quang · 21:11</div>Friday, où en est le build mobile ?</div>
-          <div class="bubble friday"><div class="who">Friday · 21:11</div>Build APK signé en 02:14, version v1.0.0 prête pour test sur ton tel.</div>
-          <div class="bubble user"><div class="who">Quang · 21:13</div>Lance la routine du soir.</div>
-          <div class="bubble friday"><div class="who">Friday · 21:13</div>Routine soir engagée. Lumières dim 30%, musique chill, alarme 7:15.</div>
-        </div>
-      </article>
+      <!-- v1.18.0 — Ligne de toggles à 5 boutons : MUSIC / ACTIVITY (slots) +
+           BOOST (Haiku↔Sonnet) + $ (panel usage) + 🔇 MUTE (couper voix Friday). -->
+      <div class="slot-toggles">
+        <button class="slot-toggle" data-slot="music">+ MUSIC</button>
+        <button class="slot-toggle" data-slot="activity">+ ACTIVITY</button>
+        <button class="slot-toggle" id="btnBoost" title="Switch modèle Claude : Haiku 4.5 (économique) ↔ Sonnet 4.6 (raisonnement avancé). Garde l'historique.">💪 BOOST</button>
+        <button class="slot-toggle" id="btnUsage" title="Affiche/cache le panneau de consommation API (Claude / ElevenLabs / Groq) en temps réel">$</button>
+        <button class="slot-toggle" id="btnMute" title="Couper la voix de Friday/Jarvis. Les réponses arrivent uniquement via le transcript (utile en environnement silencieux).">🔇 MUTE</button>
+      </div>
+
+      <!-- v1.18.0 — Champ texte saisie : envoie text_input au backend
+           (équivalent du #text-input du HUD PC). Submit (Entrée) → message
+           apparaît comme bulle user dans le transcript via le retour
+           transcript_final du backend. -->
+      <form class="text-input-form" id="textInputForm" onsubmit="return false;">
+        <input type="text" class="text-input" id="textInput"
+               placeholder="…ou tape pour parler à Friday"
+               autocomplete="off" autocorrect="off" spellcheck="true">
+        <button type="submit" class="text-input-send" id="textInputSend" aria-label="Envoyer">→</button>
+      </form>
 
     </section>
 
@@ -2092,11 +2203,12 @@ body.conv-mode-continuous .conv-stop-fab{
 (function(){
   'use strict';
 
-  // v1.17.0a — VERSION sans préfixe 'v' : le backend handshake (jarvis_backend.py
-  // ligne ~10681) splitte sur '.' pour extraire le major et compare avec
-  // VERSION.split('.')[0] = '1'. Avec 'v1.17.0' on obtient major='v1' et le
-  // backend renvoie VERSION_MISMATCH close 4001. Format attendu : '1.17.0'.
-  const VERSION = '1.17.0';
+  // v1.18.0 mobile : 6 modifs UX (Quang feedback 08/05) — transcript au-dessus
+  // de CONTEXT/FEED + flex-grow + scroll auto + bouton MUTE Friday + champ
+  // texte saisie + fix PiP cortex (sphère mini DANS le cadre) + données fake
+  // vidées (hydratation via WS context_state/feed_state/music/activity_state).
+  // Backend Friday reste en 1.17.x (pas de modif protocole, juste UI mobile).
+  const VERSION = '1.18.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -2386,6 +2498,161 @@ body.conv-mode-continuous .conv-stop-fab{
 
   // Cache dernier config_state reçu pour que BOOST sache quel modèle est actif.
   let mobileConfigState = { claude_model: HAIKU_MODEL };
+
+  /* =========================================================================
+     v1.18.0 — Bouton MUTE Friday (couper TTS sortie). Persistance localStorage
+     friday.mobile.muted. État reflété dans transcript-status (🔇 préfixe).
+     Côté backend : envoie un config event tts_muted:true|false. Le backend
+     respecte ça en court-circuitant le TTS (à brancher côté Friday selon
+     le pattern HUD PC). En attendant ce branchement backend, le mute mobile
+     bloque AUSSI le playback côté client (dans onTtsAudioMeta on skip).
+     ========================================================================= */
+  const MUTE_KEY = 'friday.mobile.muted';
+  let _ttsLocalMuted = false;
+  function applyMuteState(muted){
+    _ttsLocalMuted = !!muted;
+    const btn = $('#btnMute');
+    const status = $('#transcriptStatus');
+    if(btn){
+      btn.classList.toggle('mute-on', _ttsLocalMuted);
+      btn.textContent = _ttsLocalMuted ? '🔊 UNMUTE' : '🔇 MUTE';
+      btn.title = _ttsLocalMuted
+        ? 'TTS coupé. Tap pour réactiver la voix de Friday.'
+        : 'Couper la voix de Friday/Jarvis. Les réponses arrivent uniquement via le transcript.';
+    }
+    if(status){
+      status.classList.toggle('muted', _ttsLocalMuted);
+      status.textContent = _ttsLocalMuted ? 'silent' : 'live';
+    }
+    try { localStorage.setItem(MUTE_KEY, _ttsLocalMuted ? '1' : '0'); } catch(_) {}
+    // Côté backend : tente de propager via config (compat HUD PC tts_engine).
+    if(typeof wsSendJson === 'function'){
+      try { wsSendJson({ type: 'config', key: 'tts_muted', value: _ttsLocalMuted }); } catch(_) {}
+    }
+  }
+  $('#btnMute').addEventListener('click', () => {
+    applyMuteState(!_ttsLocalMuted);
+    try{ navigator.vibrate && navigator.vibrate(10);}catch(e){}
+  });
+  // Restore au boot
+  try { if(localStorage.getItem(MUTE_KEY) === '1') applyMuteState(true); else applyMuteState(false); } catch(_) { applyMuteState(false); }
+
+  /* =========================================================================
+     v1.18.0 — Champ texte saisie : envoie text_input au backend (équivalent
+     du #text-input HUD PC). Submit → backend traite comme un user_turn vocal,
+     le retour transcript_final fera apparaître la bulle user automatiquement.
+     ========================================================================= */
+  const textInput = $('#textInput');
+  const textInputForm = $('#textInputForm');
+  textInputForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = (textInput.value || '').trim();
+    if(!text) return;
+    if(typeof wsSendJson === 'function'){
+      wsSendJson({ type: 'text_input', text: text });
+    }
+    textInput.value = '';
+    try{ navigator.vibrate && navigator.vibrate(8);}catch(e){}
+  });
+  // Entrée submit (mobile keyboard)
+  textInput.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      textInputForm.dispatchEvent(new Event('submit', { cancelable: true }));
+    }
+  });
+
+  /* =========================================================================
+     v1.18.0 — Scroll auto transcript (pattern HUD PC v1.9.37 stickyBottom +
+     MutationObserver). Si Quang est en bas du scroll → auto-scroll au moindre
+     ajout. Si Quang a scrollé pour relire → respecte sa position jusqu'à ce
+     qu'il revienne en bas.
+     ========================================================================= */
+  (function setupTranscriptStickyBottom(){
+    const list = document.getElementById('transcriptList');
+    if(!list) return;
+    let stuck = true;
+    const STICK_THRESHOLD = 32; // px
+    list.addEventListener('scroll', () => {
+      const distFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+      stuck = distFromBottom <= STICK_THRESHOLD;
+    });
+    const obs = new MutationObserver(() => {
+      if(stuck){
+        // RAF pour laisser le browser layout les nouveaux nodes
+        requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
+      }
+    });
+    obs.observe(list, { childList: true, subtree: true, characterData: true });
+    // Force scroll bottom au boot
+    requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
+  })();
+
+  /* =========================================================================
+     v1.18.0 — Hydratation panels CONTEXT/FEED/MUSIC/ACTIVITY via events WS.
+     Les données fake du mockup ont été retirées. Le backend pousse l'état
+     courant via context_state / feed_state / music / activity_state au
+     handshake, puis à chaque changement.
+     ========================================================================= */
+  function _setPanelLines(panelId, lines){
+    const root = document.getElementById(panelId + '-content');
+    if(!root) return;
+    if(!lines || lines.length === 0){
+      root.innerHTML = '<div class="hud-panel-line dim">—</div>';
+      return;
+    }
+    root.innerHTML = lines.map(l => {
+      const cls = l.cls || (l.accent ? 'accent' : (l.dim ? 'dim' : ''));
+      const txt = String(l.text || '').replace(/[<>]/g, c => ({'<':'&lt;','>':'&gt;'})[c]);
+      return '<div class="hud-panel-line ' + cls + '">' + txt + '</div>';
+    }).join('');
+  }
+  function applyContextState(msg){
+    if(!msg) return;
+    const ctx = msg.context || msg;
+    const lines = [];
+    if(ctx.project)  lines.push({ accent:true, text: ctx.project });
+    if(ctx.summary)  lines.push({ dim:true, text: ctx.summary });
+    if(ctx.mood)     lines.push({ dim:true, text: '🌡 ' + ctx.mood });
+    if(ctx.location) lines.push({ text: '📍 ' + ctx.location });
+    if(ctx.weather)  lines.push({ dim:true, text: ctx.weather });
+    _setPanelLines('panel-context', lines);
+  }
+  function applyFeedState(msg){
+    if(!msg) return;
+    const events = msg.events || msg.feed || [];
+    if(!Array.isArray(events) || events.length === 0){
+      _setPanelLines('panel-feed', []);
+      return;
+    }
+    const lines = [{ accent:true, text: events.length + ' event' + (events.length>1?'s':'') }];
+    events.slice(0, 4).forEach(ev => {
+      const ts = ev.ts ? new Date(ev.ts).toLocaleTimeString().slice(0,5) : '';
+      lines.push({ dim:true, text: (ts ? ts + ' · ' : '') + (ev.label || ev.type || '?') });
+    });
+    _setPanelLines('panel-feed', lines);
+  }
+  function applyMusicState(msg){
+    if(!msg) return;
+    const m = msg.music || msg;
+    const lines = [];
+    if(m.title)  lines.push({ accent:true, text: m.title });
+    if(m.artist) lines.push({ dim:true, text: m.artist + (m.album ? ' · ' + m.album : '') });
+    if(m.elapsed_s != null && m.duration_s){
+      const mm = Math.floor(m.elapsed_s/60), ss = String(Math.floor(m.elapsed_s%60)).padStart(2,'0');
+      lines.push({ dim:true, text: `${mm}:${ss} / ${Math.floor(m.duration_s/60)}:${String(Math.floor(m.duration_s%60)).padStart(2,'0')}` });
+    }
+    _setPanelLines('panel-music', lines);
+  }
+  function applyActivityState(msg){
+    if(!msg) return;
+    const a = msg.activity || msg;
+    const lines = [];
+    if(a.session_tools_n != null) lines.push({ accent:true, text: a.session_tools_n + ' tool' + (a.session_tools_n>1?'s':'') });
+    if(a.last_tool)              lines.push({ dim:true, text: '↳ ' + a.last_tool });
+    if(a.uptime_min != null)     lines.push({ dim:true, text: a.uptime_min + ' min uptime' });
+    _setPanelLines('panel-activity', lines);
+  }
 
   // v1.17.0d — DEBUG BUTTONS retirés (debug bar mockup supprimée). En live,
   // setState() est appelé par le router WS via l'event 'state' du backend.
@@ -2699,6 +2966,16 @@ body.conv-mode-continuous .conv-stop-fab{
       pipTrail.classList.add('show');
       setTimeout(()=>pipTrail.classList.remove('show'), 500);
     }
+    // v1.18.0 — Déplace .sphere-wrap DANS .pip-content pour que les corners
+    // soient relatifs au cadre cortex (plus de débordement). Mémorise le
+    // parent original + position d'origine pour pouvoir restaurer.
+    if(!sphereWrap._origParent){
+      sphereWrap._origParent = sphereWrap.parentNode;
+      sphereWrap._origNextSibling = sphereWrap.nextSibling;
+    }
+    if(sphereWrap.parentNode !== pipContent){
+      pipContent.appendChild(sphereWrap);
+    }
     // Glide
     sphereWrap.classList.add('pip','corner-'+pip.corner);
     // Contenu central avec delay 50ms
@@ -2721,13 +2998,22 @@ body.conv-mode-continuous .conv-stop-fab{
     pipContent.classList.remove('show');
     pipTrail.classList.add('show');
     setTimeout(()=>pipTrail.classList.remove('show'), 500);
+    sphereWrap.classList.remove('pip','corner-tl','corner-tr','corner-bl','corner-br');
+    sphereWrap.style.transform=''; // reset éventuel transform drag
+    // v1.18.0 — Restaure la sphère à sa position d'origine dans le DOM AVANT
+    // de vider .pip-content (sinon innerHTML='' efface aussi la sphère).
+    if(sphereWrap._origParent){
+      if(sphereWrap._origNextSibling){
+        sphereWrap._origParent.insertBefore(sphereWrap, sphereWrap._origNextSibling);
+      } else {
+        sphereWrap._origParent.appendChild(sphereWrap);
+      }
+    }
     setTimeout(()=>{
       pipContent.style.display='';
       pipContent.innerHTML='';
       pipContent.classList.remove('cortex-pip-mode');
     }, 380);
-    sphereWrap.classList.remove('pip','corner-tl','corner-tr','corner-bl','corner-br');
-    sphereWrap.style.transform=''; // reset éventuel transform drag
     pip.contentKind=null;
     updateCortexBtnState();
     config.cortexOpen = false;
@@ -4056,6 +4342,15 @@ body.conv-mode-continuous .conv-stop-fab{
     // (le state=speaking arrivera quand le 1er chunk audio joue)
   }
   function onTtsAudioMeta(m){
+    // v1.18.0 — Si MUTE local actif, on NE met PAS pendingTtsMeta : la frame
+    // binaire suivante sera droppée (cf. else "Binary WS frame received without
+    // tts_audio_meta — drop"). Le state SPEAKING est quand même posé via
+    // onTtsStart pour cohérence visuelle (sphère speaking + transcript bulle
+    // Friday). C'est l'audio QUI est coupé, pas la trace écrite.
+    if(_ttsLocalMuted){
+      pendingTtsMeta = null;
+      return;
+    }
     pendingTtsMeta = m;
   }
   function onTtsStart(m){
@@ -4120,13 +4415,23 @@ body.conv-mode-continuous .conv-stop-fab{
         case 'voice_avatar_hint':
           try { applyAssistantName(m && m.assistant_name); } catch(_) {}
           break;
+        // v1.18.0 — Hydratation panels satellite via events WS
+        case 'context_state':
+          try { applyContextState(m); } catch(_) {}
+          break;
+        case 'feed_state':
+          try { applyFeedState(m); } catch(_) {}
+          break;
+        case 'music':
+          try { applyMusicState(m); } catch(_) {}
+          break;
+        case 'activity_state':
+          try { applyActivityState(m); } catch(_) {}
+          break;
         // Compat HUD PC (handshake hydratation, ignorés en 5a) :
         case 'log_init':
-        case 'context_state':
         case 'system_health':
         case 'windows_state':
-        case 'feed_state':
-        case 'activity_state':
         case 'globe_state':
         case 'ack':
         case 'rec_end':
