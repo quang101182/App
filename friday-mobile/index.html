@@ -25,6 +25,7 @@
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); transition: background .2s, box-shadow .2s; }
   .dot.connected { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
   .dot.recording { background: var(--rec); box-shadow: 0 0 12px var(--rec); animation: pulse 1.2s infinite; }
+  .dot.tts { background: #B967FF; box-shadow: 0 0 12px #B967FF; animation: pulse 1.2s infinite; }
   @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.3)} }
   #status-text { flex: 1; }
   #log {
@@ -182,6 +183,42 @@ function showTranscriptError(rec_id, error, stt_ms) {
   tsText.textContent = error;
 }
 
+function setStatus(text, kind) {
+  statusText.textContent = text;
+  connDot.classList.remove("recording", "tts");
+  if (kind === "tts") connDot.classList.add("tts");
+  else if (kind === "rec") connDot.classList.add("recording");
+}
+
+let pendingTtsMeta = null;
+let currentTtsAudio = null;
+let currentTtsUrl = null;
+
+function playTtsAudio(arrayBuffer, meta) {
+  if (currentTtsAudio) {
+    try { currentTtsAudio.pause(); } catch (e) {}
+    if (currentTtsUrl) URL.revokeObjectURL(currentTtsUrl);
+  }
+  const blob = new Blob([arrayBuffer], { type: meta.mime || "audio/mpeg" });
+  currentTtsUrl = URL.createObjectURL(blob);
+  currentTtsAudio = new Audio(currentTtsUrl);
+  currentTtsAudio.onplay = () => { setStatus("Friday parle", "tts"); logLine("<- tts play start", "ok"); };
+  currentTtsAudio.onended = () => {
+    setStatus(wsReady ? "Connecté" : "Déconnecté", "");
+    if (currentTtsUrl) URL.revokeObjectURL(currentTtsUrl);
+    currentTtsUrl = null; currentTtsAudio = null;
+    logLine("<- tts play end", "ok");
+  };
+  currentTtsAudio.onerror = () => {
+    logLine("<- tts play ERR", "err");
+    setStatus(wsReady ? "Connecté" : "Déconnecté", "");
+  };
+  currentTtsAudio.play().catch(err => {
+    logLine("<- tts play ERR: " + err.name + ": " + err.message, "err");
+    setStatus(wsReady ? "Connecté" : "Déconnecté", "");
+  });
+}
+
 function logLine(msg, kind) {
   const div = document.createElement("div");
   div.className = "line" + (kind ? " " + kind : "");
@@ -232,12 +269,26 @@ function connectWS() {
             const preview = (m.text || "").slice(0, 80);
             logLine("<- transcript: \"" + preview + "\" (stt=" + m.stt_ms + "ms)", "ok");
           }
+        } else if (m.type === "tts_pending") {
+          setStatus("Friday prépare…", "tts");
+          logLine("<- tts pending #" + m.rec_id);
+        } else if (m.type === "tts_audio_meta") {
+          pendingTtsMeta = m;
+          logLine("<- tts meta size=" + m.size + " mime=" + m.mime + " (tts=" + m.tts_ms + "ms)", "ok");
+        } else if (m.type === "tts_error") {
+          setStatus("Connecté", "");
+          logLine("<- tts ERR: " + m.error, "err");
         } else {
           logLine("<- " + ev.data);
         }
       } catch { logLine("<- " + ev.data); }
     } else {
-      logLine("<- bin " + ev.data.byteLength + "b");
+      if (pendingTtsMeta) {
+        const meta = pendingTtsMeta; pendingTtsMeta = null;
+        playTtsAudio(ev.data, meta);
+      } else {
+        logLine("<- bin " + ev.data.byteLength + "b (sans meta — drop)", "warn");
+      }
     }
   };
 }
