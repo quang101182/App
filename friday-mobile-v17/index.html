@@ -3586,7 +3586,40 @@ body.conv-mode-continuous .conv-stop-fab{
   let _focusSrc = null;
   let _focusGain = null;
   let _focusHeartbeat = null;
+  // v1.17.0j — Si Capacitor + plugin AudioFocus natif détecté → délègue à Java
+  // (AudioManager.requestAudioFocus = vraie pause persistante de Spotify, pas la
+  // limite hard ~3s de Chrome PWA). Le plugin natif reste éveillé tant qu'on
+  // appelle pas releaseFocus(). Côté JS, on flag _useNativeFocus pour qu'au
+  // release on appelle bien le bon chemin.
+  let _useNativeFocus = false;
+  function _hasNativeFocus(){
+    return !!(window.Capacitor &&
+              window.Capacitor.Plugins &&
+              window.Capacitor.Plugins.AudioFocus);
+  }
   function takeAudioFocus(){
+    if(_hasNativeFocus()){
+      _useNativeFocus = true;
+      try {
+        // mode: 'pause' = AUDIOFOCUS_GAIN_TRANSIENT → Spotify s'arrête net
+        window.Capacitor.Plugins.AudioFocus.takeFocus({ mode: 'pause', usage: 'voice' })
+          .then(r => console.log('[audio-focus native]', r))
+          .catch(e => console.warn('[audio-focus native] take failed:', e));
+        // Affiche aussi MediaSession pour cohérence visuelle bouton OS
+        if('mediaSession' in navigator){
+          try {
+            navigator.mediaSession.metadata = new MediaMetadata({
+              title: assistantName + ' écoute',
+              artist: 'Friday',
+              album: 'PTT mobile',
+            });
+            navigator.mediaSession.playbackState = 'playing';
+          } catch(_) {}
+        }
+      } catch(e){ console.warn('[audio-focus native] err:', e); }
+      return;
+    }
+    // Fallback PWA web : white noise + MediaSession heartbeat (limite ~3s).
     try {
       releaseAudioFocus(); // Cleanup any leftover state
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -3652,6 +3685,24 @@ body.conv-mode-continuous .conv-stop-fab{
     } catch(e){ console.warn('[audio-focus] take failed:', e); }
   }
   function releaseAudioFocus(){
+    // v1.17.0j — Délègue au plugin natif si actif au take.
+    if(_useNativeFocus){
+      _useNativeFocus = false;
+      try {
+        if(_hasNativeFocus()){
+          window.Capacitor.Plugins.AudioFocus.releaseFocus()
+            .then(r => console.log('[audio-focus native release]', r))
+            .catch(e => console.warn('[audio-focus native] release failed:', e));
+        }
+      } catch(_) {}
+      if('mediaSession' in navigator){
+        try {
+          navigator.mediaSession.playbackState = 'none';
+          navigator.mediaSession.metadata = null;
+        } catch(_) {}
+      }
+      return;
+    }
     try {
       if(_focusHeartbeat){
         try { clearInterval(_focusHeartbeat); } catch(_) {}
