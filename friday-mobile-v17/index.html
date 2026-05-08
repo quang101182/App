@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.19.0</title>
+<title>FRIDAY · v1.20.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -650,6 +650,111 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
   gap:2px;
   overflow:hidden;
 }
+
+/* === SETTINGS PANEL (mobile) === v1.19.1 */
+.settings-panel-mobile{
+  position:fixed;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%) scale(.96);
+  width:min(94vw, 380px);
+  max-height:88vh;
+  background:linear-gradient(180deg,rgba(0,30,52,.94),rgba(0,18,32,.97));
+  border:1px solid var(--primary-dim);
+  border-radius:6px;
+  box-shadow:0 8px 36px rgba(0,212,255,.18), 0 0 0 1px rgba(0,212,255,.08);
+  backdrop-filter:blur(14px) saturate(140%);
+  -webkit-backdrop-filter:blur(14px) saturate(140%);
+  z-index:60;
+  opacity:0;pointer-events:none;
+  transition:opacity .22s ease, transform .22s ease;
+  overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.settings-panel-mobile.show{
+  opacity:1;
+  transform:translate(-50%,-50%) scale(1);
+  pointer-events:auto;
+}
+.settings-row{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:8px;padding:8px 0;
+  border-bottom:1px dashed rgba(0,212,255,.12);
+}
+.settings-row:last-child{border-bottom:none;}
+.settings-row-stack{flex-direction:column;align-items:stretch;gap:6px;}
+.settings-row-stack .settings-label{margin-bottom:2px;}
+.settings-row.settings-info{justify-content:center;border-bottom:none;padding:6px 0 0;}
+.settings-label{
+  font:600 10px 'JetBrains Mono',monospace;
+  letter-spacing:1.5px;color:var(--text-1);
+  text-transform:uppercase;
+  flex:0 0 auto;
+}
+.settings-meta{
+  font:500 9px 'JetBrains Mono',monospace;
+  color:var(--text-1);opacity:.55;
+  letter-spacing:.5px;
+}
+.settings-btn{
+  background:rgba(0,212,255,.10);
+  border:1px solid var(--primary-dim);
+  border-radius:4px;
+  color:var(--primary);
+  padding:6px 10px;
+  font:600 10px 'JetBrains Mono',monospace;
+  letter-spacing:1px;text-transform:uppercase;
+  cursor:pointer;
+  transition:all .15s;
+}
+.settings-btn:hover, .settings-btn:active{
+  background:rgba(0,212,255,.22);
+  border-color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+}
+.settings-btn-toggle.on{
+  background:rgba(0,212,255,.22);
+  border-color:var(--primary);
+  color:var(--primary);
+}
+.settings-btn-danger{
+  border-color:rgba(255,71,87,.4);
+  color:#ff7080;
+  background:rgba(255,71,87,.08);
+  width:100%;
+}
+.settings-btn-danger:hover{
+  background:rgba(255,71,87,.18);
+  border-color:#ff4757;
+  color:#ff9090;
+}
+.settings-slider{
+  flex:1 1 auto;min-width:0;
+  -webkit-appearance:none;appearance:none;
+  height:4px;background:rgba(0,212,255,.18);
+  border-radius:2px;outline:none;cursor:pointer;
+}
+.settings-slider::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:14px;height:14px;border-radius:50%;
+  background:var(--primary);box-shadow:0 0 6px var(--primary-glow);
+  cursor:pointer;
+}
+.settings-val{
+  flex:0 0 auto;min-width:42px;text-align:right;
+  font:700 10px 'JetBrains Mono',monospace;
+  color:var(--primary);
+}
+.settings-select{
+  flex:1 1 auto;min-width:0;
+  background:rgba(0,18,32,.7);
+  border:1px solid var(--primary-dim);
+  border-radius:4px;
+  color:var(--text-1);
+  padding:6px 8px;
+  font:500 11px 'JetBrains Mono',monospace;
+  outline:none;
+}
+.settings-select:focus{border-color:var(--primary);}
 
 /* === USAGE PANEL (mobile) === */
 .usage-panel-mobile{
@@ -1842,7 +1947,7 @@ body.conv-mode-continuous .conv-stop-fab{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.19</span>
+        <span class="version-tag version-badge">· v1.20</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2150,6 +2255,58 @@ body.conv-mode-continuous .conv-stop-fab{
   </div>
 </aside>
 
+<!-- v1.19.1 — Panel SETTINGS mobile (toggle via bouton ⚙ satellite-row).
+     Permet de tester le TTS, choisir une voix, ajuster vitesse/volume,
+     reset config localStorage. -->
+<aside class="settings-panel-mobile" id="settingsPanelMobile" aria-hidden="true">
+  <div class="upm-header">
+    <span>⚙ SETTINGS</span>
+    <button class="upm-close" id="settingsClose" aria-label="Fermer">✕</button>
+  </div>
+  <div class="upm-body">
+    <div class="settings-row">
+      <span class="settings-label">Test TTS</span>
+      <button class="settings-btn" id="settingsTestTts">▶ Tester ('Bonjour Quang')</button>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Vitesse parole</span>
+      <input type="range" class="settings-slider" id="settingsRate" min="0.7" max="1.5" step="0.05" value="1.05">
+      <span class="settings-val" id="settingsRateVal">1.05</span>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Volume TTS</span>
+      <input type="range" class="settings-slider" id="settingsVolume" min="0" max="1" step="0.05" value="1.0">
+      <span class="settings-val" id="settingsVolumeVal">100%</span>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Pitch Friday (♀)</span>
+      <input type="range" class="settings-slider" id="settingsPitchFriday" min="0.7" max="1.4" step="0.05" value="1.05">
+      <span class="settings-val" id="settingsPitchFridayVal">1.05</span>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Pitch Jarvis (♂)</span>
+      <input type="range" class="settings-slider" id="settingsPitchJarvis" min="0.6" max="1.2" step="0.05" value="0.92">
+      <span class="settings-val" id="settingsPitchJarvisVal">0.92</span>
+    </div>
+    <div class="settings-row settings-row-stack">
+      <span class="settings-label">Voix Android dispo</span>
+      <select class="settings-select" id="settingsVoiceSelect">
+        <option value="">(auto par OS — recommandé)</option>
+      </select>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Vibrations PTT</span>
+      <button class="settings-btn settings-btn-toggle" id="settingsVibrate">ON</button>
+    </div>
+    <div class="settings-row settings-info">
+      <span id="settingsTtsEngine" class="settings-meta">moteur : —</span>
+    </div>
+    <div class="settings-row">
+      <button class="settings-btn settings-btn-danger" id="settingsReset">🗑 Reset config (efface localStorage)</button>
+    </div>
+  </div>
+</aside>
+
 <!-- v1.17.0e — Panel USAGE (toggle via bouton $ dans la slot-toggles row).
      Hydraté par event WS 'usage_state' du backend (mêmes champs que HUD PC :
      session/today/month + usd_to_eur + warnings). Style HOLO compact mobile. -->
@@ -2224,7 +2381,7 @@ body.conv-mode-continuous .conv-stop-fab{
   //   et envoie 'tts_speak_text' au mobile → window.speechSynthesis.speak
   //   (Friday parle dans le HP du tel via TTS OS natif).
   // + glide-typing fix (autocomplete on, enterkeyhint=send, inputmode=text).
-  const VERSION = '1.19.0';
+  const VERSION = '1.20.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -2552,6 +2709,129 @@ body.conv-mode-continuous .conv-stop-fab{
   });
   // Restore au boot
   try { if(localStorage.getItem(MUTE_KEY) === '1') applyMuteState(true); else applyMuteState(false); } catch(_) { applyMuteState(false); }
+
+  /* =========================================================================
+     v1.19.1 — Settings panel (modal) ouvert via bouton ⚙ satellite-row.
+     - Test TTS : 'Bonjour Quang' via le path local (Capacitor TTS natif si
+       dispo, sinon speechSynthesis fallback).
+     - Sliders : vitesse, volume, pitch Friday, pitch Jarvis (persistés).
+     - Voix Android : list des voices dispo de l'OS (TextToSpeech.getSupportedVoices).
+     - Vibrations PTT : toggle on/off.
+     - Reset : efface friday.mobile.* du localStorage.
+     ========================================================================= */
+  (function setupSettingsPanel(){
+    const panel = $('#settingsPanelMobile');
+    const btn   = $('#btnSettings');
+    const close = $('#settingsClose');
+    if(!panel || !btn || !close) return;
+    function showSettings(){
+      panel.classList.add('show');
+      panel.setAttribute('aria-hidden','false');
+      _refreshVoiceList();
+      _refreshTtsEngineLabel();
+      try{ navigator.vibrate && navigator.vibrate(8);}catch(e){}
+    }
+    function hideSettings(){
+      panel.classList.remove('show');
+      panel.setAttribute('aria-hidden','true');
+    }
+    btn.addEventListener('click', showSettings);
+    close.addEventListener('click', hideSettings);
+
+    // Hydrate sliders depuis _ttsConfig persistant
+    const rateEl = $('#settingsRate');     const rateVal = $('#settingsRateVal');
+    const volEl  = $('#settingsVolume');   const volVal  = $('#settingsVolumeVal');
+    const pfEl   = $('#settingsPitchFriday');  const pfVal = $('#settingsPitchFridayVal');
+    const pjEl   = $('#settingsPitchJarvis');  const pjVal = $('#settingsPitchJarvisVal');
+    rateEl.value = _ttsConfig.rate;        rateVal.textContent = Number(_ttsConfig.rate).toFixed(2);
+    volEl.value  = _ttsConfig.volume;      volVal.textContent  = Math.round(_ttsConfig.volume * 100) + '%';
+    pfEl.value   = _ttsConfig.pitchFriday; pfVal.textContent   = Number(_ttsConfig.pitchFriday).toFixed(2);
+    pjEl.value   = _ttsConfig.pitchJarvis; pjVal.textContent   = Number(_ttsConfig.pitchJarvis).toFixed(2);
+    rateEl.addEventListener('input', e => { _ttsConfig.rate = parseFloat(e.target.value); rateVal.textContent = _ttsConfig.rate.toFixed(2); _saveTtsConfig(); });
+    volEl.addEventListener('input',  e => { _ttsConfig.volume = parseFloat(e.target.value); volVal.textContent = Math.round(_ttsConfig.volume * 100) + '%'; _saveTtsConfig(); });
+    pfEl.addEventListener('input',   e => { _ttsConfig.pitchFriday = parseFloat(e.target.value); pfVal.textContent = _ttsConfig.pitchFriday.toFixed(2); _saveTtsConfig(); });
+    pjEl.addEventListener('input',   e => { _ttsConfig.pitchJarvis = parseFloat(e.target.value); pjVal.textContent = _ttsConfig.pitchJarvis.toFixed(2); _saveTtsConfig(); });
+
+    // Test TTS
+    $('#settingsTestTts').addEventListener('click', () => {
+      speakLocalTts('Bonjour Quang, ceci est un test TTS depuis ton smartphone.', assistantName === 'Jarvis' ? 'JARVIS' : 'FRIDAY', 'fr-FR');
+    });
+
+    // Voix select (peuplé par _refreshVoiceList)
+    const voiceSelect = $('#settingsVoiceSelect');
+    voiceSelect.addEventListener('change', e => {
+      _ttsConfig.forceVoice = e.target.value || null;
+      _saveTtsConfig();
+    });
+
+    // Vibrations toggle (pour les patterns vibrate dans PTT)
+    const vibKey = 'friday.mobile.vibrations';
+    let vibrationsOn = (localStorage.getItem(vibKey) || '1') === '1';
+    const vibBtn = $('#settingsVibrate');
+    function refreshVibBtn(){
+      vibBtn.textContent = vibrationsOn ? 'ON' : 'OFF';
+      vibBtn.classList.toggle('on', vibrationsOn);
+    }
+    refreshVibBtn();
+    vibBtn.addEventListener('click', () => {
+      vibrationsOn = !vibrationsOn;
+      try { localStorage.setItem(vibKey, vibrationsOn ? '1' : '0'); } catch(_) {}
+      refreshVibBtn();
+      // Patch global navigator.vibrate (no-op si OFF)
+      window.__vibrationsOn = vibrationsOn;
+      if(vibrationsOn) navigator.vibrate(40);
+    });
+    window.__vibrationsOn = vibrationsOn;
+
+    // Reset config
+    $('#settingsReset').addEventListener('click', () => {
+      if(!confirm('Effacer toute la config Friday Mobile (variantes cortex, MUTE, voix TTS, vibrations) ?')) return;
+      try {
+        Object.keys(localStorage).filter(k => k.startsWith('friday.mobile.')).forEach(k => localStorage.removeItem(k));
+        toast('Config effacée — reload pour appliquer', 2600);
+        setTimeout(() => location.reload(), 1500);
+      } catch(_) {}
+    });
+
+    async function _refreshVoiceList(){
+      // 1) Path natif Capacitor : getSupportedVoices()
+      if(_hasNativeTts()){
+        try {
+          const r = await window.Capacitor.Plugins.TextToSpeech.getSupportedVoices();
+          const voices = r && r.voices ? r.voices : [];
+          // Garde seulement les voix françaises pour ne pas saturer la liste
+          const fr = voices.filter(v => (v.lang || '').toLowerCase().startsWith('fr'));
+          voiceSelect.innerHTML = '<option value="">(auto par OS — recommandé)</option>';
+          fr.forEach((v, idx) => {
+            const opt = document.createElement('option');
+            opt.value = String(idx); // l'API native attend l'index
+            opt.textContent = (v.name || '?') + ' · ' + (v.lang || '?');
+            if(_ttsConfig.forceVoice == String(idx)) opt.selected = true;
+            voiceSelect.appendChild(opt);
+          });
+          return;
+        } catch(e){ console.warn('[settings] getSupportedVoices native failed', e); }
+      }
+      // 2) Fallback PWA : speechSynthesis.getVoices()
+      _loadVoices();
+      voiceSelect.innerHTML = '<option value="">(auto par navigateur)</option>';
+      const fr = (_voicesCache || []).filter(v => (v.lang || '').toLowerCase().startsWith('fr'));
+      fr.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.voiceURI || v.name;
+        opt.textContent = v.name + ' · ' + v.lang;
+        if(_ttsConfig.forceVoice == opt.value) opt.selected = true;
+        voiceSelect.appendChild(opt);
+      });
+    }
+    function _refreshTtsEngineLabel(){
+      const meta = $('#settingsTtsEngine');
+      if(!meta) return;
+      if(_hasNativeTts()) meta.textContent = 'moteur : Capacitor TTS natif (Android Java)';
+      else if(window.speechSynthesis) meta.textContent = 'moteur : SpeechSynthesis (navigateur, fallback)';
+      else meta.textContent = 'moteur : ⚠ aucune API TTS dispo';
+    }
+  })();
 
   /* =========================================================================
      v1.18.0 — Champ texte saisie : envoie text_input au backend (équivalent
@@ -2982,20 +3262,23 @@ body.conv-mode-continuous .conv-stop-fab{
       pipTrail.classList.add('show');
       setTimeout(()=>pipTrail.classList.remove('show'), 500);
     }
-    // v1.18.0 — Déplace .sphere-wrap DANS .pip-content pour que les corners
-    // soient relatifs au cadre cortex (plus de débordement). Mémorise le
-    // parent original + position d'origine pour pouvoir restaurer.
+    // v1.19.1 — Memoize parent original AVANT le déplacement
     if(!sphereWrap._origParent){
       sphereWrap._origParent = sphereWrap.parentNode;
       sphereWrap._origNextSibling = sphereWrap.nextSibling;
     }
+    // Glide : pose la classe pip + corner sur la sphère
+    sphereWrap.classList.add('pip','corner-'+pip.corner);
+    // Contenu central — IMPORTANT : doit s'exécuter AVANT le appendChild
+    // sinon pipContent.innerHTML=buildCortexSvg() écrase la sphère que je
+    // viens d'ajouter (bug rapporté Quang APK v1.19.0 : sphère mini absente).
+    renderPipContent(kind);
+    // v1.19.1 — Déplace .sphere-wrap DANS .pip-content APRÈS le render
+    // (sinon innerHTML= efface la sphère). Comme ça les corners sont
+    // relatifs au cadre cortex (plus de débordement) ET la sphère subsiste.
     if(sphereWrap.parentNode !== pipContent){
       pipContent.appendChild(sphereWrap);
     }
-    // Glide
-    sphereWrap.classList.add('pip','corner-'+pip.corner);
-    // Contenu central avec delay 50ms
-    renderPipContent(kind);
     if(opts.silent){
       pipContent.classList.add('show');
       pipContent.classList.add('no-anim');
@@ -4279,7 +4562,81 @@ body.conv-mode-continuous .conv-stop-fab{
   let recStopRequested = false;
 
   // ------ TTS playback ------
+  // v1.20.0 — 2 chemins :
+  // (A) Stream PCM int16 du backend Piper (kid mime audio/pcm;codec=int16) →
+  //     Web Audio API : reconstitue chaque chunk en AudioBuffer + schedule
+  //     en queue avec timing précis (pas de gap entre les chunks).
+  // (B) Blob complet (mp3, wav, etc. — usage HUD PC originel) → <audio>
+  //     classique avec Blob URL.
+  let _ttsAudioCtx = null;
+  let _ttsNextStartTime = 0;
+  let _ttsActiveSources = [];
+  let _ttsSr = 22050;
+  function _ensureTtsCtx(){
+    if(!_ttsAudioCtx){
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if(!Ctx) return null;
+      _ttsAudioCtx = new Ctx({ latencyHint: 'playback' });
+    }
+    if(_ttsAudioCtx.state === 'suspended'){
+      _ttsAudioCtx.resume().catch(() => {});
+    }
+    return _ttsAudioCtx;
+  }
+  function _stopAllTtsSources(){
+    for(const s of _ttsActiveSources){
+      try { s.stop(); s.disconnect(); } catch(_) {}
+    }
+    _ttsActiveSources = [];
+    _ttsNextStartTime = 0;
+  }
+  function _playPcmInt16Chunk(arrayBuffer, sr, channels){
+    const ctx = _ensureTtsCtx();
+    if(!ctx){ console.warn('[tts-pcm] AudioContext indisponible'); return; }
+    if(_ttsLocalMuted) return;
+    // arrayBuffer = PCM int16 little-endian
+    const int16 = new Int16Array(arrayBuffer);
+    const samples = int16.length / channels;
+    if(samples <= 0) return;
+    const buf = ctx.createBuffer(channels, samples, sr);
+    // Convertit int16 → float32 [-1, 1] et copie dans chaque channel
+    if(channels === 1){
+      const ch = buf.getChannelData(0);
+      for(let i=0; i<samples; i++) ch[i] = int16[i] / 32768;
+    } else {
+      for(let c=0; c<channels; c++){
+        const ch = buf.getChannelData(c);
+        for(let i=0; i<samples; i++) ch[i] = int16[i*channels + c] / 32768;
+      }
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    // Schedule continuous : chaque chunk démarre où le précédent finit (pas de gap).
+    const now = ctx.currentTime;
+    const startAt = Math.max(now, _ttsNextStartTime);
+    src.start(startAt);
+    _ttsNextStartTime = startAt + buf.duration;
+    src.onended = () => {
+      const idx = _ttsActiveSources.indexOf(src);
+      if(idx >= 0) _ttsActiveSources.splice(idx, 1);
+    };
+    _ttsActiveSources.push(src);
+  }
   function playTtsAudio(arrayBuffer, meta){
+    // v1.20.0 — Si meta dit PCM int16, on passe par le path Web Audio chunked
+    // (streaming Piper du backend). Sinon path classique <audio> Blob.
+    const isPcm = meta && (
+      (meta.mime || '').includes('pcm') || meta.dtype === 'int16'
+    );
+    if(isPcm){
+      _ttsSr = meta.sr || 22050;
+      _playPcmInt16Chunk(arrayBuffer, _ttsSr, meta.channels || 1);
+      // Status visuel
+      try { setState('speaking'); } catch(_) {}
+      return;
+    }
+    // Fallback path Blob (compat usage non-PCM si jamais le backend renvoie autre)
     if(currentTtsAudio){
       try{ currentTtsAudio.pause(); }catch(e){}
       if(currentTtsUrl) URL.revokeObjectURL(currentTtsUrl);
@@ -4291,7 +4648,6 @@ body.conv-mode-continuous .conv-stop-fab{
     currentTtsAudio.onended = () => {
       if(currentTtsUrl) URL.revokeObjectURL(currentTtsUrl);
       currentTtsUrl = null; currentTtsAudio = null;
-      // Le backend enverra tts_end / state=idle, mais en fallback on relâche.
       if(ui.state === 'speaking') setState('idle');
     };
     currentTtsAudio.onerror = () => {
@@ -4391,40 +4747,84 @@ body.conv-mode-continuous .conv-stop-fab{
     if(!pick) pick = frVoices.find(v => !altPatterns.test(v.name));
     return pick || frVoices[0];
   }
-  function speakLocalTts(text, voiceHint, lang){
+  function _hasNativeTts(){
+    return !!(window.Capacitor &&
+              window.Capacitor.Plugins &&
+              window.Capacitor.Plugins.TextToSpeech);
+  }
+  // v1.19.1 — Persistance config TTS mobile (vitesse, volume, force-voice)
+  let _ttsConfig = {
+    rate: 1.05,
+    volume: 1.0,
+    pitchFriday: 1.05,
+    pitchJarvis: 0.92,
+    forceVoice: null,  // null = auto par voiceHint, ou string voice identifier
+  };
+  try {
+    const saved = localStorage.getItem('friday.mobile.tts_config');
+    if(saved) _ttsConfig = Object.assign(_ttsConfig, JSON.parse(saved));
+  } catch(_) {}
+  function _saveTtsConfig(){
+    try { localStorage.setItem('friday.mobile.tts_config', JSON.stringify(_ttsConfig)); } catch(_) {}
+  }
+
+  async function speakLocalTts(text, voiceHint, lang){
     if(!text) return;
     if(_ttsLocalMuted){
       console.log('[tts-local] skipped (MUTE local actif)');
       return;
     }
+    const utterLang = lang || 'fr-FR';
+    const isJarvis = (voiceHint === 'JARVIS');
+    const status = $('#transcriptStatus');
+    const setStatus = (msg) => { if(status && !_ttsLocalMuted) status.textContent = msg; };
+    const onEnd = () => { if(status && !_ttsLocalMuted){ status.textContent = 'live'; status.classList.remove('mobile-primary'); } };
+
+    // Path préféré : plugin natif Capacitor (vrai Android TextToSpeech engine).
+    // Bien plus fiable que SpeechSynthesis WebView (qui ne fonctionne pas sur
+    // Capacitor Android — Quang l'a constaté sur APK v1.19.0 : aucun son).
+    if(_hasNativeTts()){
+      try {
+        const plugin = window.Capacitor.Plugins.TextToSpeech;
+        try { await plugin.stop(); } catch(_) {}
+        setStatus('🔊 ' + (isJarvis ? 'Jarvis' : 'Friday') + ' parle');
+        const speakOpts = {
+          text: text,
+          lang: utterLang,
+          rate: _ttsConfig.rate || 1.05,
+          pitch: isJarvis ? (_ttsConfig.pitchJarvis || 0.92) : (_ttsConfig.pitchFriday || 1.05),
+          volume: _ttsConfig.volume != null ? _ttsConfig.volume : 1.0,
+          category: 'ambient',
+        };
+        if(_ttsConfig.forceVoice != null) speakOpts.voice = _ttsConfig.forceVoice;
+        await plugin.speak(speakOpts);
+        onEnd();
+        return;
+      } catch(e){
+        console.warn('[tts-native] failed, fallback to web SpeechSynthesis:', e);
+        // Continue vers le fallback
+      }
+    }
+    // Fallback PWA : window.speechSynthesis (marche dans Chrome desktop /
+    // navigateur mobile, mais souvent muet dans Capacitor WebView).
     if(!window.speechSynthesis || !window.SpeechSynthesisUtterance){
-      console.warn('[tts-local] SpeechSynthesis API indisponible — texte affiché seulement');
+      console.warn('[tts-local] aucune API TTS dispo (ni Capacitor natif, ni speechSynthesis)');
       return;
     }
     try {
-      window.speechSynthesis.cancel(); // stoppe une éventuelle synthèse précédente
+      window.speechSynthesis.cancel();
       const utt = new SpeechSynthesisUtterance(text);
-      utt.lang = lang || 'fr-FR';
-      utt.rate = 1.05; // léger boost pour matcher la cadence Friday/Jarvis
-      utt.pitch = (voiceHint === 'JARVIS') ? 0.92 : 1.05; // homme = pitch plus bas
-      utt.volume = 1.0;
+      utt.lang = utterLang;
+      utt.rate = _ttsConfig.rate || 1.05;
+      utt.pitch = isJarvis ? (_ttsConfig.pitchJarvis || 0.92) : (_ttsConfig.pitchFriday || 1.05);
+      utt.volume = _ttsConfig.volume != null ? _ttsConfig.volume : 1.0;
       const v = _pickVoice(voiceHint, utt.lang);
       if(v) utt.voice = v;
-      utt.onend = () => {
-        // Re-pose le status normal après la fin du speak
-        try {
-          const status = $('#transcriptStatus');
-          if(status && !_ttsLocalMuted){ status.textContent = 'live'; status.classList.remove('mobile-primary'); }
-        } catch(_) {}
-      };
+      utt.onend = onEnd;
       window.speechSynthesis.speak(utt);
-      // Status mobile : "🔊 Friday parle"
-      try {
-        const status = $('#transcriptStatus');
-        if(status && !_ttsLocalMuted){ status.textContent = '🔊 ' + (voiceHint === 'JARVIS' ? 'Jarvis' : 'Friday') + ' parle'; }
-      } catch(_) {}
+      setStatus('🔊 ' + (isJarvis ? 'Jarvis' : 'Friday') + ' parle');
     } catch(e){
-      console.warn('[tts-local] speak failed:', e);
+      console.warn('[tts-local] web speak failed:', e);
     }
   }
 
@@ -4447,7 +4847,18 @@ body.conv-mode-continuous .conv-stop-fab{
     setState('speaking');
   }
   function onTtsEnd(m){
+    // v1.20.0 — Reset le meta TTS et flush proprement les sources Web Audio.
+    // Important pour qu'un nouveau TTS streamé n'utilise pas l'ancien meta.
+    pendingTtsMeta = null;
+    // Ne PAS stop les sources actives : elles doivent finir de jouer leur
+    // buffer scheduled (sinon coupe la queue de la phrase). Le onended de
+    // chaque source les retire de _ttsActiveSources naturellement.
     if(ui.state === 'speaking') setState('idle');
+    // Re-pose status 'live' côté mobile (au cas où mobile-primary)
+    try {
+      const status = $('#transcriptStatus');
+      if(status && !_ttsLocalMuted){ status.classList.remove('mobile-primary'); status.textContent = 'live'; }
+    } catch(_) {}
   }
   function onWakeDetected(m){
     // Flash sphère 200ms (sub-wake-flash) — fonction du mockup.
@@ -4543,10 +4954,14 @@ body.conv-mode-continuous .conv-stop-fab{
           break;
       }
     } else {
-      // Frame binaire : audio TTS si meta annoncée juste avant.
+      // v1.20.0 — Frame binaire : audio TTS chunk. On NE reset PAS
+      // pendingTtsMeta après le 1er chunk : pour le streaming Piper, chaque
+      // TTS comporte plusieurs chunks PCM successifs avec le même meta. Le
+      // reset arrive à tts_end (onTtsEnd). Pour les payloads non-streaming
+      // (un seul chunk gros = mp3 complet), le meta est aussi gardé jusqu'au
+      // tts_end → pas d'effet de bord puisque le 2e chunk n'arrivera pas.
       if(pendingTtsMeta){
-        const meta = pendingTtsMeta; pendingTtsMeta = null;
-        playTtsAudio(ev.data, meta);
+        playTtsAudio(ev.data, pendingTtsMeta);
       } else {
         console.warn('Binary WS frame received without tts_audio_meta — drop');
       }
