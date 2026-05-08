@@ -1,11 +1,11 @@
-<!-- Monitoring Dashboard v1.11.0 (Persistance localStorage de la checkbox auto-refresh `dk-monitoring-auto-refresh` : si user décoche, l'état est conservé entre sessions/reloads. Défaut HTML reste "checked" si jamais setté.) -->
+<!-- Monitoring Dashboard v1.12.0 (08/05/2026 nuit) — Bannière alerte "Premium silencieux détectés" (devices effectiveTier=premium AND tier=free) suite incident bug pipeline Play Billing → gateway. Affiche le compteur premiumRuntimeCount + liste 8 premiers chars devices concernés + lien direct admin/set-tier. S'auto-masque si compteur=0. Voir dictokey-billing-pipeline-bug-2026-05-08.md. v1.11.0 (Persistance localStorage de la checkbox auto-refresh `dk-monitoring-auto-refresh`). -->
 <!-- Monitoring Dashboard v1.10.0 (Refonte labels Play Console : remplacement des labels en dur "J-2"/"LIVE"/"28j" par des labels dynamiques basés sur last_data_date + window_first/last_date. Bannière warning si données figées >3j. Sub-text hero "Appareils réels actifs" : suppression du breakdown pro/premium/free quand source = Play Console (mélangeait stock Play + cumul KV, mathématiquement fallacieux). Note moyenne : label "cumul" remplacé par "note globale toutes périodes". Labels HTML statiques cohérents avec labels JS dynamiques.) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.11.0</title>
+<title>Monitoring v1.12.0</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -113,6 +113,12 @@ a { color: var(--accent2); }
 .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .kpi-grid-funnel { grid-template-columns: repeat(3, 1fr); border-left: 3px solid var(--accent2-new); padding-left: 14px; }
 .kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; text-align: left; transition: border-color .15s, box-shadow .15s, transform .15s; }
+/* v1.12.0 — Alerte Premium silencieux (incident bug pipeline 08/05/2026) */
+.silent-premium-alert { background: linear-gradient(135deg, rgba(220,38,38,.18), rgba(124,58,237,.10)); border: 1px solid #dc2626; border-radius: 10px; padding: 14px 18px; margin: 12px 0; display: flex; align-items: flex-start; gap: 14px; font-size: .85rem; color: var(--text); animation: pulseAlert 2.4s ease-in-out infinite; }
+.silent-premium-alert-icon { font-size: 1.6rem; line-height: 1; flex-shrink: 0; margin-top: 2px; }
+.silent-premium-alert-body { flex: 1; line-height: 1.5; }
+.silent-premium-alert-body code { background: rgba(0,0,0,.32); padding: 1px 6px; border-radius: 4px; font-family: ui-monospace,Menlo,Consolas,monospace; font-size: .76rem; color: var(--accent2); }
+@keyframes pulseAlert { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,.0); } 50% { box-shadow: 0 0 18px 0 rgba(220,38,38,.25); } }
 .kpi-card:hover { border-color: var(--accent2-new); box-shadow: 0 2px 14px rgba(124,58,237,.10); transform: translateY(-1px); }
 .kpi-card .kpi-label { font-size: .72rem; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; font-weight: 600; line-height: 1.3; min-height: 2.6em; display: flex; align-items: flex-end; }
 .kpi-grid-adoption { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
@@ -660,7 +666,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.11.0</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.12.0</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -712,6 +718,23 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <div class="kpi-card"><div class="kpi-label">Actifs aujourd'hui</div><div class="kpi-value" id="kpiDau">—</div><div class="kpi-sub" id="kpiDauSub"></div></div>
     <div class="kpi-card"><div class="kpi-label">Dictées aujourd'hui</div><div class="kpi-value" id="kpiDictees">—</div><div class="kpi-sub" id="kpiDicteesSub"></div></div>
     <div class="kpi-card"><div class="kpi-label">Coût du mois</div><div class="kpi-value" id="kpiCost">—</div><div class="kpi-sub" id="kpiCostSub"></div></div>
+  </div>
+
+  <!-- v1.12.0 (08/05/2026) — Alerte Premium silencieux : incident bug pipeline Play Billing → gateway -->
+  <!-- Affichée UNIQUEMENT si premiumRuntimeCount > 0 (devices `effectiveTier=premium AND tier=free`). -->
+  <!-- Sémantique : ces users ont une subscription Play ACTIVE mais le notify n'a jamais atterri en KV. -->
+  <!-- Doit retomber à 0 et y rester une fois Phase A.2 (app v2.61.4) + Phase B (RTDN Pub/Sub) déployées. -->
+  <div id="silentPremiumAlert" class="silent-premium-alert" style="display:none">
+    <div class="silent-premium-alert-icon">⚠️</div>
+    <div class="silent-premium-alert-body">
+      <div style="font-weight:600;font-size:.92rem;margin-bottom:4px">Premium silencieux détectés — <span id="silentPremiumCount">0</span> device(s)</div>
+      <div style="font-size:.78rem;color:var(--text2);line-height:1.5">
+        Pattern <code>effectiveTier=premium</code> AND <code>tier=free</code> = subscription Play active dont le notify gateway a échoué (incident pipeline 08/05/2026). À promouvoir manuellement via <code>/admin/set-tier</code> en attendant Phase A.2 (app v2.61.4) + Phase B (RTDN Pub/Sub).
+      </div>
+      <div style="font-size:.74rem;color:var(--text-mute-new);margin-top:6px;font-family:ui-monospace,Menlo,Consolas,monospace">
+        Devices : <span id="silentPremiumDevices">—</span>
+      </div>
+    </div>
   </div>
 
   <!-- Site funnel KPIs -->
@@ -986,12 +1009,12 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.11.0</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
+  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.12.0</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.11.0';
+const DASHBOARD_VERSION = 'v1.12.0';
 
 // === Multi-app config ===
 const APPS = {
@@ -1374,6 +1397,32 @@ function render(mon, stats, dev, siteVisits, siteClicks) {
   //  - tierCounts.premium = KV explicite (`/device/restore` ou `/device/update-tier` ont écrit `tier='premium'`)
   //  - premiumRuntimeCount = côté app PremiumManager.googlePremium=true mais KV reste 'free'
   var totalPremium = tierCounts.premium + premiumRuntimeCount;
+
+  // v1.12.0 (08/05/2026) — Alerte Premium silencieux (incident bug pipeline Play Billing → gateway)
+  // Le pattern `effectiveTier=premium AND tier=free` = subscription Play active dont le notify gateway a échoué.
+  // 2 cas confirmés au 08/05 (Arthur Fletcher 3fc942dc + User B ed61ade8). Affichage rouge si > 0, masqué sinon.
+  // Doit retomber à 0 et y rester une fois Phase A.2 (app v2.61.4 BillingManager.notifyGatewayTierUpdate) + Phase B (RTDN Pub/Sub) déployées.
+  try {
+    var silentAlertEl = document.getElementById('silentPremiumAlert');
+    var silentCountEl = document.getElementById('silentPremiumCount');
+    var silentDevicesEl = document.getElementById('silentPremiumDevices');
+    if (silentAlertEl && silentCountEl && silentDevicesEl) {
+      if (premiumRuntimeCount > 0) {
+        var silentDeviceCodes = devicesList.filter(function(d) {
+          return d.effectiveTier === 'premium' && ((d.tier || 'free').toLowerCase() === 'free');
+        }).map(function(d) {
+          var code = (d.deviceId || '').slice(0, 8).toUpperCase();
+          var country = d.country ? ' ' + d.country : '';
+          return code + country;
+        });
+        silentCountEl.textContent = premiumRuntimeCount;
+        silentDevicesEl.textContent = silentDeviceCodes.join(' · ') || '—';
+        silentAlertEl.style.display = 'flex';
+      } else {
+        silentAlertEl.style.display = 'none';
+      }
+    }
+  } catch (e) { /* fail silently — alerte best-effort */ }
 
   // v1.7.16 : compteur "nouveaux appareils du jour" depuis le KV gateway (live, fuseau local du navigateur).
   // Compare le createdAt ISO (UTC) au timestamp 00:00:00 local — la comparaison se fait sur les ms absolues.
@@ -3032,7 +3081,7 @@ document.addEventListener('keydown', function(e) {
 
 // Period pills (v1.5.0 : no-op si pas DictoKey ; v1.7.15 : persistance localStorage avec dot vert)
 const PERIOD_LS_KEY = 'dk-monitoring-period';
-const AUTO_REFRESH_LS_KEY = 'dk-monitoring-auto-refresh'; // v1.11.0 : "1" si coché, "0" si décoché. Absent = défaut HTML (checked).
+const AUTO_REFRESH_LS_KEY = 'dk-monitoring-auto-refresh'; // v1.12.0 : "1" si coché, "0" si décoché. Absent = défaut HTML (checked).
 const VALID_PERIODS = ['7d', '30d', '90d'];
 
 function setPeriodActive(period) {
@@ -3083,11 +3132,11 @@ function stopAutoRefresh() { if (refreshInterval) { clearInterval(refreshInterva
 
 document.getElementById('autoRefresh').addEventListener('change', function() {
   if (this.checked) startAutoRefresh(); else stopAutoRefresh();
-  // v1.11.0 : persiste l'état entre sessions
+  // v1.12.0 : persiste l'état entre sessions
   try { localStorage.setItem(AUTO_REFRESH_LS_KEY, this.checked ? '1' : '0'); } catch (e) { /* localStorage indisponible : silencieux */ }
 });
 
-// v1.11.0 : restaure l'état coché/décoché depuis localStorage. Doit être appelé AVANT le 1er check sur .checked au boot.
+// v1.12.0 : restaure l'état coché/décoché depuis localStorage. Doit être appelé AVANT le 1er check sur .checked au boot.
 function restoreAutoRefreshFromLS() {
   try {
     var saved = localStorage.getItem(AUTO_REFRESH_LS_KEY);
@@ -3444,7 +3493,7 @@ renderAppTabs();
 initNav();
 updateTierPillsUI(); // v1.4.11: applique l'état visuel des pills tier depuis localStorage au chargement
 restorePeriodFromLS(); // v1.7.15: applique la période persistée depuis localStorage avant le 1er fetch
-restoreAutoRefreshFromLS(); // v1.11.0 : applique l'état coché/décoché de la checkbox auto-refresh AVANT le 1er fetch (sinon le check ligne `if (autoRefresh.checked) startAutoRefresh()` lit le défaut HTML, pas la pref user)
+restoreAutoRefreshFromLS(); // v1.12.0 : applique l'état coché/décoché de la checkbox auto-refresh AVANT le 1er fetch (sinon le check ligne `if (autoRefresh.checked) startAutoRefresh()` lit le défaut HTML, pas la pref user)
 setupCollapsibleSections(); // v1.7.21: mode replier/déplier hybride mobile-first
 applyInternalToggleStates(); // v1.7.26: restaure devicesExpanded et churnDetailsExpanded depuis localStorage
 // v1.7.27 : update du label bouton "Replier/Déplier" sur resize (passage mobile↔desktop)
