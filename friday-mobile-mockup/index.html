@@ -6,11 +6,37 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.0.0 mock</title>
+<title>FRIDAY · v1.1.0 mock</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
-  FRIDAY MOBILE MOCK-UP v1.0.0  ·  2026-05-08
+  FRIDAY MOBILE MOCK-UP v1.1.0  ·  2026-05-08
+  ================================================================================
+  CHANGELOG V1.0 → V1.1 :
+  --------------------------------------------------------------------------------
+  · F1 — Pattern Hologramme PiP (Picture-in-Picture inversé) : sphère glide vers
+        coin top-left scale 0.28 + halo trail cyan ; contenu central plein scale
+        avec fade+scale 0.85→1.0 + delay 50ms. Tap sphère mini = retour fluide.
+        Long-press sphère mini = menu rapide (toast). Drag = 4 corners snap.
+  · F2 — Bouton 🧠 Cortex dans bottom bar → déclenche PiP avec NeuralViz cortex
+        (SVG 8 zones identifiables : frontal, motor, somatosensory, parietal,
+        temporal-L/R, occipital, broca, wernicke) + animation lumière par zone
+        synchro avec state principal.
+  · F3 — Dynamique sphère enrichie : sliders RMS + FFT pilotent amplitude
+        pulsation core / barres waveform. 3 boutons sub-states : wake-listening
+        (sonar pulse expanding), wake-flash (flash 200ms), wake-followup
+        (countdown 5→0s avec gauge SVG stroke-dasharray).
+  · F4 — Notif violet : bouton "📩 Notif" → sphère pulse 3× violet #B967FF
+        (1.8s total). Tap pendant pulse = toast "Friday : J'ai trouvé qqch...".
+  · F5 — Halo critique : bouton "✨ Halo" → radial-gradient cyan plein écran,
+        opacity 0→0.6→0 / scale 0.5→2.5 sur 2s (TTS info critique).
+  · F6 — Bordure rouge clignotante offline : bouton "📡 Offline" →
+        box-shadow inset rouge clignotant (1.2s loop) + toast "Hors ligne".
+        Re-tap pour reconnecter.
+  · UI — Title bumpé v1.1.0, badge "v1.1" en header, debug bar reorganisée
+        en 2 lignes (states + sub-states/effets), ajout 2 sliders (RMS/FFT).
+  ================================================================================
+  FRIDAY MOBILE MOCK-UP v1.0.0  ·  2026-05-08 (entrée historique)
   ================================================================================
   Single-file HTML standalone (CSS + JS inline). Aucune dépendance externe.
   Cible : portrait 6", max-width 480px, viewport-fit=cover.
@@ -706,12 +732,358 @@ body[data-state="speaking"] .wave-arc{
   transition:opacity .25s,transform .25s;
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ==========================================================================
+   V1.1 — Pattern Hologramme PiP (Picture-in-Picture inversé)
+   ========================================================================== */
+
+/* Le sphere-wrap devient transitionnable. On stocke 4 corners possibles. */
+.sphere-wrap{
+  transition:transform .4s cubic-bezier(0.2, 0.8, 0.2, 1.0),
+             filter .4s cubic-bezier(0.2, 0.8, 0.2, 1.0);
+  will-change:transform;
+}
+
+/* État PiP : sphère mini en coin */
+.sphere-wrap.pip{
+  position:absolute;
+  z-index:30;
+  width:96px;height:96px;
+  max-width:96px;
+  margin:0;
+  cursor:grab;
+  filter:drop-shadow(0 0 14px var(--state-glow))
+         drop-shadow(0 0 28px rgba(0,212,255,.35));
+}
+.sphere-wrap.pip.dragging{cursor:grabbing;transition:none}
+
+/* Anti-débordement Halo trail pendant le glide */
+.pip-trail{
+  position:absolute;left:0;top:0;
+  width:100%;height:100%;
+  pointer-events:none;
+  border-radius:50%;
+  box-shadow:0 0 60px 20px var(--primary-glow);
+  opacity:0;
+  z-index:29;
+  transition:opacity .4s ease-out;
+}
+.pip-trail.show{opacity:.6}
+
+/* Corners (4 positions snap-able) — calcul via CSS vars */
+.sphere-wrap.pip.corner-tl{top:60px;left:12px}
+.sphere-wrap.pip.corner-tr{top:60px;right:12px;left:auto}
+.sphere-wrap.pip.corner-bl{bottom:170px;left:12px;top:auto}
+.sphere-wrap.pip.corner-br{bottom:170px;right:12px;left:auto;top:auto}
+
+/* Pendant la sphère est en PiP, le state-label/hint cachés */
+.sphere-wrap.pip .sphere-state{display:none}
+
+/* Container du contenu central alternatif (rempli par JS) */
+.pip-content{
+  display:none;
+  position:relative;
+  width:100%;
+  aspect-ratio:1/1;
+  max-width:340px;
+  margin:6px auto 4px;
+  background:linear-gradient(135deg,rgba(0,18,32,.78),rgba(0,28,52,.62));
+  border:1px solid rgba(0,212,255,.45);
+  border-radius:6px;
+  overflow:hidden;
+  opacity:0;
+  transform:scale(0.85);
+  transition:opacity .35s ease,transform .35s cubic-bezier(0.2, 0.8, 0.2, 1.0);
+  box-shadow:0 4px 24px rgba(0,212,255,.18),inset 0 0 32px rgba(0,212,255,.05);
+}
+.pip-content.show{display:block;opacity:1;transform:scale(1)}
+.pip-content-title{
+  position:absolute;top:8px;left:0;right:0;
+  text-align:center;
+  font:700 10px 'JetBrains Mono',monospace;
+  letter-spacing:3px;color:var(--primary);
+  text-shadow:0 0 8px var(--primary-glow);
+  text-transform:uppercase;
+  z-index:2;pointer-events:none;
+}
+.pip-content-legend{
+  position:absolute;bottom:8px;left:0;right:0;
+  text-align:center;
+  font:9px/1.4 'JetBrains Mono',monospace;
+  letter-spacing:1.5px;color:var(--text-1);opacity:.7;
+  pointer-events:none;
+}
+
+/* ==========================================================================
+   V1.1 — Cortex NeuralViz (SVG 2D)
+   ========================================================================== */
+
+.cortex-svg{
+  width:100%;height:100%;
+  filter:drop-shadow(0 0 10px rgba(0,212,255,.25));
+}
+.cortex-zone{
+  fill:rgba(90,112,144,.28);
+  stroke:rgba(0,212,255,.3);
+  stroke-width:1;
+  transition:fill .3s ease,stroke .3s ease,filter .3s ease;
+}
+.cortex-zone.active{
+  fill:rgba(0,212,255,.55);
+  stroke:#00d4ff;
+  filter:drop-shadow(0 0 6px rgba(0,212,255,.7));
+  animation:cortexPulse 1.6s ease-in-out infinite;
+}
+.cortex-zone.thinking{
+  fill:rgba(196,77,255,.5);
+  stroke:#c44dff;
+  filter:drop-shadow(0 0 6px rgba(196,77,255,.7));
+  animation:cortexPulse 1.2s ease-in-out infinite;
+}
+.cortex-zone.speaking{
+  fill:rgba(0,255,224,.5);
+  stroke:#00ffe0;
+  filter:drop-shadow(0 0 6px rgba(0,255,224,.7));
+  animation:cortexPulse .9s ease-in-out infinite;
+}
+@keyframes cortexPulse{
+  0%,100%{opacity:.7}
+  50%{opacity:1}
+}
+.cortex-label{
+  fill:#7a8fa8;
+  font:8px 'JetBrains Mono',monospace;
+  letter-spacing:.5px;
+  pointer-events:none;
+  text-anchor:middle;
+  opacity:.85;
+}
+
+/* ==========================================================================
+   V1.1 — Sub-states : wake-listening (sonar) / wake-flash / wake-followup
+   ========================================================================== */
+
+/* Sonar expanding (wake-listening) */
+.sub-sonar{
+  position:absolute;left:50%;top:50%;
+  width:30%;height:30%;
+  border-radius:50%;
+  border:2px solid var(--primary);
+  transform:translate(-50%,-50%) scale(0.5);
+  opacity:0;
+  pointer-events:none;
+  z-index:3;
+}
+.sphere-wrap.sub-wake-listening .sub-sonar{
+  animation:sonarExpand 1.6s ease-out infinite;
+}
+@keyframes sonarExpand{
+  0%{transform:translate(-50%,-50%) scale(0.5);opacity:.7;border-width:2px}
+  100%{transform:translate(-50%,-50%) scale(2.5);opacity:0;border-width:1px}
+}
+/* second sonar décalé */
+.sub-sonar.s2{animation-delay:.5s}
+.sub-sonar.s3{animation-delay:1s}
+
+/* Flash (wake-flash) */
+.sub-flash{
+  position:absolute;inset:0;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.85) 0%,rgba(0,212,255,.5) 40%,transparent 70%);
+  opacity:0;
+  pointer-events:none;
+  z-index:4;
+}
+.sphere-wrap.sub-wake-flash .sub-flash{
+  animation:wakeFlash 200ms ease-out;
+}
+@keyframes wakeFlash{
+  0%{opacity:0;transform:scale(0.6)}
+  40%{opacity:1;transform:scale(1.05)}
+  100%{opacity:0;transform:scale(1.15)}
+}
+
+/* Followup countdown */
+.sub-followup{
+  position:absolute;left:50%;top:50%;
+  width:60%;height:60%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  z-index:5;
+  opacity:0;
+  transition:opacity .3s;
+}
+.sphere-wrap.sub-wake-followup .sub-followup{opacity:1}
+.followup-ring{
+  fill:none;
+  stroke:var(--listening);
+  stroke-width:2;
+  stroke-linecap:round;
+  filter:drop-shadow(0 0 6px rgba(255,181,71,.7));
+  transform:rotate(-90deg);
+  transform-origin:50% 50%;
+}
+.followup-text{
+  position:absolute;left:0;right:0;top:50%;
+  transform:translateY(-50%);
+  text-align:center;
+  font:700 18px 'JetBrains Mono',monospace;
+  color:var(--listening);
+  text-shadow:0 0 8px rgba(255,181,71,.7);
+  letter-spacing:1px;
+}
+
+/* ==========================================================================
+   V1.1 — Sphère core piloté par RMS / FFT (CSS vars)
+   ========================================================================== */
+
+.sphere-core{
+  /* override : amplitude pilotée par --rms-scale (1.0 = repos) */
+  transform:scale(var(--rms-scale,1));
+  transform-origin:center;
+  transform-box:fill-box;
+  transition:transform .15s ease-out;
+}
+/* Désactive l'animation native quand on pilote en live (listening) */
+body[data-state="listening"] .sphere-core{
+  animation:none;
+}
+/* Wave-arc épaissit selon FFT */
+body[data-state="speaking"] .wave-arc{
+  stroke-width:calc(1.4 + var(--fft-amp,0) * 2.8);
+}
+
+/* ==========================================================================
+   V1.1 — Notif violet (3 pulses)
+   ========================================================================== */
+
+.sphere-wrap.notif-violet svg{
+  animation:violetPulse 600ms ease-in-out 3;
+  filter:drop-shadow(0 0 18px rgba(185,103,255,.85));
+}
+@keyframes violetPulse{
+  0%,100%{transform:scale(1);filter:drop-shadow(0 0 14px rgba(185,103,255,.55))}
+  50%{transform:scale(1.08);filter:drop-shadow(0 0 30px rgba(185,103,255,.95))}
+}
+
+/* ==========================================================================
+   V1.1 — Halo cyan critique (rayonne sur tout l'écran)
+   ========================================================================== */
+
+.critical-halo{
+  position:fixed;inset:0;
+  pointer-events:none;
+  z-index:180; /* sous scanlines/edge-glow (199/200), au-dessus du contenu (1) */
+  background:radial-gradient(circle at center,
+    rgba(0,212,255,.6) 0%,
+    rgba(0,212,255,.25) 30%,
+    rgba(0,212,255,.05) 60%,
+    transparent 80%);
+  opacity:0;
+  transform:scale(0.5);
+}
+.critical-halo.fire{
+  animation:criticalHaloFire 2s ease-out;
+}
+@keyframes criticalHaloFire{
+  0%{opacity:0;transform:scale(0.5)}
+  30%{opacity:.6;transform:scale(1.4)}
+  100%{opacity:0;transform:scale(2.5)}
+}
+
+/* ==========================================================================
+   V1.1 — Offline border (clignotante rouge)
+   ========================================================================== */
+
+.offline-border{
+  position:fixed;inset:0;
+  pointer-events:none;
+  z-index:197;
+  border:2px solid #ff3a4f;
+  box-shadow:inset 0 0 24px rgba(255,58,79,.35),
+             0 0 18px rgba(255,58,79,.55);
+  opacity:0;
+  transition:opacity .3s;
+}
+body.offline .offline-border{
+  opacity:1;
+  animation:offlineBlink 1.2s ease-in-out infinite;
+}
+@keyframes offlineBlink{
+  0%,100%{opacity:.55}
+  50%{opacity:1}
+}
+
+/* ==========================================================================
+   V1.1 — Debug bar étendue (2 lignes + sliders)
+   ========================================================================== */
+
+.debug-bar.row2{margin-top:5px}
+.debug-bar .dbg-btn.violet.fire{
+  border-color:#B967FF;
+  color:#B967FF;
+  text-shadow:0 0 6px rgba(185,103,255,.7);
+}
+.debug-bar .dbg-btn.cyan.fire{
+  border-color:var(--primary);
+  color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+}
+
+.debug-sliders{
+  display:flex;gap:8px;padding:0 4px;align-items:center;
+}
+.debug-sliders label{
+  flex:1;
+  display:flex;align-items:center;gap:4px;
+  font:600 8px 'JetBrains Mono',monospace;
+  letter-spacing:1px;color:var(--text-1);
+  text-transform:uppercase;
+}
+.debug-sliders input[type="range"]{
+  flex:1;
+  -webkit-appearance:none;appearance:none;
+  height:4px;background:rgba(0,212,255,.18);
+  border-radius:2px;outline:none;
+  cursor:pointer;
+}
+.debug-sliders input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:12px;height:12px;border-radius:50%;
+  background:var(--primary);
+  box-shadow:0 0 6px var(--primary-glow);
+  cursor:pointer;
+}
+.debug-sliders input[type="range"]::-moz-range-thumb{
+  width:12px;height:12px;border-radius:50%;
+  background:var(--primary);
+  box-shadow:0 0 6px var(--primary-glow);
+  cursor:pointer;border:none;
+}
+.dbg-val{
+  min-width:28px;text-align:right;
+  color:var(--primary);font-weight:700;
+}
+
+/* Bottom bar : ajout du bouton 🧠 Cortex (reste en flex) */
+.satellite-row .sat-btn.cortex-btn{
+  font-size:14px;
+}
+.satellite-row .sat-btn.cortex-btn.on{
+  background:rgba(196,77,255,.15);
+  border-color:var(--thinking);
+  color:var(--thinking);
+  text-shadow:0 0 6px rgba(196,77,255,.7);
+  box-shadow:inset 0 0 10px rgba(196,77,255,.2);
+}
 </style>
 </head>
 <body data-state="idle">
 
 <div class="grid-bg"></div>
 <div class="edge-glow"></div>
+<div class="critical-halo" id="criticalHalo" aria-hidden="true"></div>
+<div class="offline-border" id="offlineBorder" aria-hidden="true"></div>
 <div class="toast" id="toast">READY</div>
 
 <div class="app">
@@ -726,7 +1098,7 @@ body[data-state="speaking"] .wave-arc{
       <div class="conn-status">
         <span class="conn-dot"></span>
         <span>MOCK</span>
-        <span class="version-tag">· v1.0.0</span>
+        <span class="version-tag version-badge">· v1.1</span>
       </div>
     </div>
 
@@ -743,8 +1115,8 @@ body[data-state="speaking"] .wave-arc{
     <!-- VIEW : HOME -->
     <section class="view active" id="view-home">
 
-      <!-- Sphère HOLO-SPLIT -->
-      <div class="sphere-wrap" aria-label="Sphère Friday">
+      <!-- Sphère HOLO-SPLIT (V1.1 : devient PiP-able + sub-states overlays) -->
+      <div class="sphere-wrap" id="sphereWrap" aria-label="Sphère Friday">
         <svg id="sphereSvg" viewBox="0 0 200 200" aria-hidden="true">
           <defs>
             <filter id="coreGlow" x="-50%" y="-50%" width="200%" height="200%">
@@ -819,6 +1191,26 @@ body[data-state="speaking"] .wave-arc{
           <div class="rms-bar"></div>
           <div class="rms-bar"></div>
         </div>
+
+        <!-- V1.1 sub-states overlays -->
+        <div class="sub-sonar s1" aria-hidden="true"></div>
+        <div class="sub-sonar s2" aria-hidden="true"></div>
+        <div class="sub-sonar s3" aria-hidden="true"></div>
+        <div class="sub-flash" aria-hidden="true"></div>
+        <svg class="sub-followup" viewBox="0 0 100 100" aria-hidden="true">
+          <circle class="followup-ring" id="followupRing"
+                  cx="50" cy="50" r="44"
+                  stroke-dasharray="276.46" stroke-dashoffset="0"/>
+        </svg>
+        <div class="followup-text" id="followupText" style="display:none;">5</div>
+
+        <!-- Halo trail (V1.1 — visible pendant le glide PiP) -->
+        <div class="pip-trail" id="pipTrail" aria-hidden="true"></div>
+      </div>
+
+      <!-- V1.1 — Container du contenu central alternatif (PiP) -->
+      <div class="pip-content" id="pipContent" aria-hidden="true">
+        <!-- Rempli par JS selon le trigger (cortex / autre) -->
       </div>
 
       <!-- Toggles slots cachés -->
@@ -937,20 +1329,33 @@ body[data-state="speaking"] .wave-arc{
       <span id="micLabel">TAP TO TALK</span>
     </button>
 
-    <!-- Satellite row : compactée -->
+    <!-- Satellite row : compactée (V1.1 : ajout 🧠 Cortex) -->
     <div class="satellite-row">
       <button class="sat-btn" id="btnLog" title="Logs">≡</button>
       <button class="sat-btn" id="btnMute" title="Mute">◊</button>
+      <button class="sat-btn cortex-btn" id="btnCortex" title="🧠 Cortex">🧠 Cortex</button>
       <button class="sat-btn" id="btnSettings" title="Settings">⚙</button>
       <button class="sat-btn" id="btnPersona" title="Persona">$</button>
     </div>
 
-    <!-- Debug bar (mock seulement) -->
+    <!-- Debug bar (mock seulement) — V1.1 : 2 lignes + sliders -->
     <div class="debug-bar">
       <button class="dbg-btn on" data-debug="idle">idle</button>
       <button class="dbg-btn" data-debug="listening">listening</button>
       <button class="dbg-btn" data-debug="thinking">thinking</button>
       <button class="dbg-btn" data-debug="speaking">speaking</button>
+    </div>
+    <div class="debug-bar row2">
+      <button class="dbg-btn" id="dbgWakeListen" title="wake-listening sub-state">▷ wake-listen</button>
+      <button class="dbg-btn" id="dbgWakeFlash" title="wake-flash 200ms">⚡ flash</button>
+      <button class="dbg-btn" id="dbgWakeFollowup" title="wake-followup countdown 5s">5s gauge</button>
+      <button class="dbg-btn violet" id="dbgNotif" title="Notif violet 3 pulses">📩 Notif</button>
+      <button class="dbg-btn cyan" id="dbgHalo" title="Halo cyan critique TTS">✨ Halo</button>
+      <button class="dbg-btn" id="dbgOffline" title="Toggle offline mode">📡 Offline</button>
+    </div>
+    <div class="debug-sliders">
+      <label>RMS<input type="range" id="sliderRms" min="0" max="100" value="35"><span class="dbg-val" id="rmsVal">35</span></label>
+      <label>FFT<input type="range" id="sliderFft" min="0" max="100" value="60"><span class="dbg-val" id="fftVal">60</span></label>
     </div>
   </footer>
 
@@ -985,7 +1390,7 @@ body[data-state="speaking"] .wave-arc{
 (function(){
   'use strict';
 
-  const VERSION = 'v1.0.0 mock';
+  const VERSION = 'v1.1.0 mock';
   const STATE_COLORS = {
     idle:      { ring:'#5a7090', glow:'rgba(90,112,144,.35)'  },
     listening: { ring:'#ffb547', glow:'rgba(255,181,71,.65)'  },
@@ -1201,6 +1606,396 @@ body[data-state="speaking"] .wave-arc{
   micBtn.addEventListener('pointercancel',()=>{
     if(ui.pressTimer){clearTimeout(ui.pressTimer);ui.pressTimer=null;}
     if(ui.recording && ui.holdMode){ stopRecording(true); }
+  });
+
+  /* =========================================================================
+     V1.1 — Pattern Hologramme PiP (Picture-in-Picture inversé)
+     ========================================================================= */
+
+  const sphereWrap = $('#sphereWrap');
+  const pipContent = $('#pipContent');
+  const pipTrail = $('#pipTrail');
+  const ICON_BTN_CORTEX = $('#btnCortex');
+
+  const pip = {
+    active:false,
+    corner:'tl',          // tl|tr|bl|br
+    contentKind:null,     // 'cortex' | (futur) 'camera' | etc.
+    drag:{ on:false, sx:0, sy:0, ox:0, oy:0, moved:false },
+    longPressTimer:null
+  };
+
+  function enterPiP(kind){
+    if(pip.active && pip.contentKind===kind){
+      // Re-trigger même contenu = ferme
+      exitPiP();
+      return;
+    }
+    if(pip.active && pip.contentKind!==kind){
+      // Switch contenu : fade-out ancien puis swap
+      renderPipContent(kind);
+      pip.contentKind=kind;
+      updateCortexBtnState();
+      return;
+    }
+    pip.active=true;
+    pip.contentKind=kind;
+    // Trail visible pendant le glide
+    pipTrail.classList.add('show');
+    setTimeout(()=>pipTrail.classList.remove('show'), 500);
+    // Glide
+    sphereWrap.classList.add('pip','corner-'+pip.corner);
+    // Contenu central avec delay 50ms
+    renderPipContent(kind);
+    setTimeout(()=>pipContent.classList.add('show'), 50);
+    updateCortexBtnState();
+    try{ navigator.vibrate && navigator.vibrate(15);}catch(e){}
+  }
+
+  function exitPiP(){
+    if(!pip.active) return;
+    pip.active=false;
+    pipContent.classList.remove('show');
+    pipTrail.classList.add('show');
+    setTimeout(()=>pipTrail.classList.remove('show'), 500);
+    setTimeout(()=>{
+      pipContent.style.display='';
+      pipContent.innerHTML='';
+    }, 380);
+    sphereWrap.classList.remove('pip','corner-tl','corner-tr','corner-bl','corner-br');
+    sphereWrap.style.transform=''; // reset éventuel transform drag
+    pip.contentKind=null;
+    updateCortexBtnState();
+    try{ navigator.vibrate && navigator.vibrate(10);}catch(e){}
+  }
+
+  function updateCortexBtnState(){
+    if(pip.active && pip.contentKind==='cortex'){
+      ICON_BTN_CORTEX.classList.add('on');
+    } else {
+      ICON_BTN_CORTEX.classList.remove('on');
+    }
+  }
+
+  function snapToNearestCorner(x, y){
+    // x,y = position centre approximative de la sphère mini (px viewport)
+    const w = window.innerWidth, h = window.innerHeight;
+    const left = x < w/2;
+    const top = y < h/2;
+    return (top?'t':'b') + (left?'l':'r');
+  }
+
+  // Tap court / long-press / drag sur sphère mini
+  sphereWrap.addEventListener('pointerdown',(e)=>{
+    if(!pip.active) return;
+    e.preventDefault();
+    const rect = sphereWrap.getBoundingClientRect();
+    pip.drag.on = true;
+    pip.drag.moved = false;
+    pip.drag.sx = e.clientX;
+    pip.drag.sy = e.clientY;
+    pip.drag.ox = rect.left;
+    pip.drag.oy = rect.top;
+    sphereWrap.classList.add('dragging');
+    pip.longPressTimer = setTimeout(()=>{
+      pip.longPressTimer = null;
+      if(!pip.drag.moved){
+        toast('Menu rapide');
+        try{ navigator.vibrate && navigator.vibrate([10,30,10]);}catch(e){}
+      }
+    }, 600);
+  });
+
+  sphereWrap.addEventListener('pointermove',(e)=>{
+    if(!pip.active || !pip.drag.on) return;
+    const dx = e.clientX - pip.drag.sx;
+    const dy = e.clientY - pip.drag.sy;
+    if(Math.abs(dx)>4 || Math.abs(dy)>4) pip.drag.moved=true;
+    if(pip.drag.moved){
+      // suit le doigt sans transition
+      sphereWrap.style.transform = `translate(${dx}px, ${dy}px)`;
+    }
+  });
+
+  sphereWrap.addEventListener('pointerup',(e)=>{
+    if(!pip.active) return;
+    sphereWrap.classList.remove('dragging');
+    if(pip.longPressTimer){ clearTimeout(pip.longPressTimer); pip.longPressTimer=null; }
+    if(!pip.drag.moved){
+      // tap court → exit PiP
+      pip.drag.on = false;
+      exitPiP();
+      return;
+    }
+    // Drag terminé : snap au coin le plus proche
+    pip.drag.on = false;
+    const cx = pip.drag.ox + (e.clientX - pip.drag.sx) + sphereWrap.offsetWidth/2;
+    const cy = pip.drag.oy + (e.clientY - pip.drag.sy) + sphereWrap.offsetHeight/2;
+    sphereWrap.classList.remove('corner-tl','corner-tr','corner-bl','corner-br');
+    sphereWrap.style.transform = '';
+    pip.corner = snapToNearestCorner(cx, cy);
+    sphereWrap.classList.add('corner-'+pip.corner);
+  });
+
+  sphereWrap.addEventListener('pointercancel',()=>{
+    if(pip.longPressTimer){ clearTimeout(pip.longPressTimer); pip.longPressTimer=null; }
+    pip.drag.on=false;
+    sphereWrap.classList.remove('dragging');
+    sphereWrap.style.transform = '';
+  });
+
+  /* =========================================================================
+     V1.1 — Cortex NeuralViz (SVG 2D, 8 zones identifiables)
+     ========================================================================= */
+
+  // 8 zones inspirées d'une carte cérébrale 2D simplifiée vue latéralement.
+  // Chaque zone = ellipse/path avec id pour pilotage CSS.
+  const CORTEX_ZONES = [
+    { id:'frontal',       label:'Frontal',       cx:65,  cy:80,  rx:30, ry:22 },
+    { id:'motor',         label:'Motor',         cx:115, cy:55,  rx:18, ry:14 },
+    { id:'somatosensory', label:'Somato',        cx:150, cy:55,  rx:15, ry:12 },
+    { id:'parietal',      label:'Parietal',      cx:185, cy:75,  rx:24, ry:18 },
+    { id:'occipital',     label:'Occipital',     cx:225, cy:110, rx:24, ry:20 },
+    { id:'temporal',      label:'Temporal',      cx:155, cy:135, rx:38, ry:18 },
+    { id:'broca',         label:"Broca",         cx:90,  cy:118, rx:14, ry:10 },
+    { id:'wernicke',      label:'Wernicke',      cx:200, cy:140, rx:14, ry:10 }
+  ];
+
+  function buildCortexSvg(){
+    const zonesSvg = CORTEX_ZONES.map(z =>
+      `<ellipse class="cortex-zone" id="cortex-${z.id}" cx="${z.cx}" cy="${z.cy}" rx="${z.rx}" ry="${z.ry}"/>`
+    ).join('');
+    const labelsSvg = CORTEX_ZONES.map(z =>
+      `<text class="cortex-label" x="${z.cx}" y="${z.cy+3}">${z.label}</text>`
+    ).join('');
+    return `
+      <div class="pip-content-title">🧠 NEURAL VIZ</div>
+      <svg class="cortex-svg" viewBox="0 0 280 200" aria-hidden="true">
+        <defs>
+          <radialGradient id="cortexBg">
+            <stop offset="0%" stop-color="rgba(0,30,60,.6)"/>
+            <stop offset="100%" stop-color="rgba(0,12,24,.2)"/>
+          </radialGradient>
+        </defs>
+        <!-- Brain outline (ovale stylisé) -->
+        <path d="M 50,100
+                 C 50,40 100,25 145,30
+                 C 195,25 245,55 245,110
+                 C 245,160 200,180 150,178
+                 C 100,180 50,160 50,100 Z"
+              fill="url(#cortexBg)"
+              stroke="rgba(0,212,255,.45)" stroke-width="1.5"/>
+        <!-- Sillon central séparation lobes -->
+        <path d="M 115,40 Q 130,90 125,165"
+              fill="none" stroke="rgba(0,212,255,.2)" stroke-width="1" stroke-dasharray="2 3"/>
+        <path d="M 175,40 Q 175,90 180,170"
+              fill="none" stroke="rgba(0,212,255,.2)" stroke-width="1" stroke-dasharray="2 3"/>
+        <!-- Brain stem -->
+        <ellipse cx="170" cy="180" rx="14" ry="8"
+                 fill="rgba(90,112,144,.3)" stroke="rgba(0,212,255,.3)" stroke-width="1"/>
+        ${zonesSvg}
+        ${labelsSvg}
+      </svg>
+      <div class="pip-content-legend">
+        cyan = listening · violet = thinking · turquoise = speaking
+      </div>
+    `;
+  }
+
+  function renderPipContent(kind){
+    if(kind==='cortex'){
+      pipContent.innerHTML = buildCortexSvg();
+      // démarre la boucle d'activité simulée
+      startCortexActivity();
+    }
+  }
+
+  // Boucle d'activité simulée : illumine certaines zones selon le state principal
+  let cortexInterval = null;
+  function startCortexActivity(){
+    stopCortexActivity();
+    let tick = 0;
+    cortexInterval = setInterval(()=>{
+      if(!pip.active || pip.contentKind!=='cortex'){ stopCortexActivity(); return; }
+      // reset
+      $$('.cortex-zone').forEach(z=>z.classList.remove('active','thinking','speaking'));
+      const stateClass = (ui.state==='thinking') ? 'thinking'
+                       : (ui.state==='speaking') ? 'speaking'
+                       : (ui.state==='listening') ? 'active' : 'active';
+      // mapping état → zones illuminées
+      let zones = [];
+      switch(ui.state){
+        case 'listening': zones = ['temporal','wernicke','somatosensory']; break;
+        case 'thinking':  zones = ['frontal','parietal','broca']; break;
+        case 'speaking':  zones = ['motor','broca','frontal']; break;
+        default:          zones = ['frontal']; // idle = activité minimale
+      }
+      // Ajout aléatoire d'une zone "ambient" pour varier
+      const all = CORTEX_ZONES.map(z=>z.id);
+      const random = all[(tick) % all.length];
+      if(!zones.includes(random)) zones.push(random);
+      zones.forEach(zid=>{
+        const el = document.getElementById('cortex-'+zid);
+        if(el) el.classList.add(stateClass);
+      });
+      tick++;
+    }, 600);
+  }
+  function stopCortexActivity(){
+    if(cortexInterval){ clearInterval(cortexInterval); cortexInterval=null; }
+  }
+
+  ICON_BTN_CORTEX.addEventListener('click',()=>{
+    enterPiP('cortex');
+  });
+
+  /* =========================================================================
+     V1.1 — Sub-states (wake-listening / wake-flash / wake-followup)
+     ========================================================================= */
+
+  function fireSubWakeListen(){
+    sphereWrap.classList.add('sub-wake-listening');
+    toast('▷ wake-listening pulse');
+    // Rester actif 3s pour démo
+    setTimeout(()=>sphereWrap.classList.remove('sub-wake-listening'), 3000);
+  }
+  function fireSubWakeFlash(){
+    sphereWrap.classList.remove('sub-wake-flash');
+    // Force reflow pour relancer l'animation
+    void sphereWrap.offsetWidth;
+    sphereWrap.classList.add('sub-wake-flash');
+    setTimeout(()=>sphereWrap.classList.remove('sub-wake-flash'), 250);
+    try{ navigator.vibrate && navigator.vibrate(8);}catch(e){}
+  }
+
+  // Followup countdown gauge (5→0s)
+  let followupRAF = null;
+  function fireSubWakeFollowup(){
+    cancelFollowup();
+    sphereWrap.classList.add('sub-wake-followup');
+    const ring = $('#followupRing');
+    const text = $('#followupText');
+    text.style.display='block';
+    const total = 5000; // 5s
+    const start = performance.now();
+    const circ = 276.46; // 2 * PI * 44
+    const tick = (now)=>{
+      const elapsed = now - start;
+      const remaining = Math.max(0, total - elapsed);
+      const frac = remaining / total;
+      ring.setAttribute('stroke-dashoffset', String(circ * (1 - frac)));
+      text.textContent = String(Math.ceil(remaining/1000));
+      if(remaining > 0){
+        followupRAF = requestAnimationFrame(tick);
+      } else {
+        sphereWrap.classList.remove('sub-wake-followup');
+        text.style.display='none';
+        ring.setAttribute('stroke-dashoffset','0');
+      }
+    };
+    followupRAF = requestAnimationFrame(tick);
+  }
+  function cancelFollowup(){
+    if(followupRAF){ cancelAnimationFrame(followupRAF); followupRAF=null; }
+    sphereWrap.classList.remove('sub-wake-followup');
+    const text = $('#followupText'); if(text) text.style.display='none';
+  }
+
+  $('#dbgWakeListen').addEventListener('click', fireSubWakeListen);
+  $('#dbgWakeFlash').addEventListener('click', fireSubWakeFlash);
+  $('#dbgWakeFollowup').addEventListener('click', fireSubWakeFollowup);
+
+  /* =========================================================================
+     V1.1 — RMS / FFT mock sliders
+     ========================================================================= */
+
+  const sliderRms = $('#sliderRms');
+  const sliderFft = $('#sliderFft');
+  const rmsVal = $('#rmsVal');
+  const fftVal = $('#fftVal');
+
+  function applyRms(v){
+    // 0..100 → scale core 0.85..1.45
+    const scale = 0.85 + (v/100) * 0.6;
+    document.documentElement.style.setProperty('--rms-scale', scale.toFixed(3));
+    rmsVal.textContent = v;
+  }
+  function applyFft(v){
+    // 0..100 → amplitude wave-arc 0..1
+    const amp = (v/100);
+    document.documentElement.style.setProperty('--fft-amp', amp.toFixed(3));
+    fftVal.textContent = v;
+  }
+  sliderRms.addEventListener('input',(e)=>applyRms(parseInt(e.target.value,10)));
+  sliderFft.addEventListener('input',(e)=>applyFft(parseInt(e.target.value,10)));
+  applyRms(parseInt(sliderRms.value,10));
+  applyFft(parseInt(sliderFft.value,10));
+
+  /* =========================================================================
+     V1.1 — Notif violet (3 pulses)
+     ========================================================================= */
+
+  let notifTimer = null;
+  let notifWindow = false; // true pendant la fenêtre cliquable
+  function fireNotifViolet(){
+    sphereWrap.classList.remove('notif-violet');
+    void sphereWrap.offsetWidth;
+    sphereWrap.classList.add('notif-violet');
+    notifWindow = true;
+    if(notifTimer) clearTimeout(notifTimer);
+    // 3 × 600ms = 1800ms + 400ms grace
+    notifTimer = setTimeout(()=>{
+      sphereWrap.classList.remove('notif-violet');
+      notifWindow = false;
+    }, 2200);
+    toast('📩 Friday a une notif (violet)');
+    try{ navigator.vibrate && navigator.vibrate([12,40,12,40,12]);}catch(e){}
+  }
+
+  // Tap sphère pendant la notif window → réponse Friday
+  // (On hook sur sphereWrap mais seulement quand pas en PiP)
+  sphereWrap.addEventListener('click',(e)=>{
+    if(pip.active) return; // gestion PiP gère déjà
+    if(notifWindow){
+      notifWindow = false;
+      sphereWrap.classList.remove('notif-violet');
+      if(notifTimer){ clearTimeout(notifTimer); notifTimer=null; }
+      toast('Friday : J\'ai trouvé quelque chose pour toi', 2200);
+    }
+  });
+
+  $('#dbgNotif').addEventListener('click', fireNotifViolet);
+
+  /* =========================================================================
+     V1.1 — Halo cyan critique (TTS info importante)
+     ========================================================================= */
+
+  const criticalHalo = $('#criticalHalo');
+  function fireCriticalHalo(){
+    criticalHalo.classList.remove('fire');
+    void criticalHalo.offsetWidth;
+    criticalHalo.classList.add('fire');
+    setTimeout(()=>criticalHalo.classList.remove('fire'), 2050);
+  }
+  $('#dbgHalo').addEventListener('click', fireCriticalHalo);
+
+  /* =========================================================================
+     V1.1 — Offline mode (bordure rouge clignotante)
+     ========================================================================= */
+
+  function setOffline(on){
+    if(on){
+      document.body.classList.add('offline');
+      toast('📡 Hors ligne — reconnexion auto…', 2400);
+      $('#dbgOffline').classList.add('on');
+    } else {
+      document.body.classList.remove('offline');
+      toast('✓ Connecté', 1400);
+      $('#dbgOffline').classList.remove('on');
+    }
+  }
+  $('#dbgOffline').addEventListener('click',()=>{
+    setOffline(!document.body.classList.contains('offline'));
   });
 
   // ----- INIT -----
