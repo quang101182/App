@@ -2049,7 +2049,6 @@ body.conv-mode-continuous .conv-stop-fab{
   const WS_URL = (function(){
     const override = QUERY.get('ws');
     if (override) return override;
-    // v1.17.0 GitHub Pages variant : tailnet:8445 → backend Friday WS 127.0.0.1:8765.
     if (location.hostname === 'quang101182.github.io') {
       return 'wss://desktop-97pf6l1.tailc503e.ts.net:8445/?kind=mobile';
     }
@@ -2442,6 +2441,10 @@ body.conv-mode-continuous .conv-stop-fab{
     if(hold) micBtn.classList.add('hold'); else micBtn.classList.remove('hold');
     micLabel.textContent=hold?'HOLD · 0s':'RECORDING · 0s';
     setState('listening');
+    // v1.17.0g — takeAudioFocus AVANT toute opération async (await getStream)
+    // pour rester dans le contexte du user-gesture (tap PTT). Sinon Chrome
+    // refuse l'autoplay du focus oscillator au 2e PTT.
+    try { takeAudioFocus(); } catch(_) {}
     try{ navigator.vibrate && navigator.vibrate(15);}catch(e){}
     // Hook live : signale le start côté WS (PTT + MediaRecorder).
     if(LIVE_MODE && typeof wsStartRecording === 'function'){
@@ -2470,6 +2473,9 @@ body.conv-mode-continuous .conv-stop-fab{
     micBtn.classList.remove('recording','hold');
     micBtn.style.setProperty('--rec-progress','0%');
     micLabel.textContent='TAP TO TALK';
+    // v1.17.0g — Release audio focus IMMÉDIATEMENT (synchronous) au stop pour
+    // que le contrôle de volume Android repasse sur "médias" sans attendre.
+    try { releaseAudioFocus(); } catch(_) {}
     try{ navigator.vibrate && navigator.vibrate(20);}catch(e){}
 
     // Hook live : signale le stop côté WS (cf. wsClient.stopRecording / ptt stop).
@@ -3483,52 +3489,35 @@ body.conv-mode-continuous .conv-stop-fab{
      Implémentation : <audio> invisible qui joue un wav silent en boucle +
      MediaSession API (metadata + playbackState). Stop au release.
      ========================================================================= */
-  let _focusAudio = null;     // HTMLAudioElement
-  let _focusSilentUrl = null; // data:audio/wav;base64,...
-  function _makeSilentWavDataUrl(durationMs, sampleRate){
-    durationMs = durationMs || 800;
-    sampleRate = sampleRate || 8000;
-    const samples = Math.round(sampleRate * durationMs / 1000);
-    const buf = new ArrayBuffer(44 + samples);
-    const v = new DataView(buf);
-    // "RIFF"
-    v.setUint32(0, 0x52494646);
-    v.setUint32(4, 36 + samples, true);
-    v.setUint32(8, 0x57415645); // "WAVE"
-    v.setUint32(12, 0x666d7420); // "fmt "
-    v.setUint32(16, 16, true);
-    v.setUint16(20, 1, true);    // PCM
-    v.setUint16(22, 1, true);    // mono
-    v.setUint32(24, sampleRate, true);
-    v.setUint32(28, sampleRate, true);
-    v.setUint16(32, 1, true);    // block align
-    v.setUint16(34, 8, true);    // 8-bit
-    v.setUint32(36, 0x64617461); // "data"
-    v.setUint32(40, samples, true);
-    // 8-bit unsigned PCM zero = byte value 128
-    new Uint8Array(buf, 44, samples).fill(128);
-    let bin = '';
-    const bytes = new Uint8Array(buf);
-    for(let i=0; i<bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
-    return 'data:audio/wav;base64,' + btoa(bin);
-  }
-  function _ensureFocusAudio(){
-    if(_focusAudio) return;
-    if(!_focusSilentUrl) _focusSilentUrl = _makeSilentWavDataUrl();
-    _focusAudio = new Audio(_focusSilentUrl);
-    _focusAudio.loop = true;
-    _focusAudio.preload = 'auto';
-    // volume très bas mais pas zéro (Chrome détecte les fakes 0 et n'attribue
-    // pas l'audio focus). 0.001 = -60dB, inaudible mais réel.
-    _focusAudio.volume = 0.001;
-  }
+  // v1.17.0g — Refacto OscillatorNode : signal continu non-zéro (vs <audio>
+  // boucle WAV qui était détecté "fake" par Chrome après qq secondes →
+  // focus perdu en cours de PTT). AudioContext recréé à chaque take/release
+  // pour bypasser les bugs de state du <audio> qui ne play() qu'une fois
+  // après refresh (autoplay policy réévaluée à chaque cycle pause/replay).
+  // Bonus : l'oscillateur est appelé SYNCHRONOUSLY depuis startRecording
+  // (mockup-level, dans le user-gesture du tap), pas après await getStream
+  // qui faisait perdre le contexte d'activation.
+  let _focusCtx = null;
+  let _focusOsc = null;
+  let _focusGain = null;
   function takeAudioFocus(){
     try {
-      _ensureFocusAudio();
-      const playPromise = _focusAudio.play();
-      if(playPromise && playPromise.catch){
-        playPromise.catch(err => console.warn('[audio-focus] play failed:', err && err.name));
+      releaseAudioFocus(); // Cleanup any leftover state
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if(!Ctx) return;
+      _focusCtx = new Ctx();
+      if(_focusCtx.state === 'suspended'){
+        _focusCtx.resume().catch(() => {});
       }
+      _focusOsc = _focusCtx.createOscillator();
+      _focusGain = _focusCtx.createGain();
+      // ~-62dB : inaudible humainement mais signal continu non-zéro pour que
+      // Chrome ne détecte pas un "fake silent play" et garde l'audio focus.
+      _focusGain.gain.value = 0.0008;
+      _focusOsc.frequency.value = 80; // sub-bass, encore moins perceptible
+      _focusOsc.connect(_focusGain);
+      _focusGain.connect(_focusCtx.destination);
+      _focusOsc.start();
       if('mediaSession' in navigator){
         try {
           navigator.mediaSession.metadata = new MediaMetadata({
@@ -3537,7 +3526,6 @@ body.conv-mode-continuous .conv-stop-fab{
             album: 'PTT mobile',
           });
           navigator.mediaSession.playbackState = 'playing';
-          // Bind un handler pause pour que le OS-bouton-pause stoppe le PTT.
           navigator.mediaSession.setActionHandler('pause', () => {
             try { if(typeof stopRecording === 'function' && ui.recording) stopRecording(false); } catch(_) {}
           });
@@ -3547,7 +3535,18 @@ body.conv-mode-continuous .conv-stop-fab{
   }
   function releaseAudioFocus(){
     try {
-      if(_focusAudio){ try { _focusAudio.pause(); } catch(_) {} }
+      if(_focusOsc){
+        try { _focusOsc.stop(); _focusOsc.disconnect(); } catch(_) {}
+        _focusOsc = null;
+      }
+      if(_focusGain){
+        try { _focusGain.disconnect(); } catch(_) {}
+        _focusGain = null;
+      }
+      if(_focusCtx){
+        try { _focusCtx.close(); } catch(_) {}
+        _focusCtx = null;
+      }
       if('mediaSession' in navigator){
         try {
           navigator.mediaSession.playbackState = 'none';
@@ -4039,7 +4038,15 @@ body.conv-mode-continuous .conv-stop-fab{
   }
 
   async function getStream(){
-    if(mediaStream) return mediaStream;
+    // v1.17.0g — Recrée le stream à chaque PTT (vs cache permanent).
+    // Garder un mediaStream actif entre les PTT laisse Android en mode
+    // "communications" (icône téléphone, contrôle volume sur appel).
+    // En recréant + libérant à chaque cycle, l'OS bascule retour mode
+    // "médias" entre les PTT → contrôle volume normal sur haut-parleur.
+    if(mediaStream && mediaStream.getTracks().some(t => t.readyState === 'live')){
+      return mediaStream;
+    }
+    releaseMediaStream(); // cleanup any leftover dead tracks
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
     });
@@ -4051,6 +4058,28 @@ body.conv-mode-continuous .conv-stop-fab{
       src.connect(recAnalyser);
     } catch(e){ /* analyser optionnel — fallback silencieux */ }
     return mediaStream;
+  }
+
+  // v1.17.0g — Libère le mediaStream + AudioContext local (recAudioCtx).
+  // Stop les tracks pour que l'OS Android sorte du mode "communications"
+  // et repasse en mode "médias" (icône haut-parleur, contrôle volume normal).
+  function releaseMediaStream(){
+    if(mediaStream){
+      try {
+        mediaStream.getTracks().forEach(t => {
+          try { t.stop(); } catch(_) {}
+        });
+      } catch(_) {}
+      mediaStream = null;
+    }
+    if(recAnalyser){
+      try { recAnalyser.disconnect(); } catch(_) {}
+      recAnalyser = null;
+    }
+    if(recAudioCtx){
+      try { recAudioCtx.close(); } catch(_) {}
+      recAudioCtx = null;
+    }
   }
 
   function tickRecMeter(){
@@ -4116,10 +4145,9 @@ body.conv-mode-continuous .conv-stop-fab{
     // pendant TOUT le PTT (visible aussi quand le cortex affiche la sphère
     // mini en haut à gauche, héritage CSS var --rms-scale globale).
     try { startMicAnalyser(mediaStream); } catch(_) {}
-    // v1.17.0f — Audio focus best-effort : signale à l'OS Android/iOS qu'on
-    // est en lecture média pour ducker/pauser Spotify/YouTube Music/etc.
-    // pendant le PTT (pattern DictoKey Android, mais best-effort PWA).
-    try { takeAudioFocus(); } catch(_) {}
+    // v1.17.0g — takeAudioFocus déplacé dans startRecording() (mockup level)
+    // pour rester dans le user-gesture context du tap (sinon Chrome refuse
+    // le 2e play après refresh page). Plus de double-call ici.
     mediaRec.ondataavailable = (ev) => {
       if(ev.data && ev.data.size > 0){
         recChunkCount += 1;
@@ -4166,8 +4194,11 @@ body.conv-mode-continuous .conv-stop-fab{
     // v1.17.0d — Stop l'analyseur audio local : sphère retourne à l'animation
     // native @keyframes coreBreath (respiration idle).
     try { stopMicAnalyser(); } catch(_) {}
-    // v1.17.0f — Release audio focus : la musique des autres apps reprend.
-    try { releaseAudioFocus(); } catch(_) {}
+    // v1.17.0g — releaseAudioFocus déjà appelé dans stopRecording() (mockup
+    // level) au release synchrone. Ici on libère AUSSI les tracks du mediaStream
+    // pour que Android sorte du mode "communications" (icône téléphone) et
+    // repasse en mode "médias" (haut-parleur, contrôle volume médias).
+    try { releaseMediaStream(); } catch(_) {}
     // Stoppe MediaRecorder (le onstop déclenchera rec_end).
     if(mediaRec && mediaRec.state !== 'inactive'){
       try { mediaRec.stop(); } catch(e){}
