@@ -1,0 +1,3815 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#050810">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>FRIDAY · v1.17.0</title>
+<link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
+<!--
+  ================================================================================
+  FRIDAY MOBILE LIVE v1.17.0  ·  2026-05-08  ·  Phase 5a (multi-client backend)
+  ================================================================================
+  CHANGELOG V1.4 (mockup statique) → v1.17.0 (live client WS) :
+  --------------------------------------------------------------------------------
+  · ADN VISUEL : copie carbone du mockup V1.4 (sphère HOLO-SPLIT, layout, panels
+        CONTEXT/FEED/MUSIC/ACTIVITY, transcript, bouton dictée 56px, status bar,
+        onglets ACCUEIL/CARTE/COSMOS, cortex 5 variantes A/B/C/D/E, persistance
+        localStorage). AUCUNE modif du CSS/anim/layout.
+  · DEBUG BAR (mockup) → CLIENT WS LIVE :
+        - Connexion auto à `ws://${location.hostname}:8765/?kind=mobile`
+          (override `?ws=...` en query). Reconnect auto 1.5s.
+        - Header badge passe `MOCK` → `LIVE` (vert si connecté, rouge si offline).
+        - Status hint sphère piloté par events backend (état pipeline réel).
+        - Fallback : si query `?mock=1` → comportement mockup intégral (sans WS).
+  · PTT LIVE :
+        - MediaRecorder → chunks binaires WS, contrat POC (rec_start/rec_end).
+        - 2 modes auto-détectés : tap court (<200ms) = TOGGLE, hold ≥200ms = HOLD.
+        - Limite 60s, anneau de progression conservé du mockup.
+        - Émission parallèle d'events `push_to_talk` (start/stop) au backend
+          Friday, qui sait déjà les consommer (mode wake/PTT existant).
+        - Note 5a : tant que backend ne route pas l'audio mobile binaire, l'STT
+          déclenchera depuis le mic-PC tant que le patch backend n'est pas vivant.
+          Côté UI on pré-câble le format POC pour 5b ; le backend ignorera
+          silencieusement les frames binaires inconnues (handle_ui_event ne lit
+          que JSON, cf. jarvis_backend.py:10671 `async for raw in ws ... json.loads`).
+  · TTS LIVE :
+        - Reception `tts_audio_meta` + frame binaire suivante → <audio> playback.
+        - Compatibilité format POC (mp3/opus/webm). Auto-pause si nouveau TTS.
+  · EVENTS BACKEND BRANCHÉS :
+        - `meta` : version backend affichée header (badge "vX.Y backend")
+        - `state` (idle/listening/thinking/speaking) : sphère + dot status bar
+        - `audio_level` (rms 0..1) : amplitude sphère core (RMS-réactif)
+        - `transcript_partial` / `transcript_final` : append bulles transcript
+        - `transcript` (POC) : remplace dernière bulle pending
+        - `tts_pending` / `tts_start` / `tts_end` : state SPEAKING + halo
+        - `wake_detected` : flash sphère (sub-wake-flash)
+        - `log_init` / `context_state` / `usage_state` etc. : ignorés (compat
+          handshake HUD PC, pas d'erreur).
+  · TODO 5b (NON branché ici) :
+        - Bridge centralisé bridge.js (Architecte phase 5b)
+        - Audio output WebRTC bidirectionnel (phase 5c)
+        - Re-routing serveur des chunks audio mobile vers pipeline STT
+        - Hydratation panels CONTEXT/FEED/MUSIC depuis context_state/usage_state
+        - Gestion settings/mute via WS event `config`
+  · UI : title bumpé v1.17.0, badge header "v1.17", scope minimal — aucun autre
+        fichier touché. Single-file inline (CSS+JS).
+  ================================================================================
+  HISTORIQUE MOCKUP V1.4.0 (référence visuelle figée) :
+  --------------------------------------------------------------------------------
+  CHANGELOG V1.3 → V1.4 :
+  --------------------------------------------------------------------------------
+  · F12 — Cortex 5 variantes RECADRÉES pour la zone PiP (carrée 1:1).
+        Avant : viewBox 360x640 (portrait) dans un container carré → letterbox
+        latéral, ~50% de la surface visible perdue en marges. Maintenant :
+        toutes les viewBox passent en 0 0 400 400 (carré), positions des
+        zones / silhouette / anneaux / hubs / traînées redistribuées pour
+        occuper >90% de la surface PiP utile. Padding interne du .cortex-stage
+        réduit (24/6/6/6 → 22/4/4/4).
+        Détails par variante :
+        > A. Constellation : nodes répartis en arc large (x ∈ 60..340, y ∈ 80..360),
+          rayon node 6→8, glow 20→26, labels 9→10px.
+        > B. Wireframe : silhouette cerveau scaled-up (path remappé sur 400x400),
+          ~88% de la zone, zones placées anatomiquement sur la silhouette.
+        > C. Holographic : 3 anneaux ré-élargis (rx 90/120/150 → 130/170/195),
+          zones étalées sur 60..340 horizontalement.
+        > D. Neural : D_HUBS repositionnés pour couvrir x 60..340 / y 70..340.
+        > E. Aurora : 8 traînées (1 limbic en plus) ré-espacées sur toute la
+          largeur (x 30..370), hauteur 60..340 (~85% du viewBox).
+  · CLEANUP — Suppression du CSS mort V1.2 (~210 lignes) : .brain-bg,
+        .brain-particles, .cortex-zone, #cortex-frontal/motor/..., .neural-line,
+        .cortex-label, .neural-legend, @keyframes starsTwinkle/brainBreathe/
+        particlesOrbit/particleFade/synapseFlow. Ne reste que .pip-content-title.neural-title
+        (encore utilisée pour le titre 🧠 NEURAL VIZ du PiP cortex).
+  · UI — Title bumpé v1.4.0, badge "v1.4" en header.
+  ================================================================================
+  FRIDAY MOBILE MOCK-UP v1.3.0  ·  2026-05-08 (entrée historique)
+  ================================================================================
+  CHANGELOG V1.2 → V1.3 :
+  --------------------------------------------------------------------------------
+  · F9 — Cortex 5 variantes intégrées (Constellation / Brain wireframe /
+        Holographic / Neural network / Aurora). Comportement : zones DIM
+        par défaut (gris foncé), s'allument seulement quand actives, arcs
+        électriques (pulses) qui voyagent sur les connexions. Variante par
+        défaut au tout premier lancement = A. Constellation. L'animation
+        suit l'état principal (idle/listening/thinking/speaking) piloté
+        depuis la debug bar.
+  · F10 — Long-press (≥ 500ms) sur le bouton 🧠 Cortex = menu déroulant
+        des 5 variantes (Constellation/Wireframe/Holographic/Neural/Aurora)
+        avec indicateur visuel de la variante active (chip checked).
+        Tap court = bascule PiP cortex (V1.1 inchangé). Tap ailleurs ou
+        Esc ferme le menu sans changer. Animation fade + scale 0.95→1.0
+        (180ms). Si le PiP cortex est ouvert au moment du switch, transition
+        fluide fade-out 200ms / fade-in 200ms entre les deux variantes.
+  · F11 — Persistance localStorage GLOBALE (clé `friday.mobile.config`).
+        Toutes les interactions UI sont mémorisées : cortexVariant,
+        cortexOpen (PiP actif), cortexMiniCorner (coin sphère mini),
+        slots music/activity, convMode, muted, logPanelOpen, state.
+        Au reload, la disposition exacte de la session précédente est
+        restaurée AVANT le first paint (pas de FOUC). Helpers saveConfig()
+        / loadConfig() ; fallback silencieux aux defaults si JSON corrompu.
+  · UI — Title bumpé v1.3.0, badge "v1.3" en header.
+  ================================================================================
+  FRIDAY MOBILE MOCK-UP v1.2.0  ·  2026-05-08 (entrée historique)
+  ================================================================================
+  CHANGELOG V1.1 → V1.2 :
+  --------------------------------------------------------------------------------
+  · F7 — Cortex NeuralViz REFONTE VISUELLE (wow factor MCU) :
+        > Palette MCU étendue 8 couleurs signature par zone (cyan/violet/magenta/
+          jaune/vert/orange/rose/blanc), chaque zone a son propre radialGradient
+          + drop-shadow glow individuel.
+        > Background nébuleux : radial-gradient sombre + 12 étoiles/particules
+          twinkle aléatoire derrière le cerveau.
+        > Connexions synaptiques (8 paths SVG) qui relient les zones, avec
+          stroke-dasharray + stroke-dashoffset animation neurones qui firent.
+        > 8 particules orbitant au centre (CSS rotation lente, opacity variable).
+        > Animation respiration globale (scale 1.0 ↔ 1.025 en 4.5s).
+        > Burst éphémère sur activation : zone scale 1.0→1.18→1.0 + glow boost.
+        > Title "🧠 NEURAL VIZ" stylisé text-shadow gradient + légende redesignée
+          en chips colorés.
+        > Profondeur multi-layer : double drop-shadow (inner + outer glow).
+  · F8 — Bouton mode conversation (cycle 3 modes) :
+        > Remplace bouton Persona dans bottom bar (libère espace).
+        > Cycle au tap : OFF (gris) → CONV 6s (ambre) → CONTINUOUS (rouge) → OFF.
+        > Mode CONV : countdown bar 6→0s ambre sous le bouton (mock).
+        > Mode CONTINUOUS : bouton STOP rouge flottant au-dessus de la bottom
+          bar, tap = retour OFF.
+        > Toast confirmation à chaque changement de mode.
+        > Mock seulement (pas d'impact pipeline réel).
+  · UI — Title bumpé v1.2.0, badge "v1.2" en header.
+  ================================================================================
+  FRIDAY MOBILE MOCK-UP v1.1.0  ·  2026-05-08 (entrée historique)
+  ================================================================================
+  CHANGELOG V1.0 → V1.1 :
+  --------------------------------------------------------------------------------
+  · F1 — Pattern Hologramme PiP (Picture-in-Picture inversé) : sphère glide vers
+        coin top-left scale 0.28 + halo trail cyan ; contenu central plein scale
+        avec fade+scale 0.85→1.0 + delay 50ms. Tap sphère mini = retour fluide.
+        Long-press sphère mini = menu rapide (toast). Drag = 4 corners snap.
+  · F2 — Bouton 🧠 Cortex dans bottom bar → déclenche PiP avec NeuralViz cortex
+        (SVG 8 zones identifiables : frontal, motor, somatosensory, parietal,
+        temporal-L/R, occipital, broca, wernicke) + animation lumière par zone
+        synchro avec state principal.
+  · F3 — Dynamique sphère enrichie : sliders RMS + FFT pilotent amplitude
+        pulsation core / barres waveform. 3 boutons sub-states : wake-listening
+        (sonar pulse expanding), wake-flash (flash 200ms), wake-followup
+        (countdown 5→0s avec gauge SVG stroke-dasharray).
+  · F4 — Notif violet : bouton "📩 Notif" → sphère pulse 3× violet #B967FF
+        (1.8s total). Tap pendant pulse = toast "Friday : J'ai trouvé qqch...".
+  · F5 — Halo critique : bouton "✨ Halo" → radial-gradient cyan plein écran,
+        opacity 0→0.6→0 / scale 0.5→2.5 sur 2s (TTS info critique).
+  · F6 — Bordure rouge clignotante offline : bouton "📡 Offline" →
+        box-shadow inset rouge clignotant (1.2s loop) + toast "Hors ligne".
+        Re-tap pour reconnecter.
+  · UI — Title bumpé v1.1.0, badge "v1.1" en header, debug bar reorganisée
+        en 2 lignes (states + sub-states/effets), ajout 2 sliders (RMS/FFT).
+  ================================================================================
+  FRIDAY MOBILE MOCK-UP v1.0.0  ·  2026-05-08 (entrée historique)
+  ================================================================================
+  Single-file HTML standalone (CSS + JS inline). Aucune dépendance externe.
+  Cible : portrait 6", max-width 480px, viewport-fit=cover.
+
+  CHOIX TECHNIQUES :
+  --------------------------------------------------------------------------------
+  · ADN visuel CLONÉ du HUD PC (jarvis-ui-v1.11.0.html) :
+      palette --bg-0 #050810 / --primary #00d4ff / STATE_COLORS exacts
+      scanlines + grid radial mask + tracé fin lumineux des panneaux satellites
+      (border-left 5px cyan, gradient bg, box-shadow cyan glow).
+  · Sphère HOLO-SPLIT recréée en SVG pur (pas Three.js — perf mobile + coût bat).
+      4 anneaux concentriques contre-rotatifs + équateur scintillant + core pulse
+      + waveform circulaire visible en state speaking. Tout en CSS animations
+      + Web Animations API. Couleurs pilotées par CSS vars (--state-ring/glow).
+  · Cadre satellite : 4 panneaux (CONTEXT, FEED, MUSIC, ACTIVITY). MUSIC + ACTIVITY
+      hidden by default avec toggle (mécanique HIDE TXT du HUD PC). CONTEXT + FEED
+      visibles par défaut. Layout : 2 colonnes responsive sur mobile.
+  · TRANSCRIPT panel : pinned bas (au-dessus du bouton dictée), bulles user/friday.
+  · Bouton dictée RECTANGULAIRE (pas FAB) :
+      tap court (<200ms) = TOGGLE record (anneau plein cyan)
+      long press (>200ms) = HOLD record (anneau pointillé) max 60s
+      vibration haptique simulée + edge-glow status pendant l'enregistrement.
+  · Onglets ACCUEIL / CARTE / COSMOS : segmented control identique au HUD PC,
+      avec switch de view (CARTE = placeholder map mocked, COSMOS = placeholder
+      starfield CSS).
+  · Toggle log panel (bouton dans bottom bar compactée) : panneau full-screen
+      slidant depuis le bas avec lignes log mockées.
+  · DEBUG bar en bas-haut : 4 boutons idle/listening/thinking/speaking pour
+      démontrer les animations à Quang sur son téléphone.
+  · safe-area-insets respectés (padding env(safe-area-inset-*)) pour iPhone notch.
+  · Pas de WebSocket, pas de fetch, pas de logs visibles par défaut.
+  ================================================================================
+-->
+<style>
+:root{
+  --bg-0:#050810;
+  --bg-1:#0a0e18;
+  --bg-2:#0a1828;
+  --primary:#00d4ff;
+  --primary-dim:rgba(0,212,255,.35);
+  --primary-glow:rgba(0,212,255,.7);
+  --listening:#ffb547;
+  --thinking:#c44dff;
+  --speaking:#00ffe0;
+  --error:#ff3a4f;
+  --idle:#5a7090;
+  --text-0:#d8e8ff;
+  --text-1:#7a8fa8;
+  --grid:rgba(0,212,255,.05);
+  --line:#1a3050;
+  --state-ring:#5a7090;
+  --state-glow:rgba(90,112,144,.35);
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none}
+body{
+  background:radial-gradient(ellipse at center,#0d1422 0%,var(--bg-0) 70%),var(--bg-0);
+  color:var(--text-0);
+  font-family:'JetBrains Mono','SF Mono','Consolas',monospace;
+  user-select:none;-webkit-user-select:none;
+  position:relative;
+  font-size:13px;
+}
+/* Scanlines overlay (clone HUD PC) */
+body::before{
+  content:'';position:fixed;inset:0;
+  background:repeating-linear-gradient(0deg,
+    rgba(255,255,255,0) 0,
+    rgba(255,255,255,0) 2px,
+    rgba(0,212,255,.025) 3px,
+    rgba(0,212,255,.025) 4px);
+  pointer-events:none;z-index:200;
+  animation:scanShift 8s linear infinite;
+}
+body::after{
+  content:'';position:fixed;inset:0;
+  background:linear-gradient(rgba(5,8,16,.3) 0%,transparent 8%,transparent 92%,rgba(5,8,16,.3) 100%),
+    radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.7) 100%);
+  pointer-events:none;z-index:199;
+}
+@keyframes scanShift{0%{background-position:0 0}100%{background-position:0 -12px}}
+
+/* Grid background */
+.grid-bg{
+  position:fixed;inset:0;z-index:0;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:30px 30px;
+  mask-image:radial-gradient(ellipse at center,black 0%,transparent 70%);
+  -webkit-mask-image:radial-gradient(ellipse at center,black 0%,transparent 70%);
+}
+
+/* Edge glow (statebar lumineuse autour de l'écran) */
+.edge-glow{
+  position:fixed;inset:0;z-index:198;pointer-events:none;
+  border:2px solid transparent;
+  transition:border-color .35s ease,box-shadow .35s ease;
+}
+body[data-state="listening"] .edge-glow{
+  border-color:rgba(255,181,71,.55);
+  box-shadow:inset 0 0 28px rgba(255,181,71,.18);
+}
+body[data-state="thinking"] .edge-glow{
+  border-color:rgba(196,77,255,.45);
+  box-shadow:inset 0 0 28px rgba(196,77,255,.16);
+}
+body[data-state="speaking"] .edge-glow{
+  border-color:rgba(0,255,224,.55);
+  box-shadow:inset 0 0 28px rgba(0,255,224,.18);
+}
+
+/* === Container + page layout === */
+.app{
+  position:fixed;inset:0;
+  display:flex;flex-direction:column;
+  padding-top:var(--safe-top);
+  padding-bottom:var(--safe-bot);
+  z-index:1;
+  max-width:480px;margin:0 auto;
+}
+
+/* === Header (status dot + brand + onglets) === */
+.header{
+  flex:0 0 auto;
+  padding:10px 14px 6px;
+  display:flex;flex-direction:column;gap:8px;
+}
+.header-top{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.brand{
+  display:flex;align-items:center;gap:8px;
+  font-weight:600;letter-spacing:3px;font-size:13px;
+  color:var(--primary);
+  text-shadow:0 0 10px var(--primary-glow);
+}
+.brand-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--primary);box-shadow:0 0 10px var(--primary-glow);
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.85)}}
+
+.conn-status{
+  display:flex;align-items:center;gap:6px;
+  font-size:9px;letter-spacing:1.5px;color:var(--text-1);
+}
+.conn-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--primary);
+  box-shadow:0 0 6px var(--primary-glow);
+}
+.version-tag{
+  font-size:9px;letter-spacing:1px;color:var(--text-1);opacity:.7;
+}
+
+/* === Mode switch (segmented control) — clone HUD PC === */
+.mode-switch{
+  display:inline-flex;align-self:center;
+  border:1px solid var(--primary-dim);border-radius:5px;overflow:hidden;
+  background:linear-gradient(180deg,rgba(0,18,32,.72),rgba(0,12,24,.55));
+  backdrop-filter:blur(6px) saturate(120%);
+  -webkit-backdrop-filter:blur(6px) saturate(120%);
+  box-shadow:0 2px 10px rgba(0,0,0,.4),0 0 12px rgba(0,212,255,.10);
+}
+.mode-btn{
+  background:transparent;border:none;
+  border-right:1px solid var(--primary-dim);
+  color:var(--text-1);
+  padding:7px 14px;
+  font:600 9px 'JetBrains Mono',monospace;
+  letter-spacing:2px;text-transform:uppercase;cursor:pointer;
+  transition:all .22s cubic-bezier(.16,1,.3,1);
+  white-space:nowrap;
+}
+.mode-btn:last-child{border-right:none}
+.mode-btn.active{
+  background:linear-gradient(180deg,rgba(0,140,200,.22),rgba(0,80,140,.14));
+  color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+  box-shadow:inset 0 0 12px rgba(0,212,255,.22),
+             inset 0 -1px 0 0 rgba(0,212,255,.55);
+}
+
+/* === Main scrollable area === */
+.main{
+  flex:1 1 auto;
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  padding:0 12px 8px;
+  display:flex;flex-direction:column;gap:10px;
+  scrollbar-width:thin;
+  scrollbar-color:var(--primary-dim) transparent;
+}
+.main::-webkit-scrollbar{width:3px}
+.main::-webkit-scrollbar-thumb{background:var(--primary-dim)}
+
+.view{display:none;flex-direction:column;gap:10px;animation:viewIn .35s cubic-bezier(.16,1,.3,1)}
+.view.active{display:flex}
+@keyframes viewIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* === Sphère HOLO-SPLIT === */
+.sphere-wrap{
+  position:relative;
+  width:100%;
+  aspect-ratio:1/1;
+  max-width:300px;
+  margin:6px auto 4px;
+  display:flex;align-items:center;justify-content:center;
+}
+.sphere-wrap svg{
+  width:100%;height:100%;
+  filter:drop-shadow(0 0 18px var(--state-glow));
+  transition:filter .5s ease;
+}
+.sphere-ring{
+  fill:none;
+  stroke:var(--state-ring);
+  stroke-width:1.2;
+  opacity:.85;
+  transition:stroke .5s ease;
+}
+.sphere-ring.thick{stroke-width:1.8}
+.sphere-equator{
+  fill:none;
+  stroke:var(--state-ring);
+  stroke-width:1.2;
+  stroke-dasharray:3 4;
+  opacity:.9;
+}
+.sphere-tick{
+  stroke:var(--state-ring);
+  stroke-width:1;
+  opacity:.5;
+}
+.sphere-core{
+  fill:var(--state-ring);
+  filter:url(#coreGlow);
+  animation:coreBreath 3.2s ease-in-out infinite;
+}
+@keyframes coreBreath{
+  0%,100%{transform:scale(1);opacity:.85}
+  50%{transform:scale(1.18);opacity:1}
+}
+#sphereSvg{transform-origin:50% 50%}
+.spin-cw{animation:spinCw 22s linear infinite;transform-origin:50% 50%}
+.spin-ccw{animation:spinCcw 32s linear infinite;transform-origin:50% 50%}
+.spin-tilt{animation:spinTilt 18s linear infinite;transform-origin:50% 50%}
+@keyframes spinCw{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes spinCcw{from{transform:rotate(0)}to{transform:rotate(-360deg)}}
+@keyframes spinTilt{
+  0%{transform:rotate3d(1,0,0,60deg) rotate(0)}
+  100%{transform:rotate3d(1,0,0,60deg) rotate(360deg)}
+}
+
+/* Sphere state label */
+.sphere-state{
+  position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  text-align:center;pointer-events:none;
+  z-index:2;
+}
+.state-label{
+  font-size:10px;letter-spacing:4px;font-weight:500;
+  color:var(--state-ring);
+  text-transform:uppercase;
+  text-shadow:0 0 12px var(--state-glow);
+  transition:color .35s ease;
+}
+.state-hint{
+  margin-top:4px;
+  font-size:8px;letter-spacing:2px;color:var(--text-1);opacity:.6;
+}
+
+/* RMS bars (bottom of sphere, listening only) */
+.rms-bars{
+  position:absolute;left:50%;bottom:8%;
+  transform:translateX(-50%);
+  display:flex;align-items:flex-end;gap:3px;height:18px;
+  opacity:0;transition:opacity .25s;
+}
+body[data-state="listening"] .rms-bars,
+body[data-state="speaking"] .rms-bars{opacity:.9}
+.rms-bar{
+  width:3px;background:var(--state-ring);
+  box-shadow:0 0 4px var(--state-glow);
+  animation:rmsAnim .9s ease-in-out infinite;
+  transform-origin:bottom;
+}
+.rms-bar:nth-child(1){animation-delay:0s;height:6px}
+.rms-bar:nth-child(2){animation-delay:.1s;height:12px}
+.rms-bar:nth-child(3){animation-delay:.2s;height:18px}
+.rms-bar:nth-child(4){animation-delay:.15s;height:14px}
+.rms-bar:nth-child(5){animation-delay:.05s;height:8px}
+@keyframes rmsAnim{
+  0%,100%{transform:scaleY(.4)}
+  50%{transform:scaleY(1)}
+}
+
+/* === Satellite panels grid === */
+.sat-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.hud-panel{
+  position:relative;
+  background:linear-gradient(135deg,rgba(0,18,32,.94),rgba(0,28,52,.82));
+  border:1px solid rgba(0,212,255,.6);
+  border-left:4px solid #00d4ff;
+  color:#cbeeff;
+  padding:9px 11px;
+  font-family:'Consolas','Courier New',monospace;
+  font-size:11px;
+  line-height:1.45;
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  box-shadow:0 6px 22px rgba(0,212,255,.18),0 0 2px rgba(0,212,255,.45);
+  overflow:hidden;
+  animation:panelIn .4s cubic-bezier(.16,1,.3,1);
+}
+.hud-panel.full{grid-column:1/-1}
+.hud-panel.hidden-slot{display:none}
+@keyframes panelIn{
+  from{opacity:0;transform:scale(.92) translateY(6px)}
+  to{opacity:1;transform:none}
+}
+.hud-panel-header{
+  color:#ffaa33;
+  font-weight:bold;
+  font-size:9px;
+  letter-spacing:2px;
+  margin-bottom:6px;
+  border-bottom:1px solid rgba(255,170,51,.3);
+  padding-bottom:4px;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.hud-panel-header .ico{font-size:13px}
+.hud-panel-line{
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  opacity:.95;margin:1px 0;
+  font-size:11px;
+}
+.hud-panel-line.dim{color:#6e9eb8;font-size:10px}
+.hud-panel-line.accent{color:#ffd966;font-size:11px;font-weight:500}
+.hud-panel-bigval{
+  font-size:20px;color:#00d4ff;font-weight:bold;line-height:1.1;margin:2px 0;
+}
+.hud-panel-bar{
+  height:4px;background:rgba(0,212,255,.15);
+  margin:5px 0 3px;position:relative;overflow:hidden;
+}
+.hud-panel-bar::after{
+  content:'';position:absolute;left:0;top:0;bottom:0;
+  width:var(--hud-fill,60%);
+  background:linear-gradient(90deg,#00d4ff,#66e8ff);
+  box-shadow:0 0 6px #00d4ff;
+  animation:hud-bar-pulse 1.6s infinite;
+}
+@keyframes hud-bar-pulse{0%,100%{opacity:.7}50%{opacity:1}}
+
+/* Slot toggle row */
+.slot-toggles{
+  display:flex;justify-content:center;gap:6px;
+  padding:2px 0 0;
+}
+.slot-toggle{
+  background:rgba(0,18,32,.7);
+  border:1px solid var(--primary-dim);
+  color:var(--text-1);
+  padding:5px 9px;
+  font:600 9px 'JetBrains Mono',monospace;
+  letter-spacing:1.5px;text-transform:uppercase;
+  cursor:pointer;border-radius:3px;
+  transition:all .2s;
+}
+.slot-toggle.on{
+  border-color:var(--primary);
+  color:var(--primary);
+  text-shadow:0 0 4px var(--primary-glow);
+  box-shadow:inset 0 0 10px rgba(0,212,255,.18);
+}
+
+/* === Transcript panel === */
+.transcript-panel{
+  background:linear-gradient(180deg,rgba(0,30,52,.7),rgba(0,18,32,.85));
+  border:1px solid var(--primary-dim);
+  border-left:4px solid var(--primary);
+  padding:8px 10px 10px;
+  box-shadow:0 4px 18px rgba(0,212,255,.12),inset 0 0 22px rgba(0,212,255,.04);
+  animation:panelIn .45s cubic-bezier(.16,1,.3,1);
+}
+.transcript-header{
+  font:600 9px 'JetBrains Mono',monospace;
+  letter-spacing:3px;color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+  text-transform:uppercase;
+  border-bottom:1px solid var(--primary-dim);
+  padding-bottom:4px;margin-bottom:6px;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.transcript-list{
+  display:flex;flex-direction:column;gap:6px;
+  max-height:130px;overflow-y:auto;
+  padding-right:4px;
+  scrollbar-width:thin;
+  scrollbar-color:var(--primary-dim) transparent;
+}
+.transcript-list::-webkit-scrollbar{width:3px}
+.transcript-list::-webkit-scrollbar-thumb{background:var(--primary-dim)}
+.bubble{
+  font-size:11px;line-height:1.4;
+  padding:5px 8px;border-radius:3px;
+  word-wrap:break-word;white-space:normal;
+}
+.bubble.user{
+  background:rgba(0,212,255,.06);
+  border-left:2px solid var(--primary);
+  color:var(--text-0);
+}
+.bubble.friday{
+  background:rgba(255,181,71,.05);
+  border-left:2px solid #ffb547;
+  color:#ffd9a0;
+}
+.bubble .who{
+  font-size:8px;letter-spacing:2px;
+  opacity:.65;text-transform:uppercase;
+  margin-bottom:2px;
+}
+
+/* === MAP view (mock placeholder) === */
+.map-view{
+  position:relative;
+  height:60vh;min-height:300px;
+  background:
+    radial-gradient(circle at 30% 40%,rgba(0,212,255,.08) 0%,transparent 25%),
+    radial-gradient(circle at 70% 60%,rgba(255,181,71,.05) 0%,transparent 30%),
+    linear-gradient(180deg,rgba(0,30,52,.55),rgba(0,18,32,.85));
+  border:1px solid var(--primary-dim);
+  border-left:4px solid var(--primary);
+  overflow:hidden;
+}
+.map-grid{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(0,212,255,.12) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,212,255,.12) 1px,transparent 1px);
+  background-size:24px 24px;
+  mask-image:radial-gradient(ellipse at center,black 0%,transparent 75%);
+  -webkit-mask-image:radial-gradient(ellipse at center,black 0%,transparent 75%);
+}
+.map-pin{
+  position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  width:14px;height:14px;border-radius:50%;
+  background:var(--primary);
+  box-shadow:0 0 12px var(--primary),0 0 24px var(--primary);
+  animation:mapPin 1.6s ease-out infinite;
+}
+@keyframes mapPin{
+  0%{box-shadow:0 0 8px var(--primary),0 0 16px var(--primary)}
+  100%{box-shadow:0 0 32px var(--primary),0 0 64px transparent}
+}
+.map-label{
+  position:absolute;left:50%;top:calc(50% + 18px);
+  transform:translateX(-50%);
+  font-size:10px;letter-spacing:2px;color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+  text-transform:uppercase;
+}
+.map-coord{
+  position:absolute;bottom:10px;left:10px;
+  font-size:9px;letter-spacing:2px;color:var(--text-1);opacity:.7;
+}
+
+/* === COSMOS view (placeholder starfield) === */
+.cosmos-view{
+  position:relative;
+  height:60vh;min-height:300px;
+  border:1px solid var(--primary-dim);
+  border-left:4px solid var(--primary);
+  background:radial-gradient(ellipse at center,#0a1f3c 0%,#02060e 70%);
+  overflow:hidden;
+}
+.cosmos-stars{
+  position:absolute;inset:0;
+  background-image:
+    radial-gradient(1px 1px at 20% 30%,#fff,transparent),
+    radial-gradient(1px 1px at 60% 70%,#9be3ff,transparent),
+    radial-gradient(1px 1px at 80% 20%,#fff,transparent),
+    radial-gradient(2px 2px at 40% 80%,#00d4ff,transparent),
+    radial-gradient(1px 1px at 90% 50%,#fff,transparent),
+    radial-gradient(1px 1px at 10% 60%,#cbe8ff,transparent),
+    radial-gradient(2px 2px at 50% 50%,#ffd966,transparent),
+    radial-gradient(1px 1px at 30% 90%,#fff,transparent);
+  background-size:240px 240px;
+  animation:cosmosDrift 60s linear infinite;
+  opacity:.8;
+}
+@keyframes cosmosDrift{
+  0%{background-position:0 0,0 0,0 0,0 0,0 0,0 0,0 0,0 0}
+  100%{background-position:240px 240px,-240px 240px,240px -240px,-240px -240px,240px 240px,-240px 240px,240px -240px,-240px -240px}
+}
+.cosmos-label{
+  position:absolute;bottom:14px;left:0;right:0;
+  text-align:center;
+  font-size:10px;letter-spacing:4px;color:var(--primary);
+  text-shadow:0 0 8px var(--primary-glow);
+  text-transform:uppercase;
+}
+
+/* === Bottom bar === */
+.bottombar{
+  flex:0 0 auto;
+  padding:8px 12px calc(10px + var(--safe-bot)) 12px;
+  display:flex;flex-direction:column;gap:8px;
+  border-top:1px solid var(--primary-dim);
+  background:linear-gradient(0deg,rgba(0,12,24,.85),rgba(5,8,16,.65));
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+.satellite-row{
+  display:flex;justify-content:space-between;align-items:center;gap:6px;
+}
+.sat-btn{
+  flex:1;
+  background:rgba(0,18,32,.7);
+  border:1px solid var(--primary-dim);
+  color:var(--text-1);
+  height:34px;
+  font:700 12px 'JetBrains Mono',monospace;
+  letter-spacing:1px;
+  cursor:pointer;border-radius:3px;
+  transition:all .2s;
+}
+.sat-btn:active,
+.sat-btn.on{
+  border-color:var(--primary);
+  color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+  box-shadow:inset 0 0 10px rgba(0,212,255,.18);
+}
+
+/* === Bouton dictée rectangulaire === */
+.mic-btn{
+  width:72%;
+  align-self:center;
+  height:54px;
+  background:linear-gradient(180deg,rgba(0,30,52,.85),rgba(0,18,32,.95));
+  border:2px solid var(--primary);
+  border-radius:6px;
+  color:var(--primary);
+  font:700 13px 'JetBrains Mono',monospace;
+  letter-spacing:3px;text-transform:uppercase;
+  cursor:pointer;
+  position:relative;overflow:hidden;
+  box-shadow:0 4px 18px rgba(0,212,255,.22),inset 0 0 18px rgba(0,212,255,.10);
+  transition:all .2s cubic-bezier(.16,1,.3,1);
+  text-shadow:0 0 8px var(--primary-glow);
+}
+.mic-btn:active{transform:scale(.97)}
+.mic-btn.recording{
+  background:linear-gradient(180deg,rgba(255,181,71,.18),rgba(60,30,0,.85));
+  border-color:var(--listening);
+  color:var(--listening);
+  text-shadow:0 0 10px rgba(255,181,71,.7);
+  box-shadow:0 4px 22px rgba(255,181,71,.28),inset 0 0 22px rgba(255,181,71,.18);
+  animation:micPulse 1.4s ease-in-out infinite;
+}
+.mic-btn.hold{
+  border-style:dashed;
+}
+@keyframes micPulse{
+  0%,100%{box-shadow:0 4px 22px rgba(255,181,71,.25),inset 0 0 22px rgba(255,181,71,.14)}
+  50%{box-shadow:0 4px 32px rgba(255,181,71,.55),inset 0 0 32px rgba(255,181,71,.28)}
+}
+.mic-btn::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;
+  width:var(--rec-progress,0%);
+  background:linear-gradient(90deg,rgba(255,181,71,.18),rgba(255,181,71,.36));
+  transition:width .25s linear;
+  pointer-events:none;
+}
+.mic-icon{
+  display:inline-block;
+  vertical-align:middle;
+  margin-right:8px;
+  width:16px;height:16px;
+}
+
+/* === Log panel (toggleable) === */
+.log-panel{
+  position:fixed;left:0;right:0;bottom:0;
+  height:60vh;max-height:480px;
+  background:linear-gradient(180deg,rgba(0,18,32,.96),rgba(0,12,24,.98));
+  border-top:2px solid var(--primary);
+  z-index:50;
+  transform:translateY(100%);
+  transition:transform .35s cubic-bezier(.16,1,.3,1);
+  display:flex;flex-direction:column;
+  padding-bottom:var(--safe-bot);
+  box-shadow:0 -10px 40px rgba(0,212,255,.15);
+}
+.log-panel.show{transform:translateY(0)}
+.log-header{
+  padding:10px 14px;
+  border-bottom:1px solid var(--primary-dim);
+  display:flex;justify-content:space-between;align-items:center;
+  font:700 11px 'JetBrains Mono',monospace;
+  letter-spacing:3px;color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+  text-transform:uppercase;
+}
+.log-close{
+  background:transparent;border:1px solid var(--primary-dim);
+  color:var(--text-1);
+  padding:4px 10px;font:600 10px monospace;
+  cursor:pointer;letter-spacing:1px;border-radius:3px;
+}
+.log-body{
+  flex:1;overflow-y:auto;
+  padding:10px 14px;
+  font:11px/1.5 'JetBrains Mono',monospace;
+}
+.log-line{margin:2px 0}
+.log-line.info{color:var(--text-0)}
+.log-line.dbg{color:var(--text-1);opacity:.75}
+.log-line.warn{color:var(--listening)}
+.log-line.err{color:var(--error)}
+.log-line .ts{color:var(--text-1);opacity:.55;margin-right:6px}
+.log-line .src{color:var(--primary);opacity:.7;margin-right:6px}
+
+/* === Debug bar (visible toujours bas) === */
+.debug-bar{
+  display:flex;justify-content:center;gap:5px;
+  padding:0 4px;
+}
+.dbg-btn{
+  flex:1;
+  background:rgba(0,18,32,.5);
+  border:1px solid rgba(122,143,168,.3);
+  color:var(--text-1);
+  padding:5px 4px;font:600 8px 'JetBrains Mono',monospace;
+  letter-spacing:1.2px;text-transform:uppercase;
+  cursor:pointer;border-radius:3px;
+}
+.dbg-btn.on{
+  border-color:var(--state-ring);
+  color:var(--state-ring);
+  text-shadow:0 0 4px var(--state-glow);
+}
+
+/* === Helper : RMS waveform around sphere when speaking === */
+.wave-arc{
+  fill:none;
+  stroke:var(--state-ring);
+  stroke-width:1.4;
+  opacity:0;
+  transition:opacity .3s;
+}
+body[data-state="speaking"] .wave-arc{
+  opacity:.9;
+  animation:waveDance 1.2s ease-in-out infinite;
+}
+@keyframes waveDance{
+  0%,100%{stroke-dasharray:6 4;stroke-dashoffset:0}
+  50%{stroke-dasharray:3 7;stroke-dashoffset:8}
+}
+
+/* Responsive small (very small phones) */
+@media (max-width:340px){
+  .mode-btn{padding:6px 9px;letter-spacing:1.5px}
+  .sphere-wrap{max-width:240px}
+  .hud-panel{padding:7px 9px;font-size:10px}
+  .mic-btn{height:50px;font-size:12px;letter-spacing:2px}
+}
+
+/* Toast notification */
+.toast{
+  position:fixed;left:50%;top:60px;
+  transform:translateX(-50%);
+  background:rgba(0,18,32,.95);
+  border:1px solid var(--primary);
+  color:var(--primary);
+  padding:8px 14px;font:600 10px monospace;
+  letter-spacing:2px;text-transform:uppercase;
+  border-radius:4px;z-index:300;
+  box-shadow:0 4px 16px rgba(0,212,255,.3);
+  opacity:0;pointer-events:none;
+  transition:opacity .25s,transform .25s;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ==========================================================================
+   V1.1 — Pattern Hologramme PiP (Picture-in-Picture inversé)
+   ========================================================================== */
+
+/* Le sphere-wrap devient transitionnable. On stocke 4 corners possibles. */
+.sphere-wrap{
+  transition:transform .4s cubic-bezier(0.2, 0.8, 0.2, 1.0),
+             filter .4s cubic-bezier(0.2, 0.8, 0.2, 1.0);
+  will-change:transform;
+}
+
+/* État PiP : sphère mini en coin */
+.sphere-wrap.pip{
+  position:absolute;
+  z-index:30;
+  width:96px;height:96px;
+  max-width:96px;
+  margin:0;
+  cursor:grab;
+  filter:drop-shadow(0 0 14px var(--state-glow))
+         drop-shadow(0 0 28px rgba(0,212,255,.35));
+}
+.sphere-wrap.pip.dragging{cursor:grabbing;transition:none}
+
+/* Anti-débordement Halo trail pendant le glide */
+.pip-trail{
+  position:absolute;left:0;top:0;
+  width:100%;height:100%;
+  pointer-events:none;
+  border-radius:50%;
+  box-shadow:0 0 60px 20px var(--primary-glow);
+  opacity:0;
+  z-index:29;
+  transition:opacity .4s ease-out;
+}
+.pip-trail.show{opacity:.6}
+
+/* Corners (4 positions snap-able) — calcul via CSS vars */
+.sphere-wrap.pip.corner-tl{top:60px;left:12px}
+.sphere-wrap.pip.corner-tr{top:60px;right:12px;left:auto}
+.sphere-wrap.pip.corner-bl{bottom:170px;left:12px;top:auto}
+.sphere-wrap.pip.corner-br{bottom:170px;right:12px;left:auto;top:auto}
+
+/* Pendant la sphère est en PiP, le state-label/hint cachés */
+.sphere-wrap.pip .sphere-state{display:none}
+
+/* Container du contenu central alternatif (rempli par JS) */
+.pip-content{
+  display:none;
+  position:relative;
+  width:100%;
+  aspect-ratio:1/1;
+  max-width:340px;
+  margin:6px auto 4px;
+  background:linear-gradient(135deg,rgba(0,18,32,.78),rgba(0,28,52,.62));
+  border:1px solid rgba(0,212,255,.45);
+  border-radius:6px;
+  overflow:hidden;
+  opacity:0;
+  transform:scale(0.85);
+  transition:opacity .35s ease,transform .35s cubic-bezier(0.2, 0.8, 0.2, 1.0);
+  box-shadow:0 4px 24px rgba(0,212,255,.18),inset 0 0 32px rgba(0,212,255,.05);
+}
+.pip-content.show{display:block;opacity:1;transform:scale(1)}
+.pip-content-title{
+  position:absolute;top:8px;left:0;right:0;
+  text-align:center;
+  font:700 10px 'JetBrains Mono',monospace;
+  letter-spacing:3px;color:var(--primary);
+  text-shadow:0 0 8px var(--primary-glow);
+  text-transform:uppercase;
+  z-index:2;pointer-events:none;
+}
+.pip-content-legend{
+  position:absolute;bottom:8px;left:0;right:0;
+  text-align:center;
+  font:9px/1.4 'JetBrains Mono',monospace;
+  letter-spacing:1.5px;color:var(--text-1);opacity:.7;
+  pointer-events:none;
+}
+
+/* ==========================================================================
+   V1.2 — Cortex NeuralViz (CSS V1.2 mort supprimé en V1.4 — ~210 lignes)
+   Le cortex 8-zones d'origine (`.brain-bg`, `.brain-particles`, `.cortex-zone`,
+   `#cortex-frontal/motor/...`, `.neural-line`, `.cortex-label`, `.neural-legend`,
+   keyframes `starsTwinkle/brainBreathe/particlesOrbit/particleFade/synapseFlow/
+   cortexBurst`) a été remplacé par le système 5 variantes V1.3.
+   On conserve UNIQUEMENT `.pip-content-title.neural-title` car ce style est
+   encore appliqué au titre "🧠 NEURAL VIZ" du PiP cortex (cf. buildCortexSvg).
+   ========================================================================== */
+.pip-content-title.neural-title{
+  background:linear-gradient(90deg,#00D4FF 0%,#B967FF 50%,#FF3B9A 100%);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+  text-shadow:none;
+  filter:drop-shadow(0 0 8px rgba(0,212,255,.45));
+  font-weight:800;
+  letter-spacing:2px;
+}
+
+/* ==========================================================================
+   V1.1 — Sub-states : wake-listening (sonar) / wake-flash / wake-followup
+   ========================================================================== */
+
+/* Sonar expanding (wake-listening) */
+.sub-sonar{
+  position:absolute;left:50%;top:50%;
+  width:30%;height:30%;
+  border-radius:50%;
+  border:2px solid var(--primary);
+  transform:translate(-50%,-50%) scale(0.5);
+  opacity:0;
+  pointer-events:none;
+  z-index:3;
+}
+.sphere-wrap.sub-wake-listening .sub-sonar{
+  animation:sonarExpand 1.6s ease-out infinite;
+}
+@keyframes sonarExpand{
+  0%{transform:translate(-50%,-50%) scale(0.5);opacity:.7;border-width:2px}
+  100%{transform:translate(-50%,-50%) scale(2.5);opacity:0;border-width:1px}
+}
+/* second sonar décalé */
+.sub-sonar.s2{animation-delay:.5s}
+.sub-sonar.s3{animation-delay:1s}
+
+/* Flash (wake-flash) */
+.sub-flash{
+  position:absolute;inset:0;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.85) 0%,rgba(0,212,255,.5) 40%,transparent 70%);
+  opacity:0;
+  pointer-events:none;
+  z-index:4;
+}
+.sphere-wrap.sub-wake-flash .sub-flash{
+  animation:wakeFlash 200ms ease-out;
+}
+@keyframes wakeFlash{
+  0%{opacity:0;transform:scale(0.6)}
+  40%{opacity:1;transform:scale(1.05)}
+  100%{opacity:0;transform:scale(1.15)}
+}
+
+/* Followup countdown */
+.sub-followup{
+  position:absolute;left:50%;top:50%;
+  width:60%;height:60%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  z-index:5;
+  opacity:0;
+  transition:opacity .3s;
+}
+.sphere-wrap.sub-wake-followup .sub-followup{opacity:1}
+.followup-ring{
+  fill:none;
+  stroke:var(--listening);
+  stroke-width:2;
+  stroke-linecap:round;
+  filter:drop-shadow(0 0 6px rgba(255,181,71,.7));
+  transform:rotate(-90deg);
+  transform-origin:50% 50%;
+}
+.followup-text{
+  position:absolute;left:0;right:0;top:50%;
+  transform:translateY(-50%);
+  text-align:center;
+  font:700 18px 'JetBrains Mono',monospace;
+  color:var(--listening);
+  text-shadow:0 0 8px rgba(255,181,71,.7);
+  letter-spacing:1px;
+}
+
+/* ==========================================================================
+   V1.1 — Sphère core piloté par RMS / FFT (CSS vars)
+   ========================================================================== */
+
+.sphere-core{
+  /* override : amplitude pilotée par --rms-scale (1.0 = repos) */
+  transform:scale(var(--rms-scale,1));
+  transform-origin:center;
+  transform-box:fill-box;
+  transition:transform .15s ease-out;
+}
+/* Désactive l'animation native quand on pilote en live (listening) */
+body[data-state="listening"] .sphere-core{
+  animation:none;
+}
+/* Wave-arc épaissit selon FFT */
+body[data-state="speaking"] .wave-arc{
+  stroke-width:calc(1.4 + var(--fft-amp,0) * 2.8);
+}
+
+/* ==========================================================================
+   V1.1 — Notif violet (3 pulses)
+   ========================================================================== */
+
+.sphere-wrap.notif-violet svg{
+  animation:violetPulse 600ms ease-in-out 3;
+  filter:drop-shadow(0 0 18px rgba(185,103,255,.85));
+}
+@keyframes violetPulse{
+  0%,100%{transform:scale(1);filter:drop-shadow(0 0 14px rgba(185,103,255,.55))}
+  50%{transform:scale(1.08);filter:drop-shadow(0 0 30px rgba(185,103,255,.95))}
+}
+
+/* ==========================================================================
+   V1.1 — Halo cyan critique (rayonne sur tout l'écran)
+   ========================================================================== */
+
+.critical-halo{
+  position:fixed;inset:0;
+  pointer-events:none;
+  z-index:180; /* sous scanlines/edge-glow (199/200), au-dessus du contenu (1) */
+  background:radial-gradient(circle at center,
+    rgba(0,212,255,.6) 0%,
+    rgba(0,212,255,.25) 30%,
+    rgba(0,212,255,.05) 60%,
+    transparent 80%);
+  opacity:0;
+  transform:scale(0.5);
+}
+.critical-halo.fire{
+  animation:criticalHaloFire 2s ease-out;
+}
+@keyframes criticalHaloFire{
+  0%{opacity:0;transform:scale(0.5)}
+  30%{opacity:.6;transform:scale(1.4)}
+  100%{opacity:0;transform:scale(2.5)}
+}
+
+/* ==========================================================================
+   V1.1 — Offline border (clignotante rouge)
+   ========================================================================== */
+
+.offline-border{
+  position:fixed;inset:0;
+  pointer-events:none;
+  z-index:197;
+  border:2px solid #ff3a4f;
+  box-shadow:inset 0 0 24px rgba(255,58,79,.35),
+             0 0 18px rgba(255,58,79,.55);
+  opacity:0;
+  transition:opacity .3s;
+}
+body.offline .offline-border{
+  opacity:1;
+  animation:offlineBlink 1.2s ease-in-out infinite;
+}
+@keyframes offlineBlink{
+  0%,100%{opacity:.55}
+  50%{opacity:1}
+}
+
+/* ==========================================================================
+   V1.1 — Debug bar étendue (2 lignes + sliders)
+   ========================================================================== */
+
+.debug-bar.row2{margin-top:5px}
+.debug-bar .dbg-btn.violet.fire{
+  border-color:#B967FF;
+  color:#B967FF;
+  text-shadow:0 0 6px rgba(185,103,255,.7);
+}
+.debug-bar .dbg-btn.cyan.fire{
+  border-color:var(--primary);
+  color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+}
+
+.debug-sliders{
+  display:flex;gap:8px;padding:0 4px;align-items:center;
+}
+.debug-sliders label{
+  flex:1;
+  display:flex;align-items:center;gap:4px;
+  font:600 8px 'JetBrains Mono',monospace;
+  letter-spacing:1px;color:var(--text-1);
+  text-transform:uppercase;
+}
+.debug-sliders input[type="range"]{
+  flex:1;
+  -webkit-appearance:none;appearance:none;
+  height:4px;background:rgba(0,212,255,.18);
+  border-radius:2px;outline:none;
+  cursor:pointer;
+}
+.debug-sliders input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:12px;height:12px;border-radius:50%;
+  background:var(--primary);
+  box-shadow:0 0 6px var(--primary-glow);
+  cursor:pointer;
+}
+.debug-sliders input[type="range"]::-moz-range-thumb{
+  width:12px;height:12px;border-radius:50%;
+  background:var(--primary);
+  box-shadow:0 0 6px var(--primary-glow);
+  cursor:pointer;border:none;
+}
+.dbg-val{
+  min-width:28px;text-align:right;
+  color:var(--primary);font-weight:700;
+}
+
+/* Bottom bar : ajout du bouton 🧠 Cortex (reste en flex) */
+.satellite-row .sat-btn.cortex-btn{
+  font-size:14px;
+}
+.satellite-row .sat-btn.cortex-btn.on{
+  background:rgba(196,77,255,.15);
+  border-color:var(--thinking);
+  color:var(--thinking);
+  text-shadow:0 0 6px rgba(196,77,255,.7);
+  box-shadow:inset 0 0 10px rgba(196,77,255,.2);
+}
+
+/* ==========================================================================
+   V1.2 — Bouton mode conversation (cycle OFF / CONV / CONTINUOUS)
+   ========================================================================== */
+
+.satellite-row .sat-btn.conv-mode-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:3px;
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.5px;
+  position:relative;
+  min-width:62px;
+  padding:5px 6px;
+  transition:background .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease;
+}
+.satellite-row .sat-btn.conv-mode-btn .cmb-ico{
+  font-size:13px;
+  line-height:1;
+}
+.satellite-row .sat-btn.conv-mode-btn .cmb-label{
+  font-size:9px;
+  letter-spacing:1px;
+}
+/* mode OFF (default) */
+.satellite-row .sat-btn.conv-mode-btn.mode-off{
+  color:#5a7090;
+  border-color:rgba(90,112,144,.55);
+  background:rgba(90,112,144,.07);
+}
+/* mode CONV (ambre) */
+.satellite-row .sat-btn.conv-mode-btn.mode-conv{
+  color:#FFB800;
+  border-color:#FFB800;
+  background:rgba(255,184,0,.12);
+  text-shadow:0 0 6px rgba(255,184,0,.7);
+  box-shadow:inset 0 0 10px rgba(255,184,0,.18), 0 0 8px rgba(255,184,0,.25);
+}
+/* mode CONTINUOUS (rouge) */
+.satellite-row .sat-btn.conv-mode-btn.mode-continuous{
+  color:#FF3B5C;
+  border-color:#FF3B5C;
+  background:rgba(255,59,92,.14);
+  text-shadow:0 0 6px rgba(255,59,92,.8);
+  box-shadow:inset 0 0 10px rgba(255,59,92,.25), 0 0 10px rgba(255,59,92,.35);
+  animation:convContPulse 1.4s ease-in-out infinite;
+}
+@keyframes convContPulse{
+  0%,100% { box-shadow:inset 0 0 10px rgba(255,59,92,.25), 0 0 10px rgba(255,59,92,.35); }
+  50%     { box-shadow:inset 0 0 14px rgba(255,59,92,.45), 0 0 16px rgba(255,59,92,.65); }
+}
+
+/* Countdown bar (mode CONV : 6s -> 0) */
+.conv-countdown{
+  position:absolute;
+  left:6%;
+  right:6%;
+  bottom:-6px;
+  height:3px;
+  border-radius:2px;
+  background:rgba(255,184,0,.12);
+  overflow:hidden;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity .2s ease;
+}
+.satellite-row .sat-btn.conv-mode-btn.mode-conv.counting .conv-countdown{
+  opacity:1;
+}
+.conv-countdown .bar{
+  height:100%;
+  width:100%;
+  background:linear-gradient(90deg,#FFD86B 0%,#FFB800 60%,#FF8C00 100%);
+  box-shadow:0 0 6px rgba(255,184,0,.8);
+  transform-origin:left center;
+  transform:scaleX(1);
+}
+.satellite-row .sat-btn.conv-mode-btn.mode-conv.counting .conv-countdown .bar{
+  animation:convCountdown 6s linear forwards;
+}
+@keyframes convCountdown{
+  from { transform:scaleX(1); }
+  to   { transform:scaleX(0); }
+}
+
+/* STOP flottant (mode CONTINUOUS) — au-dessus de la bottom bar */
+.conv-stop-fab{
+  position:fixed;
+  left:50%;
+  bottom:calc(168px + var(--safe-bot));
+  transform:translateX(-50%) scale(.8);
+  z-index:60;
+  display:none;
+  align-items:center;
+  gap:6px;
+  padding:8px 18px;
+  border-radius:22px;
+  border:1.5px solid #FF3B5C;
+  background:linear-gradient(180deg,rgba(255,59,92,.22) 0%,rgba(255,59,92,.10) 100%);
+  color:#FF6B82;
+  font:700 11px 'JetBrains Mono',monospace;
+  letter-spacing:1.5px;
+  text-shadow:0 0 6px rgba(255,59,92,.8);
+  box-shadow:
+    0 0 0 4px rgba(255,59,92,.10),
+    0 0 18px rgba(255,59,92,.55),
+    inset 0 0 12px rgba(255,59,92,.25);
+  cursor:pointer;
+  pointer-events:auto;
+  opacity:0;
+  transition:opacity .25s ease, transform .25s cubic-bezier(.2,.8,.2,1.0);
+  animation:convStopPulse 1.4s ease-in-out infinite;
+}
+.conv-stop-fab .stop-dot{
+  width:8px; height:8px; border-radius:50%;
+  background:#FF3B5C;
+  box-shadow:0 0 6px #FF3B5C, 0 0 12px rgba(255,59,92,.7);
+}
+body.conv-mode-continuous .conv-stop-fab{
+  display:inline-flex;
+  opacity:1;
+  transform:translateX(-50%) scale(1);
+}
+@keyframes convStopPulse{
+  0%,100% { box-shadow:0 0 0 4px rgba(255,59,92,.10), 0 0 18px rgba(255,59,92,.55), inset 0 0 12px rgba(255,59,92,.25); }
+  50%     { box-shadow:0 0 0 6px rgba(255,59,92,.18), 0 0 28px rgba(255,59,92,.75), inset 0 0 16px rgba(255,59,92,.4); }
+}
+
+/* ==========================================================================
+   V1.3 — Cortex 5 variantes (Constellation / Wireframe / Holo / Neural / Aurora)
+   Repris du fichier cortex-mockups (v0.1.0) — palette zones spécifiques.
+   Zones DIM par défaut, s'allument seulement quand active.
+   ========================================================================== */
+
+/* Couleurs zones du cortex-mockups (8 zones anatomiques sci-fi) */
+:root{
+  --c-prefrontal:#3da9ff;
+  --c-hippocampus:#ff3ec1;
+  --c-broca:#44e8a0;
+  --c-wernicke:#33d4ec;
+  --c-occipital:#ffd633;
+  --c-motor:#ff4f4f;
+  --c-cerebellum:#b066ff;
+  --c-limbic:#ff8c33;
+}
+
+/* Stage cortex : conteneur de toutes les variantes (occupe 100% du pip-content)
+   V1.4 : padding réduit (22/4/4/4) — laisse juste de quoi loger le titre + 4px.
+   Combiné aux viewBox carrés, ça pousse le contenu utile à >90% de la zone PiP. */
+.cortex-stage{
+  position:absolute;
+  inset:22px 4px 4px 4px;
+  border-radius:10px;
+  overflow:hidden;
+  background:linear-gradient(180deg,#0A0E1A 0%,#050810 100%);
+  border:1px solid rgba(0,212,255,.10);
+}
+.cortex-variant{
+  position:absolute;inset:0;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .2s ease;
+}
+.cortex-variant.active{
+  opacity:1;
+  pointer-events:auto;
+}
+.cortex-variant svg{
+  width:100%;height:100%;display:block;
+}
+
+/* Common zone behavior : DIM par défaut, brille en active */
+.cortex-variant .v-zone{transition:filter .4s, opacity .4s}
+.cortex-variant .v-zone.dim{opacity:.18; filter:saturate(.2) brightness(.7)}
+.cortex-variant .v-zone.active{opacity:1; filter:saturate(1.2) brightness(1.1) drop-shadow(0 0 6px currentColor)}
+
+/* ---------- VARIANT A — CONSTELLATION ---------- */
+#cv-a .a-link{stroke:rgba(255,255,255,.06); stroke-width:.7; fill:none; transition:stroke .4s, stroke-width .4s}
+#cv-a .a-link.lit{stroke:rgba(0,212,255,.45); stroke-width:1}
+#cv-a .a-pulse{
+  stroke-width:1.4; fill:none;
+  stroke-dasharray:8 200; stroke-dashoffset:0;
+  animation:aPulseFlow 1.6s linear infinite;
+  filter:drop-shadow(0 0 4px currentColor);
+}
+@keyframes aPulseFlow{from{stroke-dashoffset:208}to{stroke-dashoffset:0}}
+#cv-a .v-zone.active .node-glow{opacity:.6; animation:aGlowBreath 2.2s ease-in-out infinite}
+#cv-a .node-glow{opacity:0; transition:opacity .5s}
+#cv-a .node-label{font:10px 'JetBrains Mono',monospace; fill:#7a8fa8; opacity:.55; letter-spacing:.6px}
+#cv-a .v-zone.active .node-label{fill:currentColor; opacity:.95}
+@keyframes aGlowBreath{0%,100%{opacity:.45}50%{opacity:.7}}
+#cv-a .star{fill:#fff; opacity:.18}
+
+/* ---------- VARIANT B — BRAIN WIREFRAME ---------- */
+#cv-b .b-outline{stroke:rgba(220,235,255,.22); stroke-width:.8; fill:none}
+#cv-b .b-fold{stroke:rgba(220,235,255,.08); stroke-width:.5; fill:none}
+#cv-b .b-conn{stroke:rgba(220,235,255,.04); stroke-width:.5; fill:none}
+#cv-b .b-conn.lit{stroke:rgba(0,212,255,.3)}
+#cv-b .b-pulse{
+  fill:none; stroke-width:1.8;
+  stroke-dasharray:6 180;
+  filter:drop-shadow(0 0 5px currentColor);
+  animation:bFlow 1.4s linear infinite;
+}
+@keyframes bFlow{from{stroke-dashoffset:186}to{stroke-dashoffset:0}}
+#cv-b .b-zone-shape{
+  fill:rgba(255,255,255,.02);
+  stroke:rgba(255,255,255,.18); stroke-width:.6;
+  transition:all .5s;
+}
+#cv-b .v-zone.active .b-zone-shape{
+  fill:color-mix(in srgb, currentColor 22%, transparent);
+  stroke:currentColor; stroke-width:1;
+  filter:drop-shadow(0 0 8px currentColor);
+}
+#cv-b .b-zone-label{
+  font:8px 'JetBrains Mono',monospace; fill:#7a8fa8; opacity:.4;
+  letter-spacing:.4px; text-anchor:middle;
+}
+#cv-b .v-zone.active .b-zone-label{fill:currentColor; opacity:.9}
+
+/* ---------- VARIANT C — HOLOGRAPHIC ---------- */
+#cv-c{
+  background:
+    radial-gradient(ellipse at center, rgba(0,80,140,.15), transparent 70%),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 3px,
+      rgba(0,212,255,.025) 3px,
+      rgba(0,212,255,.025) 4px
+    );
+}
+#cv-c::before{
+  content:""; position:absolute; left:0; right:0; height:80px;
+  background:linear-gradient(180deg,
+    transparent 0%,
+    rgba(0,212,255,.08) 50%,
+    transparent 100%);
+  animation:cScan 4.5s linear infinite; pointer-events:none; z-index:5;
+}
+@keyframes cScan{0%{top:-80px}100%{top:100%}}
+#cv-c::after{
+  content:""; position:absolute; inset:0;
+  background:radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,.5) 100%);
+  pointer-events:none; z-index:3;
+}
+#cv-c svg{position:relative; z-index:2}
+#cv-c .c-ellipse{
+  fill:rgba(0,212,255,.04);
+  stroke:rgba(0,212,255,.25); stroke-width:.6;
+  transition:all .5s;
+}
+#cv-c .v-zone.active .c-ellipse{
+  fill:color-mix(in srgb, currentColor 16%, transparent);
+  stroke:currentColor; stroke-width:1.2;
+  filter:drop-shadow(0 0 10px currentColor) drop-shadow(2px 0 0 rgba(255,0,180,.3)) drop-shadow(-2px 0 0 rgba(0,255,255,.3));
+}
+#cv-c .c-conn{stroke:rgba(0,212,255,.08); stroke-width:.6; fill:none}
+#cv-c .c-pulse{
+  fill:none; stroke-width:1.6;
+  stroke-dasharray:5 160;
+  animation:cFlow 1.3s linear infinite;
+  filter:drop-shadow(0 0 6px currentColor);
+}
+@keyframes cFlow{from{stroke-dashoffset:165}to{stroke-dashoffset:0}}
+#cv-c .c-label{
+  font:8px 'JetBrains Mono',monospace; fill:rgba(0,212,255,.55);
+  text-anchor:middle; letter-spacing:1px; text-transform:uppercase;
+}
+#cv-c .v-zone.active .c-label{fill:currentColor}
+#cv-c .star{fill:#9cd8ff; opacity:.5}
+
+/* ---------- VARIANT D — NEURAL NETWORK GRAPH ---------- */
+#cv-d .d-edge{stroke:rgba(255,255,255,.05); stroke-width:.5; fill:none}
+#cv-d .d-edge.lit{stroke:rgba(0,212,255,.3); stroke-width:.7}
+#cv-d .d-pulse{
+  fill:none; stroke-width:1.5;
+  stroke-dasharray:4 100;
+  animation:dFlow 1.1s linear infinite;
+  filter:drop-shadow(0 0 4px currentColor);
+}
+@keyframes dFlow{from{stroke-dashoffset:104}to{stroke-dashoffset:0}}
+#cv-d .d-sub{
+  fill:rgba(255,255,255,.06); stroke:rgba(255,255,255,.12); stroke-width:.5;
+  transition:all .4s;
+}
+#cv-d .v-zone.active .d-sub{
+  fill:color-mix(in srgb, currentColor 35%, transparent);
+  stroke:currentColor;
+}
+#cv-d .d-hub{
+  fill:rgba(15,25,45,.9); stroke:rgba(255,255,255,.18); stroke-width:.8;
+  transition:all .4s;
+}
+#cv-d .v-zone.active .d-hub{
+  fill:color-mix(in srgb, currentColor 25%, rgba(15,25,45,.9));
+  stroke:currentColor; stroke-width:1.4;
+  filter:drop-shadow(0 0 8px currentColor);
+}
+#cv-d .d-hub-label{
+  font:9.5px 'JetBrains Mono',monospace; fill:#7a8fa8;
+  text-anchor:middle; letter-spacing:.6px;
+}
+#cv-d .v-zone.active .d-hub-label{fill:currentColor}
+
+/* ---------- VARIANT E — AURORA ---------- */
+#cv-e{
+  background:
+    radial-gradient(ellipse at 50% 100%, rgba(60,30,90,.25), transparent 60%),
+    linear-gradient(180deg,#02050C 0%,#040810 100%);
+}
+#cv-e .star{fill:#cfe6ff}
+#cv-e .e-trail{
+  fill:url(#auroraGrad);
+  opacity:.06;
+  transition:opacity .6s;
+}
+#cv-e .v-zone.active .e-trail{
+  opacity:.85;
+  animation:eUndulate 4.5s ease-in-out infinite;
+  filter:blur(.4px) drop-shadow(0 0 14px currentColor);
+}
+@keyframes eUndulate{
+  0%,100%{transform:translateX(0) scaleY(1)}
+  50%{transform:translateX(3px) scaleY(1.05)}
+}
+#cv-e .e-label{
+  font:8px 'JetBrains Mono',monospace; fill:#7a8fa8; text-anchor:middle;
+  letter-spacing:1px;
+}
+#cv-e .v-zone.active .e-label{fill:currentColor; opacity:.95}
+#cv-e .e-pulse{
+  fill:none; stroke-width:1.4;
+  stroke-dasharray:5 140;
+  animation:eFlow 1.5s linear infinite;
+  filter:drop-shadow(0 0 6px currentColor);
+}
+@keyframes eFlow{from{stroke-dashoffset:146}to{stroke-dashoffset:0}}
+
+/* ==========================================================================
+   V1.3 — Menu déroulant variantes (long-press sur 🧠 Cortex)
+   ========================================================================== */
+.cortex-variant-menu{
+  position:fixed;
+  z-index:240; /* au-dessus de scanlines */
+  min-width:200px;
+  padding:6px;
+  border-radius:12px;
+  background:linear-gradient(180deg,rgba(10,16,32,.96) 0%,rgba(5,8,20,.96) 100%);
+  border:1px solid rgba(0,212,255,.35);
+  box-shadow:
+    0 0 0 1px rgba(0,212,255,.10),
+    0 8px 24px rgba(0,0,0,.55),
+    0 0 24px rgba(0,212,255,.18);
+  backdrop-filter:blur(8px);
+  display:none;
+  opacity:0;
+  transform:scale(.95);
+  transform-origin:bottom center;
+  transition:opacity .18s ease, transform .18s cubic-bezier(.2,.85,.3,1.1);
+  font-family:'JetBrains Mono','SF Mono',monospace;
+}
+.cortex-variant-menu.open{
+  display:block;
+  opacity:1;
+  transform:scale(1);
+}
+.cortex-variant-menu .cv-menu-title{
+  font-size:8.5px;
+  letter-spacing:1.6px;
+  color:#7a8fa8;
+  text-transform:uppercase;
+  padding:6px 10px 4px;
+  border-bottom:1px solid rgba(0,212,255,.10);
+  margin-bottom:4px;
+}
+.cortex-variant-menu .cv-menu-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 10px;
+  border-radius:8px;
+  cursor:pointer;
+  font-size:11.5px;
+  color:#cfe8ff;
+  letter-spacing:.4px;
+  transition:background .12s ease, color .12s ease;
+  user-select:none;
+}
+.cortex-variant-menu .cv-menu-item:hover,
+.cortex-variant-menu .cv-menu-item:active{
+  background:rgba(0,212,255,.08);
+  color:#dff5ff;
+}
+.cortex-variant-menu .cv-menu-item .cv-emoji{
+  font-size:14px;
+  line-height:1;
+  width:18px;
+  text-align:center;
+}
+.cortex-variant-menu .cv-menu-item .cv-name{
+  flex:1 1 auto;
+}
+.cortex-variant-menu .cv-menu-item .cv-letter{
+  font-size:9px;
+  color:#5a7090;
+  letter-spacing:1px;
+}
+.cortex-variant-menu .cv-menu-item .cv-check{
+  width:14px;
+  height:14px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:11px;
+  color:transparent;
+}
+.cortex-variant-menu .cv-menu-item.checked{
+  background:rgba(0,212,255,.12);
+  color:var(--primary);
+  border:1px solid rgba(0,212,255,.35);
+  box-shadow:inset 0 0 8px rgba(0,212,255,.15);
+}
+.cortex-variant-menu .cv-menu-item.checked .cv-check{
+  color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+}
+
+/* Indicateur "long-press progress" sur le bouton cortex (anneau qui se remplit) */
+.satellite-row .sat-btn.cortex-btn{
+  position:relative;
+  overflow:visible;
+}
+.satellite-row .sat-btn.cortex-btn::after{
+  content:"";
+  position:absolute;
+  left:-2px; right:-2px; top:-2px; bottom:-2px;
+  border-radius:inherit;
+  border:2px solid transparent;
+  pointer-events:none;
+  opacity:0;
+}
+.satellite-row .sat-btn.cortex-btn.lp-arming::after{
+  border-color:rgba(196,77,255,.6);
+  opacity:1;
+  animation:lpArm 500ms linear forwards;
+}
+@keyframes lpArm{
+  0%{ clip-path:inset(0 100% 0 0); opacity:.4 }
+  100%{ clip-path:inset(0 0 0 0); opacity:1 }
+}
+
+/* PiP cortex stage : ajustements du pip-content pour intégrer cortex-stage
+   (on garde display:block du parent ; cortex-stage est positioned:absolute dedans) */
+.pip-content.cortex-pip-mode{
+  /* nothing special — block layout, cortex-stage takes full inner area via inset */
+}
+
+/* Crossfade entre 2 variantes lors du switch (PiP ouvert) */
+.cortex-stage.switching .cortex-variant{
+  transition:opacity .2s ease;
+}
+</style>
+</head>
+<body data-state="idle">
+
+<div class="grid-bg"></div>
+<div class="edge-glow"></div>
+<div class="critical-halo" id="criticalHalo" aria-hidden="true"></div>
+<div class="offline-border" id="offlineBorder" aria-hidden="true"></div>
+<div class="toast" id="toast">READY</div>
+
+<div class="app">
+
+  <!-- ==== HEADER ==== -->
+  <header class="header">
+    <div class="header-top">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <span>FRIDAY</span>
+      </div>
+      <div class="conn-status">
+        <span class="conn-dot" id="connDot"></span>
+        <span id="connLabel">…</span>
+        <span class="version-tag version-badge">· v1.17</span>
+        <span class="version-tag" id="backendVer" style="display:none"></span>
+      </div>
+    </div>
+
+    <div class="mode-switch" role="tablist">
+      <button class="mode-btn active" data-view="home" role="tab">Accueil</button>
+      <button class="mode-btn" data-view="map" role="tab">Carte</button>
+      <button class="mode-btn" data-view="cosmos" role="tab">Cosmos</button>
+    </div>
+  </header>
+
+  <!-- ==== MAIN ==== -->
+  <main class="main">
+
+    <!-- VIEW : HOME -->
+    <section class="view active" id="view-home">
+
+      <!-- Sphère HOLO-SPLIT (V1.1 : devient PiP-able + sub-states overlays) -->
+      <div class="sphere-wrap" id="sphereWrap" aria-label="Sphère Friday">
+        <svg id="sphereSvg" viewBox="0 0 200 200" aria-hidden="true">
+          <defs>
+            <filter id="coreGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <radialGradient id="sphereBgGrad">
+              <stop offset="0%" stop-color="rgba(0,212,255,.1)"/>
+              <stop offset="60%" stop-color="rgba(0,212,255,.03)"/>
+              <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+            </radialGradient>
+          </defs>
+
+          <!-- halo bg -->
+          <circle cx="100" cy="100" r="92" fill="url(#sphereBgGrad)"/>
+
+          <!-- ring outer (CW) -->
+          <g class="spin-cw">
+            <circle class="sphere-ring thick" cx="100" cy="100" r="86"/>
+            <!-- 12 ticks autour -->
+            <g class="sphere-tick">
+              <line x1="100" y1="6"  x2="100" y2="14"/>
+              <line x1="100" y1="186" x2="100" y2="194"/>
+              <line x1="6" y1="100"  x2="14" y2="100"/>
+              <line x1="186" y1="100" x2="194" y2="100"/>
+              <line x1="35" y1="35"  x2="42" y2="42"/>
+              <line x1="158" y1="158" x2="165" y2="165"/>
+              <line x1="35" y1="165" x2="42" y2="158"/>
+              <line x1="158" y1="42" x2="165" y2="35"/>
+            </g>
+          </g>
+
+          <!-- ring middle (CCW, ellipse pour effet 3D) -->
+          <g class="spin-ccw">
+            <ellipse class="sphere-ring" cx="100" cy="100" rx="68" ry="20"/>
+            <ellipse class="sphere-ring" cx="100" cy="100" rx="68" ry="20" transform="rotate(60 100 100)"/>
+            <ellipse class="sphere-ring" cx="100" cy="100" rx="68" ry="20" transform="rotate(-60 100 100)"/>
+          </g>
+
+          <!-- equator (dotted) -->
+          <g class="spin-cw">
+            <ellipse class="sphere-equator" cx="100" cy="100" rx="76" ry="32"/>
+          </g>
+
+          <!-- inner ring -->
+          <g class="spin-ccw">
+            <circle class="sphere-ring" cx="100" cy="100" r="50"/>
+            <line class="sphere-tick" x1="50" y1="100" x2="60" y2="100"/>
+            <line class="sphere-tick" x1="140" y1="100" x2="150" y2="100"/>
+            <line class="sphere-tick" x1="100" y1="50" x2="100" y2="60"/>
+            <line class="sphere-tick" x1="100" y1="140" x2="100" y2="150"/>
+          </g>
+
+          <!-- waveform arc (visible speaking) -->
+          <circle class="wave-arc" cx="100" cy="100" r="78" stroke-dasharray="4 4"/>
+          <circle class="wave-arc" cx="100" cy="100" r="82" stroke-dasharray="2 5"/>
+
+          <!-- core -->
+          <circle class="sphere-core" cx="100" cy="100" r="9"/>
+          <circle cx="100" cy="100" r="3" fill="#fff" opacity=".8"/>
+        </svg>
+
+        <div class="sphere-state">
+          <div class="state-label" id="stateLabel">IDLE</div>
+          <div class="state-hint" id="stateHint">tap mic to speak</div>
+        </div>
+
+        <div class="rms-bars" aria-hidden="true">
+          <div class="rms-bar"></div>
+          <div class="rms-bar"></div>
+          <div class="rms-bar"></div>
+          <div class="rms-bar"></div>
+          <div class="rms-bar"></div>
+        </div>
+
+        <!-- V1.1 sub-states overlays -->
+        <div class="sub-sonar s1" aria-hidden="true"></div>
+        <div class="sub-sonar s2" aria-hidden="true"></div>
+        <div class="sub-sonar s3" aria-hidden="true"></div>
+        <div class="sub-flash" aria-hidden="true"></div>
+        <svg class="sub-followup" viewBox="0 0 100 100" aria-hidden="true">
+          <circle class="followup-ring" id="followupRing"
+                  cx="50" cy="50" r="44"
+                  stroke-dasharray="276.46" stroke-dashoffset="0"/>
+        </svg>
+        <div class="followup-text" id="followupText" style="display:none;">5</div>
+
+        <!-- Halo trail (V1.1 — visible pendant le glide PiP) -->
+        <div class="pip-trail" id="pipTrail" aria-hidden="true"></div>
+      </div>
+
+      <!-- V1.1 — Container du contenu central alternatif (PiP) -->
+      <div class="pip-content" id="pipContent" aria-hidden="true">
+        <!-- Rempli par JS selon le trigger (cortex / autre) -->
+      </div>
+
+      <!-- Toggles slots cachés -->
+      <div class="slot-toggles">
+        <button class="slot-toggle" data-slot="music">+ MUSIC</button>
+        <button class="slot-toggle" data-slot="activity">+ ACTIVITY</button>
+      </div>
+
+      <!-- Cadre satellite : 4 panneaux -->
+      <div class="sat-grid">
+        <!-- CONTEXT -->
+        <article class="hud-panel" id="panel-context">
+          <div class="hud-panel-header">
+            <span>CONTEXT</span><span class="ico">◇</span>
+          </div>
+          <div class="hud-panel-line accent">Domicile · Lyon 7</div>
+          <div class="hud-panel-line dim">21:14 · jeu 8 mai</div>
+          <div class="hud-panel-line dim">14°C · ciel clair</div>
+          <div class="hud-panel-line">Wi-Fi · STARK-NET</div>
+        </article>
+
+        <!-- FEED -->
+        <article class="hud-panel" id="panel-feed">
+          <div class="hud-panel-header">
+            <span>FEED</span><span class="ico">⚡</span>
+          </div>
+          <div class="hud-panel-line accent">3 nouveaux events</div>
+          <div class="hud-panel-line dim">15:02 · DictoKey ↑</div>
+          <div class="hud-panel-line dim">14:48 · Build OK</div>
+          <div class="hud-panel-line dim">14:21 · Note saved</div>
+        </article>
+
+        <!-- MUSIC (hidden by default) -->
+        <article class="hud-panel hidden-slot" id="panel-music">
+          <div class="hud-panel-header">
+            <span>MUSIC</span><span class="ico">♪</span>
+          </div>
+          <div class="hud-panel-line accent">Daft Punk</div>
+          <div class="hud-panel-line dim">Discovery · 2:34</div>
+          <div class="hud-panel-bar" style="--hud-fill:42%"></div>
+        </article>
+
+        <!-- ACTIVITY (hidden by default) -->
+        <article class="hud-panel hidden-slot" id="panel-activity">
+          <div class="hud-panel-header">
+            <span>ACTIVITY</span><span class="ico">◈</span>
+          </div>
+          <div class="hud-panel-bigval">7 412</div>
+          <div class="hud-panel-line dim">pas aujourd'hui</div>
+          <div class="hud-panel-bar" style="--hud-fill:74%"></div>
+        </article>
+      </div>
+
+      <!-- TRANSCRIPT (toujours visible) -->
+      <article class="transcript-panel">
+        <div class="transcript-header">
+          <span>Transcript</span>
+          <span style="color:var(--text-1);opacity:.6">live</span>
+        </div>
+        <div class="transcript-list" id="transcriptList">
+          <div class="bubble user"><div class="who">Quang · 21:11</div>Friday, où en est le build mobile ?</div>
+          <div class="bubble friday"><div class="who">Friday · 21:11</div>Build APK signé en 02:14, version v1.0.0 prête pour test sur ton tel.</div>
+          <div class="bubble user"><div class="who">Quang · 21:13</div>Lance la routine du soir.</div>
+          <div class="bubble friday"><div class="who">Friday · 21:13</div>Routine soir engagée. Lumières dim 30%, musique chill, alarme 7:15.</div>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- VIEW : MAP -->
+    <section class="view" id="view-map">
+      <div class="map-view">
+        <div class="map-grid"></div>
+        <div class="map-pin"></div>
+        <div class="map-label">Lyon 7 · 45.74° N · 4.85° E</div>
+        <div class="map-coord">GPS · ±8m · live</div>
+      </div>
+      <article class="hud-panel full">
+        <div class="hud-panel-header">
+          <span>NEAR YOU</span><span class="ico">⌖</span>
+        </div>
+        <div class="hud-panel-line accent">Carrefour Express · 120m</div>
+        <div class="hud-panel-line dim">Métro Jean Macé · 320m</div>
+        <div class="hud-panel-line dim">Boulangerie Pozzoli · 80m</div>
+      </article>
+    </section>
+
+    <!-- VIEW : COSMOS -->
+    <section class="view" id="view-cosmos">
+      <div class="cosmos-view">
+        <div class="cosmos-stars"></div>
+        <div class="cosmos-label">Cosmos · placeholder mock</div>
+      </div>
+      <article class="hud-panel full">
+        <div class="hud-panel-header">
+          <span>SOL SYSTEM</span><span class="ico">☉</span>
+        </div>
+        <div class="hud-panel-line accent">Lune · gibbeuse 78%</div>
+        <div class="hud-panel-line dim">Mars · visible 22:14</div>
+        <div class="hud-panel-line dim">ISS · passage 23:48</div>
+      </article>
+    </section>
+
+  </main>
+
+  <!-- ==== BOTTOM BAR ==== -->
+  <footer class="bottombar">
+
+    <!-- Bouton dictée rectangulaire -->
+    <button class="mic-btn" id="micBtn" aria-label="Dictée">
+      <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="3" width="6" height="11" rx="3"/>
+        <path d="M5 11a7 7 0 0 0 14 0"/>
+        <line x1="12" y1="18" x2="12" y2="22"/>
+      </svg>
+      <span id="micLabel">TAP TO TALK</span>
+    </button>
+
+    <!-- Satellite row : compactée (V1.1 : ajout 🧠 Cortex · V1.2 : Persona remplacé par Conv Mode) -->
+    <div class="satellite-row">
+      <button class="sat-btn" id="btnLog" title="Logs">≡</button>
+      <button class="sat-btn" id="btnMute" title="Mute">◊</button>
+      <button class="sat-btn cortex-btn" id="btnCortex" title="🧠 Cortex">🧠 Cortex</button>
+      <button class="sat-btn" id="btnSettings" title="Settings">⚙</button>
+      <!-- V1.2 : Bouton mode conversation (cycle OFF → CONV → CONTINUOUS) -->
+      <button class="sat-btn conv-mode-btn mode-off" id="btnConvMode" data-mode="off" title="Mode conversation">
+        <span class="cmb-ico">🚫</span><span class="cmb-label">OFF</span>
+        <div class="conv-countdown"><div class="bar"></div></div>
+      </button>
+    </div>
+
+    <!-- Debug bar (mock seulement) — V1.1 : 2 lignes + sliders -->
+    <div class="debug-bar">
+      <button class="dbg-btn on" data-debug="idle">idle</button>
+      <button class="dbg-btn" data-debug="listening">listening</button>
+      <button class="dbg-btn" data-debug="thinking">thinking</button>
+      <button class="dbg-btn" data-debug="speaking">speaking</button>
+    </div>
+    <div class="debug-bar row2">
+      <button class="dbg-btn" id="dbgWakeListen" title="wake-listening sub-state">▷ wake-listen</button>
+      <button class="dbg-btn" id="dbgWakeFlash" title="wake-flash 200ms">⚡ flash</button>
+      <button class="dbg-btn" id="dbgWakeFollowup" title="wake-followup countdown 5s">5s gauge</button>
+      <button class="dbg-btn violet" id="dbgNotif" title="Notif violet 3 pulses">📩 Notif</button>
+      <button class="dbg-btn cyan" id="dbgHalo" title="Halo cyan critique TTS">✨ Halo</button>
+      <button class="dbg-btn" id="dbgOffline" title="Toggle offline mode">📡 Offline</button>
+    </div>
+    <div class="debug-sliders">
+      <label>RMS<input type="range" id="sliderRms" min="0" max="100" value="35"><span class="dbg-val" id="rmsVal">35</span></label>
+      <label>FFT<input type="range" id="sliderFft" min="0" max="100" value="60"><span class="dbg-val" id="fftVal">60</span></label>
+    </div>
+  </footer>
+
+</div>
+
+<!-- ==== Log panel ==== -->
+<aside class="log-panel" id="logPanel" aria-hidden="true">
+  <div class="log-header">
+    <span>LOG · MOCK</span>
+    <button class="log-close" id="logClose">CLOSE</button>
+  </div>
+  <div class="log-body" id="logBody">
+    <div class="log-line info"><span class="ts">21:14:02</span><span class="src">[WS]</span>WebSocket connected (mock)</div>
+    <div class="log-line dbg"><span class="ts">21:14:03</span><span class="src">[STT]</span>wake_state=idle</div>
+    <div class="log-line info"><span class="ts">21:14:05</span><span class="src">[LLM]</span>persona=friday-mcu loaded</div>
+    <div class="log-line dbg"><span class="ts">21:14:06</span><span class="src">[UI]</span>view=home active</div>
+    <div class="log-line info"><span class="ts">21:14:11</span><span class="src">[CTX]</span>context_update: location=Lyon 7</div>
+    <div class="log-line warn"><span class="ts">21:14:14</span><span class="src">[NET]</span>cellular signal -82dBm</div>
+    <div class="log-line dbg"><span class="ts">21:14:18</span><span class="src">[STT]</span>VAD threshold=0.45</div>
+    <div class="log-line info"><span class="ts">21:14:22</span><span class="src">[TTS]</span>voice=friday-piper-mcu rate=1.0</div>
+    <div class="log-line dbg"><span class="ts">21:14:25</span><span class="src">[UI]</span>panel.context show=true</div>
+    <div class="log-line info"><span class="ts">21:14:30</span><span class="src">[FEED]</span>3 events queued</div>
+    <div class="log-line dbg"><span class="ts">21:14:33</span><span class="src">[BAT]</span>level=64% drain=2.1%/h</div>
+  </div>
+</aside>
+
+<!-- V1.2 : STOP flottant (visible uniquement en mode CONTINUOUS via body.conv-mode-continuous) -->
+<button class="conv-stop-fab" id="convStopFab" type="button" aria-label="Stop continuous mode">
+  <span class="stop-dot"></span><span>STOP</span>
+</button>
+
+<!-- V1.3 : Menu déroulant des 5 variantes du cortex (long-press sur 🧠 Cortex) -->
+<div class="cortex-variant-menu" id="cortexVariantMenu" role="menu" aria-hidden="true">
+  <div class="cv-menu-title">Variante cortex</div>
+  <div class="cv-menu-item" data-variant="A" role="menuitemradio" aria-checked="true">
+    <span class="cv-emoji">🌌</span><span class="cv-name">Constellation</span><span class="cv-letter">A</span><span class="cv-check">✓</span>
+  </div>
+  <div class="cv-menu-item" data-variant="B" role="menuitemradio" aria-checked="false">
+    <span class="cv-emoji">🧠</span><span class="cv-name">Brain wireframe</span><span class="cv-letter">B</span><span class="cv-check">✓</span>
+  </div>
+  <div class="cv-menu-item" data-variant="C" role="menuitemradio" aria-checked="false">
+    <span class="cv-emoji">📡</span><span class="cv-name">Holographic</span><span class="cv-letter">C</span><span class="cv-check">✓</span>
+  </div>
+  <div class="cv-menu-item" data-variant="D" role="menuitemradio" aria-checked="false">
+    <span class="cv-emoji">🔬</span><span class="cv-name">Neural network</span><span class="cv-letter">D</span><span class="cv-check">✓</span>
+  </div>
+  <div class="cv-menu-item" data-variant="E" role="menuitemradio" aria-checked="false">
+    <span class="cv-emoji">🌌</span><span class="cv-name">Aurora</span><span class="cv-letter">E</span><span class="cv-check">✓</span>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   FRIDAY MOBILE MOCK-UP — JS
+   Pas de WS, pas de fetch. Tout est mock. ~250 lignes.
+   ========================================================================= */
+(function(){
+  'use strict';
+
+  const VERSION = 'v1.17.0';
+  // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
+  const QUERY = new URLSearchParams(location.search);
+  const LIVE_MODE = QUERY.get('mock') !== '1';
+  const WS_URL = (function(){
+    const override = QUERY.get('ws');
+    if (override) return override;
+    // v1.17.0 GitHub Pages variant : si servi depuis github.io, le mobile ne
+    // peut pas joindre localhost du PC → on tape Tailscale Serve qui bridge
+    // tailnet:8445 → backend Friday WS 127.0.0.1:8765. Ce mapping doit être
+    // actif côté PC : `tailscale serve --bg --tls-terminated-tcp=8445 tcp://localhost:8765`.
+    if (location.hostname === 'quang101182.github.io') {
+      return 'wss://desktop-97pf6l1.tailc503e.ts.net:8445/?kind=mobile';
+    }
+    // Default : même host que la page, port 8765 (servi par backend Friday HTTP localement)
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = location.hostname || '127.0.0.1';
+    return `${proto}//${host}:8765/?kind=mobile`;
+  })();
+  const STATE_COLORS = {
+    idle:      { ring:'#5a7090', glow:'rgba(90,112,144,.35)'  },
+    listening: { ring:'#ffb547', glow:'rgba(255,181,71,.65)'  },
+    thinking:  { ring:'#c44dff', glow:'rgba(196,77,255,.6)'   },
+    speaking:  { ring:'#00ffe0', glow:'rgba(0,255,224,.65)'   }
+  };
+  const STATE_HINTS = {
+    idle:      'tap mic to speak',
+    listening: 'listening… speak now',
+    thinking:  'reasoning…',
+    speaking:  'friday speaking'
+  };
+
+  const $ = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+
+  /* =========================================================================
+     V1.3 — Persistance localStorage GLOBALE (clé `friday.mobile.config`)
+     Toutes les interactions UI sont mémorisées : variante cortex, PiP actif,
+     coin sphère mini, slots music/activity, convMode, muted, logPanel, state.
+     Au boot, la disposition exacte de la session précédente est restaurée
+     AVANT le first paint.
+     ========================================================================= */
+  const CONFIG_KEY = 'friday.mobile.config';
+  const CONFIG_DEFAULTS = {
+    cortexVariant: 'A',                     // A | B | C | D | E
+    cortexOpen: false,                      // PiP cortex actif au reload ?
+    cortexMiniCorner: 'tl',                 // tl | tr | bl | br
+    slots: { music:'hidden', activity:'hidden' }, // visible | hidden
+    convMode: 'off',                        // off | conv | continuous
+    muted: false,
+    logPanelOpen: false,
+    state: 'idle',                          // idle | listening | thinking | speaking
+    view: 'home'                            // home | map | cosmos
+  };
+  let config = {};
+
+  function loadConfig(){
+    try{
+      const raw = localStorage.getItem(CONFIG_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      // shallow-merge avec defaults pour ne pas perdre keys nouvelles
+      config = Object.assign({}, CONFIG_DEFAULTS, parsed);
+      // sécurise objets imbriqués
+      config.slots = Object.assign({}, CONFIG_DEFAULTS.slots, (parsed && parsed.slots) || {});
+    }catch(err){
+      // Corruption : fallback aux defaults silencieusement
+      config = Object.assign({}, CONFIG_DEFAULTS);
+      config.slots = Object.assign({}, CONFIG_DEFAULTS.slots);
+    }
+    // Validation des keys (whitelist)
+    if(!['A','B','C','D','E'].includes(config.cortexVariant)) config.cortexVariant = 'A';
+    if(!['tl','tr','bl','br'].includes(config.cortexMiniCorner)) config.cortexMiniCorner = 'tl';
+    if(!['off','conv','continuous'].includes(config.convMode)) config.convMode = 'off';
+    if(!['idle','listening','thinking','speaking'].includes(config.state)) config.state = 'idle';
+    if(!['home','map','cosmos'].includes(config.view)) config.view = 'home';
+    return config;
+  }
+
+  function saveConfig(){
+    try{
+      localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+    }catch(err){
+      // localStorage non dispo (private mode) → noop
+    }
+  }
+
+  // Charge avant la moindre logique UI (évite FOUC sur first paint)
+  loadConfig();
+
+  // ----- STATE -----
+  const ui = {
+    state:'idle',
+    recording:false,
+    holdMode:false,
+    pressTs:0,
+    pressTimer:null,
+    progressTimer:null,
+    elapsed:0
+  };
+
+  // ----- TOAST -----
+  let toastTimer=null;
+  function toast(msg, ms=1400){
+    const t=$('#toast');
+    t.textContent=msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>t.classList.remove('show'),ms);
+  }
+
+  // ----- STATE COLORS -----
+  function setState(s){
+    if(!STATE_COLORS[s]) return;
+    ui.state=s;
+    document.body.dataset.state=s;
+    document.documentElement.style.setProperty('--state-ring', STATE_COLORS[s].ring);
+    document.documentElement.style.setProperty('--state-glow', STATE_COLORS[s].glow);
+    $('#stateLabel').textContent=s.toUpperCase();
+    $('#stateHint').textContent=STATE_HINTS[s];
+    // Highlight debug btn
+    $$('.dbg-btn').forEach(b=>b.classList.toggle('on', b.dataset.debug===s));
+    // V1.3 : persiste l'état + propage au cortex si actif
+    config.state = s;
+    saveConfig();
+    if(typeof applyCortexState === 'function') applyCortexState();
+  }
+
+  // ----- VIEW SWITCHING -----
+  $$('.mode-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      $$('.mode-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const v=btn.dataset.view;
+      $$('.view').forEach(x=>x.classList.remove('active'));
+      const target=$('#view-'+v);
+      if(target) target.classList.add('active');
+      try{ navigator.vibrate && navigator.vibrate(8);}catch(e){}
+      // V1.3 : persiste le view actif
+      config.view = v;
+      saveConfig();
+    });
+  });
+
+  // ----- SLOT TOGGLES -----
+  function applySlotState(slot, visible, opts){
+    opts = opts || {};
+    const panel = $('#panel-'+slot);
+    const btn   = $$('.slot-toggle').find(b=>b.dataset.slot===slot);
+    if(!panel || !btn) return;
+    if(visible){
+      panel.classList.remove('hidden-slot');
+      btn.classList.add('on');
+      btn.textContent = '– ' + slot.toUpperCase();
+    } else {
+      panel.classList.add('hidden-slot');
+      btn.classList.remove('on');
+      btn.textContent = '+ ' + slot.toUpperCase();
+    }
+    if(opts.persist){
+      config.slots[slot] = visible ? 'visible' : 'hidden';
+      saveConfig();
+    }
+  }
+  $$('.slot-toggle').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const slot=btn.dataset.slot;
+      const panel=$('#panel-'+slot);
+      const isHidden=panel.classList.contains('hidden-slot');
+      const willBeVisible = isHidden;
+      applySlotState(slot, willBeVisible, { persist:true });
+      toast(slot.toUpperCase() + (willBeVisible ? ' shown' : ' hidden'));
+      try{ navigator.vibrate && navigator.vibrate(10);}catch(e){}
+    });
+  });
+
+  // ----- DEBUG BUTTONS -----
+  $$('.dbg-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      setState(btn.dataset.debug);
+      try{ navigator.vibrate && navigator.vibrate(12);}catch(e){}
+    });
+  });
+
+  // ----- LOG PANEL -----
+  $('#btnLog').addEventListener('click',()=>{
+    const lp=$('#logPanel');
+    lp.classList.toggle('show');
+    const isOpen = lp.classList.contains('show');
+    $('#btnLog').classList.toggle('on', isOpen);
+    config.logPanelOpen = isOpen;
+    saveConfig();
+  });
+  $('#logClose').addEventListener('click',()=>{
+    $('#logPanel').classList.remove('show');
+    $('#btnLog').classList.remove('on');
+    config.logPanelOpen = false;
+    saveConfig();
+  });
+
+  // ----- SETTINGS / MUTE mock -----
+  $('#btnMute').addEventListener('click',()=>{
+    $('#btnMute').classList.toggle('on');
+    const muted = $('#btnMute').classList.contains('on');
+    toast(muted ? 'muted' : 'unmuted');
+    config.muted = muted;
+    saveConfig();
+  });
+  $('#btnSettings').addEventListener('click',()=>toast('settings · mock'));
+
+  /* =========================================================================
+     V1.2 — Bouton mode conversation (cycle OFF → CONV (6s) → CONTINUOUS → OFF)
+     Mock seulement : pas d'impact pipeline réel. Visuel + toast uniquement.
+     ========================================================================= */
+  const CONV_MODES = ['off','conv','continuous'];
+  const CONV_LABELS = {
+    off:        { ico:'🚫', label:'OFF',  toast:'Mode : OFF (PTT seul)' },
+    conv:       { ico:'🎙↻', label:'CONV', toast:'Mode : CONV (écoute 6s post-question)' },
+    continuous: { ico:'🔴', label:'CONT', toast:'Mode : CONTINUOUS (mic toujours ouvert)' }
+  };
+  const btnConvMode = $('#btnConvMode');
+  const convStopFab = $('#convStopFab');
+  let convCountdownTimer = null;
+
+  function setConvMode(mode, opts){
+    opts = opts || {};
+    if(!CONV_LABELS[mode]) mode = 'off';
+    // reset classes
+    btnConvMode.classList.remove('mode-off','mode-conv','mode-continuous','counting');
+    btnConvMode.classList.add('mode-'+mode);
+    btnConvMode.dataset.mode = mode;
+    // V1.3 : persiste
+    config.convMode = mode;
+    saveConfig();
+    // update inner label/icon
+    const ico = btnConvMode.querySelector('.cmb-ico');
+    const lbl = btnConvMode.querySelector('.cmb-label');
+    if(ico) ico.textContent = CONV_LABELS[mode].ico;
+    if(lbl) lbl.textContent = CONV_LABELS[mode].label;
+    // body class for stop fab visibility
+    document.body.classList.toggle('conv-mode-continuous', mode==='continuous');
+    // toast (skip si hydration silencieuse au boot)
+    if(!opts.silent) toast(CONV_LABELS[mode].toast, 1600);
+    // gestion countdown CONV (6s) — non lancé en silent (sinon barre se relance à chaque reload)
+    clearConvCountdown();
+    if(mode==='conv' && !opts.silent){
+      // déclenche la barre countdown 6→0s
+      // (force restart en retirant/réajoutant la classe au prochain frame)
+      requestAnimationFrame(()=>{
+        btnConvMode.classList.add('counting');
+      });
+      convCountdownTimer = setTimeout(()=>{
+        btnConvMode.classList.remove('counting');
+        toast('CONV expiré · retour idle', 1400);
+      }, 6000);
+    }
+  }
+  function clearConvCountdown(){
+    if(convCountdownTimer){ clearTimeout(convCountdownTimer); convCountdownTimer = null; }
+    btnConvMode.classList.remove('counting');
+  }
+  function nextConvMode(){
+    const cur = btnConvMode.dataset.mode || 'off';
+    const idx = CONV_MODES.indexOf(cur);
+    const next = CONV_MODES[(idx+1) % CONV_MODES.length];
+    setConvMode(next);
+  }
+  btnConvMode.addEventListener('click', nextConvMode);
+  convStopFab.addEventListener('click', ()=>{
+    setConvMode('off');
+    toast('STOP · retour OFF', 1400);
+  });
+
+  // ----- MIC BUTTON (tap toggle / long press hold) -----
+  const micBtn=$('#micBtn');
+  const micLabel=$('#micLabel');
+  const HOLD_THRESHOLD=200; // ms
+  const MAX_DURATION=60000; // 60s
+
+  function startRecording(hold){
+    if(ui.recording) return;
+    ui.recording=true;
+    ui.holdMode=!!hold;
+    ui.elapsed=0;
+    micBtn.classList.add('recording');
+    if(hold) micBtn.classList.add('hold'); else micBtn.classList.remove('hold');
+    micLabel.textContent=hold?'HOLD · 0s':'RECORDING · 0s';
+    setState('listening');
+    try{ navigator.vibrate && navigator.vibrate(15);}catch(e){}
+    // Hook live : signale le start côté WS (PTT + MediaRecorder).
+    if(LIVE_MODE && typeof wsStartRecording === 'function'){
+      try{ wsStartRecording(hold); }catch(e){ console.warn('wsStartRecording err', e); }
+    }
+
+    const startTs=Date.now();
+    ui.progressTimer=setInterval(()=>{
+      ui.elapsed=Date.now()-startTs;
+      const pct=Math.min(100,(ui.elapsed/MAX_DURATION)*100);
+      micBtn.style.setProperty('--rec-progress', pct+'%');
+      const sec=Math.floor(ui.elapsed/1000);
+      micLabel.textContent=(hold?'HOLD · ':'RECORDING · ')+sec+'s';
+      if(ui.elapsed>=MAX_DURATION){
+        toast('max 60s reached');
+        stopRecording(true);
+      }
+    },120);
+  }
+
+  function stopRecording(autoStopped){
+    if(!ui.recording) return;
+    ui.recording=false;
+    clearInterval(ui.progressTimer);
+    ui.progressTimer=null;
+    micBtn.classList.remove('recording','hold');
+    micBtn.style.setProperty('--rec-progress','0%');
+    micLabel.textContent='TAP TO TALK';
+    try{ navigator.vibrate && navigator.vibrate(20);}catch(e){}
+
+    // Hook live : signale le stop côté WS (cf. wsClient.stopRecording / ptt stop).
+    // Le backend pilote ensuite setState (transcript_pending → thinking → speaking → idle).
+    if(LIVE_MODE && typeof wsStopRecording === 'function'){
+      try{ wsStopRecording(autoStopped); }catch(e){ console.warn('wsStopRecording err', e); }
+      // En live, on NE simule PAS la suite : c'est le backend qui pilote l'état.
+      return;
+    }
+
+    // Mock pipeline : listening → thinking → speaking → idle
+    setState('thinking');
+    setTimeout(()=>{
+      const userMsg = ui.holdMode
+        ? 'Friday, dictée longue de '+Math.floor(ui.elapsed/1000)+' secondes.'
+        : 'Friday quoi de neuf ?';
+      addBubble('user', userMsg);
+      setTimeout(()=>{
+        setState('speaking');
+        const reply = ui.holdMode
+          ? 'Note longue capturée et résumée. Je l\'ai classée dans le slot CONTEXT, sous-thème dictée mobile.'
+          : 'Trois events en attente, build APK validé, et météo stable jusqu\'à demain matin.';
+        addBubble('friday', reply);
+        setTimeout(()=>setState('idle'), 2400);
+      }, 900);
+    }, 600);
+  }
+
+  function addBubble(who, text){
+    const list=$('#transcriptList');
+    const b=document.createElement('div');
+    b.className='bubble '+who;
+    const now=new Date();
+    const hh=String(now.getHours()).padStart(2,'0');
+    const mm=String(now.getMinutes()).padStart(2,'0');
+    b.innerHTML='<div class="who">'+(who==='user'?'Quang':'Friday')+' · '+hh+':'+mm+'</div>'+escapeHtml(text);
+    list.appendChild(b);
+    list.scrollTop=list.scrollHeight;
+  }
+
+  function escapeHtml(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);}
+
+  // pointerdown : detect press start
+  micBtn.addEventListener('pointerdown',(e)=>{
+    e.preventDefault();
+    if(ui.recording){
+      // already recording → ignore start (stop happens on pointerup if hold)
+      return;
+    }
+    ui.pressTs=Date.now();
+    ui.pressTimer=setTimeout(()=>{
+      // long press → HOLD
+      ui.pressTimer=null;
+      startRecording(true);
+    }, HOLD_THRESHOLD);
+  });
+  micBtn.addEventListener('pointerup',(e)=>{
+    e.preventDefault();
+    const dur=Date.now()-ui.pressTs;
+    if(ui.pressTimer){
+      clearTimeout(ui.pressTimer);
+      ui.pressTimer=null;
+      // tap court → TOGGLE
+      if(ui.recording){ stopRecording(false); }
+      else            { startRecording(false); }
+    } else if(ui.recording && ui.holdMode){
+      // long press release → stop
+      stopRecording(false);
+    }
+  });
+  micBtn.addEventListener('pointercancel',()=>{
+    if(ui.pressTimer){clearTimeout(ui.pressTimer);ui.pressTimer=null;}
+    if(ui.recording && ui.holdMode){ stopRecording(true); }
+  });
+
+  /* =========================================================================
+     V1.1 — Pattern Hologramme PiP (Picture-in-Picture inversé)
+     ========================================================================= */
+
+  const sphereWrap = $('#sphereWrap');
+  const pipContent = $('#pipContent');
+  const pipTrail = $('#pipTrail');
+  const ICON_BTN_CORTEX = $('#btnCortex');
+
+  const pip = {
+    active:false,
+    corner: (config.cortexMiniCorner || 'tl'),  // V1.3 : restauré depuis config
+    contentKind:null,     // 'cortex' | (futur) 'camera' | etc.
+    drag:{ on:false, sx:0, sy:0, ox:0, oy:0, moved:false },
+    longPressTimer:null
+  };
+
+  function enterPiP(kind, opts){
+    opts = opts || {};
+    if(pip.active && pip.contentKind===kind){
+      // Re-trigger même contenu = ferme
+      exitPiP();
+      return;
+    }
+    if(pip.active && pip.contentKind!==kind){
+      // Switch contenu : fade-out ancien puis swap
+      renderPipContent(kind);
+      pip.contentKind=kind;
+      if(kind==='cortex'){ config.cortexOpen = true; saveConfig(); }
+      updateCortexBtnState();
+      return;
+    }
+    pip.active=true;
+    pip.contentKind=kind;
+    // Trail visible pendant le glide (sauf hydration silencieuse)
+    if(!opts.silent){
+      pipTrail.classList.add('show');
+      setTimeout(()=>pipTrail.classList.remove('show'), 500);
+    }
+    // Glide
+    sphereWrap.classList.add('pip','corner-'+pip.corner);
+    // Contenu central avec delay 50ms
+    renderPipContent(kind);
+    if(opts.silent){
+      pipContent.classList.add('show');
+      pipContent.classList.add('no-anim');
+      setTimeout(()=>pipContent.classList.remove('no-anim'), 100);
+    } else {
+      setTimeout(()=>pipContent.classList.add('show'), 50);
+    }
+    updateCortexBtnState();
+    if(!opts.silent){ try{ navigator.vibrate && navigator.vibrate(15);}catch(e){} }
+    if(kind==='cortex'){ config.cortexOpen = true; saveConfig(); }
+  }
+
+  function exitPiP(){
+    if(!pip.active) return;
+    pip.active=false;
+    pipContent.classList.remove('show');
+    pipTrail.classList.add('show');
+    setTimeout(()=>pipTrail.classList.remove('show'), 500);
+    setTimeout(()=>{
+      pipContent.style.display='';
+      pipContent.innerHTML='';
+      pipContent.classList.remove('cortex-pip-mode');
+    }, 380);
+    sphereWrap.classList.remove('pip','corner-tl','corner-tr','corner-bl','corner-br');
+    sphereWrap.style.transform=''; // reset éventuel transform drag
+    pip.contentKind=null;
+    updateCortexBtnState();
+    config.cortexOpen = false;
+    saveConfig();
+    try{ navigator.vibrate && navigator.vibrate(10);}catch(e){}
+  }
+
+  function updateCortexBtnState(){
+    if(pip.active && pip.contentKind==='cortex'){
+      ICON_BTN_CORTEX.classList.add('on');
+    } else {
+      ICON_BTN_CORTEX.classList.remove('on');
+    }
+  }
+
+  function snapToNearestCorner(x, y){
+    // x,y = position centre approximative de la sphère mini (px viewport)
+    const w = window.innerWidth, h = window.innerHeight;
+    const left = x < w/2;
+    const top = y < h/2;
+    return (top?'t':'b') + (left?'l':'r');
+  }
+
+  // Tap court / long-press / drag sur sphère mini
+  sphereWrap.addEventListener('pointerdown',(e)=>{
+    if(!pip.active) return;
+    e.preventDefault();
+    const rect = sphereWrap.getBoundingClientRect();
+    pip.drag.on = true;
+    pip.drag.moved = false;
+    pip.drag.sx = e.clientX;
+    pip.drag.sy = e.clientY;
+    pip.drag.ox = rect.left;
+    pip.drag.oy = rect.top;
+    sphereWrap.classList.add('dragging');
+    pip.longPressTimer = setTimeout(()=>{
+      pip.longPressTimer = null;
+      if(!pip.drag.moved){
+        toast('Menu rapide');
+        try{ navigator.vibrate && navigator.vibrate([10,30,10]);}catch(e){}
+      }
+    }, 600);
+  });
+
+  sphereWrap.addEventListener('pointermove',(e)=>{
+    if(!pip.active || !pip.drag.on) return;
+    const dx = e.clientX - pip.drag.sx;
+    const dy = e.clientY - pip.drag.sy;
+    if(Math.abs(dx)>4 || Math.abs(dy)>4) pip.drag.moved=true;
+    if(pip.drag.moved){
+      // suit le doigt sans transition
+      sphereWrap.style.transform = `translate(${dx}px, ${dy}px)`;
+    }
+  });
+
+  sphereWrap.addEventListener('pointerup',(e)=>{
+    if(!pip.active) return;
+    sphereWrap.classList.remove('dragging');
+    if(pip.longPressTimer){ clearTimeout(pip.longPressTimer); pip.longPressTimer=null; }
+    if(!pip.drag.moved){
+      // tap court → exit PiP
+      pip.drag.on = false;
+      exitPiP();
+      return;
+    }
+    // Drag terminé : snap au coin le plus proche
+    pip.drag.on = false;
+    const cx = pip.drag.ox + (e.clientX - pip.drag.sx) + sphereWrap.offsetWidth/2;
+    const cy = pip.drag.oy + (e.clientY - pip.drag.sy) + sphereWrap.offsetHeight/2;
+    sphereWrap.classList.remove('corner-tl','corner-tr','corner-bl','corner-br');
+    sphereWrap.style.transform = '';
+    pip.corner = snapToNearestCorner(cx, cy);
+    sphereWrap.classList.add('corner-'+pip.corner);
+    // V1.3 : persiste le coin choisi
+    config.cortexMiniCorner = pip.corner;
+    saveConfig();
+  });
+
+  sphereWrap.addEventListener('pointercancel',()=>{
+    if(pip.longPressTimer){ clearTimeout(pip.longPressTimer); pip.longPressTimer=null; }
+    pip.drag.on=false;
+    sphereWrap.classList.remove('dragging');
+    sphereWrap.style.transform = '';
+  });
+
+  /* =========================================================================
+     V1.3 — Cortex 5 variantes (Constellation/Wireframe/Holo/Neural/Aurora)
+     Repris du fichier cortex-mockups (v0.1.0). 8 zones anatomiques :
+     prefrontal / hippocampus / broca / wernicke / occipital / motor /
+     cerebellum / limbic. Zones DIM par défaut, brillent quand l'état
+     principal du mock les "active".
+     ========================================================================= */
+
+  const VARIANT_LIST = ['A','B','C','D','E'];
+  const VARIANT_META = {
+    A: { name:'Constellation',    emoji:'🌌', philo:"Minimal, espace, élégance — nodes dim, arcs électriques sur connexions." },
+    B: { name:'Brain wireframe',  emoji:'🧠', philo:"Silhouette anatomique stylisée, 8 zones placées correctement, pulses sur paths courbes." },
+    C: { name:'Holographic',      emoji:'📡', philo:"Projection holo Stark/Strange : scanlines, scan vertical, chromatic aberration." },
+    D: { name:'Neural network',   emoji:'🔬', philo:"Graphe de neurones (TensorBoard) : 8 hubs + sub-nodes + edges dim." },
+    E: { name:'Aurora',           emoji:'🌌', philo:"Aurores boréales verticales : traînées fluides ondulantes, arcs entre traînées." }
+  };
+
+  // Mapping état mock → zones cortex à activer
+  // (idle = aucune zone — tout reste DIM)
+  const CORTEX_STATE_MAP = {
+    idle:      [],
+    listening: ['cerebellum','wernicke'],
+    thinking:  ['prefrontal','hippocampus'],
+    speaking:  ['broca'],
+    tooling:   ['motor'],
+    memory:    ['hippocampus']
+  };
+
+  const ZONE_COLORS = {
+    prefrontal: '#3da9ff',
+    hippocampus:'#ff3ec1',
+    broca:      '#44e8a0',
+    wernicke:   '#33d4ec',
+    occipital:  '#ffd633',
+    motor:      '#ff4f4f',
+    cerebellum: '#b066ff',
+    limbic:     '#ff8c33'
+  };
+
+  // Hubs + links pour la variante D (généré JS)
+  // V1.4 — Repositionnés pour viewBox 400x400 carré (was 360x640).
+  // Hubs étalés sur x [60..340] / y [60..340] = ~70% de la zone PiP utile.
+  const D_HUBS = [
+    {z:'prefrontal',  x:110, y:80 },
+    {z:'hippocampus', x:300, y:120},
+    {z:'broca',       x:70 , y:200},
+    {z:'wernicke',    x:130, y:320},
+    {z:'occipital',   x:240, y:340},
+    {z:'motor',       x:340, y:240},
+    {z:'cerebellum',  x:210, y:230},
+    {z:'limbic',      x:280, y:170},
+  ];
+  const D_LINKS = [
+    ['prefrontal','hippocampus'],['prefrontal','broca'],
+    ['hippocampus','limbic'],['broca','wernicke'],
+    ['wernicke','cerebellum'],['motor','cerebellum'],
+    ['occipital','prefrontal'],['limbic','motor'],
+    ['hippocampus','motor'],['prefrontal','limbic']
+  ];
+
+  // Construit les 5 layers (chacun = un SVG) dans le pip-content
+  function buildCortexSvg(){
+    return `
+      <div class="pip-content-title neural-title">🧠 NEURAL VIZ</div>
+      <div class="cortex-stage" id="cortexStage">
+        ${buildVariantA_HTML()}
+        ${buildVariantB_HTML()}
+        ${buildVariantC_HTML()}
+        ${buildVariantD_HTML()}
+        ${buildVariantE_HTML()}
+      </div>
+    `;
+  }
+
+  /* ---------- HTML générateurs des 5 variantes ---------- */
+
+  function buildVariantA_HTML(){
+    // Constellation : nodes circulaires reliés par arcs courbes
+    // V1.4 — viewBox carré 400x400, nodes étalés sur 60..340 (margin 60px = 15%)
+    // pour combler la zone PiP. Rayons node 6→8, glow 20→26, labels 9→10px.
+    return `
+    <div class="cortex-variant" id="cv-a" data-variant="A">
+      <svg viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <radialGradient id="aNodeGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="currentColor" stop-opacity=".9"/>
+            <stop offset="60%" stop-color="currentColor" stop-opacity=".25"/>
+            <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <g id="cv-a-stars"></g>
+        <g id="cv-a-links">
+          <path class="a-link" data-link="prefrontal-hippocampus" d="M200 70  Q 280 110 320 180"/>
+          <path class="a-link" data-link="prefrontal-broca"       d="M200 70  Q 120 110 80  180"/>
+          <path class="a-link" data-link="hippocampus-limbic"     d="M320 180 Q 320 250 270 290"/>
+          <path class="a-link" data-link="broca-wernicke"         d="M80  180 Q 80  250 120 300"/>
+          <path class="a-link" data-link="wernicke-cerebellum"    d="M120 300 Q 160 350 200 360"/>
+          <path class="a-link" data-link="motor-cerebellum"       d="M310 320 Q 260 360 200 360"/>
+          <path class="a-link" data-link="occipital-prefrontal"   d="M200 360 Q 50 220 200 70"/>
+          <path class="a-link" data-link="limbic-motor"           d="M270 290 Q 295 305 310 320"/>
+        </g>
+        <g id="cv-a-pulses"></g>
+        <g id="cv-a-nodes">
+          <g class="v-zone" data-zone="prefrontal" style="color:var(--c-prefrontal)" transform="translate(200 70)">
+            <circle class="node-glow" r="26" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="8" fill="currentColor"/>
+            <text class="node-label" x="0" y="-18" text-anchor="middle">prefrontal</text>
+          </g>
+          <g class="v-zone" data-zone="hippocampus" style="color:var(--c-hippocampus)" transform="translate(320 180)">
+            <circle class="node-glow" r="26" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="8" fill="currentColor"/>
+            <text class="node-label" x="14" y="4">hippoc.</text>
+          </g>
+          <g class="v-zone" data-zone="broca" style="color:var(--c-broca)" transform="translate(80 180)">
+            <circle class="node-glow" r="26" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="8" fill="currentColor"/>
+            <text class="node-label" x="-58" y="4">broca</text>
+          </g>
+          <g class="v-zone" data-zone="wernicke" style="color:var(--c-wernicke)" transform="translate(120 300)">
+            <circle class="node-glow" r="26" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="8" fill="currentColor"/>
+            <text class="node-label" x="-72" y="4">wernicke</text>
+          </g>
+          <g class="v-zone" data-zone="occipital" style="color:var(--c-occipital)" transform="translate(200 360)">
+            <circle class="node-glow" r="26" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="8" fill="currentColor"/>
+            <text class="node-label" x="0" y="22" text-anchor="middle">occipital</text>
+          </g>
+          <g class="v-zone" data-zone="motor" style="color:var(--c-motor)" transform="translate(310 320)">
+            <circle class="node-glow" r="26" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="8" fill="currentColor"/>
+            <text class="node-label" x="14" y="4">motor</text>
+          </g>
+          <g class="v-zone" data-zone="cerebellum" style="color:var(--c-cerebellum)" transform="translate(220 230)">
+            <circle class="node-glow" r="26" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="8" fill="currentColor"/>
+            <text class="node-label" x="14" y="4">cerebellum</text>
+          </g>
+          <g class="v-zone" data-zone="limbic" style="color:var(--c-limbic)" transform="translate(270 290)">
+            <circle class="node-glow" r="26" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="8" fill="currentColor"/>
+            <text class="node-label" x="14" y="-12">limbic</text>
+          </g>
+        </g>
+      </svg>
+    </div>`;
+  }
+
+  function buildVariantB_HTML(){
+    // V1.4 — viewBox carré 400x400. La silhouette d'origine était dessinée
+    // pour 360x640 (centre ≈ 195,362). Wrapper scale(1.5, 0.85) +
+    // translate(-92.5, -108.125) la remappe sur la zone PiP carrée
+    // (silhouette occupe ~87% de la surface). Les coords internes
+    // (paths, zones, pulses, conns) restent cohérentes entre elles.
+    return `
+    <div class="cortex-variant" id="cv-b" data-variant="B">
+      <svg viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="bGlowGrad" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="currentColor" stop-opacity=".5"/>
+            <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <g transform="translate(-92.5 -108.125) scale(1.5 0.85)">
+        <g id="cv-b-anatomy">
+          <path class="b-outline" d="M120 160 C 90 160, 80 200, 90 240 C 70 260, 70 300, 95 320 C 80 360, 100 410, 140 425 C 145 460, 175 475, 195 470 C 230 480, 270 460, 280 420 C 305 410, 315 370, 305 340 C 320 320, 320 280, 295 260 C 305 215, 285 165, 240 160 C 220 145, 180 145, 160 158 C 145 152, 130 154, 120 160 Z"/>
+          <path class="b-fold" d="M195 160 Q 200 250 198 380 Q 196 430 198 470"/>
+          <path class="b-fold" d="M105 220 Q 140 230 175 220"/>
+          <path class="b-fold" d="M105 270 Q 140 280 175 270"/>
+          <path class="b-fold" d="M220 220 Q 255 230 290 220"/>
+          <path class="b-fold" d="M220 270 Q 255 280 290 270"/>
+          <path class="b-fold" d="M115 340 Q 150 350 180 340"/>
+          <path class="b-fold" d="M218 340 Q 250 350 285 340"/>
+          <path class="b-fold" d="M130 400 Q 165 412 195 408"/>
+          <path class="b-fold" d="M205 408 Q 240 412 270 400"/>
+          <path class="b-outline" d="M155 470 C 145 510, 175 540, 200 535 C 230 540, 250 510, 240 470"/>
+          <path class="b-fold" d="M165 490 Q 200 500 235 490"/>
+          <path class="b-fold" d="M170 510 Q 200 520 230 510"/>
+          <path class="b-outline" d="M185 540 L 185 580 L 215 580 L 215 540"/>
+        </g>
+        <g id="cv-b-conns">
+          <path class="b-conn" data-link="prefrontal-broca"       d="M150 200 Q 130 240 120 290"/>
+          <path class="b-conn" data-link="prefrontal-hippocampus" d="M225 200 Q 245 250 240 300"/>
+          <path class="b-conn" data-link="hippocampus-limbic"     d="M240 300 Q 235 360 220 400"/>
+          <path class="b-conn" data-link="broca-wernicke"         d="M120 290 Q 130 340 140 380"/>
+          <path class="b-conn" data-link="wernicke-cerebellum"    d="M140 380 Q 165 460 200 500"/>
+          <path class="b-conn" data-link="motor-cerebellum"       d="M260 380 Q 230 460 200 500"/>
+          <path class="b-conn" data-link="occipital-wernicke"     d="M160 440 Q 145 410 140 380"/>
+          <path class="b-conn" data-link="limbic-motor"           d="M220 400 Q 245 390 260 380"/>
+        </g>
+        <g id="cv-b-pulses"></g>
+        <g id="cv-b-zones">
+          <g class="v-zone" data-zone="prefrontal" style="color:var(--c-prefrontal)">
+            <ellipse class="b-zone-shape" cx="150" cy="200" rx="32" ry="22"/>
+            <text class="b-zone-label" x="150" y="178">prefrontal</text>
+          </g>
+          <g class="v-zone" data-zone="hippocampus" style="color:var(--c-hippocampus)">
+            <ellipse class="b-zone-shape" cx="225" cy="295" rx="20" ry="14" transform="rotate(-15 225 295)"/>
+            <text class="b-zone-label" x="225" y="320">hippoc.</text>
+          </g>
+          <g class="v-zone" data-zone="broca" style="color:var(--c-broca)">
+            <ellipse class="b-zone-shape" cx="115" cy="290" rx="18" ry="14"/>
+            <text class="b-zone-label" x="100" y="320">broca</text>
+          </g>
+          <g class="v-zone" data-zone="wernicke" style="color:var(--c-wernicke)">
+            <ellipse class="b-zone-shape" cx="135" cy="375" rx="22" ry="16"/>
+            <text class="b-zone-label" x="115" y="400">wernicke</text>
+          </g>
+          <g class="v-zone" data-zone="occipital" style="color:var(--c-occipital)">
+            <ellipse class="b-zone-shape" cx="195" cy="445" rx="40" ry="20"/>
+            <text class="b-zone-label" x="195" y="450">occipital</text>
+          </g>
+          <g class="v-zone" data-zone="motor" style="color:var(--c-motor)">
+            <ellipse class="b-zone-shape" cx="260" cy="370" rx="22" ry="16"/>
+            <text class="b-zone-label" x="280" y="395">motor</text>
+          </g>
+          <g class="v-zone" data-zone="cerebellum" style="color:var(--c-cerebellum)">
+            <ellipse class="b-zone-shape" cx="200" cy="500" rx="44" ry="24"/>
+            <text class="b-zone-label" x="200" y="505">cerebellum</text>
+          </g>
+          <g class="v-zone" data-zone="limbic" style="color:var(--c-limbic)">
+            <ellipse class="b-zone-shape" cx="200" cy="345" rx="32" ry="14"/>
+            <text class="b-zone-label" x="200" y="348">limbic</text>
+          </g>
+        </g>
+        </g>
+      </svg>
+    </div>`;
+  }
+
+  function buildVariantC_HTML(){
+    // V1.4 — viewBox carré 400x400. Anneaux concentriques élargis pour
+    // atteindre les bords (rx 195/170/130, ry 130/110/85). Zones
+    // redistribuées sur x [60..340] / y [60..340], rayons +25%.
+    return `
+    <div class="cortex-variant" id="cv-c" data-variant="C">
+      <svg viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <radialGradient id="cAura" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="currentColor" stop-opacity=".5"/>
+            <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <g id="cv-c-stars"></g>
+        <g opacity=".28">
+          <ellipse cx="200" cy="200" rx="195" ry="130" fill="none" stroke="rgba(0,212,255,.4)" stroke-width=".7" stroke-dasharray="2 4"/>
+          <ellipse cx="200" cy="200" rx="170" ry="110" fill="none" stroke="rgba(0,212,255,.32)" stroke-width=".6" stroke-dasharray="1 3"/>
+          <ellipse cx="200" cy="200" rx="130" ry="85"  fill="none" stroke="rgba(0,212,255,.26)" stroke-width=".5"/>
+          <ellipse cx="200" cy="200" rx="85"  ry="55"  fill="none" stroke="rgba(0,212,255,.22)" stroke-width=".5"/>
+        </g>
+        <g id="cv-c-conns">
+          <path class="c-conn" data-link="prefrontal-hippocampus" d="M120 70  Q 240 80  330 150"/>
+          <path class="c-conn" data-link="prefrontal-broca"       d="M120 70  Q 80  140 60  220"/>
+          <path class="c-conn" data-link="hippocampus-limbic"     d="M330 150 Q 320 230 280 290"/>
+          <path class="c-conn" data-link="broca-wernicke"         d="M60  220 Q 80  280 110 340"/>
+          <path class="c-conn" data-link="wernicke-cerebellum"    d="M110 340 Q 160 340 200 290"/>
+          <path class="c-conn" data-link="motor-cerebellum"       d="M340 280 Q 270 290 200 290"/>
+          <path class="c-conn" data-link="occipital-prefrontal"   d="M200 360 Q 280 220 120 70"/>
+          <path class="c-conn" data-link="limbic-motor"           d="M280 290 Q 320 280 340 280"/>
+        </g>
+        <g id="cv-c-pulses"></g>
+        <g id="cv-c-zones">
+          <g class="v-zone" data-zone="prefrontal"  style="color:var(--c-prefrontal)"  transform="translate(120 70)"><ellipse class="c-ellipse" rx="42" ry="17"/><text class="c-label" y="3">prefrontal</text></g>
+          <g class="v-zone" data-zone="hippocampus" style="color:var(--c-hippocampus)" transform="translate(330 150)"><ellipse class="c-ellipse" rx="38" ry="15"/><text class="c-label" y="3">hippoc.</text></g>
+          <g class="v-zone" data-zone="broca"       style="color:var(--c-broca)"       transform="translate(60 220)"><ellipse class="c-ellipse" rx="34" ry="13"/><text class="c-label" y="3">broca</text></g>
+          <g class="v-zone" data-zone="wernicke"    style="color:var(--c-wernicke)"    transform="translate(110 340)"><ellipse class="c-ellipse" rx="38" ry="15"/><text class="c-label" y="3">wernicke</text></g>
+          <g class="v-zone" data-zone="occipital"   style="color:var(--c-occipital)"   transform="translate(200 360)"><ellipse class="c-ellipse" rx="50" ry="17"/><text class="c-label" y="3">occipital</text></g>
+          <g class="v-zone" data-zone="motor"       style="color:var(--c-motor)"       transform="translate(340 280)"><ellipse class="c-ellipse" rx="36" ry="15"/><text class="c-label" y="3">motor</text></g>
+          <g class="v-zone" data-zone="cerebellum"  style="color:var(--c-cerebellum)"  transform="translate(200 290)"><ellipse class="c-ellipse" rx="42" ry="16"/><text class="c-label" y="3">cerebellum</text></g>
+          <g class="v-zone" data-zone="limbic"      style="color:var(--c-limbic)"      transform="translate(280 220)"><ellipse class="c-ellipse" rx="40" ry="15"/><text class="c-label" y="3">limbic</text></g>
+        </g>
+      </svg>
+    </div>`;
+  }
+
+  function buildVariantD_HTML(){
+    // Génère hubs/edges/sub-nodes dynamiquement (besoin d'un seed déterministe pour positionnement)
+    const seed = (n,s=1)=>{ let x=Math.sin(s*9999+n)*10000; return x-Math.floor(x); };
+    let edgesSvg = '';
+    D_LINKS.forEach(([a,b])=>{
+      const ha = D_HUBS.find(h=>h.z===a), hb = D_HUBS.find(h=>h.z===b);
+      const mx = (ha.x+hb.x)/2 + (seed(a.length+b.length,1)-0.5)*30;
+      const my = (ha.y+hb.y)/2 + (seed(a.length+b.length,2)-0.5)*30;
+      edgesSvg += `<path class="d-edge" data-link="${a}-${b}" d="M${ha.x} ${ha.y} Q ${mx} ${my} ${hb.x} ${hb.y}"/>`;
+    });
+    // V1.4 — sub-nodes plus dispersés (rayon 28..40 vs 22..30) et plus gros
+    // (3.2 vs 2.5) pour combler la zone PiP carrée 400x400.
+    let subsSvg = '';
+    D_HUBS.forEach((h,idx)=>{
+      const subCount = 4 + Math.floor(seed(idx,7)*2);
+      let inner = '';
+      for(let i=0;i<subCount;i++){
+        const ang = (i/subCount)*Math.PI*2 + seed(idx,i+10)*0.6;
+        const r   = 28 + seed(idx,i+20)*12;
+        const sx  = h.x + Math.cos(ang)*r;
+        const sy  = h.y + Math.sin(ang)*r;
+        inner += `<path class="d-edge" d="M${h.x} ${h.y} L ${sx.toFixed(2)} ${sy.toFixed(2)}"/>`;
+        inner += `<circle cx="${sx.toFixed(2)}" cy="${sy.toFixed(2)}" r="3.2" class="d-sub"/>`;
+      }
+      subsSvg += `<g class="v-zone" data-zone="${h.z}" style="color:${ZONE_COLORS[h.z]}">${inner}</g>`;
+    });
+    let hubsSvg = '';
+    D_HUBS.forEach(h=>{
+      hubsSvg += `<g class="v-zone" data-zone="${h.z}" style="color:${ZONE_COLORS[h.z]}">
+        <circle cx="${h.x}" cy="${h.y}" r="11" class="d-hub"/>
+        <text class="d-hub-label" x="${h.x}" y="${h.y - 16}">${h.z}</text>
+      </g>`;
+    });
+    return `
+    <div class="cortex-variant" id="cv-d" data-variant="D">
+      <svg viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
+        <g id="cv-d-edges">${edgesSvg}</g>
+        <g id="cv-d-pulses"></g>
+        <g id="cv-d-subs">${subsSvg}</g>
+        <g id="cv-d-hubs">${hubsSvg}</g>
+      </svg>
+    </div>`;
+  }
+
+  function buildVariantE_HTML(){
+    // V1.4 — viewBox carré 400x400. 7 traînées principales espacées sur
+    // x [25..375] (≈45px d'écart), hauteur y [40..350] (~78% du viewBox).
+    // 1 traînée limbic large/courbe en arrière-plan. Labels en bas y=375.
+    return `
+    <div class="cortex-variant" id="cv-e" data-variant="E">
+      <svg viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="auroraGrad" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%"  stop-color="currentColor" stop-opacity="0"/>
+            <stop offset="35%" stop-color="currentColor" stop-opacity=".9"/>
+            <stop offset="65%" stop-color="currentColor" stop-opacity=".7"/>
+            <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <g id="cv-e-stars"></g>
+        <g id="cv-e-trails">
+          <g class="v-zone" data-zone="prefrontal" style="color:var(--c-prefrontal)">
+            <path class="e-trail" d="M25  40 C 18 140, 35 230, 22 350 L 56 350 C 64 230, 50 140, 56 40 Z"/>
+            <text class="e-label" x="40" y="375">prefr.</text>
+          </g>
+          <g class="v-zone" data-zone="hippocampus" style="color:var(--c-hippocampus)">
+            <path class="e-trail" d="M76  40 C 70 130, 90 240, 75 350 L 109 350 C 118 240, 100 130, 106 40 Z"/>
+            <text class="e-label" x="92" y="375">hippoc.</text>
+          </g>
+          <g class="v-zone" data-zone="broca" style="color:var(--c-broca)">
+            <path class="e-trail" d="M127 40 C 118 150, 142 240, 128 350 L 162 350 C 172 240, 150 150, 156 40 Z"/>
+            <text class="e-label" x="145" y="375">broca</text>
+          </g>
+          <g class="v-zone" data-zone="wernicke" style="color:var(--c-wernicke)">
+            <path class="e-trail" d="M178 40 C 170 130, 192 240, 178 350 L 212 350 C 222 240, 200 130, 208 40 Z"/>
+            <text class="e-label" x="195" y="375">wernicke</text>
+          </g>
+          <g class="v-zone" data-zone="occipital" style="color:var(--c-occipital)">
+            <path class="e-trail" d="M229 40 C 222 150, 244 240, 230 350 L 264 350 C 274 240, 252 150, 260 40 Z"/>
+            <text class="e-label" x="247" y="375">occip.</text>
+          </g>
+          <g class="v-zone" data-zone="motor" style="color:var(--c-motor)">
+            <path class="e-trail" d="M280 40 C 272 130, 294 240, 280 350 L 314 350 C 324 240, 302 130, 310 40 Z"/>
+            <text class="e-label" x="297" y="375">motor</text>
+          </g>
+          <g class="v-zone" data-zone="cerebellum" style="color:var(--c-cerebellum)">
+            <path class="e-trail" d="M331 40 C 324 150, 348 240, 332 350 L 366 350 C 376 240, 354 150, 362 40 Z"/>
+            <text class="e-label" x="349" y="375">cereb.</text>
+          </g>
+          <g class="v-zone" data-zone="limbic" style="color:var(--c-limbic)">
+            <path class="e-trail" d="M100 40 C 90 160, 280 240, 270 350 L 304 350 C 310 240, 130 160, 130 40 Z" opacity=".45"/>
+            <text class="e-label" x="200" y="32">limbic</text>
+          </g>
+        </g>
+        <g id="cv-e-pulses">
+          <path class="e-conn" data-link="prefrontal-hippocampus" d="M40 160 Q 70 170 92 160"  fill="none" stroke="rgba(255,255,255,0.04)" stroke-width=".5"/>
+          <path class="e-conn" data-link="hippocampus-limbic"     d="M92 200 Q 140 220 200 200" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width=".5"/>
+          <path class="e-conn" data-link="broca-wernicke"         d="M145 220 Q 170 230 195 220" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width=".5"/>
+          <path class="e-conn" data-link="wernicke-cerebellum"    d="M195 250 Q 270 270 349 250" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width=".5"/>
+          <path class="e-conn" data-link="motor-cerebellum"       d="M297 260 Q 320 275 349 260" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width=".5"/>
+          <path class="e-conn" data-link="occipital-prefrontal"   d="M247 300 Q 140 220 40 170"  fill="none" stroke="rgba(255,255,255,0.04)" stroke-width=".5"/>
+        </g>
+      </svg>
+    </div>`;
+  }
+
+  /* ---------- Stars (background twinkle pour A / C / E) ----------
+     V1.4 — Étoiles distribuées sur tout le viewBox carré 400x400. */
+  function initCortexStars(){
+    const seed = (n,s=1)=>{ let x=Math.sin(s*9999+n)*10000; return x-Math.floor(x); };
+    const containers = [
+      {id:'cv-a-stars', n:35, op:.18, sz:[0.8,2.0]},
+      {id:'cv-c-stars', n:60, op:.55, sz:[0.5,1.6]},
+      {id:'cv-e-stars', n:80, op:.5,  sz:[0.5,1.6]}
+    ];
+    const ns = "http://www.w3.org/2000/svg";
+    containers.forEach(({id,n,op,sz})=>{
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.innerHTML = '';
+      for(let i=0;i<n;i++){
+        const c = document.createElementNS(ns,'circle');
+        c.setAttribute('class','star');
+        c.setAttribute('cx', (seed(i,1)*400).toFixed(1));
+        c.setAttribute('cy', (seed(i,2)*400).toFixed(1));
+        c.setAttribute('r',  (sz[0]+seed(i,3)*(sz[1]-sz[0])).toFixed(2));
+        c.setAttribute('opacity', (op*(0.4+seed(i,4)*0.6)).toFixed(2));
+        el.appendChild(c);
+      }
+    });
+  }
+
+  /* ---------- Pulses (arcs électriques) générés selon zones actives ---------- */
+  const VARIANT_PULSE_MAP = {
+    A: {srcSel:'#cv-a #cv-a-links .a-link', dstId:'cv-a-pulses', cls:'a-pulse'},
+    B: {srcSel:'#cv-b #cv-b-conns .b-conn', dstId:'cv-b-pulses', cls:'b-pulse'},
+    C: {srcSel:'#cv-c #cv-c-conns .c-conn', dstId:'cv-c-pulses', cls:'c-pulse'},
+    D: {srcSel:'#cv-d #cv-d-edges .d-edge[data-link]', dstId:'cv-d-pulses', cls:'d-pulse'},
+    E: {srcSel:'#cv-e #cv-e-pulses .e-conn', dstId:'cv-e-pulses', cls:'e-pulse'}
+  };
+
+  function clearVariantPulses(letter){
+    const map = VARIANT_PULSE_MAP[letter];
+    if(!map) return;
+    const dst = document.getElementById(map.dstId);
+    if(dst) dst.innerHTML = '';
+    document.querySelectorAll(map.srcSel + '.lit').forEach(el=>el.classList.remove('lit'));
+  }
+
+  function spawnVariantPulses(letter, activeZones){
+    const map = VARIANT_PULSE_MAP[letter];
+    if(!map) return;
+    const dst = document.getElementById(map.dstId);
+    if(!dst) return;
+    dst.innerHTML = '';
+    if(!activeZones || !activeZones.length) return;
+    const sources = document.querySelectorAll(map.srcSel);
+    let count = 0;
+    const ns = "http://www.w3.org/2000/svg";
+    sources.forEach(src=>{
+      const linkAttr = src.getAttribute('data-link');
+      if(!linkAttr) return;
+      const [a,b] = linkAttr.split('-');
+      if(!activeZones.includes(a) && !activeZones.includes(b)) return;
+      if(count >= 4) return;
+      const d = src.getAttribute('d');
+      if(!d) return;
+      const p = document.createElementNS(ns,'path');
+      p.setAttribute('d', d);
+      p.setAttribute('class', map.cls);
+      const colorZone = activeZones.includes(a) ? a : b;
+      p.setAttribute('stroke', ZONE_COLORS[colorZone] || '#00D4FF');
+      p.style.color = ZONE_COLORS[colorZone];
+      p.style.animationDelay = (count * 0.35).toFixed(2)+'s';
+      dst.appendChild(p);
+      src.classList.add('lit');
+      count++;
+    });
+  }
+
+  /* ---------- Apply state to active variant ---------- */
+  function applyCortexState(){
+    if(!pip.active || pip.contentKind!=='cortex') return;
+    const active = CORTEX_STATE_MAP[ui.state] || [];
+    // toutes les variantes : DIM/active selon zones actives
+    VARIANT_LIST.forEach(L=>{
+      const root = document.getElementById(`cv-${L.toLowerCase()}`);
+      if(!root) return;
+      root.querySelectorAll('.v-zone').forEach(z=>{
+        const zn = z.getAttribute('data-zone');
+        z.classList.remove('active','dim');
+        if(active.includes(zn)) z.classList.add('active');
+        else z.classList.add('dim');
+      });
+      clearVariantPulses(L);
+      spawnVariantPulses(L, active);
+    });
+  }
+
+  /* ---------- Apply variant : show only the chosen layer ---------- */
+  function applyCortexVariant(letter, opts){
+    opts = opts || {};
+    const stage = document.getElementById('cortexStage');
+    if(!stage) return;
+    const targetId = 'cv-' + (letter || 'A').toLowerCase();
+    // Crossfade si stage déjà rendu et on switch
+    if(opts.crossfade){
+      stage.classList.add('switching');
+      // fade-out tous d'abord
+      stage.querySelectorAll('.cortex-variant.active').forEach(v=>v.classList.remove('active'));
+      setTimeout(()=>{
+        const t = document.getElementById(targetId);
+        if(t) t.classList.add('active');
+        setTimeout(()=>stage.classList.remove('switching'), 220);
+      }, 200);
+    } else {
+      stage.querySelectorAll('.cortex-variant').forEach(v=>{
+        v.classList.toggle('active', v.id === targetId);
+      });
+    }
+  }
+
+  function renderPipContent(kind){
+    if(kind==='cortex'){
+      pipContent.innerHTML = buildCortexSvg();
+      pipContent.classList.add('cortex-pip-mode');
+      initCortexStars();
+      // Variante courante depuis config
+      applyCortexVariant(config.cortexVariant || 'A');
+      applyCortexState();
+      startCortexActivity();
+    }
+  }
+
+  // Boucle d'activité simulée : rafraîchit pulses (ambient effect)
+  let cortexInterval = null;
+  function startCortexActivity(){
+    stopCortexActivity();
+    cortexInterval = setInterval(()=>{
+      if(!pip.active || pip.contentKind!=='cortex'){ stopCortexActivity(); return; }
+      const active = CORTEX_STATE_MAP[ui.state] || [];
+      if(!active.length) return; // idle = aucun pulse
+      // Re-spawn pulses uniquement sur la variante visible (perfs)
+      const letter = config.cortexVariant || 'A';
+      clearVariantPulses(letter);
+      spawnVariantPulses(letter, active);
+    }, 2400);
+  }
+  function stopCortexActivity(){
+    if(cortexInterval){ clearInterval(cortexInterval); cortexInterval=null; }
+  }
+
+  /* =========================================================================
+     V1.3 — Long-press sur 🧠 Cortex : menu déroulant des 5 variantes
+     ========================================================================= */
+  const cortexMenu = $('#cortexVariantMenu');
+  const LONG_PRESS_DURATION = 500; // ms
+  let cortexBtn_pressTimer = null;
+  let cortexBtn_longFired  = false;
+  let cortexBtn_pressTs    = 0;
+  let cortexBtn_pressX     = 0;
+  let cortexBtn_pressY     = 0;
+  let cortexBtn_moved      = false;
+
+  function openCortexMenu(){
+    // Position du menu juste au-dessus du bouton 🧠 Cortex
+    const r = ICON_BTN_CORTEX.getBoundingClientRect();
+    cortexMenu.style.left = (r.left + r.width/2 - 100) + 'px'; // 200px width / 2 = 100
+    cortexMenu.style.top  = (r.top  - 8) + 'px';
+    cortexMenu.style.transform = 'translateY(-100%) scale(.95)';
+    // Force reflow then apply open class for animation
+    void cortexMenu.offsetWidth;
+    cortexMenu.classList.add('open');
+    cortexMenu.style.transform = 'translateY(-100%) scale(1)';
+    cortexMenu.setAttribute('aria-hidden','false');
+    refreshCortexMenuChecked();
+    try{ navigator.vibrate && navigator.vibrate([10,30,10]);}catch(e){}
+  }
+  function closeCortexMenu(){
+    cortexMenu.classList.remove('open');
+    cortexMenu.setAttribute('aria-hidden','true');
+  }
+  function refreshCortexMenuChecked(){
+    cortexMenu.querySelectorAll('.cv-menu-item').forEach(it=>{
+      const v = it.getAttribute('data-variant');
+      const checked = (v === config.cortexVariant);
+      it.classList.toggle('checked', checked);
+      it.setAttribute('aria-checked', checked ? 'true' : 'false');
+    });
+  }
+
+  function selectCortexVariant(letter, opts){
+    opts = opts || {};
+    if(!VARIANT_META[letter]) return;
+    config.cortexVariant = letter;
+    saveConfig();
+    refreshCortexMenuChecked();
+    if(pip.active && pip.contentKind==='cortex'){
+      applyCortexVariant(letter, { crossfade: true });
+      applyCortexState();
+    }
+    if(!opts.silent){
+      const meta = VARIANT_META[letter];
+      toast('Cortex : '+ meta.name, 1400);
+    }
+  }
+
+  // Wire menu items
+  cortexMenu.querySelectorAll('.cv-menu-item').forEach(it=>{
+    it.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const letter = it.getAttribute('data-variant');
+      selectCortexVariant(letter);
+      closeCortexMenu();
+    });
+  });
+
+  // Tap outside or Esc closes the menu
+  document.addEventListener('pointerdown',(e)=>{
+    if(!cortexMenu.classList.contains('open')) return;
+    if(cortexMenu.contains(e.target)) return;
+    if(ICON_BTN_CORTEX.contains(e.target)) return;
+    closeCortexMenu();
+  });
+  document.addEventListener('keydown',(e)=>{
+    if(e.key === 'Escape' && cortexMenu.classList.contains('open')){
+      closeCortexMenu();
+    }
+  });
+
+  // Pointer events on cortex button : differentiate tap vs long-press
+  ICON_BTN_CORTEX.addEventListener('pointerdown',(e)=>{
+    e.preventDefault();
+    cortexBtn_longFired = false;
+    cortexBtn_moved = false;
+    cortexBtn_pressTs = Date.now();
+    cortexBtn_pressX = e.clientX;
+    cortexBtn_pressY = e.clientY;
+    ICON_BTN_CORTEX.classList.add('lp-arming');
+    cortexBtn_pressTimer = setTimeout(()=>{
+      cortexBtn_pressTimer = null;
+      cortexBtn_longFired = true;
+      ICON_BTN_CORTEX.classList.remove('lp-arming');
+      openCortexMenu();
+    }, LONG_PRESS_DURATION);
+  });
+  ICON_BTN_CORTEX.addEventListener('pointermove',(e)=>{
+    if(!cortexBtn_pressTimer && !cortexBtn_longFired) return;
+    const dx = e.clientX - cortexBtn_pressX;
+    const dy = e.clientY - cortexBtn_pressY;
+    if(Math.abs(dx) > 8 || Math.abs(dy) > 8){
+      cortexBtn_moved = true;
+      if(cortexBtn_pressTimer){
+        clearTimeout(cortexBtn_pressTimer);
+        cortexBtn_pressTimer = null;
+        ICON_BTN_CORTEX.classList.remove('lp-arming');
+      }
+    }
+  });
+  ICON_BTN_CORTEX.addEventListener('pointerup',(e)=>{
+    e.preventDefault();
+    ICON_BTN_CORTEX.classList.remove('lp-arming');
+    if(cortexBtn_pressTimer){
+      clearTimeout(cortexBtn_pressTimer);
+      cortexBtn_pressTimer = null;
+    }
+    if(cortexBtn_longFired){
+      // long-press déjà déclenché : menu ouvert, on ne tap pas
+      cortexBtn_longFired = false;
+      return;
+    }
+    if(cortexBtn_moved) return;
+    // Tap court → bascule PiP cortex (V1.1 inchangé)
+    enterPiP('cortex');
+  });
+  ICON_BTN_CORTEX.addEventListener('pointercancel',()=>{
+    if(cortexBtn_pressTimer){
+      clearTimeout(cortexBtn_pressTimer);
+      cortexBtn_pressTimer = null;
+    }
+    ICON_BTN_CORTEX.classList.remove('lp-arming');
+  });
+
+  /* =========================================================================
+     V1.1 — Sub-states (wake-listening / wake-flash / wake-followup)
+     ========================================================================= */
+
+  function fireSubWakeListen(){
+    sphereWrap.classList.add('sub-wake-listening');
+    toast('▷ wake-listening pulse');
+    // Rester actif 3s pour démo
+    setTimeout(()=>sphereWrap.classList.remove('sub-wake-listening'), 3000);
+  }
+  function fireSubWakeFlash(){
+    sphereWrap.classList.remove('sub-wake-flash');
+    // Force reflow pour relancer l'animation
+    void sphereWrap.offsetWidth;
+    sphereWrap.classList.add('sub-wake-flash');
+    setTimeout(()=>sphereWrap.classList.remove('sub-wake-flash'), 250);
+    try{ navigator.vibrate && navigator.vibrate(8);}catch(e){}
+  }
+
+  // Followup countdown gauge (5→0s)
+  let followupRAF = null;
+  function fireSubWakeFollowup(){
+    cancelFollowup();
+    sphereWrap.classList.add('sub-wake-followup');
+    const ring = $('#followupRing');
+    const text = $('#followupText');
+    text.style.display='block';
+    const total = 5000; // 5s
+    const start = performance.now();
+    const circ = 276.46; // 2 * PI * 44
+    const tick = (now)=>{
+      const elapsed = now - start;
+      const remaining = Math.max(0, total - elapsed);
+      const frac = remaining / total;
+      ring.setAttribute('stroke-dashoffset', String(circ * (1 - frac)));
+      text.textContent = String(Math.ceil(remaining/1000));
+      if(remaining > 0){
+        followupRAF = requestAnimationFrame(tick);
+      } else {
+        sphereWrap.classList.remove('sub-wake-followup');
+        text.style.display='none';
+        ring.setAttribute('stroke-dashoffset','0');
+      }
+    };
+    followupRAF = requestAnimationFrame(tick);
+  }
+  function cancelFollowup(){
+    if(followupRAF){ cancelAnimationFrame(followupRAF); followupRAF=null; }
+    sphereWrap.classList.remove('sub-wake-followup');
+    const text = $('#followupText'); if(text) text.style.display='none';
+  }
+
+  $('#dbgWakeListen').addEventListener('click', fireSubWakeListen);
+  $('#dbgWakeFlash').addEventListener('click', fireSubWakeFlash);
+  $('#dbgWakeFollowup').addEventListener('click', fireSubWakeFollowup);
+
+  /* =========================================================================
+     V1.1 — RMS / FFT mock sliders
+     ========================================================================= */
+
+  const sliderRms = $('#sliderRms');
+  const sliderFft = $('#sliderFft');
+  const rmsVal = $('#rmsVal');
+  const fftVal = $('#fftVal');
+
+  function applyRms(v){
+    // 0..100 → scale core 0.85..1.45
+    const scale = 0.85 + (v/100) * 0.6;
+    document.documentElement.style.setProperty('--rms-scale', scale.toFixed(3));
+    rmsVal.textContent = v;
+  }
+  function applyFft(v){
+    // 0..100 → amplitude wave-arc 0..1
+    const amp = (v/100);
+    document.documentElement.style.setProperty('--fft-amp', amp.toFixed(3));
+    fftVal.textContent = v;
+  }
+  sliderRms.addEventListener('input',(e)=>applyRms(parseInt(e.target.value,10)));
+  sliderFft.addEventListener('input',(e)=>applyFft(parseInt(e.target.value,10)));
+  applyRms(parseInt(sliderRms.value,10));
+  applyFft(parseInt(sliderFft.value,10));
+
+  /* =========================================================================
+     V1.1 — Notif violet (3 pulses)
+     ========================================================================= */
+
+  let notifTimer = null;
+  let notifWindow = false; // true pendant la fenêtre cliquable
+  function fireNotifViolet(){
+    sphereWrap.classList.remove('notif-violet');
+    void sphereWrap.offsetWidth;
+    sphereWrap.classList.add('notif-violet');
+    notifWindow = true;
+    if(notifTimer) clearTimeout(notifTimer);
+    // 3 × 600ms = 1800ms + 400ms grace
+    notifTimer = setTimeout(()=>{
+      sphereWrap.classList.remove('notif-violet');
+      notifWindow = false;
+    }, 2200);
+    toast('📩 Friday a une notif (violet)');
+    try{ navigator.vibrate && navigator.vibrate([12,40,12,40,12]);}catch(e){}
+  }
+
+  // Tap sphère pendant la notif window → réponse Friday
+  // (On hook sur sphereWrap mais seulement quand pas en PiP)
+  sphereWrap.addEventListener('click',(e)=>{
+    if(pip.active) return; // gestion PiP gère déjà
+    if(notifWindow){
+      notifWindow = false;
+      sphereWrap.classList.remove('notif-violet');
+      if(notifTimer){ clearTimeout(notifTimer); notifTimer=null; }
+      toast('Friday : J\'ai trouvé quelque chose pour toi', 2200);
+    }
+  });
+
+  $('#dbgNotif').addEventListener('click', fireNotifViolet);
+
+  /* =========================================================================
+     V1.1 — Halo cyan critique (TTS info importante)
+     ========================================================================= */
+
+  const criticalHalo = $('#criticalHalo');
+  function fireCriticalHalo(){
+    criticalHalo.classList.remove('fire');
+    void criticalHalo.offsetWidth;
+    criticalHalo.classList.add('fire');
+    setTimeout(()=>criticalHalo.classList.remove('fire'), 2050);
+  }
+  $('#dbgHalo').addEventListener('click', fireCriticalHalo);
+
+  /* =========================================================================
+     V1.1 — Offline mode (bordure rouge clignotante)
+     ========================================================================= */
+
+  function setOffline(on){
+    if(on){
+      document.body.classList.add('offline');
+      toast('📡 Hors ligne — reconnexion auto…', 2400);
+      $('#dbgOffline').classList.add('on');
+    } else {
+      document.body.classList.remove('offline');
+      toast('✓ Connecté', 1400);
+      $('#dbgOffline').classList.remove('on');
+    }
+  }
+  $('#dbgOffline').addEventListener('click',()=>{
+    setOffline(!document.body.classList.contains('offline'));
+  });
+
+  // ----- INIT (V1.3 : hydratation depuis localStorage avant first paint) -----
+  function hydrateFromConfig(){
+    // VIEW
+    const targetView = config.view || 'home';
+    $$('.mode-btn').forEach(b=>b.classList.toggle('active', b.dataset.view===targetView));
+    $$('.view').forEach(x=>x.classList.toggle('active', x.id === 'view-'+targetView));
+
+    // STATE (sans propager à cortex puisque pas encore ouvert)
+    setState(config.state || 'idle');
+
+    // SLOTS (sans persist, on lit déjà depuis config)
+    applySlotState('music',    config.slots.music    === 'visible', { persist:false });
+    applySlotState('activity', config.slots.activity === 'visible', { persist:false });
+
+    // MUTED
+    if(config.muted){ $('#btnMute').classList.add('on'); }
+
+    // LOG PANEL
+    if(config.logPanelOpen){
+      $('#logPanel').classList.add('show');
+      $('#btnLog').classList.add('on');
+    }
+
+    // CONV MODE (silent : ne montre pas le toast et ne lance pas le countdown)
+    setConvMode(config.convMode || 'off', { silent:true });
+
+    // Variant cortex (chip checked dans le menu) — l'application réelle se fait à l'ouverture du PiP
+    refreshCortexMenuChecked();
+
+    // PiP cortex ouvert ? → restauration silencieuse (pas de glide, pas de vibrate)
+    if(config.cortexOpen){
+      enterPiP('cortex', { silent:true });
+    }
+  }
+
+  hydrateFromConfig();
+
+  /* =========================================================================
+     v1.17.0 — CLIENT WS LIVE (Phase 5a)
+     ----------------------------------------------------------------------
+     - Connecte au backend Friday (port 8765) avec ?kind=mobile
+     - Override URL via ?ws=wss://host:port/path
+     - Mock complet via ?mock=1 (skip ce bloc et reste sur la sim mockup)
+     - Reconnect auto 1.5s ; backoff up to 8s
+     - Events backend → setState/addBubble/audio level/halo flash
+     - PTT : envoie push_to_talk (start/stop) + chunks audio binaires (POC contract)
+     - TTS : tts_audio_meta + frame binaire suivante → <audio> playback
+     ========================================================================= */
+
+  // Stubs accessibles par startRecording / stopRecording du mockup même en mock.
+  // Pré-déclarés pour que les hooks `typeof wsStartRecording === 'function'` ne
+  // raisent jamais une ReferenceError pendant le boot.
+  var wsStartRecording = function(){};
+  var wsStopRecording  = function(){};
+
+  // ------ Helpers UI live (hors LIVE_MODE = noop) ------
+  const connDot   = document.getElementById('connDot');
+  const connLabel = document.getElementById('connLabel');
+  const backendVerEl = document.getElementById('backendVer');
+
+  function setConnUI(state, label){
+    if(!connDot || !connLabel) return;
+    // 3 visuels : connecting (cyan dim), connected (cyan glow), offline (rouge)
+    connDot.style.background =
+      state === 'connected'  ? '#00d4ff' :
+      state === 'connecting' ? '#5a7090' :
+                               '#ff3a4f';
+    connDot.style.boxShadow =
+      state === 'connected'  ? '0 0 8px rgba(0,212,255,.7)' :
+      state === 'offline'    ? '0 0 8px rgba(255,58,79,.7)' :
+                               'none';
+    connLabel.textContent = label || state.toUpperCase();
+  }
+
+  if(!LIVE_MODE){
+    setConnUI('offline', 'MOCK');
+    console.log('FRIDAY MOBILE', VERSION, 'ready · MOCK MODE (?mock=1) · config restored', config);
+    setTimeout(()=>toast('FRIDAY · '+VERSION+' · MOCK', 1800), 400);
+    return; // skip the WS client entirely
+  }
+
+  setConnUI('connecting', 'CONNECT…');
+
+  // ------ State client ------
+  let ws = null;
+  let wsReady = false;
+  let reconnectDelay = 1500;
+  const RECONNECT_MAX = 8000;
+  let pendingTtsMeta = null;
+  let currentTtsAudio = null;
+  let currentTtsUrl = null;
+
+  // ------ MediaRecorder state ------
+  let mediaStream = null;
+  let mediaRec = null;
+  let recId = 0;
+  let recChunkCount = 0;
+  let recBytesSent = 0;
+  let recAudioCtx = null;
+  let recAnalyser = null;
+  let recMeterRAF = 0;
+  let recSentStart = false;
+  let recPendingSends = 0;
+  let recStopRequested = false;
+
+  // ------ TTS playback ------
+  function playTtsAudio(arrayBuffer, meta){
+    if(currentTtsAudio){
+      try{ currentTtsAudio.pause(); }catch(e){}
+      if(currentTtsUrl) URL.revokeObjectURL(currentTtsUrl);
+    }
+    const blob = new Blob([arrayBuffer], { type: meta.mime || 'audio/mpeg' });
+    currentTtsUrl = URL.createObjectURL(blob);
+    currentTtsAudio = new Audio(currentTtsUrl);
+    currentTtsAudio.onplay = () => setState('speaking');
+    currentTtsAudio.onended = () => {
+      if(currentTtsUrl) URL.revokeObjectURL(currentTtsUrl);
+      currentTtsUrl = null; currentTtsAudio = null;
+      // Le backend enverra tts_end / state=idle, mais en fallback on relâche.
+      if(ui.state === 'speaking') setState('idle');
+    };
+    currentTtsAudio.onerror = () => {
+      console.warn('TTS audio playback error');
+      if(ui.state === 'speaking') setState('idle');
+    };
+    currentTtsAudio.play().catch(err => {
+      console.warn('TTS audio play() rejected:', err && err.message);
+      if(ui.state === 'speaking') setState('idle');
+    });
+  }
+
+  // ------ Event handlers backend → UI ------
+  function onMeta(m){
+    const v = m.version || m.app_version || '';
+    if(v && backendVerEl){
+      backendVerEl.textContent = '· backend ' + v;
+      backendVerEl.style.display = '';
+    }
+  }
+  function onState(m){
+    const s = (m.value || m.state || '').toLowerCase();
+    if(['idle','listening','thinking','speaking'].includes(s)){
+      setState(s);
+    }
+  }
+  function onAudioLevel(m){
+    // RMS 0..1 → slider RMS (0..100) qui pilote la sphère core scale (cf applyRms).
+    const rms = typeof m.rms === 'number' ? m.rms : 0;
+    const v = Math.max(0, Math.min(100, Math.round(rms * 100)));
+    applyRms(v);
+    // Si le slider RMS existe, aligne sa valeur (cohérence visuelle).
+    if(sliderRms){ sliderRms.value = String(v); }
+  }
+  function onTranscriptFinal(m){
+    const text = (m.text || '').trim();
+    if(!text) return;
+    // Transcript du HUD PC = phrase user finale (STT). Côté mobile, on l'affiche
+    // comme bulle 'user'. Le backend enverra ensuite la réponse Friday via
+    // d'autres canaux (history → speak), pas de champ 'who' explicite ici.
+    addBubble('user', text);
+  }
+  function onTranscriptPartial(m){
+    // Optionnel : flash/bandeau partial. Pour 5a on log juste, pas de bulle.
+    // (évite spam transcript en streaming live)
+    if(!m || !m.text) return;
+    // Maj label sphère pour montrer la partial transcription en live.
+    const lbl = document.getElementById('stateHint');
+    if(lbl && ui.state === 'listening') lbl.textContent = m.text.slice(0, 32) + '…';
+  }
+  function onPocTranscript(m){
+    // POC server.py contract : message complet une fois STT fini.
+    if(m.error){
+      addBubble('friday', '⚠ STT error: ' + m.error);
+      setState('idle');
+      return;
+    }
+    const text = (m.text || '').trim();
+    if(text) addBubble('user', text);
+  }
+  function onTtsPending(m){
+    // Backend prépare le TTS — état "thinking" maintenu, halo pour signaler I/O.
+    // (le state=speaking arrivera quand le 1er chunk audio joue)
+  }
+  function onTtsAudioMeta(m){
+    pendingTtsMeta = m;
+  }
+  function onTtsStart(m){
+    // Si un texte est fourni, on le pousse comme bulle Friday.
+    const text = (m && (m.text || m.utterance) || '').trim();
+    if(text) addBubble('friday', text);
+    setState('speaking');
+  }
+  function onTtsEnd(m){
+    if(ui.state === 'speaking') setState('idle');
+  }
+  function onWakeDetected(m){
+    // Flash sphère 200ms (sub-wake-flash) — fonction du mockup.
+    if(typeof fireSubWakeFlash === 'function') fireSubWakeFlash();
+    toast('Wake détecté · ' + (m && m.model || ''), 1200);
+  }
+  function onError(m){
+    const code = m.code || 'ERR';
+    const msg  = m.msg || m.error || '';
+    console.warn('Backend error:', code, msg);
+    if(code === 'BUSY'){
+      // Single-client backend déjà occupé : on retente en boucle.
+      toast('Backend BUSY · retry…', 1400);
+    } else if(code === 'VERSION_MISMATCH'){
+      toast('VERSION mismatch · ' + msg, 3000);
+    } else {
+      toast('Backend ' + code, 1600);
+    }
+  }
+
+  // ------ WS dispatcher ------
+  function handleWsMessage(ev){
+    if(typeof ev.data === 'string'){
+      let m;
+      try { m = JSON.parse(ev.data); } catch(_) { return; }
+      const t = m && m.type;
+      switch(t){
+        case 'meta':              onMeta(m); break;
+        case 'state':             onState(m); break;
+        case 'audio_level':       onAudioLevel(m); break;
+        case 'transcript_final':  onTranscriptFinal(m); break;
+        case 'transcript_partial':onTranscriptPartial(m); break;
+        case 'transcript_pending':/* POC : "STT en cours" — ignoré (state=thinking suffit) */ break;
+        case 'transcript':        onPocTranscript(m); break;  // POC server.py
+        case 'tts_pending':       onTtsPending(m); break;
+        case 'tts_audio_meta':    onTtsAudioMeta(m); break;
+        case 'tts_start':         onTtsStart(m); break;
+        case 'tts_end':            onTtsEnd(m); break;
+        case 'tts_error':         onError({code:'TTS', msg: m.error}); break;
+        case 'wake_detected':     onWakeDetected(m); break;
+        case 'error':             onError(m); break;
+        // Compat HUD PC (handshake hydratation, ignorés en 5a) :
+        case 'log_init':
+        case 'context_state':
+        case 'usage_state':
+        case 'system_health':
+        case 'windows_state':
+        case 'voice_avatar_hint':
+        case 'config_state':
+        case 'feed_state':
+        case 'activity_state':
+        case 'globe_state':
+        case 'ack':
+        case 'rec_end':
+          // Acceptés silencieux (UI mobile 5a n'en a pas besoin).
+          break;
+        default:
+          // Inconnu : log seulement (ne pas spam toast).
+          // console.debug('[ws unknown]', t, m);
+          break;
+      }
+    } else {
+      // Frame binaire : audio TTS si meta annoncée juste avant.
+      if(pendingTtsMeta){
+        const meta = pendingTtsMeta; pendingTtsMeta = null;
+        playTtsAudio(ev.data, meta);
+      } else {
+        console.warn('Binary WS frame received without tts_audio_meta — drop');
+      }
+    }
+  }
+
+  // ------ WS connect/reconnect ------
+  function wsSendJson(obj){
+    if(ws && ws.readyState === WebSocket.OPEN){
+      try { ws.send(JSON.stringify(obj)); } catch(e){ /* ignore */ }
+    }
+  }
+  function wsSendBin(buf){
+    if(ws && ws.readyState === WebSocket.OPEN){
+      try { ws.send(buf); } catch(e){ /* ignore */ }
+    }
+  }
+
+  function connectWS(){
+    setConnUI('connecting', 'CONNECT…');
+    document.body.classList.remove('offline');
+    try { ws = new WebSocket(WS_URL); }
+    catch(err){
+      console.warn('WS ctor err', err);
+      scheduleReconnect();
+      return;
+    }
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = () => {
+      wsReady = true;
+      reconnectDelay = 1500;
+      setConnUI('connected', 'LIVE');
+      // Handshake compat HUD PC : envoie hello avec version client (cf. backend
+      // jarvis_backend.py:10680 — vérifie major == backend major).
+      wsSendJson({ type: 'hello', client: 'jarvis-mobile', version: VERSION,
+                   kind: 'mobile' });
+    };
+    ws.onclose = (ev) => {
+      wsReady = false;
+      setConnUI('offline', 'OFFLINE');
+      document.body.classList.add('offline');
+      console.warn('WS close', ev.code, ev.reason);
+      scheduleReconnect();
+    };
+    ws.onerror = () => {
+      // onerror est suivi de onclose → on laisse onclose gérer.
+    };
+    ws.onmessage = handleWsMessage;
+  }
+
+  function scheduleReconnect(){
+    setTimeout(connectWS, reconnectDelay);
+    reconnectDelay = Math.min(RECONNECT_MAX, Math.round(reconnectDelay * 1.4));
+  }
+
+  // ------ MediaRecorder helpers ------
+  function pickMimeType(){
+    const cands = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4;codecs=mp4a.40.2',
+      'audio/mp4',
+      'audio/ogg;codecs=opus'
+    ];
+    for(const t of cands){
+      if(window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return '';
+  }
+
+  async function getStream(){
+    if(mediaStream) return mediaStream;
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+    try {
+      recAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = recAudioCtx.createMediaStreamSource(mediaStream);
+      recAnalyser = recAudioCtx.createAnalyser();
+      recAnalyser.fftSize = 64;
+      src.connect(recAnalyser);
+    } catch(e){ /* analyser optionnel — fallback silencieux */ }
+    return mediaStream;
+  }
+
+  function tickRecMeter(){
+    if(!recAnalyser) return;
+    const buf = new Uint8Array(recAnalyser.frequencyBinCount);
+    recAnalyser.getByteTimeDomainData(buf);
+    let sum = 0;
+    for(const v of buf){ const d = (v - 128) / 128; sum += d * d; }
+    const rms = Math.sqrt(sum / buf.length);
+    const v = Math.max(0, Math.min(100, Math.round(Math.min(1, rms * 4) * 100)));
+    applyRms(v);
+    recMeterRAF = requestAnimationFrame(tickRecMeter);
+  }
+  function stopRecMeter(){
+    if(recMeterRAF){ cancelAnimationFrame(recMeterRAF); recMeterRAF = 0; }
+    applyRms(0);
+  }
+
+  // ------ PTT live (hook depuis startRecording / stopRecording du mockup) ------
+  wsStartRecording = async function(hold){
+    if(!wsReady){
+      console.warn('WS not ready — PTT start ignored (mockup pipeline disabled)');
+      toast('Backend offline · réessaie', 1400);
+      return;
+    }
+    // Signale au backend : PTT start (le HUD PC connaît cet event ; cf.
+    // jarvis_backend.py:10760). Backend bascule en LISTENING + lance le
+    // pipeline STT (mic-PC tant que le patch routing audio mobile n'est pas
+    // déployé).
+    wsSendJson({ type: 'push_to_talk', action: 'start' });
+
+    // En parallèle, prépare le streaming audio mobile (contrat POC).
+    // Tant que backend ne route pas le binaire, ces frames sont ignorées.
+    let mt = '';
+    try {
+      await getStream();
+      mt = pickMimeType();
+    } catch(err){
+      console.warn('getUserMedia failed:', err && err.message);
+      toast('Mic refusé', 1600);
+      return;
+    }
+    if(!mt){
+      console.warn('No supported MediaRecorder mimeType');
+      return;
+    }
+    recId = Date.now();
+    recChunkCount = 0;
+    recBytesSent = 0;
+    recPendingSends = 0;
+    recStopRequested = false;
+    recSentStart = true;
+    wsSendJson({ type: 'rec_start', rec_id: recId, mime: mt });
+
+    try {
+      mediaRec = new MediaRecorder(mediaStream, { mimeType: mt, audioBitsPerSecond: 32000 });
+    } catch(err){
+      console.warn('MediaRecorder ctor failed:', err);
+      return;
+    }
+    mediaRec.ondataavailable = (ev) => {
+      if(ev.data && ev.data.size > 0){
+        recChunkCount += 1;
+        recBytesSent += ev.data.size;
+        recPendingSends += 1;
+        ev.data.arrayBuffer().then(buf => {
+          wsSendBin(buf);
+          recPendingSends -= 1;
+          maybeFlushRecEnd();
+        }).catch(() => {
+          recPendingSends -= 1;
+          maybeFlushRecEnd();
+        });
+      }
+    };
+    mediaRec.onstop = () => {
+      // recStopRequested mis par wsStopRecording avant mediaRec.stop().
+      // Fallback safety : si onstop arrive sans flag, on flush quand même.
+      recStopRequested = true;
+      setTimeout(maybeFlushRecEnd, 0);
+      // Watchdog 1.5s
+      setTimeout(() => { if(recStopRequested) maybeFlushRecEnd(); }, 1500);
+    };
+    try { mediaRec.start(500); } catch(err){ console.warn('mediaRec.start fail', err); }
+    tickRecMeter();
+  };
+
+  function maybeFlushRecEnd(){
+    if(!recStopRequested || recPendingSends > 0) return;
+    if(!recSentStart) return;
+    wsSendJson({
+      type: 'rec_end',
+      rec_id: recId,
+      chunks: recChunkCount,
+      bytes: recBytesSent,
+      duration_ms: Math.round(ui.elapsed || 0)
+    });
+    recSentStart = false; // évite double-flush
+  }
+
+  wsStopRecording = function(autoStopped){
+    // PTT stop côté backend HUD PC (release PTT)
+    wsSendJson({ type: 'push_to_talk', action: 'stop' });
+    // Stoppe MediaRecorder (le onstop déclenchera rec_end).
+    if(mediaRec && mediaRec.state !== 'inactive'){
+      try { mediaRec.stop(); } catch(e){}
+    } else if(recSentStart) {
+      // Pas de MediaRecorder actif mais rec_start envoyé : flush quand même.
+      recStopRequested = true;
+      maybeFlushRecEnd();
+    }
+    stopRecMeter();
+  };
+
+  // ------ Boot ------
+  connectWS();
+  console.log('FRIDAY MOBILE', VERSION, 'ready · LIVE · WS=', WS_URL);
+  setTimeout(()=>toast('FRIDAY · '+VERSION+' · LIVE', 1800), 400);
+
+  // Beforeunload : best-effort fermeture propre
+  window.addEventListener('beforeunload', () => {
+    try {
+      if(mediaRec && mediaRec.state !== 'inactive') mediaRec.stop();
+    } catch(e){}
+    try { if(ws) ws.close(1000, 'unload'); } catch(e){}
+  });
+})();
+</script>
+</body>
+</html>
