@@ -337,22 +337,41 @@ async function startRecording() {
   chunkCount = 0;
   bytesSent = 0;
   recStart = performance.now();
+  let pendingSends = 0;
+  let stopRequested = false;
   ws.send(JSON.stringify({ type: "rec_start", rec_id: recId, mime: mt }));
   mediaRec = new MediaRecorder(mediaStream, { mimeType: mt, audioBitsPerSecond: 32_000 });
+
+  function maybeSendEnd() {
+    if (!stopRequested || pendingSends > 0) return;
+    const dur = Math.round(performance.now() - recStart);
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "rec_end", rec_id: recId, chunks: chunkCount,
+                                bytes: bytesSent, duration_ms: dur }));
+    }
+    logLine("rec stop id=" + recId + " chunks=" + chunkCount + " bytes=" + bytesSent + " dur=" + dur + "ms", "ok");
+  }
+
   mediaRec.ondataavailable = ev => {
     if (ev.data && ev.data.size > 0) {
       chunkCount += 1;
       bytesSent += ev.data.size;
+      pendingSends += 1;
       ev.data.arrayBuffer().then(buf => {
         if (ws.readyState === WebSocket.OPEN) ws.send(buf);
+        pendingSends -= 1;
+        maybeSendEnd();
+      }).catch(err => {
+        logLine("chunk send ERR: " + err.name, "err");
+        pendingSends -= 1;
+        maybeSendEnd();
       });
     }
   };
   mediaRec.onstop = () => {
-    const dur = Math.round(performance.now() - recStart);
-    ws.send(JSON.stringify({ type: "rec_end", rec_id: recId, chunks: chunkCount,
-                              bytes: bytesSent, duration_ms: dur }));
-    logLine("rec stop id=" + recId + " chunks=" + chunkCount + " bytes=" + bytesSent + " dur=" + dur + "ms", "ok");
+    stopRequested = true;
+    setTimeout(() => { if (stopRequested) maybeSendEnd(); }, 1500);
+    maybeSendEnd();
   };
   mediaRec.start(500);
   fab.classList.add("recording");
