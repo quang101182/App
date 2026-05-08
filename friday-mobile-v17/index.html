@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.20.2</title>
+<title>FRIDAY · v1.20.3</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2382,7 +2382,7 @@ body.conv-mode-continuous .conv-stop-fab{
   //   et envoie 'tts_speak_text' au mobile → window.speechSynthesis.speak
   //   (Friday parle dans le HP du tel via TTS OS natif).
   // + glide-typing fix (autocomplete on, enterkeyhint=send, inputmode=text).
-  const VERSION = '1.20.2';
+  const VERSION = '1.20.3';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -3843,7 +3843,8 @@ body.conv-mode-continuous .conv-stop-fab{
     document.querySelectorAll(map.srcSel + '.lit').forEach(el=>el.classList.remove('lit'));
   }
 
-  function spawnVariantPulses(letter, activeZones){
+  function spawnVariantPulses(letter, activeZones, opts){
+    opts = opts || {};
     const map = VARIANT_PULSE_MAP[letter];
     if(!map) return;
     const dst = document.getElementById(map.dstId);
@@ -3853,21 +3854,28 @@ body.conv-mode-continuous .conv-stop-fab{
     const sources = document.querySelectorAll(map.srcSel);
     let count = 0;
     const ns = "http://www.w3.org/2000/svg";
+    const maxArcs = opts.maxArcs || 4;
     sources.forEach(src=>{
       const linkAttr = src.getAttribute('data-link');
       if(!linkAttr) return;
       const [a,b] = linkAttr.split('-');
       if(!activeZones.includes(a) && !activeZones.includes(b)) return;
-      if(count >= 4) return;
+      if(count >= maxArcs) return;
       const d = src.getAttribute('d');
       if(!d) return;
       const p = document.createElementNS(ns,'path');
       p.setAttribute('d', d);
       p.setAttribute('class', map.cls);
-      const colorZone = activeZones.includes(a) ? a : b;
-      p.setAttribute('stroke', ZONE_COLORS[colorZone] || '#00D4FF');
-      p.style.color = ZONE_COLORS[colorZone];
+      // v1.20.3 — Arc électrique blanc (Quang feedback : 'j'aimerais que les
+      // connexions / mouvements de circulation soient blancs comme arcs
+      // électriques sur PC'). Glow blanc via currentColor + drop-shadow CSS.
+      p.setAttribute('stroke', '#ffffff');
+      p.style.color = '#ffffff';
       p.style.animationDelay = (count * 0.35).toFixed(2)+'s';
+      // Si pulse "ambient" (idle), opacity reduite pour effet subtil
+      if(opts.ambient){
+        p.style.opacity = '0.42';
+      }
       dst.appendChild(p);
       src.classList.add('lit');
       count++;
@@ -3993,22 +4001,55 @@ body.conv-mode-continuous .conv-stop-fab{
     }
   }
 
-  // Boucle d'activité simulée : rafraîchit pulses (ambient effect)
+  // v1.20.3 — Boucle activité cortex avec cadence dynamique selon state
+  // (Quang feedback : 'manque d'animation, animation spécifique pendant
+  // que Friday parle, animation minimum au repos comme PC').
+  //  - idle      : ambient pulse 1 zone aléatoire toutes les 5s, opacity réduite
+  //                (effet "cerveau qui vit" subtil)
+  //  - listening : pulses cerebellum+wernicke toutes les 1.8s (écoute active)
+  //  - thinking  : pulses prefrontal+hippocampus toutes les 1.5s (calcul intense)
+  //  - speaking  : pulses broca toutes les 0.85s (parole rapide, animation
+  //                fréquente comme HUD PC pendant TTS)
   let cortexInterval = null;
+  let cortexNextTickMs = 2400;
+  const CORTEX_TICK_BY_STATE = {
+    idle: 5000, listening: 1800, thinking: 1500, speaking: 850,
+  };
+  // Liste des 8 zones pour le mode ambient idle (random pick)
+  const _ALL_ZONES = ['prefrontal','hippocampus','broca','wernicke',
+                       'occipital','motor','cerebellum','limbic'];
+  function _scheduleCortexTick(){
+    if(cortexInterval) clearTimeout(cortexInterval);
+    if(!pip.active || pip.contentKind !== 'cortex') return;
+    const stateNow = ui.state || 'idle';
+    cortexNextTickMs = CORTEX_TICK_BY_STATE[stateNow] || 2400;
+    cortexInterval = setTimeout(_cortexTick, cortexNextTickMs);
+  }
+  function _cortexTick(){
+    if(!pip.active || pip.contentKind !== 'cortex'){ stopCortexActivity(); return; }
+    const stateNow = ui.state || 'idle';
+    const letter = config.cortexVariant || 'A';
+    let zones, ambient;
+    if(stateNow === 'idle'){
+      // Pick 1 zone aléatoire (effet "cerveau qui vit" subtil)
+      zones = [_ALL_ZONES[Math.floor(Math.random() * _ALL_ZONES.length)]];
+      ambient = true;
+    } else {
+      zones = CORTEX_STATE_MAP[stateNow] || [];
+      ambient = false;
+    }
+    if(zones.length){
+      clearVariantPulses(letter);
+      spawnVariantPulses(letter, zones, { ambient });
+    }
+    _scheduleCortexTick();
+  }
   function startCortexActivity(){
     stopCortexActivity();
-    cortexInterval = setInterval(()=>{
-      if(!pip.active || pip.contentKind!=='cortex'){ stopCortexActivity(); return; }
-      const active = CORTEX_STATE_MAP[ui.state] || [];
-      if(!active.length) return; // idle = aucun pulse
-      // Re-spawn pulses uniquement sur la variante visible (perfs)
-      const letter = config.cortexVariant || 'A';
-      clearVariantPulses(letter);
-      spawnVariantPulses(letter, active);
-    }, 2400);
+    _scheduleCortexTick();
   }
   function stopCortexActivity(){
-    if(cortexInterval){ clearInterval(cortexInterval); cortexInterval=null; }
+    if(cortexInterval){ clearTimeout(cortexInterval); cortexInterval=null; }
   }
 
   /* =========================================================================
