@@ -353,16 +353,22 @@ body[data-state="speaking"] .edge-glow{
 }
 
 /* === Main scrollable area === */
-/* v1.18.0 — Plus de scroll global sur .main : seul .transcript-list scrolle.
-   Comme ça transcript flex-grow occupe tout l'espace dispo entre la sphère
-   et le footer (boutons + input texte). */
+/* v1.18.1 (fix Quang) — Restaure le scroll global pour qu'on puisse défiler
+   et voir CONTEXT/FEED en bas si le viewport est court. Le transcript a
+   maintenant un max-height au lieu de flex-grow infini → ne mange plus
+   tout l'espace, et son scroll interne reste sur les bulles. */
 .main{
   flex:1 1 auto;
-  overflow:hidden;
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
   padding:0 12px 8px;
   display:flex;flex-direction:column;gap:10px;
-  min-height:0;
+  scrollbar-width:thin;
+  scrollbar-color:var(--primary-dim) transparent;
 }
+.main::-webkit-scrollbar{width:3px}
+.main::-webkit-scrollbar-thumb{background:var(--primary-dim)}
 .main::-webkit-scrollbar{width:3px}
 .main::-webkit-scrollbar-thumb{background:var(--primary-dim)}
 
@@ -610,14 +616,16 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
 }
 .text-input-send:disabled{opacity:.4;cursor:not-allowed;}
 
-/* v1.18.0 — Transcript primary : fait flex-grow pour occuper tout l'espace
-   disponible entre la sphère et le footer. Scroll auto via JS (MutationObserver
-   pattern stickyBottom du HUD PC v1.9.37). */
+/* v1.18.1 — Transcript central : hauteur contrainte (min 200px, max 55vh)
+   pour ne pas écraser les éléments en-dessous (CONTEXT/FEED). Scroll interne
+   de la liste (overflow-y:auto). Si le viewport est court, le scroll global
+   de .main prend le relais pour voir CONTEXT/FEED en bas. */
 .transcript-primary{
-  flex:1 1 auto;
-  min-height:120px;
+  flex:0 0 auto;
+  min-height:200px;
+  max-height:55vh;
   display:flex;flex-direction:column;
-  margin:8px 10px 4px;
+  margin:0;
 }
 .transcript-primary .transcript-list{
   flex:1 1 auto;
@@ -626,21 +634,6 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
 }
 .transcript-status{color:var(--text-1);opacity:.55;}
 .transcript-status.muted::before{content:'🔇 ';opacity:1;}
-
-/* v1.18.0 — main passe en flex column pour que .transcript-primary puisse
-   réellement flex-grow (parent doit être flex-direction:column). */
-.main{
-  display:flex;
-  flex-direction:column;
-  min-height:0;
-}
-.view{
-  display:none;
-  flex:1 1 auto;
-  flex-direction:column;
-  min-height:0;
-}
-.view.active{display:flex;}
 
 /* v1.18.0 — hud-panel-content wrap pour permettre l'hydratation dynamique
    sans casser le layout des panels (les lignes sont injectées dans ce
@@ -1842,7 +1835,7 @@ body.conv-mode-continuous .conv-stop-fab{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.17</span>
+        <span class="version-tag version-badge">· v1.18</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -1958,10 +1951,35 @@ body.conv-mode-continuous .conv-stop-fab{
         <!-- Rempli par JS selon le trigger (cortex / autre) -->
       </div>
 
-      <!-- v1.18.0 — TRANSCRIPT remonté juste sous la sphère (panneau le plus
-           important pour Quang). flex-grow:1 + auto-scroll via MutationObserver.
-           Données fake vidées : la liste est remplie uniquement par les events
-           WS transcript_final/transcript_partial/onTtsStart du backend. -->
+      <!-- v1.18.1 — Ordre voulu Quang : (1) toggles + champ texte JUSTE sous
+           la sphère (au-dessus du transcript), (2) transcript flex-grow gros
+           panneau central, (3) panels CONTEXT/FEED/MUSIC/ACTIVITY tout en bas.
+           Bouton DICTER reste dans le footer toujours visible. -->
+
+      <!-- v1.18.0 — Ligne de toggles à 5 boutons : MUSIC / ACTIVITY (slots) +
+           BOOST (Haiku↔Sonnet) + $ (panel usage) + 🔇 MUTE (couper voix Friday). -->
+      <div class="slot-toggles">
+        <button class="slot-toggle" data-slot="music">+ MUSIC</button>
+        <button class="slot-toggle" data-slot="activity">+ ACTIVITY</button>
+        <button class="slot-toggle" id="btnBoost" title="Switch modèle Claude : Haiku 4.5 (économique) ↔ Sonnet 4.6 (raisonnement avancé). Garde l'historique.">💪 BOOST</button>
+        <button class="slot-toggle" id="btnUsage" title="Affiche/cache le panneau de consommation API (Claude / ElevenLabs / Groq) en temps réel">$</button>
+        <button class="slot-toggle" id="btnMute" title="Couper la voix de Friday/Jarvis. Les réponses arrivent uniquement via le transcript (utile en environnement silencieux).">🔇 MUTE</button>
+      </div>
+
+      <!-- v1.18.0 — Champ texte saisie : envoie text_input au backend
+           (équivalent du #text-input du HUD PC). Submit (Entrée) → message
+           apparaît comme bulle user dans le transcript via le retour
+           transcript_final du backend. -->
+      <form class="text-input-form" id="textInputForm" onsubmit="return false;">
+        <input type="text" class="text-input" id="textInput"
+               placeholder="…ou tape pour parler à Friday"
+               autocomplete="off" autocorrect="off" spellcheck="true">
+        <button type="submit" class="text-input-send" id="textInputSend" aria-label="Envoyer">→</button>
+      </form>
+
+      <!-- v1.18.1 — TRANSCRIPT central (panneau le plus important pour Quang).
+           flex:1 (prend tout l'espace restant) avec scroll auto stickyBottom.
+           Données fake vidées : remplies par events WS transcript_*. -->
       <article class="transcript-panel transcript-primary">
         <div class="transcript-header">
           <span>TRANSCRIPT</span>
@@ -1970,9 +1988,8 @@ body.conv-mode-continuous .conv-stop-fab{
         <div class="transcript-list" id="transcriptList"></div>
       </article>
 
-      <!-- v1.18.0 — Cadre satellite remonté SOUS le transcript. Données fake
-           vidées : remplies par events WS context_state/feed_state/music/
-           activity_state du backend. -->
+      <!-- v1.18.1 — Cadre satellite SOUS le transcript. Données fake vidées :
+           remplies par events WS context_state/feed_state/music/activity_state. -->
       <div class="sat-grid">
         <!-- CONTEXT -->
         <article class="hud-panel" id="panel-context">
@@ -2014,27 +2031,6 @@ body.conv-mode-continuous .conv-stop-fab{
           </div>
         </article>
       </div>
-
-      <!-- v1.18.0 — Ligne de toggles à 5 boutons : MUSIC / ACTIVITY (slots) +
-           BOOST (Haiku↔Sonnet) + $ (panel usage) + 🔇 MUTE (couper voix Friday). -->
-      <div class="slot-toggles">
-        <button class="slot-toggle" data-slot="music">+ MUSIC</button>
-        <button class="slot-toggle" data-slot="activity">+ ACTIVITY</button>
-        <button class="slot-toggle" id="btnBoost" title="Switch modèle Claude : Haiku 4.5 (économique) ↔ Sonnet 4.6 (raisonnement avancé). Garde l'historique.">💪 BOOST</button>
-        <button class="slot-toggle" id="btnUsage" title="Affiche/cache le panneau de consommation API (Claude / ElevenLabs / Groq) en temps réel">$</button>
-        <button class="slot-toggle" id="btnMute" title="Couper la voix de Friday/Jarvis. Les réponses arrivent uniquement via le transcript (utile en environnement silencieux).">🔇 MUTE</button>
-      </div>
-
-      <!-- v1.18.0 — Champ texte saisie : envoie text_input au backend
-           (équivalent du #text-input du HUD PC). Submit (Entrée) → message
-           apparaît comme bulle user dans le transcript via le retour
-           transcript_final du backend. -->
-      <form class="text-input-form" id="textInputForm" onsubmit="return false;">
-        <input type="text" class="text-input" id="textInput"
-               placeholder="…ou tape pour parler à Friday"
-               autocomplete="off" autocorrect="off" spellcheck="true">
-        <button type="submit" class="text-input-send" id="textInputSend" aria-label="Envoyer">→</button>
-      </form>
 
     </section>
 
@@ -2093,13 +2089,16 @@ body.conv-mode-continuous .conv-stop-fab{
       </span>
     </button>
 
-    <!-- Satellite row : compactée (V1.1 : ajout 🧠 Cortex · V1.2 : Persona remplacé par Conv Mode) -->
+    <!-- Satellite row : 4 boutons restants (Logs ≡, Cortex 🧠, Settings ⚙, ConvMode).
+         v1.18.1 — Bouton ◊ Mute mockup retiré : doublon avec le nouveau bouton
+         🔇 MUTE de la rangée slot-toggles en haut (conflit d'ID HTML qui cassait
+         mon handler). Le vrai mute est maintenant dans la ligne MUSIC/ACTIVITY/
+         BOOST/$/MUTE au-dessus du transcript. -->
     <div class="satellite-row">
       <button class="sat-btn" id="btnLog" title="Logs">≡</button>
-      <button class="sat-btn" id="btnMute" title="Mute">◊</button>
       <button class="sat-btn cortex-btn" id="btnCortex" title="🧠 Cortex">🧠 Cortex</button>
       <button class="sat-btn" id="btnSettings" title="Settings">⚙</button>
-      <!-- V1.2 : Bouton mode conversation (cycle OFF → CONV → CONTINUOUS) -->
+      <!-- Bouton mode conversation (cycle OFF → CONV → CONTINUOUS) -->
       <button class="sat-btn conv-mode-btn mode-off" id="btnConvMode" data-mode="off" title="Mode conversation">
         <span class="cmb-ico">🚫</span><span class="cmb-label">OFF</span>
         <div class="conv-countdown"><div class="bar"></div></div>
