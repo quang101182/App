@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.18.0</title>
+<title>FRIDAY · v1.19.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -632,8 +632,15 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
   overflow-y:auto;
   min-height:0;
 }
-.transcript-status{color:var(--text-1);opacity:.55;}
+.transcript-status{color:var(--text-1);opacity:.55;transition:color .25s;}
 .transcript-status.muted::before{content:'🔇 ';opacity:1;}
+/* v1.19.0 — Status accent quand mobile = primary audio client (PTT en cours,
+   son TTS routé vers ce tel et plus le HP PC). */
+.transcript-status.mobile-primary{
+  color:#ffb547;
+  opacity:1;
+  text-shadow:0 0 6px rgba(255,181,71,.55);
+}
 
 /* v1.18.0 — hud-panel-content wrap pour permettre l'hydratation dynamique
    sans casser le layout des panels (les lignes sont injectées dans ce
@@ -1835,7 +1842,7 @@ body.conv-mode-continuous .conv-stop-fab{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.18</span>
+        <span class="version-tag version-badge">· v1.19</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2208,12 +2215,16 @@ body.conv-mode-continuous .conv-stop-fab{
 (function(){
   'use strict';
 
-  // v1.18.0 mobile : 6 modifs UX (Quang feedback 08/05) — transcript au-dessus
-  // de CONTEXT/FEED + flex-grow + scroll auto + bouton MUTE Friday + champ
-  // texte saisie + fix PiP cortex (sphère mini DANS le cadre) + données fake
-  // vidées (hydratation via WS context_state/feed_state/music/activity_state).
-  // Backend Friday reste en 1.17.x (pas de modif protocole, juste UI mobile).
-  const VERSION = '1.18.0';
+  // v1.19.0 mobile + backend : phase 5c+5d audio bidirectionnel mobile.
+  // - 5d : mic du tel → MediaRecorder webm/mp4 → frames binaires WS → backend
+  //   accumule dans STATE.mobile_audio_buffers, au rec_end appelle Whisper
+  //   Groq (groq_stt_blob accepte webm/mp4 directement), injecte transcript
+  //   via handle_user_turn_text comme un user_turn classique.
+  // - 5c : si mobile = active_audio_client (primary), real_tts skip HP PC
+  //   et envoie 'tts_speak_text' au mobile → window.speechSynthesis.speak
+  //   (Friday parle dans le HP du tel via TTS OS natif).
+  // + glide-typing fix (autocomplete on, enterkeyhint=send, inputmode=text).
+  const VERSION = '1.19.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -4346,6 +4357,77 @@ body.conv-mode-continuous .conv-stop-fab{
     // Backend prépare le TTS — état "thinking" maintenu, halo pour signaler I/O.
     // (le state=speaking arrivera quand le 1er chunk audio joue)
   }
+  /* =========================================================================
+     v1.19.0 (5c) — TTS local via SpeechSynthesis OS du téléphone.
+     Quand le backend route le TTS vers nous (mobile=primary), il envoie un
+     event 'tts_speak_text' avec le texte. On utilise l'API native du browser
+     pour parler dans le HP du téléphone. Voix choisie selon assistant_name :
+     Jarvis = voix homme FR, Friday = voix femme FR. Si le user a activé
+     MUTE local (_ttsLocalMuted), on skip le speak (texte arrive juste).
+     ========================================================================= */
+  let _voicesCache = [];
+  function _loadVoices(){
+    try {
+      _voicesCache = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+    } catch(_) { _voicesCache = []; }
+  }
+  if(window.speechSynthesis){
+    _loadVoices();
+    window.speechSynthesis.onvoiceschanged = _loadVoices;
+  }
+  function _pickVoice(voiceHint, lang){
+    if(!_voicesCache || _voicesCache.length === 0) _loadVoices();
+    const wantMale = (voiceHint === 'JARVIS');
+    const langPrefix = (lang || 'fr-FR').slice(0, 2).toLowerCase();
+    // Tente d'abord les voix avec le bon genre + langue
+    const frVoices = _voicesCache.filter(v => (v.lang || '').toLowerCase().startsWith(langPrefix));
+    if(frVoices.length === 0) return null;
+    // Heuristique nom : recherche de keywords genre
+    const malePatterns = /thomas|paul|guillaume|antoine|nicolas|french male|homme|monsieur|m\./i;
+    const femalePatterns = /amelie|amélie|virginie|marie|julie|french female|femme|madame|f\./i;
+    const targetPatterns = wantMale ? malePatterns : femalePatterns;
+    const altPatterns = wantMale ? femalePatterns : malePatterns;
+    let pick = frVoices.find(v => targetPatterns.test(v.name));
+    if(!pick) pick = frVoices.find(v => !altPatterns.test(v.name));
+    return pick || frVoices[0];
+  }
+  function speakLocalTts(text, voiceHint, lang){
+    if(!text) return;
+    if(_ttsLocalMuted){
+      console.log('[tts-local] skipped (MUTE local actif)');
+      return;
+    }
+    if(!window.speechSynthesis || !window.SpeechSynthesisUtterance){
+      console.warn('[tts-local] SpeechSynthesis API indisponible — texte affiché seulement');
+      return;
+    }
+    try {
+      window.speechSynthesis.cancel(); // stoppe une éventuelle synthèse précédente
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.lang = lang || 'fr-FR';
+      utt.rate = 1.05; // léger boost pour matcher la cadence Friday/Jarvis
+      utt.pitch = (voiceHint === 'JARVIS') ? 0.92 : 1.05; // homme = pitch plus bas
+      utt.volume = 1.0;
+      const v = _pickVoice(voiceHint, utt.lang);
+      if(v) utt.voice = v;
+      utt.onend = () => {
+        // Re-pose le status normal après la fin du speak
+        try {
+          const status = $('#transcriptStatus');
+          if(status && !_ttsLocalMuted){ status.textContent = 'live'; status.classList.remove('mobile-primary'); }
+        } catch(_) {}
+      };
+      window.speechSynthesis.speak(utt);
+      // Status mobile : "🔊 Friday parle"
+      try {
+        const status = $('#transcriptStatus');
+        if(status && !_ttsLocalMuted){ status.textContent = '🔊 ' + (voiceHint === 'JARVIS' ? 'Jarvis' : 'Friday') + ' parle'; }
+      } catch(_) {}
+    } catch(e){
+      console.warn('[tts-local] speak failed:', e);
+    }
+  }
+
   function onTtsAudioMeta(m){
     // v1.18.0 — Si MUTE local actif, on NE met PAS pendingTtsMeta : la frame
     // binaire suivante sera droppée (cf. else "Binary WS frame received without
@@ -4419,6 +4501,19 @@ body.conv-mode-continuous .conv-stop-fab{
           break;
         case 'voice_avatar_hint':
           try { applyAssistantName(m && m.assistant_name); } catch(_) {}
+          break;
+        // v1.19.0 (5c) — Backend route le TTS vers ce mobile (primary). On utilise
+        // window.speechSynthesis natif pour parler localement avec la voix de l'OS.
+        case 'tts_speak_text':
+          try { speakLocalTts(m && m.text, m && m.voice_hint, m && m.lang); } catch(_) {}
+          break;
+        // v1.19.0 (5d) — Backend confirme que ce mobile est désormais le primary
+        // audio client (PTT en cours, son TTS sera routé ici).
+        case 'mobile_audio_primary':
+          try {
+            const status = $('#transcriptStatus');
+            if(status){ status.classList.add('mobile-primary'); status.textContent = '🎤 mic mobile'; }
+          } catch(_) {}
           break;
         // v1.18.0 — Hydratation panels satellite via events WS
         case 'context_state':
