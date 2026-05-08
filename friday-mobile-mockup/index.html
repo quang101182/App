@@ -6,11 +6,38 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.2.0 mock</title>
+<title>FRIDAY · v1.3.0 mock</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
-  FRIDAY MOBILE MOCK-UP v1.2.0  ·  2026-05-08
+  FRIDAY MOBILE MOCK-UP v1.3.0  ·  2026-05-08
+  ================================================================================
+  CHANGELOG V1.2 → V1.3 :
+  --------------------------------------------------------------------------------
+  · F9 — Cortex 5 variantes intégrées (Constellation / Brain wireframe /
+        Holographic / Neural network / Aurora). Comportement : zones DIM
+        par défaut (gris foncé), s'allument seulement quand actives, arcs
+        électriques (pulses) qui voyagent sur les connexions. Variante par
+        défaut au tout premier lancement = A. Constellation. L'animation
+        suit l'état principal (idle/listening/thinking/speaking) piloté
+        depuis la debug bar.
+  · F10 — Long-press (≥ 500ms) sur le bouton 🧠 Cortex = menu déroulant
+        des 5 variantes (Constellation/Wireframe/Holographic/Neural/Aurora)
+        avec indicateur visuel de la variante active (chip checked).
+        Tap court = bascule PiP cortex (V1.1 inchangé). Tap ailleurs ou
+        Esc ferme le menu sans changer. Animation fade + scale 0.95→1.0
+        (180ms). Si le PiP cortex est ouvert au moment du switch, transition
+        fluide fade-out 200ms / fade-in 200ms entre les deux variantes.
+  · F11 — Persistance localStorage GLOBALE (clé `friday.mobile.config`).
+        Toutes les interactions UI sont mémorisées : cortexVariant,
+        cortexOpen (PiP actif), cortexMiniCorner (coin sphère mini),
+        slots music/activity, convMode, muted, logPanelOpen, state.
+        Au reload, la disposition exacte de la session précédente est
+        restaurée AVANT le first paint (pas de FOUC). Helpers saveConfig()
+        / loadConfig() ; fallback silencieux aux defaults si JSON corrompu.
+  · UI — Title bumpé v1.3.0, badge "v1.3" en header.
+  ================================================================================
+  FRIDAY MOBILE MOCK-UP v1.2.0  ·  2026-05-08 (entrée historique)
   ================================================================================
   CHANGELOG V1.1 → V1.2 :
   --------------------------------------------------------------------------------
@@ -1407,6 +1434,340 @@ body.conv-mode-continuous .conv-stop-fab{
   0%,100% { box-shadow:0 0 0 4px rgba(255,59,92,.10), 0 0 18px rgba(255,59,92,.55), inset 0 0 12px rgba(255,59,92,.25); }
   50%     { box-shadow:0 0 0 6px rgba(255,59,92,.18), 0 0 28px rgba(255,59,92,.75), inset 0 0 16px rgba(255,59,92,.4); }
 }
+
+/* ==========================================================================
+   V1.3 — Cortex 5 variantes (Constellation / Wireframe / Holo / Neural / Aurora)
+   Repris du fichier cortex-mockups (v0.1.0) — palette zones spécifiques.
+   Zones DIM par défaut, s'allument seulement quand active.
+   ========================================================================== */
+
+/* Couleurs zones du cortex-mockups (8 zones anatomiques sci-fi) */
+:root{
+  --c-prefrontal:#3da9ff;
+  --c-hippocampus:#ff3ec1;
+  --c-broca:#44e8a0;
+  --c-wernicke:#33d4ec;
+  --c-occipital:#ffd633;
+  --c-motor:#ff4f4f;
+  --c-cerebellum:#b066ff;
+  --c-limbic:#ff8c33;
+}
+
+/* Stage cortex : conteneur de toutes les variantes (occupe 100% du pip-content) */
+.cortex-stage{
+  position:absolute;
+  inset:24px 6px 6px 6px;          /* place sous le titre, marge propre */
+  border-radius:12px;
+  overflow:hidden;
+  background:linear-gradient(180deg,#0A0E1A 0%,#050810 100%);
+  border:1px solid rgba(0,212,255,.10);
+}
+.cortex-variant{
+  position:absolute;inset:0;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .2s ease;
+}
+.cortex-variant.active{
+  opacity:1;
+  pointer-events:auto;
+}
+.cortex-variant svg{
+  width:100%;height:100%;display:block;
+}
+
+/* Common zone behavior : DIM par défaut, brille en active */
+.cortex-variant .v-zone{transition:filter .4s, opacity .4s}
+.cortex-variant .v-zone.dim{opacity:.18; filter:saturate(.2) brightness(.7)}
+.cortex-variant .v-zone.active{opacity:1; filter:saturate(1.2) brightness(1.1) drop-shadow(0 0 6px currentColor)}
+
+/* ---------- VARIANT A — CONSTELLATION ---------- */
+#cv-a .a-link{stroke:rgba(255,255,255,.06); stroke-width:.7; fill:none; transition:stroke .4s, stroke-width .4s}
+#cv-a .a-link.lit{stroke:rgba(0,212,255,.45); stroke-width:1}
+#cv-a .a-pulse{
+  stroke-width:1.4; fill:none;
+  stroke-dasharray:8 200; stroke-dashoffset:0;
+  animation:aPulseFlow 1.6s linear infinite;
+  filter:drop-shadow(0 0 4px currentColor);
+}
+@keyframes aPulseFlow{from{stroke-dashoffset:208}to{stroke-dashoffset:0}}
+#cv-a .v-zone.active .node-glow{opacity:.6; animation:aGlowBreath 2.2s ease-in-out infinite}
+#cv-a .node-glow{opacity:0; transition:opacity .5s}
+#cv-a .node-label{font:9px 'JetBrains Mono',monospace; fill:#7a8fa8; opacity:.5; letter-spacing:.6px}
+#cv-a .v-zone.active .node-label{fill:currentColor; opacity:.95}
+@keyframes aGlowBreath{0%,100%{opacity:.45}50%{opacity:.7}}
+#cv-a .star{fill:#fff; opacity:.18}
+
+/* ---------- VARIANT B — BRAIN WIREFRAME ---------- */
+#cv-b .b-outline{stroke:rgba(220,235,255,.22); stroke-width:.8; fill:none}
+#cv-b .b-fold{stroke:rgba(220,235,255,.08); stroke-width:.5; fill:none}
+#cv-b .b-conn{stroke:rgba(220,235,255,.04); stroke-width:.5; fill:none}
+#cv-b .b-conn.lit{stroke:rgba(0,212,255,.3)}
+#cv-b .b-pulse{
+  fill:none; stroke-width:1.8;
+  stroke-dasharray:6 180;
+  filter:drop-shadow(0 0 5px currentColor);
+  animation:bFlow 1.4s linear infinite;
+}
+@keyframes bFlow{from{stroke-dashoffset:186}to{stroke-dashoffset:0}}
+#cv-b .b-zone-shape{
+  fill:rgba(255,255,255,.02);
+  stroke:rgba(255,255,255,.18); stroke-width:.6;
+  transition:all .5s;
+}
+#cv-b .v-zone.active .b-zone-shape{
+  fill:color-mix(in srgb, currentColor 22%, transparent);
+  stroke:currentColor; stroke-width:1;
+  filter:drop-shadow(0 0 8px currentColor);
+}
+#cv-b .b-zone-label{
+  font:8px 'JetBrains Mono',monospace; fill:#7a8fa8; opacity:.4;
+  letter-spacing:.4px; text-anchor:middle;
+}
+#cv-b .v-zone.active .b-zone-label{fill:currentColor; opacity:.9}
+
+/* ---------- VARIANT C — HOLOGRAPHIC ---------- */
+#cv-c{
+  background:
+    radial-gradient(ellipse at center, rgba(0,80,140,.15), transparent 70%),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 3px,
+      rgba(0,212,255,.025) 3px,
+      rgba(0,212,255,.025) 4px
+    );
+}
+#cv-c::before{
+  content:""; position:absolute; left:0; right:0; height:80px;
+  background:linear-gradient(180deg,
+    transparent 0%,
+    rgba(0,212,255,.08) 50%,
+    transparent 100%);
+  animation:cScan 4.5s linear infinite; pointer-events:none; z-index:5;
+}
+@keyframes cScan{0%{top:-80px}100%{top:100%}}
+#cv-c::after{
+  content:""; position:absolute; inset:0;
+  background:radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,.5) 100%);
+  pointer-events:none; z-index:3;
+}
+#cv-c svg{position:relative; z-index:2}
+#cv-c .c-ellipse{
+  fill:rgba(0,212,255,.04);
+  stroke:rgba(0,212,255,.25); stroke-width:.6;
+  transition:all .5s;
+}
+#cv-c .v-zone.active .c-ellipse{
+  fill:color-mix(in srgb, currentColor 16%, transparent);
+  stroke:currentColor; stroke-width:1.2;
+  filter:drop-shadow(0 0 10px currentColor) drop-shadow(2px 0 0 rgba(255,0,180,.3)) drop-shadow(-2px 0 0 rgba(0,255,255,.3));
+}
+#cv-c .c-conn{stroke:rgba(0,212,255,.08); stroke-width:.6; fill:none}
+#cv-c .c-pulse{
+  fill:none; stroke-width:1.6;
+  stroke-dasharray:5 160;
+  animation:cFlow 1.3s linear infinite;
+  filter:drop-shadow(0 0 6px currentColor);
+}
+@keyframes cFlow{from{stroke-dashoffset:165}to{stroke-dashoffset:0}}
+#cv-c .c-label{
+  font:8px 'JetBrains Mono',monospace; fill:rgba(0,212,255,.55);
+  text-anchor:middle; letter-spacing:1px; text-transform:uppercase;
+}
+#cv-c .v-zone.active .c-label{fill:currentColor}
+#cv-c .star{fill:#9cd8ff; opacity:.5}
+
+/* ---------- VARIANT D — NEURAL NETWORK GRAPH ---------- */
+#cv-d .d-edge{stroke:rgba(255,255,255,.05); stroke-width:.5; fill:none}
+#cv-d .d-edge.lit{stroke:rgba(0,212,255,.3); stroke-width:.7}
+#cv-d .d-pulse{
+  fill:none; stroke-width:1.5;
+  stroke-dasharray:4 100;
+  animation:dFlow 1.1s linear infinite;
+  filter:drop-shadow(0 0 4px currentColor);
+}
+@keyframes dFlow{from{stroke-dashoffset:104}to{stroke-dashoffset:0}}
+#cv-d .d-sub{
+  fill:rgba(255,255,255,.06); stroke:rgba(255,255,255,.12); stroke-width:.5;
+  transition:all .4s;
+}
+#cv-d .v-zone.active .d-sub{
+  fill:color-mix(in srgb, currentColor 35%, transparent);
+  stroke:currentColor;
+}
+#cv-d .d-hub{
+  fill:rgba(15,25,45,.9); stroke:rgba(255,255,255,.18); stroke-width:.8;
+  transition:all .4s;
+}
+#cv-d .v-zone.active .d-hub{
+  fill:color-mix(in srgb, currentColor 25%, rgba(15,25,45,.9));
+  stroke:currentColor; stroke-width:1.4;
+  filter:drop-shadow(0 0 8px currentColor);
+}
+#cv-d .d-hub-label{
+  font:8px 'JetBrains Mono',monospace; fill:#7a8fa8;
+  text-anchor:middle; letter-spacing:.6px;
+}
+#cv-d .v-zone.active .d-hub-label{fill:currentColor}
+
+/* ---------- VARIANT E — AURORA ---------- */
+#cv-e{
+  background:
+    radial-gradient(ellipse at 50% 100%, rgba(60,30,90,.25), transparent 60%),
+    linear-gradient(180deg,#02050C 0%,#040810 100%);
+}
+#cv-e .star{fill:#cfe6ff}
+#cv-e .e-trail{
+  fill:url(#auroraGrad);
+  opacity:.06;
+  transition:opacity .6s;
+}
+#cv-e .v-zone.active .e-trail{
+  opacity:.85;
+  animation:eUndulate 4.5s ease-in-out infinite;
+  filter:blur(.4px) drop-shadow(0 0 14px currentColor);
+}
+@keyframes eUndulate{
+  0%,100%{transform:translateX(0) scaleY(1)}
+  50%{transform:translateX(3px) scaleY(1.05)}
+}
+#cv-e .e-label{
+  font:8px 'JetBrains Mono',monospace; fill:#7a8fa8; text-anchor:middle;
+  letter-spacing:1px;
+}
+#cv-e .v-zone.active .e-label{fill:currentColor; opacity:.95}
+#cv-e .e-pulse{
+  fill:none; stroke-width:1.4;
+  stroke-dasharray:5 140;
+  animation:eFlow 1.5s linear infinite;
+  filter:drop-shadow(0 0 6px currentColor);
+}
+@keyframes eFlow{from{stroke-dashoffset:146}to{stroke-dashoffset:0}}
+
+/* ==========================================================================
+   V1.3 — Menu déroulant variantes (long-press sur 🧠 Cortex)
+   ========================================================================== */
+.cortex-variant-menu{
+  position:fixed;
+  z-index:240; /* au-dessus de scanlines */
+  min-width:200px;
+  padding:6px;
+  border-radius:12px;
+  background:linear-gradient(180deg,rgba(10,16,32,.96) 0%,rgba(5,8,20,.96) 100%);
+  border:1px solid rgba(0,212,255,.35);
+  box-shadow:
+    0 0 0 1px rgba(0,212,255,.10),
+    0 8px 24px rgba(0,0,0,.55),
+    0 0 24px rgba(0,212,255,.18);
+  backdrop-filter:blur(8px);
+  display:none;
+  opacity:0;
+  transform:scale(.95);
+  transform-origin:bottom center;
+  transition:opacity .18s ease, transform .18s cubic-bezier(.2,.85,.3,1.1);
+  font-family:'JetBrains Mono','SF Mono',monospace;
+}
+.cortex-variant-menu.open{
+  display:block;
+  opacity:1;
+  transform:scale(1);
+}
+.cortex-variant-menu .cv-menu-title{
+  font-size:8.5px;
+  letter-spacing:1.6px;
+  color:#7a8fa8;
+  text-transform:uppercase;
+  padding:6px 10px 4px;
+  border-bottom:1px solid rgba(0,212,255,.10);
+  margin-bottom:4px;
+}
+.cortex-variant-menu .cv-menu-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 10px;
+  border-radius:8px;
+  cursor:pointer;
+  font-size:11.5px;
+  color:#cfe8ff;
+  letter-spacing:.4px;
+  transition:background .12s ease, color .12s ease;
+  user-select:none;
+}
+.cortex-variant-menu .cv-menu-item:hover,
+.cortex-variant-menu .cv-menu-item:active{
+  background:rgba(0,212,255,.08);
+  color:#dff5ff;
+}
+.cortex-variant-menu .cv-menu-item .cv-emoji{
+  font-size:14px;
+  line-height:1;
+  width:18px;
+  text-align:center;
+}
+.cortex-variant-menu .cv-menu-item .cv-name{
+  flex:1 1 auto;
+}
+.cortex-variant-menu .cv-menu-item .cv-letter{
+  font-size:9px;
+  color:#5a7090;
+  letter-spacing:1px;
+}
+.cortex-variant-menu .cv-menu-item .cv-check{
+  width:14px;
+  height:14px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:11px;
+  color:transparent;
+}
+.cortex-variant-menu .cv-menu-item.checked{
+  background:rgba(0,212,255,.12);
+  color:var(--primary);
+  border:1px solid rgba(0,212,255,.35);
+  box-shadow:inset 0 0 8px rgba(0,212,255,.15);
+}
+.cortex-variant-menu .cv-menu-item.checked .cv-check{
+  color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+}
+
+/* Indicateur "long-press progress" sur le bouton cortex (anneau qui se remplit) */
+.satellite-row .sat-btn.cortex-btn{
+  position:relative;
+  overflow:visible;
+}
+.satellite-row .sat-btn.cortex-btn::after{
+  content:"";
+  position:absolute;
+  left:-2px; right:-2px; top:-2px; bottom:-2px;
+  border-radius:inherit;
+  border:2px solid transparent;
+  pointer-events:none;
+  opacity:0;
+}
+.satellite-row .sat-btn.cortex-btn.lp-arming::after{
+  border-color:rgba(196,77,255,.6);
+  opacity:1;
+  animation:lpArm 500ms linear forwards;
+}
+@keyframes lpArm{
+  0%{ clip-path:inset(0 100% 0 0); opacity:.4 }
+  100%{ clip-path:inset(0 0 0 0); opacity:1 }
+}
+
+/* PiP cortex stage : ajustements du pip-content pour intégrer cortex-stage
+   (on garde display:block du parent ; cortex-stage est positioned:absolute dedans) */
+.pip-content.cortex-pip-mode{
+  /* nothing special — block layout, cortex-stage takes full inner area via inset */
+}
+
+/* Crossfade entre 2 variantes lors du switch (PiP ouvert) */
+.cortex-stage.switching .cortex-variant{
+  transition:opacity .2s ease;
+}
 </style>
 </head>
 <body data-state="idle">
@@ -1429,7 +1790,7 @@ body.conv-mode-continuous .conv-stop-fab{
       <div class="conn-status">
         <span class="conn-dot"></span>
         <span>MOCK</span>
-        <span class="version-tag version-badge">· v1.2</span>
+        <span class="version-tag version-badge">· v1.3</span>
       </div>
     </div>
 
@@ -1722,6 +2083,26 @@ body.conv-mode-continuous .conv-stop-fab{
   <span class="stop-dot"></span><span>STOP</span>
 </button>
 
+<!-- V1.3 : Menu déroulant des 5 variantes du cortex (long-press sur 🧠 Cortex) -->
+<div class="cortex-variant-menu" id="cortexVariantMenu" role="menu" aria-hidden="true">
+  <div class="cv-menu-title">Variante cortex</div>
+  <div class="cv-menu-item" data-variant="A" role="menuitemradio" aria-checked="true">
+    <span class="cv-emoji">🌌</span><span class="cv-name">Constellation</span><span class="cv-letter">A</span><span class="cv-check">✓</span>
+  </div>
+  <div class="cv-menu-item" data-variant="B" role="menuitemradio" aria-checked="false">
+    <span class="cv-emoji">🧠</span><span class="cv-name">Brain wireframe</span><span class="cv-letter">B</span><span class="cv-check">✓</span>
+  </div>
+  <div class="cv-menu-item" data-variant="C" role="menuitemradio" aria-checked="false">
+    <span class="cv-emoji">📡</span><span class="cv-name">Holographic</span><span class="cv-letter">C</span><span class="cv-check">✓</span>
+  </div>
+  <div class="cv-menu-item" data-variant="D" role="menuitemradio" aria-checked="false">
+    <span class="cv-emoji">🔬</span><span class="cv-name">Neural network</span><span class="cv-letter">D</span><span class="cv-check">✓</span>
+  </div>
+  <div class="cv-menu-item" data-variant="E" role="menuitemradio" aria-checked="false">
+    <span class="cv-emoji">🌌</span><span class="cv-name">Aurora</span><span class="cv-letter">E</span><span class="cv-check">✓</span>
+  </div>
+</div>
+
 <script>
 /* =========================================================================
    FRIDAY MOBILE MOCK-UP — JS
@@ -1730,7 +2111,7 @@ body.conv-mode-continuous .conv-stop-fab{
 (function(){
   'use strict';
 
-  const VERSION = 'v1.2.0 mock';
+  const VERSION = 'v1.3.0 mock';
   const STATE_COLORS = {
     idle:      { ring:'#5a7090', glow:'rgba(90,112,144,.35)'  },
     listening: { ring:'#ffb547', glow:'rgba(255,181,71,.65)'  },
@@ -1746,6 +2127,60 @@ body.conv-mode-continuous .conv-stop-fab{
 
   const $ = (s,r=document)=>r.querySelector(s);
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+
+  /* =========================================================================
+     V1.3 — Persistance localStorage GLOBALE (clé `friday.mobile.config`)
+     Toutes les interactions UI sont mémorisées : variante cortex, PiP actif,
+     coin sphère mini, slots music/activity, convMode, muted, logPanel, state.
+     Au boot, la disposition exacte de la session précédente est restaurée
+     AVANT le first paint.
+     ========================================================================= */
+  const CONFIG_KEY = 'friday.mobile.config';
+  const CONFIG_DEFAULTS = {
+    cortexVariant: 'A',                     // A | B | C | D | E
+    cortexOpen: false,                      // PiP cortex actif au reload ?
+    cortexMiniCorner: 'tl',                 // tl | tr | bl | br
+    slots: { music:'hidden', activity:'hidden' }, // visible | hidden
+    convMode: 'off',                        // off | conv | continuous
+    muted: false,
+    logPanelOpen: false,
+    state: 'idle',                          // idle | listening | thinking | speaking
+    view: 'home'                            // home | map | cosmos
+  };
+  let config = {};
+
+  function loadConfig(){
+    try{
+      const raw = localStorage.getItem(CONFIG_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      // shallow-merge avec defaults pour ne pas perdre keys nouvelles
+      config = Object.assign({}, CONFIG_DEFAULTS, parsed);
+      // sécurise objets imbriqués
+      config.slots = Object.assign({}, CONFIG_DEFAULTS.slots, (parsed && parsed.slots) || {});
+    }catch(err){
+      // Corruption : fallback aux defaults silencieusement
+      config = Object.assign({}, CONFIG_DEFAULTS);
+      config.slots = Object.assign({}, CONFIG_DEFAULTS.slots);
+    }
+    // Validation des keys (whitelist)
+    if(!['A','B','C','D','E'].includes(config.cortexVariant)) config.cortexVariant = 'A';
+    if(!['tl','tr','bl','br'].includes(config.cortexMiniCorner)) config.cortexMiniCorner = 'tl';
+    if(!['off','conv','continuous'].includes(config.convMode)) config.convMode = 'off';
+    if(!['idle','listening','thinking','speaking'].includes(config.state)) config.state = 'idle';
+    if(!['home','map','cosmos'].includes(config.view)) config.view = 'home';
+    return config;
+  }
+
+  function saveConfig(){
+    try{
+      localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+    }catch(err){
+      // localStorage non dispo (private mode) → noop
+    }
+  }
+
+  // Charge avant la moindre logique UI (évite FOUC sur first paint)
+  loadConfig();
 
   // ----- STATE -----
   const ui = {
@@ -1779,6 +2214,10 @@ body.conv-mode-continuous .conv-stop-fab{
     $('#stateHint').textContent=STATE_HINTS[s];
     // Highlight debug btn
     $$('.dbg-btn').forEach(b=>b.classList.toggle('on', b.dataset.debug===s));
+    // V1.3 : persiste l'état + propage au cortex si actif
+    config.state = s;
+    saveConfig();
+    if(typeof applyCortexState === 'function') applyCortexState();
   }
 
   // ----- VIEW SWITCHING -----
@@ -1791,26 +2230,40 @@ body.conv-mode-continuous .conv-stop-fab{
       const target=$('#view-'+v);
       if(target) target.classList.add('active');
       try{ navigator.vibrate && navigator.vibrate(8);}catch(e){}
+      // V1.3 : persiste le view actif
+      config.view = v;
+      saveConfig();
     });
   });
 
   // ----- SLOT TOGGLES -----
+  function applySlotState(slot, visible, opts){
+    opts = opts || {};
+    const panel = $('#panel-'+slot);
+    const btn   = $$('.slot-toggle').find(b=>b.dataset.slot===slot);
+    if(!panel || !btn) return;
+    if(visible){
+      panel.classList.remove('hidden-slot');
+      btn.classList.add('on');
+      btn.textContent = '– ' + slot.toUpperCase();
+    } else {
+      panel.classList.add('hidden-slot');
+      btn.classList.remove('on');
+      btn.textContent = '+ ' + slot.toUpperCase();
+    }
+    if(opts.persist){
+      config.slots[slot] = visible ? 'visible' : 'hidden';
+      saveConfig();
+    }
+  }
   $$('.slot-toggle').forEach(btn=>{
     btn.addEventListener('click',()=>{
       const slot=btn.dataset.slot;
       const panel=$('#panel-'+slot);
       const isHidden=panel.classList.contains('hidden-slot');
-      if(isHidden){
-        panel.classList.remove('hidden-slot');
-        btn.classList.add('on');
-        btn.textContent='– '+slot.toUpperCase();
-        toast(slot.toUpperCase()+' shown');
-      } else {
-        panel.classList.add('hidden-slot');
-        btn.classList.remove('on');
-        btn.textContent='+ '+slot.toUpperCase();
-        toast(slot.toUpperCase()+' hidden');
-      }
+      const willBeVisible = isHidden;
+      applySlotState(slot, willBeVisible, { persist:true });
+      toast(slot.toUpperCase() + (willBeVisible ? ' shown' : ' hidden'));
       try{ navigator.vibrate && navigator.vibrate(10);}catch(e){}
     });
   });
@@ -1827,17 +2280,25 @@ body.conv-mode-continuous .conv-stop-fab{
   $('#btnLog').addEventListener('click',()=>{
     const lp=$('#logPanel');
     lp.classList.toggle('show');
-    $('#btnLog').classList.toggle('on', lp.classList.contains('show'));
+    const isOpen = lp.classList.contains('show');
+    $('#btnLog').classList.toggle('on', isOpen);
+    config.logPanelOpen = isOpen;
+    saveConfig();
   });
   $('#logClose').addEventListener('click',()=>{
     $('#logPanel').classList.remove('show');
     $('#btnLog').classList.remove('on');
+    config.logPanelOpen = false;
+    saveConfig();
   });
 
   // ----- SETTINGS / MUTE mock -----
   $('#btnMute').addEventListener('click',()=>{
     $('#btnMute').classList.toggle('on');
-    toast($('#btnMute').classList.contains('on')?'muted':'unmuted');
+    const muted = $('#btnMute').classList.contains('on');
+    toast(muted ? 'muted' : 'unmuted');
+    config.muted = muted;
+    saveConfig();
   });
   $('#btnSettings').addEventListener('click',()=>toast('settings · mock'));
 
@@ -1855,12 +2316,16 @@ body.conv-mode-continuous .conv-stop-fab{
   const convStopFab = $('#convStopFab');
   let convCountdownTimer = null;
 
-  function setConvMode(mode){
+  function setConvMode(mode, opts){
+    opts = opts || {};
     if(!CONV_LABELS[mode]) mode = 'off';
     // reset classes
     btnConvMode.classList.remove('mode-off','mode-conv','mode-continuous','counting');
     btnConvMode.classList.add('mode-'+mode);
     btnConvMode.dataset.mode = mode;
+    // V1.3 : persiste
+    config.convMode = mode;
+    saveConfig();
     // update inner label/icon
     const ico = btnConvMode.querySelector('.cmb-ico');
     const lbl = btnConvMode.querySelector('.cmb-label');
@@ -1868,11 +2333,11 @@ body.conv-mode-continuous .conv-stop-fab{
     if(lbl) lbl.textContent = CONV_LABELS[mode].label;
     // body class for stop fab visibility
     document.body.classList.toggle('conv-mode-continuous', mode==='continuous');
-    // toast
-    toast(CONV_LABELS[mode].toast, 1600);
-    // gestion countdown CONV (6s)
+    // toast (skip si hydration silencieuse au boot)
+    if(!opts.silent) toast(CONV_LABELS[mode].toast, 1600);
+    // gestion countdown CONV (6s) — non lancé en silent (sinon barre se relance à chaque reload)
     clearConvCountdown();
-    if(mode==='conv'){
+    if(mode==='conv' && !opts.silent){
       // déclenche la barre countdown 6→0s
       // (force restart en retirant/réajoutant la classe au prochain frame)
       requestAnimationFrame(()=>{
@@ -2017,13 +2482,14 @@ body.conv-mode-continuous .conv-stop-fab{
 
   const pip = {
     active:false,
-    corner:'tl',          // tl|tr|bl|br
+    corner: (config.cortexMiniCorner || 'tl'),  // V1.3 : restauré depuis config
     contentKind:null,     // 'cortex' | (futur) 'camera' | etc.
     drag:{ on:false, sx:0, sy:0, ox:0, oy:0, moved:false },
     longPressTimer:null
   };
 
-  function enterPiP(kind){
+  function enterPiP(kind, opts){
+    opts = opts || {};
     if(pip.active && pip.contentKind===kind){
       // Re-trigger même contenu = ferme
       exitPiP();
@@ -2033,21 +2499,31 @@ body.conv-mode-continuous .conv-stop-fab{
       // Switch contenu : fade-out ancien puis swap
       renderPipContent(kind);
       pip.contentKind=kind;
+      if(kind==='cortex'){ config.cortexOpen = true; saveConfig(); }
       updateCortexBtnState();
       return;
     }
     pip.active=true;
     pip.contentKind=kind;
-    // Trail visible pendant le glide
-    pipTrail.classList.add('show');
-    setTimeout(()=>pipTrail.classList.remove('show'), 500);
+    // Trail visible pendant le glide (sauf hydration silencieuse)
+    if(!opts.silent){
+      pipTrail.classList.add('show');
+      setTimeout(()=>pipTrail.classList.remove('show'), 500);
+    }
     // Glide
     sphereWrap.classList.add('pip','corner-'+pip.corner);
     // Contenu central avec delay 50ms
     renderPipContent(kind);
-    setTimeout(()=>pipContent.classList.add('show'), 50);
+    if(opts.silent){
+      pipContent.classList.add('show');
+      pipContent.classList.add('no-anim');
+      setTimeout(()=>pipContent.classList.remove('no-anim'), 100);
+    } else {
+      setTimeout(()=>pipContent.classList.add('show'), 50);
+    }
     updateCortexBtnState();
-    try{ navigator.vibrate && navigator.vibrate(15);}catch(e){}
+    if(!opts.silent){ try{ navigator.vibrate && navigator.vibrate(15);}catch(e){} }
+    if(kind==='cortex'){ config.cortexOpen = true; saveConfig(); }
   }
 
   function exitPiP(){
@@ -2059,11 +2535,14 @@ body.conv-mode-continuous .conv-stop-fab{
     setTimeout(()=>{
       pipContent.style.display='';
       pipContent.innerHTML='';
+      pipContent.classList.remove('cortex-pip-mode');
     }, 380);
     sphereWrap.classList.remove('pip','corner-tl','corner-tr','corner-bl','corner-br');
     sphereWrap.style.transform=''; // reset éventuel transform drag
     pip.contentKind=null;
     updateCortexBtnState();
+    config.cortexOpen = false;
+    saveConfig();
     try{ navigator.vibrate && navigator.vibrate(10);}catch(e){}
   }
 
@@ -2133,6 +2612,9 @@ body.conv-mode-continuous .conv-stop-fab{
     sphereWrap.style.transform = '';
     pip.corner = snapToNearestCorner(cx, cy);
     sphereWrap.classList.add('corner-'+pip.corner);
+    // V1.3 : persiste le coin choisi
+    config.cortexMiniCorner = pip.corner;
+    saveConfig();
   });
 
   sphereWrap.addEventListener('pointercancel',()=>{
@@ -2143,185 +2625,640 @@ body.conv-mode-continuous .conv-stop-fab{
   });
 
   /* =========================================================================
-     V1.1 — Cortex NeuralViz (SVG 2D, 8 zones identifiables)
+     V1.3 — Cortex 5 variantes (Constellation/Wireframe/Holo/Neural/Aurora)
+     Repris du fichier cortex-mockups (v0.1.0). 8 zones anatomiques :
+     prefrontal / hippocampus / broca / wernicke / occipital / motor /
+     cerebellum / limbic. Zones DIM par défaut, brillent quand l'état
+     principal du mock les "active".
      ========================================================================= */
 
-  // 8 zones inspirées d'une carte cérébrale 2D simplifiée vue latéralement.
-  // Chaque zone = ellipse/path avec id pour pilotage CSS.
-  const CORTEX_ZONES = [
-    { id:'frontal',       label:'Frontal',       cx:65,  cy:80,  rx:30, ry:22 },
-    { id:'motor',         label:'Motor',         cx:115, cy:55,  rx:18, ry:14 },
-    { id:'somatosensory', label:'Somato',        cx:150, cy:55,  rx:15, ry:12 },
-    { id:'parietal',      label:'Parietal',      cx:185, cy:75,  rx:24, ry:18 },
-    { id:'occipital',     label:'Occipital',     cx:225, cy:110, rx:24, ry:20 },
-    { id:'temporal',      label:'Temporal',      cx:155, cy:135, rx:38, ry:18 },
-    { id:'broca',         label:"Broca",         cx:90,  cy:118, rx:14, ry:10 },
-    { id:'wernicke',      label:'Wernicke',      cx:200, cy:140, rx:14, ry:10 }
+  const VARIANT_LIST = ['A','B','C','D','E'];
+  const VARIANT_META = {
+    A: { name:'Constellation',    emoji:'🌌', philo:"Minimal, espace, élégance — nodes dim, arcs électriques sur connexions." },
+    B: { name:'Brain wireframe',  emoji:'🧠', philo:"Silhouette anatomique stylisée, 8 zones placées correctement, pulses sur paths courbes." },
+    C: { name:'Holographic',      emoji:'📡', philo:"Projection holo Stark/Strange : scanlines, scan vertical, chromatic aberration." },
+    D: { name:'Neural network',   emoji:'🔬', philo:"Graphe de neurones (TensorBoard) : 8 hubs + sub-nodes + edges dim." },
+    E: { name:'Aurora',           emoji:'🌌', philo:"Aurores boréales verticales : traînées fluides ondulantes, arcs entre traînées." }
+  };
+
+  // Mapping état mock → zones cortex à activer
+  // (idle = aucune zone — tout reste DIM)
+  const CORTEX_STATE_MAP = {
+    idle:      [],
+    listening: ['cerebellum','wernicke'],
+    thinking:  ['prefrontal','hippocampus'],
+    speaking:  ['broca'],
+    tooling:   ['motor'],
+    memory:    ['hippocampus']
+  };
+
+  const ZONE_COLORS = {
+    prefrontal: '#3da9ff',
+    hippocampus:'#ff3ec1',
+    broca:      '#44e8a0',
+    wernicke:   '#33d4ec',
+    occipital:  '#ffd633',
+    motor:      '#ff4f4f',
+    cerebellum: '#b066ff',
+    limbic:     '#ff8c33'
+  };
+
+  // Hubs + links pour la variante D (généré JS)
+  const D_HUBS = [
+    {z:'prefrontal',  x:120, y:170},
+    {z:'hippocampus', x:240, y:240},
+    {z:'broca',       x:100, y:280},
+    {z:'wernicke',    x:130, y:380},
+    {z:'occipital',   x:180, y:520},
+    {z:'motor',       x:280, y:380},
+    {z:'cerebellum',  x:220, y:470},
+    {z:'limbic',      x:220, y:330},
+  ];
+  const D_LINKS = [
+    ['prefrontal','hippocampus'],['prefrontal','broca'],
+    ['hippocampus','limbic'],['broca','wernicke'],
+    ['wernicke','cerebellum'],['motor','cerebellum'],
+    ['occipital','prefrontal'],['limbic','motor'],
+    ['hippocampus','motor'],['prefrontal','limbic']
   ];
 
+  // Construit les 5 layers (chacun = un SVG) dans le pip-content
   function buildCortexSvg(){
-    // Zones (ellipses colorées via fill=url(#grad-X) défini dans <defs>)
-    const zonesSvg = CORTEX_ZONES.map(z =>
-      `<ellipse class="cortex-zone" id="cortex-${z.id}" cx="${z.cx}" cy="${z.cy}" rx="${z.rx}" ry="${z.ry}"/>`
-    ).join('');
-    const labelsSvg = CORTEX_ZONES.map(z =>
-      `<text class="cortex-label" x="${z.cx}" y="${z.cy+3}">${z.label}</text>`
-    ).join('');
-
-    // Connexions synaptiques (neural-line) entre zones — chain anatomique stylisée
-    // frontal -> motor -> somato -> parietal -> occipital -> temporal -> wernicke
-    // + bouclage broca <-> frontal et broca <-> wernicke (langage)
-    const synapses = `
-      <path class="neural-line"      d="M 65,80   Q 90,60 115,55"  />
-      <path class="neural-line alt"  d="M 115,55  Q 132,50 150,55" />
-      <path class="neural-line alt2" d="M 150,55  Q 170,60 185,75" />
-      <path class="neural-line alt3" d="M 185,75  Q 215,90 225,110"/>
-      <path class="neural-line alt4" d="M 225,110 Q 195,128 200,140"/>
-      <path class="neural-line"      d="M 200,140 Q 175,140 155,135"/>
-      <path class="neural-line alt"  d="M 65,80   Q 75,100 90,118" />
-      <path class="neural-line alt2" d="M 90,118  Q 145,140 200,140"/>
-    `;
-
-    // Gradients radiaux signature par zone (palette MCU étendue)
-    const gradients = `
-      <radialGradient id="grad-cyan"    cx="40%" cy="35%" r="65%">
-        <stop offset="0%"  stop-color="#A0F4FF" stop-opacity="1"/>
-        <stop offset="55%" stop-color="#00D4FF" stop-opacity=".85"/>
-        <stop offset="100%" stop-color="#003a55" stop-opacity=".55"/>
-      </radialGradient>
-      <radialGradient id="grad-violet"  cx="40%" cy="35%" r="65%">
-        <stop offset="0%"  stop-color="#E5C9FF" stop-opacity="1"/>
-        <stop offset="55%" stop-color="#B967FF" stop-opacity=".85"/>
-        <stop offset="100%" stop-color="#3a1758" stop-opacity=".55"/>
-      </radialGradient>
-      <radialGradient id="grad-magenta" cx="40%" cy="35%" r="65%">
-        <stop offset="0%"  stop-color="#FFC8E2" stop-opacity="1"/>
-        <stop offset="55%" stop-color="#FF3B9A" stop-opacity=".85"/>
-        <stop offset="100%" stop-color="#5a0e36" stop-opacity=".55"/>
-      </radialGradient>
-      <radialGradient id="grad-yellow"  cx="40%" cy="35%" r="65%">
-        <stop offset="0%"  stop-color="#FFE9A8" stop-opacity="1"/>
-        <stop offset="55%" stop-color="#FFB800" stop-opacity=".85"/>
-        <stop offset="100%" stop-color="#5a3e00" stop-opacity=".55"/>
-      </radialGradient>
-      <radialGradient id="grad-green"   cx="40%" cy="35%" r="65%">
-        <stop offset="0%"  stop-color="#B6FFE8" stop-opacity="1"/>
-        <stop offset="55%" stop-color="#00FFB8" stop-opacity=".85"/>
-        <stop offset="100%" stop-color="#003e2a" stop-opacity=".55"/>
-      </radialGradient>
-      <radialGradient id="grad-orange"  cx="40%" cy="35%" r="65%">
-        <stop offset="0%"  stop-color="#FFD9B0" stop-opacity="1"/>
-        <stop offset="55%" stop-color="#FF8C00" stop-opacity=".85"/>
-        <stop offset="100%" stop-color="#3e2700" stop-opacity=".55"/>
-      </radialGradient>
-      <radialGradient id="grad-pink"    cx="40%" cy="35%" r="65%">
-        <stop offset="0%"  stop-color="#FFD2E7" stop-opacity="1"/>
-        <stop offset="55%" stop-color="#FF66B5" stop-opacity=".85"/>
-        <stop offset="100%" stop-color="#4e1532" stop-opacity=".55"/>
-      </radialGradient>
-      <radialGradient id="grad-white"   cx="40%" cy="35%" r="65%">
-        <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="1"/>
-        <stop offset="55%" stop-color="#D4E8FF" stop-opacity=".85"/>
-        <stop offset="100%" stop-color="#3a4a5a" stop-opacity=".55"/>
-      </radialGradient>
-      <radialGradient id="brainOutlineGrad" cx="50%" cy="40%" r="70%">
-        <stop offset="0%"   stop-color="rgba(0,40,80,.55)"/>
-        <stop offset="60%"  stop-color="rgba(8,16,40,.85)"/>
-        <stop offset="100%" stop-color="rgba(2,4,12,.95)"/>
-      </radialGradient>
-    `;
-
     return `
       <div class="pip-content-title neural-title">🧠 NEURAL VIZ</div>
-      <div class="brain-bg" aria-hidden="true"></div>
-      <div class="brain-particles" aria-hidden="true">
-        <span class="particle p1"></span><span class="particle p2"></span>
-        <span class="particle p3"></span><span class="particle p4"></span>
-        <span class="particle p5"></span><span class="particle p6"></span>
-        <span class="particle p7"></span><span class="particle p8"></span>
-      </div>
-      <svg class="cortex-svg" viewBox="0 0 280 200" aria-hidden="true">
-        <defs>${gradients}</defs>
-        <!-- Brain outline (ovale stylisé multi-layer) -->
-        <path d="M 50,100
-                 C 50,40 100,25 145,30
-                 C 195,25 245,55 245,110
-                 C 245,160 200,180 150,178
-                 C 100,180 50,160 50,100 Z"
-              fill="url(#brainOutlineGrad)"
-              stroke="rgba(0,212,255,.55)" stroke-width="1.5"
-              filter="drop-shadow(0 0 6px rgba(0,212,255,.35))"/>
-        <!-- Sillons -->
-        <path d="M 115,40 Q 130,90 125,165"
-              fill="none" stroke="rgba(185,103,255,.28)" stroke-width="1" stroke-dasharray="2 3"/>
-        <path d="M 175,40 Q 175,90 180,170"
-              fill="none" stroke="rgba(0,212,255,.28)" stroke-width="1" stroke-dasharray="2 3"/>
-        <!-- Brain stem -->
-        <ellipse cx="170" cy="180" rx="14" ry="8"
-                 fill="rgba(90,112,144,.3)" stroke="rgba(0,212,255,.45)" stroke-width="1"/>
-        <!-- Connexions synaptiques (sous les zones pour qu'elles passent dessus) -->
-        ${synapses}
-        ${zonesSvg}
-        ${labelsSvg}
-      </svg>
-      <div class="neural-legend">
-        <span class="chip c1">Frontal</span>
-        <span class="chip c2">Motor</span>
-        <span class="chip c3">Somato</span>
-        <span class="chip c4">Parietal</span>
-        <span class="chip c5">Occipital</span>
-        <span class="chip c6">Temporal</span>
-        <span class="chip c7">Broca</span>
-        <span class="chip c8">Wernicke</span>
+      <div class="cortex-stage" id="cortexStage">
+        ${buildVariantA_HTML()}
+        ${buildVariantB_HTML()}
+        ${buildVariantC_HTML()}
+        ${buildVariantD_HTML()}
+        ${buildVariantE_HTML()}
       </div>
     `;
+  }
+
+  /* ---------- HTML générateurs des 5 variantes ---------- */
+
+  function buildVariantA_HTML(){
+    // Constellation : nodes circulaires reliés par arcs courbes
+    return `
+    <div class="cortex-variant" id="cv-a" data-variant="A">
+      <svg viewBox="0 0 360 640" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <radialGradient id="aNodeGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="currentColor" stop-opacity=".9"/>
+            <stop offset="60%" stop-color="currentColor" stop-opacity=".25"/>
+            <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <g id="cv-a-stars"></g>
+        <g id="cv-a-links">
+          <path class="a-link" data-link="prefrontal-hippocampus" d="M180 180 Q 220 230 230 280"/>
+          <path class="a-link" data-link="prefrontal-broca"       d="M180 180 Q 130 220 110 280"/>
+          <path class="a-link" data-link="hippocampus-limbic"     d="M230 280 Q 240 340 220 400"/>
+          <path class="a-link" data-link="broca-wernicke"         d="M110 280 Q 120 340 140 400"/>
+          <path class="a-link" data-link="wernicke-cerebellum"    d="M140 400 Q 170 460 200 480"/>
+          <path class="a-link" data-link="motor-cerebellum"       d="M260 420 Q 240 460 200 480"/>
+          <path class="a-link" data-link="occipital-prefrontal"   d="M180 540 Q 100 360 180 180"/>
+          <path class="a-link" data-link="limbic-motor"           d="M220 400 Q 250 410 260 420"/>
+        </g>
+        <g id="cv-a-pulses"></g>
+        <g id="cv-a-nodes">
+          <g class="v-zone" data-zone="prefrontal" style="color:var(--c-prefrontal)" transform="translate(180 180)">
+            <circle class="node-glow" r="20" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="6" fill="currentColor"/>
+            <text class="node-label" x="14" y="4">prefrontal</text>
+          </g>
+          <g class="v-zone" data-zone="hippocampus" style="color:var(--c-hippocampus)" transform="translate(230 280)">
+            <circle class="node-glow" r="20" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="6" fill="currentColor"/>
+            <text class="node-label" x="14" y="4">hippocampus</text>
+          </g>
+          <g class="v-zone" data-zone="broca" style="color:var(--c-broca)" transform="translate(110 280)">
+            <circle class="node-glow" r="20" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="6" fill="currentColor"/>
+            <text class="node-label" x="-70" y="4">broca</text>
+          </g>
+          <g class="v-zone" data-zone="wernicke" style="color:var(--c-wernicke)" transform="translate(140 400)">
+            <circle class="node-glow" r="20" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="6" fill="currentColor"/>
+            <text class="node-label" x="-70" y="4">wernicke</text>
+          </g>
+          <g class="v-zone" data-zone="occipital" style="color:var(--c-occipital)" transform="translate(180 540)">
+            <circle class="node-glow" r="20" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="6" fill="currentColor"/>
+            <text class="node-label" x="14" y="4">occipital</text>
+          </g>
+          <g class="v-zone" data-zone="motor" style="color:var(--c-motor)" transform="translate(260 420)">
+            <circle class="node-glow" r="20" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="6" fill="currentColor"/>
+            <text class="node-label" x="14" y="4">motor</text>
+          </g>
+          <g class="v-zone" data-zone="cerebellum" style="color:var(--c-cerebellum)" transform="translate(200 480)">
+            <circle class="node-glow" r="20" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="6" fill="currentColor"/>
+            <text class="node-label" x="14" y="14">cerebellum</text>
+          </g>
+          <g class="v-zone" data-zone="limbic" style="color:var(--c-limbic)" transform="translate(220 400)">
+            <circle class="node-glow" r="20" fill="url(#aNodeGrad)"/>
+            <circle class="node-circle" r="6" fill="currentColor"/>
+            <text class="node-label" x="14" y="-8">limbic</text>
+          </g>
+        </g>
+      </svg>
+    </div>`;
+  }
+
+  function buildVariantB_HTML(){
+    return `
+    <div class="cortex-variant" id="cv-b" data-variant="B">
+      <svg viewBox="0 0 360 640" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="bGlowGrad" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="currentColor" stop-opacity=".5"/>
+            <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <g id="cv-b-anatomy">
+          <path class="b-outline" d="M120 160 C 90 160, 80 200, 90 240 C 70 260, 70 300, 95 320 C 80 360, 100 410, 140 425 C 145 460, 175 475, 195 470 C 230 480, 270 460, 280 420 C 305 410, 315 370, 305 340 C 320 320, 320 280, 295 260 C 305 215, 285 165, 240 160 C 220 145, 180 145, 160 158 C 145 152, 130 154, 120 160 Z"/>
+          <path class="b-fold" d="M195 160 Q 200 250 198 380 Q 196 430 198 470"/>
+          <path class="b-fold" d="M105 220 Q 140 230 175 220"/>
+          <path class="b-fold" d="M105 270 Q 140 280 175 270"/>
+          <path class="b-fold" d="M220 220 Q 255 230 290 220"/>
+          <path class="b-fold" d="M220 270 Q 255 280 290 270"/>
+          <path class="b-fold" d="M115 340 Q 150 350 180 340"/>
+          <path class="b-fold" d="M218 340 Q 250 350 285 340"/>
+          <path class="b-fold" d="M130 400 Q 165 412 195 408"/>
+          <path class="b-fold" d="M205 408 Q 240 412 270 400"/>
+          <path class="b-outline" d="M155 470 C 145 510, 175 540, 200 535 C 230 540, 250 510, 240 470"/>
+          <path class="b-fold" d="M165 490 Q 200 500 235 490"/>
+          <path class="b-fold" d="M170 510 Q 200 520 230 510"/>
+          <path class="b-outline" d="M185 540 L 185 580 L 215 580 L 215 540"/>
+        </g>
+        <g id="cv-b-conns">
+          <path class="b-conn" data-link="prefrontal-broca"       d="M150 200 Q 130 240 120 290"/>
+          <path class="b-conn" data-link="prefrontal-hippocampus" d="M225 200 Q 245 250 240 300"/>
+          <path class="b-conn" data-link="hippocampus-limbic"     d="M240 300 Q 235 360 220 400"/>
+          <path class="b-conn" data-link="broca-wernicke"         d="M120 290 Q 130 340 140 380"/>
+          <path class="b-conn" data-link="wernicke-cerebellum"    d="M140 380 Q 165 460 200 500"/>
+          <path class="b-conn" data-link="motor-cerebellum"       d="M260 380 Q 230 460 200 500"/>
+          <path class="b-conn" data-link="occipital-wernicke"     d="M160 440 Q 145 410 140 380"/>
+          <path class="b-conn" data-link="limbic-motor"           d="M220 400 Q 245 390 260 380"/>
+        </g>
+        <g id="cv-b-pulses"></g>
+        <g id="cv-b-zones">
+          <g class="v-zone" data-zone="prefrontal" style="color:var(--c-prefrontal)">
+            <ellipse class="b-zone-shape" cx="150" cy="200" rx="32" ry="22"/>
+            <text class="b-zone-label" x="150" y="178">prefrontal</text>
+          </g>
+          <g class="v-zone" data-zone="hippocampus" style="color:var(--c-hippocampus)">
+            <ellipse class="b-zone-shape" cx="225" cy="295" rx="20" ry="14" transform="rotate(-15 225 295)"/>
+            <text class="b-zone-label" x="225" y="320">hippoc.</text>
+          </g>
+          <g class="v-zone" data-zone="broca" style="color:var(--c-broca)">
+            <ellipse class="b-zone-shape" cx="115" cy="290" rx="18" ry="14"/>
+            <text class="b-zone-label" x="100" y="320">broca</text>
+          </g>
+          <g class="v-zone" data-zone="wernicke" style="color:var(--c-wernicke)">
+            <ellipse class="b-zone-shape" cx="135" cy="375" rx="22" ry="16"/>
+            <text class="b-zone-label" x="115" y="400">wernicke</text>
+          </g>
+          <g class="v-zone" data-zone="occipital" style="color:var(--c-occipital)">
+            <ellipse class="b-zone-shape" cx="195" cy="445" rx="40" ry="20"/>
+            <text class="b-zone-label" x="195" y="450">occipital</text>
+          </g>
+          <g class="v-zone" data-zone="motor" style="color:var(--c-motor)">
+            <ellipse class="b-zone-shape" cx="260" cy="370" rx="22" ry="16"/>
+            <text class="b-zone-label" x="280" y="395">motor</text>
+          </g>
+          <g class="v-zone" data-zone="cerebellum" style="color:var(--c-cerebellum)">
+            <ellipse class="b-zone-shape" cx="200" cy="500" rx="44" ry="24"/>
+            <text class="b-zone-label" x="200" y="505">cerebellum</text>
+          </g>
+          <g class="v-zone" data-zone="limbic" style="color:var(--c-limbic)">
+            <ellipse class="b-zone-shape" cx="200" cy="345" rx="32" ry="14"/>
+            <text class="b-zone-label" x="200" y="348">limbic</text>
+          </g>
+        </g>
+      </svg>
+    </div>`;
+  }
+
+  function buildVariantC_HTML(){
+    return `
+    <div class="cortex-variant" id="cv-c" data-variant="C">
+      <svg viewBox="0 0 360 640" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <radialGradient id="cAura" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="currentColor" stop-opacity=".5"/>
+            <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <g id="cv-c-stars"></g>
+        <g opacity=".22">
+          <ellipse cx="180" cy="340" rx="150" ry="42" fill="none" stroke="rgba(0,212,255,.4)" stroke-width=".6" stroke-dasharray="2 4"/>
+          <ellipse cx="180" cy="340" rx="120" ry="32" fill="none" stroke="rgba(0,212,255,.3)" stroke-width=".5" stroke-dasharray="1 3"/>
+          <ellipse cx="180" cy="340" rx="90"  ry="22" fill="none" stroke="rgba(0,212,255,.25)" stroke-width=".5"/>
+        </g>
+        <g id="cv-c-conns">
+          <path class="c-conn" data-link="prefrontal-hippocampus" d="M120 220 Q 200 240 250 280"/>
+          <path class="c-conn" data-link="prefrontal-broca"       d="M120 220 Q 100 280 90 340"/>
+          <path class="c-conn" data-link="hippocampus-limbic"     d="M250 280 Q 240 350 220 400"/>
+          <path class="c-conn" data-link="broca-wernicke"         d="M90 340 Q 100 400 130 440"/>
+          <path class="c-conn" data-link="wernicke-cerebellum"    d="M130 440 Q 170 480 200 500"/>
+          <path class="c-conn" data-link="motor-cerebellum"       d="M280 440 Q 240 480 200 500"/>
+          <path class="c-conn" data-link="occipital-prefrontal"   d="M180 560 Q 250 380 120 220"/>
+          <path class="c-conn" data-link="limbic-motor"           d="M220 400 Q 260 420 280 440"/>
+        </g>
+        <g id="cv-c-pulses"></g>
+        <g id="cv-c-zones">
+          <g class="v-zone" data-zone="prefrontal" style="color:var(--c-prefrontal)" transform="translate(120 220)"><ellipse class="c-ellipse" rx="34" ry="14"/><text class="c-label" y="3">prefrontal</text></g>
+          <g class="v-zone" data-zone="hippocampus" style="color:var(--c-hippocampus)" transform="translate(250 280)"><ellipse class="c-ellipse" rx="30" ry="12"/><text class="c-label" y="3">hippoc.</text></g>
+          <g class="v-zone" data-zone="broca" style="color:var(--c-broca)" transform="translate(90 340)"><ellipse class="c-ellipse" rx="26" ry="10"/><text class="c-label" y="3">broca</text></g>
+          <g class="v-zone" data-zone="wernicke" style="color:var(--c-wernicke)" transform="translate(130 440)"><ellipse class="c-ellipse" rx="30" ry="12"/><text class="c-label" y="3">wernicke</text></g>
+          <g class="v-zone" data-zone="occipital" style="color:var(--c-occipital)" transform="translate(180 560)"><ellipse class="c-ellipse" rx="40" ry="14"/><text class="c-label" y="3">occipital</text></g>
+          <g class="v-zone" data-zone="motor" style="color:var(--c-motor)" transform="translate(280 440)"><ellipse class="c-ellipse" rx="28" ry="12"/><text class="c-label" y="3">motor</text></g>
+          <g class="v-zone" data-zone="cerebellum" style="color:var(--c-cerebellum)" transform="translate(200 500)"><ellipse class="c-ellipse" rx="34" ry="13"/><text class="c-label" y="3">cerebellum</text></g>
+          <g class="v-zone" data-zone="limbic" style="color:var(--c-limbic)" transform="translate(220 400)"><ellipse class="c-ellipse" rx="32" ry="12"/><text class="c-label" y="3">limbic</text></g>
+        </g>
+      </svg>
+    </div>`;
+  }
+
+  function buildVariantD_HTML(){
+    // Génère hubs/edges/sub-nodes dynamiquement (besoin d'un seed déterministe pour positionnement)
+    const seed = (n,s=1)=>{ let x=Math.sin(s*9999+n)*10000; return x-Math.floor(x); };
+    let edgesSvg = '';
+    D_LINKS.forEach(([a,b])=>{
+      const ha = D_HUBS.find(h=>h.z===a), hb = D_HUBS.find(h=>h.z===b);
+      const mx = (ha.x+hb.x)/2 + (seed(a.length+b.length,1)-0.5)*30;
+      const my = (ha.y+hb.y)/2 + (seed(a.length+b.length,2)-0.5)*30;
+      edgesSvg += `<path class="d-edge" data-link="${a}-${b}" d="M${ha.x} ${ha.y} Q ${mx} ${my} ${hb.x} ${hb.y}"/>`;
+    });
+    let subsSvg = '';
+    D_HUBS.forEach((h,idx)=>{
+      const subCount = 3 + Math.floor(seed(idx,7)*2);
+      let inner = '';
+      for(let i=0;i<subCount;i++){
+        const ang = (i/subCount)*Math.PI*2 + seed(idx,i+10)*0.6;
+        const r   = 22 + seed(idx,i+20)*8;
+        const sx  = h.x + Math.cos(ang)*r;
+        const sy  = h.y + Math.sin(ang)*r;
+        inner += `<path class="d-edge" d="M${h.x} ${h.y} L ${sx.toFixed(2)} ${sy.toFixed(2)}"/>`;
+        inner += `<circle cx="${sx.toFixed(2)}" cy="${sy.toFixed(2)}" r="2.5" class="d-sub"/>`;
+      }
+      subsSvg += `<g class="v-zone" data-zone="${h.z}" style="color:${ZONE_COLORS[h.z]}">${inner}</g>`;
+    });
+    let hubsSvg = '';
+    D_HUBS.forEach(h=>{
+      hubsSvg += `<g class="v-zone" data-zone="${h.z}" style="color:${ZONE_COLORS[h.z]}">
+        <circle cx="${h.x}" cy="${h.y}" r="9" class="d-hub"/>
+        <text class="d-hub-label" x="${h.x}" y="${h.y - 14}">${h.z}</text>
+      </g>`;
+    });
+    return `
+    <div class="cortex-variant" id="cv-d" data-variant="D">
+      <svg viewBox="0 0 360 640" preserveAspectRatio="xMidYMid meet">
+        <g id="cv-d-edges">${edgesSvg}</g>
+        <g id="cv-d-pulses"></g>
+        <g id="cv-d-subs">${subsSvg}</g>
+        <g id="cv-d-hubs">${hubsSvg}</g>
+      </svg>
+    </div>`;
+  }
+
+  function buildVariantE_HTML(){
+    return `
+    <div class="cortex-variant" id="cv-e" data-variant="E">
+      <svg viewBox="0 0 360 640" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="auroraGrad" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%"  stop-color="currentColor" stop-opacity="0"/>
+            <stop offset="35%" stop-color="currentColor" stop-opacity=".9"/>
+            <stop offset="65%" stop-color="currentColor" stop-opacity=".7"/>
+            <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <g id="cv-e-stars"></g>
+        <g id="cv-e-trails">
+          <g class="v-zone" data-zone="prefrontal" style="color:var(--c-prefrontal)">
+            <path class="e-trail" d="M50 120 C 45 240, 60 360, 50 540 L 70 540 C 80 360, 70 240, 70 120 Z"/>
+            <text class="e-label" x="60" y="555">prefr.</text>
+          </g>
+          <g class="v-zone" data-zone="hippocampus" style="color:var(--c-hippocampus)">
+            <path class="e-trail" d="M90 120 C 85 230, 100 380, 95 540 L 115 540 C 125 380, 110 230, 110 120 Z"/>
+            <text class="e-label" x="102" y="555">hippoc.</text>
+          </g>
+          <g class="v-zone" data-zone="broca" style="color:var(--c-broca)">
+            <path class="e-trail" d="M135 120 C 128 250, 145 360, 138 540 L 158 540 C 168 360, 150 250, 155 120 Z"/>
+            <text class="e-label" x="146" y="555">broca</text>
+          </g>
+          <g class="v-zone" data-zone="wernicke" style="color:var(--c-wernicke)">
+            <path class="e-trail" d="M178 120 C 175 230, 190 380, 182 540 L 202 540 C 212 380, 195 230, 198 120 Z"/>
+            <text class="e-label" x="190" y="555">wernicke</text>
+          </g>
+          <g class="v-zone" data-zone="occipital" style="color:var(--c-occipital)">
+            <path class="e-trail" d="M220 120 C 215 250, 230 360, 222 540 L 242 540 C 252 360, 235 250, 240 120 Z"/>
+            <text class="e-label" x="232" y="555">occip.</text>
+          </g>
+          <g class="v-zone" data-zone="motor" style="color:var(--c-motor)">
+            <path class="e-trail" d="M262 120 C 258 230, 275 380, 268 540 L 288 540 C 298 380, 280 230, 282 120 Z"/>
+            <text class="e-label" x="276" y="555">motor</text>
+          </g>
+          <g class="v-zone" data-zone="cerebellum" style="color:var(--c-cerebellum)">
+            <path class="e-trail" d="M305 120 C 300 250, 318 360, 310 540 L 330 540 C 340 360, 322 250, 325 120 Z"/>
+            <text class="e-label" x="320" y="555">cereb.</text>
+          </g>
+          <g class="v-zone" data-zone="limbic" style="color:var(--c-limbic)">
+            <path class="e-trail" d="M105 120 C 100 250, 220 380, 215 540 L 235 540 C 240 380, 130 250, 125 120 Z" opacity=".5"/>
+            <text class="e-label" x="170" y="110">limbic</text>
+          </g>
+        </g>
+        <g id="cv-e-pulses">
+          <path class="e-conn" data-link="prefrontal-hippocampus" d="M60 240 Q 80 250 102 240" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width=".5"/>
+          <path class="e-conn" data-link="hippocampus-limbic"     d="M102 290 Q 130 310 170 290" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width=".5"/>
+          <path class="e-conn" data-link="broca-wernicke"         d="M146 320 Q 170 330 190 320" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width=".5"/>
+          <path class="e-conn" data-link="wernicke-cerebellum"    d="M190 380 Q 250 400 320 380" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width=".5"/>
+          <path class="e-conn" data-link="motor-cerebellum"       d="M276 380 Q 300 400 320 380" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width=".5"/>
+          <path class="e-conn" data-link="occipital-prefrontal"   d="M232 460 Q 130 380 60 250" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width=".5"/>
+        </g>
+      </svg>
+    </div>`;
+  }
+
+  /* ---------- Stars (background twinkle pour A / C / E) ---------- */
+  function initCortexStars(){
+    const seed = (n,s=1)=>{ let x=Math.sin(s*9999+n)*10000; return x-Math.floor(x); };
+    const containers = [
+      {id:'cv-a-stars', n:35, op:.18, sz:[0.6,1.6]},
+      {id:'cv-c-stars', n:60, op:.55, sz:[0.4,1.4]},
+      {id:'cv-e-stars', n:80, op:.5,  sz:[0.4,1.4]}
+    ];
+    const ns = "http://www.w3.org/2000/svg";
+    containers.forEach(({id,n,op,sz})=>{
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.innerHTML = '';
+      for(let i=0;i<n;i++){
+        const c = document.createElementNS(ns,'circle');
+        c.setAttribute('class','star');
+        c.setAttribute('cx', (seed(i,1)*360).toFixed(1));
+        c.setAttribute('cy', (seed(i,2)*640).toFixed(1));
+        c.setAttribute('r',  (sz[0]+seed(i,3)*(sz[1]-sz[0])).toFixed(2));
+        c.setAttribute('opacity', (op*(0.4+seed(i,4)*0.6)).toFixed(2));
+        el.appendChild(c);
+      }
+    });
+  }
+
+  /* ---------- Pulses (arcs électriques) générés selon zones actives ---------- */
+  const VARIANT_PULSE_MAP = {
+    A: {srcSel:'#cv-a #cv-a-links .a-link', dstId:'cv-a-pulses', cls:'a-pulse'},
+    B: {srcSel:'#cv-b #cv-b-conns .b-conn', dstId:'cv-b-pulses', cls:'b-pulse'},
+    C: {srcSel:'#cv-c #cv-c-conns .c-conn', dstId:'cv-c-pulses', cls:'c-pulse'},
+    D: {srcSel:'#cv-d #cv-d-edges .d-edge[data-link]', dstId:'cv-d-pulses', cls:'d-pulse'},
+    E: {srcSel:'#cv-e #cv-e-pulses .e-conn', dstId:'cv-e-pulses', cls:'e-pulse'}
+  };
+
+  function clearVariantPulses(letter){
+    const map = VARIANT_PULSE_MAP[letter];
+    if(!map) return;
+    const dst = document.getElementById(map.dstId);
+    if(dst) dst.innerHTML = '';
+    document.querySelectorAll(map.srcSel + '.lit').forEach(el=>el.classList.remove('lit'));
+  }
+
+  function spawnVariantPulses(letter, activeZones){
+    const map = VARIANT_PULSE_MAP[letter];
+    if(!map) return;
+    const dst = document.getElementById(map.dstId);
+    if(!dst) return;
+    dst.innerHTML = '';
+    if(!activeZones || !activeZones.length) return;
+    const sources = document.querySelectorAll(map.srcSel);
+    let count = 0;
+    const ns = "http://www.w3.org/2000/svg";
+    sources.forEach(src=>{
+      const linkAttr = src.getAttribute('data-link');
+      if(!linkAttr) return;
+      const [a,b] = linkAttr.split('-');
+      if(!activeZones.includes(a) && !activeZones.includes(b)) return;
+      if(count >= 4) return;
+      const d = src.getAttribute('d');
+      if(!d) return;
+      const p = document.createElementNS(ns,'path');
+      p.setAttribute('d', d);
+      p.setAttribute('class', map.cls);
+      const colorZone = activeZones.includes(a) ? a : b;
+      p.setAttribute('stroke', ZONE_COLORS[colorZone] || '#00D4FF');
+      p.style.color = ZONE_COLORS[colorZone];
+      p.style.animationDelay = (count * 0.35).toFixed(2)+'s';
+      dst.appendChild(p);
+      src.classList.add('lit');
+      count++;
+    });
+  }
+
+  /* ---------- Apply state to active variant ---------- */
+  function applyCortexState(){
+    if(!pip.active || pip.contentKind!=='cortex') return;
+    const active = CORTEX_STATE_MAP[ui.state] || [];
+    // toutes les variantes : DIM/active selon zones actives
+    VARIANT_LIST.forEach(L=>{
+      const root = document.getElementById(`cv-${L.toLowerCase()}`);
+      if(!root) return;
+      root.querySelectorAll('.v-zone').forEach(z=>{
+        const zn = z.getAttribute('data-zone');
+        z.classList.remove('active','dim');
+        if(active.includes(zn)) z.classList.add('active');
+        else z.classList.add('dim');
+      });
+      clearVariantPulses(L);
+      spawnVariantPulses(L, active);
+    });
+  }
+
+  /* ---------- Apply variant : show only the chosen layer ---------- */
+  function applyCortexVariant(letter, opts){
+    opts = opts || {};
+    const stage = document.getElementById('cortexStage');
+    if(!stage) return;
+    const targetId = 'cv-' + (letter || 'A').toLowerCase();
+    // Crossfade si stage déjà rendu et on switch
+    if(opts.crossfade){
+      stage.classList.add('switching');
+      // fade-out tous d'abord
+      stage.querySelectorAll('.cortex-variant.active').forEach(v=>v.classList.remove('active'));
+      setTimeout(()=>{
+        const t = document.getElementById(targetId);
+        if(t) t.classList.add('active');
+        setTimeout(()=>stage.classList.remove('switching'), 220);
+      }, 200);
+    } else {
+      stage.querySelectorAll('.cortex-variant').forEach(v=>{
+        v.classList.toggle('active', v.id === targetId);
+      });
+    }
   }
 
   function renderPipContent(kind){
     if(kind==='cortex'){
       pipContent.innerHTML = buildCortexSvg();
-      // démarre la boucle d'activité simulée
+      pipContent.classList.add('cortex-pip-mode');
+      initCortexStars();
+      // Variante courante depuis config
+      applyCortexVariant(config.cortexVariant || 'A');
+      applyCortexState();
       startCortexActivity();
     }
   }
 
-  // Boucle d'activité simulée : illumine certaines zones selon le state principal
+  // Boucle d'activité simulée : rafraîchit pulses (ambient effect)
   let cortexInterval = null;
   function startCortexActivity(){
     stopCortexActivity();
-    let tick = 0;
     cortexInterval = setInterval(()=>{
       if(!pip.active || pip.contentKind!=='cortex'){ stopCortexActivity(); return; }
-      // reset
-      $$('.cortex-zone').forEach(z=>z.classList.remove('active','thinking','speaking'));
-      const stateClass = (ui.state==='thinking') ? 'thinking'
-                       : (ui.state==='speaking') ? 'speaking'
-                       : (ui.state==='listening') ? 'active' : 'active';
-      // mapping état → zones illuminées
-      let zones = [];
-      switch(ui.state){
-        case 'listening': zones = ['temporal','wernicke','somatosensory']; break;
-        case 'thinking':  zones = ['frontal','parietal','broca']; break;
-        case 'speaking':  zones = ['motor','broca','frontal']; break;
-        default:          zones = ['frontal']; // idle = activité minimale
-      }
-      // Ajout aléatoire d'une zone "ambient" pour varier
-      const all = CORTEX_ZONES.map(z=>z.id);
-      const random = all[(tick) % all.length];
-      if(!zones.includes(random)) zones.push(random);
-      zones.forEach(zid=>{
-        const el = document.getElementById('cortex-'+zid);
-        if(el) el.classList.add(stateClass);
-      });
-      tick++;
-    }, 600);
+      const active = CORTEX_STATE_MAP[ui.state] || [];
+      if(!active.length) return; // idle = aucun pulse
+      // Re-spawn pulses uniquement sur la variante visible (perfs)
+      const letter = config.cortexVariant || 'A';
+      clearVariantPulses(letter);
+      spawnVariantPulses(letter, active);
+    }, 2400);
   }
   function stopCortexActivity(){
     if(cortexInterval){ clearInterval(cortexInterval); cortexInterval=null; }
   }
 
-  ICON_BTN_CORTEX.addEventListener('click',()=>{
+  /* =========================================================================
+     V1.3 — Long-press sur 🧠 Cortex : menu déroulant des 5 variantes
+     ========================================================================= */
+  const cortexMenu = $('#cortexVariantMenu');
+  const LONG_PRESS_DURATION = 500; // ms
+  let cortexBtn_pressTimer = null;
+  let cortexBtn_longFired  = false;
+  let cortexBtn_pressTs    = 0;
+  let cortexBtn_pressX     = 0;
+  let cortexBtn_pressY     = 0;
+  let cortexBtn_moved      = false;
+
+  function openCortexMenu(){
+    // Position du menu juste au-dessus du bouton 🧠 Cortex
+    const r = ICON_BTN_CORTEX.getBoundingClientRect();
+    cortexMenu.style.left = (r.left + r.width/2 - 100) + 'px'; // 200px width / 2 = 100
+    cortexMenu.style.top  = (r.top  - 8) + 'px';
+    cortexMenu.style.transform = 'translateY(-100%) scale(.95)';
+    // Force reflow then apply open class for animation
+    void cortexMenu.offsetWidth;
+    cortexMenu.classList.add('open');
+    cortexMenu.style.transform = 'translateY(-100%) scale(1)';
+    cortexMenu.setAttribute('aria-hidden','false');
+    refreshCortexMenuChecked();
+    try{ navigator.vibrate && navigator.vibrate([10,30,10]);}catch(e){}
+  }
+  function closeCortexMenu(){
+    cortexMenu.classList.remove('open');
+    cortexMenu.setAttribute('aria-hidden','true');
+  }
+  function refreshCortexMenuChecked(){
+    cortexMenu.querySelectorAll('.cv-menu-item').forEach(it=>{
+      const v = it.getAttribute('data-variant');
+      const checked = (v === config.cortexVariant);
+      it.classList.toggle('checked', checked);
+      it.setAttribute('aria-checked', checked ? 'true' : 'false');
+    });
+  }
+
+  function selectCortexVariant(letter, opts){
+    opts = opts || {};
+    if(!VARIANT_META[letter]) return;
+    config.cortexVariant = letter;
+    saveConfig();
+    refreshCortexMenuChecked();
+    if(pip.active && pip.contentKind==='cortex'){
+      applyCortexVariant(letter, { crossfade: true });
+      applyCortexState();
+    }
+    if(!opts.silent){
+      const meta = VARIANT_META[letter];
+      toast('Cortex : '+ meta.name, 1400);
+    }
+  }
+
+  // Wire menu items
+  cortexMenu.querySelectorAll('.cv-menu-item').forEach(it=>{
+    it.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const letter = it.getAttribute('data-variant');
+      selectCortexVariant(letter);
+      closeCortexMenu();
+    });
+  });
+
+  // Tap outside or Esc closes the menu
+  document.addEventListener('pointerdown',(e)=>{
+    if(!cortexMenu.classList.contains('open')) return;
+    if(cortexMenu.contains(e.target)) return;
+    if(ICON_BTN_CORTEX.contains(e.target)) return;
+    closeCortexMenu();
+  });
+  document.addEventListener('keydown',(e)=>{
+    if(e.key === 'Escape' && cortexMenu.classList.contains('open')){
+      closeCortexMenu();
+    }
+  });
+
+  // Pointer events on cortex button : differentiate tap vs long-press
+  ICON_BTN_CORTEX.addEventListener('pointerdown',(e)=>{
+    e.preventDefault();
+    cortexBtn_longFired = false;
+    cortexBtn_moved = false;
+    cortexBtn_pressTs = Date.now();
+    cortexBtn_pressX = e.clientX;
+    cortexBtn_pressY = e.clientY;
+    ICON_BTN_CORTEX.classList.add('lp-arming');
+    cortexBtn_pressTimer = setTimeout(()=>{
+      cortexBtn_pressTimer = null;
+      cortexBtn_longFired = true;
+      ICON_BTN_CORTEX.classList.remove('lp-arming');
+      openCortexMenu();
+    }, LONG_PRESS_DURATION);
+  });
+  ICON_BTN_CORTEX.addEventListener('pointermove',(e)=>{
+    if(!cortexBtn_pressTimer && !cortexBtn_longFired) return;
+    const dx = e.clientX - cortexBtn_pressX;
+    const dy = e.clientY - cortexBtn_pressY;
+    if(Math.abs(dx) > 8 || Math.abs(dy) > 8){
+      cortexBtn_moved = true;
+      if(cortexBtn_pressTimer){
+        clearTimeout(cortexBtn_pressTimer);
+        cortexBtn_pressTimer = null;
+        ICON_BTN_CORTEX.classList.remove('lp-arming');
+      }
+    }
+  });
+  ICON_BTN_CORTEX.addEventListener('pointerup',(e)=>{
+    e.preventDefault();
+    ICON_BTN_CORTEX.classList.remove('lp-arming');
+    if(cortexBtn_pressTimer){
+      clearTimeout(cortexBtn_pressTimer);
+      cortexBtn_pressTimer = null;
+    }
+    if(cortexBtn_longFired){
+      // long-press déjà déclenché : menu ouvert, on ne tap pas
+      cortexBtn_longFired = false;
+      return;
+    }
+    if(cortexBtn_moved) return;
+    // Tap court → bascule PiP cortex (V1.1 inchangé)
     enterPiP('cortex');
+  });
+  ICON_BTN_CORTEX.addEventListener('pointercancel',()=>{
+    if(cortexBtn_pressTimer){
+      clearTimeout(cortexBtn_pressTimer);
+      cortexBtn_pressTimer = null;
+    }
+    ICON_BTN_CORTEX.classList.remove('lp-arming');
   });
 
   /* =========================================================================
@@ -2473,9 +3410,44 @@ body.conv-mode-continuous .conv-stop-fab{
     setOffline(!document.body.classList.contains('offline'));
   });
 
-  // ----- INIT -----
-  setState('idle');
-  console.log('FRIDAY MOBILE MOCK-UP', VERSION, 'ready');
+  // ----- INIT (V1.3 : hydratation depuis localStorage avant first paint) -----
+  function hydrateFromConfig(){
+    // VIEW
+    const targetView = config.view || 'home';
+    $$('.mode-btn').forEach(b=>b.classList.toggle('active', b.dataset.view===targetView));
+    $$('.view').forEach(x=>x.classList.toggle('active', x.id === 'view-'+targetView));
+
+    // STATE (sans propager à cortex puisque pas encore ouvert)
+    setState(config.state || 'idle');
+
+    // SLOTS (sans persist, on lit déjà depuis config)
+    applySlotState('music',    config.slots.music    === 'visible', { persist:false });
+    applySlotState('activity', config.slots.activity === 'visible', { persist:false });
+
+    // MUTED
+    if(config.muted){ $('#btnMute').classList.add('on'); }
+
+    // LOG PANEL
+    if(config.logPanelOpen){
+      $('#logPanel').classList.add('show');
+      $('#btnLog').classList.add('on');
+    }
+
+    // CONV MODE (silent : ne montre pas le toast et ne lance pas le countdown)
+    setConvMode(config.convMode || 'off', { silent:true });
+
+    // Variant cortex (chip checked dans le menu) — l'application réelle se fait à l'ouverture du PiP
+    refreshCortexMenuChecked();
+
+    // PiP cortex ouvert ? → restauration silencieuse (pas de glide, pas de vibrate)
+    if(config.cortexOpen){
+      enterPiP('cortex', { silent:true });
+    }
+  }
+
+  hydrateFromConfig();
+
+  console.log('FRIDAY MOBILE MOCK-UP', VERSION, 'ready · config restored', config);
 
   // Welcome toast
   setTimeout(()=>toast('FRIDAY · '+VERSION, 1800), 400);
