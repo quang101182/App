@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.20.0</title>
+<title>FRIDAY · v1.20.1</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2381,7 +2381,7 @@ body.conv-mode-continuous .conv-stop-fab{
   //   et envoie 'tts_speak_text' au mobile → window.speechSynthesis.speak
   //   (Friday parle dans le HP du tel via TTS OS natif).
   // + glide-typing fix (autocomplete on, enterkeyhint=send, inputmode=text).
-  const VERSION = '1.20.0';
+  const VERSION = '1.20.1';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -2719,7 +2719,26 @@ body.conv-mode-continuous .conv-stop-fab{
      - Vibrations PTT : toggle on/off.
      - Reset : efface friday.mobile.* du localStorage.
      ========================================================================= */
-  (function setupSettingsPanel(){
+  // v1.20.1 — Déclarations TTS config déplacées AVANT setupSettingsPanel
+  // (sinon TDZ ReferenceError au boot, casse PTT + Cortex + Settings).
+  // speakLocalTts et assistantName restent accédés en handlers click (futur),
+  // donc TDZ-safe (au moment du clic, ils sont définis).
+  let _ttsConfig = {
+    rate: 1.05,
+    volume: 1.0,
+    pitchFriday: 1.05,
+    pitchJarvis: 0.92,
+    forceVoice: null,
+  };
+  try {
+    const saved = localStorage.getItem('friday.mobile.tts_config');
+    if(saved) _ttsConfig = Object.assign(_ttsConfig, JSON.parse(saved));
+  } catch(_) {}
+  function _saveTtsConfig(){
+    try { localStorage.setItem('friday.mobile.tts_config', JSON.stringify(_ttsConfig)); } catch(_) {}
+  }
+
+  setTimeout(function setupSettingsPanel(){
     const panel = $('#settingsPanelMobile');
     const btn   = $('#btnSettings');
     const close = $('#settingsClose');
@@ -2831,7 +2850,7 @@ body.conv-mode-continuous .conv-stop-fab{
       else if(window.speechSynthesis) meta.textContent = 'moteur : SpeechSynthesis (navigateur, fallback)';
       else meta.textContent = 'moteur : ⚠ aucune API TTS dispo';
     }
-  })();
+  }, 0);
 
   /* =========================================================================
      v1.18.0 — Champ texte saisie : envoie text_input au backend (équivalent
@@ -4752,21 +4771,9 @@ body.conv-mode-continuous .conv-stop-fab{
               window.Capacitor.Plugins &&
               window.Capacitor.Plugins.TextToSpeech);
   }
-  // v1.19.1 — Persistance config TTS mobile (vitesse, volume, force-voice)
-  let _ttsConfig = {
-    rate: 1.05,
-    volume: 1.0,
-    pitchFriday: 1.05,
-    pitchJarvis: 0.92,
-    forceVoice: null,  // null = auto par voiceHint, ou string voice identifier
-  };
-  try {
-    const saved = localStorage.getItem('friday.mobile.tts_config');
-    if(saved) _ttsConfig = Object.assign(_ttsConfig, JSON.parse(saved));
-  } catch(_) {}
-  function _saveTtsConfig(){
-    try { localStorage.setItem('friday.mobile.tts_config', JSON.stringify(_ttsConfig)); } catch(_) {}
-  }
+  // v1.20.1 — _ttsConfig + _saveTtsConfig déplacés en haut de l'IIFE (avant
+  // setupSettingsPanel) car la TDZ d'un let empêche de l'utiliser même via
+  // setTimeout(0) si la déclaration vient plus tard syntaxiquement.
 
   async function speakLocalTts(text, voiceHint, lang){
     if(!text) return;
