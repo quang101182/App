@@ -2352,13 +2352,17 @@ body.conv-mode-continuous .conv-stop-fab{
   function escapeHtml(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);}
 
   // pointerdown : detect press start
+  // v1.17.0b — fix bug PTT TOGGLE : on update toujours pressTs (même si déjà
+  // recording) pour que pointerup sache détecter le 2e tap et déclencher le stop.
   micBtn.addEventListener('pointerdown',(e)=>{
     e.preventDefault();
+    ui.pressTs=Date.now();
     if(ui.recording){
-      // already recording → ignore start (stop happens on pointerup if hold)
+      // déjà en recording (mode TOGGLE OU HOLD en cours) :
+      // - pas de setTimeout (sinon on re-startRecording à HOLD_THRESHOLD)
+      // - le pointerup gérera le stop selon le mode.
       return;
     }
-    ui.pressTs=Date.now();
     ui.pressTimer=setTimeout(()=>{
       // long press → HOLD
       ui.pressTimer=null;
@@ -2367,21 +2371,22 @@ body.conv-mode-continuous .conv-stop-fab{
   });
   micBtn.addEventListener('pointerup',(e)=>{
     e.preventDefault();
-    const dur=Date.now()-ui.pressTs;
     if(ui.pressTimer){
       clearTimeout(ui.pressTimer);
       ui.pressTimer=null;
-      // tap court → TOGGLE
+      // tap court (relâché avant HOLD_THRESHOLD) → TOGGLE on/off
       if(ui.recording){ stopRecording(false); }
       else            { startRecording(false); }
-    } else if(ui.recording && ui.holdMode){
-      // long press release → stop
+    } else if(ui.recording){
+      // pas de pressTimer pending :
+      // - mode HOLD : release naturel du press long → stop
+      // - mode TOGGLE : 2e tap qui se termine → stop (fix bug Quang 08/05 ~13h45)
       stopRecording(false);
     }
   });
   micBtn.addEventListener('pointercancel',()=>{
     if(ui.pressTimer){clearTimeout(ui.pressTimer);ui.pressTimer=null;}
-    if(ui.recording && ui.holdMode){ stopRecording(true); }
+    if(ui.recording){ stopRecording(true); }
   });
 
   /* =========================================================================
