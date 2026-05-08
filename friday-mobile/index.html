@@ -33,6 +33,21 @@
     font-size: 11px; line-height: 1.45; color: var(--dim);
     -webkit-overflow-scrolling: touch;
   }
+  #transcript {
+    flex: 0 0 auto; min-height: 64px; max-height: 28vh; overflow-y: auto;
+    background: rgba(0, 212, 255, .04); border-radius: 12px;
+    padding: 10px 14px; margin-top: 8px;
+    border-left: 3px solid var(--accent);
+    transition: border-color .2s, background .2s;
+  }
+  #transcript.pending { border-left-color: #FFB800; background: rgba(255,184,0,.06); }
+  #transcript.error   { border-left-color: var(--rec); background: rgba(255,59,92,.08); }
+  #transcript .ts-meta { color: var(--dim); font-size: 10px; margin-bottom: 4px; letter-spacing: .04em; text-transform: uppercase; }
+  #transcript .ts-text { color: var(--text); white-space: pre-wrap; word-wrap: break-word; font-size: 15px; line-height: 1.45; }
+  #transcript.pending .ts-text { color: #FFB800; }
+  #transcript.error   .ts-text { color: var(--rec); }
+  @keyframes blink { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+  #transcript.pending .ts-text::after { content: " ⏳"; animation: blink 1s infinite; }
   #log .line { white-space: pre-wrap; word-break: break-all; }
   #log .line.warn { color: #FFB800; }
   #log .line.err { color: var(--rec); }
@@ -84,6 +99,10 @@
     <span id="elapsed" style="font-variant-numeric: tabular-nums;"></span>
   </header>
   <div id="log"></div>
+  <div id="transcript">
+    <div class="ts-meta">Transcription</div>
+    <div class="ts-text">Tap sur le mic et parle.</div>
+  </div>
   <div id="fab-zone">
     <div class="meter" id="meter"></div>
     <div id="fab-wrap">
@@ -141,6 +160,28 @@ for (let i = 0; i < 24; i++) {
 }
 const meterBars = [...meter.querySelectorAll("span")];
 
+const tsPanel = $("#transcript");
+const tsMeta  = tsPanel.querySelector(".ts-meta");
+const tsText  = tsPanel.querySelector(".ts-text");
+
+function showTranscriptPending(rec_id) {
+  tsPanel.classList.remove("error");
+  tsPanel.classList.add("pending");
+  tsMeta.textContent = "Transcription #" + rec_id;
+  tsText.textContent = "écoute…";
+}
+function showTranscript(rec_id, text, stt_ms, dur_ms) {
+  tsPanel.classList.remove("pending", "error");
+  tsMeta.textContent = "#" + rec_id + " · audio " + dur_ms + "ms · STT " + stt_ms + "ms";
+  tsText.textContent = (text && text.trim()) ? text : "(transcription vide)";
+}
+function showTranscriptError(rec_id, error, stt_ms) {
+  tsPanel.classList.remove("pending");
+  tsPanel.classList.add("error");
+  tsMeta.textContent = "#" + rec_id + " · ERR" + (stt_ms ? " · STT " + stt_ms + "ms" : "");
+  tsText.textContent = error;
+}
+
 function logLine(msg, kind) {
   const div = document.createElement("div");
   div.className = "line" + (kind ? " " + kind : "");
@@ -175,9 +216,25 @@ function connectWS() {
     if (typeof ev.data === "string") {
       try {
         const m = JSON.parse(ev.data);
-        if (m.type === "ack") logLine("<- ack chunk #" + m.n + " bytes=" + m.size + " total=" + m.total, "ok");
-        else if (m.type === "rec_end") logLine("<- rec_end id=" + m.rec_id + " chunks=" + m.chunks + " bytes=" + m.total + " dur=" + m.duration_ms + "ms", "ok");
-        else logLine("<- " + ev.data);
+        if (m.type === "ack") {
+          logLine("<- ack chunk #" + m.n + " bytes=" + m.size + " total=" + m.total, "ok");
+        } else if (m.type === "rec_end") {
+          logLine("<- rec_end id=" + m.rec_id + " chunks=" + m.chunks + " bytes=" + m.total + " dur=" + m.duration_ms + "ms", "ok");
+        } else if (m.type === "transcript_pending") {
+          showTranscriptPending(m.rec_id);
+          logLine("<- transcript pending #" + m.rec_id);
+        } else if (m.type === "transcript") {
+          if (m.error) {
+            showTranscriptError(m.rec_id, m.error, m.stt_ms);
+            logLine("<- transcript ERR: " + m.error, "err");
+          } else {
+            showTranscript(m.rec_id, m.text || "", m.stt_ms || 0, m.duration_ms || 0);
+            const preview = (m.text || "").slice(0, 80);
+            logLine("<- transcript: \"" + preview + "\" (stt=" + m.stt_ms + "ms)", "ok");
+          }
+        } else {
+          logLine("<- " + ev.data);
+        }
       } catch { logLine("<- " + ev.data); }
     } else {
       logLine("<- bin " + ev.data.byteLength + "b");
