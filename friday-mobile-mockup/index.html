@@ -1,0 +1,1215 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#050810">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>FRIDAY · v1.0.0 mock</title>
+<link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
+<!--
+  ================================================================================
+  FRIDAY MOBILE MOCK-UP v1.0.0  ·  2026-05-08
+  ================================================================================
+  Single-file HTML standalone (CSS + JS inline). Aucune dépendance externe.
+  Cible : portrait 6", max-width 480px, viewport-fit=cover.
+
+  CHOIX TECHNIQUES :
+  --------------------------------------------------------------------------------
+  · ADN visuel CLONÉ du HUD PC (jarvis-ui-v1.11.0.html) :
+      palette --bg-0 #050810 / --primary #00d4ff / STATE_COLORS exacts
+      scanlines + grid radial mask + tracé fin lumineux des panneaux satellites
+      (border-left 5px cyan, gradient bg, box-shadow cyan glow).
+  · Sphère HOLO-SPLIT recréée en SVG pur (pas Three.js — perf mobile + coût bat).
+      4 anneaux concentriques contre-rotatifs + équateur scintillant + core pulse
+      + waveform circulaire visible en state speaking. Tout en CSS animations
+      + Web Animations API. Couleurs pilotées par CSS vars (--state-ring/glow).
+  · Cadre satellite : 4 panneaux (CONTEXT, FEED, MUSIC, ACTIVITY). MUSIC + ACTIVITY
+      hidden by default avec toggle (mécanique HIDE TXT du HUD PC). CONTEXT + FEED
+      visibles par défaut. Layout : 2 colonnes responsive sur mobile.
+  · TRANSCRIPT panel : pinned bas (au-dessus du bouton dictée), bulles user/friday.
+  · Bouton dictée RECTANGULAIRE (pas FAB) :
+      tap court (<200ms) = TOGGLE record (anneau plein cyan)
+      long press (>200ms) = HOLD record (anneau pointillé) max 60s
+      vibration haptique simulée + edge-glow status pendant l'enregistrement.
+  · Onglets ACCUEIL / CARTE / COSMOS : segmented control identique au HUD PC,
+      avec switch de view (CARTE = placeholder map mocked, COSMOS = placeholder
+      starfield CSS).
+  · Toggle log panel (bouton dans bottom bar compactée) : panneau full-screen
+      slidant depuis le bas avec lignes log mockées.
+  · DEBUG bar en bas-haut : 4 boutons idle/listening/thinking/speaking pour
+      démontrer les animations à Quang sur son téléphone.
+  · safe-area-insets respectés (padding env(safe-area-inset-*)) pour iPhone notch.
+  · Pas de WebSocket, pas de fetch, pas de logs visibles par défaut.
+  ================================================================================
+-->
+<style>
+:root{
+  --bg-0:#050810;
+  --bg-1:#0a0e18;
+  --bg-2:#0a1828;
+  --primary:#00d4ff;
+  --primary-dim:rgba(0,212,255,.35);
+  --primary-glow:rgba(0,212,255,.7);
+  --listening:#ffb547;
+  --thinking:#c44dff;
+  --speaking:#00ffe0;
+  --error:#ff3a4f;
+  --idle:#5a7090;
+  --text-0:#d8e8ff;
+  --text-1:#7a8fa8;
+  --grid:rgba(0,212,255,.05);
+  --line:#1a3050;
+  --state-ring:#5a7090;
+  --state-glow:rgba(90,112,144,.35);
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none}
+body{
+  background:radial-gradient(ellipse at center,#0d1422 0%,var(--bg-0) 70%),var(--bg-0);
+  color:var(--text-0);
+  font-family:'JetBrains Mono','SF Mono','Consolas',monospace;
+  user-select:none;-webkit-user-select:none;
+  position:relative;
+  font-size:13px;
+}
+/* Scanlines overlay (clone HUD PC) */
+body::before{
+  content:'';position:fixed;inset:0;
+  background:repeating-linear-gradient(0deg,
+    rgba(255,255,255,0) 0,
+    rgba(255,255,255,0) 2px,
+    rgba(0,212,255,.025) 3px,
+    rgba(0,212,255,.025) 4px);
+  pointer-events:none;z-index:200;
+  animation:scanShift 8s linear infinite;
+}
+body::after{
+  content:'';position:fixed;inset:0;
+  background:linear-gradient(rgba(5,8,16,.3) 0%,transparent 8%,transparent 92%,rgba(5,8,16,.3) 100%),
+    radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.7) 100%);
+  pointer-events:none;z-index:199;
+}
+@keyframes scanShift{0%{background-position:0 0}100%{background-position:0 -12px}}
+
+/* Grid background */
+.grid-bg{
+  position:fixed;inset:0;z-index:0;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:30px 30px;
+  mask-image:radial-gradient(ellipse at center,black 0%,transparent 70%);
+  -webkit-mask-image:radial-gradient(ellipse at center,black 0%,transparent 70%);
+}
+
+/* Edge glow (statebar lumineuse autour de l'écran) */
+.edge-glow{
+  position:fixed;inset:0;z-index:198;pointer-events:none;
+  border:2px solid transparent;
+  transition:border-color .35s ease,box-shadow .35s ease;
+}
+body[data-state="listening"] .edge-glow{
+  border-color:rgba(255,181,71,.55);
+  box-shadow:inset 0 0 28px rgba(255,181,71,.18);
+}
+body[data-state="thinking"] .edge-glow{
+  border-color:rgba(196,77,255,.45);
+  box-shadow:inset 0 0 28px rgba(196,77,255,.16);
+}
+body[data-state="speaking"] .edge-glow{
+  border-color:rgba(0,255,224,.55);
+  box-shadow:inset 0 0 28px rgba(0,255,224,.18);
+}
+
+/* === Container + page layout === */
+.app{
+  position:fixed;inset:0;
+  display:flex;flex-direction:column;
+  padding-top:var(--safe-top);
+  padding-bottom:var(--safe-bot);
+  z-index:1;
+  max-width:480px;margin:0 auto;
+}
+
+/* === Header (status dot + brand + onglets) === */
+.header{
+  flex:0 0 auto;
+  padding:10px 14px 6px;
+  display:flex;flex-direction:column;gap:8px;
+}
+.header-top{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.brand{
+  display:flex;align-items:center;gap:8px;
+  font-weight:600;letter-spacing:3px;font-size:13px;
+  color:var(--primary);
+  text-shadow:0 0 10px var(--primary-glow);
+}
+.brand-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--primary);box-shadow:0 0 10px var(--primary-glow);
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.85)}}
+
+.conn-status{
+  display:flex;align-items:center;gap:6px;
+  font-size:9px;letter-spacing:1.5px;color:var(--text-1);
+}
+.conn-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--primary);
+  box-shadow:0 0 6px var(--primary-glow);
+}
+.version-tag{
+  font-size:9px;letter-spacing:1px;color:var(--text-1);opacity:.7;
+}
+
+/* === Mode switch (segmented control) — clone HUD PC === */
+.mode-switch{
+  display:inline-flex;align-self:center;
+  border:1px solid var(--primary-dim);border-radius:5px;overflow:hidden;
+  background:linear-gradient(180deg,rgba(0,18,32,.72),rgba(0,12,24,.55));
+  backdrop-filter:blur(6px) saturate(120%);
+  -webkit-backdrop-filter:blur(6px) saturate(120%);
+  box-shadow:0 2px 10px rgba(0,0,0,.4),0 0 12px rgba(0,212,255,.10);
+}
+.mode-btn{
+  background:transparent;border:none;
+  border-right:1px solid var(--primary-dim);
+  color:var(--text-1);
+  padding:7px 14px;
+  font:600 9px 'JetBrains Mono',monospace;
+  letter-spacing:2px;text-transform:uppercase;cursor:pointer;
+  transition:all .22s cubic-bezier(.16,1,.3,1);
+  white-space:nowrap;
+}
+.mode-btn:last-child{border-right:none}
+.mode-btn.active{
+  background:linear-gradient(180deg,rgba(0,140,200,.22),rgba(0,80,140,.14));
+  color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+  box-shadow:inset 0 0 12px rgba(0,212,255,.22),
+             inset 0 -1px 0 0 rgba(0,212,255,.55);
+}
+
+/* === Main scrollable area === */
+.main{
+  flex:1 1 auto;
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  padding:0 12px 8px;
+  display:flex;flex-direction:column;gap:10px;
+  scrollbar-width:thin;
+  scrollbar-color:var(--primary-dim) transparent;
+}
+.main::-webkit-scrollbar{width:3px}
+.main::-webkit-scrollbar-thumb{background:var(--primary-dim)}
+
+.view{display:none;flex-direction:column;gap:10px;animation:viewIn .35s cubic-bezier(.16,1,.3,1)}
+.view.active{display:flex}
+@keyframes viewIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* === Sphère HOLO-SPLIT === */
+.sphere-wrap{
+  position:relative;
+  width:100%;
+  aspect-ratio:1/1;
+  max-width:300px;
+  margin:6px auto 4px;
+  display:flex;align-items:center;justify-content:center;
+}
+.sphere-wrap svg{
+  width:100%;height:100%;
+  filter:drop-shadow(0 0 18px var(--state-glow));
+  transition:filter .5s ease;
+}
+.sphere-ring{
+  fill:none;
+  stroke:var(--state-ring);
+  stroke-width:1.2;
+  opacity:.85;
+  transition:stroke .5s ease;
+}
+.sphere-ring.thick{stroke-width:1.8}
+.sphere-equator{
+  fill:none;
+  stroke:var(--state-ring);
+  stroke-width:1.2;
+  stroke-dasharray:3 4;
+  opacity:.9;
+}
+.sphere-tick{
+  stroke:var(--state-ring);
+  stroke-width:1;
+  opacity:.5;
+}
+.sphere-core{
+  fill:var(--state-ring);
+  filter:url(#coreGlow);
+  animation:coreBreath 3.2s ease-in-out infinite;
+}
+@keyframes coreBreath{
+  0%,100%{transform:scale(1);opacity:.85}
+  50%{transform:scale(1.18);opacity:1}
+}
+#sphereSvg{transform-origin:50% 50%}
+.spin-cw{animation:spinCw 22s linear infinite;transform-origin:50% 50%}
+.spin-ccw{animation:spinCcw 32s linear infinite;transform-origin:50% 50%}
+.spin-tilt{animation:spinTilt 18s linear infinite;transform-origin:50% 50%}
+@keyframes spinCw{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes spinCcw{from{transform:rotate(0)}to{transform:rotate(-360deg)}}
+@keyframes spinTilt{
+  0%{transform:rotate3d(1,0,0,60deg) rotate(0)}
+  100%{transform:rotate3d(1,0,0,60deg) rotate(360deg)}
+}
+
+/* Sphere state label */
+.sphere-state{
+  position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  text-align:center;pointer-events:none;
+  z-index:2;
+}
+.state-label{
+  font-size:10px;letter-spacing:4px;font-weight:500;
+  color:var(--state-ring);
+  text-transform:uppercase;
+  text-shadow:0 0 12px var(--state-glow);
+  transition:color .35s ease;
+}
+.state-hint{
+  margin-top:4px;
+  font-size:8px;letter-spacing:2px;color:var(--text-1);opacity:.6;
+}
+
+/* RMS bars (bottom of sphere, listening only) */
+.rms-bars{
+  position:absolute;left:50%;bottom:8%;
+  transform:translateX(-50%);
+  display:flex;align-items:flex-end;gap:3px;height:18px;
+  opacity:0;transition:opacity .25s;
+}
+body[data-state="listening"] .rms-bars,
+body[data-state="speaking"] .rms-bars{opacity:.9}
+.rms-bar{
+  width:3px;background:var(--state-ring);
+  box-shadow:0 0 4px var(--state-glow);
+  animation:rmsAnim .9s ease-in-out infinite;
+  transform-origin:bottom;
+}
+.rms-bar:nth-child(1){animation-delay:0s;height:6px}
+.rms-bar:nth-child(2){animation-delay:.1s;height:12px}
+.rms-bar:nth-child(3){animation-delay:.2s;height:18px}
+.rms-bar:nth-child(4){animation-delay:.15s;height:14px}
+.rms-bar:nth-child(5){animation-delay:.05s;height:8px}
+@keyframes rmsAnim{
+  0%,100%{transform:scaleY(.4)}
+  50%{transform:scaleY(1)}
+}
+
+/* === Satellite panels grid === */
+.sat-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.hud-panel{
+  position:relative;
+  background:linear-gradient(135deg,rgba(0,18,32,.94),rgba(0,28,52,.82));
+  border:1px solid rgba(0,212,255,.6);
+  border-left:4px solid #00d4ff;
+  color:#cbeeff;
+  padding:9px 11px;
+  font-family:'Consolas','Courier New',monospace;
+  font-size:11px;
+  line-height:1.45;
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  box-shadow:0 6px 22px rgba(0,212,255,.18),0 0 2px rgba(0,212,255,.45);
+  overflow:hidden;
+  animation:panelIn .4s cubic-bezier(.16,1,.3,1);
+}
+.hud-panel.full{grid-column:1/-1}
+.hud-panel.hidden-slot{display:none}
+@keyframes panelIn{
+  from{opacity:0;transform:scale(.92) translateY(6px)}
+  to{opacity:1;transform:none}
+}
+.hud-panel-header{
+  color:#ffaa33;
+  font-weight:bold;
+  font-size:9px;
+  letter-spacing:2px;
+  margin-bottom:6px;
+  border-bottom:1px solid rgba(255,170,51,.3);
+  padding-bottom:4px;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.hud-panel-header .ico{font-size:13px}
+.hud-panel-line{
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  opacity:.95;margin:1px 0;
+  font-size:11px;
+}
+.hud-panel-line.dim{color:#6e9eb8;font-size:10px}
+.hud-panel-line.accent{color:#ffd966;font-size:11px;font-weight:500}
+.hud-panel-bigval{
+  font-size:20px;color:#00d4ff;font-weight:bold;line-height:1.1;margin:2px 0;
+}
+.hud-panel-bar{
+  height:4px;background:rgba(0,212,255,.15);
+  margin:5px 0 3px;position:relative;overflow:hidden;
+}
+.hud-panel-bar::after{
+  content:'';position:absolute;left:0;top:0;bottom:0;
+  width:var(--hud-fill,60%);
+  background:linear-gradient(90deg,#00d4ff,#66e8ff);
+  box-shadow:0 0 6px #00d4ff;
+  animation:hud-bar-pulse 1.6s infinite;
+}
+@keyframes hud-bar-pulse{0%,100%{opacity:.7}50%{opacity:1}}
+
+/* Slot toggle row */
+.slot-toggles{
+  display:flex;justify-content:center;gap:6px;
+  padding:2px 0 0;
+}
+.slot-toggle{
+  background:rgba(0,18,32,.7);
+  border:1px solid var(--primary-dim);
+  color:var(--text-1);
+  padding:5px 9px;
+  font:600 9px 'JetBrains Mono',monospace;
+  letter-spacing:1.5px;text-transform:uppercase;
+  cursor:pointer;border-radius:3px;
+  transition:all .2s;
+}
+.slot-toggle.on{
+  border-color:var(--primary);
+  color:var(--primary);
+  text-shadow:0 0 4px var(--primary-glow);
+  box-shadow:inset 0 0 10px rgba(0,212,255,.18);
+}
+
+/* === Transcript panel === */
+.transcript-panel{
+  background:linear-gradient(180deg,rgba(0,30,52,.7),rgba(0,18,32,.85));
+  border:1px solid var(--primary-dim);
+  border-left:4px solid var(--primary);
+  padding:8px 10px 10px;
+  box-shadow:0 4px 18px rgba(0,212,255,.12),inset 0 0 22px rgba(0,212,255,.04);
+  animation:panelIn .45s cubic-bezier(.16,1,.3,1);
+}
+.transcript-header{
+  font:600 9px 'JetBrains Mono',monospace;
+  letter-spacing:3px;color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+  text-transform:uppercase;
+  border-bottom:1px solid var(--primary-dim);
+  padding-bottom:4px;margin-bottom:6px;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.transcript-list{
+  display:flex;flex-direction:column;gap:6px;
+  max-height:130px;overflow-y:auto;
+  padding-right:4px;
+  scrollbar-width:thin;
+  scrollbar-color:var(--primary-dim) transparent;
+}
+.transcript-list::-webkit-scrollbar{width:3px}
+.transcript-list::-webkit-scrollbar-thumb{background:var(--primary-dim)}
+.bubble{
+  font-size:11px;line-height:1.4;
+  padding:5px 8px;border-radius:3px;
+  word-wrap:break-word;white-space:normal;
+}
+.bubble.user{
+  background:rgba(0,212,255,.06);
+  border-left:2px solid var(--primary);
+  color:var(--text-0);
+}
+.bubble.friday{
+  background:rgba(255,181,71,.05);
+  border-left:2px solid #ffb547;
+  color:#ffd9a0;
+}
+.bubble .who{
+  font-size:8px;letter-spacing:2px;
+  opacity:.65;text-transform:uppercase;
+  margin-bottom:2px;
+}
+
+/* === MAP view (mock placeholder) === */
+.map-view{
+  position:relative;
+  height:60vh;min-height:300px;
+  background:
+    radial-gradient(circle at 30% 40%,rgba(0,212,255,.08) 0%,transparent 25%),
+    radial-gradient(circle at 70% 60%,rgba(255,181,71,.05) 0%,transparent 30%),
+    linear-gradient(180deg,rgba(0,30,52,.55),rgba(0,18,32,.85));
+  border:1px solid var(--primary-dim);
+  border-left:4px solid var(--primary);
+  overflow:hidden;
+}
+.map-grid{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(0,212,255,.12) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,212,255,.12) 1px,transparent 1px);
+  background-size:24px 24px;
+  mask-image:radial-gradient(ellipse at center,black 0%,transparent 75%);
+  -webkit-mask-image:radial-gradient(ellipse at center,black 0%,transparent 75%);
+}
+.map-pin{
+  position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  width:14px;height:14px;border-radius:50%;
+  background:var(--primary);
+  box-shadow:0 0 12px var(--primary),0 0 24px var(--primary);
+  animation:mapPin 1.6s ease-out infinite;
+}
+@keyframes mapPin{
+  0%{box-shadow:0 0 8px var(--primary),0 0 16px var(--primary)}
+  100%{box-shadow:0 0 32px var(--primary),0 0 64px transparent}
+}
+.map-label{
+  position:absolute;left:50%;top:calc(50% + 18px);
+  transform:translateX(-50%);
+  font-size:10px;letter-spacing:2px;color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+  text-transform:uppercase;
+}
+.map-coord{
+  position:absolute;bottom:10px;left:10px;
+  font-size:9px;letter-spacing:2px;color:var(--text-1);opacity:.7;
+}
+
+/* === COSMOS view (placeholder starfield) === */
+.cosmos-view{
+  position:relative;
+  height:60vh;min-height:300px;
+  border:1px solid var(--primary-dim);
+  border-left:4px solid var(--primary);
+  background:radial-gradient(ellipse at center,#0a1f3c 0%,#02060e 70%);
+  overflow:hidden;
+}
+.cosmos-stars{
+  position:absolute;inset:0;
+  background-image:
+    radial-gradient(1px 1px at 20% 30%,#fff,transparent),
+    radial-gradient(1px 1px at 60% 70%,#9be3ff,transparent),
+    radial-gradient(1px 1px at 80% 20%,#fff,transparent),
+    radial-gradient(2px 2px at 40% 80%,#00d4ff,transparent),
+    radial-gradient(1px 1px at 90% 50%,#fff,transparent),
+    radial-gradient(1px 1px at 10% 60%,#cbe8ff,transparent),
+    radial-gradient(2px 2px at 50% 50%,#ffd966,transparent),
+    radial-gradient(1px 1px at 30% 90%,#fff,transparent);
+  background-size:240px 240px;
+  animation:cosmosDrift 60s linear infinite;
+  opacity:.8;
+}
+@keyframes cosmosDrift{
+  0%{background-position:0 0,0 0,0 0,0 0,0 0,0 0,0 0,0 0}
+  100%{background-position:240px 240px,-240px 240px,240px -240px,-240px -240px,240px 240px,-240px 240px,240px -240px,-240px -240px}
+}
+.cosmos-label{
+  position:absolute;bottom:14px;left:0;right:0;
+  text-align:center;
+  font-size:10px;letter-spacing:4px;color:var(--primary);
+  text-shadow:0 0 8px var(--primary-glow);
+  text-transform:uppercase;
+}
+
+/* === Bottom bar === */
+.bottombar{
+  flex:0 0 auto;
+  padding:8px 12px calc(10px + var(--safe-bot)) 12px;
+  display:flex;flex-direction:column;gap:8px;
+  border-top:1px solid var(--primary-dim);
+  background:linear-gradient(0deg,rgba(0,12,24,.85),rgba(5,8,16,.65));
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+.satellite-row{
+  display:flex;justify-content:space-between;align-items:center;gap:6px;
+}
+.sat-btn{
+  flex:1;
+  background:rgba(0,18,32,.7);
+  border:1px solid var(--primary-dim);
+  color:var(--text-1);
+  height:34px;
+  font:700 12px 'JetBrains Mono',monospace;
+  letter-spacing:1px;
+  cursor:pointer;border-radius:3px;
+  transition:all .2s;
+}
+.sat-btn:active,
+.sat-btn.on{
+  border-color:var(--primary);
+  color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+  box-shadow:inset 0 0 10px rgba(0,212,255,.18);
+}
+
+/* === Bouton dictée rectangulaire === */
+.mic-btn{
+  width:72%;
+  align-self:center;
+  height:54px;
+  background:linear-gradient(180deg,rgba(0,30,52,.85),rgba(0,18,32,.95));
+  border:2px solid var(--primary);
+  border-radius:6px;
+  color:var(--primary);
+  font:700 13px 'JetBrains Mono',monospace;
+  letter-spacing:3px;text-transform:uppercase;
+  cursor:pointer;
+  position:relative;overflow:hidden;
+  box-shadow:0 4px 18px rgba(0,212,255,.22),inset 0 0 18px rgba(0,212,255,.10);
+  transition:all .2s cubic-bezier(.16,1,.3,1);
+  text-shadow:0 0 8px var(--primary-glow);
+}
+.mic-btn:active{transform:scale(.97)}
+.mic-btn.recording{
+  background:linear-gradient(180deg,rgba(255,181,71,.18),rgba(60,30,0,.85));
+  border-color:var(--listening);
+  color:var(--listening);
+  text-shadow:0 0 10px rgba(255,181,71,.7);
+  box-shadow:0 4px 22px rgba(255,181,71,.28),inset 0 0 22px rgba(255,181,71,.18);
+  animation:micPulse 1.4s ease-in-out infinite;
+}
+.mic-btn.hold{
+  border-style:dashed;
+}
+@keyframes micPulse{
+  0%,100%{box-shadow:0 4px 22px rgba(255,181,71,.25),inset 0 0 22px rgba(255,181,71,.14)}
+  50%{box-shadow:0 4px 32px rgba(255,181,71,.55),inset 0 0 32px rgba(255,181,71,.28)}
+}
+.mic-btn::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;
+  width:var(--rec-progress,0%);
+  background:linear-gradient(90deg,rgba(255,181,71,.18),rgba(255,181,71,.36));
+  transition:width .25s linear;
+  pointer-events:none;
+}
+.mic-icon{
+  display:inline-block;
+  vertical-align:middle;
+  margin-right:8px;
+  width:16px;height:16px;
+}
+
+/* === Log panel (toggleable) === */
+.log-panel{
+  position:fixed;left:0;right:0;bottom:0;
+  height:60vh;max-height:480px;
+  background:linear-gradient(180deg,rgba(0,18,32,.96),rgba(0,12,24,.98));
+  border-top:2px solid var(--primary);
+  z-index:50;
+  transform:translateY(100%);
+  transition:transform .35s cubic-bezier(.16,1,.3,1);
+  display:flex;flex-direction:column;
+  padding-bottom:var(--safe-bot);
+  box-shadow:0 -10px 40px rgba(0,212,255,.15);
+}
+.log-panel.show{transform:translateY(0)}
+.log-header{
+  padding:10px 14px;
+  border-bottom:1px solid var(--primary-dim);
+  display:flex;justify-content:space-between;align-items:center;
+  font:700 11px 'JetBrains Mono',monospace;
+  letter-spacing:3px;color:var(--primary);
+  text-shadow:0 0 6px var(--primary-glow);
+  text-transform:uppercase;
+}
+.log-close{
+  background:transparent;border:1px solid var(--primary-dim);
+  color:var(--text-1);
+  padding:4px 10px;font:600 10px monospace;
+  cursor:pointer;letter-spacing:1px;border-radius:3px;
+}
+.log-body{
+  flex:1;overflow-y:auto;
+  padding:10px 14px;
+  font:11px/1.5 'JetBrains Mono',monospace;
+}
+.log-line{margin:2px 0}
+.log-line.info{color:var(--text-0)}
+.log-line.dbg{color:var(--text-1);opacity:.75}
+.log-line.warn{color:var(--listening)}
+.log-line.err{color:var(--error)}
+.log-line .ts{color:var(--text-1);opacity:.55;margin-right:6px}
+.log-line .src{color:var(--primary);opacity:.7;margin-right:6px}
+
+/* === Debug bar (visible toujours bas) === */
+.debug-bar{
+  display:flex;justify-content:center;gap:5px;
+  padding:0 4px;
+}
+.dbg-btn{
+  flex:1;
+  background:rgba(0,18,32,.5);
+  border:1px solid rgba(122,143,168,.3);
+  color:var(--text-1);
+  padding:5px 4px;font:600 8px 'JetBrains Mono',monospace;
+  letter-spacing:1.2px;text-transform:uppercase;
+  cursor:pointer;border-radius:3px;
+}
+.dbg-btn.on{
+  border-color:var(--state-ring);
+  color:var(--state-ring);
+  text-shadow:0 0 4px var(--state-glow);
+}
+
+/* === Helper : RMS waveform around sphere when speaking === */
+.wave-arc{
+  fill:none;
+  stroke:var(--state-ring);
+  stroke-width:1.4;
+  opacity:0;
+  transition:opacity .3s;
+}
+body[data-state="speaking"] .wave-arc{
+  opacity:.9;
+  animation:waveDance 1.2s ease-in-out infinite;
+}
+@keyframes waveDance{
+  0%,100%{stroke-dasharray:6 4;stroke-dashoffset:0}
+  50%{stroke-dasharray:3 7;stroke-dashoffset:8}
+}
+
+/* Responsive small (very small phones) */
+@media (max-width:340px){
+  .mode-btn{padding:6px 9px;letter-spacing:1.5px}
+  .sphere-wrap{max-width:240px}
+  .hud-panel{padding:7px 9px;font-size:10px}
+  .mic-btn{height:50px;font-size:12px;letter-spacing:2px}
+}
+
+/* Toast notification */
+.toast{
+  position:fixed;left:50%;top:60px;
+  transform:translateX(-50%);
+  background:rgba(0,18,32,.95);
+  border:1px solid var(--primary);
+  color:var(--primary);
+  padding:8px 14px;font:600 10px monospace;
+  letter-spacing:2px;text-transform:uppercase;
+  border-radius:4px;z-index:300;
+  box-shadow:0 4px 16px rgba(0,212,255,.3);
+  opacity:0;pointer-events:none;
+  transition:opacity .25s,transform .25s;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body data-state="idle">
+
+<div class="grid-bg"></div>
+<div class="edge-glow"></div>
+<div class="toast" id="toast">READY</div>
+
+<div class="app">
+
+  <!-- ==== HEADER ==== -->
+  <header class="header">
+    <div class="header-top">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <span>FRIDAY</span>
+      </div>
+      <div class="conn-status">
+        <span class="conn-dot"></span>
+        <span>MOCK</span>
+        <span class="version-tag">· v1.0.0</span>
+      </div>
+    </div>
+
+    <div class="mode-switch" role="tablist">
+      <button class="mode-btn active" data-view="home" role="tab">Accueil</button>
+      <button class="mode-btn" data-view="map" role="tab">Carte</button>
+      <button class="mode-btn" data-view="cosmos" role="tab">Cosmos</button>
+    </div>
+  </header>
+
+  <!-- ==== MAIN ==== -->
+  <main class="main">
+
+    <!-- VIEW : HOME -->
+    <section class="view active" id="view-home">
+
+      <!-- Sphère HOLO-SPLIT -->
+      <div class="sphere-wrap" aria-label="Sphère Friday">
+        <svg id="sphereSvg" viewBox="0 0 200 200" aria-hidden="true">
+          <defs>
+            <filter id="coreGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <radialGradient id="sphereBgGrad">
+              <stop offset="0%" stop-color="rgba(0,212,255,.1)"/>
+              <stop offset="60%" stop-color="rgba(0,212,255,.03)"/>
+              <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+            </radialGradient>
+          </defs>
+
+          <!-- halo bg -->
+          <circle cx="100" cy="100" r="92" fill="url(#sphereBgGrad)"/>
+
+          <!-- ring outer (CW) -->
+          <g class="spin-cw">
+            <circle class="sphere-ring thick" cx="100" cy="100" r="86"/>
+            <!-- 12 ticks autour -->
+            <g class="sphere-tick">
+              <line x1="100" y1="6"  x2="100" y2="14"/>
+              <line x1="100" y1="186" x2="100" y2="194"/>
+              <line x1="6" y1="100"  x2="14" y2="100"/>
+              <line x1="186" y1="100" x2="194" y2="100"/>
+              <line x1="35" y1="35"  x2="42" y2="42"/>
+              <line x1="158" y1="158" x2="165" y2="165"/>
+              <line x1="35" y1="165" x2="42" y2="158"/>
+              <line x1="158" y1="42" x2="165" y2="35"/>
+            </g>
+          </g>
+
+          <!-- ring middle (CCW, ellipse pour effet 3D) -->
+          <g class="spin-ccw">
+            <ellipse class="sphere-ring" cx="100" cy="100" rx="68" ry="20"/>
+            <ellipse class="sphere-ring" cx="100" cy="100" rx="68" ry="20" transform="rotate(60 100 100)"/>
+            <ellipse class="sphere-ring" cx="100" cy="100" rx="68" ry="20" transform="rotate(-60 100 100)"/>
+          </g>
+
+          <!-- equator (dotted) -->
+          <g class="spin-cw">
+            <ellipse class="sphere-equator" cx="100" cy="100" rx="76" ry="32"/>
+          </g>
+
+          <!-- inner ring -->
+          <g class="spin-ccw">
+            <circle class="sphere-ring" cx="100" cy="100" r="50"/>
+            <line class="sphere-tick" x1="50" y1="100" x2="60" y2="100"/>
+            <line class="sphere-tick" x1="140" y1="100" x2="150" y2="100"/>
+            <line class="sphere-tick" x1="100" y1="50" x2="100" y2="60"/>
+            <line class="sphere-tick" x1="100" y1="140" x2="100" y2="150"/>
+          </g>
+
+          <!-- waveform arc (visible speaking) -->
+          <circle class="wave-arc" cx="100" cy="100" r="78" stroke-dasharray="4 4"/>
+          <circle class="wave-arc" cx="100" cy="100" r="82" stroke-dasharray="2 5"/>
+
+          <!-- core -->
+          <circle class="sphere-core" cx="100" cy="100" r="9"/>
+          <circle cx="100" cy="100" r="3" fill="#fff" opacity=".8"/>
+        </svg>
+
+        <div class="sphere-state">
+          <div class="state-label" id="stateLabel">IDLE</div>
+          <div class="state-hint" id="stateHint">tap mic to speak</div>
+        </div>
+
+        <div class="rms-bars" aria-hidden="true">
+          <div class="rms-bar"></div>
+          <div class="rms-bar"></div>
+          <div class="rms-bar"></div>
+          <div class="rms-bar"></div>
+          <div class="rms-bar"></div>
+        </div>
+      </div>
+
+      <!-- Toggles slots cachés -->
+      <div class="slot-toggles">
+        <button class="slot-toggle" data-slot="music">+ MUSIC</button>
+        <button class="slot-toggle" data-slot="activity">+ ACTIVITY</button>
+      </div>
+
+      <!-- Cadre satellite : 4 panneaux -->
+      <div class="sat-grid">
+        <!-- CONTEXT -->
+        <article class="hud-panel" id="panel-context">
+          <div class="hud-panel-header">
+            <span>CONTEXT</span><span class="ico">◇</span>
+          </div>
+          <div class="hud-panel-line accent">Domicile · Lyon 7</div>
+          <div class="hud-panel-line dim">21:14 · jeu 8 mai</div>
+          <div class="hud-panel-line dim">14°C · ciel clair</div>
+          <div class="hud-panel-line">Wi-Fi · STARK-NET</div>
+        </article>
+
+        <!-- FEED -->
+        <article class="hud-panel" id="panel-feed">
+          <div class="hud-panel-header">
+            <span>FEED</span><span class="ico">⚡</span>
+          </div>
+          <div class="hud-panel-line accent">3 nouveaux events</div>
+          <div class="hud-panel-line dim">15:02 · DictoKey ↑</div>
+          <div class="hud-panel-line dim">14:48 · Build OK</div>
+          <div class="hud-panel-line dim">14:21 · Note saved</div>
+        </article>
+
+        <!-- MUSIC (hidden by default) -->
+        <article class="hud-panel hidden-slot" id="panel-music">
+          <div class="hud-panel-header">
+            <span>MUSIC</span><span class="ico">♪</span>
+          </div>
+          <div class="hud-panel-line accent">Daft Punk</div>
+          <div class="hud-panel-line dim">Discovery · 2:34</div>
+          <div class="hud-panel-bar" style="--hud-fill:42%"></div>
+        </article>
+
+        <!-- ACTIVITY (hidden by default) -->
+        <article class="hud-panel hidden-slot" id="panel-activity">
+          <div class="hud-panel-header">
+            <span>ACTIVITY</span><span class="ico">◈</span>
+          </div>
+          <div class="hud-panel-bigval">7 412</div>
+          <div class="hud-panel-line dim">pas aujourd'hui</div>
+          <div class="hud-panel-bar" style="--hud-fill:74%"></div>
+        </article>
+      </div>
+
+      <!-- TRANSCRIPT (toujours visible) -->
+      <article class="transcript-panel">
+        <div class="transcript-header">
+          <span>Transcript</span>
+          <span style="color:var(--text-1);opacity:.6">live</span>
+        </div>
+        <div class="transcript-list" id="transcriptList">
+          <div class="bubble user"><div class="who">Quang · 21:11</div>Friday, où en est le build mobile ?</div>
+          <div class="bubble friday"><div class="who">Friday · 21:11</div>Build APK signé en 02:14, version v1.0.0 prête pour test sur ton tel.</div>
+          <div class="bubble user"><div class="who">Quang · 21:13</div>Lance la routine du soir.</div>
+          <div class="bubble friday"><div class="who">Friday · 21:13</div>Routine soir engagée. Lumières dim 30%, musique chill, alarme 7:15.</div>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- VIEW : MAP -->
+    <section class="view" id="view-map">
+      <div class="map-view">
+        <div class="map-grid"></div>
+        <div class="map-pin"></div>
+        <div class="map-label">Lyon 7 · 45.74° N · 4.85° E</div>
+        <div class="map-coord">GPS · ±8m · live</div>
+      </div>
+      <article class="hud-panel full">
+        <div class="hud-panel-header">
+          <span>NEAR YOU</span><span class="ico">⌖</span>
+        </div>
+        <div class="hud-panel-line accent">Carrefour Express · 120m</div>
+        <div class="hud-panel-line dim">Métro Jean Macé · 320m</div>
+        <div class="hud-panel-line dim">Boulangerie Pozzoli · 80m</div>
+      </article>
+    </section>
+
+    <!-- VIEW : COSMOS -->
+    <section class="view" id="view-cosmos">
+      <div class="cosmos-view">
+        <div class="cosmos-stars"></div>
+        <div class="cosmos-label">Cosmos · placeholder mock</div>
+      </div>
+      <article class="hud-panel full">
+        <div class="hud-panel-header">
+          <span>SOL SYSTEM</span><span class="ico">☉</span>
+        </div>
+        <div class="hud-panel-line accent">Lune · gibbeuse 78%</div>
+        <div class="hud-panel-line dim">Mars · visible 22:14</div>
+        <div class="hud-panel-line dim">ISS · passage 23:48</div>
+      </article>
+    </section>
+
+  </main>
+
+  <!-- ==== BOTTOM BAR ==== -->
+  <footer class="bottombar">
+
+    <!-- Bouton dictée rectangulaire -->
+    <button class="mic-btn" id="micBtn" aria-label="Dictée">
+      <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="3" width="6" height="11" rx="3"/>
+        <path d="M5 11a7 7 0 0 0 14 0"/>
+        <line x1="12" y1="18" x2="12" y2="22"/>
+      </svg>
+      <span id="micLabel">TAP TO TALK</span>
+    </button>
+
+    <!-- Satellite row : compactée -->
+    <div class="satellite-row">
+      <button class="sat-btn" id="btnLog" title="Logs">≡</button>
+      <button class="sat-btn" id="btnMute" title="Mute">◊</button>
+      <button class="sat-btn" id="btnSettings" title="Settings">⚙</button>
+      <button class="sat-btn" id="btnPersona" title="Persona">$</button>
+    </div>
+
+    <!-- Debug bar (mock seulement) -->
+    <div class="debug-bar">
+      <button class="dbg-btn on" data-debug="idle">idle</button>
+      <button class="dbg-btn" data-debug="listening">listening</button>
+      <button class="dbg-btn" data-debug="thinking">thinking</button>
+      <button class="dbg-btn" data-debug="speaking">speaking</button>
+    </div>
+  </footer>
+
+</div>
+
+<!-- ==== Log panel ==== -->
+<aside class="log-panel" id="logPanel" aria-hidden="true">
+  <div class="log-header">
+    <span>LOG · MOCK</span>
+    <button class="log-close" id="logClose">CLOSE</button>
+  </div>
+  <div class="log-body" id="logBody">
+    <div class="log-line info"><span class="ts">21:14:02</span><span class="src">[WS]</span>WebSocket connected (mock)</div>
+    <div class="log-line dbg"><span class="ts">21:14:03</span><span class="src">[STT]</span>wake_state=idle</div>
+    <div class="log-line info"><span class="ts">21:14:05</span><span class="src">[LLM]</span>persona=friday-mcu loaded</div>
+    <div class="log-line dbg"><span class="ts">21:14:06</span><span class="src">[UI]</span>view=home active</div>
+    <div class="log-line info"><span class="ts">21:14:11</span><span class="src">[CTX]</span>context_update: location=Lyon 7</div>
+    <div class="log-line warn"><span class="ts">21:14:14</span><span class="src">[NET]</span>cellular signal -82dBm</div>
+    <div class="log-line dbg"><span class="ts">21:14:18</span><span class="src">[STT]</span>VAD threshold=0.45</div>
+    <div class="log-line info"><span class="ts">21:14:22</span><span class="src">[TTS]</span>voice=friday-piper-mcu rate=1.0</div>
+    <div class="log-line dbg"><span class="ts">21:14:25</span><span class="src">[UI]</span>panel.context show=true</div>
+    <div class="log-line info"><span class="ts">21:14:30</span><span class="src">[FEED]</span>3 events queued</div>
+    <div class="log-line dbg"><span class="ts">21:14:33</span><span class="src">[BAT]</span>level=64% drain=2.1%/h</div>
+  </div>
+</aside>
+
+<script>
+/* =========================================================================
+   FRIDAY MOBILE MOCK-UP — JS
+   Pas de WS, pas de fetch. Tout est mock. ~250 lignes.
+   ========================================================================= */
+(function(){
+  'use strict';
+
+  const VERSION = 'v1.0.0 mock';
+  const STATE_COLORS = {
+    idle:      { ring:'#5a7090', glow:'rgba(90,112,144,.35)'  },
+    listening: { ring:'#ffb547', glow:'rgba(255,181,71,.65)'  },
+    thinking:  { ring:'#c44dff', glow:'rgba(196,77,255,.6)'   },
+    speaking:  { ring:'#00ffe0', glow:'rgba(0,255,224,.65)'   }
+  };
+  const STATE_HINTS = {
+    idle:      'tap mic to speak',
+    listening: 'listening… speak now',
+    thinking:  'reasoning…',
+    speaking:  'friday speaking'
+  };
+
+  const $ = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+
+  // ----- STATE -----
+  const ui = {
+    state:'idle',
+    recording:false,
+    holdMode:false,
+    pressTs:0,
+    pressTimer:null,
+    progressTimer:null,
+    elapsed:0
+  };
+
+  // ----- TOAST -----
+  let toastTimer=null;
+  function toast(msg, ms=1400){
+    const t=$('#toast');
+    t.textContent=msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>t.classList.remove('show'),ms);
+  }
+
+  // ----- STATE COLORS -----
+  function setState(s){
+    if(!STATE_COLORS[s]) return;
+    ui.state=s;
+    document.body.dataset.state=s;
+    document.documentElement.style.setProperty('--state-ring', STATE_COLORS[s].ring);
+    document.documentElement.style.setProperty('--state-glow', STATE_COLORS[s].glow);
+    $('#stateLabel').textContent=s.toUpperCase();
+    $('#stateHint').textContent=STATE_HINTS[s];
+    // Highlight debug btn
+    $$('.dbg-btn').forEach(b=>b.classList.toggle('on', b.dataset.debug===s));
+  }
+
+  // ----- VIEW SWITCHING -----
+  $$('.mode-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      $$('.mode-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const v=btn.dataset.view;
+      $$('.view').forEach(x=>x.classList.remove('active'));
+      const target=$('#view-'+v);
+      if(target) target.classList.add('active');
+      try{ navigator.vibrate && navigator.vibrate(8);}catch(e){}
+    });
+  });
+
+  // ----- SLOT TOGGLES -----
+  $$('.slot-toggle').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const slot=btn.dataset.slot;
+      const panel=$('#panel-'+slot);
+      const isHidden=panel.classList.contains('hidden-slot');
+      if(isHidden){
+        panel.classList.remove('hidden-slot');
+        btn.classList.add('on');
+        btn.textContent='– '+slot.toUpperCase();
+        toast(slot.toUpperCase()+' shown');
+      } else {
+        panel.classList.add('hidden-slot');
+        btn.classList.remove('on');
+        btn.textContent='+ '+slot.toUpperCase();
+        toast(slot.toUpperCase()+' hidden');
+      }
+      try{ navigator.vibrate && navigator.vibrate(10);}catch(e){}
+    });
+  });
+
+  // ----- DEBUG BUTTONS -----
+  $$('.dbg-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      setState(btn.dataset.debug);
+      try{ navigator.vibrate && navigator.vibrate(12);}catch(e){}
+    });
+  });
+
+  // ----- LOG PANEL -----
+  $('#btnLog').addEventListener('click',()=>{
+    const lp=$('#logPanel');
+    lp.classList.toggle('show');
+    $('#btnLog').classList.toggle('on', lp.classList.contains('show'));
+  });
+  $('#logClose').addEventListener('click',()=>{
+    $('#logPanel').classList.remove('show');
+    $('#btnLog').classList.remove('on');
+  });
+
+  // ----- SETTINGS / MUTE / PERSONA mock -----
+  $('#btnMute').addEventListener('click',()=>{
+    $('#btnMute').classList.toggle('on');
+    toast($('#btnMute').classList.contains('on')?'muted':'unmuted');
+  });
+  $('#btnSettings').addEventListener('click',()=>toast('settings · mock'));
+  $('#btnPersona').addEventListener('click',()=>toast('persona · friday-mcu'));
+
+  // ----- MIC BUTTON (tap toggle / long press hold) -----
+  const micBtn=$('#micBtn');
+  const micLabel=$('#micLabel');
+  const HOLD_THRESHOLD=200; // ms
+  const MAX_DURATION=60000; // 60s
+
+  function startRecording(hold){
+    if(ui.recording) return;
+    ui.recording=true;
+    ui.holdMode=!!hold;
+    ui.elapsed=0;
+    micBtn.classList.add('recording');
+    if(hold) micBtn.classList.add('hold'); else micBtn.classList.remove('hold');
+    micLabel.textContent=hold?'HOLD · 0s':'RECORDING · 0s';
+    setState('listening');
+    try{ navigator.vibrate && navigator.vibrate(15);}catch(e){}
+
+    const startTs=Date.now();
+    ui.progressTimer=setInterval(()=>{
+      ui.elapsed=Date.now()-startTs;
+      const pct=Math.min(100,(ui.elapsed/MAX_DURATION)*100);
+      micBtn.style.setProperty('--rec-progress', pct+'%');
+      const sec=Math.floor(ui.elapsed/1000);
+      micLabel.textContent=(hold?'HOLD · ':'RECORDING · ')+sec+'s';
+      if(ui.elapsed>=MAX_DURATION){
+        toast('max 60s reached');
+        stopRecording(true);
+      }
+    },120);
+  }
+
+  function stopRecording(autoStopped){
+    if(!ui.recording) return;
+    ui.recording=false;
+    clearInterval(ui.progressTimer);
+    ui.progressTimer=null;
+    micBtn.classList.remove('recording','hold');
+    micBtn.style.setProperty('--rec-progress','0%');
+    micLabel.textContent='TAP TO TALK';
+    try{ navigator.vibrate && navigator.vibrate(20);}catch(e){}
+
+    // Mock pipeline : listening → thinking → speaking → idle
+    setState('thinking');
+    setTimeout(()=>{
+      const userMsg = ui.holdMode
+        ? 'Friday, dictée longue de '+Math.floor(ui.elapsed/1000)+' secondes.'
+        : 'Friday quoi de neuf ?';
+      addBubble('user', userMsg);
+      setTimeout(()=>{
+        setState('speaking');
+        const reply = ui.holdMode
+          ? 'Note longue capturée et résumée. Je l\'ai classée dans le slot CONTEXT, sous-thème dictée mobile.'
+          : 'Trois events en attente, build APK validé, et météo stable jusqu\'à demain matin.';
+        addBubble('friday', reply);
+        setTimeout(()=>setState('idle'), 2400);
+      }, 900);
+    }, 600);
+  }
+
+  function addBubble(who, text){
+    const list=$('#transcriptList');
+    const b=document.createElement('div');
+    b.className='bubble '+who;
+    const now=new Date();
+    const hh=String(now.getHours()).padStart(2,'0');
+    const mm=String(now.getMinutes()).padStart(2,'0');
+    b.innerHTML='<div class="who">'+(who==='user'?'Quang':'Friday')+' · '+hh+':'+mm+'</div>'+escapeHtml(text);
+    list.appendChild(b);
+    list.scrollTop=list.scrollHeight;
+  }
+
+  function escapeHtml(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);}
+
+  // pointerdown : detect press start
+  micBtn.addEventListener('pointerdown',(e)=>{
+    e.preventDefault();
+    if(ui.recording){
+      // already recording → ignore start (stop happens on pointerup if hold)
+      return;
+    }
+    ui.pressTs=Date.now();
+    ui.pressTimer=setTimeout(()=>{
+      // long press → HOLD
+      ui.pressTimer=null;
+      startRecording(true);
+    }, HOLD_THRESHOLD);
+  });
+  micBtn.addEventListener('pointerup',(e)=>{
+    e.preventDefault();
+    const dur=Date.now()-ui.pressTs;
+    if(ui.pressTimer){
+      clearTimeout(ui.pressTimer);
+      ui.pressTimer=null;
+      // tap court → TOGGLE
+      if(ui.recording){ stopRecording(false); }
+      else            { startRecording(false); }
+    } else if(ui.recording && ui.holdMode){
+      // long press release → stop
+      stopRecording(false);
+    }
+  });
+  micBtn.addEventListener('pointercancel',()=>{
+    if(ui.pressTimer){clearTimeout(ui.pressTimer);ui.pressTimer=null;}
+    if(ui.recording && ui.holdMode){ stopRecording(true); }
+  });
+
+  // ----- INIT -----
+  setState('idle');
+  console.log('FRIDAY MOBILE MOCK-UP', VERSION, 'ready');
+
+  // Welcome toast
+  setTimeout(()=>toast('FRIDAY · '+VERSION, 1800), 400);
+})();
+</script>
+</body>
+</html>
