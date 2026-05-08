@@ -830,6 +830,29 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
   0%,100%{box-shadow:0 4px 22px rgba(255,181,71,.25),inset 0 0 22px rgba(255,181,71,.14)}
   50%{box-shadow:0 4px 32px rgba(255,181,71,.55),inset 0 0 32px rgba(255,181,71,.28)}
 }
+/* v1.17.0h — Warning visuel à 10s de la fin (50s+) : pulse ambre rapide.
+   À 5s de la fin (55s+) : pulse rouge critique plus rapide. Override de
+   l'animation micPulse via priorité plus forte (ordre déclaration). */
+.mic-btn.warn-near-end{
+  border-color:#ffb547;
+  color:#ffe080;
+  text-shadow:0 0 12px rgba(255,224,128,.95);
+  animation:micWarnNear 1s ease-in-out infinite;
+}
+@keyframes micWarnNear{
+  0%,100%{box-shadow:0 4px 18px rgba(255,184,0,.35),inset 0 0 22px rgba(255,184,0,.20)}
+  50%    {box-shadow:0 4px 30px rgba(255,184,0,.85),inset 0 0 36px rgba(255,184,0,.45)}
+}
+.mic-btn.warn-critical{
+  border-color:#ff4757;
+  color:#ffd0d4;
+  text-shadow:0 0 14px rgba(255,71,87,.95);
+  animation:micWarnCritical .55s ease-in-out infinite;
+}
+@keyframes micWarnCritical{
+  0%,100%{box-shadow:0 4px 22px rgba(255,71,87,.45),inset 0 0 28px rgba(255,71,87,.30); transform:scale(1);}
+  50%    {box-shadow:0 4px 38px rgba(255,71,87,.95),inset 0 0 44px rgba(255,71,87,.65); transform:scale(1.025);}
+}
 .mic-btn::before{
   content:'';position:absolute;left:0;top:0;bottom:0;
   width:var(--rec-progress,0%);
@@ -2457,9 +2480,27 @@ body.conv-mode-continuous .conv-stop-fab{
       const pct=Math.min(100,(ui.elapsed/MAX_DURATION)*100);
       micBtn.style.setProperty('--rec-progress', pct+'%');
       const sec=Math.floor(ui.elapsed/1000);
-      micLabel.textContent=(hold?'HOLD · ':'RECORDING · ')+sec+'s';
+      const remaining = 60 - sec;
+      // v1.17.0h — Affichage "X / 60s" + warning visuel approche fin :
+      //   - 50s+ (10s avant fin) : pulse ambre 1s + label "(10s left)"
+      //   - 55s+ (5s avant fin)  : pulse rouge 0.55s + label "(5s left)"
+      let suffix = '';
+      if(remaining <= 5 && remaining >= 0){
+        micBtn.classList.add('warn-critical');
+        micBtn.classList.remove('warn-near-end');
+        suffix = ' · ' + remaining + 's restantes';
+        // 1 vibration courte par seconde dans la zone critique
+        try{ navigator.vibrate && navigator.vibrate(20);}catch(e){}
+      } else if(remaining <= 10){
+        micBtn.classList.add('warn-near-end');
+        micBtn.classList.remove('warn-critical');
+        suffix = ' · ' + remaining + 's avant fin';
+      } else {
+        micBtn.classList.remove('warn-near-end','warn-critical');
+      }
+      micLabel.textContent = (hold?'HOLD · ':'RECORDING · ') + sec + 's / 60s' + suffix;
       if(ui.elapsed>=MAX_DURATION){
-        toast('max 60s reached');
+        toast('max 60s atteint');
         stopRecording(true);
       }
     },120);
@@ -2470,7 +2511,7 @@ body.conv-mode-continuous .conv-stop-fab{
     ui.recording=false;
     clearInterval(ui.progressTimer);
     ui.progressTimer=null;
-    micBtn.classList.remove('recording','hold');
+    micBtn.classList.remove('recording','hold','warn-near-end','warn-critical');
     micBtn.style.setProperty('--rec-progress','0%');
     micLabel.textContent='TAP TO TALK';
     // v1.17.0g — Release audio focus IMMÉDIATEMENT (synchronous) au stop pour
@@ -3497,27 +3538,49 @@ body.conv-mode-continuous .conv-stop-fab{
   // Bonus : l'oscillateur est appelé SYNCHRONOUSLY depuis startRecording
   // (mockup-level, dans le user-gesture du tap), pas après await getStream
   // qui faisait perdre le contexte d'activation.
+  // v1.17.0h — Refacto bruit blanc + heartbeat MediaSession.
+  // Chrome Android détecte qu'un OscillatorNode joue un signal "périodique"
+  // (sinusoïde pure) et relâche l'audio focus après 2-3s pour économiser la
+  // batterie / éviter abus. Le bruit blanc non-périodique à -50dB ressemble
+  // à un vrai signal audio → focus maintenu sur toute la durée du PTT.
+  // Ajout aussi : latencyHint:'playback' (vs default 'interactive' qui peut
+  // être interprété comme audio communication) + heartbeat MediaSession
+  // toutes les 3s pour rappeler au système qu'on est en lecture média.
   let _focusCtx = null;
-  let _focusOsc = null;
+  let _focusSrc = null;
   let _focusGain = null;
+  let _focusHeartbeat = null;
   function takeAudioFocus(){
     try {
       releaseAudioFocus(); // Cleanup any leftover state
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if(!Ctx) return;
-      _focusCtx = new Ctx();
+      // latencyHint:'playback' = signal au navigateur "ceci est du média
+      // audio (musique/vidéo)", pas une voice call. Influence la priorité
+      // d'audio focus côté Android.
+      try {
+        _focusCtx = new Ctx({ latencyHint: 'playback' });
+      } catch(_) {
+        _focusCtx = new Ctx();
+      }
       if(_focusCtx.state === 'suspended'){
         _focusCtx.resume().catch(() => {});
       }
-      _focusOsc = _focusCtx.createOscillator();
+      // Buffer 1s de bruit blanc à amplitude -50dB (gain 0.003).
+      // Bruit blanc = signal non-périodique, considéré comme "vrai audio"
+      // par les algos de détection abuse de Chrome / Android.
+      const sr = _focusCtx.sampleRate;
+      const buf = _focusCtx.createBuffer(1, sr, sr);
+      const ch = buf.getChannelData(0);
+      for(let i=0; i<ch.length; i++) ch[i] = (Math.random() - 0.5) * 0.006;
+      _focusSrc = _focusCtx.createBufferSource();
+      _focusSrc.buffer = buf;
+      _focusSrc.loop = true;
       _focusGain = _focusCtx.createGain();
-      // ~-62dB : inaudible humainement mais signal continu non-zéro pour que
-      // Chrome ne détecte pas un "fake silent play" et garde l'audio focus.
-      _focusGain.gain.value = 0.0008;
-      _focusOsc.frequency.value = 80; // sub-bass, encore moins perceptible
-      _focusOsc.connect(_focusGain);
+      _focusGain.gain.value = 0.5; // amplitude finale ~-50dB (0.003 × 0.5)
+      _focusSrc.connect(_focusGain);
       _focusGain.connect(_focusCtx.destination);
-      _focusOsc.start();
+      _focusSrc.start();
       if('mediaSession' in navigator){
         try {
           navigator.mediaSession.metadata = new MediaMetadata({
@@ -3529,15 +3592,38 @@ body.conv-mode-continuous .conv-stop-fab{
           navigator.mediaSession.setActionHandler('pause', () => {
             try { if(typeof stopRecording === 'function' && ui.recording) stopRecording(false); } catch(_) {}
           });
+          // Bind play/stop aussi : plus d'handlers = Chrome considère qu'on
+          // est un vrai media player, moins enclin à relâcher le focus.
+          navigator.mediaSession.setActionHandler('play', () => {});
+          navigator.mediaSession.setActionHandler('stop', () => {
+            try { if(typeof stopRecording === 'function' && ui.recording) stopRecording(false); } catch(_) {}
+          });
         } catch(_) {}
+        // Heartbeat : ré-affirmer playbackState='playing' toutes les 2.5s
+        // pour empêcher Android de considérer la session comme "stale".
+        _focusHeartbeat = setInterval(() => {
+          try {
+            if('mediaSession' in navigator){
+              navigator.mediaSession.playbackState = 'playing';
+            }
+            // Vérifie aussi que le AudioContext n'a pas été suspendu par l'OS.
+            if(_focusCtx && _focusCtx.state === 'suspended'){
+              _focusCtx.resume().catch(() => {});
+            }
+          } catch(_) {}
+        }, 2500);
       }
     } catch(e){ console.warn('[audio-focus] take failed:', e); }
   }
   function releaseAudioFocus(){
     try {
-      if(_focusOsc){
-        try { _focusOsc.stop(); _focusOsc.disconnect(); } catch(_) {}
-        _focusOsc = null;
+      if(_focusHeartbeat){
+        try { clearInterval(_focusHeartbeat); } catch(_) {}
+        _focusHeartbeat = null;
+      }
+      if(_focusSrc){
+        try { _focusSrc.stop(); _focusSrc.disconnect(); } catch(_) {}
+        _focusSrc = null;
       }
       if(_focusGain){
         try { _focusGain.disconnect(); } catch(_) {}
@@ -3552,6 +3638,8 @@ body.conv-mode-continuous .conv-stop-fab{
           navigator.mediaSession.playbackState = 'none';
           navigator.mediaSession.metadata = null;
           navigator.mediaSession.setActionHandler('pause', null);
+          navigator.mediaSession.setActionHandler('play', null);
+          navigator.mediaSession.setActionHandler('stop', null);
         } catch(_) {}
       }
     } catch(_) {}
