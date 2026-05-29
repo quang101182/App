@@ -1,11 +1,11 @@
-<!-- Monitoring Dashboard v1.13.3 (12/05/2026 après-midi) — Nouvelle section "Attribution install & signaux v2.61.7" : 3 cards consomment aggregated.attribution_v2617 du gateway v1.5.17 (install_source / install_content / oem_kill_brand). Affiche en attente tant que v2.61.7 pas rolled out (~17-19 mai). Mesure source des installs (site dictokey.com vs Play direct vs ads), boutons site qui convertissent (hero/sticky/cta/etc.), fréquence kill OEM Xiaomi/vivo. v1.13.1 (12/05/2026) bandeau Premium silencieux requalifié pattern NORMAL v<2.61.4 + retrait /admin/set-tier (créerait Premium gratuit à vie si user résilie, validé code gateway:664 + 2e avis Groq). v1.13.0 (08/05/2026 nuit) bandeau initial. v1.11.0 persistance localStorage auto-refresh. -->
+<!-- Monitoring Dashboard v1.13.5 (29/05/2026) — Highlight AI Assistant channel dans card "Sources d'acquisition 7j" (firebaseSources) : bandeau gradient violet en tête affichant total sessions + % AI si > 0, ligne avec border violet + emoji 🤖 sur le channel matchant /ai[\s\-_]*assistant|chatgpt|perplexity|claude|gemini|copilot/i. Si 0 session AI, bandeau pointillé indique "Phase 0/1/2 GEO live 29/05 — re-mesurer J+30/+60/+90". Anticipe le rollout naturel du channel GA4 natif AI Assistant (ajouté Google 13/05/2026) — actuellement 0 sessions (normal early). v1.13.3 (12/05/2026 après-midi) — Nouvelle section "Attribution install & signaux v2.61.7" : 3 cards consomment aggregated.attribution_v2617 du gateway v1.5.17 (install_source / install_content / oem_kill_brand). Affiche en attente tant que v2.61.7 pas rolled out (~17-19 mai). Mesure source des installs (site dictokey.com vs Play direct vs ads), boutons site qui convertissent (hero/sticky/cta/etc.), fréquence kill OEM Xiaomi/vivo. v1.13.1 (12/05/2026) bandeau Premium silencieux requalifié pattern NORMAL v<2.61.4 + retrait /admin/set-tier (créerait Premium gratuit à vie si user résilie, validé code gateway:664 + 2e avis Groq). v1.13.0 (08/05/2026 nuit) bandeau initial. v1.11.0 persistance localStorage auto-refresh. -->
 <!-- Monitoring Dashboard v1.10.0 (Refonte labels Play Console : remplacement des labels en dur "J-2"/"LIVE"/"28j" par des labels dynamiques basés sur last_data_date + window_first/last_date. Bannière warning si données figées >3j. Sub-text hero "Appareils réels actifs" : suppression du breakdown pro/premium/free quand source = Play Console (mélangeait stock Play + cumul KV, mathématiquement fallacieux). Note moyenne : label "cumul" remplacé par "note globale toutes périodes". Labels HTML statiques cohérents avec labels JS dynamiques.) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.13.4</title>
+<title>Monitoring v1.13.5</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -1945,15 +1945,35 @@ function renderFirebaseKPIs() {
     }
 
     // Sources d'acquisition (sessionDefaultChannelGroup)
+    // v1.13.5 : highlight AI Assistant channel (natif GA4 13/05/2026) — sinon noyé dans la liste
     var srcEl = document.getElementById('firebaseSources');
     if (srcEl) {
       var ch = a.acquisition_channels || [];
       if (ch.length === 0) {
         srcEl.textContent = 'Aucune donnée';
       } else {
-        srcEl.innerHTML = ch.slice(0, 8).map(function(c) {
-          return '<div>' + c.channel + ' : <b>' + c.new_users + '</b> nouveaux · ' + c.sessions + ' sessions</div>';
+        // Détecte channel IA : "AI Assistant" natif + fallbacks possibles ("ai-assistant", "ChatGPT", "Perplexity", etc.)
+        var aiRegex = /ai[\s\-_]*assistant|chatgpt|perplexity|claude|gemini|copilot/i;
+        var totalSessions = ch.reduce(function(s, c) { return s + (c.sessions || 0); }, 0);
+        var aiSessions = ch.filter(function(c) { return aiRegex.test(c.channel); })
+                           .reduce(function(s, c) { return s + (c.sessions || 0); }, 0);
+        var aiPct = totalSessions > 0 ? (aiSessions / totalSessions * 100) : 0;
+
+        var html = '';
+        // Bandeau highlight AI Assistant en haut
+        if (aiSessions > 0) {
+          html += '<div style="margin-bottom:8px;padding:6px 10px;background:linear-gradient(135deg,rgba(124,58,237,.18),rgba(45,212,191,.10));border:1px solid rgba(124,58,237,.35);border-radius:6px;color:var(--accent2-new);font-weight:600;font-size:.82rem;">🤖 Trafic AI Assistant : <b>' + aiSessions + '</b> sessions (' + aiPct.toFixed(1) + '% du total)</div>';
+        } else {
+          html += '<div style="margin-bottom:8px;padding:6px 10px;background:rgba(110,118,129,.10);border:1px dashed rgba(110,118,129,.30);border-radius:6px;color:var(--text-mute-new);font-size:.75rem;">🤖 Trafic AI Assistant : <b>0</b> sessions 7j (Phase 0/1/2 GEO live 29/05 — à re-mesurer J+30/+60/+90)</div>';
+        }
+        // Liste des channels avec highlight ligne IA
+        html += ch.slice(0, 8).map(function(c) {
+          var isAi = aiRegex.test(c.channel);
+          var style = isAi ? 'background:rgba(124,58,237,.10);border-left:2px solid var(--accent-new);padding-left:6px;border-radius:0 4px 4px 0;' : '';
+          var prefix = isAi ? '<span style="color:var(--accent2-new);">🤖 </span>' : '';
+          return '<div style="' + style + '">' + prefix + c.channel + ' : <b>' + c.new_users + '</b> nouveaux · ' + c.sessions + ' sessions</div>';
         }).join('');
+        srcEl.innerHTML = html;
       }
     }
     // v1.10.0 : re-render section "Mouvements de tier" qui consomme aussi les events Firebase
