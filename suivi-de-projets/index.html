@@ -1825,6 +1825,35 @@ tr.row-flash td {
 }
 .pj-item span { flex-grow: 1; word-break: break-all; }
 
+/* --- Tab counters (S4) --- */
+.tab-counter {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  font-size: 0.72em;
+  font-weight: 700;
+  color: #fff;
+  background: #94a3b8;
+  border-radius: 999px;
+  line-height: 1.35;
+  vertical-align: 1px;
+}
+.tablink.active .tab-counter { background: #ffffff33; color: #fff; }
+
+/* --- Accessibilité animations (S4) ---
+   Respecte la préférence systeme "reduced motion" (Windows/Mac/iOS/Android).
+   Désactive blink/spin/pulse/fadeInDown/toastIn/rowFlash/transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .pj-dropzone { transition: none !important; }
+}
+
 </style>
 </head>
 <body>
@@ -1861,8 +1890,8 @@ tr.row-flash td {
     <!-- Barre d'onglets -->
     <div class="tabs">
         <a class="tablink active" href="#" onclick="ouvrirOnglet(event, 'tab1')">Tableau de bord</a>
-        <a class="tablink" href="#" onclick="ouvrirOnglet(event, 'tab2')">Thématiques</a>
-        <a class="tablink" href="#" onclick="ouvrirOnglet(event, 'tab3')">Actions</a>
+        <a class="tablink" href="#" onclick="ouvrirOnglet(event, 'tab2')">Thématiques <span class="tab-counter" id="tab2-count">0</span></a>
+        <a class="tablink" href="#" onclick="ouvrirOnglet(event, 'tab3')">Actions <span class="tab-counter" id="tab3-count">0</span></a>
         <a class="tablink" href="#" onclick="ouvrirOnglet(event, 'tab4')">Réglages</a>
     </div>
 
@@ -3497,7 +3526,44 @@ tr.row-flash td {
         }
         // S3 — Câble les dropzones PJ (multi + drag&drop + auto-add)
         try { setupPJDropzone('add'); setupPJDropzone('edit'); } catch (e) { console.warn('PJ dropzones init failed:', e); }
+        // S4 — Câble Escape + click-outside sur toutes les modales (sauf preview-modal, qui a son propre logic)
+        try { setupModaleClosers(); } catch (e) { console.warn('Modale closers init failed:', e); }
     }); // End DOMContentLoaded Listener
+
+    /**
+     * S4 — Unifie la fermeture des modales : Escape global + clic sur backdrop.
+     * Cible toutes les `.modal`, `.desc-edit-modal`, `.preview-modal`, `#desc-status-manager-modal`,
+     * `#help-modal`, `#avantages-modal`, `#username-modal` qui sont actuellement affichés.
+     */
+    function setupModaleClosers() {
+        const closers = {
+            'help-modal': masquerAide,
+            'avantages-modal': masquerAvantagesDetail,
+            'username-modal': fermerModalChangementUtilisateur,
+            'desc-modal': () => closeDescModal(false),
+            'preview-modal': fermerApercuPj,
+            'desc-status-manager-modal': closeDescStatusManagerModal,
+        };
+        // Escape global → ferme la plus récemment ouverte
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            for (const id of Object.keys(closers).reverse()) {
+                const el = document.getElementById(id);
+                if (el && (el.style.display === 'block' || el.style.display === 'flex')) {
+                    try { closers[id](); } catch (_) {}
+                    return;
+                }
+            }
+        });
+        // Click sur backdrop (= clic direct sur l'élément racine modale, pas son contenu)
+        Object.entries(closers).forEach(([id, closer]) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('mousedown', (e) => {
+                if (e.target === el) { try { closer(); } catch (_) {} }
+            });
+        });
+    }
 
     async function verifyPermission(handle, canRequest = false) {
         if (!handle) return 'denied';
@@ -3701,8 +3767,8 @@ tr.row-flash td {
         if (!selectedProjectSaveId) { console.warn("ChargerDonneesLocal: No profile selected."); return; }
         const prefix = getLocalStoragePrefix();
 
-        try { projects = JSON.parse(localStorage.getItem(prefix + 'projects') || '[]'); if (!Array.isArray(projects)) projects = []; } catch(e) { console.warn('Données projets corrompues, réinitialisation.', e); projects = []; }
-        try { actions = JSON.parse(localStorage.getItem(prefix + 'actions') || '[]'); if (!Array.isArray(actions)) actions = []; } catch(e) { console.warn('Données actions corrompues, réinitialisation.', e); actions = []; }
+        try { projects = JSON.parse(localStorage.getItem(prefix + 'projects') || '[]'); if (!Array.isArray(projects)) projects = []; } catch(e) { console.warn('Données thématiques corrompues, réinitialisation.', e); projects = []; try { logActivity('Système', `⚠ Données thématiques corrompues détectées et réinitialisées (${e.message}).`); } catch(_){} }
+        try { actions = JSON.parse(localStorage.getItem(prefix + 'actions') || '[]'); if (!Array.isArray(actions)) actions = []; } catch(e) { console.warn('Données actions corrompues, réinitialisation.', e); actions = []; try { logActivity('Système', `⚠ Données actions corrompues détectées et réinitialisées (${e.message}).`); } catch(_){} }
         nextProjectId = parseInt(localStorage.getItem(prefix + 'nextProjectId'), 10) || 1;
         nextActionId = parseInt(localStorage.getItem(prefix + 'nextActionId'), 10) || 1;
         // Recalibrer les compteurs pour éviter les doublons d'ID
@@ -3710,7 +3776,7 @@ tr.row-flash td {
         if (nextProjectId <= maxProjId) nextProjectId = maxProjId + 1;
         const maxActId = actions.reduce((m, a) => Math.max(m, a.id || 0), 0);
         if (nextActionId <= maxActId) nextActionId = maxActId + 1;
-        try { attachments = JSON.parse(localStorage.getItem(prefix + 'attachments') || '{}'); if (typeof attachments !== 'object' || Array.isArray(attachments)) attachments = {}; } catch(e) { console.warn('Données pièces jointes corrompues.', e); attachments = {}; }
+        try { attachments = JSON.parse(localStorage.getItem(prefix + 'attachments') || '{}'); if (typeof attachments !== 'object' || Array.isArray(attachments)) attachments = {}; } catch(e) { console.warn('Données pièces jointes corrompues.', e); attachments = {}; try { logActivity('Système', `⚠ Données pièces jointes corrompues (${e.message}).`); } catch(_){} }
         try { projectCounters = JSON.parse(localStorage.getItem(prefix + 'projectCounters') || '{}'); if (typeof projectCounters !== 'object' || Array.isArray(projectCounters)) projectCounters = {}; } catch(e) { projectCounters = {}; }
         try { activityLog = JSON.parse(localStorage.getItem(prefix + 'activityLog') || '[]'); if (!Array.isArray(activityLog)) activityLog = []; } catch(e) { console.warn('Journal d\'activité corrompu.', e); activityLog = []; } // <<< CHARGER LE LOG
         displayLogLimit = parseInt(localStorage.getItem(prefix + 'displayLogLimit'), 10) || 50; // <<< CHARGER LIMITE AFFICHAGE
@@ -4901,6 +4967,10 @@ function chargerActions() {
         const completedCount = actions.filter(a => a.status.toLowerCase().includes('termin')).length;
         const completedEl = document.getElementById('completed-actions');
         completedEl.innerText = completedCount; completedEl.className = "stat-value status-termine";
+
+        // (S4) Badges compteurs sur tabs
+        const tab2c = document.getElementById('tab2-count'); if (tab2c) tab2c.textContent = projects.length;
+        const tab3c = document.getElementById('tab3-count'); if (tab3c) tab3c.textContent = actions.length;
 
         // Rendre la card "En retard" cliquable une seule fois
         const lateCard = lateEl?.closest('.stat-card');
