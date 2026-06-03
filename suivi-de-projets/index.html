@@ -1766,6 +1766,65 @@ tr.row-flash td {
       /* === Config avec dossier configuré === */
       .config-option-configured::before { content: "📁 "; }
 
+/* --- PJ Dropzone (S3) --- */
+.pj-dropzone {
+  position: relative;
+  border: 2px dashed #b0bec5;
+  border-radius: 8px;
+  background: #fafbfc;
+  padding: 18px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  margin-bottom: 8px;
+}
+.pj-dropzone:hover { background: #eef5fb; border-color: #4f9ad6; }
+.pj-dropzone.is-dragover {
+  background: #e3f2fd;
+  border-color: #1976d2;
+  box-shadow: inset 0 0 0 2px #1976d255;
+}
+.pj-dropzone.is-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+  background: #f5f5f5;
+}
+.pj-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  font-size: 0;
+  color: transparent;
+  cursor: pointer;
+}
+.pj-input::-webkit-file-upload-button { visibility: hidden; }
+.pj-hint {
+  margin: 0;
+  font-size: 0.92em;
+  color: #4a5862;
+  pointer-events: none;
+}
+.pj-count {
+  font-size: 0.78em;
+  color: #607d8b;
+  font-weight: 600;
+  margin-left: 6px;
+}
+.pj-count.is-full { color: #c62828; }
+.pj-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f1f8ff;
+  border: 1px solid #c7e0f7;
+  border-radius: 6px;
+  margin-bottom: 4px;
+}
+.pj-item span { flex-grow: 1; word-break: break-all; }
+
 </style>
 </head>
 <body>
@@ -2153,11 +2212,11 @@ tr.row-flash td {
                     <label for="action-notes">Notes :</label>
                     <textarea id="action-notes"></textarea>
                 </div>
-                <h4>Pièces jointes (max 5)</h4>
-                 <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
-                    <input id="add-attachment-input" type="file" style="flex-grow: 1;"/>
-                    <button type="button" class="btn-secondary" style="flex-shrink: 0;" onclick="ajouterAttachmentTemporaire()">Ajouter PJ</button>
-                 </div>
+                <h4>Pièces jointes <span class="pj-count" id="add-pj-count">(0/10)</span></h4>
+                <div class="pj-dropzone" id="add-pj-dropzone">
+                    <input id="add-attachment-input" type="file" multiple class="pj-input"/>
+                    <p class="pj-hint">📎 <strong>Glissez-déposez vos fichiers</strong> ici ou cliquez pour sélectionner<br><span style="font-size:0.85em;color:#888;">Jusqu'à 10 fichiers — sélection multiple supportée</span></p>
+                </div>
                 <div id="add-attachment-list" style="margin-top:10px; margin-bottom: 15px; font-size: 0.9em;"></div>
 
                 <div class="form-buttons">
@@ -2224,15 +2283,15 @@ tr.row-flash td {
                     <label for="edit-action-notes">Notes :</label>
                     <textarea id="edit-action-notes"></textarea>
                 </div>
-                 <h4>Pièces jointes (max 5)</h4>
+                 <h4>Pièces jointes <span class="pj-count" id="edit-pj-count">(0/10)</span></h4>
                   <div class="form-group">
                      <label>Pièces jointes existantes:</label>
                      <div id="edit-attachment-list" style="margin-top:5px; margin-bottom: 10px; font-size: 0.9em;"></div>
                   </div>
-                 <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
-                    <input id="edit-attachment-input" type="file" style="flex-grow: 1;"/>
-                    <button type="button" class="btn-secondary" style="flex-shrink: 0;" onclick="ajouterAttachmentTemporaireEdit()">Ajouter PJ</button>
-                 </div>
+                <div class="pj-dropzone" id="edit-pj-dropzone">
+                    <input id="edit-attachment-input" type="file" multiple class="pj-input"/>
+                    <p class="pj-hint">📎 <strong>Glissez-déposez vos fichiers</strong> ici ou cliquez pour sélectionner<br><span style="font-size:0.85em;color:#888;">Jusqu'à 10 fichiers — sélection multiple supportée</span></p>
+                </div>
 
 
                 <div class="form-buttons">
@@ -3436,6 +3495,8 @@ tr.row-flash td {
         } finally {
              hideLoading();
         }
+        // S3 — Câble les dropzones PJ (multi + drag&drop + auto-add)
+        try { setupPJDropzone('add'); setupPJDropzone('edit'); } catch (e) { console.warn('PJ dropzones init failed:', e); }
     }); // End DOMContentLoaded Listener
 
     async function verifyPermission(handle, canRequest = false) {
@@ -4271,8 +4332,8 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
         }
     }
 
-    function afficherFormulaireAjoutAction() { clearMessage(); if(projects.length === 0) { displayMessage("Veuillez d'abord créer un projet.", "warning"); return; } document.getElementById('add-action-form').style.display = 'block'; document.getElementById('action-start').value = new Date().toISOString().split("T")[0]; const bouton = document.getElementById('add-action-button'); if(bouton) { bouton.disabled = true; bouton.style.opacity = '0.5'; } addActionAttachments = []; document.getElementById('add-attachment-list').innerHTML = ''; initAutocompleteEtendu(); setupProjectChangeListeners(); }
-    function masquerFormulaireAjoutAction() { document.getElementById('add-action-form').style.display = 'none'; document.getElementById('actionForm').reset(); addActionAttachments = []; document.getElementById('add-attachment-list').innerHTML = ''; const bouton = document.getElementById('add-action-button'); if(bouton) { bouton.disabled = false; bouton.style.opacity = '1'; }}
+    function afficherFormulaireAjoutAction() { clearMessage(); if(projects.length === 0) { displayMessage("Veuillez d'abord créer une thématique.", "warning"); return; } document.getElementById('add-action-form').style.display = 'block'; document.getElementById('action-start').value = new Date().toISOString().split("T")[0]; const bouton = document.getElementById('add-action-button'); if(bouton) { bouton.disabled = true; bouton.style.opacity = '0.5'; } addActionAttachments = []; document.getElementById('add-attachment-list').innerHTML = ''; refreshPJCount('add'); initAutocompleteEtendu(); setupProjectChangeListeners(); }
+    function masquerFormulaireAjoutAction() { document.getElementById('add-action-form').style.display = 'none'; document.getElementById('actionForm').reset(); addActionAttachments = []; document.getElementById('add-attachment-list').innerHTML = ''; refreshPJCount('add'); const bouton = document.getElementById('add-action-button'); if(bouton) { bouton.disabled = false; bouton.style.opacity = '1'; }}
 
     async function ajouterAction() {
         showLoading("Enregistrement de l'action et des pièces jointes...");
@@ -4350,11 +4411,12 @@ function afficherFormulaireModificationAction(actionId) {
         });
     }
     document.getElementById('edit-action-form').style.display = 'block';
+    refreshPJCount('edit');
     initAutocompleteEtendu();
     setupProjectChangeListeners();
 }
 
-     function masquerFormulaireModificationAction() { document.getElementById('edit-action-form').style.display = 'none'; document.getElementById('editActionForm').reset(); editActionAttachments = []; document.getElementById('edit-attachment-list').innerHTML = ''; }
+     function masquerFormulaireModificationAction() { document.getElementById('edit-action-form').style.display = 'none'; document.getElementById('editActionForm').reset(); editActionAttachments = []; document.getElementById('edit-attachment-list').innerHTML = ''; refreshPJCount('edit'); }
 
     async function mettreAJourAction() {
         showLoading("Mise à jour de l'action et des pièces jointes...");
@@ -4498,8 +4560,101 @@ async function supprimerAction(actionId) {
             catch (e) { if (e.name === 'NotFoundError') { return finalName; } else { console.error(`Erreur vérification existence "${finalName}" :`, e); throw new Error(`Erreur vérif nom fichier : ${e.message}`); } }
             if (counter > 999) { console.error("Impossible trouver nom unique:", originalName); throw new Error("Impossible trouver nom unique."); } } }
 
-     function ajouterAttachmentTemporaire() { const fileInput = document.getElementById('add-attachment-input'); if(!fileInput.files || fileInput.files.length === 0) return; const file = fileInput.files[0]; if(addActionAttachments.length >= 5) { displayMessage("Max 5 PJ atteint.", "warning"); return; } if (addActionAttachments.some(att => att.name === file.name)) { displayMessage("Fichier déjà ajouté.", "info"); fileInput.value = ""; return; } addActionAttachments.push({ name: file.name, blob: file }); const div = document.createElement('div'); div.className = 'pj-item'; div.innerHTML = `<span>${file.name}</span><button type="button" class="btn-danger btn-sm" style="padding: 2px 5px; font-size: 0.8em;" onclick="this.parentElement.remove(); addActionAttachments = addActionAttachments.filter(f => f.name !== '${file.name.replace(/'/g, "\\'")}')">X</button>`; document.getElementById('add-attachment-list').appendChild(div); fileInput.value = ""; }
-     function ajouterAttachmentTemporaireEdit() { const fileInput = document.getElementById('edit-attachment-input'); if(!fileInput.files || fileInput.files.length === 0) return; const file = fileInput.files[0]; const actionId = parseInt(document.getElementById('edit-action-id').value); const existingPJs = attachments[actionId] || []; const allTempPJs = [...existingPJs.map(p => p.name), ...editActionAttachments.map(p => p.name)]; if(allTempPJs.length >= 5) { displayMessage("Max 5 PJ atteint.", "warning"); return; } if (allTempPJs.includes(file.name)) { displayMessage("Fichier déjà listé.", "info"); fileInput.value = ""; return; } editActionAttachments.push({ name: file.name, blob: file }); const div = document.createElement('div'); div.className = 'pj-item'; div.innerHTML = `<span>${file.name}</span><button type="button" class="btn-danger btn-sm" style="padding: 2px 5px; font-size: 0.8em;" onclick="this.parentElement.remove(); editActionAttachments = editActionAttachments.filter(f => f.name !== '${file.name.replace(/'/g, "\\'")}')">X</button>`; const listEl = document.getElementById('edit-attachment-list'); listEl.appendChild(div); fileInput.value = ""; }
+    // ============================================================
+    // S3 — Pièces jointes : multi + drag&drop + auto-add (max 10)
+    // ============================================================
+    const MAX_ATTACHMENTS = 10;
+
+    /**
+     * Ajoute une liste de fichiers à un buffer de pièces jointes temporaires.
+     * @param {File[]|FileList} files
+     * @param {'add'|'edit'} mode
+     */
+    function ajouterFichiersAuxPJ(files, mode) {
+        const buffer = mode === 'edit' ? editActionAttachments : addActionAttachments;
+        let existingNames = buffer.map(p => p.name);
+        if (mode === 'edit') {
+            const actionId = parseInt(document.getElementById('edit-action-id').value);
+            const existingDisk = attachments[actionId] || [];
+            existingNames = [...existingNames, ...existingDisk.map(p => p.name)];
+        }
+
+        const listEl = document.getElementById(mode === 'edit' ? 'edit-attachment-list' : 'add-attachment-list');
+        const arr = Array.from(files);
+        let added = 0, skipped = 0, refused = 0;
+
+        for (const file of arr) {
+            const currentCount = buffer.length + (mode === 'edit'
+                ? ((attachments[parseInt(document.getElementById('edit-action-id').value)] || []).length)
+                : 0);
+            if (currentCount >= MAX_ATTACHMENTS) { refused = arr.length - added - skipped; break; }
+            if (existingNames.includes(file.name)) { skipped++; continue; }
+            buffer.push({ name: file.name, blob: file });
+            existingNames.push(file.name);
+            const div = document.createElement('div');
+            div.className = 'pj-item';
+            const safeName = escapeHtml(file.name);
+            const jsName = file.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            const filterCmd = mode === 'edit'
+                ? `editActionAttachments = editActionAttachments.filter(f => f.name !== '${jsName}'); refreshPJCount('edit');`
+                : `addActionAttachments = addActionAttachments.filter(f => f.name !== '${jsName}'); refreshPJCount('add');`;
+            div.innerHTML = `<span>${safeName}</span><button type="button" class="btn-danger btn-sm" style="padding: 2px 8px; font-size: 0.8em;" onclick="this.parentElement.remove(); ${filterCmd}" title="Retirer cette PJ">×</button>`;
+            listEl.appendChild(div);
+            added++;
+        }
+        refreshPJCount(mode);
+
+        if (refused > 0) displayMessage(`Maximum ${MAX_ATTACHMENTS} PJ atteint. ${refused} fichier(s) ignoré(s).`, 'warning');
+        else if (skipped > 0 && added === 0) displayMessage(`Fichier${skipped > 1 ? 's' : ''} déjà ajouté${skipped > 1 ? 's' : ''}.`, 'info');
+        else if (skipped > 0) displayMessage(`${added} ajouté(s), ${skipped} déjà présent(s).`, 'info');
+        else if (added > 1) displayMessage(`${added} fichiers ajoutés.`, 'success');
+    }
+
+    /** Met à jour le compteur visuel (X/10) et l'état disabled de la dropzone. */
+    function refreshPJCount(mode) {
+        const countEl = document.getElementById(mode === 'edit' ? 'edit-pj-count' : 'add-pj-count');
+        const dropzoneEl = document.getElementById(mode === 'edit' ? 'edit-pj-dropzone' : 'add-pj-dropzone');
+        let total;
+        if (mode === 'edit') {
+            const actionId = parseInt(document.getElementById('edit-action-id').value);
+            const existing = (attachments[actionId] || []).length;
+            total = existing + editActionAttachments.length;
+        } else {
+            total = addActionAttachments.length;
+        }
+        if (countEl) {
+            countEl.textContent = `(${total}/${MAX_ATTACHMENTS})`;
+            countEl.classList.toggle('is-full', total >= MAX_ATTACHMENTS);
+        }
+        if (dropzoneEl) dropzoneEl.classList.toggle('is-disabled', total >= MAX_ATTACHMENTS);
+    }
+
+    /** Câble les event listeners sur une dropzone (auto-add + drag&drop). À appeler 1 fois au boot. */
+    function setupPJDropzone(mode) {
+        const dropzone = document.getElementById(mode === 'edit' ? 'edit-pj-dropzone' : 'add-pj-dropzone');
+        const input = document.getElementById(mode === 'edit' ? 'edit-attachment-input' : 'add-attachment-input');
+        if (!dropzone || !input) return;
+        input.addEventListener('change', () => {
+            if (input.files && input.files.length > 0) {
+                ajouterFichiersAuxPJ(input.files, mode);
+                input.value = '';
+            }
+        });
+        ['dragenter','dragover'].forEach(ev => {
+            dropzone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dropzone.classList.add('is-dragover'); });
+        });
+        ['dragleave','drop'].forEach(ev => {
+            dropzone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('is-dragover'); });
+        });
+        dropzone.addEventListener('drop', e => {
+            const files = e.dataTransfer?.files;
+            if (files && files.length > 0) ajouterFichiersAuxPJ(files, mode);
+        });
+    }
+
+    // Aliases rétrocompat (au cas où d'autres parties du code appellent les anciennes fonctions)
+    function ajouterAttachmentTemporaire() { const input = document.getElementById('add-attachment-input'); if (input.files && input.files.length > 0) { ajouterFichiersAuxPJ(input.files, 'add'); input.value = ''; } }
+    function ajouterAttachmentTemporaireEdit() { const input = document.getElementById('edit-attachment-input'); if (input.files && input.files.length > 0) { ajouterFichiersAuxPJ(input.files, 'edit'); input.value = ''; } }
 
     async function supprimerPJExistant(actionId, fileName, btn) {
          clearMessage();
@@ -4528,6 +4683,7 @@ async function supprimerAction(actionId) {
                      if (pjButton) { if (updatedPjCount > 0) { pjButton.textContent = `PJ (${updatedPjCount})`; } else { pjCell.innerHTML = '—'; } }
                      else if (updatedPjCount === 0 && pjCell) { pjCell.innerHTML = '—'; } }
                 displayMessage(`Référence à "${fileName}" supprimée.`, "success");
+                try { refreshPJCount('edit'); } catch(e){}
              } else { console.warn(`Référence ${fileName} non trouvée attachments[${actionId}].`); }
          } else { console.warn(`Aucune PJ pour actionId ${actionId}.`); }
      }
