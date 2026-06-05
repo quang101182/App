@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.4.3';
+const VERSION = '1.5.4';
 
 // ── Plan limits (per calendar month) ────────────────────────────────────────
 const PLAN_LIMITS = {
@@ -326,10 +326,91 @@ async function verifyWebhookSignature(rawBody, signature, secret) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Activation email delivery (Resend HTTPS API) — fire-and-forget from webhook
+// ─────────────────────────────────────────────────────────────────────────────
+// Direct call to Resend (HTTPS:443, works from any host incl. Railway-blocked
+// SMTP environments). Email sent from noreply@sub-whisper.com (verified domain)
+// with reply_to: quangapps.dev@gmail.com so customer replies land in the
+// business inbox.
+// Requires env.RESEND_API_KEY. Silent no-op if missing.
+// Convergent recommendation from 3 LLM vote (Groq+DeepSeek+Kimi) + Railway docs
+// confirming SMTP block on Hobby plan — see _incidents.md 2026-05-29.
+
+async function sendActivationEmail({ email, key, plan, trialEndsAt, app, env }) {
+  if (!env.RESEND_API_KEY) return { sent: false, reason: 'no_api_key' };
+  if (app !== 'swp') return { sent: false, reason: 'unsupported_app' };
+
+  const from = env.RESEND_FROM || 'SubWhisper Pro <noreply@sub-whisper.com>';
+  const replyTo = env.RESEND_REPLY_TO || 'quangapps.dev@gmail.com';
+  const trialLine = (plan === 'trial' && trialEndsAt)
+    ? `Your free trial is active until ${new Date(trialEndsAt).toISOString().slice(0, 10)}. Included during the trial: 10 transcriptions + 100 translations.`
+    : 'Your Pro plan is active. Included every month: 50 transcriptions + 500 translations.';
+  const subject = plan === 'trial'
+    ? 'Your SubWhisper Pro key — free trial active'
+    : 'Your SubWhisper Pro key — Pro plan active';
+
+  const text = `Welcome to SubWhisper Pro!
+
+Thank you for subscribing. Here is your access key:
+
+    ${key}
+
+How to activate (30 seconds):
+1. Go to https://sub-whisper.com
+2. Click "Activate" and enter your email (${email}), OR click "Have a license key instead?" and paste the key above.
+3. Done — you can start transcribing and translating right away.
+
+${trialLine}
+
+Any question or feedback, just reply to this email — I read every message personally.
+
+Quang
+SubWhisper Pro
+https://sub-whisper.com
+`;
+
+  const html = `<!doctype html><html><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#222;line-height:1.55">
+<h2 style="color:#5e3bff;margin:0 0 16px">Welcome to SubWhisper Pro</h2>
+<p>Thank you for subscribing. Here is your access key:</p>
+<pre style="background:#f3f0ff;border:1px solid #ddd;padding:14px 16px;border-radius:8px;font-size:15px;user-select:all;word-break:break-all;margin:0">${key}</pre>
+<h3 style="margin-top:24px">How to activate (30 seconds)</h3>
+<ol>
+<li>Go to <a href="https://sub-whisper.com/?activated=1" style="color:#5e3bff">sub-whisper.com</a></li>
+<li>Click <strong>"Activate"</strong> and enter your email (<code>${email}</code>) — or click <strong>"Have a license key instead?"</strong> and paste the key above.</li>
+<li>Done. Start transcribing and translating right away.</li>
+</ol>
+<p style="background:#f9f9f9;padding:12px 16px;border-radius:6px;border-left:3px solid #5e3bff">${trialLine}</p>
+<p>Any question or feedback, just reply to this email — I read every message personally.</p>
+<p style="margin-top:32px;color:#666;font-size:13px">— Quang<br>SubWhisper Pro · <a href="https://sub-whisper.com" style="color:#5e3bff">sub-whisper.com</a></p>
+</body></html>`;
+
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from, to: [email], reply_to: replyTo, subject, text, html }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.log(`[email] Resend ${res.status}: ${errText.slice(0, 200)}`);
+      return { sent: false, reason: `resend_${res.status}` };
+    }
+    const data = await res.json().catch(() => ({}));
+    return { sent: true, id: data.id };
+  } catch (e) {
+    console.log(`[email] Resend exception: ${e.message}`);
+    return { sent: false, reason: 'exception' };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // LemonSqueezy webhook handler
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function handleLemonSqueezyWebhook(request, env) {
+async function handleLemonSqueezyWebhook(request, env, ctx) {
   const rawBody = await request.text();
   const signature = request.headers.get('X-Signature');
   const secret = await env.PRO_KV.get('cfg:lemonsqueezy_signing_secret');
@@ -360,8 +441,16 @@ async function handleLemonSqueezyWebhook(request, env) {
   const emailKey = `email:${app}:${email.toLowerCase()}`;
   const emailLegacyKey = `email:${email.toLowerCase()}`;
 
-  // subscription_created or order_created → create pro key
-  if (event === 'subscription_created' || event === 'order_created') {
+  // subscription_created → create pro key.
+  // order_created is intentionally IGNORED here: LS fires both events for every subscription
+  // purchase (order_created first, then subscription_created ~0.3s later). Handling both
+  // caused a race in KV (eventually consistent) and created duplicate keys for the same email
+  // (Mark 29/05, thomas_olaf 02/06). Subscriptions are the only product type the gateway handles
+  // — one-time purchases (PromptPack) are routed to "ignored" via LS_VARIANTS anyway.
+  if (event === 'order_created') {
+    return json({ ok: true, action: 'ignored', reason: 'order_created handled by subscription_created' });
+  }
+  if (event === 'subscription_created') {
     const status = attrs.status; // 'active', 'on_trial', 'cancelled', etc.
     const plan = (status === 'on_trial') ? 'trial' : 'pro';
     const trialEndsAt = attrs.trial_ends_at || null;
@@ -379,6 +468,9 @@ async function handleLemonSqueezyWebhook(request, env) {
         if (trialEndsAt) existingData.expiresAt = trialEndsAt;
         else delete existingData.expiresAt;
         await env.PRO_KV.put(`pro:${existingKey}`, JSON.stringify(existingData));
+      }
+      if (ctx?.waitUntil) {
+        ctx.waitUntil(sendActivationEmail({ email: email.toLowerCase(), key: existingKey, plan, trialEndsAt, app, env }));
       }
       return json({ ok: true, action: 'reactivated', email });
     }
@@ -399,6 +491,10 @@ async function handleLemonSqueezyWebhook(request, env) {
 
     await env.PRO_KV.put(`pro:${key}`, JSON.stringify(data));
     await env.PRO_KV.put(emailKey, key);
+
+    if (ctx?.waitUntil) {
+      ctx.waitUntil(sendActivationEmail({ email: email.toLowerCase(), key, plan, trialEndsAt, app, env }));
+    }
 
     return json({ ok: true, action: 'created', email, app, plan });
   }
@@ -499,13 +595,14 @@ export default {
       const today = new Date().toISOString().slice(0, 10);
       // If page=all, return all counters
       if (page === 'all') {
-        const [swpT, ncfT, nfT, dkT] = await Promise.all([
+        const [swpT, ncfT, nfT, dkT, tucT] = await Promise.all([
           env.PRO_KV.get('stats:visits:swp:total'),
           env.PRO_KV.get('stats:visits:ncf:total'),
           env.PRO_KV.get('stats:visits:nf:total'),
           env.PRO_KV.get('stats:visits:dk:total'),
+          env.PRO_KV.get('stats:visits:tuc:total'),
         ]);
-        return json({ swp: parseInt(swpT) || 0, ncf: parseInt(ncfT) || 0, nf: parseInt(nfT) || 0, dk: parseInt(dkT) || 0 });
+        return json({ swp: parseInt(swpT) || 0, ncf: parseInt(ncfT) || 0, nf: parseInt(nfT) || 0, dk: parseInt(dkT) || 0, tuc: parseInt(tucT) || 0 });
       }
       const prefix = `stats:visits:${page}`;
       const totalRaw = await env.PRO_KV.get(`${prefix}:total`);
@@ -571,7 +668,7 @@ export default {
     // ── LemonSqueezy webhook ─────────────────────────────────────────────
 
     if (path === '/webhook/lemonsqueezy' && method === 'POST') {
-      return handleLemonSqueezyWebhook(request, env);
+      return handleLemonSqueezyWebhook(request, env, ctx);
     }
 
     // ── Email activation ──────────────────────────────────────────────────
@@ -662,6 +759,22 @@ export default {
         return json({ users, count: users.length });
       }
 
+      // Reset/set monthly usage for a pro key (geste commercial, debug)
+      if (path === '/admin/pro/reset-usage' && method === 'POST') {
+        const body = await request.json();
+        if (!body.key) return err('key required');
+        const data = await env.PRO_KV.get(`pro:${body.key}`, 'json');
+        if (!data) return err('Key not found', 404);
+        const mk = body.month || monthKey();
+        const transcriptions = Number.isFinite(body.transcriptions) ? body.transcriptions : 0;
+        const translations = Number.isFinite(body.translations) ? body.translations : 0;
+        data.monthlyUsage = data.monthlyUsage || {};
+        const previous = data.monthlyUsage[mk] || { transcriptions: 0, translations: 0 };
+        data.monthlyUsage[mk] = { transcriptions, translations };
+        await env.PRO_KV.put(`pro:${body.key}`, JSON.stringify(data));
+        return json({ ok: true, key: body.key, month: mk, previous, current: data.monthlyUsage[mk] });
+      }
+
       // Revoke pro key
       if (path === '/admin/pro/revoke' && method === 'POST') {
         const body = await request.json();
@@ -671,6 +784,23 @@ export default {
         data.revoked = true;
         await env.PRO_KV.put(`pro:${body.key}`, JSON.stringify(data));
         return json({ ok: true, revoked: body.key });
+      }
+
+      // Test activation email delivery — bypasses LS webhook signature, calls
+      // sendActivationEmail directly so we can validate the real subscription_created
+      // path end-to-end without creating a real LS sub. Admin only.
+      if (path === '/admin/test-activation-email' && method === 'POST') {
+        const body = await request.json();
+        if (!body.email) return err('email required');
+        const result = await sendActivationEmail({
+          email: body.email,
+          key: body.key || 'swp_TEST_ADMIN_DELIVERY_KEY',
+          plan: body.plan || 'trial',
+          trialEndsAt: body.trialEndsAt || new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString(),
+          app: body.app || 'swp',
+          env,
+        });
+        return json({ ok: true, result });
       }
 
       // SWP-only overview (monitoring dashboard)
