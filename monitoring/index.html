@@ -1,3 +1,4 @@
+<!-- Monitoring Dashboard v1.14.0 (07/06/2026) — 3e onglet "Factory" (Ebook Funnel Factory : comptes TikTok faceless → ebooks). Isolation body.app-factory (calquée sur app-swp), #factoryView, config-driven (FACTORY_ACCOUNTS, ajout d'un compte = 1 entrée). Comptes initiaux : #0 The Unseen Child + #1 Aimer en alerte + emplacements #2/#3. Par compte : @handle cliquable, domaine cliquable, email, visites/clics achat/téléchargements (compteur public gateway /api/visit?page=<slug>[-buy|-dl], client-side), abonnés MailerLite + ventes/revenu LemonSqueezy (via worker backend factory-stats, "—" tant qu'absent), taux de conversion, santé op (phase warm-up/posting). Mobile-first. UX (s'applique aux 3 onglets) : auto-refresh 60s SUPPRIMÉ → bouton "Actualiser" manuel ; navigation onglet instantanée (rendu depuis cache appDataCache) ; persistance de l'onglet sélectionné après F5 (localStorage dk-monitoring-active-app). ZÉRO régression DictoKey/SWP (additif). -->
 <!-- Monitoring Dashboard v1.13.5 (29/05/2026) — Highlight AI Assistant channel dans card "Sources d'acquisition 7j" (firebaseSources) : bandeau gradient violet en tête affichant total sessions + % AI si > 0, ligne avec border violet + emoji 🤖 sur le channel matchant /ai[\s\-_]*assistant|chatgpt|perplexity|claude|gemini|copilot/i. Si 0 session AI, bandeau pointillé indique "Phase 0/1/2 GEO live 29/05 — re-mesurer J+30/+60/+90". Anticipe le rollout naturel du channel GA4 natif AI Assistant (ajouté Google 13/05/2026) — actuellement 0 sessions (normal early). v1.13.3 (12/05/2026 après-midi) — Nouvelle section "Attribution install & signaux v2.61.7" : 3 cards consomment aggregated.attribution_v2617 du gateway v1.5.17 (install_source / install_content / oem_kill_brand). Affiche en attente tant que v2.61.7 pas rolled out (~17-19 mai). Mesure source des installs (site dictokey.com vs Play direct vs ads), boutons site qui convertissent (hero/sticky/cta/etc.), fréquence kill OEM Xiaomi/vivo. v1.13.1 (12/05/2026) bandeau Premium silencieux requalifié pattern NORMAL v<2.61.4 + retrait /admin/set-tier (créerait Premium gratuit à vie si user résilie, validé code gateway:664 + 2e avis Groq). v1.13.0 (08/05/2026 nuit) bandeau initial. v1.11.0 persistance localStorage auto-refresh. -->
 <!-- Monitoring Dashboard v1.10.0 (Refonte labels Play Console : remplacement des labels en dur "J-2"/"LIVE"/"28j" par des labels dynamiques basés sur last_data_date + window_first/last_date. Bannière warning si données figées >3j. Sub-text hero "Appareils réels actifs" : suppression du breakdown pro/premium/free quand source = Play Console (mélangeait stock Play + cumul KV, mathématiquement fallacieux). Note moyenne : label "cumul" remplacé par "note globale toutes périodes". Labels HTML statiques cohérents avec labels JS dynamiques.) -->
 <!DOCTYPE html>
@@ -5,7 +6,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.13.5</title>
+<title>Monitoring v1.14.0</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -72,6 +73,12 @@ a { color: var(--accent2); }
 .pill-group.has-saved .pill.active .dot-saved { display: inline-block; }
 .toggle-refresh { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--text2); cursor: pointer; }
 .toggle-refresh input { accent-color: var(--accent); }
+/* v1.14.0 : bouton refresh manuel (remplace l'auto-refresh 60s) */
+.btn-refresh { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: .85rem; font-weight: 600; font-family: inherit; line-height: 1; transition: all .15s; }
+.btn-refresh:hover { border-color: var(--accent); color: var(--accent2); background: rgba(124,58,237,.08); }
+.btn-refresh:active { transform: scale(.97); }
+.btn-refresh.is-refreshing span[aria-hidden] { display: inline-block; animation: spin .8s linear infinite; }
+@media (max-width: 600px) { .btn-refresh { padding: 5px 10px; font-size: .78rem; } .btn-refresh .btn-refresh-text { display: none; } }
 .btn-logout { background: transparent; border: 1px solid var(--error); color: var(--error); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: .85rem; font-family: inherit; line-height: 1; }
 .btn-logout:hover { background: var(--error); color: #fff; }
 /* v1.7.27 : swap text/icon selon mobile pour gagner de la hauteur sticky */
@@ -528,6 +535,17 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     body.app-swp #footer, body.app-swp #alertBanner { display: none !important; }
     body.app-swp #swpView { display: block; }
 
+    /* ── v1.14.0 Factory monitoring (3e onglet) — isolation calquée sur app-swp ── */
+    /* #factoryView caché par défaut ; body.app-factory bascule atomiquement.
+       #swpView est déjà caché par `body:not(.app-swp) #swpView` quand on n'est pas en app-swp. */
+    body:not(.app-factory) #factoryView { display: none !important; }
+    body.app-factory #sO, body.app-factory #sP, body.app-factory #sA, body.app-factory #sRet,
+    body.app-factory #sChurn, body.app-factory #sD, body.app-factory #sI, body.app-factory #sectionNav,
+    body.app-factory .pill-group,
+    body.app-factory .section-block, body.app-factory .btn-toggle-all,
+    body.app-factory #footer, body.app-factory #alertBanner { display: none !important; }
+    body.app-factory #factoryView { display: block; }
+
     .swp-section { padding: 8px 0 24px; }
     .swp-kpi-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 20px; }
     .swp-kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
@@ -550,6 +568,60 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     .swp-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .8rem; }
     .swp-muted { color: var(--text2); }
     .swp-empty { text-align: center; padding: 40px; color: var(--text2); }
+
+    /* ══ v1.14.0 Factory monitoring (Ebook Funnel Factory — comptes TikTok faceless) ══ */
+    /* Mobile-first : 1 colonne par défaut, grille auto-fit sur écrans larges. */
+    .factory-section { padding: 8px 0 24px; }
+    .factory-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+    .factory-head h2 { font-size: 1.05rem; font-weight: 700; color: var(--accent2); }
+    .factory-head .factory-sub { font-size: .76rem; color: var(--text2); }
+    .factory-note { font-size: .76rem; color: var(--text-mute-new); background: var(--bg-elev-new); border: 1px dashed var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 16px; line-height: 1.5; }
+    .factory-grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
+    @media (min-width: 760px) { .factory-grid { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); } }
+
+    .fac-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; transition: border-color .15s, box-shadow .15s; }
+    .fac-card:hover { border-color: var(--accent2-new); box-shadow: 0 2px 14px rgba(124,58,237,.10); }
+    .fac-card.placeholder { opacity: .62; border-style: dashed; }
+    /* En-tête carte : numéro + nom de marque + handle */
+    .fac-card-head { display: flex; align-items: flex-start; gap: 10px; }
+    .fac-num { flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, var(--accent-new), var(--accent2-new)); color: #fff; font-weight: 800; font-size: .82rem; display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+    .fac-head-text { flex: 1; min-width: 0; }
+    .fac-name { font-size: 1rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+    .fac-badges { display: inline-flex; gap: 5px; margin-left: 6px; vertical-align: middle; }
+    .fac-badge { font-size: .56rem; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 1px 6px; border-radius: 5px; line-height: 1.5; }
+    .fac-badge.bil { background: rgba(88,166,255,.16); color: var(--blue-new); }
+    .fac-badge.warm { background: rgba(240,136,62,.16); color: var(--orange-new); }
+    .fac-badge.post { background: rgba(63,185,80,.16); color: var(--green-new); }
+    .fac-badge.soon { background: rgba(156,163,175,.16); color: var(--text2); }
+    .fac-handle { font-size: .8rem; margin-top: 2px; }
+    .fac-handle a { color: var(--accent2); text-decoration: none; }
+    .fac-handle a:hover { text-decoration: underline; }
+    /* Domaine cliquable (accès rapide au site) + email */
+    .fac-meta { display: flex; flex-direction: column; gap: 3px; font-size: .76rem; }
+    .fac-domain a { color: var(--teal-new); text-decoration: none; font-weight: 600; word-break: break-all; }
+    .fac-domain a:hover { text-decoration: underline; }
+    .fac-email { color: var(--text2); word-break: break-all; }
+    .fac-email .fac-k { color: var(--text-mute-new); }
+    /* Grille de métriques */
+    .fac-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .fac-metric { background: var(--bg-elev-new); border: 1px solid var(--border-soft-new); border-radius: 8px; padding: 8px 10px; }
+    .fac-metric .fac-m-label { font-size: .62rem; text-transform: uppercase; letter-spacing: .4px; color: var(--text2); font-weight: 600; display: flex; align-items: center; gap: 4px; }
+    .fac-metric .fac-m-val { font-size: 1.15rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.3; }
+    .fac-metric .fac-m-sub { font-size: .64rem; color: var(--text-mute-new); margin-top: 1px; }
+    .fac-metric.muted .fac-m-val { color: var(--text2); opacity: .55; }
+    .fac-metric.revenue { background: linear-gradient(135deg, rgba(63,185,80,.10), rgba(45,212,191,.04)); border-color: rgba(63,185,80,.3); }
+    .fac-metric.revenue .fac-m-val { color: var(--green-new); }
+    /* Ligne conversion */
+    .fac-conv { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .72rem; color: var(--text2); padding-top: 2px; border-top: 1px dashed rgba(48,54,61,.6); padding-top: 10px; }
+    .fac-conv b { color: var(--accent2); font-weight: 700; font-variant-numeric: tabular-nums; }
+    /* Santé op */
+    .fac-health { display: flex; align-items: center; gap: 8px; font-size: .72rem; color: var(--text2); }
+    .fac-health .fac-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .fac-dot.warm { background: var(--orange-new); }
+    .fac-dot.post { background: var(--green-new); }
+    .fac-dot.soon { background: var(--text-mute-new); }
+    .fac-placeholder-body { font-size: .82rem; color: var(--text2); line-height: 1.5; }
+    @media (max-width: 380px) { .fac-metrics { grid-template-columns: 1fr; } }
 
 /* v1.7.24 — Sections collapsibles : bloc englobant + animation grid-template-rows */
 /* .section-block enveloppe le header + le contenu pour créer un cadre visuel net qui regroupe les éléments d'une même section. */
@@ -669,14 +741,15 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.13.5</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.14.0</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
         <button class="pill" data-period="30d">30j<span class="dot-saved" title="Persisté"></span></button>
         <button class="pill" data-period="90d">90j<span class="dot-saved" title="Persisté"></span></button>
       </div>
-      <label class="toggle-refresh"><input type="checkbox" id="autoRefresh" checked> Auto 60s</label>
+      <!-- v1.14.0 : auto-refresh supprimé (latence) → refresh manuel uniquement -->
+      <button class="btn-refresh" id="btnRefresh" onclick="manualRefresh()" title="Rafraîchir les données de l'onglet courant"><span aria-hidden="true">🔄</span><span class="btn-refresh-text">Actualiser</span></button>
       <button class="btn-toggle-all" id="btnToggleAllSections" onclick="toggleAllSections()" title="Replier ou déplier toutes les sections d'un coup"><span id="btnToggleAllText">Replier tout</span></button>
       <button class="btn-logout" onclick="logout()" title="Déconnexion"><span class="btn-text-full">Déconnexion</span><span class="btn-icon-only" aria-hidden="true">🚪</span></button>
     </div>
@@ -1051,13 +1124,26 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <div style="font-size:.8rem;color:var(--text2);margin-top:12px" id="swpLastUpdated"></div>
   </div>
 
+  <!-- Factory view (v1.14.0) — Ebook Funnel Factory, isolé via body.app-factory -->
+  <div id="factoryView" class="factory-section">
+    <div class="factory-head">
+      <h2>🏭 Ebook Funnel Factory</h2>
+      <span class="factory-sub">comptes TikTok faceless → ebooks · mobile-first</span>
+    </div>
+    <div class="factory-note" id="factoryNote">
+      Visites / clics achat / téléchargements = compteur public gateway (temps réel). Ventes &amp; abonnés newsletter = via le worker backend <code>factory-stats</code> (affiche « — » tant qu'il n'est pas branché). Bouton « Actualiser » en haut pour rafraîchir.
+    </div>
+    <div id="factoryAccounts" class="factory-grid"></div>
+    <div style="font-size:.8rem;color:var(--text2);margin-top:16px" id="factoryLastUpdated"></div>
+  </div>
+
   <!-- Footer -->
-  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.13.5</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
+  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.14.0</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.13.5';
+const DASHBOARD_VERSION = 'v1.14.0';
 
 // === Multi-app config ===
 const APPS = {
@@ -1076,8 +1162,50 @@ const APPS = {
     gateway: 'https://api-gateway-pro.quang101182.workers.dev',
     tokenKey: 'monitoring_swp_token',
     endpoints: { overview: '/admin/swp/overview' }
+  },
+  // v1.14.0 — Ebook Funnel Factory : visites/clics/dl via compteur public gateway,
+  // ventes/subs via worker dédié factory-stats (token optionnel). N'utilise PAS apiFetch.
+  factory: {
+    name: 'Factory',
+    gateway: '',
+    tokenKey: 'monitoring_factory_token',
+    endpoints: {}
   }
 };
+
+// === Factory config (v1.14.0) ===
+// Compteur public de visites/clics/dl (lecture client-side OK, GET /api/visit?page=<slug>).
+const FACTORY_VISIT_GATEWAY = 'https://api-gateway-pro.quang101182.workers.dev';
+// Worker backend dédié (ventes LemonSqueezy + abonnés MailerLite, clés server-side).
+// À déployer ; tant qu'absent, l'appel échoue proprement → ventes/subs affichent "—".
+const FACTORY_STATS_BASE = 'https://factory-stats.quang101182.workers.dev';
+// Comptes de la factory — AJOUTER UN COMPTE = 1 entrée ici (config-driven, N comptes).
+// Champs : id (clé stats backend) · n (numéro affiché) · name · handle/handleUrl · email ·
+//          domain · visitSlug · instrumented (clics -buy/-dl posés sur la landing) ·
+//          mailerliteGroups · lemonProductId · bilingual · phase (warm-up|posting) · placeholder.
+const FACTORY_ACCOUNTS = [
+  {
+    id: 'tuc', n: 0, name: 'The Unseen Child',
+    handle: '@theunseen.child', handleUrl: 'https://www.tiktok.com/@theunseen.child',
+    email: null, domain: 'theunseenchild.org', visitSlug: 'tuc',
+    instrumented: false, mailerliteGroups: ['188196310320416300', '188196324324148652'],
+    lemonProductId: null, bilingual: true, phase: 'posting',
+    note: 'Preuve d’origine (bilingue EN+FR). Pas encore d’ebook payant (waitlist) → ventes « — ». Landing pas encore instrumentée clics/dl.'
+  },
+  {
+    id: 'aea', n: 1, name: 'Aimer en alerte',
+    handle: '@aimer.en.alerte', handleUrl: 'https://www.tiktok.com/@aimer.en.alerte',
+    email: 'hello@aimer-en-alerte.com', domain: 'aimer-en-alerte.com', visitSlug: 'aea',
+    instrumented: true, mailerliteGroups: ['189630922714252838'],
+    lemonProductId: '1124161', bilingual: false, phase: 'warm-up',
+    note: ''
+  },
+  { id: 'pg', n: 2, name: 'Potentiel gâché', placeholder: true, bilingual: false,
+    note: 'Niche #2 (FR, voix Anna P) — à créer après validation #1.' },
+  { id: 'di', n: 3, name: 'Deuil invisible', placeholder: true, bilingual: true,
+    note: 'Niche #3 (bilingue EN+FR) — à créer après validation #1.' }
+];
+const FACTORY_PHASE_LABELS = { 'warm-up': 'Warm-up', 'posting': 'Posting 1/j', 'soon': 'À venir' };
 let currentApp = 'dictokey';
 const LS_TOKEN_KEY_LEGACY = 'monitoring_admin_token'; // fallback for old sessions
 let currentPeriod = '7d';
@@ -1086,6 +1214,8 @@ let charts = {};
 let allDevices = [];
 let isAutoRefresh = false;
 let currentAbortCtrl = null; // v1.5.0: cancel in-flight fetches on tab switch
+let appDataCache = {};       // v1.14.0: dernier payload par app → navigation onglet instantanée (rendu depuis cache, refetch via bouton Actualiser)
+const ACTIVE_APP_LS_KEY = 'dk-monitoring-active-app'; // v1.14.0: persistance de l'onglet sélectionné après F5
 
 // Lang / mode maps
 const LANG_MAP = { French:'Français', English:'Anglais', Spanish:'Espagnol', German:'Allemand', Italian:'Italien', Portuguese:'Portugais', Dutch:'Néerlandais', Russian:'Russe', Chinese:'Chinois', Japanese:'Japonais', Korean:'Coréen', Arabic:'Arabe' };
@@ -1110,7 +1240,6 @@ function renderAppTabs() {
 // v1.5.0: atomic tab switch with full isolation (abort, chart destroy, interval clear, view toggle)
 function switchApp(newApp) {
   if (currentAbortCtrl) { currentAbortCtrl.abort(); currentAbortCtrl = null; }
-  stopAutoRefresh();
   if (currentApp === 'dictokey' && newApp !== 'dictokey') {
     destroyCharts();
     if (typeof closeDeviceExpand === 'function') closeDeviceExpand();
@@ -1118,15 +1247,29 @@ function switchApp(newApp) {
   currentApp = newApp;
   setActiveAppView(newApp);
   renderAppTabs();
-  // login modal if no token for this app
-  if (!getToken()) { showLogin(); return; }
-  fetchAll().then(function() {
-    if (document.getElementById('autoRefresh').checked) startAutoRefresh();
-  }).catch(handleAuthError);
+  persistActiveApp(); // v1.14.0 : mémorise l'onglet pour le restaurer après F5
+  // factory : visites publiques → pas de token requis. Autres apps : token requis.
+  if (newApp !== 'factory' && !getToken()) { showLogin(); return; }
+  hideLogin(); // v1.14.0 : fermer une éventuelle modale login résiduelle d'un onglet précédent
+  // v1.14.0 : retour sur un onglet déjà chargé → rendu instantané depuis le cache (refresh = bouton manuel)
+  if (renderFromCache(newApp)) return;
+  fetchAll().catch(handleAuthError);
+}
+
+// v1.14.0 : persistance de l'onglet actif
+function persistActiveApp() {
+  try { localStorage.setItem(ACTIVE_APP_LS_KEY, currentApp); } catch (e) { /* silencieux */ }
+}
+function restoreActiveAppFromLS() {
+  try {
+    var saved = localStorage.getItem(ACTIVE_APP_LS_KEY);
+    if (saved && APPS[saved]) currentApp = saved;
+  } catch (e) { /* silencieux */ }
 }
 
 function setActiveAppView(appId) {
   document.body.classList.toggle('app-swp', appId === 'swp');
+  document.body.classList.toggle('app-factory', appId === 'factory'); // v1.14.0
   document.body.dataset.activeApp = appId;
 }
 
@@ -1197,6 +1340,8 @@ async function fetchAll() {
   try {
     if (thisApp === 'swp') {
       await fetchAllSwp(signal);
+    } else if (thisApp === 'factory') {
+      await fetchAllFactory(signal);
     } else {
       await fetchAllDictoKey(signal);
     }
@@ -1219,13 +1364,188 @@ async function fetchAllDictoKey(signal) {
     fetch('https://api-gateway-pro.quang101182.workers.dev/api/click?page=dk', { signal: signal }).then(function(r){return r.json()}).catch(function(){return {total:0,today:0,by_btn:{}}})
   ]);
   if (currentApp !== 'dictokey') return; // late response on wrong tab → drop
+  appDataCache.dictokey = results; // v1.14.0 cache pour navigation instantanée
   render(results[0], results[1], results[2], results[3], results[4]);
+}
+
+// v1.14.0 : re-rendu instantané depuis le cache (pas de fetch, pas d'overlay) au retour sur un onglet déjà chargé.
+function renderFromCache(app) {
+  var c = appDataCache[app];
+  if (!c) return false;
+  if (app === 'dictokey') { render(c[0], c[1], c[2], c[3], c[4]); }
+  else if (app === 'swp') { renderSwp(c); }
+  else if (app === 'factory') { renderFactory(c); }
+  return true;
 }
 
 async function fetchAllSwp(signal) {
   var data = await apiFetch(APPS.swp.endpoints.overview, signal);
   if (currentApp !== 'swp') return;
+  appDataCache.swp = data; // v1.14.0 cache pour navigation instantanée
   renderSwp(data);
+}
+
+// === Factory fetch + render (v1.14.0) ===
+function facVisit(slug, signal) {
+  return fetch(FACTORY_VISIT_GATEWAY + '/api/visit?page=' + encodeURIComponent(slug), { signal: signal })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(j){ return j ? { total: (j.total || 0), today: (j.today || 0) } : null; })
+    .catch(function(){ return null; });
+}
+
+async function fetchAllFactory(signal) {
+  var accounts = FACTORY_ACCOUNTS;
+  // Visites / clics achat / téléchargements = compteur public, client-side, en parallèle.
+  var visitPromises = accounts.map(function(a) {
+    if (a.placeholder) return Promise.resolve(null);
+    return Promise.all([
+      facVisit(a.visitSlug, signal),
+      a.instrumented ? facVisit(a.visitSlug + '-buy', signal) : Promise.resolve(null),
+      a.instrumented ? facVisit(a.visitSlug + '-dl', signal) : Promise.resolve(null)
+    ]).then(function(r){ return { visits: r[0], buy: r[1], dl: r[2] }; });
+  });
+  // Ventes LemonSqueezy + abonnés MailerLite = worker backend (clés server-side).
+  // N'appelle le worker QUE si un token est configuré → zéro bruit console / pas de dead-end avant branchement.
+  var tok = null;
+  try { tok = localStorage.getItem('monitoring_factory_token'); } catch (e) {}
+  var statsPromise = tok
+    ? fetch(FACTORY_STATS_BASE + '/overview', { signal: signal, headers: { 'Authorization': 'Bearer ' + tok } })
+        .then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; })
+    : Promise.resolve(null);
+
+  var visitResults = await Promise.all(visitPromises);
+  var stats = await statsPromise;
+  if (currentApp !== 'factory') return; // réponse tardive sur mauvais onglet → drop
+  var data = { accounts: accounts, visits: visitResults, stats: stats, generatedAt: Date.now() };
+  appDataCache.factory = data;
+  renderFactory(data);
+}
+
+function facFmt(n) {
+  if (n == null) return '<span class="swp-muted">—</span>';
+  return swpEscape(String(n));
+}
+function facPct(num, den) {
+  if (num == null || !den || den <= 0) return '—';
+  return (Math.round((num / den) * 1000) / 10) + '%';
+}
+function facTodaySub(o) {
+  if (!o || o.today == null || o.today <= 0) return '';
+  return '+' + o.today + ' auj.';
+}
+
+function renderFactory(data) {
+  if (!data) return;
+  var accounts = data.accounts || [];
+  var visits = data.visits || [];
+  var stats = (data.stats && data.stats.accounts) ? data.stats.accounts : {};
+
+  var cards = accounts.map(function(a, i) {
+    // ── Emplacement réservé (#2/#3) ──
+    if (a.placeholder) {
+      return '<div class="fac-card placeholder">' +
+        '<div class="fac-card-head"><div class="fac-num">' + a.n + '</div>' +
+          '<div class="fac-head-text"><div class="fac-name">' + swpEscape(a.name) +
+            '<span class="fac-badges"><span class="fac-badge soon">à venir</span>' +
+            (a.bilingual ? '<span class="fac-badge bil">EN+FR</span>' : '') + '</span></div></div></div>' +
+        '<div class="fac-placeholder-body">' + swpEscape(a.note || 'Emplacement réservé.') + '</div>' +
+      '</div>';
+    }
+
+    var v = visits[i] || {};
+    var visO = v.visits, buyO = v.buy, dlO = v.dl;
+    var visTotal = visO ? visO.total : null;
+    var buyTotal = buyO ? buyO.total : null;
+    var dlTotal  = dlO  ? dlO.total  : null;
+
+    var st = stats[a.id] || {};
+    var sales = (st.sales != null) ? st.sales : null;
+    var revenue = (st.revenue != null) ? st.revenue : null;
+    var currency = st.currency || 'EUR';
+    var subs = (st.subs != null) ? st.subs : null;
+
+    var phaseKey = a.phase || 'soon';
+    var phaseLabel = FACTORY_PHASE_LABELS[phaseKey] || phaseKey;
+    var dotCls = phaseKey === 'posting' ? 'post' : (phaseKey === 'warm-up' ? 'warm' : 'soon');
+
+    function metric(label, valHtml, sub, cls) {
+      return '<div class="fac-metric ' + (cls || '') + '"><div class="fac-m-label">' + label + '</div>' +
+        '<div class="fac-m-val">' + valHtml + '</div>' +
+        (sub ? '<div class="fac-m-sub">' + sub + '</div>' : '') + '</div>';
+    }
+
+    var metricsHtml =
+      metric('👁 Visites', facFmt(visTotal), facTodaySub(visO), '') +
+      metric('🛒 Clics achat', a.instrumented ? facFmt(buyTotal) : '<span class="swp-muted">—</span>',
+             a.instrumented ? facTodaySub(buyO) : 'non instrumenté', a.instrumented ? '' : 'muted') +
+      metric('⬇ Téléchargements', a.instrumented ? facFmt(dlTotal) : '<span class="swp-muted">—</span>',
+             a.instrumented ? facTodaySub(dlO) : 'non instrumenté', a.instrumented ? '' : 'muted') +
+      metric('📨 Abonnés', facFmt(subs), 'MailerLite', subs == null ? 'muted' : '') +
+      metric('💳 Ventes ebook', facFmt(sales), a.lemonProductId ? 'LemonSqueezy' : 'pas d’ebook',
+             sales == null ? 'muted' : '') +
+      metric('💶 Revenu', revenue != null ? (swpEscape(String(revenue)) + ' ' + swpEscape(currency)) : '<span class="swp-muted">—</span>',
+             '', 'revenue' + (revenue == null ? ' muted' : ''));
+
+    var convHtml = '';
+    if (a.instrumented) {
+      convHtml = '<div class="fac-conv">' +
+        '<span>Visite→clic : <b>' + facPct(buyTotal, visTotal) + '</b></span>' +
+        '<span>Visite→dl : <b>' + facPct(dlTotal, visTotal) + '</b></span>' +
+        (sales != null ? '<span>Visite→vente : <b>' + facPct(sales, visTotal) + '</b></span>' : '') +
+      '</div>';
+    }
+
+    var emailHtml = a.email
+      ? '<div class="fac-email"><span class="fac-k">✉</span> ' + swpEscape(a.email) + '</div>' : '';
+
+    return '<div class="fac-card">' +
+      '<div class="fac-card-head"><div class="fac-num">' + a.n + '</div>' +
+        '<div class="fac-head-text">' +
+          '<div class="fac-name">' + swpEscape(a.name) + '<span class="fac-badges">' +
+            '<span class="fac-badge ' + dotCls + '">' + swpEscape(phaseLabel) + '</span>' +
+            (a.bilingual ? '<span class="fac-badge bil">EN+FR</span>' : '') +
+          '</span></div>' +
+          '<div class="fac-handle"><a href="' + swpEscape(a.handleUrl) + '" target="_blank" rel="noopener">' + swpEscape(a.handle) + '</a></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="fac-meta">' +
+        '<div class="fac-domain"><a href="https://' + swpEscape(a.domain) + '" target="_blank" rel="noopener">🔗 ' + swpEscape(a.domain) + '</a></div>' +
+        emailHtml +
+      '</div>' +
+      '<div class="fac-metrics">' + metricsHtml + '</div>' +
+      convHtml +
+      '<div class="fac-health"><span class="fac-dot ' + dotCls + '"></span>Santé op : ' + swpEscape(phaseLabel) +
+        (a.note ? ' · ' + swpEscape(a.note) : '') + '</div>' +
+    '</div>';
+  }).join('');
+
+  document.getElementById('factoryAccounts').innerHTML = cards;
+  var hasTok = false;
+  try { hasTok = !!localStorage.getItem('monitoring_factory_token'); } catch (e) {}
+  var tail;
+  if (!data.stats && !hasTok) {
+    tail = ' · <a href="#" onclick="setFactoryStatsToken();return false" style="color:var(--accent2)">🔑 brancher ventes &amp; abonnés</a>';
+  } else if (!data.stats && hasTok) {
+    tail = ' · <span class="swp-muted">worker factory-stats injoignable → ventes/abonnés « — »</span> · <a href="#" onclick="setFactoryStatsToken();return false" style="color:var(--accent2)">🔑 token</a>';
+  } else {
+    tail = ' · <a href="#" onclick="setFactoryStatsToken();return false" class="swp-muted" style="text-decoration:none">🔑</a>';
+  }
+  document.getElementById('factoryLastUpdated').innerHTML =
+    'Dernière mise à jour : ' +
+    new Date(data.generatedAt || Date.now()).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) + tail;
+}
+
+// v1.14.0 : configurer le token du worker factory-stats (ventes LemonSqueezy + abonnés MailerLite)
+function setFactoryStatsToken() {
+  var cur = '';
+  try { cur = localStorage.getItem('monitoring_factory_token') || ''; } catch (e) {}
+  var v = window.prompt('Token du worker factory-stats (ventes/abonnés). Laisser vide pour effacer :', cur);
+  if (v === null) return;
+  try {
+    if (v.trim()) localStorage.setItem('monitoring_factory_token', v.trim());
+    else localStorage.removeItem('monitoring_factory_token');
+  } catch (e) {}
+  if (currentApp === 'factory') manualRefresh();
 }
 
 // === SWP rendering (v1.5.0) ===
@@ -3328,20 +3648,16 @@ function startAutoRefresh() {
 }
 function stopAutoRefresh() { if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; } }
 
-document.getElementById('autoRefresh').addEventListener('change', function() {
-  if (this.checked) startAutoRefresh(); else stopAutoRefresh();
-  // v1.13.0 : persiste l'état entre sessions
-  try { localStorage.setItem(AUTO_REFRESH_LS_KEY, this.checked ? '1' : '0'); } catch (e) { /* localStorage indisponible : silencieux */ }
-});
-
-// v1.13.0 : restaure l'état coché/décoché depuis localStorage. Doit être appelé AVANT le 1er check sur .checked au boot.
-function restoreAutoRefreshFromLS() {
-  try {
-    var saved = localStorage.getItem(AUTO_REFRESH_LS_KEY);
-    if (saved === null) return; // jamais setté → défaut HTML (checked) garde la main
-    document.getElementById('autoRefresh').checked = (saved === '1');
-  } catch (e) { /* localStorage indisponible : silencieux */ }
+// v1.14.0 : auto-refresh supprimé (cause la latence DictoKey) → refresh = bouton manuel uniquement.
+function manualRefresh() {
+  var btn = document.getElementById('btnRefresh');
+  if (btn) btn.classList.add('is-refreshing');
+  fetchAll().catch(handleAuthError).finally(function() {
+    if (btn) btn.classList.remove('is-refreshing');
+  });
 }
+// no-op conservé pour compat avec l'appel au boot (auto-refresh retiré en v1.14.0)
+function restoreAutoRefreshFromLS() { /* v1.14.0 : auto-refresh retiré, plus rien à restaurer */ }
 
 // Enter key on login
 document.getElementById('tokenInput').addEventListener('keydown', function(e) {
@@ -3686,12 +4002,13 @@ document.getElementById('tokenInput').addEventListener('keydown', function(e) {
     }
 
 // Init
+restoreActiveAppFromLS(); // v1.14.0 : restaure l'onglet sélectionné (DictoKey/SWP/Factory) avant le 1er rendu
 setActiveAppView(currentApp); // v1.5.0: set body class before rendering
 renderAppTabs();
 initNav();
 updateTierPillsUI(); // v1.4.11: applique l'état visuel des pills tier depuis localStorage au chargement
 restorePeriodFromLS(); // v1.7.15: applique la période persistée depuis localStorage avant le 1er fetch
-restoreAutoRefreshFromLS(); // v1.13.0 : applique l'état coché/décoché de la checkbox auto-refresh AVANT le 1er fetch (sinon le check ligne `if (autoRefresh.checked) startAutoRefresh()` lit le défaut HTML, pas la pref user)
+restoreAutoRefreshFromLS(); // v1.14.0 : no-op (auto-refresh retiré) — conservé pour compat
 setupCollapsibleSections(); // v1.7.21: mode replier/déplier hybride mobile-first
 applyInternalToggleStates(); // v1.7.26: restaure devicesExpanded et churnDetailsExpanded depuis localStorage
 // v1.7.27 : update du label bouton "Replier/Déplier" sur resize (passage mobile↔desktop)
@@ -3699,10 +4016,9 @@ window.addEventListener('resize', function() {
   if (typeof updateToggleAllButton === 'function') updateToggleAllButton();
 });
 (function init() {
-  if (!getToken()) { showLogin(); return; }
-  fetchAll().then(function() {
-    if (document.getElementById('autoRefresh').checked) startAutoRefresh();
-  }).catch(function(e) {
+  // v1.14.0 : factory ne requiert pas de token (visites publiques) ; les autres apps oui
+  if (currentApp !== 'factory' && !getToken()) { showLogin(); return; }
+  fetchAll().catch(function(e) {
     if (e.message === '401') { clearToken(); showLogin('Token invalide'); }
     else { console.error(e); hideLoading(); }
   });
