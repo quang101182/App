@@ -1,3 +1,4 @@
+<!-- Monitoring Dashboard v1.16.0 (07/06/2026) — Contrôle manuel du rafraîchissement (3 onglets). PLUS de fetch auto au clic d'onglet : on affiche les dernières données connues, persistées en localStorage (cache + horodatage par app, clés dk-monitoring-cache[-ts]-<app>) → survit au F5 et à plusieurs jours. Le fetch ne se déclenche QUE sur le bouton "Actualiser" (manualRefresh) OU au tout premier chargement sans aucune donnée (bootstrap unique). NOUVEAU bandeau de fraîcheur discret #freshBanner (jaune ; orange si >24h) sous les onglets, sur les 3 onglets : "Données actualisées le JJ/MM/AAAA à HH:MM (il y a X)" + cliquable pour actualiser ; ticker 1×/min qui rafraîchit le libellé "il y a X" SANS fetch réseau. Additif, zéro régression. -->
 <!-- Monitoring Dashboard v1.15.0 (07/06/2026) — Refonte onglet SubWhisper Pro (parité visuelle avec Factory, sans copier sa logique one-shot). NOUVEAU : (1) bandeau "Revenu & abonnements" = MRR potentiel (payants×9€, plafond — revenu réel via LemonSqueezy à brancher) + payants actifs + ⚠ À risque + churn% ; (2) bandeau d'alerte automatique en tête qui crie quand un client PAYANT a 0 usage / inactif >14j (ex : Sofia partoallios1, 1ère vente débitée €10,80 jamais utilisée) ; (3) funnel Visites→Clients réels→Payants ; (4) colonne "Santé client" (🔴 payé jamais utilisé · 🟠 payé inactif >14j · 🟡 trial 0 usage · 🟢 actif · ⚫ révoqué · ⚪ test/démo) avec tri par risque + lignes colorées ; (5) comptes honnêtes hors comptes test/démo (@test./@example.). Classification 100% client-side depuis /admin/swp/overview (aucune donnée inventée). ZÉRO impact DictoKey/Factory (additif, isolé via body.app-swp). -->
 <!-- Monitoring Dashboard v1.14.1 (07/06/2026) — Compte Factory #0 The Unseen Child entièrement branché : landing theunseenchild.org instrumentée (clic tripwire LemonSqueezy "Field Kit" → tuc-buy · submit newsletter guide gratuit → tuc-dl) + config dashboard TUC instrumented:true + lemonProductId 1079445 (tripwire 6,99€). Worker factory-stats ACCOUNTS tuc.lemonProductId=1079445 → TUC affiche désormais ventes/revenu réels (1 vente, 8,39€). Note TUC mise à jour (n'est plus "pas d'ebook"). -->
 <!-- Monitoring Dashboard v1.14.0 (07/06/2026) — 3e onglet "Factory" (Ebook Funnel Factory : comptes TikTok faceless → ebooks). Isolation body.app-factory (calquée sur app-swp), #factoryView, config-driven (FACTORY_ACCOUNTS, ajout d'un compte = 1 entrée). Comptes initiaux : #0 The Unseen Child + #1 Aimer en alerte + emplacements #2/#3. Par compte : @handle cliquable, domaine cliquable, email, visites/clics achat/téléchargements (compteur public gateway /api/visit?page=<slug>[-buy|-dl], client-side), abonnés MailerLite + ventes/revenu LemonSqueezy (via worker backend factory-stats, "—" tant qu'absent), taux de conversion, santé op (phase warm-up/posting). Mobile-first. UX (s'applique aux 3 onglets) : auto-refresh 60s SUPPRIMÉ → bouton "Actualiser" manuel ; navigation onglet instantanée (rendu depuis cache appDataCache) ; persistance de l'onglet sélectionné après F5 (localStorage dk-monitoring-active-app). ZÉRO régression DictoKey/SWP (additif). -->
@@ -8,7 +9,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.15.0</title>
+<title>Monitoring v1.16.0</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -603,6 +604,14 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     .swp-table tr.row-test td { opacity:.55; }
     .swp-table tr.row-rev td { opacity:.72; }
 
+    /* ── v1.16.0 Bandeau de fraîcheur (3 onglets) — jaune par défaut, orange si > 24h ── */
+    .fresh-banner { display:flex; align-items:center; gap:8px; font-size:.75rem; color:#eab308; background:rgba(234,179,8,.10); border:1px solid rgba(234,179,8,.30); border-radius:8px; padding:6px 12px; margin:8px 0 0; cursor:pointer; transition:background .15s; }
+    .fresh-banner:hover { background:rgba(234,179,8,.18); }
+    .fresh-banner b { color:inherit; font-weight:700; }
+    .fresh-banner .fb-ic { flex-shrink:0; }
+    .fresh-banner .fb-act { margin-left:auto; color:var(--accent2-new); font-weight:600; white-space:nowrap; }
+    .fresh-banner.stale { color:var(--orange-new); background:rgba(240,136,62,.12); border-color:rgba(240,136,62,.35); }
+
     /* ══ v1.14.0 Factory monitoring (Ebook Funnel Factory — comptes TikTok faceless) ══ */
     /* Mobile-first : 1 colonne par défaut, grille auto-fit sur écrans larges. */
     .factory-section { padding: 8px 0 24px; }
@@ -775,7 +784,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.15.0</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.16.0</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -791,6 +800,9 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
   <!-- App tabs -->
   <div class="app-tabs" id="appTabs"></div>
+
+  <!-- v1.16.0 : bandeau de fraîcheur (3 onglets) — pas de fetch auto, affiche la dernière actu manuelle. Cliquable = Actualiser. -->
+  <div class="fresh-banner" id="freshBanner" style="display:none" title="Cliquer pour actualiser maintenant"></div>
 
   <!-- Section nav -->
   <nav class="section-nav" id="sectionNav">
@@ -1177,12 +1189,12 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   </div>
 
   <!-- Footer -->
-  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.15.0</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
+  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.16.0</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.15.0';
+const DASHBOARD_VERSION = 'v1.16.0';
 
 // === Multi-app config ===
 const APPS = {
@@ -1255,6 +1267,9 @@ let isAutoRefresh = false;
 let currentAbortCtrl = null; // v1.5.0: cancel in-flight fetches on tab switch
 let appDataCache = {};       // v1.14.0: dernier payload par app → navigation onglet instantanée (rendu depuis cache, refetch via bouton Actualiser)
 const ACTIVE_APP_LS_KEY = 'dk-monitoring-active-app'; // v1.14.0: persistance de l'onglet sélectionné après F5
+// v1.16.0 : persistance du cache + horodatage par app → AUCUN fetch auto au clic d'onglet (ni après F5/plusieurs jours), seul le bouton Actualiser fetch.
+const CACHE_LS_PREFIX = 'dk-monitoring-cache-';
+const CACHE_TS_LS_PREFIX = 'dk-monitoring-cache-ts-';
 
 // Lang / mode maps
 const LANG_MAP = { French:'Français', English:'Anglais', Spanish:'Espagnol', German:'Allemand', Italian:'Italien', Portuguese:'Portugais', Dutch:'Néerlandais', Russian:'Russe', Chinese:'Chinois', Japanese:'Japonais', Korean:'Coréen', Arabic:'Arabe' };
@@ -1290,9 +1305,10 @@ function switchApp(newApp) {
   // factory : visites publiques → pas de token requis. Autres apps : token requis.
   if (newApp !== 'factory' && !getToken()) { showLogin(); return; }
   hideLogin(); // v1.14.0 : fermer une éventuelle modale login résiduelle d'un onglet précédent
-  // v1.14.0 : retour sur un onglet déjà chargé → rendu instantané depuis le cache (refresh = bouton manuel)
+  // v1.14.0/v1.16.0 : retour sur un onglet → rendu depuis le cache (mémoire ou localStorage), JAMAIS de fetch auto.
   if (renderFromCache(newApp)) return;
-  fetchAll().catch(handleAuthError);
+  // Onglet jamais chargé (aucune donnée) → on n'auto-fetch PAS : l'utilisateur garde la main (bouton Actualiser).
+  renderFreshBanner(newApp);
 }
 
 // v1.14.0 : persistance de l'onglet actif
@@ -1403,24 +1419,85 @@ async function fetchAllDictoKey(signal) {
     fetch('https://api-gateway-pro.quang101182.workers.dev/api/click?page=dk', { signal: signal }).then(function(r){return r.json()}).catch(function(){return {total:0,today:0,by_btn:{}}})
   ]);
   if (currentApp !== 'dictokey') return; // late response on wrong tab → drop
-  appDataCache.dictokey = results; // v1.14.0 cache pour navigation instantanée
+  persistAppCache('dictokey', results); // v1.16.0 : cache mémoire + localStorage + horodatage
   render(results[0], results[1], results[2], results[3], results[4]);
 }
 
-// v1.14.0 : re-rendu instantané depuis le cache (pas de fetch, pas d'overlay) au retour sur un onglet déjà chargé.
+// v1.16.0 : persistance du cache en localStorage (survit au F5 / plusieurs jours) + horodatage.
+function persistAppCache(app, data) {
+  try {
+    appDataCache[app] = data;
+    localStorage.setItem(CACHE_LS_PREFIX + app, JSON.stringify(data));
+    localStorage.setItem(CACHE_TS_LS_PREFIX + app, String(Date.now()));
+  } catch (e) { /* quota dépassé : on garde au moins le cache mémoire de la session */ }
+  renderFreshBanner(app);
+}
+function loadAppCacheFromLS(app) {
+  try { var raw = localStorage.getItem(CACHE_LS_PREFIX + app); return raw ? JSON.parse(raw) : null; }
+  catch (e) { return null; }
+}
+function getCacheTs(app) {
+  try { var t = localStorage.getItem(CACHE_TS_LS_PREFIX + app); return t ? parseInt(t, 10) : null; }
+  catch (e) { return null; }
+}
+// Mémoire d'abord, puis localStorage (après F5 la mémoire est vide mais le LS persiste).
+function getAppData(app) {
+  if (appDataCache[app]) return appDataCache[app];
+  var ls = loadAppCacheFromLS(app);
+  if (ls) { appDataCache[app] = ls; return ls; }
+  return null;
+}
+
+// v1.14.0/v1.16.0 : re-rendu instantané depuis le cache (mémoire OU localStorage), JAMAIS de fetch au clic d'onglet.
 function renderFromCache(app) {
-  var c = appDataCache[app];
+  var c = getAppData(app);
   if (!c) return false;
   if (app === 'dictokey') { render(c[0], c[1], c[2], c[3], c[4]); }
   else if (app === 'swp') { renderSwp(c); }
   else if (app === 'factory') { renderFactory(c); }
+  renderFreshBanner(app);
   return true;
+}
+
+// v1.16.0 : bandeau discret de fraîcheur (jaune ; orange si > 24h). S'affiche sur les 3 onglets.
+function renderFreshBanner(app) {
+  var el = document.getElementById('freshBanner');
+  if (!el) return;
+  if (app !== currentApp) return; // ne refléter que l'onglet courant
+  el.onclick = function() { manualRefresh(); };
+  var ts = getCacheTs(app);
+  if (!ts) {
+    el.className = 'fresh-banner stale';
+    el.innerHTML = '<span class="fb-ic">🕒</span><span>Jamais actualisé sur cet onglet</span><span class="fb-act">🔄 Actualiser</span>';
+    el.style.display = 'flex';
+    return;
+  }
+  var d = new Date(ts);
+  var p2 = function(n) { return String(n).padStart(2, '0'); };
+  var dateTxt = p2(d.getDate()) + '/' + p2(d.getMonth() + 1) + '/' + d.getFullYear();
+  var timeTxt = p2(d.getHours()) + ':' + p2(d.getMinutes());
+  var ageMs = Date.now() - ts;
+  var ageMin = Math.floor(ageMs / 60000);
+  var rel;
+  if (ageMin < 1) rel = "à l'instant";
+  else if (ageMin < 60) rel = 'il y a ' + ageMin + ' min';
+  else if (ageMin < 1440) rel = 'il y a ' + Math.floor(ageMin / 60) + ' h';
+  else rel = 'il y a ' + Math.floor(ageMin / 1440) + ' j';
+  el.className = 'fresh-banner' + (ageMs > 86400000 ? ' stale' : '');
+  el.innerHTML = '<span class="fb-ic">🕒</span><span>Données actualisées le <b>' + dateTxt + ' à ' + timeTxt + '</b> (' + rel + ')</span><span class="fb-act">🔄 Actualiser</span>';
+  el.style.display = 'flex';
+}
+// v1.16.0 : rafraîchit UNIQUEMENT le libellé "il y a X" (pas de fetch réseau), 1×/min.
+var freshBannerTicker = null;
+function startFreshBannerTicker() {
+  if (freshBannerTicker) return;
+  freshBannerTicker = setInterval(function() { renderFreshBanner(currentApp); }, 60000);
 }
 
 async function fetchAllSwp(signal) {
   var data = await apiFetch(APPS.swp.endpoints.overview, signal);
   if (currentApp !== 'swp') return;
-  appDataCache.swp = data; // v1.14.0 cache pour navigation instantanée
+  persistAppCache('swp', data); // v1.16.0 : cache mémoire + localStorage + horodatage
   renderSwp(data);
 }
 
@@ -1456,7 +1533,7 @@ async function fetchAllFactory(signal) {
   var stats = await statsPromise;
   if (currentApp !== 'factory') return; // réponse tardive sur mauvais onglet → drop
   var data = { accounts: accounts, visits: visitResults, stats: stats, generatedAt: Date.now() };
-  appDataCache.factory = data;
+  persistAppCache('factory', data); // v1.16.0 : cache mémoire + localStorage + horodatage
   renderFactory(data);
 }
 
@@ -4130,10 +4207,14 @@ window.addEventListener('resize', function() {
 (function init() {
   // v1.14.0 : factory ne requiert pas de token (visites publiques) ; les autres apps oui
   if (currentApp !== 'factory' && !getToken()) { showLogin(); return; }
+  // v1.16.0 : si des données persistées existent (localStorage), on les affiche SANS fetch
+  // → l'utilisateur garde la main, il rafraîchit via le bouton Actualiser quand il veut.
+  if (renderFromCache(currentApp)) { startFreshBannerTicker(); return; }
+  // Aucune donnée connue (toute 1re ouverture) → bootstrap unique.
   fetchAll().catch(function(e) {
     if (e.message === '401') { clearToken(); showLogin('Token invalide'); }
     else { console.error(e); hideLoading(); }
-  });
+  }).finally(function() { startFreshBannerTicker(); });
 })();
 </script>
 </body>
