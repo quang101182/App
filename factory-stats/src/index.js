@@ -19,7 +19,7 @@ const STORE_ID = '314871';
 // Config comptes (miroir server-side de FACTORY_ACCOUNTS du dashboard).
 // Ajouter un compte = 1 entrée (id = clé renvoyée au dashboard).
 const ACCOUNTS = [
-  { id: 'tuc', lemonProductId: null,     mailerliteGroups: ['188196310320416300', '188196324324148652'] },
+  { id: 'tuc', lemonProductId: '1079445', mailerliteGroups: ['188196310320416300', '188196324324148652'] }, // TUC = tripwire "The Starter Field Kit" 6,99€
   { id: 'aea', lemonProductId: '1124161', mailerliteGroups: ['189630922714252838'] }
 ];
 

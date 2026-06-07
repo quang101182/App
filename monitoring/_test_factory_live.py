@@ -75,13 +75,18 @@ def main():
             print("  CARD:", mt[:260])
         assert fac_visible == "block", "factoryView pas visible"
         assert cards == 4, f"attendu 4 cartes (TUC, AEA, #2, #3), eu {cards}"
+        import re as _re
         joined = " ".join(metrics_text)
-        assert "44" in joined, "visites aea (44) absentes du rendu"
-        assert "96" in joined, "visites tuc (96) absentes du rendu"
-        # Intégration backend : avec token, les ventes/abonnés/revenu doivent être chiffrés (0 EUR), pas "—"
+        # robustesse : on ne code pas les comptes exacts (ils évoluent) — on vérifie la structure
+        assert _re.search(r"VISITES \| \d+", metrics_text[0]), "visites TUC non rendues"
+        assert _re.search(r"VISITES \| \d+", metrics_text[1]), "visites AEA non rendues"
+        # TUC + AEA sont instrumentés → clics achat doit être chiffré (plus de 'non instrumenté')
+        assert "non instrumenté" not in metrics_text[1], "AEA ne devrait plus être 'non instrumenté'"
+        assert "non instrumenté" not in metrics_text[0], "TUC devrait être instrumenté (v1.14.1)"
         if fac_tok:
             assert "EUR" in joined, "revenu LemonSqueezy (worker) non intégré (pas de 'EUR')"
-            print("  [backend] worker factory-stats intégré : ventes/revenu/abonnés chiffrés (0 réels)")
+            assert "8.39" in metrics_text[0], "ventes/revenu TUC réels (8.39€) non intégrés"
+            print("  [backend] worker intégré : TUC ventes 1 / 8.39€ réels, AEA 0")
         safe_shot(page, os.path.join(DIR, "_qa_factory_mobile.png"))
 
         # --- 3) Persistance onglet apres F5 ---
