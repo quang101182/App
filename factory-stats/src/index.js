@@ -20,7 +20,8 @@ const STORE_ID = '314871';
 // Ajouter un compte = 1 entrée (id = clé renvoyée au dashboard).
 const ACCOUNTS = [
   { id: 'tuc', lemonProductId: '1079445', mailerliteGroups: ['188196310320416300', '188196324324148652'] }, // TUC = tripwire "The Starter Field Kit" 6,99€
-  { id: 'aea', lemonProductId: '1124161', mailerliteGroups: ['189630922714252838'] }
+  { id: 'aea', lemonProductId: '1124161', mailerliteGroups: ['189630922714252838'] },
+  { id: 'lpp', lemonProductId: '1127720', mailerliteGroups: ['189741975066380081'] }
 ];
 
 const CORS = {

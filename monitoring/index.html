@@ -1,5 +1,6 @@
 <!-- Monitoring Dashboard v1.16.0 (07/06/2026) — Contrôle manuel du rafraîchissement (3 onglets). PLUS de fetch auto au clic d'onglet : on affiche les dernières données connues, persistées en localStorage (cache + horodatage par app, clés dk-monitoring-cache[-ts]-<app>) → survit au F5 et à plusieurs jours. Le fetch ne se déclenche QUE sur le bouton "Actualiser" (manualRefresh) OU au tout premier chargement sans aucune donnée (bootstrap unique). NOUVEAU bandeau de fraîcheur discret #freshBanner (jaune ; orange si >24h) sous les onglets, sur les 3 onglets : "Données actualisées le JJ/MM/AAAA à HH:MM (il y a X)" + cliquable pour actualiser ; ticker 1×/min qui rafraîchit le libellé "il y a X" SANS fetch réseau. Additif, zéro régression. -->
 <!-- Monitoring Dashboard v1.15.0 (07/06/2026) — Refonte onglet SubWhisper Pro (parité visuelle avec Factory, sans copier sa logique one-shot). NOUVEAU : (1) bandeau "Revenu & abonnements" = MRR potentiel (payants×9€, plafond — revenu réel via LemonSqueezy à brancher) + payants actifs + ⚠ À risque + churn% ; (2) bandeau d'alerte automatique en tête qui crie quand un client PAYANT a 0 usage / inactif >14j (ex : Sofia partoallios1, 1ère vente débitée €10,80 jamais utilisée) ; (3) funnel Visites→Clients réels→Payants ; (4) colonne "Santé client" (🔴 payé jamais utilisé · 🟠 payé inactif >14j · 🟡 trial 0 usage · 🟢 actif · ⚫ révoqué · ⚪ test/démo) avec tri par risque + lignes colorées ; (5) comptes honnêtes hors comptes test/démo (@test./@example.). Classification 100% client-side depuis /admin/swp/overview (aucune donnée inventée). ZÉRO impact DictoKey/Factory (additif, isolé via body.app-swp). -->
+<!-- Monitoring Dashboard v1.17.0 (08/06/2026) — Compte Factory #2 « Le poids du potentiel » branché : placeholder 'pg' remplacé par entrée réelle id 'lpp' (visitSlug lpp, ML group 189741975066380081, lemonProductId 1127720, phase posting). Worker factory-stats ACCOUNTS lpp ajouté. Additif, zéro régression DictoKey/SWP/TUC/aea. -->
 <!-- Monitoring Dashboard v1.14.1 (07/06/2026) — Compte Factory #0 The Unseen Child entièrement branché : landing theunseenchild.org instrumentée (clic tripwire LemonSqueezy "Field Kit" → tuc-buy · submit newsletter guide gratuit → tuc-dl) + config dashboard TUC instrumented:true + lemonProductId 1079445 (tripwire 6,99€). Worker factory-stats ACCOUNTS tuc.lemonProductId=1079445 → TUC affiche désormais ventes/revenu réels (1 vente, 8,39€). Note TUC mise à jour (n'est plus "pas d'ebook"). -->
 <!-- Monitoring Dashboard v1.14.0 (07/06/2026) — 3e onglet "Factory" (Ebook Funnel Factory : comptes TikTok faceless → ebooks). Isolation body.app-factory (calquée sur app-swp), #factoryView, config-driven (FACTORY_ACCOUNTS, ajout d'un compte = 1 entrée). Comptes initiaux : #0 The Unseen Child + #1 Aimer en alerte + emplacements #2/#3. Par compte : @handle cliquable, domaine cliquable, email, visites/clics achat/téléchargements (compteur public gateway /api/visit?page=<slug>[-buy|-dl], client-side), abonnés MailerLite + ventes/revenu LemonSqueezy (via worker backend factory-stats, "—" tant qu'absent), taux de conversion, santé op (phase warm-up/posting). Mobile-first. UX (s'applique aux 3 onglets) : auto-refresh 60s SUPPRIMÉ → bouton "Actualiser" manuel ; navigation onglet instantanée (rendu depuis cache appDataCache) ; persistance de l'onglet sélectionné après F5 (localStorage dk-monitoring-active-app). ZÉRO régression DictoKey/SWP (additif). -->
 <!-- Monitoring Dashboard v1.13.5 (29/05/2026) — Highlight AI Assistant channel dans card "Sources d'acquisition 7j" (firebaseSources) : bandeau gradient violet en tête affichant total sessions + % AI si > 0, ligne avec border violet + emoji 🤖 sur le channel matchant /ai[\s\-_]*assistant|chatgpt|perplexity|claude|gemini|copilot/i. Si 0 session AI, bandeau pointillé indique "Phase 0/1/2 GEO live 29/05 — re-mesurer J+30/+60/+90". Anticipe le rollout naturel du channel GA4 natif AI Assistant (ajouté Google 13/05/2026) — actuellement 0 sessions (normal early). v1.13.3 (12/05/2026 après-midi) — Nouvelle section "Attribution install & signaux v2.61.7" : 3 cards consomment aggregated.attribution_v2617 du gateway v1.5.17 (install_source / install_content / oem_kill_brand). Affiche en attente tant que v2.61.7 pas rolled out (~17-19 mai). Mesure source des installs (site dictokey.com vs Play direct vs ads), boutons site qui convertissent (hero/sticky/cta/etc.), fréquence kill OEM Xiaomi/vivo. v1.13.1 (12/05/2026) bandeau Premium silencieux requalifié pattern NORMAL v<2.61.4 + retrait /admin/set-tier (créerait Premium gratuit à vie si user résilie, validé code gateway:664 + 2e avis Groq). v1.13.0 (08/05/2026 nuit) bandeau initial. v1.11.0 persistance localStorage auto-refresh. -->
@@ -1194,7 +1195,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.16.0';
+const DASHBOARD_VERSION = 'v1.17.0';
 
 // === Multi-app config ===
 const APPS = {
@@ -1251,8 +1252,14 @@ const FACTORY_ACCOUNTS = [
     lemonProductId: '1124161', bilingual: false, phase: 'warm-up',
     note: ''
   },
-  { id: 'pg', n: 2, name: 'Potentiel gâché', placeholder: true, bilingual: false,
-    note: 'Niche #2 (FR, voix Anna P) — à créer après validation #1.' },
+  {
+    id: 'lpp', n: 2, name: 'Le poids du potentiel',
+    handle: '@le.poids.du.potentiel', handleUrl: 'https://www.tiktok.com/@le.poids.du.potentiel',
+    email: 'j.moreau2@lepoidsdupotentiel.com', domain: 'lepoidsdupotentiel.com', visitSlug: 'lpp',
+    instrumented: true, mailerliteGroups: ['189741975066380081'],
+    lemonProductId: '1127720', bilingual: false, phase: 'posting',
+    note: 'Niche #2 (FR, voix Anna P). Ebook complet 19 €. Opéré via Edge CDP (pas GeeLark).'
+  },
   { id: 'di', n: 3, name: 'Deuil invisible', placeholder: true, bilingual: true,
     note: 'Niche #3 (bilingue EN+FR) — à créer après validation #1.' }
 ];
