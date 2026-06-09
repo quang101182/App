@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.5.4';
+const VERSION = '1.5.5';
 
 // ── Plan limits (per calendar month) ────────────────────────────────────────
 const PLAN_LIMITS = {
@@ -809,7 +809,11 @@ export default {
         const mk = monthKey();
         const today = new Date().toISOString().slice(0, 10);
         let total = 0, trial = 0, pro = 0, revoked = 0;
+        // v1.5.5 — usage_this_month now counts ALL keys (revoked included) so the real
+        // monthly API consumption / cost is visible even after a key is revoked (abuse, churn).
+        // usage_this_month_active keeps the non-revoked-only view for "current active load".
         let mTranscriptions = 0, mTranslations = 0;
+        let mTranscriptionsActive = 0, mTranslationsActive = 0;
         const customers = [];
         for (const k of list.keys) {
           const data = await env.PRO_KV.get(k.name, 'json');
@@ -822,9 +826,11 @@ export default {
           else if (data.plan === 'trial') trial++;
           else if (data.plan === 'pro') pro++;
           const monthly = (data.monthlyUsage && data.monthlyUsage[mk]) || { transcriptions: 0, translations: 0 };
+          mTranscriptions += monthly.transcriptions || 0;
+          mTranslations += monthly.translations || 0;
           if (!data.revoked) {
-            mTranscriptions += monthly.transcriptions || 0;
-            mTranslations += monthly.translations || 0;
+            mTranscriptionsActive += monthly.transcriptions || 0;
+            mTranslationsActive += monthly.translations || 0;
           }
           customers.push({
             key: keyName,
@@ -853,6 +859,7 @@ export default {
           month: mk,
           customers: { total, trial, pro, revoked },
           usage_this_month: { transcriptions: mTranscriptions, translations: mTranslations },
+          usage_this_month_active: { transcriptions: mTranscriptionsActive, translations: mTranslationsActive },
           limits_per_plan: PLAN_LIMITS,
           site_visits: {
             total: parseInt(visitsTotalRaw) || 0,
