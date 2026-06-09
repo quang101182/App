@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.5.5';
+const VERSION = '1.6.0';
 
 // ── Plan limits (per calendar month) ────────────────────────────────────────
 const PLAN_LIMITS = {
@@ -464,6 +464,7 @@ async function handleLemonSqueezyWebhook(request, env, ctx) {
       if (existingData && existingData.revoked) {
         existingData.revoked = false;
         existingData.plan = plan;
+        existingData.lsStatus = status; // v1.6.0 — track real LS status
         existingData.subscriptionId = subscriptionId;
         if (trialEndsAt) existingData.expiresAt = trialEndsAt;
         else delete existingData.expiresAt;
@@ -483,6 +484,7 @@ async function handleLemonSqueezyWebhook(request, env, ctx) {
       app,
       created: new Date().toISOString(),
       subscriptionId,
+      lsStatus: status, // v1.6.0 — real LS status ('on_trial', 'active', ...) for honest payer counting
       usage: { transcriptions: 0, translations: 0 },
       monthlyUsage: {},
       revoked: false,
@@ -518,6 +520,7 @@ async function handleLemonSqueezyWebhook(request, env, ctx) {
     } else if (status === 'cancelled' || status === 'expired' || status === 'unpaid') {
       data.revoked = true;
     }
+    data.lsStatus = status; // v1.6.0 — always record the real LS status (incl. past_due, paused)
     data.subscriptionId = subscriptionId;
     await env.PRO_KV.put(`pro:${proKey}`, JSON.stringify(data));
     return json({ ok: true, action: 'updated', email, app, status });
@@ -531,6 +534,7 @@ async function handleLemonSqueezyWebhook(request, env, ctx) {
     const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
     if (data) {
       data.revoked = true;
+      data.lsStatus = attrs.status || (event === 'subscription_cancelled' ? 'cancelled' : 'expired'); // v1.6.0
       await env.PRO_KV.put(`pro:${proKey}`, JSON.stringify(data));
     }
     return json({ ok: true, action: 'revoked', email, app });
@@ -786,6 +790,55 @@ export default {
         return json({ ok: true, revoked: body.key });
       }
 
+      // Reconcile lsStatus from LemonSqueezy (backfill + on-demand resync).
+      // For each SWP pro key with a numeric subscriptionId, query the LS API and
+      // store the real subscription status. Lets the dashboard tell a genuine
+      // active payer from a past_due (failed payment) or an orphan key whose
+      // subscriptionId isn't a real subscription (e.g. an order_id → 404).
+      if (path === '/admin/swp/sync-ls-status' && method === 'POST') {
+        const lsToken = await env.PRO_KV.get('cfg:lemonsqueezy_api_key');
+        if (!lsToken) return err('cfg:lemonsqueezy_api_key not set in KV', 500);
+        const list = await env.PRO_KV.list({ prefix: 'pro:' });
+        const results = [];
+        for (const k of list.keys) {
+          const data = await env.PRO_KV.get(k.name, 'json');
+          if (!data) continue;
+          const keyName = k.name.replace('pro:', '');
+          const isSwp = data.app === 'swp' || (!data.app && keyName.startsWith('swp_'));
+          if (!isSwp || data.plan !== 'pro') continue;
+          const subId = data.subscriptionId;
+          if (!subId || !/^\d+$/.test(String(subId))) {
+            results.push({ key: keyName, email: data.email, subscriptionId: subId || null, action: 'skipped_no_numeric_sub', lsStatus: data.lsStatus || null });
+            continue;
+          }
+          let lsStatus = null, http = null;
+          try {
+            const res = await fetch(`https://api.lemonsqueezy.com/v1/subscriptions/${subId}`, {
+              headers: { 'Authorization': `Bearer ${lsToken}`, 'Accept': 'application/vnd.api+json' },
+            });
+            http = res.status;
+            if (res.status === 404) {
+              lsStatus = 'not_found'; // subscriptionId is not a real LS subscription (orphan / order_id)
+            } else if (res.ok) {
+              const b = await res.json().catch(() => ({}));
+              lsStatus = (b && b.data && b.data.attributes && b.data.attributes.status) || 'unknown';
+            } else {
+              results.push({ key: keyName, email: data.email, subscriptionId: subId, action: 'ls_http_error', http });
+              continue;
+            }
+          } catch (e) {
+            results.push({ key: keyName, email: data.email, subscriptionId: subId, action: 'exception', error: e.message });
+            continue;
+          }
+          const previous = data.lsStatus || null;
+          data.lsStatus = lsStatus;
+          data.lsStatusCheckedAt = new Date().toISOString();
+          await env.PRO_KV.put(k.name, JSON.stringify(data));
+          results.push({ key: keyName, email: data.email, subscriptionId: subId, previous, lsStatus, http });
+        }
+        return json({ ok: true, checked: results.length, results });
+      }
+
       // Test activation email delivery — bypasses LS webhook signature, calls
       // sendActivationEmail directly so we can validate the real subscription_created
       // path end-to-end without creating a real LS sub. Admin only.
@@ -841,6 +894,8 @@ export default {
             expiresAt: data.expiresAt || null,
             lastUsed: data.lastUsed || null,
             subscriptionId: data.subscriptionId || null,
+            lsStatus: data.lsStatus || null, // v1.6.0 — real LS status for honest payer/MRR classification
+            lsStatusCheckedAt: data.lsStatusCheckedAt || null,
             usageMonth: monthly,
             usageTotal: data.usage || { transcriptions: 0, translations: 0 },
           });
