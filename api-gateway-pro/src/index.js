@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.6.0';
+const VERSION = '1.7.0';
 
 // ── Plan limits (per calendar month) ────────────────────────────────────────
 const PLAN_LIMITS = {
@@ -88,6 +88,20 @@ function json(data, status = 200) {
 
 function err(msg, status = 400) {
   return json({ error: msg }, status);
+}
+
+// ── Bot/crawler filter for public visit/click counters ──────────────────────
+// New domains get hammered by CT-log crawlers, scanners and social-preview bots
+// that execute JS → they inflate the visit/click counters and make the funnel
+// dashboard lie. Skip the increment for obvious non-human traffic so counters
+// reflect real visitors. Conservative denylist (known bot tokens only).
+// CRITICAL: must NOT match the TikTok in-app webview (BytedanceWebview /
+// musical_ly / trill) — those are our real target users. Verified: none of the
+// tokens below appear in the TikTok webview UA.
+const BOT_UA_RE = /bot\b|crawl|spider|slurp|scrape|headless|phantom|puppeteer|playwright|selenium|python|curl|wget|libwww|httpclient|okhttp|go-http|java\/|axios|node-fetch|bytespider|gptbot|claudebot|ccbot|amazonbot|applebot|googlebot|bingbot|baiduspider|semrush|ahrefs|mj12|dotbot|petalbot|dataforseo|facebookexternalhit|telegrambot|whatsapp|discordbot|slackbot|embedly|skypeuripreview|censys|masscan|zgrab|expanse/i;
+function isBotUA(ua) {
+  if (!ua) return true;            // empty UA = scanner/bot
+  return BOT_UA_RE.test(ua);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -613,7 +627,8 @@ export default {
       const todayRaw = await env.PRO_KV.get(`${prefix}:${today}`);
       let total = parseInt(totalRaw) || 0;
       let todayCount = parseInt(todayRaw) || 0;
-      if (method === 'POST') {
+      // Only count real (non-bot) sessions — see isBotUA().
+      if (method === 'POST' && !isBotUA(request.headers.get('user-agent') || '')) {
         total++;
         todayCount++;
         ctx.waitUntil(Promise.all([
@@ -637,14 +652,17 @@ export default {
         let total = parseInt(totalRaw) || 0;
         let todayCount = parseInt(todayRaw) || 0;
         let btnTotal = parseInt(btnRaw) || 0;
-        total++;
-        todayCount++;
-        btnTotal++;
-        ctx.waitUntil(Promise.all([
-          env.PRO_KV.put(`${prefix}:total`, String(total)),
-          env.PRO_KV.put(`${prefix}:${today}`, String(todayCount), { expirationTtl: 90 * 86400 }),
-          env.PRO_KV.put(`${prefix}:btn:${btn}:total`, String(btnTotal)),
-        ]));
+        // Only count real (non-bot) clicks — see isBotUA().
+        if (!isBotUA(request.headers.get('user-agent') || '')) {
+          total++;
+          todayCount++;
+          btnTotal++;
+          ctx.waitUntil(Promise.all([
+            env.PRO_KV.put(`${prefix}:total`, String(total)),
+            env.PRO_KV.put(`${prefix}:${today}`, String(todayCount), { expirationTtl: 90 * 86400 }),
+            env.PRO_KV.put(`${prefix}:btn:${btn}:total`, String(btnTotal)),
+          ]));
+        }
         return json({ page, btn, total, today: todayCount });
       }
       // GET: return all click stats
