@@ -19,7 +19,7 @@ const STORE_ID = '314871';
 // Config comptes (miroir server-side de FACTORY_ACCOUNTS du dashboard).
 // Ajouter un compte = 1 entrée (id = clé renvoyée au dashboard).
 const ACCOUNTS = [
-  { id: 'tuc', lemonProductId: '1079445', mailerliteGroups: ['188196310320416300', '188196324324148652'] }, // TUC = tripwire "The Starter Field Kit" 6,99€
+  { id: 'tuc', lemonProductIds: ['1079445', '1136233', '1136241', '1136251'], mailerliteGroups: ['188196310320416300', '188196324324148652'] }, // TUC = Field Kit 7€ + Manual 17€ + Workbook 9€ + Set 19€ (value ladder)
   { id: 'aea', lemonProductId: '1124161', mailerliteGroups: ['189630922714252838'] },
   { id: 'lpp', lemonProductId: '1127720', mailerliteGroups: ['189741975066380081'] }
 ];
@@ -105,9 +105,14 @@ export default {
     let mlErr = null;
     for (const acc of ACCOUNTS) {
       const out = {};
-      if (acc.lemonProductId) {
-        const p = byProduct[acc.lemonProductId];
-        if (p) { out.sales = p.sales; out.revenue = Math.round(p.revenueCents) / 100; out.currency = p.currency; }
+      const pids = acc.lemonProductIds || (acc.lemonProductId ? [acc.lemonProductId] : []);
+      if (pids.length) {
+        let sales = 0, revenueCents = 0, currency = 'EUR', found = false;
+        for (const pid of pids) {
+          const p = byProduct[pid];
+          if (p) { sales += p.sales; revenueCents += p.revenueCents; currency = p.currency; found = true; }
+        }
+        if (found) { out.sales = sales; out.revenue = Math.round(revenueCents) / 100; out.currency = currency; }
         else if (!lemonErr) { out.sales = 0; out.revenue = 0; out.currency = 'EUR'; }
       }
       if (mlToken && acc.mailerliteGroups && acc.mailerliteGroups.length) {
