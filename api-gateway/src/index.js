@@ -43,7 +43,10 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.39';
+const VERSION = '1.40';
+
+// v1.40 — modèle Claude de repli si le modèle demandé est retiré (404) — voir proxyClaude
+const CLAUDE_FALLBACK_MODEL = 'claude-sonnet-4-6';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -356,11 +359,30 @@ async function proxyClaude(request, env, path) {
   forwardHeaders.set('x-api-key', apiKey);
   forwardHeaders.set('anthropic-version', request.headers.get('anthropic-version') || '2023-06-01');
 
-  const upstreamResp = await fetch(upstream, {
+  let upstreamResp = await fetch(upstream, {
     method : request.method,
     headers: forwardHeaders,
     body   : body.byteLength > 0 ? body : undefined,
   });
+
+  // v1.40 — Fallback modèle : si le modèle demandé est retiré/inconnu (404
+  // not_found_error), on retente UNE fois avec un modèle sûr courant au lieu de
+  // renvoyer une erreur silencieuse au client. Évite la panne différée quand
+  // Anthropic retire un modèle codé en dur côté app.
+  if (upstreamResp.status === 404 && body.byteLength > 0) {
+    try {
+      const reqJson = JSON.parse(new TextDecoder().decode(body));
+      if (reqJson && reqJson.model && reqJson.model !== CLAUDE_FALLBACK_MODEL) {
+        reqJson.model = CLAUDE_FALLBACK_MODEL;
+        const retryResp = await fetch(upstream, {
+          method : request.method,
+          headers: forwardHeaders,
+          body   : JSON.stringify(reqJson),
+        });
+        if (retryResp.ok) upstreamResp = retryResp;
+      }
+    } catch (_) { /* body non-JSON → on renvoie le 404 original */ }
+  }
 
   const respHeaders = new Headers();
   for (const h of ['content-type', 'content-length']) {
@@ -1148,16 +1170,31 @@ async function proxyYoutubeSearch(request, env) {
           const vResp = await fetch(vUrl);
           if (vResp.ok) {
             const vData = await vResp.json();
-            // Sort: prefer audio/lyric/topic, deprioritize music video/MV (fewer ads)
-            const sorted = (vData.items || []).sort((a, b) => {
-              const tA = (a.snippet?.title || '').toLowerCase();
-              const tB = (b.snippet?.title || '').toLowerCase();
-              const scoreA = (tA.includes('audio') || tA.includes('lyric') || tA.includes('topic') ? 2 : 0)
-                           - (tA.includes('music video') || tA.includes('official video') || / mv[\s\]|\)]/i.test(tA) ? 2 : 0);
-              const scoreB = (tB.includes('audio') || tB.includes('lyric') || tB.includes('topic') ? 2 : 0)
-                           - (tB.includes('music video') || tB.includes('official video') || / mv[\s\]|\)]/i.test(tB) ? 2 : 0);
-              return scoreB - scoreA;
-            });
+            // v1.40 — scoring unifié avec la recherche locale (anti-remix/cover/live/
+            // karaoke + match titre + bonus audio/lyric). Avant, le gateway ne triait
+            // que audio vs music-video → il pouvait renvoyer un remix/cover/sped-up.
+            const qLow = query.toLowerCase().replace(/official\s*audio/g, '').replace(/audio\s*officiel/g, '').trim();
+            const qWords = qLow.split(/\s+/).filter(w => w.length > 2);
+            const scoreTitle = (t) => {
+              let s = 0;
+              qWords.forEach(w => { if (t.includes(w)) s += 3; });
+              if (t.includes('official audio') || t.includes('audio officiel')) s += 5;
+              else if (t.includes('lyric')) s += 3;
+              else if (t.includes('topic')) s += 3;
+              else if (t.includes('official')) s += 2;
+              if (t.includes('remix') && !qLow.includes('remix')) s -= 6;
+              if (t.includes('cover') && !qLow.includes('cover')) s -= 6;
+              if (t.includes('live') && !qLow.includes('live')) s -= 4;
+              if (t.includes('karaoke') || t.includes('instrumental')) s -= 8;
+              if (t.includes('reaction') || t.includes('tutorial')) s -= 10;
+              if (t.includes('slowed') || t.includes('reverb') || t.includes('sped up')) s -= 7;
+              if (t.includes('1 hour') || t.includes('10 hour') || t.includes('mix ')) s -= 8;
+              if (t.includes('music video') || t.includes('official video') || / mv[\s\]|)]/i.test(t)) s -= 2;
+              return s;
+            };
+            const sorted = (vData.items || []).sort((a, b) =>
+              scoreTitle((b.snippet?.title || '').toLowerCase()) - scoreTitle((a.snippet?.title || '').toLowerCase())
+            );
             // v1.39 — Filtre dur sur status.embeddable + regionRestriction FR.
             // Une vidéo passe le filter SEULEMENT si :
             //   1. status.embeddable === true (flag global)
@@ -1252,22 +1289,75 @@ async function handleMusicProfileGet(request, env) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/music-profile/save — Write music AI profile to KV
+// POST /api/music-profile/save — Merge incoming profile with stored, write to KV
+// v1.40 — anti perte de données multi-device : on FUSIONNE les tableaux sensibles
+// (likeHistory / dislikeHistory / blacklist) avec ce qui est déjà en KV, au lieu
+// d'un PUT brut (last-write-wins). PC et mobile partagent userId='default' : sans
+// merge, le 2e save écrasait les likes de l'autre appareil. Les scalaires dérivés
+// (tasteDNA, artistEquity, genreStats) sont régénérables → incoming gagne, sauf
+// les compteurs monotones (totalSuggestions → max).
 // ─────────────────────────────────────────────────────────────────────────────
+const MUSICAI_LIMITS = { blacklist: 1800, likeHistory: 500, dislikeHistory: 200 };
+
+function _mkKey(o) { return (o && (o.title || '') + '|||' + (o.artist || '')); }
+
+// Union de deux tableaux d'objets {title,artist,ts,...}, dédup par title|||artist
+// en gardant l'entrée au ts le plus récent, trié par ts, plafonné.
+function _mergeRecords(stored, incoming, cap) {
+  const map = new Map();
+  for (const arr of [stored, incoming]) {
+    if (!Array.isArray(arr)) continue;
+    for (const it of arr) {
+      if (!it || typeof it !== 'object') continue;
+      const k = _mkKey(it);
+      const prev = map.get(k);
+      if (!prev || (it.ts || 0) >= (prev.ts || 0)) map.set(k, it);
+    }
+  }
+  const out = [...map.values()].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  return cap && out.length > cap ? out.slice(-cap) : out;
+}
+
+function mergeMusicProfile(stored, incoming) {
+  if (!stored || typeof stored !== 'object' || Object.keys(stored).length === 0) return incoming;
+  const merged = { ...stored, ...incoming };
+  // Tableaux sensibles → fusion (jamais d'écrasement)
+  merged.likeHistory    = _mergeRecords(stored.likeHistory,    incoming.likeHistory,    MUSICAI_LIMITS.likeHistory);
+  merged.dislikeHistory = _mergeRecords(stored.dislikeHistory, incoming.dislikeHistory, MUSICAI_LIMITS.dislikeHistory);
+  // blacklist = tableau de strings "title|||artist" → union
+  const bl = new Set([...(Array.isArray(stored.blacklist) ? stored.blacklist : []),
+                      ...(Array.isArray(incoming.blacklist) ? incoming.blacklist : [])]);
+  merged.blacklist = [...bl].slice(-MUSICAI_LIMITS.blacklist);
+  // genreStats → max par genre (pas de double comptage, pas de perte d'un genre découvert ailleurs)
+  const gs = {};
+  for (const src of [stored.genreStats, incoming.genreStats]) {
+    if (src && typeof src === 'object') for (const [k, v] of Object.entries(src)) gs[k] = Math.max(gs[k] || 0, Number(v) || 0);
+  }
+  merged.genreStats = gs;
+  // Compteur monotone
+  merged.totalSuggestions = Math.max(Number(stored.totalSuggestions) || 0, Number(incoming.totalSuggestions) || 0);
+  return merged;
+}
+
 async function handleMusicProfileSave(request, env) {
   const body = await request.json();
   const userId = body.userId || 'default';
-  const profile = body.profile;
-  if (!profile || typeof profile !== 'object') {
+  const incoming = body.profile;
+  if (!incoming || typeof incoming !== 'object') {
     return jsonResponse({ error: 'missing profile object' }, 400);
   }
+  // Charger l'existant et fusionner (anti perte multi-device)
+  let stored = null;
+  try { const raw = await env.GATEWAY_KV.get(`musicai:profile:${userId}`); if (raw) stored = JSON.parse(raw); } catch (_) {}
+  const profile = mergeMusicProfile(stored, incoming);
+  profile.lastServerSync = Date.now();
   // Enforce max size ~512KB for safety
   const json = JSON.stringify(profile);
   if (json.length > 512 * 1024) {
     return jsonResponse({ error: 'profile too large (max 512KB)' }, 413);
   }
   await env.GATEWAY_KV.put(`musicai:profile:${userId}`, json);
-  return jsonResponse({ ok: true, size: json.length });
+  return jsonResponse({ ok: true, size: json.length, merged: !!stored, likes: (profile.likeHistory || []).length, blacklist: (profile.blacklist || []).length });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
