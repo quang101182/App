@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>music·ai v3.20.0 — Discovery Engine</title>
+<title>music·ai v3.20.1 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -522,7 +522,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.20.0</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.20.1</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -1002,8 +1002,8 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.20.0) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,artistEquity:{influence:{},spotlightIndex:0},version:'3.20.0'};
+// ── SERVER PROFILE (music-ai v3.20.1) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,artistEquity:{influence:{},spotlightIndex:0},version:'3.20.1'};
 let _serverProfileReady=null; // v3.14.3 — Promise pour attendre le chargement serveur
 let _syncTimer=null;
 // ── ARTIST EQUITY CACHE (mémoire session uniquement) ──
@@ -1181,18 +1181,25 @@ let _ytLastSource=''; // 'L' local, 'S' server, '' unknown
 function ytBlinkOn(){const d=document.getElementById('adotYT');if(d)d.className='adot blink';_ytLastSource='';}
 function ytBlinkOff(){updateQuotaDisplay();}
 let _ytGwQuotaExhausted=false;
-async function ytSearchGateway(query){
+async function ytSearchGateway(query,meta){
   const secret=getGwSecret();if(!secret)return null;
   try{
     const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),10000);
-    const r=await fetch(GATEWAY_URL+'/api/youtube-search',{method:'POST',headers:{'Authorization':'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify({q:query}),signal:ctrl.signal});
+    // v3.20.1 — on envoie titre+artiste séparément pour que le gateway EXIGE le match du titre
+    const _payload={q:query};if(meta&&meta.title)_payload.title=meta.title;if(meta&&meta.artist)_payload.artist=meta.artist;
+    const r=await fetch(GATEWAY_URL+'/api/youtube-search',{method:'POST',headers:{'Authorization':'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify(_payload),signal:ctrl.signal});
     if(!r.ok){
       try{const err=await r.json();if(err.detail==='quota exceeded'||err.error?.includes('exhausted')){_ytGwQuotaExhausted=true;toast('🚫 Quota YouTube serveur épuisé — réessaie demain',5000);}}catch(_){}
       return null;
     }
     _ytGwQuotaExhausted=false;
     const d=await r.json();
-    if(d.videoId){_ytVidCache[query]=d.videoId;saveVidCache();ST.ytServerUsed=(ST.ytServerUsed||0)+1;updateQuotaDisplay();return d.videoId;}
+    if(d.videoId){
+      // v3.20.1 — ne pas mettre en cache local un match douteux (titre joué ≠ reco)
+      if(!d.lowConfidence){_ytVidCache[query]=d.videoId;saveVidCache();}
+      else console.warn('[YT-GW] lowConfidence (titre joué ≠ reco) pour',query);
+      ST.ytServerUsed=(ST.ytServerUsed||0)+1;updateQuotaDisplay();return d.videoId;
+    }
     return null;
   }catch(e){console.warn('[YT-GW] error:',e);return null;}
 }
@@ -1254,7 +1261,7 @@ async function ytSearchLocal(query){
   }catch(e){console.warn('[YT] Search error:',e);return null}
 }
 const _ytSearchInFlight={};
-async function ytSearch(query){
+async function ytSearch(query,meta){
   // 1. Cache local persistant
   if(_ytVidCache[query])return _ytVidCache[query];
   // 1b. Dedup: si même query déjà en vol, attendre le résultat
@@ -1266,7 +1273,7 @@ async function ytSearch(query){
     ytBlinkOn();
     try{
       if(hasLocal){const localKey=pickBestKey();if(localKey){const r=await ytSearchLocal(query);if(r){_ytLastSource='L';return r;}}}
-      if(hasGw){const r=await ytSearchGateway(query);if(r){_ytLastSource='S';return r;}}
+      if(hasGw){const r=await ytSearchGateway(query,meta);if(r){_ytLastSource='S';return r;}}
       if(hasLocal){const{used,total}=getTotalQuota();toast(`🚫 Quota YT épuisé (${used}/${total})`,4000);}
       else if(!_ytGwQuotaExhausted)toast('🚫 Recherche YT échouée',4000);
       return null;
@@ -1286,8 +1293,6 @@ window.onYouTubeIframeAPIReady=function(){
       onReady:function(e){
         ST.ytPlayerReady=true;
         e.target.setVolume(ST.volume);
-        // v3.20.0 — reprise inter-session: cue le dernier titre à sa position (en pause)
-        try{ if(ST.currentTrack&&ST.currentTrack.videoId&&ST.currentTrack._resumePosition!=null){ e.target.cueVideoById({videoId:ST.currentTrack.videoId,startSeconds:ST.currentTrack._resumePosition||0}); } }catch(_){}
         // Patch allow="autoplay" — YT API ne l'ajoute pas, requis sur Android Chrome
         try{
           const iframes=document.querySelectorAll('#yt-player-container iframe');
@@ -1320,7 +1325,7 @@ window.onYouTubeIframeAPIReady=function(){
             ['mp-vol-label','ko-vol-label'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=v+'%';});
           }catch(_){}
         }
-        if(e.data===2){updatePlayPauseUI(false);fpSetPaused(true);stopProgressTick();_proxyPause();saveLastTrack();try{navigator.mediaSession.playbackState='paused';}catch(_){}try{const _c=_getCapMediaSession();if(_c)_c.setPlaybackState({playbackState:'paused'});}catch(_){}}
+        if(e.data===2){updatePlayPauseUI(false);fpSetPaused(true);stopProgressTick();_proxyPause();try{navigator.mediaSession.playbackState='paused';}catch(_){}try{const _c=_getCapMediaSession();if(_c)_c.setPlaybackState({playbackState:'paused'});}catch(_){}}
         if(e.data===0){onTrackEnded();}
       },
       onError:function(e){
@@ -1584,7 +1589,7 @@ async function ytPlay(track){
   // PAS d'ouverture modale → lecture en arrière-plan, mini-player uniquement
   toast('🔍 Recherche…');
   const q=track.ytQuery||track.youtube_query||`${track.artist} ${track.title} official audio`;
-  const vid=track._videoId||(track._searchPromise?await track._searchPromise:null)||await ytSearch(q);
+  const vid=track._videoId||(track._searchPromise?await track._searchPromise:null)||await ytSearch(q,{title:track.title,artist:track.artist});
   // v3.14.2 — si un nouveau ytPlay() a été lancé pendant la recherche, abandonner
   if(ST._playToken!==playToken){return}
   if(!vid){ytShowFallbackToast(track);return}
@@ -2417,9 +2422,8 @@ Si besoin de précision: {"search_mode":"need_more","question":"[1 question cour
   const eraEnforce=eraRange&&!p.eras?.includes('mix')?`CONTRAINTE ANNÉE OBLIGATOIRE: le champ "year" DOIT être entre ${eraRange[0]} et ${eraRange[1]}. Toute chanson hors de cette plage sera REJETÉE automatiquement.`:'';
   // Anti-mainstream
   const discMin=mode==='discovery'?0.7:mode==='shuffle'?0.8:0.4;
-  const antiMainstream=`RÈGLE ANTI-MAINSTREAM:
-- INTERDICTION de proposer les "usual suspects" (100M+ streams Spotify)
-- Privilégie: faces B, albums méconnus, artistes indépendants, scènes non-anglophones
+  const antiMainstream=`RÈGLE RÉALITÉ (CRITIQUE — anti-hallucination): recommande UNIQUEMENT des morceaux RÉELS et VÉRIFIABLES, qui existent vraiment et sont disponibles sur YouTube. Le couple titre+artiste DOIT être exact et correctement attribué — l'artiste du champ "artist" est l'ARTISTE PRINCIPAL du morceau, jamais un simple featuring. N'INVENTE JAMAIS de titre. Si tu n'es pas certain à 100% qu'un titre existe exactement sous ce nom et cet artiste, choisis un autre morceau que tu connais avec certitude. Aucun fan-edit, leak, mashup ni "new song" non officiel.
+RÈGLE ANTI-MAINSTREAM (souple): évite les méga-hits ultra-rabâchés (usual suspects 500M+ streams), privilégie faces B / albums méconnus / artistes indépendants / scènes non-anglophones — MAIS le morceau doit rester RÉEL ET TROUVABLE : un titre vérifiable d'un artiste de niche vaut toujours mieux qu'un deep cut introuvable ou inventé.
 - Score découverte minimum: ${discMin}`;
   // Diversité genre
   const last2Genres=ST.sessionThread.slice(-2).map(x=>(x.genre||'').split(/[\/,\s]/)[0].trim()).filter(Boolean);
@@ -2474,7 +2478,12 @@ async function callAI(sys,msg,temperature){
     url=useGateway?base+'/api/claude':'https://api.anthropic.com/v1/messages';
     headers=useGateway?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}
       :{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
-    body=JSON.stringify({model,max_tokens:800,temperature:temp,system:sys,messages:[{role:'user',content:msg}]});
+    // v3.20.1 — Opus 4.7/4.8 et Fable 5 REFUSENT temperature/top_p/top_k (400 "deprecated").
+    // On l'omet pour ces modèles (la variété vient du prompt anti-répétition/shuffle).
+    const _claudeNoTemp=/opus-4-[789]|fable-5/.test(model||'');
+    const _cbody={model,max_tokens:800,system:sys,messages:[{role:'user',content:msg}]};
+    if(!_claudeNoTemp)_cbody.temperature=temp;
+    body=JSON.stringify(_cbody);
   }else if(provider==='gemini'){
     url=useGateway?base+`/api/gemini/v1beta/models/${model}:generateContent`
       :`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -2582,7 +2591,7 @@ function renderCard(container,rec){
   container.className='music-card appear';
   const title=rec.title||'',artist=rec.artist||'',genre=rec.genre||'',track={title,artist,ytQuery,ytUrl};
   // Charger la vignette YT en arrière-plan pour l'artwork de la carte
-  if(hasYT){track._searchPromise=ytSearch(ytQuery).then(vid=>{if(vid){track._videoId=vid;const artEl=document.getElementById(`${id}-art`);if(artEl){artEl.style.backgroundImage=`url(https://img.youtube.com/vi/${vid}/mqdefault.jpg)`;artEl.textContent='';}}return vid||null;}).catch(()=>null);}
+  if(hasYT){track._searchPromise=ytSearch(ytQuery,{title:rec.title,artist:rec.artist}).then(vid=>{if(vid){track._videoId=vid;const artEl=document.getElementById(`${id}-art`);if(artEl){artEl.style.backgroundImage=`url(https://img.youtube.com/vi/${vid}/mqdefault.jpg)`;artEl.textContent='';}}return vid||null;}).catch(()=>null);}
   document.getElementById(`${id}-like`).onclick=()=>doFeedback(`${id}-like`,'like',title,artist,genre);
   document.getElementById(`${id}-dislike`).onclick=()=>doFeedback(`${id}-dislike`,'dislike',title,artist,genre);
   document.getElementById(`${id}-save`).onclick=()=>doFeedback(`${id}-save`,'save',title,artist,genre);
@@ -2599,7 +2608,7 @@ function renderCard(container,rec){
     document.getElementById(`${id}-q`).onclick=()=>{if(!ST.queue.find(t=>t.ytQuery===track.ytQuery)){ST.queue.push({...track});toast('🎵 Ajouté à la file');renderQueueList()}else toast('Déjà dans la file')};
   reflectFeedbackState(id,title,artist);
 }
-// v3.20.0 — état persistant des votes: refléter pouce vert (aimé) / rouge (pas aimé)
+// v3.20.1 — état persistant des votes: refléter pouce vert (aimé) / rouge (pas aimé)
 // si la piste a déjà été votée. Double usage: (1) UX "j'ai déjà voté", (2) détecteur
 // de bug — un titre "pas aimé" (rouge) ne DEVRAIT jamais réapparaître; s'il revient,
 // le pouce rouge le rend visible → anomalie repérable. likeBtnId/disBtnId = suffixes.
@@ -2869,12 +2878,12 @@ async function sendChat(){
       <button class="crb-icon-btn" id="${bid}-sh" title="Partager">📤</button>
     </div>`;
     // Charger vignette YT
-    if(hasYT){ytSearch(ytQuery).then(vid=>{if(vid){track._videoId=vid;const a=document.getElementById(`${bid}-art`);if(a){a.style.backgroundImage=`url(https://img.youtube.com/vi/${vid}/mqdefault.jpg)`;a.textContent='';}}}).catch(()=>{});}
+    if(hasYT){ytSearch(ytQuery,{title:rec.title,artist:rec.artist}).then(vid=>{if(vid){track._videoId=vid;const a=document.getElementById(`${bid}-art`);if(a){a.style.backgroundImage=`url(https://img.youtube.com/vi/${vid}/mqdefault.jpg)`;a.textContent='';}}}).catch(()=>{});}
     document.getElementById(`${bid}-p`).onclick=()=>hasYT?ytPlay(track):window.open(ytUrl,'_blank','noopener');
     document.getElementById(`${bid}-like`).onclick=()=>doFeedback(`${bid}-like`,'like',track.title,track.artist,track.genre);
     document.getElementById(`${bid}-dis`).onclick=()=>doFeedback(`${bid}-dis`,'dislike',track.title,track.artist,track.genre);
     document.getElementById(`${bid}-sav`).onclick=()=>doFeedback(`${bid}-sav`,'save',track.title,track.artist,track.genre);
-    reflectFeedbackState(bid,track.title,track.artist,'-like','-dis');// v3.20.0 — état vote persistant (chat)
+    reflectFeedbackState(bid,track.title,track.artist,'-like','-dis');// v3.20.1 — état vote persistant (chat)
     document.getElementById(`${bid}-pl`).onclick=()=>addToPlaylist(track);
     document.getElementById(`${bid}-sh`).onclick=()=>shareTrack(track.title,track.artist);
     if(hasYT&&document.getElementById(`${bid}-q`))document.getElementById(`${bid}-q`).onclick=()=>{if(!ST.queue.find(t=>t.ytQuery===track.ytQuery)){ST.queue.push({...track});toast('🎵 Ajouté à la file');renderQueueList()}else toast('Déjà dans la file')};
@@ -3111,28 +3120,6 @@ function updateApiStatus(){
     }
   },1500);
 }
-// v3.20.0 — Reprise inter-session : persiste le dernier titre + position de lecture
-// et le restaure au boot (mini-player affiché en pause, vidéo "cued" à la position
-// via onReady). Tap sur play → reprend là où on s'était arrêté.
-const LS_LAST_TRACK='music_ai_last_track';
-function saveLastTrack(){
-  try{
-    if(!ST.currentTrack||!ST.currentTrack.videoId)return;
-    let pos=0;try{if(ST.ytPlayer&&typeof ST.ytPlayer.getCurrentTime==='function')pos=ST.ytPlayer.getCurrentTime()||0;}catch(_){}
-    localStorage.setItem(LS_LAST_TRACK,JSON.stringify({videoId:ST.currentTrack.videoId,title:ST.currentTrack.title,artist:ST.currentTrack.artist,ytQuery:ST.currentTrack.ytQuery,thumb:ST.currentTrack.thumb,genre:ST.currentTrack.genre,position:Math.floor(pos),ts:Date.now()}));
-  }catch(_){}
-}
-function restoreLastTrack(){
-  try{
-    const raw=localStorage.getItem(LS_LAST_TRACK);if(!raw)return;
-    const t=JSON.parse(raw);if(!t||!t.videoId)return;
-    if(Date.now()-(t.ts||0)>7*24*3600*1000)return;// reprise seulement si < 7 jours
-    ST.currentTrack={title:t.title,artist:t.artist,ytQuery:t.ytQuery,videoId:t.videoId,thumb:t.thumb,genre:t.genre,_resumePosition:t.position||0};
-    updateMiniPlayer(t.title,t.artist);
-    if(t.thumb)updateMiniPlayerArtwork(t.thumb);
-    updatePlayPauseUI(false);// affiché en pause — l'user tape play pour reprendre
-  }catch(_){}
-}
 function boot(){
   const p=getProfile();const c=getConfig();
   // Restaurer volume persisté
@@ -3150,9 +3137,6 @@ function boot(){
   // Listeners réseau
   window.addEventListener('offline',()=>{toast('📶 Hors ligne',3000);ST.isLoading=false;});
   window.addEventListener('online',()=>toast('📶 Connexion rétablie ✓',2000));
-  // v3.20.0 — sauver le titre courant + position pour reprise inter-session
-  window.addEventListener('pagehide',saveLastTrack);
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)saveLastTrack();});
   // Service Worker — désactivé en mode Capacitor (pas besoin, cause des conflits cache)
   if('serviceWorker' in navigator&&!window.Capacitor){
     navigator.serviceWorker.register('./sw.js').catch(()=>{});
@@ -3176,7 +3160,7 @@ function boot(){
   initPlaylistsOverlay();
   // Load server profile (v3.12)
   if(getGwSecret())_serverProfileReady=loadServerProfile().catch(e=>console.warn('[SYNC] Boot load failed:',e));
-  if(p?.completedOnboarding){showScreen('main');initMainApp();setTimeout(updateApiStatus,200);restoreLastTrack();}
+  if(p?.completedOnboarding){showScreen('main');initMainApp();setTimeout(updateApiStatus,200);}
   else{showScreen('onboard');initOnboarding();}
 }
 // ── SUNO AI MODULE ── v3.17.0
