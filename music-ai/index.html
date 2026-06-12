@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>music·ai v3.19.0 — Discovery Engine</title>
+<title>music·ai v3.20.0 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -522,7 +522,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.19.0</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.20.0</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -1002,8 +1002,8 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.19.0) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,artistEquity:{influence:{},spotlightIndex:0},version:'3.19.0'};
+// ── SERVER PROFILE (music-ai v3.20.0) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,artistEquity:{influence:{},spotlightIndex:0},version:'3.20.0'};
 let _serverProfileReady=null; // v3.14.3 — Promise pour attendre le chargement serveur
 let _syncTimer=null;
 // ── ARTIST EQUITY CACHE (mémoire session uniquement) ──
@@ -1286,6 +1286,8 @@ window.onYouTubeIframeAPIReady=function(){
       onReady:function(e){
         ST.ytPlayerReady=true;
         e.target.setVolume(ST.volume);
+        // v3.20.0 — reprise inter-session: cue le dernier titre à sa position (en pause)
+        try{ if(ST.currentTrack&&ST.currentTrack.videoId&&ST.currentTrack._resumePosition!=null){ e.target.cueVideoById({videoId:ST.currentTrack.videoId,startSeconds:ST.currentTrack._resumePosition||0}); } }catch(_){}
         // Patch allow="autoplay" — YT API ne l'ajoute pas, requis sur Android Chrome
         try{
           const iframes=document.querySelectorAll('#yt-player-container iframe');
@@ -1318,7 +1320,7 @@ window.onYouTubeIframeAPIReady=function(){
             ['mp-vol-label','ko-vol-label'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=v+'%';});
           }catch(_){}
         }
-        if(e.data===2){updatePlayPauseUI(false);fpSetPaused(true);stopProgressTick();_proxyPause();try{navigator.mediaSession.playbackState='paused';}catch(_){}try{const _c=_getCapMediaSession();if(_c)_c.setPlaybackState({playbackState:'paused'});}catch(_){}}
+        if(e.data===2){updatePlayPauseUI(false);fpSetPaused(true);stopProgressTick();_proxyPause();saveLastTrack();try{navigator.mediaSession.playbackState='paused';}catch(_){}try{const _c=_getCapMediaSession();if(_c)_c.setPlaybackState({playbackState:'paused'});}catch(_){}}
         if(e.data===0){onTrackEnded();}
       },
       onError:function(e){
@@ -2564,7 +2566,7 @@ function renderCard(container,rec){
     </div>
     <div style="font-size:12px;color:var(--muted);background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;margin-bottom:10px;line-height:1.5;">💡 ${esc(rec.why||'')}</div>
     ${rec.now_reason?`<div style="font-size:11px;color:var(--accent2);background:rgba(6,182,212,0.07);border:1px solid rgba(6,182,212,0.15);border-radius:10px;padding:8px 12px;margin-bottom:10px;line-height:1.5;">🕐 ${esc(rec.now_reason)}</div>`:''}
-    ${rec.story?`<button id="story-btn-${id}" style="width:100%;margin-bottom:8px;padding:8px 12px;border-radius:10px;background:none;border:1px solid var(--border);color:var(--muted);font-family:inherit;font-size:12px;cursor:pointer;text-align:left;" onclick="toggleStory('${id}')">📖 Raconte-moi l'histoire →</button><div id="story-${id}" style="display:none;font-size:12px;color:var(--text);background:rgba(255,255,255,0.03);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:10px 12px;margin-bottom:10px;line-height:1.7;">${esc(rec.story)}</div>`:''}
+    ${rec.story?`<button id="story-btn-${id}" style="width:100%;margin-bottom:8px;padding:8px 12px;border-radius:10px;background:none;border:1px solid var(--border);color:var(--muted);font-family:inherit;font-size:12px;cursor:pointer;text-align:left;" onclick="toggleStory('${id}')">📖 Raconte-moi l'histoire →</button><div id="story-${id}" style="display:none;font-size:12px;color:var(--text);background:rgba(255,255,255,0.03);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:10px 12px;margin-bottom:10px;line-height:1.7;">${esc(rec.story)}<span style="display:block;margin-top:8px;font-size:10px;opacity:.55;font-style:italic;">✨ Anecdote générée par IA — à prendre avec recul</span></div>`:''}
     ${discPct>0?`<div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px;"><span>Découverte</span><span>${discPct}%</span></div><div class="disc-bar"><div class="disc-fill" style="width:${discPct}%"></div></div></div>`:''}
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
         <button class="feedback-btn" id="${id}-like" aria-label="J'aime">👍</button>
@@ -2595,6 +2597,20 @@ function renderCard(container,rec){
   document.getElementById(`${id}-play`).onclick=()=>hasYT?ytPlay(track):window.open(ytUrl,'_blank','noopener');
   if(hasYT&&document.getElementById(`${id}-q`))
     document.getElementById(`${id}-q`).onclick=()=>{if(!ST.queue.find(t=>t.ytQuery===track.ytQuery)){ST.queue.push({...track});toast('🎵 Ajouté à la file');renderQueueList()}else toast('Déjà dans la file')};
+  reflectFeedbackState(id,title,artist);
+}
+// v3.20.0 — état persistant des votes: refléter pouce vert (aimé) / rouge (pas aimé)
+// si la piste a déjà été votée. Double usage: (1) UX "j'ai déjà voté", (2) détecteur
+// de bug — un titre "pas aimé" (rouge) ne DEVRAIT jamais réapparaître; s'il revient,
+// le pouce rouge le rend visible → anomalie repérable. likeBtnId/disBtnId = suffixes.
+function reflectFeedbackState(id,title,artist,likeSuffix='-like',disSuffix='-dislike'){
+  try{
+    const k=(title||'')+'|||'+(artist||'');
+    const liked=(_serverProfile.likeHistory||[]).some(x=>((x.title||'')+'|||'+(x.artist||''))===k);
+    const disliked=(_serverProfile.dislikeHistory||[]).some(x=>((x.title||'')+'|||'+(x.artist||''))===k);
+    if(liked){const b=document.getElementById(id+likeSuffix);if(b)b.classList.add('liked');}
+    if(disliked){const b=document.getElementById(id+disSuffix);if(b)b.classList.add('disliked');}
+  }catch(_){}
 }
 function toggleStory(id){
   const el=document.getElementById('story-'+id);
@@ -2840,7 +2856,7 @@ async function sendChat(){
     </div>
     <div class="crb-why">${esc(rec.why||'')}</div>
     ${rec.now_reason?`<div class="crb-now">🕐 ${esc(rec.now_reason)}</div>`:''}
-    ${rec.story?`<button class="crb-story-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.textContent=this.nextElementSibling.style.display==='none'?'📖 L\\'histoire →':'📖 Fermer ↑'">📖 L'histoire →</button><div class="crb-story" style="display:none">${esc(rec.story)}</div>`:''}
+    ${rec.story?`<button class="crb-story-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.textContent=this.nextElementSibling.style.display==='none'?'📖 L\\'histoire →':'📖 Fermer ↑'">📖 L'histoire →</button><div class="crb-story" style="display:none">${esc(rec.story)}<span style="display:block;margin-top:8px;font-size:10px;opacity:.55;font-style:italic;">✨ Généré par IA — à vérifier</span></div>`:''}
     <div class="crb-actions-row1">
       <button class="feedback-btn crb-feedback" id="${bid}-like" title="J'aime">👍</button>
       <button class="feedback-btn crb-feedback" id="${bid}-dis" title="Pas fan">👎</button>
@@ -2858,6 +2874,7 @@ async function sendChat(){
     document.getElementById(`${bid}-like`).onclick=()=>doFeedback(`${bid}-like`,'like',track.title,track.artist,track.genre);
     document.getElementById(`${bid}-dis`).onclick=()=>doFeedback(`${bid}-dis`,'dislike',track.title,track.artist,track.genre);
     document.getElementById(`${bid}-sav`).onclick=()=>doFeedback(`${bid}-sav`,'save',track.title,track.artist,track.genre);
+    reflectFeedbackState(bid,track.title,track.artist,'-like','-dis');// v3.20.0 — état vote persistant (chat)
     document.getElementById(`${bid}-pl`).onclick=()=>addToPlaylist(track);
     document.getElementById(`${bid}-sh`).onclick=()=>shareTrack(track.title,track.artist);
     if(hasYT&&document.getElementById(`${bid}-q`))document.getElementById(`${bid}-q`).onclick=()=>{if(!ST.queue.find(t=>t.ytQuery===track.ytQuery)){ST.queue.push({...track});toast('🎵 Ajouté à la file');renderQueueList()}else toast('Déjà dans la file')};
@@ -3094,6 +3111,28 @@ function updateApiStatus(){
     }
   },1500);
 }
+// v3.20.0 — Reprise inter-session : persiste le dernier titre + position de lecture
+// et le restaure au boot (mini-player affiché en pause, vidéo "cued" à la position
+// via onReady). Tap sur play → reprend là où on s'était arrêté.
+const LS_LAST_TRACK='music_ai_last_track';
+function saveLastTrack(){
+  try{
+    if(!ST.currentTrack||!ST.currentTrack.videoId)return;
+    let pos=0;try{if(ST.ytPlayer&&typeof ST.ytPlayer.getCurrentTime==='function')pos=ST.ytPlayer.getCurrentTime()||0;}catch(_){}
+    localStorage.setItem(LS_LAST_TRACK,JSON.stringify({videoId:ST.currentTrack.videoId,title:ST.currentTrack.title,artist:ST.currentTrack.artist,ytQuery:ST.currentTrack.ytQuery,thumb:ST.currentTrack.thumb,genre:ST.currentTrack.genre,position:Math.floor(pos),ts:Date.now()}));
+  }catch(_){}
+}
+function restoreLastTrack(){
+  try{
+    const raw=localStorage.getItem(LS_LAST_TRACK);if(!raw)return;
+    const t=JSON.parse(raw);if(!t||!t.videoId)return;
+    if(Date.now()-(t.ts||0)>7*24*3600*1000)return;// reprise seulement si < 7 jours
+    ST.currentTrack={title:t.title,artist:t.artist,ytQuery:t.ytQuery,videoId:t.videoId,thumb:t.thumb,genre:t.genre,_resumePosition:t.position||0};
+    updateMiniPlayer(t.title,t.artist);
+    if(t.thumb)updateMiniPlayerArtwork(t.thumb);
+    updatePlayPauseUI(false);// affiché en pause — l'user tape play pour reprendre
+  }catch(_){}
+}
 function boot(){
   const p=getProfile();const c=getConfig();
   // Restaurer volume persisté
@@ -3111,6 +3150,9 @@ function boot(){
   // Listeners réseau
   window.addEventListener('offline',()=>{toast('📶 Hors ligne',3000);ST.isLoading=false;});
   window.addEventListener('online',()=>toast('📶 Connexion rétablie ✓',2000));
+  // v3.20.0 — sauver le titre courant + position pour reprise inter-session
+  window.addEventListener('pagehide',saveLastTrack);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)saveLastTrack();});
   // Service Worker — désactivé en mode Capacitor (pas besoin, cause des conflits cache)
   if('serviceWorker' in navigator&&!window.Capacitor){
     navigator.serviceWorker.register('./sw.js').catch(()=>{});
@@ -3134,7 +3176,7 @@ function boot(){
   initPlaylistsOverlay();
   // Load server profile (v3.12)
   if(getGwSecret())_serverProfileReady=loadServerProfile().catch(e=>console.warn('[SYNC] Boot load failed:',e));
-  if(p?.completedOnboarding){showScreen('main');initMainApp();setTimeout(updateApiStatus,200)}
+  if(p?.completedOnboarding){showScreen('main');initMainApp();setTimeout(updateApiStatus,200);restoreLastTrack();}
   else{showScreen('onboard');initOnboarding();}
 }
 // ── SUNO AI MODULE ── v3.17.0
