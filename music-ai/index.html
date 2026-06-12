@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>music·ai v3.20.1 — Discovery Engine</title>
+<title>music·ai v3.20.2 — Discovery Engine</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7c3aed" id="theme-color-meta">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -522,7 +522,7 @@
   <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px;flex-shrink:0;">
       <div>
-        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.20.1</span></div>
+        <div class="syne" style="font-size:1.25rem;font-weight:800;">music·ai <span style="font-size:10px;color:var(--muted);font-weight:400;">v3.20.2</span></div>
         <div id="greeting-text" style="font-size:11px;color:var(--muted);">Bonne écoute</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
@@ -1002,8 +1002,8 @@ function pushHistory(e){const h=getHistory();h.unshift({...e,ts:Date.now()});if(
 function getYtKey(){return localStorage.getItem(LS_YT_KEY)||''}
 function setYtKey(k){localStorage.setItem(LS_YT_KEY,k)}
 
-// ── SERVER PROFILE (music-ai v3.20.1) ──
-let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,artistEquity:{influence:{},spotlightIndex:0},version:'3.20.1'};
+// ── SERVER PROFILE (music-ai v3.20.2) ──
+let _serverProfile={blacklist:[],likeHistory:[],dislikeHistory:[],genreStats:{},tasteDNA:'',tasteDNA_ts:0,totalSuggestions:0,lastSync:0,artistEquity:{influence:{},spotlightIndex:0},version:'3.20.2'};
 let _serverProfileReady=null; // v3.14.3 — Promise pour attendre le chargement serveur
 let _syncTimer=null;
 // ── ARTIST EQUITY CACHE (mémoire session uniquement) ──
@@ -1185,7 +1185,7 @@ async function ytSearchGateway(query,meta){
   const secret=getGwSecret();if(!secret)return null;
   try{
     const ctrl=new AbortController();setTimeout(()=>ctrl.abort(),10000);
-    // v3.20.1 — on envoie titre+artiste séparément pour que le gateway EXIGE le match du titre
+    // v3.20.2 — on envoie titre+artiste séparément pour que le gateway EXIGE le match du titre
     const _payload={q:query};if(meta&&meta.title)_payload.title=meta.title;if(meta&&meta.artist)_payload.artist=meta.artist;
     const r=await fetch(GATEWAY_URL+'/api/youtube-search',{method:'POST',headers:{'Authorization':'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify(_payload),signal:ctrl.signal});
     if(!r.ok){
@@ -1195,7 +1195,7 @@ async function ytSearchGateway(query,meta){
     _ytGwQuotaExhausted=false;
     const d=await r.json();
     if(d.videoId){
-      // v3.20.1 — ne pas mettre en cache local un match douteux (titre joué ≠ reco)
+      // v3.20.2 — ne pas mettre en cache local un match douteux (titre joué ≠ reco)
       if(!d.lowConfidence){_ytVidCache[query]=d.videoId;saveVidCache();}
       else console.warn('[YT-GW] lowConfidence (titre joué ≠ reco) pour',query);
       ST.ytServerUsed=(ST.ytServerUsed||0)+1;updateQuotaDisplay();return d.videoId;
@@ -1562,7 +1562,7 @@ function _playPrefetchedReco(){
   ST.sessionThread.push({title:rec.title,artist:rec.artist,mood:rec.mood,genre:rec.genre,discovery_score:parseFloat(rec.discovery_score)||0});
   if(ST.sessionThread.length>8)ST.sessionThread.shift();
   saveThread(ST.sessionThread);
-  if(getYtKey()||getAllYtKeys().length||getGwSecret()){const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;ytPlay({title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`});}
+  if(getYtKey()||getAllYtKeys().length||getGwSecret()){const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;ytPlay({_fromReco:true,title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`});}
   toast('🎵 '+esc(rec.title)+' — '+esc(rec.artist));
   return true;
 }
@@ -1593,9 +1593,30 @@ async function ytPlay(track){
   // v3.14.2 — si un nouveau ytPlay() a été lancé pendant la recherche, abandonner
   if(ST._playToken!==playToken){return}
   if(!vid){ytShowFallbackToast(track);return}
-  ST.currentTrack.videoId=vid;
-  // v3.18.0 — Hydrater metadata via oEmbed si absent (path gateway/cache empoisonné)
+  // v3.18.0/v3.20.2 — Hydrater metadata via oEmbed AVANT de committer le videoId
+  // (la décision skip ci-dessous doit se prendre avant que le mauvais morceau soit
+  // committé/affiché/joué).
   if(!_ytTitleCache[vid]){await fetchYtMetadata(vid);if(ST._playToken!==playToken)return;}
+  // v3.20.2 — SKIP + re-reco si le titre joué ne matche pas la reco (lecture AUTO
+  // seulement, jamais sur un clic manuel). Vise ~0% mauvais-audio sur les
+  // hallucinations IA résiduelles. Cap 3 pour éviter toute boucle.
+  if(track._fromReco && _ytTitleCache[vid] && track.title){
+    const _stop=new Set(['the','and','feat','ft','official','audio','officiel','video','lyric','lyrics','with','for','from','your','you','a']);
+    const _toks=track.title.toLowerCase().replace(/\(.*?\)|\[.*?\]/g,' ').replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>2&&!_stop.has(w));
+    const _ytl=(_ytTitleCache[vid]||'').toLowerCase();
+    const _ratio=_toks.length?_toks.filter(w=>_ytl.includes(w)).length/_toks.length:1;
+    if(_ratio<0.5){
+      if((ST._recoSkips||0)<3){
+        ST._recoSkips=(ST._recoSkips||0)+1;
+        console.warn(`[RECO] Titre introuvable (match ${_ratio.toFixed(2)}): "${track.title}" → YT "${_ytTitleCache[vid]}". Skip+re-reco ${ST._recoSkips}/3`);
+        toast('↪ Titre introuvable — autre reco…',2000);
+        if(ST._playToken===playToken)getRecommendation(ST.mode);
+        return;
+      }
+      console.warn('[RECO] cap skip atteint — lecture du titre le plus proche');
+    }else{ST._recoSkips=0;}
+  }
+  ST.currentTrack.videoId=vid;// v3.20.2 — commit du videoId seulement après décision skip
   // v3.18.0 — Si mismatch IA↔YouTube, réécrire l'UI avec le titre YT canonical
   // _iaTitle/_iaArtist conservés pour fpFeedback (préserve le profil utilisateur)
   const _ytFoundTitle=_ytTitleCache[vid];
@@ -2478,7 +2499,7 @@ async function callAI(sys,msg,temperature){
     url=useGateway?base+'/api/claude':'https://api.anthropic.com/v1/messages';
     headers=useGateway?{'Content-Type':'application/json','Authorization':'Bearer '+gwSecret}
       :{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
-    // v3.20.1 — Opus 4.7/4.8 et Fable 5 REFUSENT temperature/top_p/top_k (400 "deprecated").
+    // v3.20.2 — Opus 4.7/4.8 et Fable 5 REFUSENT temperature/top_p/top_k (400 "deprecated").
     // On l'omet pour ces modèles (la variété vient du prompt anti-répétition/shuffle).
     const _claudeNoTemp=/opus-4-[789]|fable-5/.test(model||'');
     const _cbody={model,max_tokens:800,system:sys,messages:[{role:'user',content:msg}]};
@@ -2548,7 +2569,7 @@ async function getRecommendation(mode){
     const pTrack=getProfile();
     if(pTrack&&(pTrack.artists||[]).length>0&&mode!=='shuffle')trackArtistInfluence(rec,pTrack.artists);
     if(pTrack){pTrack.interactions=(pTrack.interactions||0)+1;saveProfile(pTrack)}
-    if(ST.continuousMode&&(getYtKey()||getAllYtKeys().length||getGwSecret())){const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;ytPlay({title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`});}
+    if(ST.continuousMode&&(getYtKey()||getAllYtKeys().length||getGwSecret())){const ytQ=rec.youtube_query||`${rec.artist} ${rec.title} official audio`;ytPlay({_fromReco:true,title:rec.title,artist:rec.artist,ytQuery:ytQ,ytUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(ytQ)}`});}
   }catch(e){resultEl.innerHTML=`<div style="color:#ef4444;font-size:13px;">⚠️ ${esc(e.message)}</div>`}
   finally{if(mode==='onetap')document.getElementById('onetap-icon').textContent='♪';ST.isLoading=false;}
 }
@@ -2608,7 +2629,7 @@ function renderCard(container,rec){
     document.getElementById(`${id}-q`).onclick=()=>{if(!ST.queue.find(t=>t.ytQuery===track.ytQuery)){ST.queue.push({...track});toast('🎵 Ajouté à la file');renderQueueList()}else toast('Déjà dans la file')};
   reflectFeedbackState(id,title,artist);
 }
-// v3.20.1 — état persistant des votes: refléter pouce vert (aimé) / rouge (pas aimé)
+// v3.20.2 — état persistant des votes: refléter pouce vert (aimé) / rouge (pas aimé)
 // si la piste a déjà été votée. Double usage: (1) UX "j'ai déjà voté", (2) détecteur
 // de bug — un titre "pas aimé" (rouge) ne DEVRAIT jamais réapparaître; s'il revient,
 // le pouce rouge le rend visible → anomalie repérable. likeBtnId/disBtnId = suffixes.
@@ -2883,7 +2904,7 @@ async function sendChat(){
     document.getElementById(`${bid}-like`).onclick=()=>doFeedback(`${bid}-like`,'like',track.title,track.artist,track.genre);
     document.getElementById(`${bid}-dis`).onclick=()=>doFeedback(`${bid}-dis`,'dislike',track.title,track.artist,track.genre);
     document.getElementById(`${bid}-sav`).onclick=()=>doFeedback(`${bid}-sav`,'save',track.title,track.artist,track.genre);
-    reflectFeedbackState(bid,track.title,track.artist,'-like','-dis');// v3.20.1 — état vote persistant (chat)
+    reflectFeedbackState(bid,track.title,track.artist,'-like','-dis');// v3.20.2 — état vote persistant (chat)
     document.getElementById(`${bid}-pl`).onclick=()=>addToPlaylist(track);
     document.getElementById(`${bid}-sh`).onclick=()=>shareTrack(track.title,track.artist);
     if(hasYT&&document.getElementById(`${bid}-q`))document.getElementById(`${bid}-q`).onclick=()=>{if(!ST.queue.find(t=>t.ytQuery===track.ytQuery)){ST.queue.push({...track});toast('🎵 Ajouté à la file');renderQueueList()}else toast('Déjà dans la file')};
