@@ -43,7 +43,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.40';
+const VERSION = '1.43';
 
 // v1.40 — modèle Claude de repli si le modèle demandé est retiré (404) — voir proxyClaude
 const CLAUDE_FALLBACK_MODEL = 'claude-sonnet-4-6';
@@ -90,7 +90,7 @@ function isAdDomain(hostname) {
 }
 
 /** All recognised key names stored in KV */
-const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'PIAPI_KEY', 'MOONSHOT_KEY', 'ELEVENLABS_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS'];
+const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'MISTRAL_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'PIAPI_KEY', 'MOONSHOT_KEY', 'ELEVENLABS_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS'];
 
 /** Rate limit: max requests per minute window */
 const RL_API_MAX   = 20;
@@ -153,6 +153,17 @@ export default {
         if (path === '/api/send-video-openai') return await handleSendVideoOpenAI(request, env);
       }
 
+      // ── Read-only GET passthrough (ElevenLabs : voices, user, subscription, models) ──
+      // v1.42 — ElevenLabs expose ces infos en GET ; le bloc POST plus bas ne les routait pas.
+      if (method === 'GET' && path.startsWith('/api/elevenlabs')) {
+        const authErr = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
+        if (authErr) return authErr;
+        const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+        const rlErr = await checkRateLimit(env, ctx, 'api', ip, RL_API_MAX);
+        if (rlErr) return rlErr;
+        return await proxyElevenlabs(request, env, path);
+      }
+
       // ── API routes ────────────────────────────────────────────────────────
       if (method === 'POST' && path.startsWith('/api/')) {
         // Auth check (async — constant-time comparison)
@@ -171,6 +182,7 @@ export default {
         if (path === '/api/deepl')            return await proxyDeepl(request, env);
         if (path === '/api/assemblyai')       return await proxyAssemblyai(request, env);
         if (path === '/api/deepseek')         return await proxyDeepSeek(request, env);
+        if (path === '/api/mistral')          return await proxyMistral(request, env);
         if (path === '/api/kimi')             return await proxyMoonshot(request, env);
         if (path === '/api/azure')            return await proxyAzure(request, env, url);
         if (path.startsWith('/api/claude'))   return await proxyClaude(request, env, path);
@@ -316,6 +328,22 @@ async function proxyDeepSeek(request, env) {
 
   const apiPath  = safeApiPath(request, '/v1/chat/completions');
   const upstream = `https://api.deepseek.com${apiPath}`;
+  return proxyRequest(request, upstream, { 'Authorization': `Bearer ${apiKey}` });
+}
+
+/**
+ * POST /api/mistral → https://api.mistral.ai/v1/chat/completions
+ *
+ * Mistral La Plateforme API is OpenAI-compatible. Default path /v1/chat/completions.
+ * Header X-Api-Path overrides (e.g. /v1/models to list available models).
+ * Auth: Bearer MISTRAL_KEY.
+ */
+async function proxyMistral(request, env) {
+  const apiKey = await resolveKey(env, 'MISTRAL_KEY');
+  if (!apiKey) return jsonResponse({ error: 'MISTRAL_KEY not configured' }, 503);
+
+  const apiPath  = safeApiPath(request, '/v1/chat/completions');
+  const upstream = `https://api.mistral.ai${apiPath}`;
   return proxyRequest(request, upstream, { 'Authorization': `Bearer ${apiKey}` });
 }
 
@@ -1102,9 +1130,15 @@ async function proxyYoutubeSearch(request, env) {
   try { body = await request.json(); } catch { return jsonResponse({ error: 'invalid JSON body' }, 400); }
   const query = (body.q || '').trim();
   if (!query) return jsonResponse({ error: 'missing q parameter' }, 400);
+  // v1.41 — titre/artiste fournis séparément pour EXIGER le match du titre
+  // (sinon une recherche "Artiste Titre" matchait l'artiste et renvoyait un autre
+  // morceau du même artiste, ou un upload pirate). Rétro-compatible si absents.
+  const aiTitle = (body.title || '').trim();
+  const aiArtist = (body.artist || '').trim();
 
   // 1. Check KV cache first (before counting — cached = free)
-  const cacheKey = `ytcache:${query.toLowerCase().replace(/\s+/g, ' ')}`;
+  // v1.41 — clé versionnée (v2) + titre pour invalider le cache empoisonné v1.40
+  const cacheKey = `ytcache:v2:${query.toLowerCase().replace(/\s+/g, ' ')}|${aiTitle.toLowerCase()}`;
   const cached = await env.GATEWAY_KV.get(cacheKey);
   if (cached) {
     try {
@@ -1160,6 +1194,7 @@ async function proxyYoutubeSearch(request, env) {
       const ids = items.map(i => i.id?.videoId).filter(Boolean);
       // Duration filter: 90s–300s + v1.39 status/region filter
       let bestId = ids[0], bestTitle = items[0].snippet?.title || '';
+      let lowConfidence = false;  // v1.41 — true si le meilleur candidat ne matche pas le titre demandé
       if (ids.length > 0) {
         try {
           // v1.39 — part=status,contentDetails,snippet pour avoir embeddable +
@@ -1170,18 +1205,38 @@ async function proxyYoutubeSearch(request, env) {
           const vResp = await fetch(vUrl);
           if (vResp.ok) {
             const vData = await vResp.json();
-            // v1.40 — scoring unifié avec la recherche locale (anti-remix/cover/live/
-            // karaoke + match titre + bonus audio/lyric). Avant, le gateway ne triait
-            // que audio vs music-video → il pouvait renvoyer un remix/cover/sped-up.
-            const qLow = query.toLowerCase().replace(/official\s*audio/g, '').replace(/audio\s*officiel/g, '').trim();
-            const qWords = qLow.split(/\s+/).filter(w => w.length > 2);
-            const scoreTitle = (t) => {
+            // v1.41 — scoring EXIGEANT le match du titre + préférence chaîne officielle.
+            // Cause racine du "mauvais audio" : sans contrainte de titre, une recherche
+            // "Artiste Titre" matchait l'artiste et renvoyait un autre morceau du même
+            // artiste (ou un upload pirate au même nom d'artiste). On exige donc que les
+            // mots du TITRE demandé soient présents, et on préfère les chaînes Topic/VEVO/
+            // artiste (audio officiel) aux agrégateurs/bootlegs.
+            const STOP = new Set(['the','and','feat','ft','official','audio','officiel','video','lyric','lyrics','with','for','from','your','you','a']);
+            const aiTitleToks = aiTitle.toLowerCase().replace(/\(.*?\)|\[.*?\]/g,' ').replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w => w.length > 2 && !STOP.has(w));
+            const artistToks = aiArtist.toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w => w.length > 1);
+            const qLow = query.toLowerCase();
+            const titleMatchRatio = (t) => { if (!aiTitleToks.length) return 1; return aiTitleToks.filter(w => t.includes(w)).length / aiTitleToks.length; };
+            const scoreCandidate = (item) => {
+              const t = (item.snippet?.title || '').toLowerCase();
+              const ch = (item.snippet?.channelTitle || '').toLowerCase();
               let s = 0;
-              qWords.forEach(w => { if (t.includes(w)) s += 3; });
+              // exigence TITRE (le levier #1 anti mauvais-morceau)
+              const tm = titleMatchRatio(t);
+              s += tm * 20;
+              if (aiTitleToks.length && tm < 0.5) s -= 40;  // mauvais morceau → quasi-rejet
+              // artiste présent dans le titre OU la chaîne
+              if (artistToks.length) { const inT = artistToks.every(w => t.includes(w)); const inCh = artistToks.every(w => ch.includes(w)); s += (inT || inCh) ? 6 : -4; }
+              // chaîne officielle (audio officiel = Topic/VEVO/chaîne artiste)
+              if (/-\s*topic$/.test(ch)) s += 12;
+              else if (ch.includes('vevo')) s += 10;
+              else if (artistToks.length && artistToks.every(w => ch.includes(w))) s += 8;
+              else if (ch.includes('official')) s += 4;
+              // type
               if (t.includes('official audio') || t.includes('audio officiel')) s += 5;
               else if (t.includes('lyric')) s += 3;
-              else if (t.includes('topic')) s += 3;
-              else if (t.includes('official')) s += 2;
+              // anti-bootleg / fake
+              if (/new song|leak|snippet|unreleased|fan made|fanmade|mashup|ai cover|reupload|re-upload/.test(t)) s -= 15;
+              // anti-remix/cover/live/etc.
               if (t.includes('remix') && !qLow.includes('remix')) s -= 6;
               if (t.includes('cover') && !qLow.includes('cover')) s -= 6;
               if (t.includes('live') && !qLow.includes('live')) s -= 4;
@@ -1192,9 +1247,7 @@ async function proxyYoutubeSearch(request, env) {
               if (t.includes('music video') || t.includes('official video') || / mv[\s\]|)]/i.test(t)) s -= 2;
               return s;
             };
-            const sorted = (vData.items || []).sort((a, b) =>
-              scoreTitle((b.snippet?.title || '').toLowerCase()) - scoreTitle((a.snippet?.title || '').toLowerCase())
-            );
+            const sorted = (vData.items || []).slice().sort((a, b) => scoreCandidate(b) - scoreCandidate(a));
             // v1.39 — Filtre dur sur status.embeddable + regionRestriction FR.
             // Une vidéo passe le filter SEULEMENT si :
             //   1. status.embeddable === true (flag global)
@@ -1220,18 +1273,20 @@ async function proxyYoutubeSearch(request, env) {
             // Ordre de préférence : durée OK + region OK > region OK seul > rien
             const valid = sorted.find(v => isPlayableInFR(v) && isDurationOk(v))
                        || sorted.find(v => isPlayableInFR(v));
-            if (valid) { bestId = valid.id; bestTitle = valid.snippet?.title || bestTitle; }
-            else if (sorted.length) { bestId = sorted[0].id; bestTitle = sorted[0].snippet?.title || bestTitle; }
+            const chosen = valid || sorted[0];
+            if (chosen) { bestId = chosen.id; bestTitle = chosen.snippet?.title || bestTitle; }
+            // v1.41 — le morceau choisi matche-t-il le titre demandé ? Sinon lowConfidence.
+            lowConfidence = aiTitleToks.length > 0 && chosen && titleMatchRatio((chosen.snippet?.title || '').toLowerCase()) < 0.5;
           }
         } catch (_) { /* status check failed, use first result */ }
       }
 
-      // 4. Cache result in KV (fire-and-forget)
-      if (bestId) {
+      // 4. Cache result in KV (fire-and-forget) — JAMAIS cacher un mauvais match
+      if (bestId && !lowConfidence) {
         env.GATEWAY_KV.put(cacheKey, JSON.stringify({ videoId: bestId, title: bestTitle }), { expirationTtl: YT_CACHE_TTL }).catch(() => {});
       }
 
-      return jsonResponse({ videoId: bestId, title: bestTitle, cached: false });
+      return jsonResponse({ videoId: bestId, title: bestTitle, cached: false, lowConfidence });
     } catch (err) {
       lastError = err.message;
       continue;
@@ -1601,6 +1656,7 @@ async function adminKeysStatus(env) {
     DEEPL_KEY     : pingDeepl,
     ASSEMBLYAI_KEY: pingAssemblyai,
     DEEPSEEK_KEY  : pingDeepSeek,
+    MISTRAL_KEY   : pingMistral,
     AZURE_KEY     : pingAzure,
     CLAUDE_KEY    : pingClaude,
     DEEPGRAM_KEY  : pingDeepgram,
@@ -1677,6 +1733,14 @@ async function pingDeepl(apiKey) {
 
 async function pingDeepSeek(apiKey) {
   const resp = await fetch('https://api.deepseek.com/v1/models', {
+    method : 'GET',
+    headers: { 'Authorization': `Bearer ${apiKey}` },
+  });
+  return { ok: resp.ok, status: resp.status };
+}
+
+async function pingMistral(apiKey) {
+  const resp = await fetch('https://api.mistral.ai/v1/models', {
     method : 'GET',
     headers: { 'Authorization': `Bearer ${apiKey}` },
   });
