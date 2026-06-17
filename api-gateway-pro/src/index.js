@@ -36,7 +36,17 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.7.0';
+const VERSION = '1.9.0';
+// v1.9.0 (2026-06-17) — Security hardening (additive, no behavior change for valid requests):
+//   • safeApiPath(): X-Api-Path now validated on Gemini + AssemblyAI + OpenAI-SV proxies
+//     → blocks upstream API-key exfiltration via "@host"/".host"/"//host" path tricks.
+//   • timingSafeEqual(): constant-time compare for LS webhook signature + admin token.
+//   KNOWN / DEFERRED (documented, intentionally not changed here):
+//   • /api/activate returns the key by email (rate-limited 5/h) = SWP frictionless-onboarding
+//     design tradeoff. For StoryVoice onboarding, prefer email-delivered key only.
+//   • debitCredits() is a KV read-modify-write (non-atomic) → tiny TOCTOU overspend window,
+//     bounded by prepaid balance + 10/min rate limit. Acceptable for now.
+//   • CORS '*' kept (many legit origins: SWP/NoteFlowing/DictoKey/Factory).
 
 // ── Plan limits (per calendar month) ────────────────────────────────────────
 const PLAN_LIMITS = {
@@ -181,13 +191,36 @@ async function getApiKey(name, env) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Security helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Only allow path-style X-Api-Path values (must start with a single "/", no "..",
+// no backslash, no protocol-relative "//"). Blocks "@evil.com/...", ".evil.com",
+// "//evil.com" tricks that would otherwise send the upstream API key to an
+// attacker-controlled host. Falls back to the safe default for anything suspicious.
+function safeApiPath(raw, fallback) {
+  if (typeof raw !== 'string' || !raw.startsWith('/')) return fallback;
+  if (raw.startsWith('//') || raw.startsWith('/\\')) return fallback;
+  if (raw.includes('..') || raw.includes('\\')) return fallback;
+  return raw;
+}
+
+// Constant-time string comparison (avoids timing side-channels on secrets).
+function timingSafeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let r = 0;
+  for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return r === 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Proxy helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function proxyGemini(request, env, apiPath) {
   const key = await getApiKey('GEMINI_KEY', env);
   if (!key) return err('Gemini API key not configured', 503);
-  const path = apiPath || request.headers.get('X-Api-Path') || '/v1beta/models/gemini-2.0-flash:generateContent';
+  const path = safeApiPath(apiPath || request.headers.get('X-Api-Path'), '/v1beta/models/gemini-2.0-flash:generateContent');
   const url = `https://generativelanguage.googleapis.com${path}?key=${key}`;
   const resp = await fetch(url, {
     method: 'POST',
@@ -220,7 +253,7 @@ async function proxyGroq(request, env) {
 async function proxyAssemblyAI(request, env) {
   const key = await getApiKey('ASSEMBLYAI_KEY', env);
   if (!key) return err('AssemblyAI API key not configured', 503);
-  const apiPath = request.headers.get('X-Api-Path') || '/v2/transcript';
+  const apiPath = safeApiPath(request.headers.get('X-Api-Path'), '/v2/transcript');
   const url = `https://api.assemblyai.com${apiPath}`;
   const resp = await fetch(url, {
     method: request.method,
@@ -274,13 +307,90 @@ async function proxyAzure(request, env, url) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// StoryVoice — prepaid-credits path (sv_ keys). FULLY ISOLATED from SubWhisper:
+// never calls checkUsageLimit / PLAN_LIMITS / incrementUsage. Additive (v1.8.0).
+//   Brain (summaries/Q&A) via /api/deepseek = FREE (reuses proxyDeepSeek).
+//   Voice via /api/openai + X-Api-Path:/v1/audio/speech = METERED (1 credit = 1 char).
+//   plan 'unlimited' (owner/family) = never metered, just a high anti-disaster guard.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function debitCredits(proKey, chars, env) {
+  const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
+  if (!data) return;
+  data.credits = Math.max(0, Number(data.credits || 0) - chars);
+  data.ttsCharsUsed = Number(data.ttsCharsUsed || 0) + chars;
+  data.lastUsed = new Date().toISOString();
+  await env.PRO_KV.put(`pro:${proKey}`, JSON.stringify(data));
+}
+
+async function proxyOpenaiSV(request, env, apiPath) {
+  const key = await getApiKey('OPENAI_KEY', env);
+  if (!key) return err('OpenAI API key not configured', 503);
+  const p = safeApiPath(apiPath, '/v1/chat/completions');
+  const resp = await fetch(`https://api.openai.com${p}`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': request.headers.get('Content-Type') || 'application/json' },
+    body: request.body,
+  });
+  return new Response(resp.body, {
+    status: resp.status,
+    headers: { ...CORS_HEADERS, 'Content-Type': resp.headers.get('Content-Type') || 'application/json' },
+  });
+}
+
+async function handleStoryVoice(request, env, ctx, path, proKey, proData) {
+  // Anti-abuse rate limit (shared helper — safe, just a per-key KV counter)
+  if (!await checkRateLimit(proKey, env)) {
+    return err('Rate limit exceeded. Max 10 requests/minute.', 429);
+  }
+  const unlimited = proData.plan === 'unlimited';
+
+  // Brain (free): summaries / Q&A / language detection via DeepSeek
+  if (path === '/api/deepseek') {
+    return proxyDeepSeek(request, env);
+  }
+
+  // OpenAI: TTS (metered prepaid credits) or chat (free brain)
+  if (path === '/api/openai') {
+    const apiPath = request.headers.get('X-Api-Path') || '/v1/chat/completions';
+    if (apiPath === '/v1/audio/speech') {
+      let body;
+      try { body = await request.json(); } catch { return err('invalid JSON body', 400); }
+      const chars = (body && typeof body.input === 'string') ? body.input.length : 0;
+      const credits = Number(proData.credits || 0);
+      if (!unlimited && chars > credits) {
+        return json({ error: 'insufficient_credits', credits, needed: chars }, 402);
+      }
+      const key = await getApiKey('OPENAI_KEY', env);
+      if (!key) return err('OpenAI API key not configured', 503);
+      const resp = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      // Debit only on success, by the chars actually sent (fire-and-forget)
+      if (resp.ok && !unlimited && chars > 0) {
+        ctx.waitUntil(debitCredits(proKey, chars, env));
+      }
+      return new Response(resp.body, {
+        status: resp.status,
+        headers: { ...CORS_HEADERS, 'Content-Type': resp.headers.get('Content-Type') || 'audio/mpeg' },
+      });
+    }
+    return proxyOpenaiSV(request, env, apiPath);
+  }
+
+  return err('Route not available for StoryVoice', 404);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Admin helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 function checkAdmin(request, env) {
   const auth = request.headers.get('Authorization') || '';
   const token = auth.replace('Bearer ', '');
-  if (!token || token !== env.ADMIN_TOKEN) return false;
+  if (!token || !env.ADMIN_TOKEN || !timingSafeEqual(token, env.ADMIN_TOKEN)) return false;
   return true;
 }
 
@@ -336,7 +446,7 @@ async function verifyWebhookSignature(rawBody, signature, secret) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(rawBody));
   const hex = [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('');
-  return hex === signature;
+  return timingSafeEqual(hex, signature);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -971,7 +1081,7 @@ export default {
         const mk = monthKey();
         const monthly = (data.monthlyUsage && data.monthlyUsage[mk]) || { transcriptions: 0, translations: 0 };
         const limits = PLAN_LIMITS[data.plan] || PLAN_LIMITS.pro;
-        return json({ valid: true, plan: data.plan, email: data.email, usage: data.usage, monthlyUsage: monthly, limits, expiresAt: data.expiresAt || null });
+        return json({ valid: true, plan: data.plan, email: data.email, usage: data.usage, monthlyUsage: monthly, limits, credits: data.credits, expiresAt: data.expiresAt || null });
       }
 
       // ── Newsletter subscribe (no pro key needed) ───────────────────────
@@ -983,6 +1093,12 @@ export default {
       if (!proKey) return err('X-Pro-Key header required', 401);
       const proData = await validateProKey(proKey, env);
       if (!proData) return err('Invalid, expired, or revoked pro key', 403);
+
+      // ── StoryVoice (sv_ keys): fully isolated prepaid-credits path. Returns BEFORE
+      // any SubWhisper usage logic runs (checkUsageLimit / PLAN_LIMITS / incrementUsage). ──
+      if (proKey.startsWith('sv_')) {
+        return handleStoryVoice(request, env, ctx, path, proKey, proData);
+      }
 
       // Rate limit check
       if (!await checkRateLimit(proKey, env)) {
