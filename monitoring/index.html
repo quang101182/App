@@ -1,5 +1,6 @@
 <!-- Monitoring Dashboard v1.16.0 (07/06/2026) — Contrôle manuel du rafraîchissement (3 onglets). PLUS de fetch auto au clic d'onglet : on affiche les dernières données connues, persistées en localStorage (cache + horodatage par app, clés dk-monitoring-cache[-ts]-<app>) → survit au F5 et à plusieurs jours. Le fetch ne se déclenche QUE sur le bouton "Actualiser" (manualRefresh) OU au tout premier chargement sans aucune donnée (bootstrap unique). NOUVEAU bandeau de fraîcheur discret #freshBanner (jaune ; orange si >24h) sous les onglets, sur les 3 onglets : "Données actualisées le JJ/MM/AAAA à HH:MM (il y a X)" + cliquable pour actualiser ; ticker 1×/min qui rafraîchit le libellé "il y a X" SANS fetch réseau. Additif, zéro régression. -->
 <!-- Monitoring Dashboard v1.15.0 (07/06/2026) — Refonte onglet SubWhisper Pro (parité visuelle avec Factory, sans copier sa logique one-shot). NOUVEAU : (1) bandeau "Revenu & abonnements" = MRR potentiel (payants×9€, plafond — revenu réel via LemonSqueezy à brancher) + payants actifs + ⚠ À risque + churn% ; (2) bandeau d'alerte automatique en tête qui crie quand un client PAYANT a 0 usage / inactif >14j (ex : Sofia partoallios1, 1ère vente débitée €10,80 jamais utilisée) ; (3) funnel Visites→Clients réels→Payants ; (4) colonne "Santé client" (🔴 payé jamais utilisé · 🟠 payé inactif >14j · 🟡 trial 0 usage · 🟢 actif · ⚫ révoqué · ⚪ test/démo) avec tri par risque + lignes colorées ; (5) comptes honnêtes hors comptes test/démo (@test./@example.). Classification 100% client-side depuis /admin/swp/overview (aucune donnée inventée). ZÉRO impact DictoKey/Factory (additif, isolé via body.app-swp). -->
+<!-- Monitoring Dashboard v1.19.0 (17/06/2026) — Onglet StoryVoice : crédits prépayés voix, revenu estimé (packs LS), conversion démo→achat (signal GO 3%), clés sv_ (internes/test @local exclues). Source gateway-pro v1.12.0 /admin/sv/overview. Additif (4e onglet), zéro régression DictoKey/SWP/Factory. -->
 <!-- Monitoring Dashboard v1.18.0 (09/06/2026) — Onglet SWP : MRR/payants HONNÊTES via lsStatus réel LemonSqueezy (gateway api-gateway-pro v1.6.0). Un vrai payant = abonnement LS « active » (≠ past_due paiement échoué, ≠ clé orpheline not_found). MRR « potentiel » → MRR réel. Classification santé : past_due et clé orpheline distingués. Total clients = clients réels (hors test). Additif onglet SWP uniquement, zéro régression DictoKey/Factory. -->
 <!-- Monitoring Dashboard v1.14.1 (07/06/2026) — Compte Factory #0 The Unseen Child entièrement branché : landing theunseenchild.org instrumentée (clic tripwire LemonSqueezy "Field Kit" → tuc-buy · submit newsletter guide gratuit → tuc-dl) + config dashboard TUC instrumented:true + lemonProductId 1079445 (tripwire 6,99€). Worker factory-stats ACCOUNTS tuc.lemonProductId=1079445 → TUC affiche désormais ventes/revenu réels (1 vente, 8,39€). Note TUC mise à jour (n'est plus "pas d'ebook"). -->
 <!-- Monitoring Dashboard v1.14.0 (07/06/2026) — 3e onglet "Factory" (Ebook Funnel Factory : comptes TikTok faceless → ebooks). Isolation body.app-factory (calquée sur app-swp), #factoryView, config-driven (FACTORY_ACCOUNTS, ajout d'un compte = 1 entrée). Comptes initiaux : #0 The Unseen Child + #1 Aimer en alerte + emplacements #2/#3. Par compte : @handle cliquable, domaine cliquable, email, visites/clics achat/téléchargements (compteur public gateway /api/visit?page=<slug>[-buy|-dl], client-side), abonnés MailerLite + ventes/revenu LemonSqueezy (via worker backend factory-stats, "—" tant qu'absent), taux de conversion, santé op (phase warm-up/posting). Mobile-first. UX (s'applique aux 3 onglets) : auto-refresh 60s SUPPRIMÉ → bouton "Actualiser" manuel ; navigation onglet instantanée (rendu depuis cache appDataCache) ; persistance de l'onglet sélectionné après F5 (localStorage dk-monitoring-active-app). ZÉRO régression DictoKey/SWP (additif). -->
@@ -10,7 +11,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.18.0</title>
+<title>Monitoring v1.19.0</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -550,6 +551,19 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     body.app-factory #footer, body.app-factory #alertBanner { display: none !important; }
     body.app-factory #factoryView { display: block; }
 
+    /* ── v1.19.0 StoryVoice (4e onglet) — isolation calquée sur app-swp ── */
+    body:not(.app-storyvoice) #storyvoiceView { display: none !important; }
+    body.app-storyvoice #sO, body.app-storyvoice #sP, body.app-storyvoice #sA, body.app-storyvoice #sRet,
+    body.app-storyvoice #sChurn, body.app-storyvoice #sD, body.app-storyvoice #sI, body.app-storyvoice #sectionNav,
+    body.app-storyvoice .pill-group,
+    body.app-storyvoice .section-block, body.app-storyvoice .btn-toggle-all,
+    body.app-storyvoice #footer, body.app-storyvoice #alertBanner { display: none !important; }
+    body.app-storyvoice #storyvoiceView { display: block; }
+    .sv-row { border: 1px solid var(--border-soft-new); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; background: var(--bg-elev-new); }
+    .sv-row-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .sv-email { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+    .sv-row-meta { font-size: .72rem; color: var(--text2); margin-top: 4px; line-height: 1.4; }
+
     .swp-section { padding: 8px 0 24px; }
     .swp-kpi-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 20px; }
     .swp-kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
@@ -785,7 +799,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.18.0</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.19.0</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -1189,13 +1203,24 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     <div style="font-size:.8rem;color:var(--text2);margin-top:16px" id="factoryLastUpdated"></div>
   </div>
 
+  <!-- StoryVoice view (v1.19.0) — crédits prépayés voix + conversion démo→achat, isolé via body.app-storyvoice -->
+  <div id="storyvoiceView" class="swp-section">
+    <div class="swp-section-title">🎭 Conversion &amp; revenu</div>
+    <div class="swp-money-grid" id="svMoneyKpis"></div>
+    <div class="swp-section-title">Crédits de voix &amp; écoute</div>
+    <div class="swp-kpi-grid" id="svKpis"></div>
+    <div class="swp-section-title">Détail clients <span style="font-weight:400;text-transform:none;font-size:.72rem;color:var(--text-mute-new)">· clés internes/test exclues du revenu</span></div>
+    <div id="svCustomers"></div>
+    <div style="font-size:.8rem;color:var(--text2);margin-top:12px" id="svLastUpdated"></div>
+  </div>
+
   <!-- Footer -->
-  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.18.0</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
+  <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.19.0</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.18.0';
+const DASHBOARD_VERSION = 'v1.19.0';
 
 // === Multi-app config ===
 const APPS = {
@@ -1214,6 +1239,13 @@ const APPS = {
     gateway: 'https://api-gateway-pro.quang101182.workers.dev',
     tokenKey: 'monitoring_swp_token',
     endpoints: { overview: '/admin/swp/overview' }
+  },
+  // v1.19.0 — StoryVoice : crédits prépayés (voix), conversion démo→achat. Même gateway-pro, endpoint dédié /admin/sv/overview.
+  storyvoice: {
+    name: 'StoryVoice',
+    gateway: 'https://api-gateway-pro.quang101182.workers.dev',
+    tokenKey: 'monitoring_storyvoice_token',
+    endpoints: { overview: '/admin/sv/overview' }
   },
   // v1.14.0 — Ebook Funnel Factory : visites/clics/dl via compteur public gateway,
   // ventes/subs via worker dédié factory-stats (token optionnel). N'utilise PAS apiFetch.
@@ -1332,6 +1364,7 @@ function restoreActiveAppFromLS() {
 function setActiveAppView(appId) {
   document.body.classList.toggle('app-swp', appId === 'swp');
   document.body.classList.toggle('app-factory', appId === 'factory'); // v1.14.0
+  document.body.classList.toggle('app-storyvoice', appId === 'storyvoice'); // v1.19.0
   document.body.dataset.activeApp = appId;
 }
 
@@ -1402,6 +1435,8 @@ async function fetchAll() {
   try {
     if (thisApp === 'swp') {
       await fetchAllSwp(signal);
+    } else if (thisApp === 'storyvoice') {
+      await fetchAllStoryVoice(signal);
     } else if (thisApp === 'factory') {
       await fetchAllFactory(signal);
     } else {
@@ -1461,6 +1496,7 @@ function renderFromCache(app) {
   if (!c) return false;
   if (app === 'dictokey') { render(c[0], c[1], c[2], c[3], c[4]); }
   else if (app === 'swp') { renderSwp(c); }
+  else if (app === 'storyvoice') { renderSv(c); }
   else if (app === 'factory') { renderFactory(c); }
   renderFreshBanner(app);
   return true;
@@ -1506,6 +1542,14 @@ async function fetchAllSwp(signal) {
   if (currentApp !== 'swp') return;
   persistAppCache('swp', data); // v1.16.0 : cache mémoire + localStorage + horodatage
   renderSwp(data);
+}
+
+// === StoryVoice fetch + render (v1.19.0) ===
+async function fetchAllStoryVoice(signal) {
+  var data = await apiFetch(APPS.storyvoice.endpoints.overview, signal);
+  if (currentApp !== 'storyvoice') return;
+  persistAppCache('storyvoice', data);
+  renderSv(data);
 }
 
 // === Factory fetch + render (v1.14.0) ===
@@ -1913,6 +1957,73 @@ function detectPlatform(deviceId) {
   var id = (deviceId || '').toLowerCase();
   if (id.startsWith('pc_')) return 'PC';
   return 'Mobile';
+}
+
+// === StoryVoice render (v1.19.0) — crédits prépayés voix, conversion démo→achat ===
+var SV_PACKS = [{ c: 3000000, e: 64.90 }, { c: 1000000, e: 24.90 }, { c: 300000, e: 7.90 }];
+var SV_CPH = 90000; // crédits ≈ par heure de narration
+function svIsInternal(email) {
+  var e = String(email || '').toLowerCase();
+  return !e || e.endsWith('@local') || e === 'quangapps.dev@gmail.com' || swpIsTest(e);
+}
+function svRevenue(granted) { // décompose en packs (greedy desc) — miroir du gateway
+  var g = Number(granted || 0), eur = 0;
+  for (var i = 0; i < SV_PACKS.length; i++) { while (g >= SV_PACKS[i].c) { g -= SV_PACKS[i].c; eur += SV_PACKS[i].e; } }
+  if (g > 0) eur += (g / SV_PACKS[SV_PACKS.length - 1].c) * SV_PACKS[SV_PACKS.length - 1].e;
+  return eur;
+}
+function svHours(credits) { return Math.round((Number(credits || 0) / SV_CPH) * 10) / 10; }
+function svFmt(n) { return Number(n || 0).toLocaleString('fr-FR'); }
+function svCard(label, val, sub, cls) {
+  return '<div class="swp-money-card' + (cls ? ' ' + cls : '') + '"><div class="swp-m-label">' + label + '</div>' +
+    '<div class="swp-m-val">' + val + '</div>' + (sub ? '<div class="swp-m-sub">' + sub + '</div>' : '') + '</div>';
+}
+function renderSv(data) {
+  if (!data) return;
+  var list = (data.customers_list || []).slice();
+  var real = list.filter(function (c) { return !svIsInternal(c.email); });
+  var internal = list.length - real.length;
+  var revenue = 0, grantedReal = 0, usedReal = 0, remReal = 0, activeReal = 0, revokedReal = 0;
+  real.forEach(function (c) {
+    revenue += svRevenue(c.creditsGranted);
+    grantedReal += Number(c.creditsGranted || 0);
+    usedReal += Number(c.creditsUsed || 0);
+    remReal += Number(c.creditsRemaining || 0);
+    if (c.revoked) revokedReal++; else activeReal++;
+  });
+  var visits = (data.site_visits && data.site_visits.total) || 0;
+  var visToday = (data.site_visits && data.site_visits.today) || 0;
+  var convPct = visits > 0 ? Math.round((real.length / visits) * 1000) / 10 : null;
+  var convCls = (convPct != null && convPct >= 3) ? 'revenue' : '';
+
+  document.getElementById('svMoneyKpis').innerHTML = [
+    svCard('📈 Conversion démo→achat', convPct != null ? convPct + '%' : '<span class="swp-muted">—</span>',
+      real.length + ' achat(s) / ' + svFmt(visits) + ' visite(s) · seuil GO 3%', convCls),
+    svCard('💶 Revenu estimé', svFmt(Math.round(revenue * 100) / 100) + ' €', 'dérivé des crédits vendus (packs LemonSqueezy)', 'revenue'),
+    svCard('👤 Clients payants', String(real.length), internal ? (internal + ' interne(s)/test exclus') : 'aucune clé interne', ''),
+    svCard('👁 Visites démo', svFmt(visits), visToday > 0 ? ('+' + visToday + " auj.") : 'storiesvoice.org', '')
+  ].join('');
+
+  document.getElementById('svKpis').innerHTML = [
+    svCard('💳 Crédits vendus', svFmt(grantedReal), '≈ ' + svHours(grantedReal) + ' h de voix', ''),
+    svCard('🎧 Heures écoutées', svHours(usedReal) + ' h', svFmt(usedReal) + ' crédits consommés', ''),
+    svCard('🔋 Crédits restants', svFmt(remReal), 'chez les clients payants', ''),
+    svCard('🔑 Clés', activeReal + ' active(s)', revokedReal + ' révoquée(s) · ' + internal + ' interne(s)', '')
+  ].join('');
+
+  if (!list.length) {
+    document.getElementById('svCustomers').innerHTML = '<div class="swp-muted" style="padding:12px 0">Aucune clé StoryVoice pour le moment.</div>';
+  } else {
+    list.sort(function (a, b) { return String(b.lastUsed || b.created || '').localeCompare(String(a.lastUsed || a.created || '')); });
+    document.getElementById('svCustomers').innerHTML = list.map(function (c) {
+      var intern = svIsInternal(c.email);
+      var badge = intern ? '<span class="swp-badge">interne/test</span>'
+        : (c.revoked ? '<span class="swp-badge revoked">Révoqué</span>' : '<span class="swp-badge pro">Client</span>');
+      return '<div class="sv-row"><div class="sv-row-main"><span class="sv-email">' + swpEscape(c.email || '—') + '</span> ' + badge + '</div>' +
+        '<div class="sv-row-meta">🔋 ' + svFmt(c.creditsRemaining) + ' restants · 🎧 ' + svHours(c.creditsUsed) + ' h écoutées · 💳 ' + svFmt(c.creditsGranted) + ' vendus · créé ' + swpFmtDate(c.created) + ' · vu ' + swpFmtRelative(c.lastUsed) + '</div></div>';
+    }).join('');
+  }
+  document.getElementById('svLastUpdated').textContent = 'Source : /admin/sv/overview · généré ' + (data.generatedAt ? swpFmtRelative(data.generatedAt) : '');
 }
 
 function destroyCharts() {

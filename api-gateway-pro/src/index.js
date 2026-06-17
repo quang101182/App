@@ -36,7 +36,10 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.11.1';
+const VERSION = '1.12.0';
+// v1.12.0 (2026-06-17) — StoryVoice monitoring (ADDITIF, lecture seule): endpoint /admin/sv/overview
+//   (clés sv_ vendues, crédits restants/consommés, heures écoutées, revenu estimé, conversion démo→achat)
+//   + 'sv' ajouté à l'agrégat /api/visit?page=all. Aucune logique SWP/NF/DK touchée.
 // v1.10.0 (2026-06-17) — StoryVoice monetization: LS variant 1803132 (Pack Lecteur, 1M credits)
 //   → webhook order_created credits the buyer's sv_ key by email (created if new). Fully isolated
 //   from SWP/NF subscription flow. generateProKey supports 'sv_' prefix.
@@ -831,14 +834,15 @@ export default {
       const today = new Date().toISOString().slice(0, 10);
       // If page=all, return all counters
       if (page === 'all') {
-        const [swpT, ncfT, nfT, dkT, tucT] = await Promise.all([
+        const [swpT, ncfT, nfT, dkT, tucT, svT] = await Promise.all([
           env.PRO_KV.get('stats:visits:swp:total'),
           env.PRO_KV.get('stats:visits:ncf:total'),
           env.PRO_KV.get('stats:visits:nf:total'),
           env.PRO_KV.get('stats:visits:dk:total'),
           env.PRO_KV.get('stats:visits:tuc:total'),
+          env.PRO_KV.get('stats:visits:sv:total'),
         ]);
-        return json({ swp: parseInt(swpT) || 0, ncf: parseInt(ncfT) || 0, nf: parseInt(nfT) || 0, dk: parseInt(dkT) || 0, tuc: parseInt(tucT) || 0 });
+        return json({ swp: parseInt(swpT) || 0, ncf: parseInt(ncfT) || 0, nf: parseInt(nfT) || 0, dk: parseInt(dkT) || 0, tuc: parseInt(tucT) || 0, sv: parseInt(svT) || 0 });
       }
       const prefix = `stats:visits:${page}`;
       const totalRaw = await env.PRO_KV.get(`${prefix}:total`);
@@ -1156,6 +1160,61 @@ export default {
             total: parseInt(visitsTotalRaw) || 0,
             today: parseInt(visitsTodayRaw) || 0,
           },
+          customers_list: customers,
+        });
+      }
+
+      // StoryVoice-only overview (monitoring dashboard) — read-only, isolé des clés SWP/NF.
+      // v1.12.0 : crédits prépayés (1 crédit = 1 caractère TTS). granted = remaining + used.
+      if (path === '/admin/sv/overview' && method === 'GET') {
+        const list = await env.PRO_KV.list({ prefix: 'pro:' });
+        const today = new Date().toISOString().slice(0, 10);
+        // Tarifs packs LemonSqueezy (desc) — pour estimer le revenu à partir des crédits accordés
+        const PACKS = [
+          { credits: 3000000, eur: 64.90 },
+          { credits: 1000000, eur: 24.90 },
+          { credits: 300000, eur: 7.90 },
+        ];
+        let totalCust = 0, active = 0, revoked = 0;
+        let creditsRemaining = 0, creditsUsed = 0, revenueEst = 0;
+        const customers = [];
+        for (const k of list.keys) {
+          const data = await env.PRO_KV.get(k.name, 'json');
+          if (!data) continue;
+          const keyName = k.name.replace('pro:', '');
+          const isSv = data.app === 'sv' || (!data.app && keyName.startsWith('sv_'));
+          if (!isSv) continue;
+          totalCust++;
+          if (data.revoked) revoked++; else active++;
+          const rem = Math.max(0, Number(data.credits || 0));
+          const used = Math.max(0, Number(data.ttsCharsUsed || 0));
+          const granted = rem + used;
+          creditsRemaining += rem; creditsUsed += used;
+          // Estimation revenu : décompose les crédits accordés en packs (greedy desc)
+          let g = granted, eur = 0;
+          for (const p of PACKS) { while (g >= p.credits) { g -= p.credits; eur += p.eur; } }
+          if (g > 0) eur += (g / PACKS[PACKS.length - 1].credits) * PACKS[PACKS.length - 1].eur;
+          revenueEst += eur;
+          customers.push({
+            key: keyName, email: data.email || null, plan: data.plan || 'prepaid',
+            revoked: !!data.revoked, created: data.created || null, lastUsed: data.lastUsed || null,
+            creditsRemaining: rem, creditsUsed: used, creditsGranted: granted,
+          });
+        }
+        customers.sort((a, b) => String(b.lastUsed || b.created || '').localeCompare(String(a.lastUsed || a.created || '')));
+        const [visTotalRaw, visTodayRaw] = await Promise.all([
+          env.PRO_KV.get('stats:visits:sv:total'),
+          env.PRO_KV.get(`stats:visits:sv:${today}`),
+        ]);
+        const visits = parseInt(visTotalRaw) || 0;
+        return json({
+          generatedAt: new Date().toISOString(),
+          customers: { total: totalCust, active, revoked },
+          credits: { remaining: creditsRemaining, used: creditsUsed, granted: creditsRemaining + creditsUsed },
+          hours_listened: Math.round((creditsUsed / 90000) * 10) / 10,
+          revenue_eur_est: Math.round(revenueEst * 100) / 100,
+          site_visits: { total: visits, today: parseInt(visTodayRaw) || 0 },
+          conversion_pct: visits > 0 ? Math.round((totalCust / visits) * 1000) / 10 : null,
           customers_list: customers,
         });
       }
