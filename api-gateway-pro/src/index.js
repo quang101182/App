@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.11.0';
+const VERSION = '1.11.1';
 // v1.10.0 (2026-06-17) — StoryVoice monetization: LS variant 1803132 (Pack Lecteur, 1M credits)
 //   → webhook order_created credits the buyer's sv_ key by email (created if new). Fully isolated
 //   from SWP/NF subscription flow. generateProKey supports 'sv_' prefix.
@@ -542,7 +542,7 @@ https://sub-whisper.com
 // StoryVoice n'a pas son propre domaine vérifié. reply-to = inbox business. Silent no-op si pas de clé.
 async function sendStoryVoiceKeyEmail({ email, key, credits, env }) {
   if (!env.RESEND_API_KEY) return { sent: false, reason: 'no_api_key' };
-  const from = env.RESEND_SV_FROM || 'StoryVoice <noreply@sub-whisper.com>';
+  const from = env.RESEND_SV_FROM || 'StoryVoice <noreply@storiesvoice.org>';
   const replyTo = env.RESEND_REPLY_TO || 'quangapps.dev@gmail.com';
   const url = 'https://quang101182.github.io/storyvoice/';
   const hours = Math.round((Number(credits || 0) / 90000) * 10) / 10; // 90000 crédits ≈ 1 h (SV_CPH côté app)
