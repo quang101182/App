@@ -36,7 +36,10 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.9.0';
+const VERSION = '1.10.0';
+// v1.10.0 (2026-06-17) — StoryVoice monetization: LS variant 1803132 (Pack Lecteur, 1M credits)
+//   → webhook order_created credits the buyer's sv_ key by email (created if new). Fully isolated
+//   from SWP/NF subscription flow. generateProKey supports 'sv_' prefix.
 // v1.9.0 (2026-06-17) — Security hardening (additive, no behavior change for valid requests):
 //   • safeApiPath(): X-Api-Path now validated on Gemini + AssemblyAI + OpenAI-SV proxies
 //     → blocks upstream API-key exfiltration via "@host"/".host"/"//host" path tricks.
@@ -65,6 +68,7 @@ const LS_VARIANTS = {
   '1427188': { app: 'nf',  handled: true  }, // NoteFlowing Pro  €15/mo
   '1427180': { app: 'vb',  handled: false }, // VoiceBox Pro     €3/mo (handled by bot /lemon)
   '1427191': { app: 'pp',  handled: false }, // SubWhisper Prompt Pack €19 (one-time, no key)
+  '1803132': { app: 'sv',  handled: true, credits: 1000000 }, // StoryVoice Pack Lecteur €24.90 (one-time, crédits prépayés voix)
 };
 
 function extractVariantId(payload) {
@@ -396,7 +400,7 @@ function checkAdmin(request, env) {
 
 function generateProKey(app = 'swp') {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  const prefix = app === 'nf' ? 'nf_' : 'swp_';
+  const prefix = app === 'nf' ? 'nf_' : (app === 'sv' ? 'sv_' : 'swp_');
   let key = prefix;
   for (let i = 0; i < 24; i++) key += chars[Math.floor(Math.random() * chars.length)];
   return key;
@@ -564,6 +568,27 @@ async function handleLemonSqueezyWebhook(request, env, ctx) {
   const app = route.app;
   const emailKey = `email:${app}:${email.toLowerCase()}`;
   const emailLegacyKey = `email:${email.toLowerCase()}`;
+
+  // ── StoryVoice (app 'sv') : achat ONE-TIME de crédits prépayés voix. ISOLÉ de SWP/NF (abonnements).
+  // Seul order_created compte (pas de subscription). Crédite la clé sv_ de l'email (créée si nouvelle). ──
+  if (app === 'sv') {
+    if (event !== 'order_created') {
+      return json({ ok: true, action: 'ignored', reason: 'sv: only order_created credits', event });
+    }
+    const credits = (LS_VARIANTS[route.variantId] && LS_VARIANTS[route.variantId].credits) || 0;
+    let key = await env.PRO_KV.get(emailKey);
+    let data = key ? await env.PRO_KV.get(`pro:${key}`, 'json') : null;
+    if (!key || !data) {
+      key = generateProKey('sv');
+      data = { email: email.toLowerCase(), app: 'sv', plan: 'prepaid', credits: 0, created: new Date().toISOString(), revoked: false };
+      await env.PRO_KV.put(emailKey, key);
+    }
+    data.credits = Math.max(0, Number(data.credits || 0)) + credits;
+    data.lastUsed = new Date().toISOString();
+    if (data.revoked) data.revoked = false; // un nouvel achat réactive
+    await env.PRO_KV.put(`pro:${key}`, JSON.stringify(data));
+    return json({ ok: true, action: 'sv_credited', email, app: 'sv', creditsAdded: credits, balance: data.credits });
+  }
 
   // subscription_created → create pro key.
   // order_created is intentionally IGNORED here: LS fires both events for every subscription
