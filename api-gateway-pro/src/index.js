@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.10.0';
+const VERSION = '1.11.0';
 // v1.10.0 (2026-06-17) — StoryVoice monetization: LS variant 1803132 (Pack Lecteur, 1M credits)
 //   → webhook order_created credits the buyer's sv_ key by email (created if new). Fully isolated
 //   from SWP/NF subscription flow. generateProKey supports 'sv_' prefix.
@@ -68,7 +68,9 @@ const LS_VARIANTS = {
   '1427188': { app: 'nf',  handled: true  }, // NoteFlowing Pro  €15/mo
   '1427180': { app: 'vb',  handled: false }, // VoiceBox Pro     €3/mo (handled by bot /lemon)
   '1427191': { app: 'pp',  handled: false }, // SubWhisper Prompt Pack €19 (one-time, no key)
-  '1803132': { app: 'sv',  handled: true, credits: 1000000 }, // StoryVoice Pack Lecteur €24.90 (one-time, crédits prépayés voix)
+  '1803203': { app: 'sv',  handled: true, credits: 300000  }, // StoryVoice Pack Découverte €7.90 (300k crédits voix)
+  '1803132': { app: 'sv',  handled: true, credits: 1000000 }, // StoryVoice Pack Lecteur €24.90 (1M crédits voix)
+  '1803204': { app: 'sv',  handled: true, credits: 3000000 }, // StoryVoice Pack Passionné €64.90 (3M crédits voix)
 };
 
 function extractVariantId(payload) {
@@ -534,6 +536,84 @@ https://sub-whisper.com
   }
 }
 
+// StoryVoice — livraison du code prépayé par email (Resend), bilingue FR/EN.
+// ISOLÉ de sendActivationEmail (SWP) : branding StoryVoice, instructions « Réglages → Code d'accès ».
+// Domaine expéditeur réutilise sub-whisper.com (vérifié Resend) avec nom d'affichage StoryVoice tant que
+// StoryVoice n'a pas son propre domaine vérifié. reply-to = inbox business. Silent no-op si pas de clé.
+async function sendStoryVoiceKeyEmail({ email, key, credits, env }) {
+  if (!env.RESEND_API_KEY) return { sent: false, reason: 'no_api_key' };
+  const from = env.RESEND_SV_FROM || 'StoryVoice <noreply@sub-whisper.com>';
+  const replyTo = env.RESEND_REPLY_TO || 'quangapps.dev@gmail.com';
+  const url = 'https://quang101182.github.io/storyvoice/';
+  const hours = Math.round((Number(credits || 0) / 90000) * 10) / 10; // 90000 crédits ≈ 1 h (SV_CPH côté app)
+  const subject = 'Votre code StoryVoice · Your StoryVoice code';
+  const text = `Merci pour votre achat StoryVoice !
+
+Voici votre code d'acces :
+
+    ${key}
+
+Solde : ~ ${hours} h de narration vocale.
+
+Comment l'activer (30 s) :
+1. Ouvrez ${url}
+2. Cliquez sur l'engrenage (Reglages) en haut a droite.
+3. Collez votre code dans " Code d'acces ", puis Enregistrer.
+4. C'est pret : chargez vos livres et ecoutez la narration multi-voix.
+
+Une question ? Repondez simplement a cet email.
+
+— Quang · StoryVoice
+
+────────────────────────
+
+Thank you for your StoryVoice purchase!
+
+Here is your access code:
+
+    ${key}
+
+Balance: ~ ${hours} h of voice narration.
+
+How to activate (30s):
+1. Open ${url}
+2. Click the gear (Settings) at the top right.
+3. Paste your code into "Access code", then Save.
+4. Done: load your books and enjoy the multi-voice narration.
+
+Any question? Just reply to this email.
+
+— Quang · StoryVoice
+`;
+  const html = `<!doctype html><html><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#222;line-height:1.55">
+<h2 style="color:#0d94b4;margin:0 0 16px">StoryVoice</h2>
+<p>Merci pour votre achat ! Voici votre code d'acces :</p>
+<pre style="background:#eef9fc;border:1px solid #cfe9f0;padding:14px 16px;border-radius:8px;font-size:16px;user-select:all;word-break:break-all;margin:0">${key}</pre>
+<p style="color:#555;margin-top:8px">Solde : ~ <strong>${hours} h</strong> de narration vocale.</p>
+<h3 style="margin-top:22px">Activation (30 s)</h3>
+<ol>
+<li>Ouvrez <a href="${url}" style="color:#0d94b4">StoryVoice</a></li>
+<li>Cliquez sur l'engrenage <strong>&#9881; (Reglages)</strong> en haut a droite.</li>
+<li>Collez votre code dans <strong>&laquo; Code d'acces &raquo;</strong>, puis Enregistrer.</li>
+<li>C'est pret : chargez vos livres et ecoutez la narration multi-voix.</li>
+</ol>
+<hr style="border:none;border-top:1px solid #eee;margin:22px 0">
+<p style="color:#666"><em>English:</em> Here is your access code (above). Open <a href="${url}" style="color:#0d94b4">StoryVoice</a> &rarr; gear &#9881; (Settings) &rarr; paste it into &quot;Access code&quot; &rarr; Save.</p>
+<p>Une question ? Repondez a cet email. / Any question? Just reply.</p>
+<p style="margin-top:28px;color:#666;font-size:13px">— Quang · StoryVoice</p>
+</body></html>`;
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to: [email], reply_to: replyTo, subject, text, html }),
+    });
+    if (!res.ok) { const e = await res.text().catch(() => ''); console.log(`[sv-email] Resend ${res.status}: ${e.slice(0, 200)}`); return { sent: false, reason: `resend_${res.status}` }; }
+    const data = await res.json().catch(() => ({}));
+    return { sent: true, id: data.id };
+  } catch (e) { console.log(`[sv-email] Resend exception: ${e.message}`); return { sent: false, reason: 'exception' }; }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // LemonSqueezy webhook handler
 // ─────────────────────────────────────────────────────────────────────────────
@@ -587,7 +667,10 @@ async function handleLemonSqueezyWebhook(request, env, ctx) {
     data.lastUsed = new Date().toISOString();
     if (data.revoked) data.revoked = false; // un nouvel achat réactive
     await env.PRO_KV.put(`pro:${key}`, JSON.stringify(data));
-    return json({ ok: true, action: 'sv_credited', email, app: 'sv', creditsAdded: credits, balance: data.credits });
+    // Livraison du code par email (fire-and-forget, n'impacte pas la réponse webhook ni le crédit).
+    let emailQueued = false;
+    if (ctx && ctx.waitUntil) { ctx.waitUntil(sendStoryVoiceKeyEmail({ email, key, credits: data.credits, env })); emailQueued = true; }
+    return json({ ok: true, action: 'sv_credited', email, app: 'sv', creditsAdded: credits, balance: data.credits, emailQueued });
   }
 
   // subscription_created → create pro key.
