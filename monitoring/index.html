@@ -11,7 +11,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.20.0</title>
+<title>Monitoring v1.20.1</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -584,6 +584,24 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     .st-lane h3 { font-size:.74rem; text-transform:uppercase; letter-spacing:.6px; color:var(--accent2-new); margin-bottom:9px; font-weight:700; }
     .st-lane-row { display:flex; align-items:center; gap:9px; font-size:.86rem; margin:5px 0; flex-wrap:wrap; }
     .st-lane-row .arrow { color:var(--text-mute-new); }
+    /* Filtres (chips toggle) */
+    .st-filters { background:var(--bg-card); border:1px solid var(--border-new); border-radius:14px; padding:11px 13px; margin-bottom:20px; }
+    .st-filt-row { display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin:5px 0; }
+    .st-filt-lbl { font-size:.62rem; text-transform:uppercase; letter-spacing:.5px; color:var(--text-mute-new); font-weight:700; flex:0 0 52px; }
+    .st-chip { font-size:.74rem; font-weight:700; padding:5px 12px; border-radius:20px; border:1px solid var(--border-new); background:var(--bg-elev-new); color:var(--text-dim-new); cursor:pointer; transition:all .12s; user-select:none; -webkit-tap-highlight-color:transparent; }
+    .st-chip:hover { color:var(--text); border-color:var(--text-mute-new); }
+    .st-chip.on { color:#fff; border-color:var(--chip,var(--accent)); background:var(--chip,var(--accent)); }
+    /* Case DÉCOCHÉE : clignote légèrement en orange pour attirer l'œil (demande Quang 18/06) */
+    @keyframes stBlink {
+      0%,100% { box-shadow:0 0 0 0 rgba(240,136,62,0); border-color:var(--border-new); }
+      50%     { box-shadow:0 0 9px 1px rgba(240,136,62,.6); border-color:var(--orange-new); color:var(--orange-new); }
+    }
+    .st-chip.off { animation: stBlink 1.7s ease-in-out infinite; }
+    .st-allbtn { font-size:.66rem; font-weight:700; padding:4px 9px; border-radius:7px; border:1px solid var(--border-new); background:transparent; color:var(--text-dim-new); cursor:pointer; margin-left:auto; white-space:nowrap; }
+    .st-allbtn:hover { color:var(--text); border-color:var(--text-mute-new); }
+    .st-empty { text-align:center; color:var(--text2); font-size:.9rem; padding:30px 10px; }
+    @media (max-width: 560px) { .st-filt-lbl { flex-basis:100%; margin-bottom:1px; } .st-chip { padding:6px 13px; } .st-allbtn { margin-left:auto; } }
+    @media (prefers-reduced-motion: reduce) { .st-chip.off { animation:none; border-color:var(--orange-new); } }
     /* Sections */
     .st-section-h { display:flex; align-items:center; gap:8px; margin: 22px 2px 12px; font-size:.78rem; text-transform:uppercase; letter-spacing:.7px; color:var(--text2); font-weight:700; }
     .st-section-h .cnt { background:var(--bg-elev-new); color:var(--text2); border-radius:20px; padding:1px 9px; font-size:.72rem; font-weight:700; }
@@ -866,7 +884,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.20.0</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.20.1</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -1290,7 +1308,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.20.0';
+const DASHBOARD_VERSION = 'v1.20.1';
 
 // === Multi-app config ===
 const APPS = {
@@ -1408,6 +1426,39 @@ const STUDIO_LANES = [
   { chan:'TikTok',              lang:'FR', why:'traction prouvée FR' },
   { chan:'Instagram + Facebook', lang:'EN', why:'EN performe mieux (boost)' }
 ];
+// === Filtres Studio (v1.20.1) — chips toggle, persistés. Modèle : TOUT coché par défaut.
+//     On persiste les items DÉCOCHÉS (off) → un nouveau projet/canal ajouté plus tard est coché par défaut. ===
+const STUDIO_FILTER_LS = 'dk-monitoring-studio-filters';
+function studioCats() {
+  return { project: Object.keys(STUDIO_PROJECTS), channel: Object.keys(STUDIO_CHANNELS), lang: ['FR','EN'] };
+}
+function loadStudioFilters() {
+  var off = {}; try { off = JSON.parse(localStorage.getItem(STUDIO_FILTER_LS)) || {}; } catch (e) {}
+  var cats = studioCats(), out = {};
+  Object.keys(cats).forEach(function(cat) {
+    var offSet = new Set(Array.isArray(off[cat]) ? off[cat] : []);
+    out[cat] = new Set(cats[cat].filter(function(x) { return !offSet.has(x); }));
+  });
+  return out;
+}
+function saveStudioFilters() {
+  var cats = studioCats(), off = {};
+  Object.keys(cats).forEach(function(cat) {
+    off[cat] = cats[cat].filter(function(x) { return !studioFilters[cat].has(x); });
+  });
+  try { localStorage.setItem(STUDIO_FILTER_LS, JSON.stringify(off)); } catch (e) {}
+}
+var studioFilters = loadStudioFilters();
+function toggleStudioFilter(cat, val) {
+  var s = studioFilters[cat];
+  if (s.has(val)) s.delete(val); else s.add(val);
+  saveStudioFilters(); renderStudio();
+}
+function toggleAllStudio(cat) {
+  var all = studioCats()[cat], s = studioFilters[cat];
+  if (s.size >= all.length) s.clear(); else all.forEach(function(x) { s.add(x); });
+  saveStudioFilters(); renderStudio();
+}
 
 let currentApp = 'dictokey';
 const LS_TOKEN_KEY_LEGACY = 'monitoring_admin_token'; // fallback for old sessions
@@ -1629,7 +1680,14 @@ function renderStudio() {
   if (!view) return;
   var now = new Date();
   var MOIS = ['JANV','FÉVR','MARS','AVR','MAI','JUIN','JUIL','AOÛT','SEPT','OCT','NOV','DÉC'];
-  var posts = STUDIO_SCHEDULE.map(function(p){
+  // Filtre : coché = affiché. Un post passe si projet coché ET langue cochée ET ≥1 de ses canaux coché.
+  function passF(p) {
+    if (!studioFilters.project.has(p.project)) return false;
+    if (!studioFilters.lang.has(p.lang)) return false;
+    if (!p.channels.some(function(c){ return studioFilters.channel.has(c); })) return false;
+    return true;
+  }
+  var posts = STUDIO_SCHEDULE.filter(passF).map(function(p){
     var dt = new Date(p.date + 'T' + p.time + ':00');
     return { p:p, dt:dt, past: dt < now };
   });
@@ -1670,12 +1728,35 @@ function renderStudio() {
       + '<span style="color:var(--text-mute-new);font-size:.8rem">'+l.why+'</span></div>';
   }).join('');
 
-  var backlog = STUDIO_BACKLOG.map(function(b){
+  var backlogArr = STUDIO_BACKLOG.filter(function(b){ return studioFilters.project.has(b.project); });
+  var backlog = backlogArr.map(function(b){
     var pc = (STUDIO_PROJECTS[b.project]||{}).color || 'var(--accent)';
     return '<div class="st-backlog"><div class="bk-top"><span class="st-proj" style="color:'+pc+';font-size:.95rem">'+b.project+'</span>'
       + '<span class="st-lang">'+b.target+'</span></div>'
       + '<div class="bk-what">'+b.what+'</div>'+(b.note?'<div class="bk-meta">'+b.note+'</div>':'')+'</div>';
   }).join('');
+
+  // Barre de filtres (chips toggle + bouton tout cocher/décocher par catégorie)
+  var CATS = [
+    { key:'project', label:'Projet', items:Object.keys(STUDIO_PROJECTS).map(function(p){return {v:p,l:p,c:STUDIO_PROJECTS[p].color};}) },
+    { key:'channel', label:'Réseau', items:Object.keys(STUDIO_CHANNELS).map(function(c){return {v:c,l:STUDIO_CHANNELS[c].label,c:STUDIO_CHANNELS[c].c};}) },
+    { key:'lang',    label:'Langue', items:['FR','EN'].map(function(l){return {v:l,l:l,c:'var(--accent)'};}) }
+  ];
+  var fbar = '<div class="st-filters">' + CATS.map(function(cat){
+    var allOn = studioFilters[cat.key].size >= cat.items.length;
+    var chips = cat.items.map(function(it){
+      var on = studioFilters[cat.key].has(it.v);
+      return '<span class="st-chip '+(on?'on':'off')+'" style="--chip:'+it.c+'" onclick="toggleStudioFilter(\''+cat.key+'\',\''+it.v+'\')">'+it.l+'</span>';
+    }).join('');
+    return '<div class="st-filt-row"><span class="st-filt-lbl">'+cat.label+'</span>'+chips
+      + '<button class="st-allbtn" onclick="toggleAllStudio(\''+cat.key+'\')">'+(allOn?'Tout décocher':'Tout cocher')+'</button></div>';
+  }).join('') + '</div>';
+
+  var agenda = (upcoming.length || past.length || backlogArr.length)
+    ? ( (upcoming.length ? '<div class="st-section-h">À venir <span class="cnt">'+upcoming.length+'</span></div>'+upcoming.map(card).join('') : '')
+      + (backlog ? '<div class="st-section-h">À produire <span class="cnt">'+backlogArr.length+'</span></div>'+backlog : '')
+      + (past.length ? '<div class="st-section-h">Publié <span class="cnt">'+past.length+'</span></div>'+past.map(card).join('') : '') )
+    : '<div class="st-empty">Aucun post pour ces filtres.<br>Vérifie les cases décochées (elles clignotent en orange).</div>';
 
   view.innerHTML =
       '<div class="st-title"><span class="st-emoji">🎬</span><h2>Studio — Agenda des posts</h2></div>'
@@ -1686,9 +1767,8 @@ function renderStudio() {
       + '<div class="st-stat"><div class="v">'+upcoming.length+'</div><div class="l">À venir</div></div>'
     + '</div>'
     + '<div class="st-lane"><h3>📡 Stratégie par canal</h3>'+lanes+'</div>'
-    + (upcoming.length ? '<div class="st-section-h">À venir <span class="cnt">'+upcoming.length+'</span></div>'+upcoming.map(card).join('') : '')
-    + (backlog ? '<div class="st-section-h">À produire <span class="cnt">'+STUDIO_BACKLOG.length+'</span></div>'+backlog : '')
-    + (past.length ? '<div class="st-section-h">Publié <span class="cnt">'+past.length+'</span></div>'+past.map(card).join('') : '')
+    + fbar
+    + agenda
     + '<div class="st-foot">Monitoring '+DASHBOARD_VERSION+' · onglet Studio · vue planning (pas de données live des plateformes)</div>';
 }
 
