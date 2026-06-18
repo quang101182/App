@@ -11,7 +11,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.20.3</title>
+<title>Monitoring v1.20.4</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -711,6 +711,11 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     .fresh-banner .fb-ic { flex-shrink:0; }
     .fresh-banner .fb-act { margin-left:auto; color:var(--accent2-new); font-weight:600; white-space:nowrap; }
     .fresh-banner.stale { color:var(--orange-new); background:rgba(240,136,62,.12); border-color:rgba(240,136,62,.35); }
+    /* Studio : bandeau cliquable = recharge la page (données statiques, pas de fetch live). Pulse léger pour signaler qu'il est actionnable. */
+    @keyframes studioPulse { 0%,100% { box-shadow:0 0 0 0 rgba(234,179,8,0); } 50% { box-shadow:0 0 0 3px rgba(234,179,8,.16); } }
+    .fresh-banner.studio-live { animation: studioPulse 2.6s ease-in-out infinite; }
+    .fresh-banner.studio-live.stale { animation: studioPulse 1.4s ease-in-out infinite; }
+    .fresh-banner.studio-live:hover { animation:none; }
 
     /* ══ v1.14.0 Factory monitoring (Ebook Funnel Factory — comptes TikTok faceless) ══ */
     /* Mobile-first : 1 colonne par défaut, grille auto-fit sur écrans larges. */
@@ -884,7 +889,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.20.3</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.20.4</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -1308,7 +1313,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.20.3';
+const DASHBOARD_VERSION = 'v1.20.4';
 
 // === Multi-app config ===
 const APPS = {
@@ -1772,8 +1777,9 @@ function renderStudio() {
   var suRel = suAgeMin<1 ? "à l'instant" : suAgeMin<60 ? ('il y a '+suAgeMin+' min')
             : suAgeMin<1440 ? ('il y a '+Math.floor(suAgeMin/60)+' h') : ('il y a '+Math.floor(suAgeMin/1440)+' j');
   var suStale = (now.getTime()-su.getTime()) > 3*86400000;
-  var studioBanner = '<div class="fresh-banner'+(suStale?' stale':'')+'" style="display:flex;cursor:default">'
-    + '<span class="fb-ic">🎬</span><span>Studio mis à jour par Claude le <b>'+suDate+' à '+suTime+'</b> ('+suRel+')</span></div>';
+  var studioBanner = '<div class="fresh-banner studio-live'+(suStale?' stale':'')+'" style="display:flex" onclick="location.reload()" title="Recharger la page pour afficher le dernier planning publié par Claude (l\'onglet Studio est statique : pas de fetch live, on recharge la page)">'
+    + '<span class="fb-ic">🎬</span><span>Planning Studio mis à jour par Claude le <b>'+suDate+' à '+suTime+'</b> ('+suRel+') — clique pour recharger</span>'
+    + '<span class="fb-act">🔄 Recharger</span></div>';
 
   view.innerHTML =
       studioBanner
