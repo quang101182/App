@@ -1468,9 +1468,13 @@ function switchApp(newApp) {
 // v1.14.0 : persistance de l'onglet actif
 function persistActiveApp() {
   try { localStorage.setItem(ACTIVE_APP_LS_KEY, currentApp); } catch (e) { /* silencieux */ }
+  try { history.replaceState(null, '', '#' + currentApp); } catch (e) { /* v1.20.0 : URL ↔ onglet */ }
 }
 function restoreActiveAppFromLS() {
   try {
+    // v1.20.0 : deep-link par hash (#studio, #factory…) prioritaire sur le localStorage.
+    var h = (location.hash || '').replace('#', '').trim();
+    if (h && APPS[h]) { currentApp = h; return; }
     var saved = localStorage.getItem(ACTIVE_APP_LS_KEY);
     if (saved && APPS[saved]) currentApp = saved;
   } catch (e) { /* silencieux */ }
@@ -4525,8 +4529,8 @@ window.addEventListener('resize', function() {
   if (typeof updateToggleAllButton === 'function') updateToggleAllButton();
 });
 (function init() {
-  // v1.14.0 : factory ne requiert pas de token (visites publiques) ; les autres apps oui
-  if (currentApp !== 'factory' && !getToken()) { showLogin(); return; }
+  // v1.14.0 : factory ne requiert pas de token ; v1.20.0 : studio non plus (agenda statique)
+  if (currentApp !== 'factory' && currentApp !== 'studio' && !getToken()) { showLogin(); return; }
   // v1.16.0 : si des données persistées existent (localStorage), on les affiche SANS fetch
   // → l'utilisateur garde la main, il rafraîchit via le bouton Actualiser quand il veut.
   if (renderFromCache(currentApp)) { startFreshBannerTicker(); return; }
