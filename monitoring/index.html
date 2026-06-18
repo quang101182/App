@@ -11,7 +11,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.20.6</title>
+<title>Monitoring v1.20.7</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -718,6 +718,17 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     .fresh-banner.studio-live { animation: studioPulse 2.6s ease-in-out infinite; }
     .fresh-banner.studio-live.stale { animation: studioPulse 1.4s ease-in-out infinite; }
     .fresh-banner.studio-live:hover { animation:none; }
+    /* Bloc Performances TikTok (analytics read-only via rollup analytics.json) */
+    .st-perf { margin-bottom:20px; }
+    .pf-box { background:var(--bg-card); border:1px solid var(--border-new); border-radius:14px; padding:8px 11px; }
+    .pf-row { display:flex; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px solid var(--border-new); font-size:.8rem; }
+    .pf-row:last-of-type { border-bottom:none; }
+    .pf-rank { flex:0 0 20px; text-align:center; font-weight:800; color:var(--text-mute-new); }
+    .pf-cap { flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); }
+    .pf-m { flex:0 0 auto; font-variant-numeric:tabular-nums; color:var(--text-dim-new); white-space:nowrap; }
+    .pf-delta { color:#10b981; font-weight:700; font-size:.72rem; }
+    .pf-foot { font-size:.62rem; color:var(--text-mute-new); padding:6px 4px 2px; }
+    @media (max-width:560px){ .pf-row{ flex-wrap:wrap; } .pf-cap{ flex-basis:calc(100% - 30px); } }
 
     /* ══ v1.14.0 Factory monitoring (Ebook Funnel Factory — comptes TikTok faceless) ══ */
     /* Mobile-first : 1 colonne par défaut, grille auto-fit sur écrans larges. */
@@ -891,7 +902,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.20.6</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.20.7</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -1315,7 +1326,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.20.6';
+const DASHBOARD_VERSION = 'v1.20.7';
 
 // === Multi-app config ===
 const APPS = {
@@ -1797,10 +1808,38 @@ function renderStudio() {
       + '<div class="st-stat"><div class="v">'+wk+'</div><div class="l">Cette semaine</div></div>'
       + '<div class="st-stat"><div class="v">'+upcoming.length+'</div><div class="l">À venir</div></div>'
     + '</div>'
+    + '<div class="st-perf" id="studioPerf" style="display:none"></div>'
     + '<div class="st-lane"><h3>📡 Stratégie par canal</h3>'+lanes+'</div>'
     + fbar
     + agenda
     + '<div class="st-foot">Monitoring '+DASHBOARD_VERSION+' · onglet Studio · vue planning (pas de données live des plateformes)</div>';
+  loadStudioPerf();
+}
+
+// Perf TikTok : fetch du rollup analytics.json (couche 2 = collecteur read-only + agrégateur) et rendu.
+async function loadStudioPerf() {
+  var el = document.getElementById('studioPerf'); if (!el) return;
+  function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  try {
+    var r = await fetch('data/analytics.json?t=' + Date.now());
+    if (!r.ok) throw 0;
+    var d = await r.json();
+    var pub = (d.posts||[]).filter(function(p){ return p.current && (p.current.views||0) > 0; });
+    if (!pub.length) { el.style.display='none'; return; }
+    var rows = pub.slice(0,8).map(function(p,i){
+      var c=p.current||{}; var dv=(p.delta||{}).views;
+      var dtxt=(typeof dv==='number'&&dv>0)?(' <span class="pf-delta">+'+dv+'</span>'):'';
+      return '<div class="pf-row"><span class="pf-rank">'+(i+1)+'</span>'
+        +'<span class="pf-cap">'+esc((p.caption||'').slice(0,54))+'</span>'
+        +'<span class="pf-m">👁 '+(c.views!=null?c.views:'—')+dtxt+'</span>'
+        +'<span class="pf-m">❤ '+(c.likes!=null?c.likes:'—')+'</span>'
+        +'<span class="pf-m">💬 '+(c.comments!=null?c.comments:'—')+'</span></div>';
+    }).join('');
+    el.innerHTML = '<div class="st-section-h">📊 Performances TikTok <span class="cnt">'+pub.length+'</span></div>'
+      + '<div class="pf-box">'+rows
+      + '<div class="pf-foot">Snapshot du '+(d.generatedAt||'?')+' · '+(d.snapshots||1)+' relevé(s) · lecture read-only (analytics_collect + build)</div></div>';
+    el.style.display='';
+  } catch(e) { el.style.display='none'; }
 }
 
 // v1.16.0 : bandeau discret de fraîcheur (jaune ; orange si > 24h). S'affiche sur les 3 onglets.
