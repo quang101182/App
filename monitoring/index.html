@@ -11,7 +11,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.20.2</title>
+<title>Monitoring v1.20.3</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -884,7 +884,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.20.2</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.20.3</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -1308,7 +1308,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.20.2';
+const DASHBOARD_VERSION = 'v1.20.3';
 
 // === Multi-app config ===
 const APPS = {
@@ -1407,6 +1407,9 @@ const STUDIO_CHANNELS = {
   facebook:  { label: 'Facebook',  c: '#1877f2' }
 };
 // 1 post = { date 'YYYY-MM-DD', time 'HH:MM', project, lang 'FR'|'EN', channels[], subs bool, music str|null, ver str }
+// ⏱ Horodatage de fraîcheur de l'onglet Studio — Claude le BUMPE à CHAQUE édition du planning ci-dessous.
+//    (Studio = vue statique sans fetch live → le bandeau affiche cette date, pas un cache réseau.)
+const STUDIO_UPDATED = '2026-06-18T13:26';
 const STUDIO_SCHEDULE = [
   // Lot 1 — FR (v1, sans sous-titres/musique) — TikTok + Instagram + Facebook
   { date:'2026-06-18', time:'19:30', project:'DictoKey',       lang:'FR', channels:['tiktok','instagram','facebook'], subs:false, music:null, ver:'v1' },
@@ -1760,8 +1763,21 @@ function renderStudio() {
       + (past.length ? '<div class="st-section-h">Publié <span class="cnt">'+past.length+'</span></div>'+past.map(card).join('') : '') )
     : '<div class="st-empty">Aucun post pour ces filtres.<br>Vérifie les cases décochées (elles clignotent en orange).</div>';
 
+  // Bandeau de fraîcheur Studio (maj manuelle par Claude — pas de fetch). Réutilise le style .fresh-banner.
+  var su = new Date(STUDIO_UPDATED);
+  var p2s = function(n){ return String(n).padStart(2,'0'); };
+  var suDate = p2s(su.getDate())+'/'+p2s(su.getMonth()+1)+'/'+su.getFullYear();
+  var suTime = p2s(su.getHours())+':'+p2s(su.getMinutes());
+  var suAgeMin = Math.floor((now.getTime()-su.getTime())/60000);
+  var suRel = suAgeMin<1 ? "à l'instant" : suAgeMin<60 ? ('il y a '+suAgeMin+' min')
+            : suAgeMin<1440 ? ('il y a '+Math.floor(suAgeMin/60)+' h') : ('il y a '+Math.floor(suAgeMin/1440)+' j');
+  var suStale = (now.getTime()-su.getTime()) > 3*86400000;
+  var studioBanner = '<div class="fresh-banner'+(suStale?' stale':'')+'" style="display:flex;cursor:default">'
+    + '<span class="fb-ic">🎬</span><span>Studio mis à jour par Claude le <b>'+suDate+' à '+suTime+'</b> ('+suRel+')</span></div>';
+
   view.innerHTML =
-      '<div class="st-title"><span class="st-emoji">🎬</span><h2>Studio — Agenda des posts</h2></div>'
+      studioBanner
+    + '<div class="st-title"><span class="st-emoji">🎬</span><h2>Studio — Agenda des posts</h2></div>'
     + '<div class="st-sub">Tout ce qui est programmé / publié sur @se7en.ai (TikTok · Instagram · Facebook). Tenu à jour par Claude à chaque programmation.</div>'
     + '<div class="st-stats">'
       + '<div class="st-stat"><div class="v next">'+nextTxt+'</div><div class="l">Prochain</div></div>'
