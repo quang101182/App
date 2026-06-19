@@ -11,7 +11,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.20.9</title>
+<title>Monitoring v1.20.10</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -905,7 +905,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.20.9</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.20.10</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -1329,7 +1329,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.20.9';
+const DASHBOARD_VERSION = 'v1.20.10';
 
 // === Multi-app config ===
 const APPS = {
@@ -1430,7 +1430,7 @@ const STUDIO_CHANNELS = {
 // 1 post = { date 'YYYY-MM-DD', time 'HH:MM', project, lang 'FR'|'EN', channels[], subs bool, music str|null, ver str }
 // ⏱ Horodatage de fraîcheur de l'onglet Studio — Claude le BUMPE à CHAQUE édition du planning ci-dessous.
 //    (Studio = vue statique sans fetch live → le bandeau affiche cette date, pas un cache réseau.)
-const STUDIO_UPDATED = '2026-06-18T14:13';
+const STUDIO_UPDATED = '2026-06-19T08:16';
 const STUDIO_SCHEDULE = [
   // Lot 1 — FR (v1, sans sous-titres/musique) — TikTok + Instagram + Facebook
   { date:'2026-06-18', time:'19:30', project:'DictoKey',       lang:'FR', channels:['tiktok','instagram','facebook'], subs:false, music:null, ver:'v1' },
@@ -1827,9 +1827,19 @@ async function loadStudioPerf() {
     var r = await fetch('data/analytics.json?t=' + Date.now());
     if (!r.ok) throw 0;
     var d = await r.json();
-    var pub = (d.posts||[]).filter(function(p){ return p.current && (p.current.views||0) > 0; });
-    if (!pub.length) { el.style.display='none'; return; }
-    var rows = pub.slice(0,8).map(function(p,i){
+    var posts = d.posts||[];
+    // v1.20.10 : la campagne = MES vidéos (owner=studio). Posts perso de Quang + vidéos boostées
+    // (>=10K vues = vues achetées, PAS organique) sont EXCLUS des métriques campagne.
+    var mine = posts.filter(function(p){ return p.owner==='studio' && p.current && (p.current.views||0)>0; });
+    var perso = posts.filter(function(p){ return p.owner!=='studio' && !p.boosted && p.current && (p.current.views||0)>0; });
+    perso.sort(function(a,b){ return (b.current.views||0)-(a.current.views||0); });
+    var ref = perso[0];
+    if (!mine.length) {
+      el.innerHTML = '<div class="st-section-h">📊 Performances TikTok</div>'
+        + '<div class="pf-box"><div class="pf-foot">Aucune vidéo de la campagne encore publiée — les posts programmés apparaîtront ici dès leur sortie.</div></div>';
+      el.style.display=''; return;
+    }
+    var rows = mine.slice(0,8).map(function(p,i){
       var c=p.current||{}; var dv=(p.delta||{}).views;
       var dtxt=(typeof dv==='number'&&dv>0)?(' <span class="pf-delta">+'+dv+'</span>'):'';
       return '<div class="pf-row"><span class="pf-rank">'+(i+1)+'</span>'
@@ -1838,9 +1848,11 @@ async function loadStudioPerf() {
         +'<span class="pf-m">❤ '+(c.likes!=null?c.likes:'—')+'</span>'
         +'<span class="pf-m">💬 '+(c.comments!=null?c.comments:'—')+'</span></div>';
     }).join('');
-    el.innerHTML = '<div class="st-section-h">📊 Performances TikTok <span class="cnt">'+pub.length+'</span></div>'
+    var foot = 'Snapshot du '+(d.generatedAt||'?')+' · '+(d.snapshots||1)+' relevé(s) · ma campagne seule (perso + boostées exclues)';
+    if (ref) foot += ' · réf organique compte ~'+(ref.current.views)+' vues';
+    el.innerHTML = '<div class="st-section-h">📊 Performances TikTok <span class="cnt">'+mine.length+'</span></div>'
       + '<div class="pf-box">'+rows
-      + '<div class="pf-foot">Snapshot du '+(d.generatedAt||'?')+' · '+(d.snapshots||1)+' relevé(s) · lecture read-only (analytics_collect + build)</div></div>';
+      + '<div class="pf-foot">'+foot+'</div></div>';
     el.style.display='';
   } catch(e) { el.style.display='none'; }
 }
