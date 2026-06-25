@@ -1,5 +1,6 @@
 <!-- Monitoring Dashboard v1.16.0 (07/06/2026) — Contrôle manuel du rafraîchissement (3 onglets). PLUS de fetch auto au clic d'onglet : on affiche les dernières données connues, persistées en localStorage (cache + horodatage par app, clés dk-monitoring-cache[-ts]-<app>) → survit au F5 et à plusieurs jours. Le fetch ne se déclenche QUE sur le bouton "Actualiser" (manualRefresh) OU au tout premier chargement sans aucune donnée (bootstrap unique). NOUVEAU bandeau de fraîcheur discret #freshBanner (jaune ; orange si >24h) sous les onglets, sur les 3 onglets : "Données actualisées le JJ/MM/AAAA à HH:MM (il y a X)" + cliquable pour actualiser ; ticker 1×/min qui rafraîchit le libellé "il y a X" SANS fetch réseau. Additif, zéro régression. -->
 <!-- Monitoring Dashboard v1.15.0 (07/06/2026) — Refonte onglet SubWhisper Pro (parité visuelle avec Factory, sans copier sa logique one-shot). NOUVEAU : (1) bandeau "Revenu & abonnements" = MRR potentiel (payants×9€, plafond — revenu réel via LemonSqueezy à brancher) + payants actifs + ⚠ À risque + churn% ; (2) bandeau d'alerte automatique en tête qui crie quand un client PAYANT a 0 usage / inactif >14j (ex : Sofia partoallios1, 1ère vente débitée €10,80 jamais utilisée) ; (3) funnel Visites→Clients réels→Payants ; (4) colonne "Santé client" (🔴 payé jamais utilisé · 🟠 payé inactif >14j · 🟡 trial 0 usage · 🟢 actif · ⚫ révoqué · ⚪ test/démo) avec tri par risque + lignes colorées ; (5) comptes honnêtes hors comptes test/démo (@test./@example.). Classification 100% client-side depuis /admin/swp/overview (aucune donnée inventée). ZÉRO impact DictoKey/Factory (additif, isolé via body.app-swp). -->
+<!-- Monitoring Dashboard v1.20.16 (25/06/2026) — Onglet Factory : compteur de visites bascule de api-gateway-pro vers le worker ISOLÉ factory-visits (dédup serveur IP+UA + filtre ASN datacenter + denylist UA). Repart de 0 → mesure propre du trafic humain (les anciens totaux étaient du bruit bot, verdict forensic 22/06). Zéro régression DictoKey/SWP/StoryVoice (URL changée UNIQUEMENT pour FACTORY_VISIT_GATEWAY). -->
 <!-- Monitoring Dashboard v1.19.0 (17/06/2026) — Onglet StoryVoice : crédits prépayés voix, revenu estimé (packs LS), conversion démo→achat (signal GO 3%), clés sv_ (internes/test @local exclues). Source gateway-pro v1.12.0 /admin/sv/overview. Additif (4e onglet), zéro régression DictoKey/SWP/Factory. -->
 <!-- Monitoring Dashboard v1.18.0 (09/06/2026) — Onglet SWP : MRR/payants HONNÊTES via lsStatus réel LemonSqueezy (gateway api-gateway-pro v1.6.0). Un vrai payant = abonnement LS « active » (≠ past_due paiement échoué, ≠ clé orpheline not_found). MRR « potentiel » → MRR réel. Classification santé : past_due et clé orpheline distingués. Total clients = clients réels (hors test). Additif onglet SWP uniquement, zéro régression DictoKey/Factory. -->
 <!-- Monitoring Dashboard v1.14.1 (07/06/2026) — Compte Factory #0 The Unseen Child entièrement branché : landing theunseenchild.org instrumentée (clic tripwire LemonSqueezy "Field Kit" → tuc-buy · submit newsletter guide gratuit → tuc-dl) + config dashboard TUC instrumented:true + lemonProductId 1079445 (tripwire 6,99€). Worker factory-stats ACCOUNTS tuc.lemonProductId=1079445 → TUC affiche désormais ventes/revenu réels (1 vente, 8,39€). Note TUC mise à jour (n'est plus "pas d'ebook"). -->
@@ -11,7 +12,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.20.15</title>
+<title>Monitoring v1.20.16</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -905,7 +906,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.20.15</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.20.16</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -1329,7 +1330,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.20.15';
+const DASHBOARD_VERSION = 'v1.20.16';
 
 // === Multi-app config ===
 const APPS = {
@@ -1375,7 +1376,8 @@ const APPS = {
 
 // === Factory config (v1.14.0) ===
 // Compteur public de visites/clics/dl (lecture client-side OK, GET /api/visit?page=<slug>).
-const FACTORY_VISIT_GATEWAY = 'https://api-gateway-pro.quang101182.workers.dev';
+// Worker ISOLÉ factory-visits (dédup serveur + filtre ASN datacenter) — repart de 0 le 25/06, mesure propre du trafic humain.
+const FACTORY_VISIT_GATEWAY = 'https://factory-visits.quang101182.workers.dev';
 // Worker backend dédié (ventes LemonSqueezy + abonnés MailerLite, clés server-side).
 // À déployer ; tant qu'absent, l'appel échoue proprement → ventes/subs affichent "—".
 const FACTORY_STATS_BASE = 'https://factory-stats.quang101182.workers.dev';
