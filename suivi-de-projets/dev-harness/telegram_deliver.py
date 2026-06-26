@@ -68,11 +68,11 @@ def send_message(text: str):
 
 import urllib.parse  # noqa: E402
 
-CAPTION = """📦 <b>Suivi de Projets — Livraison 4 sprints</b>
+CAPTION = """📎 <b>Suivi de Projets — Refonte visionneuse Pièces Jointes</b>
 
-Renommages UI + statut/phase tech + PJ (10, multi, drag&drop) + polish a11y.
+Homonymes acceptés + anti-latence VPN (cache) + navigation Préc/Suiv + lecture vidéo/audio + bouton Retour galerie.
 
-Détail dans le message suivant. GitHub : <code>quang101182/App</code> main."""
+Détail dans le message suivant. GitHub : <code>quang101182/App</code> main (commit d9d581a)."""
 
 
 def main():
@@ -84,41 +84,26 @@ def main():
         sys.exit(1)
 
     note = (
-        "📝 <b>Détail des 4 sprints</b>\n\n"
-        "<b>S1 — Renommages</b>\n"
-        "• Configuration → Domaine\n"
-        "• Profil → Projet\n"
-        "• Onglet Projets → Thématiques\n"
-        "• Onglet Configuration → Réglages\n"
-        "• Champ libre Thématique → Tags\n"
-        "• Aide HTML synchronisée + bandeau info temporaire\n\n"
-        "<b>S2 — Statut/Phase tech</b>\n"
-        "• Restent séparés (option A) — visuels distincts\n"
-        "• Constante STATUS centrale + helper isActionLate factorisé\n"
-        "• Correction bug : KPI dashboard ignorait les actions « Bloqué » en retard\n"
-        "• Doublon de fonction supprimé\n\n"
-        "<b>S3 — Pièces jointes</b>\n"
-        "• Limite 5 → 10\n"
-        "• Sélection multiple + glisser-déposer\n"
-        "• Auto-add (plus de bouton « Ajouter PJ »)\n"
-        "• Compteur visuel (X/10) + zone saturée\n\n"
-        "<b>S4 — Polish</b>\n"
-        "• prefers-reduced-motion respecté\n"
-        "• Badges compteurs sur les onglets Thématiques + Actions\n"
-        "• Escape + clic backdrop unifiés sur 6 modales\n"
-        "• Audit trail amélioré sur corruption localStorage\n\n"
-        "<b>Effets de bord vérifiés</b>\n"
-        "• Format JSON sauvegardes inchangé\n"
-        "• Noms fichiers disque inchangés\n"
-        "• Anciens préfixes PRJ-001 valides\n"
-        "• Anciennes sauvegardes se rechargent 100%\n\n"
-        "<b>Tests live</b> : Playwright Edge headless, captures resize ≤1800px, zero page_error.\n\n"
-        "🧪 <b>À tester en vrai</b>\n"
-        "1. Ouvrir index.html dans Edge\n"
-        "2. Autoriser dossiers → choisir Backup + PJ\n"
-        "3. Créer thématique + action + glisser-déposer 2-3 PJ\n"
-        "4. Changer statut via badge inline → KPIs OK ?\n"
-        "5. Escape sur modales\n\n"
+        "📝 <b>Détail — Refonte Pièces Jointes</b>\n\n"
+        "<b>A — Doublons de nom</b>\n"
+        "• Un fichier de même nom est désormais ACCEPTÉ et renommé auto (photo.png → photo_1.png)\n"
+        "• Le dossier PJ étant partagé, l'unicité reste garantie au moment de l'enregistrement\n"
+        "• Seul un vrai re-clic du MÊME fichier (nom+taille+date) est ignoré\n\n"
+        "<b>B — Latence réseau / VPN</b>\n"
+        "• Cache : chaque PJ n'est lue qu'une seule fois depuis le réseau\n"
+        "• Galerie qui s'ouvre instantanément (vignettes chargées en parallèle)\n"
+        "• Préchargement des PJ voisines pour une navigation fluide\n"
+        "• Fuite mémoire d'origine corrigée\n\n"
+        "<b>C — Navigation</b>\n"
+        "• Boutons Précédent / Suivant + flèches clavier ← →\n"
+        "• Compteur « 2 / 5 — nom-du-fichier », bouclage aux extrémités\n\n"
+        "<b>D — Vidéo / audio</b>\n"
+        "• Lecture directe dans l'app (lecteur intégré) pour mp4, webm, audio…\n"
+        "• MOV iPhone : lu si H.264 ; si codec non supporté (HEVC) → bouton « Télécharger pour lire »\n\n"
+        "<b>+ Bouton « Retour galerie »</b>\n"
+        "• Permanent en aperçu : marche pour vidéo / PDF / audio (plus seulement l'image)\n\n"
+        "<b>Tests live</b> : Playwright Edge headless, vraies vidéos (MP4 & MOV) lues in-app, 0 erreur.\n"
+        "Sauvegardes et noms de fichiers/verrous : format inchangé.\n\n"
         "Tout retour bienvenu — on ajuste."
     )
     print("[telegram] envoi note...")
