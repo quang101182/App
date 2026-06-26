@@ -721,6 +721,33 @@ tr.action-surbrillance td:nth-child(12) {
           display: inline-block; margin-top: 10px; padding: 5px 10px; background-color: #0d6efd; color: white;
           text-decoration: none; border-radius: 4px;
       }
+      .preview-content video { max-width: 100%; max-height: 70vh; margin-bottom: 15px; background: #000; border: 1px solid #ccc; }
+      .preview-content audio { width: 100%; margin-bottom: 15px; }
+      /* Visionneuse PJ — navigation précédent / suivant */
+      .pj-nav-btn {
+        position: absolute; top: 50%; transform: translateY(-50%);
+        background: rgba(108,117,125,0.85); color: #fff; border: none;
+        width: 44px; height: 64px; font-size: 1.9em; line-height: 1; cursor: pointer;
+        border-radius: 6px; z-index: 2; display: none;
+      }
+      .pj-nav-btn:hover { background: rgba(74,80,86,0.95); }
+      .pj-nav-prev { left: 8px; }
+      .pj-nav-next { right: 8px; }
+      .pj-counter { font-size: 0.85em; color: #666; margin-bottom: 8px; word-break: break-all; }
+      .pj-video-fallback { padding: 20px; }
+      .pj-download-strong {
+        display: inline-block; margin-top: 10px; padding: 10px 18px;
+        background-color: #198754 !important; color: #fff !important; font-weight: bold;
+        border-radius: 6px; text-decoration: none; font-size: 1.05em;
+      }
+      /* Bouton retour galerie — permanent en mode aperçu (marche pour vidéo/PDF/audio, pas juste image) */
+      .pj-back-gallery {
+        position: absolute; top: 10px; left: 15px;
+        background-color: #6c757d; color: #fff; border: none; border-radius: 4px;
+        padding: 5px 12px; font-size: 0.9em; line-height: 1.3; cursor: pointer;
+        z-index: 3; display: none;
+      }
+      .pj-back-gallery:hover { background-color: #5a6268; }
 
       /* ===============================
          Description Edit Modal
@@ -2572,6 +2599,10 @@ tr.row-flash td {
     <div class="preview-modal" id="preview-modal">
         <div class="preview-content" id="preview-content">
              <button class="close-preview" onclick="fermerApercuPj()" title="Fermer">×</button>
+             <button class="pj-back-gallery" id="pj-back-gallery" onclick="retourGaleriePJ()" title="Retour à la galerie des pièces jointes">↩ Galerie</button>
+             <button class="pj-nav-btn pj-nav-prev" id="pj-nav-prev" onclick="naviguerPJ(-1)" title="Précédent (←)" aria-label="Pièce jointe précédente">‹</button>
+             <button class="pj-nav-btn pj-nav-next" id="pj-nav-next" onclick="naviguerPJ(1)" title="Suivant (→)" aria-label="Pièce jointe suivante">›</button>
+             <div id="pj-counter" class="pj-counter"></div>
             <div id="preview-container" style="margin-bottom: 15px;"></div>
             <div id="download-links"></div>
         </div>
@@ -2631,6 +2662,13 @@ tr.row-flash td {
     // Temporary Attachment Arrays
     let addActionAttachments = [];
     let editActionAttachments = [];
+    // PJ — cache d'objectURL (clé = nom de fichier, globalement unique dans le dossier partagé)
+    // pour éviter de relire les fichiers depuis le lecteur réseau/VPN à chaque ouverture.
+    const pjBlobCache = new Map();
+    // État de navigation de la visionneuse (boutons Précédent / Suivant)
+    let pjPreviewState = { actionId: null, ids: [], idx: -1 };
+    // Identifiant unique par entrée du buffer PJ (distingue 2 homonymes pour la suppression)
+    let pjUidSeq = 0;
     let currentEditingActionId = null;
 	let idActionEnSurbrillance = null;
 
@@ -3554,6 +3592,14 @@ tr.row-flash td {
                     return;
                 }
             }
+        });
+        // Flèches ← / → → navigation entre PJ quand l'aperçu plein écran est ouvert (≥ 2 PJ)
+        document.addEventListener('keydown', (e) => {
+            const modal = document.getElementById('preview-modal');
+            if (!modal || modal.style.display !== 'block') return;
+            if (!pjPreviewState || !pjPreviewState.ids || pjPreviewState.ids.length < 2 || pjPreviewState.idx < 0) return;
+            if (e.key === 'ArrowLeft') { e.preventDefault(); naviguerPJ(-1); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); naviguerPJ(1); }
         });
         // Click sur backdrop (= clic direct sur l'élément racine modale, pas son contenu)
         Object.entries(closers).forEach(([id, closer]) => {
@@ -4517,13 +4563,12 @@ function afficherFormulaireModificationAction(actionId) {
             else {
                 if (!attachments[actionId]) attachments[actionId] = [];
                 for (const fileObj of editActionAttachments) {
-                    if (!attachments[actionId].some(existing => existing.name === fileObj.name)) {
-                        try {
-                            const finalFileName = await findUniqueFilename(mainPjHandle, fileObj.name);
-                             if (finalFileName !== fileObj.name) { renameOccurredOnEdit = true; console.log(`Fichier ajouté "${fileObj.name}" renommé en "${finalFileName}".`); }
-                            const fileHandle = await mainPjHandle.getFileHandle(finalFileName, { create: true }); const writable = await fileHandle.createWritable(); await writable.write(fileObj.blob); await writable.close();
-                            attachments[actionId].push({ name: finalFileName }); newAttachmentsAddedCount++; console.log(`Nouvelle PJ ${finalFileName} écrite.`);
-                        } catch (e) { displayMessage(`Erreur écriture nouvelle PJ ${fileObj.name}: ${e.message}`, "error"); console.error("New PJ Write Error:", e); } } } } }
+                    try {
+                        const finalFileName = await findUniqueFilename(mainPjHandle, fileObj.name);
+                        if (finalFileName !== fileObj.name) { renameOccurredOnEdit = true; console.log(`Fichier ajouté "${fileObj.name}" renommé en "${finalFileName}".`); }
+                        const fileHandle = await mainPjHandle.getFileHandle(finalFileName, { create: true }); const writable = await fileHandle.createWritable(); await writable.write(fileObj.blob); await writable.close();
+                        attachments[actionId].push({ name: finalFileName }); newAttachmentsAddedCount++; console.log(`Nouvelle PJ ${finalFileName} écrite.`);
+                    } catch (e) { displayMessage(`Erreur écriture nouvelle PJ ${fileObj.name}: ${e.message}`, "error"); console.error("New PJ Write Error:", e); } } } }
          updatedAction.hasAttachments = (attachments[actionId]?.length > 0);
          editActionAttachments = [];
 
@@ -4638,12 +4683,12 @@ async function supprimerAction(actionId) {
      */
     function ajouterFichiersAuxPJ(files, mode) {
         const buffer = mode === 'edit' ? editActionAttachments : addActionAttachments;
-        let existingNames = buffer.map(p => p.name);
-        if (mode === 'edit') {
-            const actionId = parseInt(document.getElementById('edit-action-id').value);
-            const existingDisk = attachments[actionId] || [];
-            existingNames = [...existingNames, ...existingDisk.map(p => p.name)];
-        }
+        // On n'écarte QUE les vrais doublons (même fichier re-sélectionné : nom + taille + date identiques)
+        // déjà présents dans le buffer courant. Les simples homonymes (même nom, contenu différent) sont
+        // ACCEPTÉS : findUniqueFilename() leur attribuera un nom unique (photo.png → photo_1.png) au moment
+        // de la sauvegarde, le dossier PJ étant partagé entre tous les projets (noms uniques obligatoires).
+        const estMemeFichier = (entree, f) => entree.name === f.name
+            && entree.blob && entree.blob.size === f.size && entree.blob.lastModified === f.lastModified;
 
         const listEl = document.getElementById(mode === 'edit' ? 'edit-attachment-list' : 'add-attachment-list');
         const arr = Array.from(files);
@@ -4654,16 +4699,15 @@ async function supprimerAction(actionId) {
                 ? ((attachments[parseInt(document.getElementById('edit-action-id').value)] || []).length)
                 : 0);
             if (currentCount >= MAX_ATTACHMENTS) { refused = arr.length - added - skipped; break; }
-            if (existingNames.includes(file.name)) { skipped++; continue; }
-            buffer.push({ name: file.name, blob: file });
-            existingNames.push(file.name);
+            if (buffer.some(entree => estMemeFichier(entree, file))) { skipped++; continue; }
+            const uid = ++pjUidSeq;
+            buffer.push({ uid, name: file.name, blob: file });
             const div = document.createElement('div');
             div.className = 'pj-item';
             const safeName = escapeHtml(file.name);
-            const jsName = file.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
             const filterCmd = mode === 'edit'
-                ? `editActionAttachments = editActionAttachments.filter(f => f.name !== '${jsName}'); refreshPJCount('edit');`
-                : `addActionAttachments = addActionAttachments.filter(f => f.name !== '${jsName}'); refreshPJCount('add');`;
+                ? `editActionAttachments = editActionAttachments.filter(f => f.uid !== ${uid}); refreshPJCount('edit');`
+                : `addActionAttachments = addActionAttachments.filter(f => f.uid !== ${uid}); refreshPJCount('add');`;
             div.innerHTML = `<span>${safeName}</span><button type="button" class="btn-danger btn-sm" style="padding: 2px 8px; font-size: 0.8em;" onclick="this.parentElement.remove(); ${filterCmd}" title="Retirer cette PJ">×</button>`;
             listEl.appendChild(div);
             added++;
@@ -4671,8 +4715,8 @@ async function supprimerAction(actionId) {
         refreshPJCount(mode);
 
         if (refused > 0) displayMessage(`Maximum ${MAX_ATTACHMENTS} PJ atteint. ${refused} fichier(s) ignoré(s).`, 'warning');
-        else if (skipped > 0 && added === 0) displayMessage(`Fichier${skipped > 1 ? 's' : ''} déjà ajouté${skipped > 1 ? 's' : ''}.`, 'info');
-        else if (skipped > 0) displayMessage(`${added} ajouté(s), ${skipped} déjà présent(s).`, 'info');
+        else if (skipped > 0 && added === 0) displayMessage(`Fichier${skipped > 1 ? 's' : ''} identique${skipped > 1 ? 's' : ''} déjà ajouté${skipped > 1 ? 's' : ''}.`, 'info');
+        else if (skipped > 0) displayMessage(`${added} ajouté(s), ${skipped} doublon(s) identique(s) ignoré(s).`, 'info');
         else if (added > 1) displayMessage(`${added} fichiers ajoutés.`, 'success');
     }
 
@@ -4736,6 +4780,7 @@ async function supprimerAction(actionId) {
              const arr = attachments[actionId]; const initialLength = arr.length;
              attachments[actionId] = arr.filter(obj => obj.name !== fileName);
              referenceSupprimee = attachments[actionId].length < initialLength;
+             if (pjBlobCache.has(fileName)) { URL.revokeObjectURL(pjBlobCache.get(fileName)); pjBlobCache.delete(fileName); }
              if (referenceSupprimee) {
                 const action = actions.find(a => a.id === actionId);
                 if (action) { action.hasAttachments = attachments[actionId].length > 0; }
@@ -4754,9 +4799,226 @@ async function supprimerAction(actionId) {
          } else { console.warn(`Aucune PJ pour actionId ${actionId}.`); }
      }
 
-    async function afficherToutesPJ(actionId) { const modal = document.getElementById('preview-modal'); const container = document.getElementById('preview-container'); const downloadLinks = document.getElementById('download-links'); container.innerHTML = 'Chargement...'; downloadLinks.innerHTML = ''; modal.style.display = 'block'; const pjHandle = getActivePjFolderHandle(); if (!pjHandle) { container.innerHTML = '<p style="color: red;">Dossier PJ inaccessible.</p>'; return; } const pjs = attachments[actionId]; if (!pjs || pjs.length === 0) { container.innerHTML = '<p>Aucune PJ pour cette action.</p>'; return; } container.innerHTML = ''; container.style.display = 'flex'; container.style.flexWrap = 'wrap'; container.style.justifyContent = 'center'; container.style.gap = '15px'; const fragment = document.createDocumentFragment(); for (const [idx, fileObj] of pjs.entries()) { const div = document.createElement('div'); div.style.textAlign = 'center'; div.style.maxWidth = '150px'; const itemLink = document.createElement('a'); itemLink.style.cursor = 'pointer'; itemLink.style.display = 'block'; itemLink.style.border = '1px solid #eee'; itemLink.style.padding = '5px'; itemLink.onclick = () => apercuPJ(actionId, idx); let previewContent = `<span style="font-size:0.8em; word-break: break-all; display: block; margin-top: 5px;">${fileObj.name}</span>`; try { const fileHandle = await pjHandle.getFileHandle(fileObj.name); const file = await fileHandle.getFile(); const url = URL.createObjectURL(file); if (file.type.startsWith('image/')) { previewContent = `<img src="${url}" style="max-height: 100px; max-width: 100%; display: block; margin: 0 auto 5px;" alt="${fileObj.name}" onload="URL.revokeObjectURL(this.src)">` + `<span style="font-size:0.8em; word-break: break-all; display: block;">${fileObj.name}</span>`; } else { previewContent = `<span style="font-size: 3em; display:block;">📄</span>` + `<span style="font-size:0.8em; word-break: break-all; display: block;">${fileObj.name}</span>`; URL.revokeObjectURL(url); } } catch (e) { previewContent = `<span style="color:red; font-size:0.8em;">Erreur: ${fileObj.name}</span>`; console.warn(`Could not get handle for ${fileObj.name}`, e); } itemLink.innerHTML = previewContent; div.appendChild(itemLink); fragment.appendChild(div); } container.appendChild(fragment); }
-    async function apercuPJ(actionId, idx) { const fileObj = attachments[actionId]?.[idx]; if (!fileObj) return; const pjHandle = getActivePjFolderHandle(); const previewModal = document.getElementById('preview-modal'); const previewContainer = document.getElementById('preview-container'); const downloadLinks = document.getElementById('download-links'); previewContainer.innerHTML = 'Chargement...'; downloadLinks.innerHTML = ''; if (!pjHandle) { previewContainer.innerHTML = '<p style="color: red;">Dossier PJ inaccessible.</p>'; previewModal.style.display = 'block'; return; } try { const fileHandle = await pjHandle.getFileHandle(fileObj.name); const file = await fileHandle.getFile(); const url = URL.createObjectURL(file); previewContainer.style.display = 'block'; previewContainer.innerHTML = ''; downloadLinks.innerHTML = ''; if (file.type.startsWith('image/')) { const img = document.createElement('img'); img.src = url; img.alt = fileObj.name; img.style.cursor = 'pointer'; img.onclick = () => afficherToutesPJ(actionId); previewContainer.appendChild(img); } else if (file.type === 'application/pdf') { const iframe = document.createElement('iframe'); iframe.src = url; iframe.title = `Aperçu PDF: ${fileObj.name}`; iframe.style.width = '100%'; iframe.style.minHeight = '65vh'; const wrapper = document.createElement('div'); wrapper.style.cursor = 'pointer'; wrapper.title = "Retour galerie"; wrapper.onclick = () => afficherToutesPJ(actionId); wrapper.appendChild(iframe); previewContainer.appendChild(wrapper); } else { const otherPreview = document.createElement('div'); otherPreview.innerHTML = `<p>Aperçu indisponible (${file.type}).</p><p style="font-weight:bold; cursor:pointer; color:blue;">Retour galerie</p>`; otherPreview.onclick = () => afficherToutesPJ(actionId); previewContainer.appendChild(otherPreview); } const aDownload = document.createElement('a'); aDownload.href = url; aDownload.download = fileObj.name; aDownload.textContent = 'Télécharger'; downloadLinks.appendChild(aDownload); const aOpen = document.createElement('a'); aOpen.href = url; aOpen.target = '_blank'; aOpen.textContent = 'Ouvrir source'; aOpen.style.marginLeft = '10px'; downloadLinks.appendChild(aOpen); } catch (e) { previewContainer.innerHTML = `<p style="color: red;">Impossible ouvrir PJ : ${fileObj.name}</p><p style="font-size: 0.8em;">${e.message}</p>`; console.error("Preview PJ Error:", e); } previewModal.style.display = 'block'; }
-	function fermerApercuPj() { const previewModal = document.getElementById('preview-modal'); previewModal.style.display = 'none'; document.getElementById('preview-container').innerHTML = ''; document.getElementById('download-links').innerHTML = ''; }
+    // Détecte le type d'une PJ via MIME puis extension (File System Access peut renvoyer type='').
+    function detecterTypePJ(file, name) {
+        const mime = (file && file.type) ? file.type.toLowerCase() : '';
+        const ext = (name.split('.').pop() || '').toLowerCase();
+        if (mime.startsWith('image/') || ['jpg','jpeg','png','gif','webp','bmp','svg','avif','heic','heif'].includes(ext)) return 'image';
+        if (mime === 'application/pdf' || ext === 'pdf') return 'pdf';
+        if (mime.startsWith('video/') || ['mp4','webm','ogv','mov','m4v','mkv','avi','wmv','flv','3gp'].includes(ext)) return 'video';
+        if (mime.startsWith('audio/') || ['mp3','wav','ogg','m4a','aac','flac'].includes(ext)) return 'audio';
+        return 'other';
+    }
+
+    // Récupère { file, url } pour une PJ avec cache d'objectURL (clé = nom, unique dans le dossier partagé).
+    // Évite de relire le fichier depuis le lecteur réseau/VPN à chaque ouverture. Éviction simple > 40 entrées.
+    async function obtenirPJ(pjHandle, name) {
+        const fileHandle = await pjHandle.getFileHandle(name);
+        const file = await fileHandle.getFile();
+        let url = pjBlobCache.get(name);
+        if (!url) {
+            url = URL.createObjectURL(file);
+            pjBlobCache.set(name, url);
+            if (pjBlobCache.size > 40) {
+                const oldest = pjBlobCache.keys().next().value;
+                if (oldest && oldest !== name) { URL.revokeObjectURL(pjBlobCache.get(oldest)); pjBlobCache.delete(oldest); }
+            }
+        }
+        return { file, url };
+    }
+
+    // Précharge en arrière-plan les fichiers voisins (idx-1, idx+1) pour une navigation préc/suiv fluide.
+    function prechargerVoisinsPJ(pjHandle, ids, idx) {
+        [idx - 1, idx + 1].forEach(i => {
+            const o = ids[i];
+            if (o && !pjBlobCache.has(o.name)) { obtenirPJ(pjHandle, o.name).catch(() => {}); }
+        });
+    }
+
+    // Galerie de miniatures : rendu immédiat (placeholders) puis chargement des vignettes en parallèle (cache).
+    async function afficherToutesPJ(actionId) {
+        const modal = document.getElementById('preview-modal');
+        const container = document.getElementById('preview-container');
+        const downloadLinks = document.getElementById('download-links');
+        pjPreviewState = { actionId, ids: [], idx: -1 }; // mode galerie → pas de nav clavier
+        masquerNavPJ();
+        document.getElementById('pj-counter').textContent = '';
+        downloadLinks.innerHTML = '';
+        container.innerHTML = 'Chargement...';
+        modal.style.display = 'block';
+
+        const pjHandle = getActivePjFolderHandle();
+        if (!pjHandle) { container.innerHTML = '<p style="color: red;">Dossier PJ inaccessible.</p>'; return; }
+        const pjs = attachments[actionId];
+        if (!pjs || pjs.length === 0) { container.innerHTML = '<p>Aucune PJ pour cette action.</p>'; return; }
+
+        container.innerHTML = '';
+        container.style.display = 'flex';
+        container.style.flexWrap = 'wrap';
+        container.style.justifyContent = 'center';
+        container.style.gap = '15px';
+
+        // 1) Structure immédiate (placeholder par PJ) → la galerie s'ouvre sans attendre le réseau.
+        const tiles = pjs.map((fileObj, idx) => {
+            const div = document.createElement('div');
+            div.style.textAlign = 'center'; div.style.maxWidth = '150px';
+            const itemLink = document.createElement('a');
+            itemLink.style.cursor = 'pointer'; itemLink.style.display = 'block';
+            itemLink.style.border = '1px solid #eee'; itemLink.style.padding = '5px';
+            itemLink.onclick = () => apercuPJ(actionId, idx);
+            itemLink.innerHTML = `<span class="pj-thumb-ph" style="font-size:3em; display:block;">⏳</span><span style="font-size:0.8em; word-break: break-all; display: block;">${escapeHtml(fileObj.name)}</span>`;
+            div.appendChild(itemLink);
+            container.appendChild(div);
+            return itemLink;
+        });
+
+        // 2) Chargement des vignettes en parallèle (non bloquant), via le cache.
+        pjs.forEach((fileObj, idx) => {
+            obtenirPJ(pjHandle, fileObj.name).then(({ file, url }) => {
+                const ph = tiles[idx] && tiles[idx].querySelector('.pj-thumb-ph');
+                if (!ph) return;
+                const kind = detecterTypePJ(file, fileObj.name);
+                if (kind === 'image') {
+                    const img = document.createElement('img');
+                    img.src = url; img.alt = fileObj.name;
+                    img.style.cssText = 'max-height:100px; max-width:100%; display:block; margin:0 auto 5px;';
+                    img.onerror = () => { ph.textContent = '🖼️'; };
+                    ph.replaceWith(img);
+                } else {
+                    ph.textContent = kind === 'pdf' ? '📕' : kind === 'video' ? '🎬' : kind === 'audio' ? '🎵' : '📄';
+                }
+            }).catch(e => { const ph = tiles[idx] && tiles[idx].querySelector('.pj-thumb-ph'); if (ph) ph.textContent = '⚠️'; console.warn(`Vignette PJ échec ${fileObj.name}`, e); });
+        });
+    }
+
+    // Navigation préc/suiv dans l'aperçu plein écran (boucle aux extrémités).
+    function naviguerPJ(delta) {
+        const st = pjPreviewState;
+        if (!st || !st.ids || st.ids.length === 0 || st.idx < 0) return;
+        let n = st.idx + delta;
+        if (n < 0) n = st.ids.length - 1;
+        if (n >= st.ids.length) n = 0;
+        apercuPJ(st.actionId, n);
+    }
+    function majNavPJ() {
+        const st = pjPreviewState;
+        const prev = document.getElementById('pj-nav-prev');
+        const next = document.getElementById('pj-nav-next');
+        const counter = document.getElementById('pj-counter');
+        const back = document.getElementById('pj-back-gallery');
+        const enApercu = st && st.idx >= 0;
+        const multi = enApercu && st.ids && st.ids.length > 1;
+        if (prev) prev.style.display = multi ? 'block' : 'none';
+        if (next) next.style.display = multi ? 'block' : 'none';
+        if (back) back.style.display = (enApercu && st.actionId != null) ? 'inline-block' : 'none';
+        if (counter) counter.textContent = (st && st.ids && st.ids.length && st.idx >= 0)
+            ? `${st.idx + 1} / ${st.ids.length} — ${st.ids[st.idx] ? st.ids[st.idx].name : ''}` : '';
+    }
+    function masquerNavPJ() {
+        const prev = document.getElementById('pj-nav-prev');
+        const next = document.getElementById('pj-nav-next');
+        const back = document.getElementById('pj-back-gallery');
+        if (prev) prev.style.display = 'none';
+        if (next) next.style.display = 'none';
+        if (back) back.style.display = 'none';
+    }
+    // Retour à la galerie depuis l'aperçu (fonctionne pour TOUS les types : image, PDF, vidéo, audio, repli).
+    function retourGaleriePJ() {
+        const st = pjPreviewState;
+        if (st && st.actionId != null) afficherToutesPJ(st.actionId);
+    }
+
+    // Bloc de repli (vidéo non décodable, type non prévisualisable) avec bouton "Télécharger pour lire" en évidence.
+    function blocFallback(safeName, message) {
+        return `<div class="pj-video-fallback">`
+            + `<p style="font-size:2.5em; margin:0 0 6px;">📄</p>`
+            + `<p style="font-weight:bold; word-break:break-all;">${safeName}</p>`
+            + `<p style="color:#555;">${message}</p>`
+            + `<p><a class="pj-download-strong" id="pj-fallback-dl" download>⬇ Télécharger pour lire</a></p>`
+            + `<p id="pj-fallback-back" style="cursor:pointer; color:#0d6efd; margin-top:10px;">‹ Retour galerie</p>`
+            + `</div>`;
+    }
+    function cablerFallback(actionId, url, name) {
+        const dl = document.getElementById('pj-fallback-dl');
+        if (dl) { dl.href = url; dl.download = name; }
+        const back = document.getElementById('pj-fallback-back');
+        if (back) back.onclick = () => afficherToutesPJ(actionId);
+    }
+    // Aperçu plein écran d'UNE pièce jointe (image / PDF / vidéo / audio / repli téléchargement) + nav préc-suiv.
+    async function apercuPJ(actionId, idx) {
+        const pjs = attachments[actionId];
+        const fileObj = pjs && pjs[idx];
+        if (!fileObj) return;
+        const pjHandle = getActivePjFolderHandle();
+        const previewModal = document.getElementById('preview-modal');
+        const previewContainer = document.getElementById('preview-container');
+        const downloadLinks = document.getElementById('download-links');
+
+        pjPreviewState = { actionId, ids: pjs, idx };
+        previewContainer.style.display = 'block';
+        previewContainer.innerHTML = 'Chargement...';
+        downloadLinks.innerHTML = '';
+        previewModal.style.display = 'block';
+        majNavPJ();
+
+        if (!pjHandle) { previewContainer.innerHTML = '<p style="color: red;">Dossier PJ inaccessible.</p>'; masquerNavPJ(); return; }
+
+        try {
+            const { file, url } = await obtenirPJ(pjHandle, fileObj.name);
+            // Garde-fou : si l'utilisateur a navigué ailleurs pendant l'attente réseau, on abandonne ce rendu.
+            if (pjPreviewState.idx !== idx || pjPreviewState.actionId !== actionId) return;
+            previewContainer.innerHTML = '';
+            const kind = detecterTypePJ(file, fileObj.name);
+            const safeName = escapeHtml(fileObj.name);
+
+            if (kind === 'image') {
+                const img = document.createElement('img');
+                img.src = url; img.alt = fileObj.name; img.style.cursor = 'pointer';
+                img.title = 'Retour galerie'; img.onclick = () => afficherToutesPJ(actionId);
+                img.onerror = () => { previewContainer.innerHTML = blocFallback(safeName, "Image non affichable par le navigateur (format non supporté)."); cablerFallback(actionId, url, fileObj.name); };
+                previewContainer.appendChild(img);
+            } else if (kind === 'pdf') {
+                const iframe = document.createElement('iframe');
+                iframe.src = url; iframe.title = `Aperçu PDF: ${safeName}`;
+                iframe.style.width = '100%'; iframe.style.minHeight = '65vh';
+                previewContainer.appendChild(iframe);
+            } else if (kind === 'video') {
+                const video = document.createElement('video');
+                video.src = url; video.controls = true; video.preload = 'metadata';
+                video.style.maxWidth = '100%'; video.style.maxHeight = '70vh';
+                video.onerror = () => { previewContainer.innerHTML = blocFallback(safeName, "Cette vidéo n'est pas lisible dans le navigateur (codec non supporté, ex. MOV/HEVC iPhone). Téléchargez-la pour l'ouvrir avec votre lecteur."); cablerFallback(actionId, url, fileObj.name); };
+                previewContainer.appendChild(video);
+            } else if (kind === 'audio') {
+                const audio = document.createElement('audio');
+                audio.src = url; audio.controls = true; audio.style.width = '100%';
+                previewContainer.appendChild(audio);
+            } else {
+                previewContainer.innerHTML = blocFallback(safeName, `Aperçu indisponible (${escapeHtml(file.type || 'type inconnu')}). Téléchargez le fichier pour l'ouvrir avec l'application adaptée.`);
+                cablerFallback(actionId, url, fileObj.name);
+            }
+
+            const aDownload = document.createElement('a');
+            aDownload.href = url; aDownload.download = fileObj.name; aDownload.textContent = '⬇ Télécharger';
+            downloadLinks.appendChild(aDownload);
+            const aOpen = document.createElement('a');
+            aOpen.href = url; aOpen.target = '_blank'; aOpen.rel = 'noopener'; aOpen.textContent = 'Ouvrir source';
+            aOpen.style.marginLeft = '10px'; downloadLinks.appendChild(aOpen);
+
+            prechargerVoisinsPJ(pjHandle, pjs, idx);
+        } catch (e) {
+            previewContainer.innerHTML = `<p style="color: red;">Impossible ouvrir PJ : ${escapeHtml(fileObj.name)}</p><p style="font-size: 0.8em;">${escapeHtml(e.message)}</p>`;
+            console.error("Preview PJ Error:", e);
+        }
+    }
+	function fermerApercuPj() {
+        const previewModal = document.getElementById('preview-modal');
+        previewModal.style.display = 'none';
+        document.getElementById('preview-container').innerHTML = '';
+        document.getElementById('download-links').innerHTML = '';
+        const c = document.getElementById('pj-counter'); if (c) c.textContent = '';
+        masquerNavPJ();
+        pjPreviewState = { actionId: null, ids: [], idx: -1 };
+    }
 
 /**
      * Met en surbrillance une ligne d'action dans le tableau et retire la surbrillance des autres.
