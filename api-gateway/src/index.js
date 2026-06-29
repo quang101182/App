@@ -43,7 +43,7 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.43';
+const VERSION = '1.49';
 
 // v1.40 — modèle Claude de repli si le modèle demandé est retiré (404) — voir proxyClaude
 const CLAUDE_FALLBACK_MODEL = 'claude-sonnet-4-6';
@@ -90,7 +90,8 @@ function isAdDomain(hostname) {
 }
 
 /** All recognised key names stored in KV */
-const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'MISTRAL_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'PIAPI_KEY', 'MOONSHOT_KEY', 'ELEVENLABS_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS'];
+const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'MISTRAL_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'PIAPI_KEY', 'MOONSHOT_KEY', 'OPENROUTER_KEY', 'ELEVENLABS_KEY', 'GCPTTS_KEY', 'FAL_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS'];
+// GCPTTS_KEY = clé Google Cloud DÉDIÉE à l'API Cloud Text-to-Speech (texttospeech.googleapis.com), voix Chirp 3 HD = mêmes voix que Gemini sans cap journalier. Ajoutée 15/06/2026 pour StoryVoice.
 
 /** Rate limit: max requests per minute window */
 const RL_API_MAX   = 20;
@@ -164,6 +165,16 @@ export default {
         return await proxyElevenlabs(request, env, path);
       }
 
+      // ── LTX heartbeat (auth WORKER_SECRET, PAS de rate limit) ───────────────
+      // Le proxy local poste ici toutes les 30s tant qu'il gère un pod ltx-gs. Tant que ce
+      // heartbeat est frais, le cron scheduled() ne coupe PAS (session active). Hors rate limit
+      // exprès : un 429 périmerait le heartbeat -> le cron tuerait un pod en cours d'usage.
+      if (method === 'POST' && path === '/api/ltx_heartbeat') {
+        const authErr = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
+        if (authErr) return authErr;
+        return await handleLtxHeartbeat(request, env);
+      }
+
       // ── API routes ────────────────────────────────────────────────────────
       if (method === 'POST' && path.startsWith('/api/')) {
         // Auth check (async — constant-time comparison)
@@ -177,13 +188,16 @@ export default {
 
         // Dispatch to the right upstream
         if (path.startsWith('/api/gemini'))   return await proxyGemini(request, env, path);
+        if (path.startsWith('/api/gcptts'))   return await proxyGcpTts(request, env, path);
         if (path === '/api/groq')             return await proxyGroq(request, env);
         if (path === '/api/openai')           return await proxyOpenai(request, env);
+        if (path === '/api/fal')              return await proxyFal(request, env);
         if (path === '/api/deepl')            return await proxyDeepl(request, env);
         if (path === '/api/assemblyai')       return await proxyAssemblyai(request, env);
         if (path === '/api/deepseek')         return await proxyDeepSeek(request, env);
         if (path === '/api/mistral')          return await proxyMistral(request, env);
         if (path === '/api/kimi')             return await proxyMoonshot(request, env);
+        if (path === '/api/openrouter')       return await proxyOpenRouter(request, env);
         if (path === '/api/azure')            return await proxyAzure(request, env, url);
         if (path.startsWith('/api/claude'))   return await proxyClaude(request, env, path);
         if (path.startsWith('/api/deepgram')) return await proxyDeepgram(request, env, path);
@@ -214,6 +228,11 @@ export default {
         if (path === '/admin/tinify')  return await adminTinify(request, env);
         if (path === '/admin/proxy-get')  return await adminProxyGet(request, env);
         if (path === '/admin/sora-img2vid') return await adminSoraImg2Vid(request, env);
+        if (path === '/admin/ltx-reaper') {
+          // Exécution manuelle du reaper anti-fuite (test / bouton d'urgence). body {dry:true} = dry-run.
+          let b = {}; try { b = await request.json(); } catch {}
+          return jsonResponse(await runLtxReaper(env, { dryRun: !!b.dry }));
+        }
         if (path === '/admin/tts-test')    return jsonResponse({ ok: true, test: true, ts: Date.now() });
         if (path === '/admin/tts-log') {
           // Log incoming request details to KV for debugging
@@ -237,6 +256,13 @@ export default {
       console.error('[gateway] unhandled error', err);
       return jsonResponse({ error: 'internal server error' }, 500);
     }
+  },
+
+  // ── Cron : filet de sécurité anti-fuite pod RunPod LTX (toutes les 2 min) ──
+  // Coupe tout pod ltx-gs RUNNING dont le heartbeat est périmé (proxy mort / PC en veille).
+  // Indépendant du PC de Quang -> protège même app fermée / PC éteint.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runLtxReaper(env).catch(e => console.error('[ltx-reaper] scheduled error', e)));
   },
 };
 
@@ -317,6 +343,60 @@ async function proxyGemini(request, env, path) {
 }
 
 /**
+ * POST /api/gcptts/* → https://texttospeech.googleapis.com
+ * Cloud Text-to-Speech (voix Chirp 3 HD = MÊMES voix que Gemini, API de PRODUCTION sans cap 100/jour du modèle preview).
+ * Sub-path défaut: /v1/text:synthesize. Auth: ?key=GCPTTS_KEY (clé Google DÉDIÉE Cloud TTS). Ajoutée 15/06 pour StoryVoice.
+ */
+// ── OAuth compte de service (pour les modèles Gemini-TTS, qui exigent Vertex/IAM et REFUSENT la clé API) ──
+// La clé SA (JSON) est en KV `key:GCPTTS_SA_JSON`. On signe un JWT RS256 → token OAuth (caché ~55 min). Ajouté v1.45 pour StoryVoice (ton sur Gemini).
+let _gcpSaToken = { token: null, exp: 0 };
+function _b64urlBytes(u8) { let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_'); }
+function _b64urlStr(str) { return _b64urlBytes(new TextEncoder().encode(str)); }
+async function _importPkcs8(pem) {
+  const b64 = pem.replace(/-----BEGIN PRIVATE KEY-----/, '').replace(/-----END PRIVATE KEY-----/, '').replace(/\s+/g, '');
+  const der = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  return crypto.subtle.importKey('pkcs8', der.buffer, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+}
+async function getGcpSaToken(env) {
+  const now = Math.floor(Date.now() / 1000);
+  if (_gcpSaToken.token && _gcpSaToken.exp > now + 60) return _gcpSaToken.token;
+  const raw = await env.GATEWAY_KV.get('key:GCPTTS_SA_JSON');
+  if (!raw) throw new Error('GCPTTS_SA_JSON not configured');
+  const sa = JSON.parse(raw);
+  const aud = sa.token_uri || 'https://oauth2.googleapis.com/token';
+  const signingInput = _b64urlStr(JSON.stringify({ alg: 'RS256', typ: 'JWT' })) + '.' +
+    _b64urlStr(JSON.stringify({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/cloud-platform', aud, iat: now, exp: now + 3600 }));
+  const key = await _importPkcs8(sa.private_key);
+  const sig = await crypto.subtle.sign({ name: 'RSASSA-PKCS1-v1_5' }, key, new TextEncoder().encode(signingInput));
+  const jwt = signingInput + '.' + _b64urlBytes(new Uint8Array(sig));
+  const resp = await fetch(aud, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}` });
+  const j = await resp.json().catch(() => ({}));
+  if (!resp.ok || !j.access_token) throw new Error('SA token failed ' + resp.status);
+  _gcpSaToken = { token: j.access_token, exp: now + (j.expires_in || 3600) };
+  return j.access_token;
+}
+
+async function proxyGcpTts(request, env, path) {
+  let subPath = path.slice('/api/gcptts'.length) || '/v1/text:synthesize';
+  if (!subPath.startsWith('/')) subPath = '/' + subPath;
+  const search = new URL(request.url).search;
+  // Gemini-TTS (voice.model_name = gemini-*) → OAuth compte de service ; Chirp 3 HD → clé API (inchangé)
+  let isGemini = false;
+  try { const peek = await request.clone().json(); const mn = (peek && peek.voice && (peek.voice.model_name || peek.voice.modelName)) || ''; isGemini = /^gemini/i.test(mn); } catch (_) {}
+  if (isGemini) {
+    let token;
+    try { token = await getGcpSaToken(env); } catch (e) { return jsonResponse({ error: 'GCP SA auth failed: ' + e.message }, 503); }
+    const upstream = `https://texttospeech.googleapis.com${subPath}${search}`;
+    return proxyRequest(request, upstream, { 'Authorization': `Bearer ${token}` });
+  }
+  const apiKey = await resolveKey(env, 'GCPTTS_KEY');
+  if (!apiKey) return jsonResponse({ error: 'GCPTTS_KEY not configured' }, 503);
+  const upstream = `https://texttospeech.googleapis.com${subPath}${search}${search ? '&' : '?'}key=${apiKey}`;
+  return proxyRequest(request, upstream, {});
+}
+
+/**
  * POST /api/deepseek → https://api.deepseek.com/v1/chat/completions
  *
  * Header X-Api-Path overrides.
@@ -360,6 +440,22 @@ async function proxyMoonshot(request, env) {
 
   const apiPath  = safeApiPath(request, '/v1/chat/completions');
   const upstream = `https://api.moonshot.ai${apiPath}`;
+  return proxyRequest(request, upstream, { 'Authorization': `Bearer ${apiKey}` });
+}
+
+/**
+ * POST /api/openrouter → https://openrouter.ai/api/v1/chat/completions
+ *
+ * OpenRouter is OpenAI-compatible (300+ models, incl. open-weight uncensored).
+ * Default path /api/v1/chat/completions. Header X-Api-Path overrides (e.g. /api/v1/models).
+ * Auth: Bearer OPENROUTER_KEY. Added v1.48.
+ */
+async function proxyOpenRouter(request, env) {
+  const apiKey = await resolveKey(env, 'OPENROUTER_KEY');
+  if (!apiKey) return jsonResponse({ error: 'OPENROUTER_KEY not configured' }, 503);
+
+  const apiPath  = safeApiPath(request, '/api/v1/chat/completions');
+  const upstream = `https://openrouter.ai${apiPath}`;
   return proxyRequest(request, upstream, { 'Authorization': `Bearer ${apiKey}` });
 }
 
@@ -531,6 +627,35 @@ async function proxyOpenai(request, env) {
   const apiPath  = safeApiPath(request, '/v1/chat/completions');
   const upstream = `https://api.openai.com${apiPath}`;
   return proxyRequest(request, upstream, { 'Authorization': `Bearer ${apiKey}` });
+}
+
+/**
+ * POST /api/fal → https://fal.run/{model}  (inférence fal.ai SYNCHRONE — pas de queue/polling)
+ *
+ * Body JSON : { model:"fal-ai/flux/schnell", input:{prompt, image_size, ...} }. Le modèle est dans le BODY
+ * (pas un header custom) → aucun header non-standard → pas de preflight CORS bloquant (v1.47).
+ * Modèle validé (anti-SSRF : l'hôte fal.run est fixe). Réponse fal renvoyée telle quelle (URL ou data-URI image).
+ * Auth client : Bearer WORKER_SECRET. Auth upstream : `Key FAL_KEY` (KV). Ajouté v1.46 pour StoryVoice (image thématique).
+ */
+async function proxyFal(request, env) {
+  const apiKey = await resolveKey(env, 'FAL_KEY');
+  if (!apiKey) return jsonResponse({ error: 'FAL_KEY not configured' }, 503);
+
+  let body;
+  try { body = await request.json(); } catch { return jsonResponse({ error: 'invalid JSON body' }, 400); }
+  const model = body.model || 'fal-ai/flux/schnell';
+  // Garde anti-SSRF : segments alphanum/._- séparés par / uniquement (jamais de `..`, `:`, `//` en tête → impossible de changer d'hôte)
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._/-]{2,80}$/.test(model) || model.includes('..')) {
+    return jsonResponse({ error: 'invalid model' }, 400);
+  }
+  const input = body.input || {};
+  const r = await fetch(`https://fal.run/${model}`, {
+    method: 'POST',
+    headers: { 'Authorization': `Key ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const text = await r.text();
+  return new Response(text, { status: r.status, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } });
 }
 
 /**
@@ -1832,6 +1957,82 @@ async function resolveKey(env, name) {
   if (fromKV) return fromKV;
   // Fallback to env secret (set via `wrangler secret put`)
   return env[name] ?? null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LTX pod reaper — filet de sécurité anti-fuite RunPod (cron + heartbeat)
+//
+// Problème : le watchdog anti-fuite est LOCAL (proxy _studio_llm_proxy.py). Quand le PC de
+// Quang dort/s'éteint, le proxy gèle -> plus personne ne coupe le pod -> fuite (incident
+// 28->29/06 : pod ltx-gs resté ~11h à 3,29 $/h, ~38 $ + auto-topups déclenchés).
+//
+// Solution : le proxy poste un heartbeat (POST /api/ltx_heartbeat) toutes les 30s tant qu'il
+// gère un pod. Ce cron (toutes les 2 min) coupe tout pod `ltx-gs` RUNNING dont le heartbeat
+// est périmé (> 5 min => proxy mort/PC en veille) ou orphelin. Garde-fous : JAMAIS le pod fixe
+// Muse 7w8fxrvukudn7q, JAMAIS un pod d'uptime < 2 min (protège un démarrage).
+// ─────────────────────────────────────────────────────────────────────────────
+const RUNPOD_GQL              = 'https://api.runpod.io/graphql';
+const RUNPOD_UA               = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+const LTX_POD_NAME            = 'ltx-gs';            // nom donné aux pods éphémères LTX (deploy_ltx_pod)
+const LTX_PROTECTED_POD       = '7w8fxrvukudn7q';   // pod Muse fixe (volume 150Go) — NE JAMAIS terminer
+const LTX_REAPER_GRACE_MS     = 5 * 60 * 1000;      // heartbeat périmé au-delà => proxy mort / PC en veille
+const LTX_REAPER_MIN_UPTIME_S = 120;                // ne coupe jamais un pod tout juste démarré
+
+async function runpodGraphql(token, query, variables) {
+  const r = await fetch(RUNPOD_GQL, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'User-Agent': RUNPOD_UA },
+    body: JSON.stringify(variables ? { query, variables } : { query }),
+  });
+  return r.json().catch(() => ({}));
+}
+
+/** POST /api/ltx_heartbeat — le proxy signale qu'un pod LTX est géré localement. body {podId, busy}. podId vide => clear. */
+async function handleLtxHeartbeat(request, env) {
+  let body; try { body = await request.json(); } catch { return jsonResponse({ error: 'invalid JSON' }, 400); }
+  const podId = (body && body.podId ? String(body.podId) : '').trim();
+  if (!podId) { await env.GATEWAY_KV.delete('ltx:hb'); return jsonResponse({ ok: true, cleared: true }); }
+  if (!/^[a-z0-9]{6,24}$/i.test(podId)) return jsonResponse({ error: 'invalid podId' }, 400);
+  await env.GATEWAY_KV.put('ltx:hb', JSON.stringify({ podId, busy: !!(body && body.busy), ts: Date.now() }), { expirationTtl: 3600 });
+  return jsonResponse({ ok: true });
+}
+
+/** Coeur du reaper : liste les pods, décide, termine. opts.dryRun => ne termine pas, renvoie juste les décisions. */
+async function runLtxReaper(env, opts = {}) {
+  const dryRun = !!opts.dryRun;
+  const out = { ts: Date.now(), dryRun, checked: 0, killed: [], kept: [], errors: [] };
+  const readKey  = await resolveKey(env, 'RUNPOD_KEY');
+  const writeKey = await resolveKey(env, 'RUNPOD_WRITE_KEY');
+  if (!readKey || !writeKey) { out.errors.push('runpod keys missing'); return out; }
+
+  const d = await runpodGraphql(readKey, 'query{ myself{ pods{ id name desiredStatus runtime{ uptimeInSeconds } } } }');
+  if (d.errors) out.errors.push(JSON.stringify(d.errors).slice(0, 200));
+  const pods = (((d.data || {}).myself || {}).pods) || [];
+
+  const hbRaw = await env.GATEWAY_KV.get('ltx:hb');
+  let hb = null; try { hb = hbRaw ? JSON.parse(hbRaw) : null; } catch {}
+  const now = Date.now();
+  const hbFresh = !!(hb && hb.podId && (now - hb.ts) < LTX_REAPER_GRACE_MS);
+  out.heartbeat = hb ? { podId: hb.podId, ageS: Math.round((now - hb.ts) / 1000), fresh: hbFresh } : null;
+
+  for (const p of pods) {
+    if (p.id === LTX_PROTECTED_POD) continue;   // pod Muse fixe : jamais touché
+    if (p.name !== LTX_POD_NAME) continue;       // uniquement les pods éphémères LTX
+    if (p.desiredStatus !== 'RUNNING') continue;
+    out.checked++;
+    const uptime = (p.runtime && p.runtime.uptimeInSeconds) || 0;
+    if (uptime < LTX_REAPER_MIN_UPTIME_S) { out.kept.push({ id: p.id, why: 'fresh-start', uptime }); continue; }
+    let why = null;
+    if (!hbFresh) why = 'no-heartbeat';                  // proxy mort / PC en veille
+    else if (hb.podId !== p.id) why = 'orphan';          // pod orphelin distinct du pod géré
+    if (!why) { out.kept.push({ id: p.id, why: 'active-session', uptime }); continue; }
+    if (dryRun) { out.killed.push({ id: p.id, why, uptime, dryRun: true }); continue; }
+    const td = await runpodGraphql(writeKey, 'mutation{ podTerminate(input:{podId:"' + p.id + '"}) }');
+    const okKill = !td.errors;
+    out.killed.push({ id: p.id, why, uptime, ok: okKill, err: td.errors ? JSON.stringify(td.errors).slice(0, 160) : undefined });
+    await env.GATEWAY_KV.put('ltx:reaper:' + now + ':' + p.id, JSON.stringify({ podId: p.id, why, uptime, ok: okKill }), { expirationTtl: 7 * 24 * 3600 });
+  }
+  return out;
 }
 
 async function kvGetKey(env, name) {
