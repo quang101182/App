@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.21.5</title>
+<title>FRIDAY · v1.22.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2112,7 +2112,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.21</span>
+        <span class="version-tag version-badge">· v1.22</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2553,7 +2553,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   //   et envoie 'tts_speak_text' au mobile → window.speechSynthesis.speak
   //   (Friday parle dans le HP du tel via TTS OS natif).
   // + glide-typing fix (autocomplete on, enterkeyhint=send, inputmode=text).
-  const VERSION = '1.21.5';
+  const VERSION = '1.22.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -5067,6 +5067,11 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   let wsReady = false;
   let reconnectDelay = 1500;
   const RECONNECT_MAX = 8000;
+  // v1.22.0 — État résilience réseau (reconnexion robuste mobile). Déclaré tôt
+  // pour éviter toute TDZ : lu par scheduleReconnect / handleWsMessage.
+  const NET = { lastRxTs: Date.now(), reconnectTimer: null };
+  const STALE_MS = 15000;  // 0 msg reçu depuis 15s (backend broadcast ~2-8s) = socket zombie
+  const PING_MS  = 10000;  // ping sortant léger (garde le lien actif, provoque du trafic)
   let pendingTtsMeta = null;
   let currentTtsAudio = null;
   let currentTtsUrl = null;
@@ -5411,6 +5416,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 
   // ------ WS dispatcher ------
   function handleWsMessage(ev){
+    NET.lastRxTs = Date.now();  // v1.22.0 — tout message reçu (texte OU binaire) = lien vivant
     if(typeof ev.data === 'string'){
       let m;
       try { m = JSON.parse(ev.data); } catch(_) { return; }
@@ -5545,6 +5551,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     ws.onopen = () => {
       wsReady = true;
       reconnectDelay = 1500;
+      NET.lastRxTs = Date.now();  // v1.22.0
+      if(NET.reconnectTimer){ clearTimeout(NET.reconnectTimer); NET.reconnectTimer = null; }
       setConnUI('connected', 'LIVE');
       // Handshake compat HUD PC : envoie hello avec version client (cf. backend
       // jarvis_backend.py:10680 — vérifie major == backend major).
@@ -5565,7 +5573,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   }
 
   function scheduleReconnect(){
-    setTimeout(connectWS, reconnectDelay);
+    // v1.22.0 — dé-duplication du timer : un seul reconnect en vol à la fois
+    // (avant : chaque onclose + bouton lançait son propre setTimeout → sockets parallèles).
+    if(NET.reconnectTimer) clearTimeout(NET.reconnectTimer);
+    NET.reconnectTimer = setTimeout(() => { NET.reconnectTimer = null; connectWS(); }, reconnectDelay);
     reconnectDelay = Math.min(RECONNECT_MAX, Math.round(reconnectDelay * 1.4));
   }
 
@@ -5756,6 +5767,82 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     }
     stopRecMeter();
   };
+
+  // ============================================================
+  // v1.22.0 — Résilience réseau mobile (reconnexion robuste).
+  // Bug corrigé : une perte réseau (route, écran éteint, Wi-Fi↔4G) laisse
+  // un socket "zombie" (half-open) → onclose ne part jamais → aucune
+  // reconnexion, l'UI se croit LIVE, l'audio part dans le vide, il faut
+  // tuer l'app. On ajoute les 3 déclencheurs qui manquaient + un bouton
+  // manuel. Zéro modif backend (surveille le flux entrant déjà broadcasté).
+  // ============================================================
+
+  // Reconnexion immédiate et propre : annule tout timer, neutralise l'ancien
+  // socket (évite les reconnexions parallèles), repart avec un backoff court.
+  function forceReconnect(reason){
+    if(!LIVE_MODE) return;
+    console.warn('[net] forceReconnect:', reason);
+    if(NET.reconnectTimer){ clearTimeout(NET.reconnectTimer); NET.reconnectTimer = null; }
+    const old = ws;
+    if(old){
+      try { old.onopen = old.onclose = old.onerror = old.onmessage = null; } catch(_){}
+      try { old.close(); } catch(_){}
+    }
+    ws = null; wsReady = false;
+    reconnectDelay = 1500;
+    setConnUI('connecting', 'RECONNECT…');
+    document.body.classList.add('offline');
+    connectWS();
+  }
+
+  // (1) Watchdog passif : tourne quand l'app est visible (l'OS gèle les timers
+  //     en arrière-plan de toute façon). Détecte socket fermé OU zombie muet.
+  setInterval(() => {
+    if(!LIVE_MODE || document.visibilityState !== 'visible') return;
+    if(!ws || ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED){
+      if(!NET.reconnectTimer) forceReconnect('watchdog: socket non-open');
+      return;
+    }
+    if(wsReady && (Date.now() - NET.lastRxTs) > STALE_MS){
+      setConnUI('offline', 'OFFLINE');
+      document.body.classList.add('offline');
+      forceReconnect('watchdog: aucun message depuis ' + STALE_MS + 'ms');
+    }
+  }, 4000);
+
+  // Ping sortant léger : garde le lien actif + provoque du trafic backend.
+  setInterval(() => {
+    if(ws && ws.readyState === WebSocket.OPEN){
+      try { ws.send(JSON.stringify({ type: 'ping', ts: Date.now() })); } catch(_){}
+    }
+  }, PING_MS);
+
+  // (2) Retour au premier plan (déverrouillage / retour sur l'app installée) :
+  //     le cas le plus fréquent pour une PWA. Reconnecte si le lien n'est pas sain.
+  document.addEventListener('visibilitychange', () => {
+    if(document.visibilityState !== 'visible' || !LIVE_MODE) return;
+    if(!ws || ws.readyState !== WebSocket.OPEN){
+      forceReconnect('visibilitychange: lien non-open');
+    } else if((Date.now() - NET.lastRxTs) > 5000){
+      forceReconnect('visibilitychange: lien suspect');
+    }
+  });
+
+  // (3) Réseau OS revenu → reconnecte tout de suite ; réseau perdu → rouge immédiat.
+  window.addEventListener('online',  () => forceReconnect('event online'));
+  window.addEventListener('offline', () => {
+    setConnUI('offline', 'OFFLINE');
+    document.body.classList.add('offline');
+  });
+
+  // Bouton manuel : tap sur "FRIDAY" (header) = reconnexion forcée.
+  (function(){
+    const brand = document.querySelector('.brand');
+    if(!brand) return;
+    brand.style.cursor = 'pointer';
+    brand.title = 'Toucher pour reconnecter';
+    brand.addEventListener('click', () => { toast('Reconnexion…', 1400); forceReconnect('tap manuel FRIDAY'); });
+  })();
 
   // ------ Boot ------
   connectWS();
