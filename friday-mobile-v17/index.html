@@ -1,4 +1,13 @@
 <!doctype html>
+<!-- ============================================================================
+  SOURCE UNIQUE Friday Mobile (unification PWA/APK, v1.27.0, 2026-07-08).
+  Fichier CANONIQUE = jarvis/ui/jarvis-mobile-v1.17.0.html (embarqué au build APK).
+  La PWA App/friday-mobile-v17/index.html en est une COPIE générée par le script
+  jarvis/scripts/sync-mobile.py. Code DUAL-MODE : boutons natifs Capacitor masqués
+  automatiquement hors APK (voir hideNativeOnlyControls).
+  >>> ÉDITER ICI (la source), puis lancer : python jarvis/scripts/sync-mobile.py
+  >>> NE JAMAIS éditer la copie PWA à la main (elle sera écrasée).
+============================================================================= -->
 <html lang="fr">
 <head>
 <meta charset="utf-8">
@@ -6,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.23.0</title>
+<title>FRIDAY · v1.27.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -1010,14 +1019,27 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
   top:60px; /* sous header (~52px) + petit gap */
 }
 .live-captions-container[data-position="bottom"]{
-  bottom:160px; /* au-dessus du footer DICTER + satellite-row */
+  /* v1.21.6 — Remonté au niveau de la barre text-input (Quang : "trop bas
+     avant"). 200px laisse le PTT + sat-row visibles dessous, et les bulles
+     s'alignent grossièrement à hauteur de la barre où il tape à Friday. */
+  bottom:200px;
   flex-direction:column-reverse;
 }
+/* En vue CARTE/COSMOS, transcript+sat-grid sont cachés donc l'image
+   descend plus bas — on relève les captions un peu plus haut pour qu'elles
+   ne mangent pas la vue streamée. */
+body[data-current-view="map"] .live-captions-container[data-position="bottom"],
+body[data-current-view="cosmos"] .live-captions-container[data-position="bottom"]{
+  bottom:170px;
+}
 .live-cap{
-  background:rgba(0,18,32,0.85);
-  backdrop-filter:blur(12px) saturate(140%);
-  -webkit-backdrop-filter:blur(12px) saturate(140%);
-  border:1px solid var(--primary-dim);
+  /* v1.22.0 — TOUS les effets visuels (fond, blur, bord, ombre) pilotés par
+     le slider Opacity. À 0% : fond transparent + 0 blur + bord/ombre invisibles
+     (seul le texte reste lisible). À 100% : rendu actuel. Mapping linéaire. */
+  background:rgba(0,18,32, var(--lc-bg-opacity, 0.85));
+  backdrop-filter:blur(var(--lc-blur-px, 12px)) saturate(140%);
+  -webkit-backdrop-filter:blur(var(--lc-blur-px, 12px)) saturate(140%);
+  border:1px solid rgba(0,212,255, calc(.4 * var(--lc-border-alpha, 1)));
   border-radius:6px;
   padding:8px 12px;
   font:500 13px/1.35 -apple-system, system-ui, 'Segoe UI', sans-serif;
@@ -1027,7 +1049,7 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
   opacity:0;
   transform:translateY(-12px);
   transition:opacity .3s ease, transform .3s cubic-bezier(.2, 1, .3, 1);
-  box-shadow:0 4px 18px rgba(0,0,0,.35);
+  box-shadow:0 4px 18px rgba(0,0,0, calc(.35 * var(--lc-shadow-alpha, 1)));
   max-height:80px;
   overflow:hidden;
 }
@@ -1042,13 +1064,17 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
   vertical-align:middle;
 }
 .live-cap.lc-user{
-  border-color:var(--primary);
-  box-shadow:0 4px 18px rgba(0,212,255,.18), 0 0 0 1px rgba(0,212,255,.12);
+  /* v1.22.0 — bord et halo modulés par les CSS vars du slider Opacity. */
+  border-color:rgba(0,212,255, var(--lc-border-alpha, 1));
+  box-shadow:0 4px 18px rgba(0,212,255, calc(.18 * var(--lc-shadow-alpha, 1))),
+             0 0 0 1px rgba(0,212,255, calc(.12 * var(--lc-border-alpha, 1)));
 }
 .live-cap.lc-user .lc-prefix{color:var(--primary);text-shadow:0 0 4px var(--primary-glow);}
 .live-cap.lc-friday{
-  border-color:#44e8a0;
-  box-shadow:0 4px 18px rgba(68,232,160,.18), 0 0 0 1px rgba(68,232,160,.12);
+  /* v1.22.0 — idem côté Friday (couleur menthe). */
+  border-color:rgba(68,232,160, var(--lc-border-alpha, 1));
+  box-shadow:0 4px 18px rgba(68,232,160, calc(.18 * var(--lc-shadow-alpha, 1))),
+             0 0 0 1px rgba(68,232,160, calc(.12 * var(--lc-border-alpha, 1)));
 }
 .live-cap.lc-friday .lc-prefix{color:#44e8a0;text-shadow:0 0 4px rgba(68,232,160,.55);}
 .live-cap .lc-text{
@@ -1064,40 +1090,33 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
   vertical-align:top;
 }
 
-/* === v1.21.5 — Plein écran map/cosmos sur mobile (vues remote streamées) ===
-   Mode "fullscreen viewer" : quand l'utilisateur est sur l'onglet CARTE ou
-   COSMOS, on cache toggles + transcript + panels CONTEXT/FEED, et l'<img>
-   stream prend tout l'espace dispo entre le header et le footer DICTER.
-   object-fit: contain → préserve toute la carte (pas de crop), bandes noires
-   éventuelles haut/bas (ratio map ~4:3 vs écran mobile 9:19 — choix Quang). */
+/* === v1.21.6 — Mode CARTE / COSMOS : agrandir l'image SANS overlay fixed ===
+   v1.21.5 utilisait position:fixed top:60px bottom:130px qui chevauchait la
+   bottombar (PTT + 3 boutons mode) sur certaines tailles d'écran. Régression
+   ergo signalée par Quang ("PTT quasiment masqué, plus accès aux 3 boutons").
+   Solution v1.21.6 : layout flex normal, on cache UNIQUEMENT les panels
+   accessoires (transcript + sat-grid + slot-toggles). text-input-form RESTE
+   visible (utile pour piloter la map au texte). Header (mode-switch) et
+   footer (PTT + satellites) restent intacts via le flow normal. */
 body[data-current-view="map"] .slot-toggles,
-body[data-current-view="map"] .text-input-form,
 body[data-current-view="map"] .transcript-primary,
 body[data-current-view="map"] .sat-grid,
 body[data-current-view="cosmos"] .slot-toggles,
-body[data-current-view="cosmos"] .text-input-form,
 body[data-current-view="cosmos"] .transcript-primary,
 body[data-current-view="cosmos"] .sat-grid{
   display:none !important;
 }
+/* L'<img> remote-stream prend toute la hauteur restante via flex:1 du wrap. */
 body[data-current-view="map"] #view-map .remote-stream-wrap,
 body[data-current-view="cosmos"] #view-cosmos .remote-stream-wrap{
-  position:fixed;
-  top:60px;       /* sous header */
-  left:0; right:0;
-  bottom:130px;   /* au-dessus footer DICTER + satellite-row */
-  z-index:4;
-  border-radius:0;
-  border:none;
-  margin:0;
-  min-height:0;
-  height:auto;
+  flex:1 1 auto;
+  min-height:240px;
 }
 body[data-current-view="map"] #view-map .remote-stream-img,
 body[data-current-view="cosmos"] #view-cosmos .remote-stream-img{
   width:100%;
   height:100%;
-  object-fit:contain; /* option A : préserve tout le contenu */
+  object-fit:contain;
 }
 
 /* === v1.21.0 — Streaming MAP / COSMOS : <img> plein écran + placeholder === */
@@ -1201,6 +1220,36 @@ body[data-current-view="cosmos"] #view-cosmos .remote-stream-img{
 .mic-btn.hold{
   border-style:dashed;
 }
+/* v1.24.0 — INTERRUPT MODE : pendant SPEAKING le micro devient ⏹ rouge.
+   Sélecteur via body[data-state="speaking"] (posé par setState).
+   Précédence : speaking > recording (Friday parle ≠ mic en train d'écouter,
+   mais on protège le visuel si race). Animation pulse plus rapide (0.9s)
+   pour signaler "action immédiate possible". */
+body[data-state="speaking"] .mic-btn,
+body[data-state="speaking"] .mic-btn.recording{
+  background:linear-gradient(180deg,rgba(255,68,68,.22),rgba(60,0,0,.92));
+  border-color:#ff4444;
+  border-style:solid;
+  color:#ff8c8c;
+  text-shadow:0 0 10px rgba(255,68,68,.7);
+  box-shadow:0 4px 24px rgba(255,68,68,.35),inset 0 0 22px rgba(255,68,68,.20);
+  animation:micPulseStop .9s ease-in-out infinite;
+}
+body[data-state="speaking"] .mic-btn .mic-icon{
+  display:none;
+}
+body[data-state="speaking"] .mic-btn::before{
+  content:'⏹';
+  font-size:22px;
+  color:#ff8c8c;
+  margin-right:10px;
+  text-shadow:0 0 12px rgba(255,68,68,.9);
+  line-height:1;
+}
+@keyframes micPulseStop{
+  0%,100%{ box-shadow:0 4px 24px rgba(255,68,68,.35),inset 0 0 22px rgba(255,68,68,.20); }
+  50%   { box-shadow:0 4px 32px rgba(255,68,68,.55),inset 0 0 30px rgba(255,68,68,.32); }
+}
 @keyframes micPulse{
   0%,100%{box-shadow:0 4px 22px rgba(255,181,71,.25),inset 0 0 22px rgba(255,181,71,.14)}
   50%{box-shadow:0 4px 32px rgba(255,181,71,.55),inset 0 0 32px rgba(255,181,71,.28)}
@@ -1265,24 +1314,48 @@ body[data-current-view="cosmos"] #view-cosmos .remote-stream-img{
   text-shadow:0 0 6px var(--primary-glow);
   text-transform:uppercase;
 }
-.log-close{
+.log-close, .log-btn{
   background:transparent;border:1px solid var(--primary-dim);
   color:var(--text-1);
-  padding:4px 10px;font:600 10px monospace;
+  padding:4px 8px;font:600 10px 'JetBrains Mono',monospace;
   cursor:pointer;letter-spacing:1px;border-radius:3px;
+  text-transform:uppercase;
+}
+.log-close:active, .log-btn:active{background:rgba(0,212,255,.18)}
+.log-btn:hover{background:rgba(0,212,255,.08)}
+/* v1.22.0 — Header LOG enrichi : filtre + actions (parité PC). */
+.log-header .log-actions{
+  display:flex;gap:5px;align-items:center;flex-wrap:nowrap;
+}
+.log-filter{
+  background:transparent;border:1px solid var(--primary-dim);
+  color:var(--text-0);
+  padding:4px 18px 4px 8px;
+  font:600 10px 'JetBrains Mono',monospace;
+  letter-spacing:1px;border-radius:3px;
+  text-transform:uppercase;cursor:pointer;
+  appearance:none;-webkit-appearance:none;
+  background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="6" viewBox="0 0 8 6"><path d="M0 0l4 6 4-6z" fill="%2300d4ff"/></svg>');
+  background-repeat:no-repeat;background-position:right 6px center;
 }
 .log-body{
   flex:1;overflow-y:auto;
   padding:10px 14px;
   font:11px/1.5 'JetBrains Mono',monospace;
 }
-.log-line{margin:2px 0}
+/* v1.22.0 — log-line en flex pour bien aligner ts/src/msg + wrap propre. */
+.log-line{
+  display:flex;gap:5px;align-items:flex-start;flex-wrap:wrap;
+  margin:2px 0;border-left:2px solid transparent;padding-left:4px;
+}
 .log-line.info{color:var(--text-0)}
-.log-line.dbg{color:var(--text-1);opacity:.75}
-.log-line.warn{color:var(--listening)}
-.log-line.err{color:var(--error)}
-.log-line .ts{color:var(--text-1);opacity:.55;margin-right:6px}
-.log-line .src{color:var(--primary);opacity:.7;margin-right:6px}
+.log-line.dbg{color:var(--text-1);opacity:.78}
+.log-line.warn{color:var(--listening);border-left-color:rgba(255,181,71,.5);background:rgba(255,181,71,.04)}
+.log-line.err{color:var(--error);border-left-color:var(--error);background:rgba(255,58,79,.06)}
+.log-line .ts{color:var(--text-1);opacity:.55;flex:0 0 auto;font-variant-numeric:tabular-nums}
+.log-line .src{color:var(--primary);opacity:.85;flex:0 0 auto;font-weight:600}
+.log-line .msg{flex:1 1 auto;word-break:break-word;min-width:0}
+.log-line .empty-hint{opacity:.5;font-style:italic}
 
 /* v1.17.0d — CSS .debug-bar / .dbg-btn retiré (boutons mockup obsolètes en live). */
 
@@ -2078,6 +2151,105 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   100%{ clip-path:inset(0 0 0 0); opacity:1 }
 }
 
+/* v1.23.0 — Bouton CAM (📷) satellite-row : tap court = capture, long-press = menu front/back */
+.satellite-row .sat-btn.cam-btn{
+  position:relative;
+  overflow:visible;
+}
+.satellite-row .sat-btn.cam-btn::after{
+  content:"";
+  position:absolute;
+  left:-2px; right:-2px; top:-2px; bottom:-2px;
+  border-radius:inherit;
+  border:2px solid transparent;
+  pointer-events:none;
+  opacity:0;
+}
+.satellite-row .sat-btn.cam-btn.lp-arming::after{
+  border-color:rgba(255,170,60,.65);
+  opacity:1;
+  animation:lpArm 500ms linear forwards;
+}
+.satellite-row .sat-btn.cam-btn.busy{
+  opacity:.55;
+  pointer-events:none;
+}
+.satellite-row .sat-btn.cam-btn.flash{
+  animation:camFlash 280ms ease-out;
+}
+@keyframes camFlash{
+  0%{ box-shadow:0 0 0 0 rgba(255,255,255,.65), 0 0 22px 6px rgba(255,170,60,.55) }
+  100%{ box-shadow:0 0 0 12px rgba(255,255,255,0), 0 0 0 0 rgba(255,170,60,0) }
+}
+
+/* v1.23.0 — Mini menu déroulant CAM (front/back) — pattern cortex-variant-menu */
+.cam-direction-menu{
+  position:fixed;
+  z-index:2200;
+  min-width:160px;
+  background:rgba(8,16,28,.96);
+  border:1px solid rgba(255,170,60,.30);
+  border-radius:12px;
+  padding:6px;
+  box-shadow:0 12px 40px rgba(0,0,0,.65), 0 0 22px rgba(255,170,60,.18);
+  display:none;
+  opacity:0;
+  transform:scale(.95);
+  transition:opacity .14s ease, transform .14s ease;
+  pointer-events:auto;
+  backdrop-filter:blur(6px);
+}
+.cam-direction-menu.open{
+  display:block;
+  opacity:1;
+  transform:scale(1);
+}
+.cam-direction-menu .cd-menu-title{
+  font-size:8.5px;
+  letter-spacing:1.6px;
+  color:#a89070;
+  text-transform:uppercase;
+  padding:6px 10px 4px;
+  border-bottom:1px solid rgba(255,170,60,.16);
+  margin-bottom:4px;
+}
+.cam-direction-menu .cd-menu-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 10px;
+  border-radius:8px;
+  cursor:pointer;
+  font-size:11.5px;
+  color:#f0e0c8;
+  letter-spacing:.4px;
+  transition:background .12s ease, color .12s ease;
+  user-select:none;
+}
+.cam-direction-menu .cd-menu-item:hover,
+.cam-direction-menu .cd-menu-item:active{
+  background:rgba(255,170,60,.10);
+  color:#fff3dd;
+}
+.cam-direction-menu .cd-menu-item .cd-emoji{
+  font-size:14px; line-height:1; width:20px; text-align:center;
+}
+.cam-direction-menu .cd-menu-item .cd-name{ flex:1 1 auto; }
+.cam-direction-menu .cd-menu-item .cd-check{
+  width:14px; height:14px; display:inline-flex; align-items:center; justify-content:center;
+  font-size:11px; color:transparent;
+}
+.cam-direction-menu .cd-menu-item.checked{
+  background:rgba(255,170,60,.14);
+  color:#ffe2ac;
+  border:1px solid rgba(255,170,60,.40);
+  box-shadow:inset 0 0 8px rgba(255,170,60,.18);
+}
+.cam-direction-menu .cd-menu-item.checked .cd-check{
+  color:#ffba60;
+  text-shadow:0 0 6px rgba(255,170,60,.65);
+}
+
 /* PiP cortex stage : ajustements du pip-content pour intégrer cortex-stage
    (on garde display:block du parent ; cortex-stage est positioned:absolute dedans) */
 .pip-content.cortex-pip-mode{
@@ -2112,7 +2284,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.23</span>
+        <span class="version-tag version-badge">· v1.27.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2237,8 +2409,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
            (ACTIVITY → ACT pour gain de largeur 5 boutons sur 1 ligne mobile). -->
       <div class="slot-toggles">
         <button class="slot-toggle" data-slot="activity" title="Affiche/cache le panneau ACTIVITY (compteur tools session, last tool, top tools)">+ ACT</button>
-        <button class="slot-toggle" id="btnBoost" title="Switch modèle Claude : Haiku 4.5 (économique) ↔ Sonnet 4.6 (raisonnement avancé). Garde l'historique.">💪 BOOST</button>
         <button class="slot-toggle" id="btnUsage" title="Affiche/cache le panneau de consommation API (Claude / ElevenLabs / Groq) en temps réel">$</button>
+        <button class="slot-toggle" id="btnBoost" title="Switch modèle Claude : Haiku 4.5 (économique) ↔ Sonnet 4.6 (raisonnement avancé). Garde l'historique.">💪 BOOST</button>
         <button class="slot-toggle" id="btnMute" title="Couper la voix de Friday/Jarvis. Les réponses arrivent uniquement via le transcript (utile en environnement silencieux).">🔇 MUTE</button>
         <button class="slot-toggle" id="btnCaptions" title="Live captions : sous-titres éphémères de tes messages + réponses Friday, visibles sur toutes les pages. Tap pour activer/désactiver.">💬 CAP</button>
       </div>
@@ -2360,15 +2532,20 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       </span>
     </button>
 
-    <!-- Satellite row : 4 boutons restants (Logs ≡, Cortex 🧠, Settings ⚙, ConvMode).
+    <!-- Satellite row : 4 boutons restants (Logs ≡, Settings ⚙, Cortex 🧠, ConvMode).
          v1.18.1 — Bouton ◊ Mute mockup retiré : doublon avec le nouveau bouton
          🔇 MUTE de la rangée slot-toggles en haut (conflit d'ID HTML qui cassait
          mon handler). Le vrai mute est maintenant dans la ligne MUSIC/ACTIVITY/
-         BOOST/$/MUTE au-dessus du transcript. -->
+         BOOST/$/MUTE au-dessus du transcript.
+         v1.22.0 — Cortex et Settings swappés (Quang feedback 08/05). -->
     <div class="satellite-row">
       <button class="sat-btn" id="btnLog" title="Logs">≡</button>
-      <button class="sat-btn cortex-btn" id="btnCortex" title="🧠 Cortex">🧠 Cortex</button>
       <button class="sat-btn" id="btnSettings" title="Settings">⚙</button>
+      <button class="sat-btn cortex-btn" id="btnCortex" title="🧠 Cortex">🧠 Cortex</button>
+      <!-- v1.23.0 — Bouton caméra : tap court = capture (caméra arrière par défaut),
+           long-press = menu déroulant front/back persistant en localStorage. Friday
+           reçoit l'image et décide OCR vs description selon contexte vocal récent. -->
+      <button class="sat-btn cam-btn" id="btnCam" title="Caméra : tap = photo (Friday lit ou décrit) · long-press = front/back">📷</button>
       <!-- Bouton mode conversation (cycle OFF → CONV → CONTINUOUS) -->
       <button class="sat-btn conv-mode-btn mode-off" id="btnConvMode" data-mode="off" title="Mode conversation">
         <span class="cmb-ico">🚫</span><span class="cmb-label">OFF</span>
@@ -2388,23 +2565,30 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 </div>
 
 <!-- ==== Log panel ==== -->
+<!-- v1.22.0 — MOCKUP REMPLACÉ par live events backend.
+     Quang feedback v1.21.7 : "le bouton log n'est pas à jour, il est resté
+     en mockup. Comme sur PC, il devrait contenir filtre, Clear, Copy, Export
+     en TXT." Pattern porté du HUD PC LogHUD (mais simplifié : pas de wrap
+     console.* car le mobile ne fait pas de logique applicative côté JS,
+     les events backend suffisent). -->
 <aside class="log-panel" id="logPanel" aria-hidden="true">
   <div class="log-header">
-    <span>LOG · MOCK</span>
-    <button class="log-close" id="logClose">CLOSE</button>
+    <span>LOG · LIVE</span>
+    <div class="log-actions">
+      <select class="log-filter" id="logFilter" title="Niveau minimum affiché">
+        <option value="DEBUG">DBG+</option>
+        <option value="INFO" selected>INFO+</option>
+        <option value="WARN">WARN+</option>
+        <option value="ERROR">ERR</option>
+      </select>
+      <button class="log-btn" id="logClear" title="Vider l'écran">CLEAR</button>
+      <button class="log-btn" id="logCopy" title="Copier dans le presse-papier">COPY</button>
+      <button class="log-btn" id="logExport" title="Télécharger en .txt">EXPORT</button>
+      <button class="log-close" id="logClose">CLOSE</button>
+    </div>
   </div>
   <div class="log-body" id="logBody">
-    <div class="log-line info"><span class="ts">21:14:02</span><span class="src">[WS]</span>WebSocket connected (mock)</div>
-    <div class="log-line dbg"><span class="ts">21:14:03</span><span class="src">[STT]</span>wake_state=idle</div>
-    <div class="log-line info"><span class="ts">21:14:05</span><span class="src">[LLM]</span>persona=friday-mcu loaded</div>
-    <div class="log-line dbg"><span class="ts">21:14:06</span><span class="src">[UI]</span>view=home active</div>
-    <div class="log-line info"><span class="ts">21:14:11</span><span class="src">[CTX]</span>context_update: location=Lyon 7</div>
-    <div class="log-line warn"><span class="ts">21:14:14</span><span class="src">[NET]</span>cellular signal -82dBm</div>
-    <div class="log-line dbg"><span class="ts">21:14:18</span><span class="src">[STT]</span>VAD threshold=0.45</div>
-    <div class="log-line info"><span class="ts">21:14:22</span><span class="src">[TTS]</span>voice=friday-piper-mcu rate=1.0</div>
-    <div class="log-line dbg"><span class="ts">21:14:25</span><span class="src">[UI]</span>panel.context show=true</div>
-    <div class="log-line info"><span class="ts">21:14:30</span><span class="src">[FEED]</span>3 events queued</div>
-    <div class="log-line dbg"><span class="ts">21:14:33</span><span class="src">[BAT]</span>level=64% drain=2.1%/h</div>
+    <div class="log-line dbg"><span class="ts">--:--:--</span><span class="src">[WS]</span><span class="msg empty-hint">En attente des événements backend…</span></div>
   </div>
 </aside>
 
@@ -2464,8 +2648,24 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <span class="settings-label">Captions position</span>
       <button class="settings-btn settings-btn-toggle" id="settingsCapPosition">↑ HAUT</button>
     </div>
+    <div class="settings-row">
+      <span class="settings-label">Captions opacité</span>
+      <input type="range" class="settings-slider" id="settingsCapOpacity" min="0" max="100" step="5" value="85">
+      <span class="settings-val" id="settingsCapOpacityVal">85%</span>
+    </div>
     <div class="settings-row settings-info">
       <span id="settingsTtsEngine" class="settings-meta">moteur : —</span>
+    </div>
+    <!-- v1.22.2 — Mode conversation continue : 2 paramètres (Quang feedback) -->
+    <div class="settings-row">
+      <span class="settings-label">Pause fin de phrase</span>
+      <input type="range" class="settings-slider" id="settingsSilencePause" min="1.0" max="5.0" step="0.1" value="2.5">
+      <span class="settings-val" id="settingsSilencePauseVal">2.5s</span>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Durée écoute follow-up</span>
+      <input type="range" class="settings-slider" id="settingsFollowUp" min="3" max="15" step="1" value="6">
+      <span class="settings-val" id="settingsFollowUpVal">6s</span>
     </div>
     <div class="settings-row">
       <button class="settings-btn settings-btn-danger" id="settingsReset">🗑 Reset config (efface localStorage)</button>
@@ -2536,6 +2736,17 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   </div>
 </div>
 
+<!-- v1.23.0 — Mini menu déroulant CAM front/back (long-press sur 📷). Default = back. -->
+<div class="cam-direction-menu" id="camDirectionMenu" role="menu" aria-hidden="true">
+  <div class="cd-menu-title">Caméra</div>
+  <div class="cd-menu-item checked" data-facing="back" role="menuitemradio" aria-checked="true">
+    <span class="cd-emoji">📷</span><span class="cd-name">Arrière</span><span class="cd-check">✓</span>
+  </div>
+  <div class="cd-menu-item" data-facing="front" role="menuitemradio" aria-checked="false">
+    <span class="cd-emoji">🤳</span><span class="cd-name">Avant (selfie)</span><span class="cd-check">✓</span>
+  </div>
+</div>
+
 <script>
 /* =========================================================================
    FRIDAY MOBILE MOCK-UP — JS
@@ -2553,19 +2764,32 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   //   et envoie 'tts_speak_text' au mobile → window.speechSynthesis.speak
   //   (Friday parle dans le HP du tel via TTS OS natif).
   // + glide-typing fix (autocomplete on, enterkeyhint=send, inputmode=text).
-  const VERSION = '1.23.0';
+  // v1.24.0 — INTERRUPT TAP : pendant que Friday parle (state=speaking), le
+  // bouton micro morphe en ⏹ rouge + label "TAP TO STOP". Tap court → coupe
+  // l'audio TTS net (Web Audio _stopAllTtsSources local, 0ms latence) +
+  // envoie {type:'interrupt'} au backend (cancel pipeline serveur) + vibre
+  // 20ms. Long-press → barge-in : coupe TTS + démarre HOLD recording immédiat.
+  // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
+  // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
+  // (Kimi recommandation vote 3-LLM 17/05).
+  const VERSION = '1.27.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
   const WS_URL = (function(){
     const override = QUERY.get('ws');
     if (override) return override;
-    if (location.hostname === 'quang101182.github.io') {
+    // v1.21.6 — Hosts off-LAN (PWA github.io, APK Capacitor avec
+    // hostname=localhost ou vide) → tunnel Tailscale Funnel public
+    // wss://desktop-97pf6l1.tailc503e.ts.net:8445/?kind=mobile.
+    // Pour test bureau (page servie en HTTP local) on garde le ws://host:8765.
+    const h = location.hostname || '';
+    if (h === 'quang101182.github.io' || h === 'localhost' || h === '' ||
+        h === '127.0.0.1' && location.protocol === 'file:') {
       return 'wss://desktop-97pf6l1.tailc503e.ts.net:8445/?kind=mobile';
     }
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = location.hostname || '127.0.0.1';
-    return `${proto}//${host}:8765/?kind=mobile`;
+    return `${proto}//${h}:8765/?kind=mobile`;
   })();
   const STATE_COLORS = {
     idle:      { ring:'#5a7090', glow:'rgba(90,112,144,.35)'  },
@@ -2600,7 +2824,14 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     muted: false,
     logPanelOpen: false,
     state: 'idle',                          // idle | listening | thinking | speaking
-    view: 'home'                            // home | map | cosmos
+    view: 'home',                           // home | map | cosmos
+    // v1.22.2 — Mode conversation continue (Quang feedback v1.22.1) :
+    // pause de fin de phrase = secondes de silence avant auto-stop du mic.
+    // Pattern PC `capture_silence_end_s` (jarvis_backend.py:250, default 2.5).
+    silencePauseS: 2.5,                     // 1.0 - 5.0 s
+    // Durée écoute follow-up = combien de secondes le mic reste ouvert post-TTS
+    // pour que Quang puisse répondre. Pattern PC `follow_up_window_s` (default 6).
+    followUpWindowS: 6                      // 3 - 15 s
   };
   let config = {};
 
@@ -2667,6 +2898,18 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     document.documentElement.style.setProperty('--state-glow', STATE_COLORS[s].glow);
     $('#stateLabel').textContent=s.toUpperCase();
     $('#stateHint').textContent=STATE_HINTS[s];
+    // v1.24.0 — Label micBtn dynamique pendant SPEAKING : remplace
+    // "TAP TO TALK" par "TAP TO STOP" pour signaler l'action d'interruption
+    // disponible. Ne touche pas le label si ui.recording (RECORDING/HOLD
+    // gérés par startRecording/stopRecording). Reset à TAP TO TALK quand
+    // on quitte SPEAKING vers IDLE.
+    try {
+      const lbl = $('#micLabel');
+      if(lbl && !ui.recording){
+        if(s === 'speaking')       lbl.textContent = 'TAP TO STOP';
+        else if(s === 'idle')      lbl.textContent = 'TAP TO TALK';
+      }
+    } catch(_) {}
     // v1.17.0d — Highlight debug btn retiré (debug bar mockup supprimée).
     // V1.3 : persiste l'état + propage au cortex si actif
     config.state = s;
@@ -3004,10 +3247,13 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     window.__vibrationsOn = vibrationsOn;
 
     // v1.21.5 — Live Captions options : enabled toggle + timeout slider + position toggle
+    // v1.21.6 — Ajout slider opacité fond bulles (0-100%, default 85%).
     const capEnBtn = $('#settingsCapEnabled');
     const capTo    = $('#settingsCapTimeout');
     const capToVal = $('#settingsCapTimeoutVal');
     const capPosBtn = $('#settingsCapPosition');
+    const capOp    = $('#settingsCapOpacity');
+    const capOpVal = $('#settingsCapOpacityVal');
     function _refreshCapUi(){
       const c = LiveCaptions.getCfg();
       capEnBtn.textContent = c.enabled ? 'ON' : 'OFF';
@@ -3016,6 +3262,9 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       capToVal.textContent = c.timeout_s + 's';
       capPosBtn.textContent = (c.position === 'bottom') ? '↓ BAS' : '↑ HAUT';
       capPosBtn.classList.toggle('on', c.position === 'bottom');
+      const opPct = Math.round((c.opacity == null ? 0.85 : c.opacity) * 100);
+      if(capOp){ capOp.value = opPct; }
+      if(capOpVal){ capOpVal.textContent = opPct + '%'; }
     }
     _refreshCapUi();
     capEnBtn.addEventListener('click', () => {
@@ -3033,7 +3282,41 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       LiveCaptions.setPosition(c.position === 'bottom' ? 'top' : 'bottom');
       _refreshCapUi();
     });
+    if(capOp){
+      capOp.addEventListener('input', e => {
+        const pct = parseInt(e.target.value, 10);
+        LiveCaptions.setOpacity(pct / 100);
+        capOpVal.textContent = pct + '%';
+      });
+    }
 
+    // v1.22.2 — Sliders Mode conversation continue (pause fin phrase + durée écoute)
+    const silencePause = $('#settingsSilencePause');
+    const silencePauseVal = $('#settingsSilencePauseVal');
+    const followUp = $('#settingsFollowUp');
+    const followUpVal = $('#settingsFollowUpVal');
+    if(silencePause){
+      const cur = (config && config.silencePauseS != null) ? parseFloat(config.silencePauseS) : 2.5;
+      silencePause.value = cur.toFixed(1);
+      if(silencePauseVal) silencePauseVal.textContent = cur.toFixed(1) + 's';
+      silencePause.addEventListener('input', e => {
+        const v = parseFloat(e.target.value);
+        config.silencePauseS = v;
+        try { saveConfig(); } catch(_){}
+        if(silencePauseVal) silencePauseVal.textContent = v.toFixed(1) + 's';
+      });
+    }
+    if(followUp){
+      const cur = (config && config.followUpWindowS != null) ? parseInt(config.followUpWindowS, 10) : 6;
+      followUp.value = cur;
+      if(followUpVal) followUpVal.textContent = cur + 's';
+      followUp.addEventListener('input', e => {
+        const v = parseInt(e.target.value, 10);
+        config.followUpWindowS = v;
+        try { saveConfig(); } catch(_){}
+        if(followUpVal) followUpVal.textContent = v + 's';
+      });
+    }
     // Reset config
     $('#settingsReset').addEventListener('click', () => {
       if(!confirm('Effacer toute la config Friday Mobile (variantes cortex, MUTE, voix TTS, vibrations) ?')) return;
@@ -3201,7 +3484,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
      ========================================================================= */
   const LiveCaptions = (() => {
     const KEY = 'friday.mobile.captions';
-    const DEFAULTS = { enabled: true, timeout_s: 7, position: 'top' };
+    const DEFAULTS = { enabled: true, timeout_s: 7, position: 'top', opacity: 0.85 };
     let cfg = Object.assign({}, DEFAULTS);
     try {
       const saved = localStorage.getItem(KEY);
@@ -3213,7 +3496,20 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       if(!container) return;
       container.setAttribute('data-position', cfg.position === 'bottom' ? 'bottom' : 'top');
     }
+    function applyOpacity(){
+      // v1.22.0 — Slider unique pilote 4 vars CSS : fond + blur + bord + ombre.
+      // Mapping linéaire 0..1 sur tous. À 0% = bulle invisible (texte seul), à
+      // 100% = rendu actuel intact. Quang feedback v1.21.7 : "même à 0% le fond
+      // n'est pas vraiment transparent" → blur+border+shadow restaient visibles.
+      const v = Math.max(0, Math.min(1, cfg.opacity == null ? 0.85 : cfg.opacity));
+      const root = document.documentElement.style;
+      root.setProperty('--lc-bg-opacity', v.toFixed(2));
+      root.setProperty('--lc-blur-px', (12 * v).toFixed(1) + 'px');
+      root.setProperty('--lc-border-alpha', v.toFixed(2));
+      root.setProperty('--lc-shadow-alpha', v.toFixed(2));
+    }
     applyPosition();
+    applyOpacity();
     // Map des bulles actives par role : on garde une seule bulle user et une
     // seule friday visibles. Si une nouvelle arrive, on remplace l'ancienne.
     const active = { user: null, friday: null };
@@ -3277,8 +3573,9 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     }
     function setTimeout_s(s){ cfg.timeout_s = s; save(); }
     function setPosition(p){ cfg.position = (p === 'bottom') ? 'bottom' : 'top'; save(); applyPosition(); }
+    function setOpacity(o){ cfg.opacity = Math.max(0, Math.min(1, o)); save(); applyOpacity(); }
     function getCfg(){ return Object.assign({}, cfg); }
-    return { add, setEnabled, setTimeout: setTimeout_s, setPosition, getCfg };
+    return { add, setEnabled, setTimeout: setTimeout_s, setPosition, setOpacity, getCfg };
   })();
   // Init bouton CAP toggle
   (function(){
@@ -3292,6 +3589,233 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       try{ navigator.vibrate && navigator.vibrate(8);}catch(e){}
     });
   })();
+
+  /* =========================================================================
+     v1.22.0 — MobileLogHUD : panneau LOG live (parité PC LogHUD).
+     Quang feedback v1.21.7 : "le bouton log n'est pas à jour, il est resté
+     en mockup. Comme sur PC, il devrait contenir filtre, Clear, Copy, Export
+     en TXT." Implémentation simplifiée vs PC LogHUD :
+       - Pas de wrap console.* (le mobile fait peu de logique JS pure)
+       - Reçoit events backend `log` + `log_init` ET mirror tous les events
+         backend non-log (transcript/tts/state/tool/wake/etc.) avec source
+         dérivée du type (cf PC ligne 4929-4954 du HUD desktop).
+       - Filtre par niveau, Clear, Copy clipboard, Export .txt.
+       - Buffer interne plafonné MAX_LINES pour éviter explosion mémoire.
+     ========================================================================= */
+  const MobileLogHUD = (() => {
+    const MAX_LINES = 800;
+    const LEVELS = { DEBUG:0, INFO:1, WARN:2, ERROR:3 };
+    let buffer = [];
+    let minLevel = LEVELS.INFO; // INFO+ par défaut (cohérent PC)
+    const body = () => document.getElementById('logBody');
+    function _fmtTs(ts){
+      const d = ts ? new Date(typeof ts === 'number' ? ts : Date.parse(ts)) : new Date();
+      return String(d.getHours()).padStart(2,'0') + ':' +
+             String(d.getMinutes()).padStart(2,'0') + ':' +
+             String(d.getSeconds()).padStart(2,'0');
+    }
+    function _shouldShow(level){
+      const lv = LEVELS[level];
+      return (typeof lv === 'number') && lv >= minLevel;
+    }
+    function _renderLine(entry){
+      const el = document.createElement('div');
+      const cls = entry.level === 'DEBUG' ? 'dbg' :
+                  entry.level === 'WARN'  ? 'warn' :
+                  entry.level === 'ERROR' ? 'err' : 'info';
+      el.className = 'log-line ' + cls;
+      el.dataset.level = entry.level;
+      const ts = document.createElement('span'); ts.className='ts'; ts.textContent = _fmtTs(entry.ts);
+      const src = document.createElement('span'); src.className='src'; src.textContent = '['+(entry.source||'?')+']';
+      const msg = document.createElement('span'); msg.className='msg'; msg.textContent = entry.msg||'';
+      el.appendChild(ts); el.appendChild(src); el.appendChild(msg);
+      return el;
+    }
+    function _clearEmptyHint(){
+      const b = body(); if(!b) return;
+      const hint = b.querySelector('.empty-hint');
+      if(hint && hint.parentElement) hint.parentElement.remove();
+    }
+    function _appendDOM(entry){
+      const b = body(); if(!b) return;
+      if(!_shouldShow(entry.level)) return;
+      _clearEmptyHint();
+      const wasAtBottom = (b.scrollTop + b.clientHeight + 30) >= b.scrollHeight;
+      b.appendChild(_renderLine(entry));
+      while(b.children.length > MAX_LINES) b.removeChild(b.firstChild);
+      if(wasAtBottom) b.scrollTop = b.scrollHeight;
+    }
+    function _rerenderAll(){
+      const b = body(); if(!b) return;
+      b.innerHTML = '';
+      buffer.slice(-MAX_LINES).forEach(_appendDOM);
+    }
+    function push(level, source, msg, ts){
+      const entry = {
+        level: (level||'INFO').toString().toUpperCase(),
+        source: (source||'?').toString().toUpperCase(),
+        msg: (msg==null ? '' : String(msg)),
+        ts: ts || Date.now(),
+      };
+      if(!LEVELS.hasOwnProperty(entry.level)) entry.level = 'INFO';
+      buffer.push(entry);
+      if(buffer.length > MAX_LINES * 2) buffer = buffer.slice(-MAX_LINES);
+      _appendDOM(entry);
+    }
+    function clear(){
+      buffer = [];
+      const b = body(); if(b) b.innerHTML = '';
+    }
+    function _toText(){
+      return buffer.map(e => _fmtTs(e.ts) + ' [' + e.level + '] ' + e.source + ' · ' + e.msg).join('\n');
+    }
+    async function copy(){
+      const text = _toText();
+      try {
+        if(navigator.clipboard && navigator.clipboard.writeText){
+          await navigator.clipboard.writeText(text);
+        } else {
+          // Fallback Capacitor + textarea hidden
+          const ta = document.createElement('textarea');
+          ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+          document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        try { toast('Logs copiés (' + buffer.length + ' lignes)', 1400); } catch(_){}
+      } catch(e){
+        try { toast('Copie impossible', 1400); } catch(_){}
+      }
+    }
+    async function exportTxt(){
+      // v1.22.2 — Pattern PromoClip (App/promoclip/index.html ligne 2683) :
+      // Capacitor.Plugins.Filesystem.writeFile dans Documents/. Quang feedback
+      // v1.22.1 : "l'export marche pas, inspire-toi de PromoClip/SubWhisper".
+      // Le pattern Web Share v1.22.1 retournait peut-être un toast OK (handler)
+      // mais n'écrivait pas de fichier visible dans Files Android. Filesystem
+      // writeFile écrit VRAIMENT dans Documents/, l'user trouve le fichier via
+      // Files / Telegram (joindre depuis Documents). Fallback navigator.share
+      // si plugin pas dispo, puis <a download> pour PC.
+      try {
+        const text = _toText();
+        if(!text){ try { toast('Aucun log à exporter', 1400); } catch(_){} return; }
+        const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+        const filename = 'friday-mobile-log-' + ts + '.txt';
+        // Path 1 (Android APK) : Capacitor Filesystem → Documents/
+        if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem){
+          try {
+            await window.Capacitor.Plugins.Filesystem.writeFile({
+              path: filename,
+              data: btoa(unescape(encodeURIComponent(text))),
+              directory: 'DOCUMENTS',
+              recursive: true,
+            });
+            try { toast('Sauvegardé : Documents/' + filename, 2200); } catch(_){}
+            return;
+          } catch(e){
+            console.warn('[log-export] Filesystem writeFile failed:', e && e.message);
+            // Continue vers fallbacks
+          }
+        }
+        // Path 2 (Web/PWA mobile) : navigator.share avec File
+        if(navigator.canShare){
+          try {
+            const file = new File([text], filename, { type: 'text/plain' });
+            if(navigator.canShare({ files: [file] })){
+              await navigator.share({
+                files: [file],
+                title: 'Friday Mobile Logs',
+                text: buffer.length + ' lignes · ' + filename,
+              });
+              try { toast('Logs partagés', 1400); } catch(_){}
+              return;
+            }
+          } catch(e){ console.warn('[log-export] canShare threw:', e); }
+        }
+        // Path 3 (PC) : <a download> classique
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        setTimeout(()=>{ try{ URL.revokeObjectURL(url); a.remove(); }catch(_){}}, 200);
+        try { toast('Téléchargé : ' + filename, 1600); } catch(_){}
+      } catch(e){
+        try { toast('Export impossible : ' + (e.message||'?'), 2000); } catch(_){}
+      }
+    }
+    function setMinLevel(lvl){
+      const k = (lvl||'INFO').toUpperCase();
+      if(LEVELS.hasOwnProperty(k)){
+        minLevel = LEVELS[k];
+        _rerenderAll();
+      }
+    }
+    return { push, clear, copy, export: exportTxt, setMinLevel };
+  })();
+  // Wire controls
+  (function(){
+    const fSel = document.getElementById('logFilter');
+    if(fSel) fSel.addEventListener('change', e => MobileLogHUD.setMinLevel(e.target.value));
+    const c = document.getElementById('logClear'); if(c) c.addEventListener('click', () => MobileLogHUD.clear());
+    const cp = document.getElementById('logCopy'); if(cp) cp.addEventListener('click', () => MobileLogHUD.copy());
+    const ex = document.getElementById('logExport'); if(ex) ex.addEventListener('click', () => MobileLogHUD.export());
+  })();
+  // Source dérivée du type d'event backend (parité PC HUD ligne 4929+).
+  const _LOG_SRC_RULES = [
+    [/^(transcript|stt)/, 'STT'],
+    [/^(tts|assistant)/, 'LLM'],
+    [/^(wake|conv|follow)/, 'WAKE'],
+    [/^tool/, 'TOOL'],
+    [/^state$/, 'STATE'],
+    [/^(mobile|client)/, 'MOB'],
+    [/^(holo|map|cosmos|webcam|ocr|screenshot|remote_frame|remote_view)/, 'VIZ'],
+    [/^(memory|remember|forget|sleep)/, 'MEM'],
+    [/^(config|context|feed|activity|usage|voice_avatar|music|globe|windows|system)/, 'EVT'],
+    [/^error/, 'ERR'],
+  ];
+  function _logSrcOf(t){
+    for(const [re, src] of _LOG_SRC_RULES){ if(re.test(t)) return src; }
+    return 'WS';
+  }
+  function _logLevelOf(t){
+    if(t === 'error' || t === 'tts_error') return 'ERROR';
+    if(/^(audio_level|remote_frame)$/.test(t)) return 'DEBUG'; // skip via filter par défaut
+    if(/_failed$|_error$/.test(t)) return 'WARN';
+    return 'INFO';
+  }
+  function _logSummaryOf(t, m){
+    if(!m) return '';
+    if(typeof m.text === 'string') return m.text.slice(0, 80);
+    if(typeof m.msg === 'string') return m.msg.slice(0, 80);
+    if(typeof m.code === 'string') return m.code + (m.error ? ' ' + String(m.error).slice(0,40) : '');
+    if(typeof m.value !== 'undefined') return String(m.value).slice(0, 40);
+    if(typeof m.name === 'string') return m.name;
+    if(typeof m.tool === 'string') return m.tool + (m.ok != null ? (m.ok ? ' ok' : ' KO') : '');
+    return '';
+  }
+  // Events backend ULTRA bruyants : skip COMPLET du buffer (sinon ~30/s
+  // d'audio_level + ~3/s de remote_frame saturent le buffer LogHUD en quelques
+  // dizaines de secondes). Le PC fait pareil (cf HUD ligne 4944+).
+  const _LOG_SKIP_TYPES = new Set(['audio_level', 'remote_frame', 'meta']);
+  // API exposée pour le router WS (cf handleWsMessage plus bas)
+  window._mobileMirrorLog = function(t, m){
+    if(!t) return;
+    if(_LOG_SKIP_TYPES.has(t)) return; // bruit pur
+    try {
+      if(t === 'log'){
+        MobileLogHUD.push(m.level, m.source || 'BACKEND', m.msg || '', m.ts);
+        return;
+      }
+      if(t === 'log_init'){
+        (m.entries || []).forEach(e => MobileLogHUD.push(e.level, e.source, e.msg, e.ts));
+        return;
+      }
+      const lvl = _logLevelOf(t);
+      const src = _logSrcOf(t);
+      const sum = _logSummaryOf(t, m);
+      MobileLogHUD.push(lvl, src, t + (sum ? ' · ' + sum : ''));
+    } catch(_){}
+  };
 
   // v1.21.0 — Streaming carte/cosmos : reçoit un frame JPEG du HUD PC et
   // l'affiche dans l'<img> correspondant. Cache le placeholder dès le 1er
@@ -3413,6 +3937,16 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     document.body.classList.toggle('conv-mode-continuous', mode==='continuous');
     // toast (skip si hydration silencieuse au boot)
     if(!opts.silent) toast(CONV_LABELS[mode].toast, 1600);
+    // v1.22.1 — Le bouton ConvMode mobile pilote UNIQUEMENT le comportement
+    // local du mic mobile (auto-PTT post-TTS). Il NE TOUCHE PAS au wake_mode
+    // backend qui pilote la fenêtre VAD du mic PC (sans rapport avec mobile).
+    // La logique réelle (auto-trigger startRecording après tts_end selon le
+    // mode) est dans onTtsEnd → _finalize().
+    // v1.22.2 — Si on bascule en OFF et qu'un recording auto-loop tourne
+    // (continuous), on l'interrompt immédiatement (sinon le micro reste ouvert).
+    if(mode === 'off' && ui.recording && !opts.silent){
+      try { stopRecording(true); } catch(_){}
+    }
     // gestion countdown CONV (6s) — non lancé en silent (sinon barre se relance à chaque reload)
     clearConvCountdown();
     if(mode==='conv' && !opts.silent){
@@ -3504,6 +4038,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 
   function stopRecording(autoStopped){
     if(!ui.recording) return;
+    _explicitStop = true;   // v1.26.1 DIAG — marque ce stop comme explicite (par opposition à un teardown de piste)
     ui.recording=false;
     clearInterval(ui.progressTimer);
     ui.progressTimer=null;
@@ -3600,6 +4135,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     ui.pressTimer=setTimeout(()=>{
       // long press → HOLD
       ui.pressTimer=null;
+      // v1.24.0 — Si Friday parle au moment du long press : interrupt d'abord
+      // puis enchaîne HOLD recording (barge-in style ProjetEduc : couper +
+      // ouvrir le mic immédiatement pour reparler sans 2e geste).
+      if(ui.state === 'speaking'){
+        mobileInterruptTts('hold-barge-in');
+      }
       startRecording(true);
     }, HOLD_THRESHOLD);
   });
@@ -3608,6 +4149,14 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     if(ui.pressTimer){
       clearTimeout(ui.pressTimer);
       ui.pressTimer=null;
+      // v1.24.0 — Tap court pendant SPEAKING = interrupt SEUL (l'user veut
+      // couper Friday sans forcément reparler). Pas de startRecording, il
+      // peut retaper pour parler. Si l'user voulait barge-in + parler, c'est
+      // le long press qui le gère (cf pointerdown setTimeout).
+      if(ui.state === 'speaking'){
+        mobileInterruptTts('tap-stop');
+        return;
+      }
       // tap court (relâché avant HOLD_THRESHOLD) → TOGGLE on/off
       if(ui.recording){ stopRecording(false); }
       else            { startRecording(false); }
@@ -4849,9 +5398,41 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   let _micRafId = null;
   let _micTimeBuf = null;
   let _micFreqBuf = null;
+  // v1.22.2 — VAD silence detection (mode conv/continuous mobile).
+  // Activé par startRecording quand vadAutoStop=true. Le tick mesure RMS et
+  // déclenche onSilence après silenceMs ms de silence consécutif (post grace
+  // period pour ne pas couper avant que l'user n'ait commencé à parler).
+  let _vadActive = false;
+  let _vadSilenceMs = 2500;       // pause de fin de phrase configurable
+  let _vadGraceMs = 1500;         // grace period au début (1.5s avant d'écouter)
+  let _vadThreshold = 0.018;      // RMS 0..1 sous lequel = silence (calibré voix normale)
+  let _vadOnSilence = null;       // callback déclenché 1× sur silence détecté
+  let _vadAnalyserStartTs = 0;
+  let _vadSilenceStartTs = null;
+  function _vadReset(){ _vadSilenceStartTs = null; _vadAnalyserStartTs = 0; _vadActive = false; _vadOnSilence = null; }
+  function configureVAD(options){
+    options = options || {};
+    _vadSilenceMs = Math.max(500, options.silenceMs || 2500);
+    _vadGraceMs = Math.max(200, options.graceMs || 1500);
+    _vadThreshold = Math.max(0.005, Math.min(0.1, options.threshold || 0.018));
+    _vadOnSilence = options.onSilence || null;
+    _vadActive = true;
+  }
   function startMicAnalyser(stream){
     try {
+      // v1.26.0 — FIX arming VAD. configureVAD() est appelé JUSTE AVANT
+      // startMicAnalyser (dans _finalize) pour armer la détection de fin de phrase
+      // du mode conv/continuous. Or stopMicAnalyser() ci-dessous appelle _vadReset()
+      // qui EFFAÇAIT cette config (_vadActive=false, _vadOnSilence=null) → la garde
+      // du tick `if(_vadActive && _vadOnSilence)` était TOUJOURS fausse → onSilence
+      // jamais déclenché → le réglage "pause fin de phrase" (silencePauseS) n'avait
+      // AUCUN effet. Fix : sauvegarder la config VAD armée et la ré-armer après le reset.
+      const _savedVad = _vadActive ? {
+        silenceMs: _vadSilenceMs, graceMs: _vadGraceMs,
+        threshold: _vadThreshold, onSilence: _vadOnSilence,
+      } : null;
       stopMicAnalyser();
+      if(_savedVad) configureVAD(_savedVad);
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if(!Ctx) { console.warn('[mic-analyser] AudioContext unsupported'); return; }
       _micAudioCtx = new Ctx();
@@ -4869,7 +5450,9 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       src.connect(_micAnalyser);
       _micTimeBuf = new Uint8Array(_micAnalyser.fftSize);
       _micFreqBuf = new Uint8Array(_micAnalyser.frequencyBinCount);
-      console.log('[mic-analyser] started, ctx.state=', _micAudioCtx.state);
+      _vadAnalyserStartTs = performance.now();
+      _vadSilenceStartTs = null;
+      console.log('[mic-analyser] started, ctx.state=', _micAudioCtx.state, 'vad=', _vadActive);
       const tick = () => {
         if(!_micAnalyser) return;
         // RMS depuis le domaine temporel (moyenne quadratique des samples [-1..1])
@@ -4892,6 +5475,28 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         const fftAvg = acc / Math.max(1, hi - lo); // 0..255
         const fft = Math.min(100, Math.round(fftAvg * 0.6));
         applyFft(fft);
+        // v1.22.2 — VAD silence check (mode conv/continuous post-TTS).
+        // Au-delà de la grace period, si RMS reste sous threshold pendant
+        // silenceMs ms consécutifs, déclenche onSilence (qui appellera
+        // stopRecording et auto-soumettra la phrase au backend).
+        if(_vadActive && _vadOnSilence){
+          const elapsed = performance.now() - _vadAnalyserStartTs;
+          if(elapsed > _vadGraceMs){
+            if(rms01 < _vadThreshold){
+              if(_vadSilenceStartTs === null) _vadSilenceStartTs = performance.now();
+              else if(performance.now() - _vadSilenceStartTs >= _vadSilenceMs){
+                const cb = _vadOnSilence;
+                _vadActive = false;
+                _vadOnSilence = null;
+                _vadSilenceStartTs = null;
+                try { cb(); } catch(e){ console.warn('[vad] onSilence failed:', e); }
+                return; // n'enchaîne pas un autre tick (stopMicAnalyser appelé par stopRecording)
+              }
+            } else {
+              _vadSilenceStartTs = null;  // reset compteur sur retour parole
+            }
+          }
+        }
         _micRafId = requestAnimationFrame(tick);
       };
       _micRafId = requestAnimationFrame(tick);
@@ -4908,6 +5513,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       try { _micAudioCtx.close(); } catch(_) {}
       _micAudioCtx = null;
     }
+    _vadReset();
     // v1.17.0d — Retour à l'animation native @keyframes coreBreath (respiration idle)
     // en retirant les overrides --rms-scale / --fft-amp.
     clearVisualEnvelope();
@@ -5067,11 +5673,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   let wsReady = false;
   let reconnectDelay = 1500;
   const RECONNECT_MAX = 8000;
-  // v1.22.0 — État résilience réseau (reconnexion robuste mobile). Déclaré tôt
-  // pour éviter toute TDZ : lu par scheduleReconnect / handleWsMessage.
+  // v1.25.0 — État résilience réseau (report du fix PWA v1.22.0 sur l'APK).
   const NET = { lastRxTs: Date.now(), reconnectTimer: null };
-  const STALE_MS = 15000;  // 0 msg reçu depuis 15s (backend broadcast ~2-8s) = socket zombie
-  const PING_MS  = 10000;  // ping sortant léger (garde le lien actif, provoque du trafic)
+  const STALE_MS = 15000;
+  const PING_MS  = 10000;
   let pendingTtsMeta = null;
   let currentTtsAudio = null;
   let currentTtsUrl = null;
@@ -5088,6 +5693,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   let recSentStart = false;
   let recPendingSends = 0;
   let recStopRequested = false;
+  let _explicitStop = false;   // v1.26.1 DIAG — true si stop explicite (stopRecording), reste false si teardown piste (mediaRec.onstop spontané)
+  let _stopReason = '';        // v1.26.2 DIAG — 'vad' | 'conv-timeout' | '' (autre/manuel)
 
   // ------ TTS playback ------
   // v1.20.0 — 2 chemins :
@@ -5100,6 +5707,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   let _ttsNextStartTime = 0;
   let _ttsActiveSources = [];
   let _ttsSr = 22050;
+  // v1.24.0 — Flag anti-race Web Audio. Posé par mobileInterruptTts() au tap
+  // user, levé à l'arrivée du prochain tts_audio_meta (= nouveau TTS fresh).
+  // Empêche qu'un chunk binaire WS arrivé pile entre _stopAllTtsSources() et
+  // le _interrupt_current backend (latence Tailscale ~50-200ms) ne crée
+  // une nouvelle BufferSource fantôme qui jouerait après le stop.
+  let _ttsInterruptPending = false;
   function _ensureTtsCtx(){
     if(!_ttsAudioCtx){
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -5112,13 +5725,43 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     return _ttsAudioCtx;
   }
   function _stopAllTtsSources(){
+    // v1.24.0 — DeepSeek/Kimi recommandation : stop(0) explicite pour couper
+    // immédiat (vs stop() sans arg qui peut attendre fin de buffer en attente).
+    // Petit click possible sur Android moderne mais négligeable acoustique
+    // pour le TTS vocal (Kimi : "perfectionnement post-MVP via GainNode fade
+    // 20ms si gênant — pas prioritaire").
     for(const s of _ttsActiveSources){
-      try { s.stop(); s.disconnect(); } catch(_) {}
+      try { s.stop(0); s.disconnect(); } catch(_) {}
     }
     _ttsActiveSources = [];
     _ttsNextStartTime = 0;
   }
+  // v1.24.0 — Interrupt TTS depuis tap user (bouton micBtn pendant SPEAKING).
+  // Pipeline : flag race ON → flush local Web Audio (0ms) → ws interrupt
+  // (backend cancel pipeline ~50-200ms Tailscale) → vibration feedback → UI
+  // idle local. Si WS perdu (Tailscale reconnect race), l'audio s'arrête
+  // quand même côté tel ; le backend finira ses chunks dans le vide puis
+  // reviendra IDLE seul (acceptable MVP, cf vote 3-LLM 17/05).
+  function mobileInterruptTts(reason){
+    _ttsInterruptPending = true;
+    try { _stopAllTtsSources(); } catch(e){ console.warn('[interrupt] stop sources err:', e); }
+    try {
+      if(typeof wsSendJson === 'function'){
+        wsSendJson({ type: 'interrupt', source: 'mobile-tap', reason: reason || 'tap-stop' });
+      } else if(typeof ws !== 'undefined' && ws && ws.readyState === 1){
+        ws.send(JSON.stringify({ type: 'interrupt', source: 'mobile-tap', reason: reason || 'tap-stop' }));
+      }
+    } catch(e){ console.warn('[interrupt] ws send err:', e); }
+    try { if(navigator.vibrate) navigator.vibrate(20); } catch(_) {}
+    try { setState('idle'); } catch(_) {}
+    console.log('[interrupt] mobile tap →', reason || 'tap-stop');
+  }
   function _playPcmInt16Chunk(arrayBuffer, sr, channels){
+    // v1.24.0 — Race guard : si interrupt user en cours, drop tout chunk en
+    // vol (le backend va voir cancel_event au prochain sub-chunk mais peut
+    // avoir déjà envoyé 1-2 chunks dans le pipe WS). Reset à l'arrivée du
+    // prochain tts_audio_meta (cf onTtsAudioMeta).
+    if(_ttsInterruptPending) return;
     const ctx = _ensureTtsCtx();
     if(!ctx){ console.warn('[tts-pcm] AudioContext indisponible'); return; }
     if(_ttsLocalMuted) return;
@@ -5199,12 +5842,13 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   function onState(m){
     const s = (m.value || m.state || '').toLowerCase();
     if(!['idle','listening','thinking','speaking'].includes(s)) return;
-    // v1.23.0 — Porté de l'APK (fix v1.22.1). Le backend émet state=IDLE dans le
-    // `finally` de la pipeline TTS DÈS que les chunks Piper sont envoyés sur le
-    // WS, mais le mobile a encore des chunks PCM schedulés dans Web Audio qui
-    // jouent 100-1000ms après. Appliquer idle direct éteint la sphère alors que
-    // la voix joue encore ("le bleu disparaît alors qu'elle parle", Quang 08/07).
-    // Fix : différer le passage idle tant que _ttsActiveSources n'est pas vide.
+    // v1.22.1 — Backend envoie state=IDLE dans le `finally` de la pipeline TTS
+    // IMMÉDIATEMENT après que les chunks Piper soient envoyés sur WS, mais le
+    // mobile a encore X chunks PCM scheduled dans Web Audio API qui jouent
+    // pendant 100-1000ms après. Si on applique idle direct, sphère + cortex
+    // s'éteignent alors que la voix joue encore → "tout éteint pendant qu'elle
+    // me parle" (Quang feedback v1.22.0). Fix : défer le passage idle tant
+    // que _ttsActiveSources non vide, pareil pattern que onTtsEnd.
     if(s === 'idle' && typeof _ttsActiveSources !== 'undefined' &&
        _ttsActiveSources && _ttsActiveSources.length > 0){
       let waited = 0;
@@ -5230,11 +5874,19 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     applyRms(v);
     // v1.21.0 — Pose aussi --rms-speak (0..1) pour piloter la zone broca du
     // cortex pendant SPEAKING (CSS calc dans .v-zone[data-zone="broca"]).
-    // Petite smoothness : amorti exponentiel (alpha 0.6) pour éviter clignotage.
+    // v1.22.0 — Floor à 0.4 + lissage plus fort (alpha 0.85 sur prev).
+    // Quang feedback v1.21.7 : "le cortex se coupe quasi-immédiatement quand
+    // Friday parle, alors que le PC reste actif tout le temps". Cause : Piper
+    // streame phrase par phrase avec micro-silences entre → RMS retombe à 0
+    // → broca dim. Pattern PC = lissage exponentiel rmsRemote *= 0.92 + activité
+    // visuelle continue, on copie ça en mobile : floor garantit que broca reste
+    // visiblement vivante tant que state=speaking, et le lissage évite les
+    // clignotements brusques sur les transitions chunk → chunk.
     if(ui.state === 'speaking'){
-      const prev = parseFloat(document.documentElement.style.getPropertyValue('--rms-speak') || '0.3');
-      const smooth = (prev * 0.4) + (rms * 0.6);
-      document.documentElement.style.setProperty('--rms-speak', smooth.toFixed(3));
+      const prev = parseFloat(document.documentElement.style.getPropertyValue('--rms-speak') || '0.4');
+      const smooth = (prev * 0.85) + (rms * 0.15);
+      const final = Math.max(0.4, smooth);
+      document.documentElement.style.setProperty('--rms-speak', final.toFixed(3));
     }
   }
   function onTranscriptFinal(m){
@@ -5375,6 +6027,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     // tts_audio_meta — drop"). Le state SPEAKING est quand même posé via
     // onTtsStart pour cohérence visuelle (sphère speaking + transcript bulle
     // Friday). C'est l'audio QUI est coupé, pas la trace écrite.
+    // v1.24.0 — meta = nouveau TTS fresh côté backend → lever le flag race
+    // de l'interrupt précédent, permet à _playPcmInt16Chunk d'accepter les
+    // chunks suivants.
+    _ttsInterruptPending = false;
     if(_ttsLocalMuted){
       pendingTtsMeta = null;
       return;
@@ -5406,22 +6062,80 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     // Ne PAS stop les sources actives : elles doivent finir de jouer leur
     // buffer scheduled (sinon coupe la queue de la phrase). Le onended de
     // chaque source les retire de _ttsActiveSources naturellement.
-    // v1.23.0 — Porté de l'APK : ne repasser idle (et re-poser status 'live')
-    // qu'une fois les sources Web Audio réellement finies de jouer, sinon la
-    // sphère s'éteint avant la fin de la voix. Poll 80ms, cap 8s (safety).
+    // v1.22.0 — Pattern copié du PC : ne pas passer idle tant que des sources
+    // Web Audio jouent encore (le backend a fini d'envoyer ses chunks Piper
+    // mais le mobile en a encore queued à jouer pendant ~100-500ms). Quang
+    // feedback : l'activité cortex se coupait avant la fin de la voix.
+    // Polling 80ms cap 8s safety, puis reset état + status.
     const _finalize = () => {
       if(ui.state === 'speaking') setState('idle');
       try {
         const status = $('#transcriptStatus');
         if(status && !_ttsLocalMuted){ status.classList.remove('mobile-primary'); status.textContent = 'live'; }
       } catch(_) {}
+      // v1.22.2 — Modes conversation continue mobile avec VAD silence detection.
+      // Quang feedback v1.22.1 : "il faut pas être en tap to talk à part au début,
+      // il faut pause de fin de phrase + durée écoute follow-up paramétrable".
+      // Comportement :
+      //  - conv = ouvre l'écoute pendant `followUpWindowS` secondes max. Si l'user
+      //    parle, VAD silence detection auto-stop dès que pause de fin détectée
+      //    (paramétrable `silencePauseS`). Si l'user ne dit rien dans la fenêtre,
+      //    timeout absolu et retour idle (PAS de relance auto, laisse Quang re-tap).
+      //  - continuous = ouvre l'écoute SANS timeout absolu. VAD silence auto-stop
+      //    pareil. La boucle continue tant que l'user n'a pas cliqué stop (le
+      //    prochain _finalize re-déclenchera après le TTS de réponse, en boucle).
+      try {
+        const mode = (typeof config !== 'undefined' && config) ? (config.convMode || 'off') : 'off';
+        if(mode !== 'off' && typeof startRecording === 'function' && !ui.recording){
+          const silenceS = Math.max(1, Math.min(5, parseFloat(config.silencePauseS || 2.5)));
+          const windowS  = Math.max(3, Math.min(15, parseInt(config.followUpWindowS || 6, 10)));
+          // Délai 700ms (v1.26.0, était 350ms) : laisser le HP finir le dernier
+          // sub-chunk audio (anti-self-feedback) ET laisser le focus audio Android
+          // se stabiliser avant de rouvrir getUserMedia. À 350ms, la piste micro
+          // pouvait être teardown/mute en plein basculement focus → mediaRec.onstop
+          // immédiat → rec_end avec un chunk partiel → "phrase coupée à ~0,1s".
+          setTimeout(() => {
+            if(ui.recording || (config.convMode || 'off') === 'off') return;
+            // Activer VAD silence detection avant que startMicAnalyser tick démarre
+            try {
+              configureVAD({
+                silenceMs: Math.round(silenceS * 1000),
+                graceMs: 1200,    // 1.2s de grace au début (laisse à l'user le temps de commencer)
+                threshold: 0.018, // calibré voix normale Android — ajustable si trop sensible
+                onSilence: () => {
+                  if(ui.recording){
+                    try { _stopReason='vad'; stopRecording(false); } catch(_){}
+                  }
+                },
+              });
+            } catch(_){}
+            try { wsSendJson({ type:'client_log', msg:'LISTEN mode='+mode+' silMs='+Math.round(silenceS*1000)+' win='+windowS }); } catch(_){}
+            try { startRecording(false); } catch(_){}
+            if((config.convMode || 'off') === 'conv'){
+              // Fenêtre absolue : si l'user n'a rien dit durant `windowS` secondes,
+              // on coupe et retour idle. Si l'user a parlé, le VAD a déjà fait
+              // stopRecording avant ce timeout → no-op.
+              setTimeout(() => {
+                if(ui.recording){
+                  try { _stopReason='conv-timeout'; stopRecording(true); } catch(_){}
+                }
+              }, windowS * 1000);
+            }
+            // continuous : pas de timeout absolu (le VAD silence gère le stop).
+          }, 700);
+        }
+      } catch(_){}
     };
-    if(typeof _ttsActiveSources !== 'undefined' && _ttsActiveSources && _ttsActiveSources.length > 0){
+    const stillPlaying = (typeof _ttsActiveSources !== 'undefined') && _ttsActiveSources && _ttsActiveSources.length > 0;
+    if(stillPlaying){
       let waited = 0;
       const poll = setInterval(() => {
         waited += 80;
         const empty = !_ttsActiveSources || _ttsActiveSources.length === 0;
-        if(empty || waited >= 8000){ clearInterval(poll); _finalize(); }
+        if(empty || waited >= 8000){
+          clearInterval(poll);
+          _finalize();
+        }
       }, 80);
     } else {
       _finalize();
@@ -5448,7 +6162,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 
   // ------ WS dispatcher ------
   function handleWsMessage(ev){
-    NET.lastRxTs = Date.now();  // v1.22.0 — tout message reçu (texte OU binaire) = lien vivant
+    NET.lastRxTs = Date.now();  // v1.25.0 — tout message reçu = lien vivant
     if(typeof ev.data === 'string'){
       let m;
       try { m = JSON.parse(ev.data); } catch(_) { return; }
@@ -5458,6 +6172,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       // tools/wake/TTS/vision/mémoire). NoOp si type non mappé ou cortex
       // inactif. Try/catch silencieux : ne doit JAMAIS bloquer le routing UI.
       try { if (typeof cortexHandleEvent === 'function') cortexHandleEvent(t); } catch(_) {}
+      // v1.22.0 — Mirror tous les events backend dans MobileLogHUD (parité PC).
+      try { if (typeof window._mobileMirrorLog === 'function') window._mobileMirrorLog(t, m); } catch(_) {}
       switch(t){
         case 'meta':              onMeta(m); break;
         case 'state':             onState(m); break;
@@ -5488,6 +6204,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
             mobileConfigState.claude_model = m.claude_model;
             try { refreshBoostBtn(m.claude_model); } catch(_) {}
           }
+          // v1.22.1 — PAS d'hydratation depuis backend.wake_mode : le mode
+          // ConvMode mobile est purement LOCAL (pilote l'auto-PTT post-TTS du
+          // mic mobile), il n'a rien à voir avec wake_mode backend (mic PC).
+          // L'hydratation depuis localStorage suffit (cf init mobile boot).
           break;
         case 'usage_state':
           try { refreshUsagePanel(m); } catch(_) {}
@@ -5583,7 +6303,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     ws.onopen = () => {
       wsReady = true;
       reconnectDelay = 1500;
-      NET.lastRxTs = Date.now();  // v1.22.0
+      NET.lastRxTs = Date.now();  // v1.25.0
       if(NET.reconnectTimer){ clearTimeout(NET.reconnectTimer); NET.reconnectTimer = null; }
       setConnUI('connected', 'LIVE');
       // Handshake compat HUD PC : envoie hello avec version client (cf. backend
@@ -5605,8 +6325,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   }
 
   function scheduleReconnect(){
-    // v1.22.0 — dé-duplication du timer : un seul reconnect en vol à la fois
-    // (avant : chaque onclose + bouton lançait son propre setTimeout → sockets parallèles).
+    // v1.25.0 — dé-duplication du timer (évite sockets parallèles).
     if(NET.reconnectTimer) clearTimeout(NET.reconnectTimer);
     NET.reconnectTimer = setTimeout(() => { NET.reconnectTimer = null; connectWS(); }, reconnectDelay);
     reconnectDelay = Math.min(RECONNECT_MAX, Math.round(reconnectDelay * 1.4));
@@ -5721,6 +6440,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     recBytesSent = 0;
     recPendingSends = 0;
     recStopRequested = false;
+    _explicitStop = false;   // v1.26.1 DIAG — reset : si onstop arrive avec ce flag encore false = teardown piste
+    _stopReason = '';        // v1.26.2 DIAG — reset du déclencheur
     recSentStart = true;
     wsSendJson({ type: 'rec_start', rec_id: recId, mime: mt });
 
@@ -5754,6 +6475,14 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       }
     };
     mediaRec.onstop = () => {
+      // v1.26.1 DIAG — affiche À L'ÉCRAN la raison du stop : explicit=true => on a
+      // appelé stopRecording (VAD/tap/timeout) ; explicit=false => la piste micro
+      // s'est terminée SEULE (teardown Android/focus audio) = coupure prématurée.
+      try {
+        const _tr = (typeof mediaStream !== 'undefined' && mediaStream && mediaStream.getAudioTracks && mediaStream.getAudioTracks()[0])
+          ? (mediaStream.getAudioTracks()[0].readyState + (mediaStream.getAudioTracks()[0].muted ? '/muted' : '')) : 'no-track';
+        wsSendJson({ type:'client_log', msg:'STOP by=' + (_stopReason || (_explicitStop ? 'manuel' : 'teardown')) + ' silMs=' + _vadSilenceMs + ' chunks=' + recChunkCount + ' explicit=' + _explicitStop });
+      } catch(_){}
       // recStopRequested mis par wsStopRecording avant mediaRec.stop().
       // Fallback safety : si onstop arrive sans flag, on flush quand même.
       recStopRequested = true;
@@ -5801,16 +6530,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   };
 
   // ============================================================
-  // v1.22.0 — Résilience réseau mobile (reconnexion robuste).
-  // Bug corrigé : une perte réseau (route, écran éteint, Wi-Fi↔4G) laisse
-  // un socket "zombie" (half-open) → onclose ne part jamais → aucune
-  // reconnexion, l'UI se croit LIVE, l'audio part dans le vide, il faut
-  // tuer l'app. On ajoute les 3 déclencheurs qui manquaient + un bouton
-  // manuel. Zéro modif backend (surveille le flux entrant déjà broadcasté).
+  // v1.25.0 — Résilience réseau mobile (report du fix PWA v1.22.0 sur l'APK).
+  // Bug: en mobilité (route, écran éteint, Wi-Fi<->4G), le WS devient zombie
+  // (half-open) -> onclose ne part jamais -> aucune reconnexion, l'UI se croit
+  // LIVE, l'audio part dans le vide. On ajoute les 3 déclencheurs manquants +
+  // un bouton manuel. Ping/pong avec le backend v1.48.1.
   // ============================================================
-
-  // Reconnexion immédiate et propre : annule tout timer, neutralise l'ancien
-  // socket (évite les reconnexions parallèles), repart avec un backoff court.
   function forceReconnect(reason){
     if(!LIVE_MODE) return;
     console.warn('[net] forceReconnect:', reason);
@@ -5826,9 +6551,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     document.body.classList.add('offline');
     connectWS();
   }
-
-  // (1) Watchdog passif : tourne quand l'app est visible (l'OS gèle les timers
-  //     en arrière-plan de toute façon). Détecte socket fermé OU zombie muet.
+  // (1) Watchdog passif : socket fermé OU zombie muet (>15s sans RX).
   setInterval(() => {
     if(!LIVE_MODE || document.visibilityState !== 'visible') return;
     if(!ws || ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED){
@@ -5841,16 +6564,13 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       forceReconnect('watchdog: aucun message depuis ' + STALE_MS + 'ms');
     }
   }, 4000);
-
-  // Ping sortant léger : garde le lien actif + provoque du trafic backend.
+  // Ping sortant léger (backend v1.48.1 répond pong).
   setInterval(() => {
     if(ws && ws.readyState === WebSocket.OPEN){
       try { ws.send(JSON.stringify({ type: 'ping', ts: Date.now() })); } catch(_){}
     }
   }, PING_MS);
-
-  // (2) Retour au premier plan (déverrouillage / retour sur l'app installée) :
-  //     le cas le plus fréquent pour une PWA. Reconnecte si le lien n'est pas sain.
+  // (2) Retour au premier plan (déverrouillage / retour sur l'app).
   document.addEventListener('visibilitychange', () => {
     if(document.visibilityState !== 'visible' || !LIVE_MODE) return;
     if(!ws || ws.readyState !== WebSocket.OPEN){
@@ -5859,14 +6579,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       forceReconnect('visibilitychange: lien suspect');
     }
   });
-
-  // (3) Réseau OS revenu → reconnecte tout de suite ; réseau perdu → rouge immédiat.
+  // (3) Réseau OS revenu -> reconnecte ; perdu -> rouge immédiat.
   window.addEventListener('online',  () => forceReconnect('event online'));
   window.addEventListener('offline', () => {
     setConnUI('offline', 'OFFLINE');
     document.body.classList.add('offline');
   });
-
   // Bouton manuel : tap sur "FRIDAY" (header) = reconnexion forcée.
   (function(){
     const brand = document.querySelector('.brand');
@@ -5880,6 +6598,178 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   connectWS();
   console.log('FRIDAY MOBILE', VERSION, 'ready · LIVE · WS=', WS_URL);
   setTimeout(()=>toast('FRIDAY · '+VERSION+' · LIVE', 1800), 400);
+
+  /* =========================================================================
+     v1.23.0 — Camera (CAM) : Capacitor Camera plugin
+     Tap court = capture (face courante, default arrière), long-press = menu
+     déroulant front/back persistant en localStorage. Photo envoyée au backend
+     via WS type='mobile_image' avec intent='auto' → backend décide OCR vs
+     description selon contexte vocal récent. saveToGallery:true → la photo
+     apparaît dans la galerie Android comme une photo classique.
+     ========================================================================= */
+  (function initCameraModule(){
+    const LS_KEY = 'friday.mobile.camera.facing';
+    const LP_DURATION = 500;
+    function loadFacing(){ try{ return localStorage.getItem(LS_KEY) === 'front' ? 'front' : 'back'; }catch(_){ return 'back'; } }
+    function saveFacing(v){ try{ localStorage.setItem(LS_KEY, v === 'front' ? 'front' : 'back'); }catch(_){} }
+    const camBtn = document.getElementById('btnCam');
+    const camMenu = document.getElementById('camDirectionMenu');
+    if(!camBtn || !camMenu) return;
+    let pressTimer = null, pressX = 0, pressY = 0, longFired = false, moved = false, busy = false;
+    let currentFacing = loadFacing();
+    function refreshChecks(){
+      camMenu.querySelectorAll('.cd-menu-item').forEach(it => {
+        const f = it.getAttribute('data-facing');
+        const on = (f === currentFacing);
+        it.classList.toggle('checked', on);
+        it.setAttribute('aria-checked', on ? 'true' : 'false');
+      });
+    }
+    refreshChecks();
+    function openMenu(){
+      const r = camBtn.getBoundingClientRect();
+      camMenu.style.left = Math.max(8, Math.min(window.innerWidth - 168, r.left + r.width/2 - 80)) + 'px';
+      camMenu.style.top  = (r.top - 8) + 'px';
+      camMenu.style.transform = 'translateY(-100%) scale(.95)';
+      void camMenu.offsetWidth;
+      camMenu.classList.add('open');
+      camMenu.style.transform = 'translateY(-100%) scale(1)';
+      camMenu.setAttribute('aria-hidden','false');
+    }
+    function closeMenu(){
+      camMenu.classList.remove('open');
+      camMenu.setAttribute('aria-hidden','true');
+    }
+    camMenu.querySelectorAll('.cd-menu-item').forEach(it => {
+      it.addEventListener('click', () => {
+        const f = it.getAttribute('data-facing');
+        currentFacing = (f === 'front') ? 'front' : 'back';
+        saveFacing(currentFacing);
+        refreshChecks();
+        closeMenu();
+        try{ if(typeof toast === 'function') toast('Caméra : ' + (currentFacing === 'front' ? 'avant (selfie)' : 'arrière')); }catch(_){}
+      });
+    });
+    document.addEventListener('pointerdown', e => {
+      if(!camMenu.classList.contains('open')) return;
+      if(camMenu.contains(e.target)) return;
+      if(camBtn.contains(e.target)) return;
+      closeMenu();
+    });
+    document.addEventListener('keydown', e => {
+      if(e.key === 'Escape' && camMenu.classList.contains('open')) closeMenu();
+    });
+    function hasCapacitorCamera(){
+      return !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Camera);
+    }
+    async function capture(){
+      if(busy) return;
+      if(!hasCapacitorCamera()){
+        try{ if(typeof toast === 'function') toast('Caméra : disponible uniquement dans l\'APK Android (pas en PWA web)'); }catch(_){}
+        return;
+      }
+      busy = true;
+      camBtn.classList.add('busy', 'flash');
+      setTimeout(() => camBtn.classList.remove('flash'), 320);
+      try{
+        const Camera = window.Capacitor.Plugins.Camera;
+        const photo = await Camera.getPhoto({
+          quality: 75,
+          allowEditing: false,
+          resultType: 'base64',
+          source: 'CAMERA',
+          saveToGallery: true,
+          direction: currentFacing === 'front' ? 'FRONT' : 'REAR',
+          width: 1600,
+          height: 1600,
+          preserveAspectRatio: true,
+          correctOrientation: true,
+          promptLabelHeader: 'Friday',
+          promptLabelCancel: 'Annuler',
+          promptLabelPhoto: 'Galerie',
+          promptLabelPicture: 'Prendre une photo'
+        });
+        const b64 = (photo && (photo.base64String || photo.base64)) || '';
+        const fmt = (photo && photo.format) || 'jpeg';
+        if(!b64){
+          try{ if(typeof toast === 'function') toast('Photo annulée'); }catch(_){}
+          return;
+        }
+        try{ if(typeof toast === 'function') toast('Photo envoyée à Friday…'); }catch(_){}
+        if(typeof wsSendJson === 'function'){
+          wsSendJson({
+            type: 'mobile_image',
+            image_b64: b64,
+            media_type: 'image/' + (fmt === 'png' ? 'png' : 'jpeg'),
+            intent: 'auto',
+            facing: currentFacing,
+            ts: Date.now()
+          });
+        }
+        try{ if(typeof window._mobileMirrorLog === 'function') window._mobileMirrorLog('camera', 'photo capturée (' + currentFacing + ', ' + Math.round(b64.length/1024) + ' KB b64)'); }catch(_){}
+      }catch(err){
+        const msg = (err && err.message) || String(err);
+        console.warn('[CAM] capture error', err);
+        const friendly = msg.toLowerCase().includes('cancel') ? 'annulée' :
+                         msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('denied') ? 'permission refusée — accorder dans Réglages Android' :
+                         (msg.length > 80 ? msg.slice(0,80) + '…' : msg);
+        try{ if(typeof toast === 'function') toast('Caméra : ' + friendly); }catch(_){}
+        try{ if(typeof window._mobileMirrorLog === 'function') window._mobileMirrorLog('camera_err', msg); }catch(_){}
+      }finally{
+        busy = false;
+        camBtn.classList.remove('busy');
+      }
+    }
+    camBtn.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      longFired = false; moved = false;
+      pressX = e.clientX; pressY = e.clientY;
+      camBtn.classList.add('lp-arming');
+      pressTimer = setTimeout(() => {
+        pressTimer = null;
+        longFired = true;
+        camBtn.classList.remove('lp-arming');
+        openMenu();
+      }, LP_DURATION);
+    });
+    camBtn.addEventListener('pointermove', e => {
+      if(!pressTimer && !longFired) return;
+      const dx = e.clientX - pressX, dy = e.clientY - pressY;
+      if(Math.abs(dx) > 8 || Math.abs(dy) > 8){
+        moved = true;
+        if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; camBtn.classList.remove('lp-arming'); }
+      }
+    });
+    camBtn.addEventListener('pointerup', e => {
+      e.preventDefault();
+      camBtn.classList.remove('lp-arming');
+      if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
+      if(longFired){ longFired = false; return; }
+      if(moved) return;
+      capture();
+    });
+    camBtn.addEventListener('pointercancel', () => {
+      if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
+      camBtn.classList.remove('lp-arming');
+    });
+    try{ window._fridayCam = { capture, get facing(){ return currentFacing; }, set facing(v){ currentFacing = (v === 'front' ? 'front' : 'back'); saveFacing(currentFacing); refreshChecks(); } }; }catch(_){}
+  })();
+
+  // v1.27.0 — Unification PWA/APK (source unique). Hors APK (pas de Capacitor),
+  // masquer les contrôles purement natifs pour éviter des boutons morts en PWA.
+  // Même fichier servi en APK (Capacitor présent → boutons visibles) et en PWA
+  // (Capacitor absent → boutons masqués). Aucune transformation post-copie.
+  (function hideNativeOnlyControls(){
+    try {
+      const plugins = (window.Capacitor && window.Capacitor.Plugins) || null;
+      if (!(plugins && plugins.Camera)) {
+        const b = document.getElementById('btnCam'); if (b) b.style.display = 'none';
+      }
+      if (!(plugins && plugins.Filesystem)) {
+        const e = document.getElementById('logExport'); if (e) e.style.display = 'none';
+      }
+    } catch(_) {}
+  })();
 
   // Beforeunload : best-effort fermeture propre
   window.addEventListener('beforeunload', () => {
