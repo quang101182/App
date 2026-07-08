@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.27.0</title>
+<title>FRIDAY · v1.27.1</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2284,7 +2284,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.27.0</span>
+        <span class="version-tag version-badge">· v1.27.1</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2772,7 +2772,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.27.0';
+  const VERSION = '1.27.1';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -3992,6 +3992,26 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     if(hold) micBtn.classList.add('hold'); else micBtn.classList.remove('hold');
     micLabel.textContent=hold?'HOLD · 0s':'RECORDING · 0s';
     setState('listening');
+    // v1.27.1 — Armer le VAD dès la 1re dictée MANUELLE en mode conv/continuous.
+    // Avant : le VAD ne s'armait qu'aux tours follow-up (dans onTtsEnd) → la 1re
+    // dictée ne s'arrêtait pas au silence (il fallait re-taper). Les suivantes OK.
+    // Garde !_vadActive : ne clobbe PAS une config déjà armée par le follow-up.
+    // Garde convMode!=='off' : le mode off garde son tap-to-talk manuel (pas de VAD).
+    // Garde !hold : le press-and-hold (PTT) s'arrête au relâchement, pas au VAD.
+    try {
+      const _cm = (typeof config !== 'undefined' && config) ? (config.convMode || 'off') : 'off';
+      if(!hold && _cm !== 'off' && !_vadActive && typeof configureVAD === 'function'){
+        const _silS = Math.max(1, Math.min(5, parseFloat((config && config.silencePauseS) || 2.5)));
+        configureVAD({
+          silenceMs: Math.round(_silS * 1000),
+          graceMs: 1200,     // 1.2s de grâce au début (le temps de commencer à parler)
+          threshold: 0.018,  // calibré voix normale Android (identique au follow-up)
+          onSilence: () => {
+            if(ui.recording){ try { _stopReason='vad'; stopRecording(false); } catch(_){} }
+          },
+        });
+      }
+    } catch(_){}
     // v1.17.0g — takeAudioFocus AVANT toute opération async (await getStream)
     // pour rester dans le contexte du user-gesture (tap PTT). Sinon Chrome
     // refuse l'autoplay du focus oscillator au 2e PTT.
