@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.22.0</title>
+<title>FRIDAY · v1.23.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2112,7 +2112,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.22</span>
+        <span class="version-tag version-badge">· v1.23</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2553,7 +2553,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   //   et envoie 'tts_speak_text' au mobile → window.speechSynthesis.speak
   //   (Friday parle dans le HP du tel via TTS OS natif).
   // + glide-typing fix (autocomplete on, enterkeyhint=send, inputmode=text).
-  const VERSION = '1.22.0';
+  const VERSION = '1.23.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -5198,9 +5198,27 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   }
   function onState(m){
     const s = (m.value || m.state || '').toLowerCase();
-    if(['idle','listening','thinking','speaking'].includes(s)){
-      setState(s);
+    if(!['idle','listening','thinking','speaking'].includes(s)) return;
+    // v1.23.0 — Porté de l'APK (fix v1.22.1). Le backend émet state=IDLE dans le
+    // `finally` de la pipeline TTS DÈS que les chunks Piper sont envoyés sur le
+    // WS, mais le mobile a encore des chunks PCM schedulés dans Web Audio qui
+    // jouent 100-1000ms après. Appliquer idle direct éteint la sphère alors que
+    // la voix joue encore ("le bleu disparaît alors qu'elle parle", Quang 08/07).
+    // Fix : différer le passage idle tant que _ttsActiveSources n'est pas vide.
+    if(s === 'idle' && typeof _ttsActiveSources !== 'undefined' &&
+       _ttsActiveSources && _ttsActiveSources.length > 0){
+      let waited = 0;
+      const poll = setInterval(() => {
+        waited += 80;
+        const empty = !_ttsActiveSources || _ttsActiveSources.length === 0;
+        if(empty || waited >= 8000){
+          clearInterval(poll);
+          if(ui.state !== 'idle') setState('idle');
+        }
+      }, 80);
+      return;
     }
+    setState(s);
   }
   function onAudioLevel(m){
     // RMS 0..1 (event audio_level backend) → 0..100 → applyRms (--rms-scale).
@@ -5388,12 +5406,26 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     // Ne PAS stop les sources actives : elles doivent finir de jouer leur
     // buffer scheduled (sinon coupe la queue de la phrase). Le onended de
     // chaque source les retire de _ttsActiveSources naturellement.
-    if(ui.state === 'speaking') setState('idle');
-    // Re-pose status 'live' côté mobile (au cas où mobile-primary)
-    try {
-      const status = $('#transcriptStatus');
-      if(status && !_ttsLocalMuted){ status.classList.remove('mobile-primary'); status.textContent = 'live'; }
-    } catch(_) {}
+    // v1.23.0 — Porté de l'APK : ne repasser idle (et re-poser status 'live')
+    // qu'une fois les sources Web Audio réellement finies de jouer, sinon la
+    // sphère s'éteint avant la fin de la voix. Poll 80ms, cap 8s (safety).
+    const _finalize = () => {
+      if(ui.state === 'speaking') setState('idle');
+      try {
+        const status = $('#transcriptStatus');
+        if(status && !_ttsLocalMuted){ status.classList.remove('mobile-primary'); status.textContent = 'live'; }
+      } catch(_) {}
+    };
+    if(typeof _ttsActiveSources !== 'undefined' && _ttsActiveSources && _ttsActiveSources.length > 0){
+      let waited = 0;
+      const poll = setInterval(() => {
+        waited += 80;
+        const empty = !_ttsActiveSources || _ttsActiveSources.length === 0;
+        if(empty || waited >= 8000){ clearInterval(poll); _finalize(); }
+      }, 80);
+    } else {
+      _finalize();
+    }
   }
   function onWakeDetected(m){
     // Flash sphère 200ms (sub-wake-flash) — fonction du mockup.
