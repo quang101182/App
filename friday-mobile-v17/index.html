@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.27.1</title>
+<title>FRIDAY · v1.27.3</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -565,14 +565,6 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
   color:var(--primary);
   text-shadow:0 0 4px var(--primary-glow);
   box-shadow:inset 0 0 10px rgba(0,212,255,.18);
-}
-/* v1.17.0e — Variante BOOST actif : violet (#c44dff = thinking color) pour
-   distinguer du toggle de panel. Indique "modèle Sonnet/Opus actif". */
-.slot-toggle.boost-on{
-  border-color:#c44dff;
-  color:#c44dff;
-  text-shadow:0 0 4px rgba(196,77,255,.6);
-  box-shadow:inset 0 0 10px rgba(196,77,255,.22);
 }
 /* v1.18.0 — Variante MUTE actif : rouge orangé pour signaler "Friday silencieux". */
 .slot-toggle.mute-on{
@@ -2284,7 +2276,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.27.1</span>
+        <span class="version-tag version-badge">· v1.27.3</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2410,7 +2402,6 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="slot-toggles">
         <button class="slot-toggle" data-slot="activity" title="Affiche/cache le panneau ACTIVITY (compteur tools session, last tool, top tools)">+ ACT</button>
         <button class="slot-toggle" id="btnUsage" title="Affiche/cache le panneau de consommation API (Claude / ElevenLabs / Groq) en temps réel">$</button>
-        <button class="slot-toggle" id="btnBoost" title="Switch modèle Claude : Haiku 4.5 (économique) ↔ Sonnet 4.6 (raisonnement avancé). Garde l'historique.">💪 BOOST</button>
         <button class="slot-toggle" id="btnMute" title="Couper la voix de Friday/Jarvis. Les réponses arrivent uniquement via le transcript (utile en environnement silencieux).">🔇 MUTE</button>
         <button class="slot-toggle" id="btnCaptions" title="Live captions : sous-titres éphémères de tes messages + réponses Friday, visibles sur toutes les pages. Tap pour activer/désactiver.">💬 CAP</button>
       </div>
@@ -2772,7 +2763,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.27.1';
+  const VERSION = '1.27.3';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -2983,7 +2974,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     }
   }
   // v1.17.0e — Filtrer : seuls les .slot-toggle avec data-slot sont toggles de panels.
-  // Les autres (#btnBoost, #btnUsage) ont leurs propres handlers ci-dessous.
+  // Les autres (#btnUsage) ont leurs propres handlers ci-dessous.
   $$('.slot-toggle').forEach(btn=>{
     if(!btn.dataset.slot) return;
     btn.addEventListener('click',()=>{
@@ -2997,34 +2988,6 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     });
   });
 
-  /* =========================================================================
-     v1.17.0e — BOOST (toggle Claude Haiku 4.5 ↔ Sonnet 4.6)
-     Miroir du #btn-boost du HUD PC : envoie config WS, le visuel reflète
-     ensuite l'event 'config_state' broadcast par le backend.
-     ========================================================================= */
-  const HAIKU_MODEL  = 'claude-haiku-4-5-20251001';
-  const SONNET_MODEL = 'claude-sonnet-4-6';
-  function refreshBoostBtn(currentModel){
-    const btn = $('#btnBoost');
-    if(!btn) return;
-    const isBoost = (currentModel || '').includes('sonnet') || (currentModel || '').includes('opus');
-    btn.classList.toggle('boost-on', isBoost);
-    btn.textContent = isBoost ? '💪 SONNET' : '💪 BOOST';
-    btn.title = isBoost
-      ? 'Sonnet 4.6 actif (raisonnement avancé). Tap → revenir à Haiku 4.5.'
-      : 'Haiku 4.5 actif (rapide, économique). Tap → escalader vers Sonnet 4.6.';
-  }
-  $('#btnBoost').addEventListener('click',()=>{
-    const cur = (mobileConfigState && mobileConfigState.claude_model) || HAIKU_MODEL;
-    const isBoost = cur.includes('sonnet') || cur.includes('opus');
-    const next = isBoost ? HAIKU_MODEL : SONNET_MODEL;
-    wsSendJson({ type: 'config', key: 'claude_model', value: next });
-    toast(isBoost ? 'CLAUDE → HAIKU 4.5' : 'CLAUDE → SONNET 4.6');
-    try{ navigator.vibrate && navigator.vibrate(12);}catch(e){}
-    // Feedback visuel immédiat avant retour config_state du backend
-    refreshBoostBtn(next);
-    if(mobileConfigState) mobileConfigState.claude_model = next;
-  });
 
   /* =========================================================================
      v1.17.0e — USAGE panel toggle ($) — miroir #btn-usage HUD PC
@@ -3114,7 +3077,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   try { if(localStorage.getItem(UPM_KEY) === '1') showUsagePanel(); } catch(_) {}
 
   // Cache dernier config_state reçu pour que BOOST sache quel modèle est actif.
-  let mobileConfigState = { claude_model: HAIKU_MODEL };
+  let mobileConfigState = { claude_model: 'claude-haiku-4-5-20251001' };
 
   /* =========================================================================
      v1.18.0 — Bouton MUTE Friday (couper TTS sortie). Persistance localStorage
@@ -6222,7 +6185,6 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         case 'config_state':
           if(m && m.claude_model){
             mobileConfigState.claude_model = m.claude_model;
-            try { refreshBoostBtn(m.claude_model); } catch(_) {}
           }
           // v1.22.1 — PAS d'hydratation depuis backend.wake_mode : le mode
           // ConvMode mobile est purement LOCAL (pilote l'auto-PTT post-TTS du
