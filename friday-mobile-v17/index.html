@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.40.0</title>
+<title>FRIDAY · v1.41.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2594,7 +2594,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.40.0</span>
+        <span class="version-tag version-badge">· v1.41.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -3237,7 +3237,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.40.0';
+  const VERSION = '1.41.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -6228,6 +6228,60 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     }
     return _ttsAudioCtx;
   }
+  // v1.41.0 — Attend la fin RÉELLE de la parole avant de repasser idle.
+  //
+  // Le backend envoie tous les chunks PCM au mobile sans attendre leur lecture
+  // (`_send_tts_chunk_to_primary` rend la main aussitôt), puis émet `tts_end` +
+  // `state=idle` DANS LA FOULÉE. Mesuré le 09/07 : 136 s d'audio expédiées en
+  // 3 s. Le mobile doit donc tenir l'état SPEAKING lui-même.
+  //
+  // L'ancien poll abandonnait au bout de 8 s fixes → toute réponse parlée de
+  // plus de ~8 s voyait l'hologramme s'éteindre EN PLEINE PHRASE (bug Quang).
+  // Le vrai signal de fin reste `_ttsActiveSources` vide ; le plafond n'est
+  // qu'un garde-fou si un `onended` ne se déclenche jamais. On le recalcule
+  // donc à partir de l'audio encore planifié (`_ttsNextStartTime`), et on le
+  // laisse grandir si de nouveaux chunks arrivent.
+  const _TTS_DEFER_STEP_MS = 80;
+  const _TTS_DEFER_GRACE_MS = 1500;    // marge après le dernier sample planifié
+  const _TTS_DEFER_HARD_CAP_MS = 300000; // garde-fou absolu (5 min)
+  function _ttsRemainingMs(){
+    try {
+      if(!_ttsAudioCtx) return 0;
+      return Math.max(0, (_ttsNextStartTime - _ttsAudioCtx.currentTime) * 1000);
+    } catch(_) { return 0; }
+  }
+  function _ttsStillPlaying(){
+    return (typeof _ttsActiveSources !== 'undefined') && _ttsActiveSources && _ttsActiveSources.length > 0;
+  }
+  // Un AudioContext non-`running` (autoplay bloqué, onglet gelé) NE joue rien :
+  // `currentTime` est figé, donc `onended` ne se déclenchera jamais et les sources
+  // ne quitteront jamais `_ttsActiveSources`. Attendre serait attendre pour rien —
+  // et laisserait l'hologramme bleu jusqu'au garde-fou. Mesuré au CDP le 09/07
+  // (state=suspended, currentTime=0 pendant 48 s). On finalise donc tout de suite.
+  function _ttsCtxRunning(){
+    return !!(_ttsAudioCtx && _ttsAudioCtx.state === 'running');
+  }
+  function _deferUntilSpeechDone(done){
+    if(!_ttsStillPlaying() || !_ttsCtxRunning()){ done(); return; }
+    let waited = 0;
+    let cap = Math.max(8000, _ttsRemainingMs() + _TTS_DEFER_GRACE_MS);
+    let lastNow = _ttsAudioCtx.currentTime;
+    let stalled = 0;
+    const poll = setInterval(() => {
+      waited += _TTS_DEFER_STEP_MS;
+      // Horloge audio figée (contexte suspendu en cours de route) → on n'attend pas.
+      const now = _ttsAudioCtx ? _ttsAudioCtx.currentTime : lastNow;
+      stalled = (now > lastNow) ? 0 : stalled + _TTS_DEFER_STEP_MS;
+      lastNow = now;
+      // Un chunk arrivé entre-temps repousse la fin : le plafond suit.
+      cap = Math.min(_TTS_DEFER_HARD_CAP_MS,
+                     Math.max(cap, waited + _ttsRemainingMs() + _TTS_DEFER_GRACE_MS));
+      if(!_ttsStillPlaying() || !_ttsCtxRunning() || stalled >= 2000 || waited >= cap){
+        clearInterval(poll);
+        done();
+      }
+    }, _TTS_DEFER_STEP_MS);
+  }
   function _stopAllTtsSources(){
     // v1.24.0 — DeepSeek/Kimi recommandation : stop(0) explicite pour couper
     // immédiat (vs stop() sans arg qui peut attendre fin de buffer en attente).
@@ -6353,17 +6407,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     // s'éteignent alors que la voix joue encore → "tout éteint pendant qu'elle
     // me parle" (Quang feedback v1.22.0). Fix : défer le passage idle tant
     // que _ttsActiveSources non vide, pareil pattern que onTtsEnd.
-    if(s === 'idle' && typeof _ttsActiveSources !== 'undefined' &&
-       _ttsActiveSources && _ttsActiveSources.length > 0){
-      let waited = 0;
-      const poll = setInterval(() => {
-        waited += 80;
-        const empty = !_ttsActiveSources || _ttsActiveSources.length === 0;
-        if(empty || waited >= 8000){
-          clearInterval(poll);
-          if(ui.state !== 'idle') setState('idle');
-        }
-      }, 80);
+    // v1.41.0 — plafond dynamique (voir _deferUntilSpeechDone). Avant : 8 s fixes,
+    // qui éteignaient l'hologramme au milieu des réponses longues.
+    if(s === 'idle' && _ttsStillPlaying()){
+      _deferUntilSpeechDone(() => {
+        if(ui.state !== 'idle') setState('idle');
+      });
       return;
     }
     setState(s);
@@ -6630,20 +6679,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         }
       } catch(_){}
     };
-    const stillPlaying = (typeof _ttsActiveSources !== 'undefined') && _ttsActiveSources && _ttsActiveSources.length > 0;
-    if(stillPlaying){
-      let waited = 0;
-      const poll = setInterval(() => {
-        waited += 80;
-        const empty = !_ttsActiveSources || _ttsActiveSources.length === 0;
-        if(empty || waited >= 8000){
-          clearInterval(poll);
-          _finalize();
-        }
-      }, 80);
-    } else {
-      _finalize();
-    }
+    // v1.41.0 — plafond dynamique : on attend la fin réelle de la lecture.
+    _deferUntilSpeechDone(_finalize);
   }
   function onWakeDetected(m){
     // Flash sphère 200ms (sub-wake-flash) — fonction du mockup.
@@ -7080,6 +7117,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     if(NET.reconnectTimer){ clearTimeout(NET.reconnectTimer); NET.reconnectTimer = null; }
     const old = ws;
     if(old){
+      // v1.41.0 — On nullifie `onclose` juste après : le verrou « éteindre le badge
+      // sur onclose » (v1.34.0) ne se déclencherait donc JAMAIS sur ce chemin, et un
+      // `active:false` encore en vol sur l'ancienne socket serait jeté avec `onmessage`.
+      // On éteint donc ici, explicitement ; le resync du handshake rallumera le badge
+      // si une génération est réellement encore en cours.
+      try { MediaImages.onMediaBusy({ active: false }); } catch(_){}
       try { old.onopen = old.onclose = old.onerror = old.onmessage = null; } catch(_){}
       try { old.close(); } catch(_){}
     }
@@ -7115,6 +7158,13 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       forceReconnect('visibilitychange: lien non-open');
     } else if((Date.now() - NET.lastRxTs) > 5000){
       forceReconnect('visibilitychange: lien suspect');
+    } else {
+      // v1.41.0 — La socket a survécu à la mise en arrière-plan et les pings (10 s)
+      // la font paraître fraîche → aucune reconnexion, donc AUCUN resync de handshake.
+      // Or l'`active:false` de fin de génération est parti pendant que le JS était
+      // gelé : le badge « Friday imagine » restait allumé pour toujours (bug Quang
+      // 09/07). On redemande donc l'état réel à chaque retour au premier plan.
+      try { wsSendJson({ type: 'media_busy_query' }); } catch(_){}
     }
   });
   // (3) Réseau OS revenu -> reconnecte ; perdu -> rouge immédiat.
