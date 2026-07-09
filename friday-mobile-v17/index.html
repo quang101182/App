@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.39.0</title>
+<title>FRIDAY · v1.40.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2594,7 +2594,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.39.0</span>
+        <span class="version-tag version-badge">· v1.40.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -3237,7 +3237,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.39.0';
+  const VERSION = '1.40.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -7330,11 +7330,30 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     let selMode = false, pending = null, pendingTimer = null;
     const toastEl = document.getElementById('galToast');
 
+    // v1.40.0 — L'échec ne doit JAMAIS être silencieux. Avant, un `.catch()` vide
+    // avalait tout : sur le Honor, le preflight CORS bloquait chaque POST et
+    // l'écran affirmait que l'image était supprimée. Elle revenait au rechargement.
     function api(path, body){
       return fetch(API_BASE + path, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
-      }).catch(function(){});
+      }).then(function(r){
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json().catch(function(){ return {}; });
+      }).catch(function(e){
+        apiFailed(path, e);
+        throw e;
+      });
+    }
+    function apiFailed(path, e){
+      console.error('[gallery] échec', path, e);
+      const t = document.getElementById('galToastMsg');
+      const el = document.getElementById('galToast');
+      if (t && el){
+        t.textContent = '⚠ Échec (' + (e && e.message ? e.message : 'réseau') + ') — rien n’a changé';
+        el.classList.add('show');
+        setTimeout(function(){ el.classList.remove('show'); }, 4000);
+      }
     }
     function hideToast(){
       toastEl.classList.remove('show');
@@ -7343,8 +7362,14 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     function commitPending(){
       if (pendingTimer){ clearTimeout(pendingTimer); pendingTimer = null; }
       if (pending){
-        const id = pending.id; pending = null;
-        api('/api/gallery/delete', { ids: [id] });   // le vrai DELETE, enfin
+        const p = pending; pending = null;
+        api('/api/gallery/delete', { ids: [p.id] })   // le vrai DELETE, enfin
+          .catch(function(){
+            // Le backend n'a rien supprimé : on REMET l'image, sinon l'écran ment.
+            allItems.splice(Math.min(p.idx, allItems.length), 0, p.item);
+            allItems.sort(function(a, b){ return (b.ts || 0) - (a.ts || 0); });
+            render();
+          });
       }
       hideToast();
     }
@@ -7376,17 +7401,20 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       if (!it) return;
       it.favorite = !it.favorite;
       render();
-      api('/api/gallery/favorite', { id: id, favorite: it.favorite });
+      api('/api/gallery/favorite', { id: id, favorite: it.favorite })
+        .catch(function(){ it.favorite = !it.favorite; render(); });   // rollback
     }
     function deleteBulk(){
       if (!selected.size) return;
       if (!confirm('Supprimer ' + selected.size + ' image(s) ? C\'est définitif.')) return;
       const ids = Array.from(selected);
+      const backup = allItems.slice();
       allItems = allItems.filter(function(x){ return !selected.has(x.id); });
       selected.clear();
       selMode = false;
       render();
-      api('/api/gallery/delete', { ids: ids });   // bulk : pas d'undo, d'où le confirm
+      api('/api/gallery/delete', { ids: ids })   // bulk : pas d'undo, d'où le confirm
+        .catch(function(){ allItems = backup; render(); });
     }
     function refreshBulkBar(){
       const bar = document.getElementById('galBulk');
