@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.38.0</title>
+<title>FRIDAY · v1.39.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2594,7 +2594,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.38.0</span>
+        <span class="version-tag version-badge">· v1.39.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -3237,7 +3237,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.38.0';
+  const VERSION = '1.39.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -7637,11 +7637,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       if (!el) return;
       const mine = allItems.filter(function(x){ return x.readonly !== true; });
       const nonFav = mine.filter(function(x){ return !x.favorite; }).length;
-      const gs = allItems.length - mine.length;
       const fav = mine.length - nonFav;
       const full = nonFav >= galMax;
-      el.innerHTML = allItems.length + ' img · <span class="' + (full ? 'warn' : '') + '">'
-        + nonFav + '/' + galMax + (full ? ' ⚠' : '') + '</span> · miroir GS ' + gs + ' · ❤ ' + fav;
+      el.innerHTML = '<span class="' + (full ? 'warn' : '') + '">'
+        + nonFav + '/' + galMax + (full ? ' ⚠' : '') + '</span> · ❤ ' + fav;
       el.title = full
         ? 'Plafond atteint : chaque nouvelle image cloud efface la plus ancienne. Un favori (❤) est exempté.'
         : 'Images cloud non favorites conservées. Au-delà du plafond, les plus anciennes sont effacées.';
@@ -7689,10 +7688,14 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
           .then(function(r){ return r.ok ? r.json() : []; })
           .catch(function(){ return []; });
       };
-      const res = await Promise.all([grab('/api/gallery'), grab('/api/gallery/gs')]);
-      const cloud = Array.isArray(res[0]) ? res[0] : [];
-      const gs    = Array.isArray(res[1]) ? res[1] : [];
-      allItems = cloud.concat(gs).sort(function(a, b){ return (b.ts || 0) - (a.ts || 0); });
+      // v1.39.0 — Le MIROIR de la base Generate Studio (`/api/gallery/gs`, images
+      // de `output/` en lecture seule) n'est plus chargé (décision Quang, révise
+      // la session 3) : il faisait doublon avec les images GS que Friday génère
+      // et stocke elle-même. Les images créées depuis l'app GS se consultent
+      // dans GS. La route backend reste disponible.
+      const res = await Promise.all([grab('/api/gallery')]);
+      const mine = Array.isArray(res[0]) ? res[0] : [];
+      allItems = mine.sort(function(a, b){ return (b.ts || 0) - (a.ts || 0); });
       render();
     }
 
