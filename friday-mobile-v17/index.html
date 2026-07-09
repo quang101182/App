@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.32.0</title>
+<title>FRIDAY · v1.34.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2327,6 +2327,14 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 }
 .gal-dot.gs{ color:#5cf58c; }
 .gal-fav{ position:absolute; top:2px; left:3px; font-size:10px; }
+/* v1.33.0 — Image que Friday a générée d'elle-même (Mode A passif). Discret :
+   coin haut-droite, vert « pensée », loin du ❤ (haut-gauche) et de la pastille
+   moteur (bas-droite). */
+.gal-pass{
+  position:absolute; top:2px; right:3px; padding:1px 3px; border-radius:2px;
+  font:7px/1.3 var(--mono,monospace); letter-spacing:.3px;
+  background:rgba(0,10,20,.85); color:#5cf58c;
+}
 .gal-empty{ grid-column:1/-1; padding:24px 8px; text-align:center; opacity:.6;
   font:10px/1.5 var(--mono,monospace); color:var(--primary,#00d4ff); }
 
@@ -2478,7 +2486,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.32.0</span>
+        <span class="version-tag version-badge">· v1.34.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -3065,7 +3073,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.32.0';
+  const VERSION = '1.34.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -6639,6 +6647,11 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       wsReady = false;
       setConnUI('offline', 'OFFLINE');
       document.body.classList.add('offline');
+      // v1.34.0 — Le backend ne pourra plus dire « c'est fini » : on éteint
+      // l'indicateur de génération. Sinon il clignote indéfiniment après un
+      // redémarrage du backend (bug signalé par Quang). Le backend renvoie
+      // l'état réel au handshake suivant s'il y a vraiment une génération.
+      try { MediaImages.onMediaBusy({ active: false }); } catch(e){}
       console.warn('WS close', ev.code, ev.reason);
       scheduleReconnect();
     };
@@ -7117,6 +7130,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
           const f = document.createElement('span');
           f.className = 'gal-fav'; f.textContent = '❤';
           cell.appendChild(f);
+        }
+        if (it.passive){   // v1.33.0 — Friday l'a imaginée toute seule
+          const t = document.createElement('span');
+          t.className = 'gal-pass'; t.textContent = '✦ PENSÉE';
+          t.title = 'Générée spontanément par Friday';
+          cell.appendChild(t);
         }
         const dot = document.createElement('span');
         dot.className = 'gal-dot' + (it.engine === 'gs' ? ' gs' : '');
