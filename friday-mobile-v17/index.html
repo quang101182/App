@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.36.0</title>
+<title>FRIDAY · v1.37.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2311,6 +2311,14 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   background:rgba(0,18,32,.7); color:var(--primary,#00d4ff); border:1px solid var(--primary-dim);
 }
 .gal-fmt-btn.on{ background:var(--primary,#00d4ff); color:#02121e; }
+.gal-fx-btn{
+  width:26px; height:24px; border-radius:3px; cursor:pointer; font-size:11px; padding:0;
+  background:rgba(0,18,32,.7); color:var(--primary,#00d4ff); border:1px solid var(--primary-dim);
+}
+.gal-fx-btn.on{ background:var(--primary,#00d4ff); color:#02121e; }
+.gal-fx-btn:disabled{ opacity:.3; }
+.gal-count{ font:8px/1.2 var(--mono,monospace); opacity:.7; letter-spacing:0; }
+.gal-count .warn{ color:#ff9b6b; }
 .gal-chips{ display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
 .gal-chip{
   padding:4px 8px; font:9px/1.2 var(--mono,monospace); border-radius:3px; cursor:pointer;
@@ -2344,6 +2352,17 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 }
 .gal-empty{ grid-column:1/-1; padding:24px 8px; text-align:center; opacity:.6;
   font:10px/1.5 var(--mono,monospace); color:var(--primary,#00d4ff); }
+
+/* ═══════ v1.37.0 — Effets d'affichage (réglage §4) ═══════
+   Piège connu (roadmap) : les transitions/rAF sont GELÉES quand l'onglet est en
+   arrière-plan. Un élément caché en opacity:0 qui « transitionne » vers 1 n'y
+   apparaît JAMAIS. Ici l'état final est l'état NORMAL de l'élément et l'effet est
+   une `animation` d'entrée : si elle ne joue pas, l'image est visible quand même. */
+@keyframes fxFadeIn  { from { opacity:0 } to { opacity:1 } }
+@keyframes fxSlideIn { from { opacity:0; transform:translateY(-14px) } to { opacity:1; transform:none } }
+.fx-fade  { animation:fxFadeIn .28s ease both; }
+.fx-slide { animation:fxSlideIn .3s cubic-bezier(.2,.8,.2,1) both; }
+/* `none` = aucune classe : apparition sèche. */
 
 /* ═══════ v1.32.0 — Indicateur « génération en cours » ═══════
    z-index 285 : AU-DESSUS de la carte centrée (257), de la pyramide (258) et de
@@ -2458,12 +2477,19 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   max-width:100%; max-height:100%; object-fit:contain;
   transition:transform .18s ease; transform-origin:center center; touch-action:none;
 }
+/* v1.37.0 — La barre était collée au bord bas (sous la barre de gestes Android)
+   et le prompt en `nowrap` était tronqué à droite. Remontée au-dessus de la
+   safe-area, prompt sur 2 lignes maximum. */
 .lb-bar{
-  flex:0 0 auto; display:flex; justify-content:space-between; align-items:center; gap:8px;
-  padding:8px 10px; border-top:1px solid rgba(0,212,255,.2);
-  font:9px/1.3 var(--mono,monospace); color:var(--primary,#00d4ff);
+  flex:0 0 auto; display:flex; flex-direction:column; align-items:flex-start; gap:4px;
+  padding:8px 12px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  border-top:1px solid rgba(0,212,255,.2);
+  font:9px/1.35 var(--mono,monospace); color:var(--primary,#00d4ff);
 }
-.lb-prompt{ flex:1; opacity:.8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lb-prompt{
+  width:100%; opacity:.8; white-space:normal; word-break:break-word;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+}
 /* v1.35.0 — ✕ haut-droite, 44×44, sous la safe-area (loin de la barre de gestes). */
 .lb-x{
   position:absolute; top:calc(env(safe-area-inset-top, 0px) + 10px); right:10px;
@@ -2555,7 +2581,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.36.0</span>
+        <span class="version-tag version-badge">· v1.37.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2851,7 +2877,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 <aside id="galleryPanel" aria-hidden="true">
   <div class="gal-head">
     <div class="gal-title">
-      <span>🖼 GALERIE</span>
+      <span>🖼 GALERIE <span class="gal-count" id="galCount"></span></span>
       <span style="display:flex;gap:6px;align-items:center">
         <button class="gal-sel-btn" id="btnSelMode">☑ SÉLECTION</button>
         <button class="lb-btn" id="galClose">✕</button>
@@ -2875,6 +2901,11 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <button class="gal-fmt-btn" data-fmt="square" title="Carré 1:1">◼</button>
       <button class="gal-fmt-btn" data-fmt="portrait" title="Portrait 3:4">▮</button>
       <button class="gal-fmt-btn" data-fmt="landscape" title="Paysage 4:3">▬</button>
+      <span class="gal-fmt-lbl" style="margin-left:8px">EFFET</span>
+      <button class="gal-fx-btn" data-fx="fade" title="Fondu">◐</button>
+      <button class="gal-fx-btn" data-fx="none" title="Net (d'un coup)">▣</button>
+      <button class="gal-fx-btn" data-fx="slide" title="Glisse">⇣</button>
+      <button class="gal-fx-btn" id="btnFxRandom" title="Aléatoire : Friday varie l'effet">🎲</button>
     </div>
     <div class="gal-chips" id="galChips">
       <button class="gal-chip on" data-f="all">Tout</button>
@@ -3180,7 +3211,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.36.0';
+  const VERSION = '1.37.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -7109,6 +7140,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     // `mobOn` = choix propre à ce mobile (conservé même quand le PC est OFF).
     let pcOn = false, mobOn = true;
     let imgFmt = 'square';   // v1.36.0 — réglage §4 (persisté côté backend)
+    let imgFx = 'fade', imgFxRnd = false, galMax = 100;   // v1.37.0
 
     let hideTimer = null;
     let lastFlash = null;      // dernière image flashée (pour le tap → visionneuse)
@@ -7159,6 +7191,17 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       center.style.bottom = Math.round(window.innerHeight - bar.getBoundingClientRect().top) + 'px';
     }
 
+    // v1.37.0 — L'effet est CHOISI PAR LE BACKEND (`m.effect`) : PC et mobile
+    // jouent le même sur la même image, y compris en mode aléatoire.
+    function applyFx(el, m){
+      el.classList.remove('fx-fade', 'fx-slide');
+      const fx = m && m.effect;
+      if (fx === 'fade' || fx === 'slide'){
+        void el.offsetWidth;            // redémarre l'animation sur une 2e image
+        el.classList.add('fx-' + fx);
+      }
+    }
+
     function showCenter(m, src){
       lastFlash = m;
       centerImg.src = src;
@@ -7168,6 +7211,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       placeCenter();
       center.classList.add('show');
       center.setAttribute('aria-hidden', 'false');
+      applyFx(document.querySelector('.mcx-card'), m);
     }
     function hideCenter(){
       center.classList.remove('show');
@@ -7192,6 +7236,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       placeFlash();
       flash.classList.add('show');
       flash.setAttribute('aria-hidden', 'false');
+      applyFx(flash, m);
       clearTimeout(hideTimer);
       const secs = Math.max(2, Math.min(30, Number(m.display_s) || 12));
       hideTimer = setTimeout(hideFlash, secs * 1000);
@@ -7337,11 +7382,15 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         return;
       }
       list.forEach(function(it, i){
-        const gs = it.engine === 'gs';   // Generate Studio = LECTURE SEULE
+        // v1.37.0 — LECTURE SEULE = `readonly` (miroir de la base Generate Studio),
+        // PAS `engine === 'gs'` : les images GS générées par Jarvis vivent dans
+        // data/generated/, lui appartiennent, et sont donc supprimables.
+        const gs = it.engine === 'gs';        // pastille moteur
+        const ro = it.readonly === true;      // verrouillage réel
         const cell = document.createElement('div');
         cell.className = 'gal-cell'
-          + (!gs && !selMode ? ' has-ctrls' : '')
-          + (selMode && !gs && selected.has(it.id) ? ' sel-on' : '');
+          + (!ro && !selMode ? ' has-ctrls' : '')
+          + (selMode && !ro && selected.has(it.id) ? ' sel-on' : '');
         const im = document.createElement('img');
         im.loading = 'lazy';
         im.src = srcOf(it);
@@ -7365,10 +7414,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 
         if (selMode){
           const mark = document.createElement('span');
-          if (gs){ mark.className = 'gal-lock'; mark.textContent = '🔒'; mark.title = 'Géré dans Generate Studio'; }
+          if (ro){ mark.className = 'gal-lock'; mark.textContent = '🔒'; mark.title = 'Géré dans Generate Studio'; }
           else { mark.className = 'gal-check'; mark.textContent = selected.has(it.id) ? '✓' : ''; }
           cell.appendChild(mark);
-        } else if (!gs){
+        } else if (!ro){
           // Tactile : contrôles TOUJOURS visibles (pas de survol sur un doigt).
           const ctrls = document.createElement('div');
           ctrls.className = 'gal-ctrls';
@@ -7388,7 +7437,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 
         cell.addEventListener('click', function(){
           if (selMode){
-            if (gs) return;   // une image GS n'est jamais sélectionnable
+            if (ro) return;   // le miroir GS n'est jamais sélectionnable
             if (selected.has(it.id)) selected.delete(it.id); else selected.add(it.id);
             render();
             return;
@@ -7399,6 +7448,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       });
       refreshChips();
       refreshBulkBar();
+      renderCount();
     }
 
     // ---- Indicateur « génération en cours » --------------------------------
@@ -7480,6 +7530,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       cmp.classList.remove('zoomed');
       cmp.classList.add('show');
       cmp.setAttribute('aria-hidden', 'false');
+      applyFx(document.querySelector('.cmp-frame'), m);
     }
     function closeCompare(){
       cmp.classList.remove('show', 'zoomed');
@@ -7523,12 +7574,39 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       document.querySelectorAll('.gal-fmt-btn').forEach(function(b){
         b.classList.toggle('on', b.dataset.fmt === imgFmt);
       });
+      document.querySelectorAll('.gal-fx-btn[data-fx]').forEach(function(b){
+        // En aléatoire, Friday choisit : le choix fixe n'a plus de sens.
+        b.classList.toggle('on', !imgFxRnd && b.dataset.fx === imgFx);
+        b.disabled = imgFxRnd;
+      });
+      const r = document.getElementById('btnFxRandom');
+      if (r) r.classList.toggle('on', imgFxRnd);
+    }
+    // v1.37.0 — Compteur de purge. Le plafond ne concerne QUE les images cloud
+    // NON favorites : Generate Studio est en lecture seule (base séparée) et les
+    // favoris en sont exemptés. Un « 141/100 » n'aurait aucun sens.
+    function renderCount(){
+      const el = document.getElementById('galCount');
+      if (!el) return;
+      const mine = allItems.filter(function(x){ return x.readonly !== true; });
+      const nonFav = mine.filter(function(x){ return !x.favorite; }).length;
+      const gs = allItems.length - mine.length;
+      const fav = mine.length - nonFav;
+      const full = nonFav >= galMax;
+      el.innerHTML = allItems.length + ' img · <span class="' + (full ? 'warn' : '') + '">'
+        + nonFav + '/' + galMax + (full ? ' ⚠' : '') + '</span> · miroir GS ' + gs + ' · ❤ ' + fav;
+      el.title = full
+        ? 'Plafond atteint : chaque nouvelle image cloud efface la plus ancienne. Un favori (❤) est exempté.'
+        : 'Images cloud non favorites conservées. Au-delà du plafond, les plus anciennes sont effacées.';
     }
     function onConfigState(m){
       if (!m) return;
       if (typeof m.passive_images_enabled === 'boolean') pcOn = m.passive_images_enabled;
       if (typeof m.passive_images_mobile_enabled === 'boolean') mobOn = m.passive_images_mobile_enabled;
-      if (typeof m.image_format === 'string'){ imgFmt = m.image_format; renderFormat(); }
+      if (typeof m.image_format === 'string') imgFmt = m.image_format;
+      if (typeof m.image_effect === 'string') imgFx = m.image_effect;
+      if (typeof m.image_effect_random === 'boolean') imgFxRnd = m.image_effect_random;
+      renderFormat();
       renderPassive();
     }
     // v1.36.0 — une image supprimée/gardée à la VOIX doit disparaître/se marquer
@@ -7551,7 +7629,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         pcOn = !!s.passive_enabled;
         mobOn = (typeof s.passive_mobile_enabled === 'boolean') ? s.passive_mobile_enabled : true;
         if (s.image_format) imgFmt = s.image_format;
-        renderPassive(); renderFormat();
+        if (s.image_effect) imgFx = s.image_effect;
+        if (typeof s.image_effect_random === 'boolean') imgFxRnd = s.image_effect_random;
+        if (s.gallery_max) galMax = s.gallery_max;
+        renderPassive(); renderFormat(); renderCount();
       } catch (e) { /* backend injoignable : on garde l'état courant */ }
     }
 
@@ -7629,6 +7710,20 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
           renderFormat();
           wsSendJson({ type: 'config', key: 'image_format', value: imgFmt });
         });
+      });
+
+      document.querySelectorAll('.gal-fx-btn[data-fx]').forEach(function(b){
+        b.addEventListener('click', function(){
+          if (b.disabled) return;
+          imgFx = b.dataset.fx;
+          renderFormat();
+          wsSendJson({ type: 'config', key: 'image_effect', value: imgFx });
+        });
+      });
+      document.getElementById('btnFxRandom').addEventListener('click', function(){
+        imgFxRnd = !imgFxRnd;
+        renderFormat();
+        wsSendJson({ type: 'config', key: 'image_effect_random', value: imgFxRnd });
       });
 
       // Image active centrée : ✕, clic hors carte, et tap image → visionneuse.
