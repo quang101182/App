@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.43.0</title>
+<title>FRIDAY · v1.44.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2306,6 +2306,33 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 .gal-passive-btn:disabled{ opacity:.32; cursor:not-allowed; filter:grayscale(1); }
 .gal-passive-pc{ font:8px/1.3 var(--mono,monospace); opacity:.7; color:var(--primary,#00d4ff); }
 .gal-passive-pc.off{ color:#ff9b6b; opacity:.95; }
+/* v1.44.0 — Halo de génération. z-index au-dessus de TOUT (2400 > 2200) mais
+   `pointer-events:none` : il ne peut intercepter ni le micro ni un bouton.
+   L'animation n'est qu'une respiration → gelée en arrière-plan, l'état final
+   (visible, non animé) reste correct. */
+#genHalo{
+  position:fixed; inset:0; pointer-events:none; z-index:2400;
+  opacity:0; transition:opacity .45s ease;
+}
+#genHalo.show{ opacity:1; }
+#genHalo::before{
+  content:''; position:absolute; inset:0;
+  box-shadow: inset 0 0 var(--halo-thick,20px) calc(var(--halo-thick,20px)/2.6) var(--halo-c1,#8fb6d6);
+  opacity:var(--halo-opacity,.5);
+  animation: haloBreathe var(--halo-period,2.6s) ease-in-out infinite;
+}
+#genHalo.tri::before{
+  animation: haloBreathe var(--halo-period,2.6s) ease-in-out infinite,
+             haloTri calc(var(--halo-period,2.6s) * 2.4) linear infinite;
+}
+@keyframes haloBreathe{ 0%,100%{ filter:brightness(.72); } 50%{ filter:brightness(1.3); } }
+@keyframes haloTri{
+  0%,100%{ box-shadow: inset 0 0 var(--halo-thick,20px) calc(var(--halo-thick,20px)/2.6) var(--halo-c1); }
+  33%    { box-shadow: inset 0 0 var(--halo-thick,20px) calc(var(--halo-thick,20px)/2.6) var(--halo-c2); }
+  66%    { box-shadow: inset 0 0 var(--halo-thick,20px) calc(var(--halo-thick,20px)/2.6) var(--halo-c3); }
+}
+@media (prefers-reduced-motion: reduce){ #genHalo::before{ animation:none; } }
+
 /* v1.43.0 — « Galerie non chargée » : bouton de reprise (≠ « galerie vide »). */
 .gal-retry-btn{
   margin-top:8px; padding:7px 12px; min-height:32px; border-radius:4px; cursor:pointer;
@@ -2973,6 +3000,11 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   <span class="busy-dot"></span><span id="busyLabel">Génération…</span>
 </div>
 
+<!-- v1.44.0 — HALO DE GÉNÉRATION (idée Quang) : on voit qu'elle fabrique une image
+     même sans fenêtre ouverte. `pointer-events:none` : il ne peut PAS voler le tap
+     du bouton micro (le piège de l'overlay centré). -->
+<div id="genHalo" aria-hidden="true"></div>
+
 <!-- v1.31.0 — Image ACTIVE (« génère-moi X ») : affichage CENTRÉ, EN GRAND, qui
      RESTE jusqu'à fermeture — comme le MediaCenter du PC (correction Quang 09/07 :
      seul le PASSIF est un flash éphémère haut-droite).
@@ -3273,7 +3305,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.43.0';
+  const VERSION = '1.44.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -7677,8 +7709,53 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       busy.style.right = Math.round(window.innerWidth - a.right + 12) + 'px';
     }
 
+    // v1.44.0 — HALO : une dimension visuelle = une information.
+    //   couleur  = le moteur · présence = pour qui elle travaille
+    //   rythme   = combien d'images · humeur = teinte SES pensées uniquement
+    const HALO_ENGINES = { gs:'#7fe0a8', gemini:'#b98cff', openai:'#5ad2ff', compare:'#7fe0a8' };
+    const HALO_NEUTRAL = '#8fb6d6';   // moteur inconnu : on n'invente pas de couleur
+    const HALO_MOODS = { focus:-14, calme:10, joueur:26, curieux:18, serein:8 };
+    function _haloShift(hex, deg){
+      if (!deg) return hex;
+      const r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
+      const mx = Math.max(r,g,b), mn = Math.min(r,g,b), l = (mx+mn)/2;
+      let h = 0, s = 0;
+      if (mx !== mn){
+        const d = mx - mn;
+        s = l > 0.5 ? d/(2-mx-mn) : d/(mx+mn);
+        h = mx === r ? ((g-b)/d + (g<b?6:0)) : mx === g ? (b-r)/d + 2 : (r-g)/d + 4;
+        h *= 60;
+      }
+      h = (h + deg + 360) % 360;
+      return 'hsl(' + h.toFixed(0) + ' ' + (s*100).toFixed(0) + '% ' + (l*100).toFixed(0) + '%)';
+    }
+    function applyHalo(m){
+      const halo = document.getElementById('genHalo');
+      if (!halo) return;
+      if (!m || !m.active){ halo.classList.remove('show','tri'); return; }
+      const engine  = String(m.engine || '').toLowerCase();
+      const passive = m.mode === 'passive';
+      const n       = Math.max(1, Number(m.count) || 1);
+      const base    = HALO_ENGINES[engine] || HALO_NEUTRAL;
+      // `mood` est un texte LIBRE côté backend → repli 0° si le mot est inconnu.
+      const deg     = passive ? (HALO_MOODS[String(m.mood || '').toLowerCase()] || 0) : 0;
+      const st = document.documentElement.style;
+      st.setProperty('--halo-c1', _haloShift(base, deg));
+      if (engine === 'compare'){
+        st.setProperty('--halo-c2', HALO_ENGINES.gemini);
+        st.setProperty('--halo-c3', HALO_ENGINES.openai);
+      }
+      // Plus fin qu'au PC : l'écran est petit, un halo épais mange l'image.
+      st.setProperty('--halo-thick', (passive ? 13 : 20) + 'px');
+      st.setProperty('--halo-opacity', (passive ? 0.34 : 0.52).toFixed(2));
+      st.setProperty('--halo-period', Math.max(1.1, 2.9 - Math.log2(n) * 0.55).toFixed(2) + 's');
+      halo.classList.toggle('tri', engine === 'compare');
+      halo.classList.add('show');
+    }
+
     function onMediaBusy(m){
       clearTimeout(busyGuard);
+      applyHalo(m);   // v1.44.0 — le halo suit exactement le même signal que le badge
       if (!m || !m.active){
         busy.classList.remove('show');
         busy.setAttribute('aria-hidden', 'true');
@@ -7692,7 +7769,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       busy.setAttribute('aria-hidden', 'false');
       // Filet : si le backend meurt en pleine génération, `active:false` n'arrive
       // jamais et l'indicateur resterait allumé pour toujours.
-      busyGuard = setTimeout(function(){ busy.classList.remove('show'); }, 6 * 60 * 1000);
+      busyGuard = setTimeout(function(){
+        busy.classList.remove('show');
+        applyHalo(null);       // le halo ne survit pas non plus au filet
+      }, 6 * 60 * 1000);
     }
 
     // ---- Comparaison 3 moteurs (pyramide) ----------------------------------
