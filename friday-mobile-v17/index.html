@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.27.3</title>
+<title>FRIDAY · v1.28.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2252,6 +2252,96 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 .cortex-stage.switching .cortex-variant{
   transition:opacity .2s ease;
 }
+/* ═══════════ v1.28.0 — IMAGES (flash · galerie · visionneuse) ═══════════
+   Flash : vignette éphémère HAUT-DROITE, SOUS la barre d'onglets (top calé en
+   JS sur le bas du header → zéro collision avec Accueil/Carte/Cosmos).
+   Un SEUL comportement : actif et passif s'affichent pareil (décision Quang).
+   z-index 196 = au-dessus du contenu, sous les scanlines (198-200). */
+#mediaFlash{
+  position:absolute; right:12px; width:126px; z-index:196;
+  border:1px solid var(--primary-dim); border-radius:4px; overflow:hidden;
+  background:rgba(0,18,32,.86); box-shadow:0 4px 18px rgba(0,0,0,.55);
+  opacity:0; transform:translateY(-6px); pointer-events:none;
+  transition:opacity .22s ease, transform .22s ease;
+}
+#mediaFlash.show{ opacity:1; transform:translateY(0); pointer-events:auto; }
+#mediaFlash img{ display:block; width:100%; height:auto; max-height:170px; object-fit:cover; }
+.flash-tag{
+  display:flex; justify-content:space-between; align-items:center; gap:4px;
+  padding:3px 5px; font:9px/1.2 var(--mono,monospace); letter-spacing:.5px;
+  color:var(--primary,#00d4ff); background:rgba(0,10,20,.9);
+}
+.flash-tag .fx-mode{ opacity:.75; text-transform:uppercase; }
+.flash-close{
+  position:absolute; top:2px; right:2px; width:20px; height:20px; line-height:18px;
+  text-align:center; border:none; border-radius:3px; cursor:pointer;
+  background:rgba(0,10,20,.75); color:var(--primary,#00d4ff); font-size:12px;
+}
+
+/* Galerie : feuille glissante depuis le bas (pattern .log-panel). */
+#galleryPanel{
+  position:fixed; left:0; right:0; bottom:0; height:72vh; z-index:58;
+  display:flex; flex-direction:column;
+  background:rgba(2,12,22,.97); border-top:1px solid var(--primary-dim);
+  transform:translateY(100%); transition:transform .25s ease;
+  max-width:480px; margin:0 auto;
+}
+#galleryPanel.show{ transform:translateY(0); }
+.gal-head{
+  flex:0 0 auto; padding:8px 10px 6px; border-bottom:1px solid rgba(0,212,255,.18);
+}
+.gal-title{
+  display:flex; justify-content:space-between; align-items:center;
+  font:11px/1.3 var(--mono,monospace); color:var(--primary,#00d4ff); letter-spacing:1px;
+}
+.gal-chips{ display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
+.gal-chip{
+  padding:4px 8px; font:9px/1.2 var(--mono,monospace); border-radius:3px; cursor:pointer;
+  background:rgba(0,18,32,.7); color:var(--primary,#00d4ff);
+  border:1px solid var(--primary-dim);
+}
+.gal-chip.on{ background:var(--primary,#00d4ff); color:#02121e; font-weight:700; }
+/* Chips moteur : les 3 sont TOUJOURS visibles ; grisés + inertes si aucune
+   image de ce moteur (décision Quang — pas de chip qui apparaît/disparaît). */
+.gal-chip:disabled{ opacity:.32; cursor:not-allowed; filter:grayscale(1); }
+.gal-grid{
+  flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+  display:grid; grid-template-columns:repeat(3,1fr); gap:5px; padding:7px;
+  grid-auto-rows:max-content; align-content:start;
+}
+.gal-cell{ position:relative; aspect-ratio:1; border-radius:3px; overflow:hidden; background:#02121e; cursor:pointer; }
+.gal-cell img{ width:100%; height:100%; object-fit:cover; display:block; }
+.gal-dot{
+  position:absolute; bottom:2px; right:2px; padding:1px 3px; border-radius:2px;
+  font:7px/1.3 var(--mono,monospace); background:rgba(0,10,20,.85); color:var(--primary,#00d4ff);
+}
+.gal-dot.gs{ color:#5cf58c; }
+.gal-fav{ position:absolute; top:2px; left:3px; font-size:10px; }
+.gal-empty{ grid-column:1/-1; padding:24px 8px; text-align:center; opacity:.6;
+  font:10px/1.5 var(--mono,monospace); color:var(--primary,#00d4ff); }
+
+/* Visionneuse plein écran : au-dessus des scanlines (200), sous le toast (300). */
+#mediaLightbox{
+  position:fixed; inset:0; z-index:260; display:flex; flex-direction:column;
+  background:rgba(0,4,10,.96); opacity:0; pointer-events:none; transition:opacity .18s ease;
+}
+#mediaLightbox.show{ opacity:1; pointer-events:auto; }
+.lb-stage{ flex:1; min-height:0; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.lb-stage img{
+  max-width:100%; max-height:100%; object-fit:contain;
+  transition:transform .18s ease; transform-origin:center center; touch-action:none;
+}
+.lb-bar{
+  flex:0 0 auto; display:flex; justify-content:space-between; align-items:center; gap:8px;
+  padding:8px 10px; border-top:1px solid rgba(0,212,255,.2);
+  font:9px/1.3 var(--mono,monospace); color:var(--primary,#00d4ff);
+}
+.lb-prompt{ flex:1; opacity:.8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lb-btn{
+  border:1px solid var(--primary-dim); background:rgba(0,18,32,.8);
+  color:var(--primary,#00d4ff); border-radius:3px; padding:5px 9px; font:10px/1 var(--mono,monospace); cursor:pointer;
+}
+.lb-count{ opacity:.65; }
 </style>
 </head>
 <body data-state="idle">
@@ -2276,7 +2366,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.27.3</span>
+        <span class="version-tag version-badge">· v1.28.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2397,10 +2487,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
            panneau central, (3) panels CONTEXT/FEED/MUSIC/ACTIVITY tout en bas.
            Bouton DICTER reste dans le footer toujours visible. -->
 
-      <!-- v1.21.5 — Ligne de toggles 5 boutons : ACT + BOOST + $ + MUTE + CAP
-           (ACTIVITY → ACT pour gain de largeur 5 boutons sur 1 ligne mobile). -->
+      <!-- v1.28.0 — Ligne de toggles 5 boutons : ACT + GAL + $ + MUTE + CAP.
+           Le slot libéré par BOOST (retiré v1.27.3) accueille la GALERIE
+           (décision Quang : la galerie est un bouton, pas un onglet). -->
       <div class="slot-toggles">
         <button class="slot-toggle" data-slot="activity" title="Affiche/cache le panneau ACTIVITY (compteur tools session, last tool, top tools)">+ ACT</button>
+        <button class="slot-toggle" id="btnGallery" title="Galerie des images générées (Gemini · OpenAI · Generate Studio). Tap une vignette pour l'agrandir.">🖼 GAL</button>
         <button class="slot-toggle" id="btnUsage" title="Affiche/cache le panneau de consommation API (Claude / ElevenLabs / Groq) en temps réel">$</button>
         <button class="slot-toggle" id="btnMute" title="Couper la voix de Friday/Jarvis. Les réponses arrivent uniquement via le transcript (utile en environnement silencieux).">🔇 MUTE</button>
         <button class="slot-toggle" id="btnCaptions" title="Live captions : sous-titres éphémères de tes messages + réponses Friday, visibles sur toutes les pages. Tap pour activer/désactiver.">💬 CAP</button>
@@ -2553,6 +2645,45 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
          setOffline) restent : elles sont appelées par le router WS. -->
   </footer>
 
+  <!-- v1.28.0 — Flash image éphémère. Dans .app (donc calé sur la colonne
+       480px centrée), positionné en JS juste sous le header. -->
+  <div id="mediaFlash" aria-hidden="true">
+    <button class="flash-close" id="flashClose" title="Fermer" tabindex="-1">✕</button>
+    <img id="flashImg" alt="">
+    <div class="flash-tag">
+      <span id="flashEngine">—</span>
+      <span class="fx-mode" id="flashMode">—</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- v1.28.0 — Galerie (feuille basse) -->
+<aside id="galleryPanel" aria-hidden="true">
+  <div class="gal-head">
+    <div class="gal-title">
+      <span>🖼 GALERIE</span>
+      <button class="lb-btn" id="galClose">✕</button>
+    </div>
+    <div class="gal-chips" id="galChips">
+      <button class="gal-chip on" data-f="all">Tout</button>
+      <button class="gal-chip" data-f="gemini">Gemini</button>
+      <button class="gal-chip" data-f="openai">OpenAI</button>
+      <button class="gal-chip" data-f="gs">Generate Studio</button>
+      <button class="gal-chip" data-f="fav">❤ Favoris</button>
+    </div>
+  </div>
+  <div class="gal-grid" id="galGrid"></div>
+</aside>
+
+<!-- v1.28.0 — Visionneuse plein écran (zoom double-tap + swipe) -->
+<div id="mediaLightbox" aria-hidden="true">
+  <div class="lb-stage" id="lbStage"><img id="lbImg" alt=""></div>
+  <div class="lb-bar">
+    <span class="lb-count" id="lbCount"></span>
+    <span class="lb-prompt" id="lbPrompt"></span>
+    <button class="lb-btn" id="lbClose">FERMER</button>
+  </div>
 </div>
 
 <!-- ==== Log panel ==== -->
@@ -2763,7 +2894,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.27.3';
+  const VERSION = '1.28.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -2781,6 +2912,20 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     }
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${proto}//${h}:8765/?kind=mobile`;
+  })();
+  // v1.28.0 — Base HTTP du backend (galerie + fichiers image). Le WS :8445 et ce
+  // HTTP :8448 sont deux exposition Tailscale DISTINCTES, toutes deux tailnet-only.
+  // Off-LAN (PWA github.io / APK) → :8448. Sinon (page servie par le backend, ou
+  // adb reverse) → même hôte, port 8766. Override de test via ?api=
+  const API_BASE = (function(){
+    const override = QUERY.get('api');
+    if (override) return override.replace(/\/+$/, '');
+    const h = location.hostname || '';
+    if (h === 'quang101182.github.io' || h === 'localhost' || h === '') {
+      return 'https://desktop-97pf6l1.tailc503e.ts.net:8448';
+    }
+    const proto = location.protocol === 'https:' ? 'https:' : 'http:';
+    return `${proto}//${h}:8766`;
   })();
   const STATE_COLORS = {
     idle:      { ring:'#5a7090', glow:'rgba(90,112,144,.35)'  },
@@ -6233,6 +6378,14 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
           break;
         // Compat HUD PC (handshake hydratation, ignorés en 5a) :
         case 'log_init':
+        // v1.28.0 — Image générée (actif ou passif) : même flash, même endroit.
+        case 'media_image':
+          MediaImages.onMediaImage(m);
+          break;
+        // v1.28.0 — « montre mes images » / « ouvre ma galerie » (tool open_gallery).
+        case 'open_gallery':
+          MediaImages.open(m.focus_id || null);
+          break;
         case 'system_health':
         case 'windows_state':
         case 'globe_state':
@@ -6580,6 +6733,264 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   connectWS();
   console.log('FRIDAY MOBILE', VERSION, 'ready · LIVE · WS=', WS_URL);
   setTimeout(()=>toast('FRIDAY · '+VERSION+' · LIVE', 1800), 400);
+
+  /* =========================================================================
+     v1.28.0 — IMAGES : flash éphémère + galerie + visionneuse
+     - Flash : les octets arrivent en data-URI dans `media_image` (champ `image`,
+       ajouté par le backend pour les clients kind=mobile) → aucun HTTP requis.
+       Actif et passif s'affichent PAREIL (décision Quang), durée = `display_s`.
+     - Galerie : lit API_BASE (/api/gallery + /api/gallery/gs). Cellules GS en
+       lecture seule, comme sur PC (Jarvis n'écrit jamais le stockage GS).
+     ========================================================================= */
+  const MediaImages = (function(){
+    const flash    = document.getElementById('mediaFlash');
+    const flashImg = document.getElementById('flashImg');
+    const engineEl = document.getElementById('flashEngine');
+    const modeEl   = document.getElementById('flashMode');
+    const panel    = document.getElementById('galleryPanel');
+    const grid     = document.getElementById('galGrid');
+    const chipsBox = document.getElementById('galChips');
+    const lb       = document.getElementById('mediaLightbox');
+    const lbImg    = document.getElementById('lbImg');
+    const lbPrompt = document.getElementById('lbPrompt');
+    const lbCount  = document.getElementById('lbCount');
+
+    let hideTimer = null;
+    let lastFlash = null;      // dernière image flashée (pour le tap → visionneuse)
+    let allItems  = [];        // galerie chargée (cloud + GS)
+    let viewList  = [];        // liste courante de la visionneuse
+    let viewIdx   = 0;
+    let zoomed    = false;
+    const engines = new Set(); // moteurs cochés (vide = tous)
+    let favOnly   = false;
+
+    const ENGINE_KEYS = ['gemini', 'openai', 'gs'];
+
+    // ---- Flash -------------------------------------------------------------
+    function placeFlash(){
+      const hd = document.querySelector('.header');
+      if (!hd || !flash) return;
+      // Sous la barre d'onglets, jamais dessus : bas du header + marge.
+      flash.style.top = (hd.offsetTop + hd.offsetHeight + 8) + 'px';
+    }
+
+    function srcOf(it){
+      if (!it) return '';
+      if (it.image) return it.image;                       // data-URI (flash)
+      if (it.thumb) return it.thumb;                       // vignette GS inline
+      if (it.image_url) return API_BASE + it.image_url;
+      if (it.url) return API_BASE + it.url;
+      return '';
+    }
+    function fullSrcOf(it){
+      if (!it) return '';
+      if (it.image) return it.image;
+      if (it.image_url) return API_BASE + it.image_url;
+      if (it.url) return API_BASE + it.url;
+      return it.thumb || '';
+    }
+
+    function hideFlash(){
+      if (!flash) return;
+      flash.classList.remove('show');
+      flash.setAttribute('aria-hidden', 'true');
+    }
+
+    function onMediaImage(m){
+      const src = m.image || (m.image_url ? API_BASE + m.image_url : '');
+      if (!src) return;
+      lastFlash = m;
+      flashImg.src = src;
+      engineEl.textContent = m.engine_label || m.engine || '—';
+      modeEl.textContent = (m.mode === 'passive') ? 'pensée' : 'à la demande';
+      placeFlash();
+      flash.classList.add('show');
+      flash.setAttribute('aria-hidden', 'false');
+      clearTimeout(hideTimer);
+      const secs = Math.max(2, Math.min(30, Number(m.display_s) || 12));
+      hideTimer = setTimeout(hideFlash, secs * 1000);
+    }
+
+    // ---- Visionneuse -------------------------------------------------------
+    function renderView(){
+      const it = viewList[viewIdx];
+      if (!it) return;
+      lbImg.src = fullSrcOf(it);
+      setZoom(false);
+      lbPrompt.textContent = it.prompt || '';
+      lbCount.textContent = viewList.length > 1
+        ? `${viewIdx + 1}/${viewList.length}` : (it.engine_label || '');
+    }
+    function setZoom(on){
+      zoomed = on;
+      lbImg.style.transform = on ? 'scale(2.4)' : 'scale(1)';
+    }
+    function openViewer(list, idx){
+      viewList = list.filter(Boolean);
+      if (!viewList.length) return;
+      viewIdx = Math.max(0, Math.min(idx, viewList.length - 1));
+      renderView();
+      lb.classList.add('show');
+      lb.setAttribute('aria-hidden', 'false');
+    }
+    function closeViewer(){
+      lb.classList.remove('show');
+      lb.setAttribute('aria-hidden', 'true');
+      setZoom(false);
+    }
+    function step(delta){
+      if (viewList.length < 2) return;
+      viewIdx = (viewIdx + delta + viewList.length) % viewList.length;
+      renderView();
+    }
+
+    // ---- Galerie -----------------------------------------------------------
+    function matches(it){
+      if (favOnly && !it.favorite) return false;
+      if (engines.size && !engines.has(it.engine)) return false;
+      return true;
+    }
+    function refreshChips(){
+      chipsBox.querySelectorAll('.gal-chip').forEach(function(c){
+        const f = c.dataset.f;
+        if (ENGINE_KEYS.indexOf(f) >= 0){
+          // Les 3 chips moteur restent TOUJOURS visibles ; grisés si vides.
+          const has = allItems.some(function(it){ return it.engine === f; });
+          c.disabled = !has;
+          c.classList.toggle('on', engines.has(f));
+        } else if (f === 'fav'){
+          c.disabled = !allItems.some(function(it){ return it.favorite; });
+          c.classList.toggle('on', favOnly);
+        } else {
+          c.classList.toggle('on', !engines.size && !favOnly);
+        }
+      });
+    }
+    function render(){
+      const list = allItems.filter(matches);
+      grid.innerHTML = '';
+      if (!list.length){
+        const d = document.createElement('div');
+        d.className = 'gal-empty';
+        d.textContent = allItems.length ? 'Aucune image pour ce filtre.' : 'Galerie vide.';
+        grid.appendChild(d);
+        refreshChips();
+        return;
+      }
+      list.forEach(function(it, i){
+        const cell = document.createElement('div');
+        cell.className = 'gal-cell';
+        const im = document.createElement('img');
+        im.loading = 'lazy';
+        im.src = srcOf(it);
+        im.alt = it.prompt || '';
+        cell.appendChild(im);
+        if (it.favorite){
+          const f = document.createElement('span');
+          f.className = 'gal-fav'; f.textContent = '❤';
+          cell.appendChild(f);
+        }
+        const dot = document.createElement('span');
+        dot.className = 'gal-dot' + (it.engine === 'gs' ? ' gs' : '');
+        dot.textContent = it.engine === 'gs' ? 'GS'
+                        : (it.engine === 'openai' ? 'OAI' : 'GEM');
+        cell.appendChild(dot);
+        cell.addEventListener('click', function(){ openViewer(list, i); });
+        grid.appendChild(cell);
+      });
+      refreshChips();
+    }
+
+    async function load(){
+      const grab = function(p){
+        return fetch(API_BASE + p, { cache: 'no-store' })
+          .then(function(r){ return r.ok ? r.json() : []; })
+          .catch(function(){ return []; });
+      };
+      const res = await Promise.all([grab('/api/gallery'), grab('/api/gallery/gs')]);
+      const cloud = Array.isArray(res[0]) ? res[0] : [];
+      const gs    = Array.isArray(res[1]) ? res[1] : [];
+      allItems = cloud.concat(gs).sort(function(a, b){ return (b.ts || 0) - (a.ts || 0); });
+      render();
+    }
+
+    function open(focusId){
+      panel.classList.add('show');
+      panel.setAttribute('aria-hidden', 'false');
+      load().then(function(){
+        if (!focusId) return;
+        const list = allItems.filter(matches);
+        const i = list.findIndex(function(it){ return it.id === focusId; });
+        if (i >= 0) openViewer(list, i);
+      });
+    }
+    function close(){
+      panel.classList.remove('show');
+      panel.setAttribute('aria-hidden', 'true');
+    }
+    function toggle(){
+      if (panel.classList.contains('show')) close(); else open();
+    }
+
+    // ---- Câblage -----------------------------------------------------------
+    function init(){
+      document.getElementById('flashClose').addEventListener('click', function(e){
+        e.stopPropagation(); clearTimeout(hideTimer); hideFlash();
+      });
+      flashImg.addEventListener('click', function(){
+        if (lastFlash) openViewer([lastFlash], 0);
+      });
+      const btn = document.getElementById('btnGallery');
+      if (btn) btn.addEventListener('click', function(){
+        toggle();
+        btn.classList.toggle('on', panel.classList.contains('show'));
+      });
+      document.getElementById('galClose').addEventListener('click', function(){
+        close();
+        const b = document.getElementById('btnGallery');
+        if (b) b.classList.remove('on');
+      });
+      document.getElementById('lbClose').addEventListener('click', closeViewer);
+
+      chipsBox.addEventListener('click', function(e){
+        const c = e.target.closest('.gal-chip');
+        if (!c || c.disabled) return;
+        const f = c.dataset.f;
+        if (f === 'all'){ engines.clear(); favOnly = false; }
+        else if (f === 'fav'){ favOnly = !favOnly; }
+        else { if (engines.has(f)) engines.delete(f); else engines.add(f); }
+        render();
+      });
+
+      // Swipe horizontal + double-tap zoom dans la visionneuse.
+      let sx = 0, sy = 0, lastTap = 0;
+      const stage = document.getElementById('lbStage');
+      stage.addEventListener('touchstart', function(e){
+        if (e.touches.length !== 1) return;
+        sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+      }, { passive: true });
+      stage.addEventListener('touchend', function(e){
+        const t = e.changedTouches[0];
+        const dx = t.clientX - sx, dy = t.clientY - sy;
+        if (!zoomed && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5){
+          step(dx < 0 ? 1 : -1);
+          return;
+        }
+        if (Math.abs(dx) < 12 && Math.abs(dy) < 12){
+          const now = Date.now();
+          if (now - lastTap < 300){ setZoom(!zoomed); lastTap = 0; }
+          else lastTap = now;
+        }
+      }, { passive: true });
+      lb.addEventListener('click', function(e){ if (e.target === lb) closeViewer(); });
+
+      window.addEventListener('resize', placeFlash);
+      window.addEventListener('orientationchange', function(){ setTimeout(placeFlash, 120); });
+    }
+
+    return { init: init, onMediaImage: onMediaImage, open: open, close: close };
+  })();
+  MediaImages.init();
 
   /* =========================================================================
      v1.23.0 — Camera (CAM) : Capacitor Camera plugin
