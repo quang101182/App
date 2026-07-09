@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.29.0</title>
+<title>FRIDAY · v1.30.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2330,6 +2330,56 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 .gal-empty{ grid-column:1/-1; padding:24px 8px; text-align:center; opacity:.6;
   font:10px/1.5 var(--mono,monospace); color:var(--primary,#00d4ff); }
 
+/* ═══════ v1.30.0 — Comparaison 3 moteurs en PYRAMIDE (maquette validée) ═══════
+   z-index 258 = juste sous la visionneuse (260) : tap une image de la pyramide
+   ouvre le zoom PAR-DESSUS, sans fermer la comparaison. */
+#mediaCompare{
+  position:fixed; inset:0; z-index:258; display:flex; align-items:center; justify-content:center;
+  background:rgba(0,4,10,.96); opacity:0; pointer-events:none; transition:opacity .18s ease;
+  padding:10px;
+}
+#mediaCompare.show{ opacity:1; pointer-events:auto; }
+.cmp-frame{ width:100%; max-width:420px; max-height:100%; overflow-y:auto; }
+.cmp-head{
+  display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;
+  font:11px/1.3 var(--mono,monospace); color:var(--primary,#00d4ff); letter-spacing:1px;
+}
+.cmp-pyramid{ display:flex; flex-direction:column; align-items:center; gap:8px; }
+/* Le sommet fait EXACTEMENT la largeur d'une cellule du bas : (100% - gap)/2. */
+.cmp-apex{ width:calc((100% - 8px)/2); }
+.cmp-base{ display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; }
+.cmp-cell{
+  position:relative; aspect-ratio:1; border-radius:4px; overflow:hidden; cursor:pointer;
+  border:1px solid var(--primary-dim); background:#02121e;
+}
+.cmp-cell img{ width:100%; height:100%; object-fit:cover; display:block; }
+.cmp-dot{
+  position:absolute; left:3px; bottom:3px; padding:1px 4px; border-radius:2px;
+  font:7px/1.3 var(--mono,monospace); background:rgba(0,10,20,.85); color:var(--primary,#00d4ff);
+}
+.cmp-dot.gs{ color:#5cf58c; }
+.cmp-crown{ position:absolute; top:3px; right:4px; font-size:10px; }
+.cmp-prompt{
+  width:100%; margin-top:8px; font:10px/1.5 var(--mono,monospace);
+  color:var(--primary,#00d4ff); opacity:.8;
+}
+.cmp-lbl{ display:block; opacity:.55; letter-spacing:1px; margin-bottom:2px; }
+.cmp-hint{ font:9px/1.4 var(--mono,monospace); opacity:.55; color:var(--primary,#00d4ff); margin-top:6px; }
+
+.cmp-zoom{ display:none; flex-direction:column; gap:8px; }
+#mediaCompare.zoomed .cmp-pyramid{ display:none; }
+#mediaCompare.zoomed .cmp-zoom{ display:flex; }
+.cmp-zoom-bar{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.cmp-back{
+  background:var(--primary,#00d4ff); color:#02121e; border:none; border-radius:3px;
+  padding:8px 12px; font:700 10px var(--mono,monospace); letter-spacing:1px; cursor:pointer;
+}
+.cmp-zoom-eng{ font:9px/1.3 var(--mono,monospace); color:var(--primary,#00d4ff); opacity:.8; }
+.cmp-zoom-stage{
+  aspect-ratio:1; border:1px solid var(--primary-dim); border-radius:4px; overflow:hidden;
+}
+.cmp-zoom-stage img{ width:100%; height:100%; object-fit:contain; display:block; }
+
 /* Visionneuse plein écran : au-dessus des scanlines (200), sous le toast (300). */
 #mediaLightbox{
   position:fixed; inset:0; z-index:260; display:flex; flex-direction:column;
@@ -2376,7 +2426,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.29.0</span>
+        <span class="version-tag version-badge">· v1.30.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2692,6 +2742,34 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   <div class="gal-grid" id="galGrid"></div>
 </aside>
 
+<!-- v1.30.0 — Comparaison 3 moteurs en PYRAMIDE (maquette validée Quang 09/07).
+     Generate Studio au sommet (local, gratuit), Gemini + OpenAI dessous, les 3
+     de MÊME taille. Tap une image = agrandir dans le même cadre + « RETOUR AUX 3 ».
+     Sur mobile il n'y a pas de place latérale → le prompt passe SOUS la pyramide. -->
+<div id="mediaCompare" aria-hidden="true">
+  <div class="cmp-frame">
+    <div class="cmp-head">
+      <span id="cmpTitle">COMPARAISON · 3 MOTEURS</span>
+      <button class="lb-btn" id="cmpClose">✕</button>
+    </div>
+
+    <div class="cmp-pyramid" id="cmpPyramid">
+      <div class="cmp-apex"><div class="cmp-cell" id="cmpApex"></div></div>
+      <div class="cmp-base" id="cmpBase"></div>
+      <div class="cmp-prompt"><span class="cmp-lbl">PROMPT</span><span id="cmpPrompt"></span></div>
+      <div class="cmp-hint">Tape une image pour l'agrandir.</div>
+    </div>
+
+    <div class="cmp-zoom" id="cmpZoom">
+      <div class="cmp-zoom-bar">
+        <button class="cmp-back" id="cmpBack">← RETOUR AUX 3</button>
+        <span class="cmp-zoom-eng" id="cmpZoomEng"></span>
+      </div>
+      <div class="cmp-zoom-stage"><img id="cmpZoomImg" alt=""></div>
+    </div>
+  </div>
+</div>
+
 <!-- v1.28.0 — Visionneuse plein écran (zoom double-tap + swipe) -->
 <div id="mediaLightbox" aria-hidden="true">
   <div class="lb-stage" id="lbStage"><img id="lbImg" alt=""></div>
@@ -2910,7 +2988,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.29.0';
+  const VERSION = '1.30.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -6400,6 +6478,18 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         case 'media_image':
           MediaImages.onMediaImage(m);
           break;
+        // v1.30.0 — Comparaison 3 moteurs → pyramide (avant : ignoré en silence).
+        case 'media_compare':
+          MediaImages.onMediaCompare(m);
+          break;
+        // v1.30.0 — Voix : « agrandis celle de Gemini ».
+        case 'media_compare_focus':
+          MediaImages.focusCompare(m.engine);
+          break;
+        // v1.30.0 — Voix : « ferme la galerie / cette image / tout ».
+        case 'media_close':
+          MediaImages.onMediaClose(m.target);
+          break;
         // v1.28.0 — « montre mes images » / « ouvre ma galerie » (tool open_gallery).
         case 'open_gallery':
           MediaImages.open(m.focus_id || null);
@@ -6925,6 +7015,79 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       refreshChips();
     }
 
+    // ---- Comparaison 3 moteurs (pyramide) ----------------------------------
+    const cmp     = document.getElementById('mediaCompare');
+    const cmpApex = document.getElementById('cmpApex');
+    const cmpBase = document.getElementById('cmpBase');
+
+    function cellHtml(it, apex){
+      const gs = it.engine === 'gs';
+      return '<img alt="">'
+        + (apex ? '<span class="cmp-crown">👑</span>' : '')
+        + '<span class="cmp-dot' + (gs ? ' gs' : '') + '"></span>';
+    }
+    function fillCell(el, it, apex){
+      el.innerHTML = cellHtml(it, apex);
+      el.querySelector('img').src = fullSrcOf(it);
+      el.querySelector('.cmp-dot').textContent = it.engine_label || it.engine || '';
+      el.onclick = function(){
+        document.getElementById('cmpZoomImg').src = fullSrcOf(it);
+        document.getElementById('cmpZoomEng').textContent = it.engine_label || it.engine || '';
+        cmp.classList.add('zoomed');
+      };
+    }
+    function onMediaCompare(m){
+      const items = Array.isArray(m.items) ? m.items : [];
+      if (!items.length) return;
+      _cmpItems = items;
+      // Sommet = Generate Studio (local, gratuit). S'il a échoué, le 1er venu monte.
+      const apex = items.find(function(i){ return i.engine === 'gs'; }) || items[0];
+      const base = items.filter(function(i){ return i !== apex; });
+      fillCell(cmpApex, apex, true);
+      cmpBase.innerHTML = '';
+      base.forEach(function(it){
+        const c = document.createElement('div');
+        c.className = 'cmp-cell';
+        cmpBase.appendChild(c);
+        fillCell(c, it, false);
+      });
+      // 1 seul moteur en base => il occupe une colonne, pas deux (pas d'étirement).
+      cmpBase.style.gridTemplateColumns = base.length === 1 ? '1fr 0' : '1fr 1fr';
+      document.getElementById('cmpPrompt').textContent = m.prompt || '';
+      document.getElementById('cmpTitle').textContent =
+        'COMPARAISON · ' + items.length + ' MOTEUR' + (items.length > 1 ? 'S' : '')
+        + (m.elapsed_s != null ? ' · ' + m.elapsed_s + ' s' : '');
+      cmp.classList.remove('zoomed');
+      cmp.classList.add('show');
+      cmp.setAttribute('aria-hidden', 'false');
+    }
+    function closeCompare(){
+      cmp.classList.remove('show', 'zoomed');
+      cmp.setAttribute('aria-hidden', 'true');
+    }
+    let _cmpItems = [];
+    // v1.30.0 — Voix : « agrandis celle de Gemini » (tool focus_compare_image).
+    function focusCompare(engine){
+      if (!cmp.classList.contains('show')) return false;
+      const it = _cmpItems.find(function(x){ return x.engine === engine; });
+      if (!it) return false;
+      document.getElementById('cmpZoomImg').src = fullSrcOf(it);
+      document.getElementById('cmpZoomEng').textContent = it.engine_label || it.engine || '';
+      cmp.classList.add('zoomed');
+      return true;
+    }
+    // v1.30.0 — Voix : « ferme la galerie / cette image / tout » (tool close_media).
+    function onMediaClose(target){
+      const t = target || 'all';
+      if (t === 'image' || t === 'all'){ clearTimeout(hideTimer); hideFlash(); closeViewer(); }
+      if (t === 'comparison' || t === 'all') closeCompare();
+      if (t === 'gallery' || t === 'all'){
+        close();
+        const b = document.getElementById('btnGallery');
+        if (b) b.classList.remove('on');
+      }
+    }
+
     // ---- Passif (PC maître) ------------------------------------------------
     function renderPassive(){
       // PC OFF => rien n'est généré => le mobile est OFF d'office, grisé.
@@ -7005,6 +7168,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       });
       document.getElementById('lbClose').addEventListener('click', closeViewer);
 
+      document.getElementById('cmpClose').addEventListener('click', closeCompare);
+      document.getElementById('cmpBack').addEventListener('click', function(){
+        cmp.classList.remove('zoomed');   // retour aux 3, sans fermer la comparaison
+      });
+      cmp.addEventListener('click', function(e){ if (e.target === cmp) closeCompare(); });
+
       passBtn.addEventListener('click', function(){
         if (passBtn.disabled) return;   // PC OFF = verrouillé (le PC est maître)
         mobOn = !mobOn;
@@ -7050,7 +7219,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     }
 
     return { init: init, onMediaImage: onMediaImage, open: open, close: close,
-             onConfigState: onConfigState };
+             onConfigState: onConfigState, onMediaCompare: onMediaCompare,
+             focusCompare: focusCompare, onMediaClose: onMediaClose };
   })();
   MediaImages.init();
 
