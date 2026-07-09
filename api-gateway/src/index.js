@@ -43,7 +43,8 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VERSION = '1.49';
+// v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
+const VERSION = '1.52';
 
 // v1.40 — modèle Claude de repli si le modèle demandé est retiré (404) — voir proxyClaude
 const CLAUDE_FALLBACK_MODEL = 'claude-sonnet-4-6';
@@ -90,7 +91,7 @@ function isAdDomain(hostname) {
 }
 
 /** All recognised key names stored in KV */
-const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'MISTRAL_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'PIAPI_KEY', 'MOONSHOT_KEY', 'OPENROUTER_KEY', 'ELEVENLABS_KEY', 'GCPTTS_KEY', 'FAL_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS'];
+const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMBLYAI_KEY', 'DEEPSEEK_KEY', 'MISTRAL_KEY', 'AZURE_KEY', 'CLAUDE_KEY', 'DEEPGRAM_KEY', 'PIAPI_KEY', 'MOONSHOT_KEY', 'OPENROUTER_KEY', 'GLM_KEY', 'ELEVENLABS_KEY', 'GCPTTS_KEY', 'FAL_KEY', 'AZURE_REGION', 'WORKER_URL', 'DIAG_FOLDER_ID', 'MCP_DRIVE_URL', 'YOUTUBE_KEYS', 'STUDIO_SECRET'];
 // GCPTTS_KEY = clé Google Cloud DÉDIÉE à l'API Cloud Text-to-Speech (texttospeech.googleapis.com), voix Chirp 3 HD = mêmes voix que Gemini sans cap journalier. Ajoutée 15/06/2026 pour StoryVoice.
 
 /** Rate limit: max requests per minute window */
@@ -139,6 +140,17 @@ export default {
         const authErr = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
         if (authErr) return authErr;
         return await handleConfig(env);
+      }
+
+      // ── Studio secret (auth: WORKER_SECRET) ───────────────────────────────
+      // Jarvis récupère STUDIO_SECRET depuis le KV (jamais stocké en clair sur son
+      // disque) pour piloter le proxy Generate Studio local (/start ComfyUI).
+      if (method === 'GET' && path === '/api/studio-secret') {
+        const authErr = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
+        if (authErr) return authErr;
+        // Worker Secret en priorité (comme les autres clés du gateway), fallback KV.
+        const secret = env.STUDIO_SECRET || (await kvGetKey(env, 'STUDIO_SECRET')) || '';
+        return jsonResponse({ secret });
       }
 
       // ── Telegram media routes (dual auth: WORKER_SECRET or ADMIN_TOKEN) ──
@@ -198,6 +210,7 @@ export default {
         if (path === '/api/mistral')          return await proxyMistral(request, env);
         if (path === '/api/kimi')             return await proxyMoonshot(request, env);
         if (path === '/api/openrouter')       return await proxyOpenRouter(request, env);
+        if (path === '/api/glm')              return await proxyGLM(request, env);
         if (path === '/api/azure')            return await proxyAzure(request, env, url);
         if (path.startsWith('/api/claude'))   return await proxyClaude(request, env, path);
         if (path.startsWith('/api/deepgram')) return await proxyDeepgram(request, env, path);
@@ -456,6 +469,22 @@ async function proxyOpenRouter(request, env) {
 
   const apiPath  = safeApiPath(request, '/api/v1/chat/completions');
   const upstream = `https://openrouter.ai${apiPath}`;
+  return proxyRequest(request, upstream, { 'Authorization': `Bearer ${apiKey}` });
+}
+
+/**
+ * POST /api/glm → https://api.z.ai/api/paas/v4/chat/completions
+ *
+ * Zhipu GLM (z.ai) is OpenAI-compatible. Default path /api/paas/v4/chat/completions.
+ * Header X-Api-Path overrides (e.g. /api/paas/v4/... for other endpoints).
+ * Auth: Bearer GLM_KEY. Added v1.50 (cerveau swappable Jarvis, glm-4-plus).
+ */
+async function proxyGLM(request, env) {
+  const apiKey = await resolveKey(env, 'GLM_KEY');
+  if (!apiKey) return jsonResponse({ error: 'GLM_KEY not configured' }, 503);
+
+  const apiPath  = safeApiPath(request, '/api/paas/v4/chat/completions');
+  const upstream = `https://api.z.ai${apiPath}`;
   return proxyRequest(request, upstream, { 'Authorization': `Bearer ${apiKey}` });
 }
 
