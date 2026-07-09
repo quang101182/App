@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.42.0</title>
+<title>FRIDAY · v1.43.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2279,8 +2279,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 }
 
 /* Galerie : feuille glissante depuis le bas (pattern .log-panel). */
+/* v1.43.0 — Remontée : 72vh → 84vh. L'en-tête a maigri (5 lignes → 4), la grille
+   gagne la différence + les 12vh. Demande Quang (« on peut gagner un peu de hauteur »). */
 #galleryPanel{
-  position:fixed; left:0; right:0; bottom:0; height:72vh; z-index:58;
+  position:fixed; left:0; right:0; bottom:0; height:84vh; z-index:58;
   display:flex; flex-direction:column;
   background:rgba(2,12,22,.97); border-top:1px solid var(--primary-dim);
   transform:translateY(100%); transition:transform .25s ease;
@@ -2304,15 +2306,34 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 .gal-passive-btn:disabled{ opacity:.32; cursor:not-allowed; filter:grayscale(1); }
 .gal-passive-pc{ font:8px/1.3 var(--mono,monospace); opacity:.7; color:var(--primary,#00d4ff); }
 .gal-passive-pc.off{ color:#ff9b6b; opacity:.95; }
-/* v1.42.0 — Moteur local : bouton tactile 32px min (pas de hover sur mobile). */
-.gal-engine{ display:flex; align-items:center; gap:7px; margin-top:7px; }
+/* v1.43.0 — « Galerie non chargée » : bouton de reprise (≠ « galerie vide »). */
+.gal-retry-btn{
+  margin-top:8px; padding:7px 12px; min-height:32px; border-radius:4px; cursor:pointer;
+  font:10px/1.2 var(--mono,monospace);
+  background:rgba(0,18,32,.8); color:var(--primary,#00d4ff); border:1px solid var(--primary-dim);
+}
+/* v1.43.0 — Image non chargée : un repère explicite, jamais un carré noir muet.
+   (`::after` ne rend rien sur un <img>, élément remplacé → on habille l'img.) */
+.gal-img-fail{
+  background:repeating-linear-gradient(45deg,#0b1a26,#0b1a26 6px,#122736 6px,#122736 12px);
+  border:1px dashed rgba(255,155,107,.55); box-sizing:border-box; cursor:pointer;
+}
+/* v1.43.0 — Passif + Moteur sur UNE seule ligne (elles étaient empilées, une par
+   itération). Boutons tactiles 32 px conservés, gap resserré, wrap si écran étroit. */
+.gal-controls{
+  display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap;
+}
+.gal-ctrl-sep{
+  width:1px; height:16px; background:rgba(0,212,255,.22); margin:0 2px;
+}
 .gal-engine-btn{
   padding:6px 9px; min-height:32px; font:9px/1.2 var(--mono,monospace); border-radius:3px; cursor:pointer;
   background:rgba(0,18,32,.7); color:var(--primary,#00d4ff); border:1px solid var(--primary-dim);
+  white-space:nowrap;
 }
 .gal-engine-btn.on{ background:#7fe0a8; color:#02121e; font-weight:700; border-color:#7fe0a8; }
 .gal-engine-btn:disabled{ opacity:.5; cursor:progress; }
-.gal-engine-state{ font:8px/1.3 var(--mono,monospace); opacity:.75; color:var(--primary,#00d4ff); }
+.gal-engine-state{ font:8px/1.3 var(--mono,monospace); opacity:.75; color:var(--primary,#00d4ff); white-space:nowrap; }
 .gal-engine-state.off{ color:#ff9b6b; opacity:.95; }
 .gal-fmt{ display:flex; align-items:center; gap:5px; margin-top:6px; }
 .gal-fmt-lbl{ font:8px/1.2 var(--mono,monospace); opacity:.55; letter-spacing:1px; color:var(--primary,#00d4ff); }
@@ -2911,17 +2932,15 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <button id="galSelNone">Tout décocher</button>
       <button class="danger" id="galBulkDel">🗑 Supprimer</button>
     </div>
-    <!-- v1.29.0 — Passif : le PC est MAÎTRE. Si le passif est OFF sur PC, rien
-         n'est généré → ce toggle est forcé OFF + grisé, et l'état PC est affiché. -->
-    <div class="gal-passive">
-      <button class="gal-passive-btn" id="btnPassiveMobile">🎨 Passif sur ce mobile</button>
+    <!-- v1.43.0 — Les deux commandes tenaient sur DEUX lignes empilées (une par
+         itération). Une seule ligne : « Passif » (le PC reste maître) et « Moteur
+         local » (Quang l'allume/l'éteint lui-même, y compris à distance ; Friday
+         le démarre seule quand elle en a besoin et ne l'éteint jamais). -->
+    <div class="gal-controls">
+      <button class="gal-passive-btn" id="btnPassiveMobile">🎨 Passif</button>
       <span class="gal-passive-pc" id="passivePcState">—</span>
-    </div>
-    <!-- v1.42.0 — Moteur local (Generate Studio) : Quang l'allume / l'éteint lui-même,
-         y compris à distance. Friday continue de le démarrer seule quand elle en a
-         besoin, et ne l'éteint jamais d'elle-même. -->
-    <div class="gal-engine">
-      <button class="gal-engine-btn" id="btnGsEngine">⚙ Moteur local</button>
+      <span class="gal-ctrl-sep"></span>
+      <button class="gal-engine-btn" id="btnGsEngine">⚙ Moteur</button>
       <span class="gal-engine-state" id="gsEngineState">—</span>
     </div>
     <!-- v1.36.0 — Réglage §4 : format de génération. Les vignettes restent
@@ -3254,7 +3273,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.42.0';
+  const VERSION = '1.43.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -7236,6 +7255,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     let imgFmt = 'square';   // v1.36.0 — réglage §4 (persisté côté backend)
     let imgFx = 'fade', imgFxRnd = false, galMax = 100;   // v1.37.0
     let gsUp = false, gsBusy = false;   // v1.42.0 — moteur local (bouton manuel)
+    let loadFailed = false;             // v1.43.0 — « non chargée » ≠ « vide »
 
     let hideTimer = null;
     let lastFlash = null;      // dernière image flashée (pour le tap → visionneuse)
@@ -7270,6 +7290,40 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       if (it.image_url) return API_BASE + it.image_url;
       if (it.url) return API_BASE + it.url;
       return it.thumb || '';
+    }
+    // v1.43.0 — La GRILLE tire des vignettes 320 px (~22 Ko) au lieu des images
+    // pleines (~390 Ko) : 100 cellules = ~2 Mo au lieu de 18 Mo. C'est ce poids qui
+    // faisait échouer des requêtes à distance et laissait des cases noires.
+    // La visionneuse, elle, garde `fullSrcOf` (qualité pleine).
+    function thumbSrcOf(it){
+      if (!it) return '';
+      if (it.image) return it.image;      // data-URI du flash : déjà local
+      if (it.thumb) return it.thumb;      // vignette inline (miroir GS)
+      if (it.filename) return API_BASE + '/thumb/' + it.filename;
+      return srcOf(it);                   // repli : image pleine
+    }
+    // Une image qui échoue restait NOIRE POUR TOUJOURS (aucun `onerror`) → Quang
+    // devait fermer/rouvrir la galerie 2-3 fois. On retente 2 fois (backoff court,
+    // cache-buster), puis on affiche un repère cliquable plutôt qu'un trou noir.
+    function wireImgRetry(im, src){
+      let tries = 0;
+      im.onerror = function(){
+        if (tries < 2){
+          tries++;
+          setTimeout(function(){ im.src = src + (src.indexOf('?') < 0 ? '?' : '&') + 'r=' + tries; }, 350 * tries);
+          return;
+        }
+        im.onerror = null;
+        im.classList.add('gal-img-fail');
+        im.alt = 'image non chargée — toucher pour réessayer';
+        im.onclick = function(ev){
+          ev.stopPropagation();
+          im.classList.remove('gal-img-fail');
+          tries = 0; wireImgRetry(im, src);
+          im.src = src + (src.indexOf('?') < 0 ? '?' : '&') + 'r=manual';
+        };
+      };
+      im.src = src;
     }
 
     function hideFlash(){
@@ -7499,7 +7553,18 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       if (!list.length){
         const d = document.createElement('div');
         d.className = 'gal-empty';
-        d.textContent = allItems.length ? 'Aucune image pour ce filtre.' : 'Galerie vide.';
+        if (loadFailed && !allItems.length){
+          // Dire la vérité : la liste n'a pas pu être chargée, elle n'est pas vide.
+          d.innerHTML = 'Galerie non chargée<br><small>réseau ou backend injoignable</small>';
+          const b = document.createElement('button');
+          b.className = 'gal-retry-btn';
+          b.textContent = '↻ Réessayer';
+          b.onclick = function(){ load(); };
+          d.appendChild(document.createElement('br'));
+          d.appendChild(b);
+        } else {
+          d.textContent = allItems.length ? 'Aucune image pour ce filtre.' : 'Galerie vide.';
+        }
         grid.appendChild(d);
         refreshChips(); refreshBulkBar();
         return;
@@ -7516,8 +7581,9 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
           + (selMode && !ro && selected.has(it.id) ? ' sel-on' : '');
         const im = document.createElement('img');
         im.loading = 'lazy';
-        im.src = srcOf(it);
+        im.decoding = 'async';
         im.alt = it.prompt || '';
+        wireImgRetry(im, thumbSrcOf(it));   // v1.43.0 — vignette + retry si échec
         cell.appendChild(im);
         if (it.favorite){
           const f = document.createElement('span');
@@ -7709,9 +7775,11 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       const effective = pcOn && mobOn;
       passBtn.disabled = !pcOn;
       passBtn.classList.toggle('on', effective);
-      passPc.textContent = pcOn
-        ? 'PC : ON — tu peux couper ici'
-        : 'PC : OFF — passif désactivé partout';
+      // v1.43.0 — Libellés courts : la ligne est partagée avec le moteur. Le détail
+      // reste dans l'infobulle (long press / survol) plutôt que d'occuper la hauteur.
+      passPc.textContent = pcOn ? 'PC on' : 'PC off';
+      passPc.title = pcOn ? 'Passif actif sur le PC — tu peux le couper ici'
+                          : 'Passif coupé sur le PC : rien n’est généré, ici non plus';
       passPc.classList.toggle('off', !pcOn);
     }
     function renderFormat(){
@@ -7789,8 +7857,11 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       if (!b || !st) return;
       b.disabled = gsBusy;
       b.classList.toggle('on', gsUp && !gsBusy);
-      b.textContent = gsBusy ? '⚙ …' : (gsUp ? '⚙ Éteindre le moteur' : '⚙ Démarrer le moteur');
-      st.textContent = gsBusy ? (gsUp ? 'extinction…' : 'démarrage (~30 s)…')
+      // v1.43.0 — Libellés courts (ligne partagée). L'action reste explicite.
+      b.textContent = gsBusy ? '⚙ …' : (gsUp ? '⚙ Éteindre' : '⚙ Démarrer');
+      b.title = gsUp ? 'Éteindre le moteur local (libère la VRAM du GPU)'
+                     : 'Démarrer le moteur local (~30 s)';
+      st.textContent = gsBusy ? (gsUp ? 'extinction…' : 'démarrage…')
                               : (gsUp ? 'allumé' : 'éteint');
       st.classList.toggle('off', !gsUp && !gsBusy);
     }
@@ -7825,10 +7896,17 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     }
 
     async function load(){
+      // v1.43.0 — L'échec ne doit JAMAIS se déguiser en « Galerie vide » : le
+      // `.catch(() => [])` faisait croire à Quang que ses images avaient disparu
+      // quand le réseau flanchait (même faute que le `.catch(){}` vide du Honor).
+      loadFailed = false;
       const grab = function(p){
         return fetch(API_BASE + p, { cache: 'no-store' })
-          .then(function(r){ return r.ok ? r.json() : []; })
-          .catch(function(){ return []; });
+          .then(function(r){
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
+          .catch(function(e){ loadFailed = true; console.warn('[gallery]', p, e); return []; });
       };
       // v1.39.0 — Le MIROIR de la base Generate Studio (`/api/gallery/gs`, images
       // de `output/` en lecture seule) n'est plus chargé (décision Quang, révise
