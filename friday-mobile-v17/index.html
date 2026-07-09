@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.28.0</title>
+<title>FRIDAY · v1.29.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2294,6 +2294,16 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   display:flex; justify-content:space-between; align-items:center;
   font:11px/1.3 var(--mono,monospace); color:var(--primary,#00d4ff); letter-spacing:1px;
 }
+/* v1.29.0 — ligne « Passif » (PC maître) */
+.gal-passive{ display:flex; align-items:center; gap:7px; margin-top:7px; }
+.gal-passive-btn{
+  padding:4px 8px; font:9px/1.2 var(--mono,monospace); border-radius:3px; cursor:pointer;
+  background:rgba(0,18,32,.7); color:var(--primary,#00d4ff); border:1px solid var(--primary-dim);
+}
+.gal-passive-btn.on{ background:var(--primary,#00d4ff); color:#02121e; font-weight:700; }
+.gal-passive-btn:disabled{ opacity:.32; cursor:not-allowed; filter:grayscale(1); }
+.gal-passive-pc{ font:8px/1.3 var(--mono,monospace); opacity:.7; color:var(--primary,#00d4ff); }
+.gal-passive-pc.off{ color:#ff9b6b; opacity:.95; }
 .gal-chips{ display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
 .gal-chip{
   padding:4px 8px; font:9px/1.2 var(--mono,monospace); border-radius:3px; cursor:pointer;
@@ -2366,7 +2376,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.28.0</span>
+        <span class="version-tag version-badge">· v1.29.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2665,6 +2675,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <span>🖼 GALERIE</span>
       <button class="lb-btn" id="galClose">✕</button>
     </div>
+    <!-- v1.29.0 — Passif : le PC est MAÎTRE. Si le passif est OFF sur PC, rien
+         n'est généré → ce toggle est forcé OFF + grisé, et l'état PC est affiché. -->
+    <div class="gal-passive">
+      <button class="gal-passive-btn" id="btnPassiveMobile">🎨 Passif sur ce mobile</button>
+      <span class="gal-passive-pc" id="passivePcState">—</span>
+    </div>
     <div class="gal-chips" id="galChips">
       <button class="gal-chip on" data-f="all">Tout</button>
       <button class="gal-chip" data-f="gemini">Gemini</button>
@@ -2894,7 +2910,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.28.0';
+  const VERSION = '1.29.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -6328,6 +6344,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         case 'error':             onError(m); break;
         // v1.17.0e — events branchés (BOOST + USAGE + JARVIS/FRIDAY label)
         case 'config_state':
+          // v1.29.0 — reflète en direct le passif PC (maître) + le choix mobile.
+          try { MediaImages.onConfigState(m); } catch(e){}
           if(m && m.claude_model){
             mobileConfigState.claude_model = m.claude_model;
           }
@@ -6754,6 +6772,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     const lbImg    = document.getElementById('lbImg');
     const lbPrompt = document.getElementById('lbPrompt');
     const lbCount  = document.getElementById('lbCount');
+    const passBtn  = document.getElementById('btnPassiveMobile');
+    const passPc   = document.getElementById('passivePcState');
+
+    // v1.29.0 — Passif : le PC est MAÎTRE. `pcOn` = passive_images_enabled (PC),
+    // `mobOn` = choix propre à ce mobile (conservé même quand le PC est OFF).
+    let pcOn = false, mobOn = true;
 
     let hideTimer = null;
     let lastFlash = null;      // dernière image flashée (pour le tap → visionneuse)
@@ -6901,6 +6925,34 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       refreshChips();
     }
 
+    // ---- Passif (PC maître) ------------------------------------------------
+    function renderPassive(){
+      // PC OFF => rien n'est généré => le mobile est OFF d'office, grisé.
+      const effective = pcOn && mobOn;
+      passBtn.disabled = !pcOn;
+      passBtn.classList.toggle('on', effective);
+      passPc.textContent = pcOn
+        ? 'PC : ON — tu peux couper ici'
+        : 'PC : OFF — passif désactivé partout';
+      passPc.classList.toggle('off', !pcOn);
+    }
+    function onConfigState(m){
+      if (!m) return;
+      if (typeof m.passive_images_enabled === 'boolean') pcOn = m.passive_images_enabled;
+      if (typeof m.passive_images_mobile_enabled === 'boolean') mobOn = m.passive_images_mobile_enabled;
+      renderPassive();
+    }
+    async function loadPassive(){
+      try {
+        const r = await fetch(API_BASE + '/api/gs-status', { cache: 'no-store' });
+        if (!r.ok) return;
+        const s = await r.json();
+        pcOn = !!s.passive_enabled;
+        mobOn = (typeof s.passive_mobile_enabled === 'boolean') ? s.passive_mobile_enabled : true;
+        renderPassive();
+      } catch (e) { /* backend injoignable : on garde l'état courant */ }
+    }
+
     async function load(){
       const grab = function(p){
         return fetch(API_BASE + p, { cache: 'no-store' })
@@ -6917,6 +6969,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     function open(focusId){
       panel.classList.add('show');
       panel.setAttribute('aria-hidden', 'false');
+      loadPassive();
       load().then(function(){
         if (!focusId) return;
         const list = allItems.filter(matches);
@@ -6951,6 +7004,14 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         if (b) b.classList.remove('on');
       });
       document.getElementById('lbClose').addEventListener('click', closeViewer);
+
+      passBtn.addEventListener('click', function(){
+        if (passBtn.disabled) return;   // PC OFF = verrouillé (le PC est maître)
+        mobOn = !mobOn;
+        renderPassive();
+        wsSendJson({ type: 'config', key: 'passive_images_mobile_enabled', value: mobOn });
+      });
+      renderPassive();
 
       chipsBox.addEventListener('click', function(e){
         const c = e.target.closest('.gal-chip');
@@ -6988,7 +7049,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       window.addEventListener('orientationchange', function(){ setTimeout(placeFlash, 120); });
     }
 
-    return { init: init, onMediaImage: onMediaImage, open: open, close: close };
+    return { init: init, onMediaImage: onMediaImage, open: open, close: close,
+             onConfigState: onConfigState };
   })();
   MediaImages.init();
 
