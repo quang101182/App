@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.30.0</title>
+<title>FRIDAY · v1.31.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2330,6 +2330,32 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 .gal-empty{ grid-column:1/-1; padding:24px 8px; text-align:center; opacity:.6;
   font:10px/1.5 var(--mono,monospace); color:var(--primary,#00d4ff); }
 
+/* ═══════ v1.31.0 — Image ACTIVE : centre, grand, reste (parité PC) ═══════
+   `bottom` est calé en JS sur le haut du pied de page → le bouton TAP TO TALK
+   n'est JAMAIS recouvert (sur mobile le micro est un bouton, pas une touche).
+   z-index 257 : sous la comparaison (258) et la visionneuse (260). */
+#mediaCenter{
+  position:fixed; left:0; right:0; top:0; bottom:0; z-index:257;
+  display:flex; align-items:center; justify-content:center; padding:10px;
+  background:rgba(0,4,10,.92); opacity:0; pointer-events:none; transition:opacity .18s ease;
+}
+#mediaCenter.show{ opacity:1; pointer-events:auto; }
+.mcx-card{
+  width:100%; max-width:420px; max-height:100%; display:flex; flex-direction:column; gap:8px;
+  background:rgba(2,14,26,.96); border:1px solid var(--primary-dim); border-radius:6px; padding:10px;
+}
+.mcx-head{
+  display:flex; justify-content:space-between; align-items:center; gap:8px;
+  font:11px/1.3 var(--mono,monospace); color:var(--primary,#00d4ff); letter-spacing:1px;
+}
+.mcx-stage{
+  flex:1; min-height:0; display:flex; align-items:center; justify-content:center;
+  border:1px solid var(--primary-dim); border-radius:4px; overflow:hidden; background:#02121e;
+}
+.mcx-stage img{ max-width:100%; max-height:100%; object-fit:contain; display:block; cursor:zoom-in; }
+.mcx-foot{ font:10px/1.45 var(--mono,monospace); color:var(--primary,#00d4ff); opacity:.8; }
+.mcx-hint{ display:block; margin-top:3px; font-size:9px; opacity:.6; }
+
 /* ═══════ v1.30.0 — Comparaison 3 moteurs en PYRAMIDE (maquette validée) ═══════
    z-index 258 = juste sous la visionneuse (260) : tap une image de la pyramide
    ouvre le zoom PAR-DESSUS, sans fermer la comparaison. */
@@ -2426,7 +2452,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.30.0</span>
+        <span class="version-tag version-badge">· v1.31.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2742,6 +2768,25 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   <div class="gal-grid" id="galGrid"></div>
 </aside>
 
+<!-- v1.31.0 — Image ACTIVE (« génère-moi X ») : affichage CENTRÉ, EN GRAND, qui
+     RESTE jusqu'à fermeture — comme le MediaCenter du PC (correction Quang 09/07 :
+     seul le PASSIF est un flash éphémère haut-droite).
+     Le pied de page (TAP TO TALK) reste DÉCOUVERT : sur mobile le micro est un
+     bouton, un overlay plein écran empêcherait de parler à Friday. -->
+<div id="mediaCenter" aria-hidden="true">
+  <div class="mcx-card">
+    <div class="mcx-head">
+      <span id="mcxEngine">—</span>
+      <button class="lb-btn" id="mcxClose" tabindex="-1">✕</button>
+    </div>
+    <div class="mcx-stage"><img id="mcxImg" alt=""></div>
+    <div class="mcx-foot">
+      <span id="mcxPrompt"></span>
+      <span class="mcx-hint">Tape l'image pour l'agrandir · elle reste jusqu'à fermeture</span>
+    </div>
+  </div>
+</div>
+
 <!-- v1.30.0 — Comparaison 3 moteurs en PYRAMIDE (maquette validée Quang 09/07).
      Generate Studio au sommet (local, gratuit), Gemini + OpenAI dessous, les 3
      de MÊME taille. Tap une image = agrandir dans le même cadre + « RETOUR AUX 3 ».
@@ -2988,7 +3033,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.30.0';
+  const VERSION = '1.31.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -6864,6 +6909,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     const lbCount  = document.getElementById('lbCount');
     const passBtn  = document.getElementById('btnPassiveMobile');
     const passPc   = document.getElementById('passivePcState');
+    const center   = document.getElementById('mediaCenter');
+    const centerImg = document.getElementById('mcxImg');
 
     // v1.29.0 — Passif : le PC est MAÎTRE. `pcOn` = passive_images_enabled (PC),
     // `mobOn` = choix propre à ce mobile (conservé même quand le PC est OFF).
@@ -6910,13 +6957,44 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       flash.setAttribute('aria-hidden', 'true');
     }
 
+    // v1.31.0 — L'overlay centre s'arrête au-dessus du pied de page : sur mobile
+    // le micro est un BOUTON, le recouvrir empêcherait de parler à Friday.
+    function placeCenter(){
+      const bar = document.querySelector('.bottombar');
+      if (!bar || !center) return;
+      center.style.bottom = Math.round(window.innerHeight - bar.getBoundingClientRect().top) + 'px';
+    }
+
+    function showCenter(m, src){
+      lastFlash = m;
+      centerImg.src = src;
+      document.getElementById('mcxEngine').textContent =
+        (m.engine_label || m.engine || 'IA') + (m.elapsed_s != null ? ' · ' + m.elapsed_s + ' s' : '');
+      document.getElementById('mcxPrompt').textContent = m.prompt || '';
+      placeCenter();
+      center.classList.add('show');
+      center.setAttribute('aria-hidden', 'false');
+    }
+    function hideCenter(){
+      center.classList.remove('show');
+      center.setAttribute('aria-hidden', 'true');
+    }
+
     function onMediaImage(m){
       const src = m.image || (m.image_url ? API_BASE + m.image_url : '');
       if (!src) return;
+      // Correction Quang 09/07 : le PASSIF est un flash éphémère haut-droite ;
+      // l'ACTIF (« génère-moi X ») s'affiche au CENTRE, en grand, et RESTE
+      // jusqu'à fermeture — comme le MediaCenter du PC. Une nouvelle image
+      // active REMPLACE la précédente (conversation visuelle continue).
+      if (m.mode !== 'passive'){
+        showCenter(m, src);
+        return;
+      }
       lastFlash = m;
       flashImg.src = src;
       engineEl.textContent = m.engine_label || m.engine || '—';
-      modeEl.textContent = (m.mode === 'passive') ? 'pensée' : 'à la demande';
+      modeEl.textContent = 'pensée';
       placeFlash();
       flash.classList.add('show');
       flash.setAttribute('aria-hidden', 'false');
@@ -7079,7 +7157,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     // v1.30.0 — Voix : « ferme la galerie / cette image / tout » (tool close_media).
     function onMediaClose(target){
       const t = target || 'all';
-      if (t === 'image' || t === 'all'){ clearTimeout(hideTimer); hideFlash(); closeViewer(); }
+      if (t === 'image' || t === 'all'){ clearTimeout(hideTimer); hideFlash(); hideCenter(); closeViewer(); }
       if (t === 'comparison' || t === 'all') closeCompare();
       if (t === 'gallery' || t === 'all'){
         close();
@@ -7167,6 +7245,15 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         if (b) b.classList.remove('on');
       });
       document.getElementById('lbClose').addEventListener('click', closeViewer);
+
+      // Image active centrée : ✕, clic hors carte, et tap image → visionneuse.
+      document.getElementById('mcxClose').addEventListener('click', hideCenter);
+      center.addEventListener('click', function(e){ if (e.target === center) hideCenter(); });
+      centerImg.addEventListener('click', function(){
+        if (lastFlash) openViewer([lastFlash], 0);
+      });
+      window.addEventListener('resize', placeCenter);
+      window.addEventListener('orientationchange', function(){ setTimeout(placeCenter, 120); });
 
       document.getElementById('cmpClose').addEventListener('click', closeCompare);
       document.getElementById('cmpBack').addEventListener('click', function(){
