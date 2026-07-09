@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.35.0</title>
+<title>FRIDAY · v1.36.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2304,6 +2304,13 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 .gal-passive-btn:disabled{ opacity:.32; cursor:not-allowed; filter:grayscale(1); }
 .gal-passive-pc{ font:8px/1.3 var(--mono,monospace); opacity:.7; color:var(--primary,#00d4ff); }
 .gal-passive-pc.off{ color:#ff9b6b; opacity:.95; }
+.gal-fmt{ display:flex; align-items:center; gap:5px; margin-top:6px; }
+.gal-fmt-lbl{ font:8px/1.2 var(--mono,monospace); opacity:.55; letter-spacing:1px; color:var(--primary,#00d4ff); }
+.gal-fmt-btn{
+  width:28px; height:24px; border-radius:3px; cursor:pointer; font-size:12px; padding:0;
+  background:rgba(0,18,32,.7); color:var(--primary,#00d4ff); border:1px solid var(--primary-dim);
+}
+.gal-fmt-btn.on{ background:var(--primary,#00d4ff); color:#02121e; }
 .gal-chips{ display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
 .gal-chip{
   padding:4px 8px; font:9px/1.2 var(--mono,monospace); border-radius:3px; cursor:pointer;
@@ -2548,7 +2555,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.35.0</span>
+        <span class="version-tag version-badge">· v1.36.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2861,6 +2868,14 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <button class="gal-passive-btn" id="btnPassiveMobile">🎨 Passif sur ce mobile</button>
       <span class="gal-passive-pc" id="passivePcState">—</span>
     </div>
+    <!-- v1.36.0 — Réglage §4 : format de génération. Les vignettes restent
+         carrées (aspect-ratio 1 + cover) → la grille ne bouge pas. -->
+    <div class="gal-fmt">
+      <span class="gal-fmt-lbl">FORMAT</span>
+      <button class="gal-fmt-btn" data-fmt="square" title="Carré 1:1">◼</button>
+      <button class="gal-fmt-btn" data-fmt="portrait" title="Portrait 3:4">▮</button>
+      <button class="gal-fmt-btn" data-fmt="landscape" title="Paysage 4:3">▬</button>
+    </div>
     <div class="gal-chips" id="galChips">
       <button class="gal-chip on" data-f="all">Tout</button>
       <button class="gal-chip" data-f="gemini">Gemini</button>
@@ -3165,7 +3180,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.35.0';
+  const VERSION = '1.36.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -3475,8 +3490,15 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         if (el) el.textContent = txt;
       };
       const imgN = bucket.image_n || 0;
+      // v1.36.0 — Détail par moteur : sans lui, « 3 img · $0.081 » cachait que
+      // les images Generate Studio sont GRATUITES.
+      const byEng = [];
+      if (bucket.image_n_gemini) byEng.push('GEM ' + bucket.image_n_gemini);
+      if (bucket.image_n_openai) byEng.push('OAI ' + bucket.image_n_openai);
+      if (bucket.image_n_gs) byEng.push('GS ' + bucket.image_n_gs + ' gratuit');
       set('image', imgN === 0 ? '— · ' + fmtCost(0)
-                              : imgN + ' img · ' + fmtCost(bucket.image_cost_usd || 0));
+        : imgN + ' img · ' + fmtCost(bucket.image_cost_usd || 0)
+          + (byEng.length ? ' · ' + byEng.join(' · ') : ''));
 
       const gAi = bucket.gemini_audio_in_sec || 0, gAo = bucket.gemini_audio_out_sec || 0;
       set('gemini', (gAi === 0 && gAo === 0 && (bucket.gemini_n || 0) === 0)
@@ -6681,6 +6703,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         case 'media_image':
           MediaImages.onMediaImage(m);
           break;
+        // v1.36.0 — « garde-la » / « supprime cette image » à la voix.
+        case 'gallery_changed':
+          MediaImages.onGalleryChanged(m);
+          break;
         // v1.32.0 — « génération en cours » (visible par-dessus les overlays).
         case 'media_busy':
           MediaImages.onMediaBusy(m);
@@ -7082,6 +7108,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     // v1.29.0 — Passif : le PC est MAÎTRE. `pcOn` = passive_images_enabled (PC),
     // `mobOn` = choix propre à ce mobile (conservé même quand le PC est OFF).
     let pcOn = false, mobOn = true;
+    let imgFmt = 'square';   // v1.36.0 — réglage §4 (persisté côté backend)
 
     let hideTimer = null;
     let lastFlash = null;      // dernière image flashée (pour le tap → visionneuse)
@@ -7492,11 +7519,29 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         : 'PC : OFF — passif désactivé partout';
       passPc.classList.toggle('off', !pcOn);
     }
+    function renderFormat(){
+      document.querySelectorAll('.gal-fmt-btn').forEach(function(b){
+        b.classList.toggle('on', b.dataset.fmt === imgFmt);
+      });
+    }
     function onConfigState(m){
       if (!m) return;
       if (typeof m.passive_images_enabled === 'boolean') pcOn = m.passive_images_enabled;
       if (typeof m.passive_images_mobile_enabled === 'boolean') mobOn = m.passive_images_mobile_enabled;
+      if (typeof m.image_format === 'string'){ imgFmt = m.image_format; renderFormat(); }
       renderPassive();
+    }
+    // v1.36.0 — une image supprimée/gardée à la VOIX doit disparaître/se marquer
+    // ici aussi : la galerie ne se rafraîchit pas toute seule.
+    function onGalleryChanged(m){
+      if (m && m.reason === 'delete'){
+        allItems = allItems.filter(function(x){ return String(x.id) !== String(m.id); });
+        if (lastFlash && String(lastFlash.id) === String(m.id)){ hideCenter(); hideFlash(); }
+      } else if (m && m.reason === 'favorite'){
+        const it = allItems.find(function(x){ return String(x.id) === String(m.id); });
+        if (it) it.favorite = true;
+      }
+      if (panel.classList.contains('show')) render();
     }
     async function loadPassive(){
       try {
@@ -7505,7 +7550,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         const s = await r.json();
         pcOn = !!s.passive_enabled;
         mobOn = (typeof s.passive_mobile_enabled === 'boolean') ? s.passive_mobile_enabled : true;
-        renderPassive();
+        if (s.image_format) imgFmt = s.image_format;
+        renderPassive(); renderFormat();
       } catch (e) { /* backend injoignable : on garde l'état courant */ }
     }
 
@@ -7577,6 +7623,14 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       });
       document.getElementById('galBulkDel').addEventListener('click', deleteBulk);
 
+      document.querySelectorAll('.gal-fmt-btn').forEach(function(b){
+        b.addEventListener('click', function(){
+          imgFmt = b.dataset.fmt;
+          renderFormat();
+          wsSendJson({ type: 'config', key: 'image_format', value: imgFmt });
+        });
+      });
+
       // Image active centrée : ✕, clic hors carte, et tap image → visionneuse.
       document.getElementById('mcxClose').addEventListener('click', hideCenter);
       center.addEventListener('click', function(e){ if (e.target === center) hideCenter(); });
@@ -7641,7 +7695,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     return { init: init, onMediaImage: onMediaImage, open: open, close: close,
              onConfigState: onConfigState, onMediaCompare: onMediaCompare,
              focusCompare: focusCompare, onMediaClose: onMediaClose,
-             onMediaBusy: onMediaBusy };
+             onMediaBusy: onMediaBusy, onGalleryChanged: onGalleryChanged };
   })();
   MediaImages.init();
 
