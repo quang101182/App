@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.41.0</title>
+<title>FRIDAY · v1.42.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2304,6 +2304,16 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 .gal-passive-btn:disabled{ opacity:.32; cursor:not-allowed; filter:grayscale(1); }
 .gal-passive-pc{ font:8px/1.3 var(--mono,monospace); opacity:.7; color:var(--primary,#00d4ff); }
 .gal-passive-pc.off{ color:#ff9b6b; opacity:.95; }
+/* v1.42.0 — Moteur local : bouton tactile 32px min (pas de hover sur mobile). */
+.gal-engine{ display:flex; align-items:center; gap:7px; margin-top:7px; }
+.gal-engine-btn{
+  padding:6px 9px; min-height:32px; font:9px/1.2 var(--mono,monospace); border-radius:3px; cursor:pointer;
+  background:rgba(0,18,32,.7); color:var(--primary,#00d4ff); border:1px solid var(--primary-dim);
+}
+.gal-engine-btn.on{ background:#7fe0a8; color:#02121e; font-weight:700; border-color:#7fe0a8; }
+.gal-engine-btn:disabled{ opacity:.5; cursor:progress; }
+.gal-engine-state{ font:8px/1.3 var(--mono,monospace); opacity:.75; color:var(--primary,#00d4ff); }
+.gal-engine-state.off{ color:#ff9b6b; opacity:.95; }
 .gal-fmt{ display:flex; align-items:center; gap:5px; margin-top:6px; }
 .gal-fmt-lbl{ font:8px/1.2 var(--mono,monospace); opacity:.55; letter-spacing:1px; color:var(--primary,#00d4ff); }
 .gal-fmt-btn{
@@ -2907,6 +2917,13 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <button class="gal-passive-btn" id="btnPassiveMobile">🎨 Passif sur ce mobile</button>
       <span class="gal-passive-pc" id="passivePcState">—</span>
     </div>
+    <!-- v1.42.0 — Moteur local (Generate Studio) : Quang l'allume / l'éteint lui-même,
+         y compris à distance. Friday continue de le démarrer seule quand elle en a
+         besoin, et ne l'éteint jamais d'elle-même. -->
+    <div class="gal-engine">
+      <button class="gal-engine-btn" id="btnGsEngine">⚙ Moteur local</button>
+      <span class="gal-engine-state" id="gsEngineState">—</span>
+    </div>
     <!-- v1.36.0 — Réglage §4 : format de génération. Les vignettes restent
          carrées (aspect-ratio 1 + cover) → la grille ne bouge pas. -->
     <div class="gal-fmt">
@@ -3237,7 +3254,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.41.0';
+  const VERSION = '1.42.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -6802,6 +6819,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
           MediaImages.onGalleryChanged(m);
           break;
         // v1.32.0 — « génération en cours » (visible par-dessus les overlays).
+        case 'gs_state':          MediaImages.onGsState(m); break;
         case 'media_busy':
           MediaImages.onMediaBusy(m);
           break;
@@ -7217,6 +7235,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     let pcOn = false, mobOn = true;
     let imgFmt = 'square';   // v1.36.0 — réglage §4 (persisté côté backend)
     let imgFx = 'fade', imgFxRnd = false, galMax = 100;   // v1.37.0
+    let gsUp = false, gsBusy = false;   // v1.42.0 — moteur local (bouton manuel)
 
     let hideTimer = null;
     let lastFlash = null;      // dernière image flashée (pour le tap → visionneuse)
@@ -7756,8 +7775,53 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         if (s.image_effect) imgFx = s.image_effect;
         if (typeof s.image_effect_random === 'boolean') imgFxRnd = s.image_effect_random;
         if (s.gallery_max) galMax = s.gallery_max;
-        renderPassive(); renderFormat(); renderCount();
+        gsUp = !!s.up;
+        renderPassive(); renderFormat(); renderCount(); renderEngine();
       } catch (e) { /* backend injoignable : on garde l'état courant */ }
+    }
+
+    // v1.42.0 — Moteur local : allumer / éteindre depuis le téléphone, y compris
+    // à distance. Le backend refuse de couper au milieu d'une génération → on
+    // demande confirmation puis on rappelle avec force:true.
+    function renderEngine(){
+      const b = document.getElementById('btnGsEngine');
+      const st = document.getElementById('gsEngineState');
+      if (!b || !st) return;
+      b.disabled = gsBusy;
+      b.classList.toggle('on', gsUp && !gsBusy);
+      b.textContent = gsBusy ? '⚙ …' : (gsUp ? '⚙ Éteindre le moteur' : '⚙ Démarrer le moteur');
+      st.textContent = gsBusy ? (gsUp ? 'extinction…' : 'démarrage (~30 s)…')
+                              : (gsUp ? 'allumé' : 'éteint');
+      st.classList.toggle('off', !gsUp && !gsBusy);
+    }
+    async function gsToggle(force){
+      if (gsBusy) return;
+      const wasUp = gsUp;
+      gsBusy = true; renderEngine();
+      try {
+        const r = await fetch(API_BASE + (wasUp ? '/api/gs/stop' : '/api/gs/start'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(force ? { force: true } : {}),
+        });
+        const d = await r.json();
+        if (d && d.needConfirm){
+          gsBusy = false; renderEngine();
+          if (confirm('Une génération est en cours sur le moteur.\nCouper quand même ?')) {
+            return gsToggle(true);
+          }
+          return;
+        }
+        if (!d || d.ok !== true) throw new Error((d && d.error) || 'echec');
+      } catch (e) {
+        // v1.40.0 : un échec ne doit JAMAIS être silencieux (cf bug Honor).
+        try { toast('Moteur : ' + (wasUp ? 'extinction' : 'démarrage') + ' impossible', 2600); } catch(_){}
+        console.warn('[gs] toggle failed:', e);
+      } finally {
+        gsBusy = false;
+        await loadPassive();   // relit l'état RÉEL, ne suppose rien
+        renderEngine();
+      }
     }
 
     async function load(){
@@ -7885,6 +7949,11 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       });
       renderPassive();
 
+      // v1.42.0 — Moteur local : allumer / éteindre depuis le téléphone.
+      const gsBtn = document.getElementById('btnGsEngine');
+      if (gsBtn) gsBtn.addEventListener('click', function(){ gsToggle(false); });
+      renderEngine();
+
       chipsBox.addEventListener('click', function(e){
         const c = e.target.closest('.gal-chip');
         if (!c || c.disabled) return;
@@ -7923,10 +7992,18 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       });
     }
 
+    // v1.42.0 — Le moteur a changé d'état ailleurs (bouton du PC, ordre vocal,
+    // ou auto-start de Friday) : on suit sans re-poller.
+    function onGsState(m){
+      if (!m) return;
+      gsUp = !!m.up;
+      if (!gsBusy) renderEngine();
+    }
     return { init: init, onMediaImage: onMediaImage, open: open, close: close,
              onConfigState: onConfigState, onMediaCompare: onMediaCompare,
              focusCompare: focusCompare, onMediaClose: onMediaClose,
-             onMediaBusy: onMediaBusy, onGalleryChanged: onGalleryChanged };
+             onMediaBusy: onMediaBusy, onGalleryChanged: onGalleryChanged,
+             onGsState: onGsState };
   })();
   MediaImages.init();
 
