@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.37.0</title>
+<title>FRIDAY · v1.38.0</title>
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2413,8 +2413,24 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   border:1px solid var(--primary-dim); border-radius:4px; overflow:hidden; background:#02121e;
 }
 .mcx-stage img{ max-width:100%; max-height:100%; object-fit:contain; display:block; cursor:zoom-in; }
-.mcx-foot{ font:10px/1.45 var(--mono,monospace); color:var(--primary,#00d4ff); opacity:.8; }
+.mcx-foot{ font:10px/1.45 var(--mono,monospace); color:var(--primary,#00d4ff); opacity:.8;
+  flex:0 0 auto; display:flex; flex-direction:column; gap:3px; }
 .mcx-hint{ display:block; margin-top:3px; font-size:9px; opacity:.6; }
+
+/* v1.38.0 — Un prompt long faisait grossir la carte et poussait l'image vers le
+   haut. Hauteur FIGÉE + ascenseur : l'image ne bouge plus, quel que soit le texte. */
+.prompt-box{ display:flex; align-items:flex-start; gap:6px; width:100%; }
+.prompt-txt{
+  flex:1; min-width:0; max-height:4.4em;      /* ~3 lignes */
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  white-space:normal; word-break:break-word; overscroll-behavior:contain;
+}
+.prompt-copy{
+  flex:0 0 auto; width:26px; height:24px; border-radius:3px; cursor:pointer; padding:0;
+  background:rgba(0,18,32,.75); border:1px solid var(--primary-dim);
+  color:var(--primary,#00d4ff); font-size:11px; line-height:1;
+}
+.prompt-copy.done{ background:var(--primary,#00d4ff); color:#02121e; }
 
 /* ═══════ v1.30.0 — Comparaison 3 moteurs en PYRAMIDE (maquette validée) ═══════
    z-index 258 = juste sous la visionneuse (260) : tap une image de la pyramide
@@ -2486,10 +2502,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   border-top:1px solid rgba(0,212,255,.2);
   font:9px/1.35 var(--mono,monospace); color:var(--primary,#00d4ff);
 }
-.lb-prompt{
-  width:100%; opacity:.8; white-space:normal; word-break:break-word;
-  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
-}
+.lb-prompt{ width:100%; opacity:.8; }
 /* v1.35.0 — ✕ haut-droite, 44×44, sous la safe-area (loin de la barre de gestes). */
 .lb-x{
   position:absolute; top:calc(env(safe-area-inset-top, 0px) + 10px); right:10px;
@@ -2581,7 +2594,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.37.0</span>
+        <span class="version-tag version-badge">· v1.38.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2937,7 +2950,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     </div>
     <div class="mcx-stage"><img id="mcxImg" alt=""></div>
     <div class="mcx-foot">
-      <span id="mcxPrompt"></span>
+      <div class="prompt-box">
+        <span class="prompt-txt" id="mcxPrompt"></span>
+        <button class="prompt-copy" data-copy="mcxPrompt" title="Copier le prompt">📋</button>
+      </div>
       <span class="mcx-hint">Tape l'image pour l'agrandir · elle reste jusqu'à fermeture</span>
     </div>
   </div>
@@ -2957,7 +2973,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     <div class="cmp-pyramid" id="cmpPyramid">
       <div class="cmp-apex"><div class="cmp-cell" id="cmpApex"></div></div>
       <div class="cmp-base" id="cmpBase"></div>
-      <div class="cmp-prompt"><span class="cmp-lbl">PROMPT</span><span id="cmpPrompt"></span></div>
+      <div class="cmp-prompt"><span class="cmp-lbl">PROMPT</span>
+        <div class="prompt-box">
+          <span class="prompt-txt" id="cmpPrompt"></span>
+          <button class="prompt-copy" data-copy="cmpPrompt" title="Copier le prompt">📋</button>
+        </div>
+      </div>
       <div class="cmp-hint">Tape une image pour l'agrandir.</div>
     </div>
 
@@ -2980,7 +3001,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   <div class="lb-stage" id="lbStage"><img id="lbImg" alt=""></div>
   <div class="lb-bar">
     <span class="lb-count" id="lbCount"></span>
-    <span class="lb-prompt" id="lbPrompt"></span>
+    <span class="lb-prompt">
+      <span class="prompt-box">
+        <span class="prompt-txt" id="lbPrompt"></span>
+        <button class="prompt-copy" data-copy="lbPrompt" title="Copier le prompt">📋</button>
+      </span>
+    </span>
   </div>
 </div>
 
@@ -3211,7 +3237,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.37.0';
+  const VERSION = '1.38.0';
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -7451,6 +7477,27 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       renderCount();
     }
 
+    // v1.38.0 — Copie du prompt. `navigator.clipboard` exige un contexte sécurisé
+    // (https ou localhost) : la PWA et l'APK y sont, mais on garde un repli
+    // execCommand pour ne jamais échouer en silence.
+    function copyText(txt, btn){
+      const done = function(){
+        if (!btn) return;
+        btn.classList.add('done'); btn.textContent = '✓';
+        setTimeout(function(){ btn.classList.remove('done'); btn.textContent = '📋'; }, 1200);
+      };
+      if (navigator.clipboard && window.isSecureContext){
+        navigator.clipboard.writeText(txt).then(done, function(){ legacy(); });
+      } else { legacy(); }
+      function legacy(){
+        const ta = document.createElement('textarea');
+        ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch(e){}
+        document.body.removeChild(ta);
+      }
+    }
+
     // ---- Indicateur « génération en cours » --------------------------------
     const busy = document.getElementById('mediaBusy');
     const busyLbl = document.getElementById('busyLabel');
@@ -7734,6 +7781,14 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       });
       window.addEventListener('resize', placeCenter);
       window.addEventListener('orientationchange', function(){ setTimeout(placeCenter, 120); });
+
+      document.querySelectorAll('.prompt-copy').forEach(function(b){
+        b.addEventListener('click', function(e){
+          e.stopPropagation();   // ne pas déclencher le tap sur l'image / la cellule
+          const src = document.getElementById(b.dataset.copy);
+          if (src && src.textContent.trim()) copyText(src.textContent.trim(), b);
+        });
+      });
 
       document.getElementById('cmpClose').addEventListener('click', closeCompare);
       document.getElementById('cmpBack').addEventListener('click', function(){
