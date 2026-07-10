@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.52.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
+<title>FRIDAY · v1.53.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2794,7 +2794,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.52.0</span>
+        <span class="version-tag version-badge">· v1.53.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -3490,7 +3490,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.52.0';   // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
+  const VERSION = '1.53.0';   // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -3693,6 +3693,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     saveConfig();
     // v1.49.0 — P3 : lazy-load des données de la vue synthèse SYSTÈME.
     if(v === 'systeme'){ try { SystemeNative.ensureData(); } catch(_) {} }
+    if(v === 'codemap'){ try { CodemapNative.ensureDemo(); } catch(_) {} }   // v1.53.0 démo par défaut (parité PC)
     if(!opts.remote){
       // v1.21.0 — Signale au HUD PC quelle vue le mobile regarde (info)
       _signalRemoteView(v);
@@ -4886,6 +4887,34 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       const sym = $('#codeSymCard'); if(sym) sym.hidden = true;
       setState('Demande à Friday : « ouvre la carte du code sur X » puis « montre-moi la fonction Y ».');
     }
+    // v1.53.0 — Exemple de démonstration par défaut (parité PC : le codemap PC
+    // auto-charge l'exemple « Minuteur » au boot). Rendu en fiche native tant que
+    // Friday n'a pas ouvert un VRAI fichier (broadcast codemap_cmd → load() remplace
+    // la démo). Ne recharge JAMAIS par-dessus un fichier déjà chargé (garde `file`).
+    function ensureDemo(){
+      if(file) return;
+      const DEMO = `function createTimer() {
+  let seconds = 0;
+  let running = false;
+  function start() { running = true; tick(); }
+  function pause() { running = false; }
+  function reset() { seconds = 0; render(); }
+  function tick() {
+    if (!running) return;
+    seconds = seconds + 1;
+    render();
+    setTimeout(tick, 1000);
+  }
+  function render() { updateDisplay(seconds); }
+  return { start, pause, reset };
+}`;
+      load('Minuteur (exemple)', DEMO);
+      showSymbol('tick');
+      const tierEl = document.querySelector('#codeFileCard .sys-tier');
+      if(tierEl){ tierEl.textContent = 'DÉMO'; }
+      const note = $('#codemapLastAction');
+      if(note){ note.textContent = 'Exemple de démonstration (comme sur PC). Demande à Friday d’ouvrir un vrai fichier pour le remplacer.'; }
+    }
     function onCodemapCmd(m){
       if(!m || !m.tool) return;
       if((m.tool === 'open' || m.tool === 'diff') && m.args && m.args.length >= 2){
@@ -4903,7 +4932,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
                callees: focused && byName[focused] ? byName[focused].callees.length : null,
                state: ($('#codeState') || {}).textContent || '' };
     }
-    return { onCodemapCmd, getState };
+    return { onCodemapCmd, getState, ensureDemo };
   })();
 
   // v1.48.0 — P2 : fond de carte embarqué (Natural Earth 110m via world-atlas,
