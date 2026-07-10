@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.49.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
+<title>FRIDAY · v1.50.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -416,6 +416,19 @@ body[data-current-view="cosmos"] #view-cosmos{flex:1 1 auto}
 .sys-tier.exp{background:rgba(167,139,250,.14);color:#a78bfa}
 .sys-state{font-size:11px;color:var(--idle);text-align:center;padding:12px 0}
 .sys-state:empty{display:none}
+/* v1.50.0 — P4 : fiche symbole CODE (maquette onglets v1) : la RÉPONSE, pas le graphe 3D. */
+.code-sym{background:rgba(0,18,32,.5);border:1px solid var(--primary-dim);border-radius:11px;padding:12px}
+.code-sym .name{font-family:'JetBrains Mono',Consolas,monospace;font-size:15px;color:var(--primary);word-break:break-all}
+.code-sym .loc{font-size:10px;color:var(--text-1);margin:3px 0 8px;font-family:'JetBrains Mono',Consolas,monospace;word-break:break-all}
+.code-metrics{display:flex;gap:7px;margin-bottom:10px}
+.code-metric{flex:1;background:rgba(0,24,40,.65);border-radius:8px;padding:7px 4px;text-align:center}
+.code-metric b{display:block;font-size:15px;color:var(--text-0)}
+.code-metric span{font-size:9px;color:var(--text-1);letter-spacing:.5px}
+.code-callers h4{font-size:10px;letter-spacing:1.5px;color:var(--text-1);margin:9px 0 5px;font-weight:600}
+.code-callers div{font-family:'JetBrains Mono',Consolas,monospace;font-size:11.5px;padding:4px 8px;
+  border-left:2px solid var(--primary-dim);margin-bottom:3px;background:rgba(0,24,40,.6);
+  border-radius:0 6px 6px 0;word-break:break-all}
+.code-callers div.out{border-left-color:#a78bfa}
 .mode-btn.active{
   background:linear-gradient(180deg,rgba(0,140,200,.22),rgba(0,80,140,.14));
   color:var(--primary);
@@ -1179,7 +1192,10 @@ body[data-current-view="cosmos"] .transcript-primary,
 body[data-current-view="cosmos"] .sat-grid,
 body[data-current-view="systeme"] .slot-toggles,
 body[data-current-view="systeme"] .transcript-primary,
-body[data-current-view="systeme"] .sat-grid{
+body[data-current-view="systeme"] .sat-grid,
+body[data-current-view="codemap"] .slot-toggles,
+body[data-current-view="codemap"] .transcript-primary,
+body[data-current-view="codemap"] .sat-grid{
   display:none !important;
 }
 /* L'<img> remote-stream prend toute la hauteur restante via flex:1 du wrap. */
@@ -2760,7 +2776,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.49.0</span>
+        <span class="version-tag version-badge">· v1.50.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -3002,14 +3018,18 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       </div>
     </section>
 
-    <!-- v1.47.0 — P1 roadmap onglets : VIEW CODE, vue minimale honnête (fiche symbole en P4). -->
+    <!-- v1.50.0 — P4 roadmap onglets : FICHE SYMBOLE CODE (maquette v1 validée).
+         La RÉPONSE à la question (« montre-moi la fonction X »), pas le graphe 3D du PC (V1).
+         Données : le broadcast `codemap_cmd open/diff` transporte déjà le CODE complet
+         (args=[name, code], codemap_bridge.dispatch_codemap_tool) — parsing regex LOCAL. -->
     <section class="view" id="view-codemap">
-      <div class="nav-mini">
-        <div class="nav-mini-icon">📊</div>
-        <div class="nav-mini-title">CODE</div>
-        <div class="nav-mini-sub">Carte interactive du code (VoiceForge)</div>
-        <div class="nav-mini-last" id="codemapLastAction">Friday n'a pas encore ouvert cette vue durant la session.</div>
-        <div class="nav-mini-hint">Fiche symbole mobile en préparation (P4) — en attendant, demande à Friday : « montre-moi la fonction X »</div>
+      <div class="sys-synth">
+        <div class="sys-title">CODE</div>
+        <div class="sys-sub">la réponse à ta question — pas le graphe 3D entier du PC</div>
+        <div class="sys-last" id="codemapLastAction">Friday n'a pas encore agi sur cette vue durant la session.</div>
+        <div class="sys-card" id="codeFileCard" hidden></div>
+        <div class="code-sym" id="codeSymCard" hidden></div>
+        <div class="sys-state" id="codeState">Demande à Friday : « ouvre la carte du code sur X » puis « montre-moi la fonction Y ».</div>
       </div>
     </section>
 
@@ -3438,7 +3458,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.49.0';   // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
+  const VERSION = '1.50.0';   // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -4652,6 +4672,206 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
                state: ($('#sysState') || {}).textContent || '' };
     }
     return { ensureData, onSystemeCmd, getState };
+  })();
+
+  // ============================================================
+  // v1.50.0 — P4 roadmap onglets : FICHE SYMBOLE CODE MOBILE.
+  // Zéro backend : le broadcast `codemap_cmd open/diff` transporte déjà le
+  // CODE COMPLET du fichier (args=[name, code]) — on le parse LOCALEMENT
+  // (mêmes patterns que codemap_bridge._FN_PATS + def Python) et on rend la
+  // fiche du symbole demandé sur `focus`. Bornes de corps approximatives
+  // (jusqu'à la déclaration suivante) : c'est une SYNTHÈSE, le graphe exact
+  // AST (acorn) reste l'expérience PC (V1).
+  // ============================================================
+  window.CodemapNative = (function(){
+    const DEF_PATS = [
+      /^[ \t]*(?:async[ \t]+)?def[ \t]+([A-Za-z_]\w*)[ \t]*\(/,
+      /\bfunction\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(/,
+      /\b([A-Za-z_$][\w$]*)\s*[:=]\s*(?:async\s*)?function\b/,
+      /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>/,
+      /^[ \t]*(?:async[ \t]+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/
+    ];
+    const KW = new Set(['if','for','while','switch','catch','function','return','do','else',
+                        'await','typeof','new','case','with','const','let','var','def',
+                        'elif','except','constructor','super']);
+    // Méthodes prototypes JS courantes : exclues du graphe d'appels (mesuré au smoke :
+    // `arr.push()` matchait une méthode homonyme d'un objet du fichier = faux appelé).
+    const BUILTIN = new Set(['push','pop','shift','unshift','apply','call','bind','map','filter',
+                             'forEach','slice','splice','join','then','catch','get','set','add',
+                             'has','delete','keys','values','includes','indexOf','replace','split',
+                             'trim','toString','concat','sort','find','some','every','reduce',
+                             'append','remove','update','init','log','error','warn','info']);
+    let file = null, fns = [], byName = {}, focused = null;
+    function setState(txt){ const el = $('#codeState'); if(el) el.textContent = txt || ''; }
+    function parse(code){
+      const lines = code.split(/\r?\n/);
+      fns = []; byName = {};
+      const seen = new Set();
+      lines.forEach((ln, i) => {
+        for(const re of DEF_PATS){
+          const m = ln.match(re);
+          if(m && m[1] && !KW.has(m[1])){
+            if(!seen.has(m[1])){ seen.add(m[1]); fns.push({ name: m[1], line: i + 1 }); }
+            break;
+          }
+        }
+      });
+      fns.forEach((f, idx) => {
+        f.end = idx + 1 < fns.length ? fns[idx + 1].line - 1 : lines.length;
+        f.loc = Math.max(1, f.end - f.line + 1);
+        f.callers = []; f.callees = [];
+        byName[f.name] = f;
+      });
+      const names = new Set(fns.map(f => f.name));
+      fns.forEach(f => {
+        const body = lines.slice(f.line - 1, f.end).join('\n');
+        const seenC = new Set();
+        const re = /([A-Za-z_$][\w$]*)\s*\(/g; let m;
+        while((m = re.exec(body))){
+          const n = m[1];
+          if(n !== f.name && names.has(n) && !KW.has(n) && !BUILTIN.has(n)) seenC.add(n);
+        }
+        f.callees = [...seenC];
+      });
+      fns.forEach(f => f.callees.forEach(c => { if(byName[c]) byName[c].callers.push(f.name); }));
+      return lines.length;
+    }
+    function load(name, code){
+      const nLines = parse(String(code || ''));
+      file = { name: String(name || '?'), lines: nLines };
+      focused = null;
+      const card = $('#codeFileCard');
+      if(card){
+        card.hidden = false;
+        card.textContent = '';
+        const t = document.createElement('div'); t.className = 't';
+        const b = document.createElement('b'); b.textContent = file.name;
+        const tier = document.createElement('span'); tier.className = 'sys-tier dev';
+        tier.textContent = 'CHARGÉ';
+        t.appendChild(b); t.appendChild(tier); card.appendChild(t);
+        const d = document.createElement('div'); d.className = 'd';
+        d.textContent = fns.length + ' fonctions · ' + nLines + ' lignes · « montre-moi la fonction X »';
+        card.appendChild(d);
+      }
+      const sym = $('#codeSymCard'); if(sym) sym.hidden = true;
+      setState('');
+    }
+    function findFn(q){
+      const k = String(q || '').trim();
+      if(!k) return null;
+      if(byName[k]) return byName[k];
+      const kl = k.toLowerCase().replace(/\(\)$/, '');
+      return fns.find(f => f.name.toLowerCase() === kl)
+          || fns.find(f => f.name.toLowerCase().includes(kl) || kl.includes(f.name.toLowerCase()))
+          || null;
+    }
+    function miniGraph(f){
+      const NS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('viewBox', '0 0 340 96');
+      svg.style.width = '100%'; svg.style.margin = '4px 0';
+      const cIn = f.callers.slice(0, 3), cOut = f.callees.slice(0, 3);
+      const ys = n => n <= 1 ? [48] : (n === 2 ? [22, 74] : [16, 48, 80]);
+      const node = (x, y, r, fill, stroke) => {
+        const c = document.createElementNS(NS, 'circle');
+        c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', r);
+        c.setAttribute('fill', fill); if(stroke) c.setAttribute('stroke', stroke);
+        svg.appendChild(c);
+      };
+      const edge = (x1, y1, x2, y2, col) => {
+        const l = document.createElementNS(NS, 'line');
+        l.setAttribute('x1', x1); l.setAttribute('y1', y1);
+        l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+        l.setAttribute('stroke', col); l.setAttribute('stroke-width', '1');
+        svg.appendChild(l);
+      };
+      ys(cIn.length).slice(0, Math.max(1, cIn.length)).forEach((y, i) => {
+        if(!cIn.length) return;
+        edge(60, y, 170, 48, '#1a7f92'); node(60, y, 6, '#0d2233', '#00d4ff');
+      });
+      ys(cOut.length).slice(0, Math.max(1, cOut.length)).forEach((y, i) => {
+        if(!cOut.length) return;
+        edge(170, 48, 285, y, '#6d5bb8'); node(285, y, 6, '#171130', '#a78bfa');
+      });
+      node(170, 48, 10, '#00d4ff', null);
+      return svg;
+    }
+    function showSymbol(q){
+      if(!file){
+        setState('Aucun fichier chargé — demande d’abord : « ouvre la carte du code sur X ».');
+        return;
+      }
+      const f = findFn(q);
+      const sym = $('#codeSymCard');
+      if(!f){
+        setState('« ' + q + ' » introuvable dans ' + file.name + ' (' + fns.length + ' fonctions connues).');
+        if(sym) sym.hidden = true;
+        focused = null;
+        return;
+      }
+      focused = f.name;
+      setState('');
+      if(!sym) return;
+      sym.hidden = false;
+      sym.textContent = '';
+      const nm = document.createElement('div'); nm.className = 'name'; nm.textContent = f.name + '()';
+      const lc = document.createElement('div'); lc.className = 'loc';
+      lc.textContent = file.name + ' · L' + f.line;
+      sym.appendChild(nm); sym.appendChild(lc);
+      const mets = document.createElement('div'); mets.className = 'code-metrics';
+      [[f.loc, 'LIGNES ~'], [f.callers.length, 'APPELANTS'], [f.callees.length, 'APPELÉS']].forEach(([v, lab]) => {
+        const mt = document.createElement('div'); mt.className = 'code-metric';
+        const b = document.createElement('b'); b.textContent = v;
+        const s = document.createElement('span'); s.textContent = lab;
+        mt.appendChild(b); mt.appendChild(s); mets.appendChild(mt);
+      });
+      sym.appendChild(mets);
+      sym.appendChild(miniGraph(f));
+      const lists = document.createElement('div'); lists.className = 'code-callers';
+      const section = (title, items, out) => {
+        const h = document.createElement('h4'); h.textContent = title; lists.appendChild(h);
+        if(!items.length){
+          const d = document.createElement('div'); if(out) d.className = 'out';
+          d.textContent = '—'; lists.appendChild(d); return;
+        }
+        items.slice(0, 5).forEach(n => {
+          const d = document.createElement('div'); if(out) d.className = 'out';
+          d.textContent = n + '()'; lists.appendChild(d);
+        });
+        if(items.length > 5){
+          const d = document.createElement('div'); if(out) d.className = 'out';
+          d.textContent = '… +' + (items.length - 5); lists.appendChild(d);
+        }
+      };
+      section('APPELANTS', f.callers, false);
+      section('APPELÉS', f.callees, true);
+      sym.appendChild(lists);
+      try { sym.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch(_) {}
+    }
+    function clear(){
+      file = null; fns = []; byName = {}; focused = null;
+      const card = $('#codeFileCard'); if(card) card.hidden = true;
+      const sym = $('#codeSymCard'); if(sym) sym.hidden = true;
+      setState('Demande à Friday : « ouvre la carte du code sur X » puis « montre-moi la fonction Y ».');
+    }
+    function onCodemapCmd(m){
+      if(!m || !m.tool) return;
+      if((m.tool === 'open' || m.tool === 'diff') && m.args && m.args.length >= 2){
+        load(m.args[0], m.args[1]);
+      } else if(m.tool === 'focus' && m.args && m.args.length){
+        showSymbol(m.args[0]);
+      } else if(m.tool === 'reset' || m.tool === 'close'){
+        clear();
+      }
+    }
+    function getState(){
+      return { file: file ? file.name : null, fns: fns.length, focused,
+               names: fns.slice(0, 5).map(f => f.name),
+               callers: focused && byName[focused] ? byName[focused].callers.length : null,
+               callees: focused && byName[focused] ? byName[focused].callees.length : null,
+               state: ($('#codeState') || {}).textContent || '' };
+    }
+    return { onCodemapCmd, getState };
   })();
 
   // v1.48.0 — P2 : fond de carte embarqué (Natural Earth 110m via world-atlas,
@@ -7581,7 +7801,9 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
           try { SystemeNative.onSystemeCmd(m); } catch(_) {}
           break;
         case 'codemap_cmd':
+          // v1.50.0 — P4 : fiche symbole locale (open/diff portent le code, focus le symbole).
           try { noteSceneAction('codemap', m); } catch(_) {}
+          try { CodemapNative.onCodemapCmd(m); } catch(_) {}
           break;
         case 'cosmos_cmd':
           // v1.48.0 — P2 : le cosmos natif local réagit (focus_planet/focus_sun/
