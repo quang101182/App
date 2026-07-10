@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.59.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
+<title>FRIDAY · v1.59.1</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2381,11 +2381,18 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 /* Galerie : feuille glissante depuis le bas (pattern .log-panel). */
 /* v1.43.0 — Remontée : 72vh → 84vh. L'en-tête a maigri (5 lignes → 4), la grille
    gagne la différence + les 12vh. Demande Quang (« on peut gagner un peu de hauteur »). */
+/* v1.59.1 — remontée au-dessus du bouton parler via --ptt-h (hauteur du pied de page).
+   La galerie s'escamote par translateY : on AJOUTE --ptt-h à la translation de fermeture,
+   sinon poser `bottom` en dur laisserait son HAUT visible en bas en permanence (bug v1.59.0). */
 #galleryPanel{
-  position:fixed; left:0; right:0; bottom:0; height:84vh; z-index:58;
+  position:fixed; left:0; right:0; bottom:var(--ptt-h,0px); height:84vh; z-index:58;
   display:flex; flex-direction:column;
   background:rgba(2,12,22,.97); border-top:1px solid var(--primary-dim);
-  transform:translateY(100%); transition:transform .25s ease;
+  /* Fermeture par translation ABSOLUE (120vh, pas 100% de la hauteur) : garantit la
+     galerie hors écran quels que soient --ptt-h, la hauteur 84vh ou la barre d'URL au
+     boot. Poser `bottom` en dur + translateY(100%) laissait au contraire son HAUT visible
+     (bug v1.59.0). Seule la position OUVERTE (translateY(0)) utilise bottom:var(--ptt-h). */
+  transform:translateY(120vh); transition:transform .25s ease;
   max-width:480px; margin:0 auto;
 }
 #galleryPanel.show{ transform:translateY(0); }
@@ -2817,7 +2824,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.59.0</span>
+        <span class="version-tag version-badge">· v1.59.1</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -3518,7 +3525,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.59.0';   // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
+  const VERSION = '1.59.1';   // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -8402,17 +8409,20 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     // sur mobile le micro est un BOUTON, le recouvrir empêcherait de parler à Friday.
     // Mandat Quang 11/07 : vrai pour TOUTES les fenêtres image (triptyque/explore/viewer),
     // plus seulement #mediaCenter. Seule exception assumée : la galerie (bottom-sheet).
-    function placeAboveBar(el){
+    function _pttH(){
       const bar = document.querySelector('.bottombar');
-      if (!bar || !el) return;
-      el.style.bottom = Math.round(window.innerHeight - bar.getBoundingClientRect().top) + 'px';
+      return bar ? Math.round(window.innerHeight - bar.getBoundingClientRect().top) : 0;
     }
+    // Overlays cachés par `opacity` (triptyque/explore/viewer/center) : poser `bottom` en
+    // dur est sûr (l'escamotage ne dépend pas de la position).
+    function placeAboveBar(el){ if (el) el.style.bottom = _pttH() + 'px'; }
+    // v1.59.1 — la GALERIE se cache par translateY : surtout PAS de `bottom` en dur (son
+    // haut resterait visible en bas). On expose la hauteur du pied de page en variable CSS,
+    // consommée par le transform de #galleryPanel (escamotage = translateY(100% + --ptt-h)).
+    function syncPttVar(){ document.documentElement.style.setProperty('--ptt-h', _pttH() + 'px'); }
     function placeCenter(){ placeAboveBar(center); }
-    // v1.59.0 — mandat Quang 11/07 élargi (« partout pareil, sans collision ») : la GALERIE
-    // aussi remonte au-dessus du bouton (le bottom-sheet garde ses 84vh, calé sur le footer).
     function placeOverlaysAboveBar(){
-      placeAboveBar(center); placeAboveBar(cmp); placeAboveBar(exEl);
-      placeAboveBar(lb); placeAboveBar(panel);
+      placeAboveBar(center); placeAboveBar(cmp); placeAboveBar(exEl); placeAboveBar(lb); syncPttVar();
     }
 
     // v1.37.0 — L'effet est CHOISI PAR LE BACKEND (`m.effect`) : PC et mobile
@@ -9327,8 +9337,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     }
 
     function open(focusId){
+      syncPttVar();           // v1.59.1 — remonte la galerie via --ptt-h (translateY-safe, jamais de bottom en dur)
       panel.classList.add('show');
-      placeAboveBar(panel);   // v1.59.0 — remonte la galerie au-dessus du bouton TAP TO TALK
       panel.setAttribute('aria-hidden', 'false');
       loadPassive();
       load().then(function(){
@@ -9418,6 +9428,11 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       });
       window.addEventListener('resize', placeOverlaysAboveBar);
       window.addEventListener('orientationchange', function(){ setTimeout(placeOverlaysAboveBar, 120); });
+      // v1.59.1 — poser --ptt-h DÈS le boot : sinon (var non définie → fallback 0px) le
+      // transform de la galerie ne l'escamote pas complètement (84vh se calcule sur le
+      // viewport sans barre d'URL, > innerHeight) et son haut dépasse en bas. Rappel
+      // différé = layout stabilisé (barre d'URL résorbée).
+      syncPttVar(); setTimeout(syncPttVar, 250); setTimeout(syncPttVar, 1200);
 
       document.querySelectorAll('.prompt-copy').forEach(function(b){
         b.addEventListener('click', function(e){
