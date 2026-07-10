@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.48.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
+<title>FRIDAY · v1.49.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -390,6 +390,32 @@ body[data-current-view="cosmos"] #view-cosmos .native-view-wrap{flex:1 1 auto;mi
    le canvas ne recevait pas les swipes hors de sa petite zone. */
 body[data-current-view="map"] #view-map,
 body[data-current-view="cosmos"] #view-cosmos{flex:1 1 auto}
+/* v1.49.0 — P3 : vue synthèse SYSTÈME (maquette onglets v1 validée).
+   Liste verticale native (chips compteurs + cartes projets), .main scrolle. */
+.sys-synth{display:flex;flex-direction:column;gap:10px;padding:2px 0 8px}
+.sys-title{font:600 13px 'JetBrains Mono',monospace;letter-spacing:4px;color:var(--primary)}
+.sys-sub{font-size:11px;color:var(--text-1);margin-top:-6px}
+.sys-last{font-size:11.5px;color:var(--text-0);border:1px solid var(--primary-dim);
+  border-radius:8px;padding:8px 11px;background:rgba(0,18,32,.55)}
+.sys-kinds{display:flex;flex-wrap:wrap;gap:6px}
+.sys-kind{border:1px solid var(--primary-dim);background:rgba(0,18,32,.5);
+  border-radius:12px;font-size:10.5px;padding:3px 9px;color:var(--text-0)}
+.sys-kind i{font-style:normal;margin-right:4px}
+.sys-cards{display:flex;flex-direction:column;gap:8px}
+.sys-card{background:rgba(0,18,32,.5);border:1px solid var(--primary-dim);
+  border-radius:10px;padding:9px 11px;transition:border-color .25s,box-shadow .25s}
+.sys-card.focus{border-color:var(--primary);box-shadow:0 0 14px rgba(0,212,255,.28)}
+.sys-card .t{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12.5px}
+.sys-card .t b{color:var(--text-0);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sys-card .d{font-size:10.5px;color:var(--text-1);margin-top:4px;line-height:1.45}
+.sys-tier{flex:none;font:600 9px 'JetBrains Mono',monospace;border-radius:8px;
+  padding:2px 7px;letter-spacing:1px}
+.sys-tier.rev{background:rgba(255,179,71,.14);color:#ffb347}
+.sys-tier.prod{background:rgba(61,220,132,.13);color:#3ddc84}
+.sys-tier.dev{background:rgba(0,212,255,.12);color:var(--primary)}
+.sys-tier.exp{background:rgba(167,139,250,.14);color:#a78bfa}
+.sys-state{font-size:11px;color:var(--idle);text-align:center;padding:12px 0}
+.sys-state:empty{display:none}
 .mode-btn.active{
   background:linear-gradient(180deg,rgba(0,140,200,.22),rgba(0,80,140,.14));
   color:var(--primary);
@@ -1150,7 +1176,10 @@ body[data-current-view="map"] .transcript-primary,
 body[data-current-view="map"] .sat-grid,
 body[data-current-view="cosmos"] .slot-toggles,
 body[data-current-view="cosmos"] .transcript-primary,
-body[data-current-view="cosmos"] .sat-grid{
+body[data-current-view="cosmos"] .sat-grid,
+body[data-current-view="systeme"] .slot-toggles,
+body[data-current-view="systeme"] .transcript-primary,
+body[data-current-view="systeme"] .sat-grid{
   display:none !important;
 }
 /* L'<img> remote-stream prend toute la hauteur restante via flex:1 du wrap. */
@@ -2731,7 +2760,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.48.0</span>
+        <span class="version-tag version-badge">· v1.49.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -2958,17 +2987,18 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       </div>
     </section>
 
-    <!-- v1.47.0 — P1 roadmap onglets : VIEW SYSTEME, vue minimale HONNÊTE
-         (titre + « ce que Friday vient d'y faire »). La synthèse riche vient en P3.
-         Pas de fenêtre vide : le rail de synchro (ui_mode_switch) amène l'user ici
-         quand Friday ouvre la constellation sur le PC. -->
+    <!-- v1.49.0 — P3 roadmap onglets : VUE SYNTHÈSE SYSTÈME (maquette v1 validée).
+         L'essentiel de la constellation PC repensé VERTICAL (V1 : parité d'interaction,
+         pas de layout PC compressé). Données live : GET API_BASE/systeme/data — la MÊME
+         source que l'iframe PC systeme.html (systeme_bridge.build_systeme_data, cache 5 min). -->
     <section class="view" id="view-systeme">
-      <div class="nav-mini">
-        <div class="nav-mini-icon">🛰</div>
-        <div class="nav-mini-title">SYSTÈME</div>
-        <div class="nav-mini-sub">Constellation projets · mémoire · Drive</div>
-        <div class="nav-mini-last" id="systemeLastAction">Friday n'a pas encore ouvert cette vue durant la session.</div>
-        <div class="nav-mini-hint">Vue synthèse mobile en préparation (P3) — en attendant, demande à Friday : « où en sont mes projets ? »</div>
+      <div class="sys-synth">
+        <div class="sys-title">SYSTÈME</div>
+        <div class="sys-sub">l'essentiel de la constellation PC — projets · mémoire · Drive</div>
+        <div class="sys-last" id="systemeLastAction">Friday n'a pas encore agi sur cette vue durant la session.</div>
+        <div class="sys-kinds" id="sysKinds"></div>
+        <div class="sys-cards" id="sysCards"></div>
+        <div class="sys-state" id="sysState"></div>
       </div>
     </section>
 
@@ -3408,7 +3438,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.48.0';   // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
+  const VERSION = '1.49.0';   // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -3609,6 +3639,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     // V1.3 : persiste le view actif
     config.view = v;
     saveConfig();
+    // v1.49.0 — P3 : lazy-load des données de la vue synthèse SYSTÈME.
+    if(v === 'systeme'){ try { SystemeNative.ensureData(); } catch(_) {} }
     if(!opts.remote){
       // v1.21.0 — Signale au HUD PC quelle vue le mobile regarde (info)
       _signalRemoteView(v);
@@ -4507,6 +4539,120 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     const hh = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
     el.textContent = "Friday vient d'y faire : " + m.tool + extra + ' (' + hh + ')';
   }
+
+  // ============================================================
+  // v1.49.0 — P3 roadmap onglets : VUE SYNTHÈSE SYSTÈME MOBILE.
+  // Même source de données que l'iframe PC : GET API_BASE/systeme/data
+  // (systeme_bridge.build_systeme_data — gh repo list + scan FS + mémoire,
+  // cache backend 5 min). Rendu vertical natif (maquette v1) : chips
+  // compteurs par famille + cartes projets (tier REVENUE/PROD/DEV/EXP).
+  // `systeme_cmd focus_node/explain` → highlight de la carte visée.
+  // ============================================================
+  // (sur window : sondable par le harnais CDP — Runtime.evaluate ne voit pas le scope lexical)
+  window.SystemeNative = (function(){
+    const TIERS = { 'revenue-prod': ['REVENUE','rev',0], 'prod': ['PROD','prod',1],
+                    'dev': ['DEV','dev',2], 'exp': ['EXP','exp',3] };
+    const KINDS = [ ['github','GitHub','#00d4ff'], ['local','Local','#8fa3b8'],
+                    ['memory','Mémoire','#ff5c8a'], ['drive','Drive','#3ddc84'] ];
+    const TTL_MS = 5 * 60 * 1000; // aligné sur le cache backend
+    let nodes = [], loadedAt = 0, loading = false, pendingFocus = null;
+    function _norm(s){ return String(s||'').toLowerCase().replace(/\.md$/,'').replace(/[^a-z0-9]/g,''); }
+    function setState(txt){ const el = $('#sysState'); if(el) el.textContent = txt || ''; }
+    function ensureData(){
+      if(loading) return;
+      if(nodes.length && (Date.now() - loadedAt) < TTL_MS) return;
+      loading = true;
+      setState('Chargement de la constellation…');
+      fetch(API_BASE + '/systeme/data', { cache: 'no-store' })
+        .then(r => { if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(d => {
+          nodes = (d && d.nodes) || [];
+          loadedAt = Date.now(); loading = false;
+          render(); setState('');
+          if(pendingFocus){ const n = pendingFocus; pendingFocus = null; focusCard(n); }
+        })
+        .catch(err => {
+          loading = false; loadedAt = 0;
+          setState('Données injoignables (' + (err && err.message || err) + ') — retape l’onglet pour réessayer.');
+        });
+    }
+    function render(){
+      const kEl = $('#sysKinds'), cEl = $('#sysCards');
+      if(!kEl || !cEl) return;
+      kEl.textContent = ''; cEl.textContent = '';
+      // Chips compteurs par famille (GitHub / Local / Mémoire / Drive)
+      KINDS.forEach(([kind, label, color]) => {
+        const n = nodes.filter(x => x.kind === kind).length;
+        if(!n) return;
+        const chip = document.createElement('span');
+        chip.className = 'sys-kind';
+        const dot = document.createElement('i');
+        dot.style.color = color; dot.textContent = '●';
+        chip.appendChild(dot);
+        chip.appendChild(document.createTextNode(label + ' ' + n));
+        kEl.appendChild(chip);
+      });
+      // Cartes projets : repos GitHub + dossiers locaux, tier puis fraîcheur
+      const projs = nodes.filter(x => x.kind === 'github' || x.kind === 'local')
+        .sort((a, b) => {
+          const ta = (TIERS[a.tier] || TIERS.dev)[2], tb = (TIERS[b.tier] || TIERS.dev)[2];
+          if(ta !== tb) return ta - tb;
+          return String(b.pushedAt||'').localeCompare(String(a.pushedAt||''));
+        });
+      projs.forEach(p => {
+        const [label, cls] = TIERS[p.tier] || TIERS.dev;
+        const card = document.createElement('div');
+        card.className = 'sys-card';
+        card.dataset.norm = _norm(p.name);
+        const t = document.createElement('div'); t.className = 't';
+        const b = document.createElement('b'); b.textContent = p.name;
+        const tier = document.createElement('span'); tier.className = 'sys-tier ' + cls; tier.textContent = label;
+        t.appendChild(b); t.appendChild(tier); card.appendChild(t);
+        const bits = [];
+        if(p.desc) bits.push(p.desc);
+        if(p.lang) bits.push(p.lang);
+        if(p.pushedAt) bits.push('maj ' + p.pushedAt);
+        if(bits.length){
+          const d = document.createElement('div'); d.className = 'd';
+          d.textContent = bits.join(' · '); card.appendChild(d);
+        }
+        cEl.appendChild(card);
+      });
+      if(!projs.length) setState('Aucun projet dans le dataset.');
+    }
+    function focusCard(name){
+      const key = _norm(name);
+      if(!key) return;
+      const cards = $$('#sysCards .sys-card');
+      if(!cards.length){ pendingFocus = name; ensureData(); return; }
+      cards.forEach(c => c.classList.remove('focus'));
+      const hit = cards.find(c => c.dataset.norm === key)
+               || cards.find(c => c.dataset.norm.includes(key) || key.includes(c.dataset.norm));
+      if(hit){
+        hit.classList.add('focus');
+        try { hit.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch(_) {}
+      }
+    }
+    function onSystemeCmd(m){
+      if(!m || !m.tool) return;
+      if(m.tool === 'reset' || m.tool === 'close'){
+        $$('#sysCards .sys-card').forEach(c => c.classList.remove('focus'));
+        return;
+      }
+      ensureData();
+      if((m.tool === 'focus_node' || m.tool === 'explain' || m.tool === 'search')
+         && m.args && m.args.length){ focusCard(m.args[0]); }
+    }
+    function getState(){
+      const cards = $$('#sysCards .sys-card');
+      const foc = cards.find(c => c.classList.contains('focus'));
+      return { nodes: nodes.length, cards: cards.length,
+               chips: $$('#sysKinds .sys-kind').length,
+               focused: foc ? (foc.querySelector('b') || {}).textContent : null,
+               state: ($('#sysState') || {}).textContent || '' };
+    }
+    return { ensureData, onSystemeCmd, getState };
+  })();
 
   // v1.48.0 — P2 : fond de carte embarqué (Natural Earth 110m via world-atlas,
   // 101 anneaux / ~5000 points, dixièmes de degré [lng,lat,...] à plat).
@@ -7429,9 +7575,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
           try { onUiModeSwitch(m); } catch(_) {}
           break;
         case 'systeme_cmd':
-          // v1.47.0 — P1 : le contenu est rendu par l'iframe PC ; sur mobile on
-          // note « ce que Friday vient d'y faire » (la bascule arrive via ui_mode_switch).
+          // v1.47.0 — P1 : note « ce que Friday vient d'y faire ».
+          // v1.49.0 — P3 : la vue synthèse réagit aussi (focus_node → highlight carte).
           try { noteSceneAction('systeme', m); } catch(_) {}
+          try { SystemeNative.onSystemeCmd(m); } catch(_) {}
           break;
         case 'codemap_cmd':
           try { noteSceneAction('codemap', m); } catch(_) {}
