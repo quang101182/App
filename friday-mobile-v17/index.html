@@ -353,6 +353,12 @@ body[data-state="speaking"] .edge-glow{
   white-space:nowrap;
 }
 .mode-btn:last-child{border-right:none}
+/* v1.45.1 — Onglets en ICÔNES AGRANDIES et de LARGEUR ÉGALE (mandat Quang) :
+   les emojis n'ont pas la même chasse (⌂ étroit, 🪐 large) → on fixe la largeur du
+   bouton, pas celle du glyphe. */
+.mode-label{display:none}
+.mode-btn{font-size:22px;line-height:1;letter-spacing:0;padding:6px 0;
+  width:62px;display:inline-flex;align-items:center;justify-content:center}
 .mode-btn.active{
   background:linear-gradient(180deg,rgba(0,140,200,.22),rgba(0,80,140,.14));
   color:var(--primary);
@@ -567,6 +573,24 @@ body[data-state="speaking"] .rms-bars{opacity:.9}
   box-shadow:inset 0 0 10px rgba(0,212,255,.18);
 }
 /* v1.18.0 — Variante MUTE actif : rouge orangé pour signaler "Friday silencieux". */
+/* v1.45.1 — GS : jumeau du bouton PC. La PASTILLE suit le moteur, le CADRE suit le
+   verrou. Coupé => blink rouge franc (Quang joue en plein écran : ça ne le gêne que
+   lorsqu'il revient regarder Friday, et c'est le but). */
+.studio-toggle{display:inline-flex;align-items:center;gap:5px;border-color:var(--primary);color:var(--primary);
+  text-shadow:0 0 4px var(--primary-glow);box-shadow:inset 0 0 10px rgba(0,212,255,.18)}
+.studio-toggle:disabled{opacity:.6}
+.studio-ico{font-size:11px;line-height:1}
+.studio-dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--primary);
+  box-shadow:0 0 6px var(--primary-glow);transition:background .25s,box-shadow .25s}
+.studio-toggle.engine-off .studio-dot{background:#2a4657;box-shadow:none}
+.studio-toggle.off{border-color:#ff5566;color:#ff5566;text-shadow:0 0 4px rgba(255,85,102,.55);
+  animation:studioOffBlink 1.15s steps(1,end) infinite}
+.studio-toggle.off .studio-dot{background:#ff5566;box-shadow:0 0 6px rgba(255,85,102,.8)}
+.studio-toggle.off.engine-off .studio-dot{background:#6b2530;box-shadow:none}
+@keyframes studioOffBlink{
+  0%,49%{opacity:1;box-shadow:inset 0 0 10px rgba(255,85,102,.30)}
+  50%,100%{opacity:.55;box-shadow:inset 0 0 4px rgba(255,85,102,.10)}
+}
 .slot-toggle.mute-on{
   border-color:#ff7a47;
   color:#ff7a47;
@@ -2658,9 +2682,9 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     </div>
 
     <div class="mode-switch" role="tablist">
-      <button class="mode-btn active" data-view="home" role="tab">Accueil</button>
-      <button class="mode-btn" data-view="map" role="tab">Carte</button>
-      <button class="mode-btn" data-view="cosmos" role="tab">Cosmos</button>
+      <button class="mode-btn active" data-view="home" role="tab">⌂ <span class="mode-label">Accueil</span></button>
+      <button class="mode-btn" data-view="map" role="tab">🗺 <span class="mode-label">Carte</span></button>
+      <button class="mode-btn" data-view="cosmos" role="tab">🪐 <span class="mode-label">Cosmos</span></button>
     </div>
   </header>
 
@@ -2777,7 +2801,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
            Le slot libéré par BOOST (retiré v1.27.3) accueille la GALERIE
            (décision Quang : la galerie est un bouton, pas un onglet). -->
       <div class="slot-toggles">
-        <button class="slot-toggle" data-slot="activity" title="Affiche/cache le panneau ACTIVITY (compteur tools session, last tool, top tools)">+ ACT</button>
+        <button class="slot-toggle studio-toggle" id="btnStudio" aria-pressed="true"
+                title="Moteur local + images passives — couper libère le GPU et empêche Friday de le rallumer"><span class="studio-dot"></span><span class="studio-ico" aria-hidden="true">🎨</span>GS</button>
         <button class="slot-toggle" id="btnGallery" title="Galerie des images générées (Gemini · OpenAI · Generate Studio). Tap une vignette pour l'agrandir.">🖼 GAL</button>
         <button class="slot-toggle" id="btnUsage" title="Affiche/cache le panneau de consommation API (Claude / ElevenLabs / Groq) en temps réel">$</button>
         <button class="slot-toggle" id="btnMute" title="Couper la voix de Friday/Jarvis. Les réponses arrivent uniquement via le transcript (utile en environnement silencieux).">🔇 MUTE</button>
@@ -2841,7 +2866,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
              garde son YouTube IFrame Player normal. -->
 
         <!-- ACTIVITY (hidden by default) -->
-        <article class="hud-panel hidden-slot" id="panel-activity">
+        <article class="hud-panel" id="panel-activity">   <!-- v1.45.1 : plus de toggle, toujours visible -->
           <div class="hud-panel-header">
             <span>ACTIVITY</span><span class="ico">◈</span>
           </div>
@@ -3305,7 +3330,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.44.0';
+  const VERSION = '1.45.1';   // v1.45.1 — bouton GS (verrou moteur local + images passives) + onglets icones de largeur egale
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -6169,7 +6194,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 
     // SLOTS (sans persist, on lit déjà depuis config)
     applySlotState('music',    config.slots.music    === 'visible', { persist:false });
-    applySlotState('activity', config.slots.activity === 'visible', { persist:false });
+    // v1.45.1 — slot 'activity' figé visible : son toggle a cédé la place à GS.
 
     // MUTED
     if(config.muted){ $('#btnMute').classList.add('on'); }
@@ -7287,6 +7312,9 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     let imgFmt = 'square';   // v1.36.0 — réglage §4 (persisté côté backend)
     let imgFx = 'fade', imgFxRnd = false, galMax = 100;   // v1.37.0
     let gsUp = false, gsBusy = false;   // v1.42.0 — moteur local (bouton manuel)
+    // v1.45.1 — bouton GS : `gsLocked` = Quang a coupé (verrou persisté backend).
+    // Distinct de `gsUp` (le moteur répond) : « éteint » n'est pas « interdit ».
+    let gsLocked = false, studioBusy = false;
     let loadFailed = false;             // v1.43.0 — « non chargée » ≠ « vide »
 
     let hideTimer = null;
@@ -7897,8 +7925,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       if (typeof m.image_format === 'string') imgFmt = m.image_format;
       if (typeof m.image_effect === 'string') imgFx = m.image_effect;
       if (typeof m.image_effect_random === 'boolean') imgFxRnd = m.image_effect_random;
+      if (typeof m.gs_user_lock === 'boolean') gsLocked = m.gs_user_lock;   // v1.45.1
       renderFormat();
       renderPassive();
+      renderStudio();
     }
     // v1.36.0 — une image supprimée/gardée à la VOIX doit disparaître/se marquer
     // ici aussi : la galerie ne se rafraîchit pas toute seule.
@@ -7924,7 +7954,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         if (typeof s.image_effect_random === 'boolean') imgFxRnd = s.image_effect_random;
         if (s.gallery_max) galMax = s.gallery_max;
         gsUp = !!s.up;
-        renderPassive(); renderFormat(); renderCount(); renderEngine();
+        if (typeof s.gs_user_lock === 'boolean') gsLocked = s.gs_user_lock;   // v1.45.1
+        renderPassive(); renderFormat(); renderCount(); renderEngine(); renderStudio();
       } catch (e) { /* backend injoignable : on garde l'état courant */ }
     }
 
@@ -8024,6 +8055,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 
     // ---- Câblage -----------------------------------------------------------
     function init(){
+      // v1.45.1 — GS : etat initial via /api/gs-status (loadPassive), puis suivi par
+      // les events `gs_state` / `config_state`.
+      const bs = document.getElementById('btnStudio');
+      if (bs) bs.addEventListener('click', function(){ if (!studioBusy) toggleStudio(false); });
       document.getElementById('flashClose').addEventListener('click', function(e){
         e.stopPropagation(); clearTimeout(hideTimer); hideFlash();
       });
@@ -8150,12 +8185,56 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       });
     }
 
+    // ---- v1.45.1 — Bouton GS (jumeau du bouton PC) ------------------------
+    function renderStudio(){
+      const b = document.getElementById('btnStudio');
+      if (!b) return;
+      b.classList.toggle('off', gsLocked);
+      b.classList.toggle('engine-off', !gsUp);
+      b.disabled = studioBusy;
+      b.setAttribute('aria-pressed', String(!gsLocked));
+      b.title = gsLocked
+        ? 'Moteur local et images passives COUPES - taper pour reactiver'
+        : (gsUp ? 'Moteur local actif - taper pour couper (libere le GPU)'
+                : 'Moteur local autorise mais eteint - taper pour couper');
+    }
+
+    async function toggleStudio(force){
+      studioBusy = true; renderStudio();
+      try {
+        const r = await fetch(API_BASE + '/api/studio', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ on: gsLocked, force: !!force }),
+        });
+        const j = await r.json().catch(function(){ return {}; });
+        // Une generation tourne : on demande, on ne force jamais en douce - sinon le
+        // bouton mentirait (coupe a l'ecran, GPU encore occupe).
+        if (j && j.needConfirm){
+          studioBusy = false; renderStudio();
+          if (confirm('Une generation tourne sur le moteur local. Couper quand meme ?')) {
+            return toggleStudio(true);
+          }
+          return;
+        }
+        if (j && typeof j.locked === 'boolean') gsLocked = j.locked;
+        if (j && typeof j.up === 'boolean') gsUp = j.up;
+        try { navigator.vibrate && navigator.vibrate(10); } catch(e){}
+      } catch(e){
+        toast('Moteur injoignable');
+      } finally {
+        studioBusy = false; renderStudio();
+      }
+    }
+
     // v1.42.0 — Le moteur a changé d'état ailleurs (bouton du PC, ordre vocal,
     // ou auto-start de Friday) : on suit sans re-poller.
     function onGsState(m){
       if (!m) return;
       gsUp = !!m.up;
+      // v1.45.1 — le meme event porte le verrou : le PC coupe, le telephone le voit.
+      if (typeof m.locked === 'boolean') gsLocked = m.locked;
       if (!gsBusy) renderEngine();
+      renderStudio();
     }
     return { init: init, onMediaImage: onMediaImage, open: open, close: close,
              onConfigState: onConfigState, onMediaCompare: onMediaCompare,
