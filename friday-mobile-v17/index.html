@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.59.3</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
+<title>FRIDAY · v1.60.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -1870,47 +1870,57 @@ body.offline .offline-border{
   to   { transform:scaleX(0); }
 }
 
-/* STOP flottant (mode CONTINUOUS) — au-dessus de la bottom bar */
+/* v1.60.0 (PORT depuis l'APK v1.60.0/v1.69.0) — Barre du bas 3 zones symétriques :
+   mini-hologramme d'activité à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE.
+   Le mini-holo prend les couleurs d'état via --state-ring/--state-glow (déjà posées
+   par setState sur :root). Slots latéraux 48px → bouton parler toujours centré. */
+.mic-row{display:flex;align-items:center;gap:8px;width:100%;min-width:0}
+.ptt-slot{flex:0 0 48px;width:48px;height:48px;display:flex;align-items:center;justify-content:center;position:relative}
+.mini-holo{width:48px;height:48px;filter:drop-shadow(0 0 8px var(--state-glow));transition:filter .5s ease}
+.mini-holo .mh-ring{fill:none;stroke:var(--state-ring);stroke-width:2;opacity:.85;transition:stroke .5s ease}
+.mini-holo .mh-cw{transform-box:fill-box;transform-origin:center;animation:mhCw 22s linear infinite}
+.mini-holo .mh-ccw{transform-box:fill-box;transform-origin:center;animation:mhCcw 32s linear infinite}
+.mini-holo .mh-core{fill:var(--state-ring);filter:drop-shadow(0 0 4px var(--state-glow));animation:mhBreath 3.2s ease-in-out infinite}
+/* v1.60.0 — Anneau magenta « jauge de parole » concentrique autour du mini-holo
+   (miroir de l'anneau PC). Piloté par _TtsGaugeM.setF, même progression que la barre. */
+.tts-ring-m{position:absolute;top:50%;left:50%;width:56px;height:56px;transform:translate(-50%,-50%);pointer-events:none;opacity:0;transition:opacity .3s ease;filter:drop-shadow(0 0 5px rgba(255,45,149,.55));z-index:2}
+.tts-ring-m.show{opacity:1;transition:opacity .15s ease}
+.tts-ring-m .trm-bg{fill:none;stroke:rgba(255,255,255,.08);stroke-width:3}
+.tts-ring-m .trm-fg{fill:none;stroke:url(#ttsRingMGrad);stroke-width:3;stroke-linecap:round}
+@keyframes mhCw{to{transform:rotate(360deg)}}
+@keyframes mhCcw{to{transform:rotate(-360deg)}}
+@keyframes mhBreath{0%,100%{opacity:.65}50%{opacity:1}}
+
+/* v1.60.0 (PORT APK) — STOP mode CONTINUOUS : cercle plein rouge de MÊME taille que le
+   mini-holo (48px), logé dans le slot DROIT de la .mic-row (miroir de l'holo à gauche).
+   Remplace l'ancien FAB flottant position:fixed. Affiché via body.conv-mode-continuous. */
 .conv-stop-fab{
-  position:fixed;
-  left:50%;
-  bottom:calc(168px + var(--safe-bot));
-  transform:translateX(-50%) scale(.8);
-  z-index:60;
+  width:48px;height:48px;border-radius:50%;padding:0;
   display:none;
-  align-items:center;
-  gap:6px;
-  padding:8px 18px;
-  border-radius:22px;
+  align-items:center;justify-content:center;
   border:1.5px solid #FF3B5C;
-  background:linear-gradient(180deg,rgba(255,59,92,.22) 0%,rgba(255,59,92,.10) 100%);
+  background:radial-gradient(circle at 50% 42%,rgba(255,59,92,.30),rgba(255,59,92,.10) 70%);
   color:#FF6B82;
-  font:700 11px 'JetBrains Mono',monospace;
-  letter-spacing:1.5px;
-  text-shadow:0 0 6px rgba(255,59,92,.8);
-  box-shadow:
-    0 0 0 4px rgba(255,59,92,.10),
-    0 0 18px rgba(255,59,92,.55),
-    inset 0 0 12px rgba(255,59,92,.25);
   cursor:pointer;
   pointer-events:auto;
   opacity:0;
+  transform:scale(.7);
   transition:opacity .25s ease, transform .25s cubic-bezier(.2,.8,.2,1.0);
   animation:convStopPulse 1.4s ease-in-out infinite;
 }
-.conv-stop-fab .stop-dot{
-  width:8px; height:8px; border-radius:50%;
+.conv-stop-fab .stop-square{
+  width:15px;height:15px;border-radius:3px;
   background:#FF3B5C;
-  box-shadow:0 0 6px #FF3B5C, 0 0 12px rgba(255,59,92,.7);
+  box-shadow:0 0 8px #FF3B5C, 0 0 14px rgba(255,59,92,.7);
 }
 body.conv-mode-continuous .conv-stop-fab{
   display:inline-flex;
   opacity:1;
-  transform:translateX(-50%) scale(1);
+  transform:scale(1);
 }
 @keyframes convStopPulse{
-  0%,100% { box-shadow:0 0 0 4px rgba(255,59,92,.10), 0 0 18px rgba(255,59,92,.55), inset 0 0 12px rgba(255,59,92,.25); }
-  50%     { box-shadow:0 0 0 6px rgba(255,59,92,.18), 0 0 28px rgba(255,59,92,.75), inset 0 0 16px rgba(255,59,92,.4); }
+  0%,100% { box-shadow:0 0 0 3px rgba(255,59,92,.10), 0 0 16px rgba(255,59,92,.5), inset 0 0 12px rgba(255,59,92,.22); }
+  50%     { box-shadow:0 0 0 6px rgba(255,59,92,.18), 0 0 26px rgba(255,59,92,.72), inset 0 0 16px rgba(255,59,92,.38); }
 }
 
 /* ==========================================================================
@@ -2872,7 +2882,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.59.6</span>
+        <span class="version-tag version-badge">· v1.60.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -3134,21 +3144,57 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   <!-- ==== BOTTOM BAR ==== -->
   <footer class="bottombar">
 
-    <!-- Bouton dictée rectangulaire -->
-    <!-- v1.17.0i — Bouton 2 lignes : ligne 1 = état (TAP TO TALK / RECORDING /
-         HOLD / 10s avant fin), ligne 2 = chrono "Xs / 60s" pendant le rec. -->
-    <button class="mic-btn mic-btn-2lines" id="micBtn" aria-label="Dictée">
-      <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="9" y="3" width="6" height="11" rx="3"/>
-        <path d="M5 11a7 7 0 0 0 14 0"/>
-        <line x1="12" y1="18" x2="12" y2="22"/>
-      </svg>
-      <!-- v1.17.0i — 2 lignes : texte état (haut) + chrono Xs / 60s (bas) -->
-      <span class="mic-text">
-        <span id="micLabel">TAP TO TALK</span>
-        <span id="micCounter" class="mic-counter"></span>
-      </span>
-    </button>
+    <!-- v1.60.0 (PORT APK) — Ligne micro à 3 zones symétriques :
+         [mini-hologramme d'activité] · [bouton parler] · [STOP cercle conv-continue].
+         Holo gauche = témoin d'état TOUJOURS visible (mêmes couleurs que la sphère
+         d'accueil : piloté par les vars globales --state-ring/--state-glow posées
+         par setState). STOP droite = cercle de MÊME taille que l'holo (effet miroir),
+         rapatrié ici depuis l'ancien FAB flottant. Slots gauche/droite = 48px fixes,
+         donc le bouton parler reste parfaitement centré même quand le STOP est absent. -->
+    <div class="mic-row">
+      <div class="ptt-slot ptt-slot-left">
+        <svg class="mini-holo" viewBox="0 0 200 200" aria-hidden="true">
+          <g class="mh-cw">
+            <circle class="mh-ring" cx="100" cy="100" r="80"/>
+            <circle class="mh-ring" cx="100" cy="100" r="80" stroke-dasharray="2 13"/>
+          </g>
+          <g class="mh-ccw">
+            <ellipse class="mh-ring" cx="100" cy="100" rx="80" ry="30"/>
+            <ellipse class="mh-ring" cx="100" cy="100" rx="30" ry="80"/>
+          </g>
+          <circle class="mh-core" cx="100" cy="100" r="11"/>
+        </svg>
+        <!-- v1.60.0 — anneau magenta « jauge de parole » (concentrique, autour du mini-holo) -->
+        <svg class="tts-ring-m" id="ttsRingM" viewBox="0 0 56 56" aria-hidden="true">
+          <defs><linearGradient id="ttsRingMGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#ff2d95"/><stop offset="1" stop-color="#ff7ec4"/></linearGradient></defs>
+          <circle class="trm-bg" cx="28" cy="28" r="25"/>
+          <circle class="trm-fg" id="ttsRingMFg" cx="28" cy="28" r="25" stroke-dasharray="157.1" stroke-dashoffset="0" transform="rotate(-90 28 28)"/>
+        </svg>
+      </div>
+
+      <!-- v1.17.0i — Bouton 2 lignes : ligne 1 = état (TAP TO TALK / RECORDING /
+           HOLD / 10s avant fin), ligne 2 = chrono "Xs / 60s" pendant le rec. -->
+      <button class="mic-btn mic-btn-2lines" id="micBtn" aria-label="Dictée">
+        <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="3" width="6" height="11" rx="3"/>
+          <path d="M5 11a7 7 0 0 0 14 0"/>
+          <line x1="12" y1="18" x2="12" y2="22"/>
+        </svg>
+        <!-- v1.17.0i — 2 lignes : texte état (haut) + chrono Xs / 60s (bas) -->
+        <span class="mic-text">
+          <span id="micLabel">TAP TO TALK</span>
+          <span id="micCounter" class="mic-counter"></span>
+        </span>
+      </button>
+
+      <div class="ptt-slot ptt-slot-right">
+        <!-- convStopFab rapatrié ici (cercle). Affiché via body.conv-mode-continuous. -->
+        <button class="conv-stop-fab" id="convStopFab" type="button" aria-label="Stop continuous mode">
+          <span class="stop-square"></span>
+        </button>
+      </div>
+    </div>
 
     <!-- Satellite row : 4 boutons restants (Logs ≡, Settings ⚙, Cortex 🧠, ConvMode).
          v1.18.1 — Bouton ◊ Mute mockup retiré : doublon avec le nouveau bouton
@@ -3513,10 +3559,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   </div>
 </aside>
 
-<!-- V1.2 : STOP flottant (visible uniquement en mode CONTINUOUS via body.conv-mode-continuous) -->
-<button class="conv-stop-fab" id="convStopFab" type="button" aria-label="Stop continuous mode">
-  <span class="stop-dot"></span><span>STOP</span>
-</button>
+<!-- v1.60.0 (PORT APK) : STOP conv-continue DÉPLACÉ dans la .mic-row (slot droit, cercle). L'ancien FAB flottant est retiré. -->
+
 
 <!-- V1.3 : Menu déroulant des 5 variantes du cortex (long-press sur 🧠 Cortex) -->
 <div class="cortex-variant-menu" id="cortexVariantMenu" role="menu" aria-hidden="true">
@@ -3574,7 +3618,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.59.6';   // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
+  const VERSION = '1.60.0';   // v1.60.0 — PORT depuis l'APK : BARRE DU BAS 3 zones (mini-hologramme d'état à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE, l'ancien FAB flottant est retiré) + JAUGE DE PAROLE (barre magenta fine en haut + anneau concentrique autour du mini-holo, décroissants et exacts via _ttsRemainingMs, gate target==='mobile', fondu au barge-in). La PWA était restée à l'ancien layout (lignée v1.59.x divergente) — patchs ciblés, aucun écrasement. // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -7415,6 +7459,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     } catch(e){ console.warn('[interrupt] ws send err:', e); }
     try { if(navigator.vibrate) navigator.vibrate(20); } catch(_) {}
     try { setState('idle'); } catch(_) {}
+    try { _TtsGaugeM.end(); } catch(_) {}   // v1.60.0 — la jauge de parole disparaît au barge-in
     console.log('[interrupt] mobile tap →', reason || 'tap-stop');
   }
   function _playPcmInt16Chunk(arrayBuffer, sr, channels){
@@ -7705,11 +7750,70 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     try { LiveCaptions.add('friday', text); } catch(_) {}
   }
 
+  // v1.60.0 (PORT APK) — Jauge de parole mobile : fine barre magenta centrée TOUT en
+  // haut + anneau concentrique autour du mini-holo, décroissants et EXACTS (le mobile
+  // connaît la durée réelle de l'audio via _ttsRemainingMs). Démarre au tts_start si
+  // l'audio cible CE mobile, suit l'audio en RAF, se cache en fondu quand l'audio est
+  // fini OU au barge-in. Couleur magenta = tranche sur le cyan. Largeur 150px, z 210.
+  const _TtsGaugeM = (() => {
+    const W = 150;
+    const RING_CIRC = 2 * Math.PI * 25;   // anneau r=25
+    let root=null, fill=null, raf=null, total=0, seen=false, safety=null;
+    let ring=null, ringFg=null;           // anneau magenta autour du mini-holo
+    function init(){
+      if(root) return;
+      // l'anneau est statique dans le DOM (.ptt-slot-left) : on récupère ses refs.
+      ring=document.getElementById('ttsRingM'); ringFg=document.getElementById('ttsRingMFg');
+      const st=document.createElement('style');
+      st.textContent =
+        '#tts-gauge-m{position:fixed;top:0;left:50%;transform:translateX(-50%);'
+        +'width:'+W+'px;height:5px;border-radius:0 0 4px 4px;overflow:hidden;'
+        +'z-index:210;pointer-events:none;background:rgba(255,255,255,.06);'
+        +'opacity:0;transition:opacity .3s ease}'
+        +'#tts-gauge-m.show{opacity:1;transition:opacity .15s ease}'
+        +'#tts-gauge-m .tgm-fill{position:absolute;inset:0;transform-origin:left center;'
+        +'transform:scaleX(1);border-radius:0 0 4px 4px;'
+        +'background:linear-gradient(90deg,#ff2d95,#ff7ec4);'
+        +'box-shadow:0 0 12px rgba(255,45,149,.6)}';
+      document.head.appendChild(st);
+      root=document.createElement('div'); root.id='tts-gauge-m';
+      fill=document.createElement('div'); fill.className='tgm-fill';
+      root.appendChild(fill); document.body.appendChild(root);
+    }
+    function setF(f){ const c=Math.max(0,Math.min(1,f)); if(fill) fill.style.transform='scaleX('+c.toFixed(4)+')';
+      if(ringFg) ringFg.setAttribute('stroke-dashoffset', (RING_CIRC*(1-c)).toFixed(1)); }
+    function tick(){
+      let rem=0; try{ rem=_ttsRemainingMs(); }catch(_){}
+      if(rem>total) total=rem;
+      if(rem>120) seen=true;                 // l'audio a réellement commencé
+      let playing=true; try{ playing=_ttsStillPlaying(); }catch(_){ playing=true; }
+      if(seen && (rem<=40 || !playing)){ end(); return; }
+      setF(total>0 ? rem/total : 1);
+      raf=requestAnimationFrame(tick);
+    }
+    function start(){
+      init(); total=0; seen=false; setF(1); root.classList.add('show');
+      if(ring) ring.classList.add('show');
+      if(raf) cancelAnimationFrame(raf); raf=requestAnimationFrame(tick);
+      if(safety) clearTimeout(safety);
+      safety=setTimeout(()=>{ if(!seen) end(); }, 6000); // audio jamais venu → referme
+    }
+    function end(){
+      if(raf){ cancelAnimationFrame(raf); raf=null; }
+      if(safety){ clearTimeout(safety); safety=null; }
+      if(root){ setF(0); root.classList.remove('show'); }
+      if(ring){ ring.classList.remove('show'); }
+    }
+    return { start, end };
+  })();
+
   function onTtsStart(m){
     // Si un texte est fourni, on le pousse comme bulle Friday.
     const text = (m && (m.text || m.utterance) || '').trim();
     if(text) addBubble('friday', text);
     setState('speaking');
+    // v1.60.0 — jauge de parole : afficher barre+anneau si l'audio cible ce mobile.
+    try { if(m && m.target === 'mobile') _TtsGaugeM.start(); } catch(_) {}
   }
   function onTtsEnd(m){
     // v1.20.0 — Reset le meta TTS et flush proprement les sources Web Audio.
