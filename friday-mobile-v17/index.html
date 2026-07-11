@@ -217,6 +217,12 @@
   --primary:#00d4ff;
   --primary-dim:rgba(0,212,255,.35);
   --primary-glow:rgba(0,212,255,.7);
+  /* v1.63.0 — palette moteurs d'image : une couleur = un moteur, cohérente
+     PARTOUT (badge galerie, viewer, compare, flash/center, halo de génération). */
+  --eng-gs:#7fe0a8;       /* Generate Studio — vert (le vert reste vert) */
+  --eng-gemini:#b78dff;   /* Gemini / Nano Banana — violet */
+  --eng-openai:#ffb454;   /* OpenAI / GPT Image — ambre */
+  --eng-neutral:#8fb6d6;  /* moteur inconnu : on n'invente pas de couleur */
   --listening:#ffb547;
   --thinking:#c44dff;
   --speaking:#00ffe0;
@@ -2515,19 +2521,22 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 }
 .gal-cell{ position:relative; aspect-ratio:1; border-radius:3px; overflow:hidden; background:#02121e; cursor:pointer; }
 .gal-cell img{ width:100%; height:100%; object-fit:cover; display:block; }
+/* v1.63.0 — badge moteur : couleur = moteur (var --eng-*), regroupé en bas-GAUCHE
+   avec l'icône « pensée » dans .gal-botL (plus de collision avec ❤/⬇ du haut). */
+.gal-botL{ position:absolute; bottom:2px; left:2px; display:flex; align-items:center; gap:3px; z-index:2; }
 .gal-dot{
-  position:absolute; bottom:2px; right:2px; padding:1px 3px; border-radius:2px;
-  font:7px/1.3 var(--mono,monospace); background:rgba(0,10,20,.85); color:var(--primary,#00d4ff);
+  padding:1px 3px; border-radius:2px; border:1px solid currentColor;
+  font:7px/1.3 var(--mono,monospace); background:rgba(0,10,20,.85); color:var(--eng-neutral);
 }
-.gal-dot.gs{ color:#5cf58c; }
+.gal-dot.eng-gs{ color:var(--eng-gs); }
+.gal-dot.eng-gemini{ color:var(--eng-gemini); }
+.gal-dot.eng-openai{ color:var(--eng-openai); }
 .gal-fav{ position:absolute; top:2px; left:3px; font-size:10px; }
-/* v1.33.0 — Image que Friday a générée d'elle-même (Mode A passif). Discret :
-   coin haut-droite, vert « pensée », loin du ❤ (haut-gauche) et de la pastille
-   moteur (bas-droite). */
+/* v1.63.0 — « pensée » (Mode A passif) réduite à l'icône ✦ (vert = GS local),
+   placée dans .gal-botL, à gauche du badge moteur. */
 .gal-pass{
-  position:absolute; top:2px; right:3px; padding:1px 3px; border-radius:2px;
-  font:7px/1.3 var(--mono,monospace); letter-spacing:.3px;
-  background:rgba(0,10,20,.85); color:#5cf58c;
+  padding:0 3px; border-radius:2px; font:9px/1.4 var(--mono,monospace);
+  background:rgba(4,10,20,.78); color:var(--eng-gs); border:1px solid rgba(127,224,168,.45);
 }
 .gal-empty{ grid-column:1/-1; padding:24px 8px; text-align:center; opacity:.6;
   font:10px/1.5 var(--mono,monospace); color:var(--primary,#00d4ff); }
@@ -2636,9 +2645,11 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 .cmp-cell img{ width:100%; height:100%; object-fit:cover; display:block; }
 .cmp-dot{
   position:absolute; left:3px; bottom:3px; padding:1px 4px; border-radius:2px;
-  font:7px/1.3 var(--mono,monospace); background:rgba(0,10,20,.85); color:var(--primary,#00d4ff);
+  font:7px/1.3 var(--mono,monospace); background:rgba(0,10,20,.85); color:var(--eng-neutral); border:1px solid currentColor;
 }
-.cmp-dot.gs{ color:#5cf58c; }
+.cmp-dot.eng-gs{ color:var(--eng-gs); }        /* v1.63.0 — palette moteurs */
+.cmp-dot.eng-gemini{ color:var(--eng-gemini); }
+.cmp-dot.eng-openai{ color:var(--eng-openai); }
 .cmp-crown{ position:absolute; top:3px; right:4px; font-size:10px; }
 /* v1.58.0 (phase 3) — gestes manuels sur le triptyque : ✓ valider · ❤ favori · 🗑 supprimer.
    Overlay bas-droit (couronne haut-droit, label bas-gauche). */
@@ -2755,8 +2766,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 }
 .gal-ctrl.on{ color:#ff5f8a; border-color:#ff5f8a; }
 .gal-ctrl:active{ background:rgba(0,212,255,.2); }
-/* Le tag « pensée » passe à gauche quand les contrôles occupent la droite. */
-.gal-cell.has-ctrls .gal-pass{ right:auto; left:3px; }
+/* v1.63.0 — « pensée » désormais dans .gal-botL (bas-gauche) : plus de bascule. */
 
 /* Mode Sélection (suppression groupée) */
 .gal-sel-btn{
@@ -8785,16 +8795,23 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
           f.className = 'gal-fav'; f.textContent = '❤';
           cell.appendChild(f);
         }
-        if (it.passive){   // v1.33.0 — Friday l'a imaginée toute seule
+        // v1.63.0 — icône « pensée » + badge moteur regroupés en bas-gauche (.gal-botL)
+        const botL = document.createElement('div');
+        botL.className = 'gal-botL';
+        if (it.passive){   // Friday l'a imaginée toute seule → icône ✦ (vert = GS local)
           const t = document.createElement('span');
-          t.className = 'gal-pass'; t.textContent = '✦ PENSÉE';
+          t.className = 'gal-pass'; t.textContent = '✦';
           t.title = 'Générée spontanément par Friday';
-          cell.appendChild(t);
+          botL.appendChild(t);
         }
         const dot = document.createElement('span');
-        dot.className = 'gal-dot' + (gs ? ' gs' : '');
+        const engCls = it.engine === 'gs' ? 'eng-gs'
+          : (it.engine === 'openai' ? 'eng-openai'
+          : (it.engine === 'gemini' ? 'eng-gemini' : 'eng-neutral'));
+        dot.className = 'gal-dot ' + engCls;
         dot.textContent = gs ? 'GS' : (it.engine === 'openai' ? 'OAI' : 'GEM');
-        cell.appendChild(dot);
+        botL.appendChild(dot);
+        cell.appendChild(botL);
 
         if (selMode){
           const mark = document.createElement('span');
@@ -8880,7 +8897,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     // v1.44.0 — HALO : une dimension visuelle = une information.
     //   couleur  = le moteur · présence = pour qui elle travaille
     //   rythme   = combien d'images · humeur = teinte SES pensées uniquement
-    const HALO_ENGINES = { gs:'#7fe0a8', gemini:'#b98cff', openai:'#5ad2ff', compare:'#7fe0a8' };
+    const HALO_ENGINES = { gs:'#7fe0a8', gemini:'#b78dff', openai:'#ffb454', compare:'#7fe0a8' };  // v1.63.0 — aligné palette moteurs (--eng-*)
     const HALO_NEUTRAL = '#8fb6d6';   // moteur inconnu : on n'invente pas de couleur
     const HALO_MOODS = { focus:-14, calme:10, joueur:26, curieux:18, serein:8 };
     function _haloShift(hex, deg){
@@ -8959,9 +8976,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         + '<button class="cmp-act cmp-fav' + (it._fav ? ' on' : '') + '">❤</button>'
         + '<button class="cmp-act cmp-del">🗑</button>'
         + '</span>') : '';
+      const engCls = it.engine === 'gs' ? 'eng-gs'
+        : (it.engine === 'openai' ? 'eng-openai'
+        : (it.engine === 'gemini' ? 'eng-gemini' : 'eng-neutral'));   // v1.63.0
       return '<img alt="">'
         + (apex ? '<span class="cmp-crown">👑</span>' : '')
-        + '<span class="cmp-dot' + (gs ? ' gs' : '') + '"></span>'
+        + '<span class="cmp-dot ' + engCls + '"></span>'
         + acts;
     }
     function fillCell(el, it, apex){
