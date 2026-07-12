@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.69.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
+<title>FRIDAY · v1.70.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2423,14 +2423,32 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
    Un SEUL comportement : actif et passif s'affichent pareil (décision Quang).
    z-index 196 = au-dessus du contenu, sous les scanlines (198-200). */
 #mediaFlash{
-  position:absolute; right:12px; width:126px; z-index:196;
+  position:absolute; right:12px; width:var(--flash-w,126px); z-index:196;
   border:1px solid var(--primary-dim); border-radius:4px; overflow:hidden;
   background:rgba(0,18,32,.86); box-shadow:0 4px 18px rgba(0,0,0,.55);
   opacity:0; transform:translateY(-6px); pointer-events:none;
   transition:opacity .22s ease, transform .22s ease;
 }
 #mediaFlash.show{ opacity:1; transform:translateY(0); pointer-events:auto; }
-#mediaFlash img{ display:block; width:100%; height:auto; max-height:170px; object-fit:cover; }
+#mediaFlash img{ display:block; width:100%; height:auto; max-height:var(--flash-imgh,170px); object-fit:cover; }
+/* v1.70.0 — P1.5 : PILE DE FLASHS haut-droite (parité bandeau droite PC : cartes
+   tool_call éphémères, récent en haut ; la pensée #mediaFlash s'empile dessous). */
+#flashStack{
+  position:absolute; right:12px; z-index:195; width:var(--flash-w,126px);
+  display:flex; flex-direction:column; gap:6px; pointer-events:none;
+}
+.fs-card{
+  background:rgba(0,14,26,.92); border:1px solid var(--primary-dim); border-radius:8px;
+  padding:7px 9px; pointer-events:auto; box-shadow:0 4px 18px rgba(0,212,255,.10);
+  animation:fsIn .25s ease;
+}
+.fs-card .fs-h{ display:flex; align-items:center; gap:6px;
+  font:600 10px 'JetBrains Mono',Consolas,monospace; letter-spacing:1px; color:var(--primary); }
+.fs-card .fs-h .ico{ font-size:12px }
+.fs-card .fs-l{ font-size:10px; color:var(--text-0); margin-top:3px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:'JetBrains Mono',Consolas,monospace; }
+.fs-card.out{ opacity:0; transform:translateX(12px); transition:opacity .3s,transform .3s }
+@keyframes fsIn{ from{opacity:0; transform:translateX(16px)} to{opacity:1; transform:none} }
 .flash-tag{
   display:flex; justify-content:space-between; align-items:center; gap:4px;
   padding:3px 5px; font:9px/1.2 var(--mono,monospace); letter-spacing:.5px;
@@ -2938,7 +2956,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.69.0</span>
+        <span class="version-tag version-badge">· v1.70.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -3286,6 +3304,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
 
   <!-- v1.28.0 — Flash image éphémère. Dans .app (donc calé sur la colonne
        480px centrée), positionné en JS juste sous le header. -->
+  <!-- v1.70.0 — P1.5 : pile de flashs tool_call (parité bandeau droite PC) -->
+  <div id="flashStack" aria-hidden="true"></div>
   <div id="mediaFlash" aria-hidden="true">
     <button class="flash-close" id="flashClose" title="Fermer" tabindex="-1">✕</button>
     <!-- v1.52.0 phase 2 — ❤/🗑 sur la pensée (flash). Pas de vignette dédiée mobile,
@@ -3562,6 +3582,11 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <input type="range" class="settings-slider" id="settingsFollowUp" min="3" max="15" step="1" value="6">
       <span class="settings-val" id="settingsFollowUpVal">6s</span>
     </div>
+    <!-- v1.70.0 — P1.5 : taille des flashs (pile tool_call + pensée visuelle) -->
+    <div class="settings-row">
+      <span class="settings-label">Taille des flashs</span>
+      <button class="settings-btn settings-btn-toggle" id="settingsFlashSize">M · 126px</button>
+    </div>
     <div class="settings-row">
       <button class="settings-btn settings-btn-danger" id="settingsReset">🗑 Reset config (efface localStorage)</button>
     </div>
@@ -3677,7 +3702,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.69.0';   // v1.69.0 — P1.4 CODE mobile (parité APK v1.78.0) : AUDIT local hubs/cycles/dead (case 'audit' du codemap_cmd, avant ignoré — HUB_MIN parité PC, SCC Tarjan, dead=fan-in 0, card #codeAuditCard tappable) + DIFF GIT exploité (args[2]=fonctions touchées par le backend git, avant jeté : liste ± modifiée, badge MODIFIÉE sur la fiche, focus auto si 1 seule fonction). // v1.62.0 — parité mobile v1.71.0 : (B) jauge ne se dissipe plus entre 2 phrases (attend tts_end + GRACE_MS), (C) pensée flash cliquable partout + watchdog auto-hide, (D) itinéraire carte accumulé (routes[] + event 'itinerary') = parcours continu. // v1.61.0 — BADGE ✦ « pensée » dans le VIEWER plein écran (#mediaLightbox) : span #lbPass alimenté par renderView (it.passive galerie OU it.mode==='passive' flash), vert GS, masqué si vide. Parité PC/APK. // v1.60.0 — PORT depuis l'APK : BARRE DU BAS 3 zones (mini-hologramme d'état à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE, l'ancien FAB flottant est retiré) + JAUGE DE PAROLE (barre magenta fine en haut + anneau concentrique autour du mini-holo, décroissants et exacts via _ttsRemainingMs, gate target==='mobile', fondu au barge-in). La PWA était restée à l'ancien layout (lignée v1.59.x divergente) — patchs ciblés, aucun écrasement. // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
+  const VERSION = '1.70.0';   // v1.70.0 — P1.5 PILE DE FLASHS haut-droite (parité APK v1.79.0, cadrage validé Quang 12/07) : module FlashStack — case WS 'tool_call' branché (avant JETÉ) → carte éphémère par outil, max 3, récent en haut, durée = ephemeral_hud_duration_ms backend partagé, deadline horloge + watchdog 1s anti-throttling, pensée #mediaFlash INTACTE empilée dessous, réglage ⚙ « Taille des flashs » S/M/L (100/126/170px), contenant prêt P2.2. // v1.69.0 — P1.4 CODE mobile (parité APK v1.78.0) : AUDIT local hubs/cycles/dead (case 'audit' du codemap_cmd, avant ignoré — HUB_MIN parité PC, SCC Tarjan, dead=fan-in 0, card #codeAuditCard tappable) + DIFF GIT exploité (args[2]=fonctions touchées par le backend git, avant jeté : liste ± modifiée, badge MODIFIÉE sur la fiche, focus auto si 1 seule fonction). // v1.62.0 — parité mobile v1.71.0 : (B) jauge ne se dissipe plus entre 2 phrases (attend tts_end + GRACE_MS), (C) pensée flash cliquable partout + watchdog auto-hide, (D) itinéraire carte accumulé (routes[] + event 'itinerary') = parcours continu. // v1.61.0 — BADGE ✦ « pensée » dans le VIEWER plein écran (#mediaLightbox) : span #lbPass alimenté par renderView (it.passive galerie OU it.mode==='passive' flash), vert GS, masqué si vide. Parité PC/APK. // v1.60.0 — PORT depuis l'APK : BARRE DU BAS 3 zones (mini-hologramme d'état à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE, l'ancien FAB flottant est retiré) + JAUGE DE PAROLE (barre magenta fine en haut + anneau concentrique autour du mini-holo, décroissants et exacts via _ttsRemainingMs, gate target==='mobile', fondu au barge-in). La PWA était restée à l'ancien layout (lignée v1.59.x divergente) — patchs ciblés, aucun écrasement. // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -5330,6 +5355,130 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
                state: ($('#codeState') || {}).textContent || '' };
     }
     return { onCodemapCmd, getState, ensureDemo };
+  })();
+
+  // ============================================================
+  // v1.70.0 — P1.5 : PILE DE FLASHS haut-droite (parité bandeau droite PC).
+  // Mêmes events que le PC : chaque `tool_call` WS = carte éphémère (spec
+  // compacte portée de hudSpecForToolCall PC:6237), durée = réglage backend
+  // partagé `ephemeral_hud_duration_ms` (config_state) → PC et mobile flashent
+  // ENSEMBLE. Anti-throttling : deadline horloge murale + watchdog 1 s
+  // (pattern v1.56/v1.71 du flash pensée). La pensée (#mediaFlash) reste un
+  // module INTACT : placeFlash l'empile visuellement SOUS cette pile.
+  // Taille S/M/L (⚙ mobile, localStorage) : M = 126px = défaut historique.
+  // Contenant prêt P2.2 (une carte saura porter une image web éphémère).
+  // ============================================================
+  window.FlashStack = (function(){
+    const MAX = 3;
+    const SIZES = { s:{w:100,img:130}, m:{w:126,img:170}, l:{w:170,img:220} };
+    let durMs = 7000;                 // écrasé par config_state (réglage PC 2-30 s)
+    let cards = [];                   // [{el, deadline, header}]
+    let watch = null;
+    let size = localStorage.getItem('flash_size_mobile') || 'm';
+    if(!SIZES[size]) size = 'm';
+    function applySize(){
+      const s = SIZES[size];
+      document.documentElement.style.setProperty('--flash-w', s.w + 'px');
+      document.documentElement.style.setProperty('--flash-imgh', s.img + 'px');
+    }
+    function el(){ return document.getElementById('flashStack'); }
+    function place(){
+      const hd = document.querySelector('.header'); const c = el();
+      if(hd && c) c.style.top = (hd.offsetTop + hd.offsetHeight + 8) + 'px';
+    }
+    function height(){
+      const c = el();
+      return (c && cards.length) ? c.offsetHeight + 6 : 0;
+    }
+    const _base = p => String(p || '').split(/[\\\/]/).pop();
+    const SPEC = {
+      web_search:           { ico:'🔍', h:'WEB SEARCH',      line:i => i.query },
+      screenshot_describe:  { ico:'👁', h:'VISION SCAN' },
+      youtube_music_play:   { ico:'🎵', h:'MUSIC ENGINE',    line:i => i.query },
+      youtube_music_search: { ico:'🎵', h:'MUSIC ENGINE',    line:i => i.query },
+      youtube_search:       { ico:'▶',  h:'YOUTUBE',         line:i => i.query },
+      weather:              { ico:'⛅', h:'WEATHER',         line:i => i.city },
+      morning_brief:        { ico:'☕', h:'MORNING BRIEF' },
+      get_user_location:    { ico:'📍', h:'LOCATION' },
+      current_time:         { ico:'⏱',  h:'TIME' },
+      system_info:          { ico:'⚙',  h:'SYSTEM' },
+      read_file:            { ico:'📁', h:'READ FILE',       line:i => _base(i.path) },
+      list_dir:             { ico:'📁', h:'LIST DIR',        line:i => _base(i.path) },
+      write_file:           { ico:'✎',  h:'WRITE FILE',      line:i => _base(i.path) },
+      show_notification:    { ico:'🔔', h:'NOTIFICATION',    line:i => i.title },
+      open_url:             { ico:'🌐', h:'OPEN URL',        line:i => { try { return new URL(i.url).host; } catch(_) { return i.url; } } },
+      launch_app:           { ico:'🚀', h:'LAUNCH APP',      line:i => i.app },
+      remember_fact:        { ico:'🧠', h:'MEMORY · WRITE',  line:i => (i.fact || '').slice(0, 40) },
+      recall_facts:         { ico:'🧠', h:'MEMORY · RECALL', line:i => i.query },
+    };
+    function onToolCall(m){
+      if(!m || !m.name) return;
+      const c = el(); if(!c) return;
+      const inp = m.input || {};
+      const sp = SPEC[m.name] || { ico:'⚡', h:String(m.name).toUpperCase().replace(/_/g, ' ') };
+      const card = document.createElement('div'); card.className = 'fs-card';
+      const h = document.createElement('div'); h.className = 'fs-h';
+      const i = document.createElement('span'); i.className = 'ico'; i.textContent = sp.ico;
+      const t = document.createElement('span'); t.textContent = sp.h;
+      h.appendChild(i); h.appendChild(t); card.appendChild(h);
+      const lineTxt = sp.line ? (sp.line(inp) || '') : '';
+      if(lineTxt){
+        const l = document.createElement('div'); l.className = 'fs-l';
+        l.textContent = String(lineTxt); card.appendChild(l);
+      }
+      c.insertBefore(card, c.firstChild);
+      cards.unshift({ el: card, deadline: Date.now() + durMs, header: sp.h });
+      while(cards.length > MAX){ const old = cards.pop(); if(old.el) old.el.remove(); }
+      place();
+      window.dispatchEvent(new Event('resize'));   // recale #mediaFlash sous la pile
+      if(!watch) watch = setInterval(tick, 1000);  // watchdog horloge (anti-throttling)
+    }
+    function drop(entry){
+      if(!entry.el) return;
+      entry.el.classList.add('out');
+      setTimeout(() => { try { entry.el.remove(); } catch(_) {} }, 320);
+    }
+    function tick(){
+      const now = Date.now();
+      let changed = false;
+      cards = cards.filter(e => {
+        if(now >= e.deadline){ drop(e); changed = true; return false; }
+        return true;
+      });
+      if(changed) window.dispatchEvent(new Event('resize'));
+      if(!cards.length && watch){ clearInterval(watch); watch = null; }
+    }
+    document.addEventListener('visibilitychange', function(){
+      if(document.visibilityState === 'visible') tick();   // rattrapage au retour 1er plan
+    });
+    function onConfigState(m){
+      if(m && typeof m.ephemeral_hud_duration_ms === 'number'){
+        durMs = Math.max(2000, Math.min(30000, m.ephemeral_hud_duration_ms));
+      }
+    }
+    function setSize(k){
+      if(!SIZES[k]) return;
+      size = k; localStorage.setItem('flash_size_mobile', k);
+      applySize(); place();
+      window.dispatchEvent(new Event('resize'));
+    }
+    function getState(){
+      return { count: cards.length, headers: cards.map(e => e.header), size, durMs };
+    }
+    // Réglage ⚙ « Taille des flashs » : bouton cyclique S → M → L
+    const _btn = document.getElementById('settingsFlashSize');
+    if(_btn){
+      const label = k => k.toUpperCase() + ' · ' + SIZES[k].w + 'px';
+      _btn.textContent = label(size);
+      _btn.addEventListener('click', () => {
+        const order = ['s', 'm', 'l'];
+        setSize(order[(order.indexOf(size) + 1) % 3]);
+        _btn.textContent = label(size);
+      });
+    }
+    applySize();
+    window.addEventListener('resize', place);
+    return { onToolCall, onConfigState, getState, setSize, height, place };
   })();
 
   // v1.48.0 — P2 : fond de carte embarqué (Natural Earth 110m via world-atlas,
@@ -8691,9 +8840,16 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         case 'wake_detected':     onWakeDetected(m); break;
         case 'error':             onError(m); break;
         // v1.17.0e — events branchés (BOOST + USAGE + JARVIS/FRIDAY label)
+        // v1.70.0 — P1.5 : parité bandeau droite PC — flashs d'activité des outils
+        // (le PC spawne une carte HUD à chaque tool_call, jarvis-ui:8071 ; le
+        // mobile jetait cet event en silence).
+        case 'tool_call':
+          try { FlashStack.onToolCall(m); } catch(_) {}
+          break;
         case 'config_state':
           // v1.29.0 — reflète en direct le passif PC (maître) + le choix mobile.
           try { MediaImages.onConfigState(m); } catch(e){}
+          try { FlashStack.onConfigState(m); } catch(_) {}   // v1.70.0 — durée flashs partagée PC
           if(m && m.claude_model){
             mobileConfigState.claude_model = m.claude_model;
           }
@@ -9242,7 +9398,9 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       const hd = document.querySelector('.header');
       if (!hd || !flash) return;
       // Sous la barre d'onglets, jamais dessus : bas du header + marge.
-      flash.style.top = (hd.offsetTop + hd.offsetHeight + 8) + 'px';
+      // v1.70.0 — P1.5 : + hauteur de la pile de flashs (la pensée s'empile dessous).
+      const stackH = (window.FlashStack && FlashStack.height) ? FlashStack.height() : 0;
+      flash.style.top = (hd.offsetTop + hd.offsetHeight + 8 + stackH) + 'px';
     }
 
     function srcOf(it){
