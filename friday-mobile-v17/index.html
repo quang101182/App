@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.62.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
+<title>FRIDAY · v1.63.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -390,6 +390,20 @@ body[data-state="speaking"] .edge-glow{
 .map-info-badge.hidden,#cosmosInfoCard.hidden{display:none}
 .native-view-hint{position:absolute;bottom:6px;left:0;right:0;text-align:center;
   font-size:10px;color:var(--idle);pointer-events:none}
+/* v1.63.0 — P1.1 : HUD « couches actives » jumeau PC, adapté smartphone (choix Quang
+   12/07) : BANDEAU HORIZONTAL pleine largeur en bas (au-dessus du hint), UNE ligne,
+   labels raccourcis (SÉIS/AUR/VOLS/CYCL) — la pastille dégradée porte la rampe couleur.
+   pointer-events:none = le pan/pinch passe à travers. */
+#mapLayersHud{position:absolute;bottom:34px;left:8px;right:8px;z-index:6;   /* 34px : hint mesuré 24px de haut + marge (collision vue au harnais) */
+  display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:4px 8px;background:rgba(0,18,32,.72);border:1px solid rgba(0,212,255,.28);
+  border-radius:8px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  box-shadow:0 2px 14px rgba(0,0,0,.4);font:10px/1.3 'JetBrains Mono',monospace;color:#bfe6f5;
+  pointer-events:none;user-select:none}
+#mapLayersHud.hidden{display:none}
+#mapLayersHud .lh-chip{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+#mapLayersHud .lh-bar{width:14px;height:7px;border-radius:2px;box-shadow:0 0 4px rgba(255,255,255,.15) inset}
+#mapLayersHud .lh-count{color:#8fd0e8;font-variant-numeric:tabular-nums}
 body[data-current-view="map"] #view-map .native-view-wrap,
 body[data-current-view="cosmos"] #view-cosmos .native-view-wrap{flex:1 1 auto;min-height:240px}
 /* v1.48.0 — mesuré au harnais : sans flex:1 la vue reste à son min-content (240px),
@@ -2889,7 +2903,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.62.0</span>
+        <span class="version-tag version-badge">· v1.63.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -3626,7 +3640,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.62.0';   // v1.62.0 — parité mobile v1.71.0 : (B) jauge ne se dissipe plus entre 2 phrases (attend tts_end + GRACE_MS), (C) pensée flash cliquable partout + watchdog auto-hide, (D) itinéraire carte accumulé (routes[] + event 'itinerary') = parcours continu. // v1.61.0 — BADGE ✦ « pensée » dans le VIEWER plein écran (#mediaLightbox) : span #lbPass alimenté par renderView (it.passive galerie OU it.mode==='passive' flash), vert GS, masqué si vide. Parité PC/APK. // v1.60.0 — PORT depuis l'APK : BARRE DU BAS 3 zones (mini-hologramme d'état à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE, l'ancien FAB flottant est retiré) + JAUGE DE PAROLE (barre magenta fine en haut + anneau concentrique autour du mini-holo, décroissants et exacts via _ttsRemainingMs, gate target==='mobile', fondu au barge-in). La PWA était restée à l'ancien layout (lignée v1.59.x divergente) — patchs ciblés, aucun écrasement. // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
+  const VERSION = '1.63.0';   // v1.62.0 — parité mobile v1.71.0 : (B) jauge ne se dissipe plus entre 2 phrases (attend tts_end + GRACE_MS), (C) pensée flash cliquable partout + watchdog auto-hide, (D) itinéraire carte accumulé (routes[] + event 'itinerary') = parcours continu. // v1.61.0 — BADGE ✦ « pensée » dans le VIEWER plein écran (#mediaLightbox) : span #lbPass alimenté par renderView (it.passive galerie OU it.mode==='passive' flash), vert GS, masqué si vide. Parité PC/APK. // v1.60.0 — PORT depuis l'APK : BARRE DU BAS 3 zones (mini-hologramme d'état à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE, l'ancien FAB flottant est retiré) + JAUGE DE PAROLE (barre magenta fine en haut + anneau concentrique autour du mini-holo, décroissants et exacts via _ttsRemainingMs, gate target==='mobile', fondu au barge-in). La PWA était restée à l'ancien layout (lignée v1.59.x divergente) — patchs ciblés, aucun écrasement. // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -5082,14 +5096,20 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // (`globe {action,…}` et `cosmos_cmd {tool,args}`) — un event, chaque client
   // rend à sa façon (V1 : parité d'interaction, pas de rendu). Zéro backend.
   // Fonctionne PC éteint. Exposés en window.* (testabilité, patron MapHUD PC).
-  // Couches avancées PC non portées (choix P2 assumé) : seisms/aurora/flights/
-  // hurricanes/highlight_add + géométries geojson de frontières → ignorées ici.
+  // v1.63.0 (P1.1 convergence) : couches data-live PORTÉES en natif léger — seisms/
+  // aurora/flights/hurricanes + highlight_add/clear + pins_state (pins mémoire) + HUD
+  // « couches actives » (bandeau bas). Restent ignorées : frontières geojson pays/ville.
   // ============================================================
   window.MapNative = (function(){
     let canvas=null, ctx=null, badgeEl=null, W=0, H=0, dpr=1, started=false;
     // cam.scale = pixels CSS par degré. Vue monde au boot.
     const cam = { lng:10, lat:22, scale:1.05 };
     let pins=[], arc=null, routes=[], itinMode=false, fly=null, needsDraw=true, lastTouches=null;   // v1.62.0 — routes[] (accumulation itinéraire)
+    // v1.63.0 — P1.1 : couches data-live (parité PC) : séismes/aurore/vols/cyclones +
+    // highlights geojson + pins mémoire. auroraCount = nb de points REÇUS (HUD, parité
+    // compteur PC) ; auroraPts = sous-échantillonné pour le rendu (perf mobile).
+    let seisms=[], auroraPts=[], auroraCount=0, flights=[], hurricanes=[], memPins=[], hudEl=null;
+    const highlights=new Map();
 
     function activeView(){ return document.body.getAttribute('data-current-view')==='map'; }
     function minScale(){ return canvas ? Math.max(0.55, (canvas.clientWidth||384)/360) : 1; }
@@ -5212,13 +5232,146 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         ctx.fillText(pin.city, p[0]+7*dpr, p[1]+3*dpr);
       }
     }
+    // ============ v1.63.0 — P1.1 : couches data-live (rampes IDENTIQUES au PC) ============
+    // _seismColor / _flightColor / _hurricaneColor / rampe circle aurora de jarvis-ui.
+    function seismColor(m){ return m>=7?'#ff1a4f':m>=6?'#ff3a4f':m>=5?'#ff9500':m>=4?'#ffd700':'#ffec8b'; }
+    function seismRadius(m){ return m>=7?18:m>=6?14:m>=5?10:m>=4?7:5; }
+    function flightColor(a){ return a>=11000?'#ff5ac8':a>=9000?'#b05aff':a>=6000?'#00d4ff':a>=3000?'#00ffaa':'#ffd700'; }
+    function hurrColor(v){ return v>=157?'#5b1d6e':v>=130?'#ff1a4f':v>=111?'#ff3a4f':v>=96?'#ff9500':v>=74?'#ffd700':v>=39?'#00ffaa':'#00d4ff'; }
+    // Rampe « voile d'aurore » sans rouge (feedback Quang 12/07, jumelle heatmap PC v1.17.2).
+    function auroraColor(i){ return i>=85?'#c08fff':i>=60?'#8fb4ff':i>=30?'#35e0b8':'#2fe08a'; }
+    function drawSeisms(){
+      // Statique + glow (pas de pulse animé : boucle dirty-flag conservée, batterie).
+      for(let i=0;i<seisms.length;i++){
+        const s=seisms[i], q=px(+s.lng,+s.lat);
+        if(q[0]<-40||q[0]>W+40||q[1]<-40||q[1]>H+40) continue;
+        const c=seismColor(+s.mag||0), r=Math.max(3, seismRadius(+s.mag||0)*0.75)*dpr;
+        const g=ctx.createRadialGradient(q[0],q[1],0,q[0],q[1],r*1.8);
+        g.addColorStop(0,c+'cc'); g.addColorStop(0.55,c+'44'); g.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(q[0],q[1],r*1.8,0,6.2832); ctx.fill();
+        ctx.fillStyle=c; ctx.beginPath(); ctx.arc(q[0],q[1],r*0.45,0,6.2832); ctx.fill();
+      }
+    }
+    function drawAurora(){
+      if(!auroraPts.length) return;
+      ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.16;   // voile doux (0.22 faisait des nuages durs)
+      for(let i=0;i<auroraPts.length;i++){
+        const p=auroraPts[i], q=px(+p[0],+p[1]);
+        if(q[0]<-20||q[0]>W+20||q[1]<-20||q[1]>H+20) continue;
+        ctx.fillStyle=auroraColor(+p[2]||0);
+        ctx.beginPath(); ctx.arc(q[0],q[1],6*dpr,0,6.2832); ctx.fill();
+      }
+      ctx.restore();
+    }
+    function drawFlights(){
+      // ✈ pointe NE par défaut → rotation heading-45° (même convention que le PC).
+      const glow = flights.length<=120;   // shadowBlur coûteux → coupé au-delà (perf A32)
+      for(let i=0;i<flights.length;i++){
+        const f=flights[i], q=px(+f.lng,+f.lat);
+        if(q[0]<-20||q[0]>W+20||q[1]<-20||q[1]>H+20) continue;
+        const c=flightColor(+f.alt_m||0);
+        ctx.save(); ctx.translate(q[0],q[1]); ctx.rotate(((+f.heading||0)-45)*Math.PI/180);
+        ctx.font=(11*dpr)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        if(glow){ ctx.shadowColor=c; ctx.shadowBlur=5*dpr; }
+        ctx.fillStyle=c; ctx.fillText('✈',0,0); ctx.restore();
+      }
+    }
+    function drawHurricanes(){
+      for(let i=0;i<hurricanes.length;i++){
+        const h=hurricanes[i], q=px(+h.lng,+h.lat);
+        if(q[0]<-40||q[0]>W+40||q[1]<-40||q[1]>H+40) continue;
+        const v=+h.intensity_mph||0, c=hurrColor(v);
+        const fs=(v>=130?20:v>=96?17:v>=74?15:13)*dpr;
+        ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.font=fs+'px sans-serif'; ctx.shadowColor=c; ctx.shadowBlur=8*dpr;
+        ctx.fillText('🌀',q[0],q[1]);
+        ctx.shadowBlur=0; ctx.font=(7.5*dpr)+'px monospace'; ctx.fillStyle=c;
+        ctx.fillText(String(h.name||'').toUpperCase(),q[0],q[1]+fs*0.75+4*dpr);
+        ctx.restore();
+      }
+    }
+    function eachRing(geo, cb){
+      // Descend Polygon/MultiPolygon/LineString/… jusqu'aux anneaux de [lng,lat]. Tolérant.
+      if(!geo) return;
+      (function walk(a){
+        if(!Array.isArray(a)) return;
+        if(a.length && Array.isArray(a[0]) && typeof a[0][0]==='number'){ cb(a); return; }
+        for(let i=0;i<a.length;i++) walk(a[i]);
+      })(geo.coordinates || geo);
+    }
+    function drawHighlights(){
+      highlights.forEach(function(hl){
+        const col = hl.color || '#a855f7';
+        if(hl.geo){
+          ctx.beginPath();
+          eachRing(hl.geo, function(ring){
+            let prevLng=null;
+            for(let i=0;i<ring.length;i++){
+              const lng=+ring[i][0], lat=+ring[i][1], p=px(lng,lat);
+              // Antiméridien : même garde que drawLand (pas de trait parasite).
+              if(i===0 || (prevLng!==null && Math.abs(lng-prevLng)>180)) ctx.moveTo(p[0],p[1]);
+              else ctx.lineTo(p[0],p[1]);
+              prevLng=lng;
+            }
+          });
+          ctx.save();
+          ctx.strokeStyle=col; ctx.globalAlpha=0.4; ctx.lineWidth=6*dpr; ctx.stroke();   // glow (2 passes comme le PC)
+          ctx.globalAlpha=0.95; ctx.lineWidth=2*dpr; ctx.stroke();
+          ctx.restore();
+        } else if(isFinite(hl.lng) && isFinite(hl.lat)){
+          const q=px(hl.lng,hl.lat);
+          ctx.save(); ctx.strokeStyle=col;
+          ctx.globalAlpha=0.4; ctx.lineWidth=5*dpr; ctx.beginPath(); ctx.arc(q[0],q[1],11*dpr,0,6.2832); ctx.stroke();
+          ctx.globalAlpha=0.95; ctx.lineWidth=2*dpr; ctx.beginPath(); ctx.arc(q[0],q[1],11*dpr,0,6.2832); ctx.stroke();
+          ctx.restore();
+        }
+      });
+    }
+    function drawMemPins(){
+      for(let i=0;i<memPins.length;i++){
+        const p=memPins[i], q=px(+p.lng,+p.lat);
+        if(q[0]<-30||q[0]>W+60||q[1]<-30||q[1]>H+30) continue;
+        ctx.fillStyle='#00ffaa'; ctx.beginPath(); ctx.arc(q[0],q[1],2.5*dpr,0,6.2832); ctx.fill();
+        ctx.strokeStyle='rgba(0,255,170,0.4)'; ctx.lineWidth=1*dpr;
+        ctx.beginPath(); ctx.arc(q[0],q[1],5*dpr,0,6.2832); ctx.stroke();
+        ctx.font=(8*dpr)+'px monospace'; ctx.fillStyle='rgba(191,230,245,0.85)'; ctx.textAlign='left';
+        ctx.fillText(String(p.name||'').toUpperCase(),q[0]+7*dpr,q[1]+2.5*dpr);
+      }
+    }
+    // HUD « couches actives » — jumeau du PC (#map-layers-hud), format BANDEAU bas
+    // pleine largeur, labels courts (choix Quang 12/07). Mêmes rampes que le PC.
+    const HUD_META = {
+      seisms:    { label:'SÉIS', grad:'linear-gradient(90deg,#00ffaa,#ffd700,#ff8a3d,#ff2d2d)' },
+      aurora:    { label:'AUR',  grad:'linear-gradient(90deg,#1a6b3a,#38ffa0,#b07fff)' },
+      flights:   { label:'VOLS', grad:'linear-gradient(90deg,#ffd700,#00ffaa,#00d4ff,#b05aff,#ff5ac8)' },
+      hurricanes:{ label:'CYCL', grad:'linear-gradient(90deg,#00d4ff,#ffd700,#ff8a3d,#ff2d2d)' }
+    };
+    function renderHud(){
+      if(!hudEl) return;
+      const counts={ seisms:seisms.length, aurora:auroraCount, flights:flights.length, hurricanes:hurricanes.length };
+      const act=['seisms','aurora','flights','hurricanes'].filter(function(k){ return counts[k]>0; });
+      if(!act.length){ hudEl.classList.add('hidden'); hudEl.innerHTML=''; return; }
+      hudEl.innerHTML=act.map(function(k){
+        const m=HUD_META[k];
+        return '<span class="lh-chip"><span class="lh-bar" style="background:'+m.grad+'"></span>'
+          +m.label+' <span class="lh-count">'+counts[k]+'</span></span>';
+      }).join('');
+      hudEl.classList.remove('hidden');
+    }
+    // =====================================================================================
     function draw(){
       ctx.clearRect(0,0,W,H);
       drawGraticule();
       drawLand();
+      drawHighlights();   // v1.63.0 — sous les couches data (contour pays/ville)
+      drawAurora();       // v1.63.0 — halos additifs sous les markers
       drawArc();
       drawRoute();
+      drawSeisms();       // v1.63.0
+      drawHurricanes();   // v1.63.0
+      drawFlights();      // v1.63.0
       drawPins();
+      drawMemPins();      // v1.63.0 — au-dessus (petits, labels)
     }
     function loop(){
       requestAnimationFrame(loop);
@@ -5258,7 +5411,9 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       if(g.coordinates && Array.isArray(g.coordinates)) return g.coordinates;
       return null;   // polyline encodée non supportée → les pins + l'arc suffisent
     }
-    function clearAll(){ pins=[]; arc=null; routes=[]; itinMode=false; badge(null); needsDraw=true; }   // v1.62.0
+    function clearAll(){ pins=[]; arc=null; routes=[]; itinMode=false; badge(null);
+      seisms=[]; auroraPts=[]; auroraCount=0; flights=[]; hurricanes=[]; highlights.clear(); memPins=[];   // v1.63.0
+      renderHud(); needsDraw=true; }
     function onGlobe(m){
       if(!started || !m) return;
       switch(m.action){
@@ -5333,7 +5488,38 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
           break;
         case 'close': clearAll(); break;
         case 'error': badge('LIEU INTROUVABLE'+(m.city ? ' : '+m.city.toUpperCase() : '')); break;
-        default: break;   // show + couches avancées non portées (P2 assumé)
+        // ===== v1.63.0 — P1.1 : couches data-live (payloads déjà broadcastés, cf jarvis_backend ws_broadcast) =====
+        case 'seisms':
+          seisms = Array.isArray(m.seisms) ? m.seisms.filter(function(s){ return s && isFinite(+s.lat) && isFinite(+s.lng); }) : [];
+          renderHud(); needsDraw=true; break;
+        case 'seisms_clear': seisms=[]; renderHud(); needsDraw=true; break;
+        case 'aurora': {
+          const _pts = Array.isArray(m.points) ? m.points.filter(function(p){ return Array.isArray(p) && p.length>=3; }) : [];
+          auroraCount = _pts.length;
+          const _step = Math.max(1, Math.ceil(_pts.length/800));   // cap rendu 800 pts (perf A32/Honor)
+          auroraPts = _step>1 ? _pts.filter(function(_,i){ return i%_step===0; }) : _pts;
+          renderHud(); needsDraw=true; break;
+        }
+        case 'aurora_clear': auroraPts=[]; auroraCount=0; renderHud(); needsDraw=true; break;
+        case 'flights':
+          flights = Array.isArray(m.flights) ? m.flights.filter(function(f){ return f && isFinite(+f.lat) && isFinite(+f.lng); }) : [];
+          renderHud(); needsDraw=true; break;
+        case 'flights_clear': flights=[]; renderHud(); needsDraw=true; break;
+        case 'hurricanes':
+          hurricanes = Array.isArray(m.storms) ? m.storms.filter(function(s){ return s && isFinite(+s.lat) && isFinite(+s.lng); }) : [];
+          renderHud(); needsDraw=true; break;
+        case 'hurricanes_clear': hurricanes=[]; renderHud(); needsDraw=true; break;
+        case 'highlight_add':
+          if(m.id) highlights.set(m.id, { color:m.color||'#a855f7', geo:m.geojson||null, lat:+m.lat, lng:+m.lng });
+          needsDraw=true; break;
+        case 'highlight_clear':
+          if(m.id) highlights.delete(m.id); else highlights.clear();
+          needsDraw=true; break;
+        case 'pins_state':
+          // Full state (re-broadcasté par le backend au show + à chaque mention de lieu).
+          memPins = Array.isArray(m.pins) ? m.pins.filter(function(p){ return p && isFinite(+p.lat) && isFinite(+p.lng); }) : [];
+          needsDraw=true; break;
+        default: break;   // 'show' + actions résiduelles (frontières geojson pays/ville) non portées
       }
     }
     function init(){
@@ -5341,6 +5527,13 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       badgeEl = document.getElementById('mapInfoBadge');
       if(!canvas || started) return;
       ctx = canvas.getContext('2d');
+      // v1.63.0 — HUD couches injecté en JS (zéro HTML statique à diverger).
+      hudEl = document.getElementById('mapLayersHud');
+      if(!hudEl && canvas.parentElement){
+        hudEl = document.createElement('div');
+        hudEl.id = 'mapLayersHud'; hudEl.className = 'hidden';
+        canvas.parentElement.appendChild(hudEl);
+      }
       bindTouch();
       started = true;
       cam.scale = minScale();
@@ -5348,7 +5541,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     }
     function getState(){
       return { pins: pins.map(p=>p.city), badge: badgeEl && !badgeEl.classList.contains('hidden') ? badgeEl.textContent : null,
-               hasArc: !!arc, hasRoute: !!(route && route.coords), cam: {lng:+cam.lng.toFixed(2), lat:+cam.lat.toFixed(2), scale:+cam.scale.toFixed(2)} };
+               hasArc: !!arc, hasRoute: routes.length>0,   // v1.63.0 — FIX préexistant : `route` n'existait plus (ReferenceError)
+               layers: { seisms:seisms.length, aurora:auroraCount, flights:flights.length,
+                         hurricanes:hurricanes.length, highlights:highlights.size, memPins:memPins.length },
+               cam: {lng:+cam.lng.toFixed(2), lat:+cam.lat.toFixed(2), scale:+cam.scale.toFixed(2)} };
     }
     return { init:init, onGlobe:onGlobe, getState:getState };
   })();
