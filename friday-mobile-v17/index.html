@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.64.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
+<title>FRIDAY · v1.65.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -388,6 +388,21 @@ body[data-state="speaking"] .edge-glow{
   background:rgba(0,14,26,.88);border:1px solid var(--primary-dim);color:var(--text-0);
   font:600 11px 'JetBrains Mono',monospace;letter-spacing:1px;padding:6px 10px;border-radius:6px}
 .map-info-badge.hidden,#cosmosInfoCard.hidden{display:none}
+/* v1.65.0 — P1.2 : chips LIVE cosmos (ISS/NEO/météo), haut-droite (espace mesuré libre :
+   fiche focus = haut-gauche, hint = bas). Colonne étroite qui s'étire vers le bas.
+   Card cosmos plafonnée 44% + chips 48% → zéro chevauchement possible à 360px. */
+#cosmosInfoCard{max-width:44%}
+#cosmosLiveHud{position:absolute;top:8px;right:8px;z-index:6;display:none;flex-direction:column;
+  gap:6px;align-items:flex-end;max-width:48%;pointer-events:none}
+#cosmosLiveHud .live-chip{background:rgba(0,18,32,.78);border:1px solid rgba(0,212,255,.28);
+  border-radius:8px;padding:5px 8px;font:10px/1.4 'JetBrains Mono',monospace;color:#bfe6f5;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 2px 10px rgba(0,0,0,.4);
+  text-align:right}
+#cosmosLiveHud .live-chip .t{color:#00d4ff;font-size:9px;letter-spacing:1px}
+#cosmosLiveHud .live-chip.warn{border-color:rgba(255,170,60,.45)}
+#cosmosLiveHud .live-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:#00ffaa;
+  vertical-align:1px;margin-right:3px;animation:cosmosblink 1.6s infinite}
+@keyframes cosmosblink{50%{opacity:.25}}
 .native-view-hint{position:absolute;bottom:6px;left:0;right:0;text-align:center;
   font-size:10px;color:var(--idle);pointer-events:none}
 /* v1.63.0 — P1.1 : HUD « couches actives » jumeau PC, adapté smartphone (choix Quang
@@ -2903,7 +2918,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.64.0</span>
+        <span class="version-tag version-badge">· v1.65.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -3640,7 +3655,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.64.0';   // v1.62.0 — parité mobile v1.71.0 : (B) jauge ne se dissipe plus entre 2 phrases (attend tts_end + GRACE_MS), (C) pensée flash cliquable partout + watchdog auto-hide, (D) itinéraire carte accumulé (routes[] + event 'itinerary') = parcours continu. // v1.61.0 — BADGE ✦ « pensée » dans le VIEWER plein écran (#mediaLightbox) : span #lbPass alimenté par renderView (it.passive galerie OU it.mode==='passive' flash), vert GS, masqué si vide. Parité PC/APK. // v1.60.0 — PORT depuis l'APK : BARRE DU BAS 3 zones (mini-hologramme d'état à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE, l'ancien FAB flottant est retiré) + JAUGE DE PAROLE (barre magenta fine en haut + anneau concentrique autour du mini-holo, décroissants et exacts via _ttsRemainingMs, gate target==='mobile', fondu au barge-in). La PWA était restée à l'ancien layout (lignée v1.59.x divergente) — patchs ciblés, aucun écrasement. // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
+  const VERSION = '1.65.0';   // v1.62.0 — parité mobile v1.71.0 : (B) jauge ne se dissipe plus entre 2 phrases (attend tts_end + GRACE_MS), (C) pensée flash cliquable partout + watchdog auto-hide, (D) itinéraire carte accumulé (routes[] + event 'itinerary') = parcours continu. // v1.61.0 — BADGE ✦ « pensée » dans le VIEWER plein écran (#mediaLightbox) : span #lbPass alimenté par renderView (it.passive galerie OU it.mode==='passive' flash), vert GS, masqué si vide. Parité PC/APK. // v1.60.0 — PORT depuis l'APK : BARRE DU BAS 3 zones (mini-hologramme d'état à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE, l'ancien FAB flottant est retiré) + JAUGE DE PAROLE (barre magenta fine en haut + anneau concentrique autour du mini-holo, décroissants et exacts via _ttsRemainingMs, gate target==='mobile', fondu au barge-in). La PWA était restée à l'ancien layout (lignée v1.59.x divergente) — patchs ciblés, aucun écrasement. // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -5559,6 +5574,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   window.CosmosNative = (function(){
     let canvas=null, ctx=null, cardEl=null, W=0, H=0, dpr=1, started=false;
     let rot=0, vel=0.0012, dragX=null, zoom=1, focused=null, stars=null;
+    // v1.65.0 — P1.2 : données LIVE (ISS/NEO/météo spatiale — mêmes APIs que le POC PC,
+    // fetch direct navigateur) + interactions manuelles (tap planète, pinch zoom).
+    let iss=null, issTimer=null, neo=null, sw=null, liveHudEl=null, touches=null, tapInfo=null;
+    const NASA_KEY='DEMO_KEY';   // même clé que le POC PC (quota par IP)
     const PLANETS=[
       { n:'Mercure', alias:'mercury', col:'#b8a08a', r:46,  size:2.6, T:24  },
       { n:'Vénus',   alias:'venus',   col:'#e6c87a', r:66,  size:3.6, T:38  },
@@ -5622,6 +5641,13 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       ctx.fillStyle='#f5d97b';
       ctx.beginPath(); ctx.arc(W/2, H*0.44, 8*dpr*Math.min(zoom,1.6), 0, Math.PI*2); ctx.fill();
       ctx.shadowBlur=0;
+      // v1.65.0 — météo spatiale : halo solaire modulé par l'activité (formule POC PC)
+      if(sw && sw.intensity>1){
+        ctx.shadowColor='#ffbb33'; ctx.shadowBlur=24*dpr*sw.intensity;
+        ctx.fillStyle='rgba(245,217,123,0.30)';
+        ctx.beginPath(); ctx.arc(W/2, H*0.44, 8*dpr*Math.min(zoom,1.6)*1.15, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur=0;
+      }
       // planètes
       ctx.font=(9.5*dpr)+'px "JetBrains Mono", monospace';
       for(const p of PLANETS){
@@ -5641,6 +5667,31 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         }
         ctx.fillStyle = isFocus ? 'rgba(216,232,255,1)' : 'rgba(160,190,215,.75)';
         ctx.fillText(p.n, pos.x+8*dpr, pos.y+3*dpr);
+      }
+      // v1.65.0 — ISS + NEO autour de la Terre (rendu schématique ; les DONNÉES des
+      // chips sont réelles). Dessiné dans le repère translaté (suit le focus).
+      if(iss || (neo && neo.count>0)){
+        const ep = planetPos(PLANETS[2], t);
+        if(neo && neo.count>0){
+          const nShow = Math.min(neo.count, 10);
+          const nHaz = Math.min(neo.hazardous, nShow);
+          for(let i=0;i<nShow;i++){
+            const na = i*2.399 + t/9000;
+            const rr = (14 + (i%5)*3.2)*dpr;
+            ctx.fillStyle = i<nHaz ? '#ff5a5a' : '#9ab0c0';
+            ctx.beginPath();
+            ctx.arc(ep.x+Math.cos(na)*rr, ep.y+Math.sin(na)*rr*0.7, (i<nHaz?1.6:1.2)*dpr, 0, Math.PI*2);
+            ctx.fill();
+          }
+        }
+        if(iss){
+          const ia = t/2600;
+          ctx.strokeStyle='rgba(0,255,170,.3)'; ctx.lineWidth=1;
+          ctx.beginPath(); ctx.ellipse(ep.x, ep.y, 11*dpr, 11*dpr*0.6, 0, 0, Math.PI*2); ctx.stroke();
+          ctx.fillStyle='#ccf5ff'; ctx.shadowColor='#00ffaa'; ctx.shadowBlur=6*dpr;
+          ctx.beginPath(); ctx.arc(ep.x+Math.cos(ia)*11*dpr, ep.y+Math.sin(ia)*11*dpr*0.6, 1.8*dpr, 0, Math.PI*2); ctx.fill();
+          ctx.shadowBlur=0;
+        }
       }
       ctx.restore();
     }
@@ -5664,6 +5715,109 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       focused=p; zoom=1.55;
       card(p.n.toUpperCase()+' · orbite '+p.r+' u · demandez « raconte-moi '+p.n+' » sur le PC pour la version 3D');
     }
+    // ============ v1.65.0 — P1.2 : LIVE (mêmes sources que le POC PC) ============
+    function ensureLiveHud(){
+      if(liveHudEl || !canvas || !canvas.parentElement) return;
+      liveHudEl=document.createElement('div');
+      liveHudEl.id='cosmosLiveHud';
+      canvas.parentElement.appendChild(liveHudEl);
+    }
+    function renderLiveHud(){
+      ensureLiveHud();
+      if(!liveHudEl) return;
+      const chips=[];
+      if(iss) chips.push('<div class="live-chip"><span class="t"><span class="live-dot"></span>🛰 ISS LIVE</span><br>'
+        + iss.lat.toFixed(1)+'°'+(iss.lat>=0?'N':'S')+' · '+iss.lng.toFixed(1)+'°'+(iss.lng>=0?'E':'O')+'<br>'
+        + 'alt '+Math.round(iss.alt)+' km · '+Math.round(iss.vel).toLocaleString('fr-FR')+' km/h</div>');
+      if(neo) chips.push(neo.err
+        ? '<div class="live-chip"><span class="t">☄ NEO 7 JOURS</span><br>indisponible (quota NASA)</div>'
+        : '<div class="live-chip"><span class="t">☄ NEO 7 JOURS</span><br>'
+          + neo.count+' corps · <span style="color:#ff8a3d">'+neo.hazardous+' dangereux</span>'
+          + (neo.biggest ? '<br>max '+Math.round(neo.biggest)+' m' : '')
+          + (neo.stale ? '<br><span style="color:#6d90a8">données en cache</span>' : '')+'</div>');
+      if(sw) chips.push(sw.err
+        ? '<div class="live-chip"><span class="t">☀ MÉTÉO SPATIALE</span><br>indisponible (quota NASA)</div>'
+        : '<div class="live-chip'+(sw.intensity>=1.8?' warn':'')+'">'
+          + '<span class="t">☀ MÉTÉO SPATIALE</span><br>'+sw.flares+' flares · '+sw.cmes+' CME<br>'
+          + '<span style="color:#ffd700">'+sw.tag+'</span>'
+          + (sw.stale ? ' <span style="color:#6d90a8">(cache)</span>' : '')+'</div>');
+      liveHudEl.innerHTML=chips.join('');
+      liveHudEl.style.display=chips.length?'flex':'none';
+    }
+    function fetchISS(){
+      if(!activeView()) return;   // batterie : pas de fetch si l'onglet cosmos est caché
+      fetch('https://api.wheretheiss.at/v1/satellites/25544',{cache:'no-store'})
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          iss={ lat:+d.latitude, lng:+d.longitude, alt:+d.altitude, vel:+d.velocity };
+          renderLiveHud();
+        }).catch(function(){});
+    }
+    function startISS(){
+      if(issTimer){ fetchISS(); return; }
+      fetchISS();
+      issTimer=setInterval(fetchISS, 5000);   // même cadence que le POC PC
+    }
+    function stopISS(){ if(issTimer){ clearInterval(issTimer); issTimer=null; } iss=null; renderLiveHud(); }
+    function dateStr(d){ return d.toISOString().slice(0,10); }
+    // Cache localStorage 30 min : la DEMO_KEY NASA = 30 req/h par IP — sans cache,
+    // 2 démos d'affilée épuisent le quota (mesuré au harnais 12/07). En échec sans
+    // cache → chip « indisponible » honnête (jamais un faux « calme »).
+    const NASA_TTL=1800000;
+    function cacheGet(key){
+      try{ const c=JSON.parse(localStorage.getItem(key)||'null');
+           if(c && c.data) return { data:c.data, fresh:(Date.now()-c.ts)<NASA_TTL }; }catch(_){}
+      return null;
+    }
+    function cachePut(key,data){ try{ localStorage.setItem(key,JSON.stringify({ts:Date.now(),data:data})); }catch(_){} }
+    function fetchNEO(){
+      const cached=cacheGet('cosmos.neo');
+      if(cached && cached.fresh){ neo=cached.data; renderLiveHud(); return; }
+      const end=new Date(), start=new Date(Date.now()-6*86400000);
+      fetch('https://api.nasa.gov/neo/rest/v1/feed?start_date='+dateStr(start)+'&end_date='+dateStr(end)+'&api_key='+NASA_KEY,{cache:'no-store'})
+        .then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); })
+        .then(function(d){
+          let count=0, haz=0, biggest=0;
+          const days=d.near_earth_objects||{};
+          Object.keys(days).forEach(function(k){
+            (days[k]||[]).forEach(function(o){
+              count++;
+              if(o.is_potentially_hazardous_asteroid) haz++;
+              const dm=o.estimated_diameter && o.estimated_diameter.meters ? +o.estimated_diameter.meters.estimated_diameter_max : 0;
+              if(dm>biggest) biggest=dm;
+            });
+          });
+          neo={ count:count, hazardous:haz, biggest:biggest };
+          cachePut('cosmos.neo', neo);
+          renderLiveHud();
+        }).catch(function(){
+          neo = cached ? Object.assign({}, cached.data, {stale:true}) : {err:true};
+          renderLiveHud();
+        });
+    }
+    function fetchSW(){
+      const cached=cacheGet('cosmos.sw');
+      if(cached && cached.fresh){ sw=cached.data; renderLiveHud(); return; }
+      const end=new Date(), start=new Date(Date.now()-6*86400000);
+      const q='?startDate='+dateStr(start)+'&endDate='+dateStr(end)+'&api_key='+NASA_KEY;
+      function jok(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); }
+      Promise.all([
+        fetch('https://api.nasa.gov/DONKI/FLR'+q,{cache:'no-store'}).then(jok),
+        fetch('https://api.nasa.gov/DONKI/CME'+q,{cache:'no-store'}).then(jok)
+      ]).then(function(res){
+        const f=Array.isArray(res[0])?res[0].length:0, c=Array.isArray(res[1])?res[1].length:0;
+        const inten=Math.min(3, 1+(f+c)*0.05);   // formule POC PC
+        sw={ flares:f, cmes:c, intensity:inten,
+             tag: inten>=2.5?'tempête solaire':inten>=1.8?'actif':inten>=1.2?'modéré':'calme' };
+        cachePut('cosmos.sw', sw);
+        renderLiveHud();
+      }).catch(function(){
+        sw = cached ? Object.assign({}, cached.data, {stale:true}) : {err:true};
+        renderLiveHud();
+      });
+    }
+    function stopLive(){ stopISS(); neo=null; sw=null; renderLiveHud(); }
+    // =============================================================================
     function onCosmosCmd(m){
       if(!started || !m || !m.tool) return;
       switch(m.tool){
@@ -5675,17 +5829,60 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         case 'focus_planet': focus(m.args && m.args[0]); break;
         case 'focus_sun':    focus('soleil'); break;
         case 'reset_view':   focused=null; zoom=1; card(null); break;
-        case 'close':        focused=null; zoom=1; card(null); break;
-        default: break;   // stories/ISS/galaxie… = expérience PC (non portées, P2 assumé)
+        case 'close':        focused=null; zoom=1; card(null); stopLive(); break;
+        // ===== v1.65.0 — P1.2 : données live portées en natif =====
+        case 'iss_show':       startISS(); break;
+        case 'iss_hide':       stopISS(); break;
+        case 'show_asteroids': fetchNEO(); break;
+        case 'space_weather':  fetchSW(); break;
+        default: break;   // stories/galaxie/compare… = expérience PC (non portées)
       }
     }
+    function snapT(e){
+      const out=[]; for(let i=0;i<e.touches.length && i<2;i++) out.push({x:e.touches[i].clientX, y:e.touches[i].clientY});
+      return out;
+    }
+    // v1.65.0 — parité interactions PC (demande Quang 12/07) : TAP = sélection
+    // planète/soleil (fiche), PINCH = zoom (delta incrémental — leçon fix carte
+    // v1.64.0), drag 1 doigt = rotation (existant conservé).
     function bindTouch(){
-      canvas.addEventListener('touchstart', function(e){ dragX=e.touches[0].clientX; }, {passive:true});
-      canvas.addEventListener('touchend',   function(){ dragX=null; }, {passive:true});
-      canvas.addEventListener('touchmove',  function(e){
-        if(dragX===null) return;
-        rot += (e.touches[0].clientX-dragX)*.005;
-        dragX=e.touches[0].clientX;
+      canvas.addEventListener('touchstart', function(e){
+        touches=snapT(e);
+        dragX = e.touches.length===1 ? e.touches[0].clientX : null;
+        tapInfo = e.touches.length===1 ? { x:e.touches[0].clientX, y:e.touches[0].clientY, t:performance.now(), moved:false } : null;
+      }, {passive:true});
+      canvas.addEventListener('touchend', function(e){
+        if(tapInfo && !tapInfo.moved && performance.now()-tapInfo.t<350 && e.touches.length===0){
+          const rct=canvas.getBoundingClientRect();
+          const tx=(tapInfo.x-rct.left)*dpr, ty=(tapInfo.y-rct.top)*dpr;
+          const now=performance.now();
+          let ox=0, oy=0;
+          if(focused){ const fp=planetPos(focused, now); ox=W/2-fp.x; oy=H*0.44-fp.y; }
+          if(Math.hypot(tx-(W/2+ox), ty-(H*0.44+oy)) < 24*dpr){ focus('soleil'); }
+          else {
+            let best=null, bd=1e9;
+            for(const p of PLANETS){
+              const pos=planetPos(p, now);
+              const d=Math.hypot(tx-(pos.x+ox), ty-(pos.y+oy));
+              if(d<bd){ bd=d; best=p; }
+            }
+            if(best && bd < 30*dpr) focus(best.n);
+          }
+        }
+        touches=null; dragX=null; tapInfo=null;
+      }, {passive:true});
+      canvas.addEventListener('touchmove', function(e){
+        const t=snapT(e);
+        if(tapInfo && t.length && Math.hypot(t[0].x-tapInfo.x, t[0].y-tapInfo.y)>8) tapInfo.moved=true;
+        if(t.length>=2 && touches && touches.length>=2){
+          const d0=Math.hypot(touches[1].x-touches[0].x, touches[1].y-touches[0].y);
+          const d1=Math.hypot(t[1].x-t[0].x, t[1].y-t[0].y);
+          if(d0>0) zoom=Math.min(3.5, Math.max(0.5, zoom*d1/d0));
+        } else if(t.length===1 && dragX!==null){
+          rot += (t[0].x-dragX)*.005;
+          dragX=t[0].x;
+        }
+        touches=t;
         e.preventDefault();
       }, {passive:false});
     }
@@ -5700,7 +5897,9 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     }
     function getState(){
       return { focused: focused ? focused.n : null, zoom:+zoom.toFixed(2),
-               card: cardEl && !cardEl.classList.contains('hidden') ? cardEl.textContent : null };
+               card: cardEl && !cardEl.classList.contains('hidden') ? cardEl.textContent : null,
+               live: { iss: !!iss, issTimer: !!issTimer, neo: neo ? neo.count : 0,
+                       hazardous: neo ? neo.hazardous : 0, sw: sw ? sw.tag : null } };   // v1.65.0
     }
     return { init:init, onCosmosCmd:onCosmosCmd, getState:getState };
   })();
