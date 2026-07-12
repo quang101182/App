@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.68.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
+<title>FRIDAY · v1.69.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -468,6 +468,22 @@ body[data-current-view="cosmos"] #view-cosmos{flex:1 1 auto}
   border-left:2px solid var(--primary-dim);margin-bottom:3px;background:rgba(0,24,40,.6);
   border-radius:0 6px 6px 0;word-break:break-all}
 .code-callers div.out{border-left-color:#a78bfa}
+/* v1.69.0 — P1.4 : audit hubs/cycles/dead + diff git (rows tappables ≥44px) */
+.code-audit{background:rgba(0,18,32,.5);border:1px solid var(--primary-dim);border-radius:11px;padding:11px}
+.code-audit .t{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.code-audit .t b{font:600 11px 'JetBrains Mono',Consolas,monospace;letter-spacing:1.5px;color:var(--primary)}
+.code-audit .cnt{font:600 10px 'JetBrains Mono',Consolas,monospace;color:var(--text-0);
+  background:rgba(0,24,40,.65);border-radius:8px;padding:2px 7px;margin-left:auto}
+.code-audit .row{display:flex;align-items:center;gap:7px;font-family:'JetBrains Mono',Consolas,monospace;
+  font-size:11.5px;color:var(--text-0);padding:6px 8px;min-height:44px;box-sizing:border-box;
+  background:rgba(0,24,40,.55);border-left:2px solid var(--primary);border-radius:0 6px 6px 0;margin-bottom:4px}
+.code-audit .row .m{margin-left:auto;font-size:10px;color:var(--text-1);text-align:right;flex:none}
+.code-audit .row.cyc{border-left-color:#ff5a7a}
+.code-audit .row.dead{border-left-color:#6b7688;color:var(--text-1)}
+.code-audit .row.chg{border-left-color:#3ddc84}
+.code-audit .row.miss{border-left-color:#6b7688;color:var(--text-1);min-height:30px}
+.code-audit .empty{font-size:11px;color:var(--text-1);padding:2px}
+.code-audit .note{font-size:9.5px;color:var(--text-1);margin-top:6px}
 .mode-btn.active{
   background:linear-gradient(180deg,rgba(0,140,200,.22),rgba(0,80,140,.14));
   color:var(--primary);
@@ -2922,7 +2938,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.68.0</span>
+        <span class="version-tag version-badge">· v1.69.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -3175,6 +3191,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         <div class="sys-last" id="codemapLastAction">Friday n'a pas encore agi sur cette vue durant la session.</div>
         <div class="sys-card" id="codeFileCard" hidden></div>
         <div class="code-sym" id="codeSymCard" hidden></div>
+        <!-- v1.69.0 — P1.4 : audit hubs/cycles/dead + diff git (synthèse locale) -->
+        <div class="code-audit" id="codeAuditCard" hidden></div>
         <div class="sys-state" id="codeState">Demande à Friday : « ouvre la carte du code sur X » puis « montre-moi la fonction Y ».</div>
       </div>
     </section>
@@ -3659,7 +3677,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.68.0';   // v1.62.0 — parité mobile v1.71.0 : (B) jauge ne se dissipe plus entre 2 phrases (attend tts_end + GRACE_MS), (C) pensée flash cliquable partout + watchdog auto-hide, (D) itinéraire carte accumulé (routes[] + event 'itinerary') = parcours continu. // v1.61.0 — BADGE ✦ « pensée » dans le VIEWER plein écran (#mediaLightbox) : span #lbPass alimenté par renderView (it.passive galerie OU it.mode==='passive' flash), vert GS, masqué si vide. Parité PC/APK. // v1.60.0 — PORT depuis l'APK : BARRE DU BAS 3 zones (mini-hologramme d'état à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE, l'ancien FAB flottant est retiré) + JAUGE DE PAROLE (barre magenta fine en haut + anneau concentrique autour du mini-holo, décroissants et exacts via _ttsRemainingMs, gate target==='mobile', fondu au barge-in). La PWA était restée à l'ancien layout (lignée v1.59.x divergente) — patchs ciblés, aucun écrasement. // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
+  const VERSION = '1.69.0';   // v1.69.0 — P1.4 CODE mobile (parité APK v1.78.0) : AUDIT local hubs/cycles/dead (case 'audit' du codemap_cmd, avant ignoré — HUB_MIN parité PC, SCC Tarjan, dead=fan-in 0, card #codeAuditCard tappable) + DIFF GIT exploité (args[2]=fonctions touchées par le backend git, avant jeté : liste ± modifiée, badge MODIFIÉE sur la fiche, focus auto si 1 seule fonction). // v1.62.0 — parité mobile v1.71.0 : (B) jauge ne se dissipe plus entre 2 phrases (attend tts_end + GRACE_MS), (C) pensée flash cliquable partout + watchdog auto-hide, (D) itinéraire carte accumulé (routes[] + event 'itinerary') = parcours continu. // v1.61.0 — BADGE ✦ « pensée » dans le VIEWER plein écran (#mediaLightbox) : span #lbPass alimenté par renderView (it.passive galerie OU it.mode==='passive' flash), vert GS, masqué si vide. Parité PC/APK. // v1.60.0 — PORT depuis l'APK : BARRE DU BAS 3 zones (mini-hologramme d'état à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE, l'ancien FAB flottant est retiré) + JAUGE DE PAROLE (barre magenta fine en haut + anneau concentrique autour du mini-holo, décroissants et exacts via _ttsRemainingMs, gate target==='mobile', fondu au barge-in). La PWA était restée à l'ancien layout (lignée v1.59.x divergente) — patchs ciblés, aucun écrasement. // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -4974,7 +4992,13 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
                              'trim','toString','concat','sort','find','some','every','reduce',
                              'append','remove','update','init','log','error','warn','info']);
     let file = null, fns = [], byName = {}, focused = null;
+    // v1.69.0 — P1.4 : état audit (hubs/cycles/dead) + diff git
+    let auditMode = null, auditInfo = null, changedSet = new Set(), changedMissing = [];
     function setState(txt){ const el = $('#codeState'); if(el) el.textContent = txt || ''; }
+    function resetAudit(){
+      auditMode = null; auditInfo = null; changedSet = new Set(); changedMissing = [];
+      const ac = $('#codeAuditCard'); if(ac){ ac.hidden = true; ac.textContent = ''; }
+    }
     function parse(code){
       const lines = code.split(/\r?\n/);
       fns = []; byName = {};
@@ -5012,6 +5036,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       const nLines = parse(String(code || ''));
       file = { name: String(name || '?'), lines: nLines };
       focused = null;
+      resetAudit();   // v1.69.0 — nouveau fichier = audit/diff précédents caducs
       const card = $('#codeFileCard');
       if(card){
         card.hidden = false;
@@ -5087,6 +5112,11 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       sym.hidden = false;
       sym.textContent = '';
       const nm = document.createElement('div'); nm.className = 'name'; nm.textContent = f.name + '()';
+      if(changedSet.has(f.name)){   // v1.69.0 — P1.4 : fonction touchée par le dernier diff git
+        const chip = document.createElement('span'); chip.className = 'sys-tier prod';
+        chip.textContent = 'MODIFIÉE'; chip.style.marginLeft = '8px'; chip.style.verticalAlign = 'middle';
+        nm.appendChild(chip);
+      }
       const lc = document.createElement('div'); lc.className = 'loc';
       lc.textContent = file.name + ' · L' + f.line;
       sym.appendChild(nm); sym.appendChild(lc);
@@ -5120,8 +5150,130 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       sym.appendChild(lists);
       try { sym.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch(_) {}
     }
+    // ============================================================
+    // v1.69.0 — P1.4 : AUDIT LOCAL hubs/cycles/dead (parité algos PC codemap.html :
+    // HUB_MIN = max(4, round(maxFanIn*0.45)) ; cycles = SCC Tarjan sur callees ;
+    // dead = fan-in 0). Synthèse regex locale — le graphe exact AST reste sur PC.
+    // ============================================================
+    const AUDIT_LABELS = { hubs: 'HUBS', cycles: 'CYCLES', dead: 'CODE MORT', diff: 'DIFF GIT' };
+    function computeAudit(mode){
+      const fin = f => f.callers.length;
+      if(mode === 'hubs'){
+        const maxFin = fns.reduce((mx, f) => Math.max(mx, fin(f)), 0);
+        const min = Math.max(4, Math.round(maxFin * 0.45));
+        return { min, items: fns.filter(f => fin(f) >= min).sort((a, b) => fin(b) - fin(a)) };
+      }
+      if(mode === 'cycles'){
+        const idx = {}, low = {}, onstk = {}, stack = []; let counter = 0; const comps = [];
+        const strong = v => {
+          idx[v] = low[v] = counter++; stack.push(v); onstk[v] = true;
+          (byName[v].callees || []).forEach(w => {
+            if(!byName[w]) return;
+            if(idx[w] === undefined){ strong(w); low[v] = Math.min(low[v], low[w]); }
+            else if(onstk[w]) low[v] = Math.min(low[v], idx[w]);
+          });
+          if(low[v] === idx[v]){
+            const comp = []; let w;
+            do { w = stack.pop(); onstk[w] = false; comp.push(w); } while(w !== v);
+            if(comp.length > 1) comps.push(comp);
+          }
+        };
+        fns.forEach(f => { if(idx[f.name] === undefined) strong(f.name); });
+        const compOf = {}; comps.forEach(c => c.forEach(n => { compOf[n] = c.length; }));
+        return { comps, compOf, items: fns.filter(f => compOf[f.name]) };
+      }
+      if(mode === 'dead'){
+        return { items: fns.filter(f => fin(f) === 0).sort((a, b) => b.loc - a.loc) };
+      }
+      return { items: [] };
+    }
+    function auditRow(card, f, cls, metric){
+      const r = document.createElement('div'); r.className = 'row' + (cls ? ' ' + cls : '');
+      const n = document.createElement('span'); n.textContent = f.name + '()';
+      const m = document.createElement('span'); m.className = 'm'; m.textContent = metric;
+      r.appendChild(n); r.appendChild(m);
+      r.addEventListener('click', () => showSymbol(f.name));
+      card.appendChild(r);
+    }
+    function auditHeader(card, label, count){
+      card.hidden = false; card.textContent = '';
+      const t = document.createElement('div'); t.className = 't';
+      const b = document.createElement('b'); b.textContent = 'AUDIT · ' + label;
+      const c = document.createElement('span'); c.className = 'cnt'; c.textContent = count;
+      t.appendChild(b); t.appendChild(c); card.appendChild(t);
+    }
+    function auditNote(card, txt){
+      const n = document.createElement('div'); n.className = 'note'; n.textContent = txt; card.appendChild(n);
+    }
+    function showAudit(mode){
+      mode = (mode === 'cycles' || mode === 'dead') ? mode : 'hubs';
+      if(!file) ensureDemo();
+      const card = $('#codeAuditCard'); if(!card || !file) return;
+      if(auditMode === mode){ resetAudit(); return; }   // toggle, comme setAuditMode PC
+      const res = computeAudit(mode);
+      auditMode = mode;
+      auditInfo = { mode, count: res.items.length, names: res.items.slice(0, 5).map(f => f.name) };
+      auditHeader(card, AUDIT_LABELS[mode], res.items.length);
+      if(!res.items.length){
+        const e = document.createElement('div'); e.className = 'empty';
+        e.textContent = mode === 'hubs' ? 'Aucun hub (seuil ≥' + res.min + ' appelants).'
+          : mode === 'cycles' ? 'Aucune dépendance circulaire détectée.'
+          : 'Aucune fonction orpheline — tout est appelé.';
+        card.appendChild(e);
+      } else {
+        res.items.slice(0, 8).forEach(f => {
+          if(mode === 'hubs') auditRow(card, f, '', '← ' + f.callers.length + ' appels');
+          else if(mode === 'cycles') auditRow(card, f, 'cyc', '↻ cycle de ' + res.compOf[f.name]);
+          else auditRow(card, f, 'dead', f.loc + ' l · 0 appelant');
+        });
+        if(res.items.length > 8){
+          const e = document.createElement('div'); e.className = 'empty';
+          e.textContent = '… +' + (res.items.length - 8) + ' autres'; card.appendChild(e);
+        }
+      }
+      auditNote(card, 'Synthèse locale (regex) sur ' + file.name + ' — tap une ligne pour la fiche. Graphe exact : PC.');
+      const note = $('#codemapLastAction');
+      if(note) note.textContent = 'Audit ' + AUDIT_LABELS[mode] + ' sur ' + file.name + ' : ' + res.items.length + ' fonction(s).';
+      setState('');
+      try { card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch(_) {}
+    }
+    // v1.69.0 — P1.4 : le broadcast diff porte args[2] = noms des fonctions touchées
+    // (calcul git côté backend, codemap_bridge._diff_functions) — avant : ignoré.
+    function showDiff(names){
+      changedSet = new Set(); changedMissing = [];
+      // Lookup EXACT (insensible casse) : les noms viennent du git backend, le flou
+      // de findFn créerait des faux positifs (« fantome » ⊃ « a » → 'a' marquée modifiée).
+      (names || []).forEach(n => {
+        const k = String(n).toLowerCase();
+        const f = byName[n] || fns.find(fn => fn.name.toLowerCase() === k);
+        if(f) changedSet.add(f.name); else changedMissing.push(String(n));
+      });
+      const tierEl = document.querySelector('#codeFileCard .sys-tier');
+      if(tierEl){ tierEl.textContent = 'DIFF GIT'; tierEl.className = 'sys-tier prod'; }
+      const card = $('#codeAuditCard'); if(!card) return;
+      auditMode = 'diff';
+      auditInfo = { mode: 'diff', count: changedSet.size, names: [...changedSet].slice(0, 5), missing: changedMissing.length };
+      auditHeader(card, 'DIFF GIT', changedSet.size);
+      if(!changedSet.size && !changedMissing.length){
+        const e = document.createElement('div'); e.className = 'empty';
+        e.textContent = 'Aucune fonction touchée identifiée dans ce diff.'; card.appendChild(e);
+      } else {
+        [...changedSet].forEach(n => auditRow(card, byName[n], 'chg', '± modifiée'));
+        changedMissing.forEach(n => {
+          const r = document.createElement('div'); r.className = 'row miss';
+          r.textContent = n + '() · hors graphe local'; card.appendChild(r);
+        });
+      }
+      auditNote(card, 'Fonctions touchées par les derniers commits (diff git backend). Tap = fiche.');
+      if(changedSet.size === 1) showSymbol([...changedSet][0]);
+      const note = $('#codemapLastAction');
+      if(note) note.textContent = 'Diff git ' + file.name + ' : ' + changedSet.size + ' fonction(s) modifiée(s)'
+        + (changedMissing.length ? ' (+' + changedMissing.length + ' hors graphe)' : '') + '.';
+      try { card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch(_) {}
+    }
     function clear(){
       file = null; fns = []; byName = {}; focused = null;
+      resetAudit();   // v1.69.0
       const card = $('#codeFileCard'); if(card) card.hidden = true;
       const sym = $('#codeSymCard'); if(sym) sym.hidden = true;
       setState('Demande à Friday : « ouvre la carte du code sur X » puis « montre-moi la fonction Y ».');
@@ -5158,6 +5310,10 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       if(!m || !m.tool) return;
       if((m.tool === 'open' || m.tool === 'diff') && m.args && m.args.length >= 2){
         load(m.args[0], m.args[1]);
+        // v1.69.0 — P1.4 : le diff exploite args[2] (fonctions touchées, git backend)
+        if(m.tool === 'diff') showDiff(Array.isArray(m.args[2]) ? m.args[2] : []);
+      } else if(m.tool === 'audit'){
+        showAudit(m.args && m.args[0] ? String(m.args[0]) : 'hubs');   // v1.69.0 — P1.4
       } else if(m.tool === 'focus' && m.args && m.args.length){
         showSymbol(m.args[0]);
       } else if(m.tool === 'reset' || m.tool === 'close'){
@@ -5169,6 +5325,8 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
                names: fns.slice(0, 5).map(f => f.name),
                callers: focused && byName[focused] ? byName[focused].callers.length : null,
                callees: focused && byName[focused] ? byName[focused].callees.length : null,
+               audit: auditInfo,                       // v1.69.0 — P1.4
+               changed: [...changedSet],               // v1.69.0 — P1.4
                state: ($('#codeState') || {}).textContent || '' };
     }
     return { onCodemapCmd, getState, ensureDemo };
