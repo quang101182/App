@@ -12,7 +12,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.20.17</title>
+<title>Monitoring v1.21.0</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -569,6 +569,15 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     body.app-studio #footer, body.app-studio #alertBanner, body.app-studio #freshBanner { display: none !important; }
     body.app-studio #studioView { display: block; }
 
+    /* === Se7en AI (v1.21.0) — funnel hub vitrine, isolé via body.app-se7, SANS token (compteurs publics) === */
+    body:not(.app-se7) #se7View { display: none !important; }
+    body.app-se7 #sO, body.app-se7 #sP, body.app-se7 #sA, body.app-se7 #sRet,
+    body.app-se7 #sChurn, body.app-se7 #sD, body.app-se7 #sI, body.app-se7 #sectionNav,
+    body.app-se7 .pill-group, body.app-se7 .section-block, body.app-se7 .btn-toggle-all,
+    body.app-se7 #footer, body.app-se7 #alertBanner { display: none !important; }
+    body.app-se7 #se7View { display: block; }
+    #se7View { width: 100%; min-width: 0; box-sizing: border-box; max-width: 860px; margin: 0 auto; }
+
     /* width:100% + min-width:0 : #studioView est un flex-item de .main (flex column). Sans width:100%,
        il se dimensionne sur son max-content (~365px) et déborde l'écran à droite sur mobile étroit (≤390px).
        width:100% le force à la largeur du conteneur ; min-width:0 autorise le rétrécissement des enfants. */
@@ -906,7 +915,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.20.17</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.21.0</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -1324,13 +1333,16 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   <!-- Studio view (v1.20.0) — agenda des posts vidéo, isolé via body.app-studio, SANS token. Rempli par renderStudio(). -->
   <div id="studioView"></div>
 
+  <!-- Se7en AI view (v1.21.0) — funnel du hub se7enai.com, isolé via body.app-se7, SANS token. Rempli par renderSe7(). -->
+  <div id="se7View"></div>
+
   <!-- Footer -->
   <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.19.0</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.20.17';
+const DASHBOARD_VERSION = 'v1.21.0';
 
 // === Multi-app config ===
 const APPS = {
@@ -1368,6 +1380,13 @@ const APPS = {
   // v1.20.0 — Studio : agenda des posts vidéo (Vidéo Studio). Données statiques tenues par Claude, SANS token (aucune donnée sensible).
   studio: {
     name: 'Studio',
+    gateway: '',
+    tokenKey: null,
+    endpoints: {}
+  },
+  // v1.21.0 — Se7en AI : hub vitrine se7enai.com, funnel d'acquisition (visites/clics via gateway-pro slug se7). SANS token (compteurs publics).
+  se7: {
+    name: 'Se7en AI',
     gateway: '',
     tokenKey: null,
     endpoints: {}
@@ -1549,8 +1568,8 @@ function switchApp(newApp) {
   persistActiveApp(); // v1.14.0 : mémorise l'onglet pour le restaurer après F5
   // v1.20.0 : Studio = agenda statique, aucune donnée sensible → pas de token, rendu direct.
   if (newApp === 'studio') { hideLogin(); renderStudio(); return; }
-  // factory : visites publiques → pas de token requis. Autres apps : token requis.
-  if (newApp !== 'factory' && !getToken()) { showLogin(); return; }
+  // factory + se7 : visites publiques → pas de token requis. Autres apps : token requis.
+  if (newApp !== 'factory' && newApp !== 'se7' && !getToken()) { showLogin(); return; }
   hideLogin(); // v1.14.0 : fermer une éventuelle modale login résiduelle d'un onglet précédent
   // v1.14.0/v1.16.0 : retour sur un onglet → rendu depuis le cache (mémoire ou localStorage), JAMAIS de fetch auto.
   if (renderFromCache(newApp)) return;
@@ -1578,6 +1597,7 @@ function setActiveAppView(appId) {
   document.body.classList.toggle('app-factory', appId === 'factory'); // v1.14.0
   document.body.classList.toggle('app-storyvoice', appId === 'storyvoice'); // v1.19.0
   document.body.classList.toggle('app-studio', appId === 'studio'); // v1.20.0
+  document.body.classList.toggle('app-se7', appId === 'se7'); // v1.21.0
   document.body.dataset.activeApp = appId;
 }
 
@@ -1652,6 +1672,8 @@ async function fetchAll() {
       await fetchAllStoryVoice(signal);
     } else if (thisApp === 'factory') {
       await fetchAllFactory(signal);
+    } else if (thisApp === 'se7') {
+      await fetchAllSe7(signal);
     } else {
       await fetchAllDictoKey(signal);
     }
@@ -1712,6 +1734,7 @@ function renderFromCache(app) {
   else if (app === 'swp') { renderSwp(c); }
   else if (app === 'storyvoice') { renderSv(c); }
   else if (app === 'factory') { renderFactory(c); }
+  else if (app === 'se7') { renderSe7(c); }
   renderFreshBanner(app);
   return true;
 }
@@ -1952,6 +1975,76 @@ async function fetchAllFactory(signal) {
   var data = { accounts: accounts, visits: visitResults, stats: stats, generatedAt: Date.now() };
   persistAppCache('factory', data); // v1.16.0 : cache mémoire + localStorage + horodatage
   renderFactory(data);
+}
+
+// === Se7en AI fetch + render (v1.21.0) — funnel hub vitrine, compteurs publics gateway-pro slug se7 ===
+async function fetchAllSe7(signal) {
+  var G = 'https://api-gateway-pro.quang101182.workers.dev';
+  var r = await Promise.all([
+    fetch(G + '/api/visit?page=se7', { signal: signal }).then(function(x){ return x.json(); }).catch(function(){ return { total: 0, today: 0 }; }),
+    fetch(G + '/api/click?page=se7', { signal: signal }).then(function(x){ return x.json(); }).catch(function(){ return { total: 0, today: 0, by_btn_all: {} }; })
+  ]);
+  if (currentApp !== 'se7') return; // réponse tardive sur mauvais onglet → drop
+  var data = { visit: r[0], clicks: r[1], generatedAt: Date.now() };
+  persistAppCache('se7', data);
+  renderSe7(data);
+}
+
+function renderSe7(data) {
+  var view = document.getElementById('se7View');
+  if (!view || !data) return;
+  var visit = data.visit || { total: 0, today: 0 };
+  var bb = (data.clicks && data.clicks.by_btn_all) || {};
+  function g(k) { return parseInt(bb[k]) || 0; }
+  var vTot = parseInt(visit.total) || 0, vToday = parseInt(visit.today) || 0;
+  var demo = g('f:demo'), chat = g('f:chat'), cta = g('f:cta'), wait = g('f:waitlist');
+  var outTotal = 0, outParts = [];
+  Object.keys(bb).forEach(function(k){ if (k.indexOf('out:') === 0) { var v = parseInt(bb[k]) || 0; outTotal += v; outParts.push({ name: k.slice(4), v: v }); } });
+  outParts.sort(function(a, b){ return b.v - a.v; });
+  function pct(n, d) { if (!d || d <= 0) return '—'; return (Math.round((n / d) * 1000) / 10) + '%'; }
+  var steps = [
+    { label: '👁 Visites', val: vTot, prev: null, note: (vToday > 0 ? '+' + vToday + ' auj.' : 'trafic humain') },
+    { label: '🎬 Interaction démo', val: demo, prev: vTot, note: 'capacité jouée' },
+    { label: '💬 Engagement chat', val: chat, prev: vTot, note: 'question posée à Halo' },
+    { label: '✨ Clic CTA', val: cta, prev: vTot, note: 'accès anticipé / sur-mesure / soutien' },
+    { label: '📧 Waitlist envoyée', val: wait, prev: cta, note: 'email laissé' },
+    { label: '🔗 Clic sortant', val: outTotal, prev: vTot, note: 'vers store / app' }
+  ];
+  var max = Math.max(1, vTot, demo, chat, cta, wait, outTotal);
+  var rows = steps.map(function(s) {
+    var w = Math.max(2, Math.round((s.val / max) * 100));
+    var conv = s.prev == null ? '' : '<span style="color:#8a97ab;font-size:.76rem;white-space:nowrap;min-width:78px;text-align:right">' + pct(s.val, s.prev) + ' vs préc.</span>';
+    return '<div style="margin-bottom:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">' +
+        '<span style="font-weight:600;font-size:.9rem">' + s.label + ' <span style="color:#6b7a8c;font-weight:400;font-size:.74rem">' + swpEscape(s.note) + '</span></span>' +
+        '<span style="font-weight:700;font-size:1.05rem">' + s.val + '</span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px">' +
+        '<div style="flex:1;height:14px;background:rgba(58,160,255,.08);border-radius:7px;overflow:hidden">' +
+          '<div style="height:100%;width:' + w + '%;background:linear-gradient(90deg,#3aa0ff,#7cc0ff);border-radius:7px"></div>' +
+        '</div>' + conv +
+      '</div>' +
+    '</div>';
+  }).join('');
+  var outHtml = outParts.length ? ('<div style="margin-top:10px;font-size:.82rem;color:#8a97ab">Détail sortants : ' + outParts.map(function(o){ return swpEscape(o.name) + ' <b style="color:#e6edf3">' + o.v + '</b>'; }).join(' · ') + '</div>') : '';
+  var when = data.generatedAt ? new Date(data.generatedAt).toLocaleString('fr-FR') : '';
+  var box = 'background:rgba(120,160,220,.05);border:1px solid rgba(58,160,255,.14);border-radius:12px;padding:14px;text-align:center';
+  view.innerHTML =
+    '<div style="padding:18px 14px 70px">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin:4px 2px 6px"><span style="font-size:1.4rem">🌐</span>' +
+        '<h2 style="font-size:1.3rem;font-weight:800;letter-spacing:-.02em">Se7en AI — Hub &amp; Acquisition</h2></div>' +
+      '<div style="color:#8a97ab;font-size:.82rem;margin:0 2px 16px;line-height:1.45">Funnel du hub <a href="https://se7enai.com" target="_blank" rel="noopener" style="color:#3aa0ff">se7enai.com ↗</a> — visite → démo → chat → CTA → waitlist → clic sortant. Cookieless (gateway-pro, slug <code>se7</code>).</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:22px">' +
+        '<div style="' + box + '"><div style="font-size:.7rem;color:#8a97ab;text-transform:uppercase;letter-spacing:.06em">Visites</div><div style="font-size:1.5rem;font-weight:800;color:#3aa0ff">' + vTot + '</div><div style="font-size:.7rem;color:#8a97ab">' + (vToday > 0 ? '+' + vToday + ' auj.' : '—') + '</div></div>' +
+        '<div style="' + box + '"><div style="font-size:.7rem;color:#8a97ab;text-transform:uppercase;letter-spacing:.06em">Waitlist</div><div style="font-size:1.5rem;font-weight:800;color:#7bc88a">' + wait + '</div><div style="font-size:.7rem;color:#8a97ab">emails captés</div></div>' +
+        '<div style="' + box + '"><div style="font-size:.7rem;color:#8a97ab;text-transform:uppercase;letter-spacing:.06em">Clics sortants</div><div style="font-size:1.5rem;font-weight:800;color:#ffc46b">' + outTotal + '</div><div style="font-size:.7rem;color:#8a97ab">vers store/app</div></div>' +
+      '</div>' +
+      '<div style="background:rgba(120,160,220,.03);border:1px solid rgba(58,160,255,.1);border-radius:14px;padding:18px 16px">' +
+        '<div style="font-weight:700;font-size:.82rem;margin-bottom:14px;text-transform:uppercase;letter-spacing:.06em;color:#8a97ab">Funnel d\'acquisition</div>' +
+        rows + outHtml +
+      '</div>' +
+      '<div style="font-size:.78rem;color:#8a97ab;margin-top:14px">Dernière mesure : ' + swpEscape(when) + '</div>' +
+    '</div>';
 }
 
 function facFmt(n) {
@@ -4706,7 +4799,7 @@ window.addEventListener('resize', function() {
 });
 (function init() {
   // v1.14.0 : factory ne requiert pas de token ; v1.20.0 : studio non plus (agenda statique)
-  if (currentApp !== 'factory' && currentApp !== 'studio' && !getToken()) { showLogin(); return; }
+  if (currentApp !== 'factory' && currentApp !== 'studio' && currentApp !== 'se7' && !getToken()) { showLogin(); return; }
   // v1.16.0 : si des données persistées existent (localStorage), on les affiche SANS fetch
   // → l'utilisateur garde la main, il rafraîchit via le bouton Actualiser quand il veut.
   if (renderFromCache(currentApp)) { startFreshBannerTicker(); return; }
