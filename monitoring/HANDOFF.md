@@ -1,55 +1,46 @@
-# Projet: Dashboard Monitoring · 16 juillet 2026 · Codex API → prochain moteur
-Lot relais : R10
+# HANDOFF — App/monitoring
+Lot: R10 · 16 juillet 2026 · Codex API → prochain moteur
 
-> Chantier : **refonte complète du dashboard monitoring** — reconstruction propre « à côté »
-> (`monitoring-v2.html`), prod intact jusqu'à bascule. Codex disponible en 2e moteur exécutant
-> (Quang relaie manuellement). Contrainte transverse : **économie de tokens Claude** — Claude cadre
-> et valide (léger), Codex code (lourd).
+## Objectif courant
 
-## 🎯 Objectif courant
-Porter l'acquisition publique dans `App/monitoring/monitoring-v2.html`, en respectant le mock-up validé,
-SANS toucher le prod (`App/monitoring/index.html` v1.23.0).
+Porter l'acquisition publique de `index.html` v1.23.0 dans `monitoring-v2.html`, avec les mêmes chiffres, sans token et sans modifier la production.
 
-## 📚 Références (LIRE avant de coder — hors git, sous le parent 02-Apps-Web)
-- `D:/Download/02-Apps-Web/dashboard-refonte/DASHBOARD-REFONTE-ROADMAP.md` — **feuille de route figée**
-  (Règle d'or + décisions verrouillées + phasage P0→P6 + pièges). Source de vérité du chantier.
-- `D:/Download/02-Apps-Web/dashboard-refonte/MOCKUP-v0.2.html` — **direction visuelle VALIDÉE** (Quang 16/07).
-- Prod actuel : `App/monitoring/index.html` v1.23.0 (revenue, auth-gaté via `dash.se7enai.com` proxy-live).
+## État actuel
 
-## ✅ Fait (vérifié)
-- Quick win **v1.23.0** (fusion onglet se7+acquisition + 3 familles nav) — déployé, testé, live.
-- Audit exhaustif du dashboard (chiffré) + **palette produit validée** daltonisme.
-- Mock-up v0.1 → **v0.2 VALIDÉ par Quang le 16/07** (titre « Se7en AI » recollé + fresh-bar partout + polish).
-- **Feuille de route figée** (roadmap ci-dessus) + Règle d'or.
-- **Découpage en lots Codex-ready** défini (voir ci-dessous). Aucune ligne de v2 encore écrite.
+- Refonte développée en parallèle dans `monitoring-v2.html`; `index.html` v1.23.0 reste la production.
+- Direction visuelle validée : `D:/Download/02-Apps-Web/dashboard-refonte/MOCKUP-v0.2.html`.
+- Feuille de route figée : `D:/Download/02-Apps-Web/dashboard-refonte/DASHBOARD-REFONTE-ROADMAP.md`.
 
-## ⏳ Reste à faire — LOTS (chaque lot = 1 brief autoportant relayé à Codex)
-- **LOT 2 — P1 Acquisition** (token-less) : porter l'onglet fusionné v1.23.0. **DoD** : chiffres = prod.
-- **LOT 3 — P2 Home** : hero KPI cross-studio + grille produits + funnel global + alertes (dépend LOT 2).
-- **LOT 4 — P3 Produits** : swp + sv d'abord, DictoKey en dernier (panneaux accordéon). Token-gated.
-- **LOT 5 — P4 Ops** : Factory + Studio.
-- **LOT 6 — P5 Bascule** (Claude + Quang, PAS Codex) : tests parité prod↔v2, repointer proxy `se7enai-dash`, surveiller 48h.
+## Fait vérifié
 
-## ⚠️ Pièges à NE PAS répéter
-- **`git add -A` INTERDIT dans le repo `App`** : 5 fichiers modifiés concurrents non liés (api-gateway-pro,
-  noteflow, subwhisper-pro, promoclip) + untracked (APKs, logs). TOUJOURS `git add <fichier>` un par un.
-- **NE PAS casser le revenue** : prod servi jusqu'à P5. v2 développé en parallèle. Bascule = repointer proxy (réversible, 1 commit).
-- **Parité AVANT bascule** : chaque vue v2 doit afficher EXACTEMENT les mêmes chiffres que le prod (Playwright côte à côte).
-- **ZÉRO FREESTYLE** : respecter l'esprit du mock-up validé. Meilleure idée → la PROPOSER en texte à Quang, ne pas l'imposer.
-- **Fresh-banner / pas d'auto-fetch** : refresh manuel uniquement (sinon spam réseau + coût).
-- **Mobile réel** : Playwright `is_mobile=True`, vérifier `scrollWidth==clientWidth`.
-- **Validation P0 à compléter si nécessaire** : la syntaxe et les contrats statiques ont été vérifiés ; le test visuel
-  navigateur local n'a pas été exécuté car l'ouverture `file:` était bloquée par la politique du navigateur.
-- **Tokens conservés** : dk/swp/sv token-gated ; home/acquisition token-less (données publiques uniquement).
-- **Codex ne fait JAMAIS** : git · mémoire · deploy · MCP. Il code le HTML, Claude/Quang gèrent le reste.
+- Commit `3e43f0c` : LOT 1 / P0 Socle livré.
+- `monitoring-v2.html` contient les tokens CSS validés, navigation desktop/sidebar et mobile/drawer, 7 routes par hash, `APPS[]`, `fetchApp(cfg, signal)`, et les composants `KpiTile`, `Panel`, `FunnelBar`, `ProductCard`, `Alert`, `FreshBar`.
+- Fresh-bar présente sur chaque vue ; aucun endpoint réel n'est configuré ni appelé ; aucun token n'est exposé ; `index.html` est inchangé.
+- Syntaxe JavaScript, contrats P0 statiques et `git diff --check` validés.
 
-## ➡️ Prochaine étape UNIQUE
-Exécuter le **LOT 2 — P1 Acquisition** : porter l'onglet fusionné v1.23.0 avec chiffres strictement identiques,
-sans token et sans toucher `index.html`. Vérifier ensuite la parité côte à côte.
+## Reste à faire
 
-## 🛠 Actions hors-code à faire par Claude (si applicable)
-- **Mémoire** : à jour côté `projet-site-web-public.md` (recall) — le chantier dashboard est aussi tracé ;
-  au retour d'un lot livré, noter l'avancement dans le topic monitoring/dashboard.
-- **Déploiement** : AUCUN tant que P5 non atteint (prod intact). La bascule = repointer proxy `se7enai-dash`.
-- **Notifications** : livrables visuels → Telegram (Quang sur Honor). Docs/roadmap → terminal (ne pas auto-push).
-- **Serveurs** : rien à redémarrer pour ce chantier.
+- LOT 2 / P1 Acquisition : migrer la vue acquisition token-less et prouver une stricte parité de chiffres avec la production.
+- LOT 3 / P2 Home : KPI agrégés, cartes produit, funnel global et alertes après P1.
+- LOT 4 / P3 Produits : SubWhisper Pro et StoryVoice, puis DictoKey en panneaux accordéon ; tokens obligatoires.
+- LOT 5 / P4 Ops : Factory et Studio.
+- LOT 6 / P5 Bascule : parité globale, repointage du proxy par Claude/Quang, surveillance 48 h.
+
+## Pièges à ne pas répéter
+
+- Ne jamais toucher `index.html` ni le proxy avant P5 : le dashboard production génère du revenu.
+- Ne jamais lancer `git add -A` dans le dépôt `App` : modifications et fichiers non suivis concurrents existent dans des projets frères. Indexer uniquement les fichiers du lot.
+- Respecter le mock-up validé ; toute divergence de principe doit être proposée à Quang, jamais imposée.
+- Refresh manuel uniquement : pas d'auto-fetch. Garder l'isolation et les tokens pour DictoKey, SubWhisper Pro et StoryVoice.
+- Avant bascule, comparer chaque chiffre v2 à la production. Vérifier le mobile réel (`scrollWidth === clientWidth`).
+- Le test visuel P0 navigateur n'a pas été exécuté : l'accès local `file:` était bloqué par la politique du navigateur. Cette limitation ne valide pas le rendu PC/mobile.
+
+## Prochaine étape unique
+
+Exécuter LOT 2 / P1 Acquisition dans `monitoring-v2.html`, sans données protégées ni changement de production, puis vérifier la parité des chiffres avec `index.html`.
+
+## Actions hors-code à faire par Claude
+
+- Mémoire : consigner le LOT 1 livré et le départ du LOT 2 dans le suivi monitoring/dashboard.
+- Déploiement : aucun avant P5 ; ne pas redémarrer de serveur.
+- Notifications : aucune obligatoire pour cette consolidation ; envoyer une capture sur Telegram uniquement après validation visuelle demandée.
