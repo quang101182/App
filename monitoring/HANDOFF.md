@@ -1,11 +1,11 @@
 # HANDOFF — App/monitoring
-Lot: R9 · 16 juillet 2026 · Claude (Opus 4.8) → prochain moteur (P3b4 Firebase / Adoption / Attribution)
+Lot: R9 · 16 juillet 2026 · Claude (Opus 4.8) → prochain moteur (P3b5 Rétention & mouvements de tier)
 
 ## Objectif courant
 
 Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue de la prod `index.html` v1.23.0 vers `monitoring-v2.html` (config-driven, tokenisé, responsive), **sans toucher la prod**, en migrant onglet par onglet, bascule seulement à parité de chiffres vérifiée.
 
-**Étape immédiate = P3b4 Firebase / Adoption / Attribution** (voir « Prochaine étape unique » en bas). Fait à ce jour : P0 socle, P1 Acquisition, P2 Home, P3a SWP/StoryVoice, P3b1 + P3b2 + P3b3 DictoKey — tous vérifiés en runtime.
+**Étape immédiate = P3b5 Rétention & mouvements de tier** (dernier sous-lot DictoKey — voir « Prochaine étape unique » en bas). Fait à ce jour : P0 socle, P1 Acquisition, P2 Home, P3a SWP/StoryVoice, P3b1→P3b4 DictoKey — tous vérifiés en runtime.
 
 ## Références figées
 
@@ -66,9 +66,16 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
   - Panneau replié → **resize des charts à l'ouverture** (sinon canvas 0×0 = chart écrasé).
   - 📐 **ÉCART ASSUMÉ vs prod (règle dataviz « jamais de hues cyclées »)** : la prod fait `DONUT_COLORS[i % length]` → ses **17 langues** sortent avec des couleurs qui **se répètent** (2 langues de même couleur = illisible). v2 replie sur **top 7 + « Autres »** et trie desc (la prod ne triait pas les langues). **Vérifié : le total est CONSERVÉ** — donut langues **945** = somme exacte des 17 langues ; donut pays **399** = 464 devices − 65 fantômes. Aucune donnée perdue, juste les doublons de couleur supprimés.
 
+- **✅ LOT 8 / P3b4 — Firebase + Adoption v2.61 + Attribution v2.61.7 (Claude, 16/07, v2.8.0-p3b4)**.
+  - `fetchDk` ajoute `/admin/firebase-stats?period=7d`, **toléré** (`.catch(() => null)`) comme playstore.
+  - `renderDkFirebase` (3 KPI + funnel d'activation + sources d'acquisition avec bandeau IA), `renderDkAdoption` (badge + flow ime_only/with_bubble + conversion bandeau par déclencheur + drop-off par slide en **ordre fixe** + refus de permission), `renderDkAttribution` (badge + sources d'installation + top boutons/pages + kills OEM). Tout en panneaux accordéon.
+  - **Parité vérifiée : 15/15** vs prod (KPI + séquence numérique de chaque bloc). 0 erreur console, pas d'overflow PC + mobile 384.
+  - ⚠ **Piège de harness** : le prod lance `fetchFirebaseLive()` en **fire-and-forget** et l'endpoint interroge **GA4 en live** (plusieurs secondes). Attendre une **vraie valeur numérique**, pas juste « plus de ⏳ » : `—` = jamais rendu, et on croit à tort à un écart de parité (m'a coûté un faux négatif 15/15 → 0/15).
+  - ✏ **Libellés repris à l'identique** : le bandeau IA dit « Phase 0/1/2 GEO live 29/05 » (renvoie aux phases GEO) — je l'avais reformulé, corrigé. Ne pas réécrire les libellés du prod en douce.
+  - 📊 **Signaux métier sortis (à regarder, indépendants du dashboard)** : **19 désinstalls pour 31 nouveaux users sur 7 j** (17 users distincts) · **bandeau d'activation bulle = 0 % de conversion** (0 activation sur **11 taps** : `main_banner` 0/7, `post_dictation_notif` 0/4) — le bandeau est cliqué mais n'aboutit JAMAIS · funnel : first_open 31 → bulle 11 (35 %) → IME 8 (26 %) → first_dictation 7 (23 %) → premium_purchase 1 (3 %) · attribution : google-play 19 (73 %), **dictokey-site 1 (4 %)** seulement.
+
 ## Ce qui reste à faire
 - **P3b — DictoKey, sous-lots restants** (P3b1 fait). Découpage décidé le 16/07 car la vue prod = 7 sections + 11 sous-blocs dans le seul `#sO` :
-  - **P3b4 — Firebase / Adoption v2.61 / Attribution v2.61.7** : endpoint `/admin/firebase-stats?period=7d` (toléré). Funnel d'activation, sources d'acquisition (+ bandeau IA), adoption refonte, attribution.
   - **P3b5 — Rétention (`advanced`) + Mouvements de tier** : D1/D7/D30 (seuils couleur 0.4 / 0.2), nouveaux utilisateurs, distribution d'usage + segments power/regular/casual, adoption features ; churn details (tableau Date/Device/Transition).
   - ⚠ **Ne PAS porter le code mort** identifié : `#funnelUnified` (masqué v1.13.0 mais toujours calculé), donuts Modes/Paires (masqués), Sessions 7j Firebase (masqué), `PLAYSTORE_STATS_BASELINE` (déclarée jamais lue), `isAutoRefresh` (auto-refresh retiré v1.14.0).
 - **P4 Ops** : Factory + Studio. **DoD** : parité.
@@ -88,11 +95,15 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
 
 ## Prochaine étape unique
 
-**P3b4 — Firebase / Adoption v2.61 / Attribution v2.61.7**. Endpoint `/admin/firebase-stats?period=7d` (à ajouter dans `fetchDk`, **toléré** comme playstore : `.catch(() => null)`). Source = `FIREBASE_STATS_LIVE.aggregated` → `d7` / `events` / `acquisition_channels` / `adoption_v261` / `attribution_v2617`.
-- **Activation & engagement (Firebase J-1)** (prod `renderFirebaseKPIs` l.3073+) : Actifs 7j (`d7.active_users`), Nouveaux 7j (`d7.new_users`, sub `first_open`), Désinstalls 7j (`ev.app_remove.count`, sub `.users` distincts), funnel d'activation 7j (`first_open` → `bubble_first_use`/`ime_first_use`/`first_dictation`/`daily_dictation`/`quota_exceeded`/`premium_purchase`, % = `round(x/first_open*100)`), sources d'acquisition (top 8 de `acquisition_channels[]` + bandeau IA : `aiSessions` = Σ sessions des channels matchant `/ai[\s\-_]*assistant|chatgpt|perplexity|claude|gemini|copilot/i`, `aiPct = aiSessions/totalSessions*100`).
-- **Adoption refonte v2.61** (`renderAdoptionV261` l.3167-3294) et **Attribution v2.61.7** (`renderAttributionV2617` l.3340-3440) : 4 + 3 cartes texte.
-- ⚠ **Ne PAS porter** : « Sessions 7j » (masqué en prod, HTML l.1056) ni `#funnelUnified` (masqué v1.13.0 mais toujours calculé).
-- ⚠ **Fraîcheur hétérogène** à afficher honnêtement : Play = snapshot J-2..J-7 (peut être figé >3j), Firebase = **J-1** (cache KV 1h), KV gateway = live, visites site = live. C'est la raison documentée du masquage du funnel unifié en prod — ne pas le ressusciter sans en parler à Quang.
+**P3b5 — Rétention (`mon.advanced`) + Mouvements de tier** — le DERNIER sous-lot de DictoKey. Source = `mon.advanced` (déjà ramené par `fetchDk` via `?advanced=1`) et `mon.churn`.
+- **Rétention** (prod `renderAdvanced` l.3673-3784) : D1/D7/D30 = `round(adv.retention.dX.rate * 100)%`, sub `Cohorte : cohort_size utilisateurs`, **seuils couleur** `≥0.4` vert / `≥0.2` orange / sinon rouge. Si `!adv.retention[k]` → carte « Pas assez de données ».
+- **Nouveaux utilisateurs** : sub `adv.new_users.total_period total sur la période — moy. avg_per_day/jour` + chart bar sur `new_users.daily` **reversed** (enregistrer dans `dkCharts` !).
+- **Usage par utilisateur** : Min/Max/Moyenne/Médiane = `adv.usage_distribution.per_user.{min,max,avg,median}` (unité « dictées/jour ») + segments Power (>20) / Régulier (5-20) / Occasionnel (<5) = `ud.segments.{power,regular,casual}`.
+- **Adoption des features** : `round(fa.{ep}.rate * 100)%`, libellé `pct% — users/fa.active_devices util.` (`totalDev = fa.active_devices || 1`).
+- Si `adv` absent → les 4 blocs masqués (prod l.3675-3678).
+- **Mouvements de tier** (`renderChurnDetails` l.3914-3969) : summary — si Firebase dispo : `↑ ev.premium_purchase.users achats fresh · 🔁 ev.premium_restored.users restaurations · ↓ ev.app_remove.users désinstalls` + ligne KV `upgrades · downgrades · N détails` ; sinon fallback `↑ churn.upgrades · ↓ churn.downgrades · N détails · (Firebase events en attente)`. Tableau `churn.details[]` trié desc sur `d.ts || d.date` → `fmtDateTime` / deviceId tronqué 12 car. / `d.from → d.to`. ⚠ Sur les données actuelles `churn.details` est **vide** (0) → tableau vide, c'est normal.
+
+⚠ **Fraîcheur hétérogène** à afficher honnêtement : Play = snapshot J-2..J-7 (peut être figé >3j), Firebase = **J-1** (cache KV 1h), KV gateway = live, visites site = live. C'est la raison documentée du masquage du funnel unifié en prod — ne pas le ressusciter sans en parler à Quang.
 
 ✅ **Piège phantom : RÉGLÉ** — `dkIsPhantom(d)` unifie les 3 variantes (mesuré : 65 = 65 sur les 464 devices réels). Le donut Top pays l'utilise déjà. Ne jamais re-coder une 4e variante.
 ✅ **Fuite Chart.js : RÉGLÉE** — registre `dkCharts` + `dkDestroyCharts()` dans `renderApp`. Tout nouveau chart DOIT s'enregistrer dans `dkCharts`.
@@ -109,10 +120,11 @@ Méthode qui a marché 4 fois — la rejouer : (1) sous-agent Explore pour extra
 - ✅ P3b1 : parité 33/33, commit scopé, capture Telegram livrée.
 - ✅ P3b2 : parité summary/pills/pagination/lignes + interactions au clic réel, commit scopé, capture Telegram livrée.
 - ✅ P3b3 : charts vérifiés (totaux conservés, 0 fuite Chart.js, palette validée), commit scopé, capture Telegram livrée.
+- ✅ P3b4 : parité 15/15 (Firebase + Adoption + Attribution), commit scopé, capture Telegram livrée.
 - **Git** : toujours commit SCOPÉ (`git add` fichier par fichier, jamais `-A` — dépôt `App` a des frères non commités). Pas de push tant que non demandé.
 - **Mémoire** : P1 + observation test Codex autonome à consigner (topic monitoring + `codex.md`).
 - **Déploiement** : AUCUN avant P5. Ne redémarrer aucun serveur.
 
 ---
 
-**Pour le prochain moteur (résumé 3 lignes)** : refonte dashboard « à côté » — **P0 socle, P1 Acquisition, P2 Home, P3a SWP/StoryVoice, P3b1 DictoKey (Overview/Play Store/Infra) et P3b2 (Appareils) sont faits et VÉRIFIÉS** (`monitoring-v2.html` v2.5.0-p3b2 ; parités prouvées vs prod : acq 28/28, produits 21/21, DictoKey 33/33, Appareils = summary + pills + pagination + lignes + interactions au clic réel ; 0 erreur console PC+mobile ; token gate testé). **Reste** : P3b3 Charts/donuts (Chart.js CDN) → P3b4 Firebase/Adoption/Attribution → P3b5 Rétention/Mouvements → P3b2b expand par appareil → compléter MRR/Actifs sur la Home → P4 Ops → P5 bascule. Les tokens sont **résolus** (`_quickref.md` : swp/sv `admin-pro-2026`, dk `dk-admin-2026-secure`) et v2 lit **les mêmes clés localStorage que la prod** → rien à recoller à la bascule. Règles d'or : ne jamais toucher `index.html`/le proxy avant P5, `git add` fichier par fichier (jamais `-A`), vérif en runtime navigateur (`http.server`+Playwright, jamais `file:`), extraire le prod **par ID d'élément**. Codex n'a pas pu coder en autonomie (clé API → sandbox read-only) : pour le relayer, son onglet doit être en `--dangerously-bypass-approvals-and-sandbox` (cf `codex.md` §1quater).
+**Pour le prochain moteur (résumé 3 lignes)** : refonte dashboard « à côté » — **P0 socle, P1 Acquisition, P2 Home, P3a SWP/StoryVoice et P3b1→P3b4 DictoKey (Overview/Play Store/Infra, Appareils, Charts, Firebase/Adoption/Attribution) sont faits et VÉRIFIÉS** (`monitoring-v2.html` v2.8.0-p3b4 ; parités prouvées vs prod : acq 28/28, produits 21/21, DictoKey 33/33, Appareils = summary + pills + pagination + lignes + interactions au clic réel ; 0 erreur console PC+mobile ; token gate testé). **Reste** : **P3b5 Rétention/Mouvements** (dernier sous-lot DictoKey) → P3b2b expand par appareil → compléter MRR/Actifs sur la Home → P4 Ops (Factory/Studio) → P5 bascule. Les tokens sont **résolus** (`_quickref.md` : swp/sv `admin-pro-2026`, dk `dk-admin-2026-secure`) et v2 lit **les mêmes clés localStorage que la prod** → rien à recoller à la bascule. Règles d'or : ne jamais toucher `index.html`/le proxy avant P5, `git add` fichier par fichier (jamais `-A`), vérif en runtime navigateur (`http.server`+Playwright, jamais `file:`), extraire le prod **par ID d'élément**. Codex n'a pas pu coder en autonomie (clé API → sandbox read-only) : pour le relayer, son onglet doit être en `--dangerously-bypass-approvals-and-sandbox` (cf `codex.md` §1quater).
