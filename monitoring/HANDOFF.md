@@ -22,7 +22,7 @@ npx wrangler deploy --config ./wrangler.toml
 - ⚠ **`wrangler` n'était plus authentifié** (OAuth local expiré → `Failed to fetch auth token: 400`). Utiliser `CLOUDFLARE_API_TOKEN` = token **« claude-factory »** (`_quickref.md`, a bien `Workers Scripts:Edit`). Toujours `--config ./wrangler.toml` (2 incidents de worker déployé au mauvais endroit, cf `feedback_wrangler_parent_config.md`).
 - ⚠ **`index.html` (prod v1) n'a JAMAIS été touchée** de tout le chantier et reste servie sur `/index.html` + le github.io public. Ne pas la supprimer avant la fin de la surveillance 48 h.
 - **Vérification post-bascule faite** (Cloudflare Access interdit la lecture anonyme → la chaîne du worker a été **rejouée à l'identique** en local depuis la MÊME source github.io avec la MÊME injection de tokens) : **14/14 vues OK** (7 PC 1280 + 7 mobile 384), **aucun token-gate** (tokens injectés bien hérités), 0 erreur console, 0 overflow. Source github.io confirmée (v2.11.1-p4 à la bascule ; v2.12.0-panels depuis).
-- ⏭ **Reste** : surveiller 48 h (jusqu'au 18/07), puis archiver `index.html` · P6 hygiène · P3b2b (non bloquant).
+- ⏭ **Reste** : surveiller 48 h (jusqu'au 18/07), puis archiver `index.html` · P6 hygiène. **P3b2b est LIVRÉ** (v2.14.0).
 
 ## Objectif courant
 
@@ -81,7 +81,7 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
   - ✅ **`free` 346 (summary) vs 411 (pills) = NON aligné volontairement** : ce n'est pas une incohérence, les deux répondent à des questions différentes — le summary annonce les free *réels* (fantômes sortis, comptés à part) ; le filtre compte ce qui est **dans le tableau**, fantômes inclus (et le tableau les affiche bien, grisés + tag FANTOME).
   - 🔁 **`dkIsPhantom(d)` unifié (feu vert Quang)** : la prod définissait le test **3 fois** (render l.2606 + renderDevicesPage l.4008 = ms & tier minusculé ; donut pays l.2811 = strings ISO & `d.tier` **brut sans minuscules** → un tier `"Free"` aurait cassé le donut seul). **Mesuré sur les 464 devices réels : les 2 variantes donnent 65, ZÉRO écart** (tiers déjà en minuscules, aucune date manquante) → unification sans changer un chiffre. **Le donut de P3b3 DOIT utiliser `dkIsPhantom`.**
   - ✏️ Pluriel corrigé (« 1 appareil » et non « 1 appareils » — faute présente dans la prod). Aucun chiffre touché.
-  - ⏭ **P3b2b** (reporté) : panneau détail par appareil (expand) — `buildDevicePanelHtml` + `aggregateDaily`, endpoint `/admin/monitoring?device=<id>&period=30d`, batch de 6 avec guard `_fetchCounters` + `_bulkCancelled`, état conservé à travers la pagination.
+  - ✅ **P3b2b — LIVRÉ le 16/07 (v2.14.0-p3b2b, commit `10b2896`)** : panneau détail par appareil au clic. 🚨 **Il avait été qualifié de « non bloquant » PAR MOI et perdu à la bascule — Quang l'utilisait.** Sa valeur n'était pas la mienne à décider : **une bascule doit exiger la parité FONCTIONNELLE, pas seulement celle des chiffres.**
 
 - **✅ LOT 7 / P3b3 — DictoKey Charts & donuts (Claude, 16/07, v2.7.0-p3b3)**.
   - `Chart.js@4` via CDN (comme la prod). **Registre `dkCharts` + `dkDestroyCharts()`** appelé avant chaque re-render et à chaque changement de vue → **corrige la fuite de la prod** (`window._cLatency` est hors de son objet `charts`, donc jamais détruit). Vérifié : **0 instance résiduelle** après changement de vue.
@@ -121,7 +121,7 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
 ## Ce qui reste à faire
 - **P5 Bascule** : parité globale prod vs v2 → repointer le proxy `se7enai-dash` sur v2 → surveiller 48 h → archiver l'ancien. Réversible (repointer = 1 commit). ⚠ **Go explicite de Quang OBLIGATOIRE** (revenue).
 - **P6 Hygiène** : supprimer code mort, changelog.
-- **Non bloquant** : P3b2b (expand par appareil).
+- ✅ **P3b2b : LIVRÉ** (v2.14.0-p3b2b).
 - ⚠ **Ne PAS porter le code mort** identifié : `#funnelUnified` (masqué v1.13.0 mais toujours calculé), donuts Modes/Paires (masqués), Sessions 7j Firebase (masqué), `PLAYSTORE_STATS_BASELINE` (déclarée jamais lue), `isAutoRefresh` (auto-refresh retiré v1.14.0). Côté P4 : `mailerliteGroups` (jamais lu), champ `ver` de `STUDIO_SCHEDULE` (15 occurrences mortes), `series[]` d'`analytics.json` (~60 % du poids du fichier, jamais lu) — **non portés**.
 
 ## Pièges à ne pas répéter
@@ -149,7 +149,7 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
 1. **MRR DictoKey** — inexistant dans l'API (Play Console). Prix en dur × premium actifs / API Play Developer / laisser « via Play Console » ?
 2. **`Visite→vente` Factory** — corriger côté worker (borner `/overview` sur une période) ou garder le marquage v2 ?
 
-**Non bloquant** : P3b2b (expand par appareil) — `buildDevicePanelHtml` + `aggregateDaily` (prod l.4273-4402), endpoint `/admin/monitoring?device=<id>&period=30d`, batch de 6 avec guard `_fetchCounters` + `_bulkCancelled`.
+✅ **P3b2b : LIVRÉ** (v2.14.0-p3b2b, commit `10b2896`) — détail par appareil au clic, batch de 6, état conservé à travers la pagination, AbortController réel (la prod n'annulait aucune requête). **Leçon : je l'avais déclaré « non bloquant » et livré la bascule sans lui, alors que Quang s'en servait.**
 
 ⚠ **Fraîcheur hétérogène** à afficher honnêtement : Play = snapshot J-2..J-7 (peut être figé >3j), Firebase = **J-1** (cache KV 1h), KV gateway = live, visites site = live. C'est la raison documentée du masquage du funnel unifié en prod — ne pas le ressusciter sans en parler à Quang.
 
