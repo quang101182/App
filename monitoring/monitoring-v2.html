@@ -200,6 +200,32 @@
     .cost-total { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); color: var(--ink); font-weight: 750; font-size: .84rem; }
     .panel-content .acq-sub:first-child { margin-top: 0; }
 
+    /* P3b2 — Appareils */
+    .dev-summary { margin-bottom: 13px; color: var(--ink); font-size: .84rem; font-weight: 650; }
+    .dev-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 13px; }
+    .dev-controls input { flex: 1 1 210px; min-width: 0; min-height: 38px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--bg); color: var(--ink); font: inherit; font-size: .82rem; }
+    .dev-controls input:focus { border-color: var(--accent); outline: none; }
+    .tier-pills { display: flex; gap: 7px; }
+    .tier-pill { min-height: 38px; padding: 7px 12px; border: 1px solid var(--line-strong); border-radius: 999px; background: transparent; color: var(--ink-faint); font-size: .75rem; font-weight: 700; cursor: pointer; text-transform: capitalize; }
+    .tier-pill.active { border-color: rgba(58,160,255,.45); background: rgba(58,160,255,.13); color: #cfe8ff; }
+    .tier-pill b { font-variant-numeric: tabular-nums; }
+    .dev-table td { vertical-align: top; }
+    .dev-table tr.is-phantom td { opacity: .35; }
+    .phantom-tag { color: var(--crit); font-size: .68rem; font-weight: 750; }
+    .id-sub, .time-sub { margin-top: 2px; color: var(--ink-faint); font-size: .7rem; }
+    .flag { vertical-align: middle; margin-right: 3px; border-radius: 2px; }
+    .tier-kv-sub { margin-top: 3px; color: var(--ink-faint); font-size: .66rem; }
+    .badge.b-pro { border-color: rgba(58,160,255,.4); background: rgba(58,160,255,.12); color: #9fd0ff; }
+    .badge.b-prem { border-color: rgba(199,125,10,.5); background: rgba(199,125,10,.15); color: #e9b866; }
+    .badge.b-prem-rt { border-style: dashed; }
+    .badge.b-free { border-color: var(--line-strong); background: transparent; color: var(--ink-faint); }
+    .devices-empty-row td { padding: 22px 12px; color: var(--ink-muted); text-align: center; }
+    .devices-empty-row a { color: var(--accent); cursor: pointer; }
+    .dev-pagi { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 13px; }
+    .dev-pagi[hidden] { display: none; }
+    .dev-pagi .button:disabled { opacity: .4; cursor: not-allowed; }
+    .dev-page-info { color: var(--ink-muted); font-size: .78rem; font-variant-numeric: tabular-nums; }
+
     @media (max-width: 900px) {
       .app { display: block; }
       .mobile-bar { display: flex; }
@@ -227,7 +253,7 @@
     <aside class="sidebar" aria-label="Navigation principale">
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Se<span class="brand-seven">7</span>en&nbsp;AI</span></div>
       <nav id="navigation"></nav>
-      <div class="side-footer">Monitoring v2 · P3b1 DictoKey</div>
+      <div class="side-footer">Monitoring v2 · P3b2 Appareils</div>
     </aside>
     <div class="content-wrap">
       <header class="mobile-bar"><button class="menu-button" id="menu-button" type="button" aria-label="Ouvrir la navigation" aria-expanded="false">☰</button><strong class="mobile-title">Se<span class="brand-seven">7</span>en&nbsp;AI</strong></header>
@@ -238,7 +264,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.4.0-p3b1';
+    const VERSION = 'v2.5.0-p3b2';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics ; revenus et actifs au lot P3.', sections: [] },
@@ -485,6 +511,55 @@
                totalPremium: tierCounts.premium + premiumRuntimeCount, newDevicesToday };
     }
 
+    // === P3b2 — Appareils DictoKey : état + helpers (parité stricte, index.html l.3786-4061) ===
+    const DK_PER_PAGE = 50;
+    const LS_TIER_FILTERS = 'monitoring_tier_filters';   // même clé que la prod → filtres hérités
+    const dkDevState = { page: 0, search: '', filters: dkLoadTierFilters(), all: [], filtered: [] };
+    function dkLoadTierFilters() {
+      try {
+        const stored = localStorage.getItem(LS_TIER_FILTERS);
+        if (stored) { const p = JSON.parse(stored); return { pro: p.pro !== false, premium: p.premium !== false, free: p.free !== false }; }
+      } catch (e) {}
+      return { pro: true, premium: true, free: true };
+    }
+    function dkSaveTierFilters() { try { localStorage.setItem(LS_TIER_FILTERS, JSON.stringify(dkDevState.filters)); } catch (e) {} }
+    // Catégorie EFFECTIVE : pro KV = pro (cadeau admin à vie) · effectiveTier premium = vrai acheteur Google Play · reste = free.
+    function dkDeviceCategory(d) {
+      const kvTier = (d.tier || 'free').toLowerCase();
+      if (kvTier === 'pro') return 'pro';
+      if (d.effectiveTier === 'premium') return 'premium';
+      return 'free';
+    }
+    function dkDetectPlatform(deviceId) { return (deviceId || '').toLowerCase().startsWith('pc_') ? 'PC' : 'Mobile'; }
+    function dkRelativeTime(s) {
+      const mins = Math.floor((Date.now() - new Date(s).getTime()) / 60000);
+      if (mins < 1) return "À l'instant";
+      if (mins < 60) return `Il y a ${mins}min`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `Il y a ${hours}h`;
+      return `Il y a ${Math.floor(hours / 24)}j`;
+    }
+    function dkTimeOnly(s) { if (!s) return ''; const d = new Date(s); return isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+    function dkDateStack(s) {
+      if (!s) return '—';
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return '—';
+      return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}<div class="time-sub">${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}</div>`;
+    }
+    function dkCountryFlag(code) { return (!code || code === '—') ? '' : `<img src="https://flagcdn.com/20x15/${String(code).toLowerCase()}.png" width="20" height="15" alt="${safeText(code)}" class="flag">`; }
+    function dkApplyDeviceFilters(resetPage) {
+      const q = (dkDevState.search || '').toLowerCase();
+      dkDevState.filtered = (dkDevState.all || []).filter(d => {
+        const cat = dkDeviceCategory(d);
+        if (!dkDevState.filters[cat]) return false;
+        if (!q) return true;
+        return (d.deviceId || '').toLowerCase().includes(q) || cat.includes(q)
+          || dkDetectPlatform(d.deviceId || '').toLowerCase().includes(q) || (d.country || '').toLowerCase().includes(q);
+      });
+      const totalPages = Math.ceil(dkDevState.filtered.length / DK_PER_PAGE);
+      dkDevState.page = (resetPage === false) ? Math.min(dkDevState.page, Math.max(totalPages - 1, 0)) : 0;
+    }
+
     // === P2 — Agrégats Home (dérivés des mêmes compteurs publics que la vue Acquisition) ===
     // Somme cohérente avec la vue acq : hub/swp/sv comptent les `out:*`, DictoKey compte `clicks.total` (outMode).
     function acqSiteOut(acq, key) {
@@ -666,6 +741,9 @@
       if (!payload || !payload.mon) return EmptyState('DictoKey', 'Aucune donnée reçue du gateway.');
       const { mon, stats, dev, visit, click, play } = payload;
       const ds = dkDeviceStats(dev);
+      // Devices triés par lastSeen desc (comme la prod). Les filtres/la page sont conservés entre les rendus.
+      dkDevState.all = ds.devicesList.slice().sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
+      dkApplyDeviceFilters(false);
 
       // --- Trend bar : requêtes + utilisateurs actifs (mobile only) + churn
       const rc = dkPctChange(mon.trend.requests.today, mon.trend.requests.yesterday);
@@ -785,14 +863,97 @@
         + `<section class="section">${kpis}</section>`
         + `<section class="section">${Panel('dk-site', '🌐 Funnel site → Play Store', siteFunnel, true)}</section>`
         + `<section class="section">${Panel('dk-play', '📥 Play Store — adoption & activité', psHtml, true)}</section>`
+        + `<section class="section">${Panel('dk-devices', '📱 Appareils enregistrés', dkRenderDevicesSection(ds), true)}</section>`
         + `<section class="section">${Panel('dk-infra', '🛠 Infra — erreurs & coûts', errHtml + costBars, false)}</section>`
-        + `<section class="section">${Panel('dk-todo', '⏳ Sections restantes', '<p>Appareils (P3b2) · Charts & donuts (P3b3) · Firebase / Adoption v2.61 / Attribution (P3b4) · Rétention & mouvements de tier (P3b5).</p>', false)}</section>`;
+        + `<section class="section">${Panel('dk-todo', '⏳ Sections restantes', '<p>Charts &amp; donuts (P3b3) · Firebase / Adoption v2.61 / Attribution (P3b4) · Rétention &amp; mouvements de tier (P3b5) · panneau détail par appareil (P3b2b).</p>', false)}</section>`;
+    }
+
+    // === P3b2 — Section « Appareils enregistrés » (summary + filtres + recherche + tableau paginé) ===
+    function dkRenderDevicesSection(ds) {
+      // Summary — répartition complète : pro + premium + free = realCount (les fantômes sont hors realCount).
+      const realCount = ds.devicesList.length - ds.phantomCount;
+      const realFreeCount = ds.effectiveFree - ds.phantomCount;
+      const sumParts = [`${ds.tierCounts.pro} pro`];
+      if (ds.totalPremium > 0) sumParts.push(`💎 ${ds.totalPremium} premium`);
+      sumParts.push(`${realFreeCount} free`);
+      let summaryText = `${realCount} appareils — ${sumParts.join(', ')}`;
+      if (ds.phantomCount > 0) summaryText += ` — ${ds.phantomCount} fantôme${ds.phantomCount > 1 ? 's' : ''} (free, 0 req)`;
+      if (ds.totalPremium === 0) summaryText += ' — Premium Google : voir Play Console';
+      summaryText += ` — ⚡ +${ds.newDevicesToday} aujourd’hui`;
+
+      // Compteurs des pills = sur allDevices (NON filtré), comme la prod.
+      const counts = { pro: 0, premium: 0, free: 0 };
+      (dkDevState.all || []).forEach(d => { counts[dkDeviceCategory(d)]++; });
+      const pills = ['pro', 'premium', 'free'].map(t =>
+        `<button class="tier-pill${dkDevState.filters[t] ? ' active' : ''}" type="button" data-tier="${t}">${t} <b>${counts[t]}</b></button>`).join('');
+
+      const start = dkDevState.page * DK_PER_PAGE;
+      const end = Math.min(start + DK_PER_PAGE, dkDevState.filtered.length);
+      const page = dkDevState.filtered.slice(start, end);
+      let body, pageInfo, prevDis, nextDis, pagiHidden;
+      if (dkDevState.filtered.length === 0) {
+        const noTier = !dkDevState.filters.pro && !dkDevState.filters.premium && !dkDevState.filters.free;
+        body = `<tr class="devices-empty-row"><td colspan="4">${noTier ? 'Aucun tier sélectionné — <a href="#" data-tier-reset="1">Tout réactiver</a>' : 'Aucun appareil ne correspond aux filtres'}</td></tr>`;
+        pageInfo = '0 / 0 (0 appareils)'; prevDis = true; nextDis = true; pagiHidden = true;
+      } else {
+        body = page.map(d => {
+          const did = d.deviceId || 'inconnu';
+          const id = did.length > 12 ? did.slice(0, 12) + '...' : did;
+          const kvTier = d.tier || 'free';
+          const effective = d.effectiveTier || null;
+          const displayTier = effective || kvTier;
+          const showSubTier = effective && effective !== kvTier;
+          const tierCls = displayTier === 'pro' ? 'b-pro'
+            : displayTier === 'premium' ? (effective === 'premium' && kvTier !== 'premium' ? 'b-prem b-prem-rt' : 'b-prem') : 'b-free';
+          const created = new Date(d.createdAt).getTime();
+          const seen = new Date(d.lastSeen).getTime();
+          const isPhantom = kvTier === 'free' && !effective && seen <= created;   // variante ms (identique à la prod ici)
+          // 3 sous-lignes FIXES (drapeau+pays+version / modèle / Android) → hauteur uniforme, pas de wrap.
+          // '—' si donnée absente (app < v2.60.0 n'envoyait ni deviceModel ni androidVersion).
+          const l1 = [];
+          if (d.country && d.country !== '—') l1.push(dkCountryFlag(d.country) + safeText(d.country));
+          if (d.appVersion) l1.push('v' + safeText(d.appVersion));
+          const idCell = `<div>${safeText(id)}${isPhantom ? ' <span class="phantom-tag">FANTOME</span>' : ''}</div>`
+            + (l1.length ? `<div class="id-sub">${l1.join(' · ')}</div>` : '')
+            + `<div class="id-sub">${d.deviceModel ? safeText(d.deviceModel) : '—'}</div>`
+            + `<div class="id-sub">${d.androidVersion ? 'A' + safeText(d.androidVersion) : '—'}</div>`;
+          const tierCell = `<span class="badge ${tierCls}">${safeText(displayTier === 'premium' ? 'prem' : displayTier)}</span>`
+            + (showSubTier ? `<div class="tier-kv-sub">KV: ${safeText(kvTier)}</div>` : '');
+          return `<tr class="dev-row${isPhantom ? ' is-phantom' : ''}" title="${safeText(did)}"><td>${idCell}</td><td>${tierCell}</td>`
+            + `<td>${dkDateStack(d.createdAt)}</td><td>${dkRelativeTime(d.lastSeen)}<div class="time-sub">${dkTimeOnly(d.lastSeen)}</div></td></tr>`;
+        }).join('');
+        const totalPages = Math.ceil(dkDevState.filtered.length / DK_PER_PAGE);
+        pageInfo = `${dkDevState.page + 1} / ${Math.max(totalPages, 1)} (${dkDevState.filtered.length} appareils)`;
+        prevDis = dkDevState.page === 0;
+        nextDis = end >= dkDevState.filtered.length;
+        pagiHidden = dkDevState.filtered.length <= DK_PER_PAGE;
+      }
+
+      return `<div class="dev-summary" id="dk-dev-summary">${safeText(summaryText)}</div>`
+        + `<div class="dev-controls"><input type="search" id="dk-dev-search" placeholder="Rechercher (id, tier, pays…)" value="${safeText(dkDevState.search)}" autocomplete="off"><div class="tier-pills">${pills}</div></div>`
+        + `<div class="table-wrap"><table class="data-table dev-table"><thead><tr><th>Appareil</th><th>Tier</th><th>Créé</th><th>Vu</th></tr></thead><tbody>${body}</tbody></table></div>`
+        + `<div class="dev-pagi"${pagiHidden ? ' hidden' : ''}><button class="button" type="button" data-dev-page="prev"${prevDis ? ' disabled' : ''}>← Précédent</button>`
+        + `<span class="dev-page-info">${safeText(pageInfo)}</span>`
+        + `<button class="button" type="button" data-dev-page="next"${nextDis ? ' disabled' : ''}>Suivant →</button></div>`;
     }
 
     function EmptyState(name, message) { return `<section class="placeholder"><div class="placeholder-inner"><span class="placeholder-icon" aria-hidden="true">◌</span><h2>${safeText(name)}</h2><p>${safeText(message)}</p></div></section>`; }
     function TokenGate(app, message) {
       return `<section class="placeholder"><div class="placeholder-inner"><span class="placeholder-icon" aria-hidden="true">🔒</span><h2>${safeText(app.name)} — token requis</h2><p>${safeText(message || 'Cette vue expose des données payantes. Colle le token admin pour y accéder.')}</p>`
         + `<div class="token-form"><input type="password" id="token-input" placeholder="Token admin" autocomplete="off" spellcheck="false"><button class="button" type="button" data-token-save="${app.key}">Enregistrer</button></div></div></section>`;
+    }
+
+    // Re-rend UNIQUEMENT le panneau Appareils (filtres/recherche/pagination = zéro requête réseau).
+    function dkRefreshDevicesPanel(keepFocus) {
+      const host = document.getElementById('dk-devices-content');
+      if (!host) return;
+      const cached = state.cache.get('dk');
+      if (!cached || !cached.dev) return;
+      host.innerHTML = dkRenderDevicesSection(dkDeviceStats(cached.dev));
+      if (keepFocus) {
+        const input = document.getElementById('dk-dev-search');
+        if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+      }
     }
 
     function renderNavigation() {
@@ -879,8 +1040,41 @@
         refresh(cfg.key);
         return;
       }
+      const tierPill = event.target.closest('[data-tier]');
+      if (tierPill) {
+        const t = tierPill.dataset.tier;
+        dkDevState.filters[t] = !dkDevState.filters[t];
+        dkSaveTierFilters();
+        dkApplyDeviceFilters(true);
+        dkRefreshDevicesPanel();
+        return;
+      }
+      const tierReset = event.target.closest('[data-tier-reset]');
+      if (tierReset) {
+        event.preventDefault();
+        dkDevState.filters = { pro: true, premium: true, free: true };
+        dkSaveTierFilters();
+        dkApplyDeviceFilters(true);
+        dkRefreshDevicesPanel();
+        return;
+      }
+      const devPage = event.target.closest('[data-dev-page]');
+      if (devPage) {
+        const totalPages = Math.ceil(dkDevState.filtered.length / DK_PER_PAGE);
+        if (devPage.dataset.devPage === 'prev') dkDevState.page = Math.max(0, dkDevState.page - 1);
+        else dkDevState.page = Math.min(Math.max(totalPages - 1, 0), dkDevState.page + 1);
+        dkRefreshDevicesPanel();
+        return;
+      }
       const panelButton = event.target.closest('.panel-toggle');
       if (panelButton) { const panel = panelButton.closest('.panel'); const open = panel.dataset.open !== 'true'; panel.dataset.open = String(open); panelButton.setAttribute('aria-expanded', String(open)); }
+    });
+    document.addEventListener('input', event => {
+      if (event.target && event.target.id === 'dk-dev-search') {
+        dkDevState.search = event.target.value || '';
+        dkApplyDeviceFilters(true);
+        dkRefreshDevicesPanel(true);
+      }
     });
     document.getElementById('menu-button').addEventListener('click', () => document.getElementById('app-shell').classList.contains('drawer-open') ? closeDrawer() : openDrawer());
     document.getElementById('nav-scrim').addEventListener('click', closeDrawer);

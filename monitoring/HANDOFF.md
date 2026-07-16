@@ -1,11 +1,11 @@
 # HANDOFF — App/monitoring
-Lot: R9 · 16 juillet 2026 · Claude (Opus 4.8) → prochain moteur (P3 Produits payants)
+Lot: R9 · 16 juillet 2026 · Claude (Opus 4.8) → prochain moteur (P3b3 Charts & donuts)
 
 ## Objectif courant
 
 Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue de la prod `index.html` v1.23.0 vers `monitoring-v2.html` (config-driven, tokenisé, responsive), **sans toucher la prod**, en migrant onglet par onglet, bascule seulement à parité de chiffres vérifiée.
 
-**Étape immédiate = LOT 2 / P1 Acquisition** : brancher la vue Acquisition (token-less, données publiques) dans `monitoring-v2.html`, chiffres STRICTEMENT identiques à la prod.
+**Étape immédiate = P3b3 Charts & donuts** (voir « Prochaine étape unique » en bas). Fait à ce jour : P0 socle, P1 Acquisition, P2 Home, P3a SWP/StoryVoice, P3b1 + P3b2 DictoKey — tous avec parité prouvée en runtime.
 
 ## Références figées
 
@@ -46,9 +46,15 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
   - Rendu : trend-bar, 4 KPI (hero appareils Play-ou-KV), bandeau Premium silencieux, funnel site, Play Store (adoption + 28 j + warning figé), Infra (erreurs + coûts) — **en panneaux accordéon** (`Panel`), ce qui règle le fleuve de 7000px.
   - **Parité vérifiée : 33/33 identiques** vs prod (extraction prod **par ID d'élément**, v2 par structure DOM). Couvre les cas tordus : delta −68 %, `snapshot Google au 11 juil. (J-5)`, breakdown clics `hero 235 · pricing 8 · …`, taux 4.0 % (avec baseline), conversion 42.0 %, note 4.73. **0 erreur console**, pas d'overflow PC 1280 + mobile 384.
 
+- **✅ LOT 6 / P3b2 — DictoKey Appareils (Claude, 16/07, v2.5.0-p3b2)**.
+  - Summary (realCount = devices − fantômes, breakdown pro/💎premium/free, fantômes, ⚡nouveaux), **filtres tier persistés sur la MÊME clé que la prod** (`monitoring_tier_filters` → hérités), recherche (id/cat/plateforme/pays), **tableau paginé 50/page** (4 colonnes : Appareil + 3 sous-lignes fixes drapeau/modèle/Android, Tier + `KV:` si effectif ≠ KV, Créé, Vu), état vide + « Tout réactiver », pagination masquée si ≤ 50.
+  - Filtres/recherche/pagination re-rendent **uniquement le panneau** (`dkRefreshDevicesPanel`) → **zéro requête réseau**, focus de la recherche conservé.
+  - **Parité vérifiée** : summary, compteurs des pills, `1 / 10 (464 appareils)`, 50 lignes, 3 premières lignes identiques au caractère près. **Interactions testées au clic réel** : pill `free` OFF → `1 / 2 (51 appareils)`, page suivante → `2 / 10`, recherche « fr » → `1 / 9 (435)`. 0 erreur console, pas d'overflow PC + mobile 384.
+  - ⚠️ **Incohérence PROD reproduite fidèlement (à trancher avec Quang, ne PAS aligner sans son feu vert)** : le summary et les pills utilisent **deux taxonomies différentes**. Summary `totalPremium` = KV premium + premium runtime = **18** ; pills `getDeviceCategory()` ne renvoie `premium` que si `effectiveTier === 'premium'` = **16** → **2 appareils KV `premium` sans effectiveTier sont classés « free » par le filtre** (donc invisibles si on décoche « free »). Idem le `free` du summary (346) exclut les fantômes, celui des pills (413) les inclut.
+  - ⏭ **P3b2b** (reporté) : panneau détail par appareil (expand) — `buildDevicePanelHtml` + `aggregateDaily`, endpoint `/admin/monitoring?device=<id>&period=30d`, batch de 6 avec guard `_fetchCounters` + `_bulkCancelled`, état conservé à travers la pagination.
+
 ## Ce qui reste à faire
 - **P3b — DictoKey, sous-lots restants** (P3b1 fait). Découpage décidé le 16/07 car la vue prod = 7 sections + 11 sous-blocs dans le seul `#sO` :
-  - **P3b2 — Appareils** : summary (`realCount` = devices − phantoms, breakdown pro/💎premium/free + fantômes + ⚡nouveaux), tableau paginé (**50/page**, état `devicesPage`), filtres tier persistés (`monitoring_tier_filters`), recherche (id/cat/plateforme/pays), panneaux expand (batch de 6, endpoint `?device=<id>&period=30d`). 466 devices en prod.
   - **P3b3 — Charts & donuts** : `Chart.js@4` via CDN (`cdn.jsdelivr.net/npm/chart.js@4`, le prod fait pareil — 5 instances). DAU quotidien (line), Activité quotidienne (bar stacked), latence P50 (line) + jauges `#sP`, donut Langues + donut Top pays (agrégation `devicesList[].country` **hors fantômes**, `Map` pour garder l'ordre). ⚠ Ne PAS porter les donuts Modes/Paires (masqués en prod).
   - **P3b4 — Firebase / Adoption v2.61 / Attribution v2.61.7** : endpoint `/admin/firebase-stats?period=7d` (toléré). Funnel d'activation, sources d'acquisition (+ bandeau IA), adoption refonte, attribution.
   - **P3b5 — Rétention (`advanced`) + Mouvements de tier** : D1/D7/D30 (seuils couleur 0.4 / 0.2), nouveaux utilisateurs, distribution d'usage + segments power/regular/casual, adoption features ; churn details (tableau Date/Device/Transition).
@@ -70,9 +76,11 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
 
 ## Prochaine étape unique
 
-**P3b2 — Appareils DictoKey** : summary + tableau paginé (50/page) + filtres tier + recherche + expand. C'est le plus gros sous-lot restant. Tout est déjà en place côté socle : `dkDeviceStats(dev)` calcule déjà les cohortes (devicesList/tierCounts/phantomCount/premiumRuntimeCount/effectiveFree/totalPremium/newDevicesToday), `.data-table` + `.badge` + `.health` existent (P3a), `fetchDk` ramène déjà `/admin/devices` (466 devices).
+**P3b3 — Charts & donuts DictoKey**. Charger `Chart.js@4` depuis le CDN (`<script src="https://cdn.jsdelivr.net/npm/chart.js@4">`, comme la prod). À porter : DAU quotidien (line, `dau.daily` **reversed**, `by_platform.mobile`), Activité quotidienne (bar stacked, `mon.daily` reversed, `d.{transcribe,rewrite,correct,translate}.count`), latence P50 (line, `lat.daily` reversed, `spanGaps:true`) + jauges `#sP` (`p50/1000`, barre `min(p50/5000*100,100)`, seuils couleur 1000 / 3000), donut Langues (`summary.transcribe.top_langs` via `mapLang`), donut Top pays (agrégation `devicesList[].country` **hors fantômes**, `Map` pour l'ordre, drapeaux emoji).
 
-⚠ **Piège de parité à trancher AVANT de coder P3b2/P3b3** : le prod définit « phantom » **3 fois avec des variantes** — `render()` l.2606-2608 et `renderDevicesPage()` l.4008 comparent en **ms**, le donut pays l.2811 compare des **strings ISO** et exige les 2 champs présents. `dkDeviceStats` (v2) implémente la variante **ms**. Unifier en un seul `isPhantom(d)` est tentant et propre, MAIS peut changer le compte du donut pays → **le proposer à Quang, ne pas l'imposer** ; en attendant, reproduire la variante exacte de chaque site d'appel pour garder la parité.
+⚠ **Piège phantom à trancher AVANT P3b3** : le prod définit « phantom » **3 fois avec des variantes** — `render()` l.2606-2608 et `renderDevicesPage()` l.4008 comparent en **ms** (v2 fait pareil, parité OK), MAIS le donut pays l.2811 compare des **strings ISO** et exige les 2 champs présents. Donc **le donut peut compter différemment**. Unifier en un `isPhantom(d)` est propre mais CHANGERAIT le donut → **proposer à Quang, ne pas l'imposer** ; par défaut, reproduire la variante ISO pour le donut afin de garder la parité.
+
+⚠ **Détruire les charts au changement de vue** : la prod a une fuite connue — `window._cLatency` est **hors** de l'objet `charts`, donc `destroyCharts()` ne le détruit pas. En v2, tenir un registre unique et tout détruire dans `route()`/`renderApp` avant de re-rendre, sinon Chart.js empile les instances.
 
 Méthode qui a marché 4 fois — la rejouer : (1) sous-agent Explore pour extraire endpoints + formules + DOM du prod, (2) **passe critique** = relire soi-même le code cité avant de coder, (3) porter à l'identique avec les composants v2, (4) prouver la parité en Playwright (prod vs v2, mêmes données live — **extraire le prod par ID d'élément**, c'est le plus robuste), (5) capture + commit scopé.
 
@@ -84,10 +92,12 @@ Méthode qui a marché 4 fois — la rejouer : (1) sous-agent Explore pour extra
 - ✅ P2 : runtime OK, agrégats vérifiés vs somme des apps, CTA au clic réel, commit scopé, captures Telegram livrées.
 - ✅ P3a : parité 21/21, token gate testé, commit scopé, captures Telegram livrées.
 - ✅ P3b1 : parité 33/33, commit scopé, capture Telegram livrée.
+- ✅ P3b2 : parité summary/pills/pagination/lignes + interactions au clic réel, commit scopé, capture Telegram livrée.
+- ✅ P3b2 : parité summary/pills/pagination/lignes + interactions au clic réel, commit scopé, capture Telegram livrée.
 - **Git** : toujours commit SCOPÉ (`git add` fichier par fichier, jamais `-A` — dépôt `App` a des frères non commités). Pas de push tant que non demandé.
 - **Mémoire** : P1 + observation test Codex autonome à consigner (topic monitoring + `codex.md`).
 - **Déploiement** : AUCUN avant P5. Ne redémarrer aucun serveur.
 
 ---
 
-**Pour le prochain moteur (résumé 3 lignes)** : refonte dashboard « à côté » — **P0 socle, P1 Acquisition, P2 Home, P3a SWP/StoryVoice et P3b1 DictoKey (Overview/Play Store/Infra) sont faits et VÉRIFIÉS** (`monitoring-v2.html` v2.4.0-p3b1 ; parités prouvées vs prod : acq 28/28, produits 21/21, DictoKey 33/33 ; 0 erreur console PC+mobile ; token gate testé). **Reste** : P3b2 Appareils (tableau paginé) → P3b3 Charts/donuts (Chart.js CDN) → P3b4 Firebase/Adoption/Attribution → P3b5 Rétention/Mouvements → compléter MRR/Actifs sur la Home → P4 Ops → P5 bascule. Les tokens sont **résolus** (`_quickref.md` : swp/sv `admin-pro-2026`, dk `dk-admin-2026-secure`) et v2 lit **les mêmes clés localStorage que la prod** → rien à recoller à la bascule. Règles d'or : ne jamais toucher `index.html`/le proxy avant P5, `git add` fichier par fichier (jamais `-A`), vérif en runtime navigateur (`http.server`+Playwright, jamais `file:`), extraire le prod **par ID d'élément**. Codex n'a pas pu coder en autonomie (clé API → sandbox read-only) : pour le relayer, son onglet doit être en `--dangerously-bypass-approvals-and-sandbox` (cf `codex.md` §1quater).
+**Pour le prochain moteur (résumé 3 lignes)** : refonte dashboard « à côté » — **P0 socle, P1 Acquisition, P2 Home, P3a SWP/StoryVoice, P3b1 DictoKey (Overview/Play Store/Infra) et P3b2 (Appareils) sont faits et VÉRIFIÉS** (`monitoring-v2.html` v2.5.0-p3b2 ; parités prouvées vs prod : acq 28/28, produits 21/21, DictoKey 33/33, Appareils = summary + pills + pagination + lignes + interactions au clic réel ; 0 erreur console PC+mobile ; token gate testé). **Reste** : P3b3 Charts/donuts (Chart.js CDN) → P3b4 Firebase/Adoption/Attribution → P3b5 Rétention/Mouvements → P3b2b expand par appareil → compléter MRR/Actifs sur la Home → P4 Ops → P5 bascule. Les tokens sont **résolus** (`_quickref.md` : swp/sv `admin-pro-2026`, dk `dk-admin-2026-secure`) et v2 lit **les mêmes clés localStorage que la prod** → rien à recoller à la bascule. Règles d'or : ne jamais toucher `index.html`/le proxy avant P5, `git add` fichier par fichier (jamais `-A`), vérif en runtime navigateur (`http.server`+Playwright, jamais `file:`), extraire le prod **par ID d'élément**. Codex n'a pas pu coder en autonomie (clé API → sandbox read-only) : pour le relayer, son onglet doit être en `--dangerously-bypass-approvals-and-sandbox` (cf `codex.md` §1quater).
