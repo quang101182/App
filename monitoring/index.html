@@ -12,7 +12,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.22.0</title>
+<title>Monitoring v1.23.0</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -102,6 +102,9 @@ a { color: var(--accent2); }
 .app-tab:hover:not(.active) { color: var(--text); }
 /* v1.7.15 fix Kimi : differenciation app-tabs vs section-nav par fond colore subtil + underline + font-weight 600 (vs section-nav qui n'a que underline) */
 .app-tab.active { background: rgba(124,58,237,.10); color: var(--accent2); border-bottom-color: var(--accent); }
+/* v1.23.0 — regroupement onglets en familles */
+.tab-grp-label { align-self: center; font-size: .6rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--text2); opacity: .55; padding: 0 9px 0 3px; white-space: nowrap; flex: none; }
+.tab-sep { align-self: center; width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex: none; }
 
 /* Main */
 .main { max-width: 1400px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
@@ -569,16 +572,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     body.app-studio #footer, body.app-studio #alertBanner, body.app-studio #freshBanner { display: none !important; }
     body.app-studio #studioView { display: block; }
 
-    /* === Se7en AI (v1.21.0) — funnel hub vitrine, isolé via body.app-se7, SANS token (compteurs publics) === */
-    body:not(.app-se7) #se7View { display: none !important; }
-    body.app-se7 #sO, body.app-se7 #sP, body.app-se7 #sA, body.app-se7 #sRet,
-    body.app-se7 #sChurn, body.app-se7 #sD, body.app-se7 #sI, body.app-se7 #sectionNav,
-    body.app-se7 .pill-group, body.app-se7 .section-block, body.app-se7 .btn-toggle-all,
-    body.app-se7 #footer, body.app-se7 #alertBanner { display: none !important; }
-    body.app-se7 #se7View { display: block; }
-    #se7View { width: 100%; min-width: 0; box-sizing: border-box; max-width: 860px; margin: 0 auto; }
-
-    /* === Sites & Acquisition (v1.22.0) — funnel sites vitrines, isolé via body.app-acq, SANS token === */
+    /* === Acquisition (v1.23.0) — hub se7 + sites vitrines, isolé via body.app-acq, SANS token === */
     body:not(.app-acq) #acqView { display: none !important; }
     body.app-acq #sO, body.app-acq #sP, body.app-acq #sA, body.app-acq #sRet,
     body.app-acq #sChurn, body.app-acq #sD, body.app-acq #sI, body.app-acq #sectionNav,
@@ -924,7 +918,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.22.0</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.23.0</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -1342,10 +1336,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   <!-- Studio view (v1.20.0) — agenda des posts vidéo, isolé via body.app-studio, SANS token. Rempli par renderStudio(). -->
   <div id="studioView"></div>
 
-  <!-- Se7en AI view (v1.21.0) — funnel du hub se7enai.com, isolé via body.app-se7, SANS token. Rempli par renderSe7(). -->
-  <div id="se7View"></div>
-
-  <!-- Sites & Acquisition view (v1.22.0) — funnel visite→sortant des sites vitrines, isolé via body.app-acq, SANS token. Rempli par renderAcq(). -->
+  <!-- Acquisition view (v1.23.0) — hub se7enai.com + sites vitrines, isolé via body.app-acq, SANS token. Rempli par renderAcq(). -->
   <div id="acqView"></div>
 
   <!-- Footer -->
@@ -1354,7 +1345,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.22.0';
+const DASHBOARD_VERSION = 'v1.23.0';
 
 // === Multi-app config ===
 const APPS = {
@@ -1396,14 +1387,7 @@ const APPS = {
     tokenKey: null,
     endpoints: {}
   },
-  // v1.21.0 — Se7en AI : hub vitrine se7enai.com, funnel d'acquisition (visites/clics via gateway-pro slug se7). SANS token (compteurs publics).
-  se7: {
-    name: 'Se7en AI',
-    gateway: '',
-    tokenKey: null,
-    endpoints: {}
-  },
-  // v1.22.0 — Sites & Acquisition : funnel visite→clic sortant des sites vitrines (dk/swp/sv) via compteurs publics gateway-pro. SANS token.
+  // v1.23.0 — Acquisition (fusion des ex-onglets se7 + acq) : hub se7enai.com + sites vitrines (dk/swp/sv), funnel visite→clic sortant via compteurs publics gateway-pro. SANS token.
   acq: {
     name: 'Acquisition',
     gateway: '',
@@ -1562,9 +1546,23 @@ const DONUT_COLORS = ['#6D28D9','#3b82f6','#10b981','#f59e0b','#ef4444','#a78bfa
 // === App tabs ===
 function renderAppTabs() {
   const container = document.getElementById('appTabs');
-  container.innerHTML = Object.entries(APPS).map(([key, app]) =>
-    '<button class="app-tab' + (key === currentApp ? ' active' : '') + '" data-app="' + key + '">' + app.name + '</button>'
-  ).join('');
+  // v1.23.0 — regroupement des onglets en 3 familles (remarque Quang : hiérarchie produits / acquisition / ops).
+  var GROUPS = [
+    { label: 'Produits', keys: ['dictokey', 'swp', 'storyvoice'] },
+    { label: 'Acquisition', keys: ['acq'] },
+    { label: 'Ops', keys: ['factory', 'studio'] }
+  ];
+  var html = '';
+  GROUPS.forEach(function(grp, gi) {
+    if (gi > 0) html += '<span class="tab-sep" aria-hidden="true"></span>';
+    html += '<span class="tab-grp-label">' + grp.label + '</span>';
+    grp.keys.forEach(function(key) {
+      var app = APPS[key];
+      if (!app) return;
+      html += '<button class="app-tab' + (key === currentApp ? ' active' : '') + '" data-app="' + key + '">' + app.name + '</button>';
+    });
+  });
+  container.innerHTML = html;
   container.querySelectorAll('.app-tab').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var newApp = this.dataset.app;
@@ -1588,7 +1586,7 @@ function switchApp(newApp) {
   // v1.20.0 : Studio = agenda statique, aucune donnée sensible → pas de token, rendu direct.
   if (newApp === 'studio') { hideLogin(); renderStudio(); return; }
   // factory + se7 : visites publiques → pas de token requis. Autres apps : token requis.
-  if (newApp !== 'factory' && newApp !== 'se7' && newApp !== 'acq' && !getToken()) { showLogin(); return; }
+  if (newApp !== 'factory' && newApp !== 'acq' && !getToken()) { showLogin(); return; }
   hideLogin(); // v1.14.0 : fermer une éventuelle modale login résiduelle d'un onglet précédent
   // v1.14.0/v1.16.0 : retour sur un onglet → rendu depuis le cache (mémoire ou localStorage), JAMAIS de fetch auto.
   if (renderFromCache(newApp)) return;
@@ -1616,8 +1614,7 @@ function setActiveAppView(appId) {
   document.body.classList.toggle('app-factory', appId === 'factory'); // v1.14.0
   document.body.classList.toggle('app-storyvoice', appId === 'storyvoice'); // v1.19.0
   document.body.classList.toggle('app-studio', appId === 'studio'); // v1.20.0
-  document.body.classList.toggle('app-se7', appId === 'se7'); // v1.21.0
-  document.body.classList.toggle('app-acq', appId === 'acq'); // v1.22.0
+  document.body.classList.toggle('app-acq', appId === 'acq'); // v1.23.0 (fusion se7+acq)
   document.body.dataset.activeApp = appId;
 }
 
@@ -1692,8 +1689,6 @@ async function fetchAll() {
       await fetchAllStoryVoice(signal);
     } else if (thisApp === 'factory') {
       await fetchAllFactory(signal);
-    } else if (thisApp === 'se7') {
-      await fetchAllSe7(signal);
     } else if (thisApp === 'acq') {
       await fetchAllAcq(signal);
     } else {
@@ -1756,7 +1751,6 @@ function renderFromCache(app) {
   else if (app === 'swp') { renderSwp(c); }
   else if (app === 'storyvoice') { renderSv(c); }
   else if (app === 'factory') { renderFactory(c); }
-  else if (app === 'se7') { renderSe7(c); }
   else if (app === 'acq') { renderAcq(c); }
   renderFreshBanner(app);
   return true;
@@ -2001,21 +1995,10 @@ async function fetchAllFactory(signal) {
 }
 
 // === Se7en AI fetch + render (v1.21.0) — funnel hub vitrine, compteurs publics gateway-pro slug se7 ===
-async function fetchAllSe7(signal) {
-  var G = 'https://api-gateway-pro.quang101182.workers.dev';
-  var r = await Promise.all([
-    fetch(G + '/api/visit?page=se7', { signal: signal }).then(function(x){ return x.json(); }).catch(function(){ return { total: 0, today: 0 }; }),
-    fetch(G + '/api/click?page=se7', { signal: signal }).then(function(x){ return x.json(); }).catch(function(){ return { total: 0, today: 0, by_btn_all: {} }; })
-  ]);
-  if (currentApp !== 'se7') return; // réponse tardive sur mauvais onglet → drop
-  var data = { visit: r[0], clicks: r[1], generatedAt: Date.now() };
-  persistAppCache('se7', data);
-  renderSe7(data);
-}
-
-function renderSe7(data) {
-  var view = document.getElementById('se7View');
-  if (!view || !data) return;
+// === v1.23.0 — Onglet « Acquisition » UNIFIÉ (fusion des ex-onglets se7 + acq, remarque Quang) :
+//     section Hub se7enai.com (funnel 6 étapes) + section Sites vitrines (dk/swp/sv). Compteurs publics gateway-pro, SANS token. ===
+function hubSectionHtml(data) {
+  if (!data) return '<div style="color:#8a97ab;font-size:.82rem">Hub : pas de données.</div>';
   var visit = data.visit || { total: 0, today: 0 };
   var bb = (data.clicks && data.clicks.by_btn_all) || {};
   function g(k) { return parseInt(bb[k]) || 0; }
@@ -2050,38 +2033,30 @@ function renderSe7(data) {
     '</div>';
   }).join('');
   var outHtml = outParts.length ? ('<div style="margin-top:10px;font-size:.82rem;color:#8a97ab">Détail sortants : ' + outParts.map(function(o){ return swpEscape(o.name) + ' <b style="color:#e6edf3">' + o.v + '</b>'; }).join(' · ') + '</div>') : '';
-  var when = data.generatedAt ? new Date(data.generatedAt).toLocaleString('fr-FR') : '';
   var box = 'background:rgba(120,160,220,.05);border:1px solid rgba(58,160,255,.14);border-radius:12px;padding:14px;text-align:center';
-  view.innerHTML =
-    '<div style="padding:18px 14px 70px">' +
-      '<div style="display:flex;align-items:center;gap:10px;margin:4px 2px 6px"><span style="font-size:1.4rem">🌐</span>' +
-        '<h2 style="font-size:1.3rem;font-weight:800;letter-spacing:-.02em">Se7en AI — Hub &amp; Acquisition</h2></div>' +
-      '<div style="color:#8a97ab;font-size:.82rem;margin:0 2px 16px;line-height:1.45">Funnel du hub <a href="https://se7enai.com" target="_blank" rel="noopener" style="color:#3aa0ff">se7enai.com ↗</a> — visite → démo → chat → CTA → waitlist → clic sortant. Cookieless (gateway-pro, slug <code>se7</code>).</div>' +
-      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:22px">' +
-        '<div style="' + box + '"><div style="font-size:.7rem;color:#8a97ab;text-transform:uppercase;letter-spacing:.06em">Visites</div><div style="font-size:1.5rem;font-weight:800;color:#3aa0ff">' + vTot + '</div><div style="font-size:.7rem;color:#8a97ab">' + (vToday > 0 ? '+' + vToday + ' auj.' : '—') + '</div></div>' +
-        '<div style="' + box + '"><div style="font-size:.7rem;color:#8a97ab;text-transform:uppercase;letter-spacing:.06em">Waitlist</div><div style="font-size:1.5rem;font-weight:800;color:#7bc88a">' + wait + '</div><div style="font-size:.7rem;color:#8a97ab">emails captés</div></div>' +
-        '<div style="' + box + '"><div style="font-size:.7rem;color:#8a97ab;text-transform:uppercase;letter-spacing:.06em">Clics sortants</div><div style="font-size:1.5rem;font-weight:800;color:#ffc46b">' + outTotal + '</div><div style="font-size:.7rem;color:#8a97ab">vers store/app</div></div>' +
-      '</div>' +
-      '<div style="background:rgba(120,160,220,.03);border:1px solid rgba(58,160,255,.1);border-radius:14px;padding:18px 16px">' +
-        '<div style="font-weight:700;font-size:.82rem;margin-bottom:14px;text-transform:uppercase;letter-spacing:.06em;color:#8a97ab">Funnel d\'acquisition</div>' +
-        rows + outHtml +
-      '</div>' +
-      '<div style="font-size:.78rem;color:#8a97ab;margin-top:14px">Dernière mesure : ' + swpEscape(when) + '</div>' +
-    '</div>';
+  return '<div style="display:flex;align-items:center;gap:10px;margin:0 2px 4px"><span style="font-size:1.15rem">🌐</span>' +
+      '<h3 style="font-size:1.02rem;font-weight:800;letter-spacing:-.01em;margin:0">Hub — <a href="https://se7enai.com" target="_blank" rel="noopener" style="color:#3aa0ff;text-decoration:none">se7enai.com ↗</a></h3></div>' +
+    '<div style="color:#8a97ab;font-size:.78rem;margin:0 2px 14px;line-height:1.45">Tête de pont (lien bio TikTok). Visite → démo → chat → CTA → waitlist → clic sortant.</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">' +
+      '<div style="' + box + '"><div style="font-size:.68rem;color:#8a97ab;text-transform:uppercase;letter-spacing:.06em">Visites</div><div style="font-size:1.4rem;font-weight:800;color:#3aa0ff">' + vTot + '</div><div style="font-size:.68rem;color:#8a97ab">' + (vToday > 0 ? '+' + vToday + ' auj.' : '—') + '</div></div>' +
+      '<div style="' + box + '"><div style="font-size:.68rem;color:#8a97ab;text-transform:uppercase;letter-spacing:.06em">Waitlist</div><div style="font-size:1.4rem;font-weight:800;color:#7bc88a">' + wait + '</div><div style="font-size:.68rem;color:#8a97ab">emails captés</div></div>' +
+      '<div style="' + box + '"><div style="font-size:.68rem;color:#8a97ab;text-transform:uppercase;letter-spacing:.06em">Clics sortants</div><div style="font-size:1.4rem;font-weight:800;color:#ffc46b">' + outTotal + '</div><div style="font-size:.68rem;color:#8a97ab">vers store/app</div></div>' +
+    '</div>' +
+    '<div style="font-weight:700;font-size:.76rem;margin-bottom:12px;text-transform:uppercase;letter-spacing:.06em;color:#8a97ab">Funnel d\'acquisition du hub</div>' +
+    rows + outHtml;
 }
 
-// === v1.22.0 — Sites & Acquisition : funnel visite→clic sortant des sites vitrines (dk/swp/sv), compteurs publics gateway-pro, SANS token ===
 async function fetchAllAcq(signal) {
   var G = 'https://api-gateway-pro.quang101182.workers.dev';
-  var sites = ['dk', 'swp', 'sv'];
+  var slugs = ['se7', 'dk', 'swp', 'sv'];
   var calls = [];
-  sites.forEach(function(s) {
+  slugs.forEach(function(s) {
     calls.push(fetch(G + '/api/visit?page=' + s, { signal: signal }).then(function(x){ return x.json(); }).catch(function(){ return { total: 0, today: 0 }; }));
     calls.push(fetch(G + '/api/click?page=' + s, { signal: signal }).then(function(x){ return x.json(); }).catch(function(){ return { total: 0, today: 0, by_btn_all: {} }; }));
   });
   var r = await Promise.all(calls);
   if (currentApp !== 'acq') return; // réponse tardive sur mauvais onglet → drop
-  var data = { dk: { visit: r[0], clicks: r[1] }, swp: { visit: r[2], clicks: r[3] }, sv: { visit: r[4], clicks: r[5] }, generatedAt: Date.now() };
+  var data = { se7: { visit: r[0], clicks: r[1] }, dk: { visit: r[2], clicks: r[3] }, swp: { visit: r[4], clicks: r[5] }, sv: { visit: r[6], clicks: r[7] }, generatedAt: Date.now() };
   persistAppCache('acq', data);
   renderAcq(data);
 }
@@ -2127,8 +2102,12 @@ function renderAcq(data) {
   view.innerHTML =
     '<div style="padding:18px 14px 70px">' +
       '<div style="display:flex;align-items:center;gap:10px;margin:4px 2px 6px"><span style="font-size:1.4rem">📡</span>' +
-        '<h2 style="font-size:1.3rem;font-weight:800;letter-spacing:-.02em">Sites &amp; Acquisition</h2></div>' +
-      '<div style="color:#8a97ab;font-size:.82rem;margin:0 2px 18px;line-height:1.45">North-star : <b style="color:#e6edf3">taux visite → clic sortant</b> par site vitrine. Dit si la fuite est le SITE ou le PRODUIT (leçon « seau percé »). Cookieless, compteurs publics gateway-pro.</div>' +
+        '<h2 style="font-size:1.3rem;font-weight:800;letter-spacing:-.02em">Acquisition</h2></div>' +
+      '<div style="color:#8a97ab;font-size:.82rem;margin:0 2px 20px;line-height:1.45">North-star : <b style="color:#e6edf3">taux visite → clic sortant</b>. Le hub se7enai.com (tête de pont TikTok) puis les sites vitrines. Cookieless, gateway-pro.</div>' +
+      '<div style="background:rgba(120,160,220,.03);border:1px solid rgba(58,160,255,.12);border-radius:16px;padding:18px 16px;margin-bottom:24px">' +
+        hubSectionHtml(data.se7) +
+      '</div>' +
+      '<div style="font-weight:700;font-size:.8rem;margin:0 2px 12px;text-transform:uppercase;letter-spacing:.06em;color:#8a97ab">Sites vitrines</div>' +
       cards +
       '<div style="font-size:.78rem;color:#8a97ab;margin-top:8px">Dernière mesure : ' + swpEscape(when) + '</div>' +
     '</div>';
@@ -4886,7 +4865,7 @@ window.addEventListener('resize', function() {
 });
 (function init() {
   // v1.14.0 : factory ne requiert pas de token ; v1.20.0 : studio non plus (agenda statique)
-  if (currentApp !== 'factory' && currentApp !== 'studio' && currentApp !== 'se7' && currentApp !== 'acq' && !getToken()) { showLogin(); return; }
+  if (currentApp !== 'factory' && currentApp !== 'studio' && currentApp !== 'acq' && !getToken()) { showLogin(); return; }
   // v1.16.0 : si des données persistées existent (localStorage), on les affiche SANS fetch
   // → l'utilisateur garde la main, il rafraîchit via le bouton Actualiser quand il veut.
   if (renderFromCache(currentApp)) { startFreshBannerTicker(); return; }
