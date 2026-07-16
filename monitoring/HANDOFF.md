@@ -1,11 +1,28 @@
 # HANDOFF — App/monitoring
-Lot: R10 · 16 juillet 2026 · Claude (Opus 4.8) → prochain moteur (P5 BASCULE — go explicite de Quang OBLIGATOIRE)
+Lot: R11 · 16 juillet 2026 · Claude (Opus 4.8) → **P5 BASCULÉ (go Quang donné le 16/07)** · reste : surveillance 48 h, P6 hygiène
+
+## 🚨 BASCULE FAITE le 16/07/2026 — `dash.se7enai.com` sert `monitoring-v2.html` (v2.11.1-p4)
+
+**Rollback = 1 minute, 1 ligne** (le worker n'est PAS versionné — se7enai-hub n'est pas un dépôt git) :
+```bash
+cd D:/Download/02-Apps-Web/se7enai-hub/dash-worker
+# remettre "/index.html" à la place de "/monitoring-v2.html" (src/inject.js l.22)
+# un .bak horodaté existe : src/inject.js.bak-pre-p5-*
+export CLOUDFLARE_API_TOKEN="cfut_..."   # token « claude-factory », cf _quickref.md (Workers Scripts:Edit)
+npx wrangler deploy --config ./wrangler.toml
+```
+- **Filet immédiat SANS redeploy** : `dash.se7enai.com/index.html` sert TOUJOURS l'ancien dashboard v1.23.0 (seul le chemin `/` a basculé). Quang peut y aller à tout moment.
+- **Ce qui a changé** : `se7enai-hub/dash-worker/src/inject.js` l.22 → `const path = url.pathname === "/" ? "/monitoring-v2.html" : url.pathname;`. Déployé : version `5b361ede-3b2f-4815-945d-1ad4cee5fb51`. **Rien d'autre** (UPSTREAM, injection des tokens, secrets, Access : inchangés).
+- ⚠ **`wrangler` n'était plus authentifié** (OAuth local expiré → `Failed to fetch auth token: 400`). Utiliser `CLOUDFLARE_API_TOKEN` = token **« claude-factory »** (`_quickref.md`, a bien `Workers Scripts:Edit`). Toujours `--config ./wrangler.toml` (2 incidents de worker déployé au mauvais endroit, cf `feedback_wrangler_parent_config.md`).
+- ⚠ **`index.html` (prod v1) n'a JAMAIS été touchée** de tout le chantier et reste servie sur `/index.html` + le github.io public. Ne pas la supprimer avant la fin de la surveillance 48 h.
+- **Vérification post-bascule faite** (Cloudflare Access interdit la lecture anonyme → la chaîne du worker a été **rejouée à l'identique** en local depuis la MÊME source github.io avec la MÊME injection de tokens) : **14/14 vues OK** (7 PC 1280 + 7 mobile 384), **aucun token-gate** (tokens injectés bien hérités), 0 erreur console, 0 overflow. Source github.io confirmée en `v2.11.1-p4`.
+- ⏭ **Reste** : surveiller 48 h (jusqu'au 18/07), puis archiver `index.html` · P6 hygiène · P3b2b (non bloquant).
 
 ## Objectif courant
 
 Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue de la prod `index.html` v1.23.0 vers `monitoring-v2.html` (config-driven, tokenisé, responsive), **sans toucher la prod**, en migrant onglet par onglet, bascule seulement à parité de chiffres vérifiée.
 
-**Étape immédiate = P5 BASCULE** (voir « Prochaine étape unique » en bas) — ⚠ revenue, **ne rien faire sans le go explicite de Quang**. ✅ Fait et vérifié : P0 socle, P1 Acquisition, **P2 Home COMPLÈTE (DoD bouclée)**, P3a SWP/StoryVoice, P3b1→P3b5 DictoKey (vue complète), **P4 Ops Factory + Studio**. **TOUTES LES VUES SONT PORTÉES** (7/7).
+**Étape immédiate = surveillance 48 h + P6 hygiène.** ✅ Fait et vérifié : P0 socle, P1 Acquisition, **P2 Home COMPLÈTE (DoD bouclée)**, P3a SWP/StoryVoice, P3b1→P3b5 DictoKey (vue complète), **P4 Ops Factory + Studio**, **P5 BASCULE (16/07)**. **TOUTES LES VUES SONT PORTÉES (7/7) ET EN PRODUCTION.**
 
 ## Références figées
 
@@ -115,10 +132,10 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
 
 ## Prochaine étape unique
 
-**P5 — BASCULE.** Toutes les vues sont portées et prouvées. ⚠ **C'est LE moment sensible du chantier (revenue) : ne RIEN faire sans le go explicite de Quang.**
-1. **Re-vérifier la parité globale** en une passe (les 7 vues, prod vs v2, mêmes données live) — les parités sont prouvées lot par lot, jamais toutes ensemble le même jour.
-2. **Repointer le proxy `se7enai-dash`** sur `monitoring-v2.html` (dash.se7enai.com). **Rollback = repointer = 1 commit.**
-3. **Surveiller 48 h**, puis archiver `index.html`.
+**Surveillance 48 h (jusqu'au 18/07), puis archiver `index.html`.** La bascule est faite (voir le bloc en tête). Ne rien archiver avant la fin de la surveillance : `/index.html` est le filet de secours sans redeploy.
+- ✅ ~~Parité globale~~ : passe faite le 16/07 avant bascule — 14/14 vues saines (7 PC + 7 mobile), spot-check des chiffres clés OK (DictoKey 464/4.73, SWP 18/11/72.7, acq 9270, Factory 6/12/25/8.39, Studio 15226/67000, Home 18/159).
+- ✅ ~~Repointer le proxy~~ : fait, version `5b361ede`.
+- ⏭ **Surveiller** : si Quang signale un écran vide/lent, penser au **cold start du worker DictoKey (jusqu'à 22 s)** — c'est attendu, l'état de chargement l'annonce désormais.
 - ✅ **Tokens : rien à recoller.** v2 lit les MÊMES clés localStorage que la prod (`monitoring_admin_token`, `monitoring_swp_token`, `monitoring_storyvoice_token`, `monitoring_factory_token`, `dk-monitoring-studio-filters`) et est servi depuis la MÊME origine → tokens et filtres hérités.
 - ⚠ **Divergences VOULUES à assumer publiquement à la bascule** (ce ne sont PAS des régressions) : perf Studio séparée organique/boosté (82 226 → 15 226 + 67 000, décision Quang), 30 appareils/page (vs 50), donuts top 7 + « Autres », filtre premium DictoKey corrigé (16 → 18), `Visite→vente` marqué « fenêtres mixtes ». Roadmap §7 + §8.
 
