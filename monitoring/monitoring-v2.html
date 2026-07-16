@@ -330,6 +330,10 @@
       .kpi-value { font-size: 1.45rem; }
     }
 
+    .ret-since { margin: 0 0 12px; color: var(--ink-muted); font-size: .73rem; line-height: 1.5; }
+    .ret-since b { color: var(--ink); }
+    .ret-nosig { color: var(--ink-muted); font-size: .62em; font-style: italic; font-weight: 600; }
+
     /* Métrique non calculable : ni verte ni rouge — l'absence de mesure n'est pas un résultat. */
     .dk-unmeasured { color: var(--ink-muted) !important; font-style: italic; }
     .dk-warnbox { margin-top: 9px; padding: 9px 11px; border: 1px solid rgba(245, 181, 46, .32); border-left: 3px solid var(--warn); border-radius: 8px; background: rgba(245, 181, 46, .06); color: var(--ink-muted); font-size: .73rem; line-height: 1.6; }
@@ -479,7 +483,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.12.1-unmeasured';
+    const VERSION = 'v2.12.2-signif';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -1190,14 +1194,31 @@
     // === P3b5 — Rétention (mon.advanced) + Mouvements de tier (parité stricte, index.html l.3673-3784 / 3914-3969) ===
     function renderDkAdvanced(adv) {
       if (!adv) return `<div class="no-data">Pas de métriques avancées sur la période</div>`;
-      // --- Rétention D1/D7/D30. Seuils : ≥0.4 vert · ≥0.2 orange · sinon rouge. Cohorte absente → « Pas assez de données ».
+      // --- Rétention D1/D7/D30. Seuils : ≥0.4 vert · ≥0.2 orange · sinon rouge.
+      // ⚠ Le prod ne dit « Pas assez de données » QUE si la cohorte est absente (null) → une cohorte d'UNE
+      // personne sort en « 0 % » ROUGE. Constaté le 16/07 : d1 cohort_size=1 retained=0 et
+      // d30 cohort_size=1 → deux alertes rouges qui ne mesurent RIEN. Même piège que le « 0 % » du bandeau
+      // bulle : un taux calculé sur n=1 est du bruit, pas un résultat. En dessous de RET_MIN_COHORT on
+      // affiche donc le taux en gris + le n, sans code couleur (une couleur = un jugement).
+      const RET_MIN_COHORT = 10;
       let ret = '';
       if (adv.retention) {
-        ret = `<div class="chart-title">Rétention</div><div class="kpi-grid ret-grid">` + [['d1', 'D1'], ['d7', 'D7'], ['d30', 'D30']].map(([k, label]) => {
+        const since = adv.retention.dau_available_since;
+        // Le backend n'historise le DAU que depuis cette date : avant, aucune rétention n'est calculable.
+        // Sans cette mention, on lit « 0 % » comme un effondrement produit alors que c'est un manque d'historique.
+        const sinceNote = since
+          ? `<p class="ret-since">Les données de rétention ne commencent que le <b>${safeText(since)}</b> — avant, l’historique DAU n’existe pas.</p>`
+          : '';
+        ret = `<div class="chart-title">Rétention</div>${sinceNote}<div class="kpi-grid ret-grid">` + [['d1', 'D1'], ['d7', 'D7'], ['d30', 'D30']].map(([k, label]) => {
           const d = adv.retention[k];
           if (!d) return `<article class="kpi-tile"><div class="kpi-label">${label}</div><div class="kpi-value ret-na">Pas assez de données</div></article>`;
+          const n = d.cohort_size || 0;
+          const plural = n > 1 ? 'utilisateurs' : 'utilisateur';
+          if (n < RET_MIN_COHORT) {
+            return `<article class="kpi-tile"><div class="kpi-label">${label}</div><div class="kpi-value ret-na">${Math.round(d.rate * 100)}% <span class="ret-nosig">sur n=${n}</span></div><div class="kpi-note">Cohorte de ${n} ${plural} → <b>non significatif</b>, aucun jugement possible</div></article>`;
+          }
           const cls = d.rate >= 0.4 ? 'r-good' : d.rate >= 0.2 ? 'r-warn' : 'r-crit';
-          return `<article class="kpi-tile"><div class="kpi-label">${label}</div><div class="kpi-value ${cls}">${Math.round(d.rate * 100)}%</div><div class="kpi-note">Cohorte : ${d.cohort_size} utilisateurs</div></article>`;
+          return `<article class="kpi-tile"><div class="kpi-label">${label}</div><div class="kpi-value ${cls}">${Math.round(d.rate * 100)}%</div><div class="kpi-note">Cohorte : ${n} ${plural}</div></article>`;
         }).join('') + `</div>`;
       }
       // --- Nouveaux utilisateurs (chart monté dans dkMountCharts)
