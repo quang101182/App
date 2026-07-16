@@ -11,7 +11,8 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
 
 - Mock-up de direction VALIDÉ : `D:/Download/02-Apps-Web/dashboard-refonte/MOCKUP-v0.2.html`.
 - Feuille de route mère : `D:/Download/02-Apps-Web/dashboard-refonte/DASHBOARD-REFONTE-ROADMAP.md` (§3 = phasage P0→P6).
-- **Brief P1 détaillé (auto-suffisant, pour Codex) : `D:/Download/02-Apps-Web/dashboard-refonte/BRIEF-CODEX-P1-acquisition.md`** ← à lire et exécuter.
+- ~~`dashboard-refonte/BRIEF-CODEX-P1-acquisition.md`~~ — **PÉRIMÉ, ne pas exécuter** : P1 est livré. Le fichier ne reste utile que comme **exemple de brief** auto-suffisant si on veut relayer un lot à Codex/Gemini.
+- **Prod = `App/monitoring/index.html` v1.23.0, dernier commit `1546c70`. Elle n'a PAS été touchée de tout le chantier — et ne doit pas l'être avant P5.**
 
 ## Ce qui est fait (vérifié)
 
