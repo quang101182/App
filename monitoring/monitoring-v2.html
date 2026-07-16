@@ -333,6 +333,41 @@
       .kpi-value { font-size: 1.45rem; }
     }
 
+    /* ── P3b2b — détail par appareil ─────────────────────────────────────── */
+    .dev-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .dev-bulk-btn { min-height: 34px; padding: 6px 11px; font-size: .74rem; }
+    .dev-bulk-btn:disabled { opacity: .42; cursor: not-allowed; }
+    .dev-bulk-status { color: var(--accent); font-size: .73rem; font-weight: 600; }
+    .dev-bulk-hint { margin-left: auto; color: var(--ink-muted); font-size: .71rem; }
+    .dev-table tr.dev-row { cursor: pointer; }
+    .dev-table tr.dev-row:hover td { background: var(--surface-raised); }
+    .dev-table tr.dev-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .dev-table tr.dev-row.dev-expanded td { background: rgba(58, 160, 255, .07); }
+    .dev-table tr.dev-expand-row td { padding: 0; background: var(--surface-soft); }
+    .dev-panel { padding: 14px 16px; border-left: 3px solid var(--accent); white-space: normal; }
+    .dev-panel-loading, .dev-panel-error, .dev-panel-empty { color: var(--ink-muted); font-size: .79rem; }
+    .dev-panel-error { color: var(--crit); }
+    .dev-panel-empty { font-style: italic; }
+    .dev-panel-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 13px; }
+    .dev-col { padding: 10px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+    .dev-col-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; color: var(--ink-muted); font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+    .dev-col-total { color: var(--accent); font-size: .68rem; }
+    .dev-metric { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 0; font-size: .76rem; }
+    .dev-metric-label { display: flex; align-items: center; gap: 6px; color: var(--ink-muted); }
+    .dev-metric-val { color: var(--ink); font-weight: 700; }
+    .dev-metric-zero .dev-metric-val, .dev-metric-zero .dev-metric-label { opacity: .38; }
+    .dev-meta { display: grid; gap: 7px; padding-top: 11px; border-top: 1px solid var(--line); }
+    .dev-meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 9px; }
+    .dev-meta-label { color: var(--ink-faint); font-size: .68rem; text-transform: uppercase; letter-spacing: .03em; }
+    .dev-meta-val { color: var(--ink); font-size: .77rem; }
+    .dev-none { color: var(--ink-muted); font-size: .72rem; font-weight: 400; opacity: .8; }
+    .dev-chip { padding: 1px 8px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink-muted); font-size: .7rem; }
+    .dev-copy-id { padding: 1px 7px; border-radius: 5px; background: var(--surface-raised); color: var(--ink-muted); font-family: ui-monospace, monospace; font-size: .7rem; user-select: all; }
+    @media (max-width: 760px) {
+      .dev-panel-grid { grid-template-columns: 1fr; gap: 8px; }
+      .dev-bulk-hint { flex-basis: 100%; margin-left: 0; }
+    }
+
     /* Bandeau de rôle : neutre (jamais rouge/orange) — un produit au repos n'est pas une anomalie. */
     .role-banner { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 22px; padding: 11px 14px; border: 1px solid var(--line); border-left: 3px solid var(--role-color, var(--accent)); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-muted); font-size: .78rem; line-height: 1.6; }
     .role-banner b { color: var(--ink); }
@@ -491,7 +526,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.13.3-refresh';
+    const VERSION = 'v2.14.0-p3b2b';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -1791,7 +1826,9 @@
             + `<div class="id-sub">${d.androidVersion ? 'A' + safeText(d.androidVersion) : '—'}</div>`;
           const tierCell = `<span class="badge ${tierCls}">${safeText(displayTier === 'premium' ? 'prem' : displayTier)}</span>`
             + (showSubTier ? `<div class="tier-kv-sub">KV: ${safeText(kvTier)}</div>` : '');
-          return `<tr class="dev-row${isPhantom ? ' is-phantom' : ''}" title="${safeText(did)}"><td>${idCell}</td><td>${tierCell}</td>`
+          // P3b2b : la ligne entière ouvre le détail. `aria-expanded` + `tabindex` = la prod n'avait ni l'un
+          // ni l'autre (ligne cliquable au curseur seulement, invisible au clavier et aux lecteurs d'écran).
+          return `<tr class="dev-row${isPhantom ? ' is-phantom' : ''}${dkExpanded.has(did) ? ' dev-expanded' : ''}" data-device-id="${safeText(did)}" tabindex="0" role="button" aria-expanded="${dkExpanded.has(did)}" title="${safeText(did)} — cliquer pour le détail d’usage"><td>${idCell}</td><td>${tierCell}</td>`
             + `<td>${dkDateStack(d.createdAt)}</td><td>${dkRelativeTime(d.lastSeen)}<div class="time-sub">${dkTimeOnly(d.lastSeen)}</div></td></tr>`;
         }).join('');
         const totalPages = Math.ceil(dkDevState.filtered.length / DK_PER_PAGE);
@@ -1804,6 +1841,10 @@
 
       return `<div class="dev-summary" id="dk-dev-summary">${safeText(summaryText)}</div>`
         + `<div class="dev-controls"><input type="search" id="dk-dev-search" placeholder="Rechercher (id, tier, pays…)" value="${safeText(dkDevState.search)}" autocomplete="off"><div class="tier-pills">${pills}</div></div>`
+        + `<div class="dev-bulk"><button class="button dev-bulk-btn" type="button" id="dk-expand-all">⤓ Tout déplier</button>`
+          + `<button class="button dev-bulk-btn" type="button" id="dk-collapse-all">⤒ Tout replier</button>`
+          + `<span class="dev-bulk-status" id="dk-bulk-status"></span>`
+          + `<span class="dev-bulk-hint">Clique une ligne pour son détail d’usage (30 j)</span></div>`
         + `<div class="table-wrap"><table class="data-table dev-table"><thead><tr><th>Appareil</th><th>Tier</th><th>Créé</th><th>Vu</th></tr></thead><tbody>${body}</tbody></table></div>`
         + `<div class="dev-pagi"${pagiHidden ? ' hidden' : ''}><button class="button" type="button" data-dev-page="prev"${prevDis ? ' disabled' : ''}>← Précédent</button>`
         + `<span class="dev-page-info">${safeText(pageInfo)}</span>`
@@ -1823,10 +1864,250 @@
       const cached = state.cache.get('dk');
       if (!cached || !cached.dev) return;
       host.innerHTML = dkRenderDevicesSection(dkDeviceStats(cached.dev));
+      dkRestoreExpanded();   // les panneaux ouverts survivent aux filtres / recherche / pagination
       if (keepFocus) {
         const input = document.getElementById('dk-dev-search');
         if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
       }
+    }
+
+    // ── P3b2b — Détail par appareil (clic sur une ligne) ────────────────────────
+    // Fonctionnalité de la prod que Quang utilise et que la bascule P5 avait perdue : je l'avais moi-même
+    // qualifiée de « non bloquante » et livrée sans elle. Sa valeur n'était pas la mienne à décider.
+    const dkExpanded = new Set();          // deviceIds ouverts (survit à la pagination, comme la prod)
+    const dkExpandCache = new Map();       // deviceId -> payload /admin/monitoring?device=…
+    const dkExpandSeq = new Map();         // deviceId -> n° de fetch : jette les réponses obsolètes
+    let dkExpandCtrl = null;               // AbortController partagé : la prod n'en avait AUCUN (cf. plus bas)
+    let dkBulkRunning = false;
+
+    function dkTopN(obj, n) { return Object.entries(obj || {}).sort((a, b) => b[1] - a[1]).slice(0, n); }
+    function dkFmtDuration(sec) {
+      if (!sec) return '0s';
+      if (sec < 60) return `${Math.round(sec)}s`;
+      const m = Math.floor(sec / 60), s = Math.round(sec - m * 60);
+      return `${m}min${s ? ` ${s}s` : ''}`;
+    }
+    // Agrège les `days` jours les PLUS RÉCENTS. La prod fait `daily[i]` de 0 à days sans jamais lire `d.date` :
+    // elle SUPPOSE que daily[0] = aujourd'hui. C'est vrai aujourd'hui (vérifié : daily[0].date == date du jour),
+    // mais rien ne le garantit — et si l'ordre s'inversait, « Aujourd'hui » afficherait le jour le plus ancien
+    // SANS ERREUR VISIBLE. On trie donc défensivement par date décroissante avant de couper.
+    function dkAggregateDaily(daily, days) {
+      const agg = { transcribe: 0, rewrite: 0, correct: 0, translate: 0, words: 0, audio_sec: 0, langs: {}, modes: {}, pairs: {}, latSum: 0, latCount: 0, latMax: 0, daysWithData: 0 };
+      if (!Array.isArray(daily)) return agg;
+      const sorted = daily.slice().sort((a, b) => String((b || {}).date || '').localeCompare(String((a || {}).date || '')));
+      sorted.slice(0, days).forEach(d => {
+        if (!d) return;
+        if (d.transcribe) {
+          agg.transcribe += d.transcribe.count || 0;
+          agg.words += d.transcribe.words || 0;
+          agg.audio_sec += d.transcribe.audio_sec || 0;
+          Object.entries(d.transcribe.langs || {}).forEach(([k, v]) => { agg.langs[k] = (agg.langs[k] || 0) + v; });
+        }
+        if (d.rewrite) {
+          agg.rewrite += d.rewrite.count || 0;
+          Object.entries(d.rewrite.modes || {}).forEach(([k, v]) => { agg.modes[k] = (agg.modes[k] || 0) + v; });
+        }
+        if (d.correct) agg.correct += d.correct.count || 0;
+        if (d.translate) {
+          agg.translate += d.translate.count || 0;
+          Object.entries(d.translate.pairs || {}).forEach(([k, v]) => { agg.pairs[k] = (agg.pairs[k] || 0) + v; });
+        }
+        ['transcribe', 'rewrite', 'correct', 'translate'].forEach(ep => {
+          const l = d[ep] && d[ep].latency;
+          if (!l) return;
+          agg.latSum += l.sum || 0;
+          agg.latCount += l.count || 0;
+          if ((l.max || 0) > agg.latMax) agg.latMax = l.max || 0;
+        });
+        if ((d.transcribe || {}).count || (d.rewrite || {}).count || (d.correct || {}).count || (d.translate || {}).count) agg.daysWithData++;
+      });
+      return agg;
+    }
+    function dkDevicePanelHtml(did, data) {
+      const daily = (data && data.daily) || [];
+      const devInfo = (dkDevState.all || []).find(x => x.deviceId === did);
+      const idRow = `<div class="dev-meta-row"><span class="dev-meta-label">Device ID</span><span class="dev-copy-id">${safeText(did)}</span></div>`;
+      if (!daily.length) return `<div class="dev-panel"><div class="dev-panel-empty">Aucune activité enregistrée sur les 30 derniers jours.</div><div class="dev-meta">${idRow}</div></div>`;
+      const today = dkAggregateDaily(daily, 1), week = dkAggregateDaily(daily, 7), month = dkAggregateDaily(daily, 30);
+      const col = (label, agg) => {
+        const total = agg.transcribe + agg.rewrite + agg.correct + agg.translate;
+        const row = (icon, name, val) => `<div class="dev-metric${val === 0 ? ' dev-metric-zero' : ''}"><span class="dev-metric-label"><span class="dev-metric-icon">${icon}</span>${name}</span><span class="dev-metric-val">${val}</span></div>`;
+        return `<div class="dev-col"><div class="dev-col-label">${label}<span class="dev-col-total">${total} req</span></div>`
+          + row('🎙', 'Dictées', agg.transcribe) + row('✏', 'Réécritures', agg.rewrite)
+          + row('🔧', 'Corrections', agg.correct) + row('🌐', 'Traductions', agg.translate) + `</div>`;
+      };
+      const chips = (list, vide) => list.length ? list.map(([k, v]) => `<span class="dev-chip">${safeText(k)} (${v})</span>`).join('') : `<span class="dev-meta-val dev-none">${vide}</span>`;
+      const avgLat = month.latCount > 0 ? Math.round(month.latSum / month.latCount) : 0;
+      // La prod calcule latMax puis ne l'affiche jamais (code mort). Ici il sert : un max très au-dessus de
+      // la moyenne est le signal d'un pic isolé, invisible sur la seule moyenne.
+      const latCell = avgLat ? `${avgLat} ms${month.latMax > avgLat * 2 ? ` <span class="dev-none">· pic ${month.latMax} ms</span>` : ''}` : '—';
+      // La prod étiquette « 30 derniers jours » même quand l'API n'a que 4 jours d'historique : impossible de
+      // distinguer « 0 sur 30 j » de « pas de données ». On affiche donc la couverture réelle.
+      const cover = daily.length < 30 ? ` <span class="dev-none">· ${daily.length} jour${daily.length > 1 ? 's' : ''} d’historique</span>` : '';
+      const kvTier = (devInfo || {}).tier || 'free';
+      const effectiveTier = (devInfo || {}).effectiveTier || null;
+      let tierDisplay;
+      if (!devInfo) tierDisplay = `<span class="dev-none">appareil absent de la liste chargée</span>`;   // la prod affiche « free » : une absence rendue comme une donnée
+      else if (effectiveTier && effectiveTier !== kvTier) {
+        const icon = effectiveTier === 'premium' ? '💎 ' : effectiveTier === 'pro' ? '⭐ ' : '';
+        tierDisplay = `${icon}${safeText(effectiveTier)} <span class="dev-none">(KV : ${safeText(kvTier)})</span>`
+          + ((devInfo || {}).effectiveTierAt ? ` <span class="dev-none">· ${dkRelativeTime(devInfo.effectiveTierAt)}</span>` : '');
+      } else if (effectiveTier) tierDisplay = safeText(effectiveTier);
+      else tierDisplay = `${safeText(kvTier)} <span class="dev-none">(pas encore détecté au runtime)</span>`;
+      const country = (devInfo || {}).country;
+      return `<div class="dev-panel">`
+        + `<div class="dev-panel-grid">${col('Aujourd’hui', today)}${col('7 derniers jours', week)}${col('30 derniers jours', month)}</div>`
+        + `<div class="dev-meta">`
+          + `<div class="dev-meta-row"><span class="dev-meta-label">Langues dictées (30j)</span>${chips(dkTopN(month.langs, 10), 'aucune')}</div>`
+          + `<div class="dev-meta-row"><span class="dev-meta-label">Modes réécriture (30j)</span>${chips(dkTopN(month.modes, 10), 'aucun')}</div>`
+          + `<div class="dev-meta-row"><span class="dev-meta-label">Paires traduction (30j)</span>${chips(dkTopN(month.pairs, 10), 'aucune')}</div>`
+          + `<div class="dev-meta-row"><span class="dev-meta-label">Audio total</span><span class="dev-meta-val">${dkFmtDuration(month.audio_sec)}</span>`
+            + `<span class="dev-meta-label">Mots</span><span class="dev-meta-val">${month.words.toLocaleString('fr-FR')}</span>`
+            + `<span class="dev-meta-label">Latence moy</span><span class="dev-meta-val">${latCell}</span>`
+            + `<span class="dev-meta-label">Jours actifs</span><span class="dev-meta-val">${month.daysWithData}/${Math.min(daily.length, 30)}${cover}</span></div>`
+          + `<div class="dev-meta-row"><span class="dev-meta-label">Tier effectif</span><span class="dev-meta-val">${tierDisplay}</span>`
+            + `<span class="dev-meta-label">Pays</span><span class="dev-meta-val">${country ? dkCountryFlag(country) + safeText(country) : '—'}</span></div>`
+          + idRow
+        + `</div></div>`;
+    }
+    function dkExpandRowFor(did) { return document.querySelector(`#dk-devices-content tr.dev-expand-row[data-expand-for="${CSS.escape(did)}"]`); }
+    function dkRowFor(did) { return document.querySelector(`#dk-devices-content tr.dev-row[data-device-id="${CSS.escape(did)}"]`); }
+    function dkPaintPanel(did, html) {
+      const row = dkExpandRowFor(did);
+      if (row) row.innerHTML = `<td colspan="4">${html}</td>`;
+    }
+    function dkInsertExpandRow(tr, did, data) {
+      const old = dkExpandRowFor(did);
+      if (old) old.remove();
+      const el = document.createElement('tr');
+      el.className = 'dev-expand-row';
+      el.setAttribute('data-expand-for', did);
+      el.innerHTML = `<td colspan="4">${data ? dkDevicePanelHtml(did, data) : '<div class="dev-panel"><div class="dev-panel-loading">Chargement des détails…</div></div>'}</td>`;
+      tr.parentNode.insertBefore(el, tr.nextSibling);
+      return el;
+    }
+    // ⚠ La prod appelle son apiFetch SANS signal sur ce chemin (l.4115 et 4247) alors qu'il en accepte un :
+    // fermer les panneaux ou changer d'onglet n'annulait AUCUNE requête (jusqu'à 50 en vol après un « Tout
+    // déplier »). Ses `_fetchCounters`/`_bulkCancelled` ne faisaient que JETER les réponses. Ici on annule vraiment.
+    async function dkFetchDevice(did) {
+      if (!dkExpandCtrl) dkExpandCtrl = new AbortController();
+      const cfg = getApp('dk');
+      const r = await fetch(`${DK_GATEWAY}/admin/monitoring?device=${encodeURIComponent(did)}&period=30d`,
+        { signal: dkExpandCtrl.signal, headers: { Authorization: `Bearer ${getToken(cfg)}` } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    }
+    async function dkOpenDevice(did) {
+      const tr = dkRowFor(did);
+      if (!tr || dkExpanded.has(did)) return;
+      dkExpanded.add(did);
+      tr.classList.add('dev-expanded');
+      tr.setAttribute('aria-expanded', 'true');
+      if (dkExpandCache.has(did)) { dkInsertExpandRow(tr, did, dkExpandCache.get(did)); dkUpdateBulkState(); return; }
+      dkInsertExpandRow(tr, did, null);
+      dkUpdateBulkState();
+      const seq = (dkExpandSeq.get(did) || 0) + 1;
+      dkExpandSeq.set(did, seq);
+      try {
+        const data = await dkFetchDevice(did);
+        if (dkExpandSeq.get(did) !== seq || !dkExpanded.has(did)) return;   // réponse obsolète
+        dkExpandCache.set(did, data);
+        dkPaintPanel(did, dkDevicePanelHtml(did, data));
+      } catch (e) {
+        if (e.name === 'AbortError' || dkExpandSeq.get(did) !== seq || !dkExpanded.has(did)) return;
+        // 401 = session expirée : le dire une fois, clairement (la prod affichait « Erreur : 401 » dans
+        // chaque panneau, sans jamais rouvrir la modale de login).
+        const msg = /401/.test(e.message) ? 'Session expirée — recolle un token via « Actualiser ».' : `Erreur de chargement : ${safeText(e.message || 'inconnue')}`;
+        dkPaintPanel(did, `<div class="dev-panel"><div class="dev-panel-error">${msg}</div></div>`);
+      }
+    }
+    function dkCloseDevice(did) {
+      const row = dkExpandRowFor(did);
+      if (row) row.remove();
+      const tr = dkRowFor(did);
+      if (tr) { tr.classList.remove('dev-expanded'); tr.setAttribute('aria-expanded', 'false'); }
+      dkExpanded.delete(did);
+      dkExpandSeq.delete(did);
+      dkExpandCache.delete(did);
+      dkUpdateBulkState();
+    }
+    function dkCloseAllDevices() {
+      if (dkExpandCtrl) { dkExpandCtrl.abort(); dkExpandCtrl = null; }   // annule pour de vrai
+      Array.from(dkExpanded).forEach(did => dkCloseDevice(did));
+      dkExpanded.clear(); dkExpandCache.clear(); dkExpandSeq.clear();
+      dkUpdateBulkState();
+    }
+    function dkVisibleDeviceIds() {
+      const start = dkDevState.page * DK_PER_PAGE;
+      return (dkDevState.filtered || []).slice(start, start + DK_PER_PAGE).map(d => d.deviceId).filter(Boolean);
+    }
+    function dkUpdateBulkState() {
+      const exp = document.getElementById('dk-expand-all'), col = document.getElementById('dk-collapse-all'), st = document.getElementById('dk-bulk-status');
+      if (!exp || !col) return;
+      const page = dkVisibleDeviceIds();
+      const openOnPage = page.filter(d => dkExpanded.has(d)).length;
+      exp.disabled = dkBulkRunning || !page.length || openOnPage === page.length;
+      col.disabled = dkBulkRunning || dkExpanded.size === 0;
+      if (st && !dkBulkRunning) st.textContent = dkExpanded.size ? `${dkExpanded.size} déplié${dkExpanded.size > 1 ? 's' : ''}` : '';
+    }
+    // Batch de 6 : ne pas saturer une connexion mobile avec 30 requêtes d'un coup (repris de la prod).
+    async function dkExpandAllVisible() {
+      if (dkBulkRunning) return;
+      const todo = dkVisibleDeviceIds().filter(d => !dkExpanded.has(d));
+      if (!todo.length) return;
+      dkBulkRunning = true;
+      dkUpdateBulkState();
+      const st = document.getElementById('dk-bulk-status');
+      let done = 0;
+      const setStatus = () => { if (st) st.textContent = `Chargement ${done}/${todo.length}…`; };
+      setStatus();
+      todo.forEach(did => {
+        const tr = dkRowFor(did);
+        if (!tr) return;
+        dkExpanded.add(did);
+        tr.classList.add('dev-expanded');
+        tr.setAttribute('aria-expanded', 'true');
+        dkInsertExpandRow(tr, did, dkExpandCache.get(did) || null);
+      });
+      try {
+        for (let i = 0; i < todo.length; i += 6) {
+          if (!dkBulkRunning) break;   // annulé par « Tout replier » / Échap
+          await Promise.all(todo.slice(i, i + 6).map(async did => {
+            if (dkExpandCache.has(did)) { done++; setStatus(); return; }
+            const seq = (dkExpandSeq.get(did) || 0) + 1;
+            dkExpandSeq.set(did, seq);
+            try {
+              const data = await dkFetchDevice(did);
+              if (dkExpandSeq.get(did) !== seq || !dkExpanded.has(did)) return;
+              dkExpandCache.set(did, data);
+              dkPaintPanel(did, dkDevicePanelHtml(did, data));
+            } catch (e) {
+              if (e.name === 'AbortError' || !dkExpanded.has(did)) return;
+              const msg = /401/.test(e.message) ? 'Session expirée — recolle un token via « Actualiser ».' : `Erreur de chargement : ${safeText(e.message || 'inconnue')}`;
+              dkPaintPanel(did, `<div class="dev-panel"><div class="dev-panel-error">${msg}</div></div>`);
+            } finally { done++; setStatus(); }
+          }));
+        }
+      } finally {
+        dkBulkRunning = false;
+        if (st) st.textContent = '';
+        dkUpdateBulkState();
+      }
+    }
+    // Réinsère les panneaux des appareils ouverts encore visibles (état conservé à travers la pagination),
+    // et purge ceux qui sont sortis du filtre — la prod oubliait de nettoyer son compteur de fetch ici.
+    function dkRestoreExpanded() {
+      if (!dkExpanded.size) { dkUpdateBulkState(); return; }
+      const inList = new Set((dkDevState.filtered || []).map(d => d.deviceId));
+      Array.from(dkExpanded).forEach(did => {
+        if (!inList.has(did)) { dkExpanded.delete(did); dkExpandCache.delete(did); dkExpandSeq.delete(did); return; }
+        const tr = dkRowFor(did);
+        if (!tr) return;   // hors page : on garde l'état pour le retour
+        tr.classList.add('dev-expanded');
+        tr.setAttribute('aria-expanded', 'true');
+        dkInsertExpandRow(tr, did, dkExpandCache.get(did) || null);
+      });
+      dkUpdateBulkState();
     }
 
     function renderNavigation() {
@@ -2142,6 +2423,16 @@
       if (routeButton) { route(routeButton.dataset.route); return; }
       const refreshButton = event.target.closest('[data-refresh]');
       if (refreshButton) { refresh(refreshButton.dataset.refresh); return; }
+      // P3b2b — détail par appareil (délégation ; les clics DANS un panneau ouvert sont ignorés)
+      if (event.target.closest('#dk-expand-all')) { dkExpandAllVisible(); return; }
+      if (event.target.closest('#dk-collapse-all')) { dkCloseAllDevices(); return; }
+      if (!event.target.closest('tr.dev-expand-row')) {
+        const devRow = event.target.closest('tr.dev-row');
+        if (devRow) {
+          const did = devRow.dataset.deviceId;
+          if (did) { dkExpanded.has(did) ? dkCloseDevice(did) : dkOpenDevice(did); return; }
+        }
+      }
       const studioChip = event.target.closest('[data-studio-filter]');
       if (studioChip) { toggleStudioFilter(studioChip.dataset.studioFilter, studioChip.dataset.studioVal); return; }
       const studioAll = event.target.closest('[data-studio-all]');
@@ -2214,6 +2505,17 @@
         dkApplyDeviceFilters(true);
         dkRefreshDevicesPanel(true);
       }
+    });
+    // P3b2b — clavier. La prod rendait la ligne cliquable à la souris seulement, et son Échap fermait tout
+    // même quand le focus était dans le champ de recherche. Ici : Entrée/Espace ouvrent la ligne focalisée,
+    // Échap ne ferme que si on n'est pas en train de taper.
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && dkExpanded.size && !/^(INPUT|TEXTAREA)$/.test((event.target || {}).tagName || '')) { dkCloseAllDevices(); return; }
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const row = (event.target || {}).closest && event.target.closest('tr.dev-row');
+      if (!row || !row.dataset.deviceId) return;
+      event.preventDefault();   // Espace ne doit pas scroller la page
+      dkExpanded.has(row.dataset.deviceId) ? dkCloseDevice(row.dataset.deviceId) : dkOpenDevice(row.dataset.deviceId);
     });
     document.getElementById('menu-button').addEventListener('click', () => document.getElementById('app-shell').classList.contains('drawer-open') ? closeDrawer() : openDrawer());
     document.getElementById('nav-scrim').addEventListener('click', closeDrawer);
