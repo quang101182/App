@@ -334,7 +334,7 @@
     <aside class="sidebar" aria-label="Navigation principale">
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Se<span class="brand-seven">7</span>en&nbsp;AI</span></div>
       <nav id="navigation"></nav>
-      <div class="side-footer">Monitoring v2 · P3b5 Rétention</div>
+      <div class="side-footer">Monitoring v2 · Home complète</div>
     </aside>
     <div class="content-wrap">
       <header class="mobile-bar"><button class="menu-button" id="menu-button" type="button" aria-label="Ouvrir la navigation" aria-expanded="false">☰</button><strong class="mobile-title">Se<span class="brand-seven">7</span>en&nbsp;AI</strong></header>
@@ -345,10 +345,10 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.9.0-p3b5';
+    const VERSION = 'v2.10.0-home';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
-      { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics ; revenus et actifs au lot P3.', sections: [] },
+      { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
       { key: 'dk', name: 'DictoKey', icon: '⌨', family: 'products', color: PRODUCT_COLORS.dk, auth: 'token', tokenKey: 'monitoring_admin_token', endpoints: {}, subtitle: 'Adoption, rétention, revenus et infrastructure.', sections: [] },
       { key: 'swp', name: 'SubWhisper Pro', icon: '◉', family: 'products', color: PRODUCT_COLORS.swp, auth: 'token', tokenKey: 'monitoring_swp_token', gateway: 'https://api-gateway-pro.quang101182.workers.dev', endpoints: { overview: '/admin/swp/overview' }, subtitle: 'Abonnements, santé client et revenus.', sections: [] },
       { key: 'sv', name: 'StoryVoice', icon: '◌', family: 'products', color: PRODUCT_COLORS.sv, auth: 'token', tokenKey: 'monitoring_storyvoice_token', gateway: 'https://api-gateway-pro.quang101182.workers.dev', endpoints: { overview: '/admin/sv/overview' }, subtitle: 'Crédits, conversion et revenus.', sections: [] },
@@ -1046,16 +1046,42 @@
       const sortants = hubOut + ['dk', 'swp', 'sv'].reduce((sum, k) => sum + acqSiteOut(acq, k), 0);
       return { visites, today, engagement, sortants };
     }
-    // Alertes RÉELLES calculables sur les données publiques. Les alertes produit (churn SWP,
-    // snapshot figé DictoKey, backend absent) exigent les données token-gated → lot P3.
-    function homeAlerts(acq) {
-      if (!acq) return [];
+    // Agrégats produit pour la Home. La Home est TOKEN-LESS (décision roadmap §4) : elle ne fetche JAMAIS
+    // les endpoints payants — elle consomme UNIQUEMENT le cache des apps déjà ouvertes (§2.2). Cache absent
+    // → `null` → la Home affiche « — » et le dit, plutôt que d'exposer une donnée protégée sans token.
+    function homeSwpStats() {
+      const data = (state.cache.get('swp') || {}).overview;
+      if (!data) return null;
+      const list = (data.customers_list || []).map(cu => Object.assign({}, cu, { _h: swpHealth(cu) }));
+      const real = list.filter(c => !swpIsTest(c.email));
+      const payants = real.filter(c => c.plan === 'pro' && !c.revoked && c.lsStatus === 'active');
+      return { mrr: payants.length * SWP_PRICE_EUR, real: real.length, atRisk: real.filter(c => c._h.rank <= 1).length };
+    }
+    function homeSvStats() {
+      const data = (state.cache.get('sv') || {}).overview;
+      if (!data) return null;
+      const real = (data.customers_list || []).filter(c => !svIsInternal(c.email));
+      return { revenue: real.reduce((s, c) => s + svRevenue(c.creditsGranted), 0), real: real.length };
+    }
+    function homeDkStats() {
+      const c = state.cache.get('dk');
+      if (!c || !c.mon) return null;
+      const ds = dkDeviceStats(c.dev);
+      const a = c.play && c.play.aggregated;
+      const psActive = (a && a.active_devices_net) || null;
+      return { actives: (psActive && psActive > 0) ? psActive : (ds.devicesList.length - ds.phantomCount),
+               snapAge: a ? dkDaysSinceUtc(a.last_data_date) : null, snapDate: a ? a.last_data_date : null };
+    }
+
+    // Alertes agrégées. Publiques (acq) toujours ; produit seulement si l'app a été ouverte (cache présent).
+    function homeAlerts(acq, swp, sv, dk) {
       const list = [];
-      ['dk', 'swp', 'sv'].forEach(k => {
+      if (acq) ['dk', 'swp', 'sv'].forEach(k => {
         const vTot = acqInt(((acq[k] || {}).visit || {}).total);
-        const out = acqSiteOut(acq, k);
-        if (vTot >= 50 && out === 0) list.push({ level: 'attention', title: ACQ_META[k].name, message: `${vTot} visites mais aucun clic sortant — le parcours de sortie ne convertit pas.` });
+        if (vTot >= 50 && acqSiteOut(acq, k) === 0) list.push({ level: 'attention', title: ACQ_META[k].name, message: `${vTot} visites mais aucun clic sortant — le parcours de sortie ne convertit pas.` });
       });
+      if (swp && swp.atRisk > 0) list.push({ level: 'critique', title: 'SubWhisper Pro', message: `${swp.atRisk} abonné(s) payant(s) à risque (payé jamais utilisé / inactif >14j / paiement en échec).` });
+      if (dk && dk.snapAge !== null && dk.snapAge > 3) list.push({ level: 'attention', title: 'DictoKey', message: `snapshot Play Console figé au ${dkPlayDate(dk.snapDate)} (J-${dk.snapAge}) — les chiffres Play reflètent ce snapshot, pas l’état actuel.` });
       return list;
     }
 
@@ -1458,13 +1484,35 @@
     function renderHome(data) {
       const acq = (data && data.acq) || null;
       const t = acqTotals(acq);
-      const alerts = homeAlerts(acq);
+      const swp = homeSwpStats(), sv = homeSvStats(), dk = homeDkStats();
+      const alerts = homeAlerts(acq, swp, sv, dk);
       const products = APPS.filter(app => app.family === 'products');
-      // Hero : MRR/Actifs exigent les données produit token-gated (lot P3). Visites/Clics = agrégats publics réels.
-      // NB « Visites 7j » du mock-up n'est pas réalisable : le compteur public n'expose que total + today (pas de fenêtre 7j).
+
+      // --- MRR total. ⚠ DictoKey N'EST PAS agrégeable : ses revenus Premium sont gérés par Google Play Console
+      // et ne sont exposés par AUCUN endpoint (le prod le dit lui-même dans son infobulle « MRR estimé », l.4804),
+      // et il n'existe aucune constante de prix DK (contrairement à SWP_PRICE_EUR). On somme donc ce qui est réel
+      // et on le DIT, plutôt que d'inventer un prix. Le « Σ dk premium + swp + sv » du mock-up n'est pas réalisable.
+      const mrrParts = [], mrrNote = [];
+      if (swp) { mrrParts.push(swp.mrr); mrrNote.push(`${swp.mrr} € SWP`); }
+      if (sv) { mrrParts.push(sv.revenue); mrrNote.push(`${svFmt(Math.round(sv.revenue * 100) / 100)} € StoryVoice`); }
+      const mrrVal = mrrParts.length ? `${svFmt(Math.round(mrrParts.reduce((a, b) => a + b, 0) * 100) / 100)} €` : '—';
+      const mrrSub = mrrParts.length
+        ? `${mrrNote.join(' + ')} · DictoKey via Play Console (non exposé par l’API)`
+        : 'ouvre SubWhisper Pro / StoryVoice pour agréger';
+
+      // --- Utilisateurs actifs : somme des « actifs » de chaque produit. Populations hétérogènes
+      // (DictoKey = appareils, SWP/SV = clients) → la composition est affichée en note, pas cachée.
+      const actParts = [], actNote = [];
+      if (dk) { actParts.push(dk.actives); actNote.push(`${dk.actives} appareils DictoKey`); }
+      if (swp) { actParts.push(swp.real); actNote.push(`${swp.real} clients SWP`); }
+      if (sv) { actParts.push(sv.real); actNote.push(`${sv.real} StoryVoice`); }
+      const actVal = actParts.length ? actParts.reduce((a, b) => a + b, 0) : '—';
+      const actSub = actParts.length ? actNote.join(' · ') : 'ouvre les vues produit pour agréger';
+
+      // NB « Visites 7j » du mock-up n'est pas réalisable : le compteur public n'expose que total + today.
       const hero = `<div class="kpi-grid">` +
-        KpiTile('MRR total', '—', 'Données produit — lot P3') +
-        KpiTile('Utilisateurs actifs', '—', 'Données produit — lot P3') +
+        KpiTile('MRR total', mrrVal, mrrSub) +
+        KpiTile('Utilisateurs actifs', actVal, actSub) +
         KpiTile('Visites sites', t ? t.visites : '—', t ? (t.today > 0 ? `+${t.today} aujourd’hui` : 'tous sites, cumul') : '—') +
         KpiTile('Alertes', t ? alerts.length : '—', alerts.length ? 'à traiter' : 'rien à signaler') +
         `</div>`;
@@ -1473,7 +1521,7 @@
         : `<div class="funnel">${FunnelBar('Visites', '—', 100)}${FunnelBar('Engagement (hub)', '—', 0)}${FunnelBar('Clics sortants', '—', 0)}</div>`;
       const alertList = alerts.length
         ? alerts.map(a => Alert(a.level, a.title, a.message)).join('')
-        : Alert('attention', 'Alertes produit', 'Churn, snapshot figé et santé backend arrivent avec les données produit (lot P3).');
+        : Alert('ok', 'Rien à signaler', 'Aucune alerte sur les données disponibles. Les alertes produit n’apparaissent qu’après ouverture des vues concernées (la Home reste token-less).');
       return `<section class="section">${hero}</section>` +
         `<section class="section"><div class="section-head"><h2>Produits</h2><a href="#acq">Voir l’acquisition →</a></div><div class="product-grid">${products.map(app => ProductCard(app, acq)).join('')}</div></section>` +
         `<section class="section"><div class="section-head"><h2>Acquisition — funnel global</h2><a href="#acq">Détail →</a></div>${funnel}</section>` +
