@@ -1,5 +1,5 @@
 # HANDOFF — App/monitoring
-Lot: R10 · 16 juillet 2026 · Codex API → prochain moteur
+Lot: R10 · 16 juillet 2026 · Claude (Opus 4.8) → prochain moteur (session neuve Claude + Codex)
 
 ## Objectif courant
 
@@ -13,10 +13,11 @@ Porter l'acquisition publique de `index.html` v1.23.0 dans `monitoring-v2.html`,
 
 ## Fait vérifié
 
-- Commit `3e43f0c` : LOT 1 / P0 Socle livré.
-- `monitoring-v2.html` contient les tokens CSS validés, navigation desktop/sidebar et mobile/drawer, 7 routes par hash, `APPS[]`, `fetchApp(cfg, signal)`, et les composants `KpiTile`, `Panel`, `FunnelBar`, `ProductCard`, `Alert`, `FreshBar`.
-- Fresh-bar présente sur chaque vue ; aucun endpoint réel n'est configuré ni appelé ; aucun token n'est exposé ; `index.html` est inchangé.
-- Syntaxe JavaScript, contrats P0 statiques et `git diff --check` validés.
+- LOT 1 / P0 Socle livré (commit Codex `3e43f0c`) PUIS **corrigé + validé en runtime réel par Claude** (`monitoring-v2.html` v2.0.0-P0.1).
+- `monitoring-v2.html` : tokens CSS validés, navigation desktop/sidebar + mobile/drawer, 7 routes par hash, `APPS[]`, `fetchApp(cfg, signal)`, composants `KpiTile`, `Panel`, `FunnelBar`, `ProductCard`, `Alert`, `FreshBar`.
+- Fresh-bar présente sur chaque vue ; aucun endpoint réel configuré ni appelé ; aucun token exposé ; `index.html` inchangé.
+- 🐛 **Bug bloquant P0 corrigé (Claude 16/07)** : dans `route()`, le paramètre `refresh` masquait la fonction globale `refresh` → `TypeError` à chaque nav à froid, `view-root` vide. Renommé `forceRefresh`. Sans ce fix, le socle NE S'AFFICHAIT PAS.
+- ✅ **Preuve runtime (Playwright, `http.server`, PAS `file:`)** : home + **7 vues à froid** rendues (3144 / ~1400 chars), **0 erreur console** PC ET mobile, fresh-bar=1/vue, `scrollWidth==clientWidth` (1280 PC, 384 mobile). Captures livrées Telegram.
 
 ## Reste à faire
 
@@ -33,7 +34,8 @@ Porter l'acquisition publique de `index.html` v1.23.0 dans `monitoring-v2.html`,
 - Respecter le mock-up validé ; toute divergence de principe doit être proposée à Quang, jamais imposée.
 - Refresh manuel uniquement : pas d'auto-fetch. Garder l'isolation et les tokens pour DictoKey, SubWhisper Pro et StoryVoice.
 - Avant bascule, comparer chaque chiffre v2 à la production. Vérifier le mobile réel (`scrollWidth === clientWidth`).
-- Le test visuel P0 navigateur n'a pas été exécuté : l'accès local `file:` était bloqué par la politique du navigateur. Cette limitation ne valide pas le rendu PC/mobile.
+- ⚠️ **Ne JAMAIS conclure « P0 validé » sans rendu runtime réel** : `node --check` / contrôles statiques ne voient pas les bugs runtime (ex. le shadowing `refresh`). Tester via `python -m http.server` + Playwright (`is_mobile=True`), **jamais `file:`** (bloqué par la politique navigateur → fausse excuse pour ne pas tester). Vérifier `view-root` non vide sur CHAQUE vue à froid + `errors console == 0`.
+- **Codex ne fait pas de git ni de mémoire** : le commit `3e43f0c` était étiqueté « Codex API » — les commits/mémoire/déploiement sont gérés par Claude/Quang, Codex code seulement.
 
 ## Prochaine étape unique
 
