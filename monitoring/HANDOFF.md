@@ -1,11 +1,11 @@
 # HANDOFF — App/monitoring
-Lot: R9 · 16 juillet 2026 · Claude (Opus 4.8) → prochain moteur (P3b5 Rétention & mouvements de tier)
+Lot: R9 · 16 juillet 2026 · Claude (Opus 4.8) → prochain moteur (P4 Ops, ou compléter la Home)
 
 ## Objectif courant
 
 Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue de la prod `index.html` v1.23.0 vers `monitoring-v2.html` (config-driven, tokenisé, responsive), **sans toucher la prod**, en migrant onglet par onglet, bascule seulement à parité de chiffres vérifiée.
 
-**Étape immédiate = P3b5 Rétention & mouvements de tier** (dernier sous-lot DictoKey — voir « Prochaine étape unique » en bas). Fait à ce jour : P0 socle, P1 Acquisition, P2 Home, P3a SWP/StoryVoice, P3b1→P3b4 DictoKey — tous vérifiés en runtime.
+**Étape immédiate = compléter la Home (MRR/Actifs) puis P4 Ops** (voir « Prochaine étape unique » en bas). ✅ **Les 3 vues produit sont FINIES** : P0 socle, P1 Acquisition, P2 Home, P3a SWP/StoryVoice, P3b1→P3b5 DictoKey — tous vérifiés en runtime, parité prouvée.
 
 ## Références figées
 
@@ -74,6 +74,11 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
   - ✏ **Libellés repris à l'identique** : le bandeau IA dit « Phase 0/1/2 GEO live 29/05 » (renvoie aux phases GEO) — je l'avais reformulé, corrigé. Ne pas réécrire les libellés du prod en douce.
   - 📊 **Signaux métier sortis (à regarder, indépendants du dashboard)** : **19 désinstalls pour 31 nouveaux users sur 7 j** (17 users distincts) · **bandeau d'activation bulle = 0 % de conversion** (0 activation sur **11 taps** : `main_banner` 0/7, `post_dictation_notif` 0/4) — le bandeau est cliqué mais n'aboutit JAMAIS · funnel : first_open 31 → bulle 11 (35 %) → IME 8 (26 %) → first_dictation 7 (23 %) → premium_purchase 1 (3 %) · attribution : google-play 19 (73 %), **dictokey-site 1 (4 %)** seulement.
 
+- **✅ LOT 9 / P3b5 — DictoKey Rétention + Mouvements de tier (Claude, 16/07, v2.9.0-p3b5) — DictoKey COMPLET**.
+  - `renderDkAdvanced` : rétention D1/D7/D30 (seuils 0.4 vert / 0.2 orange / sinon rouge, carte « Pas assez de données » si cohorte absente), nouveaux utilisateurs (sub + chart bar **enregistré dans `dkCharts`**), distribution d'usage (min/max/moyenne/médiane + segments power/regular/casual), adoption des features.
+  - `renderDkChurn` : affiche les **2 sources côte à côte avec leur sémantique exacte** (comme la prod) — Firebase 7j (achats fresh / restaurations / désinstalls) ET KV gateway. **Pourquoi** : le KV (`m:churn:{date}`) ne bouge QUE sur un changement de tier **admin** ; les achats Play Billing de l'APK **ne notifient pas le gateway** → KV à 0 alors que Firebase voit les events. Ne pas « corriger » en fusionnant les deux : ce sont deux mesures différentes.
+  - **Parité vérifiée : 7/7** vs prod, dont le cas `D7 = « Pas assez de données »` (cohorte nulle) et le tableau vide « Aucun mouvement de tier sur la période ». Chart signup : 5 points, total 10 = `new_users.total_period`. 0 erreur console, pas d'overflow.
+
 ## Ce qui reste à faire
 - **P3b — DictoKey, sous-lots restants** (P3b1 fait). Découpage décidé le 16/07 car la vue prod = 7 sections + 11 sous-blocs dans le seul `#sO` :
   - **P3b5 — Rétention (`advanced`) + Mouvements de tier** : D1/D7/D30 (seuils couleur 0.4 / 0.2), nouveaux utilisateurs, distribution d'usage + segments power/regular/casual, adoption features ; churn details (tableau Date/Device/Transition).
@@ -95,13 +100,11 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
 
 ## Prochaine étape unique
 
-**P3b5 — Rétention (`mon.advanced`) + Mouvements de tier** — le DERNIER sous-lot de DictoKey. Source = `mon.advanced` (déjà ramené par `fetchDk` via `?advanced=1`) et `mon.churn`.
-- **Rétention** (prod `renderAdvanced` l.3673-3784) : D1/D7/D30 = `round(adv.retention.dX.rate * 100)%`, sub `Cohorte : cohort_size utilisateurs`, **seuils couleur** `≥0.4` vert / `≥0.2` orange / sinon rouge. Si `!adv.retention[k]` → carte « Pas assez de données ».
-- **Nouveaux utilisateurs** : sub `adv.new_users.total_period total sur la période — moy. avg_per_day/jour` + chart bar sur `new_users.daily` **reversed** (enregistrer dans `dkCharts` !).
-- **Usage par utilisateur** : Min/Max/Moyenne/Médiane = `adv.usage_distribution.per_user.{min,max,avg,median}` (unité « dictées/jour ») + segments Power (>20) / Régulier (5-20) / Occasionnel (<5) = `ud.segments.{power,regular,casual}`.
-- **Adoption des features** : `round(fa.{ep}.rate * 100)%`, libellé `pct% — users/fa.active_devices util.` (`totalDev = fa.active_devices || 1`).
-- Si `adv` absent → les 4 blocs masqués (prod l.3675-3678).
-- **Mouvements de tier** (`renderChurnDetails` l.3914-3969) : summary — si Firebase dispo : `↑ ev.premium_purchase.users achats fresh · 🔁 ev.premium_restored.users restaurations · ↓ ev.app_remove.users désinstalls` + ligne KV `upgrades · downgrades · N détails` ; sinon fallback `↑ churn.upgrades · ↓ churn.downgrades · N détails · (Firebase events en attente)`. Tableau `churn.details[]` trié desc sur `d.ts || d.date` → `fmtDateTime` / deviceId tronqué 12 car. / `d.from → d.to`. ⚠ Sur les données actuelles `churn.details` est **vide** (0) → tableau vide, c'est normal.
+**Compléter la Home (reliquat de la DoD P2), maintenant que les 3 vues produit existent** : brancher **MRR total** et **Utilisateurs actifs** (aujourd'hui à `—`, cf LOT 3) sur les caches produit, puis vérifier la part restante de la DoD P2 (« agrégats corrects vs somme des apps ») sur les chiffres payants.
+- MRR total attendu = **MRR SWP (18 €)** + **revenu SV (0 €)** + premium DictoKey. ⚠ Les 3 sources sont **token-gated** → la Home ne doit PAS fetcher ces endpoints elle-même (elle est token-less par décision roadmap §4). Suivre §2.2 : **consommer les caches des apps déjà chargées** (`state.cache.get('swp'/'sv'/'dk')`) et afficher `—` + une note honnête si l'app n'a pas encore été visitée. Ne jamais exposer une donnée payante sans token.
+- Puis **P4 Ops** (Factory + Studio) : Factory = worker `factory-stats` `/overview`, `Authorization: Bearer` avec `monitoring_factory_token` (= `dcadf8148ad38b148acb35ea8e922a9abeec677c994934a4`, cf `_quickref.md`) ; token **optionnel** (seuls ventes/abonnés l'exigent). Config `FACTORY_ACCOUNTS` dans le prod.
+- Puis **P5 bascule** : parité globale → repointer le proxy `se7enai-dash` sur `monitoring-v2.html` → surveiller 48 h → archiver l'ancien. Rollback = 1 commit.
+- Reste aussi **P3b2b** (non bloquant) : panneau détail par appareil — `buildDevicePanelHtml` + `aggregateDaily` (prod l.4273-4402), endpoint `/admin/monitoring?device=<id>&period=30d`, batch de 6 avec guard `_fetchCounters` + `_bulkCancelled`, état conservé à travers la pagination.
 
 ⚠ **Fraîcheur hétérogène** à afficher honnêtement : Play = snapshot J-2..J-7 (peut être figé >3j), Firebase = **J-1** (cache KV 1h), KV gateway = live, visites site = live. C'est la raison documentée du masquage du funnel unifié en prod — ne pas le ressusciter sans en parler à Quang.
 
@@ -121,10 +124,11 @@ Méthode qui a marché 4 fois — la rejouer : (1) sous-agent Explore pour extra
 - ✅ P3b2 : parité summary/pills/pagination/lignes + interactions au clic réel, commit scopé, capture Telegram livrée.
 - ✅ P3b3 : charts vérifiés (totaux conservés, 0 fuite Chart.js, palette validée), commit scopé, capture Telegram livrée.
 - ✅ P3b4 : parité 15/15 (Firebase + Adoption + Attribution), commit scopé, capture Telegram livrée.
+- ✅ P3b5 : parité 7/7 (rétention + usage + mouvements de tier), commit scopé, capture Telegram livrée. **DictoKey complet.**
 - **Git** : toujours commit SCOPÉ (`git add` fichier par fichier, jamais `-A` — dépôt `App` a des frères non commités). Pas de push tant que non demandé.
 - **Mémoire** : P1 + observation test Codex autonome à consigner (topic monitoring + `codex.md`).
 - **Déploiement** : AUCUN avant P5. Ne redémarrer aucun serveur.
 
 ---
 
-**Pour le prochain moteur (résumé 3 lignes)** : refonte dashboard « à côté » — **P0 socle, P1 Acquisition, P2 Home, P3a SWP/StoryVoice et P3b1→P3b4 DictoKey (Overview/Play Store/Infra, Appareils, Charts, Firebase/Adoption/Attribution) sont faits et VÉRIFIÉS** (`monitoring-v2.html` v2.8.0-p3b4 ; parités prouvées vs prod : acq 28/28, produits 21/21, DictoKey 33/33, Appareils = summary + pills + pagination + lignes + interactions au clic réel ; 0 erreur console PC+mobile ; token gate testé). **Reste** : **P3b5 Rétention/Mouvements** (dernier sous-lot DictoKey) → P3b2b expand par appareil → compléter MRR/Actifs sur la Home → P4 Ops (Factory/Studio) → P5 bascule. Les tokens sont **résolus** (`_quickref.md` : swp/sv `admin-pro-2026`, dk `dk-admin-2026-secure`) et v2 lit **les mêmes clés localStorage que la prod** → rien à recoller à la bascule. Règles d'or : ne jamais toucher `index.html`/le proxy avant P5, `git add` fichier par fichier (jamais `-A`), vérif en runtime navigateur (`http.server`+Playwright, jamais `file:`), extraire le prod **par ID d'élément**. Codex n'a pas pu coder en autonomie (clé API → sandbox read-only) : pour le relayer, son onglet doit être en `--dangerously-bypass-approvals-and-sandbox` (cf `codex.md` §1quater).
+**Pour le prochain moteur (résumé 3 lignes)** : refonte dashboard « à côté » — **P0 socle, P1 Acquisition, P2 Home, P3a SWP/StoryVoice et P3b1→P3b5 DictoKey (vue COMPLÈTE) sont faits et VÉRIFIÉS** (`monitoring-v2.html` v2.9.0-p3b5 ; parités prouvées vs prod : acq 28/28, produits 21/21, DictoKey 33/33, Appareils = summary + pills + pagination + lignes + interactions au clic réel ; 0 erreur console PC+mobile ; token gate testé). **Les 3 vues produit sont FINIES.** **Reste** : compléter MRR/Actifs sur la Home → P4 Ops (Factory/Studio) → P5 bascule → P3b2b expand par appareil (non bloquant). Les tokens sont **résolus** (`_quickref.md` : swp/sv `admin-pro-2026`, dk `dk-admin-2026-secure`) et v2 lit **les mêmes clés localStorage que la prod** → rien à recoller à la bascule. Règles d'or : ne jamais toucher `index.html`/le proxy avant P5, `git add` fichier par fichier (jamais `-A`), vérif en runtime navigateur (`http.server`+Playwright, jamais `file:`), extraire le prod **par ID d'élément**. Codex n'a pas pu coder en autonomie (clé API → sandbox read-only) : pour le relayer, son onglet doit être en `--dangerously-bypass-approvals-and-sandbox` (cf `codex.md` §1quater).
