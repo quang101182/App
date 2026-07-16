@@ -1,11 +1,11 @@
 # HANDOFF — App/monitoring
-Lot: R9 · 16 juillet 2026 · Claude (Opus 4.8) → prochain moteur (P3b3 Charts & donuts)
+Lot: R9 · 16 juillet 2026 · Claude (Opus 4.8) → prochain moteur (P3b4 Firebase / Adoption / Attribution)
 
 ## Objectif courant
 
 Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue de la prod `index.html` v1.23.0 vers `monitoring-v2.html` (config-driven, tokenisé, responsive), **sans toucher la prod**, en migrant onglet par onglet, bascule seulement à parité de chiffres vérifiée.
 
-**Étape immédiate = P3b3 Charts & donuts** (voir « Prochaine étape unique » en bas). Fait à ce jour : P0 socle, P1 Acquisition, P2 Home, P3a SWP/StoryVoice, P3b1 + P3b2 DictoKey — tous avec parité prouvée en runtime.
+**Étape immédiate = P3b4 Firebase / Adoption / Attribution** (voir « Prochaine étape unique » en bas). Fait à ce jour : P0 socle, P1 Acquisition, P2 Home, P3a SWP/StoryVoice, P3b1 + P3b2 + P3b3 DictoKey — tous vérifiés en runtime.
 
 ## Références figées
 
@@ -59,9 +59,15 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
   - ✏️ Pluriel corrigé (« 1 appareil » et non « 1 appareils » — faute présente dans la prod). Aucun chiffre touché.
   - ⏭ **P3b2b** (reporté) : panneau détail par appareil (expand) — `buildDevicePanelHtml` + `aggregateDaily`, endpoint `/admin/monitoring?device=<id>&period=30d`, batch de 6 avec guard `_fetchCounters` + `_bulkCancelled`, état conservé à travers la pagination.
 
+- **✅ LOT 7 / P3b3 — DictoKey Charts & donuts (Claude, 16/07, v2.7.0-p3b3)**.
+  - `Chart.js@4` via CDN (comme la prod). **Registre `dkCharts` + `dkDestroyCharts()`** appelé avant chaque re-render et à chaque changement de vue → **corrige la fuite de la prod** (`window._cLatency` est hors de son objet `charts`, donc jamais détruit). Vérifié : **0 instance résiduelle** après changement de vue.
+  - Palette = colonne **dark** de la palette dataviz, **ordre fixe** (l'ordre EST le mécanisme de sécurité daltonisme). **Validée par `validate_palette.js` contre NOTRE surface `#141a26`** (pas celle par défaut de la skill) : 5/5 PASS (bande L, chroma, CVD ΔE 8.4, vision normale 19.3, contraste ≥3:1). Ne pas réordonner.
+  - Livré : DAU quotidien (line, **série unique → pas de légende**, le titre nomme la série), Activité quotidienne (bar stacked 4 séries, spacer 2px couleur surface), Latence P50 (line, `spanGaps`), **4 jauges** par endpoint (statut = couleur **+ mot** « Rapide/Moyen/Lent », jamais la couleur seule), donut Langues, donut Top pays (fantômes exclus via `dkIsPhantom`).
+  - Panneau replié → **resize des charts à l'ouverture** (sinon canvas 0×0 = chart écrasé).
+  - 📐 **ÉCART ASSUMÉ vs prod (règle dataviz « jamais de hues cyclées »)** : la prod fait `DONUT_COLORS[i % length]` → ses **17 langues** sortent avec des couleurs qui **se répètent** (2 langues de même couleur = illisible). v2 replie sur **top 7 + « Autres »** et trie desc (la prod ne triait pas les langues). **Vérifié : le total est CONSERVÉ** — donut langues **945** = somme exacte des 17 langues ; donut pays **399** = 464 devices − 65 fantômes. Aucune donnée perdue, juste les doublons de couleur supprimés.
+
 ## Ce qui reste à faire
 - **P3b — DictoKey, sous-lots restants** (P3b1 fait). Découpage décidé le 16/07 car la vue prod = 7 sections + 11 sous-blocs dans le seul `#sO` :
-  - **P3b3 — Charts & donuts** : `Chart.js@4` via CDN (`cdn.jsdelivr.net/npm/chart.js@4`, le prod fait pareil — 5 instances). DAU quotidien (line), Activité quotidienne (bar stacked), latence P50 (line) + jauges `#sP`, donut Langues + donut Top pays (agrégation `devicesList[].country` **hors fantômes**, `Map` pour garder l'ordre). ⚠ Ne PAS porter les donuts Modes/Paires (masqués en prod).
   - **P3b4 — Firebase / Adoption v2.61 / Attribution v2.61.7** : endpoint `/admin/firebase-stats?period=7d` (toléré). Funnel d'activation, sources d'acquisition (+ bandeau IA), adoption refonte, attribution.
   - **P3b5 — Rétention (`advanced`) + Mouvements de tier** : D1/D7/D30 (seuils couleur 0.4 / 0.2), nouveaux utilisateurs, distribution d'usage + segments power/regular/casual, adoption features ; churn details (tableau Date/Device/Transition).
   - ⚠ **Ne PAS porter le code mort** identifié : `#funnelUnified` (masqué v1.13.0 mais toujours calculé), donuts Modes/Paires (masqués), Sessions 7j Firebase (masqué), `PLAYSTORE_STATS_BASELINE` (déclarée jamais lue), `isAutoRefresh` (auto-refresh retiré v1.14.0).
@@ -82,11 +88,14 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
 
 ## Prochaine étape unique
 
-**P3b3 — Charts & donuts DictoKey**. Charger `Chart.js@4` depuis le CDN (`<script src="https://cdn.jsdelivr.net/npm/chart.js@4">`, comme la prod). À porter : DAU quotidien (line, `dau.daily` **reversed**, `by_platform.mobile`), Activité quotidienne (bar stacked, `mon.daily` reversed, `d.{transcribe,rewrite,correct,translate}.count`), latence P50 (line, `lat.daily` reversed, `spanGaps:true`) + jauges `#sP` (`p50/1000`, barre `min(p50/5000*100,100)`, seuils couleur 1000 / 3000), donut Langues (`summary.transcribe.top_langs` via `mapLang`), donut Top pays (agrégation `devicesList[].country` **hors fantômes**, `Map` pour l'ordre, drapeaux emoji).
+**P3b4 — Firebase / Adoption v2.61 / Attribution v2.61.7**. Endpoint `/admin/firebase-stats?period=7d` (à ajouter dans `fetchDk`, **toléré** comme playstore : `.catch(() => null)`). Source = `FIREBASE_STATS_LIVE.aggregated` → `d7` / `events` / `acquisition_channels` / `adoption_v261` / `attribution_v2617`.
+- **Activation & engagement (Firebase J-1)** (prod `renderFirebaseKPIs` l.3073+) : Actifs 7j (`d7.active_users`), Nouveaux 7j (`d7.new_users`, sub `first_open`), Désinstalls 7j (`ev.app_remove.count`, sub `.users` distincts), funnel d'activation 7j (`first_open` → `bubble_first_use`/`ime_first_use`/`first_dictation`/`daily_dictation`/`quota_exceeded`/`premium_purchase`, % = `round(x/first_open*100)`), sources d'acquisition (top 8 de `acquisition_channels[]` + bandeau IA : `aiSessions` = Σ sessions des channels matchant `/ai[\s\-_]*assistant|chatgpt|perplexity|claude|gemini|copilot/i`, `aiPct = aiSessions/totalSessions*100`).
+- **Adoption refonte v2.61** (`renderAdoptionV261` l.3167-3294) et **Attribution v2.61.7** (`renderAttributionV2617` l.3340-3440) : 4 + 3 cartes texte.
+- ⚠ **Ne PAS porter** : « Sessions 7j » (masqué en prod, HTML l.1056) ni `#funnelUnified` (masqué v1.13.0 mais toujours calculé).
+- ⚠ **Fraîcheur hétérogène** à afficher honnêtement : Play = snapshot J-2..J-7 (peut être figé >3j), Firebase = **J-1** (cache KV 1h), KV gateway = live, visites site = live. C'est la raison documentée du masquage du funnel unifié en prod — ne pas le ressusciter sans en parler à Quang.
 
-✅ **Piège phantom : RÉGLÉ (16/07)** — `dkIsPhantom(d)` unifie les 3 variantes de la prod, après mesure sur les 464 devices réels (65 des deux côtés, zéro écart). **Le donut Top pays DOIT l'utiliser** (`devicesList.filter(d => !dkIsPhantom(d))`), surtout pas re-coder une 4e variante.
-
-⚠ **Détruire les charts au changement de vue** : la prod a une fuite connue — `window._cLatency` est **hors** de l'objet `charts`, donc `destroyCharts()` ne le détruit pas. En v2, tenir un registre unique et tout détruire dans `route()`/`renderApp` avant de re-rendre, sinon Chart.js empile les instances.
+✅ **Piège phantom : RÉGLÉ** — `dkIsPhantom(d)` unifie les 3 variantes (mesuré : 65 = 65 sur les 464 devices réels). Le donut Top pays l'utilise déjà. Ne jamais re-coder une 4e variante.
+✅ **Fuite Chart.js : RÉGLÉE** — registre `dkCharts` + `dkDestroyCharts()` dans `renderApp`. Tout nouveau chart DOIT s'enregistrer dans `dkCharts`.
 
 Méthode qui a marché 4 fois — la rejouer : (1) sous-agent Explore pour extraire endpoints + formules + DOM du prod, (2) **passe critique** = relire soi-même le code cité avant de coder, (3) porter à l'identique avec les composants v2, (4) prouver la parité en Playwright (prod vs v2, mêmes données live — **extraire le prod par ID d'élément**, c'est le plus robuste), (5) capture + commit scopé.
 
@@ -99,7 +108,7 @@ Méthode qui a marché 4 fois — la rejouer : (1) sous-agent Explore pour extra
 - ✅ P3a : parité 21/21, token gate testé, commit scopé, captures Telegram livrées.
 - ✅ P3b1 : parité 33/33, commit scopé, capture Telegram livrée.
 - ✅ P3b2 : parité summary/pills/pagination/lignes + interactions au clic réel, commit scopé, capture Telegram livrée.
-- ✅ P3b2 : parité summary/pills/pagination/lignes + interactions au clic réel, commit scopé, capture Telegram livrée.
+- ✅ P3b3 : charts vérifiés (totaux conservés, 0 fuite Chart.js, palette validée), commit scopé, capture Telegram livrée.
 - **Git** : toujours commit SCOPÉ (`git add` fichier par fichier, jamais `-A` — dépôt `App` a des frères non commités). Pas de push tant que non demandé.
 - **Mémoire** : P1 + observation test Codex autonome à consigner (topic monitoring + `codex.md`).
 - **Déploiement** : AUCUN avant P5. Ne redémarrer aucun serveur.
