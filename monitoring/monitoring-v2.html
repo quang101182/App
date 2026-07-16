@@ -92,6 +92,7 @@
     .product-meta { position: relative; display: flex; justify-content: space-between; gap: 12px; margin-top: 16px; padding-left: 8px; }
     .product-meta span { display: block; color: var(--ink-faint); font-size: .64rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
     .product-meta strong { font-size: 1.08rem; }
+    .product-meta .pm-item > strong { display: block; margin-top: 3px; color: var(--ink); font-size: 1.08rem; font-variant-numeric: tabular-nums; }
     .product-progress { position: relative; height: 6px; margin: 15px 0 0 8px; overflow: hidden; border-radius: 5px; background: rgba(255, 255, 255, .07); }
     .product-progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--product-color); }
     .funnel { padding: 18px; }
@@ -170,7 +171,7 @@
     <aside class="sidebar" aria-label="Navigation principale">
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Se<span class="brand-seven">7</span>en&nbsp;AI</span></div>
       <nav id="navigation"></nav>
-      <div class="side-footer">Monitoring v2 · P1 Acquisition</div>
+      <div class="side-footer">Monitoring v2 · P2 Home</div>
     </aside>
     <div class="content-wrap">
       <header class="mobile-bar"><button class="menu-button" id="menu-button" type="button" aria-label="Ouvrir la navigation" aria-expanded="false">☰</button><strong class="mobile-title">Se<span class="brand-seven">7</span>en&nbsp;AI</strong></header>
@@ -181,10 +182,10 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.1.0-p1';
+    const VERSION = 'v2.2.0-p2';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
-      { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — données à raccorder aux lots suivants.', sections: [] },
+      { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics ; revenus et actifs au lot P3.', sections: [] },
       { key: 'dk', name: 'DictoKey', icon: '⌨', family: 'products', color: PRODUCT_COLORS.dk, auth: 'token', endpoints: {}, subtitle: 'Adoption, rétention, revenus et infrastructure.', sections: [] },
       { key: 'swp', name: 'SubWhisper Pro', icon: '◉', family: 'products', color: PRODUCT_COLORS.swp, auth: 'token', endpoints: {}, subtitle: 'Abonnements, santé client et revenus.', sections: [] },
       { key: 'sv', name: 'StoryVoice', icon: '◌', family: 'products', color: PRODUCT_COLORS.sv, auth: 'token', endpoints: {}, subtitle: 'Crédits, conversion et revenus.', sections: [] },
@@ -214,9 +215,16 @@
       return { se7: { visit: r[0], clicks: r[1] }, dk: { visit: r[2], clicks: r[3] }, swp: { visit: r[4], clicks: r[5] }, sv: { visit: r[6], clicks: r[7] }, generatedAt: Date.now() };
     }
 
+    // P2 — Home : fetch léger des agrégats publics (mêmes compteurs que la vue Acquisition).
+    // Les données produit (MRR, actifs) restent token-gated → branchées au lot P3 via state.cache.
+    async function fetchHome(signal) {
+      return { acq: await fetchAcq(signal) };
+    }
+
     // Moteur générique : les endpoints vides ne déclenchent aucun fetch (vues non encore branchées).
     async function fetchApp(cfg, signal) {
       if (cfg.key === 'acq') return fetchAcq(signal);
+      if (cfg.key === 'home') return fetchHome(signal);
       const payload = {};
       for (const [name, endpoint] of Object.entries(cfg.endpoints || {})) {
         if (!endpoint) continue;
@@ -230,7 +238,18 @@
 
     function KpiTile(label, value, note) { return `<article class="kpi-tile"><div class="kpi-label">${safeText(label)}</div><div class="kpi-value">${safeText(value)}</div><div class="kpi-note">${safeText(note)}</div></article>`; }
     function FunnelBar(label, value, width) { return `<div class="funnel-step"><div class="funnel-meta"><strong>${safeText(label)}</strong><span>${safeText(value)}</span></div><div class="funnel-bar"><i style="--bar-width:${Math.max(0, Math.min(100, width))}%"></i></div></div>`; }
-    function ProductCard(app) { return `<button class="product-card" type="button" data-route="${app.key}" style="--product-color:${app.color}"><span class="product-name">${safeText(app.name)}</span><span class="product-meta"><span>Migration</span><strong>P3</strong></span><span class="product-progress"><i></i></span></button>`; }
+    // P2 : les cartes produit affichent les KPI PUBLICS (visites / clics sortants) disponibles dès maintenant.
+    // Les KPI payants (MRR, abonnés actifs) s'ajouteront au lot P3 avec les endpoints token-gated.
+    function ProductCard(app, acq) {
+      const d = acq && acq[app.key];
+      const vTot = d ? acqInt((d.visit || {}).total) : null;
+      const out = d ? acqSiteOut(acq, app.key) : null;
+      const w = (vTot && vTot > 0) ? Math.max(2, Math.min(100, Math.round((out / vTot) * 100))) : 0;
+      const meta = d
+        ? `<span class="pm-item"><span>Visites</span><strong>${vTot}</strong></span><span class="pm-item"><span>Clics sortants</span><strong>${out}</strong></span>`
+        : `<span class="pm-item"><span>Données</span><strong>—</strong></span><span class="pm-item"><span>Lot</span><strong>P3</strong></span>`;
+      return `<button class="product-card" type="button" data-route="${app.key}" style="--product-color:${app.color}"><span class="product-name">${safeText(app.name)}</span><span class="product-meta">${meta}</span><span class="product-progress"><i style="width:${w}%"></i></span></button>`;
+    }
     function Alert(level, title, message) { const color = level === 'critique' ? 'var(--crit)' : 'var(--warn)'; return `<article class="alert" style="--alert-color:${color}"><span class="alert-badge">${safeText(level)}</span><span class="alert-message"><strong>${safeText(title)}</strong> — ${safeText(message)}</span></article>`; }
     function Panel(id, title, content, open = false) { return `<section class="panel" data-open="${open}" id="${id}"><button class="panel-toggle" type="button" aria-expanded="${open}" aria-controls="${id}-content"><span>${safeText(title)}</span><span class="panel-chevron" aria-hidden="true">⌄</span></button><div class="panel-content" id="${id}-content">${content}</div></section>`; }
     function FreshBar(app) { const at = state.loadedAt.get(app.key) || new Date(); const [label, color] = freshState(at); return `<button class="freshbar" type="button" data-refresh="${app.key}" style="--fresh-color:${color}" title="Actualiser cette vue"><span class="fresh-dot" aria-hidden="true"></span><span><strong>${label}</strong> · données ${app.auth === 'token' ? 'protégées' : 'publiques'} · dernier rafraîchissement le <strong>${formatDate(at)}</strong> (${relativeTime(at)})</span><span class="fresh-action">↻ Actualiser</span></button>`; }
@@ -293,17 +312,69 @@
       return `<p class="acq-northstar">North-star : <strong>taux visite → clic sortant</strong>. Le hub se7enai.com (tête de pont TikTok) puis les sites vitrines. Cookieless, gateway-pro.</p><section class="section acq-hub">${renderAcqHub(data.se7)}</section><section class="section"><div class="section-head"><h2>Sites vitrines</h2></div>${renderAcqSites(data)}</section><div class="acq-when">Dernière mesure : ${safeText(when)}</div>`;
     }
 
+    // === P2 — Agrégats Home (dérivés des mêmes compteurs publics que la vue Acquisition) ===
+    // Somme cohérente avec la vue acq : hub/swp/sv comptent les `out:*`, DictoKey compte `clicks.total` (outMode).
+    function acqSiteOut(acq, key) {
+      const d = acq[key] || {};
+      const clicks = d.clicks || {};
+      if ((ACQ_META[key] || {}).outMode === 'total') return acqInt(clicks.total);
+      const bb = clicks.by_btn_all || {};
+      return Object.keys(bb).reduce((sum, b) => b.indexOf('out:') === 0 ? sum + acqInt(bb[b]) : sum, 0);
+    }
+    function acqTotals(acq) {
+      if (!acq) return null;
+      let visites = 0, today = 0;
+      ['se7', 'dk', 'swp', 'sv'].forEach(k => { const v = (acq[k] && acq[k].visit) || {}; visites += acqInt(v.total); today += acqInt(v.today); });
+      const hb = (acq.se7 && acq.se7.clicks && acq.se7.clicks.by_btn_all) || {};
+      const engagement = acqInt(hb['f:demo']) + acqInt(hb['f:chat']) + acqInt(hb['f:cta']);
+      const hubOut = Object.keys(hb).reduce((sum, k) => k.indexOf('out:') === 0 ? sum + acqInt(hb[k]) : sum, 0);
+      const sortants = hubOut + ['dk', 'swp', 'sv'].reduce((sum, k) => sum + acqSiteOut(acq, k), 0);
+      return { visites, today, engagement, sortants };
+    }
+    // Alertes RÉELLES calculables sur les données publiques. Les alertes produit (churn SWP,
+    // snapshot figé DictoKey, backend absent) exigent les données token-gated → lot P3.
+    function homeAlerts(acq) {
+      if (!acq) return [];
+      const list = [];
+      ['dk', 'swp', 'sv'].forEach(k => {
+        const vTot = acqInt(((acq[k] || {}).visit || {}).total);
+        const out = acqSiteOut(acq, k);
+        if (vTot >= 50 && out === 0) list.push({ level: 'attention', title: ACQ_META[k].name, message: `${vTot} visites mais aucun clic sortant — le parcours de sortie ne convertit pas.` });
+      });
+      return list;
+    }
+
     function renderNavigation() {
       const nav = document.getElementById('navigation');
       const items = family => APPS.filter(app => app.family === family).map(app => `<button class="nav-item" type="button" data-route="${app.key}" ${app.key === state.activeKey ? 'aria-current="page"' : ''}><span class="nav-icon" aria-hidden="true">${app.icon}</span><span>${safeText(app.name)}</span>${app.color ? `<span class="product-dot" style="--product-color:${app.color}" aria-hidden="true"></span>` : ''}</button>`).join('');
       nav.innerHTML = `${items('home')}${Object.keys(FAMILY_LABELS).map(key => `<div class="nav-group">${FAMILY_LABELS[key]}</div>${items(key)}`).join('')}`;
     }
-    function renderHome() {
+    function renderHome(data) {
+      const acq = (data && data.acq) || null;
+      const t = acqTotals(acq);
+      const alerts = homeAlerts(acq);
       const products = APPS.filter(app => app.family === 'products');
-      return `<section class="section"><div class="kpi-grid">${KpiTile('MRR total', '—', 'Branchement P2')} ${KpiTile('Actifs', '—', 'Branchement P2')} ${KpiTile('Visites 7j', '—', 'Branchement P1')} ${KpiTile('Alertes', '—', 'Branchement P2')}</div></section><section class="section"><div class="section-head"><h2>Produits</h2></div><div class="product-grid">${products.map(ProductCard).join('')}</div></section><section class="section"><div class="section-head"><h2>Acquisition — funnel global</h2></div><div class="funnel">${FunnelBar('Visites', '—', 100)}${FunnelBar('Engagement', '—', 0)}${FunnelBar('Clics sortants', '—', 0)}</div></section><section class="section"><div class="section-head"><h2>À surveiller</h2></div><div class="alert-list">${Alert('attention', 'Socle P0', 'Les alertes agrégées seront raccordées au lot P2.')}</div></section>`;
+      // Hero : MRR/Actifs exigent les données produit token-gated (lot P3). Visites/Clics = agrégats publics réels.
+      // NB « Visites 7j » du mock-up n'est pas réalisable : le compteur public n'expose que total + today (pas de fenêtre 7j).
+      const hero = `<div class="kpi-grid">` +
+        KpiTile('MRR total', '—', 'Données produit — lot P3') +
+        KpiTile('Utilisateurs actifs', '—', 'Données produit — lot P3') +
+        KpiTile('Visites sites', t ? t.visites : '—', t ? (t.today > 0 ? `+${t.today} aujourd’hui` : 'tous sites, cumul') : '—') +
+        KpiTile('Alertes', t ? alerts.length : '—', alerts.length ? 'à traiter' : 'rien à signaler') +
+        `</div>`;
+      const funnel = t
+        ? `<div class="funnel">${FunnelBar('Visites', t.visites, 100)}${FunnelBar('Engagement (hub)', t.engagement, t.visites ? Math.max(2, Math.round((t.engagement / t.visites) * 100)) : 0)}${FunnelBar(`Clics sortants — ${acqPct(t.sortants, t.visites)} de sortie`, t.sortants, t.visites ? Math.max(2, Math.round((t.sortants / t.visites) * 100)) : 0)}</div>`
+        : `<div class="funnel">${FunnelBar('Visites', '—', 100)}${FunnelBar('Engagement (hub)', '—', 0)}${FunnelBar('Clics sortants', '—', 0)}</div>`;
+      const alertList = alerts.length
+        ? alerts.map(a => Alert(a.level, a.title, a.message)).join('')
+        : Alert('attention', 'Alertes produit', 'Churn, snapshot figé et santé backend arrivent avec les données produit (lot P3).');
+      return `<section class="section">${hero}</section>` +
+        `<section class="section"><div class="section-head"><h2>Produits</h2><a href="#acq">Voir l’acquisition →</a></div><div class="product-grid">${products.map(app => ProductCard(app, acq)).join('')}</div></section>` +
+        `<section class="section"><div class="section-head"><h2>Acquisition — funnel global</h2><a href="#acq">Détail →</a></div>${funnel}</section>` +
+        `<section class="section"><div class="section-head"><h2>À surveiller</h2></div><div class="alert-list">${alertList}</div></section>`;
     }
     function renderPlaceholder(app) { const tokenHint = app.auth === 'token' ? 'Cette vue restera token-gated au branchement des données.' : 'Cette vue utilisera uniquement ses données publiques au branchement.'; return `<section class="placeholder"><div class="placeholder-inner"><span class="placeholder-icon" aria-hidden="true">◌</span><h2>${safeText(app.name)} — vue prête au branchement</h2><p>${safeText(tokenHint)} Le socle P0 ne déclenche aucune requête réseau.</p></div></section><section class="section">${Panel(`architecture-${app.key}`, 'Contrat de données préparé', `<p>Config déclarative disponible dans <code>APPS[]</code> : authentification, endpoints et sections. Le rendu métier sera ajouté dans le lot dédié.</p>`, true)}</section>`; }
-    function renderApp(app, data) { const content = app.key === 'home' ? renderHome() : app.key === 'acq' ? renderAcq(data) : renderPlaceholder(app, data); document.getElementById('view-root').innerHTML = `<div class="page-head"><div><h1>${safeText(app.name)} <span class="view-badge">${VERSION}</span></h1><p>${safeText(app.subtitle)}</p></div><button class="button" type="button" data-refresh="${app.key}">↻ Actualiser</button></div>${FreshBar(app)}${content}`; }
+    function renderApp(app, data) { const content = app.key === 'home' ? renderHome(data) : app.key === 'acq' ? renderAcq(data) : renderPlaceholder(app, data); document.getElementById('view-root').innerHTML = `<div class="page-head"><div><h1>${safeText(app.name)} <span class="view-badge">${VERSION}</span></h1><p>${safeText(app.subtitle)}</p></div><button class="button" type="button" data-refresh="${app.key}">↻ Actualiser</button></div>${FreshBar(app)}${content}`; }
     async function refresh(key) {
       const cfg = getApp(key);
       if (state.controller) state.controller.abort();
