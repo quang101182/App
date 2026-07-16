@@ -1,11 +1,11 @@
 # HANDOFF — App/monitoring
-Lot: R9 · 16 juillet 2026 · Claude (Opus 4.8) → prochain moteur (P4 Ops : Factory + Studio)
+Lot: R10 · 16 juillet 2026 · Claude (Opus 4.8) → prochain moteur (P5 BASCULE — go explicite de Quang OBLIGATOIRE)
 
 ## Objectif courant
 
 Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue de la prod `index.html` v1.23.0 vers `monitoring-v2.html` (config-driven, tokenisé, responsive), **sans toucher la prod**, en migrant onglet par onglet, bascule seulement à parité de chiffres vérifiée.
 
-**Étape immédiate = P4 Ops (Factory + Studio)** — les 2 DERNIÈRES vues avant la bascule (voir « Prochaine étape unique » en bas). ✅ Fait et vérifié : P0 socle, P1 Acquisition, **P2 Home COMPLÈTE (DoD bouclée)**, P3a SWP/StoryVoice, P3b1→P3b5 DictoKey (vue complète).
+**Étape immédiate = P5 BASCULE** (voir « Prochaine étape unique » en bas) — ⚠ revenue, **ne rien faire sans le go explicite de Quang**. ✅ Fait et vérifié : P0 socle, P1 Acquisition, **P2 Home COMPLÈTE (DoD bouclée)**, P3a SWP/StoryVoice, P3b1→P3b5 DictoKey (vue complète), **P4 Ops Factory + Studio**. **TOUTES LES VUES SONT PORTÉES** (7/7).
 
 ## Références figées
 
@@ -86,13 +86,20 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
   - ⚠ **3e écart au mock-up ASSUMÉ** (après « Visites 7j ») : **« MRR total = Σ dk premium + swp + sv » n'est PAS réalisable pour la part DictoKey.** Ses revenus Premium sont gérés par **Google Play Console** et exposés par **AUCUN endpoint** — le prod le dit lui-même dans son infobulle « MRR estimé » (l.4804) — et il n'existe **aucune constante de prix DK** (contrairement à `SWP_PRICE_EUR = 9`). v2 somme ce qui est réel et l'écrit dans l'UI : « 18 € SWP + 0 € StoryVoice · DictoKey via Play Console (non exposé par l'API) ». **Aucun prix inventé.** Si Quang veut le MRR DK, il faut une source (prix en dur + compte de premium actifs, ou l'API Play Developer).
   - 📖 « Utilisateurs actifs » agrège des **populations hétérogènes** (DictoKey = appareils, SWP/SV = clients) → la composition est affichée en note, pas cachée.
 
+- **✅ LOT 11 / P4 Ops — Factory + Studio LIVRÉS + VÉRIFIÉS (Claude, 16/07, v2.11.0-p4) — TOUTES LES VUES SONT PORTÉES**.
+  - **Factory** — `fetchFactory` + `renderFactoryView`. 9 compteurs publics (`tuc|aea|lpp` × `_|-buy|-dl`) tolérants par compteur + `/overview` en Bearer. **Token VRAIMENT optionnel** (`auth:'none'` + gating partiel, PAS de TokenGate) : sans token, aucun appel au worker (zéro bruit console), ventes/abonnés à `—`, `Visite→vente` non rendu.
+  - **Parité vérifiée : 24/24 valeurs identiques** vs prod (3 comptes × 6 métriques + placeholder), **dans les 2 modes** : sans token (`6 / 0 / 2 / — / — / —`…) ET avec token (`8.39 EUR`, 1 vente, subs 0). Conversions identiques. 0 erreur console, pas d'overflow PC 1280 + mobile 384. Bouton token testé au clic réel.
+  - **Studio** — `fetchStudio` + `renderStudioView`. Planning statique porté (15 posts, backlog, lanes) + rollup `data/analytics.json`. **Parité agenda** : 15 cartes, « À produire 3 », « Publié 15 », 3 KPI identiques. Filtres/chips/état vide/persistance testés au clic réel, **0 requête réseau par clic** (la prod refetch à CHAQUE chip).
+  - 📐 **ÉCART ASSUMÉ — décision Quang 16/07 (perf TikTok séparée)** : organique et boosté affichés **côte à côte, JAMAIS additionnés** → « Organique 16 vidéos · **15 226** vues » / « Boostées · vues achetées 4 vidéos · **67 000** vues ». La prod affichait **82 226 vues** sous le libellé « boostées exclues » (cf. bug #6 ci-dessous). v2 rend 12 lignes (8 organiques + 4 boostées) vs 8 en prod : **rupture de parité VOULUE**, c'est le seul chiffre du chantier qui diverge par décision produit.
+  - 🐛 **BUGS PROD CORRIGÉS en v2** (la prod les garde jusqu'à P5) : voir #6 → #10 de la roadmap §8 (libellé perf mensonger, `J+N` faux d'un jour, backlog filtré au tiers, canaux décochés affichés, cache/token désynchronisés).
+  - ⚠ **`Visite→vente` = ratio à FENÊTRES MIXTES** (ventes cumulées depuis l'origine ÷ visites depuis le **25/06**, date où le worker `factory-visits` est reparti de 0) → mécaniquement surévalué (`tuc` affiche 16.7 %). La prod l'affiche nu ; v2 le **marque** (`⚠ fenêtres mixtes` + tooltip) sans le supprimer ni changer le chiffre. **Le vrai correctif est côté worker** (borner `/overview` sur une période) — à décider avec Quang.
+  - 🔍 **Anomalie Factory à investiguer** : `tuc` = **1 vente / 8.39 €** pour **6 visites** et **0 clic achat** enregistré. Une vente sans clic tracé = le compteur `tuc-buy` ne capte pas le vrai chemin d'achat (ou la vente précède le 25/06). À croiser avec LemonSqueezy.
+
 ## Ce qui reste à faire
-- **P3b — DictoKey, sous-lots restants** (P3b1 fait). Découpage décidé le 16/07 car la vue prod = 7 sections + 11 sous-blocs dans le seul `#sO` :
-  - **P3b5 — Rétention (`advanced`) + Mouvements de tier** : D1/D7/D30 (seuils couleur 0.4 / 0.2), nouveaux utilisateurs, distribution d'usage + segments power/regular/casual, adoption features ; churn details (tableau Date/Device/Transition).
-  - ⚠ **Ne PAS porter le code mort** identifié : `#funnelUnified` (masqué v1.13.0 mais toujours calculé), donuts Modes/Paires (masqués), Sessions 7j Firebase (masqué), `PLAYSTORE_STATS_BASELINE` (déclarée jamais lue), `isAutoRefresh` (auto-refresh retiré v1.14.0).
-- **P4 Ops** : Factory + Studio. **DoD** : parité.
-- **P5 Bascule** : parité globale prod vs v2 → repointer le proxy `se7enai-dash` sur v2 → surveiller 48 h → archiver l'ancien. Réversible (repointer = 1 commit).
+- **P5 Bascule** : parité globale prod vs v2 → repointer le proxy `se7enai-dash` sur v2 → surveiller 48 h → archiver l'ancien. Réversible (repointer = 1 commit). ⚠ **Go explicite de Quang OBLIGATOIRE** (revenue).
 - **P6 Hygiène** : supprimer code mort, changelog.
+- **Non bloquant** : P3b2b (expand par appareil).
+- ⚠ **Ne PAS porter le code mort** identifié : `#funnelUnified` (masqué v1.13.0 mais toujours calculé), donuts Modes/Paires (masqués), Sessions 7j Firebase (masqué), `PLAYSTORE_STATS_BASELINE` (déclarée jamais lue), `isAutoRefresh` (auto-refresh retiré v1.14.0). Côté P4 : `mailerliteGroups` (jamais lu), champ `ver` de `STUDIO_SCHEDULE` (15 occurrences mortes), `series[]` d'`analytics.json` (~60 % du poids du fichier, jamais lu) — **non portés**.
 
 ## Pièges à ne pas répéter
 
@@ -101,18 +108,24 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
 - **`node --check` ≠ preuve runtime** : le socle P0 ne s'affichait pas à cause d'un bug runtime (shadowing) invisible aux contrôles statiques. **Toujours** valider via `python -m http.server` + Playwright (`is_mobile=True`), **jamais `file:`** (bloqué par la politique navigateur). Vérifier `view-root` non vide sur CHAQUE vue à froid + `errors console == 0`.
 - **Parité AVANT bascule** : comparer chaque chiffre v2 au prod côte à côte. Reproduire les formules EXACTEMENT (pièges connus : funnel hub étape 5 « Waitlist » a pour base `cta`, PAS `vTot` · `payants` SWP exige `lsStatus === 'active'` STRICT — un `pro` sans `lsStatus` est labellisé « Actif » mais **exclu** du MRR · churn SWP = ratio **cumulé** révoqués/réels, pas mensuel · les **tableaux de détail affichent TOUT** (test/internes inclus) alors que les **KPI les excluent** = 2 populations sur le même écran).
 - **Pièges de HARNESS Playwright rencontrés** (coûtent 20 min chacun) : `add_init_script` attend des **instructions**, PAS une arrow function (`()=>{...}` = expression jamais appelée → token jamais posé) · un `goto` qui ne change que le **hash** = navigation **same-document**, le document n'est pas ré-exécuté → le prod (qui lit le hash seulement à l'init, sans listener `hashchange`) reste sur l'onglet précédent → **forcer `page.reload()`** · ce reload annule les fetch en vol du prod → une erreur console `Failed to fetch` venant d'`index.html` est un **artefact de test**, pas un bug v2 (vérifier la stack avant de conclure).
+- 🚨 **`reload()` SYSTÉMATIQUE = faux négatif de parité (vécu en P4, 20 min)** : un `reload()` après un `goto` vers une AUTRE page relance le boot du prod, dont l'`AbortController` **annule ses 9 fetch Factory en vol** → toutes ses métriques tombent à `—` et la parité semble catastrophique alors que v2 est juste. **La règle exacte** : `reload()` UNIQUEMENT quand on change le seul hash d'un document déjà chargé. Sinon → `goto('about:blank')` puis `goto(url)` = vraie navigation, le document s'exécute proprement. Corollaire : `add_init_script` s'exécute AUSSI sur `about:blank` → il y lève `localStorage: Access is denied` ; ces erreurs console sont un **artefact du harness** (leur nombre suit celui des handlers cumulés), pas un bug — les compter séparément.
 - **Codex ne fait ni git, ni mémoire, ni déploiement, ni vérif visuelle** (son sandbox ne rend pas le navigateur). Il code ; Claude relit le `git diff`, teste le rendu, commit, met la mémoire à jour. « Commité + tests verts » ≠ « ça marche » → valider le FONCTIONNEL.
 - **Fresh-bar obligatoire sur CHAQUE vue** (exigence forte Quang) + **refresh manuel uniquement**, pas d'auto-fetch (sinon spam réseau + coût).
 - **Mobile réel** : Playwright `is_mobile=True` (pas `--window-size`), vérifier `scrollWidth === clientWidth`.
 
 ## Prochaine étape unique
 
-**P4 Ops — Factory + Studio** : les 2 dernières vues avant la bascule.
-- **Factory** : worker `factory-stats` (`https://factory-stats.quang101182.workers.dev`), `GET /overview`, `Authorization: Bearer <monitoring_factory_token>` (= `dcadf8148ad38b148acb35ea8e922a9abeec677c994934a4`, cf `_quickref.md`). Renvoie `{accounts:{<id>:{sales,revenue,currency,subs}}}`. **Token OPTIONNEL** : seuls ventes/abonnés l'exigent → la vue doit fonctionner SANS token (ne pas la mettre derrière le `TokenGate` en dur — `auth:'none'` + gating partiel). Config des comptes = const `FACTORY_ACCOUNTS` dans le prod (`index.html`), + `FACTORY_VISIT_GATEWAY = 'https://factory-visits.quang101182.workers.dev'` (l.1402) et factory-stats (l.1405). Fonctions prod : chercher `renderFactory` / `fetchAllFactory` (~l.1983-2240).
-- **Studio** : agenda / opérations de publication (le plus léger).
-- Rejouer la méthode : sous-agent Explore → **passe critique** (relire le code cité) → porter → prouver la parité en Playwright (extraire le prod **par ID d'élément**) → capture + commit scopé.
+**P5 — BASCULE.** Toutes les vues sont portées et prouvées. ⚠ **C'est LE moment sensible du chantier (revenue) : ne RIEN faire sans le go explicite de Quang.**
+1. **Re-vérifier la parité globale** en une passe (les 7 vues, prod vs v2, mêmes données live) — les parités sont prouvées lot par lot, jamais toutes ensemble le même jour.
+2. **Repointer le proxy `se7enai-dash`** sur `monitoring-v2.html` (dash.se7enai.com). **Rollback = repointer = 1 commit.**
+3. **Surveiller 48 h**, puis archiver `index.html`.
+- ✅ **Tokens : rien à recoller.** v2 lit les MÊMES clés localStorage que la prod (`monitoring_admin_token`, `monitoring_swp_token`, `monitoring_storyvoice_token`, `monitoring_factory_token`, `dk-monitoring-studio-filters`) et est servi depuis la MÊME origine → tokens et filtres hérités.
+- ⚠ **Divergences VOULUES à assumer publiquement à la bascule** (ce ne sont PAS des régressions) : perf Studio séparée organique/boosté (82 226 → 15 226 + 67 000, décision Quang), 30 appareils/page (vs 50), donuts top 7 + « Autres », filtre premium DictoKey corrigé (16 → 18), `Visite→vente` marqué « fenêtres mixtes ». Roadmap §7 + §8.
 
-**Ensuite → P5 BASCULE** : parité globale → repointer le proxy `se7enai-dash` sur `monitoring-v2.html` → surveiller 48 h → archiver l'ancien. Rollback = 1 commit. ⚠ C'est LE moment sensible du chantier (revenue) : ne rien faire sans le go explicite de Quang.
+**Décisions EN ATTENTE de Quang (ne pas trancher seul)** :
+1. **MRR DictoKey** — inexistant dans l'API (Play Console). Prix en dur × premium actifs / API Play Developer / laisser « via Play Console » ?
+2. **`Visite→vente` Factory** — corriger côté worker (borner `/overview` sur une période) ou garder le marquage v2 ?
+
 **Non bloquant** : P3b2b (expand par appareil) — `buildDevicePanelHtml` + `aggregateDaily` (prod l.4273-4402), endpoint `/admin/monitoring?device=<id>&period=30d`, batch de 6 avec guard `_fetchCounters` + `_bulkCancelled`.
 
 ⚠ **Fraîcheur hétérogène** à afficher honnêtement : Play = snapshot J-2..J-7 (peut être figé >3j), Firebase = **J-1** (cache KV 1h), KV gateway = live, visites site = live. C'est la raison documentée du masquage du funnel unifié en prod — ne pas le ressusciter sans en parler à Quang.
@@ -135,10 +148,11 @@ Méthode qui a marché 4 fois — la rejouer : (1) sous-agent Explore pour extra
 - ✅ P3b4 : parité 15/15 (Firebase + Adoption + Attribution), commit scopé, capture Telegram livrée.
 - ✅ P3b5 : parité 7/7 (rétention + usage + mouvements de tier), commit scopé, capture Telegram livrée. **DictoKey complet.**
 - ✅ Home complétée : DoD P2 bouclée (MRR 18 € = 18 SWP + 0 SV, Actifs 159 = 148+11+0), commit scopé.
+- ✅ P4 Ops : parité Factory 24/24 (2 modes de token), parité agenda Studio, interactions au clic réel, commit scopé, captures Telegram livrées. **Toutes les vues portées.**
 - **Git** : toujours commit SCOPÉ (`git add` fichier par fichier, jamais `-A` — dépôt `App` a des frères non commités). Pas de push tant que non demandé.
 - **Mémoire** : P1 + observation test Codex autonome à consigner (topic monitoring + `codex.md`).
 - **Déploiement** : AUCUN avant P5. Ne redémarrer aucun serveur.
 
 ---
 
-**Pour le prochain moteur (résumé 3 lignes)** : refonte dashboard « à côté » — **P0 socle, P1 Acquisition, P2 Home (COMPLÈTE), P3a SWP/StoryVoice et P3b1→P3b5 DictoKey (vue COMPLÈTE) sont faits et VÉRIFIÉS** (`monitoring-v2.html` v2.10.0-home ; parités prouvées vs prod : acq 28/28, produits 21/21, DictoKey 33/33, Appareils = summary + pills + pagination + lignes + interactions au clic réel ; 0 erreur console PC+mobile ; token gate testé). **Les 3 vues produit ET la Home sont FINIES** (DoD P2 bouclée : MRR 18 € = 18 SWP + 0 SV, Actifs 159 = 148+11+0). **Reste** : P4 Ops (Factory/Studio) → **P5 bascule** → P3b2b expand (non bloquant). Les tokens sont **résolus** (`_quickref.md` : swp/sv `admin-pro-2026`, dk `dk-admin-2026-secure`) et v2 lit **les mêmes clés localStorage que la prod** → rien à recoller à la bascule. Règles d'or : ne jamais toucher `index.html`/le proxy avant P5, `git add` fichier par fichier (jamais `-A`), vérif en runtime navigateur (`http.server`+Playwright, jamais `file:`), extraire le prod **par ID d'élément**. Codex n'a pas pu coder en autonomie (clé API → sandbox read-only) : pour le relayer, son onglet doit être en `--dangerously-bypass-approvals-and-sandbox` (cf `codex.md` §1quater).
+**Pour le prochain moteur (résumé 3 lignes)** : refonte dashboard « à côté » — **TOUTES LES VUES (7/7) SONT PORTÉES ET VÉRIFIÉES** (`monitoring-v2.html` **v2.11.0-p4**) : P0 socle, P1 Acquisition (28/28), P2 Home COMPLÈTE (MRR 18 € = 18 SWP + 0 SV, Actifs 159 = 148+11+0), P3a SWP/StoryVoice (21/21), P3b1→P3b5 DictoKey (33/33 + 15/15 + 7/7 + appareils/charts), **P4 Ops Factory (24/24 sur 2 modes de token) + Studio**. 0 erreur console PC 1280 + mobile 384 partout, interactions testées au clic réel. **Il ne reste que P5 = LA BASCULE** (repointer `se7enai-dash` sur v2, rollback = 1 commit) — ⚠ **revenue : go explicite de Quang OBLIGATOIRE**, plus P6 hygiène et P3b2b (non bloquants). Tokens **résolus** et **hérités** (mêmes clés localStorage que la prod, même origine) → rien à recoller. **Divergences VOULUES** à assumer à la bascule (roadmap §7/§8, pas des régressions) : perf Studio séparée organique/boosté, 30/page, donuts top 7, filtre premium corrigé, `Visite→vente` marqué « fenêtres mixtes ». **2 décisions en attente de Quang** : MRR DictoKey (aucune source) et `Visite→vente` (corriger le worker ?). Règles d'or : ne jamais toucher `index.html`/le proxy avant P5, `git add` fichier par fichier (jamais `-A`), vérif en runtime navigateur (`http.server`+Playwright, jamais `file:`), extraire le prod **par ID d'élément**, et **jamais de `reload()` sur une vraie navigation** (annule les fetch du prod → fausse parité). Codex n'a pas pu coder en autonomie (clé API → sandbox read-only) : pour le relayer, son onglet doit être en `--dangerously-bypass-approvals-and-sandbox` (cf `codex.md` §1quater).
