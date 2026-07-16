@@ -64,6 +64,9 @@
 
     .freshbar { display: flex; align-items: center; gap: 10px; min-height: 48px; margin-bottom: 24px; padding: 9px 13px; border: 1px solid var(--line); border-left: 3px solid var(--fresh-color); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-muted); font-size: .81rem; cursor: pointer; }
     .freshbar:hover { border-color: var(--line-strong); background: var(--surface-raised); }
+    /* Données servies depuis le cache disque : le bandeau doit SE VOIR, pas juste porter un liseré. */
+    .freshbar[data-fresh="vieillit"] { border-color: rgba(245, 181, 46, .38); background: rgba(245, 181, 46, .07); }
+    .freshbar[data-fresh="perime"] { border-color: rgba(239, 83, 80, .42); background: rgba(239, 83, 80, .08); }
     .fresh-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--fresh-color); box-shadow: 0 0 0 0 var(--fresh-color); }
     .freshbar strong { color: var(--ink); }
     .fresh-action { margin-left: auto; color: var(--accent); font-weight: 700; white-space: nowrap; }
@@ -470,7 +473,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.11.1-p4';
+    const VERSION = 'v2.12.0-panels';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -543,6 +546,34 @@
     const STUDIO_MONTHS = ['JANV', 'FÉVR', 'MARS', 'AVR', 'MAI', 'JUIN', 'JUIL', 'AOÛT', 'SEPT', 'OCT', 'NOV', 'DÉC'];
     const state = { activeKey: null, controller: null, loadedAt: new Map(), cache: new Map(), error: new Map() };
 
+    // ── Cache persisté (v2.12.0) ────────────────────────────────────────────────
+    // Reprend le principe de la prod (`persistAppCache`, v1.16.0) : au retour, on AFFICHE le cache
+    // sans refetcher, et l'utilisateur garde la main via « Actualiser ». Trois raisons :
+    //  1. la roadmap l'exige (« refresh manuel uniquement, pas d'auto-fetch : sinon spam réseau + coût ») —
+    //     or v2 refetchait à CHAQUE ouverture de vue ;
+    //  2. sans horodatage persisté, la fresh-bar était toujours verte « à l'instant » : son état orange/rouge
+    //     ne pouvait JAMAIS s'afficher, alors que c'est tout son intérêt ;
+    //  3. DictoKey (5 sources, jusqu'à 22 s à froid) s'ouvrait en 20 s à chaque fois.
+    const CACHE_LS = 'monitoring_v2_cache_';
+    const CACHE_TS_LS = 'monitoring_v2_cache_ts_';
+    function persistCache(key, data) {
+      try {
+        localStorage.setItem(CACHE_LS + key, JSON.stringify(data));
+        localStorage.setItem(CACHE_TS_LS + key, String(Date.now()));
+      } catch (e) { /* quota dépassé : on garde au moins le cache mémoire de la session */ }
+    }
+    // Recharge cache + horodatage en mémoire. Retourne false si rien de valide → l'appelant fetch.
+    function hydrateCache(key) {
+      if (state.loadedAt.has(key)) return true;
+      try {
+        const raw = localStorage.getItem(CACHE_LS + key);
+        const ts = parseInt(localStorage.getItem(CACHE_TS_LS + key) || '', 10);
+        if (!raw || !ts || Number.isNaN(ts)) return false;
+        state.cache.set(key, JSON.parse(raw));
+        state.loadedAt.set(key, new Date(ts));   // l'âge RÉEL des données, pas l'heure d'affichage
+        return true;
+      } catch (e) { return false; }
+    }
     function getApp(key) { return APPS.find(app => app.key === key) || APPS[0]; }
     function safeText(value) { return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]); }
     function formatDate(date) { return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(date); }
@@ -644,8 +675,26 @@
       return `<button class="product-card" type="button" data-route="${app.key}" style="--product-color:${app.color}"><span class="product-name">${safeText(app.name)}</span><span class="product-meta">${meta}</span><span class="product-progress"><i style="width:${w}%"></i></span></button>`;
     }
     function Alert(level, title, message) { const color = level === 'critique' ? 'var(--crit)' : level === 'ok' ? 'var(--good)' : 'var(--warn)'; return `<article class="alert" style="--alert-color:${color}"><span class="alert-badge">${safeText(level)}</span><span class="alert-message"><strong>${safeText(title)}</strong> — ${safeText(message)}</span></article>`; }
-    function Panel(id, title, content, open = false) { return `<section class="panel" data-open="${open}" id="${id}"><button class="panel-toggle" type="button" aria-expanded="${open}" aria-controls="${id}-content"><span>${safeText(title)}</span><span class="panel-chevron" aria-hidden="true">⌄</span></button><div class="panel-content" id="${id}-content">${content}</div></section>`; }
-    function FreshBar(app) { const at = state.loadedAt.get(app.key) || new Date(); const [label, color] = freshState(at); return `<button class="freshbar" type="button" data-refresh="${app.key}" style="--fresh-color:${color}" title="Actualiser cette vue"><span class="fresh-dot" aria-hidden="true"></span><span><strong>${label}</strong> · données ${app.auth === 'token' ? 'protégées' : 'publiques'} · dernier rafraîchissement le <strong>${formatDate(at)}</strong> (${relativeTime(at)})</span><span class="fresh-action">↻ Actualiser</span></button>`; }
+    // État plié/déplié persisté par panneau (clé = son id, stable d'une session à l'autre).
+    // On ne stocke QUE les panneaux que Quang a explicitement bougés : un nouveau panneau garde son défaut,
+    // et rien à migrer si un id disparaît. (Les ids de la prod — #sO, #sP… — ne correspondent pas : pas d'héritage possible.)
+    const PANEL_LS = 'monitoring_v2_panels';
+    function loadPanelState() { try { return JSON.parse(localStorage.getItem(PANEL_LS)) || {}; } catch (e) { return {}; } }
+    let panelState = loadPanelState();
+    function savePanelState() { try { localStorage.setItem(PANEL_LS, JSON.stringify(panelState)); } catch (e) {} }
+    function Panel(id, title, content, open = false) {
+      const isOpen = Object.prototype.hasOwnProperty.call(panelState, id) ? !!panelState[id] : open;
+      return `<section class="panel" data-open="${isOpen}" id="${id}"><button class="panel-toggle" type="button" aria-expanded="${isOpen}" aria-controls="${id}-content"><span>${safeText(title)}</span><span class="panel-chevron" aria-hidden="true">⌄</span></button><div class="panel-content" id="${id}-content">${content}</div></section>`;
+    }
+    // La couleur ne porte JAMAIS l'info seule : le mot (Frais/Vieillit/Périmé) la dit toujours.
+    // Au-delà de 6 h le bandeau se teinte (orange), au-delà de 24 h il passe en rouge — comme le « stale » de la prod.
+    function FreshBar(app) {
+      const at = state.loadedAt.get(app.key) || new Date();
+      const [label, color] = freshState(at);
+      const age = Date.now() - at.getTime();
+      const tone = age > 86400000 ? 'perime' : age > 21600000 ? 'vieillit' : 'frais';
+      return `<button class="freshbar" type="button" data-refresh="${app.key}" data-fresh="${tone}" style="--fresh-color:${color}" title="Actualiser cette vue"><span class="fresh-dot" aria-hidden="true"></span><span><strong>${label}</strong> · données ${app.auth === 'token' ? 'protégées' : 'publiques'} · actualisées le <strong>${formatDate(at)}</strong> (${relativeTime(at)})</span><span class="fresh-action">↻ Actualiser</span></button>`;
+    }
 
     // === P1 — Acquisition (parité stricte avec index.html v1.23.0, formules identiques) ===
     const ACQ_META = {
@@ -1980,7 +2029,11 @@
       if (state.controller) state.controller.abort();
       renderLoading(cfg);
       state.controller = new AbortController();
-      try { state.cache.set(cfg.key, await fetchApp(cfg, state.controller.signal)); state.loadedAt.set(cfg.key, new Date()); state.error.delete(cfg.key); }
+      try {
+        const data = await fetchApp(cfg, state.controller.signal);
+        state.cache.set(cfg.key, data); state.loadedAt.set(cfg.key, new Date()); state.error.delete(cfg.key);
+        if (cfg.key !== 'home') persistCache(cfg.key, data);   // la Home n'est qu'un agrégat des autres : rien à persister
+      }
       catch (error) { if (error.name !== 'AbortError') state.error.set(cfg.key, error.message || String(error)); }
       finally { state.controller = null; renderApp(cfg, state.cache.get(cfg.key) || {}); }
     }
@@ -1992,6 +2045,10 @@
       }
       state.activeKey = cfg.key;
       renderNavigation();
+      // La Home n'agrège que des caches produit : les réhydrater d'abord, sinon elle affiche « — » à froid
+      // alors que les données de la dernière visite sont sur le disque. Aucun fetch payé (roadmap §4).
+      if (cfg.key === 'home') APPS.forEach(a => { if (a.key !== 'home') hydrateCache(a.key); });
+      if (!forceRefresh) hydrateCache(cfg.key);   // cache disque → affichage immédiat, l'utilisateur garde la main
       if (!state.loadedAt.has(cfg.key) || forceRefresh) refresh(cfg.key); else renderApp(cfg, state.cache.get(cfg.key) || {});
       closeDrawer();
     }
@@ -2065,6 +2122,7 @@
         const open = panel.dataset.open !== 'true';
         panel.dataset.open = String(open);
         panelButton.setAttribute('aria-expanded', String(open));
+        if (panel.id) { panelState[panel.id] = open; savePanelState(); }   // survit au re-render ET au rechargement
         // Un canvas dans un panneau replié a une taille nulle → resize à l'ouverture, sinon chart écrasé.
         if (open) requestAnimationFrame(() => Object.values(dkCharts).forEach(c => { try { c.resize(); } catch (e) {} }));
       }
