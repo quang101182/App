@@ -220,6 +220,27 @@
     .gauge-bar i { display: block; height: 100%; border-radius: inherit; background: var(--g-color); }
     .gauge-sub { margin-top: 7px; color: var(--ink-faint); font-size: .68rem; }
 
+    /* P3b5 — Rétention / usage / mouvements de tier */
+    .ret-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .kpi-value.r-good { color: var(--good); }
+    .kpi-value.r-warn { color: var(--warn); }
+    .kpi-value.r-crit { color: var(--crit); }
+    .kpi-value.ret-na { color: var(--ink-faint); font-size: .84rem; font-weight: 600; }
+    .seg-row { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 12px; }
+    .seg { padding: 6px 11px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--ink-muted); font-size: .76rem; }
+    .seg b { color: var(--ink); }
+    .adopt-list { display: grid; gap: 10px; }
+    .adopt-row { display: flex; align-items: center; gap: 12px; }
+    .adopt-label { flex: 0 0 92px; color: var(--ink-muted); font-size: .8rem; }
+    .adopt-bg { flex: 1; height: 9px; overflow: hidden; border-radius: 5px; background: rgba(255, 255, 255, .06); }
+    .adopt-bg i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), #7cc0ff); }
+    .adopt-info { flex: 0 0 auto; color: var(--ink-faint); font-size: .74rem; font-variant-numeric: tabular-nums; }
+    .churn-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; color: var(--ink-muted); font-size: .86rem; line-height: 1.7; }
+    .churn-sum b { color: var(--ink); }
+    .churn-sum b.up, .up { color: var(--good); }
+    .churn-sum b.down, .down { color: var(--crit); }
+    .churn-kv { margin-top: 7px; color: var(--ink-faint); font-size: .72rem; }
+
     /* P3b4 — Firebase / Adoption / Attribution */
     .fb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
     .fb-card { padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
@@ -313,7 +334,7 @@
     <aside class="sidebar" aria-label="Navigation principale">
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Se<span class="brand-seven">7</span>en&nbsp;AI</span></div>
       <nav id="navigation"></nav>
-      <div class="side-footer">Monitoring v2 · P3b4 Firebase</div>
+      <div class="side-footer">Monitoring v2 · P3b5 Rétention</div>
     </aside>
     <div class="content-wrap">
       <header class="mobile-bar"><button class="menu-button" id="menu-button" type="button" aria-label="Ouvrir la navigation" aria-expanded="false">☰</button><strong class="mobile-title">Se<span class="brand-seven">7</span>en&nbsp;AI</strong></header>
@@ -324,7 +345,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.8.0-p3b4';
+    const VERSION = 'v2.9.0-p3b5';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics ; revenus et actifs au lot P3.', sections: [] },
@@ -684,6 +705,17 @@
         });
       }
 
+      // Nouveaux utilisateurs (P3b5) — série unique → pas de légende
+      const nu = ((mon.advanced && mon.advanced.new_users && mon.advanced.new_users.daily) || []).slice().reverse();
+      const elNu = document.getElementById('dk-chart-signup');
+      if (elNu && nu.length) dkCharts.signup = new Chart(elNu, {
+        type: 'bar',
+        data: { labels: nu.map(d => d.date.slice(5)), datasets: [{ label: 'Nouveaux utilisateurs',
+          data: nu.map(d => d.count), backgroundColor: DK_SERIES[0], borderRadius: 4, borderSkipped: false }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: dkLegend(false),
+          scales: { x: dkAxis(), y: { beginAtZero: true, ticks: { color: DK_INK_MUTED, stepSize: 1 }, grid: { color: DK_GRID } } } }
+      });
+
       // Donut langues dictées
       dkDonut('dk-chart-lang', Object.entries((mon.summary && mon.summary.transcribe && mon.summary.transcribe.top_langs) || {}), dkMapLang);
       // Donut Top pays actifs — fantômes EXCLUS via le helper unifié (surtout pas une 4e variante du test)
@@ -853,6 +885,87 @@
         + `<div class="fb-card"><div class="chart-title">Sources d’installation</div>${src}</div>`
         + `<div class="fb-card"><div class="chart-title">Top boutons / pages</div>${cont}</div>`
         + `<div class="fb-card"><div class="chart-title">Kills OEM</div>${oem}</div></div>`;
+    }
+
+    // === P3b5 — Rétention (mon.advanced) + Mouvements de tier (parité stricte, index.html l.3673-3784 / 3914-3969) ===
+    function renderDkAdvanced(adv) {
+      if (!adv) return `<div class="no-data">Pas de métriques avancées sur la période</div>`;
+      // --- Rétention D1/D7/D30. Seuils : ≥0.4 vert · ≥0.2 orange · sinon rouge. Cohorte absente → « Pas assez de données ».
+      let ret = '';
+      if (adv.retention) {
+        ret = `<div class="chart-title">Rétention</div><div class="kpi-grid ret-grid">` + [['d1', 'D1'], ['d7', 'D7'], ['d30', 'D30']].map(([k, label]) => {
+          const d = adv.retention[k];
+          if (!d) return `<article class="kpi-tile"><div class="kpi-label">${label}</div><div class="kpi-value ret-na">Pas assez de données</div></article>`;
+          const cls = d.rate >= 0.4 ? 'r-good' : d.rate >= 0.2 ? 'r-warn' : 'r-crit';
+          return `<article class="kpi-tile"><div class="kpi-label">${label}</div><div class="kpi-value ${cls}">${Math.round(d.rate * 100)}%</div><div class="kpi-note">Cohorte : ${d.cohort_size} utilisateurs</div></article>`;
+        }).join('') + `</div>`;
+      }
+      // --- Nouveaux utilisateurs (chart monté dans dkMountCharts)
+      let signups = '';
+      if (adv.new_users) {
+        signups = `<div class="chart-title dk-sub2">Nouveaux utilisateurs</div>`
+          + `<div class="sm">${adv.new_users.total_period} total sur la période — moy. ${adv.new_users.avg_per_day}/jour</div>`
+          + `<div class="chart-box" style="height:210px;margin-top:9px"><canvas id="dk-chart-signup"></canvas></div>`;
+      }
+      // --- Distribution d'usage + segments
+      let usage = '';
+      if (adv.usage_distribution) {
+        const pu = adv.usage_distribution.per_user || {}, seg = adv.usage_distribution.segments || {};
+        usage = `<div class="chart-title dk-sub2">Usage par utilisateur</div><div class="kpi-grid">`
+          + [['Min', pu.min], ['Max', pu.max], ['Moyenne', pu.avg], ['Médiane', pu.median]]
+              .map(([l, v]) => KpiTile(l, v || 0, 'dictées/jour')).join('')
+          + `</div><div class="seg-row">`
+          + `<span class="seg">Power (&gt;20) : <b>${seg.power || 0}</b></span>`
+          + `<span class="seg">Régulier (5-20) : <b>${seg.regular || 0}</b></span>`
+          + `<span class="seg">Occasionnel (&lt;5) : <b>${seg.casual || 0}</b></span></div>`;
+      }
+      // --- Adoption des features
+      let adoption = '';
+      if (adv.feature_adoption) {
+        const fa = adv.feature_adoption, totalDev = fa.active_devices || 1;
+        adoption = `<div class="chart-title dk-sub2">Adoption des features</div><div class="adopt-list">`
+          + [['Dictée', fa.transcribe], ['Réécriture', fa.rewrite], ['Correction', fa.correct], ['Traduction', fa.translate]]
+              .map(([label, d0]) => {
+                const d = d0 || { users: 0, rate: 0 };
+                const pct = Math.round(d.rate * 100);
+                return `<div class="adopt-row"><span class="adopt-label">${safeText(label)}</span><div class="adopt-bg"><i style="width:${pct}%"></i></div>`
+                  + `<span class="adopt-info">${pct}% — ${d.users}/${totalDev} util.</span></div>`;
+              }).join('') + `</div>`;
+      }
+      return ret + signups + usage + adoption;
+    }
+
+    // Mouvements de tier. Le KV (`m:churn:{date}`) ne bouge QUE sur un changement de tier admin ; les
+    // achats/restores Play Billing côté APK ne notifient pas le gateway → KV à 0 alors que Firebase voit
+    // les events. La prod affiche donc les 2 sources côte à côte avec leur sémantique exacte — on fait pareil.
+    function renderDkChurn(churn, fb) {
+      const details = (churn && churn.details) || [];
+      const ups = (churn && churn.upgrades) || 0, dns = (churn && churn.downgrades) || 0;
+      const ev = fb && fb.aggregated && fb.aggregated.events;
+      let summary;
+      if (ev) {
+        const g = (n, f) => (ev[n] && ev[n][f]) || 0;
+        const pu = g('premium_purchase', 'users'), puC = g('premium_purchase', 'count');
+        const rs = g('premium_restored', 'users');
+        const rm = g('app_remove', 'users'), rmC = g('app_remove', 'count');
+        summary = `<div class="churn-sum"><span><b class="up">↑ ${pu}</b> achats Premium fresh${puC !== pu ? ` (${puC} events)` : ''}</span>`
+          + `<span><b>🔁 ${rs}</b> restaurations (reinstall/replay)</span>`
+          + `<span><b class="down">↓ ${rm}</b> désinstalls totaux${rmC !== rm ? ` (${rmC} events)` : ''}</span>`
+          + `<span class="muted">Firebase 7j</span></div>`
+          + `<div class="churn-kv">KV gateway (changements de tier admin seulement) : ${ups} upgrades · ${dns} downgrades · ${details.length} détail${details.length > 1 ? 's' : ''} table ci-dessous.</div>`;
+      } else {
+        summary = `<div class="churn-sum"><span class="up"><b>↑ ${ups} upgrades</b></span> · <span class="down"><b>↓ ${dns} downgrades</b></span>`
+          + ` · <span class="muted">${details.length} détail${details.length > 1 ? 's' : ''} affiché${details.length > 1 ? 's' : ''}</span>`
+          + ` · <span class="muted">(Firebase events en attente)</span></div>`;
+      }
+      if (!details.length) return summary + `<div class="empty dk-sub2">Aucun mouvement de tier sur la période</div>`;
+      const rows = details.slice().sort((a, b) => new Date(b.ts || b.date).getTime() - new Date(a.ts || a.date).getTime())
+        .map(d => {
+          const did = d.deviceId || 'inconnu';
+          return `<tr><td>${safeText(dkFmtDateTime(d.ts || d.date))}</td><td class="mono" title="${safeText(did)}">${safeText(did.length > 12 ? did.slice(0, 12) + '...' : did)}</td>`
+            + `<td><span class="down">${safeText(d.from || '?')} → ${safeText(d.to || '?')}</span></td></tr>`;
+        }).join('');
+      return summary + `<div class="table-wrap dk-sub2"><table class="data-table"><thead><tr><th>Date</th><th>Appareil</th><th>Transition</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     }
 
     // === P3b2 — Appareils DictoKey : état + helpers (parité stricte, index.html l.3786-4061) ===
@@ -1243,9 +1356,11 @@
         + `<section class="section">${Panel('dk-fb', '📊 Activation & engagement (Firebase J-1)', renderDkFirebase(fb), false)}</section>`
         + `<section class="section">${Panel('dk-adoption', '📈 Adoption refonte v2.61', renderDkAdoption(fb), false)}</section>`
         + `<section class="section">${Panel('dk-attr', '🎯 Attribution install & signaux v2.61.7', renderDkAttribution(fb), false)}</section>`
+        + `<section class="section">${Panel('dk-adv', '🔄 Rétention & usage', renderDkAdvanced(mon.advanced), false)}</section>`
+        + `<section class="section">${Panel('dk-churn', '💱 Mouvements de tier', renderDkChurn(mon.churn, fb), false)}</section>`
         + `<section class="section">${Panel('dk-devices', '📱 Appareils enregistrés', dkRenderDevicesSection(ds), true)}</section>`
         + `<section class="section">${Panel('dk-infra', '🛠 Infra — erreurs & coûts', errHtml + costBars, false)}</section>`
-        + `<section class="section">${Panel('dk-todo', '⏳ Sections restantes', '<p>Rétention &amp; mouvements de tier (P3b5) · panneau détail par appareil (P3b2b).</p>', false)}</section>`;
+        + `<section class="section">${Panel('dk-todo', '⏳ Section restante', '<p>Panneau détail par appareil (expand) — lot P3b2b.</p>', false)}</section>`;
     }
 
     // === P3b2 — Section « Appareils enregistrés » (summary + filtres + recherche + tableau paginé) ===
