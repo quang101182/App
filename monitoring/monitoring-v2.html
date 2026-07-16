@@ -175,6 +175,31 @@
     .token-form input { min-width: 0; flex: 1 1 240px; max-width: 320px; min-height: 40px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--bg); color: var(--ink); font: inherit; font-size: .85rem; }
     .token-form input:focus { border-color: var(--accent); outline: none; }
 
+    /* P3b1 — DictoKey */
+    .kpi-value { color: var(--ink); }
+    .trend-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+    .trend-item { display: flex; align-items: baseline; gap: 8px; flex: 1 1 190px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+    .trend-label { color: var(--ink-faint); font-size: .68rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+    .trend-val { margin-left: auto; font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .change { font-size: .74rem; font-weight: 750; }
+    .change.up, .churn-info .up { color: var(--good); }
+    .change.down, .churn-info .down { color: var(--crit); }
+    .change.neutral { color: var(--ink-faint); }
+    .churn-info { font-size: .9rem; }
+    .dk-stale { margin-bottom: 14px; }
+    .dk-sub2 { margin-top: 20px; }
+    .cost-list { display: grid; gap: 9px; }
+    .cost-row { display: flex; align-items: center; gap: 12px; }
+    .cost-label { flex: 0 0 110px; color: var(--ink-muted); font-size: .8rem; }
+    .cost-bar-bg { flex: 1; height: 11px; overflow: hidden; border-radius: 6px; background: rgba(255, 255, 255, .06); }
+    .cost-bar-bg i { display: block; height: 100%; border-radius: inherit; }
+    .cost-bar-bg i.c0 { background: linear-gradient(90deg, #7c5cff, #a68bff); }
+    .cost-bar-bg i.c1 { background: linear-gradient(90deg, var(--accent), #7cc0ff); }
+    .cost-bar-bg i.c2 { background: linear-gradient(90deg, var(--good), #6ee7a8); }
+    .cost-amount { flex: 0 0 62px; color: var(--ink); font-size: .8rem; text-align: right; font-variant-numeric: tabular-nums; }
+    .cost-total { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); color: var(--ink); font-weight: 750; font-size: .84rem; }
+    .panel-content .acq-sub:first-child { margin-top: 0; }
+
     @media (max-width: 900px) {
       .app { display: block; }
       .mobile-bar { display: flex; }
@@ -202,7 +227,7 @@
     <aside class="sidebar" aria-label="Navigation principale">
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Se<span class="brand-seven">7</span>en&nbsp;AI</span></div>
       <nav id="navigation"></nav>
-      <div class="side-footer">Monitoring v2 · P3a SWP + StoryVoice</div>
+      <div class="side-footer">Monitoring v2 · P3b1 DictoKey</div>
     </aside>
     <div class="content-wrap">
       <header class="mobile-bar"><button class="menu-button" id="menu-button" type="button" aria-label="Ouvrir la navigation" aria-expanded="false">☰</button><strong class="mobile-title">Se<span class="brand-seven">7</span>en&nbsp;AI</strong></header>
@@ -213,7 +238,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.3.0-p3a';
+    const VERSION = 'v2.4.0-p3b1';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics ; revenus et actifs au lot P3.', sections: [] },
@@ -256,6 +281,7 @@
     async function fetchApp(cfg, signal) {
       if (cfg.key === 'acq') return fetchAcq(signal);
       if (cfg.key === 'home') return fetchHome(signal);
+      if (cfg.key === 'dk') return fetchDk(cfg, signal);
       const payload = {};
       for (const [name, endpoint] of Object.entries(cfg.endpoints || {})) {
         if (!endpoint) continue;
@@ -397,6 +423,67 @@
     }
     function svHours(credits) { return Math.round((Number(credits || 0) / SV_CPH) * 10) / 10; }
     function svFmt(n) { return Number(n || 0).toLocaleString('fr-FR'); }
+
+    // === P3b1 — DictoKey : données + helpers (parité stricte avec render(), index.html v1.23.0) ===
+    const DK_GATEWAY = 'https://api-gateway-dictokey.quang101182.workers.dev';
+    const DK_PERIOD = '7d';
+    const TRACKING_BASELINE_VISITS = 1874;   // visites au 14/04/2026, démarrage du tracking clics sendBeacon (l.2728)
+
+    async function fetchDk(cfg, signal) {
+      const headers = { Authorization: `Bearer ${getToken(cfg)}` };
+      const j = async url => { const r = await fetch(url, { signal, headers }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); };
+      const pub = (url, fallback) => fetch(url, { signal }).then(r => r.json()).catch(() => fallback);
+      const [mon, stats, dev, visit, click, play] = await Promise.all([
+        j(`${DK_GATEWAY}/admin/monitoring?period=${DK_PERIOD}&advanced=1`),
+        j(`${DK_GATEWAY}/admin/stats`),
+        j(`${DK_GATEWAY}/admin/devices`),
+        pub(`${ACQ_GATEWAY}/api/visit?page=dk`, { total: 0, today: 0 }),
+        pub(`${ACQ_GATEWAY}/api/click?page=dk`, { total: 0, today: 0, by_btn: {} }),
+        // Play Store toléré (403 possible pendant la propagation Google). AWAITÉ ici, contrairement au prod qui le
+        // lance en fire-and-forget depuis render() → la race condition du prod (window._kpiDevicesCtx + re-render
+        // via updateKpiDevices) disparaît. Chiffres finaux identiques, un seul rendu.
+        j(`${DK_GATEWAY}/admin/playstore-stats`).catch(() => null)
+      ]);
+      return { mon, stats, dev, visit, click, play };
+    }
+
+    function dkPctChange(today, yesterday) {
+      if (yesterday === 0 && today === 0) return { text: '—', cls: 'neutral' };
+      if (yesterday === 0) return { text: '+∞', cls: 'up' };
+      const p = Math.round(((today - yesterday) / yesterday) * 100);
+      if (p > 0) return { text: `+${p}%`, cls: 'up' };
+      if (p < 0) return { text: `${p}%`, cls: 'down' };
+      return { text: '0%', cls: 'neutral' };
+    }
+    function dkFmtDateTime(s) { const d = new Date(s); return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+    // UTC forcé : last_data_date / window_* viennent du Worker qui parse les CSV Google en UTC (l.2957-2971).
+    function dkPlayDate(iso) { return iso ? new Date(iso + 'T00:00:00Z').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', timeZone: 'UTC' }) : '?'; }
+    function dkDaysSinceUtc(iso) {
+      if (!iso) return null;
+      const now = new Date();
+      const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      return Math.floor((todayUtc - new Date(iso + 'T00:00:00Z').getTime()) / 86400000);
+    }
+    // Cohortes devices — PC exclus (préfixe `pc_`). premiumRuntime = KV free + effective premium UNIQUEMENT
+    // (v1.7.21 : `tier !== 'pro'` incluait à tort les KV premium → ne pas réintroduire).
+    function dkDeviceStats(dev) {
+      const devicesList = ((dev && dev.devices) || []).filter(d => !(d.deviceId || '').toLowerCase().startsWith('pc_'));
+      const tierCounts = { pro: 0, premium: 0, free: 0 };
+      let phantomCount = 0, premiumRuntimeCount = 0;
+      devicesList.forEach(d => {
+        const tier = (d.tier || 'free').toLowerCase();
+        if (tierCounts[tier] !== undefined) tierCounts[tier]++; else tierCounts.free++;
+        if (d.effectiveTier === 'premium' && tier === 'free') premiumRuntimeCount++;
+        const created = new Date(d.createdAt).getTime();
+        const seen = new Date(d.lastSeen).getTime();
+        if (tier === 'free' && !d.effectiveTier && seen <= created) phantomCount++;   // fantôme = free jamais utilisé
+      });
+      const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+      const newDevicesToday = devicesList.filter(d => { if (!d.createdAt) return false; const t = new Date(d.createdAt).getTime(); return !isNaN(t) && t >= startOfToday.getTime(); }).length;
+      return { devicesList, tierCounts, phantomCount, premiumRuntimeCount,
+               effectiveFree: tierCounts.free - premiumRuntimeCount,
+               totalPremium: tierCounts.premium + premiumRuntimeCount, newDevicesToday };
+    }
 
     // === P2 — Agrégats Home (dérivés des mêmes compteurs publics que la vue Acquisition) ===
     // Somme cohérente avec la vue acq : hub/swp/sv comptent les `out:*`, DictoKey compte `clicks.total` (outMode).
@@ -574,6 +661,134 @@
         + `<div class="acq-when">Source : /admin/sv/overview · généré ${data.generatedAt ? swpFmtRelative(data.generatedAt) : ''}</div>`;
     }
 
+    // === P3b1 — Vue DictoKey : Overview + Play Store + Infra (devices/charts/Firebase/advanced = lots suivants) ===
+    function renderDkView(payload) {
+      if (!payload || !payload.mon) return EmptyState('DictoKey', 'Aucune donnée reçue du gateway.');
+      const { mon, stats, dev, visit, click, play } = payload;
+      const ds = dkDeviceStats(dev);
+
+      // --- Trend bar : requêtes + utilisateurs actifs (mobile only) + churn
+      const rc = dkPctChange(mon.trend.requests.today, mon.trend.requests.yesterday);
+      const dauDaily = (mon.dau && mon.dau.daily) || [];
+      const dauToday = dauDaily.length > 0 ? ((dauDaily[0].by_platform && dauDaily[0].by_platform.mobile) || 0) : 0;
+      const dauYesterday = dauDaily.length > 1 ? ((dauDaily[1].by_platform && dauDaily[1].by_platform.mobile) || 0) : 0;
+      const dc = dkPctChange(dauToday, dauYesterday);
+      const trend = `<div class="trend-bar">`
+        + `<div class="trend-item"><span class="trend-label">Requêtes</span><span class="trend-val">${mon.trend.requests.today}</span><span class="change ${rc.cls}">${safeText(rc.text)}</span></div>`
+        + `<div class="trend-item"><span class="trend-label">Utilisateurs actifs</span><span class="trend-val">${dauToday}</span><span class="change ${dc.cls}">${safeText(dc.text)}</span></div>`
+        + `<div class="trend-item"><span class="trend-label">Churn</span><span class="trend-val churn-info"><span class="up">↑ ${mon.churn.upgrades}</span> / <span class="down">↓ ${mon.churn.downgrades}</span></span></div>`
+        + `</div>`;
+
+      // --- KPI hero « Appareils réels actifs » : Play Console prioritaire, sinon fallback cumul KV.
+      // v1.10.0 : quand la source est Play, le breakdown pro/premium/free n'est PLUS affiché ici — retrancher
+      // des cumuls KV d'un stock Play est mathématiquement fallacieux. Le breakdown reste dans « Appareils » (P3b2).
+      const psActive = (play && play.aggregated && play.aggregated.active_devices_net) || null;
+      let heroVal, heroSub;
+      if (psActive && psActive > 0) {
+        heroVal = psActive;
+        const snapAge = dkDaysSinceUtc(play.aggregated.last_data_date);
+        heroSub = play.aggregated.last_data_date
+          ? `snapshot Google au ${dkPlayDate(play.aggregated.last_data_date)}${snapAge !== null ? ` (J-${snapAge})` : ''}`
+          : 'snapshot Google';
+      } else {
+        heroVal = ds.devicesList.length - ds.phantomCount;
+        const parts = [];
+        if (ds.tierCounts.pro > 0) parts.push(`${ds.tierCounts.pro} pro`);
+        if (ds.totalPremium > 0) parts.push(`💎 ${ds.totalPremium}`);
+        const realFree = ds.effectiveFree - ds.phantomCount;
+        if (realFree > 0) parts.push(`${realFree} free`);
+        heroSub = parts.join(' · ') + (ds.phantomCount > 0 ? ` (+${ds.phantomCount} fant${ds.phantomCount > 1 ? 'ômes' : 'ôme'})` : '') + ' · cumul KV';
+      }
+      const heroTile = `<article class="kpi-tile"><div class="kpi-label">Appareils réels actifs</div><div class="kpi-value">${safeText(heroVal)}</div><div class="kpi-note">${safeText(heroSub)}</div><div class="kpi-note">⚡ +${ds.newDevicesToday} aujourd’hui (KV live)</div></article>`;
+
+      let dauSub = '';
+      if (dauDaily.length > 0) {
+        let sum = 0, max = 0;
+        dauDaily.forEach(d => { const c = (d.by_platform && d.by_platform.mobile) || 0; sum += c; if (c > max) max = c; });
+        dauSub = `moy. ${Math.round(sum / dauDaily.length)} / pic ${max}`;
+      }
+      const today = (stats.stats && stats.stats.today) || {};
+      const ecm = (stats.stats && stats.stats.estimated_cost_month) || {};
+      const kpis = `<div class="kpi-grid">${heroTile}`
+        + KpiTile('Actifs aujourd’hui', dauToday, dauSub)
+        + KpiTile('Dictées aujourd’hui', today.transcriptions || 0, `+${today.rewrites || 0} réécr. +${today.corrections || 0} corr. +${today.translations || 0} trad.`)
+        + KpiTile('Coût du mois', ecm.total || '$0.00', `W:${ecm.whisper || ecm.groq_whisper || '—'} L:${ecm.llm || ecm.groq_llm || '—'} A:${ecm.azure || ecm.azure_translate || '—'}`)
+        + `</div>`;
+
+      // --- Bandeau « Premium runtime non-syncé KV » : pattern NORMAL app < v2.61.4, PAS un incident.
+      // /admin/set-tier INTERDIT (créerait un Premium gratuit à vie en cas de résiliation).
+      const nowMs = Date.now(), sevenDaysMs = 7 * 86400 * 1000;
+      const activeSilent = ds.devicesList.filter(d => {
+        if (d.effectiveTier !== 'premium') return false;
+        if ((d.tier || 'free').toLowerCase() !== 'free') return false;
+        const req30d = parseInt(d.reqCount30d || d.requests30d || 0, 10) || 0;
+        const lastSeenMs = d.lastSeen ? new Date(d.lastSeen).getTime() : 0;
+        return req30d > 0 || (lastSeenMs ? (nowMs - lastSeenMs) : Infinity) < sevenDaysMs;   // exclut les artefacts
+      });
+      const silent = activeSilent.length ? `<div class="alert-list">${Alert('attention', `${activeSilent.length} Premium runtime non-syncé KV`,
+        `${activeSilent.map(d => `${(d.deviceId || '').slice(0, 8).toUpperCase()}${d.country ? ' ' + d.country : ''}${(parseInt(d.reqCount30d || d.requests30d || 0, 10) || 0) > 0 ? ` (${parseInt(d.reqCount30d || d.requests30d || 0, 10)} req/30j)` : ''}`).join(' · ')} — pattern normal pour app < v2.61.4 (Premium fonctionnel via header X-Premium), auto-corrigé au prochain auto-update. Pas un incident.`)}</div>` : '';
+
+      // --- Funnel site : le taux global retranche la baseline (tracking clics démarré après le compteur visites) ;
+      // le taux « auj. » ne l'applique PAS → les deux ne sont pas comparables (piège hérité du prod).
+      const sv = visit.total || 0, svToday = visit.today || 0, sc = click.total || 0, scToday = click.today || 0;
+      const trackedVisits = Math.max(0, sv - TRACKING_BASELINE_VISITS);
+      const rate = trackedVisits > 0 ? ((sc / trackedVisits) * 100).toFixed(1) : '0.0';
+      const rateToday = svToday > 0 ? ((scToday / svToday) * 100).toFixed(1) : '0.0';
+      const btn = click.by_btn || {};
+      const btnParts = [];
+      ['hero', 'pricing', 'nav', 'cta', 'sticky'].forEach(k => { if (btn[k]) btnParts.push(`${k} ${btn[k]}`); });
+      const siteFunnel = `<div class="kpi-grid">`
+        + KpiTile('Visites site', sv.toLocaleString('fr-FR'), `auj. +${svToday}`)
+        + KpiTile('Clics Play Store', sc.toLocaleString('fr-FR'), btnParts.length ? btnParts.join(' · ') : `auj. +${scToday}`)
+        + KpiTile('Taux clic site → Play', `${rate}%`, `auj. ${rateToday}%`)
+        + `</div>`;
+
+      // --- Play Store
+      const a = play && play.aggregated;
+      let psHtml;
+      if (a) {
+        const num = v => typeof v === 'number' ? v.toLocaleString('fr-FR') : (v || '—');
+        const pubDate = a.publication_date ? new Date(a.publication_date + 'T00:00:00Z').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'publication';
+        const snapAge = dkDaysSinceUtc(a.last_data_date);
+        const snapLabel = a.last_data_date ? `snapshot au ${dkPlayDate(a.last_data_date)}${snapAge !== null ? ` (J-${snapAge})` : ''}` : 'snapshot Google';
+        const lostPct = a.installs_cumulative > 0 ? Math.round(a.lost_total / a.installs_cumulative * 100) : 0;
+        const winLabel = (a.window_first_date && a.window_last_date) ? `du ${dkPlayDate(a.window_first_date)} au ${dkPlayDate(a.window_last_date)}` : 'fenêtre 28 j';
+        const stale = (snapAge !== null && snapAge > 3)
+          ? `<div class="alert-list dk-stale">${Alert('attention', 'Données Play Console figées', `au ${dkPlayDate(a.last_data_date)} (J-${snapAge}). Google n’a pas encore publié de CSV plus récent. Les KPI ci-dessous reflètent ce snapshot, pas l’état actuel.`)}</div>` : '';
+        psHtml = stale
+          + `<div class="acq-sub">🎯 Adoption globale (depuis publication)</div><div class="kpi-grid">`
+          + KpiTile('📥 Installations totales', num(a.installs_cumulative || '—'), `depuis ${pubDate}`)
+          + KpiTile('📱 Appareils actifs', num(a.active_devices_net || '—'), snapLabel)
+          + KpiTile('🚪 Pertes', num(a.lost_total != null ? a.lost_total : '—'), a.installs_cumulative > 0 ? `= ${lostPct}% des installs` : '= installs − actifs')
+          + `</div><div class="acq-sub dk-sub2">📈 Activité — fenêtre 28 jours</div><div class="kpi-grid">`
+          + KpiTile('👁 Visiteurs fiche', num(a.store_visitors_28d || '—'), winLabel)
+          + KpiTile('⬇ Installs', num(a.installs_28d || '—'), winLabel)
+          + KpiTile('🎯 Conversion fiche', `${(a.conversion_rate_28d || 0).toFixed(1)} %`, winLabel)
+          + KpiTile('⭐ Note moyenne', (a.rating_avg || 0).toFixed(2), a.rating_count != null ? `${a.rating_count} avis` : 'note globale (toutes périodes)')
+          + `</div>`;
+      } else {
+        psHtml = `<div class="kpi-grid">` + ['📥 Installations totales', '📱 Appareils actifs', '🚪 Pertes', '👁 Visiteurs fiche', '⬇ Installs', '🎯 Conversion fiche', '⭐ Note moyenne'].map(l => KpiTile(l, '⏳', 'En attente activation')).join('') + `</div>`;
+      }
+
+      // --- Infra : erreurs (conditionnel) + coûts
+      const errHtml = (mon.errors && mon.errors.total > 0)
+        ? `<div class="acq-sub">Erreurs récentes</div><div class="table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Endpoint</th><th>Message</th></tr></thead><tbody>`
+          + (mon.errors.recent || []).map(e => `<tr><td>${safeText(dkFmtDateTime(e.date || e.timestamp || e.ts))}</td><td>${safeText(e.endpoint || '—')}</td><td>${safeText(e.message || e.error || (e.status ? 'HTTP ' + e.status : '—'))}</td></tr>`).join('')
+          + `</tbody></table></div><div class="acq-sub dk-sub2">Coûts estimés ce mois</div>` : `<div class="acq-sub">Coûts estimés ce mois</div>`;
+      const parseCost = v => parseFloat(String(v || '0').replace('$', '')) || 0;
+      const costs = [{ label: 'Groq Whisper', value: parseCost(ecm.groq_whisper) }, { label: 'Groq LLM', value: parseCost(ecm.groq_llm) }, { label: 'Azure Translate', value: parseCost(ecm.azure_translate) }];
+      const maxCost = Math.max(...costs.map(c => c.value), 0.001);
+      const costBars = `<div class="cost-list">` + costs.map((c, i) => `<div class="cost-row"><span class="cost-label">${safeText(c.label)}</span><div class="cost-bar-bg"><i class="c${i}" style="width:${Math.max((c.value / maxCost) * 100, 2)}%"></i></div><span class="cost-amount">$${c.value.toFixed(2)}</span></div>`).join('')
+        + `</div><div class="cost-total">Total ce mois : $${parseCost(ecm.total).toFixed(2)}</div>`;
+
+      return trend + silent
+        + `<section class="section">${kpis}</section>`
+        + `<section class="section">${Panel('dk-site', '🌐 Funnel site → Play Store', siteFunnel, true)}</section>`
+        + `<section class="section">${Panel('dk-play', '📥 Play Store — adoption & activité', psHtml, true)}</section>`
+        + `<section class="section">${Panel('dk-infra', '🛠 Infra — erreurs & coûts', errHtml + costBars, false)}</section>`
+        + `<section class="section">${Panel('dk-todo', '⏳ Sections restantes', '<p>Appareils (P3b2) · Charts & donuts (P3b3) · Firebase / Adoption v2.61 / Attribution (P3b4) · Rétention & mouvements de tier (P3b5).</p>', false)}</section>`;
+    }
+
     function EmptyState(name, message) { return `<section class="placeholder"><div class="placeholder-inner"><span class="placeholder-icon" aria-hidden="true">◌</span><h2>${safeText(name)}</h2><p>${safeText(message)}</p></div></section>`; }
     function TokenGate(app, message) {
       return `<section class="placeholder"><div class="placeholder-inner"><span class="placeholder-icon" aria-hidden="true">🔒</span><h2>${safeText(app.name)} — token requis</h2><p>${safeText(message || 'Cette vue expose des données payantes. Colle le token admin pour y accéder.')}</p>`
@@ -620,6 +835,7 @@
       else if (app.key === 'acq') content = renderAcq(data);
       else if (app.key === 'swp') content = renderSwpView(data);
       else if (app.key === 'sv') content = renderSvView(data);
+      else if (app.key === 'dk') content = renderDkView(data);
       else content = renderPlaceholder(app, data);
       document.getElementById('view-root').innerHTML = `<div class="page-head"><div><h1>${safeText(app.name)} <span class="view-badge">${VERSION}</span></h1><p>${safeText(app.subtitle)}</p></div><button class="button" type="button" data-refresh="${app.key}">↻ Actualiser</button></div>${FreshBar(app)}${content}`;
     }
