@@ -330,6 +330,11 @@
       .kpi-value { font-size: 1.45rem; }
     }
 
+    /* Bandeau de rôle : neutre (jamais rouge/orange) — un produit au repos n'est pas une anomalie. */
+    .role-banner { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 22px; padding: 11px 14px; border: 1px solid var(--line); border-left: 3px solid var(--swp); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-muted); font-size: .78rem; line-height: 1.6; }
+    .role-banner b { color: var(--ink); }
+    .role-badge { flex: none; padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--swp) 18%, transparent); color: var(--swp); font-size: .66rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+
     .ret-since { margin: 0 0 12px; color: var(--ink-muted); font-size: .73rem; line-height: 1.5; }
     .ret-since b { color: var(--ink); }
     .ret-nosig { color: var(--ink-muted); font-size: .62em; font-style: italic; font-weight: 600; }
@@ -483,12 +488,18 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.12.2-signif';
+    const VERSION = 'v2.13.0-vitrine';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
       { key: 'dk', name: 'DictoKey', icon: '⌨', family: 'products', color: PRODUCT_COLORS.dk, auth: 'token', tokenKey: 'monitoring_admin_token', endpoints: {}, subtitle: 'Adoption, rétention, revenus et infrastructure.', sections: [] },
-      { key: 'swp', name: 'SubWhisper Pro', icon: '◉', family: 'products', color: PRODUCT_COLORS.swp, auth: 'token', tokenKey: 'monitoring_swp_token', gateway: 'https://api-gateway-pro.quang101182.workers.dev', endpoints: { overview: '/admin/swp/overview' }, subtitle: 'Abonnements, santé client et revenus.', sections: [] },
+      // `role: 'vitrine'` (décision Quang 16/07) — SubWhisper Pro est le PREMIER outil du projet, celui dont
+      // les autres (DictoKey…) sont nés. Il DORT volontairement et ne coûte rien : « 0 usage » est son
+      // comportement NOMINAL, pas une anomalie. Ses chiffres restent tous affichés dans sa vue ; il ne remonte
+      // simplement plus d'alerte sur la Home. Une alerte qui ne peut JAMAIS s'éteindre n'informe pas, elle use
+      // l'attention due aux vraies. (Les 2 payants inactifs : livraison du code + mail confirmés, l'un relancé
+      // sans réponse → l'action a déjà été faite, l'alerte ne pouvait pas le savoir.)
+      { key: 'swp', name: 'SubWhisper Pro', icon: '◉', family: 'products', color: PRODUCT_COLORS.swp, auth: 'token', role: 'vitrine', tokenKey: 'monitoring_swp_token', gateway: 'https://api-gateway-pro.quang101182.workers.dev', endpoints: { overview: '/admin/swp/overview' }, subtitle: 'Abonnements, santé client et revenus.', sections: [] },
       { key: 'sv', name: 'StoryVoice', icon: '◌', family: 'products', color: PRODUCT_COLORS.sv, auth: 'token', tokenKey: 'monitoring_storyvoice_token', gateway: 'https://api-gateway-pro.quang101182.workers.dev', endpoints: { overview: '/admin/sv/overview' }, subtitle: 'Crédits, conversion et revenus.', sections: [] },
       { key: 'acq', name: 'Acquisition', icon: '⌁', family: 'acquisition', auth: 'none', endpoints: {}, subtitle: 'Sites, visites, engagement et clics sortants.', sections: [] },
       // Factory : `auth: 'none'` DÉLIBÉRÉ — le token n'ouvre que ventes/abonnés, la vue doit vivre sans lui (pas de TokenGate en dur).
@@ -1395,13 +1406,16 @@
     }
 
     // Alertes agrégées. Publiques (acq) toujours ; produit seulement si l'app a été ouverte (cache présent).
+    // Un produit `role: 'vitrine'` n'alerte pas : ses KPI d'usage/conversion ne mesurent pas son objectif.
+    function isVitrine(key) { const a = APPS.find(x => x.key === key); return !!(a && a.role === 'vitrine'); }
     function homeAlerts(acq, swp, sv, dk) {
       const list = [];
       if (acq) ['dk', 'swp', 'sv'].forEach(k => {
+        if (isVitrine(k)) return;
         const vTot = acqInt(((acq[k] || {}).visit || {}).total);
         if (vTot >= 50 && acqSiteOut(acq, k) === 0) list.push({ level: 'attention', title: ACQ_META[k].name, message: `${vTot} visites mais aucun clic sortant — le parcours de sortie ne convertit pas.` });
       });
-      if (swp && swp.atRisk > 0) list.push({ level: 'critique', title: 'SubWhisper Pro', message: `${swp.atRisk} abonné(s) payant(s) à risque (payé jamais utilisé / inactif >14j / paiement en échec).` });
+      if (swp && swp.atRisk > 0 && !isVitrine('swp')) list.push({ level: 'critique', title: 'SubWhisper Pro', message: `${swp.atRisk} abonné(s) payant(s) à risque (payé jamais utilisé / inactif >14j / paiement en échec).` });
       if (dk && dk.snapAge !== null && dk.snapAge > 3) list.push({ level: 'attention', title: 'DictoKey', message: `snapshot Play Console figé au ${dkPlayDate(dk.snapDate)} (J-${dk.snapAge}) — les chiffres Play reflètent ce snapshot, pas l’état actuel.` });
       return list;
     }
@@ -1495,7 +1509,13 @@
         : `<div class="empty">Aucun client pour le moment.</div>`;
 
       const when = new Date(data.generatedAt || Date.now()).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      return (alertHtml ? `<section class="section"><div class="alert-list">${alertHtml}</div></section>` : '')
+      // Bandeau de RÔLE : les chiffres restent tous là, mais on dit comment les lire. Sans ça, « 0 usage »
+      // se lit comme un échec alors que c'est l'objectif du produit qui n'est pas l'usage.
+      const roleBanner = isVitrine('swp')
+        ? `<div class="role-banner"><span class="role-badge">Vitrine</span><span>Produit <b>volontairement au repos</b> — premier outil du projet, celui dont les suivants (DictoKey…) sont nés. Il ne coûte rien et n’a pas d’objectif d’usage : <b>« 0 dictée » est ici le comportement normal, pas une anomalie</b>. Ses chiffres restent affichés, mais il ne remonte aucune alerte sur la vue d’ensemble.</span></div>`
+        : '';
+      return roleBanner
+        + (alertHtml ? `<section class="section"><div class="alert-list">${alertHtml}</div></section>` : '')
         + `<section class="section"><div class="section-head"><h2>💶 Revenu &amp; abonnements</h2></div>${money}</section>`
         + `<section class="section"><div class="section-head"><h2>Funnel</h2><a href="#acq">Acquisition →</a></div>${funnel}</section>`
         + `<section class="section"><div class="section-head"><h2>Clients</h2></div>${clients}</section>`
