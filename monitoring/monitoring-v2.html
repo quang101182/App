@@ -327,6 +327,14 @@
       .kpi-value { font-size: 1.45rem; }
     }
 
+    /* ── État de chargement (le prod a un overlay ; sans lui, DictoKey = écran blanc ~20 s) ── */
+    .loading-state { display: flex; align-items: center; gap: 14px; padding: 30px 22px; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(160deg, var(--surface), #111622); color: var(--ink-muted); }
+    .loading-state strong { display: block; color: var(--ink); font-size: .92rem; }
+    .loading-state p { margin: 4px 0 0; font-size: .79rem; }
+    .loading-spin { flex: none; width: 20px; height: 20px; border: 2px solid var(--line-strong); border-top-color: var(--accent); border-radius: 50%; animation: loading-turn .8s linear infinite; }
+    @keyframes loading-turn { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .loading-spin { animation-duration: 2.4s; } }
+
     /* ── P4 / Factory ────────────────────────────────────────────────── */
     .fac-note { margin: 0 0 16px; color: var(--ink-muted); font-size: .81rem; line-height: 1.55; }
     .fac-note code { padding: 1px 5px; border-radius: 4px; background: var(--surface-soft); font-size: .95em; }
@@ -1956,10 +1964,21 @@
       document.getElementById('view-root').innerHTML = `<div class="page-head"><div><h1>${safeText(app.name)} <span class="view-badge">${VERSION}</span></h1><p>${safeText(app.subtitle)}</p></div><button class="button" type="button" data-refresh="${app.key}">↻ Actualiser</button></div>${FreshBar(app)}${content}`;
       if (app.key === 'dk' && !err && getToken(app)) dkMountCharts(data);   // après innerHTML : les canvas doivent exister
     }
+    // Le prod a un `loadingOverlay` ; sans équivalent, la vue DictoKey (5 sources, jusqu'à ~20 s quand le
+    // worker Cloudflare est à froid) laisse un écran BLANC muet — on croit que c'est cassé. Mesuré : 22 s.
+    function renderLoading(app) {
+      const wait = app.key === 'dk'
+        ? 'DictoKey interroge 5 sources ; jusqu’à ~20 s quand le worker est à froid.'
+        : 'Récupération des données.';
+      document.getElementById('view-root').innerHTML =
+        `<div class="page-head"><div><h1>${safeText(app.name)} <span class="view-badge">${VERSION}</span></h1><p>${safeText(app.subtitle)}</p></div></div>` +
+        `<div class="loading-state" role="status" aria-live="polite"><span class="loading-spin" aria-hidden="true"></span><div><strong>Chargement…</strong><p>${wait}</p></div></div>`;
+    }
     async function refresh(key) {
       const cfg = getApp(key);
       if (cfg.auth === 'token' && !getToken(cfg)) { renderApp(cfg, {}); return; }   // pas de token → pas de 401 inutile
       if (state.controller) state.controller.abort();
+      renderLoading(cfg);
       state.controller = new AbortController();
       try { state.cache.set(cfg.key, await fetchApp(cfg, state.controller.signal)); state.loadedAt.set(cfg.key, new Date()); state.error.delete(cfg.key); }
       catch (error) { if (error.name !== 'AbortError') state.error.set(cfg.key, error.message || String(error)); }
