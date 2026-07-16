@@ -264,7 +264,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.5.1-p3b2';
+    const VERSION = 'v2.6.0-p3b2';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics ; revenus et actifs au lot P3.', sections: [] },
@@ -490,6 +490,19 @@
       const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
       return Math.floor((todayUtc - new Date(iso + 'T00:00:00Z').getTime()) / 86400000);
     }
+    // Fantôme = free jamais utilisé (et pas premium runtime, sinon ce n'est pas un fantôme).
+    // ⚠ UNIFICATION v2 : la prod définit ce test 3 fois (render l.2606, renderDevicesPage l.4008 = ms + tier
+    // minusculé ; donut pays l.2811 = comparaison de strings ISO + `d.tier` BRUT sans minuscules). Vérifié le
+    // 16/07 sur les 464 devices réels : les 2 variantes donnent 65, ZÉRO écart (tiers déjà en minuscules,
+    // aucune date manquante) → unifiées ici sans changer un seul chiffre. Le donut de P3b3 doit utiliser CE helper.
+    function dkIsPhantom(d) {
+      if ((d.tier || 'free').toLowerCase() !== 'free') return false;
+      if (d.effectiveTier) return false;
+      const created = new Date(d.createdAt).getTime();
+      const seen = new Date(d.lastSeen).getTime();
+      return seen <= created;   // NaN si date absente/invalide → false (non-fantôme), comme la prod
+    }
+
     // Cohortes devices — PC exclus (préfixe `pc_`). premiumRuntime = KV free + effective premium UNIQUEMENT
     // (v1.7.21 : `tier !== 'pro'` incluait à tort les KV premium → ne pas réintroduire).
     function dkDeviceStats(dev) {
@@ -500,9 +513,7 @@
         const tier = (d.tier || 'free').toLowerCase();
         if (tierCounts[tier] !== undefined) tierCounts[tier]++; else tierCounts.free++;
         if (d.effectiveTier === 'premium' && tier === 'free') premiumRuntimeCount++;
-        const created = new Date(d.createdAt).getTime();
-        const seen = new Date(d.lastSeen).getTime();
-        if (tier === 'free' && !d.effectiveTier && seen <= created) phantomCount++;   // fantôme = free jamais utilisé
+        if (dkIsPhantom(d)) phantomCount++;
       });
       const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
       const newDevicesToday = devicesList.filter(d => { if (!d.createdAt) return false; const t = new Date(d.createdAt).getTime(); return !isNaN(t) && t >= startOfToday.getTime(); }).length;
@@ -525,11 +536,17 @@
       return { pro: true, premium: true, free: true };
     }
     function dkSaveTierFilters() { try { localStorage.setItem(LS_TIER_FILTERS, JSON.stringify(dkDevState.filters)); } catch (e) {} }
-    // Catégorie EFFECTIVE : pro KV = pro (cadeau admin à vie) · effectiveTier premium = vrai acheteur Google Play · reste = free.
+    // Catégorie EFFECTIVE : pro KV = pro (cadeau admin à vie) · premium = KV premium explicite OU effectiveTier
+    // premium (vrai acheteur Google Play) · reste = free.
+    // 🐛 CORRIGE UN BUG DE LA PROD (divergence assumée, feu vert Quang 16/07) : `getDeviceCategory()` (l.3813-3822)
+    // teste `pro` puis `effectiveTier === 'premium'`, et OUBLIE le cas `tier === 'premium'` en KV → les appareils
+    // passés premium explicitement (via /device/restore ou /device/update-tier) retombaient dans « free ». Sur les
+    // données réelles : 2 appareils concernés → pills premium 16 au lieu de 18, et ils disparaissaient dès qu'on
+    // décochait « free ». Le summary, lui, les comptait bien (totalPremium = 18) → les 2 sources se contredisaient.
     function dkDeviceCategory(d) {
       const kvTier = (d.tier || 'free').toLowerCase();
       if (kvTier === 'pro') return 'pro';
-      if (d.effectiveTier === 'premium') return 'premium';
+      if (kvTier === 'premium' || d.effectiveTier === 'premium') return 'premium';
       return 'free';
     }
     function dkDetectPlatform(deviceId) { return (deviceId || '').toLowerCase().startsWith('pc_') ? 'PC' : 'Mobile'; }
@@ -878,7 +895,7 @@
       const sumParts = [`${ds.tierCounts.pro} pro`];
       if (ds.totalPremium > 0) sumParts.push(`💎 ${ds.totalPremium} premium`);
       sumParts.push(`${realFreeCount} free`);
-      let summaryText = `${realCount} appareils — ${sumParts.join(', ')}`;
+      let summaryText = `${realCount} appareil${realCount > 1 ? 's' : ''} — ${sumParts.join(', ')}`;
       if (ds.phantomCount > 0) summaryText += ` — ${ds.phantomCount} fantôme${ds.phantomCount > 1 ? 's' : ''} (free, 0 req)`;
       if (ds.totalPremium === 0) summaryText += ' — Premium Google : voir Play Console';
       summaryText += ` — ⚡ +${ds.newDevicesToday} aujourd’hui`;
@@ -896,7 +913,7 @@
       if (dkDevState.filtered.length === 0) {
         const noTier = !dkDevState.filters.pro && !dkDevState.filters.premium && !dkDevState.filters.free;
         body = `<tr class="devices-empty-row"><td colspan="4">${noTier ? 'Aucun tier sélectionné — <a href="#" data-tier-reset="1">Tout réactiver</a>' : 'Aucun appareil ne correspond aux filtres'}</td></tr>`;
-        pageInfo = '0 / 0 (0 appareils)'; prevDis = true; nextDis = true; pagiHidden = true;
+        pageInfo = '0 / 0 (0 appareil)'; prevDis = true; nextDis = true; pagiHidden = true;
       } else {
         body = page.map(d => {
           const did = d.deviceId || 'inconnu';
@@ -907,9 +924,7 @@
           const showSubTier = effective && effective !== kvTier;
           const tierCls = displayTier === 'pro' ? 'b-pro'
             : displayTier === 'premium' ? (effective === 'premium' && kvTier !== 'premium' ? 'b-prem b-prem-rt' : 'b-prem') : 'b-free';
-          const created = new Date(d.createdAt).getTime();
-          const seen = new Date(d.lastSeen).getTime();
-          const isPhantom = kvTier === 'free' && !effective && seen <= created;   // variante ms (identique à la prod ici)
+          const isPhantom = dkIsPhantom(d);
           // 3 sous-lignes FIXES (drapeau+pays+version / modèle / Android) → hauteur uniforme, pas de wrap.
           // '—' si donnée absente (app < v2.60.0 n'envoyait ni deviceModel ni androidVersion).
           const l1 = [];
@@ -925,7 +940,8 @@
             + `<td>${dkDateStack(d.createdAt)}</td><td>${dkRelativeTime(d.lastSeen)}<div class="time-sub">${dkTimeOnly(d.lastSeen)}</div></td></tr>`;
         }).join('');
         const totalPages = Math.ceil(dkDevState.filtered.length / DK_PER_PAGE);
-        pageInfo = `${dkDevState.page + 1} / ${Math.max(totalPages, 1)} (${dkDevState.filtered.length} appareils)`;
+        const n = dkDevState.filtered.length;
+        pageInfo = `${dkDevState.page + 1} / ${Math.max(totalPages, 1)} (${n} appareil${n > 1 ? 's' : ''})`;
         prevDis = dkDevState.page === 0;
         nextDis = end >= dkDevState.filtered.length;
         pagiHidden = dkDevState.filtered.length <= DK_PER_PAGE;
