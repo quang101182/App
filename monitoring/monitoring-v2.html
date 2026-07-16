@@ -536,13 +536,15 @@
       return { pro: true, premium: true, free: true };
     }
     function dkSaveTierFilters() { try { localStorage.setItem(LS_TIER_FILTERS, JSON.stringify(dkDevState.filters)); } catch (e) {} }
-    // Catégorie EFFECTIVE : pro KV = pro (cadeau admin à vie) · premium = KV premium explicite OU effectiveTier
-    // premium (vrai acheteur Google Play) · reste = free.
+    // Catégorie EFFECTIVE. Les 2 sources de premium sont disjointes par construction :
+    //   - `tier === 'premium'` en KV  → écrit par l'APP (`/device/restore` ou `/device/update-tier`), pas à la main
+    //   - `effectiveTier === 'premium'` avec KV free → premium runtime (app < v2.61.4 qui n'a jamais syncé le KV)
+    // ⚠ Seul `pro` est admin-set (cadeau à vie). NE PAS décrire les premium comme « manuels » — ce sont des achats Google Play.
     // 🐛 CORRIGE UN BUG DE LA PROD (divergence assumée, feu vert Quang 16/07) : `getDeviceCategory()` (l.3813-3822)
-    // teste `pro` puis `effectiveTier === 'premium'`, et OUBLIE le cas `tier === 'premium'` en KV → les appareils
-    // passés premium explicitement (via /device/restore ou /device/update-tier) retombaient dans « free ». Sur les
-    // données réelles : 2 appareils concernés → pills premium 16 au lieu de 18, et ils disparaissaient dès qu'on
-    // décochait « free ». Le summary, lui, les comptait bien (totalPremium = 18) → les 2 sources se contredisaient.
+    // teste `pro` puis `effectiveTier === 'premium'`, et OUBLIE le cas `tier === 'premium'` en KV → ces appareils
+    // retombaient dans « free ». Sur les données réelles : 12 KV premium + 6 runtime = 18, dont 2 KV premium sans
+    // aucun signal runtime → pills premium 16 au lieu de 18, et ces 2 disparaissaient dès qu'on décochait « free ».
+    // Le summary, lui, les comptait bien (totalPremium = 18) → les 2 sources se contredisaient.
     function dkDeviceCategory(d) {
       const kvTier = (d.tier || 'free').toLowerCase();
       if (kvTier === 'pro') return 'pro';
