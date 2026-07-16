@@ -12,7 +12,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monitoring v1.21.0</title>
+<title>Monitoring v1.22.0</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -578,6 +578,15 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
     body.app-se7 #se7View { display: block; }
     #se7View { width: 100%; min-width: 0; box-sizing: border-box; max-width: 860px; margin: 0 auto; }
 
+    /* === Sites & Acquisition (v1.22.0) — funnel sites vitrines, isolé via body.app-acq, SANS token === */
+    body:not(.app-acq) #acqView { display: none !important; }
+    body.app-acq #sO, body.app-acq #sP, body.app-acq #sA, body.app-acq #sRet,
+    body.app-acq #sChurn, body.app-acq #sD, body.app-acq #sI, body.app-acq #sectionNav,
+    body.app-acq .pill-group, body.app-acq .section-block, body.app-acq .btn-toggle-all,
+    body.app-acq #footer, body.app-acq #alertBanner { display: none !important; }
+    body.app-acq #acqView { display: block; }
+    #acqView { width: 100%; min-width: 0; box-sizing: border-box; max-width: 860px; margin: 0 auto; }
+
     /* width:100% + min-width:0 : #studioView est un flex-item de .main (flex column). Sans width:100%,
        il se dimensionne sur son max-content (~365px) et déborde l'écran à droite sur mobile étroit (≤390px).
        width:100% le force à la largeur du conteneur ; min-width:0 autorise le rétrécissement des enfants. */
@@ -915,7 +924,7 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
 <div class="sticky-top" id="stickyTop">
   <!-- Header -->
   <header class="header">
-    <h1>Monitoring<span class="version-pill">v1.21.0</span></h1>
+    <h1>Monitoring<span class="version-pill">v1.22.0</span></h1>
     <div class="header-controls">
       <div class="pill-group" id="periodPillGroup" title="Période d'analyse · choix mémorisé entre sessions">
         <button class="pill active" data-period="7d">7j<span class="dot-saved" title="Persisté"></span></button>
@@ -1336,13 +1345,16 @@ td { padding: 10px 8px; border-bottom: 1px solid rgba(30,58,95,.4); }
   <!-- Se7en AI view (v1.21.0) — funnel du hub se7enai.com, isolé via body.app-se7, SANS token. Rempli par renderSe7(). -->
   <div id="se7View"></div>
 
+  <!-- Sites & Acquisition view (v1.22.0) — funnel visite→sortant des sites vitrines, isolé via body.app-acq, SANS token. Rempli par renderAcq(). -->
+  <div id="acqView"></div>
+
   <!-- Footer -->
   <div class="footer" id="footer"><span id="footerDyn">Monitoring v1.19.0</span> · 💡 dis "snapshot DictoKey" à Claude pour archiver dans Drive</div>
 </div>
 
 <script>
 // === Dashboard version (single source of truth — bump à chaque release) ===
-const DASHBOARD_VERSION = 'v1.21.0';
+const DASHBOARD_VERSION = 'v1.22.0';
 
 // === Multi-app config ===
 const APPS = {
@@ -1387,6 +1399,13 @@ const APPS = {
   // v1.21.0 — Se7en AI : hub vitrine se7enai.com, funnel d'acquisition (visites/clics via gateway-pro slug se7). SANS token (compteurs publics).
   se7: {
     name: 'Se7en AI',
+    gateway: '',
+    tokenKey: null,
+    endpoints: {}
+  },
+  // v1.22.0 — Sites & Acquisition : funnel visite→clic sortant des sites vitrines (dk/swp/sv) via compteurs publics gateway-pro. SANS token.
+  acq: {
+    name: 'Acquisition',
     gateway: '',
     tokenKey: null,
     endpoints: {}
@@ -1569,7 +1588,7 @@ function switchApp(newApp) {
   // v1.20.0 : Studio = agenda statique, aucune donnée sensible → pas de token, rendu direct.
   if (newApp === 'studio') { hideLogin(); renderStudio(); return; }
   // factory + se7 : visites publiques → pas de token requis. Autres apps : token requis.
-  if (newApp !== 'factory' && newApp !== 'se7' && !getToken()) { showLogin(); return; }
+  if (newApp !== 'factory' && newApp !== 'se7' && newApp !== 'acq' && !getToken()) { showLogin(); return; }
   hideLogin(); // v1.14.0 : fermer une éventuelle modale login résiduelle d'un onglet précédent
   // v1.14.0/v1.16.0 : retour sur un onglet → rendu depuis le cache (mémoire ou localStorage), JAMAIS de fetch auto.
   if (renderFromCache(newApp)) return;
@@ -1598,6 +1617,7 @@ function setActiveAppView(appId) {
   document.body.classList.toggle('app-storyvoice', appId === 'storyvoice'); // v1.19.0
   document.body.classList.toggle('app-studio', appId === 'studio'); // v1.20.0
   document.body.classList.toggle('app-se7', appId === 'se7'); // v1.21.0
+  document.body.classList.toggle('app-acq', appId === 'acq'); // v1.22.0
   document.body.dataset.activeApp = appId;
 }
 
@@ -1674,6 +1694,8 @@ async function fetchAll() {
       await fetchAllFactory(signal);
     } else if (thisApp === 'se7') {
       await fetchAllSe7(signal);
+    } else if (thisApp === 'acq') {
+      await fetchAllAcq(signal);
     } else {
       await fetchAllDictoKey(signal);
     }
@@ -1735,6 +1757,7 @@ function renderFromCache(app) {
   else if (app === 'storyvoice') { renderSv(c); }
   else if (app === 'factory') { renderFactory(c); }
   else if (app === 'se7') { renderSe7(c); }
+  else if (app === 'acq') { renderAcq(c); }
   renderFreshBanner(app);
   return true;
 }
@@ -2044,6 +2067,70 @@ function renderSe7(data) {
         rows + outHtml +
       '</div>' +
       '<div style="font-size:.78rem;color:#8a97ab;margin-top:14px">Dernière mesure : ' + swpEscape(when) + '</div>' +
+    '</div>';
+}
+
+// === v1.22.0 — Sites & Acquisition : funnel visite→clic sortant des sites vitrines (dk/swp/sv), compteurs publics gateway-pro, SANS token ===
+async function fetchAllAcq(signal) {
+  var G = 'https://api-gateway-pro.quang101182.workers.dev';
+  var sites = ['dk', 'swp', 'sv'];
+  var calls = [];
+  sites.forEach(function(s) {
+    calls.push(fetch(G + '/api/visit?page=' + s, { signal: signal }).then(function(x){ return x.json(); }).catch(function(){ return { total: 0, today: 0 }; }));
+    calls.push(fetch(G + '/api/click?page=' + s, { signal: signal }).then(function(x){ return x.json(); }).catch(function(){ return { total: 0, today: 0, by_btn_all: {} }; }));
+  });
+  var r = await Promise.all(calls);
+  if (currentApp !== 'acq') return; // réponse tardive sur mauvais onglet → drop
+  var data = { dk: { visit: r[0], clicks: r[1] }, swp: { visit: r[2], clicks: r[3] }, sv: { visit: r[4], clicks: r[5] }, generatedAt: Date.now() };
+  persistAppCache('acq', data);
+  renderAcq(data);
+}
+
+function renderAcq(data) {
+  var view = document.getElementById('acqView');
+  if (!view || !data) return;
+  var META = {
+    dk:  { name: 'DictoKey',       url: 'https://dictokey.com',                color: '#3aa0ff', outMode: 'total', outNote: 'vers Play Store' },
+    swp: { name: 'SubWhisper Pro', url: 'https://sub-whisper.com/landing.html', color: '#7c6aff', outMode: 'out',   outNote: 'vers checkout' },
+    sv:  { name: 'StoryVoice',     url: 'https://storiesvoice.org',            color: '#b08d3e', outMode: 'out',   outNote: 'vers checkout / app' }
+  };
+  function pct(n, d) { if (!d || d <= 0) return '—'; return (Math.round((n / d) * 1000) / 10) + '%'; }
+  var cards = ['dk', 'swp', 'sv'].map(function(k) {
+    var m = META[k], d = data[k] || {};
+    var visit = d.visit || { total: 0, today: 0 };
+    var clicks = d.clicks || { total: 0, by_btn_all: {} };
+    var vTot = parseInt(visit.total) || 0, vToday = parseInt(visit.today) || 0;
+    var bb = clicks.by_btn_all || {};
+    var outTotal = 0, outParts = [];
+    if (m.outMode === 'total') {
+      outTotal = parseInt(clicks.total) || 0;
+    } else {
+      Object.keys(bb).forEach(function(b) { if (b.indexOf('out:') === 0) { var v = parseInt(bb[b]) || 0; outTotal += v; outParts.push({ name: b.slice(4), v: v }); } });
+    }
+    outParts.sort(function(a, b) { return b.v - a.v; });
+    var w = vTot > 0 ? Math.max(2, Math.min(100, Math.round((outTotal / vTot) * 100))) : 0;
+    var detail = outParts.length ? ('<div style="font-size:.74rem;color:#8a97ab;margin-top:8px">Détail : ' + outParts.map(function(o){ return swpEscape(o.name) + ' <b style="color:#e6edf3">' + o.v + '</b>'; }).join(' · ') + '</div>') : '';
+    return '<div style="background:rgba(120,160,220,.05);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:16px;margin-bottom:14px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:12px">' +
+        '<a href="' + m.url + '" target="_blank" rel="noopener" style="font-weight:800;font-size:1.05rem;color:' + m.color + ';text-decoration:none">' + swpEscape(m.name) + ' ↗</a>' +
+        '<span style="font-size:.76rem;color:#8a97ab;white-space:nowrap">taux sortant <b style="color:#e6edf3;font-size:.95rem">' + pct(outTotal, vTot) + '</b></span>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">' +
+        '<div><div style="font-size:.68rem;color:#8a97ab;text-transform:uppercase;letter-spacing:.06em">Visites</div><div style="font-size:1.35rem;font-weight:800;color:' + m.color + '">' + vTot + '</div><div style="font-size:.68rem;color:#8a97ab">' + (vToday > 0 ? '+' + vToday + ' auj.' : '—') + '</div></div>' +
+        '<div><div style="font-size:.68rem;color:#8a97ab;text-transform:uppercase;letter-spacing:.06em">Clics sortants</div><div style="font-size:1.35rem;font-weight:800;color:#ffc46b">' + outTotal + '</div><div style="font-size:.68rem;color:#8a97ab">' + swpEscape(m.outNote) + '</div></div>' +
+      '</div>' +
+      '<div style="height:12px;background:rgba(58,160,255,.08);border-radius:6px;overflow:hidden"><div style="height:100%;width:' + w + '%;background:linear-gradient(90deg,' + m.color + ',#7cc0ff);border-radius:6px"></div></div>' +
+      detail +
+    '</div>';
+  }).join('');
+  var when = data.generatedAt ? new Date(data.generatedAt).toLocaleString('fr-FR') : '';
+  view.innerHTML =
+    '<div style="padding:18px 14px 70px">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin:4px 2px 6px"><span style="font-size:1.4rem">📡</span>' +
+        '<h2 style="font-size:1.3rem;font-weight:800;letter-spacing:-.02em">Sites &amp; Acquisition</h2></div>' +
+      '<div style="color:#8a97ab;font-size:.82rem;margin:0 2px 18px;line-height:1.45">North-star : <b style="color:#e6edf3">taux visite → clic sortant</b> par site vitrine. Dit si la fuite est le SITE ou le PRODUIT (leçon « seau percé »). Cookieless, compteurs publics gateway-pro.</div>' +
+      cards +
+      '<div style="font-size:.78rem;color:#8a97ab;margin-top:8px">Dernière mesure : ' + swpEscape(when) + '</div>' +
     '</div>';
 }
 
@@ -4799,7 +4886,7 @@ window.addEventListener('resize', function() {
 });
 (function init() {
   // v1.14.0 : factory ne requiert pas de token ; v1.20.0 : studio non plus (agenda statique)
-  if (currentApp !== 'factory' && currentApp !== 'studio' && currentApp !== 'se7' && !getToken()) { showLogin(); return; }
+  if (currentApp !== 'factory' && currentApp !== 'studio' && currentApp !== 'se7' && currentApp !== 'acq' && !getToken()) { showLogin(); return; }
   // v1.16.0 : si des données persistées existent (localStorage), on les affiche SANS fetch
   // → l'utilisateur garde la main, il rafraîchit via le bouton Actualiser quand il veut.
   if (renderFromCache(currentApp)) { startFreshBannerTicker(); return; }
