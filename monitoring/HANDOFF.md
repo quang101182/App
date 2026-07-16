@@ -1,5 +1,5 @@
 # HANDOFF — App/monitoring
-Lot: R9 · 16 juillet 2026 · Claude (Opus 4.8) → Codex (gpt-5.6-terra) pour P1, puis retour Claude
+Lot: R9 · 16 juillet 2026 · Claude (Opus 4.8) → prochain moteur (P2 Home)
 
 ## Objectif courant
 
@@ -19,11 +19,13 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
   - Config `APPS[]`, nav desktop/sidebar + mobile/drawer, routeur par hash (7 vues), `fetchApp(cfg, signal)`, composants `KpiTile`/`Panel`/`FunnelBar`/`ProductCard`/`Alert`/`FreshBar`, tokens CSS palette validée.
   - Fresh-bar présente sur chaque vue ; aucun endpoint réel branché ; aucun token exposé ; `index.html` inchangé.
   - ✅ **Preuve runtime** (Playwright + `python -m http.server`, PAS `file:`) : home + 7 vues à froid rendues, **0 erreur console** PC(1280) ET mobile(384), fresh-bar=1/vue, `scrollWidth==clientWidth`.
-- **P1 — préparation** (Claude, 16/07) : logique Acquisition prod extraite et **vérifiée ligne à ligne** contre `index.html` (lignes 2000-2114) → endpoints + formules consolidés dans le brief Codex. Extraction confirmée exacte (formules `pct`, funnel 6 étapes, 8 compteurs `api-gateway-pro`, cartes sites `outMode`).
+- **✅ LOT 2 / P1 Acquisition — LIVRÉ + VÉRIFIÉ (Claude, 16/07, `monitoring-v2.html` v2.1.0-p1)**.
+  - Codé par **Claude** : le test « Codex mode autonome » (relais Quang) a échoué — Codex n'a rien produit (mode clé API + `--full-auto` = sandbox read-only sur Windows, incapable d'éditer le fichier ; cf `codex.md` §1quater : édition autonome exige `--dangerously-bypass-approvals-and-sandbox`). Quang a rendu la main à Claude.
+  - Implémentation : `fetchAcq(signal)` (8 compteurs publics `api-gateway-pro`, sans token, fallback neutre par compteur), branché dans `fetchApp` (`cfg.key==='acq'`) ; `renderAcq/renderAcqHub/renderAcqSites` fidèles aux formules prod ; CSS tokenisé (composants `.acq-*`, réutilise `KpiTile`/`.funnel`) ; version bumpée.
+  - **Preuve runtime** (Playwright + `http.server`, jamais `file:`) : PC 1280 + mobile 384, **0 erreur console**, `view-root` non vide, `scrollWidth==clientWidth` (pas d'overflow), fresh-bar présente.
+  - **Parité chiffres v2 vs prod** (`index.html#acq` piloté sur les mêmes données live) : **28/28 tokens numériques identiques** (hub visites/waitlist/clics, funnel 6 étapes + %, 3 cartes sites visites/clics/taux). Captures PC+mobile livrées Telegram.
 
 ## Ce qui reste à faire
-
-- **P1 Acquisition (EN COURS)** : Codex exécute le brief (`BRIEF-CODEX-P1-acquisition.md`) → édite `monitoring-v2.html` uniquement, bump `v2.1.0-p1`. Puis Claude vérifie runtime + parité chiffres v2 vs prod. **DoD** : chiffres identiques au prod.
 - **P2 Home** : hero KPI agrégés + grille produits + funnel global + alertes, sur vraies données. **DoD** : agrégats corrects vs somme des apps.
 - **P3 Produits payants** : SubWhisper Pro + StoryVoice d'abord (simples), DictoKey en dernier (le plus riche) en panneaux accordéon. Tokens obligatoires. **DoD** : parité KPI + non-régression.
 - **P4 Ops** : Factory + Studio. **DoD** : parité.
@@ -42,17 +44,15 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
 
 ## Prochaine étape unique
 
-Codex : lire `BRIEF-CODEX-P1-acquisition.md` et brancher la vue Acquisition dans `monitoring-v2.html` (8 compteurs publics `api-gateway-pro`, sans token, fallback par compteur ; funnel hub 6 étapes + 3 cartes sites ; formules à l'identique ; version `v2.1.0-p1`). Ne pas committer.
+**LOT 3 / P2 Home** : brancher la vue d'ensemble sur les vraies données — hero KPI cross-studio (MRR total, Actifs, Visites 7j, Alertes), grille produits, funnel global, alertes agrégées. Réutiliser le cache des apps déjà chargées (dont `acq` pour les visites/funnel) + agrégats publics. **DoD** : agrégats corrects vs somme des apps. ⚠ P2 touche des données produit protégées (MRR/actifs) → penser tokens dk/swp/sv ; garder home/acquisition token-less sur données publiques.
 
-## Actions hors-code à faire par Claude (au retour de Codex)
+## Actions hors-code déjà faites (P1) / à faire (Claude)
 
-- **Vérif runtime** : Playwright (`python -m http.server`, PC 1280 + mobile 384), `view-root` non vide sur la vue `acq`, 0 erreur console, `scrollWidth==clientWidth`, fresh-bar présente.
-- **Parité chiffres** : ouvrir prod (`index.html`, onglet Acquisition) et v2 côte à côte, comparer chaque chiffre (funnel hub + 3 cartes sites). Corriger tout écart de formule.
-- **Git** : commit SCOPÉ (`git add App/monitoring/monitoring-v2.html App/monitoring/HANDOFF.md`, jamais `-A`), message descriptif. Pas de push si non demandé — vérifier la convention.
-- **Mémoire** : consigner P1 livré dans le suivi monitoring/dashboard (topic projet, pas MEMORY.md).
+- ✅ P1 : runtime Playwright OK, parité 28/28, commit scopé, captures Telegram livrées.
+- **Git** : toujours commit SCOPÉ (`git add` fichier par fichier, jamais `-A` — dépôt `App` a des frères non commités). Pas de push tant que non demandé.
+- **Mémoire** : P1 + observation test Codex autonome à consigner (topic monitoring + `codex.md`).
 - **Déploiement** : AUCUN avant P5. Ne redémarrer aucun serveur.
-- **Notifications** : capture Telegram (Honor) après validation visuelle réussie uniquement.
 
 ---
 
-**Pour le prochain moteur (résumé 3 lignes)** : refonte dashboard « à côté » — le socle P0 de `monitoring-v2.html` est fait et validé runtime ; on attaque **P1 Acquisition** (la vue la plus simple, token-less). Le brief complet et auto-suffisant est dans `dashboard-refonte/BRIEF-CODEX-P1-acquisition.md` (endpoints + formules exactes déjà extraites du prod). Règles d'or : ne jamais toucher `index.html`/le proxy avant P5, `git add` fichier par fichier (jamais `-A`), parité de chiffres vérifiée en runtime navigateur avant toute bascule.
+**Pour le prochain moteur (résumé 3 lignes)** : refonte dashboard « à côté » — **P0 socle + P1 Acquisition sont faits et vérifiés** (`monitoring-v2.html` v2.1.0-p1 ; parité 28/28 vs prod, 0 erreur console PC+mobile). Prochaine étape = **P2 Home** (agrégats cross-app sur vraies données). Règles d'or : ne jamais toucher `index.html`/le proxy avant P5, `git add` fichier par fichier (jamais `-A`), parité de chiffres vérifiée en runtime navigateur (`http.server`+Playwright, jamais `file:`) avant toute bascule. Codex n'a pas pu coder P1 en autonomie (clé API → sandbox read-only) : pour le relayer, il faut le mode `--dangerously-bypass-approvals-and-sandbox` (cf `codex.md` §1quater).
