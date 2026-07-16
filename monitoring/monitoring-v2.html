@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Se7en AI — Monitoring v2</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
     :root {
       --bg: #0a0d13;
@@ -200,6 +201,25 @@
     .cost-total { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); color: var(--ink); font-weight: 750; font-size: .84rem; }
     .panel-content .acq-sub:first-child { margin-top: 0; }
 
+    /* P3b3 — Charts & jauges */
+    .chart-title { margin-bottom: 10px; color: var(--ink-faint); font-size: .72rem; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+    .chart-box { position: relative; height: 260px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+    .chart-box.donut { height: 230px; }
+    .no-data { display: grid; min-height: 90px; place-items: center; color: var(--ink-faint); font-size: .82rem; }
+    .donut-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .gauge-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .gauge { padding: 13px 14px; border: 1px solid var(--line); border-left: 3px solid var(--g-color); border-radius: var(--radius-sm); background: var(--surface); }
+    .gauge.g-good { --g-color: var(--good); }
+    .gauge.g-warn { --g-color: var(--warn); }
+    .gauge.g-crit { --g-color: var(--crit); }
+    .gauge-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .gauge-label { color: var(--ink-faint); font-size: .68rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+    .gauge-state { color: var(--g-color); font-size: .66rem; font-weight: 800; }
+    .gauge-value { margin: 6px 0 8px; font-size: 1.32rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .gauge-bar { height: 7px; overflow: hidden; border-radius: 4px; background: rgba(255, 255, 255, .07); }
+    .gauge-bar i { display: block; height: 100%; border-radius: inherit; background: var(--g-color); }
+    .gauge-sub { margin-top: 7px; color: var(--ink-faint); font-size: .68rem; }
+
     /* P3b2 — Appareils */
     .dev-summary { margin-bottom: 13px; color: var(--ink); font-size: .84rem; font-weight: 650; }
     .dev-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 13px; }
@@ -235,6 +255,8 @@
       main { padding: 20px 16px 56px; }
       .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .product-grid { grid-template-columns: 1fr; }
+      .donut-grid { grid-template-columns: 1fr; }
+      .gauge-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 520px) {
       .page-head { align-items: flex-start; flex-direction: column; }
@@ -253,7 +275,7 @@
     <aside class="sidebar" aria-label="Navigation principale">
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Se<span class="brand-seven">7</span>en&nbsp;AI</span></div>
       <nav id="navigation"></nav>
-      <div class="side-footer">Monitoring v2 · P3b2 Appareils</div>
+      <div class="side-footer">Monitoring v2 · P3b3 Charts</div>
     </aside>
     <div class="content-wrap">
       <header class="mobile-bar"><button class="menu-button" id="menu-button" type="button" aria-label="Ouvrir la navigation" aria-expanded="false">☰</button><strong class="mobile-title">Se<span class="brand-seven">7</span>en&nbsp;AI</strong></header>
@@ -264,7 +286,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.6.0-p3b2';
+    const VERSION = 'v2.7.0-p3b3';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics ; revenus et actifs au lot P3.', sections: [] },
@@ -520,6 +542,115 @@
       return { devicesList, tierCounts, phantomCount, premiumRuntimeCount,
                effectiveFree: tierCounts.free - premiumRuntimeCount,
                totalPremium: tierCounts.premium + premiumRuntimeCount, newDevicesToday };
+    }
+
+    // === P3b3 — Charts (Chart.js) ===
+    // Palette catégorielle = colonne DARK de la palette dataviz validée, dans son ORDRE FIXE (l'ordre EST le
+    // mécanisme de sécurité daltonisme, pas de la cosmétique). Validée le 16/07 par `validate_palette.js`
+    // contre NOTRE surface (#141a26), pas celle par défaut : 5/5 checks PASS (bande L, chroma, CVD ΔE 8.4,
+    // vision normale 19.3, contraste ≥3:1). Ne pas réordonner ni ajouter une 9e teinte : au-delà de 8 on replie
+    // sur « Autres » (règle « jamais de hues cyclées » — la prod fait `DONUT_COLORS[i % length]`, d'où 2 langues
+    // de même couleur sur son donut à 17 entrées).
+    const DK_SERIES = ['#3987e5', '#008300', '#d55181', '#c98500', '#199e70', '#d95926', '#9085e9', '#e66767'];
+    const DK_INK_MUTED = '#898781';   // ticks/légendes : encre, JAMAIS la couleur de série
+    const DK_GRID = '#2c2c2a';        // grille récessive
+    const DK_SURFACE = '#141a26';     // sert de « spacer » 2px entre segments empilés
+    const DK_EP_LABELS = { transcribe: 'Dictée', rewrite: 'Réécriture', correct: 'Correction', translate: 'Traduction' };
+    const dkCharts = {};
+    function dkDestroyCharts() {
+      Object.keys(dkCharts).forEach(k => { try { dkCharts[k].destroy(); } catch (e) {} delete dkCharts[k]; });
+    }
+    const dkAxis = (extra = {}) => ({ ticks: { color: DK_INK_MUTED, ...(extra.ticks || {}) }, grid: { color: DK_GRID }, ...(extra.rest || {}) });
+    const dkLegend = show => ({ legend: { display: show, labels: { color: DK_INK_MUTED, boxWidth: 12, boxHeight: 12, usePointStyle: true } },
+                                tooltip: { mode: 'index', intersect: false } });
+    // Replie la queue sur « Autres » : au-delà de 8 tranches on ne cycle JAMAIS les couleurs.
+    function dkFoldTop(entries, n = 7) {
+      const sorted = entries.slice().sort((a, b) => b[1] - a[1]);
+      if (sorted.length <= n + 1) return sorted;
+      const tail = sorted.slice(n).reduce((s, e) => s + e[1], 0);
+      return tail > 0 ? sorted.slice(0, n).concat([['Autres', tail]]) : sorted.slice(0, n);
+    }
+    function dkFlagEmoji(code) {
+      if (!code || code === 'Inconnu') return '❓ Inconnu';
+      if (code === 'Autres') return 'Autres';
+      if (code.length !== 2) return code;
+      const RIA = 0x1F1E6, A = 0x41;
+      try { return String.fromCodePoint(RIA + code.toUpperCase().charCodeAt(0) - A) + String.fromCodePoint(RIA + code.toUpperCase().charCodeAt(1) - A) + ' ' + code.toUpperCase(); }
+      catch (e) { return code; }
+    }
+    const DK_LANG_MAP = { French: 'Français', English: 'Anglais', Spanish: 'Espagnol', German: 'Allemand', Italian: 'Italien', Portuguese: 'Portugais', Dutch: 'Néerlandais', Russian: 'Russe', Chinese: 'Chinois', Japanese: 'Japonais', Korean: 'Coréen', Arabic: 'Arabe' };
+    function dkMapLang(k) { return k === 'Autres' ? 'Autres' : (DK_LANG_MAP[k] || k); }
+
+    function dkDonut(canvasId, entries, labelFn) {
+      const el = document.getElementById(canvasId);
+      if (!el || typeof Chart === 'undefined') return;
+      const folded = dkFoldTop(entries);
+      if (!folded.length) { el.closest('.chart-box').innerHTML = '<div class="no-data">Aucune donnée</div>'; return; }
+      dkCharts[canvasId] = new Chart(el, {
+        type: 'doughnut',
+        data: { labels: folded.map(e => labelFn(e[0])), datasets: [{ data: folded.map(e => e[1]),
+          backgroundColor: folded.map((_, i) => DK_SERIES[i]), borderColor: DK_SURFACE, borderWidth: 2, hoverOffset: 8 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '58%',
+          plugins: { legend: { position: 'right', labels: { color: DK_INK_MUTED, boxWidth: 12, boxHeight: 12, usePointStyle: true, padding: 9 } },
+            tooltip: { callbacks: { label: c => { const t = c.dataset.data.reduce((a, b) => a + b, 0); return ` ${c.label} : ${c.parsed} (${t ? Math.round(c.parsed / t * 100) : 0}%)`; } } } } }
+      });
+    }
+
+    function dkMountCharts(payload) {
+      if (!payload || !payload.mon || typeof Chart === 'undefined') return;
+      const { mon, dev } = payload;
+      const ds = dkDeviceStats(dev);
+
+      // DAU quotidien — série UNIQUE → pas de légende (le titre nomme la série)
+      const dau = ((mon.dau && mon.dau.daily) || []).slice().reverse();
+      const elDau = document.getElementById('dk-chart-dau');
+      if (elDau) dkCharts.dau = new Chart(elDau, {
+        type: 'line',
+        data: { labels: dau.map(d => d.date.slice(5)), datasets: [{ label: 'Appareils actifs',
+          data: dau.map(d => (d.by_platform && d.by_platform.mobile) || 0), borderColor: DK_SERIES[0],
+          backgroundColor: 'rgba(57,135,229,.14)', borderWidth: 2, fill: true, tension: .3, pointRadius: 4, pointHoverRadius: 8 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: dkLegend(false),
+          scales: { x: dkAxis(), y: { beginAtZero: true, ticks: { color: DK_INK_MUTED, stepSize: 1 }, grid: { color: DK_GRID } } } }
+      });
+
+      // Activité quotidienne — 4 séries empilées, spacer 2px couleur surface entre segments
+      const act = (mon.daily || []).slice().reverse();
+      const elAct = document.getElementById('dk-chart-activity');
+      if (elAct) dkCharts.activity = new Chart(elAct, {
+        type: 'bar',
+        data: { labels: act.map(d => d.date.slice(5)),
+          datasets: ['transcribe', 'rewrite', 'correct', 'translate'].map((ep, i) => ({
+            label: DK_EP_LABELS[ep], data: act.map(d => (d[ep] && d[ep].count) || 0),
+            backgroundColor: DK_SERIES[i], borderColor: DK_SURFACE, borderWidth: 2, borderRadius: 4, borderSkipped: false })) },
+        options: { responsive: true, maintainAspectRatio: false, plugins: dkLegend(true),
+          scales: { x: { stacked: true, ticks: { color: DK_INK_MUTED }, grid: { color: DK_GRID } },
+                    y: { stacked: true, beginAtZero: true, ticks: { color: DK_INK_MUTED }, grid: { color: DK_GRID } } } }
+      });
+
+      // Latence P50 quotidienne — spanGaps pour ne pas inventer de continuité sur les trous
+      const lat = (mon.latency && mon.latency.daily || []).slice().reverse();
+      const elLat = document.getElementById('dk-chart-latency');
+      if (elLat && lat.length && lat.some(d => d.transcribe || d.rewrite || d.correct || d.translate)) {
+        const eps = ['transcribe', 'rewrite', 'correct', 'translate'].filter(ep => lat.some(d => d[ep]));
+        dkCharts.latency = new Chart(elLat, {
+          type: 'line',
+          data: { labels: lat.map(d => d.date ? d.date.slice(5) : ''),
+            datasets: eps.map((ep, i) => ({ label: DK_EP_LABELS[ep] || ep, borderColor: DK_SERIES[i],
+              backgroundColor: 'transparent', borderWidth: 2, tension: .3, pointRadius: 4, spanGaps: true,
+              data: lat.map(d => d[ep] ? (d[ep].p50 || 0) / 1000 : null) })) },
+          options: { responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: DK_INK_MUTED, boxWidth: 12, usePointStyle: true } },
+              tooltip: { mode: 'index', intersect: false, callbacks: { label: c => ` ${c.dataset.label} : ${c.parsed.y != null ? c.parsed.y.toFixed(2) + 's' : '—'}` } } },
+            scales: { x: dkAxis(), y: { beginAtZero: true, ticks: { color: DK_INK_MUTED, callback: v => v + 's' }, grid: { color: DK_GRID } } } }
+        });
+      }
+
+      // Donut langues dictées
+      dkDonut('dk-chart-lang', Object.entries((mon.summary && mon.summary.transcribe && mon.summary.transcribe.top_langs) || {}), dkMapLang);
+      // Donut Top pays actifs — fantômes EXCLUS via le helper unifié (surtout pas une 4e variante du test)
+      const agg = {};
+      ds.devicesList.forEach(d => { if (dkIsPhantom(d)) return; const c = d.country || 'Inconnu'; agg[c] = (agg[c] || 0) + 1; });
+      dkDonut('dk-chart-country', Object.entries(agg), dkFlagEmoji);
     }
 
     // === P3b2 — Appareils DictoKey : état + helpers (parité stricte, index.html l.3786-4061) ===
@@ -880,13 +1011,36 @@
       const costBars = `<div class="cost-list">` + costs.map((c, i) => `<div class="cost-row"><span class="cost-label">${safeText(c.label)}</span><div class="cost-bar-bg"><i class="c${i}" style="width:${Math.max((c.value / maxCost) * 100, 2)}%"></i></div><span class="cost-amount">$${c.value.toFixed(2)}</span></div>`).join('')
         + `</div><div class="cost-total">Total ce mois : $${parseCost(ecm.total).toFixed(2)}</div>`;
 
+      // --- Jauges de latence par endpoint (statut = couleur + mot, jamais la couleur seule)
+      const latSummary = (mon.latency && mon.latency.summary) || {};
+      const latEps = Object.keys(latSummary);
+      const gauges = latEps.length === 0
+        ? '<div class="no-data">Pas encore de données latence</div>'
+        : `<div class="gauge-grid">` + latEps.map(ep => {
+            const d = latSummary[ep], p50 = d.p50 || 0, p95 = d.p95 || 0;
+            const cls = p50 < 1000 ? 'g-good' : p50 < 3000 ? 'g-warn' : 'g-crit';
+            const word = p50 < 1000 ? 'Rapide' : p50 < 3000 ? 'Moyen' : 'Lent';
+            return `<article class="gauge ${cls}"><div class="gauge-head"><span class="gauge-label">${safeText(DK_EP_LABELS[ep] || ep)}</span><span class="gauge-state">${word}</span></div>`
+              + `<div class="gauge-value">${(p50 / 1000).toFixed(2)}s</div>`
+              + `<div class="gauge-bar"><i style="width:${Math.min((p50 / 5000) * 100, 100)}%"></i></div>`
+              + `<div class="gauge-sub">P95 ${(p95 / 1000).toFixed(2)}s · avg ${((d.avg || 0) / 1000).toFixed(2)}s · max ${((d.max || 0) / 1000).toFixed(2)}s</div></article>`;
+          }).join('') + `</div>`;
+      const perf = gauges + `<div class="chart-title dk-sub2">Latence P50 quotidienne</div><div class="chart-box"><canvas id="dk-chart-latency"></canvas></div>`;
+      const activity = `<div class="chart-title">Utilisateurs actifs quotidiens</div><div class="chart-box"><canvas id="dk-chart-dau"></canvas></div>`
+        + `<div class="chart-title dk-sub2">Activité quotidienne</div><div class="chart-box"><canvas id="dk-chart-activity"></canvas></div>`;
+      const donuts = `<div class="donut-grid"><div><div class="chart-title">Langues dictées</div><div class="chart-box donut"><canvas id="dk-chart-lang"></canvas></div></div>`
+        + `<div><div class="chart-title">Top pays actifs</div><div class="chart-box donut"><canvas id="dk-chart-country"></canvas></div></div></div>`;
+
       return trend + silent
         + `<section class="section">${kpis}</section>`
         + `<section class="section">${Panel('dk-site', '🌐 Funnel site → Play Store', siteFunnel, true)}</section>`
         + `<section class="section">${Panel('dk-play', '📥 Play Store — adoption & activité', psHtml, true)}</section>`
+        + `<section class="section">${Panel('dk-activity', '📈 Activité', activity, true)}</section>`
+        + `<section class="section">${Panel('dk-perf', '⚡ Performance API', perf, false)}</section>`
+        + `<section class="section">${Panel('dk-split', '🌍 Répartition', donuts, false)}</section>`
         + `<section class="section">${Panel('dk-devices', '📱 Appareils enregistrés', dkRenderDevicesSection(ds), true)}</section>`
         + `<section class="section">${Panel('dk-infra', '🛠 Infra — erreurs & coûts', errHtml + costBars, false)}</section>`
-        + `<section class="section">${Panel('dk-todo', '⏳ Sections restantes', '<p>Charts &amp; donuts (P3b3) · Firebase / Adoption v2.61 / Attribution (P3b4) · Rétention &amp; mouvements de tier (P3b5) · panneau détail par appareil (P3b2b).</p>', false)}</section>`;
+        + `<section class="section">${Panel('dk-todo', '⏳ Sections restantes', '<p>Firebase / Adoption v2.61 / Attribution (P3b4) · Rétention &amp; mouvements de tier (P3b5) · panneau détail par appareil (P3b2b).</p>', false)}</section>`;
     }
 
     // === P3b2 — Section « Appareils enregistrés » (summary + filtres + recherche + tableau paginé) ===
@@ -1008,6 +1162,9 @@
     function renderPlaceholder(app) { const tokenHint = app.auth === 'token' ? 'Cette vue restera token-gated au branchement des données.' : 'Cette vue utilisera uniquement ses données publiques au branchement.'; return `<section class="placeholder"><div class="placeholder-inner"><span class="placeholder-icon" aria-hidden="true">◌</span><h2>${safeText(app.name)} — vue prête au branchement</h2><p>${safeText(tokenHint)} Le socle P0 ne déclenche aucune requête réseau.</p></div></section><section class="section">${Panel(`architecture-${app.key}`, 'Contrat de données préparé', `<p>Config déclarative disponible dans <code>APPS[]</code> : authentification, endpoints et sections. Le rendu métier sera ajouté dans le lot dédié.</p>`, true)}</section>`; }
     function renderApp(app, data) {
       const err = state.error.get(app.key);
+      // Détruire AVANT de remplacer le DOM : sinon Chart.js empile les instances sur des canvas morts.
+      // (La prod a cette fuite : `window._cLatency` est hors de son objet `charts`, donc `destroyCharts()` l'oublie.)
+      dkDestroyCharts();
       let content;
       if (app.auth === 'token' && !getToken(app)) content = TokenGate(app);
       else if (err && /401/.test(err)) content = TokenGate(app, 'Session expirée ou token invalide (401). Colle un token valide.');
@@ -1019,6 +1176,7 @@
       else if (app.key === 'dk') content = renderDkView(data);
       else content = renderPlaceholder(app, data);
       document.getElementById('view-root').innerHTML = `<div class="page-head"><div><h1>${safeText(app.name)} <span class="view-badge">${VERSION}</span></h1><p>${safeText(app.subtitle)}</p></div><button class="button" type="button" data-refresh="${app.key}">↻ Actualiser</button></div>${FreshBar(app)}${content}`;
+      if (app.key === 'dk' && !err && getToken(app)) dkMountCharts(data);   // après innerHTML : les canvas doivent exister
     }
     async function refresh(key) {
       const cfg = getApp(key);
@@ -1087,7 +1245,14 @@
         return;
       }
       const panelButton = event.target.closest('.panel-toggle');
-      if (panelButton) { const panel = panelButton.closest('.panel'); const open = panel.dataset.open !== 'true'; panel.dataset.open = String(open); panelButton.setAttribute('aria-expanded', String(open)); }
+      if (panelButton) {
+        const panel = panelButton.closest('.panel');
+        const open = panel.dataset.open !== 'true';
+        panel.dataset.open = String(open);
+        panelButton.setAttribute('aria-expanded', String(open));
+        // Un canvas dans un panneau replié a une taille nulle → resize à l'ouverture, sinon chart écrasé.
+        if (open) requestAnimationFrame(() => Object.values(dkCharts).forEach(c => { try { c.resize(); } catch (e) {} }));
+      }
     });
     document.addEventListener('input', event => {
       if (event.target && event.target.id === 'dk-dev-search') {
