@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Se7en AI — Monitoring v2</title>
+  <style>
+    :root {
+      --bg: #0a0d13;
+      --surface: #141a26;
+      --surface-raised: #1c2434;
+      --surface-soft: #111725;
+      --line: rgba(255, 255, 255, .07);
+      --line-strong: rgba(255, 255, 255, .15);
+      --ink: #e9eef6;
+      --ink-muted: #9aa7b8;
+      --ink-faint: #68758a;
+      --accent: #3aa0ff;
+      --dk: #2f80d8;
+      --swp: #ec4899;
+      --sv: #c77d0a;
+      --good: #22c55e;
+      --warn: #f5b52e;
+      --crit: #ef4444;
+      --radius: 14px;
+      --radius-sm: 10px;
+      --sidebar-width: 224px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--bg); }
+    body { margin: 0; min-width: 320px; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+    button { font: inherit; }
+    button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .app { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); min-height: 100vh; }
+
+    .sidebar { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; padding: 18px 12px; overflow-y: auto; background: linear-gradient(180deg, var(--surface-soft), #0e1420); border-right: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 6px 10px 18px; font-size: 1.08rem; font-weight: 800; letter-spacing: .01em; }
+    .brand-mark { flex: 0 0 26px; width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 38% 32%, #cfe8ff, var(--accent) 55%, #0a2c5c); box-shadow: 0 0 16px rgba(58, 160, 255, .55); }
+    .brand-seven { color: var(--accent); }
+    .nav-group { margin: 12px 0 4px; padding: 0 12px; color: var(--ink-faint); font-size: .62rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+    .nav-item { display: flex; align-items: center; gap: 11px; width: 100%; min-height: 40px; padding: 8px 12px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--ink-muted); text-align: left; font-size: .88rem; font-weight: 650; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+    .nav-item:hover { background: var(--surface-raised); color: var(--ink); }
+    .nav-item[aria-current="page"] { border-color: rgba(58, 160, 255, .28); background: rgba(58, 160, 255, .13); color: #d3ebff; }
+    .nav-icon { width: 18px; text-align: center; font-size: 1rem; }
+    .product-dot { width: 8px; height: 8px; margin-left: auto; border-radius: 50%; background: var(--product-color); box-shadow: 0 0 7px var(--product-color); }
+    .side-footer { margin-top: auto; padding: 18px 10px 4px; color: var(--ink-faint); font-size: .67rem; }
+
+    .mobile-bar { position: sticky; top: 0; z-index: 30; display: none; align-items: center; gap: 12px; min-height: 60px; padding: 10px 16px; background: rgba(20, 26, 38, .96); border-bottom: 1px solid var(--line); backdrop-filter: blur(10px); }
+    .menu-button, .icon-button { display: inline-grid; width: 40px; height: 40px; place-items: center; border: 1px solid var(--line-strong); border-radius: 10px; background: transparent; color: var(--ink); cursor: pointer; }
+    .mobile-title { font-weight: 800; }
+    .scrim { display: none; }
+
+    main { width: 100%; max-width: 1180px; padding: 26px 30px 64px; }
+    .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+    .page-head h1 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 1.7rem; line-height: 1.15; letter-spacing: -.025em; }
+    .page-head p { margin: 4px 0 0; color: var(--ink-muted); font-size: .85rem; }
+    .view-badge { padding: 3px 8px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--ink-muted); font-size: .65rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 9px 14px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); color: var(--ink); font-size: .82rem; font-weight: 700; white-space: nowrap; cursor: pointer; }
+    .button:hover { border-color: var(--accent); background: var(--surface-raised); }
+
+    .freshbar { display: flex; align-items: center; gap: 10px; min-height: 48px; margin-bottom: 24px; padding: 9px 13px; border: 1px solid var(--line); border-left: 3px solid var(--fresh-color); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-muted); font-size: .81rem; cursor: pointer; }
+    .freshbar:hover { border-color: var(--line-strong); background: var(--surface-raised); }
+    .fresh-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--fresh-color); box-shadow: 0 0 0 0 var(--fresh-color); }
+    .freshbar strong { color: var(--ink); }
+    .fresh-action { margin-left: auto; color: var(--accent); font-weight: 700; white-space: nowrap; }
+
+    .placeholder { display: grid; min-height: 290px; place-items: center; padding: 32px; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: linear-gradient(145deg, var(--surface), rgba(20, 26, 38, .45)); text-align: center; }
+    .placeholder-inner { max-width: 470px; }
+    .placeholder-icon { display: block; margin-bottom: 13px; color: var(--accent); font-size: 1.8rem; }
+    .placeholder h2 { margin: 0 0 6px; font-size: 1.05rem; }
+    .placeholder p { margin: 0; color: var(--ink-muted); }
+
+    .section { margin-bottom: 28px; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .section-head h2 { margin: 0; font-size: 1rem; letter-spacing: -.01em; }
+    .section-head a { color: var(--accent); font-size: .78rem; font-weight: 700; text-decoration: none; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .kpi-tile, .product-card, .funnel, .alert, .panel { border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(160deg, var(--surface), #111622); }
+    .kpi-tile { min-height: 126px; padding: 16px 17px; }
+    .kpi-label { color: var(--ink-faint); font-size: .67rem; font-weight: 750; letter-spacing: .065em; text-transform: uppercase; }
+    .kpi-value { margin-top: 7px; font-size: 1.82rem; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+    .kpi-note { margin-top: 3px; color: var(--ink-muted); font-size: .76rem; }
+    .product-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .product-card { position: relative; overflow: hidden; padding: 18px; color: inherit; text-align: left; cursor: pointer; }
+    .product-card::before { position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--product-color); content: ""; }
+    .product-card::after { position: absolute; inset: 0 0 auto; height: 80px; background: radial-gradient(115% 100% at 0 0, color-mix(in srgb, var(--product-color) 22%, transparent), transparent 70%); content: ""; pointer-events: none; }
+    .product-card:hover { transform: translateY(-2px); border-color: var(--line-strong); }
+    .product-name { position: relative; padding-left: 8px; font-size: 1rem; font-weight: 800; }
+    .product-meta { position: relative; display: flex; justify-content: space-between; gap: 12px; margin-top: 16px; padding-left: 8px; }
+    .product-meta span { display: block; color: var(--ink-faint); font-size: .64rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .product-meta strong { font-size: 1.08rem; }
+    .product-progress { position: relative; height: 6px; margin: 15px 0 0 8px; overflow: hidden; border-radius: 5px; background: rgba(255, 255, 255, .07); }
+    .product-progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--product-color); }
+    .funnel { padding: 18px; }
+    .funnel-step + .funnel-step { margin-top: 13px; }
+    .funnel-meta { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 5px; font-size: .84rem; }
+    .funnel-meta span { color: var(--ink-muted); }
+    .funnel-bar { height: 12px; overflow: hidden; border-radius: 7px; background: rgba(58, 160, 255, .09); }
+    .funnel-bar i { display: block; width: var(--bar-width); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), #7cc0ff); box-shadow: 0 0 12px rgba(58, 160, 255, .35); }
+    .alert-list { display: grid; gap: 9px; }
+    .alert { display: flex; align-items: center; gap: 11px; min-height: 52px; padding: 11px 14px; border-left: 3px solid var(--alert-color); }
+    .alert-badge { padding: 3px 7px; border-radius: 6px; background: color-mix(in srgb, var(--alert-color) 16%, transparent); color: var(--alert-color); font-size: .64rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+    .alert-message { color: var(--ink-muted); font-size: .84rem; }
+    .alert-message strong { color: var(--ink); }
+    .panel { overflow: hidden; }
+    .panel-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 52px; padding: 13px 16px; border: 0; background: transparent; color: var(--ink); text-align: left; font-weight: 750; cursor: pointer; }
+    .panel-toggle:hover { background: rgba(255, 255, 255, .025); }
+    .panel-chevron { color: var(--accent); transition: transform .16s; }
+    .panel[data-open="true"] .panel-chevron { transform: rotate(180deg); }
+    .panel-content { display: none; padding: 0 16px 16px; color: var(--ink-muted); font-size: .85rem; }
+    .panel[data-open="true"] .panel-content { display: block; }
+
+    @media (max-width: 900px) {
+      .app { display: block; }
+      .mobile-bar { display: flex; }
+      .sidebar { position: fixed; z-index: 50; top: 0; left: 0; width: 254px; height: 100dvh; transform: translateX(-101%); transition: transform .22s ease; }
+      .app.drawer-open .sidebar { transform: translateX(0); }
+      .app.drawer-open .scrim { position: fixed; z-index: 40; inset: 0; display: block; background: rgba(0, 0, 0, .58); }
+      main { padding: 20px 16px 56px; }
+      .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .product-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 520px) {
+      .page-head { align-items: flex-start; flex-direction: column; }
+      .page-head h1 { font-size: 1.42rem; }
+      .freshbar { align-items: flex-start; }
+      .fresh-action { display: none; }
+      .kpi-grid { gap: 10px; }
+      .kpi-tile { min-height: 110px; padding: 14px; }
+      .kpi-value { font-size: 1.45rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app-shell">
+    <div class="scrim" id="nav-scrim" aria-hidden="true"></div>
+    <aside class="sidebar" aria-label="Navigation principale">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Se<span class="brand-seven">7</span>en&nbsp;AI</span></div>
+      <nav id="navigation"></nav>
+      <div class="side-footer">Monitoring v2 · P0 Socle</div>
+    </aside>
+    <div class="content-wrap">
+      <header class="mobile-bar"><button class="menu-button" id="menu-button" type="button" aria-label="Ouvrir la navigation" aria-expanded="false">☰</button><strong class="mobile-title">Se<span class="brand-seven">7</span>en&nbsp;AI</strong></header>
+      <main id="view-root" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    const VERSION = 'v2.0.0-p0';
+    const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
+    const APPS = [
+      { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — données à raccorder aux lots suivants.', sections: [] },
+      { key: 'dk', name: 'DictoKey', icon: '⌨', family: 'products', color: PRODUCT_COLORS.dk, auth: 'token', endpoints: {}, subtitle: 'Adoption, rétention, revenus et infrastructure.', sections: [] },
+      { key: 'swp', name: 'SubWhisper Pro', icon: '◉', family: 'products', color: PRODUCT_COLORS.swp, auth: 'token', endpoints: {}, subtitle: 'Abonnements, santé client et revenus.', sections: [] },
+      { key: 'sv', name: 'StoryVoice', icon: '◌', family: 'products', color: PRODUCT_COLORS.sv, auth: 'token', endpoints: {}, subtitle: 'Crédits, conversion et revenus.', sections: [] },
+      { key: 'acq', name: 'Acquisition', icon: '⌁', family: 'acquisition', auth: 'none', endpoints: {}, subtitle: 'Sites, visites, engagement et clics sortants.', sections: [] },
+      { key: 'factory', name: 'Factory', icon: '▦', family: 'ops', auth: 'none', endpoints: {}, subtitle: 'Ebook Funnel Factory — opérations et performance.', sections: [] },
+      { key: 'studio', name: 'Studio', icon: '▣', family: 'ops', auth: 'none', endpoints: {}, subtitle: 'Agenda et opérations de publication.', sections: [] }
+    ];
+    const FAMILY_LABELS = { products: 'Produits', acquisition: 'Acquisition', ops: 'Ops' };
+    const state = { activeKey: null, controller: null, loadedAt: new Map(), cache: new Map() };
+
+    function getApp(key) { return APPS.find(app => app.key === key) || APPS[0]; }
+    function safeText(value) { return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]); }
+    function formatDate(date) { return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(date); }
+    function relativeTime(date) { const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000)); return seconds < 60 ? "à l'instant" : seconds < 3600 ? `il y a ${Math.floor(seconds / 60)} min` : seconds < 86400 ? `il y a ${Math.floor(seconds / 3600)} h` : `il y a ${Math.floor(seconds / 86400)} j`; }
+    function freshState(date) { const age = Date.now() - date.getTime(); return age > 86400000 ? ['Périmé', 'var(--crit)'] : age > 21600000 ? ['Vieillit', 'var(--warn)'] : ['Frais', 'var(--good)']; }
+
+    // Moteur générique : les endpoints restent vides au P0. Aucun fetch réseau n’est déclenché avant les lots de branchement.
+    async function fetchApp(cfg, signal) {
+      const payload = {};
+      for (const [name, endpoint] of Object.entries(cfg.endpoints || {})) {
+        if (!endpoint) continue;
+        const response = await fetch(endpoint, { signal, headers: cfg.auth === 'token' ? { Authorization: `Bearer ${getToken(cfg.key)}` } : {} });
+        if (!response.ok) throw new Error(`${cfg.name} — HTTP ${response.status}`);
+        payload[name] = await response.json();
+      }
+      return payload;
+    }
+    function getToken(key) { return localStorage.getItem(`se7en-monitoring-token-${key}`) || ''; }
+
+    function KpiTile(label, value, note) { return `<article class="kpi-tile"><div class="kpi-label">${safeText(label)}</div><div class="kpi-value">${safeText(value)}</div><div class="kpi-note">${safeText(note)}</div></article>`; }
+    function FunnelBar(label, value, width) { return `<div class="funnel-step"><div class="funnel-meta"><strong>${safeText(label)}</strong><span>${safeText(value)}</span></div><div class="funnel-bar"><i style="--bar-width:${Math.max(0, Math.min(100, width))}%"></i></div></div>`; }
+    function ProductCard(app) { return `<button class="product-card" type="button" data-route="${app.key}" style="--product-color:${app.color}"><span class="product-name">${safeText(app.name)}</span><span class="product-meta"><span>Migration</span><strong>P3</strong></span><span class="product-progress"><i></i></span></button>`; }
+    function Alert(level, title, message) { const color = level === 'critique' ? 'var(--crit)' : 'var(--warn)'; return `<article class="alert" style="--alert-color:${color}"><span class="alert-badge">${safeText(level)}</span><span class="alert-message"><strong>${safeText(title)}</strong> — ${safeText(message)}</span></article>`; }
+    function Panel(id, title, content, open = false) { return `<section class="panel" data-open="${open}" id="${id}"><button class="panel-toggle" type="button" aria-expanded="${open}" aria-controls="${id}-content"><span>${safeText(title)}</span><span class="panel-chevron" aria-hidden="true">⌄</span></button><div class="panel-content" id="${id}-content">${content}</div></section>`; }
+    function FreshBar(app) { const at = state.loadedAt.get(app.key) || new Date(); const [label, color] = freshState(at); return `<button class="freshbar" type="button" data-refresh="${app.key}" style="--fresh-color:${color}" title="Actualiser cette vue"><span class="fresh-dot" aria-hidden="true"></span><span><strong>${label}</strong> · données ${app.auth === 'token' ? 'protégées' : 'publiques'} · dernier rafraîchissement le <strong>${formatDate(at)}</strong> (${relativeTime(at)})</span><span class="fresh-action">↻ Actualiser</span></button>`; }
+
+    function renderNavigation() {
+      const nav = document.getElementById('navigation');
+      const items = family => APPS.filter(app => app.family === family).map(app => `<button class="nav-item" type="button" data-route="${app.key}" ${app.key === state.activeKey ? 'aria-current="page"' : ''}><span class="nav-icon" aria-hidden="true">${app.icon}</span><span>${safeText(app.name)}</span>${app.color ? `<span class="product-dot" style="--product-color:${app.color}" aria-hidden="true"></span>` : ''}</button>`).join('');
+      nav.innerHTML = `${items('home')}${Object.keys(FAMILY_LABELS).map(key => `<div class="nav-group">${FAMILY_LABELS[key]}</div>${items(key)}`).join('')}`;
+    }
+    function renderHome() {
+      const products = APPS.filter(app => app.family === 'products');
+      return `<section class="section"><div class="kpi-grid">${KpiTile('MRR total', '—', 'Branchement P2')} ${KpiTile('Actifs', '—', 'Branchement P2')} ${KpiTile('Visites 7j', '—', 'Branchement P1')} ${KpiTile('Alertes', '—', 'Branchement P2')}</div></section><section class="section"><div class="section-head"><h2>Produits</h2></div><div class="product-grid">${products.map(ProductCard).join('')}</div></section><section class="section"><div class="section-head"><h2>Acquisition — funnel global</h2></div><div class="funnel">${FunnelBar('Visites', '—', 100)}${FunnelBar('Engagement', '—', 0)}${FunnelBar('Clics sortants', '—', 0)}</div></section><section class="section"><div class="section-head"><h2>À surveiller</h2></div><div class="alert-list">${Alert('attention', 'Socle P0', 'Les alertes agrégées seront raccordées au lot P2.')}</div></section>`;
+    }
+    function renderPlaceholder(app) { const tokenHint = app.auth === 'token' ? 'Cette vue restera token-gated au branchement des données.' : 'Cette vue utilisera uniquement ses données publiques au branchement.'; return `<section class="placeholder"><div class="placeholder-inner"><span class="placeholder-icon" aria-hidden="true">◌</span><h2>${safeText(app.name)} — vue prête au branchement</h2><p>${safeText(tokenHint)} Le socle P0 ne déclenche aucune requête réseau.</p></div></section><section class="section">${Panel(`architecture-${app.key}`, 'Contrat de données préparé', `<p>Config déclarative disponible dans <code>APPS[]</code> : authentification, endpoints et sections. Le rendu métier sera ajouté dans le lot dédié.</p>`, true)}</section>`; }
+    function renderApp(app, data) { const content = app.key === 'home' ? renderHome() : renderPlaceholder(app, data); document.getElementById('view-root').innerHTML = `<div class="page-head"><div><h1>${safeText(app.name)} <span class="view-badge">${VERSION}</span></h1><p>${safeText(app.subtitle)}</p></div><button class="button" type="button" data-refresh="${app.key}">↻ Actualiser</button></div>${FreshBar(app)}${content}`; }
+    async function refresh(key) {
+      const cfg = getApp(key);
+      if (state.controller) state.controller.abort();
+      state.controller = new AbortController();
+      try { state.cache.set(cfg.key, await fetchApp(cfg, state.controller.signal)); state.loadedAt.set(cfg.key, new Date()); }
+      catch (error) { if (error.name !== 'AbortError') console.error(error); }
+      finally { state.controller = null; renderApp(cfg, state.cache.get(cfg.key) || {}); }
+    }
+    function route(key, refresh = false) {
+      const cfg = getApp(key);
+      if (location.hash !== `#${cfg.key}`) {
+        location.hash = cfg.key;
+        return;
+      }
+      state.activeKey = cfg.key;
+      renderNavigation();
+      if (!state.loadedAt.has(cfg.key) || refresh) refresh(cfg.key); else renderApp(cfg, state.cache.get(cfg.key) || {});
+      closeDrawer();
+    }
+    function openDrawer() { document.getElementById('app-shell').classList.add('drawer-open'); document.getElementById('menu-button').setAttribute('aria-expanded', 'true'); }
+    function closeDrawer() { document.getElementById('app-shell').classList.remove('drawer-open'); document.getElementById('menu-button').setAttribute('aria-expanded', 'false'); }
+    function onHashChange() { route(location.hash.slice(1) || 'home'); }
+
+    document.addEventListener('click', event => {
+      const routeButton = event.target.closest('[data-route]');
+      if (routeButton) { route(routeButton.dataset.route); return; }
+      const refreshButton = event.target.closest('[data-refresh]');
+      if (refreshButton) { refresh(refreshButton.dataset.refresh); return; }
+      const panelButton = event.target.closest('.panel-toggle');
+      if (panelButton) { const panel = panelButton.closest('.panel'); const open = panel.dataset.open !== 'true'; panel.dataset.open = String(open); panelButton.setAttribute('aria-expanded', String(open)); }
+    });
+    document.getElementById('menu-button').addEventListener('click', () => document.getElementById('app-shell').classList.contains('drawer-open') ? closeDrawer() : openDrawer());
+    document.getElementById('nav-scrim').addEventListener('click', closeDrawer);
+    window.addEventListener('hashchange', onHashChange);
+    route(location.hash.slice(1) || 'home');
+  </script>
+</body>
+</html>
