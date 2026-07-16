@@ -330,6 +330,12 @@
       .kpi-value { font-size: 1.45rem; }
     }
 
+    /* Métrique non calculable : ni verte ni rouge — l'absence de mesure n'est pas un résultat. */
+    .dk-unmeasured { color: var(--ink-muted) !important; font-style: italic; }
+    .dk-warnbox { margin-top: 9px; padding: 9px 11px; border: 1px solid rgba(245, 181, 46, .32); border-left: 3px solid var(--warn); border-radius: 8px; background: rgba(245, 181, 46, .06); color: var(--ink-muted); font-size: .73rem; line-height: 1.6; }
+    .dk-warnbox code { padding: 1px 4px; border-radius: 3px; background: var(--surface-soft); font-size: .95em; }
+    .dk-warnbox b { color: var(--ink); }
+
     /* ── État de chargement (le prod a un overlay ; sans lui, DictoKey = écran blanc ~20 s) ── */
     .loading-state { display: flex; align-items: center; gap: 14px; padding: 30px 22px; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(160deg, var(--surface), #111622); color: var(--ink-muted); }
     .loading-state strong { display: block; color: var(--ink); font-size: .92rem; }
@@ -473,7 +479,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.12.0-panels';
+    const VERSION = 'v2.12.1-unmeasured';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -1073,7 +1079,18 @@
           + `<div class="lg-row"><i class="sw s2"></i>⌨ ime_only : <b>${ime}</b> (${dkPct(ime, totalUsers)}%)</div>`
           + `<div class="split-bar">${totalUsers > 0 ? `<i class="s1" style="width:${dkPct(bub, totalUsers)}%"></i><i class="s2" style="width:${dkPct(ime, totalUsers)}%"></i>` : ''}</div>`;
       }
-      // 2) Conversion du bandeau (started → completed), par déclencheur
+      // 2) Conversion du bandeau, par déclencheur.
+      // ⚠ Ne JAMAIS afficher « 0 % » quand `completed` est absent : un zéro affirmé déclenche des décisions
+      // (on a failli refaire un flow d'activation qui marche), un trou déclaré en empêche.
+      // Bug app v2.64.1 et antérieures — 3 défauts empilés, vérifiés dans le code le 16/07/2026 :
+      //   1. AnalyticsManager.kt:219-220 utilise putBoolean() → Firebase Analytics n'accepte que String/long/double
+      //      → `started` et `completed` sont DROPPÉS par le SDK, d'où « (not set) » et jamais « false ».
+      //      Preuve croisée : `trigger` (putString, l.221) du MÊME Bundle remonte, lui, parfaitement.
+      //   2. Aucun call-site ne passe completed=true (MainActivity.kt:766 et NotificationHelper.kt:610 le
+      //      passent en dur à false) → le numérateur n'existe pas dans le code. L'activation réussie
+      //      (MegaActivationSlide.kt:322-328, `startService(FloatingBubbleService)`) ne logge que onboarding_completed.
+      //   3. Asymétrie : main_banner = tap (onClick), post_dictation_notif = impression (après nm.notify()).
+      // Réalité mesurée par ailleurs : bubble_first_use = 45 users / 106 first_open sur 30 j → la bulle s'active bien.
       const bubRows = ad.bubble_activation_post_onboarding || [];
       let bubble;
       if (!bubRows.length) bubble = '<div class="no-data">⏳ Aucun event 7j (bandeau MainActivity)</div>';
@@ -1087,10 +1104,18 @@
           byTrigger[t].started += c;
           if (r.completed === 'true') byTrigger[t].completed += c;
         });
-        bubble = `<div class="big">${dkPct(completed, started)}% <span>conversion (started → completed)</span></div>`
-          + `<div class="sm"><b>${completed}</b> activations sur <b>${started}</b> taps</div>`
-          + (Object.keys(byTrigger).length ? `<div class="chart-title dk-sub2">Par déclencheur</div>`
-            + Object.keys(byTrigger).map(t => `<div class="sm">• ${safeText(t)} : <b>${byTrigger[t].completed}</b>/${byTrigger[t].started} (${dkPct(byTrigger[t].completed, byTrigger[t].started)}%)</div>`).join('') : '');
+        // Aucune ligne ne porte completed=true/false → le paramètre n'est pas envoyé : on ne mesure RIEN.
+        const measurable = bubRows.some(r => r.completed === 'true' || r.completed === 'false');
+        bubble = measurable
+          ? `<div class="big">${dkPct(completed, started)}% <span>conversion (started → completed)</span></div>`
+            + `<div class="sm"><b>${completed}</b> activations sur <b>${started}</b> taps</div>`
+            + (Object.keys(byTrigger).length ? `<div class="chart-title dk-sub2">Par déclencheur</div>`
+              + Object.keys(byTrigger).map(t => `<div class="sm">• ${safeText(t)} : <b>${byTrigger[t].completed}</b>/${byTrigger[t].started} (${dkPct(byTrigger[t].completed, byTrigger[t].started)}%)</div>`).join('') : '')
+          : `<div class="big dk-unmeasured">non mesuré <span>le taux n’est pas calculable</span></div>`
+            + `<div class="sm"><b>${started}</b> déclenchements enregistrés, mais l’app n’envoie pas le paramètre <code>completed</code> (il ressort <code>(not set)</code>).</div>`
+            + `<div class="dk-warnbox">⚠ <b>Bug de tracking, pas d’échec produit.</b> <code>AnalyticsManager.kt:219-220</code> passe <code>completed</code> en <code>putBoolean</code> — un type que Firebase Analytics ignore ; et aucun call-site ne le passe à <code>true</code>. <b>Ce bloc affichait « 0 % de conversion » — c’était faux.</b> La réalité : <b>bubble_first_use = 45 users sur 106 first_open (30 j)</b> → la bulle s’active bel et bien. À corriger côté app (<code>putString</code> + logger l’activation aboutie).</div>`
+            + (Object.keys(byTrigger).length ? `<div class="chart-title dk-sub2">Déclenchements par origine</div>`
+              + Object.keys(byTrigger).map(t => `<div class="sm">• ${safeText(t)} : <b>${byTrigger[t].started}</b>${t === 'post_dictation_notif' ? ' <i>(impressions de la notif, pas des taps)</i>' : t === 'main_banner' ? ' <i>(taps)</i>' : ''}</div>`).join('') : '');
       }
       // 3) Drop-off par slide (ordre FIXE de l'onboarding, pas l'ordre reçu)
       const stepRows = ad.onboarding_step_view || [];
