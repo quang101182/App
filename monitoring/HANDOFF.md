@@ -1,7 +1,13 @@
 # HANDOFF — App/monitoring
 Lot: R11 · 16 juillet 2026 · Claude (Opus 4.8) → **P5 BASCULÉ (go Quang donné le 16/07)** · reste : surveillance 48 h, P6 hygiène
 
-## 🚨 BASCULE FAITE le 16/07/2026 — `dash.se7enai.com` sert `monitoring-v2.html` (v2.11.1-p4)
+## 🚨 BASCULE FAITE le 16/07/2026 — `dash.se7enai.com` sert `monitoring-v2.html` (**v2.12.0-panels** en ligne)
+
+> Le worker lit **github.io en direct** : un `git push` suffit à mettre en ligne (~30-60 s de propagation Pages). Aucun redeploy du worker nécessaire pour livrer une nouvelle version du dashboard.
+
+### v2.12.0-panels (demande Quang, 16/07 — commit `9110e78`)
+- **Panneaux pliés/dépliés persistés** (`monitoring_v2_panels`) : seuls ceux explicitement bougés sont stockés → un nouveau panneau garde son défaut. Vérifié après rechargement complet.
+- **Cache persisté** (`monitoring_v2_cache_*` + `_ts_*`) : reprend le principe prod v1.16.0. **Sans lui la fresh-bar était condamnée à rester verte** (cache mémoire seule → refetch à chaque ouverture → « à l'instant » perpétuel). Règle aussi les **20 s d'ouverture de DictoKey (→ 0,2 s)** et le « — » de la Home à froid. Mesuré : bandeau orange à 6 h, rouge + « il y a 3 j » à 24 h, Home à froid = MRR 18 € + Actifs 159 **sans aucun fetch payé**, cache ~181 Ko / 5 Mo.
 
 **Rollback = 1 minute, 1 ligne** (le worker n'est PAS versionné — se7enai-hub n'est pas un dépôt git) :
 ```bash
@@ -15,7 +21,7 @@ npx wrangler deploy --config ./wrangler.toml
 - **Ce qui a changé** : `se7enai-hub/dash-worker/src/inject.js` l.22 → `const path = url.pathname === "/" ? "/monitoring-v2.html" : url.pathname;`. Déployé : version `5b361ede-3b2f-4815-945d-1ad4cee5fb51`. **Rien d'autre** (UPSTREAM, injection des tokens, secrets, Access : inchangés).
 - ⚠ **`wrangler` n'était plus authentifié** (OAuth local expiré → `Failed to fetch auth token: 400`). Utiliser `CLOUDFLARE_API_TOKEN` = token **« claude-factory »** (`_quickref.md`, a bien `Workers Scripts:Edit`). Toujours `--config ./wrangler.toml` (2 incidents de worker déployé au mauvais endroit, cf `feedback_wrangler_parent_config.md`).
 - ⚠ **`index.html` (prod v1) n'a JAMAIS été touchée** de tout le chantier et reste servie sur `/index.html` + le github.io public. Ne pas la supprimer avant la fin de la surveillance 48 h.
-- **Vérification post-bascule faite** (Cloudflare Access interdit la lecture anonyme → la chaîne du worker a été **rejouée à l'identique** en local depuis la MÊME source github.io avec la MÊME injection de tokens) : **14/14 vues OK** (7 PC 1280 + 7 mobile 384), **aucun token-gate** (tokens injectés bien hérités), 0 erreur console, 0 overflow. Source github.io confirmée en `v2.11.1-p4`.
+- **Vérification post-bascule faite** (Cloudflare Access interdit la lecture anonyme → la chaîne du worker a été **rejouée à l'identique** en local depuis la MÊME source github.io avec la MÊME injection de tokens) : **14/14 vues OK** (7 PC 1280 + 7 mobile 384), **aucun token-gate** (tokens injectés bien hérités), 0 erreur console, 0 overflow. Source github.io confirmée (v2.11.1-p4 à la bascule ; v2.12.0-panels depuis).
 - ⏭ **Reste** : surveiller 48 h (jusqu'au 18/07), puis archiver `index.html` · P6 hygiène · P3b2b (non bloquant).
 
 ## Objectif courant
