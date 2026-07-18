@@ -156,9 +156,15 @@ Si un lot de suite est voulu : **fusion des 5 groupes de helpers en double** (`a
 - ✅ **Tokens : rien à recoller.** v2 lit les MÊMES clés localStorage que la prod (`monitoring_admin_token`, `monitoring_swp_token`, `monitoring_storyvoice_token`, `monitoring_factory_token`, `dk-monitoring-studio-filters`) et est servi depuis la MÊME origine → tokens et filtres hérités.
 - ⚠ **Divergences VOULUES à assumer publiquement à la bascule** (ce ne sont PAS des régressions) : perf Studio séparée organique/boosté (82 226 → 15 226 + 67 000, décision Quang), 30 appareils/page (vs 50), donuts top 7 + « Autres », filtre premium DictoKey corrigé (16 → 18), `Visite→vente` marqué « fenêtres mixtes ». Roadmap §7 + §8.
 
-**Décisions EN ATTENTE de Quang (ne pas trancher seul)** :
-1. **MRR DictoKey** — inexistant dans l'API (Play Console). Prix en dur × premium actifs / API Play Developer / laisser « via Play Console » ?
-2. **`Visite→vente` Factory** — corriger côté worker (borner `/overview` sur une période) ou garder le marquage v2 ?
+**Les 2 décisions ont été TRANCHÉES le 18/07** (Quang : « analyse correctement ce truc » / « c'est toi qui gères ») — v2.16.0-honest :
+
+1. ✅ **MRR DictoKey — on ne le calculera PAS, et la tuile a été renommée.** « MRR total » excluait structurellement DictoKey → devient **« Abonnements SWP + StoryVoice »**.
+   - DictoKey Premium **est** un abonnement (`ProductType.SUBS` ×3, **zéro** `INAPP`) à **4,99 €/mois · 34,99 €/an** (`strings.xml:565-566`) → un MRR y serait légitime **en principe**.
+   - **Mais les « 18 premium » ne sont PAS 18 payants** : l'app marque premium dès que Play signale un abonnement actif (`BillingManager.kt:124`), et **un essai gratuit de 7 j est un abonnement actif**.
+   - **Arithmétique décisive** : `18 × 4,99 = 89,82 €/mois` vs **24,38 € nets CUMULÉS depuis l'origine** (1 abonnement annuel italien) → le « prix en dur × premium » se tromperait d'un **facteur ~45**. ⛔ **Ne jamais recoder ce calcul.**
+   - 🔓 **Piste réelle rouverte** : les rapports financiers Play (GCS) sont **de nouveau accessibles** — testé 18/07, le zip se télécharge, **plus de 403** (ACL propagée depuis avril). Blocage restant = **bug de dézippage dans `unzipSingleEntry`** du gateway DictoKey (`gateway/src/index.js`). C'est le chemin d'un vrai KPI de revenu, **lot en soi**.
+2. ✅ **`Visite→vente` Factory — supprimé, worker NON touché.** Ce n'était pas un taux imprécis mais un **calcul sans objet** (ventes cumulées ÷ visites depuis le 25/06) ; l'annoter « ⚠ fenêtres mixtes » laissait quand même le nombre à l'écran. Remplacé par les 2 faits bruts, chacun avec sa fenêtre. Et **sous `FACTORY_MIN_DENOM = 30` visites**, `Visite→clic`/`Visite→dl` affichent les **comptes bruts** (`2/6`) au lieu d'un %.
+   - Option écartée (borner `/overview` côté worker) : produirait **un taux propre sur 6 visites** = un non-résultat d'allure fiable, en touchant un worker de prod.
 
 ✅ **P3b2b : LIVRÉ** (v2.14.0-p3b2b, commit `10b2896`) — détail par appareil au clic, batch de 6, état conservé à travers la pagination, AbortController réel (la prod n'annulait aucune requête). **Leçon : je l'avais déclaré « non bloquant » et livré la bascule sans lui, alors que Quang s'en servait.**
 

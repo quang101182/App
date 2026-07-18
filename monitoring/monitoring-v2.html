@@ -526,7 +526,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.15.0-p6';
+    const VERSION = 'v2.16.0-honest';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -560,6 +560,10 @@
     const FACTORY_VISIT_GATEWAY = 'https://factory-visits.quang101182.workers.dev';
     const FACTORY_STATS_BASE = 'https://factory-stats.quang101182.workers.dev';
     const FACTORY_VISITS_SINCE = '25/06/2026';
+    // Dénominateur minimal pour OSER afficher un taux. Même principe que la rétention (v2.12.2) :
+    // un pourcentage sur un dénominateur minuscule n'est pas une mesure, c'est du bruit affiché
+    // avec l'autorité d'un chiffre. À 6 visites, « 16,7 % » et « 0 % » sont le même non-résultat.
+    const FACTORY_MIN_DENOM = 30;
     const FACTORY_ACCOUNTS = [
       { id: 'tuc', n: 0, name: 'The Unseen Child', handle: '@theunseen.child', handleUrl: 'https://www.tiktok.com/@theunseen.child',
         email: null, domain: 'theunseenchild.org', visitSlug: 'tuc', instrumented: true, lemonProductId: '1079445', bilingual: true, phase: 'posting',
@@ -2121,16 +2125,30 @@
       const alerts = homeAlerts(acq, swp, sv, dk);
       const products = APPS.filter(app => app.family === 'products');
 
-      // --- MRR total. ⚠ DictoKey N'EST PAS agrégeable : ses revenus Premium sont gérés par Google Play Console
-      // et ne sont exposés par AUCUN endpoint (le prod le dit lui-même dans son infobulle « MRR estimé », l.4804),
-      // et il n'existe aucune constante de prix DK (contrairement à SWP_PRICE_EUR). On somme donc ce qui est réel
-      // et on le DIT, plutôt que d'inventer un prix. Le « Σ dk premium + swp + sv » du mock-up n'est pas réalisable.
-      const mrrParts = [], mrrNote = [];
-      if (swp) { mrrParts.push(swp.mrr); mrrNote.push(`${swp.mrr} € SWP`); }
-      if (sv) { mrrParts.push(sv.revenue); mrrNote.push(`${svFmt(Math.round(sv.revenue * 100) / 100)} € StoryVoice`); }
-      const mrrVal = mrrParts.length ? `${svFmt(Math.round(mrrParts.reduce((a, b) => a + b, 0) * 100) / 100)} €` : '—';
-      const mrrSub = mrrParts.length
-        ? `${mrrNote.join(' + ')} · DictoKey via Play Console (non exposé par l’API)`
+      // --- Revenu des abonnements. ⚠ CE N'EST PAS UN « MRR TOTAL » — la tuile s'appelait ainsi (héritée du
+      // mock-up) alors qu'elle EXCLUT structurellement DictoKey, le produit principal. Un « total » qui omet
+      // le plus gros poste n'est pas un total : le titre porte désormais son périmètre réel.
+      //
+      // 🔍 ENQUÊTE DU 18/07 — pourquoi on ne complétera JAMAIS ce chiffre avec DictoKey :
+      //   · DictoKey Premium est bien un ABONNEMENT (BillingManager : ProductType.SUBS ×3, zéro INAPP,
+      //     zéro consumeAsync) à 4,99 €/mois ou 34,99 €/an — donc un MRR y serait conceptuellement légitime.
+      //   · MAIS le nombre d'abonnés PAYANTS n'est exposé par aucune API. La seule quantité disponible est
+      //     le compte d'appareils « premium » (18) — et il ne mesure PAS des payants : l'app marque premium
+      //     dès que Play signale un abonnement actif (BillingManager.kt:124), or un ESSAI GRATUIT DE 7 JOURS
+      //     est un abonnement actif. Les essais sont donc comptés comme des premium.
+      //   · L'arithmétique tranche : 18 × 4,99 = 89,82 €/mois, contre 24,38 € NETS CUMULÉS DEPUIS L'ORIGINE
+      //     (un unique abonnement annuel italien). Le « prix en dur × premium actifs » se tromperait d'un
+      //     facteur ~45. Ce n'est pas une approximation, c'est un faux.
+      //   · Vraie source = les rapports financiers Play (GCS). Testé le 18/07 : l'accès GCS FONCTIONNE
+      //     désormais (le zip est bien téléchargé — plus de 403, l'ACL a propagé depuis avril) ; il reste un
+      //     bug de dézippage dans `unzipSingleEntry` du gateway DictoKey. C'est le chemin d'un vrai KPI de
+      //     revenu, si Quang le veut — un lot en soi, pas une constante à inventer ici.
+      const subParts = [], subNote = [];
+      if (swp) { subParts.push(swp.mrr); subNote.push(`${swp.mrr} € SWP`); }
+      if (sv) { subParts.push(sv.revenue); subNote.push(`${svFmt(Math.round(sv.revenue * 100) / 100)} € StoryVoice`); }
+      const subVal = subParts.length ? `${svFmt(Math.round(subParts.reduce((a, b) => a + b, 0) * 100) / 100)} €` : '—';
+      const subSub = subParts.length
+        ? `${subNote.join(' + ')} · par mois · DictoKey non inclus (Play Console)`
         : 'ouvre SubWhisper Pro / StoryVoice pour agréger';
 
       // --- Utilisateurs actifs : somme des « actifs » de chaque produit. Populations hétérogènes
@@ -2144,7 +2162,7 @@
 
       // NB « Visites 7j » du mock-up n'est pas réalisable : le compteur public n'expose que total + today.
       const hero = `<div class="kpi-grid">` +
-        KpiTile('MRR total', mrrVal, mrrSub) +
+        KpiTile('Abonnements SWP + StoryVoice', subVal, subSub) +
         KpiTile('Utilisateurs actifs', actVal, actSub) +
         KpiTile('Visites sites', t ? t.visites : '—', t ? (t.today > 0 ? `+${t.today} aujourd’hui` : 'tous sites, cumul') : '—') +
         KpiTile('Alertes', t ? alerts.length : '—', alerts.length ? 'à traiter' : 'rien à signaler') +
@@ -2202,10 +2220,29 @@
           facMetric('💶 Revenu', revenue != null ? `${safeText(String(revenue))} ${safeText(currency)}` : facDash, '', `revenue${revenue == null ? ' muted' : ''}`);
         let convHtml = '';
         if (a.instrumented) {
-          // Visite→clic et Visite→dl comparent deux compteurs de la MÊME source, même fenêtre : ils sont sains.
-          // Visite→vente NON : les ventes sont cumulées depuis toujours, les visites repartent du 25/06 → le taux est
-          // mécaniquement gonflé. La prod l'affiche nu ; ici il est marqué, pas supprimé.
-          convHtml = `<div class="fac-conv"><span>Visite→clic : <b>${facPct(buyTotal, visTotal)}</b></span><span>Visite→dl : <b>${facPct(dlTotal, visTotal)}</b></span>${sales != null ? `<span class="fac-conv-warn" title="Ventes cumulées depuis la création du produit ÷ visites depuis le ${FACTORY_VISITS_SINCE} — deux fenêtres différentes, taux surévalué.">Visite→vente : <b>${facPct(sales, visTotal)}</b> <span class="fac-warn-ic">⚠ fenêtres mixtes</span></span>` : ''}</div>`;
+          // DEUX défauts distincts, donc deux traitements distincts (décision 18/07) :
+          //
+          // 1. Visite→clic et Visite→dl comparent deux compteurs de la MÊME source sur la MÊME
+          //    fenêtre : le ratio est bien DÉFINI. Mais défini ≠ significatif — sous
+          //    FACTORY_MIN_DENOM visites on affiche les COMPTES BRUTS, pas un pourcentage.
+          //    Même règle que la rétention (v2.12.2) : ne pas donner l'autorité d'un taux à du bruit.
+          //
+          // 2. Visite→vente n'est PAS un ratio définissable : ventes CUMULÉES DEPUIS L'ORIGINE
+          //    divisées par les visites DEPUIS LE 25/06. Ce n'est pas un taux imprécis, c'est un
+          //    calcul qui n'a pas de sens. Le marquer « ⚠ fenêtres mixtes » (v2.11) laissait quand
+          //    même le nombre à l'écran — or un chiffre faux annoté se lit comme un chiffre.
+          //    Supprimé au profit des deux faits bruts, chacun avec SA fenêtre.
+          //    (L'autre option était de borner /overview côté worker factory-stats : écartée —
+          //    ça produirait un taux propre sur 6 visites, donc un non-résultat d'allure fiable,
+          //    et ça toucherait un worker de prod pour un chiffre qui resterait du bruit.)
+          const enoughVisits = visTotal >= FACTORY_MIN_DENOM;
+          const facRate = (num, label) => enoughVisits
+            ? `<span>${label} : <b>${facPct(num, visTotal)}</b></span>`
+            : `<span>${label} : <b>${facFmt(num)}/${facFmt(visTotal)}</b> <span class="fac-warn-ic">n&lt;${FACTORY_MIN_DENOM} · pas de taux</span></span>`;
+          const salesFact = sales != null
+            ? `<span class="fac-conv-warn" title="Les ventes sont un cumul depuis la création du produit ; les visites repartent du ${FACTORY_VISITS_SINCE}. Diviser l'un par l'autre ne donne aucun taux interprétable — les deux faits sont donc affichés séparément.">Ventes : <b>${facFmt(sales)}</b> (cumul) · visites depuis le ${FACTORY_VISITS_SINCE} : <b>${facFmt(visTotal)}</b> <span class="fac-warn-ic">⚠ fenêtres différentes, pas de taux</span></span>`
+            : '';
+          convHtml = `<div class="fac-conv">${facRate(buyTotal, 'Visite→clic')}${facRate(dlTotal, 'Visite→dl')}${salesFact}</div>`;
         }
         const emailHtml = a.email ? `<div class="fac-email"><span class="fac-k">✉</span> ${safeText(a.email)}</div>` : '';
         return `<article class="fac-card"><div class="fac-card-head"><div class="fac-num">${a.n}</div><div class="fac-head-text"><div class="fac-name">${safeText(a.name)}<span class="fac-badges"><span class="fac-badge ${dotCls}">${safeText(phaseLabel)}</span>${a.bilingual ? '<span class="fac-badge bil">EN+FR</span>' : ''}</span></div><div class="fac-handle"><a href="${safeText(a.handleUrl)}" target="_blank" rel="noopener">${safeText(a.handle)}</a></div></div></div><div class="fac-meta"><div class="fac-domain"><a href="https://${safeText(a.domain)}" target="_blank" rel="noopener">🔗 ${safeText(a.domain)}</a></div>${emailHtml}</div><div class="fac-metrics">${metricsHtml}</div>${convHtml}<div class="fac-health"><span class="fac-dot ${dotCls}"></span>Santé op : ${safeText(phaseLabel)}${a.note ? ` · ${safeText(a.note)}` : ''}</div></article>`;

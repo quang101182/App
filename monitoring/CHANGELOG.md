@@ -6,6 +6,49 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.16.0-honest — 18/07/2026 · Les 2 décisions tranchées : deux chiffres qui n'en étaient pas
+
+### 1. « MRR total » → « Abonnements SWP + StoryVoice »
+
+La tuile s'appelait « MRR total » alors qu'elle **excluait structurellement DictoKey**, le produit
+principal. Un total qui omet le plus gros poste n'est pas un total. Le titre porte maintenant son
+périmètre réel.
+
+**Pourquoi on ne la complétera jamais avec DictoKey** (enquête du 18/07, sources vérifiées) :
+
+- DictoKey Premium **est** un abonnement — `BillingManager` : `ProductType.SUBS` ×3, **zéro**
+  `INAPP`, zéro `consumeAsync` — à **4,99 €/mois ou 34,99 €/an** (`strings.xml:565-566`). Un MRR y
+  serait donc conceptuellement légitime.
+- **Mais le nombre d'abonnés payants n'existe dans aucune API.** La seule quantité disponible est
+  le compte d'appareils « premium » (**18**), et **il ne mesure pas des payants** : l'app marque
+  premium dès que Play signale un abonnement actif (`BillingManager.kt:124` — *« Google Play says
+  this user has an active subscription → mark as premium »*), or **un essai gratuit de 7 jours est
+  un abonnement actif**.
+- **L'arithmétique tranche** : `18 × 4,99 = 89,82 €/mois` contre **24,38 € nets cumulés depuis
+  l'origine** (un unique abonnement annuel italien). Le « prix en dur × premium actifs » se
+  tromperait d'un **facteur ~45**. Ce n'est pas une approximation, c'est un faux.
+- 🔓 **Nouveauté utile** : la vraie source (rapports financiers Play sur GCS) **est de nouveau
+  accessible** — testé le 18/07, le zip se télécharge, **plus de 403** (l'ACL a propagé depuis
+  avril). Il reste un bug de dézippage dans `unzipSingleEntry` du gateway DictoKey. **C'est le
+  chemin d'un vrai KPI de revenu** — un lot en soi, pas une constante à inventer.
+
+### 2. Factory : suppression du taux « Visite→vente »
+
+Deux défauts distincts, deux traitements distincts :
+
+- **`Visite→vente` n'était pas un ratio imprécis, c'était un calcul sans objet** : ventes
+  **cumulées depuis l'origine** ÷ visites **depuis le 25/06**. Le marquer « ⚠ fenêtres mixtes »
+  (v2.11) laissait le nombre à l'écran — or **un chiffre faux annoté se lit comme un chiffre**.
+  Remplacé par les deux faits bruts, chacun avec sa fenêtre.
+- **`Visite→clic` et `Visite→dl` sont bien définis** (même source, même fenêtre) mais étaient
+  affichés sur 6 à 25 visites. Sous **30 visites** (`FACTORY_MIN_DENOM`), on montre désormais les
+  **comptes bruts** (`2/6`) et non un pourcentage — même règle que la rétention en v2.12.2 : ne pas
+  donner l'autorité d'un taux à du bruit.
+
+*L'autre option envisagée — borner `/overview` côté worker `factory-stats` — a été écartée : elle
+produirait un taux propre sur 6 visites, donc un non-résultat d'allure fiable, en touchant un
+worker de production pour un chiffre qui resterait du bruit.*
+
 ## v2.15.0-p6 — 18/07/2026 · P6 Hygiène (dernier lot de la refonte)
 
 **Le chantier de refonte est terminé.**
