@@ -526,7 +526,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.16.0-honest';
+    const VERSION = 'v2.16.1-country';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -1396,6 +1396,24 @@
       return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}<div class="time-sub">${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}</div>`;
     }
     function dkCountryFlag(code) { return (!code || code === '—') ? '' : `<img src="https://flagcdn.com/20x15/${String(code).toLowerCase()}.png" width="20" height="15" alt="${safeText(code)}" class="flag">`; }
+
+    // Nom de pays EN TOUTES LETTRES pour le panneau détaillé (« Togo », pas « TG »).
+    // L'en-tête de la ligne affiche déjà « 🇹🇬 TG » : y répéter le code n'apprend rien.
+    // La v1 le faisait (`countryName`, l.2474-2479) ; le portage P3b2b l'avait perdu — régression
+    // signalée par Quang le 18/07.
+    // ⚠ Robustesse mobile (exigence explicite « PC ou smartphone ») : `Intl.DisplayNames` n'existe
+    // pas sur les WebView Android anciens, et `.of()` LÈVE une RangeError sur un code non-région.
+    // D'où : instanciation unique protégée + repli systématique sur le code. Jamais « undefined ».
+    const _dkCountryFmt = (() => {
+      try { return (typeof Intl !== 'undefined' && Intl.DisplayNames) ? new Intl.DisplayNames(['fr'], { type: 'region' }) : null; }
+      catch (e) { return null; }
+    })();
+    function dkCountryName(code) {
+      if (!code || code === '—') return '—';
+      const c = String(code).toUpperCase();
+      if (c.length !== 2 || !_dkCountryFmt) return code;      // 'Inconnu', 'Autres', codes exotiques
+      try { return _dkCountryFmt.of(c) || code; } catch (e) { return code; }
+    }
     function dkApplyDeviceFilters(resetPage) {
       const q = (dkDevState.search || '').toLowerCase();
       dkDevState.filtered = (dkDevState.all || []).filter(d => {
@@ -1970,7 +1988,7 @@
             + `<span class="dev-meta-label">Latence moy</span><span class="dev-meta-val">${latCell}</span>`
             + `<span class="dev-meta-label">Jours actifs</span><span class="dev-meta-val">${month.daysWithData}/${Math.min(daily.length, 30)}${cover}</span></div>`
           + `<div class="dev-meta-row"><span class="dev-meta-label">Tier effectif</span><span class="dev-meta-val">${tierDisplay}</span>`
-            + `<span class="dev-meta-label">Pays</span><span class="dev-meta-val">${country ? dkCountryFlag(country) + safeText(country) : '—'}</span></div>`
+            + `<span class="dev-meta-label">Pays</span><span class="dev-meta-val">${country ? dkCountryFlag(country) + safeText(dkCountryName(country)) : '—'}</span></div>`
           + idRow
         + `</div></div>`;
     }
