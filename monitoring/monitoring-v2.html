@@ -499,6 +499,34 @@
     .st-empty { padding: 30px 18px; border: 1px dashed var(--line-strong); border-radius: var(--radius); color: var(--ink-muted); font-size: .81rem; text-align: center; }
     .st-foot { margin-top: 20px; color: var(--ink-muted); font-size: .72rem; }
 
+    /* ─── Mobile étroit : ZÉRO scroll horizontal ────────────────────────────────────
+       Référence de conception = 360px CSS (Honor, le tél de Quang — PLUS ÉTROIT que le
+       Samsung 384px). Si ça tient à 360, ça tient partout.
+       ⚠ Le PC n'est PAS touché : tout est sous media query.
+       Pourquoi ces débordements avaient échappé aux contrôles : ils vérifiaient
+       `scrollWidth == clientWidth` sur le <html>, ce qui ne voit PAS un conteneur qui
+       scrolle en interne (`.table-wrap` a `overflow-x:auto`). L'audit se fait désormais
+       élément par élément, panneaux dépliés. */
+    @media (max-width: 620px) {
+      /* Tableaux étroits (3-4 colonnes) : on relâche `white-space:nowrap` et on resserre
+         le padding — ça suffit à les faire tenir sans changer leur forme. */
+      .data-table { font-size: .74rem; white-space: normal; }
+      .data-table th, .data-table td { padding: 8px 7px; }
+      .data-table td { overflow-wrap: anywhere; }
+
+      /* Le tableau clients SubWhisper Pro a 8 COLONNES : aucune compression ne le fera
+         tenir dans 360px. Chaque ligne devient donc une CARTE étiquetée (label ← → valeur).
+         Les libellés viennent de `data-label` posé sur chaque <td> ; le <thead> est masqué
+         de façon accessible (pas `display:none`, qui le retirerait aux lecteurs d'écran). */
+      .swp-table thead { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+      .swp-table, .swp-table tbody, .swp-table tr, .swp-table td { display: block; width: 100%; }
+      .swp-table tr { border: 1px solid var(--line); border-radius: var(--radius); margin: 0 0 10px; padding: 2px 10px; }
+      .swp-table tr:last-child { margin-bottom: 0; }
+      .swp-table td { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; text-align: right; border-bottom: 1px solid var(--line); padding: 7px 0; }
+      .swp-table tr td:last-child { border-bottom: 0; }
+      .swp-table td::before { content: attr(data-label); flex: 0 0 auto; text-align: left; color: var(--ink-faint); font-size: .64rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+    }
+
     @media (max-width: 760px) {
       .fac-grid { grid-template-columns: 1fr; }
       .fac-metrics { grid-template-columns: repeat(2, 1fr); }
@@ -526,7 +554,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.16.1-country';
+    const VERSION = 'v2.17.0-mobile360';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -1567,19 +1595,21 @@
         const h = cu._h;
         const cls = h.rank <= 1 ? 'row-risk' : h.cls === 'test' ? 'row-test' : h.cls === 'rev' ? 'row-rev' : '';
         const um = cu.usageMonth || {}, ut = cu.usageTotal || {};
+        // `data-label` = le libellé de colonne, requis par la bascule en cartes sous 620px
+        // (cf. `.swp-table td::before`). Sur PC il est simplement ignoré.
         return `<tr class="${cls}">`
-          + `<td><span class="health h-${h.cls}"><span class="hdot"></span>${safeText(h.label)}</span></td>`
-          + `<td>${safeText(cu.email)}</td>`
-          + `<td>${swpPlanBadge(cu)}</td>`
-          + `<td>${swpFmtDate(cu.created)}</td>`
-          + `<td>${swpFmtDate(cu.expiresAt)}</td>`
-          + `<td title="${safeText(cu.lastUsed || '')}">${swpFmtRelative(cu.lastUsed)}</td>`
-          + `<td class="mono">${um.transcriptions || 0}t / ${um.translations || 0}tr</td>`
-          + `<td class="mono muted">${ut.transcriptions || 0}t / ${ut.translations || 0}tr</td>`
+          + `<td data-label="Santé"><span class="health h-${h.cls}"><span class="hdot"></span>${safeText(h.label)}</span></td>`
+          + `<td data-label="Email">${safeText(cu.email)}</td>`
+          + `<td data-label="Statut">${swpPlanBadge(cu)}</td>`
+          + `<td data-label="Créé le">${swpFmtDate(cu.created)}</td>`
+          + `<td data-label="Expire le">${swpFmtDate(cu.expiresAt)}</td>`
+          + `<td data-label="Dernière activité" title="${safeText(cu.lastUsed || '')}">${swpFmtRelative(cu.lastUsed)}</td>`
+          + `<td data-label="Usage ${safeText(data.month || '')}" class="mono">${um.transcriptions || 0}t / ${um.translations || 0}tr</td>`
+          + `<td data-label="Usage total" class="mono muted">${ut.transcriptions || 0}t / ${ut.translations || 0}tr</td>`
           + `</tr>`;
       }).join('') : '';
       const table = swpList.length
-        ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Santé</th><th>Email</th><th>Statut</th><th>Créé le</th><th>Expire le</th><th>Dernière activité</th><th>Usage ${safeText(data.month || '')}</th><th>Usage total</th></tr></thead><tbody>${rows}</tbody></table></div>`
+        ? `<div class="table-wrap"><table class="data-table swp-table"><thead><tr><th>Santé</th><th>Email</th><th>Statut</th><th>Créé le</th><th>Expire le</th><th>Dernière activité</th><th>Usage ${safeText(data.month || '')}</th><th>Usage total</th></tr></thead><tbody>${rows}</tbody></table></div>`
         : `<div class="empty">Aucun client pour le moment.</div>`;
 
       const when = new Date(data.generatedAt || Date.now()).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
