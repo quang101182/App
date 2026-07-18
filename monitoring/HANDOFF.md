@@ -24,6 +24,31 @@ npx wrangler deploy --config ./wrangler.toml
 - **Vérification post-bascule faite** (Cloudflare Access interdit la lecture anonyme → la chaîne du worker a été **rejouée à l'identique** en local depuis la MÊME source github.io avec la MÊME injection de tokens) : **14/14 vues OK** (7 PC 1280 + 7 mobile 384), **aucun token-gate** (tokens injectés bien hérités), 0 erreur console, 0 overflow. Source github.io confirmée (v2.11.1-p4 à la bascule ; v2.12.0-panels depuis).
 - 🏁 **Reste : RIEN.** Surveillance 48 h ✅ · `index.html` ✅ archivé (18/07) · P3b2b ✅ (v2.14.0) · P6 hygiène ✅ (v2.15.0-p6). **Refonte P0→P6 terminée.**
 
+## 🆕 19/07/2026 — DEMANDE QUANG : passe sur l'onglet ACQUISITION (le parcours du site a changé)
+
+> Note posée depuis la session Ondine. **Rien n'a été codé ici** — c'est une entrée de feuille de route.
+
+**Le fait** : sur `se7enai.com`, le CTA d'Ondine était un **bouton email « accès anticipé »** ; il est
+devenu un **bouton « Télécharger »** (site v0.11.0+, release publique sur `ondine-releases`). Mots de
+Quang : *« je ne vois pas l'analytique en place pour le nombre de fois où les gens ont cliqué ou
+téléchargé »*. **L'onglet acquisition mesure donc encore l'ANCIEN parcours** (une capture d'écran
+accompagnait sa demande, non lue à ce stade).
+
+**C'est une chaîne à 2 projets, dans cet ordre** :
+1. **Le site émet l'événement** — `se7enai-hub/site/` : instrumenter le clic « Télécharger » (et
+   distinguer les 4 cas de la modale : Windows / mobile / mac-linux / inconnu, cf HANDOFF Ondine).
+   🚨 **Ne JAMAIS deviner l'endpoint du compteur** : le pattern maison est `/api/visit?page=<slug>`
+   sur un gateway — **lire le code du Worker cible d'abord** (incident fondateur : un endpoint inventé
+   qui existait ailleurs sous un autre nom, cf règle n°1 de CLAUDE.md).
+2. **Le dashboard l'affiche** — ici, onglet acquisition. Le worker `factory-stats` se déploie
+   **toujours** avec `cd App/factory-stats && wrangler deploy --config wrangler.toml`
+   (2 incidents de worker déployé au mauvais endroit).
+
+**Déclencheur** : **après la release corrective d'Ondine** (le P0 Gemini est prioritaire, cf
+`ondine/HANDOFF.md`). Poser l'événement pendant la passe site de cette release, brancher le dashboard
+ensuite — instrumenter avant que le parcours soit en ligne reviendrait à mesurer du vide.
+Quang a dit « un peu plus tard » : ce n'est pas urgent, mais ce n'est pas abandonné.
+
 ## Objectif courant
 
 Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue de la prod `index.html` v1.23.0 vers `monitoring-v2.html` (config-driven, tokenisé, responsive), **sans toucher la prod**, en migrant onglet par onglet, bascule seulement à parité de chiffres vérifiée.
