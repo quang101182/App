@@ -1,7 +1,7 @@
 # HANDOFF — App/monitoring
-Lot: R12 · 18 juillet 2026 · Claude (Opus 4.8) → **P5 TERMINÉ** (bascule 16/07 + surveillance 48 h + ancien archivé le 18/07) · **reste : P6 hygiène UNIQUEMENT**
+Lot: R13 · 18 juillet 2026 · Claude (Opus 4.8) → 🏁 **REFONTE TERMINÉE — P0 à P6 tous livrés.** Bascule 16/07, surveillance 48 h, ancien archivé 18/07, P6 hygiène 18/07 (v2.15.0-p6). **Plus aucun lot en cours** ; restent 2 décisions produit pour Quang (MRR DictoKey · `Visite→vente` Factory).
 
-## 🚨 BASCULE FAITE le 16/07/2026 — `dash.se7enai.com` sert `monitoring-v2.html` (**v2.12.0-panels** en ligne)
+## 🚨 BASCULE FAITE le 16/07/2026 — `dash.se7enai.com` sert `monitoring-v2.html` (**v2.15.0-p6** en ligne)
 
 > Le worker lit **github.io en direct** : un `git push` suffit à mettre en ligne (~30-60 s de propagation Pages). Aucun redeploy du worker nécessaire pour livrer une nouvelle version du dashboard.
 
@@ -22,13 +22,13 @@ npx wrangler deploy --config ./wrangler.toml
 - ⚠ **`wrangler` n'était plus authentifié** (OAuth local expiré → `Failed to fetch auth token: 400`). Utiliser `CLOUDFLARE_API_TOKEN` = token **« claude-factory »** (`_quickref.md`, a bien `Workers Scripts:Edit`). Toujours `--config ./wrangler.toml` (2 incidents de worker déployé au mauvais endroit, cf `feedback_wrangler_parent_config.md`).
 - ✅ **`index.html` (prod v1) n'a JAMAIS été modifiée** de tout le chantier. **Archivée le 18/07** (surveillance 48 h écoulée) : `git mv index.html archive/index-v1.23.0.html`. Contenu **inchangé au octet près** — seul son chemin bouge. Le rollback reste vivant à sa nouvelle URL.
 - **Vérification post-bascule faite** (Cloudflare Access interdit la lecture anonyme → la chaîne du worker a été **rejouée à l'identique** en local depuis la MÊME source github.io avec la MÊME injection de tokens) : **14/14 vues OK** (7 PC 1280 + 7 mobile 384), **aucun token-gate** (tokens injectés bien hérités), 0 erreur console, 0 overflow. Source github.io confirmée (v2.11.1-p4 à la bascule ; v2.12.0-panels depuis).
-- ⏭ **Reste : P6 hygiène uniquement.** Surveillance 48 h ✅ écoulée · `index.html` ✅ archivé le 18/07 · **P3b2b LIVRÉ** (v2.14.0).
+- 🏁 **Reste : RIEN.** Surveillance 48 h ✅ · `index.html` ✅ archivé (18/07) · P3b2b ✅ (v2.14.0) · P6 hygiène ✅ (v2.15.0-p6). **Refonte P0→P6 terminée.**
 
 ## Objectif courant
 
 Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue de la prod `index.html` v1.23.0 vers `monitoring-v2.html` (config-driven, tokenisé, responsive), **sans toucher la prod**, en migrant onglet par onglet, bascule seulement à parité de chiffres vérifiée.
 
-**Étape immédiate = P6 hygiène (dernier lot).** ✅ Fait et vérifié : P0 socle, P1 Acquisition, **P2 Home COMPLÈTE (DoD bouclée)**, P3a SWP/StoryVoice, P3b1→P3b5 DictoKey (vue complète), **P4 Ops Factory + Studio**, **P5 BASCULE (16/07)**. **TOUTES LES VUES SONT PORTÉES (7/7) ET EN PRODUCTION.**
+**Plus d'étape en cours — la refonte est finie.** ✅ Fait et vérifié : P0 socle, P1 Acquisition, **P2 Home COMPLÈTE (DoD bouclée)**, P3a SWP/StoryVoice, P3b1→P3b5 DictoKey (vue complète), **P4 Ops Factory + Studio**, **P5 BASCULE (16/07)**. **TOUTES LES VUES SONT PORTÉES (7/7) ET EN PRODUCTION.**
 
 ## Références figées
 
@@ -120,7 +120,14 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
 
 ## Ce qui reste à faire
 - ✅ **P5 Bascule — TERMINÉE** : parité globale → proxy repointé le 16/07 (`5b361ede`) → 48 h de surveillance → **ancien archivé le 18/07** (`archive/index-v1.23.0.html`, toujours joignable = rollback vivant). La surveillance a servi : elle a sorti la régression P3b2b (détail par appareil), corrigée avant l'archivage.
-- **P6 Hygiène** : supprimer code mort, changelog. ← **seul lot restant**
+- ✅ **P6 Hygiène — TERMINÉE le 18/07** (v2.15.0-p6) : **LA REFONTE EST FINIE, P0→P6 tous livrés.**
+  - 🐛 Supprimé un panneau qui **mentait à l'utilisateur** : la vue DictoKey affichait « ⏳ Section restante — Panneau détail par appareil (expand) — lot P3b2b » alors que c'est livré depuis la v2.14.0. Le dashboard annonçait « à faire » la fonctionnalité même dont Quang avait signalé la perte.
+  - 🧹 Supprimé le fragment de sélecteur CSS mort `.icon-button` (`.menu-button` conservé, utilisé).
+  - 📄 `CHANGELOG.md` créé (historique v2.0.0 → v2.15.0 + divergences voulues + décisions en attente).
+  - 📊 **Audit de code mort (sous-agent Explore, chaque identifiant vérifié puis recontrôlé à la main)** : **0 fonction morte** sur 122, **0 constante** jamais lue, **0** `if (false)`/bloc commenté. La v2 était déjà propre.
+  - ⏭ **Non fait, volontairement** : 5 groupes de helpers font double emploi (`acqPct`/`swpPct` **strictement identiques**, `facPct` quasi, 3 formateurs de temps relatif aux **sorties différentes**, 3 de nombre, 2 de date+heure). Fusionner = **refactor sur un fichier en production**, pas de l'hygiène. Lot séparé si souhaité (~40 lignes).
+  - ✅ **Preuve runtime** : 14/14 vues (7 PC 1280 + 7 mobile 384), **0 erreur console**, 0 overflow, badge `v2.15.0-p6`, panneau périmé absent partout. **Test de mutation fait** (le vert est falsifiable) : réinjecter le panneau → rouge ; casser un backtick de la même chaîne → rouge ; original intact.
+  - 🪤 **2 artefacts de harness reconfirmés** (ne pas les prendre pour des bugs) : `add_init_script` s'exécute **aussi sur `about:blank`** → `localStorage: Access is denied`, 1 par navigation (envelopper dans `try/catch`) · **`dk` à froid** peut rendre 392 caractères à 9 s (cold start jusqu'à 22 s) → attendre du **contenu réel** (`wait_for_function` sur la taille de `view-root`), jamais un timer fixe.
 - ✅ **P3b2b : LIVRÉ** (v2.14.0-p3b2b).
 - ⚠ **Ne PAS porter le code mort** identifié : `#funnelUnified` (masqué v1.13.0 mais toujours calculé), donuts Modes/Paires (masqués), Sessions 7j Firebase (masqué), `PLAYSTORE_STATS_BASELINE` (déclarée jamais lue), `isAutoRefresh` (auto-refresh retiré v1.14.0). Côté P4 : `mailerliteGroups` (jamais lu), champ `ver` de `STUDIO_SCHEDULE` (15 occurrences mortes), `series[]` d'`analytics.json` (~60 % du poids du fichier, jamais lu) — **non portés**.
 
@@ -138,7 +145,11 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
 
 ## Prochaine étape unique
 
-**P6 Hygiène** (code mort + changelog) — c'est le **seul lot restant**. La bascule est faite, la surveillance 48 h est écoulée et **`index.html` est archivé** (18/07) en `archive/index-v1.23.0.html`, toujours servi = le filet de secours existe encore, à sa nouvelle URL.
+🏁 **RIEN — la refonte est terminée** (P0→P6). Bascule faite, surveillance écoulée, `index.html` archivé en `archive/index-v1.23.0.html` (filet toujours servi, nouvelle URL), P6 hygiène livrée en v2.15.0-p6 avec preuve runtime 14/14 + test de mutation.
+
+Les seules choses ouvertes sont **2 décisions produit** qui appartiennent à Quang (voir plus bas) : **MRR DictoKey** (aucune source API) et **`Visite→vente` Factory** (ratio à fenêtres mixtes). Ne pas les trancher seul.
+
+Si un lot de suite est voulu : **fusion des 5 groupes de helpers en double** (`acqPct`/`swpPct` identiques…) — c'est du refactor sur un fichier en production, à traiter comme tel.
 - ✅ ~~Parité globale~~ : passe faite le 16/07 avant bascule — 14/14 vues saines (7 PC + 7 mobile), spot-check des chiffres clés OK (DictoKey 464/4.73, SWP 18/11/72.7, acq 9270, Factory 6/12/25/8.39, Studio 15226/67000, Home 18/159).
 - ✅ ~~Repointer le proxy~~ : fait, version `5b361ede`.
 - ⏭ **Surveiller** : si Quang signale un écran vide/lent, penser au **cold start du worker DictoKey (jusqu'à 22 s)** — c'est attendu, l'état de chargement l'annonce désormais.
