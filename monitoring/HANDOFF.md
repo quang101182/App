@@ -1,5 +1,5 @@
 # HANDOFF — App/monitoring
-Lot: R11 · 16 juillet 2026 · Claude (Opus 4.8) → **P5 BASCULÉ (go Quang donné le 16/07)** · reste : surveillance 48 h, P6 hygiène
+Lot: R12 · 18 juillet 2026 · Claude (Opus 4.8) → **P5 TERMINÉ** (bascule 16/07 + surveillance 48 h + ancien archivé le 18/07) · **reste : P6 hygiène UNIQUEMENT**
 
 ## 🚨 BASCULE FAITE le 16/07/2026 — `dash.se7enai.com` sert `monitoring-v2.html` (**v2.12.0-panels** en ligne)
 
@@ -12,30 +12,30 @@ Lot: R11 · 16 juillet 2026 · Claude (Opus 4.8) → **P5 BASCULÉ (go Quang don
 **Rollback = 1 minute, 1 ligne** (le worker n'est PAS versionné — se7enai-hub n'est pas un dépôt git) :
 ```bash
 cd D:/Download/02-Apps-Web/se7enai-hub/dash-worker
-# remettre "/index.html" à la place de "/monitoring-v2.html" (src/inject.js l.22)
+# remettre "/archive/index-v1.23.0.html" à la place de "/monitoring-v2.html" (src/inject.js l.22)
 # un .bak horodaté existe : src/inject.js.bak-pre-p5-*
 export CLOUDFLARE_API_TOKEN="cfut_..."   # token « claude-factory », cf _quickref.md (Workers Scripts:Edit)
 npx wrangler deploy --config ./wrangler.toml
 ```
-- **Filet immédiat SANS redeploy** : `dash.se7enai.com/index.html` sert TOUJOURS l'ancien dashboard v1.23.0 (seul le chemin `/` a basculé). Quang peut y aller à tout moment.
+- **Filet immédiat SANS redeploy** : l'ancien dashboard v1.23.0 reste servi tel quel (seul le chemin `/` a basculé). Quang peut y aller à tout moment. ⚠ **Son URL a changé le 18/07** (archivage) : `dash.se7enai.com/index.html` → **`dash.se7enai.com/archive/index-v1.23.0.html`**. Le worker relaie n'importe quel chemin vers github.io et injecte les tokens sur tout HTML → la page archivée est **pleinement fonctionnelle**, pas une coquille. Cf `archive/README.md`.
 - **Ce qui a changé** : `se7enai-hub/dash-worker/src/inject.js` l.22 → `const path = url.pathname === "/" ? "/monitoring-v2.html" : url.pathname;`. Déployé : version `5b361ede-3b2f-4815-945d-1ad4cee5fb51`. **Rien d'autre** (UPSTREAM, injection des tokens, secrets, Access : inchangés).
 - ⚠ **`wrangler` n'était plus authentifié** (OAuth local expiré → `Failed to fetch auth token: 400`). Utiliser `CLOUDFLARE_API_TOKEN` = token **« claude-factory »** (`_quickref.md`, a bien `Workers Scripts:Edit`). Toujours `--config ./wrangler.toml` (2 incidents de worker déployé au mauvais endroit, cf `feedback_wrangler_parent_config.md`).
-- ⚠ **`index.html` (prod v1) n'a JAMAIS été touchée** de tout le chantier et reste servie sur `/index.html` + le github.io public. Ne pas la supprimer avant la fin de la surveillance 48 h.
+- ✅ **`index.html` (prod v1) n'a JAMAIS été modifiée** de tout le chantier. **Archivée le 18/07** (surveillance 48 h écoulée) : `git mv index.html archive/index-v1.23.0.html`. Contenu **inchangé au octet près** — seul son chemin bouge. Le rollback reste vivant à sa nouvelle URL.
 - **Vérification post-bascule faite** (Cloudflare Access interdit la lecture anonyme → la chaîne du worker a été **rejouée à l'identique** en local depuis la MÊME source github.io avec la MÊME injection de tokens) : **14/14 vues OK** (7 PC 1280 + 7 mobile 384), **aucun token-gate** (tokens injectés bien hérités), 0 erreur console, 0 overflow. Source github.io confirmée (v2.11.1-p4 à la bascule ; v2.12.0-panels depuis).
-- ⏭ **Reste** : surveiller 48 h (jusqu'au 18/07), puis archiver `index.html` · P6 hygiène. **P3b2b est LIVRÉ** (v2.14.0).
+- ⏭ **Reste : P6 hygiène uniquement.** Surveillance 48 h ✅ écoulée · `index.html` ✅ archivé le 18/07 · **P3b2b LIVRÉ** (v2.14.0).
 
 ## Objectif courant
 
 Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue de la prod `index.html` v1.23.0 vers `monitoring-v2.html` (config-driven, tokenisé, responsive), **sans toucher la prod**, en migrant onglet par onglet, bascule seulement à parité de chiffres vérifiée.
 
-**Étape immédiate = surveillance 48 h + P6 hygiène.** ✅ Fait et vérifié : P0 socle, P1 Acquisition, **P2 Home COMPLÈTE (DoD bouclée)**, P3a SWP/StoryVoice, P3b1→P3b5 DictoKey (vue complète), **P4 Ops Factory + Studio**, **P5 BASCULE (16/07)**. **TOUTES LES VUES SONT PORTÉES (7/7) ET EN PRODUCTION.**
+**Étape immédiate = P6 hygiène (dernier lot).** ✅ Fait et vérifié : P0 socle, P1 Acquisition, **P2 Home COMPLÈTE (DoD bouclée)**, P3a SWP/StoryVoice, P3b1→P3b5 DictoKey (vue complète), **P4 Ops Factory + Studio**, **P5 BASCULE (16/07)**. **TOUTES LES VUES SONT PORTÉES (7/7) ET EN PRODUCTION.**
 
 ## Références figées
 
 - Mock-up de direction VALIDÉ : `D:/Download/02-Apps-Web/dashboard-refonte/MOCKUP-v0.2.html`.
 - Feuille de route mère : `D:/Download/02-Apps-Web/dashboard-refonte/DASHBOARD-REFONTE-ROADMAP.md` (§3 = phasage P0→P6).
 - ~~`dashboard-refonte/BRIEF-CODEX-P1-acquisition.md`~~ — **PÉRIMÉ, ne pas exécuter** : P1 est livré. Le fichier ne reste utile que comme **exemple de brief** auto-suffisant si on veut relayer un lot à Codex/Gemini.
-- **Prod = `App/monitoring/index.html` v1.23.0, dernier commit `1546c70`. Elle n'a PAS été touchée de tout le chantier — et ne doit pas l'être avant P5.**
+- **Ancienne prod = `App/monitoring/archive/index-v1.23.0.html`** (v1.23.0, dernier commit fonctionnel `1546c70`). **Jamais modifiée** de tout le chantier ; seulement déplacée le 18/07. Reste le filet de rollback.
 
 ## Ce qui est fait (vérifié)
 
@@ -119,8 +119,8 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
   - 🔍 **Anomalie Factory à investiguer** : `tuc` = **1 vente / 8.39 €** pour **6 visites** et **0 clic achat** enregistré. Une vente sans clic tracé = le compteur `tuc-buy` ne capte pas le vrai chemin d'achat (ou la vente précède le 25/06). À croiser avec LemonSqueezy.
 
 ## Ce qui reste à faire
-- **P5 Bascule** : parité globale prod vs v2 → repointer le proxy `se7enai-dash` sur v2 → surveiller 48 h → archiver l'ancien. Réversible (repointer = 1 commit). ⚠ **Go explicite de Quang OBLIGATOIRE** (revenue).
-- **P6 Hygiène** : supprimer code mort, changelog.
+- ✅ **P5 Bascule — TERMINÉE** : parité globale → proxy repointé le 16/07 (`5b361ede`) → 48 h de surveillance → **ancien archivé le 18/07** (`archive/index-v1.23.0.html`, toujours joignable = rollback vivant). La surveillance a servi : elle a sorti la régression P3b2b (détail par appareil), corrigée avant l'archivage.
+- **P6 Hygiène** : supprimer code mort, changelog. ← **seul lot restant**
 - ✅ **P3b2b : LIVRÉ** (v2.14.0-p3b2b).
 - ⚠ **Ne PAS porter le code mort** identifié : `#funnelUnified` (masqué v1.13.0 mais toujours calculé), donuts Modes/Paires (masqués), Sessions 7j Firebase (masqué), `PLAYSTORE_STATS_BASELINE` (déclarée jamais lue), `isAutoRefresh` (auto-refresh retiré v1.14.0). Côté P4 : `mailerliteGroups` (jamais lu), champ `ver` de `STUDIO_SCHEDULE` (15 occurrences mortes), `series[]` d'`analytics.json` (~60 % du poids du fichier, jamais lu) — **non portés**.
 
@@ -138,7 +138,7 @@ Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue
 
 ## Prochaine étape unique
 
-**Surveillance 48 h (jusqu'au 18/07), puis archiver `index.html`.** La bascule est faite (voir le bloc en tête). Ne rien archiver avant la fin de la surveillance : `/index.html` est le filet de secours sans redeploy.
+**P6 Hygiène** (code mort + changelog) — c'est le **seul lot restant**. La bascule est faite, la surveillance 48 h est écoulée et **`index.html` est archivé** (18/07) en `archive/index-v1.23.0.html`, toujours servi = le filet de secours existe encore, à sa nouvelle URL.
 - ✅ ~~Parité globale~~ : passe faite le 16/07 avant bascule — 14/14 vues saines (7 PC + 7 mobile), spot-check des chiffres clés OK (DictoKey 464/4.73, SWP 18/11/72.7, acq 9270, Factory 6/12/25/8.39, Studio 15226/67000, Home 18/159).
 - ✅ ~~Repointer le proxy~~ : fait, version `5b361ede`.
 - ⏭ **Surveiller** : si Quang signale un écran vide/lent, penser au **cold start du worker DictoKey (jusqu'à 22 s)** — c'est attendu, l'état de chargement l'annonce désormais.
