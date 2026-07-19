@@ -6,6 +6,25 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.18.0-acq-dl — 19/07/2026 · Le téléchargement Ondine devient mesurable
+
+Le CTA du site est passé de « accès anticipé » à « Télécharger » (release publique), mais
+l'onglet acquisition mesurait encore l'ancien parcours — le funnel s'arrêtait à la waitlist
+(reproche Quang : « je ne vois pas l'analytique des clics/téléchargements »).
+
+**Côté site (v0.13.1, déployé)** — le parcours DL émet désormais :
+- `dl_view:<os>` — ouverture de la modale DL, ventilée par OS (win / mobile / mac / linux / other) ;
+- `f:unlock` — code d'accès validé (ère du gel : les testeurs débloquent avant de télécharger) ;
+- `f:download` + `f:download:<os>` — clic RÉEL sur l'installeur (avant : le bouton débloqué
+  n'émettait rien, et le déblocage était compté comme un téléchargement — deux trous).
+
+**Côté dashboard** — le funnel du hub gagne 3 étapes (📥 Modale DL ouverte, 🔓 Code débloqué,
+⬇ Téléchargement, avec ventilation par OS en note) + tuile « Téléchargements » dans le récap.
+Aucune étape existante modifiée (parité conservée).
+
+Preuve : 16/16 Playwright (PC 1280 + mobile 360, données réelles gateway-pro, 0 erreur console,
+0 overflow).
+
 ## v2.16.0-honest — 18/07/2026 · Les 2 décisions tranchées : deux chiffres qui n'en étaient pas
 
 ### 1. « MRR total » → « Abonnements SWP + StoryVoice »

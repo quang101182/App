@@ -554,7 +554,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.17.0-mobile360';
+    const VERSION = 'v2.18.0-acq-dl';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -810,26 +810,44 @@
       const g = key => acqInt(bb[key]);
       const vTot = acqInt(visit.total), vToday = acqInt(visit.today);
       const demo = g('f:demo'), chat = g('f:chat'), cta = g('f:cta'), wait = g('f:waitlist');
+      // v2.18.0 (19/07) — le parcours « Télécharger Ondine » (site v0.13.1) émet enfin
+      // ses propres compteurs : vues de la modale par OS (dl_view:<os>), codes débloqués
+      // (f:unlock, ère du gel) et clics réels sur l'installeur (f:download + f:download:<os>).
+      // Avant : le funnel s'arrêtait à la waitlist — le téléchargement était invisible
+      // (reproche Quang : « je ne vois pas l'analytique des clics/téléchargements »).
+      const unlock = g('f:unlock'), dl = g('f:download');
+      let dlViewTotal = 0; const dlViewParts = [];
+      const dlOsParts = [];
+      Object.keys(bb).forEach(key => {
+        if (key.indexOf('dl_view:') === 0) { const v = acqInt(bb[key]); dlViewTotal += v; dlViewParts.push({ name: key.slice(8), v }); }
+        else if (key.indexOf('f:download:') === 0) { const v = acqInt(bb[key]); dlOsParts.push({ name: key.slice(11), v }); }
+      });
+      dlViewParts.sort((a, b) => b.v - a.v);
+      dlOsParts.sort((a, b) => b.v - a.v);
       let outTotal = 0; const outParts = [];
       Object.keys(bb).forEach(key => { if (key.indexOf('out:') === 0) { const v = acqInt(bb[key]); outTotal += v; outParts.push({ name: key.slice(4), v }); } });
       outParts.sort((a, b) => b.v - a.v);
+      const osNote = parts => parts.length ? parts.map(o => `${safeText(o.name)} ${o.v}`).join(' · ') : '—';
       const steps = [
         { label: '👁 Visites', val: vTot, prev: null, note: vToday > 0 ? `+${vToday} auj.` : 'trafic humain' },
         { label: '🎬 Interaction démo', val: demo, prev: vTot, note: 'capacité jouée' },
         { label: '💬 Engagement chat', val: chat, prev: vTot, note: 'question posée à Halo' },
         { label: '✨ Clic CTA', val: cta, prev: vTot, note: 'accès anticipé / sur-mesure / soutien' },
         { label: '📧 Waitlist envoyée', val: wait, prev: cta, note: 'email laissé' },
+        { label: '📥 Modale DL ouverte', val: dlViewTotal, prev: vTot, note: osNote(dlViewParts) },
+        { label: '🔓 Code débloqué', val: unlock, prev: dlViewTotal, note: 'testeurs (ère du gel)' },
+        { label: '⬇ Téléchargement', val: dl, prev: dlViewTotal, note: osNote(dlOsParts) },
         { label: '🔗 Clic sortant', val: outTotal, prev: vTot, note: 'vers store / app' }
       ];
-      const max = Math.max(1, vTot, demo, chat, cta, wait, outTotal);
+      const max = Math.max(1, vTot, demo, chat, cta, wait, dlViewTotal, unlock, dl, outTotal);
       const rows = steps.map(s => {
         const w = Math.max(2, Math.round((s.val / max) * 100));
         const conv = s.prev == null ? '' : `<span class="funnel-conv">${acqPct(s.val, s.prev)} vs préc.</span>`;
         return `<div class="funnel-step"><div class="funnel-meta"><strong>${safeText(s.label)} <span class="funnel-note">${safeText(s.note)}</span></strong><span>${s.val}</span></div><div class="funnel-line"><div class="funnel-bar"><i style="--bar-width:${w}%"></i></div>${conv}</div></div>`;
       }).join('');
       const detail = outParts.length ? `<div class="acq-detail">Détail sortants : ${outParts.map(o => `${safeText(o.name)} <strong>${o.v}</strong>`).join(' · ')}</div>` : '';
-      const recap = `<div class="kpi-grid acq-recap">${KpiTile('Visites', vTot, vToday > 0 ? `+${vToday} auj.` : '—')}${KpiTile('Waitlist', wait, 'emails captés')}${KpiTile('Clics sortants', outTotal, 'vers store/app')}</div>`;
-      return `<div class="acq-hub-head"><h3>🌐 Hub — <a href="https://se7enai.com" target="_blank" rel="noopener">se7enai.com ↗</a></h3></div><p class="acq-hub-desc">Tête de pont (lien bio TikTok). Visite → démo → chat → CTA → waitlist → clic sortant.</p>${recap}<div class="acq-sub">Funnel d’acquisition du hub</div><div class="funnel">${rows}</div>${detail}`;
+      const recap = `<div class="kpi-grid acq-recap">${KpiTile('Visites', vTot, vToday > 0 ? `+${vToday} auj.` : '—')}${KpiTile('Waitlist', wait, 'emails captés')}${KpiTile('Téléchargements', dl, 'installeur Ondine')}${KpiTile('Clics sortants', outTotal, 'vers store/app')}</div>`;
+      return `<div class="acq-hub-head"><h3>🌐 Hub — <a href="https://se7enai.com" target="_blank" rel="noopener">se7enai.com ↗</a></h3></div><p class="acq-hub-desc">Tête de pont (lien bio TikTok). Visite → démo → chat → CTA → waitlist → téléchargement → clic sortant.</p>${recap}<div class="acq-sub">Funnel d’acquisition du hub</div><div class="funnel">${rows}</div>${detail}`;
     }
     function renderAcqSites(data) {
       return ['dk', 'swp', 'sv'].map(key => {
