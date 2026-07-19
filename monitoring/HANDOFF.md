@@ -49,6 +49,33 @@ accompagnait sa demande, non lue à ce stade).
 ensuite — instrumenter avant que le parcours soit en ligne reviendrait à mesurer du vide.
 Quang a dit « un peu plus tard » : ce n'est pas urgent, mais ce n'est pas abandonné.
 
+## ✅ 19/07/2026 (aprèm) — FAIT : onglet ACQUISITION aligné sur le parcours « Télécharger » (v2.18.0-acq-dl)
+
+> Codé par Claude, preuve 16/16 Playwright (PC 1280 + mobile 360, données réelles gateway-pro,
+> 0 erreur console, 0 overflow). Commit App `a096272`, en ligne (github.io → worker).
+
+**Le trou comblé** : le funnel du hub s'arrêtait à la waitlist alors que le CTA du site est
+« Télécharger ». Et le site comptait le DÉBLOCAGE du code comme un téléchargement, alors que
+le vrai bouton d'installeur (post-déblocage) n'émettait RIEN.
+
+1. **Site (v0.13.1 puis v0.13.2, déployé, byte-exact vérifié)** — émissions `api-gateway-pro`
+   (accepte tout `btn`, GET renvoie `by_btn_all` complet — vérifié dans `src/index.js:931+`) :
+   `dl_view:<os>` à l'ouverture de la modale DL · `f:unlock` au code validé ·
+   `f:download` + `f:download:<os>` au CLIC RÉEL sur l'installeur (boutons gel-débloqué et public).
+2. **Dashboard (v2.18.0)** — funnel hub : +📥 Modale DL ouverte (ventilée par OS), 🔓 Code
+   débloqué, ⬇ Téléchargement (par OS) + tuile « Téléchargements ». Étapes existantes intactes.
+
+**Coherence site au passage (v0.13.2)** : la bandeau stats (« 75 sous-titres (SubWhisper Pro) »…)
+était au milieu du récit Ondine (confusion signalée par Quang) → **déplacé juste avant #apps**
+(vitrine studio). Section don : bouton « Faire un don 💛 » PRÊT mais **caché tant que
+`DONATE_LS_URL` est vide** (jamais de bouton mort) — reste à créer le produit « Don » dans le
+dashboard Lemon Squeezy (dashboard-only, store `se7en-tools` 314871) et poser l'URL.
+`.bak-*` du dossier `site/` déplacés vers `site-backups/` (ils étaient SERVIS publiquement).
+Mail `contact@se7enai.com` : règle CF Email Routing active + destination vérifiée 18/07 →
+mail de test réel envoyé via n8n (id `6b3ab203…`), à confirmer en boîte Gmail (spam ?).
+
+**Déclencheur initial rempli** : release corrective v0.97.4 publiée le 19/07 (cf `ondine/HANDOFF.md`).
+
 ## Objectif courant
 
 Refonte du dashboard monitoring « reconstruire à côté » : porter chaque vue de la prod `index.html` v1.23.0 vers `monitoring-v2.html` (config-driven, tokenisé, responsive), **sans toucher la prod**, en migrant onglet par onglet, bascule seulement à parité de chiffres vérifiée.
