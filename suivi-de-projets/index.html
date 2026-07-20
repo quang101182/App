@@ -4384,6 +4384,38 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
          return refs;
      }
 
+     // Supprime des fichiers PJ en épargnant ceux qu'un AUTRE projet utilise encore.
+     // Le dossier PJ est partagé et la suppression se fait par nom : sans ce filtre,
+     // supprimer une action/thématique aux données contaminées effacerait les pièces
+     // jointes d'un autre projet. Retourne le compte de supprimés/conservés/erreurs.
+     async function supprimerFichiersPJEnSecurite(pjs, contexte) {
+         const resultat = { supprimes: 0, conserves: 0, erreurs: 0 };
+         const noms = (Array.isArray(pjs) ? pjs : []).map(pj => pj && pj.name).filter(Boolean);
+         if (noms.length === 0) return resultat;
+         const mainPjHandle = getActivePjFolderHandle();
+         if (!mainPjHandle || await verifyPermission(mainPjHandle) !== 'granted') {
+             displayMessage("Permission refusée pour le dossier PJ. Fichiers non supprimés.", "warning");
+             return resultat;
+         }
+         const pjAutresProjets = await collecterPJDesAutresProjets(selectedProjectSaveId, getActiveBackupDirHandle());
+         for (const nom of noms) {
+             if (pjAutresProjets.has(nom)) {
+                 console.warn(`Fichier PJ ${nom} (${contexte}) CONSERVÉ : encore référencé par un autre projet.`);
+                 resultat.conserves++;
+                 continue;
+             }
+             try { await mainPjHandle.removeEntry(nom); resultat.supprimes++; console.log(`Fichier PJ ${nom} (${contexte}) supprimé.`); }
+             catch (e) {
+                 if (e.name !== 'NotFoundError') { console.warn(`Erreur suppression PJ ${nom} (${contexte}): ${e.message}`); resultat.erreurs++; }
+                 else { console.log(`Fichier PJ ${nom} (${contexte}) non trouvé.`); }
+             }
+         }
+         if (resultat.supprimes > 0) displayMessage(`${resultat.supprimes} fichier(s) PJ supprimé(s).`, "info");
+         if (resultat.conserves > 0) displayMessage(`${resultat.conserves} fichier(s) PJ conservé(s) : utilisé(s) par un autre projet.`, "info");
+         if (resultat.erreurs > 0) displayMessage(`Erreur suppression de ${resultat.erreurs} fichier(s) PJ.`, "warning");
+         return resultat;
+     }
+
      async function supprimerProjetDeSauvegarde() {
         clearMessage();
         if (projectSaveList.length <= 1) { displayMessage("Impossible de supprimer le dernier projet.", "error"); return; }
@@ -4532,20 +4564,13 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
         try {
             const actionsASupprimer = actions.filter(a => a.projectId === projetId);
             console.log(`Suppression Projet: ${projet.numeroRef}, Actions associées: ${actionsASupprimer.map(a => a.numeroRef).join(', ')}`);
-            const mainPjHandle = getActivePjFolderHandle(); let deletedFileCount = 0; let fileErrors = 0;
-            if (!mainPjHandle) { if (actionsASupprimer.some(a => attachments[a.id]?.length > 0)) { displayMessage("Avertissement: Dossier PJ non défini. Fichiers non supprimés.", "warning"); } }
-            else {
-                if (await verifyPermission(mainPjHandle) === 'granted') {
-                    console.log(`Tentative suppression PJ pour projet ${projet.numeroRef}...`); const deletePromises = [];
-                    for (const action of actionsASupprimer) {
-                        const pjsASupprimer = attachments[action.id];
-                        if (Array.isArray(pjsASupprimer) && pjsASupprimer.length > 0) {
-                             console.log(`-- Action ${action.numeroRef}: Tentative suppression de ${pjsASupprimer.map(p => p.name).join(', ')}`);
-                             for (const pj of pjsASupprimer) { deletePromises.push(mainPjHandle.removeEntry(pj.name).then(() => { console.log(`---- Fichier PJ ${pj.name} supprimé.`); deletedFileCount++; }).catch(e => { if (e.name !== 'NotFoundError') { console.warn(`---- Erreur suppression PJ ${pj.name}: ${e.message}`); fileErrors++; } else { console.log(`---- Fichier PJ ${pj.name} non trouvé.`); } }) ); } } }
-                    await Promise.allSettled(deletePromises);
-                    if (deletedFileCount > 0) displayMessage(`${deletedFileCount} fichier(s) PJ supprimé(s).`, "info");
-                    if (fileErrors > 0) displayMessage(`Erreur suppression de ${fileErrors} fichier(s) PJ.`, "warning");
-                 } else { if (actionsASupprimer.some(a => attachments[a.id]?.length > 0)) { displayMessage("Permission refusée dossier PJ. Fichiers non supprimés.", "warning"); } } }
+            const mainPjHandle = getActivePjFolderHandle();
+            const pjsDeLaThematique = actionsASupprimer.flatMap(a => Array.isArray(attachments[a.id]) ? attachments[a.id] : []);
+            if (!mainPjHandle) { if (pjsDeLaThematique.length > 0) { displayMessage("Avertissement: Dossier PJ non défini. Fichiers non supprimés.", "warning"); } }
+            else if (pjsDeLaThematique.length > 0) {
+                // Épargne les PJ encore utilisées par un autre projet (données contaminées).
+                await supprimerFichiersPJEnSecurite(pjsDeLaThematique, `thématique ${projet.numeroRef}`);
+            }
 
             actionsASupprimer.forEach(action => { if (attachments[action.id]) { delete attachments[action.id]; } });
             projects.splice(projetIndex, 1);
@@ -4737,28 +4762,8 @@ async function supprimerAction(actionId) {
     try {
         const mainPjHandle = getActivePjFolderHandle();
         if (action.hasAttachments && attachments[actionId] && mainPjHandle) {
-            if (await verifyPermission(mainPjHandle) === 'granted') {
-                console.log(`Tentative suppression PJ pour action ${action.numeroRef}...`);
-                let deletedFileCount = 0;
-                const pjsToDelete = [...attachments[actionId]];
-                for (const pj of pjsToDelete) {
-                    try {
-                        await mainPjHandle.removeEntry(pj.name);
-                        console.log(`Fichier PJ ${pj.name} supprimé.`);
-                        deletedFileCount++;
-                    } catch (e) {
-                        if (e.name !== 'NotFoundError') {
-                            console.warn(`Erreur suppression PJ ${pj.name}: ${e.message}`);
-                            displayMessage(`Erreur suppression PJ ${pj.name}.`, "warning");
-                        } else {
-                            console.log(`Fichier PJ ${pj.name} non trouvé.`);
-                        }
-                    }
-                }
-                if (deletedFileCount > 0) displayMessage(`${deletedFileCount} fichier(s) PJ supprimé(s).`, "info");
-            } else {
-                displayMessage("Permission refusée dossier PJ. Fichiers non supprimés.", "warning");
-            }
+            // Épargne les PJ encore utilisées par un autre projet (données contaminées).
+            await supprimerFichiersPJEnSecurite([...attachments[actionId]], `action ${action.numeroRef}`);
         } else if (action.hasAttachments && attachments[actionId]) {
             console.warn("Dossier PJ non défini.");
         }
