@@ -3768,11 +3768,21 @@ tr.row-flash td {
     }
 
     let _saveLocalTimeout = null;
-    function sauvegarderDonneesLocal() {
+    // `immediat` = écrire tout de suite, sans passer par le debounce.
+    // OBLIGATOIRE avant tout changement de projet : le debounce lit le préfixe AU MOMENT
+    // DU FLUSH, donc une écriture différée partirait sous le préfixe du projet suivant
+    // (données du projet A rangées chez le projet B), et un clearTimeout ultérieur
+    // annulerait purement et simplement la sauvegarde de l'ancien projet.
+    function sauvegarderDonneesLocal(immediat = false) {
         if (!selectedProjectSaveId) return;
-        // Debounce : évite de sérialiser x fois en rafale (ex: CRUD + auto-save)
-        clearTimeout(_saveLocalTimeout);
-        _saveLocalTimeout = setTimeout(() => {
+        const profilAuMomentDeLAppel = selectedProjectSaveId;
+        const ecrire = () => {
+            // Le projet courant a changé depuis la demande : les variables globales
+            // décrivent désormais un AUTRE projet. Écrire ici mélangerait les données.
+            if (selectedProjectSaveId !== profilAuMomentDeLAppel) {
+                console.warn(`Sauvegarde locale abandonnée : projet changé (${profilAuMomentDeLAppel} -> ${selectedProjectSaveId}).`);
+                return;
+            }
             const prefix = getLocalStoragePrefix();
             try {
                 // Tronquer le log avant sauvegarde pour éviter QuotaExceededError
@@ -3804,7 +3814,12 @@ tr.row-flash td {
                     displayMessage("Erreur lors de la sauvegarde locale.", "error");
                 }
             }
-        }, 300);
+        };
+        // Debounce : évite de sérialiser x fois en rafale (ex: CRUD + auto-save).
+        clearTimeout(_saveLocalTimeout);
+        _saveLocalTimeout = null;
+        if (immediat) { ecrire(); return; }
+        _saveLocalTimeout = setTimeout(ecrire, 300);
     }
 
     function chargerDonneesLocal() {
@@ -3862,8 +3877,25 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
         return false; 
     } 
 
-    try { 
-        const permission = await verifyPermission(backupHandle); 
+    // ── Instantané ATOMIQUE (projet + données figés AVANT le moindre await) ──────────
+    // Cette fonction est appelée sans être attendue après chaque CRUD. Sur un lecteur
+    // réseau lent, un changement/création de projet peut survenir pendant ses await.
+    // Avant, le nom de fichier et les données étaient relus à des instants différents :
+    // on écrivait les données d'un projet dans le fichier d'un autre (contamination),
+    // et un backup vide sur le projet d'origine. On fige tout ici, une fois pour toutes.
+    const profilCible = selectedProjectSaveId;
+    const filenamePrefix = `backup_C${activeConfig}_${profilCible}_`;
+    const snapshot = {
+        profileId: profilCible,          // propriétaire du fichier (voir chargerSauvegardeSelectionnee)
+        profileName: getProjectSaveName(profilCible),
+        projects, actions, attachments, nextProjectId, nextActionId, projectCounters, activityLog
+    };
+    const contenu = JSON.stringify(snapshot, null, 2);
+    // Le projet a-t-il changé sous nos pieds pendant les I/O ?
+    const projetAChange = () => selectedProjectSaveId !== profilCible;
+
+    try {
+        const permission = await verifyPermission(backupHandle);
         if (permission !== 'granted') {
             setBandeauDegrade(true);
             if (afficherMessage) displayMessage(`Permission refusée pour dossier Backup (Domaine ${activeConfig}).`, "error");
@@ -3871,9 +3903,8 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
         }
         setBandeauDegrade(false); // Dossier accessible, masquer le bandeau
 
-        let backups = []; 
-        const filenamePrefix = getBackupFilenamePrefix(); 
-        
+        let backups = [];
+
         try { 
             for await (const entry of backupHandle.values()) { 
                 if (entry.kind === 'file' && entry.name.startsWith(filenamePrefix) && entry.name.endsWith('.json')) { 
@@ -3903,8 +3934,14 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
                 }
             }
         }
-        if (backups.length >= MAX_BACKUPS) { 
-            const nombreASupprimer = backups.length - MAX_BACKUPS + 1; 
+        // Ne jamais purger si on s'apprête à abandonner l'écriture : on supprimerait
+        // d'anciennes sauvegardes sans en produire de nouvelle.
+        if (projetAChange()) {
+            console.warn(`Sauvegarde abandonnée avant rotation : projet changé (${profilCible} -> ${selectedProjectSaveId}).`);
+            return false;
+        }
+        if (backups.length >= MAX_BACKUPS) {
+            const nombreASupprimer = backups.length - MAX_BACKUPS + 1;
             const toDelete = backups.slice(0, nombreASupprimer); 
             
             console.log(`📦 Nettoyage: ${toDelete.length} ancien(s) backup(s) à supprimer`); 
@@ -3919,22 +3956,26 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
             } 
         } 
         
-        const now = new Date(); 
-        const stamp = getLocalIsoString(now); 
-        const fileName = `${filenamePrefix}${stamp}.json`; 
-        
-        const data = { 
-            projects, actions, attachments, nextProjectId, nextActionId, projectCounters, activityLog 
-        }; 
-        
-        try { 
-            const fileHandle = await backupHandle.getFileHandle(fileName, { create: true }); 
-            const writable = await fileHandle.createWritable(); 
-            await writable.write(JSON.stringify(data, null, 2)); 
-            await writable.close(); 
-            
+        // Dernier contrôle avant écriture : si l'utilisateur a changé/créé un projet
+        // pendant les I/O ci-dessus, ne RIEN écrire. Mieux vaut une sauvegarde manquante
+        // qu'une sauvegarde rangée chez le mauvais projet.
+        if (projetAChange()) {
+            console.warn(`Sauvegarde abandonnée : projet changé pendant l'écriture (${profilCible} -> ${selectedProjectSaveId}).`);
+            return false;
+        }
+
+        const now = new Date();
+        const stamp = getLocalIsoString(now);
+        const fileName = `${filenamePrefix}${stamp}.json`;
+
+        try {
+            const fileHandle = await backupHandle.getFileHandle(fileName, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(contenu);          // instantané figé en début de fonction
+            await writable.close();
+
             _lastLoadedBackupName = fileName; // Mettre à jour le tracking
-            await loadProjectSaveBackups(selectedProjectSaveId);
+            await loadProjectSaveBackups(profilCible);
             updateContextBar();
 
             if (afficherMessage) displayMessage(`✓ Sauvegarde créée: ${fileName}`, "success"); 
@@ -4013,6 +4054,18 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
                     const file = await fileHandle.getFile();
                     const text = await file.text();
                     const data = JSON.parse(text);
+                    // Garde-fou anti-contamination : une sauvegarde estampillée d'un AUTRE
+                    // projet ne doit jamais être chargée en silence. `profileId` est absent
+                    // des sauvegardes antérieures à ce correctif -> on ne bloque que si le
+                    // champ existe ET ne correspond pas (compatibilité ascendante totale).
+                    if (data.profileId && data.profileId !== selectedProjectSaveId) {
+                        const proprietaire = data.profileName || data.profileId;
+                        console.error(`Sauvegarde ${backupFileName} appartient à "${proprietaire}", pas au projet courant.`);
+                        displayMessage(`⚠️ Sauvegarde ignorée : elle appartient au projet "${escapeHtml(proprietaire)}", pas à celui-ci. Choisissez une autre sauvegarde.`, "error");
+                        try { logActivity('Système', `⚠ Sauvegarde <strong>${escapeHtml(backupFileName)}</strong> refusée : appartient à "${escapeHtml(proprietaire)}".`); } catch(_) {}
+                        hideLoading();
+                        return;
+                    }
                     projects = Array.isArray(data.projects) ? data.projects : [];
                     actions = Array.isArray(data.actions) ? data.actions : [];
                     attachments = (data.attachments && typeof data.attachments === 'object' && !Array.isArray(data.attachments)) ? data.attachments : {};
@@ -4160,12 +4213,19 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
          const selectEl = document.getElementById('projet-select'); if (!selectEl) return;
          const newProfileId = selectEl.value; if (newProfileId === selectedProjectSaveId) return;
 
+         // Overlay dès la PREMIÈRE opération réseau. Sans lui, la libération du verrou et
+         // la lecture du dossier de sauvegardes se font écran figé sur le projet précédent :
+         // sur un lecteur réseau lent, on croit voir le nouveau projet déjà chargé.
+         showLoading(`Chargement du projet "${getProjectSaveName(newProfileId)}"...`);
+         try {
          // Libérer le verrou du projet actuel si on le détient
          if (isLockedByCurrentUser) {
              await supprimerVerrouProfil();
              isLockedByCurrentUser = false;
          }
-         sauvegarderDonneesLocal();
+         // `true` = immédiat : en différé, cette écriture partirait sous le préfixe du
+         // NOUVEAU projet (le préfixe est résolu au moment du flush, pas de l'appel).
+         sauvegarderDonneesLocal(true);
          selectedProjectSaveId = newProfileId;
          localStorage.setItem('selectedProjectSaveId_C'+activeConfig, selectedProjectSaveId);
          chargerDonneesLocal();
@@ -4191,7 +4251,7 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
                  && !firstOpt.startsWith('Config');
              if (isValid) {
                  selectSauv.value = firstOpt;
-                 showLoading('Chargement du projet...');
+                 // L'overlay est déjà affiché depuis le début de la fonction (finally global).
                  try {
                      await chargerSauvegardeSelectionnee();
                      setTimeout(() => { try { showToast('Projet chargé', 'success', 2000); } catch(e){} }, 300);
@@ -4199,8 +4259,6 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
                      console.warn('Auto-load profil échoué:', e);
                      displayMessage('Erreur chargement projet. Cliquez sur Charger manuellement.', 'warning');
                      if (chargerBtn) { chargerBtn.classList.add('blink', 'btn-primary-action'); chargerBtn.disabled = false; chargerBtn.style.opacity = '1'; delete chargerBtn.dataset.forceDisabled; }
-                 } finally {
-                     hideLoading();
                  }
                  return;
              }
@@ -4213,6 +4271,11 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
          displayMessage(`Projet "${getProjectSaveName(selectedProjectSaveId)}" sélectionné. Cliquez sur "Charger" pour l'activer.`, 'warning');
          const bandeauVerrou = document.getElementById('verrou-info-banner'); if(bandeauVerrou) bandeauVerrou.style.display = 'none';
          const topBanner = document.getElementById('top-info-banner'); if(topBanner) topBanner.style.display = 'none';
+         } finally {
+             // Couvre TOUTES les sorties, y compris la branche "aucune sauvegarde",
+             // qui ne masquait aucun indicateur auparavant.
+             hideLoading();
+         }
      }
 
 
@@ -4231,14 +4294,24 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
          if (!Array.isArray(projectSaveList)) projectSaveList = []; projectSaveList.push(newProfile);
          await saveProfilesForActiveConfig();
          localStorage.setItem('projectSaveList', JSON.stringify(projectSaveList));
-         sauvegarderDonneesLocal();
+         // `true` = écriture immédiate : en différé, cette sauvegarde partirait sous le
+         // préfixe du NOUVEAU projet, et serait de toute façon annulée par l'appel suivant.
+         sauvegarderDonneesLocal(true);
+         // On quitte le projet courant : libérer son verrou pour ne pas le garder indéfiniment.
+         if (isLockedByCurrentUser) { await supprimerVerrouProfil(); }
          selectedProjectSaveId = profileId; localStorage.setItem('selectedProjectSaveId_C'+activeConfig, selectedProjectSaveId);
 
          // Clear data for the new profile, ADD LOG ENTRY
          projects = []; actions = []; attachments = {}; projectCounters = {}; nextProjectId = 1; nextActionId = 1;
          activityLog = []; // <<< VIDER LE LOG POUR LE NOUVEAU PROJET
          logActivity('Système', `Projet '${profileName.trim()}' créé.`); // <<< LOG CREATION
-         sauvegarderDonneesLocal();
+         sauvegarderDonneesLocal(true);
+
+         // Prendre le verrou DU NOUVEAU PROJET. Sans cela, isLockedByCurrentUser restait
+         // hérité du projet précédent : l'app se croyait en édition alors qu'aucun .lock
+         // n'existait, puis la surveillance (60 s) ne trouvait pas le verrou et basculait
+         // en LECTURE SEULE avec le message "(fichier disparu)".
+         await verifierVerrouAvantChargementModifie();
 
          updateProjectSaveSelect();
          chargerProjets(); chargerActions(); mettreAJourTableauDeBord(); mettreAJourListesProjets(); mettreAJourSelectFiltreProjet(); initStatusFilters();
@@ -4269,6 +4342,48 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
           if (topBanner && topBanner.style.display !== 'none') { const currentText = topBanner.textContent; if (currentText.includes("Projet")) { topBanner.textContent = currentText.replace(/Projet ".*?"/, `Projet "${profil.name}"`); } }
      }
 
+     // Recense les pièces jointes référencées par TOUS LES AUTRES projets du domaine.
+     // Le dossier PJ est un fourre-tout partagé et la suppression se fait par NOM de
+     // fichier : sans ce garde-fou, supprimer un projet dont les données ont été
+     // contaminées effacerait physiquement les PJ d'un autre projet, irréversiblement.
+     async function collecterPJDesAutresProjets(profileIdExclu, backupHandle) {
+         const refs = new Set();
+         const ajouter = (attachmentsObj) => {
+             if (!attachmentsObj || typeof attachmentsObj !== 'object') return;
+             Object.values(attachmentsObj).forEach(pjs => {
+                 if (Array.isArray(pjs)) pjs.forEach(pj => { if (pj && pj.name) refs.add(pj.name); });
+             });
+         };
+         // (a) Données locales des autres projets de ce domaine.
+         (Array.isArray(projectSaveList) ? projectSaveList : []).forEach(p => {
+             if (!p || p.id === profileIdExclu) return;
+             try { ajouter(JSON.parse(localStorage.getItem(`profile_C${activeConfig}_${p.id}_attachments`) || '{}')); }
+             catch (e) { console.warn(`PJ locales illisibles pour ${p.id}:`, e); }
+         });
+         // (b) Dernière sauvegarde disque de chaque autre projet : un projet jamais ouvert
+         //     sur ce poste n'a rien en localStorage, ses PJ seraient invisibles en (a).
+         if (backupHandle) {
+             try {
+                 const dernierParProjet = {};
+                 const re = new RegExp(`^backup_C${activeConfig}_(.+)_\\d{4}-\\d{2}-\\d{2}-\\d{2}-\\d{2}-\\d{2}\\.json$`);
+                 for await (const entry of backupHandle.values()) {
+                     if (entry.kind !== 'file') continue;
+                     const m = entry.name.match(re);
+                     if (!m || m[1] === profileIdExclu) continue;
+                     const actuel = dernierParProjet[m[1]];
+                     if (!actuel || entry.name > actuel.name) dernierParProjet[m[1]] = entry;
+                 }
+                 for (const pid in dernierParProjet) {
+                     try {
+                         const f = await dernierParProjet[pid].getFile();
+                         ajouter(JSON.parse(await f.text()).attachments);
+                     } catch (e) { console.warn(`Sauvegarde de ${pid} illisible (PJ):`, e); }
+                 }
+             } catch (e) { console.warn("Scan des sauvegardes pour recensement PJ:", e); }
+         }
+         return refs;
+     }
+
      async function supprimerProjetDeSauvegarde() {
         clearMessage();
         if (projectSaveList.length <= 1) { displayMessage("Impossible de supprimer le dernier projet.", "error"); return; }
@@ -4286,17 +4401,26 @@ async function sauvegarderBackupAutomatique(afficherMessage = false) {
             if (Object.keys(attachmentsToDelete).length > 0 && mainPjHandle) {
                  if (await verifyPermission(mainPjHandle) === 'granted') {
                      console.log(`Tentative de suppression des fichiers PJ pour le profil ${profileNameToDelete}...`);
-                     let deletedFileCount = 0; let fileErrors = 0; const deletePromises = [];
+                     // Fichiers encore utilisés par un AUTRE projet : à ne surtout pas effacer.
+                     const pjAutresProjets = await collecterPJDesAutresProjets(profileIdToDelete, getActiveBackupDirHandle());
+                     let deletedFileCount = 0; let fileErrors = 0; let preservedCount = 0; const deletePromises = [];
                      for (const actionIdStr in attachmentsToDelete) {
                           const actionId = parseInt(actionIdStr); const pjs = attachmentsToDelete[actionId];
                           if (Array.isArray(pjs) && pjs.length > 0) {
                              const actionInfo = actionsToDelete.find(a => a.id === actionId);
                              const actionRef = actionInfo ? actionInfo.numeroRef : `ID ${actionId}`;
                              for (const pj of pjs) {
+                                 if (!pj || !pj.name) continue;
+                                 if (pjAutresProjets.has(pj.name)) {
+                                     console.warn(`Fichier PJ ${pj.name} (Action ${actionRef}) CONSERVÉ : encore référencé par un autre projet.`);
+                                     preservedCount++;
+                                     continue;
+                                 }
                                  deletePromises.push(mainPjHandle.removeEntry(pj.name).then(() => { console.log(`Fichier PJ ${pj.name} (Action ${actionRef}) supprimé.`); deletedFileCount++; }).catch(e => { if (e.name !== 'NotFoundError') { console.warn(`Erreur suppression fichier PJ ${pj.name} (Action ${actionRef}): ${e.message}`); fileErrors++; } else { console.log(`Fichier PJ ${pj.name} (Action ${actionRef}) non trouvé.`); } }) );
                              } } }
                      await Promise.allSettled(deletePromises);
                      if (deletedFileCount > 0) displayMessage(`${deletedFileCount} fichier(s) PJ supprimé(s) du disque.`, "info");
+                     if (preservedCount > 0) displayMessage(`${preservedCount} fichier(s) PJ conservé(s) : utilisé(s) par un autre projet.`, "info");
                      if (fileErrors > 0) displayMessage(`Erreur lors de la tentative de suppression de ${fileErrors} fichier(s) PJ (voir console).`, "warning");
                  } else { if (Object.keys(attachmentsToDelete).length > 0) { displayMessage("Permission refusée pour le dossier PJ. Fichiers non supprimés.", "warning"); } }
             } else if (Object.keys(attachmentsToDelete).length > 0) { console.warn("Dossier PJ principal non défini."); }
