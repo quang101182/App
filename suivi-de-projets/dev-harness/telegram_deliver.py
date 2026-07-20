@@ -68,11 +68,12 @@ def send_message(text: str):
 
 import urllib.parse  # noqa: E402
 
-CAPTION = """📎 <b>Suivi de Projets — Refonte visionneuse Pièces Jointes</b>
+CAPTION = """🛠 <b>Suivi de Projets — Correction des bugs de création / changement de projet</b>
 
-Homonymes acceptés + anti-latence VPN (cache) + navigation Préc/Suiv + lecture vidéo/audio + bouton Retour galerie.
+⚠️ <b>À faire AVANT de t'en servir : copie ton dossier Backup réseau.</b>
 
-Détail dans le message suivant. GitHub : <code>quang101182/App</code> main (commit d9d581a)."""
+6 correctifs + les 3 boutons « Fonctions avancées » enfin implémentés.
+Détail dans le message suivant. GitHub : <code>quang101182/App</code> main (commits 48bf185 + a78c583)."""
 
 
 def main():
@@ -84,27 +85,42 @@ def main():
         sys.exit(1)
 
     note = (
-        "📝 <b>Détail — Refonte Pièces Jointes</b>\n\n"
-        "<b>A — Doublons de nom</b>\n"
-        "• Un fichier de même nom est désormais ACCEPTÉ et renommé auto (photo.png → photo_1.png)\n"
-        "• Le dossier PJ étant partagé, l'unicité reste garantie au moment de l'enregistrement\n"
-        "• Seul un vrai re-clic du MÊME fichier (nom+taille+date) est ignoré\n\n"
-        "<b>B — Latence réseau / VPN</b>\n"
-        "• Cache : chaque PJ n'est lue qu'une seule fois depuis le réseau\n"
-        "• Galerie qui s'ouvre instantanément (vignettes chargées en parallèle)\n"
-        "• Préchargement des PJ voisines pour une navigation fluide\n"
-        "• Fuite mémoire d'origine corrigée\n\n"
-        "<b>C — Navigation</b>\n"
-        "• Boutons Précédent / Suivant + flèches clavier ← →\n"
-        "• Compteur « 2 / 5 — nom-du-fichier », bouclage aux extrémités\n\n"
-        "<b>D — Vidéo / audio</b>\n"
-        "• Lecture directe dans l'app (lecteur intégré) pour mp4, webm, audio…\n"
-        "• MOV iPhone : lu si H.264 ; si codec non supporté (HEVC) → bouton « Télécharger pour lire »\n\n"
-        "<b>+ Bouton « Retour galerie »</b>\n"
-        "• Permanent en aperçu : marche pour vidéo / PDF / audio (plus seulement l'image)\n\n"
-        "<b>Tests live</b> : Playwright Edge headless, vraies vidéos (MP4 & MOV) lues in-app, 0 erreur.\n"
-        "Sauvegardes et noms de fichiers/verrous : format inchangé.\n\n"
-        "Tout retour bienvenu — on ajuste."
+        "📝 <b>Détail — ce qui était cassé et ce qui est corrigé</b>\n\n"
+        "<b>1. « Le fichier disparaît, ça passe en lecture seule »</b>\n"
+        "• Cause : à la création d'un projet, son fichier verrou n'était jamais créé. "
+        "L'app se croyait en édition, puis sa surveillance (60 s) ne trouvait pas le verrou "
+        "et concluait qu'un collègue avait pris la main.\n"
+        "• Le message « (fichier disparu) » venait de l'app : rien n'avait disparu.\n"
+        "• Corrigé : le verrou est pris à la création. Vérifié : plus aucune bascule après 65 s.\n\n"
+        "<b>2. Les thématiques d'un autre projet qui s'affichent</b>\n"
+        "• Cause : la sauvegarde automatique lisait le nom du fichier et les données à deux "
+        "instants différents, séparés par des accès disque. En changeant de projet pendant "
+        "ce laps de temps, les données d'un projet partaient dans le fichier d'un autre.\n"
+        "• ⚠️ Et le projet d'origine se retrouvait avec une sauvegarde VIDE : il y avait "
+        "perte de données, pas seulement un affichage trompeur.\n"
+        "• Corrigé : sauvegarde atomique, abandonnée si le projet change en cours de route.\n\n"
+        "<b>3. Danger caché : la suppression d'un projet</b>\n"
+        "• Le dossier PJ est partagé et la suppression se fait par nom de fichier. "
+        "Supprimer un projet « contaminé » effaçait les pièces jointes d'un AUTRE projet, "
+        "définitivement. Ton intuition de ne pas y toucher était la bonne.\n"
+        "• Corrigé : tout fichier encore utilisé par un autre projet est conservé.\n\n"
+        "<b>4-6.</b> Sauvegarde locale de l'ancien projet qui était annulée · identité du "
+        "projet inscrite dans chaque sauvegarde (une sauvegarde étrangère est refusée au lieu "
+        "d'être affichée en silence) · indicateur de chargement dès le début du changement de projet.\n\n"
+        "<b>⚙️ Fonctions avancées (Réglages)</b> — elles n'avaient jamais été écrites :\n"
+        "• <b>Exporter</b> : archive JSON de tous les projets du domaine\n"
+        "• <b>Importer</b> : recrée des projets, sans jamais écraser un existant\n"
+        "• <b>Réparer</b> : analyse de cohérence + rapport détaillé\n"
+        "Audit complet : 82 boutons vérifiés, ces 3 étaient les seuls morts.\n\n"
+        "<b>🚨 Important — le correctif ne répare PAS l'existant</b>\n"
+        "Il empêche que ça se reproduise. Tes 2 projets neufs restent contaminés.\n"
+        "1) Copie ton dossier Backup réseau (la rotation à 10 sauvegardes peut purger les bonnes versions)\n"
+        "2) Récupère une sauvegarde antérieure saine via le sélecteur « Sauvegarde »\n"
+        "3) Tu peux ensuite supprimer les projets neufs sans risque pour tes PJ\n\n"
+        "<b>Tests</b> : chaque bug reproduit en live AVANT correction, revérifié APRÈS. "
+        "Le test de suppression échoue sur l'ancienne version et passe sur la nouvelle.\n"
+        "Format des sauvegardes, noms de fichiers et verrous : inchangés.\n\n"
+        "Non testé : vrai partage réseau et deux postes simultanés. Dis-moi ce que ça donne."
     )
     print("[telegram] envoi note...")
     res_msg = send_message(note)
