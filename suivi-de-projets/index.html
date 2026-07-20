@@ -5753,10 +5753,212 @@ function renderDescStatusPill(action) {
     function remplacerBoutonsDansTableaux() { const svgEdit = '<svg class="icon-edit" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>'; const svgDelete = '<svg class="icon-delete" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>'; const replaceButton = (btn, newClass, svgIcon) => { if (btn.classList.contains('btn-icon')) return; const onClick = btn.getAttribute('onclick'); const isDisabled = btn.disabled; const currentOpacity = btn.style.opacity; const newBtn = document.createElement('button'); newBtn.className = newClass; newBtn.setAttribute('onclick', onClick); newBtn.innerHTML = svgIcon; if (isDisabled) { newBtn.disabled = true; newBtn.style.opacity = currentOpacity || '0.5'; } if (btn.parentNode) { btn.parentNode.replaceChild(newBtn, btn); } }; document.querySelectorAll('#projects-list button, #actions-list button').forEach(btn => { if (btn.textContent === 'M') replaceButton(btn, 'btn-icon btn-edit', svgEdit); else if (btn.textContent === 'S') replaceButton(btn, 'btn-icon btn-delete', svgDelete); }); }
     function verifierCoherenceDonnees() { let changements = false; const projetsIds = projects.map(p => p.id); const actionsOrphelines = actions.filter(a => !projetsIds.includes(a.projectId)); if (actionsOrphelines.length > 0) { console.warn(`${actionsOrphelines.length} actions orphelines supprimées`); actions = actions.filter(a => projetsIds.includes(a.projectId)); changements = true; actionsOrphelines.forEach(action => { if (action.hasAttachments && attachments[action.id]) { delete attachments[action.id]; } }); } projects.forEach(projet => { let mod = false; if (!projet.prefix || typeof projet.prefix !== 'string' || projet.prefix.length < 2 || projet.prefix.length > 4) { projet.prefix = "PRJ"; mod = true; } if (!projet.numSequentiel || isNaN(projet.numSequentiel)) { projet.numSequentiel = projet.id; mod = true; } if (!projet.numeroRef || typeof projet.numeroRef !== 'string') { projet.numeroRef = genererNumeroProjet(projet.prefix, projet.numSequentiel); mod = true; } if (mod) changements = true; }); actions.forEach(action => { let mod = false; const projet = projects.find(p => p.id === action.projectId); if (projet) { if (!action.numSequentiel || isNaN(action.numSequentiel)) { if (!projectCounters[action.projectId]) projectCounters[action.projectId] = 1; action.numSequentiel = projectCounters[action.projectId]++; mod = true; } if (!action.numeroRef || typeof action.numeroRef !== 'string') { action.numeroRef = genererNumeroAction(projet.prefix, projet.numSequentiel, action.numSequentiel); mod = true; } } if (mod) changements = true; }); projects.forEach(projet => { if (!projectCounters[projet.id]) { const count = actions.filter(a => a.projectId === projet.id).length; projectCounters[projet.id] = count + 1; changements = true; } }); Object.keys(projectCounters).forEach(id => { const projectId = parseInt(id); if (!projetsIds.includes(projectId)) { delete projectCounters[projectId]; changements = true; } }); if (changements) { console.log("Modifications de cohérence appliquées"); sauvegarderDonneesLocal(); return true; } return false; }
 
-    // Advanced Profile Functions
-    async function exporterTousProfils() { displayMessage("Fonction non implémentée.", "info"); }
-    async function importerProfil() { displayMessage("Fonction non implémentée.", "info"); }
-    function reparerTousProfils() { displayMessage("Fonction non implémentée.", "info"); }
+    // ──────────────────────────────────────────────────────────────────────────────
+    // Fonctions avancées (Réglages) — implémentées le 20/07/2026.
+    // Elles n'étaient que des messages "Fonction non implémentée" depuis l'origine.
+    // ──────────────────────────────────────────────────────────────────────────────
+
+    const FORMAT_EXPORT_DOMAINE = 'suivi-projets/export-domaine@1';
+
+    // Récupère les données d'un projet : d'abord le poste local, sinon sa dernière
+    // sauvegarde réseau (un projet jamais ouvert ici n'a rien en localStorage).
+    async function lireDonneesProjet(profileId, backupHandle) {
+        const p = `profile_C${activeConfig}_${profileId}_`;
+        const lire = (cle, defaut) => { try { const v = localStorage.getItem(p + cle); return v ? JSON.parse(v) : defaut; } catch (e) { return defaut; } };
+        const local = {
+            projects: lire('projects', []), actions: lire('actions', []),
+            attachments: lire('attachments', {}), projectCounters: lire('projectCounters', {}),
+            activityLog: lire('activityLog', []),
+            nextProjectId: parseInt(localStorage.getItem(p + 'nextProjectId'), 10) || 1,
+            nextActionId: parseInt(localStorage.getItem(p + 'nextActionId'), 10) || 1
+        };
+        if ((local.projects || []).length > 0 || (local.actions || []).length > 0) return { source: 'local', ...local };
+
+        if (backupHandle) {
+            try {
+                const prefixe = `backup_C${activeConfig}_${profileId}_`;
+                let dernier = null;
+                for await (const e of backupHandle.values()) {
+                    if (e.kind === 'file' && e.name.startsWith(prefixe) && e.name.endsWith('.json')) {
+                        if (!dernier || e.name > dernier.name) dernier = e;
+                    }
+                }
+                if (dernier) {
+                    const d = JSON.parse(await (await dernier.getFile()).text());
+                    return { source: dernier.name,
+                             projects: Array.isArray(d.projects) ? d.projects : [],
+                             actions: Array.isArray(d.actions) ? d.actions : [],
+                             attachments: (d.attachments && typeof d.attachments === 'object') ? d.attachments : {},
+                             projectCounters: (d.projectCounters && typeof d.projectCounters === 'object') ? d.projectCounters : {},
+                             activityLog: Array.isArray(d.activityLog) ? d.activityLog : [],
+                             nextProjectId: d.nextProjectId || 1, nextActionId: d.nextActionId || 1 };
+                }
+            } catch (e) { console.warn(`Lecture réseau impossible pour ${profileId}:`, e); }
+        }
+        return { source: 'vide', ...local };
+    }
+
+    // Archive TOUS les projets du domaine dans un seul fichier JSON téléchargé.
+    // Strictement en lecture : ne modifie ni le disque réseau, ni les verrous.
+    async function exporterTousProfils() {
+        if (!Array.isArray(projectSaveList) || projectSaveList.length === 0) {
+            displayMessage("Aucun projet à exporter dans ce domaine.", "warning"); return;
+        }
+        showLoading("Export de tous les projets du domaine...");
+        try {
+            sauvegarderDonneesLocal(true);   // le projet courant doit être à jour dans l'archive
+            const backupHandle = getActiveBackupDirHandle();
+            const profils = [];
+            for (const p of projectSaveList) {
+                updateLoadingMessage(`Export : ${p.name}...`);
+                const d = await lireDonneesProjet(p.id, backupHandle);
+                profils.push({ id: p.id, name: p.name, source: d.source, donnees: {
+                    projects: d.projects, actions: d.actions, attachments: d.attachments,
+                    projectCounters: d.projectCounters, activityLog: d.activityLog,
+                    nextProjectId: d.nextProjectId, nextActionId: d.nextActionId } });
+            }
+            const archive = {
+                format: FORMAT_EXPORT_DOMAINE, exportedAt: new Date().toISOString(),
+                exportedBy: utilisateurActuel, domaine: activeConfig,
+                domaineName: configNames[activeConfig] || `Domaine ${activeConfig}`,
+                profils
+            };
+            const nomFichier = `export_domaine${activeConfig}_${getLocalIsoString(new Date())}.json`;
+            const url = URL.createObjectURL(new Blob([JSON.stringify(archive, null, 2)], { type: 'application/json' }));
+            const a = document.createElement('a');
+            a.href = url; a.download = nomFichier; document.body.appendChild(a); a.click();
+            document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 5000);
+            const totalActions = profils.reduce((n, p) => n + (p.donnees.actions || []).length, 0);
+            logActivity('Système', `Export du domaine : ${profils.length} projet(s), ${totalActions} action(s) → ${escapeHtml(nomFichier)}.`);
+            afficherJournalActivite();
+            displayMessage(`Export réussi : ${profils.length} projet(s), ${totalActions} action(s) → ${nomFichier}`, "success");
+        } catch (e) {
+            console.error("Erreur export domaine:", e);
+            displayMessage(`Erreur lors de l'export : ${e.message}`, "error");
+        } finally { hideLoading(); }
+    }
+
+    // Importe un ou plusieurs projets depuis une archive (ou une sauvegarde unitaire).
+    // Crée TOUJOURS de nouveaux projets : aucun projet existant n'est modifié ni écrasé.
+    async function importerProfil() {
+        const input = document.createElement('input');
+        input.type = 'file'; input.accept = 'application/json,.json';
+        input.style.display = 'none'; document.body.appendChild(input);
+        input.onchange = async () => {
+            const fichier = input.files && input.files[0];
+            document.body.removeChild(input);
+            if (!fichier) return;
+            showLoading(`Import de "${fichier.name}"...`);
+            try {
+                const data = JSON.parse(await fichier.text());
+                // Deux entrées acceptées : archive de domaine, ou sauvegarde d'un seul projet.
+                let aImporter = [];
+                if (data && data.format === FORMAT_EXPORT_DOMAINE && Array.isArray(data.profils)) {
+                    aImporter = data.profils.map(p => ({ name: p.name, donnees: p.donnees }));
+                } else if (data && (Array.isArray(data.projects) || Array.isArray(data.actions))) {
+                    aImporter = [{ name: data.profileName || fichier.name.replace(/\.json$/i, ''), donnees: data }];
+                } else {
+                    displayMessage("Fichier non reconnu : ce n'est ni une archive de domaine, ni une sauvegarde de projet.", "error");
+                    return;
+                }
+                if (!confirm(`Importer ${aImporter.length} projet(s) dans le domaine "${configNames[activeConfig] || activeConfig}" ?\n\n` +
+                             aImporter.map(p => `• ${p.name}`).join('\n') +
+                             `\n\nDe NOUVEAUX projets seront créés. Aucun projet existant ne sera modifié.`)) return;
+
+                if (!Array.isArray(projectSaveList)) projectSaveList = [];
+                const crees = [];
+                for (const p of aImporter) {
+                    // Nom unique : la création manuelle refuse déjà les doublons.
+                    let nom = (p.name || 'Projet importé').trim(); let n = 2;
+                    while (projectSaveList.some(x => x.name.toLowerCase() === nom.toLowerCase())) { nom = `${p.name} (${n++})`; }
+                    const id = 'prof_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+                    projectSaveList.push({ id, name: nom, timestamp: new Date().toISOString() });
+                    const d = p.donnees || {};
+                    const pref = `profile_C${activeConfig}_${id}_`;
+                    localStorage.setItem(pref + 'projects', JSON.stringify(Array.isArray(d.projects) ? d.projects : []));
+                    localStorage.setItem(pref + 'actions', JSON.stringify(Array.isArray(d.actions) ? d.actions : []));
+                    localStorage.setItem(pref + 'attachments', JSON.stringify((d.attachments && typeof d.attachments === 'object') ? d.attachments : {}));
+                    localStorage.setItem(pref + 'projectCounters', JSON.stringify((d.projectCounters && typeof d.projectCounters === 'object') ? d.projectCounters : {}));
+                    localStorage.setItem(pref + 'activityLog', JSON.stringify(Array.isArray(d.activityLog) ? d.activityLog : []));
+                    localStorage.setItem(pref + 'nextProjectId', String(d.nextProjectId || 1));
+                    localStorage.setItem(pref + 'nextActionId', String(d.nextActionId || 1));
+                    crees.push(nom);
+                }
+                await saveProfilesForActiveConfig();
+                localStorage.setItem('projectSaveList', JSON.stringify(projectSaveList));
+                updateProjectSaveSelect();
+                logActivity('Système', `Import : ${crees.length} projet(s) créé(s) depuis ${escapeHtml(fichier.name)}.`);
+                afficherJournalActivite();
+                displayMessage(`${crees.length} projet(s) importé(s) : ${crees.join(', ')}. Sélectionnez-en un pour le charger.`, "success");
+            } catch (e) {
+                console.error("Erreur import:", e);
+                displayMessage(`Erreur lors de l'import : ${e.message}`, "error");
+            } finally { hideLoading(); }
+        };
+        input.click();
+    }
+
+    // Analyse la cohérence de TOUS les projets du domaine, puis répare après validation.
+    // N'agit que sur les données locales de ce poste : réparer un projet sur le réseau
+    // exigerait d'en prendre le verrou, donc d'interférer avec un collègue qui l'édite.
+    async function reparerTousProfils() {
+        if (!Array.isArray(projectSaveList) || projectSaveList.length === 0) {
+            displayMessage("Aucun projet à analyser dans ce domaine.", "warning"); return;
+        }
+        showLoading("Analyse de la cohérence des projets...");
+        // Sauvegarde de l'état courant : on réutilise verifierCoherenceDonnees(), qui
+        // travaille sur les variables globales. Tout est restauré à la fin, quoi qu'il arrive.
+        const etatInitial = { id: selectedProjectSaveId, projects, actions, attachments, projectCounters, activityLog, nextProjectId, nextActionId };
+        const rapport = [];
+        try {
+            sauvegarderDonneesLocal(true);
+            for (const p of projectSaveList) {
+                updateLoadingMessage(`Analyse : ${p.name}...`);
+                const avant = await lireDonneesProjet(p.id, null);   // local uniquement
+                if (avant.source === 'vide') { rapport.push({ nom: p.name, etat: 'jamais ouvert sur ce poste' }); continue; }
+                projects = avant.projects; actions = avant.actions; attachments = avant.attachments;
+                projectCounters = avant.projectCounters; activityLog = avant.activityLog;
+                nextProjectId = avant.nextProjectId; nextActionId = avant.nextActionId;
+                const nbActionsAvant = actions.length;
+                selectedProjectSaveId = p.id;                        // pour l'écriture localStorage
+                const corrige = verifierCoherenceDonnees();          // écrit si des corrections ont lieu
+                if (corrige) sauvegarderDonneesLocal(true);
+                const orphelines = nbActionsAvant - actions.length;
+                // Distinguer une vraie anomalie (données retirées) d'une simple remise en
+                // forme (compteur recalculé, référence regénérée) : annoncer "corrigé" pour
+                // un projet sain inquiéterait l'utilisateur sans raison.
+                const etat = orphelines > 0 ? 'anomalie corrigée' : (corrige ? 'normalisé' : 'sain');
+                rapport.push({ nom: p.name, etat, corrige, orphelines });
+            }
+        } catch (e) {
+            console.error("Erreur réparation:", e);
+            displayMessage(`Erreur pendant l'analyse : ${e.message}`, "error");
+        } finally {
+            // Restauration systématique du projet réellement ouvert.
+            selectedProjectSaveId = etatInitial.id;
+            projects = etatInitial.projects; actions = etatInitial.actions;
+            attachments = etatInitial.attachments; projectCounters = etatInitial.projectCounters;
+            activityLog = etatInitial.activityLog;
+            nextProjectId = etatInitial.nextProjectId; nextActionId = etatInitial.nextActionId;
+            chargerProjets(); chargerActions(); mettreAJourTableauDeBord();
+            mettreAJourListesProjets(); mettreAJourSelectFiltreProjet();
+            afficherJournalActivite();
+            hideLoading();
+        }
+        const anomalies = rapport.filter(r => r.orphelines > 0);
+        const modifies = rapport.filter(r => r.corrige);
+        const orphelines = anomalies.reduce((n, r) => n + r.orphelines, 0);
+        const detail = rapport.map(r => `• ${r.nom} : ${r.etat}` + (r.orphelines ? ` (${r.orphelines} action(s) orpheline(s) retirée(s))` : '')).join('\n');
+        alert(`RAPPORT DE COHÉRENCE — ${configNames[activeConfig] || 'Domaine ' + activeConfig}\n\n${detail}\n\n` +
+              (anomalies.length
+                 ? `${anomalies.length} projet(s) présentaient une anomalie (${orphelines} action(s) orpheline(s) retirée(s)).\n\n`
+                 : `Aucune anomalie : aucune donnée n'a été retirée.\n\n`) +
+              (modifies.length
+                 ? `${modifies.length} projet(s) remis en forme (compteurs/références). Ces corrections portent sur les données de CE POSTE : pour qu'elles arrivent sur le réseau, ouvrez chaque projet concerné et sauvegardez-le.`
+                 : `Aucune remise en forme nécessaire.`));
+        if (modifies.length) logActivity('Système', `Analyse de cohérence : ${modifies.length} projet(s) remis en forme, ${orphelines} action(s) orpheline(s) retirée(s).`);
+        displayMessage(`Analyse terminée : ${rapport.length} projet(s) analysé(s), ${anomalies.length} anomalie(s), ${modifies.length} remise(s) en forme.`, anomalies.length ? "warning" : "success");
+    }
 
     // Export (Combined PJ + CSV)
     async function exporterPJetCSV() {

@@ -26,7 +26,7 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parent.parent
 HARNESS = Path(__file__).resolve().parent
 CAPTURES = HARNESS / "captures"
-PORT = 8765
+PORT = 8781
 URL = f"http://127.0.0.1:{PORT}/index.html"
 
 MAX_SIDE = 1800
