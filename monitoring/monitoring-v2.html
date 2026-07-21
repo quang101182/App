@@ -21,6 +21,11 @@
       --dk: #2f80d8;
       --swp: #ec4899;
       --sv: #c77d0a;
+      /* Ondine (v2.19.0) — turquoise choisi PAR MESURE, pas à l'œil : contraste 9,36:1 sur --surface,
+         et un écart ΔE minimal de 15,4 contre --dk/--swp/--sv en simulation protanopie/deutéranopie/
+         tritanopie (Viénot 1999). Le bleu et le cyan sont le piège classique ici : #14b8a6 tombait à
+         ΔE 6 en CVD (confondu avec --dk), #2dd4bf tient. Ne pas « harmoniser » sans refaire la mesure. */
+      --ondine: #2dd4bf;
       --good: #22c55e;
       --warn: #f5b52e;
       --crit: #ef4444;
@@ -131,6 +136,9 @@
     .funnel-line { display: flex; align-items: center; gap: 10px; }
     .funnel-line .funnel-bar { flex: 1; }
     .funnel-conv { flex: 0 0 auto; min-width: 78px; color: var(--ink-faint); font-size: .76rem; text-align: right; white-space: nowrap; }
+    /* `white-space: normal` volontaire : cette note est plus longue qu'un « 42 % », elle doit pouvoir
+       revenir à la ligne à 360px au lieu d'élargir la ligne du funnel (= scroll horizontal). */
+    .funnel-conv.over { color: var(--ink-muted); white-space: normal; text-align: right; }
     .acq-detail { margin-top: 11px; color: var(--ink-muted); font-size: .8rem; }
     .acq-detail strong { color: var(--ink); }
     .acq-site { position: relative; overflow: hidden; margin-bottom: 14px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(160deg, var(--surface), #111622); }
@@ -490,6 +498,8 @@
     .st-chans { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0 5px; }
     .st-chan { padding: 1px 7px; border: 1px solid var(--chan, #888); border-radius: 5px; background: color-mix(in srgb, var(--chan, #888) 12%, transparent); color: var(--chan, #888); font-size: .66rem; font-weight: 600; }
     .st-chan.off { border-color: var(--line); background: transparent; color: var(--ink-muted); opacity: .45; }
+    .st-title { margin-top: 2px; color: var(--ink); font-size: .78rem; }
+    .st-pause-note { margin-top: 10px; padding: 9px 11px; border: 1px solid var(--line); border-left: 3px solid var(--ondine); border-radius: var(--radius-sm); background: var(--surface-soft); color: var(--ink-muted); font-size: .76rem; line-height: 1.45; }
     .st-meta { color: var(--ink-muted); font-size: .72rem; }
     .st-meta .mus { color: var(--ink-muted); }
     .st-backlog { margin-bottom: 8px; padding: 11px 14px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-soft); }
@@ -554,7 +564,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.18.0-acq-dl';
+    const VERSION = 'v2.19.0-ondine';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -610,9 +620,20 @@
 
     // ── P4 / Studio ─────────────────────────────────────────────────────────────
     // Planning tenu à la main (aucune API). Les couleurs viennent des tokens v2, pas des hex en dur de la prod.
-    const STUDIO_PROJECTS = { DictoKey: { color: 'var(--dk)' }, StoryVoice: { color: 'var(--sv)' }, 'SubWhisper Pro': { color: 'var(--swp)' } };
+    // `paused` (contexte Quang, 21/07) — les 3 premiers projets sont EN PAUSE VOLONTAIRE : « tout le reste a
+    // été mis en pause, c'est volontaire parce que ça n'a pas fonctionné ». Sans cette mention, un planning
+    // qui s'arrête au 30/06 se lit comme un abandon ou une panne — alors que c'est un arbitrage.
+    // Ondine est aujourd'hui le SEUL projet actif, et il bénéficie d'une règle exceptionnelle : la rotation
+    // « 70 % produit en alternance » ne s'applique pas à lui, sa série part en salve. Ne pas « rétablir »
+    // l'alternance sans que Quang l'ait redemandé.
+    const STUDIO_PROJECTS = {
+      Ondine: { color: 'var(--ondine)' },
+      DictoKey: { color: 'var(--dk)', paused: true },
+      StoryVoice: { color: 'var(--sv)', paused: true },
+      'SubWhisper Pro': { color: 'var(--swp)', paused: true }
+    };
     const STUDIO_CHANNELS = { tiktok: { label: 'TikTok', c: '#ff4d6d' }, instagram: { label: 'Instagram', c: '#e1306c' }, facebook: { label: 'Facebook', c: '#1877f2' } };
-    const STUDIO_UPDATED = '2026-06-29T20:38';   // bumper à CHAQUE édition du planning ci-dessous
+    const STUDIO_UPDATED = '2026-07-21T14:10';   // bumper à CHAQUE édition du planning ci-dessous
     const STUDIO_PERF_URL = 'data/analytics.json';
     const STUDIO_SCHEDULE = [
       { date: '2026-06-18', time: '19:30', project: 'DictoKey', lang: 'FR', channels: ['tiktok', 'instagram', 'facebook'], subs: false, music: null },
@@ -629,7 +650,21 @@
       { date: '2026-06-27', time: '21:00', project: 'StoryVoice', lang: 'FR', channels: ['tiktok'], subs: true, music: 'Better Times' },
       { date: '2026-06-29', time: '19:40', project: 'DictoKey', lang: 'FR', channels: ['tiktok'], subs: false, music: 'PlaceIt World' },
       { date: '2026-06-28', time: '19:15', project: 'DictoKey', lang: 'FR', channels: ['tiktok'], subs: false, music: 'PlaceIt World' },
-      { date: '2026-06-30', time: '19:15', project: 'DictoKey', lang: 'EN', channels: ['instagram', 'facebook'], subs: false, music: 'PlaceIt World' }
+      { date: '2026-06-30', time: '19:15', project: 'DictoKey', lang: 'EN', channels: ['instagram', 'facebook'], subs: false, music: 'PlaceIt World' },
+      // ── Série Ondine (21/07) — 6 types éditoriaux, 6 tournages distincts, tous QA 7/7.
+      // Le lane-split est respecté SANS effort : les 3 FR vont sur TikTok, les 3 EN sur IG+FB.
+      // `music: null` est VOLONTAIRE et vaut pour toute la série : le son se pose dans TikTok au
+      // moment de publier (une bande importée se fait couper par le fingerprinting).
+      // La 7e vidéo — « Identité posée » (24,6 s) — n'est PAS ici : elle partage son footage avec
+      // l'accroche du 22/07. Elle attend ≥2 semaines ou un nouveau tournage.
+      // `title` (nouveau) : sans lui, six cartes « Ondine · FR · TikTok » sont indistinguables — on ne
+      // saurait plus quelle vidéo part quel jour. Champ optionnel : les entrées d'avant n'en ont pas.
+      { date: '2026-07-22', time: '19:45', project: 'Ondine', lang: 'FR', channels: ['tiktok'], subs: true, music: null, title: 'Identité — accroche (22,0 s)' },
+      { date: '2026-07-23', time: '12:30', project: 'Ondine', lang: 'EN', channels: ['instagram', 'facebook'], subs: true, music: null, title: 'Rafale de création (20,5 s)' },
+      { date: '2026-07-24', time: '20:15', project: 'Ondine', lang: 'FR', channels: ['tiktok'], subs: true, music: null, title: 'Hologrammes (14,2 s)' },
+      { date: '2026-07-25', time: '19:15', project: 'Ondine', lang: 'EN', channels: ['instagram', 'facebook'], subs: true, music: null, title: 'Local-first (12,1 s)' },
+      { date: '2026-07-26', time: '12:15', project: 'Ondine', lang: 'FR', channels: ['tiktok'], subs: true, music: null, title: 'Photothèque (15,5 s)' },
+      { date: '2026-07-27', time: '20:30', project: 'Ondine', lang: 'EN', channels: ['instagram', 'facebook'], subs: true, music: null, title: 'Commandes en rafale (13,1 s)' }
     ];
     // `target` en clé de canal (pas 'TikTok' libre) : la prod compare 'TikTok' à des clés minuscules → le filtre ne mordait jamais.
     const STUDIO_BACKLOG = [
@@ -801,6 +836,8 @@
       swp: { name: 'SubWhisper Pro', url: 'https://sub-whisper.com/landing.html', color: 'var(--swp)', outMode: 'out',   outNote: 'vers checkout' },
       sv:  { name: 'StoryVoice',     url: 'https://storiesvoice.org',             color: 'var(--sv)',  outMode: 'out',   outNote: 'vers checkout / app' }
     };
+    // Dénominateur minimal pour OSER afficher un taux (même principe que FACTORY_MIN_DENOM).
+    const ACQ_MIN_DENOM = 30;
     function acqInt(value) { return parseInt(value) || 0; }
     function acqPct(n, d) { return (!d || d <= 0) ? '—' : `${Math.round((n / d) * 1000) / 10}%`; }
 
@@ -819,7 +856,12 @@
       let dlViewTotal = 0; const dlViewParts = [];
       const dlOsParts = [];
       Object.keys(bb).forEach(key => {
-        if (key.indexOf('dl_view:') === 0) { const v = acqInt(bb[key]); dlViewTotal += v; dlViewParts.push({ name: key.slice(8), v }); }
+        // 🐛 Corrigé le 21/07 : le préfixe cherché était `dl_view:` alors que TOUTES les clés du site sont
+        // préfixées `f:` (`beaconFunnel`, site/index.html:977 → `f:dl_view:win`). Le test ne mordait jamais.
+        // Conséquence : l'étape affichait « 0 » avec 4 ouvertures réelles en base, ET comme elle sert de
+        // dénominateur aux 2 étapes suivantes (`prev: dlViewTotal`), leurs taux tombaient à « — ».
+        // Un zéro affiché n'était pas une mesure — c'était une clé qui ne correspondait à rien.
+        if (key.indexOf('f:dl_view:') === 0) { const v = acqInt(bb[key]); dlViewTotal += v; dlViewParts.push({ name: key.slice(10), v }); }
         else if (key.indexOf('f:download:') === 0) { const v = acqInt(bb[key]); dlOsParts.push({ name: key.slice(11), v }); }
       });
       dlViewParts.sort((a, b) => b.v - a.v);
@@ -842,11 +884,28 @@
       const max = Math.max(1, vTot, demo, chat, cta, wait, dlViewTotal, unlock, dl, outTotal);
       const rows = steps.map(s => {
         const w = Math.max(2, Math.round((s.val / max) * 100));
-        const conv = s.prev == null ? '' : `<span class="funnel-conv">${acqPct(s.val, s.prev)} vs préc.</span>`;
+        // Une etape qui DEPASSE la precedente ne se rend pas en pourcentage : « 160 % de conversion »
+        // se lit comme un taux alors que les deux compteurs ne comptent pas la meme chose (ouvertures de
+        // modale vs CLICS sur l'installeur, repetables). On affiche les deux comptes bruts, sans %.
+        const conv = s.prev == null ? ''
+          : (s.val > s.prev
+            ? `<span class="funnel-conv over">${s.val} pour ${s.prev} — clics répétés, pas un taux</span>`
+            : `<span class="funnel-conv">${acqPct(s.val, s.prev)} vs préc.</span>`);
         return `<div class="funnel-step"><div class="funnel-meta"><strong>${safeText(s.label)} <span class="funnel-note">${safeText(s.note)}</span></strong><span>${s.val}</span></div><div class="funnel-line"><div class="funnel-bar"><i style="--bar-width:${w}%"></i></div>${conv}</div></div>`;
       }).join('');
       const detail = outParts.length ? `<div class="acq-detail">Détail sortants : ${outParts.map(o => `${safeText(o.name)} <strong>${o.v}</strong>`).join(' · ')}</div>` : '';
-      const recap = `<div class="kpi-grid acq-recap">${KpiTile('Visites', vTot, vToday > 0 ? `+${vToday} auj.` : '—')}${KpiTile('Waitlist', wait, 'emails captés')}${KpiTile('Téléchargements', dl, 'installeur Ondine')}${KpiTile('Clics sortants', outTotal, 'vers store/app')}</div>`;
+      // Ordre des tuiles (21/07) — « Clics sortants » passe EN TÊTE : si Ondine sert de vitrine aux autres
+      // apps, c'est LE chiffre qui dit si la vitrine fait entrer quelqu'un. Il était en dernier, et sa
+      // ventilation par app se lisait tout en bas du funnel.
+      // Le taux n'est affiché qu'au-dessus de 30 visites — même principe que FACTORY_MIN_DENOM : sous ce
+      // seuil, « 1,1 % » et « 0 % » sont le même non-résultat présenté avec l'autorité d'un pourcentage.
+      const outRate = vTot >= ACQ_MIN_DENOM ? `${acqPct(outTotal, vTot)} des visites` : `sur ${vTot} visite(s) — trop peu pour un taux`;
+      const outDest = outParts.length ? ` · ${outParts.map(o => `${o.name} ${o.v}`).join(' · ')}` : '';
+      // ⚠ « Téléchargements » compte des CLICS, pas des personnes : le gel étant actif, ce bouton n'existe
+      // qu'après un code débloqué — 8 clics pour 2 déblocages, donc au plus 2 testeurs. Ne pas le lire
+      // comme un nombre d'utilisateurs.
+      const dlNote = unlock > 0 ? `clics · ${unlock} code(s) débloqué(s)` : 'clics sur l’installeur';
+      const recap = `<div class="kpi-grid acq-recap">${KpiTile('Clics sortants', outTotal, safeText(outRate + outDest))}${KpiTile('Visites', vTot, vToday > 0 ? `+${vToday} auj.` : '—')}${KpiTile('Téléchargements', dl, dlNote)}${KpiTile('Waitlist', wait, 'emails captés')}</div>`;
       return `<div class="acq-hub-head"><h3>🌐 Hub — <a href="https://se7enai.com" target="_blank" rel="noopener">se7enai.com ↗</a></h3></div><p class="acq-hub-desc">Tête de pont (lien bio TikTok). Visite → démo → chat → CTA → waitlist → téléchargement → clic sortant.</p>${recap}<div class="acq-sub">Funnel d’acquisition du hub</div><div class="funnel">${rows}</div>${detail}`;
     }
     function renderAcqSites(data) {
@@ -2425,9 +2484,18 @@
         }).join('');
         const fmt = `Démo écran + voix off${p.subs ? ' + sous-titres' : ''}`;
         const mus = p.music ? ` <span class="mus">· 🎵 ${safeText(p.music)}</span>` : '';
-        return `<div class="st-card${x.past ? ' posted' : ''}" style="--proj:${pc}"><div class="st-date"><div class="d">${x.dt.getDate()}</div><div class="m">${STUDIO_MONTHS[x.dt.getMonth()]}</div><div class="t">${safeText(p.time)}</div></div><div class="st-body"><div class="st-row1"><span class="st-proj">${safeText(p.project)}</span><span class="st-lang">${safeText(p.lang)}</span><span class="st-status ${x.past ? 'posted' : 'sched'}">${x.past ? 'Publié' : 'Programmé'}</span></div><div class="st-chans">${chans}</div><div class="st-meta">${fmt}${mus}</div></div></div>`;
+        // `title` optionnel : six posts d'un même projet, même langue, même canal sont autrement
+        // impossibles à distinguer — on ne saurait pas laquelle des six vidéos part quel jour.
+        const ttl = p.title ? `<div class="st-title">${safeText(p.title)}</div>` : '';
+        return `<div class="st-card${x.past ? ' posted' : ''}" style="--proj:${pc}"><div class="st-date"><div class="d">${x.dt.getDate()}</div><div class="m">${STUDIO_MONTHS[x.dt.getMonth()]}</div><div class="t">${safeText(p.time)}</div></div><div class="st-body"><div class="st-row1"><span class="st-proj">${safeText(p.project)}</span><span class="st-lang">${safeText(p.lang)}</span><span class="st-status ${x.past ? 'posted' : 'sched'}">${x.past ? 'Publié' : 'Programmé'}</span></div>${ttl}<div class="st-chans">${chans}</div><div class="st-meta">${fmt}${mus}</div></div></div>`;
       };
       const lanes = STUDIO_LANES.map(l => `<div class="st-lane-row"><strong>${safeText(l.chan)}</strong><span class="arrow">→</span><span class="st-lang">${safeText(l.lang)}</span><span class="st-why">${safeText(l.why)}</span></div>`).join('');
+      // Sans cette note, un agenda vide entre le 30/06 et le 22/07 se lit comme un abandon ou une panne
+      // de production. C'est un arbitrage de Quang (21/07), donc une information — pas un trou.
+      const paused = Object.keys(STUDIO_PROJECTS).filter(p => STUDIO_PROJECTS[p].paused);
+      const pauseNote = paused.length
+        ? `<div class="st-pause-note"><b>${safeText(paused.join(', '))}</b> ${paused.length > 1 ? 'sont en pause volontaire' : 'est en pause volontaire'} — arrêt assumé, « ça n'a pas fonctionné ». <b style="color:var(--ondine)">Ondine</b> est le seul projet actif : sa série part en salve, la rotation entre produits ne s'applique pas.</div>`
+        : '';
       // Le backlog obéit aux 3 filtres, comme l'agenda (la prod ne lui applique que le projet → décocher TikTok laissait 3 items TikTok à l'écran).
       const backlogArr = STUDIO_BACKLOG.filter(b => studioFilters.project.has(b.project) && studioFilters.channel.has(b.target) && studioFilters.lang.has(b.lang));
       const backlog = backlogArr.map(b => {
@@ -2452,7 +2520,7 @@
       const p2s = n => String(n).padStart(2, '0');
       const suStale = now.getTime() - su.getTime() > 3 * 86400000;
       const banner = `<div class="st-planning-bar${suStale ? ' stale' : ''}"><span class="fb-ic">🎬</span><span>Planning tenu à la main — dernière édition le <b>${p2s(su.getDate())}/${p2s(su.getMonth() + 1)}/${su.getFullYear()} à ${p2s(su.getHours())}:${p2s(su.getMinutes())}</b> (${relativeTime(su)})${suStale ? ' — <b>périmé (&gt; 3 j)</b>' : ''}</span></div>`;
-      return `${banner}<div class="st-stats kpi-grid">${KpiTile('Prochain', nextTxt, upcoming.length ? 'post visible le plus proche' : 'aucun post à venir')}${KpiTile('7 prochains jours', wk, 'fenêtre glissante, pas la semaine calendaire')}${KpiTile('À venir', upcoming.length, 'après filtres')}</div>${renderStudioPerf(data)}${Panel('studio-lanes', '📡 Stratégie par canal', `<div class="st-lane">${lanes}</div>`, true)}${fbar}<div class="st-agenda">${agenda}</div><p class="st-foot">Planning éditorial — les chiffres des plateformes viennent du seul rollup TikTok ci-dessus.</p>`;
+      return `${banner}<div class="st-stats kpi-grid">${KpiTile('Prochain', nextTxt, upcoming.length ? 'post visible le plus proche' : 'aucun post à venir')}${KpiTile('7 prochains jours', wk, 'fenêtre glissante, pas la semaine calendaire')}${KpiTile('À venir', upcoming.length, 'après filtres')}</div>${renderStudioPerf(data)}${Panel('studio-lanes', '📡 Stratégie par canal', `<div class="st-lane">${lanes}</div>${pauseNote}`, true)}${fbar}<div class="st-agenda">${agenda}</div><p class="st-foot">Planning éditorial — les chiffres des plateformes viennent du seul rollup TikTok ci-dessus.</p>`;
     }
 
     function renderApp(app, data) {

@@ -6,6 +6,36 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.19.0-ondine — 21/07/2026 · Ondine entre au Studio, et un funnel qui ne mesurait rien
+
+**Studio** — Ondine devient un projet de plein droit (couleur `--ondine` `#2dd4bf`, choisie **par mesure** :
+contraste 9,36:1 sur la surface, ecart DeltaE minimal 15,4 contre --dk/--swp/--sv en simulation
+protanopie/deuteranopie/tritanopie ; #14b8a6 tombait a 6 = confondu avec DictoKey). Sa serie de 6 videos
+est au planning du 22 au 27/07 : 3 FR sur TikTok, 3 EN sur Instagram+Facebook, conformement au lane-split.
+
+Deux ajouts nes du contenu lui-meme :
+- champ `title` optionnel sur les entrees de planning — six cartes « Ondine · FR · TikTok » etaient
+  autrement indistinguables, on ne savait pas quelle video partait quel jour ;
+- mention de **pause volontaire** sur DictoKey / StoryVoice / SubWhisper Pro (arbitrage Quang du 21/07).
+  Sans elle, un agenda vide du 30/06 au 22/07 se lit comme un abandon ou une panne de production.
+
+**Acquisition — un bug qui affichait un zero pour une cle qui n'existait pas.** L'etape « Modale DL
+ouverte » cherchait les compteurs sous le prefixe `dl_view:` alors que le site les emet TOUS prefixes
+`f:` (`beaconFunnel`, site/index.html:977 → `f:dl_view:win`). Elle affichait donc **0 avec 4 ouvertures
+reelles en base**, et comme elle sert de denominateur aux deux etapes suivantes, « Code debloque » et
+« Telechargement » n'avaient plus de taux du tout.
+
+**Acquisition — le KPI vitrine passe en tete.** Si Ondine sert de vitrine aux autres apps, « Clics
+sortants » est le chiffre qui dit si la vitrine fait entrer quelqu'un : il etait en derniere position,
+sa ventilation par app noyee en bas du funnel. Il ouvre desormais le recap, avec son taux (affiche
+seulement au-dessus de `ACQ_MIN_DENOM = 30` visites) et sa destination.
+Etat au 21/07 : **1 clic sortant pour 94 visites**.
+
+La tuile « Telechargements » porte enfin sa vraie nature : elle compte des **clics**, pas des personnes
+— le gel etant actif, ce bouton n'existe qu'apres un code debloque (8 clics pour 2 deblocages).
+
+---
+
 ## v2.18.0-acq-dl — 19/07/2026 · Le téléchargement Ondine devient mesurable
 
 Le CTA du site est passé de « accès anticipé » à « Télécharger » (release publique), mais
