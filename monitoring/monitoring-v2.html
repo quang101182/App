@@ -564,7 +564,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.19.2-ondine';
+    const VERSION = 'v2.20.0-ondine';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -726,7 +726,13 @@
         calls.push(fetch(`${ACQ_GATEWAY}/api/click?page=${slug}`, { signal }).then(r => r.json()).catch(() => ({ total: 0, today: 0, by_btn_all: {} })));
       });
       const r = await Promise.all(calls);
-      return { se7: { visit: r[0], clicks: r[1] }, dk: { visit: r[2], clicks: r[3] }, swp: { visit: r[4], clicks: r[5] }, sv: { visit: r[6], clicks: r[7] }, generatedAt: Date.now() };
+      // v2.20.0 (25/07) : la tuile Leads lit le KV du worker se7enai (source de
+      // vérité) — la tuile « waitlist » ne comptait que les beacons navigateur
+      // (bloquables) : 4 affichés vs 7 leads réels. Endpoint public, compteurs
+      // anonymes uniquement, cache 5 min côté worker.
+      const leads = await fetch('https://se7enai-chat.quang101182.workers.dev/api/leads_stats', { signal })
+        .then(r => r.json()).catch(() => null);
+      return { se7: { visit: r[0], clicks: r[1], leads }, dk: { visit: r[2], clicks: r[3] }, swp: { visit: r[4], clicks: r[5] }, sv: { visit: r[6], clicks: r[7] }, generatedAt: Date.now() };
     }
 
     // P2 — Home : fetch léger des agrégats publics (mêmes compteurs que la vue Acquisition).
@@ -877,7 +883,7 @@
         { label: '🎬 Interaction démo', val: demo, prev: vTot, note: 'capacité jouée' },
         { label: '💬 Engagement chat', val: chat, prev: vTot, note: 'question posée à Halo' },
         { label: '✨ Clic CTA', val: cta, prev: vTot, note: 'accès anticipé / sur-mesure / soutien' },
-        { label: '📧 Waitlist envoyée', val: wait, prev: cta, note: 'email laissé' },
+        { label: '📧 Waitlist envoyée', val: wait, prev: cta, note: 'soumissions trackées (le détail KV est dans la tuile Leads)' },
         { label: '📥 Modale DL ouverte', val: dlViewTotal, prev: vTot, note: osNote(dlViewParts) },
         { label: '🔓 Code débloqué', val: unlock, prev: dlViewTotal, note: 'testeurs (ère du gel)' },
         { label: '⬇ Téléchargement', val: dl, prev: dlViewTotal, note: osNote(dlOsParts) },
@@ -907,7 +913,16 @@
       // qu'après un code débloqué — 8 clics pour 2 déblocages, donc au plus 2 testeurs. Ne pas le lire
       // comme un nombre d'utilisateurs.
       const dlNote = unlock > 0 ? `clics · ${unlock} code(s) débloqué(s)` : 'clics sur l’installeur';
-      const recap = `<div class="kpi-grid acq-recap">${KpiTile('Clics sortants', outTotal, safeText(outRate + outDest))}${KpiTile('Visites', vTot, vToday > 0 ? `+${vToday} auj.` : '—')}${KpiTile('Téléchargements', dl, dlNote)}${KpiTile('Waitlist', wait, 'emails captés')}</div>`;
+      // v2.20.0 (25/07, demande Quang) : la tuile « Waitlist » (beacons, 4 au
+      // compteur alors que 7 leads réels) devient « Leads » lue dans le KV —
+      // total, ventilation par voie, accusés automatiques, en attente de réponse.
+      const leads = (se7 && se7.leads) || null;
+      const bt = (leads && leads.by_type) || { early: 0, custom: 0, support: 0 };
+      const leadsNote = leads && leads.ok
+        ? `accès ${bt.early} · sur-mesure ${bt.custom} · soutien ${bt.support} · accusés auto ${leads.acks_sent} · en attente ${leads.awaiting}`
+        : 'stats indisponibles (worker)';
+      const leadsVal = leads && leads.ok ? leads.total : '—';
+      const recap = `<div class="kpi-grid acq-recap">${KpiTile('Clics sortants', outTotal, safeText(outRate + outDest))}${KpiTile('Visites', vTot, vToday > 0 ? `+${vToday} auj.` : '—')}${KpiTile('Téléchargements', dl, dlNote)}${KpiTile('Leads', leadsVal, safeText(leadsNote))}</div>`;
       return `<div class="acq-hub-head"><h3>🌐 Hub — <a href="https://se7enai.com" target="_blank" rel="noopener">se7enai.com ↗</a></h3></div><p class="acq-hub-desc">Tête de pont (lien bio TikTok). Visite → démo → chat → CTA → waitlist → téléchargement → clic sortant.</p>${recap}<div class="acq-sub">Funnel d’acquisition du hub</div><div class="funnel">${rows}</div>${detail}`;
     }
     function renderAcqSites(data) {
