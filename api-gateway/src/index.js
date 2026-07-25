@@ -44,7 +44,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
-const VERSION = '1.54';
+const VERSION = '1.55';
 
 // v1.53 — la constante CLAUDE_FALLBACK_MODEL a été SUPPRIMÉE avec le fallback silencieux
 // qu'elle servait (voir proxyClaude) : le gateway ne substitue plus jamais un modèle.
@@ -202,6 +202,7 @@ export default {
         if (path.startsWith('/api/gemini'))   return await proxyGemini(request, env, path);
         if (path.startsWith('/api/gcptts'))   return await proxyGcpTts(request, env, path);
         if (path === '/api/groq')             return await proxyGroq(request, env);
+        if (path === '/api/tavily')           return await proxyTavily(request, env);
         if (path === '/api/openai')           return await proxyOpenai(request, env);
         if (path === '/api/fal')              return await proxyFal(request, env);
         if (path === '/api/deepl')            return await proxyDeepl(request, env);
@@ -648,6 +649,25 @@ async function proxyGroq(request, env) {
 
   const apiPath  = safeApiPath(request, '/openai/v1/chat/completions');
   const upstream = `https://api.groq.com${apiPath}`;
+  return proxyRequest(request, upstream, { 'Authorization': `Bearer ${apiKey}` });
+}
+
+/**
+ * POST /api/tavily → https://api.tavily.com/search
+ *
+ * v1.55 — Recherche web pour les moteurs qui n'en ont pas nativement.
+ * Claude a `web_search` en tool serveur Anthropic ; DeepSeek, Kimi, Groq,
+ * Mistral, GLM et OpenAI n'ont aucun équivalent — d'où le « mode dégradé »
+ * de Jarvis, où basculer de cerveau faisait perdre la recherche web.
+ * Body Tavily : { query, max_results?, search_depth?, include_answer? }.
+ * Auth: Bearer TAVILY_KEY (KV), jamais côté client.
+ */
+async function proxyTavily(request, env) {
+  const apiKey = await resolveKey(env, 'TAVILY_KEY');
+  if (!apiKey) return jsonResponse({ error: 'TAVILY_KEY not configured' }, 503);
+
+  const apiPath  = safeApiPath(request, '/search');
+  const upstream = `https://api.tavily.com${apiPath}`;
   return proxyRequest(request, upstream, { 'Authorization': `Bearer ${apiKey}` });
 }
 
