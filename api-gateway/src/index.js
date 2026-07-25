@@ -44,10 +44,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
-const VERSION = '1.52';
+const VERSION = '1.54';
 
-// v1.40 — modèle Claude de repli si le modèle demandé est retiré (404) — voir proxyClaude
-const CLAUDE_FALLBACK_MODEL = 'claude-sonnet-4-6';
+// v1.53 — la constante CLAUDE_FALLBACK_MODEL a été SUPPRIMÉE avec le fallback silencieux
+// qu'elle servait (voir proxyClaude) : le gateway ne substitue plus jamais un modèle.
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin' : '*',
@@ -518,23 +518,25 @@ async function proxyClaude(request, env, path) {
     body   : body.byteLength > 0 ? body : undefined,
   });
 
-  // v1.40 — Fallback modèle : si le modèle demandé est retiré/inconnu (404
-  // not_found_error), on retente UNE fois avec un modèle sûr courant au lieu de
-  // renvoyer une erreur silencieuse au client. Évite la panne différée quand
-  // Anthropic retire un modèle codé en dur côté app.
-  if (upstreamResp.status === 404 && body.byteLength > 0) {
+  // v1.53 — LE FALLBACK SILENCIEUX EST SUPPRIMÉ. La v1.40 substituait ici un modèle de
+  // repli et rejouait l'appel : le client recevait un 200 produit par un AUTRE modèle,
+  // sans le savoir. Mandat Quang (règle stable depuis le 22/05, étendue aux moteurs LLM
+  // le 08/07) : « il préfère que le système ne fonctionne plus du tout plutôt qu'un
+  // fallback qui déraille ». Sur une app finement tunée, un moteur substitué en douce est
+  // invisible et destructeur — pire qu'une panne franche, qui elle se voit et se répare.
+  // Décision prise le 25/07/2026, au lendemain du retrait de `deepseek-chat` par DeepSeek.
+  //
+  // À la place : la panne reste ENTIÈRE, mais on la NOMME dans un en-tête de diagnostic,
+  // pour que la cause se lise en trois secondes au lieu d'une session entière.
+  let diag = null;
+  if ((upstreamResp.status === 404 || upstreamResp.status === 400) && body.byteLength > 0) {
     try {
       const reqJson = JSON.parse(new TextDecoder().decode(body));
-      if (reqJson && reqJson.model && reqJson.model !== CLAUDE_FALLBACK_MODEL) {
-        reqJson.model = CLAUDE_FALLBACK_MODEL;
-        const retryResp = await fetch(upstream, {
-          method : request.method,
-          headers: forwardHeaders,
-          body   : JSON.stringify(reqJson),
-        });
-        if (retryResp.ok) upstreamResp = retryResp;
+      if (reqJson && reqJson.model) {
+        // ASCII pur : un en-tête HTTP est du latin-1, un tiret cadratin y arrive mojibaké.
+        diag = `modele-refuse: ${reqJson.model} (HTTP ${upstreamResp.status}) - aucune bascule automatique, par choix`;
       }
-    } catch (_) { /* body non-JSON → on renvoie le 404 original */ }
+    } catch (_) { /* body non-JSON → on renvoie la réponse d'origine telle quelle */ }
   }
 
   const respHeaders = new Headers();
@@ -543,6 +545,12 @@ async function proxyClaude(request, env, path) {
     if (val) respHeaders.set(h, val);
   }
   for (const [k, v] of Object.entries(CORS_HEADERS)) respHeaders.set(k, v);
+  if (diag) {
+    respHeaders.set('X-Gateway-Diag', diag);
+    // Sans Expose-Headers, un client NAVIGATEUR ne peut pas lire un en-tête custom :
+    // le poser sans l'exposer revient à ne rien poser du tout.
+    respHeaders.set('Access-Control-Expose-Headers', 'X-Gateway-Diag');
+  }
 
   return new Response(upstreamResp.body, { status: upstreamResp.status, headers: respHeaders });
 }
@@ -1479,6 +1487,23 @@ async function proxyRequest(request, upstreamUrl, authHeaders) {
   }
   for (const [k, v] of Object.entries(CORS_HEADERS)) {
     respHeaders.set(k, v);
+  }
+
+  // v1.54 — Diagnostic « nom de modèle refusé ». Ce helper est partagé par TOUS les
+  // providers LLM (DeepSeek, Mistral, Groq, Kimi, OpenRouter, GLM, OpenAI) : c'est le
+  // seul endroit qui les couvre tous. On ne substitue RIEN (cf. suppression du fallback
+  // silencieux en v1.53) — on nomme la cause pour qu'elle se lise en trois secondes.
+  // Le 24/07/2026, DeepSeek a retiré `deepseek-chat` et les apps n'ont vu qu'un « 400 ».
+  if ((upstreamResp.status === 400 || upstreamResp.status === 404) && body.byteLength > 0) {
+    try {
+      const reqJson = JSON.parse(new TextDecoder().decode(body));
+      if (reqJson && reqJson.model) {
+        // ASCII pur : un en-tête HTTP est du latin-1, un tiret cadratin y arrive mojibaké.
+        respHeaders.set('X-Gateway-Diag',
+          `modele-refuse: ${reqJson.model} (HTTP ${upstreamResp.status}) - aucune bascule automatique, par choix`);
+        respHeaders.set('Access-Control-Expose-Headers', 'X-Gateway-Diag');
+      }
+    } catch (_) { /* body non-JSON → réponse inchangée */ }
   }
 
   return new Response(upstreamResp.body, {
