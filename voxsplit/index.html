@@ -1341,7 +1341,7 @@ async function startTranslation(silent=false){
       const lines=chunks[ci].map(c=>`[${c.idx}] ${c.text}`).join('\n');
       const prompt=`Traduis les lignes suivantes en ${langNames[targetLang]||targetLang}. Chaque ligne est préfixée par [numéro]. Retourne EXACTEMENT le même format [numéro] suivi de la traduction. Ne traduis PAS les noms propres. Conserve le sens et le ton. Pas d'explication.\n\n${lines}`;
       const apiPath=engine==='gemini'?'/api/gemini/v1beta/models/gemini-2.0-flash:generateContent':'/api/deepseek';
-      const body=engine==='gemini'?{contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.3,maxOutputTokens:8192}}:{model:'deepseek-chat',messages:[{role:'user',content:prompt}],temperature:.3,max_tokens:8192};
+      const body=engine==='gemini'?{contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.3,maxOutputTokens:8192}}:{model:'deepseek-v4-flash',thinking:{type:'disabled'},messages:[{role:'user',content:prompt}],temperature:.3,max_tokens:8192};
       const resp=await fetch(getGateway()+apiPath,{method:'POST',headers:{'Authorization':'Bearer '+getSecret(),'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(120000)});
       if(!resp.ok)throw new Error(`${engine} HTTP ${resp.status}`);const data=await resp.json();
       const rt=engine==='gemini'?data.candidates?.[0]?.content?.parts?.[0]?.text||'':data.choices?.[0]?.message?.content||'';
@@ -1770,7 +1770,7 @@ async function startSecondPass(){
       const lines=chunks[ci].map(idx=>`[${idx}] ORIGINAL: ${parsedUtterances[idx].text}\nTRADUCTION: ${translations[idx]}`).join('\n\n');
       const prompt=`Tu es un correcteur de sous-titres. Voici des paires original/traduction en ${langNames[targetLang]||targetLang}. Corrige UNIQUEMENT les erreurs de traduction (sens, grammaire, naturalité). Si la traduction est correcte, retourne-la telle quelle. Format: [numéro] traduction_corrigée. Une ligne par numéro.\n\n${lines}`;
       const apiPath=engine==='gemini'?'/api/gemini/v1beta/models/gemini-2.0-flash:generateContent':'/api/deepseek';
-      const body=engine==='gemini'?{contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.2,maxOutputTokens:8192}}:{model:'deepseek-chat',messages:[{role:'user',content:prompt}],temperature:.2,max_tokens:8192};
+      const body=engine==='gemini'?{contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.2,maxOutputTokens:8192}}:{model:'deepseek-v4-flash',thinking:{type:'disabled'},messages:[{role:'user',content:prompt}],temperature:.2,max_tokens:8192};
       const resp=await fetch(getGateway()+apiPath,{method:'POST',headers:{'Authorization':'Bearer '+getSecret(),'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(120000)});
       if(!resp.ok)throw new Error(`${engine} HTTP ${resp.status}`);const data=await resp.json();
       const rt=engine==='gemini'?data.candidates?.[0]?.content?.parts?.[0]?.text||'':data.choices?.[0]?.message?.content||'';
