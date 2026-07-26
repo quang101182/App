@@ -1,6 +1,6 @@
 # Manga Studio
 
-> État : **phases 3 (dans l'app), 4 et 5 franchies** — `manga_studio.html` **v1.5.0**. L'app produit une
+> État : **phases 3 (dans l'app), 4 et 5 franchies** — `manga_studio.html` **v1.6.2**. L'app produit une
 > planche complète (bulles et lettrage compris) **et** ingère une page existante pour la relettrer en
 > français, exportée à la géométrie de la page d'origine. PNG et PDF.
 > **La feuille de route est le document de référence : [`ROADMAP.md`](ROADMAP.md)** — objectifs, décision
@@ -32,8 +32,13 @@ L'export remonte la page à sa **géométrie d'origine**, pas dans une grille.
 ⚠️ Prérequis : `python scripts/fetch_models.py` (le détecteur YOLO, 15 Mo, Apache 2.0 — non versionné).
 L'ingestion tourne dans le venv **kohya**, seul à avoir `ultralytics`.
 
-⚠️ Limite connue : on **superpose** une bulle, on n'efface pas la source. Si la bulle d'origine est plus
-grande, son contour reste visible autour.
+Case **« effacer le texte d'origine »** (cochée par défaut) : les bulles de la page sont **vidées** — une
+diffusion bornée depuis un pixel clair, sans aucune IA, donc sans risque d'inventer du dessin — et leur
+**contour est préservé**. L'app **réutilise** alors la bulle du dessin et n'y pose que le texte, comme le
+font les groupes de traduction. Mesuré : noir dans la zone du japonais **0,070 → 0,000**.
+
+⚠️ Limite assumée : le français doit tenir dans une bulle dessinée pour du **japonais vertical**, donc en
+portrait. Il y est plus haché — c'est le prix de la fidélité au dessin.
 
 ### Bulles et lettrage
 

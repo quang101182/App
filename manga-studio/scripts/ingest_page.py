@@ -110,6 +110,93 @@ def detect(im, conf):
     return panels, texts
 
 
+def clean_bubbles(im, texts, marge=0.30):
+    """Efface le TEXTE des bulles d'origine en preservant leur CONTOUR.
+
+    Sans ca, on ne relettre pas : on empile une bulle francaise sur une bulle
+    japonaise, et le contour d'origine reste visible autour des qu'il est plus
+    grand que le notre.
+
+    Aucune IA ici, et c'est voulu : une bulle de manga est un aplat clair borne
+    par un trait noir. On isole donc la composante claire qui contient le texte,
+    on bouche ses trous (les trous, ce sont les lettres), et on la peint en blanc.
+    Deterministe, instantane, et ca ne peut pas halluciner un dessin.
+
+    Renvoie (image nettoyee, statistiques par bulle).
+    """
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    img = np.array(im.convert("RGB"))
+    H, W = img.shape[:2]
+    gris = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    stats = []
+
+    aire_max = 0.18 * H * W          # au-dela, ce n'est plus une bulle mais un fond
+
+    for t in texts:
+        bx1, by1 = int(t["x"] * W), int(t["y"] * H)
+        bw, bh = max(1, int(t["w"] * W)), max(1, int(t["h"] * H))
+        bx2, by2 = min(W, bx1 + bw), min(H, by1 + bh)
+        if bx2 - bx1 < 4 or by2 - by1 < 4:
+            stats.append({"id": t.get("id"), "etat": "trop petite"}); continue
+
+        # Amorce : le pixel le PLUS CLAIR de la boite de texte. C'est forcement du
+        # fond de bulle (le texte, lui, est sombre), donc on part du bon endroit.
+        boite = gris[by1:by2, bx1:bx2]
+        if int(boite.max()) < 150:
+            stats.append({"id": t.get("id"), "etat": "pas de fond clair"}); continue
+        oy, ox = np.unravel_index(int(np.argmax(boite)), boite.shape)
+        seed = (bx1 + int(ox), by1 + int(oy))
+
+        # Diffusion sur la PAGE entiere, en plage fixe autour du blanc : elle
+        # s'arrete d'elle-meme sur le trait de la bulle. C'est la SURFACE atteinte
+        # qui dit si on est dans une bulle ou dans un fond clair — pas le fait de
+        # toucher le bord d'une fenetre choisie arbitrairement (mon 1er essai se
+        # declenchait a l'envers, justement sur le cas normal).
+        masque = np.zeros((H + 2, W + 2), np.uint8)
+        drapeaux = (4 | cv2.FLOODFILL_MASK_ONLY | cv2.FLOODFILL_FIXED_RANGE | (255 << 8))
+        cv2.floodFill(gris.copy(), masque, seed, 0, (60,), (60,), drapeaux)
+        comp = masque[1:H + 1, 1:W + 1].copy()
+
+        aire = int(comp.sum() > 0) and int((comp > 0).sum())
+        if aire > aire_max or aire == 0:
+            comp = np.zeros((H, W), np.uint8)
+            comp[by1:by2, bx1:bx2] = 1
+            etat = "fond ouvert -> boite seule"
+        else:
+            # Les lettres sont des trous dans l'aplat : on les rebouche pour les
+            # effacer aussi, puis on recule de 2 px pour ne pas manger le trait.
+            comp = (comp > 0).astype(np.uint8)
+            m2 = np.zeros((H + 2, W + 2), np.uint8)
+            hors = comp.copy()
+            cv2.floodFill(hors, m2, (0, 0), 1)
+            comp = cv2.bitwise_or(comp, (hors == 0).astype(np.uint8))
+            comp = cv2.erode(comp, np.ones((3, 3), np.uint8), iterations=2)
+            etat = "bulle"
+
+        sel = comp > 0
+        if not sel.any():
+            stats.append({"id": t.get("id"), "etat": "vide"}); continue
+        avant = float((gris[sel] < 90).mean())
+        img[sel] = 255
+        gris[sel] = 255
+        # La boite REELLE de la bulle videe. C'est elle qui compte : le texte
+        # francais va se poser DEDANS, dans la bulle d'origine — dont le contour
+        # est preserve. La boite du texte japonais, elle, ne dit rien de la place
+        # disponible (le japonais est vertical).
+        ys, xs = np.where(sel)
+        t["clean"] = {"x": float(xs.min()) / W, "y": float(ys.min()) / H,
+                      "w": float(xs.max() - xs.min() + 1) / W,
+                      "h": float(ys.max() - ys.min() + 1) / H,
+                      "ok": etat == "bulle"}
+        stats.append({"id": t.get("id"), "etat": etat, "pixels": int(sel.sum()),
+                      "sombres_avant": round(avant, 4), "sombres_apres": 0.0})
+
+    return Image.fromarray(img), stats
+
+
 def crop_panels(im, panels, outdir, base):
     """Decoupe chaque case dans le dossier du projet. Les chemins renvoyes sont
     RELATIFS a output/ : c'est ce que l'app sait servir via /manga/file."""
@@ -143,6 +230,14 @@ def attach_bubbles(panels, texts):
             t["by"] = (tcy - best["y"]) / best["h"]
             t["bw"] = min(0.94, t["w"] / best["w"] * 1.15)
             t["bh"] = min(0.60, t["h"] / best["h"] * 1.15)
+            # meme conversion pour la bulle videe : centre et dimensions en
+            # fractions de CASE, seule unite que l'app connaisse.
+            c = t.get("clean")
+            if c:
+                t["cx_"] = (c["x"] + c["w"] / 2 - best["x"]) / best["w"]
+                t["cy_"] = (c["y"] + c["h"] / 2 - best["y"]) / best["h"]
+                t["cw_"] = c["w"] / best["w"]
+                t["ch_"] = c["h"] / best["h"]
 
 
 def translate_bubbles(im, texts):
@@ -200,6 +295,8 @@ def main():
     ap.add_argument("--out", required=True, help="dossier de sortie (output/<slug>)")
     ap.add_argument("--base", default="", help="prefixe des fichiers decoupes")
     ap.add_argument("--translate", action="store_true")
+    ap.add_argument("--clean", action="store_true",
+                    help="efface le texte des bulles d'origine (relettrage propre)")
     ap.add_argument("--conf", type=float, default=0.25)
     a = ap.parse_args()
 
@@ -211,15 +308,26 @@ def main():
 
     panels, texts = detect(im, a.conf)
     log("detection : %d case(s), %d bulle(s)" % (len(panels), len(texts)))
-    crop_panels(im, panels, a.out, base)
-    attach_bubbles(panels, texts)
 
+    # La traduction lit la page D'ORIGINE : nettoyer avant, ce serait effacer ce
+    # qu'on doit lire. L'ordre n'est pas un detail.
     traduites = 0
     if a.translate and texts:
         traduites = translate_bubbles(im, texts)
 
+    nettoyage = []
+    if a.clean and texts:
+        im_prop, nettoyage = clean_bubbles(im, texts)
+        vraies = [c for c in nettoyage if c.get("etat") == "bulle"]
+        log("nettoyage : %d/%d bulles effacees" % (len(vraies), len(texts)))
+        im = im_prop
+
+    crop_panels(im, panels, a.out, base)
+    attach_bubbles(panels, texts)
+
     json.dump({"ok": True, "w": W, "h": H, "base": base,
-               "panels": panels, "texts": texts, "traduites": traduites},
+               "panels": panels, "texts": texts, "traduites": traduites,
+               "nettoyage": nettoyage},
               sys.stdout, ensure_ascii=False)
     sys.stdout.flush()
     return 0

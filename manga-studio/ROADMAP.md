@@ -414,9 +414,40 @@ sous-processus tourne dans le venv **kohya** (c'est lui qui a `ultralytics` + to
    hauteur de **la page** (~1,9 %) — ce que fait un lettreur — et la bulle **couvre au minimum celle
    d'origine**, sinon le japonais reste visible autour du français.
 
-**Ce qui n'est pas parfait et qu'il faut savoir** : on **superpose** une bulle, on n'efface pas la source.
-Quand la bulle d'origine est plus grande que la nôtre, son contour reste visible autour. Un vrai
-relettrage masquerait la zone source (inpainting du fond) — c'est un chantier à part.
+### Effacement du texte source et réutilisation des bulles ✅ *(27/07, v1.6.2)*
+
+~~On superpose une bulle, on n'efface pas la source.~~ → **corrigé le jour même.**
+
+Case à cocher **« effacer le texte d'origine »**. Aucune IA, et c'est délibéré : une bulle de manga est un
+**aplat clair borné par un trait noir**. On amorce une diffusion sur le pixel le plus clair de la boîte de
+texte — forcément du fond de bulle, puisque le texte est sombre —, elle s'arrête d'elle-même sur le trait,
+on rebouche ses trous (les trous, ce sont les lettres) et on peint en blanc. Déterministe, instantané,
+et ça **ne peut pas halluciner un dessin**.
+
+⇒ Le **contour d'origine survit**. Donc on ne dessine plus de bulle par-dessus : **on réutilise celle de
+la page**, et on n'y pose que le texte. C'est ce que font les groupes de traduction — la bulle fait partie
+du dessin, elle épouse la composition.
+
+| Mesure | Valeur |
+|---|---|
+| Bulles correctement vidées | **6 / 6** |
+| Noir dans la zone du texte japonais — page source → case nettoyée | **0,070 → 0,000** |
+| Pixels modifiés hors des bulles | **0** (1ʳᵉ version), diffusion bornée à 18 % de la page ensuite |
+| Textes débordant de leur bulle | **0** |
+
+**Deux erreurs de méthode, notées parce qu'elles se reproduiront :**
+1. **Mon garde-fou se déclenchait à l'envers.** Je décidais « est-ce une bulle ? » selon que l'aplat touche
+   les bords d'une fenêtre que j'avais moi-même choisie — or dans le cas **normal** (texte bien au centre
+   d'une grande bulle), la fenêtre est entièrement à l'intérieur, donc l'aplat touche tous les bords. Les
+   6 bulles tombaient dans le cas de repli. Le bon critère n'est pas géométrique mais **la surface atteinte**.
+2. **Je mesurais l'effacement au mauvais endroit** : dans la page *exportée*, à l'emplacement du japonais —
+   là où l'on vient justement de poser le français. Le noir *augmentait*, et la mesure concluait à l'envers.
+   Il faut mesurer sur la **case nettoyée**, avant lettrage. *Une mesure au mauvais endroit est pire qu'une
+   absence de mesure : elle donne l'assurance sans le contrôle.*
+
+**Limite restante** : le texte français doit tenir dans une bulle dessinée pour du **japonais vertical**
+(donc en portrait). Il y est plus haché qu'il ne le serait dans une bulle conçue pour lui — c'est le prix
+de la fidélité au dessin, et c'est le bon arbitrage.
 
 ### Phase 6 — Boucle de validation ⏳
 **Reprendre la décision GS du 29/06, ne pas réinventer** : l'apprentissage automatique, invisible et
@@ -445,6 +476,8 @@ la boucle paie vraiment. **L'app propose, elle n'impose jamais.**
 | **Un banc qui ne regarde jamais l'écran** | Les 3 défauts de la phase 5 étaient verts sur tous les chiffres. Un banc d'UI doit produire une **capture** — et un contrôle géométrique (`getBBox`) quand la question est « est-ce que ça tient dedans ». |
 | **Un poids de modele non versionne ET non scriptable** | Le detecteur YOLO avait ete telecharge dans un scratchpad, jamais range. A la session suivante il avait disparu, emportant la reproductibilite de la phase 3 alors que ses chiffres etaient soigneusement consignes. Un binaire n'a pas sa place dans le depot, mais **la commande qui le rapporte, si** : `scripts/fetch_models.py`. |
 | **Bulles japonaises reprises telles quelles** | Le japonais s'ecrit **verticalement** : ses boites sont en portrait. Les reutiliser pour du francais donne un mot par ligne. Dimensionner la bulle **par son texte**, jamais par la boite detectee. |
+| **Un garde-fou cale sur une fenetre arbitraire** | Decider « est-ce une bulle ? » selon que l'aplat touche les bords d'une fenetre qu'on a soi-meme choisie se declenche **a l'envers sur le cas normal** (texte au centre d'une grande bulle : la fenetre est entierement dedans). Le bon critere etait la **surface atteinte** par la diffusion. |
+| **Mesurer au mauvais endroit** | Verifier l'effacement du japonais dans la page **exportee**, la ou l'on vient de poser le francais : le noir augmente, et la mesure conclut a l'inverse de la verite. Mesurer sur la **case nettoyee**, avant lettrage. Une mesure mal placee donne l'assurance sans le controle. |
 | **Cadres qui se chevauchent** | YOLO detecte parfois une grande zone contenant des petites. En une seule passe de dessin, les cases suivantes **recouvrent les bulles** des precedentes (3/6 perdues, invisibles dans tous les autres controles). Dessiner **toutes les images d'abord**, tous les calques de texte ensuite. |
 | **Ids générés à la milliseconde** | `prefix + hex(now_ms)` donne le **même id** à deux insertions dans la même ms — et créer 6 cases d'un coup est une rafale. `_studio_db._uid()` ajoute un compteur monotone. Attrapé par le self-test, pas en production. |
 
@@ -457,6 +490,7 @@ la boucle paie vraiment. **L'app propose, elle n'impose jamais.**
 | 2026-07-26 | Ouverture du chantier. Décision d'archi (app séparée). Checkpoint Illustrious installé. Essais 1-4 mesurés. Recherche web + vote 3 voix. kohya installé (3 pièges payés : cu128, versions transformers, encodage cp1252). |
 | 2026-07-26 | **Phase 1 franchie à 89 %** (contre 50 % sans LoRA). LoRA `zqmg1rl_v1` entraîné et validé sur comparatif strict. 2 réserves ouvertes → LoRA v2 avant la phase 4. |
 | 2026-07-26 | **Phase 3 : pipeline d'ingestion écrit et mesuré** (`manga_ingest.py`). Découpage 83 % à IoU 0,66 mais **Pixtral quantifie sur une grille** ⇒ raffinement OpenCV nécessaire. Volet style : OK. **Bloqué sur la validation** faute de scans réels de Quang. Premier test = faux positif, corrigé par un test à vérité terrain. |
+| 2026-07-27 | **Effacement du texte source** (v1.6.2). Les bulles d'origine sont VIDEES (diffusion bornee depuis un pixel clair, sans IA) et leur contour survit ⇒ on les REUTILISE au lieu d'en empiler de nouvelles. Mesure : noir dans la zone du japonais 0,070 -> **0,000**, 0 texte qui deborde. Deux erreurs de methode notees : un garde-fou qui se declenchait **a l'envers sur le cas normal**, et une mesure faite **au mauvais endroit** (dans l'export lettre au lieu de la case nettoyee) qui concluait a l'inverse de la verite. |
 | 2026-07-27 | **Ingestion et relettrage dans l'app** (v1.5.0). Onglet Ingestion : page reelle -> YOLO -> Pixtral -> planche relettrable, exportee **a la geometrie de la page d'origine**. 5/5 cases, 6/6 bulles francaises, 6/6 **visibles dans le fichier exporte**, ~14 s. Quatre defauts corriges, dont trois invisibles autrement : bulles en portrait (le japonais est vertical), cases ecrasees a l'export, et **3 bulles sur 6 recouvertes** par des cadres qui se chevauchent. **Le modele YOLO avait DISPARU** (il vivait dans un scratchpad) : `fetch_models.py` le rapporte desormais — un chiffre mesure dont l'outil a disparu n'est plus un resultat, c'est un souvenir. |
 | 2026-07-26 | **Phase 5 franchie — bulles et lettrage** (v1.2.0). Calque SVG unique (écran = export par construction), 5 formes, queue orientable, police Comic Neue embarquée, export PNG **et** PDF écrit à la main. Trois défauts trouvés par la mesure, dont **le voile de génération qui recouvrait chaque case depuis la v1.0.1** — invisible dans les chiffres, évident à l'écran ⇒ le banc prend désormais une **capture**. Reste : le relettrage d'une page traduite, qui attend un écran d'**ingestion** dans l'app. |
 | 2026-07-26 | **Phase 4 franchie — l'app existe.** `manga_studio.html` v1.0.1 (single-file, servie par le proxy sur `/manga`), tables SQLite dédiées `manga_projects/pages/panels` (schéma v3), routes `/manga/*`. Planche de 6 cases de bout en bout : 6/6, 0 erreur JS sur PC **et** Samsung réel, 12/12 responsive. **Exigence Quang du jour : les sorties ne se mélangent plus à celles de Generate Studio** (851→851 fichiers à la racine, 0 résidu) ; 62 fichiers d'exploration rapatriés. Un défaut invisible à l'œil trouvé par le banc : créer un projet ne le sélectionnait pas → cases rangées chez un voisin. Arbitrage Quang : l'app **avant** le LoRA v2, stockage en **table dédiée**. |

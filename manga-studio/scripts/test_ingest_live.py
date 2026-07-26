@@ -57,6 +57,7 @@ def main():
         pg.wait_for_timeout(400)
         pg.set_input_files("#ingFile", args.page)
         pg.check("#ingTrad")
+        pg.check("#ingClean")
         pg.click("#btnIngest")
         try:
             pg.wait_for_selector("#ingResCard:not([hidden])", timeout=600000)
@@ -97,10 +98,24 @@ def main():
               horsCadre: items.reduce((n,p) => n + (p.bubbles||[]).filter(
                   b => b.x < 0 || b.x > 1 || b.y < 0 || b.y > 1).length, 0),
               rendues: document.querySelectorAll('g.bub').length,
+              // Une bulle REUTILISEE n'a pas de contour dessine : rien ne signale
+              // que son texte deborde de la bulle du DESSIN. On compare donc la
+              // boite du texte a la boite de la bulle videe.
+              debordent: (() => {
+                let n = 0;
+                document.querySelectorAll('.panel').forEach(pan => {
+                  const g = pan.querySelector('g.bub'); if (!g) return;
+                  const tx = g.querySelector('text'); if (!tx) return;
+                  const svg = g.ownerSVGElement;
+                  const vb = svg.viewBox.baseVal;
+                  const b = tx.getBBox();
+                  if (b.x < 0 || b.y < 0 || b.x + b.width > vb.width || b.y + b.height > vb.height) n++;
+                });
+                return n; })(),
               // Le japonais s'ecrit verticalement : sa boite est en portrait. Reprise
               // telle quelle, elle donne du francais a un mot par ligne. On EXIGE donc
               // des bulles en paysage, et au moins 2 mots par ligne en moyenne.
-              enPortrait: items.reduce((n,p) => n + (p.bubbles||[]).filter(b => b.w <= b.h).length, 0),
+              enPortrait: items.reduce((n,p) => n + (p.bubbles||[]).filter(b => !b.reuse && b.w <= b.h).length, 0),
               motsParLigne: (() => {
                 const g = [...document.querySelectorAll('g.bub')];
                 if (!g.length) return 0;
@@ -147,6 +162,35 @@ def main():
             }
             return out; }""")
 
+        # Pour mesurer l'effacement il faut regarder la CASE NETTOYEE, pas l'export :
+        # l'export porte notre francais au meme endroit, donc il y est plus noir que
+        # la source. Mon premier controle mesurait exactement ca et concluait a l'envers.
+        crops = pg.evaluate("""async () => {
+            const k = localStorage.getItem('manga_key');
+            const r = await fetch(location.origin+'/manga/panels?page='+localStorage.getItem('manga_page'),
+                {headers:{Authorization:'Bearer '+k}});
+            const out = [];
+            for (const p of (await r.json()).items){
+              const bx = p.recipe && p.recipe.box; if (!bx) continue;
+              for (const b of (p.bubbles||[])) if (b.src && b.srcBox)
+                out.push({ file: p.file, panelBox: bx, srcBox: b.srcBox });
+            }
+            return out; }""")
+
+        # boites du texte JAPONAIS d'origine, en fractions de PAGE
+        boites_src = pg.evaluate("""async () => {
+            const k = localStorage.getItem('manga_key');
+            const r = await fetch(location.origin+'/manga/panels?page='+localStorage.getItem('manga_page'),
+                {headers:{Authorization:'Bearer '+k}});
+            const out = [];
+            for (const p of (await r.json()).items){
+              const bx = p.recipe && p.recipe.box; if (!bx) continue;
+              for (const b of (p.bubbles||[])) if (b.src)
+                out.push({ x: bx[0]+ (b.x-b.w/2)*bx[2], y: bx[1]+ (b.y-b.h/2)*bx[3],
+                           w: b.w*bx[2], h: b.h*bx[3] });
+            }
+            return out; }""")
+
         app_err = pg.evaluate("() => MangaLog.errors().map(e => e.msg)")
         # on garde la planche : elle sert a regarder le resultat
         br.close()
@@ -159,8 +203,9 @@ def main():
     print("bulles posées                    : %d (avec texte : %d)" % (e["bulles"], e["bullesAvecTexte"]))
     print("bulles hors cadre                : %d" % e["horsCadre"])
     print("bulles rendues à l'écran         : %d" % e["rendues"])
+    print("textes débordant de leur case   : %d" % e["debordent"])
     print("bulles restées en portrait       : %d  (le japonais est vertical, le français non)" % e["enPortrait"])
-    print("mots par ligne (moyenne)         : %.2f  (< 1,6 = texte haché)" % e["motsParLigne"])
+    print("mots par ligne (moyenne)         : %.2f  (bulles réutilisées : le format vient du dessin)" % e["motsParLigne"])
     from PIL import Image as _I
     # Chaque bulle est-elle VISIBLE dans l'export ? Une bulle enregistree en base
     # mais recouverte par une case dessinee ensuite passe tous les autres controles.
@@ -190,7 +235,41 @@ def main():
               % (ew, eh, src_w, src_h, "oui" if geo_ok else "NON"))
     else:
         print("export : ABSENT")
+    # LE controle du nettoyage : dans la zone du texte JAPONAIS d'origine, il ne
+    # doit plus rester de pixels sombres autres que ceux du francais qu'on y a pose.
+    # On mesure donc la SOURCE et l'EXPORT au meme endroit : la densite de noir doit
+    # avoir franchement baisse, sinon le japonais est encore la, sous notre texte.
+    src_dark, clean_dark, zones = 0.0, 0.0, 0
+    src_page = _I.open(args.page).convert("L")
+    SW, SH = src_page.size
+    for c in crops:
+        f = os.path.join(PROJ_DIR, "output", *c["file"].split("/"))
+        if not os.path.isfile(f):
+            continue
+        pan = _I.open(f).convert("L")
+        pw, ph = pan.size
+        sb, pb = c["srcBox"], c["panelBox"]
+        # meme zone, dans la case nettoyee et dans la page d'origine
+        x1 = int(max(0, (sb[0]-sb[2]/2)*pw)); x2 = int(min(pw, (sb[0]+sb[2]/2)*pw))
+        y1 = int(max(0, (sb[1]-sb[3]/2)*ph)); y2 = int(min(ph, (sb[1]+sb[3]/2)*ph))
+        if x2-x1 < 3 or y2-y1 < 3:
+            continue
+        px = list(pan.crop((x1, y1, x2, y2)).getdata())
+        clean_dark += sum(1 for v in px if v < 90)/len(px)
+        gx1 = int((pb[0] + (sb[0]-sb[2]/2)*pb[2]) * SW); gx2 = int((pb[0] + (sb[0]+sb[2]/2)*pb[2]) * SW)
+        gy1 = int((pb[1] + (sb[1]-sb[3]/2)*pb[3]) * SH); gy2 = int((pb[1] + (sb[1]+sb[3]/2)*pb[3]) * SH)
+        gx1, gx2 = max(0, gx1), min(SW, gx2); gy1, gy2 = max(0, gy1), min(SH, gy2)
+        if gx2-gx1 < 3 or gy2-gy1 < 3:
+            continue
+        gpx = list(src_page.crop((gx1, gy1, gx2, gy2)).getdata())
+        src_dark += sum(1 for v in gpx if v < 90)/len(gpx)
+        zones += 1
+    if zones:
+        src_dark /= zones; clean_dark /= zones
     print("bulles visibles dans l'export    : %d / %d" % (visibles, len(attendues)))
+    print("--- effacement, mesure sur la CASE NETTOYEE (%d zone(s)) ---" % zones)
+    print("noir dans la zone, page source   : %.3f" % src_dark)
+    print("noir dans la zone, case nettoyee : %.3f  (doit s'effondrer)" % clean_dark)
     print("erreurs JS                       : %d" % len(js_errors))
     print("erreurs journal de l'app         : %d" % len(app_err))
     print("\nquelques répliques :")
@@ -203,8 +282,9 @@ def main():
           and e["imagesChargees"] == e["cases"]
           and e["bullesAvecTexte"] >= 3 and e["horsCadre"] == 0
           and e["rendues"] == e["bulles"]
-          and e["enPortrait"] == 0 and e["motsParLigne"] >= 1.6 and geo_ok
+          and e["enPortrait"] == 0 and e["debordent"] == 0 and e["motsParLigne"] >= 1.15 and geo_ok
           and visibles == len(attendues)
+          and zones > 0 and clean_dark < src_dark * 0.25
           and not js_errors and not app_err)
     print("\n%s" % ("*** INGESTION : PAGE REELLE DEVENUE PLANCHE RELETTRABLE ***" if ok
                     else "*** INGESTION : NON ATTEINT ***"))
