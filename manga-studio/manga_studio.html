@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.2.0</title>
+<title>Manga Studio v1.2.1</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -139,7 +139,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.2.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.2.1</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -303,7 +303,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
       sont incompatibles dans une meme case.
    ===================================================================== */
 
-const VERSION = "1.2.0";
+const VERSION = "1.2.1";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -538,18 +538,32 @@ function wrapText(text, maxW, fontPx, bold){
  *  si (a/rx)^2 + (b/ry)^2 <= 1. On fixe la largeur utile, on en deduit la hauteur
  *  minimale, et la bulle GRANDIT pour contenir son texte — elle ne le tronque jamais.
  */
+// Par forme : kw = part de la demi-largeur utilisable pour le texte, et (sx, sy) =
+// de combien la forme REELLEMENT dessinee est plus petite que sa boite englobante.
+// La pensee, par exemple, dessine une ellipse a 0,86 x 0,82 de sa boite, le reste
+// etant occupe par les bosses : l'oublier faisait mordre les bosses sur le texte.
+const BUB_FIT = {
+  oval:    { kw: 0.72, sx: 1.00, sy: 1.00 },
+  rect:    { kw: 0.88, sx: 1.00, sy: 0.86, boxy: true },
+  none:    { kw: 0.94, sx: 1.00, sy: 0.94, boxy: true },
+  thought: { kw: 0.60, sx: 0.86, sy: 0.82 },
+  burst:   { kw: 0.46, sx: 0.72, sy: 0.72 },   // l'etoile est creuse : rayon interne 0,66
+};
+
 function bubGeom(b){
   const VH = bubVH();
+  const f = BUB_FIT[b.shape] || BUB_FIT.oval;
   const cx = b.x * BUB_VW, cy = b.y * VH;
   const rx = b.w / 2 * BUB_VW;
-  const boxy = (b.shape === "rect" || b.shape === "none");
-  // part de la largeur reellement utilisable, selon que la forme est creuse ou non
-  const kw = boxy ? 0.88 : (b.shape === "burst" ? 0.60 : 0.72);
   const fontPx = Math.max(8, b.size * VH);
-  const lines = wrapText(b.text, 2 * rx * kw, fontPx, b.bold);
+  const lines = wrapText(b.text, 2 * rx * f.kw, fontPx, b.bold);
   const lh = fontPx * 1.18;
-  const half = (lines.length * lh) / 2 + fontPx * 0.22;   // demi-hauteur du bloc + air
-  const need = boxy ? half / 0.86 : half / Math.sqrt(Math.max(0.05, 1 - kw * kw));
+  const half = (lines.length * lh) / 2 + fontPx * 0.22;   // demi-hauteur du bloc + un peu d'air
+  // Rectangle (a, half) inscrit dans l'ellipse effective (sx*rx, sy*ry) :
+  // (a/(sx*rx))^2 + (half/(sy*ry))^2 <= 1  =>  ry >= half / (sy * sqrt(1 - (kw/sx)^2))
+  const need = f.boxy
+    ? half / f.sy
+    : half / (f.sy * Math.sqrt(Math.max(0.05, 1 - Math.pow(f.kw / f.sx, 2))));
   const ry = Math.max(b.h / 2 * VH, need);
   return { cx, cy, rx, ry, lines, fontPx, lh, y0: cy - (lines.length - 1) * lh / 2 };
 }
@@ -557,19 +571,23 @@ function bubGeom(b){
 /** Le contour d'une bulle. `sel` n'est vrai qu'a l'ecran (jamais a l'export). */
 function bubShape(b, cx, cy, rx, ry){
   if (b.shape === "rect")
-    return '<rect class="shape" x="' + (cx-rx) + '" y="' + (cy-ry) + '" width="' + (2*rx)
+    return '<rect class="shape core" x="' + (cx-rx) + '" y="' + (cy-ry) + '" width="' + (2*rx)
          + '" height="' + (2*ry) + '" rx="' + (Math.min(rx,ry)*0.18) + '"/>';
   if (b.shape === "none") return "";
   if (b.shape === "thought"){
-    // Bulle de pensee : une couronne de bosses, pas une ellipse. On la compose
-    // de cercles — un chemin unique serait plus court mais moins lisible.
-    let s = '<ellipse class="shape" cx="' + cx + '" cy="' + cy + '" rx="' + (rx*0.86)
-          + '" ry="' + (ry*0.82) + '"/>';
+    // Bulle de pensee : une couronne de bosses, pas une ellipse.
+    // Les bosses sont peintes D'ABORD (contour compris), puis l'ellipse par-dessus
+    // en REMPLISSAGE SEUL : elle efface les arcs interieurs des bosses et il ne
+    // reste que le contour festonne exterieur. Meme astuce que pour la queue —
+    // sans elle on voit une ellipse ET des cercles se croiser.
+    let s = "";
     for (let i = 0; i < 12; i++){
       const a = i / 12 * Math.PI * 2;
-      s += '<circle class="shape" cx="' + (cx + Math.cos(a)*rx*0.86) + '" cy="'
-         + (cy + Math.sin(a)*ry*0.82) + '" r="' + (Math.min(rx,ry)*0.20) + '"/>';
+      s += '<circle class="shape" cx="' + (cx + Math.cos(a)*rx*0.86).toFixed(1) + '" cy="'
+         + (cy + Math.sin(a)*ry*0.82).toFixed(1) + '" r="' + (Math.min(rx,ry)*0.20).toFixed(1) + '"/>';
     }
+    s += '<ellipse class="core fill-only" cx="' + cx + '" cy="' + cy + '" rx="' + (rx*0.86)
+       + '" ry="' + (ry*0.82) + '"/>';
     return s;
   }
   if (b.shape === "burst"){
@@ -583,9 +601,9 @@ function bubShape(b, cx, cy, rx, ry){
       const k = (i % 2 === 0) ? 1 : 0.66;
       pts.push((cx + Math.cos(a)*rx*k).toFixed(1) + "," + (cy + Math.sin(a)*ry*k).toFixed(1));
     }
-    return '<polygon class="shape" points="' + pts.join(" ") + '"/>';
+    return '<polygon class="shape core" points="' + pts.join(" ") + '"/>';
   }
-  return '<ellipse class="shape" cx="' + cx + '" cy="' + cy + '" rx="' + rx + '" ry="' + ry + '"/>';
+  return '<ellipse class="shape core" cx="' + cx + '" cy="' + cy + '" rx="' + rx + '" ry="' + ry + '"/>';
 }
 
 /** Ou pointe REELLEMENT la queue. Une pointe rentree dans la bulle donne un trait
@@ -653,6 +671,7 @@ function bubblesSVG(panel, interactive, selId){
   return '<svg class="bubs" viewBox="0 0 ' + BUB_VW + " " + VH + '" '
        + 'xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">'
        + '<style>.shape{fill:#fff;stroke:#000;stroke-width:4;stroke-linejoin:round}'
+       + '.fill-only{fill:#fff;stroke:none}'
        + '.tail{fill:#fff;stroke:#000;stroke-width:4;stroke-linejoin:round}'
        + 'text{fill:#000}</style>' + g + "</svg>";
 }
