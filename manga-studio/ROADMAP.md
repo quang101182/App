@@ -1,6 +1,6 @@
 # Manga Studio — feuille de route
 
-> **Document vivant.** Mis à jour à chaque étape franchie ou infirmée. Dernière révision : **2026-07-26**.
+> **Document vivant.** Mis à jour à chaque étape franchie ou infirmée. Dernière révision : **2026-07-27**.
 > Autosuffisant : tout ce qu'il faut pour reprendre le chantier est ici, sans mémoire externe.
 >
 > **Nature des énoncés** (arbitrage `.claude/rules/document-vs-depot.md`) : les sections *Objectif*,
@@ -373,11 +373,50 @@ c'est un défaut de correction, pas de goût.
 *Les trois étaient invisibles dans les chiffres et évidents à l'écran. Un banc qui ne regarde jamais le
 rendu mesure l'exécution, pas le résultat.*
 
-**⏳ Ce que la phase 5 ne fait PAS** : le **relettrage d'une page traduite** (RESTANT de la phase 3-bis).
-La brique existe désormais — c'est le même calque — mais rien ne la relie à une page ingérée, parce que
-**l'ingestion n'est pas dans l'app** (elle vit encore dans `manga_ingest.py` / `manga_translate.py`).
-Il manque un écran d'import : page → YOLO (cases + bulles) → traduction → bulles pré-remplies aux
-positions détectées. C'est le prochain chantier naturel.
+~~**⏳ Ce que la phase 5 ne fait PAS** : le relettrage d'une page traduite.~~
+→ **✅ FAIT le 27/07 (v1.5.0)** — voir « Ingestion dans l'app » ci-dessous.
+
+### Phase 3 dans l'app — Ingestion et relettrage ✅ *(atteinte le 27/07 — v1.5.0)*
+
+Onglet **Ingestion** : une page à toi (image ou PDF) → **YOLO Manga109** (cases + bulles) → **Pixtral**
+(OCR + traduction, bulle isolée puis page entière en contexte) → une planche dans l'app, une case par
+cadre, une **bulle française posée là où elle a été trouvée**. Route `POST /manga/ingest` ; le
+sous-processus tourne dans le venv **kohya** (c'est lui qui a `ultralytics` + torch cu128).
+
+> **Critère de sortie** : sur une page réelle, cases découpées et servies, bulles rattachées à la bonne
+> case, texte français, page exportée à la **géométrie d'origine**, 0 erreur JS.
+
+**Résultat mesuré — banc `scripts/test_ingest_live.py`, sur une page japonaise réelle :**
+
+| Mesure | Valeur |
+|---|---|
+| Cases créées / avec fichier / images servies | **5 / 5 / 5** |
+| Bulles posées / avec texte français | **6 / 6** |
+| Bulles hors cadre | **0** |
+| Bulles **visibles dans le fichier exporté** (mesure pixels, une par une) | **6 / 6** |
+| Mots par ligne (moyenne) | **1,87** (seuil 1,6 — en dessous, le texte est haché) |
+| Export à la géométrie de la page source | ✅ 1809×2595 pour une source 603×865 (même format à 3 % près) |
+| Erreurs JS | **0** |
+| Durée détection + traduction | **~14 s** |
+
+**Quatre défauts trouvés — tous par la mesure ou par le regard, aucun par le hasard :**
+1. **Bulles en portrait.** Le japonais s'écrit **verticalement** : ses bulles sont hautes et étroites.
+   Reprises telles quelles, elles donnaient du français **à un mot par ligne**. La bulle est désormais
+   dimensionnée **par son texte** (bloc visé ~1,6 fois plus large que haut), pas par la boîte détectée.
+2. **Cases écrasées à l'export.** Une planche ingérée a des cadres de tailles quelconques ; l'export les
+   forçait au format de la première. Le format vient maintenant de **chaque case** (`recipe.box` + `page`).
+3. **3 bulles sur 6 disparaissaient du fichier exporté.** Les cadres détectés se **chevauchent** (YOLO
+   trouve parfois une grande zone contenant des petites) : une case dessinée ensuite recouvrait les bulles
+   des précédentes. Désormais **deux passes** — toutes les images (les plus grandes d'abord), **puis** tous
+   les calques de texte. *Aucun autre contrôle ne l'aurait vu : les 6 bulles étaient bien en base.*
+4. **Lettrage minuscule dans les bandeaux plats.** La taille du texte était une fraction de la hauteur de
+   **la case** ; dans un bandeau large et bas, ça donne un texte illisible. Elle est maintenant calée sur la
+   hauteur de **la page** (~1,9 %) — ce que fait un lettreur — et la bulle **couvre au minimum celle
+   d'origine**, sinon le japonais reste visible autour du français.
+
+**Ce qui n'est pas parfait et qu'il faut savoir** : on **superpose** une bulle, on n'efface pas la source.
+Quand la bulle d'origine est plus grande que la nôtre, son contour reste visible autour. Un vrai
+relettrage masquerait la zone source (inpainting du fond) — c'est un chantier à part.
 
 ### Phase 6 — Boucle de validation ⏳
 **Reprendre la décision GS du 29/06, ne pas réinventer** : l'apprentissage automatique, invisible et
@@ -404,6 +443,9 @@ la boucle paie vraiment. **L'app propose, elle n'impose jamais.**
 | **Créer ≠ sélectionner** | Le projet fraîchement créé n'était pas le projet courant → 6 cases rangées chez un voisin, **sans aucune erreur**. Toujours vérifier *où* un fichier atterrit, pas seulement *qu'il* atterrit. |
 | **`hidden` écrasé par un `display` d'auteur** | `.busy{display:flex}` annule l'attribut `hidden` : le voile est resté affiché sur chaque case pendant toute la v1.0.1, masquant l'image et **avalant les clics**. Toujours écrire `.x[hidden]{display:none}` quand on donne un `display` à un élément qu'on masque par attribut. |
 | **Un banc qui ne regarde jamais l'écran** | Les 3 défauts de la phase 5 étaient verts sur tous les chiffres. Un banc d'UI doit produire une **capture** — et un contrôle géométrique (`getBBox`) quand la question est « est-ce que ça tient dedans ». |
+| **Un poids de modele non versionne ET non scriptable** | Le detecteur YOLO avait ete telecharge dans un scratchpad, jamais range. A la session suivante il avait disparu, emportant la reproductibilite de la phase 3 alors que ses chiffres etaient soigneusement consignes. Un binaire n'a pas sa place dans le depot, mais **la commande qui le rapporte, si** : `scripts/fetch_models.py`. |
+| **Bulles japonaises reprises telles quelles** | Le japonais s'ecrit **verticalement** : ses boites sont en portrait. Les reutiliser pour du francais donne un mot par ligne. Dimensionner la bulle **par son texte**, jamais par la boite detectee. |
+| **Cadres qui se chevauchent** | YOLO detecte parfois une grande zone contenant des petites. En une seule passe de dessin, les cases suivantes **recouvrent les bulles** des precedentes (3/6 perdues, invisibles dans tous les autres controles). Dessiner **toutes les images d'abord**, tous les calques de texte ensuite. |
 | **Ids générés à la milliseconde** | `prefix + hex(now_ms)` donne le **même id** à deux insertions dans la même ms — et créer 6 cases d'un coup est une rafale. `_studio_db._uid()` ajoute un compteur monotone. Attrapé par le self-test, pas en production. |
 
 ---
@@ -415,6 +457,7 @@ la boucle paie vraiment. **L'app propose, elle n'impose jamais.**
 | 2026-07-26 | Ouverture du chantier. Décision d'archi (app séparée). Checkpoint Illustrious installé. Essais 1-4 mesurés. Recherche web + vote 3 voix. kohya installé (3 pièges payés : cu128, versions transformers, encodage cp1252). |
 | 2026-07-26 | **Phase 1 franchie à 89 %** (contre 50 % sans LoRA). LoRA `zqmg1rl_v1` entraîné et validé sur comparatif strict. 2 réserves ouvertes → LoRA v2 avant la phase 4. |
 | 2026-07-26 | **Phase 3 : pipeline d'ingestion écrit et mesuré** (`manga_ingest.py`). Découpage 83 % à IoU 0,66 mais **Pixtral quantifie sur une grille** ⇒ raffinement OpenCV nécessaire. Volet style : OK. **Bloqué sur la validation** faute de scans réels de Quang. Premier test = faux positif, corrigé par un test à vérité terrain. |
+| 2026-07-27 | **Ingestion et relettrage dans l'app** (v1.5.0). Onglet Ingestion : page reelle -> YOLO -> Pixtral -> planche relettrable, exportee **a la geometrie de la page d'origine**. 5/5 cases, 6/6 bulles francaises, 6/6 **visibles dans le fichier exporte**, ~14 s. Quatre defauts corriges, dont trois invisibles autrement : bulles en portrait (le japonais est vertical), cases ecrasees a l'export, et **3 bulles sur 6 recouvertes** par des cadres qui se chevauchent. **Le modele YOLO avait DISPARU** (il vivait dans un scratchpad) : `fetch_models.py` le rapporte desormais — un chiffre mesure dont l'outil a disparu n'est plus un resultat, c'est un souvenir. |
 | 2026-07-26 | **Phase 5 franchie — bulles et lettrage** (v1.2.0). Calque SVG unique (écran = export par construction), 5 formes, queue orientable, police Comic Neue embarquée, export PNG **et** PDF écrit à la main. Trois défauts trouvés par la mesure, dont **le voile de génération qui recouvrait chaque case depuis la v1.0.1** — invisible dans les chiffres, évident à l'écran ⇒ le banc prend désormais une **capture**. Reste : le relettrage d'une page traduite, qui attend un écran d'**ingestion** dans l'app. |
 | 2026-07-26 | **Phase 4 franchie — l'app existe.** `manga_studio.html` v1.0.1 (single-file, servie par le proxy sur `/manga`), tables SQLite dédiées `manga_projects/pages/panels` (schéma v3), routes `/manga/*`. Planche de 6 cases de bout en bout : 6/6, 0 erreur JS sur PC **et** Samsung réel, 12/12 responsive. **Exigence Quang du jour : les sorties ne se mélangent plus à celles de Generate Studio** (851→851 fichiers à la racine, 0 résidu) ; 62 fichiers d'exploration rapatriés. Un défaut invisible à l'œil trouvé par le banc : créer un projet ne le sélectionnait pas → cases rangées chez un voisin. Arbitrage Quang : l'app **avant** le LoRA v2, stockage en **table dédiée**. |
 | 2026-07-26 | **Phase 2 franchie, 6/6.** Fond maître + ControlNet depth @ 0,55. Témoin sans ControlNet = 0/4 ⇒ répéter le décor dans le prompt est inopérant. Découverte structurante : décor figé et identité fine sont **incompatibles dans une même case** ⇒ règle des deux types de cases. Prochaine étape : **phase 3, ingestion des scans**. |

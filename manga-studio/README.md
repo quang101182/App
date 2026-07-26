@@ -1,7 +1,8 @@
 # Manga Studio
 
-> État : **phases 4 et 5 franchies** (26/07/2026) — `manga_studio.html` **v1.2.0** : l'app produit une
-> planche complète, bulles et lettrage compris, et l'exporte en PNG ou PDF.
+> État : **phases 3 (dans l'app), 4 et 5 franchies** — `manga_studio.html` **v1.5.0**. L'app produit une
+> planche complète (bulles et lettrage compris) **et** ingère une page existante pour la relettrer en
+> français, exportée à la géométrie de la page d'origine. PNG et PDF.
 > **La feuille de route est le document de référence : [`ROADMAP.md`](ROADMAP.md)** — objectifs, décision
 > d'architecture, verdicts chiffrés, pièges d'environnement, causes des échecs et leurs correctifs.
 
@@ -20,6 +21,19 @@ même convention que GS). Accessible depuis le téléphone par `adb reverse tcp:
 - **Deux types de case**, conformément à la mesure de la phase 2 :
   `ambiance` (fond maître + ControlNet depth 0,55) et `dialogue` (LoRA seul).
   Une case `ambiance` **refuse** de se générer sans fond maître.
+
+### Ingérer une page existante (relettrage)
+
+Onglet **Ingestion** : une image ou un PDF → **YOLO Manga109** détecte cases *et* bulles → **Pixtral**
+lit le japonais (souvent vertical) et le traduit, bulle par bulle puis la page entière en contexte →
+une planche apparaît, une case par cadre, **une bulle française posée là où elle a été trouvée**.
+L'export remonte la page à sa **géométrie d'origine**, pas dans une grille.
+
+⚠️ Prérequis : `python scripts/fetch_models.py` (le détecteur YOLO, 15 Mo, Apache 2.0 — non versionné).
+L'ingestion tourne dans le venv **kohya**, seul à avoir `ultralytics`.
+
+⚠️ Limite connue : on **superpose** une bulle, on n'efface pas la source. Si la bulle d'origine est plus
+grande, son contour reste visible autour.
 
 ### Bulles et lettrage
 
@@ -56,6 +70,9 @@ git**. Les diffs exacts sont versionnés ici : [`proxy-patch/`](proxy-patch/READ
 | `scripts/test_app_live.py` | **Banc de la phase 4** — pilote l'app (Playwright), produit une planche de 6 cases, verdict chiffré + contrôle d'isolation |
 | `scripts/test_lettering_live.py` | **Banc de la phase 5** — pose une bulle, la déplace, recharge, exporte ; vérifie **par les pixels** que la bulle est bien dans le fichier exporté, et **par `getBBox`** que le texte tient dedans. Produit une **capture d'écran** : trois défauts de rendu étaient verts sur tous les chiffres |
 | `scripts/rapatrie_outputs.py` | Sort les images manga du dossier de Generate Studio (`--dry-run` par défaut) |
+| `scripts/test_ingest_live.py` | **Banc de l'ingestion** — une vraie page devient une planche relettrable ; vérifie que **chaque bulle est visible dans le fichier exporté** (mesure pixels) et que la page garde sa géométrie |
+| `scripts/test_bubble_shapes.py` | Les 5 formes de bulle contiennent-elles leur texte |
+| `scripts/fetch_models.py` | Rapporte les modèles non versionnés (détecteur YOLO) |
 | `.claude/scripts/responsive-audit.py` | 320/360/384 px × 4 onglets (à la racine du dépôt) |
 
 ---

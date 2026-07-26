@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.2.1</title>
+<title>Manga Studio v1.5.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -139,7 +139,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.2.1</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.5.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -149,6 +149,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <nav>
   <button data-tab="tPlate" class="sel">Planche</button>
   <button data-tab="tProj">Projet</button>
+  <button data-tab="tIng">Ingestion</button>
   <button data-tab="tGal">Galerie</button>
   <button data-tab="tSet">Réglages</button>
 </nav>
@@ -247,6 +248,37 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
   </div>
 </section>
 
+<!-- ============ INGESTION ============ -->
+<section id="tIng">
+  <div class="card">
+    <h3>Ingérer une page existante</h3>
+    <p class="muted" style="margin:0 0 10px">
+      Une page à toi (image ou PDF) est découpée en cases par <b>YOLO Manga109</b> — IoU mesuré
+      <b>0,90</b>, là où un modèle de vision généraliste coupait en plein milieu des dessins.
+      Les bulles sont détectées en même temps ; si tu coches la traduction, chaque bulle est lue
+      isolément (l'attribution vient donc de la détection, pas du modèle de langue) puis relue avec
+      la page entière en contexte.
+    </p>
+    <input type="file" id="ingFile" accept="image/*,.pdf">
+    <div class="row" style="margin-top:10px">
+      <label style="margin:0;display:flex;align-items:center;gap:6px;color:var(--txt)">
+        <input type="checkbox" id="ingTrad" style="width:auto" checked> traduire en français</label>
+      <div style="width:150px"><label>Seuil de détection</label>
+        <input id="ingConf" type="number" step="0.05" min="0.05" max="0.9" value="0.25"></div>
+      <button class="btn pri" id="btnIngest" style="align-self:flex-end">Analyser la page</button>
+      <span class="muted" id="ingState"></span>
+    </div>
+  </div>
+  <div class="card" id="ingResCard" hidden>
+    <h3>Résultat</h3>
+    <div id="ingRes"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn pri" id="btnIngCreate">Créer la planche</button>
+      <span class="muted">Une case par cadre détecté, les bulles posées où elles ont été trouvées.</span>
+    </div>
+  </div>
+</section>
+
 <!-- ============ GALERIE ============ -->
 <section id="tGal">
   <div class="card">
@@ -303,7 +335,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
       sont incompatibles dans une meme case.
    ===================================================================== */
 
-const VERSION = "1.2.1";
+const VERSION = "1.5.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -504,7 +536,19 @@ async function uploadToComfy(blob, name){
    tombe au meme endroit sur une vignette de 400 px et sur un export 832 px.
    ===================================================================== */
 const BUB_VW = 1000;                      // repere interne du SVG (largeur)
-const bubVH = () => Math.round(BUB_VW * recipe().h / recipe().w);
+
+/** Rapport hauteur/largeur d'une case.
+ *  Une case GENEREE suit la recette (832x1216). Une case INGEREE a le format du
+ *  cadre decoupe dans la page — quelconque. Confondre les deux rognait les cases
+ *  ingerees a l'ecran et les ecrasait a l'export. */
+function panelAspect(p){
+  const b = p && p.recipe && p.recipe.box, pg = p && p.recipe && p.recipe.page;
+  if (b && pg && b[2] > 0 && pg[0] > 0)
+    return (b[3] * pg[1]) / (b[2] * pg[0]);
+  const r = recipe();
+  return (+r.h || 1216) / (+r.w || 832);
+}
+const bubVH = (p) => Math.round(BUB_VW * panelAspect(p));
 
 const BUB_DEFAULT = { shape: "oval", x: 0.5, y: 0.18, w: 0.52, h: 0.16,
                       text: "", size: 0.042, bold: false, tail: null };
@@ -550,8 +594,8 @@ const BUB_FIT = {
   burst:   { kw: 0.46, sx: 0.72, sy: 0.72 },   // l'etoile est creuse : rayon interne 0,66
 };
 
-function bubGeom(b){
-  const VH = bubVH();
+function bubGeom(b, pan){
+  const VH = bubVH(pan);
   const f = BUB_FIT[b.shape] || BUB_FIT.oval;
   const cx = b.x * BUB_VW, cy = b.y * VH;
   const rx = b.w / 2 * BUB_VW;
@@ -610,8 +654,8 @@ function bubShape(b, cx, cy, rx, ry){
  *  qui barre le texte (constate au banc) : on la repousse au-dela du contour.
  *  La donnee de l'utilisateur n'est pas modifiee — seul l'affichage est corrige,
  *  et la poignee d'edition utilise le meme point pour rester coherente. */
-function bubTailPoint(b, cx, cy, rx, ry){
-  let tx = b.tail.x * BUB_VW, ty = b.tail.y * bubVH();
+function bubTailPoint(b, cx, cy, rx, ry, pan){
+  let tx = b.tail.x * BUB_VW, ty = b.tail.y * bubVH(pan);
   const d = Math.hypot((tx - cx) / rx, (ty - cy) / ry);
   if (d < 1.25){
     const k = 1.25 / Math.max(0.001, d);
@@ -623,9 +667,9 @@ function bubTailPoint(b, cx, cy, rx, ry){
 /** La queue. Astuce : chemin OUVERT (pas de Z) rempli en blanc — son remplissage
  *  efface le trait de la bulle a l'endroit ou elle s'y raccorde, et le contour
  *  n'est trace que sur les deux cotes. C'est ce qui donne une vraie jonction. */
-function bubTail(b, cx, cy, rx, ry){
+function bubTail(b, cx, cy, rx, ry, pan){
   if (!b.tail || b.shape === "none") return "";
-  const { tx, ty } = bubTailPoint(b, cx, cy, rx, ry);
+  const { tx, ty } = bubTailPoint(b, cx, cy, rx, ry, pan);
   const a = Math.atan2(ty - cy, tx - cx), sp = 0.30;
   const p = (ang) => (cx + Math.cos(ang)*rx*1.02).toFixed(1) + ","
                    + (cy + Math.sin(ang)*ry*1.02).toFixed(1);
@@ -645,11 +689,11 @@ function bubTail(b, cx, cy, rx, ry){
 
 /** Le calque complet d'une case. `interactive` ajoute les poignees d'edition. */
 function bubblesSVG(panel, interactive, selId){
-  const VH = bubVH();
+  const VH = bubVH(panel);
   const list = panel.bubbles || [];
   let g = "";
   for (const b of list){
-    const { cx, cy, rx, ry, lines, fontPx, lh, y0 } = bubGeom(b);
+    const { cx, cy, rx, ry, lines, fontPx, lh, y0 } = bubGeom(b, panel);
     let txt = '<text x="' + cx + '" y="' + y0 + '" text-anchor="middle" '
             + 'dominant-baseline="central" font-size="' + fontPx.toFixed(1) + '" '
             + 'font-family="Comic Neue, sans-serif" font-weight="' + (b.bold ? 700 : 400) + '">';
@@ -658,11 +702,11 @@ function bubblesSVG(panel, interactive, selId){
     });
     txt += "</text>";
     g += '<g class="bub' + (interactive && b.id === selId ? " sel" : "") + '" data-bid="' + b.id + '">'
-       + bubShape(b, cx, cy, rx, ry) + bubTail(b, cx, cy, rx, ry) + txt
+       + bubShape(b, cx, cy, rx, ry) + bubTail(b, cx, cy, rx, ry, panel) + txt
        + (interactive
           ? '<circle class="handle" data-h="size" cx="' + (cx+rx) + '" cy="' + (cy+ry)
             + '" r="16" fill="#4a9ee8" stroke="#fff" stroke-width="3"/>'
-            + (b.tail ? (() => { const t = bubTailPoint(b, cx, cy, rx, ry);
+            + (b.tail ? (() => { const t = bubTailPoint(b, cx, cy, rx, ry, panel);
                  return '<circle class="handle" data-h="tail" cx="' + t.tx.toFixed(1)
                       + '" cy="' + t.ty.toFixed(1) + '" r="14" fill="#e84a5f" stroke="#fff" stroke-width="3"/>'; })() : "")
           : "")
@@ -774,7 +818,10 @@ function panelHTML(p, i){
   const v = p.verdict === "ok" ? "✅" : (p.verdict === "ko" ? "❌" : "");
   const nb = (p.bubbles || []).length;
   return '<div class="panel' + (p.id === S.lettering ? " lettering" : "") + '" data-pid="' + p.id + '">'
-   + '<div class="img"><span class="num">' + (i+1) + '</span><span class="verdict">' + v + '</span>'
+   // Le format vient de la CASE : une case ingeree garde celui de son cadre d'origine,
+   // sinon elle serait rognee a l'ecran et ecrasee a l'export.
+   + '<div class="img" style="aspect-ratio:1/' + panelAspect(p).toFixed(4) + '">'
+   + '<span class="num">' + (i+1) + '</span><span class="verdict">' + v + '</span>'
    + img + bubblesSVG(p, p.id === S.lettering, S.selBub)
    + '<div class="busy" data-busy hidden><div class="spin"></div><span data-busytxt></span></div></div>'
    + '<div class="body">'
@@ -1020,7 +1067,49 @@ async function buildPlateCanvas(){
     i.onload = () => res(i); i.onerror = () => rej(new Error("image illisible: " + p.file));
     i.src = imgURL(p.file);
   })));
-  const cw = imgs[0].naturalWidth, ch = imgs[0].naturalHeight;
+
+  // --- Planche INGEREE : on la remonte a sa geometrie d'origine ---------------
+  // Chaque case sait ou elle etait dans la page. La reposer a sa place, c'est
+  // rendre la page relettree ; la mettre dans une grille, c'est en faire autre chose.
+  const L = S.page.layout || {};
+  if (L.source === "ingest" && L.pageW > 0){
+    const sc = Math.max(1, Math.min(3, 2000 / L.pageW));   // on remonte un peu en resolution
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(L.pageW * sc); cv.height = Math.round(L.pageH * sc);
+    const x = cv.getContext("2d");
+    x.fillStyle = "#fff"; x.fillRect(0, 0, cv.width, cv.height);
+    // DEUX passes, et l'ordre n'est pas un detail : les cadres detectes se
+    // CHEVAUCHENT (YOLO trouve parfois une grande zone qui en contient de petites).
+    // En une seule passe, une case dessinee ensuite recouvre les bulles des
+    // precedentes — mesure : 3 bulles francaises sur 6 disparaissaient de l'export.
+    // 1) les images, les plus GRANDES d'abord, pour que les petites restent dessus ;
+    // 2) tous les calques de texte, donc aucun ne peut etre recouvert.
+    const aire = i => { const b = done[i].recipe && done[i].recipe.box;
+                        return b ? b[2] * b[3] : 0; };
+    const ordre = done.map((_, i) => i).sort((a, b) => aire(b) - aire(a));
+    for (const i of ordre){
+      const b = done[i].recipe && done[i].recipe.box;
+      if (!b) continue;
+      x.drawImage(imgs[i], b[0]*cv.width, b[1]*cv.height, b[2]*cv.width, b[3]*cv.height);
+    }
+    for (let i = 0; i < done.length; i++){
+      const b = done[i].recipe && done[i].recipe.box;
+      if (!b) continue;
+      const w = b[2]*cv.width, h = b[3]*cv.height;
+      const layer = await bubblesToImage(done[i], Math.round(w), Math.round(h));
+      if (layer) x.drawImage(layer, b[0]*cv.width, b[1]*cv.height, w, h);
+    }
+    const nb = done.reduce((n,p) => n + (p.bubbles || []).length, 0);
+    log("planche ingérée remontée " + cv.width + "x" + cv.height + ", " + nb + " bulle(s)", "s");
+    return cv;
+  }
+  // Toutes les cases n'ont PAS la meme taille : une planche ingeree donne des cadres
+  // de dimensions quelconques. Prendre celle de la 1re image les ecraserait toutes
+  // a son format. On fixe une cellule au rapport de la recette — exactement ce que
+  // fait l'ecran (`aspect-ratio` en CSS) — et chaque image y entre en « cover ».
+  const r = recipe();
+  const cw = Math.max.apply(null, imgs.map(i => i.naturalWidth));
+  const ch = Math.round(cw * (+r.h / +r.w));
   const rows = Math.ceil(imgs.length / cols);
   const cv = document.createElement("canvas");
   cv.width  = pad*2 + cols*cw + (cols-1)*gut;
@@ -1031,7 +1120,11 @@ async function buildPlateCanvas(){
   imgs.forEach((im,i) => {
     const c = i % cols, rr = Math.floor(i / cols);
     const ox = pad + c*(cw+gut), oy = pad + rr*(ch+gut);
-    x.drawImage(im, ox, oy, cw, ch);
+    // « cover » : on recadre la SOURCE au centre plutot que de deformer l'image,
+    // pour que l'export montre exactement ce que l'ecran montre.
+    const sc = Math.max(cw / im.naturalWidth, ch / im.naturalHeight);
+    const sw = cw / sc, sh = ch / sc;
+    x.drawImage(im, (im.naturalWidth - sw)/2, (im.naturalHeight - sh)/2, sw, sh, ox, oy, cw, ch);
     if (layers[i]) x.drawImage(layers[i], ox, oy, cw, ch);
   });
   const nb = done.reduce((n,p) => n + (p.bubbles || []).length, 0);
@@ -1088,6 +1181,145 @@ async function exportPDF(){
 
   download(new Blob(parts, { type: "application/pdf" }), plateName() + ".pdf");
   log("PDF exporté (" + Math.round(len/1024) + " Ko, " + pw.toFixed(0) + "x" + ph.toFixed(0) + " pt)", "s");
+}
+
+/* =====================================================================
+   INGESTION D'UNE PAGE EXISTANTE (phase 3 portee dans l'app)
+   ===================================================================== */
+let ING = null;   // dernier resultat d'analyse, en attente de creation
+
+async function ingestPage(){
+  const f = $("ingFile").files[0];
+  if (!f) return toast("choisis une page");
+  if (!S.proj) return toast("crée un projet d'abord");
+  const trad = $("ingTrad").checked;
+  $("btnIngest").disabled = true;
+  $("ingState").textContent = trad ? "détection puis traduction… (~15 s)" : "détection…";
+  log("ingestion de " + f.name + (trad ? " avec traduction" : ""));
+  try {
+    const b64 = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result));
+      r.onerror = () => rej(new Error("lecture du fichier impossible"));
+      r.readAsDataURL(f);
+    });
+    const r = await api("/manga/ingest", { image: b64, filename: f.name,
+      slug: S.proj.slug, translate: trad, conf: +$("ingConf").value || 0.25 });
+    ING = r;
+    renderIngest(r);
+    $("ingState").textContent = r.panels.length + " case(s), " + r.texts.length + " bulle(s)";
+    log("ingestion OK : " + r.panels.length + " cases, " + r.texts.length + " bulles, "
+        + (r.traduites || 0) + " traduites", "s");
+  } catch(e){
+    log("ingestion: " + e.message, "e");
+    toast("échec : " + e.message);
+    $("ingState").textContent = "échec";
+  } finally { $("btnIngest").disabled = false; }
+}
+
+function renderIngest(r){
+  $("ingResCard").hidden = false;
+  const parBulle = {};
+  (r.texts || []).forEach(t => { (parBulle[t.panel] = parBulle[t.panel] || []).push(t); });
+  $("ingRes").innerHTML =
+    '<p class="muted">Page ' + r.w + '×' + r.h + ' — ' + r.panels.length + ' case(s), '
+    + r.texts.length + ' bulle(s)' + (r.traduites ? ', ' + r.traduites + ' traduite(s)' : '') + '</p>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">'
+    + r.panels.map(p =>
+        '<figure style="margin:0;background:var(--panel2);border:1px solid var(--line);'
+        + 'border-radius:8px;overflow:hidden">'
+        + (p.file ? '<img src="' + imgURL(S.proj.slug + "/" + p.file)
+                    + '" style="width:100%;display:block">' : '')
+        + '<figcaption style="padding:6px 8px;font-size:12px;color:var(--dim)">case '
+        + p.id + ' · conf ' + p.conf
+        + (parBulle[p.id] ? '<br>' + parBulle[p.id].map(t => esc(t.fr || t.src || "(vide)")).join("<br>") : '')
+        + '</figcaption></figure>').join("")
+    + '</div>';
+}
+
+/** Convertit le resultat d'ingestion en planche : une case par cadre, une bulle
+ *  par zone de texte, POSEE OU ELLE A ETE TROUVEE. C'est ce qui rend le relettrage
+ *  possible : on ne repositionne pas 9 bulles a la main. */
+async function createFromIngest(){
+  if (!ING) return toast("analyse une page d'abord");
+  const r = ING;
+  // Le ton detecte choisit la forme : une pensee n'est pas un cri.
+  const forme = t => ({ pense: "thought", crie: "burst", narration: "none" })[t] || "oval";
+
+  /** Re-proportionne une bulle ingeree pour du texte FRANCAIS.
+   *
+   *  Le japonais s'ecrit VERTICALEMENT : ses bulles sont hautes et etroites.
+   *  Reprendre cette boite telle quelle donne du francais a un mot par ligne
+   *  (constate au banc : « C'est / bien / ce que / je / pensais. »).
+   *  On garde donc la SURFACE detectee — elle dit combien de texte tenait la —
+   *  mais on lui impose un format paysage, qui est celui d'une ecriture
+   *  horizontale. La hauteur finale reste libre : la bulle grandit ensuite
+   *  d'elle-meme si le texte le demande.
+   */
+  const paysage = (txt, size, aspect) => {
+    // La surface japonaise ne sert a rien ici : le francais prend plus de place que
+    // le japonais vertical, et c'est le TEXTE qui doit dicter la largeur.
+    // Bloc de texte legerement plus large que haut (ratio ~1,6) : n = L x C et
+    // C x 0,52 / (L x 1,18) = 1,6  =>  L = racine(n / 3,63).
+    const n = Math.max(4, (txt || "").length);
+    const L = Math.max(1, Math.sqrt(n / 3.63));
+    const C = 3.63 * L;                       // caracteres par ligne vises
+    // La taille de police est une fraction de la HAUTEUR de la case : elle depend
+    // donc du format de CETTE case, pas de celui de la recette. Une case ingeree
+    // large et basse et une case generee en portrait n'ont pas la meme echelle.
+    const fontU = size * BUB_VW * aspect;                    // taille en unites SVG
+    const larg = C * 0.52 * fontU;            // largeur du bloc, en unites SVG
+    // larg = 2 x rx x kw  et  rx = w/2 x BUB_VW  =>  w = larg / (kw x BUB_VW)
+    return { w: Math.min(0.92, Math.max(0.34, larg / (0.72 * BUB_VW))),
+             h: 0.12 };                       // la hauteur s'ajustera au texte
+  };
+  const page = await api("/manga/pages", { projectId: S.proj.id,
+    chapter: $("pgChapter").value || "1", idx: S.pages.length,
+    title: "ingérée " + (r.base || ""),
+    layout: { cols: 2, source: "ingest", pageW: r.w, pageH: r.h }, master: {} });
+  const items = r.panels.map((p, i) => {
+    const bulles = (r.texts || []).filter(t => t.panel === p.id && (t.fr || t.src));
+    return {
+      pageId: page.id, idx: i, kind: "dialogue",
+      prompt: "", file: S.proj.slug + "/" + p.file,
+      // box = ou se trouvait ce cadre dans la page, page = les dimensions de la page.
+      // Les deux ensemble permettent de REMONTER la planche a sa geometrie d'origine
+      // a l'export : c'est ca, relettrer — pas mettre les cases dans une grille.
+      recipe: { source: "ingestion", conf: p.conf,
+                box: [p.x, p.y, p.w, p.h], page: [r.w, r.h] },
+      bubbles: bulles.map((t, j) => {
+        // format reel de CETTE case dans la page source
+        const asp = (p.h * r.h) / (p.w * r.w);
+        // La taille du texte est une fraction de la hauteur de LA CASE. Sur un
+        // bandeau plat, ca donne un lettrage minuscule alors que la case est large.
+        // Un lettreur garde une taille constante sur LA PAGE : on vise donc 1,9 %
+        // de la hauteur de page, converti en fraction de case.
+        const taille = Math.min(0.26, Math.max(0.020, 0.019 / Math.max(0.05, p.h)));
+        const g = paysage(t.fr || t.src || "", taille, asp);
+        return {
+          id: "i" + p.id + "_" + j, shape: forme(t.tone),
+          // recentre pour que la bulle elargie reste dans la case
+          x: Math.min(1 - g.w/2 - 0.01, Math.max(g.w/2 + 0.01, t.bx)),
+          y: Math.min(1 - g.h/2 - 0.01, Math.max(g.h/2 + 0.01, t.by)),
+          // La bulle doit au minimum COUVRIR celle d'origine : sinon le japonais
+          // reste visible autour du francais, et la page n'est pas relettree.
+          w: Math.min(0.96, Math.max(g.w, t.bw * 1.08)),
+          h: Math.max(g.h, t.bh * 1.08),
+          text: t.fr || t.src || "", size: taille, bold: false, tail: null,
+          // on garde la source : sans elle, impossible de verifier une traduction
+          src: t.src || "", lang: t.lang || ""
+        };
+      })
+    };
+  }).filter(x => x.file && !x.file.endsWith("/"));
+  if (!items.length) return toast("aucune case exploitable");
+  await api("/manga/panels", { items });
+  localStorage.setItem("manga_page", page.id);
+  await loadPages();
+  document.querySelector('nav button[data-tab="tPlate"]').click();
+  toast(items.length + " case(s) créée(s)");
+  log("planche créée depuis l'ingestion : " + items.length + " cases, "
+      + items.reduce((n,x) => n + x.bubbles.length, 0) + " bulles", "s");
 }
 
 async function refreshGal(){
@@ -1190,6 +1422,9 @@ $("btnGenAll").onclick = genAll;
 $("btnExport").onclick = () => exportPlate().catch(e => { log("export PNG: " + e.message, "e"); toast("échec export"); });
 $("btnExportPdf").onclick = () => exportPDF().catch(e => { log("export PDF: " + e.message, "e"); toast("échec export PDF"); });
 $("btnRefreshGal").onclick = refreshGal;
+$("btnIngest").onclick = ingestPage;
+$("btnIngCreate").onclick = () => createFromIngest()
+  .catch(e => { log("création depuis ingestion: " + e.message, "e"); toast("échec"); });
 
 $("plate").addEventListener("click", async e => {
   const btn = e.target.closest("[data-act]"); if (!btn) return;
