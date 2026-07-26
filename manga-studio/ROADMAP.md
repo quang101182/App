@@ -449,13 +449,52 @@ du dessin, elle épouse la composition.
 (donc en portrait). Il y est plus haché qu'il ne le serait dans une bulle conçue pour lui — c'est le prix
 de la fidélité au dessin, et c'est le bon arbitrage.
 
-### Phase 6 — Boucle de validation ⏳
+### Phase 6 — Boucle de validation 🔄 *(machinerie livrée le 27/07 — v1.7.0 ; reste l'entraînement)*
 **Reprendre la décision GS du 29/06, ne pas réinventer** : l'apprentissage automatique, invisible et
 appliqué sur signal faible avait été jugé non fiable et **rétrogradé en suggestions à valider**.
 Ici : Quang note ✅/❌ ; le validé alimente (a) une bibliothèque de recettes gagnantes réutilisables,
 (b) à ~30-50 cases validées d'un même style, **le dataset d'entraînement du LoRA suivant** — c'est là que
 la boucle paie vraiment. **L'app propose, elle n'impose jamais.**
 > **Critère de sortie** : un 2ᵉ LoRA entraîné à partir de cases validées bat le 1er sur le test de la phase 1.
+
+**Livré (v1.7.0) — onglet « Validé » :** les cases notées ✅ alimentent une bibliothèque de recettes
+rejouables, et un bouton écrit le **dataset du LoRA suivant** (`POST /manga/dataset` →
+`dataset_<projet>/`, paires image + caption). `prep_train.py` accepte désormais **n'importe quel**
+dataset (`--src`, `--trigger`) au lieu d'être figé sur celui de la v1.
+
+Les captions sont construites selon la règle payée sur le LoRA v1 : **trigger + tags de style + ce qui
+VARIE**, jamais un attribut constant du personnage — le décrire apprendrait au modèle qu'il est
+*détachable*.
+
+**Résultat mesuré — banc `scripts/test_validation_live.py` :**
+
+| Mesure | Valeur |
+|---|---|
+| Cases validées vues par l'app | 2 ✅ / 1 ❌ sur 4 |
+| Recette **copiée** dans la case vide | ✅ (avec un **seed renouvelé** — sinon on rejoue la même image) |
+| **Autres cases modifiées d'office** | **0** — *l'app propose, elle n'impose pas* |
+| Dataset écrit : images / captions / appariées | **2 / 2 / 2** |
+| Trigger en tête, aucun attribut constant | ✅ |
+| **L'entraîneur accepte le dossier** | ✅ (`prep_train.py --src` exécuté pour de vrai) |
+| Erreurs JS | 0 |
+
+La propriété « l'app n'impose rien » est **falsifiable** : sabotée (la recette appliquée à toutes les
+cases), le banc passe de 0 à 3 et vire au rouge. C'est la seule qui compte vraiment — une boucle qui
+s'applique toute seule serait une régression sur la décision Generate Studio du 29/06.
+
+**⏳ Ce qui reste, et qui demande le GPU** : entraîner le LoRA v2 et le confronter au v1 sur le test des
+18 observations de la phase 1. **Il faut couper ComfyUI** (16 Go de VRAM ne suffisent pas aux deux),
+donc l'app perd sa génération pendant ~40 min. À lancer quand Quang ne s'en sert pas :
+```
+python scripts/prep_train.py --src <dataset> --trigger <trigger>
+bash scripts/train_lora.sh
+python scripts/manga_test_lora.py      # rejoue le comparatif de la phase 1
+```
+
+**⚠️ Bug latent trouvé au passage** : `prep_train.py` cherchait le dataset dans `scripts/dataset/` alors
+qu'il est à la racine du projet. Il ne trouvait donc **plus rien, en silence, depuis que les scripts ont
+été rangés dans `scripts/`** (commit `d2ccc5c`) — le LoRA v1 n'aurait pas pu être réentraîné. Corrigé, et
+vérifié : 24 images × 6 repeats = 1 152 steps, exactement les chiffres de la phase 1.
 
 ---
 
@@ -474,6 +513,8 @@ la boucle paie vraiment. **L'app propose, elle n'impose jamais.**
 | **Créer ≠ sélectionner** | Le projet fraîchement créé n'était pas le projet courant → 6 cases rangées chez un voisin, **sans aucune erreur**. Toujours vérifier *où* un fichier atterrit, pas seulement *qu'il* atterrit. |
 | **`hidden` écrasé par un `display` d'auteur** | `.busy{display:flex}` annule l'attribut `hidden` : le voile est resté affiché sur chaque case pendant toute la v1.0.1, masquant l'image et **avalant les clics**. Toujours écrire `.x[hidden]{display:none}` quand on donne un `display` à un élément qu'on masque par attribut. |
 | **Un banc qui ne regarde jamais l'écran** | Les 3 défauts de la phase 5 étaient verts sur tous les chiffres. Un banc d'UI doit produire une **capture** — et un contrôle géométrique (`getBBox`) quand la question est « est-ce que ça tient dedans ». |
+| **Un chemin relatif apres un rangement de fichiers** | `prep_train.py` pointait vers `HERE/dataset` ; les scripts ont ete deplaces dans `scripts/`, le dataset est reste a la racine. Il ne trouvait plus rien **sans rien dire** — un `continue` silencieux dans une boucle. Tout script qui peut finir avec 0 element doit le DIRE bruyamment. |
+| **Un caractere non-ASCII dans un message** | Un `⚠` dans un `print()` fait planter le script sur une console Windows cp1252. Le banc qui lisait sa sortie a conclu a un echec d'entrainement **qui n'avait jamais eu lieu**. Forcer `sys.stdout` en UTF-8, ou rester en ASCII. |
 | **Un poids de modele non versionne ET non scriptable** | Le detecteur YOLO avait ete telecharge dans un scratchpad, jamais range. A la session suivante il avait disparu, emportant la reproductibilite de la phase 3 alors que ses chiffres etaient soigneusement consignes. Un binaire n'a pas sa place dans le depot, mais **la commande qui le rapporte, si** : `scripts/fetch_models.py`. |
 | **Bulles japonaises reprises telles quelles** | Le japonais s'ecrit **verticalement** : ses boites sont en portrait. Les reutiliser pour du francais donne un mot par ligne. Dimensionner la bulle **par son texte**, jamais par la boite detectee. |
 | **Un garde-fou cale sur une fenetre arbitraire** | Decider « est-ce une bulle ? » selon que l'aplat touche les bords d'une fenetre qu'on a soi-meme choisie se declenche **a l'envers sur le cas normal** (texte au centre d'une grande bulle : la fenetre est entierement dedans). Le bon critere etait la **surface atteinte** par la diffusion. |
@@ -490,6 +531,7 @@ la boucle paie vraiment. **L'app propose, elle n'impose jamais.**
 | 2026-07-26 | Ouverture du chantier. Décision d'archi (app séparée). Checkpoint Illustrious installé. Essais 1-4 mesurés. Recherche web + vote 3 voix. kohya installé (3 pièges payés : cu128, versions transformers, encodage cp1252). |
 | 2026-07-26 | **Phase 1 franchie à 89 %** (contre 50 % sans LoRA). LoRA `zqmg1rl_v1` entraîné et validé sur comparatif strict. 2 réserves ouvertes → LoRA v2 avant la phase 4. |
 | 2026-07-26 | **Phase 3 : pipeline d'ingestion écrit et mesuré** (`manga_ingest.py`). Découpage 83 % à IoU 0,66 mais **Pixtral quantifie sur une grille** ⇒ raffinement OpenCV nécessaire. Volet style : OK. **Bloqué sur la validation** faute de scans réels de Quang. Premier test = faux positif, corrigé par un test à vérité terrain. |
+| 2026-07-27 | **Boucle de validation livree** (v1.7.0) : onglet Valide, bibliotheque de recettes rejouables, ecriture du dataset du LoRA suivant, `prep_train.py` rendu generique. La propriete « l'app propose, elle n'impose rien » est **falsifiable** et verifiee rouge sous sabotage. Bug latent trouve : `prep_train.py` ne trouvait plus le dataset depuis le rangement des scripts — le LoRA v1 n'etait plus reentrainable, en silence. RESTE l'entrainement du v2 (GPU, ComfyUI a couper ~40 min). |
 | 2026-07-27 | **Effacement du texte source** (v1.6.2). Les bulles d'origine sont VIDEES (diffusion bornee depuis un pixel clair, sans IA) et leur contour survit ⇒ on les REUTILISE au lieu d'en empiler de nouvelles. Mesure : noir dans la zone du japonais 0,070 -> **0,000**, 0 texte qui deborde. Deux erreurs de methode notees : un garde-fou qui se declenchait **a l'envers sur le cas normal**, et une mesure faite **au mauvais endroit** (dans l'export lettre au lieu de la case nettoyee) qui concluait a l'inverse de la verite. |
 | 2026-07-27 | **Ingestion et relettrage dans l'app** (v1.5.0). Onglet Ingestion : page reelle -> YOLO -> Pixtral -> planche relettrable, exportee **a la geometrie de la page d'origine**. 5/5 cases, 6/6 bulles francaises, 6/6 **visibles dans le fichier exporte**, ~14 s. Quatre defauts corriges, dont trois invisibles autrement : bulles en portrait (le japonais est vertical), cases ecrasees a l'export, et **3 bulles sur 6 recouvertes** par des cadres qui se chevauchent. **Le modele YOLO avait DISPARU** (il vivait dans un scratchpad) : `fetch_models.py` le rapporte desormais — un chiffre mesure dont l'outil a disparu n'est plus un resultat, c'est un souvenir. |
 | 2026-07-26 | **Phase 5 franchie — bulles et lettrage** (v1.2.0). Calque SVG unique (écran = export par construction), 5 formes, queue orientable, police Comic Neue embarquée, export PNG **et** PDF écrit à la main. Trois défauts trouvés par la mesure, dont **le voile de génération qui recouvrait chaque case depuis la v1.0.1** — invisible dans les chiffres, évident à l'écran ⇒ le banc prend désormais une **capture**. Reste : le relettrage d'une page traduite, qui attend un écran d'**ingestion** dans l'app. |

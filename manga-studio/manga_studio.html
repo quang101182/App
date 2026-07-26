@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.6.2</title>
+<title>Manga Studio v1.7.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -139,7 +139,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.6.2</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.7.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -150,6 +150,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
   <button data-tab="tPlate" class="sel">Planche</button>
   <button data-tab="tProj">Projet</button>
   <button data-tab="tIng">Ingestion</button>
+  <button data-tab="tVal">Validé</button>
   <button data-tab="tGal">Galerie</button>
   <button data-tab="tSet">Réglages</button>
 </nav>
@@ -282,6 +283,48 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
   </div>
 </section>
 
+<!-- ============ VALIDÉ (boucle de validation) ============ -->
+<section id="tVal">
+  <div class="card">
+    <h3>Ce que tu as validé</h3>
+    <p class="muted" style="margin:0 0 8px">
+      Tu notes ✅ / ❌ sur chaque case. Le validé sert à deux choses, et à rien d'autre :
+      une <b>bibliothèque de recettes</b> réutilisables, et — à partir d'une trentaine de cases
+      d'un même style — le <b>dataset du LoRA suivant</b>. C'est là que la boucle paie vraiment.
+    </p>
+    <p class="muted" style="margin:0 0 10px">
+      <b>L'app propose, elle n'impose jamais.</b> Rien n'est appliqué tout seul : la décision
+      Generate Studio du 29/06 avait jugé l'apprentissage automatique sur signal faible non fiable,
+      et l'avait rétrogradé en suggestions à valider. On ne la rejoue pas.
+    </p>
+    <div class="row">
+      <button class="btn" id="btnValRefresh">Rafraîchir</button>
+      <span class="muted" id="valState"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Dataset du prochain LoRA</h3>
+    <div class="row">
+      <div style="width:170px"><label>Déclencheur (trigger)</label><input id="dsTrigger"></div>
+      <div class="grow"><label>Tags constants du style</label><input id="dsStyle"
+        value="1girl, solo, monochrome, greyscale, manga"></div>
+    </div>
+    <p class="muted" style="margin:8px 0">
+      Les captions décrivent <b>ce qui varie</b> (cadrage, expression, fond) — jamais ce qui est
+      constant (coiffure, uniforme). Décrire un attribut constant apprend au modèle qu'il est
+      <i>détachable</i> du personnage : c'est le piège payé sur le LoRA v1.
+    </p>
+    <div class="row">
+      <button class="btn pri" id="btnDataset">Écrire le dataset</button>
+      <span class="muted" id="dsState"></span>
+    </div>
+    <div id="dsOut" class="muted" style="margin-top:8px"></div>
+  </div>
+
+  <div id="valList"></div>
+</section>
+
 <!-- ============ GALERIE ============ -->
 <section id="tGal">
   <div class="card">
@@ -338,7 +381,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
       sont incompatibles dans une meme case.
    ===================================================================== */
 
-const VERSION = "1.6.2";
+const VERSION = "1.7.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1359,6 +1402,91 @@ async function createFromIngest(){
       + items.reduce((n,x) => n + x.bubbles.length, 0) + " bulles", "s");
 }
 
+/* =====================================================================
+   BOUCLE DE VALIDATION (phase 6)
+
+   Deux usages du valide, et deux seulement :
+     (a) une bibliotheque de recettes gagnantes, rejouables telles quelles ;
+     (b) a ~30 cases d'un meme style, le dataset du LoRA suivant.
+   L'app PROPOSE. Elle n'applique rien d'elle-meme, elle n'entraine rien.
+   ===================================================================== */
+let VALIDES = [];
+
+/** Caption d'entrainement : le trigger + les tags constants + CE QUI VARIE.
+ *  Ne jamais y mettre un attribut constant du personnage (coiffure, uniforme) :
+ *  le modele apprendrait qu'il est detachable. Piege paye sur le LoRA v1. */
+function caption(p, trigger, style){
+  const varie = (p.prompt || "").trim();
+  return [trigger, style, varie].filter(Boolean).join(", ");
+}
+
+async function loadValides(){
+  if (!S.proj) return;
+  const pages = (await api("/manga/pages?project=" + S.proj.id)).items || [];
+  const lots = await Promise.all(pages.map(pg =>
+    api("/manga/panels?page=" + pg.id).then(r => (r.items || []).map(x =>
+      Object.assign({}, x, { _page: pg })))));
+  const tous = lots.flat();
+  VALIDES = tous.filter(p => p.verdict === "ok" && p.file);
+  const refuses = tous.filter(p => p.verdict === "ko").length;
+  $("valState").textContent = VALIDES.length + " validée(s) · " + refuses
+    + " refusée(s) · " + tous.length + " case(s) au total";
+  const manque = Math.max(0, 30 - VALIDES.length);
+  $("dsState").textContent = manque
+    ? manque + " case(s) de plus avant qu'un LoRA soit vraiment utile"
+    : "assez de matière pour entraîner";
+  if (!$("dsTrigger").value) $("dsTrigger").value = recipe().trigger || "";
+
+  $("valList").innerHTML = VALIDES.length ? (
+    '<div class="card"><h3>Recettes gagnantes</h3>'
+    + '<div id="gal">' + VALIDES.map(p => {
+        const r = p.recipe || {};
+        return '<figure><img loading="lazy" src="' + imgURL(p.file) + '" alt="">'
+          + '<figcaption>' + esc((p.prompt || "").slice(0, 60) || "(sans prompt)")
+          + '<br>seed ' + (r.seed || "?") + (r.loraW ? " · LoRA " + r.loraW : "")
+          + (r.controlnet ? " · CN " + r.controlnet.weight : "")
+          + '<br><button class="btn sm" data-reuse="' + p.id + '">réutiliser</button>'
+          + '</figcaption></figure>'; }).join("")
+    + '</div></div>')
+    : '<p class="muted">Aucune case validée pour l\'instant. Note ✅ sur les cases que tu gardes.</p>';
+}
+
+/** Reutiliser une recette : on la COPIE dans la case courante en attente, on ne
+ *  l'applique jamais d'office ailleurs. */
+async function reuseRecipe(pid){
+  const src = VALIDES.find(p => p.id === pid);
+  if (!src) return;
+  const cible = S.panels.find(p => !p.file);
+  if (!cible) return toast("ajoute d'abord une case vide dans la planche courante");
+  cible.prompt = src.prompt;
+  cible.kind = src.kind;
+  cible.recipe = Object.assign({}, src.recipe, { seed: Math.floor(Math.random()*1e9),
+                                                 herite_de: src.id });
+  await api("/manga/panels", cible);
+  renderPlate();
+  toast("recette copiée dans la case " + (S.panels.indexOf(cible) + 1));
+}
+
+async function ecrireDataset(){
+  if (!VALIDES.length) return toast("aucune case validée");
+  const trigger = $("dsTrigger").value.trim() || "perso";
+  const style = $("dsStyle").value.trim();
+  const items = VALIDES.map(p => ({ file: p.file, caption: caption(p, trigger, style) }));
+  $("btnDataset").disabled = true;
+  try {
+    const r = await api("/manga/dataset", { slug: S.proj.slug, trigger, items });
+    $("dsOut").innerHTML = '<b>' + r.images + ' image(s)</b> écrite(s) dans <code>'
+      + esc(r.path) + '</code>'
+      + (r.absents && r.absents.length ? '<br>⚠ ' + r.absents.length + ' fichier(s) introuvable(s)' : '')
+      + '<br>Pour entraîner (ComfyUI doit être coupé — 16 Go de VRAM ne suffisent pas aux deux) :'
+      + '<br><code>' + esc(r.commande) + '</code>'
+      + '<br><code>bash scripts/train_lora.sh</code>';
+    log("dataset écrit : " + r.images + " images -> " + r.path, "s");
+    toast(r.images + " image(s) dans le dataset");
+  } catch(e){ log("dataset: " + e.message, "e"); toast("échec : " + e.message); }
+  finally { $("btnDataset").disabled = false; }
+}
+
 async function refreshGal(){
   if (!S.proj) return;
   const j = await api("/manga/files?slug=" + encodeURIComponent(S.proj.slug));
@@ -1407,6 +1535,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("main section").forEach(x => x.classList.remove("sel"));
   b.classList.add("sel"); $(b.dataset.tab).classList.add("sel");
   if (b.dataset.tab === "tGal") refreshGal();
+  if (b.dataset.tab === "tVal") loadValides().catch(e => log("validé: " + e.message, "e"));
   if (b.dataset.tab === "tSet"){ $("cfgBase").value = CFG.base; $("cfgKey").value = CFG.key; }
 });
 
@@ -1459,6 +1588,12 @@ $("btnGenAll").onclick = genAll;
 $("btnExport").onclick = () => exportPlate().catch(e => { log("export PNG: " + e.message, "e"); toast("échec export"); });
 $("btnExportPdf").onclick = () => exportPDF().catch(e => { log("export PDF: " + e.message, "e"); toast("échec export PDF"); });
 $("btnRefreshGal").onclick = refreshGal;
+$("btnValRefresh").onclick = () => loadValides().catch(e => log("validé: " + e.message, "e"));
+$("btnDataset").onclick = ecrireDataset;
+$("valList").addEventListener("click", e => {
+  const id = e.target.dataset && e.target.dataset.reuse;
+  if (id) reuseRecipe(id).catch(x => { log("réutilisation: " + x.message, "e"); toast("échec"); });
+});
 $("btnIngest").onclick = ingestPage;
 $("btnIngCreate").onclick = () => createFromIngest()
   .catch(e => { log("création depuis ingestion: " + e.message, "e"); toast("échec"); });

@@ -1,6 +1,6 @@
 # Manga Studio
 
-> État : **phases 3 (dans l'app), 4 et 5 franchies** — `manga_studio.html` **v1.6.2**. L'app produit une
+> État : **phases 3 (dans l'app), 4 et 5 franchies** — `manga_studio.html` **v1.7.0**. L'app produit une
 > planche complète (bulles et lettrage compris) **et** ingère une page existante pour la relettrer en
 > français, exportée à la géométrie de la page d'origine. PNG et PDF.
 > **La feuille de route est le document de référence : [`ROADMAP.md`](ROADMAP.md)** — objectifs, décision
@@ -52,6 +52,15 @@ sont identiques par construction. La police (**Comic Neue**, OFL) est **embarqu�
 
 Export **PNG** et **PDF** (le PDF est écrit à la main, sans aucune bibliothèque : l'app reste un fichier).
 
+### Boucle de validation
+
+Onglet **Validé** : les cases notées ✅ deviennent une bibliothèque de **recettes rejouables** (le bouton
+« réutiliser » les **copie** dans une case vide, avec un seed neuf — rien n'est appliqué ailleurs), et un
+bouton écrit le **dataset du LoRA suivant**, directement consommable par `prep_train.py --src`.
+
+**L'app propose, elle n'impose jamais.** C'est vérifié par un banc, et la vérification est falsifiable :
+sabotée, elle vire au rouge.
+
 ### 🔒 Les images ne se mélangent jamais à celles de Generate Studio
 
 Exigence de Quang (26/07), après constat que les scripts d'exploration avaient laissé 62 fichiers dans
@@ -77,6 +86,7 @@ git**. Les diffs exacts sont versionnés ici : [`proxy-patch/`](proxy-patch/READ
 | `scripts/rapatrie_outputs.py` | Sort les images manga du dossier de Generate Studio (`--dry-run` par défaut) |
 | `scripts/test_ingest_live.py` | **Banc de l'ingestion** — une vraie page devient une planche relettrable ; vérifie que **chaque bulle est visible dans le fichier exporté** (mesure pixels) et que la page garde sa géométrie |
 | `scripts/test_bubble_shapes.py` | Les 5 formes de bulle contiennent-elles leur texte |
+| `scripts/test_validation_live.py` | **Banc de la phase 6** — notation, réutilisation de recette, écriture du dataset ; vérifie que l'entraîneur **accepte réellement** le dossier produit, et qu'aucune autre case n'est modifiée d'office |
 | `scripts/fetch_models.py` | Rapporte les modèles non versionnés (détecteur YOLO) |
 | `.claude/scripts/responsive-audit.py` | 320/360/384 px × 4 onglets (à la racine du dépôt) |
 
