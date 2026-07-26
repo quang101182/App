@@ -21,6 +21,14 @@ Trois besoins exprimés par Quang le 26/07/2026, dans l'ordre où ils sont arriv
    le style ou en faire des variantes**.
 3. **Apprendre de ce qu'il valide** : il note ✅/❌, l'app s'appuie sur les données validées au fil du temps,
    avec du texte généré et incrusté.
+4. **Produire un CHAPITRE entier depuis un texte** *(rappelé par Quang le 27/07)* : « le but de l'outil,
+   c'est de pouvoir créer une image ou même plusieurs images d'un chapitre, depuis un prompt de texte ou
+   autre ». Autrement dit : on donne un synopsis, un script ou un découpage, et l'app en sort la suite de
+   cases — pas une image à la fois, à la main.
+   **Quang précise lui-même : « ce qui sera possible plus tard ».** C'est donc la cible, pas le prochain
+   pas. ⏱ **Déclencheur de reprise : après le LoRA v2**, parce que générer un chapitre n'a de sens que
+   si le personnage et le décor tiennent sur la durée — c'est exactement ce que les phases 1, 2 et 6
+   servent à garantir. Générer 40 cases avec un personnage instable produirait 40 images à jeter.
 
 ### Hors périmètre (assumé)
 
@@ -448,6 +456,28 @@ du dessin, elle épouse la composition.
 **Limite restante** : le texte français doit tenir dans une bulle dessinée pour du **japonais vertical**
 (donc en portrait). Il y est plus haché qu'il ne le serait dans une bulle conçue pour lui — c'est le prix
 de la fidélité au dessin, et c'est le bon arbitrage.
+
+### Phase 7 — Un chapitre depuis un texte ⏳ *(la cible ; déclencheur : après le LoRA v2)*
+
+Entrée : un **texte** (synopsis, script, découpage). Sortie : la suite des cases d'un chapitre, prêtes à
+relire et à corriger. C'est le but de l'outil, rappelé par Quang le 27/07.
+
+Ce que les phases précédentes ont déjà posé, et qui n'est donc pas à refaire :
+- **l'identité** du personnage tient (LoRA, 89 % — phase 1) ;
+- **le décor** tient sur une séquence (fond maître + ControlNet 0,55, 6/6 — phase 2) ;
+- **la règle des deux types de cases** dit déjà quand utiliser l'un ou l'autre ;
+- **la recette complète** de chaque case est enregistrée, donc une planche est rejouable ;
+- **le lettrage** sait poser les répliques, et la **boucle de validation** sait recycler ce qui marche.
+
+Ce qui manque, et qui est le vrai travail :
+1. **Le découpage narratif** — un LLM transforme le texte en *storyboard* : combien de cases, quel
+   cadrage, quelle action, quelle réplique. C'est du texte vers du texte, donc peu risqué.
+2. **La continuité de scène sur la LONGUEUR** — le piège n°1 de tout le chantier, pointé par les 3 voix
+   dès le premier jour : ce n'est pas le visage qui casse une planche, c'est le décor et les accessoires
+   qui dérivent. Sur 40 cases, le problème change d'échelle.
+3. **Le ratio à assumer** : l'IA fait ~30 % du travail. Un chapitre généré est un **premier jet à
+   remonter**, pas un livrable. L'app doit être conçue pour ça — relecture séquentielle, régénération
+   d'une case sans casser les autres — pas pour livrer un chapitre d'un clic.
 
 ### Phase 6 — Boucle de validation 🔄 *(machinerie livrée le 27/07 — v1.7.0 ; reste l'entraînement)*
 **Reprendre la décision GS du 29/06, ne pas réinventer** : l'apprentissage automatique, invisible et
