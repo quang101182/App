@@ -1,0 +1,247 @@
+--- _studio_db.py.bak	2026-07-26 22:36:56.398081100 +0200
++++ _studio_db.py	2026-07-26 23:01:01.694092600 +0200
+@@ -24,7 +24,7 @@
+     "STUDIO_DB_PATH",
+     os.path.join(os.path.dirname(os.path.abspath(__file__)), "studio_content.db"),
+ )
+-SCHEMA_VERSION = 2  # v2 : table preferences (socle mémoire IA centralisée + suggestions)
++SCHEMA_VERSION = 3  # v3 : tables manga_* (app Manga Studio, hierarchie projet->chapitre->planche->case)
+ 
+ _lock = threading.RLock()
+ _conn = None  # connexion unique partagee (check_same_thread=False + verrou)
+@@ -103,6 +103,60 @@
+           meta   TEXT    NOT NULL DEFAULT '{}'
+         );
+         CREATE INDEX IF NOT EXISTS idx_preferences_scope ON preferences(scope, status);
++
++        -- ============================================================
++        -- v3 : MANGA STUDIO — tables DEDIEES, volontairement separees de gallery.
++        -- Une planche n'est pas une image de galerie : le modele est hierarchique
++        -- (projet -> chapitre -> planche -> case) et chaque case porte sa RECETTE
++        -- complete, ce que la table gallery (one-shot) ne sait pas representer.
++        -- Aucune de ces tables n'est lue par Generate Studio.
++        -- ============================================================
++
++        CREATE TABLE IF NOT EXISTS manga_projects (
++          id     TEXT PRIMARY KEY,
++          ts     INTEGER NOT NULL DEFAULT 0,
++          name   TEXT    NOT NULL DEFAULT '',
++          slug   TEXT    NOT NULL DEFAULT '',   -- nom de dossier sur disque (output/<slug>/)
++          notes  TEXT    NOT NULL DEFAULT '',
++          -- recipe = les reglages par defaut du projet (checkpoint, LoRA + poids, negatif,
++          -- tags de style N&B, taille). Une case qui n'en redefinit pas herite d'ici.
++          recipe TEXT    NOT NULL DEFAULT '{}'
++        );
++        CREATE INDEX IF NOT EXISTS idx_manga_projects_ts ON manga_projects(ts DESC);
++
++        CREATE TABLE IF NOT EXISTS manga_pages (
++          id         TEXT PRIMARY KEY,
++          project_id TEXT    NOT NULL DEFAULT '',
++          ts         INTEGER NOT NULL DEFAULT 0,
++          chapter    TEXT    NOT NULL DEFAULT '1',   -- le chapitre est un attribut de planche,
++          idx        INTEGER NOT NULL DEFAULT 0,     -- pas une table : il n'a pas de donnees propres
++          title      TEXT    NOT NULL DEFAULT '',
++          layout     TEXT    NOT NULL DEFAULT '{}',  -- grille de la planche (lignes, gouttieres, format)
++          -- master = le fond MAITRE de la planche (phase 2) : le decor genere une fois,
++          -- sa carte de profondeur, et le nom sous lequel ComfyUI la connait.
++          master     TEXT    NOT NULL DEFAULT '{}'
++        );
++        CREATE INDEX IF NOT EXISTS idx_manga_pages_proj ON manga_pages(project_id, chapter, idx);
++
++        CREATE TABLE IF NOT EXISTS manga_panels (
++          id      TEXT PRIMARY KEY,
++          page_id TEXT    NOT NULL DEFAULT '',
++          ts      INTEGER NOT NULL DEFAULT 0,
++          idx     INTEGER NOT NULL DEFAULT 0,        -- ordre de lecture dans la planche
++          -- kind : 'ambiance' (fond maitre + ControlNet depth 0.55) | 'dialogue' (LoRA seul).
++          -- Cette distinction n'est pas cosmetique : la phase 2 a mesure que decor fige et
++          -- identite fine sont INCOMPATIBLES dans une meme case.
++          kind    TEXT    NOT NULL DEFAULT 'dialogue',
++          prompt  TEXT    NOT NULL DEFAULT '',
++          -- recipe = TOUT ce qu'il faut pour rejouer la case a l'identique :
++          -- checkpoint, lora + poids, seed, steps, cfg, sampler, controlnet + poids, source.
++          recipe  TEXT    NOT NULL DEFAULT '{}',
++          file    TEXT    NOT NULL DEFAULT '',       -- chemin relatif dans output/<slug>/
++          -- verdict : '' (non juge) | 'ok' | 'ko'. Socle de la boucle de validation (phase 6).
++          verdict TEXT    NOT NULL DEFAULT '',
++          bubbles TEXT    NOT NULL DEFAULT '[]'      -- bulles/lettrage (phase 5), pose des maintenant
++        );
++        CREATE INDEX IF NOT EXISTS idx_manga_panels_page ON manga_panels(page_id, idx);
+         """
+         )
+         row = c.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
+@@ -344,6 +398,159 @@
+     return {"ok": True, "prompts_added": np, "gallery_added": ng}
+ 
+ 
++# ---------- MANGA STUDIO (v3) ----------
++# Trois niveaux, trois fonctions chacune : list / upsert / delete. Aucune subtilite,
++# et surtout aucun partage avec gallery — c'est tout l'interet d'une table dediee.
++
++def _row_project(r):
++    return {"id": r["id"], "ts": r["ts"], "name": r["name"], "slug": r["slug"],
++            "notes": r["notes"], "recipe": _jload(r["recipe"])}
++
++def _row_page(r):
++    return {"id": r["id"], "projectId": r["project_id"], "ts": r["ts"], "chapter": r["chapter"],
++            "idx": r["idx"], "title": r["title"], "layout": _jload(r["layout"]),
++            "master": _jload(r["master"])}
++
++def _row_panel(r):
++    return {"id": r["id"], "pageId": r["page_id"], "ts": r["ts"], "idx": r["idx"],
++            "kind": r["kind"], "prompt": r["prompt"], "recipe": _jload(r["recipe"]),
++            "file": r["file"], "verdict": r["verdict"], "bubbles": _jload(r["bubbles"], [])}
++
++
++_uid_counter = [0]
++
++def _uid(prefix):
++    """Identifiant unique meme en rafale.
++
++    Paye au self-test : `prefix + hex(_now_ms())` seul donne le MEME id a deux
++    insertions dans la meme milliseconde — et creer les 6 cases d'une planche
++    d'un coup est precisement une rafale. Le compteur monotone leve l'ambiguite.
++    """
++    with _lock:
++        _uid_counter[0] = (_uid_counter[0] + 1) % 4096
++        return "%s%x%03x" % (prefix, _now_ms(), _uid_counter[0])
++
++
++def _jload(s, default=None):
++    try:
++        v = json.loads(s or "")
++        return v
++    except Exception:
++        return {} if default is None else default
++
++
++def list_manga_projects():
++    with _lock:
++        c = _connect()
++        rows = c.execute("SELECT * FROM manga_projects ORDER BY ts DESC").fetchall()
++        return [_row_project(r) for r in rows]
++
++
++def upsert_manga_project(p):
++    pid = p.get("id") or _uid("mp")
++    with _lock:
++        c = _connect()
++        c.execute(
++            "INSERT INTO manga_projects(id,ts,name,slug,notes,recipe) VALUES(?,?,?,?,?,?) "
++            "ON CONFLICT(id) DO UPDATE SET ts=excluded.ts,name=excluded.name,slug=excluded.slug,"
++            "notes=excluded.notes,recipe=excluded.recipe",
++            (pid, int(p.get("ts") or _now_ms()), p.get("name") or "", p.get("slug") or "",
++             p.get("notes") or "", json.dumps(p.get("recipe") or {})),
++        )
++        c.commit()
++    return {"ok": True, "id": pid}
++
++
++def delete_manga_project(pid):
++    """Supprime le projet ET sa descendance. Les fichiers sur disque ne sont PAS touches :
++    effacer une fiche ne doit jamais effacer des images (elles se re-rattachent si besoin)."""
++    with _lock:
++        c = _connect()
++        pages = [r["id"] for r in c.execute("SELECT id FROM manga_pages WHERE project_id=?", (pid,)).fetchall()]
++        for pg in pages:
++            c.execute("DELETE FROM manga_panels WHERE page_id=?", (pg,))
++        c.execute("DELETE FROM manga_pages WHERE project_id=?", (pid,))
++        c.execute("DELETE FROM manga_projects WHERE id=?", (pid,))
++        c.commit()
++    return {"ok": True, "id": pid, "pages_deleted": len(pages)}
++
++
++def list_manga_pages(project_id=None):
++    with _lock:
++        c = _connect()
++        if project_id:
++            rows = c.execute("SELECT * FROM manga_pages WHERE project_id=? ORDER BY chapter, idx",
++                             (project_id,)).fetchall()
++        else:
++            rows = c.execute("SELECT * FROM manga_pages ORDER BY ts DESC").fetchall()
++        return [_row_page(r) for r in rows]
++
++
++def upsert_manga_page(p):
++    pid = p.get("id") or _uid("mg")
++    with _lock:
++        c = _connect()
++        c.execute(
++            "INSERT INTO manga_pages(id,project_id,ts,chapter,idx,title,layout,master) "
++            "VALUES(?,?,?,?,?,?,?,?) "
++            "ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id,ts=excluded.ts,"
++            "chapter=excluded.chapter,idx=excluded.idx,title=excluded.title,"
++            "layout=excluded.layout,master=excluded.master",
++            (pid, p.get("projectId") or "", int(p.get("ts") or _now_ms()),
++             str(p.get("chapter") or "1"), int(p.get("idx") or 0), p.get("title") or "",
++             json.dumps(p.get("layout") or {}), json.dumps(p.get("master") or {})),
++        )
++        c.commit()
++    return {"ok": True, "id": pid}
++
++
++def delete_manga_page(pid):
++    with _lock:
++        c = _connect()
++        c.execute("DELETE FROM manga_panels WHERE page_id=?", (pid,))
++        c.execute("DELETE FROM manga_pages WHERE id=?", (pid,))
++        c.commit()
++    return {"ok": True, "id": pid}
++
++
++def list_manga_panels(page_id=None):
++    with _lock:
++        c = _connect()
++        if page_id:
++            rows = c.execute("SELECT * FROM manga_panels WHERE page_id=? ORDER BY idx", (page_id,)).fetchall()
++        else:
++            rows = c.execute("SELECT * FROM manga_panels ORDER BY ts DESC LIMIT 500").fetchall()
++        return [_row_panel(r) for r in rows]
++
++
++def upsert_manga_panel(p):
++    pid = p.get("id") or _uid("mc")
++    with _lock:
++        c = _connect()
++        c.execute(
++            "INSERT INTO manga_panels(id,page_id,ts,idx,kind,prompt,recipe,file,verdict,bubbles) "
++            "VALUES(?,?,?,?,?,?,?,?,?,?) "
++            "ON CONFLICT(id) DO UPDATE SET page_id=excluded.page_id,ts=excluded.ts,idx=excluded.idx,"
++            "kind=excluded.kind,prompt=excluded.prompt,recipe=excluded.recipe,"
++            # le fichier n'est ecrase que si le push en apporte un : une simple edition de
++            # prompt ne doit pas effacer le lien vers l'image deja generee.
++            "file=CASE WHEN excluded.file='' THEN manga_panels.file ELSE excluded.file END,"
++            "verdict=excluded.verdict,bubbles=excluded.bubbles",
++            (pid, p.get("pageId") or "", int(p.get("ts") or _now_ms()), int(p.get("idx") or 0),
++             p.get("kind") or "dialogue", p.get("prompt") or "",
++             json.dumps(p.get("recipe") or {}), p.get("file") or "",
++             p.get("verdict") or "", json.dumps(p.get("bubbles") or [])),
++        )
++        c.commit()
++    return {"ok": True, "id": pid}
++
++
++def delete_manga_panel(pid):
++    with _lock:
++        c = _connect(); c.execute("DELETE FROM manga_panels WHERE id=?", (pid,)); c.commit()
++    return {"ok": True, "id": pid}
++
++
+ def status():
+     with _lock:
+         c = _connect()
+@@ -351,8 +558,13 @@
+         cg = c.execute("SELECT COUNT(*) n FROM gallery").fetchone()["n"]
+         cf = c.execute("SELECT COUNT(*) n FROM favorites").fetchone()["n"]
+         sv = c.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
++        mp = c.execute("SELECT COUNT(*) n FROM manga_projects").fetchone()["n"]
++        mg = c.execute("SELECT COUNT(*) n FROM manga_pages").fetchone()["n"]
++        mc = c.execute("SELECT COUNT(*) n FROM manga_panels").fetchone()["n"]
+         return {"ok": True, "schema_version": sv["version"] if sv else None,
+-                "counts": {"prompts": cp, "gallery": cg, "favorites": cf}, "path": DB_PATH}
++                "counts": {"prompts": cp, "gallery": cg, "favorites": cf,
++                           "manga_projects": mp, "manga_pages": mg, "manga_panels": mc},
++                "path": DB_PATH}
+ 
+ 
+ # ---------- self-test isolation (python _studio_db.py) ----------

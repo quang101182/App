@@ -251,9 +251,14 @@ ambiance, époque) + une liste de tags Danbooru + un `reusable_prompt` directeme
 de test il a correctement identifié « seinen/josei, encrage fin à moyen, trames denses en pointillé et
 hachures croisées, fort contraste ».
 
-**⏳ CE QUI MANQUE ET QUI NE DÉPEND PAS DE MOI** : les **scans réels de Quang**. Le critère de sortie parle de
+~~**⏳ CE QUI MANQUE ET QUI NE DÉPEND PAS DE MOI** : les **scans réels de Quang**. Le critère de sortie parle de
 *ses* planches — testé jusqu'ici uniquement sur des pages générées ou fabriquées. À déposer dans
-`D:\Download\02-Apps-Web\01-Term_mob_files_send\` (images, PDF ou captures).
+`D:\Download\02-Apps-Web\01-Term_mob_files_send\`.~~
+→ **✅ PÉRIMÉ dès le 26/07 au soir** : ses 5 pages sont arrivées le jour même et ont servi — ce sont elles qui ont
+invalidé Pixtral et provoqué la bascule sur YOLO (voir ci-dessus). Ce constat n'aurait jamais dû rester en « ⏳ » :
+il était déjà contredit **par la suite du même paragraphe**. C'est exactement le défaut que
+`.claude/rules/document-vs-depot.md` décrit — une livraison qui rend faux un constat écrit, sans que l'auteur
+revisite *celui-là*. (Relevé et corrigé à l'ouverture de la phase 4.)
 
 ### Phase 3-bis — Les MODES sur une page ingérée ⏳ *(demandes Quang du 26/07, après le premier jet)*
 
@@ -278,11 +283,49 @@ c'est un axe par question, pas une liste de boutons.
 | **N&B → couleur** | 🎯 **ControlNet lineart/canny** : on fige le trait exact, le modèle ne pose que la couleur. Le dessin reste celui de la source. Préprocesseurs déjà là (`AnimeLineArtPreprocessor`) ; **modèle `canny-sdxl-xinsir` téléchargé le 26/07** |
 | **Couleur → N&B** | ⚠️ **ne pas désaturer** — ça donne du gris, pas des trames. Un vrai N&B manga = points de demi-teinte + hachures. Chemin retenu : extraire le trait puis **re-générer** en N&B tramé (cohérent avec l'essai 1 et le test tiers lilting.ch) |
 
-### Phase 4 — L'app ⏳
+### Phase 4 — L'app ✅ *(atteinte le 26/07 — `manga_studio.html` v1.0.1)*
 Single-file HTML, version affichée dans l'UI, cliente du proxy 8190. Modèle : projet → chapitre → planche →
 case. Chaque case porte sa **recette complète** (modèle, LoRA + poids, seed, prompt, ControlNet, source).
 > **Critère de sortie** : une planche de 6 cases produite de bout en bout dans l'app, testée PC **et**
 > mobile (Samsung réel), 0 erreur JS.
+
+**Résultat mesuré — banc `scripts/test_app_live.py` (Playwright, pilote l'app comme un utilisateur) :**
+
+| Mesure | Valeur |
+|---|---|
+| Cases produites de bout en bout | **6/6** (3 ambiance + 3 dialogue), 99 s au total |
+| Fond maître + carte de profondeur | 2/2, 22 s |
+| Export de la planche assemblée | ✅ PNG 1760×3768 |
+| Erreurs JS (`pageerror` + console + journal de l'app) | **0** |
+| Mobile — Samsung réel (CDP par `adb reverse`) | **0 erreur JS**, 9/9 vignettes chargées, aucun débordement |
+| Responsive 320 / 360 / 384 px × 4 onglets | **12/12 sans scroll horizontal** |
+
+**🔒 Isolation vis-à-vis de Generate Studio — exigence posée par Quang le 26/07, mesurée par différence :**
+racine `ComfyUI/output` **851 avant, 851 après** alors qu'on venait de générer 7 images, et **0 résidu** dans
+`ComfyUI/output/manga/`. Deux verrous en série, pas un seul :
+1. ComfyUI écrit sous `output/manga/<slug>/<planche>/` — sous-dossier profond, hors du scan 1-niveau de
+   `list_outputs()`, donc **invisible de la galerie GS** ;
+2. `POST /manga/harvest` **déplace** ensuite le fichier dans `manga-studio/output/<slug>/` — il quitte ComfyUI.
+
+**⚠️ Le défaut que le banc a attrapé et que l'œil n'aurait pas vu** : au 1er passage, tout paraissait vert
+(6/6 générées, export correct, 0 erreur) — et pourtant les 6 cases avaient atterri dans le dossier d'**un autre
+projet**. Cause : *créer* un projet ne le *sélectionnait* pas, `loadProjects()` restaurant celui de la session
+précédente. Aucune erreur n'était levée : le rangement se faisait, simplement au mauvais endroit.
+Deux corrections, pas une : le projet créé devient courant (v1.0.1), **et** la destination se déduit désormais du
+projet **propriétaire de la planche**, plus du projet « sélectionné ». *Un test qui compte les fichiers au bon
+endroit valait tous les verdicts « ça marche ».*
+
+**Ce que l'app encode en dur, parce que c'est mesuré et pas négociable :**
+- les **deux types de case** (phase 2) — `ambiance` = fond maître + ControlNet depth 0,55 ; `dialogue` = LoRA seul ;
+- une case `ambiance` **refuse de se générer** sans fond maître, au lieu de sortir un décor à la dérive ;
+- les tags N&B de l'essai 1 dans la recette par défaut ;
+- les générations sont **sérielles** (une seule carte, 16 Go de VRAM) ;
+- un **journal client** (`window.MangaLog.dump()` / `.errors()`) dès la conception, lisible par CDP.
+
+**Limites visibles sur la planche de validation, toutes deux déjà documentées** : le **rouge « spot color »
+persiste** malgré le négatif (réserve de l'essai 1 — ce n'est pas du N&B d'impression), et sur les cases
+d'ambiance **le visage n'est pas résolu** (limite structurelle de la phase 2 — c'est précisément ce qui justifie
+la règle des deux types de cases).
 
 ### Phase 5 — Bulles et lettrage ⏳
 Overlay Canvas éditable. Le LLM écrit les répliques, le canvas pose bulle + texte.
@@ -309,6 +352,9 @@ la boucle paie vraiment. **L'app propose, elle n'impose jamais.**
 | **Captions de LoRA de personnage** | Décrire ce qui **varie** (cadrage, expression, fond), jamais ce qui est **constant** (coiffure, uniforme) — sinon le modèle apprend que c'est détachable du personnage. |
 | **Magi** | Licence **recherche académique uniquement**. Préférer YOLO26n ou Pixtral pour un usage perso durable. |
 | **`llm.py vote`** | ~310 s (Kimi est le facteur limitant). À lancer en arrière-plan, pas en bloquant. |
+| **Sorties qui polluent Generate Studio** | Payé le 26/07 : les scripts d'exploration écrivaient à la **racine** de `ComfyUI/output`, où GS range les siennes — 62 fichiers à nous mêlés à 850 à Quang (rapatriés par `scripts/rapatrie_outputs.py`). Tout nouveau script manga doit écrire sous `manga/<slug>/…` **et** passer par `/manga/harvest`. |
+| **Créer ≠ sélectionner** | Le projet fraîchement créé n'était pas le projet courant → 6 cases rangées chez un voisin, **sans aucune erreur**. Toujours vérifier *où* un fichier atterrit, pas seulement *qu'il* atterrit. |
+| **Ids générés à la milliseconde** | `prefix + hex(now_ms)` donne le **même id** à deux insertions dans la même ms — et créer 6 cases d'un coup est une rafale. `_studio_db._uid()` ajoute un compteur monotone. Attrapé par le self-test, pas en production. |
 
 ---
 
@@ -319,4 +365,5 @@ la boucle paie vraiment. **L'app propose, elle n'impose jamais.**
 | 2026-07-26 | Ouverture du chantier. Décision d'archi (app séparée). Checkpoint Illustrious installé. Essais 1-4 mesurés. Recherche web + vote 3 voix. kohya installé (3 pièges payés : cu128, versions transformers, encodage cp1252). |
 | 2026-07-26 | **Phase 1 franchie à 89 %** (contre 50 % sans LoRA). LoRA `zqmg1rl_v1` entraîné et validé sur comparatif strict. 2 réserves ouvertes → LoRA v2 avant la phase 4. |
 | 2026-07-26 | **Phase 3 : pipeline d'ingestion écrit et mesuré** (`manga_ingest.py`). Découpage 83 % à IoU 0,66 mais **Pixtral quantifie sur une grille** ⇒ raffinement OpenCV nécessaire. Volet style : OK. **Bloqué sur la validation** faute de scans réels de Quang. Premier test = faux positif, corrigé par un test à vérité terrain. |
+| 2026-07-26 | **Phase 4 franchie — l'app existe.** `manga_studio.html` v1.0.1 (single-file, servie par le proxy sur `/manga`), tables SQLite dédiées `manga_projects/pages/panels` (schéma v3), routes `/manga/*`. Planche de 6 cases de bout en bout : 6/6, 0 erreur JS sur PC **et** Samsung réel, 12/12 responsive. **Exigence Quang du jour : les sorties ne se mélangent plus à celles de Generate Studio** (851→851 fichiers à la racine, 0 résidu) ; 62 fichiers d'exploration rapatriés. Un défaut invisible à l'œil trouvé par le banc : créer un projet ne le sélectionnait pas → cases rangées chez un voisin. Arbitrage Quang : l'app **avant** le LoRA v2, stockage en **table dédiée**. |
 | 2026-07-26 | **Phase 2 franchie, 6/6.** Fond maître + ControlNet depth @ 0,55. Témoin sans ControlNet = 0/4 ⇒ répéter le décor dans le prompt est inopérant. Découverte structurante : décor figé et identité fine sont **incompatibles dans une même case** ⇒ règle des deux types de cases. Prochaine étape : **phase 3, ingestion des scans**. |

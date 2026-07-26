@@ -1,10 +1,54 @@
-# Manga Studio — scripts de la phase d'exploration (26/07/2026)
+# Manga Studio
 
-> État : **exploration terminée, app pas encore écrite.** Tous les verrous techniques sont levés et mesurés.
+> État : **l'app existe et la phase 4 est franchie** (26/07/2026) — `manga_studio.html` **v1.0.1**.
 > **La feuille de route est le document de référence : [`ROADMAP.md`](ROADMAP.md)** — objectifs, décision
 > d'architecture, verdicts chiffrés, pièges d'environnement, causes des échecs et leurs correctifs.
 
-Ces scripts ne forment pas une application : ce sont les **bancs d'essai** qui ont servi à répondre, un par
+## L'app
+
+```
+http://127.0.0.1:8190/manga#k=<contenu de ComfyUI\.studio_secret>
+```
+
+Single-file HTML **servi par le proxy Generate Studio** (le `#k=` dépose la clé puis disparaît de l'URL,
+même convention que GS). Accessible depuis le téléphone par `adb reverse tcp:8190 tcp:8190`.
+
+- Modèle : **projet → chapitre → planche → case**, en base SQLite côté proxy (donc partagé PC ↔ mobile).
+- Chaque case porte sa **recette complète** — modèle, LoRA + poids, seed, prompt, ControlNet, négatif.
+  C'est ce qui rend une case rejouable, et c'est pour ça que les images ne sont pas versionnées.
+- **Deux types de case**, conformément à la mesure de la phase 2 :
+  `ambiance` (fond maître + ControlNet depth 0,55) et `dialogue` (LoRA seul).
+  Une case `ambiance` **refuse** de se générer sans fond maître.
+
+### 🔒 Les images ne se mélangent jamais à celles de Generate Studio
+
+Exigence de Quang (26/07), après constat que les scripts d'exploration avaient laissé 62 fichiers dans
+son dossier `output`. Deux verrous en série :
+
+1. ComfyUI écrit sous `ComfyUI/output/manga/<slug>/<planche>/` — sous-dossier profond, **hors du scan
+   1-niveau** de `list_outputs()`, donc invisible de la galerie GS ;
+2. `POST /manga/harvest` **déplace** le fichier vers `manga-studio/output/<slug>/`, hors de ComfyUI.
+
+Mesuré par différence au banc : racine `ComfyUI/output` **851 avant, 851 après** 7 générations, 0 résidu.
+
+### Dépendance hors dépôt
+
+L'app a besoin d'ajouts au proxy, qui vit dans `C:\Users\quang\Documents\ComfyUI\` et **n'est sous aucun
+git**. Les diffs exacts sont versionnés ici : [`proxy-patch/`](proxy-patch/README.md).
+
+### Bancs de l'app
+
+| Script | Rôle |
+|---|---|
+| `scripts/test_app_live.py` | **Banc de la phase 4** — pilote l'app (Playwright), produit une planche de 6 cases, verdict chiffré + contrôle d'isolation |
+| `scripts/rapatrie_outputs.py` | Sort les images manga du dossier de Generate Studio (`--dry-run` par défaut) |
+| `.claude/scripts/responsive-audit.py` | 320/360/384 px × 4 onglets (à la racine du dépôt) |
+
+---
+
+## Les scripts d'exploration (phases 0 à 3)
+
+Ils ne forment pas une application : ce sont les **bancs d'essai** qui ont servi à répondre, un par
 un, aux « est-ce que c'est seulement possible ? ». Ils sont conservés parce que chaque chiffre de la roadmap
 vient de l'un d'eux, et qu'ils sont réutilisables tels quels.
 

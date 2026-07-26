@@ -1,0 +1,196 @@
+--- _studio_llm_proxy.py.bak	2026-07-26 22:36:56.426887400 +0200
++++ _studio_llm_proxy.py	2026-07-26 22:40:29.650831300 +0200
+@@ -3,7 +3,7 @@
+ gateway CF /api/deepseek cote serveur -> le WORKER_SECRET ne sort jamais dans le HTML.
+ Stdlib only. Lance : python _studio_llm_proxy.py
+ """
+-import base64, hashlib, json, os, re, subprocess, sys, threading, time, urllib.request, urllib.error
++import base64, hashlib, json, os, re, shutil, subprocess, sys, threading, time, urllib.request, urllib.error
+ # Fix 2026-07-05 : stdout/stderr en UTF-8 tolérant -> un print() d'un nom de LoRA non-ASCII
+ # (chinois/japonais) ne crashe plus l'import (avant: UnicodeEncodeError 'charmap' cp1252 -> HTTP 500).
+ try:
+@@ -1055,6 +1055,17 @@
+ WAN_DIR = os.environ.get("STUDIO_WAN_DIR", r"C:\Users\quang\Documents\Wan2GP")
+ WAN_PORT = 7870
+ HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "generate_studio.html")
++# --- MANGA STUDIO (app separee, cliente de ce proxy) ---
++# Elle vit dans son depot, PAS ici : le proxy ne fait que la servir et ranger ses images.
++# Regle posee par Quang le 26/07 : les sorties manga ne doivent JAMAIS se melanger a celles
++# de Generate Studio. Deux verrous, pas un seul :
++#   1. ComfyUI ecrit sous output/manga/<slug>/... (sous-dossier profond, invisible du scan
++#      1-niveau de list_outputs, donc absent de la galerie GS) ;
++#   2. /manga/harvest DEPLACE ensuite le fichier dans le dossier du projet, hors de ComfyUI.
++MANGA_ROOT = os.environ.get(
++    "MANGA_ROOT", r"D:\Download\02-Apps-Web\Repo-github\App\manga-studio")
++MANGA_HTML = os.path.join(MANGA_ROOT, "manga_studio.html")
++MANGA_OUT = os.path.join(MANGA_ROOT, "output")
+ SECRET  = os.environ.get("WORKER_SECRET", "333a33b16f8cab5aec61eb5806eeaee332a50e1172ad1b3e3d710b3d84b9cc7b")
+ # --- Securite acces proxy (parite Muse) ---
+ # Loopback (PC en file:// + smartphone via `adb reverse` = USB) : TOUJOURS libre, zero friction.
+@@ -1565,6 +1576,64 @@
+     except Exception as ex:
+         return {"error": str(ex)}
+ 
++def _manga_safe(rel):
++    """Resout un chemin RELATIF sous MANGA_OUT, ou renvoie None.
++
++    Anti path-traversal : on normalise puis on verifie que le resultat est bien
++    SOUS la racine. Un '..' bien place sortirait sinon du dossier du projet, et
++    cette route sert des fichiers a un navigateur.
++    """
++    rel = (rel or "").replace("\\", "/").lstrip("/")
++    full = os.path.normpath(os.path.join(MANGA_OUT, rel))
++    root = os.path.normpath(MANGA_OUT)
++    if not (full == root or full.startswith(root + os.sep)):
++        return None
++    return full
++
++
++def manga_harvest(filename, subfolder, slug, dest=""):
++    """DEPLACE une image fraichement generee de ComfyUI vers le dossier du projet manga.
++
++    C'est le 2e verrou anti-melange : meme si ComfyUI ecrit deja dans un sous-dossier,
++    l'image ne reste pas chez lui. Elle rejoint output/<slug>/ dans le depot du projet,
++    ou l'app va la relire via /manga/file.
++    """
++    comfy_out = os.path.dirname(VIDEO_DIR)  # ...\output
++    src = os.path.normpath(os.path.join(comfy_out, subfolder or "", os.path.basename(filename or "")))
++    if not (src.startswith(os.path.normpath(comfy_out) + os.sep) and os.path.isfile(src)):
++        return {"error": "source introuvable: %s" % src}
++    slug = re.sub(r"[^a-zA-Z0-9_-]", "", slug or "divers") or "divers"
++    name = os.path.basename(dest or os.path.basename(src))
++    name = re.sub(r"[^a-zA-Z0-9_.-]", "_", name)
++    d = os.path.join(MANGA_OUT, slug)
++    os.makedirs(d, exist_ok=True)
++    dst = os.path.join(d, name)
++    if os.path.exists(dst):          # jamais ecraser en silence une image deja rangee
++        base, ext = os.path.splitext(name)
++        name = "%s_%d%s" % (base, int(time.time() * 1000) % 100000, ext)
++        dst = os.path.join(d, name)
++    try:
++        shutil.move(src, dst)
++    except Exception as ex:
++        return {"error": "deplacement: %s" % ex}
++    return {"ok": True, "path": "%s/%s" % (slug, name), "bytes": os.path.getsize(dst)}
++
++
++def manga_files(slug=""):
++    """Galerie PROPRE au projet : ne liste que output/<slug>/, jamais le dossier de GS."""
++    base = _manga_safe(slug) if slug else os.path.normpath(MANGA_OUT)
++    if not base or not os.path.isdir(base):
++        return {"files": []}
++    out = []
++    for f in sorted(os.listdir(base)):
++        p = os.path.join(base, f)
++        if os.path.isfile(p) and f.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
++            out.append({"name": f, "path": ("%s/%s" % (slug, f)) if slug else f,
++                        "bytes": os.path.getsize(p), "mtime": int(os.path.getmtime(p) * 1000)})
++    out.sort(key=lambda x: x["mtime"], reverse=True)
++    return {"files": out}
++
++
+ class H(BaseHTTPRequestHandler):
+     def _cors(self):
+         self.send_header("Access-Control-Allow-Origin", "*")
+@@ -1672,6 +1741,37 @@
+             self.wfile.write(data)
+         except Exception as e:
+             self._json(500, {"error": "HTML introuvable: " + str(e)})
++    def serve_manga_html(self):
++        # Sert l'app Manga Studio (elle vit dans son depot, App/manga-studio/).
++        try:
++            with open(MANGA_HTML, "rb") as f: data = f.read()
++            self.send_response(200); self._cors()
++            self.send_header("Content-Type", "text/html; charset=utf-8")
++            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
++            self.send_header("Pragma", "no-cache"); self.send_header("Expires", "0")
++            self.send_header("Content-Length", str(len(data))); self.end_headers()
++            self.wfile.write(data)
++        except Exception as e:
++            self._json(500, {"error": "Manga Studio introuvable (%s): %s" % (MANGA_HTML, e)})
++
++    def serve_manga_file(self, rel):
++        # Sert une image du dossier du projet manga (jamais celui de Generate Studio).
++        full = _manga_safe(rel)
++        if not full or not os.path.isfile(full):
++            self._json(404, {"error": "not found"}); return
++        ext = os.path.splitext(full)[1].lower()
++        ct = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
++              ".webp": "image/webp"}.get(ext, "application/octet-stream")
++        try:
++            with open(full, "rb") as f: data = f.read()
++            self.send_response(200); self._cors()
++            self.send_header("Content-Type", ct)
++            self.send_header("Cache-Control", "max-age=86400")  # immuable par nom
++            self.send_header("Content-Length", str(len(data))); self.end_headers()
++            self.wfile.write(data)
++        except Exception as e:
++            self._json(500, {"error": str(e)})
++
+     def serve_preview(self):
+         # Sert l'image d'apercu d'un LoRA (depuis models/loras/.previews/).
+         name = (parse_qs(urlparse(self.path).query).get("name") or [""])[0]
+@@ -1730,6 +1830,10 @@
+         # On ignore la query string -> un cache-bust (?cb=...) ne casse pas le chargement de l'app.
+         if self.path.split("?", 1)[0] in ("/", "/index.html"):
+             self.serve_html(); return
++        # L'app Manga est servie comme celle de GS : coquille PUBLIQUE (aucun secret dedans),
++        # pour qu'on puisse la charger depuis le tunnel/mobile PUIS y saisir la cle.
++        if self.path.split("?", 1)[0] in ("/manga", "/manga/", "/manga.html"):
++            self.serve_manga_html(); return
+         if self.path == "/favicon.ico":
+             self.send_response(204); self._cors(); self.end_headers(); return
+         if not self._authorized(): self._deny(); return
+@@ -1817,6 +1921,20 @@
+             scope = (q.get("scope") or [""])[0] or None
+             status = (q.get("status") or [""])[0] or None
+             self._json(200, {"items": studiodb.list_preferences(scope, status)})
++        # --- MANGA STUDIO (lecture) ---
++        elif self.path.split("?", 1)[0] == "/manga/projects":
++            self._json(200, {"items": studiodb.list_manga_projects()})
++        elif self.path.split("?", 1)[0] == "/manga/pages":
++            pid = (parse_qs(urlparse(self.path).query).get("project") or [""])[0] or None
++            self._json(200, {"items": studiodb.list_manga_pages(pid)})
++        elif self.path.split("?", 1)[0] == "/manga/panels":
++            pid = (parse_qs(urlparse(self.path).query).get("page") or [""])[0] or None
++            self._json(200, {"items": studiodb.list_manga_panels(pid)})
++        elif self.path.split("?", 1)[0] == "/manga/files":
++            slug = (parse_qs(urlparse(self.path).query).get("slug") or [""])[0]
++            self._json(200, manga_files(slug))
++        elif self.path.split("?", 1)[0] == "/manga/file":
++            self.serve_manga_file((parse_qs(urlparse(self.path).query).get("p") or [""])[0])
+         else:
+             self._json(404, {"error": "not found"})
+     def do_POST(self):
+@@ -1965,6 +2083,31 @@
+                     self._json(200, {"ok": True, "n": len(data.get("items") or [])})
+                 else:
+                     self._json(200, studiodb.upsert_preference(data.get("item") or data))
++            # --- MANGA STUDIO (ecriture) ---
++            # Meme convention que /db/* : {"delete": id} supprime, sinon upsert de l'item.
++            elif self.path == "/manga/projects":
++                if data.get("delete"):
++                    self._json(200, studiodb.delete_manga_project(data.get("delete")))
++                else:
++                    self._json(200, studiodb.upsert_manga_project(data.get("item") or data))
++            elif self.path == "/manga/pages":
++                if data.get("delete"):
++                    self._json(200, studiodb.delete_manga_page(data.get("delete")))
++                else:
++                    self._json(200, studiodb.upsert_manga_page(data.get("item") or data))
++            elif self.path == "/manga/panels":
++                if data.get("delete"):
++                    self._json(200, studiodb.delete_manga_panel(data.get("delete")))
++                elif isinstance(data.get("items"), list):
++                    out = [studiodb.upsert_manga_panel(x) for x in data["items"]]
++                    self._json(200, {"ok": True, "ids": [o["id"] for o in out]})
++                else:
++                    self._json(200, studiodb.upsert_manga_panel(data.get("item") or data))
++            elif self.path == "/manga/harvest":
++                self._json(200, manga_harvest(data.get("filename") or "",
++                                              data.get("subfolder") or "",
++                                              data.get("slug") or "",
++                                              data.get("dest") or ""))
+             else:
+                 self._json(404, {"error": "not found"})
+         except Exception as e:

@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Manga Studio v1.0.1</title>
+<style>
+:root{
+  --bg:#0d0f13; --panel:#151922; --panel2:#1c2130; --line:#2a3040;
+  --txt:#e6e9f0; --dim:#8b93a7; --accent:#e84a5f; --accent2:#4a9ee8;
+  --ok:#3fbf7f; --ko:#e05a5a; --warn:#e0a63f;
+  --r:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  -webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+
+/* ---------- barre du haut ---------- */
+header{position:sticky;top:0;z-index:50;background:#0d0f13ee;backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);padding:10px 14px;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.brand{font-weight:700;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+.brand b{color:var(--accent)}
+.ver{font-size:11px;padding:2px 7px;border:1px solid var(--line);border-radius:99px;color:var(--dim)}
+.dots{display:flex;gap:6px;margin-left:auto;align-items:center}
+.dot{width:9px;height:9px;border-radius:50%;background:#444;flex:none}
+.dot.on{background:var(--ok)} .dot.off{background:var(--ko)}
+.dot-lbl{font-size:11px;color:var(--dim)}
+
+/* ---------- onglets ---------- */
+nav{display:flex;gap:4px;padding:8px 14px 0;overflow-x:auto;border-bottom:1px solid var(--line)}
+nav button{background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px;
+  color:var(--dim);white-space:nowrap;border-radius:6px 6px 0 0}
+nav button.sel{color:var(--txt);border-bottom-color:var(--accent);background:var(--panel)}
+
+main{padding:14px;max-width:1400px;margin:0 auto}
+section{display:none} section.sel{display:block}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:14px}
+.card h3{margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grow{flex:1;min-width:140px}
+label{display:block;font-size:12px;color:var(--dim);margin:8px 0 3px}
+input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);
+  border-radius:8px;padding:9px 10px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent2)}
+textarea{min-height:70px;resize:vertical;font-size:14px}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 14px}
+.btn:hover{border-color:var(--accent2)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.pri:hover{filter:brightness(1.1)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.sm{padding:5px 9px;font-size:13px}
+.muted{color:var(--dim);font-size:13px}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;
+  border:1px solid var(--line);color:var(--dim)}
+.tag.amb{border-color:var(--accent2);color:var(--accent2)}
+.tag.dia{border-color:var(--warn);color:var(--warn)}
+
+/* ---------- planche ---------- */
+#plate{display:grid;gap:14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+  overflow:hidden;display:flex;flex-direction:column}
+.panel .img{position:relative;background:#0a0c10;aspect-ratio:832/1216;
+  display:flex;align-items:center;justify-content:center}
+.panel .img img{width:100%;height:100%;object-fit:cover;display:block}
+.panel .img .ph{color:#3a4152;font-size:34px}
+.panel .img .busy{position:absolute;inset:0;background:#0a0c10cc;display:flex;
+  align-items:center;justify-content:center;flex-direction:column;gap:8px;font-size:13px;color:var(--accent2)}
+.panel .body{padding:10px;display:flex;flex-direction:column;gap:8px}
+.panel .num{position:absolute;top:6px;left:6px;background:#000a;border-radius:6px;
+  padding:1px 7px;font-size:12px;font-weight:700}
+.panel .verdict{position:absolute;top:6px;right:6px;font-size:16px}
+.spin{width:22px;height:22px;border:2px solid var(--line);border-top-color:var(--accent2);
+  border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- galerie ---------- */
+#gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+#gal figure{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+#gal img{width:100%;display:block;aspect-ratio:1;object-fit:cover}
+#gal figcaption{padding:5px 7px;font-size:11px;color:var(--dim);word-break:break-all}
+
+/* ---------- journal ---------- */
+#log{background:#080a0d;border:1px solid var(--line);border-radius:8px;padding:10px;
+  max-height:280px;overflow:auto;font:12px/1.6 ui-monospace,Consolas,monospace;white-space:pre-wrap}
+#log .e{color:var(--ko)} #log .w{color:var(--warn)} #log .s{color:var(--ok)} #log .t{color:#5a6478}
+
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:99;
+  background:var(--panel2);border:1px solid var(--line);border-radius:99px;padding:9px 18px;
+  box-shadow:0 6px 24px #000a;opacity:0;pointer-events:none;transition:opacity .25s;max-width:92vw}
+#toast.on{opacity:1}
+
+@media(max-width:700px){
+  main{padding:10px}
+  .card{padding:11px}
+  header{padding:8px 10px}
+  /* Mesure a 320px : la barre d'onglets depassait de 12px. Elle scrolle (overflow-x:auto),
+     donc rien ne se serait "casse" — mais un scroll horizontal impose a l'utilisateur est
+     un defaut, pas une solution. On resserre plutot les 4 onglets pour qu'ils tiennent. */
+  nav{padding:8px 6px 0}
+  nav button{padding:8px 9px;font-size:14px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.0.1</span></div>
+  <div class="dots">
+    <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
+    <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
+  </div>
+</header>
+
+<nav>
+  <button data-tab="tPlate" class="sel">Planche</button>
+  <button data-tab="tProj">Projet</button>
+  <button data-tab="tGal">Galerie</button>
+  <button data-tab="tSet">Réglages</button>
+</nav>
+
+<main>
+
+<!-- ============ PLANCHE ============ -->
+<section id="tPlate" class="sel">
+  <div class="card">
+    <div class="row">
+      <div class="grow">
+        <label>Projet</label>
+        <select id="selProj"></select>
+      </div>
+      <div class="grow">
+        <label>Planche</label>
+        <select id="selPage"></select>
+      </div>
+      <div style="align-self:flex-end;display:flex;gap:8px">
+        <button class="btn" id="btnNewPage">+ Planche</button>
+        <button class="btn" id="btnDelPage">Suppr.</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div style="width:110px"><label>Chapitre</label><input id="pgChapter" value="1"></div>
+      <div class="grow"><label>Titre de la planche</label><input id="pgTitle" placeholder="ex : la rencontre"></div>
+      <div style="width:110px"><label>Colonnes</label>
+        <select id="pgCols"><option>1</option><option selected>2</option><option>3</option></select></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Fond maître de la planche</h3>
+    <p class="muted" style="margin:0 0 8px">
+      Mesuré en phase 2 : répéter le décor dans le prompt ne tient <b>pas</b> (0/4). Le fond maître
+      généré une fois, puis imposé en profondeur à 0,55, tient <b>6/6</b>. Il ne sert qu'aux cases
+      « ambiance » — une case de dialogue s'en passe, et c'est voulu.
+    </p>
+    <label>Décor (sans personnage)</label>
+    <textarea id="mstPrompt" placeholder="empty school classroom, wooden desks in rows, large windows on the left, blackboard at the back, afternoon light from the left"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="btn pri" id="btnMaster">Générer le fond maître</button>
+      <span class="muted" id="mstState">aucun fond</span>
+    </div>
+    <div id="mstPrev" class="row" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button class="btn" id="btnAddPanel">+ Case</button>
+      <button class="btn" id="btnGenAll">Générer toutes les cases vides</button>
+      <button class="btn" id="btnExport">Exporter la planche (PNG)</button>
+      <span class="muted" id="plateState"></span>
+    </div>
+  </div>
+
+  <div id="plate"></div>
+</section>
+
+<!-- ============ PROJET ============ -->
+<section id="tProj">
+  <div class="card">
+    <h3>Projets</h3>
+    <div class="row">
+      <input class="grow" id="npName" placeholder="nom du projet">
+      <button class="btn pri" id="btnNewProj">Créer</button>
+    </div>
+    <div id="projList" style="margin-top:10px"></div>
+  </div>
+  <div class="card">
+    <h3>Recette par défaut du projet</h3>
+    <p class="muted" style="margin:0 0 8px">Une case qui ne redéfinit rien hérite d'ici.</p>
+    <label>Checkpoint</label><select id="rCkpt"></select>
+    <div class="row">
+      <div class="grow"><label>LoRA de personnage</label><input id="rLora"></div>
+      <div style="width:110px"><label>Poids</label><input id="rLoraW" type="number" step="0.05" value="0.8"></div>
+    </div>
+    <div class="row">
+      <div class="grow"><label>Déclencheur (trigger)</label><input id="rTrigger"></div>
+      <div class="grow"><label>Identité du personnage</label><input id="rIdent"></div>
+    </div>
+    <label>Style (tags N&amp;B — l'essai 1 a montré que ce sont eux qui font tout)</label>
+    <textarea id="rStyle"></textarea>
+    <label>Négatif</label><textarea id="rNeg"></textarea>
+    <div class="row">
+      <div style="width:100px"><label>Largeur</label><input id="rW" type="number" value="832"></div>
+      <div style="width:100px"><label>Hauteur</label><input id="rH" type="number" value="1216"></div>
+      <div style="width:90px"><label>Steps</label><input id="rSteps" type="number" value="30"></div>
+      <div style="width:90px"><label>CFG</label><input id="rCfg" type="number" step="0.1" value="5.5"></div>
+      <div style="width:130px"><label>ControlNet (ambiance)</label><input id="rCnW" type="number" step="0.05" value="0.55"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn pri" id="btnSaveRecipe">Enregistrer la recette</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GALERIE ============ -->
+<section id="tGal">
+  <div class="card">
+    <h3>Galerie du projet</h3>
+    <p class="muted" style="margin:0 0 8px">
+      Ne lit que <code>manga-studio/output/&lt;projet&gt;/</code>. Les images de Generate Studio
+      n'y entrent jamais : ComfyUI écrit dans un sous-dossier, puis le proxy déplace le fichier ici.
+    </p>
+    <div class="row"><button class="btn" id="btnRefreshGal">Rafraîchir</button>
+      <span class="muted" id="galState"></span></div>
+  </div>
+  <div id="gal"></div>
+</section>
+
+<!-- ============ RÉGLAGES ============ -->
+<section id="tSet">
+  <div class="card">
+    <h3>Connexion</h3>
+    <label>Proxy Generate Studio</label><input id="cfgBase">
+    <label>Clé (STUDIO_SECRET)</label><input id="cfgKey" type="password" placeholder="collée automatiquement via #k=">
+    <div class="row" style="margin-top:10px">
+      <button class="btn pri" id="btnSaveCfg">Enregistrer</button>
+      <button class="btn" id="btnPing">Tester</button>
+      <button class="btn" id="btnStartComfy">Lancer ComfyUI</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Journal</h3>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn sm" id="btnClearLog">Vider</button>
+      <button class="btn sm" id="btnCopyLog">Copier</button>
+      <span class="muted" id="logState"></span>
+    </div>
+    <div id="log"></div>
+  </div>
+</section>
+
+</main>
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Manga Studio — app SEPAREE, cliente du proxy Generate Studio (8190).
+   Elle ne modifie rien de generate_studio.html : elle consomme le meme
+   moteur (ComfyUI + routes du proxy) via ses propres tables manga_*.
+
+   Deux regles MESUREES sont cablees en dur ici, pas negociables a l'usage :
+   1. Les sorties ne se melangent JAMAIS a celles de Generate Studio.
+      ComfyUI ecrit sous output/manga/<slug>/..., puis /manga/harvest
+      DEPLACE le fichier dans le dossier du projet.
+   2. Une case est soit "ambiance" (fond maitre + ControlNet depth 0,55),
+      soit "dialogue" (LoRA seul). Phase 2 : decor fige et identite fine
+      sont incompatibles dans une meme case.
+   ===================================================================== */
+
+const VERSION = "1.0.1";
+
+/* ---------- journal (obligatoire des la conception) ---------- */
+const LOG = [];
+function log(msg, cls){
+  const t = new Date().toISOString().slice(11,19);
+  LOG.push({t, msg, cls: cls || ""});
+  if (LOG.length > 500) LOG.shift();
+  const el = document.getElementById("log");
+  if (el){
+    const d = document.createElement("div");
+    d.innerHTML = '<span class="t">' + t + '</span> <span class="' + (cls||"") + '">'
+                + String(msg).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) + '</span>';
+    el.appendChild(d); el.scrollTop = el.scrollHeight;
+  }
+}
+window.addEventListener("error", e => log("JS ERROR: " + e.message + " @" + e.filename + ":" + e.lineno, "e"));
+window.addEventListener("unhandledrejection", e => log("PROMISE REJETEE: " + (e.reason && e.reason.message || e.reason), "e"));
+window.MangaLog = { dump: n => LOG.slice(-(n||200)), errors: () => LOG.filter(x => x.cls === "e") };
+
+function toast(m){
+  const t = document.getElementById("toast");
+  t.textContent = m; t.classList.add("on");
+  clearTimeout(toast._h); toast._h = setTimeout(() => t.classList.remove("on"), 2600);
+}
+
+/* ---------- config / auth ---------- */
+const CFG = {
+  base: localStorage.getItem("manga_base") || (location.protocol.startsWith("http") ? location.origin : "http://127.0.0.1:8190"),
+  key:  localStorage.getItem("manga_key")  || ""
+};
+// Meme convention que Generate Studio : #k=<secret> depose la cle puis disparait de l'URL.
+(function(){
+  const m = /[#&]k=([^&]+)/.exec(location.hash || "");
+  if (m){ CFG.key = decodeURIComponent(m[1]); localStorage.setItem("manga_key", CFG.key);
+          history.replaceState(null, "", location.pathname + location.search); }
+})();
+
+async function api(path, body, opts){
+  const o = Object.assign({ headers: {} }, opts || {});
+  if (CFG.key) o.headers["Authorization"] = "Bearer " + CFG.key;
+  if (body !== undefined){ o.method = "POST"; o.headers["Content-Type"] = "application/json";
+                           o.body = JSON.stringify(body); }
+  const r = await fetch(CFG.base + path, o);
+  const txt = await r.text();
+  let j; try { j = JSON.parse(txt); } catch { j = { raw: txt }; }
+  if (!r.ok) throw new Error("HTTP " + r.status + " " + path + " : " + (j.error || txt.slice(0,120)));
+  if (j && j.error) throw new Error(path + " : " + j.error);
+  return j;
+}
+// URL d'image : le token passe en query (un <img> ne porte pas d'en-tete Authorization).
+const imgURL = p => CFG.base + "/manga/file?p=" + encodeURIComponent(p) + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
+
+/* ---------- reglages mesures (phases 0 a 2) ---------- */
+const DEFAULT_RECIPE = {
+  ckpt: "waiIllustriousSDXL_v170.safetensors",
+  lora: "_manga_test\\zqmg1rl_v1.safetensors",
+  loraW: 0.8,
+  trigger: "zqmg1rl",
+  ident: "1girl, solo, short messy black hair, blunt bangs, amber eyes, black sailor uniform, red scarf",
+  // Essai 1 : ces tags SEULS sortent de vraies trames halftone. Sans eux, meme seed = illustration couleur.
+  style: "masterpiece, best quality, very aesthetic, absurdres, monochrome, greyscale, manga, screentone, halftone, lineart, ink, high contrast",
+  neg: "bad quality, worst quality, sketch, censor, watermark, signature, text, speech bubble, extra digits, bad hands, bad anatomy, multiple girls, color, colored",
+  w: 832, h: 1216, steps: 30, cfg: 5.5,
+  sampler: "euler_ancestral", scheduler: "normal",
+  cn: "depth-sdxl.safetensors",
+  cnW: 0.55,          // phase 2 : 0,85 fait disparaitre le personnage (1/4). 0,55 = 6/6.
+  depthCkpt: "depth_anything_v2_vitl.pth"
+};
+
+/* ---------- etat ---------- */
+const S = { projects: [], pages: [], panels: [], proj: null, page: null, busy: 0 };
+const $ = id => document.getElementById(id);
+const recipe = () => Object.assign({}, DEFAULT_RECIPE, (S.proj && S.proj.recipe) || {});
+
+/* =====================================================================
+   COMFYUI — construction des graphes
+   ===================================================================== */
+/** Fond maitre : le decor SEUL + sa carte de profondeur, en un seul graphe.
+ *  Faire les deux d'un coup evite un aller-retour d'upload inutile. */
+function wfMaster(r, decor, seed, prefix){
+  return {
+    "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: r.ckpt } },
+    "2": { class_type: "CLIPTextEncode", inputs: { text: r.style + ", " + decor + ", no humans, empty room", clip: ["1",1] } },
+    "3": { class_type: "CLIPTextEncode", inputs: { text: r.neg + ", 1girl, person, human", clip: ["1",1] } },
+    "4": { class_type: "EmptyLatentImage", inputs: { width: +r.w, height: +r.h, batch_size: 1 } },
+    "5": { class_type: "KSampler", inputs: { seed: seed, steps: +r.steps + 2, cfg: +r.cfg,
+            sampler_name: r.sampler, scheduler: r.scheduler, denoise: 1.0,
+            model: ["1",0], positive: ["2",0], negative: ["3",0], latent_image: ["4",0] } },
+    "6": { class_type: "VAEDecode", inputs: { samples: ["5",0], vae: ["1",2] } },
+    "7": { class_type: "SaveImage", inputs: { images: ["6",0], filename_prefix: prefix + "/fond" } },
+    "9": { class_type: "DepthAnythingV2Preprocessor",
+           inputs: { image: ["6",0], ckpt_name: r.depthCkpt, resolution: 1024 } },
+    "10":{ class_type: "SaveImage", inputs: { images: ["9",0], filename_prefix: prefix + "/depth" } }
+  };
+}
+
+/** Une case. `depthName` non vide => mode AMBIANCE (ControlNet depth sur le fond maitre). */
+function wfPanel(r, positive, seed, prefix, depthName){
+  const g = {
+    "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: r.ckpt } },
+    "10":{ class_type: "LoraLoader", inputs: { lora_name: r.lora,
+            strength_model: +r.loraW, strength_clip: +r.loraW, model: ["1",0], clip: ["1",1] } },
+    "2": { class_type: "CLIPTextEncode", inputs: { text: positive, clip: ["10",1] } },
+    "3": { class_type: "CLIPTextEncode", inputs: { text: r.neg, clip: ["10",1] } },
+    "4": { class_type: "EmptyLatentImage", inputs: { width: +r.w, height: +r.h, batch_size: 1 } },
+    "5": { class_type: "KSampler", inputs: { seed: seed, steps: +r.steps, cfg: +r.cfg,
+            sampler_name: r.sampler, scheduler: r.scheduler, denoise: 1.0,
+            model: ["10",0], positive: ["2",0], negative: ["3",0], latent_image: ["4",0] } },
+    "6": { class_type: "VAEDecode", inputs: { samples: ["5",0], vae: ["1",2] } },
+    "7": { class_type: "SaveImage", inputs: { images: ["6",0], filename_prefix: prefix + "/case" } }
+  };
+  if (depthName){
+    g["11"] = { class_type: "ControlNetLoader", inputs: { control_net_name: r.cn } };
+    g["12"] = { class_type: "LoadImage", inputs: { image: depthName } };
+    g["13"] = { class_type: "ControlNetApplyAdvanced", inputs: {
+                 positive: ["2",0], negative: ["3",0], control_net: ["11",0], image: ["12",0],
+                 strength: +r.cnW, start_percent: 0.0, end_percent: 0.8 } };
+    g["5"].inputs.positive = ["13",0];
+    g["5"].inputs.negative = ["13",1];
+  }
+  return g;
+}
+
+/** Soumet un graphe et attend ses images. Renvoie [{filename, subfolder, type}, ...]. */
+async function runGraph(nodes, label){
+  S.busy++;
+  try {
+    const cid = "manga-" + Math.random().toString(36).slice(2);
+    const q = await api("/comfy/prompt", { prompt: nodes, client_id: cid });
+    const pid = q.prompt_id;
+    if (!pid) throw new Error("ComfyUI n'a pas renvoye de prompt_id : " + JSON.stringify(q).slice(0,200));
+    log("[" + label + "] file d'attente " + pid);
+    const t0 = Date.now();
+    for(;;){
+      await new Promise(r => setTimeout(r, 1500));
+      const h = await api("/comfy/history/" + pid);
+      if (h && h[pid]){
+        const st = h[pid].status || {};
+        if (st.status_str === "error")
+          throw new Error("ComfyUI: " + JSON.stringify(st.messages || st).slice(0,300));
+        const imgs = [];
+        Object.values(h[pid].outputs || {}).forEach(o => (o.images || []).forEach(i => imgs.push(i)));
+        if (!imgs.length) throw new Error("aucune image produite");
+        log("[" + label + "] OK " + Math.round((Date.now()-t0)/1000) + "s, " + imgs.length + " image(s)", "s");
+        return imgs;
+      }
+      if (Date.now() - t0 > 400000) throw new Error("délai dépassé (400 s)");
+    }
+  } finally { S.busy--; }
+}
+
+/** Range une image de ComfyUI dans le dossier du projet. C'est ICI que la separation
+ *  d'avec Generate Studio devient definitive : le fichier quitte ComfyUI. */
+async function harvest(img, dest){
+  // Le dossier de destination se deduit du projet qui POSSEDE la planche courante,
+  // jamais du projet simplement "selectionne". Les deux ont diverge une fois (banc
+  // de phase 4) et 6 cases sont parties chez un voisin, en silence.
+  const owner = (S.page && S.projects.find(p => p.id === S.page.projectId)) || S.proj;
+  if (!owner) throw new Error("aucun projet propriétaire pour ranger l'image");
+  const r = await api("/manga/harvest", {
+    filename: img.filename, subfolder: img.subfolder || "", slug: owner.slug, dest: dest });
+  log("rangé -> output/" + r.path, "s");
+  return r.path;
+}
+
+/** Depose une image dans le dossier input de ComfyUI (necessaire pour LoadImage). */
+async function uploadToComfy(blob, name){
+  const fd = new FormData();
+  fd.append("image", blob, name);
+  fd.append("overwrite", "true");
+  const h = {}; if (CFG.key) h["Authorization"] = "Bearer " + CFG.key;
+  const r = await fetch(CFG.base + "/comfy/upload/image", { method: "POST", headers: h, body: fd });
+  const j = await r.json();
+  if (!j.name) throw new Error("upload ComfyUI: " + JSON.stringify(j).slice(0,150));
+  return j.name;
+}
+
+/* =====================================================================
+   DONNEES
+   ===================================================================== */
+async function loadProjects(){
+  S.projects = (await api("/manga/projects")).items || [];
+  const sel = $("selProj");
+  sel.innerHTML = S.projects.map(p => '<option value="' + p.id + '">' + esc(p.name) + "</option>").join("");
+  const want = localStorage.getItem("manga_proj");
+  S.proj = S.projects.find(p => p.id === want) || S.projects[0] || null;
+  if (S.proj){ sel.value = S.proj.id; localStorage.setItem("manga_proj", S.proj.id); }
+  renderProjList(); fillRecipe();
+  await loadPages();
+}
+
+async function loadPages(){
+  S.pages = S.proj ? ((await api("/manga/pages?project=" + S.proj.id)).items || []) : [];
+  const sel = $("selPage");
+  sel.innerHTML = S.pages.map(p =>
+    '<option value="' + p.id + '">ch.' + esc(p.chapter) + " · " + (p.idx+1) + " · " + esc(p.title || "sans titre") + "</option>").join("");
+  const want = localStorage.getItem("manga_page");
+  S.page = S.pages.find(p => p.id === want) || S.pages[0] || null;
+  if (S.page){ sel.value = S.page.id; localStorage.setItem("manga_page", S.page.id); }
+  fillPage();
+  await loadPanels();
+}
+
+async function loadPanels(){
+  S.panels = S.page ? ((await api("/manga/panels?page=" + S.page.id)).items || []) : [];
+  renderPlate();
+}
+
+function fillPage(){
+  const p = S.page;
+  $("pgChapter").value = p ? p.chapter : "1";
+  $("pgTitle").value   = p ? p.title : "";
+  $("pgCols").value    = String((p && p.layout && p.layout.cols) || 2);
+  $("mstPrompt").value = (p && p.master && p.master.decor) || "";
+  const has = p && p.master && p.master.depthInput;
+  $("mstState").textContent = has ? "fond maître prêt (profondeur déposée)" : "aucun fond";
+  const prev = $("mstPrev"); prev.innerHTML = "";
+  if (p && p.master && p.master.fond){
+    ["fond","depth"].forEach(k => {
+      if (!p.master[k]) return;
+      const i = new Image(); i.src = imgURL(p.master[k]);
+      i.style.cssText = "height:130px;border-radius:8px;border:1px solid var(--line)";
+      i.alt = k; prev.appendChild(i);
+    });
+  }
+}
+
+async function savePage(){
+  if (!S.page) return;
+  S.page.chapter = $("pgChapter").value || "1";
+  S.page.title   = $("pgTitle").value;
+  S.page.layout  = Object.assign({}, S.page.layout, { cols: +$("pgCols").value });
+  await api("/manga/pages", S.page);
+  renderPlate();
+}
+
+/* =====================================================================
+   RENDU
+   ===================================================================== */
+const esc = s => String(s == null ? "" : s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+
+function renderProjList(){
+  $("projList").innerHTML = S.projects.map(p =>
+    '<div class="row" style="padding:6px 0;border-top:1px solid var(--line)">'
+    + '<b class="grow">' + esc(p.name) + '</b>'
+    + '<span class="tag">output/' + esc(p.slug) + '/</span>'
+    + '<button class="btn sm" data-delproj="' + p.id + '">supprimer</button></div>').join("")
+    || '<p class="muted">aucun projet</p>';
+}
+
+function renderPlate(){
+  const cols = (S.page && S.page.layout && S.page.layout.cols) || 2;
+  const el = $("plate");
+  el.style.gridTemplateColumns = "repeat(" + (window.innerWidth < 700 ? 1 : cols) + ",1fr)";
+  if (!S.page){ el.innerHTML = '<p class="muted">Aucune planche. Crée-en une.</p>'; return; }
+  el.innerHTML = S.panels.map((p,i) => panelHTML(p,i)).join("")
+    || '<p class="muted">Aucune case. Ajoute-en une.</p>';
+  $("plateState").textContent = S.panels.length + " case(s), "
+    + S.panels.filter(p => p.file).length + " générée(s)";
+}
+
+function panelHTML(p, i){
+  const img = p.file
+    ? '<img src="' + imgURL(p.file) + '" alt="case ' + (i+1) + '">'
+    : '<span class="ph">◻</span>';
+  const v = p.verdict === "ok" ? "✅" : (p.verdict === "ko" ? "❌" : "");
+  return '<div class="panel" data-pid="' + p.id + '">'
+   + '<div class="img"><span class="num">' + (i+1) + '</span><span class="verdict">' + v + '</span>'
+   + img + '<div class="busy" data-busy hidden><div class="spin"></div><span data-busytxt></span></div></div>'
+   + '<div class="body">'
+   + '<div class="row"><select data-kind style="width:auto">'
+   + '<option value="dialogue"' + (p.kind==="dialogue"?" selected":"") + '>dialogue — LoRA seul</option>'
+   + '<option value="ambiance"' + (p.kind==="ambiance"?" selected":"") + '>ambiance — fond maître</option>'
+   + '</select><span class="tag ' + (p.kind==="ambiance"?"amb":"dia") + '">'
+   + (p.kind==="ambiance" ? "ControlNet " + recipe().cnW : "identité fine") + '</span></div>'
+   + '<textarea data-prompt placeholder="action du personnage — ex : sitting at a desk, chin on hand, upper body">'
+   + esc(p.prompt) + '</textarea>'
+   + '<div class="row"><input data-seed type="number" style="width:120px" value="'
+   + ((p.recipe && p.recipe.seed) || "") + '" placeholder="seed"> '
+   + '<button class="btn sm" data-act="gen">Générer</button>'
+   + '<button class="btn sm" data-act="ok">✅</button>'
+   + '<button class="btn sm" data-act="ko">❌</button>'
+   + '<button class="btn sm" data-act="del">suppr.</button></div>'
+   + '</div></div>';
+}
+
+function panelBusy(pid, txt){
+  const el = document.querySelector('[data-pid="' + pid + '"] [data-busy]');
+  if (!el) return;
+  if (txt == null){ el.hidden = true; return; }
+  el.hidden = false;
+  el.querySelector("[data-busytxt]").textContent = txt;
+}
+
+/* =====================================================================
+   ACTIONS
+   ===================================================================== */
+async function genMaster(){
+  if (!S.page) return toast("aucune planche");
+  const decor = $("mstPrompt").value.trim();
+  if (!decor) return toast("décris le décor d'abord");
+  const r = recipe(), seed = Math.floor(Math.random()*1e9);
+  const prefix = "manga/" + S.proj.slug + "/" + S.page.id;
+  $("btnMaster").disabled = true; $("mstState").textContent = "génération du décor…";
+  try {
+    const imgs = await runGraph(wfMaster(r, decor, seed, prefix), "fond maître");
+    // Deux SaveImage : le fond porte "fond" dans son nom, la profondeur porte "depth".
+    const fondImg  = imgs.find(i => /fond/.test(i.filename))  || imgs[0];
+    const depthImg = imgs.find(i => /depth/.test(i.filename)) || imgs[1] || imgs[0];
+
+    // La profondeur doit exister dans le dossier INPUT de ComfyUI pour que LoadImage la voie.
+    $("mstState").textContent = "dépôt de la carte de profondeur…";
+    const dq = await fetch(CFG.base + "/comfy/view?filename=" + encodeURIComponent(depthImg.filename)
+      + "&type=" + depthImg.type + "&subfolder=" + encodeURIComponent(depthImg.subfolder || ""),
+      { headers: CFG.key ? { Authorization: "Bearer " + CFG.key } : {} });
+    const depthInput = await uploadToComfy(await dq.blob(), "mangadepth_" + S.page.id + ".png");
+
+    const fondPath  = await harvest(fondImg,  S.page.id + "_fond.png");
+    const depthPath = await harvest(depthImg, S.page.id + "_depth.png");
+
+    S.page.master = { decor, seed, fond: fondPath, depth: depthPath, depthInput };
+    await api("/manga/pages", S.page);
+    fillPage();
+    toast("fond maître prêt");
+  } catch(e){ log("fond maître: " + e.message, "e"); toast("échec : " + e.message); $("mstState").textContent = "échec"; }
+  finally { $("btnMaster").disabled = false; }
+}
+
+async function genPanel(p){
+  const r = recipe();
+  const card = document.querySelector('[data-pid="' + p.id + '"]');
+  if (card){
+    p.kind   = card.querySelector("[data-kind]").value;
+    p.prompt = card.querySelector("[data-prompt]").value;
+    const sv = card.querySelector("[data-seed]").value;
+    p.recipe = Object.assign({}, p.recipe, { seed: sv ? +sv : Math.floor(Math.random()*1e9) });
+  }
+  if (!p.prompt.trim()){ toast("case " + (S.panels.indexOf(p)+1) + " : prompt vide"); return; }
+
+  const ambiance = p.kind === "ambiance";
+  const depthName = ambiance ? (S.page.master && S.page.master.depthInput) : "";
+  if (ambiance && !depthName){
+    toast("case ambiance : génère d'abord le fond maître");
+    log("case " + p.id + " en ambiance sans fond maître -> ignorée", "w");
+    return;
+  }
+  const positive = r.style + ", " + r.trigger + ", " + r.ident + ", " + p.prompt.trim()
+                 + (ambiance && S.page.master.decor ? ", " + S.page.master.decor : "");
+  const prefix = "manga/" + S.proj.slug + "/" + S.page.id;
+
+  panelBusy(p.id, ambiance ? "ambiance…" : "dialogue…");
+  try {
+    const imgs = await runGraph(wfPanel(r, positive, p.recipe.seed, prefix, depthName), "case " + p.id);
+    p.file = await harvest(imgs[0], p.id + ".png");
+    // La recette complete est enregistree AVEC la case : c'est ce qui rend le resultat rejouable.
+    p.recipe = Object.assign({}, p.recipe, {
+      ckpt: r.ckpt, lora: r.lora, loraW: r.loraW, steps: r.steps, cfg: r.cfg,
+      sampler: r.sampler, w: r.w, h: r.h,
+      controlnet: ambiance ? { name: r.cn, weight: r.cnW, depth: S.page.master.depth } : null,
+      positive: positive, negative: r.neg
+    });
+    await api("/manga/panels", p);
+    renderPlate();
+  } catch(e){ log("case: " + e.message, "e"); toast("échec : " + e.message); panelBusy(p.id, null); }
+}
+
+async function genAll(){
+  const todo = S.panels.filter(p => !p.file && p.prompt.trim());
+  if (!todo.length) return toast("rien à générer");
+  log("génération de " + todo.length + " case(s)");
+  for (const p of todo) await genPanel(p);   // en serie : une seule carte, 16 Go de VRAM
+  toast("planche terminée");
+}
+
+async function addPanel(){
+  if (!S.page) return toast("crée une planche d'abord");
+  const p = { pageId: S.page.id, idx: S.panels.length, kind: "dialogue", prompt: "", recipe: {} };
+  const r = await api("/manga/panels", p);
+  p.id = r.id; S.panels.push(p); renderPlate();
+}
+
+async function exportPlate(){
+  const done = S.panels.filter(p => p.file);
+  if (!done.length) return toast("aucune case générée");
+  const cols = (S.page.layout && S.page.layout.cols) || 2;
+  const gut = 24, pad = 36;
+  const imgs = await Promise.all(done.map(p => new Promise((res, rej) => {
+    const i = new Image(); i.crossOrigin = "anonymous";
+    i.onload = () => res(i); i.onerror = () => rej(new Error("image illisible: " + p.file));
+    i.src = imgURL(p.file);
+  })));
+  const cw = imgs[0].naturalWidth, ch = imgs[0].naturalHeight;
+  const rows = Math.ceil(imgs.length / cols);
+  const cv = document.createElement("canvas");
+  cv.width  = pad*2 + cols*cw + (cols-1)*gut;
+  cv.height = pad*2 + rows*ch + (rows-1)*gut;
+  const x = cv.getContext("2d");
+  x.fillStyle = "#fff"; x.fillRect(0,0,cv.width,cv.height);   // gouttieres blanches, comme une vraie planche
+  imgs.forEach((im,i) => {
+    const c = i % cols, rr = Math.floor(i / cols);
+    x.drawImage(im, pad + c*(cw+gut), pad + rr*(ch+gut), cw, ch);
+  });
+  cv.toBlob(b => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(b);
+    a.download = (S.proj.slug || "planche") + "_ch" + S.page.chapter + "_" + (S.page.idx+1) + ".png";
+    a.click(); URL.revokeObjectURL(a.href);
+    log("planche exportée " + cv.width + "x" + cv.height, "s");
+  }, "image/png");
+}
+
+async function refreshGal(){
+  if (!S.proj) return;
+  const j = await api("/manga/files?slug=" + encodeURIComponent(S.proj.slug));
+  $("gal").innerHTML = (j.files || []).map(f =>
+    '<figure><img loading="lazy" src="' + imgURL(f.path) + '" alt="' + esc(f.name) + '">'
+    + '<figcaption>' + esc(f.name) + '</figcaption></figure>').join("")
+    || '<p class="muted">Aucune image dans ce projet.</p>';
+  $("galState").textContent = (j.files || []).length + " image(s) — output/" + S.proj.slug + "/";
+}
+
+/* ---------- recette ---------- */
+function fillRecipe(){
+  const r = recipe();
+  $("rLora").value = r.lora; $("rLoraW").value = r.loraW; $("rTrigger").value = r.trigger;
+  $("rIdent").value = r.ident; $("rStyle").value = r.style; $("rNeg").value = r.neg;
+  $("rW").value = r.w; $("rH").value = r.h; $("rSteps").value = r.steps;
+  $("rCfg").value = r.cfg; $("rCnW").value = r.cnW;
+  const sel = $("rCkpt");
+  if (!sel.options.length) sel.innerHTML = '<option>' + esc(r.ckpt) + '</option>';
+  sel.value = r.ckpt;
+}
+
+async function loadCheckpoints(){
+  try {
+    const info = await api("/comfy/object_info/CheckpointLoaderSimple");
+    const list = info.CheckpointLoaderSimple.input.required.ckpt_name[0] || [];
+    const r = recipe();
+    $("rCkpt").innerHTML = list.map(c => '<option' + (c===r.ckpt?" selected":"") + '>' + esc(c) + '</option>').join("");
+    log("checkpoints ComfyUI : " + list.length);
+  } catch(e){ log("liste des checkpoints indisponible (ComfyUI éteint ?) : " + e.message, "w"); }
+}
+
+/* ---------- sante ---------- */
+async function health(){
+  try { await api("/ping"); $("dProxy").className = "dot on"; }
+  catch { $("dProxy").className = "dot off"; }
+  try { await api("/comfy/system_stats"); $("dComfy").className = "dot on"; }
+  catch { $("dComfy").className = "dot off"; }
+}
+
+/* =====================================================================
+   BRANCHEMENTS
+   ===================================================================== */
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.remove("sel"));
+  document.querySelectorAll("main section").forEach(x => x.classList.remove("sel"));
+  b.classList.add("sel"); $(b.dataset.tab).classList.add("sel");
+  if (b.dataset.tab === "tGal") refreshGal();
+  if (b.dataset.tab === "tSet"){ $("cfgBase").value = CFG.base; $("cfgKey").value = CFG.key; }
+});
+
+$("selProj").onchange = async e => {
+  S.proj = S.projects.find(p => p.id === e.target.value);
+  localStorage.setItem("manga_proj", S.proj.id); fillRecipe(); await loadPages();
+};
+$("selPage").onchange = async e => {
+  S.page = S.pages.find(p => p.id === e.target.value);
+  localStorage.setItem("manga_page", S.page.id); fillPage(); await loadPanels();
+};
+["pgChapter","pgTitle","pgCols"].forEach(id => $(id).onchange = savePage);
+
+$("btnNewProj").onclick = async () => {
+  const name = $("npName").value.trim();
+  if (!name) return toast("donne un nom");
+  const slug = name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
+                   .replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || ("p" + Date.now());
+  const r = await api("/manga/projects", { name, slug, recipe: DEFAULT_RECIPE });
+  // Selectionner le projet qu'on vient de creer. Sans cette ligne, loadProjects()
+  // restaure celui de la session precedente : le banc de phase 4 a genere 6 cases
+  // dans le dossier d'un AUTRE projet sans qu'aucune erreur ne soit levee.
+  localStorage.setItem("manga_proj", r.id);
+  $("npName").value = ""; localStorage.removeItem("manga_page");
+  await loadProjects(); toast("projet créé");
+};
+$("projList").onclick = async e => {
+  const id = e.target.dataset && e.target.dataset.delproj;
+  if (!id) return;
+  if (!confirm("Supprimer ce projet et ses planches ? Les images sur disque sont conservées.")) return;
+  await api("/manga/projects", { delete: id }); await loadProjects(); toast("projet supprimé");
+};
+
+$("btnNewPage").onclick = async () => {
+  if (!S.proj) return toast("crée un projet d'abord");
+  const r = await api("/manga/pages", { projectId: S.proj.id, chapter: $("pgChapter").value || "1",
+    idx: S.pages.length, title: "", layout: { cols: +$("pgCols").value }, master: {} });
+  localStorage.setItem("manga_page", r.id); await loadPages(); toast("planche créée");
+};
+$("btnDelPage").onclick = async () => {
+  if (!S.page) return;
+  if (!confirm("Supprimer cette planche et ses cases ?")) return;
+  await api("/manga/pages", { delete: S.page.id });
+  localStorage.removeItem("manga_page"); await loadPages();
+};
+
+$("btnMaster").onclick = genMaster;
+$("btnAddPanel").onclick = addPanel;
+$("btnGenAll").onclick = genAll;
+$("btnExport").onclick = () => exportPlate().catch(e => { log("export: " + e.message, "e"); toast("échec export"); });
+$("btnRefreshGal").onclick = refreshGal;
+
+$("plate").addEventListener("click", async e => {
+  const btn = e.target.closest("[data-act]"); if (!btn) return;
+  const pid = e.target.closest("[data-pid]").dataset.pid;
+  const p = S.panels.find(x => x.id === pid); if (!p) return;
+  const act = btn.dataset.act;
+  if (act === "gen") return genPanel(p);
+  if (act === "del"){ await api("/manga/panels", { delete: pid });
+                      S.panels = S.panels.filter(x => x.id !== pid); return renderPlate(); }
+  // Le verdict alimentera la boucle de validation (phase 6) : l'app propose, elle n'impose pas.
+  p.verdict = (p.verdict === act) ? "" : act;
+  await api("/manga/panels", p); renderPlate();
+});
+$("plate").addEventListener("change", async e => {
+  const card = e.target.closest("[data-pid]"); if (!card) return;
+  const p = S.panels.find(x => x.id === card.dataset.pid); if (!p) return;
+  p.kind   = card.querySelector("[data-kind]").value;
+  p.prompt = card.querySelector("[data-prompt]").value;
+  await api("/manga/panels", p);
+});
+
+$("btnSaveRecipe").onclick = async () => {
+  if (!S.proj) return toast("aucun projet");
+  S.proj.recipe = Object.assign({}, recipe(), {
+    ckpt: $("rCkpt").value, lora: $("rLora").value, loraW: +$("rLoraW").value,
+    trigger: $("rTrigger").value, ident: $("rIdent").value, style: $("rStyle").value,
+    neg: $("rNeg").value, w: +$("rW").value, h: +$("rH").value,
+    steps: +$("rSteps").value, cfg: +$("rCfg").value, cnW: +$("rCnW").value });
+  await api("/manga/projects", S.proj); toast("recette enregistrée");
+};
+
+$("btnSaveCfg").onclick = () => {
+  CFG.base = $("cfgBase").value.replace(/\/$/,""); CFG.key = $("cfgKey").value;
+  localStorage.setItem("manga_base", CFG.base); localStorage.setItem("manga_key", CFG.key);
+  toast("connexion enregistrée"); boot();
+};
+$("btnPing").onclick = async () => {
+  try { await api("/ping"); toast("proxy OK"); log("ping proxy OK", "s"); }
+  catch(e){ toast("proxy injoignable"); log("ping: " + e.message, "e"); }
+  health();
+};
+$("btnStartComfy").onclick = async () => {
+  try { await api("/start", {}); toast("ComfyUI démarre…"); log("demande de démarrage ComfyUI"); }
+  catch(e){ log("start: " + e.message, "e"); toast("échec"); }
+  setTimeout(health, 8000);
+};
+$("btnClearLog").onclick = () => { LOG.length = 0; $("log").innerHTML = ""; };
+$("btnCopyLog").onclick = () => {
+  navigator.clipboard.writeText(LOG.map(l => l.t + " " + l.msg).join("\n"))
+    .then(() => toast("journal copié"));
+};
+window.addEventListener("resize", () => renderPlate());
+
+/* =====================================================================
+   DEMARRAGE
+   ===================================================================== */
+async function boot(){
+  $("verBadge").textContent = "v" + VERSION;
+  document.title = "Manga Studio v" + VERSION;
+  log("Manga Studio v" + VERSION + " — proxy " + CFG.base + (CFG.key ? " (clé présente)" : " (SANS clé)"),
+      CFG.key ? "" : "w");
+  await health();
+  try {
+    await loadProjects();
+    if (!S.projects.length) log("aucun projet — crée-en un dans l'onglet Projet", "w");
+    loadCheckpoints();
+  } catch(e){ log("démarrage: " + e.message, "e"); toast("échec de connexion — voir Réglages"); }
+}
+boot();
+</script>
+</body>
+</html>
