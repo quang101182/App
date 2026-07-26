@@ -327,9 +327,57 @@ persiste** malgré le négatif (réserve de l'essai 1 — ce n'est pas du N&B d'
 d'ambiance **le visage n'est pas résolu** (limite structurelle de la phase 2 — c'est précisément ce qui justifie
 la règle des deux types de cases).
 
-### Phase 5 — Bulles et lettrage ⏳
-Overlay Canvas éditable. Le LLM écrit les répliques, le canvas pose bulle + texte.
+### Phase 5 — Bulles et lettrage ✅ *(atteinte le 26/07 — v1.2.0)*
+Calque éditable par case. Le modèle de diffusion n'écrit **jamais** le texte (convergence des 3 voix) :
+le texte est posé par-dessus.
 > **Critère de sortie** : bulles repositionnables, texte réeditable après coup, export PNG/PDF.
+
+**Décision d'architecture — un seul chemin de rendu.** Le calque est un **SVG**, affiché tel quel à
+l'écran *et* rasterisé pour l'export. Écran et export sont identiques **par construction**, au lieu
+d'être deux codes de dessin (DOM + canvas) qu'il faudrait garder d'accord — ils divergent toujours.
+Toutes les coordonnées sont des **fractions de la case** : la même bulle tombe au même endroit sur une
+vignette de 400 px et sur un export pleine résolution.
+
+**Résultat mesuré — banc `scripts/test_lettering_live.py` :**
+
+| Mesure | Valeur |
+|---|---|
+| Bulle posée, texte renvoyé à la ligne | ✅ 6 lignes automatiques |
+| Texte **contenu** dans la forme (mesure `getBBox`) | ✅ marge ≥ 100 unités sur les 4 côtés |
+| Repositionnable, et **enregistré** | ✅ 0,500;0,180 → 0,589;0,332 relu depuis la base |
+| Texte rééditable après rechargement complet | ✅ |
+| **La bulle est-elle dans le fichier exporté ?** (mesure pixels) | ✅ zone 122 → **229** / 255, 88 % d'aplat, 9 % de texte |
+| Export PDF | ✅ valide, 758 Ko, écrit à la main (image JPEG en XObject, aucune bibliothèque) |
+| Erreurs JS | **0** |
+| Mobile Samsung réel | ✅ 0 erreur, aucun débordement, **police embarquée réellement utilisée** (200 px vs 312 px en repli) |
+
+Formes : ovale · rectangle · **pensée** (couronne de bosses + bulles qui s'éloignent) · **cri** (étoile
+déterministe — pas de `Math.random`, sinon la forme changerait entre l'écran et l'export) · **récitatif**
+(sans bulle). Queue orientable à la poignée. Police **Comic Neue (OFL) embarquée en base64** : l'export
+étant rendu côté client, une police absente du téléphone donnerait un fichier différent de celui du PC —
+c'est un défaut de correction, pas de goût.
+
+**⚠️ Trois défauts trouvés par la mesure, dont un présent depuis la phase 4 :**
+1. **Le voile « génération en cours » recouvrait chaque case en permanence** — un `display:flex` d'auteur
+   écrase l'attribut `hidden` (qui n'est qu'un `display:none` de la feuille du navigateur). Il masquait
+   l'image *et interceptait tous les clics*. **Présent dans la v1.0.1 livrée en phase 4** : les critères
+   chiffrés de la phase 4 restent vrais, mais l'affichage de la planche était dégradé et personne ne l'avait
+   vu — aucun chiffre ne regardait l'écran. C'est ce qui a motivé l'ajout d'une **capture d'écran** au banc.
+2. **Le texte débordait de la bulle** : la largeur utile était calculée sans tenir compte de la courbure de
+   l'ellipse, et la hauteur n'était jamais vérifiée. Corrigé par la condition d'inscription
+   `(a/rx)² + (b/ry)² ≤ 1` — la bulle **grandit** pour contenir son texte, elle ne le tronque jamais.
+   Le contrôle `getBBox` qui l'aurait détecté n'existait pas : il a été ajouté *après* le constat visuel.
+3. **La queue barrait le texte** : déplacer la bulle ne déplaçait pas la pointe, qui se retrouvait à
+   l'intérieur. La queue suit désormais la bulle, et une pointe rentrée est repoussée hors du contour.
+
+*Les trois étaient invisibles dans les chiffres et évidents à l'écran. Un banc qui ne regarde jamais le
+rendu mesure l'exécution, pas le résultat.*
+
+**⏳ Ce que la phase 5 ne fait PAS** : le **relettrage d'une page traduite** (RESTANT de la phase 3-bis).
+La brique existe désormais — c'est le même calque — mais rien ne la relie à une page ingérée, parce que
+**l'ingestion n'est pas dans l'app** (elle vit encore dans `manga_ingest.py` / `manga_translate.py`).
+Il manque un écran d'import : page → YOLO (cases + bulles) → traduction → bulles pré-remplies aux
+positions détectées. C'est le prochain chantier naturel.
 
 ### Phase 6 — Boucle de validation ⏳
 **Reprendre la décision GS du 29/06, ne pas réinventer** : l'apprentissage automatique, invisible et
@@ -354,6 +402,8 @@ la boucle paie vraiment. **L'app propose, elle n'impose jamais.**
 | **`llm.py vote`** | ~310 s (Kimi est le facteur limitant). À lancer en arrière-plan, pas en bloquant. |
 | **Sorties qui polluent Generate Studio** | Payé le 26/07 : les scripts d'exploration écrivaient à la **racine** de `ComfyUI/output`, où GS range les siennes — 62 fichiers à nous mêlés à 850 à Quang (rapatriés par `scripts/rapatrie_outputs.py`). Tout nouveau script manga doit écrire sous `manga/<slug>/…` **et** passer par `/manga/harvest`. |
 | **Créer ≠ sélectionner** | Le projet fraîchement créé n'était pas le projet courant → 6 cases rangées chez un voisin, **sans aucune erreur**. Toujours vérifier *où* un fichier atterrit, pas seulement *qu'il* atterrit. |
+| **`hidden` écrasé par un `display` d'auteur** | `.busy{display:flex}` annule l'attribut `hidden` : le voile est resté affiché sur chaque case pendant toute la v1.0.1, masquant l'image et **avalant les clics**. Toujours écrire `.x[hidden]{display:none}` quand on donne un `display` à un élément qu'on masque par attribut. |
+| **Un banc qui ne regarde jamais l'écran** | Les 3 défauts de la phase 5 étaient verts sur tous les chiffres. Un banc d'UI doit produire une **capture** — et un contrôle géométrique (`getBBox`) quand la question est « est-ce que ça tient dedans ». |
 | **Ids générés à la milliseconde** | `prefix + hex(now_ms)` donne le **même id** à deux insertions dans la même ms — et créer 6 cases d'un coup est une rafale. `_studio_db._uid()` ajoute un compteur monotone. Attrapé par le self-test, pas en production. |
 
 ---
@@ -365,5 +415,6 @@ la boucle paie vraiment. **L'app propose, elle n'impose jamais.**
 | 2026-07-26 | Ouverture du chantier. Décision d'archi (app séparée). Checkpoint Illustrious installé. Essais 1-4 mesurés. Recherche web + vote 3 voix. kohya installé (3 pièges payés : cu128, versions transformers, encodage cp1252). |
 | 2026-07-26 | **Phase 1 franchie à 89 %** (contre 50 % sans LoRA). LoRA `zqmg1rl_v1` entraîné et validé sur comparatif strict. 2 réserves ouvertes → LoRA v2 avant la phase 4. |
 | 2026-07-26 | **Phase 3 : pipeline d'ingestion écrit et mesuré** (`manga_ingest.py`). Découpage 83 % à IoU 0,66 mais **Pixtral quantifie sur une grille** ⇒ raffinement OpenCV nécessaire. Volet style : OK. **Bloqué sur la validation** faute de scans réels de Quang. Premier test = faux positif, corrigé par un test à vérité terrain. |
+| 2026-07-26 | **Phase 5 franchie — bulles et lettrage** (v1.2.0). Calque SVG unique (écran = export par construction), 5 formes, queue orientable, police Comic Neue embarquée, export PNG **et** PDF écrit à la main. Trois défauts trouvés par la mesure, dont **le voile de génération qui recouvrait chaque case depuis la v1.0.1** — invisible dans les chiffres, évident à l'écran ⇒ le banc prend désormais une **capture**. Reste : le relettrage d'une page traduite, qui attend un écran d'**ingestion** dans l'app. |
 | 2026-07-26 | **Phase 4 franchie — l'app existe.** `manga_studio.html` v1.0.1 (single-file, servie par le proxy sur `/manga`), tables SQLite dédiées `manga_projects/pages/panels` (schéma v3), routes `/manga/*`. Planche de 6 cases de bout en bout : 6/6, 0 erreur JS sur PC **et** Samsung réel, 12/12 responsive. **Exigence Quang du jour : les sorties ne se mélangent plus à celles de Generate Studio** (851→851 fichiers à la racine, 0 résidu) ; 62 fichiers d'exploration rapatriés. Un défaut invisible à l'œil trouvé par le banc : créer un projet ne le sélectionnait pas → cases rangées chez un voisin. Arbitrage Quang : l'app **avant** le LoRA v2, stockage en **table dédiée**. |
 | 2026-07-26 | **Phase 2 franchie, 6/6.** Fond maître + ControlNet depth @ 0,55. Témoin sans ControlNet = 0/4 ⇒ répéter le décor dans le prompt est inopérant. Découverte structurante : décor figé et identité fine sont **incompatibles dans une même case** ⇒ règle des deux types de cases. Prochaine étape : **phase 3, ingestion des scans**. |

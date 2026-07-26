@@ -1,6 +1,7 @@
 # Manga Studio
 
-> État : **l'app existe et la phase 4 est franchie** (26/07/2026) — `manga_studio.html` **v1.0.1**.
+> État : **phases 4 et 5 franchies** (26/07/2026) — `manga_studio.html` **v1.2.0** : l'app produit une
+> planche complète, bulles et lettrage compris, et l'exporte en PNG ou PDF.
 > **La feuille de route est le document de référence : [`ROADMAP.md`](ROADMAP.md)** — objectifs, décision
 > d'architecture, verdicts chiffrés, pièges d'environnement, causes des échecs et leurs correctifs.
 
@@ -19,6 +20,18 @@ même convention que GS). Accessible depuis le téléphone par `adb reverse tcp:
 - **Deux types de case**, conformément à la mesure de la phase 2 :
   `ambiance` (fond maître + ControlNet depth 0,55) et `dialogue` (LoRA seul).
   Une case `ambiance` **refuse** de se générer sans fond maître.
+
+### Bulles et lettrage
+
+Bouton **✎ Lettrage** sur une case : le calque devient éditable. Ovale · rectangle · pensée · cri ·
+récitatif ; queue orientable ; texte renvoyé à la ligne automatiquement, et **la bulle grandit pour
+contenir son texte** plutôt que de le tronquer.
+
+Le calque est un **SVG**, affiché tel quel *et* rasterisé pour l'export : l'écran et le fichier exporté
+sont identiques par construction. La police (**Comic Neue**, OFL) est **embarquée en base64** — l'export
+étant rendu côté client, une police absente du téléphone donnerait un fichier différent de celui du PC.
+
+Export **PNG** et **PDF** (le PDF est écrit à la main, sans aucune bibliothèque : l'app reste un fichier).
 
 ### 🔒 Les images ne se mélangent jamais à celles de Generate Studio
 
@@ -41,6 +54,7 @@ git**. Les diffs exacts sont versionnés ici : [`proxy-patch/`](proxy-patch/READ
 | Script | Rôle |
 |---|---|
 | `scripts/test_app_live.py` | **Banc de la phase 4** — pilote l'app (Playwright), produit une planche de 6 cases, verdict chiffré + contrôle d'isolation |
+| `scripts/test_lettering_live.py` | **Banc de la phase 5** — pose une bulle, la déplace, recharge, exporte ; vérifie **par les pixels** que la bulle est bien dans le fichier exporté, et **par `getBBox`** que le texte tient dedans. Produit une **capture d'écran** : trois défauts de rendu étaient verts sur tous les chiffres |
 | `scripts/rapatrie_outputs.py` | Sort les images manga du dossier de Generate Studio (`--dry-run` par défaut) |
 | `.claude/scripts/responsive-audit.py` | 320/360/384 px × 4 onglets (à la racine du dépôt) |
 
