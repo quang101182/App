@@ -512,13 +512,54 @@ La propriété « l'app n'impose rien » est **falsifiable** : sabotée (la rece
 cases), le banc passe de 0 à 3 et vire au rouge. C'est la seule qui compte vraiment — une boucle qui
 s'applique toute seule serait une régression sur la décision Generate Studio du 29/06.
 
-**⏳ Ce qui reste, et qui demande le GPU** : entraîner le LoRA v2 et le confronter au v1 sur le test des
-18 observations de la phase 1. **Il faut couper ComfyUI** (16 Go de VRAM ne suffisent pas aux deux),
-donc l'app perd sa génération pendant ~40 min. À lancer quand Quang ne s'en sert pas :
+### LoRA v2 — entraîné et mesuré le 27/07 : **le critère de sortie n'est PAS atteint**
+
+Dataset v2 (`manga_dataset_v2.py`, 28 images) généré **sans ReActor** — le LoRA v1 sert d'ancre
+d'identité — avec un **FaceDetailer** qui re-rend le visage à 512 px, ce qui rendait enfin possible ce
+que ReActor interdisait : des plans larges au visage résolu. Entraînement 1 344 steps, 8 epochs, ~35 min.
+
+**Comparatif v1 vs v2, même seed (222222), même checkpoint, poids 0,8 :**
+
+| Mesure | v1 | v2 | Lecture |
+|---|---|---|---|
+| Taille du visage sur la case « full body » | 0,227 | **0,202** | cadre **11 % plus large** — réel, mais les deux restent classés « buste » |
+| Grain de beauté vu (juge Pixtral, question fermée) | 0/3 | **0/3** | **non corrigé** |
+| Visage lisible | 3/3 | 3/3 | égal |
+| Couleur des yeux | ambre 3/3 | ambre à l'œil | le juge a dit « red/other » : **c'est du bruit**, vérifié sur les images |
+
+**⛔ Le critère de sortie de la phase 6 n'est pas atteint** : le v2 ne « bat » pas le v1. Il l'améliore
+marginalement sur un seul point. Et il n'a même pas été entraîné à partir de *cases validées* — il ne
+teste donc pas la boucle elle-même, seulement la correction des deux réserves.
+
+**Ce que la mesure a appris, et qui vaut plus que le LoRA :**
+
+1. **Réserve n°2 (cadrage) — partiellement réduite.** L'étalement du dataset progresse pour de vrai
+   (américain 0 % → 18 %, étendue des tailles de visage ×3,1 → ×4,1) mais **aucun vrai plan en pied**
+   n'est atteint, ni dans le dataset ni en sortie, malgré 7 prompts « full body » et un négatif qui
+   pousse activement hors du plan rapproché. ⇒ **Ce n'est pas (que) le dataset : le modèle de base
+   résiste.** Le fixer demande de forcer le cadrage à la génération — ControlNet **openpose** — et pas
+   seulement de rééquilibrer le dataset. C'était l'intuition initiale de la roadmap ; elle est confirmée.
+2. **Réserve n°1 (grain de beauté) — non corrigée, mais on sait enfin pourquoi.** Mesure directe sur les
+   datasets : le grain n'est visible que sur **2/12** images du v1 et **3/12** du v2, malgré une
+   accentuation à `(mole:1.4)`. Le dataset reste **muet** sur ce détail. ⇒ L'explication « un
+   micro-détail ne s'apprend pas » n'est ni prouvée ni réfutée — on n'a **jamais montré** ce détail
+   assez souvent pour le savoir. Les deux vraies options : **l'incruster** dans les images du dataset
+   (inpainting ciblé), ou **le retirer du design du personnage**. Mettre plus de poids dans le prompt
+   ne marche pas : c'est mesuré.
+
+**Décision : le v1 reste le LoRA par défaut de l'app.** Le v2 est installé à côté
+(`ComfyUI/models/loras/_manga_test/zqmg1rl_v2.safetensors`) et sélectionnable. Changer le défaut pour
+un gain de 11 % sur un seul axe, avec un style légèrement plus bruité sur la case 3, ne se justifie pas.
+
+**⏳ Ce qui reste** : forcer le cadrage par ControlNet openpose, trancher le sort du grain de beauté
+(incruster ou retirer du design), puis entraîner un LoRA **depuis des cases réellement validées** —
+c'est seulement là que le critère de la phase 6 sera testé pour ce qu'il dit.
+
+Rejouer la chaîne (**couper ComfyUI** — 16 Go de VRAM ne suffisent pas aux deux, ~40 min) :
 ```
 python scripts/prep_train.py --src <dataset> --trigger <trigger>
 bash scripts/train_lora.sh
-python scripts/manga_test_lora.py      # rejoue le comparatif de la phase 1
+python scripts/compare_lora.py         # comparatif v1 vs v2, mesures reproductibles
 ```
 
 **⚠️ Bug latent trouvé au passage** : `prep_train.py` cherchait le dataset dans `scripts/dataset/` alors
@@ -561,6 +602,7 @@ vérifié : 24 images × 6 repeats = 1 152 steps, exactement les chiffres de la 
 | 2026-07-26 | Ouverture du chantier. Décision d'archi (app séparée). Checkpoint Illustrious installé. Essais 1-4 mesurés. Recherche web + vote 3 voix. kohya installé (3 pièges payés : cu128, versions transformers, encodage cp1252). |
 | 2026-07-26 | **Phase 1 franchie à 89 %** (contre 50 % sans LoRA). LoRA `zqmg1rl_v1` entraîné et validé sur comparatif strict. 2 réserves ouvertes → LoRA v2 avant la phase 4. |
 | 2026-07-26 | **Phase 3 : pipeline d'ingestion écrit et mesuré** (`manga_ingest.py`). Découpage 83 % à IoU 0,66 mais **Pixtral quantifie sur une grille** ⇒ raffinement OpenCV nécessaire. Volet style : OK. **Bloqué sur la validation** faute de scans réels de Quang. Premier test = faux positif, corrigé par un test à vérité terrain. |
+| 2026-07-27 | **LoRA v2 entraine et mesure — critere NON atteint, et c'est le resultat utile.** Cadrage : 11 % plus large seulement, les deux restent des bustes malgre 7 prompts « full body » ⇒ **le modele de base resiste, ce n'est pas (que) le dataset** ; il faudra ControlNet openpose. Grain de beaute : toujours 0/3, et la mesure dit pourquoi — il n'est visible que sur **3/12** images du dataset v2 malgre `(mole:1.4)`. **On n'a jamais montre ce detail assez souvent pour savoir s'il est apprenable.** Le v1 reste le defaut. Trouve au passage : `train_lora.sh` pointait vers une session morte. |
 | 2026-07-27 | **Boucle de validation livree** (v1.7.0) : onglet Valide, bibliotheque de recettes rejouables, ecriture du dataset du LoRA suivant, `prep_train.py` rendu generique. La propriete « l'app propose, elle n'impose rien » est **falsifiable** et verifiee rouge sous sabotage. Bug latent trouve : `prep_train.py` ne trouvait plus le dataset depuis le rangement des scripts — le LoRA v1 n'etait plus reentrainable, en silence. RESTE l'entrainement du v2 (GPU, ComfyUI a couper ~40 min). |
 | 2026-07-27 | **Effacement du texte source** (v1.6.2). Les bulles d'origine sont VIDEES (diffusion bornee depuis un pixel clair, sans IA) et leur contour survit ⇒ on les REUTILISE au lieu d'en empiler de nouvelles. Mesure : noir dans la zone du japonais 0,070 -> **0,000**, 0 texte qui deborde. Deux erreurs de methode notees : un garde-fou qui se declenchait **a l'envers sur le cas normal**, et une mesure faite **au mauvais endroit** (dans l'export lettre au lieu de la case nettoyee) qui concluait a l'inverse de la verite. |
 | 2026-07-27 | **Ingestion et relettrage dans l'app** (v1.5.0). Onglet Ingestion : page reelle -> YOLO -> Pixtral -> planche relettrable, exportee **a la geometrie de la page d'origine**. 5/5 cases, 6/6 bulles francaises, 6/6 **visibles dans le fichier exporte**, ~14 s. Quatre defauts corriges, dont trois invisibles autrement : bulles en portrait (le japonais est vertical), cases ecrasees a l'export, et **3 bulles sur 6 recouvertes** par des cadres qui se chevauchent. **Le modele YOLO avait DISPARU** (il vivait dans un scratchpad) : `fetch_models.py` le rapporte desormais — un chiffre mesure dont l'outil a disparu n'est plus un resultat, c'est un souvenir. |
