@@ -1310,7 +1310,7 @@ mutation rouge. Il a aussi corrigé **deux de ses propres mesures** : il mettait
 « screentone » pour prouver que le style survit — alors que ce mot est déjà dans le style **par
 défaut**. Un vert sans valeur.
 
-#### 12.6 — Analyser et noter une case, comme Generate Studio 🟡
+#### 12.6 — ✅ « Qu'est-ce qui cloche ? » *(livré v1.43.0)*
 
 Demande : *« un bouton qui analyse et améliore, avec potentiellement un score et la possibilité de
 relancer une génération »*.
@@ -1321,12 +1321,28 @@ Série. Un score de prompt sur une case déjà dessinée ne dit **rien** de ce q
 « bien écrit » une case aux mains ratées. Le porter tel quel serait un **chiffre décoratif**, et un
 chiffre décoratif fait plus de mal que pas de chiffre — on lui fait confiance.
 
-⇒ Ce qui a du sens ici, c'est la **critique vision** (Pixtral, déjà branchée dans le proxy et déjà
-utilisée par ce projet) : elle **regarde l'image** et dit *ce qui cloche*, en français. Proposition :
-un bouton **« Qu'est-ce qui cloche ? »** dans le panneau ⚙ Affiner, qui rend 2-3 défauts nommés et,
-pour chacun, l'action qui les répare (⬚ Zone pré-remplie avec la consigne, ou relance seed). Une
-phrase utile vaut mieux qu'un 7,4/10. **Un score chiffré ne sera ajouté que s'il note l'image et
-qu'on a mesuré qu'il est d'accord avec Quang** — sinon il ne sera pas ajouté du tout.
+⇒ Ce qui a du sens ici, c'est la **critique vision** : `/critique` envoie l'image à **Pixtral**, qui
+la **regarde** (lu dans `_studio_llm_proxy.py`, pas supposé) et renvoie `{score, issues (français),
+prompt corrigé}`.
+
+✅ **Livré — et la réserve sur le score se précise au lieu de disparaître.** Ce score-là porte bien
+sur l'image, donc il n'est pas décoratif ; mais il mesure la **conformité à la demande** (sujet,
+compte, attributs, action), **pas la qualité du dessin**. Une case peut être conforme à 95 % et
+avoir six doigts. C'est écrit **à l'écran, mot pour mot, à côté du chiffre** — *un chiffre dont on
+ignore ce qu'il mesure est pire qu'un chiffre absent*. Pour un défaut de dessin, l'écran renvoie
+vers ⬚ Zone.
+
+Le prompt soumis au juge est celui **réellement utilisé** (`recipe.positive`), pas celui qu'on
+recalculerait aujourd'hui : la recette a pu changer, et on jugerait l'image contre une demande qui
+n'est pas la sienne.
+
+⚠️ **La correction ne passe pas par le champ de la case.** Le juge renvoie le positif **complet**
+corrigé, pas une action — l'écrire dans le champ (comme le fait 💡 3 suites) ferait **doublonner le
+style et l'identité** à la génération suivante, puisque `promptFinal` les rajoute par-dessus.
+`genPanel` accepte donc un positif **imposé**. C'est ce que la mutation casse, et le doublon se
+mesure.
+
+Banc : `test_critique.py` — 11 ✓, réponse du juge figée, mutation rouge à 3 échecs.
 
 #### 12.7 — ✅ « On ne génère pas de bulle de texte ? » *(livré v1.40.0)*
 
@@ -1561,7 +1577,7 @@ vérifié les `confirm(`, **pas** les `prompt(`. L'annonce était donc fausse ; 
 | — | **12.7 💬 Répliques** | ✅ v1.40.0 | brique déjà écrite aux ¾ ; la réserve « ajoute, n'écrase pas » est tenue et mesurée |
 | — | **12.1 case-groupe** | ✅ v1.41.0 | l'export lit `S.panels`, pas le DOM : le regroupement ne pouvait pas le casser |
 | — | **12.2 réordonner** | ✅ v1.42.0 | ⇤ ⇥ plutôt qu'un drag ; échange `sequence.index` **et** `idx` |
-| 5 | **12.6 critique vision** | ⏳ | dépend du panneau ⚙, et demande sa propre mesure |
+| — | **12.6 critique vision** | ✅ v1.43.0 | le score dit ce qu'il mesure ; la correction ne passe pas par le champ |
 | 6 | **12.3 page par page** | 🤔 | à réévaluer **après** 12.1 — peut-être sans objet |
 
 #### 12.11 — ✅ La question de sécurité avant de couper le moteur *(livré v1.34.0)*

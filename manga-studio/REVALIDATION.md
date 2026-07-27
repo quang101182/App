@@ -52,6 +52,8 @@
 >
 > | **v1.42.0** | **réordonner une séquence** au tap (⇤ ⇥, pas de glisser-déposer) — l'ordre de la **planche** suit, donc l'export aussi | `test_case_groupe.py` — 16 ✓, mutation rouge |
 >
+> | **v1.43.0** | **🔎 Qu'est-ce qui cloche ?** — Pixtral regarde la case, dit le défaut en français et propose une correction régénérable ; le score annonce **ce qu'il mesure** (conformité, pas qualité) | `test_critique.py` — 11 ✓, mutation rouge |
+>
 > ⚠️ **Règle qui sort de la v1.39.0 — sur les BANCS** : une `const` de module n'est **pas**
 > remplaçable (`window.x = …` ne l'atteint pas, la résolution lexicale gagne) ; et une mutation doit
 > viser **le comportement**, pas une ligne — ici l'héritage se joue à l'écriture *et* à la lecture,
