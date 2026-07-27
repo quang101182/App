@@ -61,7 +61,9 @@ Réécrire `_studio_db.py` avec `open(p,'w')` en Python **sur Windows** converti
 ## 🔴 Le secret du gateway a été exposé — et il doit être CHANGÉ (28/07/2026)
 
 `_studio_llm_proxy.diff` portait le `WORKER_SECRET` **en clair** dans une ligne de contexte,
-versionné le 26/07 (commit `61cbab9`) dans un dépôt **public**. Cinq scripts de `scripts/`
+dans un dépôt **public**. ⚠️ Et ce n'est pas né avec le manga : `git log --all -S` remonte au
+**7 mars 2026**, sur **15 commits** — dont un du 9 mars intitulé *« security: remove tracked
+secrets »*, preuve que la fuite avait déjà été traitée une fois **et qu'elle est revenue**. Cinq scripts de `scripts/`
 l'avaient aussi en dur. Tout est retiré depuis le 28/07 : les scripts lisent `WORKER_SECRET`
 dans l'environnement, ou `ComfyUI/.worker_secret` (hors dépôt), et s'arrêtent en le disant s'il
 manque.
