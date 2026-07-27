@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.54.0</title>
+<title>Manga Studio v1.55.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -144,6 +144,13 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
   display:flex;align-items:center;justify-content:center}
 .panel .img img{width:100%;height:100%;object-fit:cover;display:block}
 .panel .img .ph{color:#3a4152;font-size:34px}
+/* Une image qui n'a pas charge le DIT, au centre de sa case, et se rattrape
+   d'un seul toucher. Un cadre noir muet laisse croire a une generation ratee
+   alors que le fichier est intact sur le disque (constat du 28/07). */
+.panel .img .imgko{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  max-width:88%;padding:8px 10px;border-radius:8px;border:1px solid var(--warn);
+  background:rgba(20,22,30,.92);color:var(--warn);font-size:12px;text-align:center;
+  cursor:pointer;line-height:1.35;z-index:3}
 .panel .img .busy{position:absolute;inset:0;background:#0a0c10cc;display:flex;
   align-items:center;justify-content:center;flex-direction:column;gap:8px;font-size:13px;color:var(--accent2)}
 /* Un `display` d'auteur ecrase l'attribut `hidden` (qui n'est qu'un display:none de la
@@ -357,7 +364,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.54.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.55.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -834,7 +841,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.54.0";
+const VERSION = "1.55.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1013,6 +1020,45 @@ async function api(path, body, opts){
 }
 // URL d'image : le token passe en query (un <img> ne porte pas d'en-tete Authorization).
 const imgURL = p => CFG.base + "/manga/file?p=" + encodeURIComponent(p) + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
+
+/** Une image de case n'a pas charge : on REESSAIE une fois, puis on le DIT.
+ *
+ *  Le silence etait le vrai defaut : une case restait noire sans qu'aucun
+ *  message, aucun journal, aucun bouton ne l'explique — et le fichier, lui,
+ *  etait intact sur le disque. « Ca n'a pas chargé, touche pour réessayer »
+ *  vaut mieux qu'un cadre vide qui laisse croire que la generation a echoue.
+ *
+ *  Le parametre anti-cache est indispensable : sans lui, le navigateur ressert
+ *  son propre echec sans redemander le fichier. */
+function imageRatee(el){
+  if (!el || el.dataset.reessai === "1"){
+    if (el && !el.dataset.dit){
+      el.dataset.dit = "1";
+      log("image non chargée : " + (el.dataset.src || "?") + " (touche la case pour réessayer)", "e");
+      const hote = el.parentNode;
+      if (hote && !hote.querySelector(".imgko")){
+        const d = document.createElement("button");
+        d.className = "imgko";
+        d.textContent = "⟳ l’image n’a pas chargé — réessayer";
+        d.onclick = ev => { ev.stopPropagation(); relancerImage(el); };
+        hote.appendChild(d);
+      }
+    }
+    return;
+  }
+  el.dataset.reessai = "1";
+  relancerImage(el);
+}
+
+function relancerImage(el){
+  const f = el.dataset.src;
+  if (!f) return;
+  const hote = el.parentNode;
+  const vieux = hote && hote.querySelector(".imgko");
+  if (vieux) vieux.remove();
+  el.dataset.dit = "";
+  el.src = imgURL(f) + "&r=" + Date.now();
+}
 
 /* ---------- reglages mesures (phases 0 a 2) ---------- */
 const DEFAULT_RECIPE = {
@@ -2093,8 +2139,24 @@ function posSequence(p){
 }
 
 function panelHTML(p, i){
+  /* ⚠ UNE IMAGE QUI ECHOUE SE REESSAIE (v1.55.0). Quang, 28/07, capture a
+     l'appui : « tu as des cases sans images ». Verifie avant toute hypothese —
+     le fichier etait sur le disque, valide, et le proxy le servait en HTTP 200 :
+     rien n'etait perdu. C'est le CHARGEMENT qui avait echoue, une fois, et rien
+     ne le relancait : la case restait vide jusqu'a un rechargement complet.
+     Cause probable : `renderPlate()` reconstruit toute la planche en innerHTML
+     apres CHAQUE case generee — les images en cours de telechargement (~1,5 Mo
+     piece, dix d'un coup) sont detruites et leurs requetes annulees.
+     Deux parades, et la premiere suffirait : on reessaie une fois (avec un
+     parametre anti-cache, sinon le navigateur reservirait son echec), puis on
+     DIT que ca n'a pas charge au lieu de laisser un cadre noir muet.
+     `loading=lazy` + `decoding=async` reduisent la pression : sur un telephone,
+     dix images plein format demandees en meme temps, c'est la cause, pas le
+     symptome. */
   const img = (p.file
-    ? '<img src="' + imgURL(p.file) + '" alt="case ' + (i+1) + '">'
+    ? '<img src="' + imgURL(p.file) + '" alt="case ' + (i+1) + '" '
+      + 'loading="lazy" decoding="async" data-src="' + esc(p.file) + '" '
+      + 'onerror="imageRatee(this)">'
     : '<span class="ph">◻</span>')
     // Le cadre de la zone se voit MEME hors du mode trace : sinon on ne sait plus
     // ce qu'on a selectionne, et on regenere a l'aveugle.

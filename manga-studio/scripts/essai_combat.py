@@ -233,13 +233,26 @@ def main():
             fini, tmax = False, time.time() + 900
             while time.time() < tmax:
                 pg.wait_for_timeout(5000)
-                n = pg.evaluate("document.querySelectorAll('[data-pid] .img img').length")
+                # ⚠ On compte les images REELLEMENT CHARGEES, pas les balises.
+                # La premiere version comptait `querySelectorAll('img').length`
+                # et annoncait « 10 images » alors qu'une case etait vide a
+                # l'ecran : une balise existe meme quand son image a echoue.
+                # C'est Quang qui l'a vu, capture a l'appui, pas le banc.
+                n = pg.evaluate("""() => [...document.querySelectorAll('[data-pid] .img img')]
+                    .filter(i => i.naturalWidth > 0).length""")
                 if n >= len(scenario):
                     fini = True
                     break
+            etat_img = pg.evaluate("""() => {
+                const im = [...document.querySelectorAll('[data-pid] .img img')];
+                return {balises: im.length,
+                        chargees: im.filter(i => i.naturalWidth > 0).length};
+            }""")
             geste("générer les %d cases (1 geste)" % len(scenario), t,
-                  "%d images" % pg.evaluate(
-                      "document.querySelectorAll('[data-pid] .img img').length"))
+                  "%d/%d images affichées" % (etat_img["chargees"], etat_img["balises"]))
+            if etat_img["chargees"] < etat_img["balises"]:
+                friction("%d case(s) sans image à l'écran alors que le fichier existe"
+                         % (etat_img["balises"] - etat_img["chargees"]))
             if not fini:
                 friction("toutes les cases n'ont pas abouti en 15 min")
 
