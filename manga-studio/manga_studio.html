@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.7.0</title>
+<title>Manga Studio v1.7.1</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -139,7 +139,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.7.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.7.1</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -846,10 +846,24 @@ function renderProjList(){
     || '<p class="muted">aucun projet</p>';
 }
 
-function renderPlate(){
+/** Le nombre de colonnes, et RIEN d'autre.
+ *
+ * Extrait de renderPlate le 27/07 pour un bug tres concret : sur telephone,
+ * l'ouverture du clavier virtuel REDIMENSIONNE la fenetre. Le resize rappelait
+ * renderPlate, qui reconstruit toute la planche en innerHTML -- le champ qui
+ * venait de recevoir le focus etait donc detruit, et le clavier se refermait
+ * aussitot. Impossible d'ecrire une seule lettre dans une case.
+ * Un redimensionnement ne change que la mise en colonnes : il n'a aucune raison
+ * de toucher au contenu. */
+function applyPlateColumns(){
   const cols = (S.page && S.page.layout && S.page.layout.cols) || 2;
+  $("plate").style.gridTemplateColumns =
+    "repeat(" + (window.innerWidth < 700 ? 1 : cols) + ",1fr)";
+}
+
+function renderPlate(){
   const el = $("plate");
-  el.style.gridTemplateColumns = "repeat(" + (window.innerWidth < 700 ? 1 : cols) + ",1fr)";
+  applyPlateColumns();
   if (!S.page){ el.innerHTML = '<p class="muted">Aucune planche. Crée-en une.</p>'; return; }
   el.innerHTML = S.panels.map((p,i) => panelHTML(p,i)).join("")
     || '<p class="muted">Aucune case. Ajoute-en une.</p>';
@@ -1681,7 +1695,10 @@ $("btnCopyLog").onclick = () => {
   navigator.clipboard.writeText(LOG.map(l => l.t + " " + l.msg).join("\n"))
     .then(() => toast("journal copié"));
 };
-window.addEventListener("resize", () => renderPlate());
+// Un redimensionnement ne re-rend PLUS la planche : sur telephone, le clavier
+// virtuel en declenche un, et reconstruire l'innerHTML tuait le champ focalise
+// (le clavier s'ouvrait puis se refermait aussitot). Seules les colonnes bougent.
+window.addEventListener("resize", () => applyPlateColumns());
 
 /* =====================================================================
    DEMARRAGE

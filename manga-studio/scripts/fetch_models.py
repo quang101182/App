@@ -41,6 +41,15 @@ ASSETS = [
         "min_octets": 5_000_000,
         "a_quoi": "detection des cases (classe frame) et des bulles (classe text)",
     },
+    # Compteur de personnages : la question « la case contient-elle bien DEUX
+    # personnes ? » n'a aucune reponse automatique sans lui, et c'est le trou de
+    # mesure du volet adulte (tout a ete mesure sur un personnage seul).
+    {
+        "nom": "yolov8n.pt",
+        "url": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8n.pt",
+        "min_octets": 4_000_000,
+        "a_quoi": "detection COCO 'person' -- compter les personnages d'une case",
+    },
     # --- IPAdapter (cohérence d'un personnage SANS entrainement) -------------
     # Le nom du fichier de l'encodeur d'image n'est pas cosmetique : le noeud
     # IPAdapterUnifiedLoader cherche par MOTIF dans models/clip_vision. Depose
