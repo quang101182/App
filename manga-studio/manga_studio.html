@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.22.0</title>
+<title>Manga Studio v1.23.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -212,7 +212,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.22.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.23.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -471,9 +471,18 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
       <b>Améliorer automatiquement avant de générer</b>
     </label>
     <p class="muted" style="margin:0">
-      Tu écris en français, l'app traduit en tags juste avant la génération —
-      sans que tu aies à cliquer ✨. Le texte traduit reste dans la case : tu peux
-      le relire et le corriger. Une case déjà en tags anglais n'est pas retouchée.
+      <b>Améliorer</b> = ajouter ce que tu n'as pas écrit (cadrage, lumière,
+      trames, détails de décor). C'est un avis sur ta case, donc c'est ton choix :
+      cette option, ou le bouton ✨ au coup par coup.
+    </p>
+    <p class="muted" style="margin:8px 0 0">
+      <b>La traduction, elle, est toujours faite</b> — quelle que soit la langue
+      dans laquelle tu écris, et sur tous les chemins (une case, la planche
+      entière, une séquence). Le moteur ne lit que l'anglais : une phrase
+      française n'y est pas mal comprise, elle est <i>ignorée</i>. Ce n'est donc
+      pas un service, c'est ce qui fait que ton texte compte. Elle est fidèle :
+      elle traduit, elle n'invente rien. Le texte traduit reste dans la case, tu
+      peux le relire et le corriger.
     </p>
   </div>
   <div class="card">
@@ -533,7 +542,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.22.0";
+const VERSION = "1.23.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -766,6 +775,108 @@ function promptFinal(p){
     }
   }
   return out;
+}
+
+/* =====================================================================
+   TRADUIRE ≠ AMELIORER  (decision Quang, 27/07/2026)
+   =====================================================================
+   Ces deux operations etaient confondues dans un seul bouton et un seul
+   reglage. Quang : « la traduction automatique, qui est obligatoire dans tous
+   les cas, en anglais, peu importe la langue d'entree [...] et le bouton qui
+   ameliore le prompt ou non : pour moi c'est deux choses distinctes. »
+
+   TRADUIRE  = condition pour que la phrase de l'utilisateur COMPTE. Le moteur
+               ne lit que l'anglais ; une phrase francaise n'est pas mal
+               interpretee, elle est purement ignoree. Ce n'est donc pas un
+               service rendu, c'est le minimum pour que son texte existe.
+               => OBLIGATOIRE, sur TOUS les chemins, sans reglage.
+               => FIDELE : elle n'ajoute rien que l'utilisateur n'ait ecrit.
+   AMELIORER = ajouter ce qu'il n'a PAS ecrit (cadrage, lumiere, trames,
+               details de decor). C'est un avis sur son travail.
+               => reste SON choix : bouton ✨, ou case « automatiquement ».
+
+   Le 27/07, la confusion a coute trois vignettes generees sur « Les autres
+   eleves chuchotent et se retournent » : la sequence, seul chemin a n'avoir
+   jamais eu de garde-fou, a envoye la phrase francaise telle quelle. */
+
+const TRAD_CONSIGNE =
+  "Translate the following manga panel description into English danbooru-style tags, "
+  + "comma-separated, on ONE line. TRANSLATE ONLY: do not add a single tag that is not "
+  + "in the original text — no lighting, no camera angle, no quality tag, no background, "
+  + "no emotion the text does not state. Keep the SAME number of characters and the SAME "
+  + "action. Output only the tags, nothing else.\n\nText: ";
+
+/** Traduit la case en anglais si besoin. Rend true si elle a ete traduite.
+ *  N'ENRICHIT PAS : c'est le role de `ameliorerPrompt`. */
+async function traduire(p){
+  const champ = document.querySelector('[data-pid="' + p.id + '"] [data-prompt]');
+  const r = await api("/enhance", { idea: TRAD_CONSIGNE + (p.prompt || "").trim(),
+                                    format: "raw" });
+  if (!r.prompt || !r.prompt.trim()) throw new Error("traduction vide");
+  p.prompt = r.prompt.trim().split("\n")[0].trim();
+  if (champ) champ.value = p.prompt;
+  majApercu(p);
+  await api("/manga/panels", p);
+  log("traduit : " + p.prompt.slice(0, 90), "s");
+  return true;
+}
+
+/** Enrichit la case : le LLM ajoute cadrage, lumiere et details. Traduit au
+ *  passage si le texte est francais. C'est le bouton ✨, et l'option auto. */
+async function ameliorerPrompt(p){
+  const champ = document.querySelector('[data-pid="' + p.id + '"] [data-prompt]');
+  const idee = (champ ? champ.value : p.prompt || "").trim();
+  if (!idee) throw new Error("rien à améliorer");
+  // Le modele compte avec des TAGS, pas avec des mots : « two martial arts
+  // masters » ne pese rien face a « 2boys ». C'est ce qui rendait une scene
+  // a deux personnages muette -- Quang obtenait un seul combattant.
+  const r = await api("/enhance", { idea:
+      "Manga panel, black and white. IMPORTANT: if the scene involves several "
+    + "characters, you MUST use danbooru count tags (2boys, 2girls, 1boy 1girl, "
+    + "3boys, multiple boys, multiple girls) and you must NOT output the tag "
+    + "\"solo\". If it involves exactly one, use solo. Scene: " + idee, format: "tags" });
+  if (!r.prompt) throw new Error("réponse vide");
+  p.prompt = r.prompt;
+  if (champ) champ.value = r.prompt;
+  // ⚠ Ecrire .value par JS ne declenche PAS l'evenement `input` : sans cet
+  // appel, l'apercu gardait la phrase FRANCAISE et son alerte, alors que le
+  // champ contenait deja les tags anglais (bug v1.22.1, mesure sur le Samsung).
+  majApercu(p);
+  await api("/manga/panels", p);
+  log("prompt amélioré : " + r.prompt.slice(0, 90), "s");
+  if (r.negativeAdd) log("négatif suggéré : " + r.negativeAdd, "w");
+  return r;
+}
+
+/** LE point de passage unique avant toute depense de GPU.
+ *
+ *  Tout chemin qui envoie une case au moteur passe par ici -- generation d'une
+ *  case, planche entiere, sequence. C'est volontairement UNE seule fonction :
+ *  le meme bug d'ordre a ete paye trois fois le 27/07 parce que chaque chemin
+ *  refaisait sa propre preparation, et qu'un seul des trois etait a jour.
+ */
+async function preparePrompt(p){
+  // Le nombre de personnages se lit sur le texte D'ORIGINE, AVANT toute
+  // reecriture. « Le maitre frappe la fille » compte 2 en francais et 0 une
+  // fois traduit (« master », « girl » au singulier ne sont pas des sujets
+  // reconnus) : compter apres, c'est compter sur un texte deja appauvri.
+  const n = nbPersonnages(p.prompt || "");
+  if (n > 1) p.recipe = Object.assign({}, p.recipe, { nbPersos: n });
+
+  try {
+    if (OPT.autoEnhance){
+      // L'amelioration traduit deja : inutile de payer deux appels.
+      busyOn("Amélioration du prompt…");
+      await ameliorerPrompt(p);
+    } else if (sembleFrancais(p.prompt)){
+      busyOn("Traduction de ta phrase en tags…");
+      await traduire(p);
+    }
+  } catch(e){
+    // On NE bloque PAS la generation : une traduction ratee vaut mieux qu'une
+    // case qu'on refuse de dessiner. On le dit, et on continue.
+    log("préparation du prompt impossible (" + e.message + ") — on génère tel quel", "w");
+  }
 }
 
 /** Un texte qui ressemble a du francais n'est PAS compris par le moteur : il est
@@ -1363,13 +1474,13 @@ function majApercu(p){
   const fr = sembleFrancais((p.prompt || "").trim());
   el.innerHTML = "<b>Sera envoyé :</b> " + esc(txt.slice(0, 260))
     + (txt.length > 260 ? "…" : "")
+    // La traduction n'est plus une option (27/07) : l'alerte « le moteur ne
+    // comprend pas » n'a plus lieu d'etre, elle mentait sur ce qui va se passer.
+    // On annonce ce qui VA arriver, ce qui est le role d'un apercu.
     + (!fr ? ""
-        : OPT.autoEnhance
-          ? '<br><span style="color:#8fd8a8">✓ Français détecté : il sera traduit '
-            + 'automatiquement juste avant la génération.</span>'
-          : '<br><span class="alerte">⚠ Ta phrase est en français : le moteur ne la '
-            + 'comprend pas, il l’ignorera. Clique <b>✨ Améliorer</b> — ou active '
-            + 'la traduction automatique dans <b>Réglages</b>.</span>');
+        : '<br><span style="color:#8fd8a8">✓ Français détecté : il sera traduit '
+          + 'en tags anglais juste avant la génération'
+          + (OPT.autoEnhance ? ', puis amélioré' : '') + '.</span>');
 }
 
 function majApercus(){ (S.panels || []).forEach(majApercu); }
@@ -1572,37 +1683,9 @@ async function genPanel(p){
   const prefix = "manga/" + S.proj.slug + "/" + S.page.id
                + "/" + Date.now().toString(36);
 
-  // Amelioration automatique : on traduit AVANT de generer, seulement si le texte
-  // en a besoin. Une case deja en tags anglais n'est pas retouchee -- retraduire
-  // une traduction la degrade a chaque passage.
-  // Le nombre de personnages se lit sur le texte D'ORIGINE. La traduction le perd
-  // regulierement (« deux maitres » ressort en « martial arts master », au
-  // singulier) : compter apres, c'est compter sur un texte deja appauvri.
-  const nDemande = nbPersonnages(p.prompt || "");
-  if (nDemande > 1) p.recipe = Object.assign({}, p.recipe, { nbPersos: nDemande });
-
-  if (OPT.autoEnhance && sembleFrancais(p.prompt)){
-    try {
-      busyOn("Traduction de ta phrase en tags…");
-      const rr = await api("/enhance", { idea: "Manga panel, black and white. IMPORTANT: if the scene involves several "
-      + "characters, you MUST use danbooru count tags (2boys, 2girls, 1boy 1girl, "
-      + "3boys, multiple boys, multiple girls) and you must NOT output the tag "
-      + "\"solo\". If it involves exactly one, use solo. Scene: " + p.prompt.trim(),
-                                         format: "tags" });
-      if (rr.prompt){
-        p.prompt = rr.prompt;
-        const c2 = document.querySelector('[data-pid="' + p.id + '"] [data-prompt]');
-        if (c2) c2.value = rr.prompt;
-        majApercu(p);
-        await api("/manga/panels", p);
-        log("prompt traduit automatiquement : " + rr.prompt.slice(0, 80), "s");
-      }
-    } catch(e){
-      // On NE bloque PAS la generation : une traduction ratee vaut mieux qu'une
-      // case qu'on refuse de dessiner. On le dit, et on continue.
-      log("traduction auto impossible (" + e.message + ") — on génère tel quel", "w");
-    }
-  }
+  // Traduction OBLIGATOIRE (+ amelioration si elle est demandee). Un seul point
+  // de passage, partage avec la planche entiere et la sequence : cf preparePrompt.
+  await preparePrompt(p);
 
   // Le prompt final se calcule ICI, APRES la traduction automatique -- pas avant.
   // Bug du 27/07, visible dans la case de Quang : le texte affiche etait bien
@@ -2308,8 +2391,13 @@ async function etapesDepuisTexte(quoi, n){
 async function sequence(p, geste, n, etapesLibres, cadrageLibre){
   etapesLibres = etapesLibres || [];
   const r = recipe();
+  if (!(p.prompt || "").trim()) return toast("écris d'abord l'action de la case");
+  // ⚠ AVANT de creer la moindre vignette : le moteur ne lit que l'anglais, et une
+  // sequence depense N generations. Le 27/07, trois vignettes ont ete produites
+  // sur « Les autres eleves chuchotent et se retournent » -- le moteur a ignore
+  // la phrase entiere. La sequence etait le seul chemin sans garde-fou.
+  await preparePrompt(p);
   const base = (p.prompt || "").trim();
-  if (!base) return toast("écris d'abord l'action de la case");
   // Le seed est FIXE sur toute la suite : c'est lui qui garde le meme dessin.
   const seed = (p.recipe && p.recipe.seed) || Math.floor(Math.random() * 1e9);
   const i0 = S.panels.indexOf(p);
@@ -2827,27 +2915,15 @@ $("plate").addEventListener("click", async e => {
   if (act === "ameliorer"){
     const carte = document.querySelector('[data-pid="' + p.id + '"]');
     const champ = carte.querySelector("[data-prompt]");
-    const idee = champ.value.trim();
-    if (!idee) return toast("écris d'abord ce que tu veux voir");
-    // Le moteur ne comprend QUE des tags booru anglais. Une phrase francaise
-    // n'est pas traduite par lui : elle est ignoree, et il rend ce que le reste
-    // du prompt lui dicte. C'est ce qui est arrive le 27/07 -- deux demandes
-    // tres differentes ont donne deux fois la meme image.
-    return avecTemoin("Amélioration du prompt…", async () => {
-      // Le modele compte avec des TAGS, pas avec des mots : « two martial arts
-      // masters » ne pese rien face a « 2boys ». C'est ce qui rendait une scene
-      // a deux personnages muette -- Quang obtenait un seul combattant.
-      const r = await api("/enhance", { idea: "Manga panel, black and white. IMPORTANT: if the scene involves several "
-      + "characters, you MUST use danbooru count tags (2boys, 2girls, 1boy 1girl, "
-      + "3boys, multiple boys, multiple girls) and you must NOT output the tag "
-      + "\"solo\". If it involves exactly one, use solo. Scene: " + idee, format: "tags" });
-      if (!r.prompt) throw new Error("réponse vide");
-      p.prompt = r.prompt;
-      champ.value = r.prompt;
-      await api("/manga/panels", p);
-      log("prompt amélioré : " + r.prompt.slice(0, 90), "s");
-      if (r.negativeAdd) log("négatif suggéré : " + r.negativeAdd, "w");
-    }, "Prompt amélioré").catch(e => {
+    if (!champ.value.trim()) return toast("écris d'abord ce que tu veux voir");
+    // Le nombre de personnages se lit sur la phrase D'ORIGINE, AVANT de la
+    // remplacer par des tags : « le maitre frappe la fille » compte 2 en
+    // francais et 0 une fois traduit. Meme parade que preparePrompt.
+    const nAvant = nbPersonnages(champ.value.trim());
+    if (nAvant > 1) p.recipe = Object.assign({}, p.recipe, { nbPersos: nAvant });
+    return avecTemoin("Amélioration du prompt…",
+                      () => ameliorerPrompt(p),
+                      "Prompt amélioré").catch(e => {
       log("amélioration : " + e.message, "e");
       refus(p, "L'amélioration a échoué : " + e.message);
     });
