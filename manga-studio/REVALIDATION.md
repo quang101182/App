@@ -44,6 +44,23 @@
 > (`character design`, `simple background`), la case sort en planche de personnage quoi qu'on fasse
 > aux images. Les fiches de Quang n'ont pas été modifiées, c'est à lui de lancer le nettoyage.
 >
+> ### ⏱ Où on en est vraiment — fin de session du 28/07 (app **v1.57.0**)
+>
+> **Ce qui est acquis et mesuré** : deux identités dans une case (6/6) · référence recadrée sur le
+> visage (4/6 → 6/6) · une image qui échoue se rattrape · l'alerte de casting · les dialogues de
+> toute la planche. **Neuf bancs verts, mutations rouges.**
+>
+> **Ce qui reste, par ordre d'utilité :**
+> 1. 🔴 **Changer le `WORKER_SECRET` côté gateway** — il a été public du 26 au 28/07 et l'historique
+>    git le garde. Décision de Quang (secret partagé avec d'autres apps).
+> 2. **Les cases d'ACTION à deux personnages** restent le point faible : visages parasites, compte
+>    qui dérape. Les cases à un personnage, elles, sont bonnes.
+> 3. **Une fiche ne doit pas décrire la tenue jusqu'aux chaussures** (mesuré : visage à 4,8 % de
+>    l'image contre 15,2 %) — 🧹 Nettoyer ne retire pas encore ces éléments-là.
+> 4. Sur un projet **neuf**, aucune pastille « Qui est là » n'est proposée tant qu'on n'a pas déplié
+>    « + ajouter » — dix fois le même geste sur une planche de dix cases.
+> 5. Phase 8 (bibliothèque de références) ou phase 7 (chapitre automatique).
+>
 > **Prochain** : la bibliothèque de références (phase 8) ou le mode chapitre automatique
 > (phase 7) — cf. §4. Et la dernière combinaison de l'étape 4 (ingestion puis séquence).
 >
