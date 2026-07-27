@@ -954,6 +954,21 @@ l'app n'ajoute rien à ce que Quang écrit.
 différents restent chacun à leur place », pas « l'identité fine de chacun est tenue ». Pour deux
 personnages proches, aucune mesure ne le couvre.
 
+**🟠 Vérifié sur les VRAIES fiches de Quang (Jo + Kimiko, 28/07) — et ça découvre le verrou suivant.**
+Le duo fonctionne, mais deux choses le sabotaient en amont, dans cet ordre :
+1. **Les tags des fiches.** Telles quelles (`character design`, `simple background`, `monochrome`,
+   `lineart`), la case sort en **planche de personnage** — vues multiples sur fond vide — et Jo
+   n'apparaît pas du tout. Avec des copies aux tags nettoyés, **Jo apparaît vraiment**, à côté de
+   Kimiko, dans un décor. ⇒ Le bouton **🧹 Nettoyer** (v1.51.0) n'est pas un confort : sans lui, le
+   verrou d'identité travaille contre une mise en page imposée par le texte.
+2. **La nature de l'image de référence elle-même.** Celles de Jo et Kimiko sont des **planches de
+   design** (plusieurs vues sur fond vide). IPAdapter PLUS transfère la **composition** autant que
+   l'identité : la case hérite donc d'un grand visage flottant et d'échelles incohérentes, même après
+   nettoyage des tags. ⏳ **Chantier suivant, et il est net** : une référence doit être **recadrée sur
+   le visage/buste** avant d'être utilisée — YOLO face sait déjà le faire (`test_ipadapter` s'en sert
+   pour choisir sa référence), l'app ne le fait pas encore. *Mesuré à l'œil sur deux générations
+   réelles, images conservées dans `scripts/duo_refs_out/`.*
+
 **Un défaut de banc payé au passage, et il avait de quoi tromper** : les deux références étaient
 uploadées sous **le même nom** dans `ComfyUI/input` (le fichier N&B intermédiaire s'appelait toujours
 `_ref_nb.png`, avec `overwrite`). Deux bras rendaient donc des chiffres **identiques au millième**

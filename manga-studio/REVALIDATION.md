@@ -23,6 +23,13 @@
 > **Chantiers n°1 et n°2 livrés** : images de référence sur les fiches (v1.25.0, IPAdapter) et
 > **zone ciblée** (v1.26.1, inpaint au doigt). Les deux 🔴 du §3 sont fermés.
 >
+> **🟠 Le verrou suivant, découvert le 28/07 en vérifiant sur Jo et Kimiko** : une image de
+> référence qui est une **planche de design** (plusieurs vues, fond vide) fait hériter la case
+> de sa **composition**, pas seulement de l'identité — grand visage flottant, échelles incohérentes.
+> ⇒ **recadrer la référence sur le visage/buste avant de l'utiliser** (YOLO face sait le faire,
+> l'app ne le fait pas). Et **passer les fiches par 🧹 Nettoyer** reste un préalable : avec leurs
+> tags actuels (`character design`, `simple background`), la case sort en planche de personnage.
+>
 > **Prochain** : la bibliothèque de références (phase 8) ou le mode chapitre automatique
 > (phase 7) — cf. §4. Et la dernière combinaison de l'étape 4 (ingestion puis séquence).
 >
