@@ -927,6 +927,78 @@ phase 6 : *l'app propose, elle n'impose jamais*. La taxonomie n'est pas à inven
 > l'esprit » de la catégorie demandée — **et** une planche générée **sans aucune référence chargée**, qui reste
 > correcte. Le second test compte autant que le premier : il prouve que la dépendance n'existe pas.
 
+### ✅ MESURÉ le 27/07 — deux personnages dans une case (`scripts/test_duo.py`)
+
+Le trou de mesure du volet adulte. Échelle de quatre niveaux, 3 seeds chacun, sujets **adultes**
+(28-30 ans, tenue de ville) — pas le personnage du LoRA, décrit « 18 ans » en uniforme scolaire, qui
+n'a rien à faire dans un test de registre adulte.
+
+| Niveau | Résultat |
+|---|---|
+| **n1 — côte à côte**, sans contact | ✅ 3/3 — deux personnes nettes, décor propre |
+| **n2 — contact simple** (main sur l'épaule) | ✅ 2/3 |
+| **n3 — rapport de force** (elle debout, lui à genoux, femdom) | ⛔ **échec** — l'homme à genoux **n'apparaît pas**. Il reste la femme seule et une forme confuse au sol |
+| **n4 — étreinte serrée** | ✅ visuellement bon (2 personnes enlacées), mais le compteur n'en voit qu'une |
+
+**Ce que ça établit, et c'est exactement la prédiction du volet adulte :**
+- **Deux corps dans une case, ça marche** dès qu'ils sont simplement co-présents ou en contact simple.
+  Ce n'était pas acquis — ça l'est maintenant.
+- **Ce qui casse, c'est la MISE EN SCÈNE, pas l'anatomie.** Le femdom ne se joue pas sur les corps mais
+  sur le rapport de force — qui domine le cadre, qui est en hauteur, qui regarde qui. Le modèle ne
+  compose pas ça tout seul : décrit en texte, il produit une femme debout et oublie l'homme.
+  ⇒ **Parade identifiée et déjà outillée : ControlNet openpose.** `make_pose.py` fabrique des squelettes
+  synthétiques où *la position dans la toile EST le cadrage* — c'est précisément ce qu'il faut ici :
+  deux squelettes, l'un debout, l'autre agenouillé. À faire, et c'est le prochain pas du volet adulte.
+- **Limite d'instrument déclarée** : le compteur (visages YOLO, calibré 9/9 sur des images à une
+  personne) **sous-compte en cadrage serré**, quand les visages se chevauchent. Il vaut pour les plans
+  larges ; sur un gros plan enlacé, seul le regard tranche.
+
+### Phase 9 — Partir d'une VRAIE image : photo → manga ⏳ *(demande Quang du 27/07)*
+
+> « Est-il possible de transformer en manga une image ou une photo, n'importe quoi, même une scène […]
+> soit l'intégrer sur une page, soit en faire une base de référence pour une nouvelle page ou un
+> nouveau chapitre. » Et le rappel : « un contrôle total sur la génération en noir et blanc,
+> partiellement colorée ou totalement colorée ».
+
+**Oui, c'est faisable — et l'essentiel est déjà installé.** Mais il faut distinguer **trois usages** que
+la même phrase recouvre, parce qu'ils n'ont ni la même difficulté ni le même outil :
+
+| Ce que tu veux faire de la photo | Outil | État |
+|---|---|---|
+| **1. La convertir en case de manga** (garder la composition exacte, changer le rendu) | **ControlNet lineart/canny** + `img2img` à denoise moyen : le trait de la photo est figé, le modèle ne fait que redessiner en N&B tramé | ✅ `canny-sdxl-xinsir` **déjà téléchargé** (26/07), préprocesseurs déjà là |
+| **2. En faire une référence de style/sujet** pour générer AUTRE chose | **IPAdapter** (validé le 27/07) + fiche de style Pixtral | ✅ les deux acquis |
+| **3. En faire une base de scène** (décor réutilisé sur plusieurs cases) | **carte de profondeur** de la photo → ControlNet depth 0,55, exactement le mécanisme du « fond maître » | ✅ acquis en phase 2 — il suffit de remplacer le fond généré par une photo |
+
+⇒ **Rien de neuf à inventer : c'est du branchement.** Les trois briques existent, aucune n'est reliée à
+l'app pour une image d'entrée.
+
+**Là où je suis critique — deux points qui décideront de la qualité :**
+1. **Une photo réelle ne devient pas un beau manga par simple conversion.** Le contour d'une photo est
+   *bruité* (cheveux, textures, plis) : passé en lineart, ça donne un fouillis de traits, pas un
+   encrage. Un vrai manga a un trait **sélectif** — il jette 90 % du détail. La bonne recette est donc
+   un ControlNet à **poids modéré** (la photo guide la composition) plus un **denoise élevé** (le
+   modèle redessine vraiment), pas un « filtre » à faible denoise qui ne fera qu'un décalque sale.
+   C'est mesurable, et ça se mesurera comme le reste.
+2. **Le visage d'une personne réelle est hors périmètre** (règle déjà posée). Pour une scène, un décor,
+   une pose, un objet : aucun problème. Pour un visage reconnaissable : non.
+
+**Le contrôle colorimétrique demandé — la vraie réponse est qu'il y a trois modes, pas un curseur :**
+
+| Mode | Chemin technique | État |
+|---|---|---|
+| **N&B** | tags de l'essai 1 (mesuré : ils font tout) + référence convertie en N&B si IPAdapter | ✅ acquis |
+| **Couleur** | mêmes tags retirés | ✅ acquis |
+| **Partiellement colorée** (« spot color ») | 🎯 **c'est le mode intéressant, et il est presque gratuit** : la planche est générée en N&B, la couleur est **rajoutée par-dessus** sur une zone choisie. Le rouge qui « persiste » malgré le négatif (réserve de l'essai 1) montre que le modèle sait déjà le faire — mais **subir** un rouge n'est pas le **choisir** | ⏳ à construire |
+
+⇒ **Ma recommandation sur la couleur : ne pas la demander au modèle.** Un rendu N&B propre + un calque
+de couleur appliqué au lettrage près (le calque SVG existe déjà) donne un contrôle **total et
+réversible**, là où un prompt donne un résultat qu'on subit. C'est le même arbitrage que pour le
+texte : ce qui doit être maîtrisé ne se génère pas, il se **superpose**.
+
+> **Critère de sortie** : une photo de Quang → une case en N&B qui tient dans une planche ; la même
+> photo → un décor réutilisé sur 3 cases cohérentes ; et une zone colorée choisie **par lui**, pas par
+> le modèle.
+
 ---
 
 ## 5. Pièges connus (payés ou repérés — ne pas les repayer)
@@ -957,6 +1029,11 @@ phase 6 : *l'app propose, elle n'impose jamais*. La taxonomie n'est pas à inven
 | **Nom de fichier d'un encodeur CLIP** | `IPAdapterUnifiedLoader` cherche l'encodeur d'image **par motif** dans `models/clip_vision/`. Depose sous son nom d'origine HuggingFace (`model.safetensors`), un fichier parfaitement valide de 2,5 Go n'est **jamais trouve**. Renommer `CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors`. |
 | **FaceID sans son LoRA compagnon** | `ip-adapter-faceid-plusv2_sdxl.bin` **exige** `ip-adapter-faceid-plusv2_sdxl_lora.safetensors` — deux fichiers, deux dossiers differents. L'un sans l'autre : rendu qui part en vrille, **sans message d'erreur**. |
 | **Tuer ComfyUI au lieu de le redemarrer** | Ici ComfyUI est lance **par le proxy Generate Studio** (parente verifiee). Le tuer dans le dos de son parent, c'est se priver du garde-fou « ne pas couper une generation en cours » que le proxy applique deja. Passer par `POST /shutdown` puis `POST /start` (Bearer `.studio_secret`), avec `dryRun` d'abord. |
+| **Un element pose APRES le `<script>`** | Le bloc du plein ecran avait ete ajoute juste avant `</body>`, donc **apres** le script qui lui accroche ses handlers : `$("lbClose")` valait `null`, l'exception tuait **tout le reste du script**, et la galerie restait vide **sans aucun message**. Un seul element mal place eteint une page entiere. |
+| **Un `id` en double** | `id="gal"` servait a la fois a la galerie et a l'onglet Valide : `$("gal")` ne voyait que le premier, et l'autre ne se mettait jamais a jour. Ce qui se repete est une **classe**, jamais un id. |
+| **Un `overflow-x:auto` qui cache un debordement** | La barre d'onglets faisait 418 px pour 360 disponibles. La page ne debordait pas (le controle automatique disait OK) mais les derniers onglets etaient **inatteignables** sur telephone. Un conteneur qui scrolle en douce est un defaut, pas une parade. |
+| **Un banc qui depend d'un effet de bord** | Le banc du clavier comptait sur « creer un projet le rend courant ». Ca a marche une fois, puis des projets **homonymes** se sont accumules et `select_option(label=…)` tombait sur un projet vide : le banc concluait « aucune case » en accusant l'app. Un banc dresse son decor **explicitement**, et nomme ses objets de facon unique. |
+| **Un banc qui remplit un DOM invisible** | Appeler `refreshGal()` sans activer l'onglet remplissait un `<section>` masque : rien n'etait cliquable, et le banc testait des donnees en croyant tester une interface. **Cliquer l'onglet**, comme l'utilisateur. |
 | **Ids générés à la milliseconde** | `prefix + hex(now_ms)` donne le **même id** à deux insertions dans la même ms — et créer 6 cases d'un coup est une rafale. `_studio_db._uid()` ajoute un compteur monotone. Attrapé par le self-test, pas en production. |
 
 ---
@@ -965,6 +1042,10 @@ phase 6 : *l'app propose, elle n'impose jamais*. La taxonomie n'est pas à inven
 
 | Date | Événement |
 |---|---|
+| 2026-07-27 | **v1.8.0 — la galerie SERT enfin a quelque chose** (« je ne peux rien faire dessus ») : plein ecran (taille MESUREE, pas supposee), selection multiple, suppression qui NOMME les fichiers, et une route proxy a trois verrous (anti-traversee verifiee en direct). Trois defauts trouves en chemin, tous invisibles autrement : `id="gal"` **en double**, le bloc du plein ecran pose **apres** le `<script>` (une erreur qui eteignait TOUT le script, galerie vide sans message), et une barre d'onglets qui **debordait en douce** (418 px pour 360) donc des onglets inatteignables sur telephone. responsive-audit OK a 320/360/384. |
+| 2026-07-27 | **v1.7.1 — le clavier du telephone ne se referme plus.** Bug remonte par Quang : impossible d'ecrire dans une case. Cause lue dans le code : un clavier virtuel qui s'ouvre **redimensionne la fenetre**, le `resize` rappelait `renderPlate()` qui reconstruit tout en `innerHTML` -- le champ focalise etait **detruit**. Un redimensionnement ne touche plus qu'aux colonnes. Banc falsifiable (`--muter` -> ROUGE, verifie). |
+| 2026-07-27 | **DEUX personnages dans une case — mesure, et le trou est partiellement comble.** Co-presence et contact simple : ca marche. **Le rapport de force (femdom) ECHOUE** : decrit en texte, le modele produit la femme debout et **oublie l'homme a genoux**. ⇒ ce qui casse n'est pas l'anatomie mais la **mise en scene**, et la parade est deja outillee (`make_pose.py`, deux squelettes openpose). Limite d'instrument declaree : le compteur de visages **sous-compte en cadrage serre**. |
+| 2026-07-27 | **Phase 9 ouverte — photo/capture -> manga** (demande Quang). Trois usages distincts derriere une meme phrase (convertir la case · servir de reference de style · servir de decor reutilisable), **et les trois briques sont deja installees** : canny/lineart telecharge le 26/07, IPAdapter valide le 27/07, carte de profondeur acquise en phase 2. Ce n'est pas de la recherche, c'est du branchement. Deux reserves posees : un contour de photo est **bruite** (un manga jette 90 % du detail -> ControlNet modere + denoise eleve, pas un filtre), et les **visages reels restent hors perimetre**. Sur la couleur : trois modes, et la **couleur partielle se SUPERPOSE** au lieu de se demander au modele -- meme arbitrage que pour le texte. |
 | 2026-07-27 | **IPAdapter MESURE — il marche, mais a un reglage que rien n'annoncait.** Par defaut il est inutilisable : le preset `PLUS FACE`, dont le nom invite pourtant a le choisir, **detruit le rendu** (noir 0,112 contre 0,599 au temoin), et a poids 0,8 la planche **vire au bleu**. Le reglage utile est **PLUS / poids 0,4 / end_at 0,5 / reference convertie en N&B** : identite 0,839 sur 3/3, et **saturation 0,149 — la planche la plus proprement monochrome des trois bras**, devant le LoRA (0,333). ⇒ **le verrou de la phase 7 est leve** : un sujet ponctuel n'a plus besoin d'un LoRA. ⚠️ Mais **l'instrument a echoue a l'epreuve difficile** (il ne distingue pas un changement d'yeux et de morphologie) : les chiffres se comparent entre bras, **aucun ne prouve « c'est bien lui »** — le juge reste l'oeil de Quang. Quatre pieges payes : insightface **inutilisable sur du dessin** (5/12 meme sur visage recadre), une reference **choisie au hasard** pendant que le commentaire pretendait le contraire, une **mesure aveugle au defaut** (noirceur au lieu de saturation : du bleu sombre est sombre), et la couleur qui venait **de la reference elle-meme** — IPAdapter transfere la palette, le negatif textuel ne pese rien contre une image. |
 | 2026-07-27 | **IPAdapter INSTALLE** — le blocage annonce depuis le 26/07 est leve. 774 -> **811 noeuds**, 5,7 Go de poids (encodeur ViT-H, PLUS, PLUS FACE, FaceID v2 + son LoRA), tous rapportables par `fetch_models.py --dest`. ComfyUI redemarre **par le chemin du proxy** (`/shutdown` + `/start`, dry-run `busy:false` d'abord), pas en tuant un process. Deux pieges payes : le **nom** de l'encodeur CLIP (cherche par motif, invisible sous son nom d'origine) et **FaceID inutilisable sans son LoRA compagnon**. ⏳ **Rien n'est encore mesure** : une installation n'est pas un resultat. |
 | 2026-07-27 | **Trois demandes de Quang inscrites dans la feuille de route.** (1) **Volet adulte explicite** : la matrice ne disait que « pornographie » — desormais 4 sous-genres nommes (explicite · **fetichisme** · **femdom/domination** · suggestif), avec ce que chacun met a l'epreuve. Consequence relevee : **tout ce qui a ete mesure l'a ete sur UN personnage seul** — « deux personnages dans une case » est un **trou de mesure**, pas un acquis. (2) **Phase 8, bibliotheque de references** : une image sert a trois choses distinctes (style / apparence / **composition**), a ne surtout pas melanger ; **la bibliotheque est un accelerateur, jamais un prerequis** — rien de charge = generation de A a Z. (3) **Muse a deja resolu la moitie du probleme** (taxonomie, routage LoRA, negatif casting, filet d'interdits **en code**) : on reutilise, on ne recopie pas — et le catalogue explicite **reste chez Muse**, hors synchro. |
