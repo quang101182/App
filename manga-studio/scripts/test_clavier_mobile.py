@@ -26,6 +26,7 @@ Usage:
 """
 import argparse
 import io
+import os
 import sys
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -35,6 +36,10 @@ APP_URL = "http://127.0.0.1:8190/manga"
 # 360 px = la largeur du telephone de Quang (le Honor), pas celle du Samsung.
 LARGEUR, HAUTEUR = 360, 780
 HAUTEUR_CLAVIER = 380   # ce qu'il reste de hauteur quand le clavier est ouvert
+# Nom UNIQUE par execution : des projets homonymes s'etaient accumules et
+# select_option(label=...) tombait sur le premier -- un projet vide, sans case.
+# Le banc concluait alors « aucune case affichee » en accusant l'app.
+NOM = "_test_clavier_%d" % os.getpid()
 
 
 def main():
@@ -60,22 +65,29 @@ def main():
         # dependre d'un projet que Quang aurait supprime entre deux sessions.
         # On passe par la fonction api() de l'app : elle porte le token. Un fetch
         # brut part sans en-tete Authorization et se fait refuser en 401 (paye ici).
-        ok = pg.evaluate("""async () => {
-            const proj = await api('/manga/projects', {name:'_test_clavier'});
-            const id = proj.id || (proj.item && proj.item.id);
-            if (!id) return false;
-            const p = await api('/manga/pages', {project_id:id, title:'clavier', chapter:1});
-            const pid = p.id || (p.item && p.item.id);
-            if (!pid) return false;
-            await api('/manga/panels', {page_id:pid, kind:'dialogue', prompt:'test', idx:0});
+        # Le decor est dresse DIRECTEMENT dans l'etat de l'app. Ce banc mesure le
+        # comportement du focus lors d'un redimensionnement : passer par les menus
+        # de selection de projet ajouterait des causes d'echec etrangeres a la
+        # question posee (et c'est ce qui est arrive : des projets homonymes, un
+        # filtre serveur qui renvoie tout). La planche affichee reste une vraie
+        # planche, rendue par le vrai renderPlate.
+        ok = pg.evaluate("""async (nom) => {
+            const proj = await api('/manga/projects', {name: nom});
+            const pg2  = await api('/manga/pages', {project_id: proj.id, title:'clavier', chapter:1});
+            const pan  = await api('/manga/panels',
+                {page_id: pg2.id, kind:'dialogue', prompt:'case 1', idx:0});
+            S.proj = {id: proj.id, name: nom, slug: nom};
+            S.page = {id: pg2.id, title:'clavier', chapter:1, layout:{cols:2}};
+            S.panels = [{id: pan.id, page_id: pg2.id, kind:'dialogue', prompt:'case 1',
+                         bubbles: [], recipe: {}}];
+            renderPlate();
             return true;
-        }""")
+        }""", NOM)
         if not ok:
             print("ARRET : impossible de creer la planche de test (proxy joignable ?)")
             br.close()
             return 2
-        pg.reload(wait_until="domcontentloaded")
-        pg.wait_for_timeout(2500)
+        pg.wait_for_timeout(800)
 
         champ = pg.query_selector("#plate textarea[data-prompt]")
         if not champ:
@@ -125,8 +137,10 @@ def main():
         # Menage : on ne laisse pas de projet de test derriere soi.
         pg.evaluate("""async () => {
             const l = await api('/manga/projects');
-            const p = (l.projects || l.items || l || []).find(x => x.name === '_test_clavier');
-            if (p) await api('/manga/projects', {delete: p.id});
+            for (const p of (l.items || [])) {
+                if (p.name && p.name.startsWith('_test_clavier'))
+                    await api('/manga/projects', {delete: p.id});
+            }
         }""")
         br.close()
 

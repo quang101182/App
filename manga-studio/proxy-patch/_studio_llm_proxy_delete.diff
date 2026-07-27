@@ -1,0 +1,45 @@
+--- _studio_llm_proxy.py.bak	2026-07-27 07:06:24.915848900 +0200
++++ _studio_llm_proxy.py	2026-07-27 07:06:24.949831600 +0200
+@@ -1723,6 +1723,33 @@
+     return {"files": out}
+ 
+ 
++def manga_delete(paths):
++    """Supprime des images de la galerie manga. Rien d'autre, nulle part ailleurs.
++
++    Trois verrous, parce qu'une route qui efface merite mieux qu'un seul :
++      1. _manga_safe -> le chemin doit retomber SOUS manga-studio/output ;
++      2. l'extension doit etre une image (jamais un .db, un .json, un script) ;
++      3. ce doit etre un fichier, jamais un dossier -- pas de suppression en masse.
++    Elle rend le compte exact de ce qui a ete supprime : une suppression qui
++    "reussit" sans rien effacer est un mensonge silencieux.
++    """
++    if isinstance(paths, str):
++        paths = [paths]
++    faits, refuses = [], []
++    for rel in (paths or []):
++        full = _manga_safe(rel)
++        if (not full or not os.path.isfile(full)
++                or not full.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))):
++            refuses.append(rel)
++            continue
++        try:
++            os.remove(full)
++            faits.append(rel)
++        except Exception:
++            refuses.append(rel)
++    return {"ok": True, "supprimes": len(faits), "refuses": refuses, "faits": faits}
++
++
+ class H(BaseHTTPRequestHandler):
+     def _cors(self):
+         self.send_header("Access-Control-Allow-Origin", "*")
+@@ -2192,6 +2219,8 @@
+                     self._json(200, {"ok": True, "ids": [o["id"] for o in out]})
+                 else:
+                     self._json(200, studiodb.upsert_manga_panel(data.get("item") or data))
++            elif self.path == "/manga/files":
++                self._json(200, manga_delete(data.get("delete")))
+             elif self.path == "/manga/ingest":
+                 self._json(200, manga_ingest(data.get("image") or "",
+                                              data.get("filename") or "",
