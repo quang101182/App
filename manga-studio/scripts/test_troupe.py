@@ -144,6 +144,12 @@ def main():
                 route.continue_()
             pg.route("**/manga/pages", sans_casting)
 
+        # ⚠ Depuis la v1.50.0, la troupe vit dans l'onglet PROJET : c'est un
+        # reglage du manga, alors que le choix d'usage se fait case par case
+        # (pastilles « Qui est la »). Le banc suit ce deplacement.
+        pg.click('nav button[data-tab="tProj"]')
+        pg.wait_for_timeout(800)
+
         # ---------- 1. la ligne ne montre pas la base entiere ----------
         cases = pg.eval_on_selector_all("#casting [data-cast]", "els => els.length")
         verifie("aucune case a cocher tant que la troupe est vide",
@@ -163,6 +169,8 @@ def main():
         verifie("... et il joue tout de suite sur la planche ouverte", coche is True)
 
         # ---------- 3. ses tags arrivent dans la case ----------
+        pg.click('nav button[data-tab="tPlate"]')
+        pg.wait_for_timeout(800)
         pg.click('[data-pid="%s"] [data-act="gen"]' % d["pid"])
         pg.wait_for_timeout(2500)
         env = " ||| ".join(prompts)
@@ -207,6 +215,8 @@ def main():
         # ---------- 6. retirer de la troupe ----------
         pg.evaluate("(id) => { S.proj = S.projects.find(p => p.id === id); }", d["proj"])
         pg.wait_for_timeout(300)
+        pg.click('nav button[data-tab="tProj"]')
+        pg.wait_for_timeout(600)
         pg.evaluate("() => renderCasting()")
         pg.wait_for_timeout(300)
         n_av = pg.evaluate("troupeProjet().length")
