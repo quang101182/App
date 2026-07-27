@@ -102,6 +102,17 @@ def main():
         pg.click('nav button[data-tab="tPerso"]')
         pg.wait_for_timeout(1500)
 
+        def ouvrir(cid):
+            """Deplie la fiche. Depuis la v1.38.0 la liste est REPLIEE (une fiche
+            = une ligne) : sans ce geste, les boutons de la fiche n'existent pas
+            dans le DOM. Ce banc coute 2 min de GPU, il n'avait donc pas ete
+            rejoue depuis -- il etait casse sans que rien ne le signale."""
+            if pg.eval_on_selector_all('[data-chdraw="%s"]' % cid, "e => e.length") == 0:
+                pg.click('[data-chopen="%s"]' % cid)
+                pg.wait_for_timeout(600)
+
+        ouvrir(d["vide"])
+
         if args.muter:
             # MUTATION : la fiche est dessinee AVEC l'identite du projet. Trois
             # belles images sortent quand meme -- ce sont juste celles du heros
@@ -133,6 +144,7 @@ def main():
 
         # ---------- 2. dessiner pour de vrai ----------
         print("   generation reelle en cours (3 vues, ~1-2 min)…", flush=True)
+        ouvrir(d["plein"])
         pg.click('[data-chdraw="%s"]' % d["plein"])
         vues = 0
         for _ in range(120):                       # jusqu'a 6 min

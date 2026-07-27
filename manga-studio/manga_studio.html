@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.45.0</title>
+<title>Manga Studio v1.47.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -325,7 +325,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.45.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.47.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -429,6 +429,14 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
   </div>
 
   <div id="plate"></div>
+  <!-- Quang, 27/07 : « ajout case je dois remonter a chaque fois, scroll ».
+       Le bouton n'existait qu'EN HAUT : sur une planche de six cases, ajouter la
+       septieme obligeait a remonter tout l'ecran, puis a redescendre pour ecrire
+       dedans. Un geste frequent doit etre a portee de la ou l'on travaille. -->
+  <div class="row" id="plateBas" style="margin-top:10px" hidden>
+    <button class="btn" id="btnAddPanelBas">+ Case</button>
+    <span class="muted" style="font-size:11px">la nouvelle case s'ouvre juste en dessous</span>
+  </div>
 </section>
 
 <!-- ============ PROJET ============ -->
@@ -474,6 +482,19 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
     </div>
     <label>Style (tags N&amp;B — l'essai 1 a montré que ce sont eux qui font tout)</label>
     <textarea id="rStyle"></textarea>
+    <!-- Un projet CREE AVANT le 27/07 garde son ancien style. On ne le corrige
+         pas dans son dos -- c'est sa donnee -- mais on lui dit ce qu'on a mesure
+         et on lui laisse le geste. -->
+    <div id="styleAlerte" hidden style="margin:6px 0 0;padding:8px;border-radius:8px;
+         background:var(--panel2);border:1px solid var(--warn)">
+      <p class="muted" style="margin:0 0 6px;font-size:11px">
+        Ce style contient <b>ink</b> et/ou <b>high contrast</b>. Mesuré le 27/07 :
+        c'est ce qui dessine les <b>coulures d'encre sur les visages</b> et noircit
+        le bas des cases (sol noir à 88 % contre 3 % sans eux). Les trames, elles,
+        restent — ce sont elles qui font le rendu manga.
+      </p>
+      <button class="btn sm" id="btnStyleFix">Retirer « ink » et « high contrast »</button>
+    </div>
     <label>Style du projet — libre, en français si tu veux</label>
     <textarea id="rTheme" placeholder="ex : manga de mecha, encrage épais, trames grossières, plans très contrastés"></textarea>
     <div class="row">
@@ -762,7 +783,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.45.0";
+const VERSION = "1.47.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -952,8 +973,19 @@ const DEFAULT_RECIPE = {
   // lyceenne -- son texte etait noye sous une identite qu'il n'avait pas choisie.
   // Un personnage se declare dans l'onglet Recette du projet qui en veut un.
   lora: "", loraW: 0.8, trigger: "", ident: "",
-  // Essai 1 : ces tags SEULS sortent de vraies trames halftone. Sans eux, meme seed = illustration couleur.
-  style: "masterpiece, best quality, very aesthetic, absurdres, monochrome, greyscale, manga, screentone, halftone, lineart, ink, high contrast",
+  // Essai 1 : ces tags SEULS sortent de vraies trames halftone. Sans eux, meme
+  // seed = illustration couleur.
+  // ⚠ `ink` et `high contrast` RETIRES le 27/07 apres mesure
+  // (`scripts/mesure_taches_encre.py`, meme seed, un tag retire a la fois) :
+  //   temoin (avec les deux)      : coulures d'encre SUR LE VISAGE, sol noir a 88 %
+  //   sans `ink`                  : plus de coulures, sol encore noir a 79 %
+  //   sans `ink` + `high contrast`: plus de coulures, sol a 3 % -- lisible
+  //   sans les trames non plus    : propre, mais ce n'est plus du manga
+  // Quang : « pourquoi des taches noires sur certains personnages ». C'etait
+  // `ink` -- le modele dessine litteralement de l'encre qui coule -- et
+  // `high contrast` qui noyait le reste. Les trames RESTENT : c'est elles qui
+  // font le rendu manga.
+  style: "masterpiece, best quality, very aesthetic, absurdres, monochrome, greyscale, manga, screentone, halftone, lineart",
   // « multiple girls » a ete RETIRE du defaut : il rendait toute scene a deux
   // personnages impossible par construction. Il appartient a l'identite d'un
   // personnage solo, pas au style de l'app.
@@ -1880,6 +1912,8 @@ function renderPlate(){
   });
   el.innerHTML = morceaux.join("")
     || '<p class="muted">Aucune case. Ajoute-en une.</p>';
+  const bas = $("plateBas");
+  if (bas) bas.hidden = !S.page;
   $("plateState").textContent = S.panels.length + " case(s), "
     + S.panels.filter(p => p.file).length + " générée(s)";
   majApercus();
@@ -2395,6 +2429,14 @@ async function addPanel(){
   const p = { pageId: S.page.id, idx: S.panels.length, kind: "dialogue", prompt: "", recipe: {} };
   const r = await api("/manga/panels", p);
   p.id = r.id; S.panels.push(p); renderPlate();
+  // On AMENE a la case qu'on vient de creer, et on met le curseur dedans :
+  // ajouter une case, c'est vouloir ecrire dedans tout de suite.
+  const carte = document.querySelector('[data-pid="' + p.id + '"]');
+  if (carte){
+    carte.scrollIntoView({ behavior: "smooth", block: "center" });
+    const champ = carte.querySelector("[data-prompt]");
+    if (champ) setTimeout(() => champ.focus({ preventScroll: true }), 350);
+  }
 }
 
 /** Assemble la planche (cases + calques de bulles) et renvoie le canvas. */
@@ -3675,8 +3717,15 @@ function troupeProjet(){
    resolution lexicale l'emporte sur `window.x = ...`) -- une premiere version
    de `test_troupe.py` mutait ainsi et restait verte, donc ne prouvait rien. */
 function castingPage(){
-  const l = S.page && S.page.layout && S.page.layout.casting;
-  return l === undefined ? troupeProjet() : l;   // absent = herite, vide = personne
+  // ⚠ Rend TOUJOURS un tableau. Ecrit d'abord `S.page && S.page.layout && …`,
+  // cette fonction renvoyait `null` quand aucune planche n'etait ouverte -- et
+  // tous ses appelants font `.includes(...)` dessus. Le journal du Honor l'a
+  // montre le 27/07 : six « Cannot read properties of null » d'affilee pendant
+  // que Quang essayait d'ajouter quelqu'un a son scenario. Le defaut etait
+  // invisible ici (une planche est presque toujours ouverte) et bloquant chez lui.
+  if (!S.page || !S.page.layout) return troupeProjet();
+  const l = S.page.layout.casting;
+  return (l === undefined || l === null) ? troupeProjet() : l;   // absent = herite, vide = personne
 }
 
 let AJOUT_TROUPE = false;      // le petit panneau « + quelqu'un » est-il ouvert
@@ -3750,6 +3799,8 @@ function fillRecipe(){
   const sel = $("rCkpt");
   if (!sel.options.length) sel.innerHTML = '<option>' + esc(r.ckpt) + '</option>';
   sel.value = r.ckpt;
+  const al = $("styleAlerte");
+  if (al) al.hidden = !/ink|high contrast/i.test(r.style || "");
 }
 
 /** Remplit la liste des LoRA depuis ComfyUI. « Aucun » est en TETE et c'est le
@@ -3994,9 +4045,25 @@ $("btnCharEnhance").onclick = () => {
   if (!idee) return toast("décris d'abord le personnage");
   // Le bouton ✨, lui, ENRICHIT (et traduit au passage) : c'est un geste demande.
   return avecTemoin("Enrichissement des traits…", async () => {
+    // ⚠ Ni COULEUR ni STYLE dans une fiche. Mesure sur la fiche « Jo » de Quang
+    // (27/07) : cette consigne avait produit « 1man, short hair, RED HAIR, …,
+    // black and white, monochrome, lineart, SKETCH, character design, simple
+    // background ». Deux degats :
+    //   · « red hair » fait sortir une image EN COULEUR dans une app N&B --
+    //     une couleur n'a aucun sens ici, seule la VALEUR en a une (clair/fonce) ;
+    //   · « sketch » est deja dans le NEGATIF du projet : la fiche demandait
+    //     exactement ce que la recette interdit, et le resultat devenait
+    //     imprevisible. Les mots de style appartiennent au PROJET, pas a la fiche.
     const r = await api("/enhance", { idea:
-      "Character design for a black and white manga. ONLY constant physical traits "
-      + "and outfit, no pose, no expression, no background : " + idee, format: "tags" });
+      "Character design for a BLACK AND WHITE manga. Output ONLY the constant "
+      + "physical traits and outfit of the character: hair shape and length, eyes, "
+      + "face, build, age, clothes. "
+      + "NEVER output a COLOUR name (no red/blue/blonde hair, no green eyes) — this "
+      + "is monochrome: describe VALUE instead (light hair, dark hair, pale skin). "
+      + "NEVER output style, rendering or medium words (monochrome, lineart, sketch, "
+      + "manga, screentone, character design, simple background) — those belong to "
+      + "the project, not to the character. "
+      + "No pose, no expression, no background. Character: " + idee, format: "tags" });
     if (r.prompt) $("chTags").value = r.prompt.trim();
   }, "Traits enrichis");
 };
@@ -4123,6 +4190,12 @@ $("casting").onchange = async e => {
 /** La troupe du MANGA : qui peut apparaitre dans ce projet. */
 async function majTroupe(ids){
   if (!S.proj) return toast("ouvre un projet d'abord");
+  // DEDOUBLONNE. Le journal du Honor, 27/07 : « troupe du manga : Kimiko,
+  // Kimiko, Jo, Kimiko, Kimiko, Kimiko ». Chaque tap sur « + quelqu'un »
+  // rajoutait le meme nom, et la liste devenait illisible -- c'est ce que Quang
+  // a resume par « les personnes a ajouter au scenario, pas trop compris ».
+  // Une appartenance est un ENSEMBLE : on y est, ou on n'y est pas.
+  ids = [...new Set((ids || []).filter(Boolean))];
   S.proj.recipe = Object.assign({}, S.proj.recipe, { casting: ids });
   await api("/manga/projects", S.proj);
   renderCasting();
@@ -4198,6 +4271,7 @@ $("btnMaster").onclick = () => avecTemoin("Fond maître : décor puis profondeur
     genMaster, "Fond maître prêt")
   .catch(e => { log("fond maître: " + e.message, "e"); toast("échec : " + e.message); });
 $("btnAddPanel").onclick = addPanel;
+$("btnAddPanelBas").onclick = addPanel;
 $("btnGenAll").onclick = genAll;
 $("btnExport").onclick = () => avecTemoin("Export PNG de la planche…", exportPlate, "PNG exporté").catch(e => { log("export PNG: " + e.message, "e"); toast("échec export"); });
 $("btnExportPdf").onclick = () => avecTemoin("Export PDF de la planche…", exportPDF, "PDF exporté").catch(e => { log("export PDF: " + e.message, "e"); toast("échec export PDF"); });
@@ -4874,6 +4948,20 @@ $("btnSansPerso").onclick = async () => {
   fillRecipe(); renderPlate();
   toast("personnage retiré du projet");
   log("personnage retire du projet " + S.proj.slug, "s");
+};
+
+$("btnStyleFix").onclick = async () => {
+  if (!S.proj) return toast("ouvre un projet d'abord");
+  const propre = ($("rStyle").value || "")
+    .replace(/,\s*ink/gi, "").replace(/ink\s*,\s*/gi, "")
+    .replace(/,\s*high contrast/gi, "").replace(/high contrast\s*,\s*/gi, "")
+    .replace(/,\s*,/g, ",").replace(/^\s*,|,\s*$/g, "").trim();
+  $("rStyle").value = propre;
+  S.proj.recipe = Object.assign({}, recipe(), { style: propre });
+  await api("/manga/projects", S.proj);
+  fillRecipe();
+  toast("style nettoyé — les prochaines cases n'auront plus de coulures");
+  log("style nettoyé : ink et high contrast retirés", "s");
 };
 
 $("btnSaveRecipe").onclick = async () => {
