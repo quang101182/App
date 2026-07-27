@@ -523,6 +523,52 @@ entraînement**. Pistes, par ordre de crédibilité :
 seuls les personnages récurrents ont un LoRA. Tant que ce n'est pas tranché, la phase 7 ne peut livrer que
 ce qui est **indépendant du sujet** — c'est-à-dire le découpage narratif et les dialogues.
 
+### 🧩 Conception : base de personnages + boucle de validation *(questions Quang, 27/07)*
+
+> « Comment ça se passe au niveau de la création des personnages, ne serait-ce que de leur visage, et la
+> cohérence maintenue entre les chapitres ? […] on pourrait avoir une base de données de tout type de
+> personnages différents, c'est moi qui décide si je les valide. »
+
+**A. La cohérence d'un personnage : trois niveaux, pas un seul.** Le choix dépend du rôle du personnage,
+pas d'une préférence technique. Fiabilité mesurée sur ce projet et confirmée par l'avis extérieur :
+
+| Rôle | Moyen | Coût | Fiabilité |
+|---|---|---|---|
+| **Héros récurrent** (1-3 par projet) | **LoRA** entraîné | 35 min GPU, une fois | **100 %** (mesuré, phase 1) |
+| **Secondaires réguliers** | **IPAdapter** (image de référence) | ⛔ **à installer** | verrou *facial*, sans entraînement |
+| **Figurants, décors, one-shot** | **fiche texte + seed fixe** | gratuit | ~50 % (mesuré) — suffisant pour qui passe une fois |
+
+⇒ **L'installation d'IPAdapter est le chantier technique n°1** : c'est la seule brique qui manque pour
+couvrir « n'importe quel sujet » sans entraîner. Identifiée comme manquante dès le 26/07, jamais faite.
+
+**B. La base de personnages** — une **fiche** devient un objet de premier plan (aujourd'hui l'identité
+n'est qu'une chaîne de caractères dans la recette du projet, ce qui ne survit pas à un chapitre 2) :
+
+| Champ | À quoi il sert |
+|---|---|
+| `id`, `nom`, `role` (héros / secondaire / figurant) | choisit le niveau de cohérence ci-dessus |
+| `traits` — tags visuels **constants** uniquement | injecté dans **chaque** prompt |
+| `refs[]` — images de référence (face, 3/4, profil) | IPAdapter, et dataset de départ si on entraîne |
+| `lora` + `trigger` (si entraîné) | verrou fort |
+| `recette` (checkpoint, style, poids) | ce qui rend le rendu **reproductible d'un chapitre à l'autre** |
+| `valide` (booléen, décidé par Quang) | rien n'entre en base sans son accord |
+
+**La discipline qui compte** : `traits` ne contient QUE le constant. Tout ce qui varie (pose, expression,
+cadrage) reste dans la case. C'est la même règle que les captions de LoRA, et c'est elle qui fait tenir la
+cohérence — pas la quantité de description.
+
+**C. Apprendre des images REJETÉES — mon avis : à ne PAS faire tel quel.**
+Un ❌ ne dit pas *pourquoi*. La même image peut être refusée pour la pose, le visage, le cadrage ou le
+style. Réinjecter « évite ça » sans connaître la cause n'apprend rien d'utilisable, et alimenter un négatif
+à partir des rejets **empoisonnerait** la génération. L'avis extérieur consulté dit la même chose de son
+côté, et c'est aussi ce que disait la décision Generate Studio du 29/06 : l'apprentissage sur **signal
+faible** avait été jugé non fiable. **Un ❌ seul EST un signal faible.**
+
+**Ce qui marche, et qui coûte un clic** : ❌ **+ une cause** parmi 4-5 (*visage · cadrage · anatomie ·
+style · hors sujet*). La cause, elle, est actionnable — « cadrage » corrige les règles de cadrage,
+« visage » remonte l'ancre d'identité d'un cran, « style » ajuste les tags. On transforme un signal
+inutilisable en signal utile pour le prix d'un bouton. **C'est ma recommandation.**
+
 Ce qui manque, et qui est le vrai travail :
 1. **Le découpage narratif** — un LLM transforme le texte en *storyboard* : combien de cases, quel
    cadrage, quelle action, quelle réplique. C'est du texte vers du texte, donc peu risqué.
