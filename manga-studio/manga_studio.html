@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.11.1</title>
+<title>Manga Studio v1.12.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -199,7 +199,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.11.1</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.12.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -282,6 +282,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
     <div class="row">
       <input class="grow" id="npName" placeholder="nom du projet">
       <button class="btn pri" id="btnNewProj">Créer</button>
+      <button class="btn" id="btnDemarrer">Démarrer une planche</button>
     </div>
     <div id="projList" style="margin-top:10px"></div>
   </div>
@@ -466,7 +467,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.11.1";
+const VERSION = "1.12.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1073,10 +1074,13 @@ function majEtape(){
   const lettrees = S.panels.filter(p => p.file && (p.bubbles || []).length).length;
   const jugees = S.panels.filter(p => p.file && p.verdict).length;
   let t;
-  if (!S.page)       t = "<b>1.</b> Crée une planche pour commencer.";
+  if (!S.page)       t = "<b>1.</b> Onglet <b>Projets</b> → <b>Démarrer une planche</b> "
+                       + "(crée le projet, la planche et ses cases d'un coup).";
   else if (!n)       t = "<b>1.</b> Ajoute une case avec <b>+ Case</b>.";
-  else if (gen < n)  t = "<b>2.</b> Décris l'action dans la case, puis <b>Générer</b> — "
-                       + (n - gen) + " case(s) encore vide(s). Le lettrage vient APRÈS l'image.";
+  else if (gen < n)  t = "<b>2.</b> Décris l'action de chaque case (ex : <i>close-up, "
+                       + "looking at viewer</i>), puis <b>Générer toutes les cases vides</b> "
+                       + "— ou <b>Générer</b> case par case. " + (n - gen)
+                       + " encore vide(s). Le lettrage vient APRÈS l'image.";
   else if (!lettrees) t = "<b>3.</b> Les images sont là. <b>✎ Lettrage</b> pour poser les bulles "
                         + "et écrire les répliques par-dessus.";
   else if (jugees < gen) t = "<b>4.</b> Juge les cases avec <b>✅</b> ou <b>❌</b> "
@@ -1928,6 +1932,39 @@ $("btnNewProj").onclick = async () => {
   $("npName").value = ""; localStorage.removeItem("manga_page");
   await loadProjects(); toast("projet créé");
 };
+/** Un projet, une planche et ses cases, en UN geste.
+ *
+ * Quang, 27/07 : « je n'ai pas trop compris dans quel ordre je dois faire les
+ * choses ». Et pour cause -- il fallait creer un projet, PUIS une planche, PUIS
+ * ajouter les cases une a une, sans que rien ne l'annonce ; il s'est retrouve
+ * dans le projet de test d'un banc, ou tout etait deja fait.
+ * Le premier pas doit etre un seul bouton. */
+$("btnDemarrer").onclick = async () => {
+  const nom = ($("npName").value.trim())
+    || prompt("Nom de la planche ?", "ma planche") || "";
+  if (!nom.trim()) return;
+  const n = Math.max(1, Math.min(12, +(prompt("Combien de cases ?", "4") || 4)));
+  await avecTemoin("Création du projet et de la planche…", async () => {
+    const slug = nom.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
+                    .replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || ("p" + Date.now());
+    const pr = await api("/manga/projects", { name: nom, slug, recipe: DEFAULT_RECIPE });
+    // ⚠ La base attend `projectId` et `pageId` (camelCase). Avec `project_id`,
+    // la planche est creee ORPHELINE : elle existe, mais aucun projet ne la
+    // contient, donc l'app affiche « 0 case » sans la moindre erreur.
+    const pg = await api("/manga/pages",
+      { projectId: pr.id, title: nom, chapter: "1", idx: 0, layout: { cols: 2 } });
+    for (let i = 0; i < n; i++){
+      await api("/manga/panels",
+        { pageId: pg.id, kind: "dialogue", prompt: "", idx: i });
+    }
+    localStorage.setItem("manga_proj", pr.id);
+    localStorage.setItem("manga_page", pg.id);
+    $("npName").value = "";
+    await loadProjects();
+    document.querySelector('nav button[data-tab="tPlate"]').click();
+  }, n + " case(s) prêtes — décris-les puis Générer");
+};
+
 $("projList").onclick = async e => {
   const id = e.target.dataset && e.target.dataset.delproj;
   if (!id) return;
