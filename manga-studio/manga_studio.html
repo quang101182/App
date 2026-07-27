@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.21.0</title>
+<title>Manga Studio v1.22.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -212,7 +212,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.21.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.22.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -533,7 +533,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.21.0";
+const VERSION = "1.22.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1328,6 +1328,8 @@ function panelHTML(p, i){
    + '<button class="btn sm" data-act="ameliorer" title="Traduit ta phrase en tags que le modèle comprend vraiment">✨ Améliorer</button>'
    + '<button class="btn sm" data-act="idees" title="Propose 3 suites, d\'après les cases précédentes">💡 3 suites</button>'
    + '<button class="btn sm" data-act="sequence" title="Décompose ce geste en plusieurs vignettes (même personnage)">🎬 Séquence</button>'
+   + ((p.recipe && p.recipe.sequence && p.file)
+       ? '<button class="btn sm" data-act="jouer" title="Joue la séquence en boucle">▶ Jouer</button>' : "")
    + (recipe().trigger
        ? '<label style="margin:0;display:flex;align-items:center;gap:5px;color:var(--txt);font-size:12px">'
          + '<input data-perso type="checkbox" style="width:auto"'
@@ -2312,21 +2314,34 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
   const seed = (p.recipe && p.recipe.seed) || Math.floor(Math.random() * 1e9);
   const i0 = S.panels.indexOf(p);
   const faites = [];
+  // La sequence cree N cases NEUVES, apres celle-ci, et n'ECRASE PAS son image.
+  // Premiere version : la vignette 1 reutilisait la case de depart -- Quang y
+  // perdait l'image deja generee, et tout semblait « se placer au meme endroit »
+  // (journal du 27/07 : deux fichiers ranges dans la meme case). Une case
+  // existante ne se sacrifie pas pour faire de la place a une nouveaute.
+  const lot = [];
+  for (let i = 0; i < n; i++){
+    const neuf = { pageId: S.page.id, idx: i0 + 1 + i, kind: "dialogue",
+                   prompt: base, recipe: { seed: seed } };
+    const rep = await api("/manga/panels", neuf);
+    neuf.id = rep.id;
+    lot.push(neuf);
+  }
+  S.panels.splice(i0 + 1, 0, ...lot);
+  // Les cases qui SUIVENT sont reindexees : sans ca, deux cases portent le meme
+  // `idx` et l'ordre de lecture devient aleatoire au prochain chargement.
+  for (let k = 0; k < S.panels.length; k++){
+    if (S.panels[k].idx !== k){
+      S.panels[k].idx = k;
+      await api("/manga/panels", S.panels[k]);
+    }
+  }
+  renderPlate();
+
   for (let i = 0; i < n; i++){
     const t = n > 1 ? i / (n - 1) : 0;
     busyOn("Séquence : vignette " + (i + 1) + " sur " + n + "…");
-    // La case 1 est celle d'origine ; les suivantes sont creees a la file.
-    let cible = p;
-    if (i > 0){
-      const neuf = { pageId: S.page.id, idx: i0 + i, kind: "dialogue",
-                     prompt: base, recipe: { seed: seed } };
-      const rep = await api("/manga/panels", neuf);
-      neuf.id = rep.id;
-      S.panels.splice(i0 + i, 0, neuf);
-      cible = neuf;
-    } else {
-      cible.recipe = Object.assign({}, cible.recipe, { seed: seed });
-    }
+    const cible = lot[i];
     const prefix = "manga/" + S.proj.slug + "/" + S.page.id + "/" + Date.now().toString(36);
     let nom = null, pos;
     if (GESTES[geste]){
@@ -2355,6 +2370,40 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
   const nomG = (GESTES[geste] || GESTES_LIBRES[geste] || {}).nom || geste;
   log("sequence « " + nomG + " » : " + faites.length + " vignettes, seed " + seed, "s");
 }
+
+
+/** Joue une sequence en boucle, comme un flipbook.
+ *
+ * Idee de Quang : « les jouer en mode defile ». C'est aussi le seul moyen de
+ * JUGER une sequence -- alignees cote a cote, on voit six dessins ; enchainees,
+ * on voit si le geste tient. Aller-retour (ping-pong) plutot que boucle seche :
+ * un geste qui revient brutalement a son debut se lit comme un saut. */
+let LECT = null;
+function jouerSequence(p){
+  const idx = S.panels.filter(x => x.recipe && x.recipe.sequence
+                                   && x.file
+                                   && x.recipe.seed === p.recipe.seed)
+                      .sort((a, b) => a.recipe.sequence.index - b.recipe.sequence.index);
+  if (idx.length < 2) return toast("séquence incomplète");
+  const boite = document.getElementById("lightbox");
+  const img = document.getElementById("lbImg");
+  const suite = idx.concat(idx.slice(1, -1).reverse());   // aller-retour
+  let k = 0;
+  document.getElementById("lbName").textContent =
+    "▶ " + idx.length + " vignettes · " + (p.recipe.sequence.geste || "");
+  boite.hidden = false;
+  clearInterval(LECT);
+  LECT = setInterval(() => {
+    img.src = imgURL(suite[k % suite.length].file);
+    k++;
+  }, 180);
+}
+// La lecture s'arrete avec la fenetre, sinon elle continue a tourner en fond.
+document.addEventListener("click", e => {
+  if (e.target.id === "lbClose" || e.target.id === "lightbox"){
+    clearInterval(LECT); LECT = null;
+  }
+}, true);
 
 /* ---------- base de personnages ----------
    Quang, 27/07 : « je ne comprends pas a quel moment je peux selectionner les
@@ -2712,6 +2761,7 @@ $("plate").addEventListener("click", async e => {
     p.bubbles = p.bubbles.filter(x => x.id !== b.id); S.selBub = null;
     redrawBubbles(p); fillBubEditor(); return saveBubbles(p);
   }
+  if (act === "jouer"){ return jouerSequence(p); }
   if (act === "sequence"){
     if (!(p.prompt || "").trim()) return toast("écris d'abord l'action de la case");
     // Panneau INLINE, pas deux prompt() en cascade. Le 27/07, Quang a clique le
