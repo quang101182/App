@@ -1178,7 +1178,7 @@ seed sans garde ; ce champ vivant désormais dans un panneau **repliable**, gén
 aurait jeté une `TypeError`. Une rangée simplifiée qui casse la génération serait un très mauvais
 marché — le banc le vérifie explicitement (`test_affiner_et_badge.py`, 14 ✓, mutation rouge).
 
-#### 12.1 — Regrouper les vignettes d'une séquence 🎯 *(la plus rentable)*
+#### 12.1 — ✅ Regrouper les vignettes d'une séquence *(livré v1.41.0)*
 
 Demande : *« je les imagine plutôt regroupées ensemble sur la même fenêtre, avec un bouton pouvant
 les faire défiler […] suivant/précédent avec l'affichage du numéro d'image »*.
@@ -1188,10 +1188,24 @@ moments. Aujourd'hui elle occupe 6 cases dans le fil de la planche et noie tout 
 
 ⚠️ **Le piège à ne pas commettre — et il est sérieux** : ne **jamais** fusionner les données. Une
 vignette **est** une case de manga : elle doit rester dans la planche exportée en PNG/PDF, sinon le
-regroupement détruit le livrable. Le regroupement est donc un **mode d'affichage de l'atelier**,
-pas une fusion. Une case-groupe montre **la vignette courante + ◀ 3/6 ▶ + ▶ Jouer**, et un
-« déplier » rend les 6 cases visibles à l'ancienne. `renderPlate` ne change pas de données, il
-change de rendu.
+regroupement détruit le livrable.
+
+✅ **Livré v1.41.0, et le piège a été vérifié AVANT d'écrire une ligne** : `buildPlateCanvas` lit
+`S.panels`, **jamais le DOM** — regrouper l'affichage ne touche donc ni au PNG ni au PDF. C'est
+exactement ce que la mutation du banc casse : elle fusionne pour de bon, l'écran reste identique,
+et **5 cases disparaissent en silence de l'export**.
+
+Le groupe montre une vignette, **◀ n/N ▶** (ça boucle — un bouton qui ne répond pas au bout passe
+pour cassé), et **« déplier les 6 »** pour les revoir côte à côte. L'index se recale seul si une
+suppression a raccourci la série. Le tout s'appuie sur `sequence.gid`, posé en v1.31.0 : il servait
+au badge et au lecteur, il porte maintenant la case-groupe.
+
+Banc : `test_case_groupe.py` — 12 ✓, mutation rouge à 7 échecs.
+
+> **Effet de bord assumé** : `test_affiner_et_badge` parlait de 6 vignettes affichées séparément ;
+> il **déplie** désormais le groupe, parce que c'est l'état dans lequel ses questions (badge,
+> panneau ⚙, seed case par case) ont un sens. Ce n'est pas un contournement pour rester vert — sa
+> mutation rougit toujours.
 
 #### 12.2 — Réordonner les vignettes 🎯
 
@@ -1533,7 +1547,7 @@ vérifié les `confirm(`, **pas** les `prompt(`. L'annonce était donc fausse ; 
 | — | **12.14 la troupe du manga** | ✅ v1.39.0 | répond à « comment j'inclus mes personnages » ; a révélé un `prompt()` natif oublié |
 | — | **12.13 visionneuse + liste** | ✅ v1.38.0 | zoom ancré, navigation, liste repliée — et le zoom de la planche a désormais une implémentation de référence |
 | — | **12.7 💬 Répliques** | ✅ v1.40.0 | brique déjà écrite aux ¾ ; la réserve « ajoute, n'écrase pas » est tenue et mesurée |
-| 3 | **12.1 case-groupe** | ⏳ | gros gain de lisibilité ; `sequence.gid` (v1.31.0) est déjà posé pour elle |
+| — | **12.1 case-groupe** | ✅ v1.41.0 | l'export lit `S.panels`, pas le DOM : le regroupement ne pouvait pas le casser |
 | 4 | **12.2 réordonner** | ⏳ | trivial **une fois** la case-groupe posée |
 | 5 | **12.6 critique vision** | ⏳ | dépend du panneau ⚙, et demande sa propre mesure |
 | 6 | **12.3 page par page** | 🤔 | à réévaluer **après** 12.1 — peut-être sans objet |

@@ -48,6 +48,8 @@
 >
 > | **v1.40.0** | **💬 Répliques** : l'app propose 3 dialogues d'après les cases précédentes et le casting ; une réplique choisie **ajoute** une bulle et n'écrase jamais un texte écrit à la main | `test_repliques.py` — 13 ✓, mutation rouge |
 >
+> | **v1.41.0** | **case-groupe** : une séquence occupe un seul bloc (◀ n/N ▶ + déplier), **sans fusionner les données** — l'export continue de voir toutes les cases | `test_case_groupe.py` — 12 ✓, mutation rouge |
+>
 > ⚠️ **Règle qui sort de la v1.39.0 — sur les BANCS** : une `const` de module n'est **pas**
 > remplaçable (`window.x = …` ne l'atteint pas, la résolution lexicale gagne) ; et une mutation doit
 > viser **le comportement**, pas une ligne — ici l'héritage se joue à l'écriture *et* à la lecture,
