@@ -9,7 +9,7 @@
 > | 1 · Samsung réel | ✅ **12 gestes sur 12**, 0 erreur JS | 3 défauts, tous corrigés (v1.22.1 → v1.23.0) |
 > | 2 · Rejouer les bancs | ✅ tous verts, mutations rouges | 1 banc **périmé** qui accusait l'app à tort |
 > | 3 · Bancs manquants | ✅ **5 sur 5 écrits**, tous falsifiés | les 20 fonctions ont enfin un filet |
-> | 4 · Effets de bord | 🟠 1 sur 6 mesuré | défaut séquence + casting **corrigé en v1.24.0** |
+> | 4 · Effets de bord | ✅ **5 sur 6 mesurées** | 1 défaut corrigé (v1.24.0) + 2 constats · reste l'ingestion |
 > | 5 · Nettoyage | ✅ projets et fiches de test supprimés | restent `test A`, `Test A`, `Salle de classe` |
 >
 > **La lacune de fond est levée** : le Samsung `SM-A326B` a servi, au doigt, avec
@@ -17,7 +17,11 @@
 > jour ne se voyaient que là.
 >
 > **Décidé et livré (v1.24.0)** : la pose garantie n'est plus proposée quand le casting a ≥ 2
-> personnages. Restent **5 combinaisons sur 6** à mesurer à l'étape 4.
+> personnages. L'étape 4 est mesurée à **5 combinaisons sur 6** (`test_compositions.py`, 18
+> vérifications, **zéro GPU** — il lit le graphe envoyé à ComfyUI au lieu de générer).
+>
+> **Prochain chantier** : les **images de référence sur les fiches de personnages** (§3, 🔴) —
+> c'est ce qui fait passer un personnage de ~50 % à une identité tenue.
 
 > Écrit le **2026-07-27** en fin de session, à la demande de Quang :
 > *« dresse une feuille de route bien détaillée, revalide tout ce qu'il faut valider, avec le
@@ -188,17 +192,28 @@ Par ordre d'importance, en s'arrêtant dès qu'un défaut apparaît :
 
 Ce qui n'a **jamais** été testé ensemble :
 
-- [ ] Séquence **dans une planche qui a déjà un fond maître** (openpose *et* depth s'excluent :
-      vérifier que la séquence ne casse pas les cases « ambiance »).
+- [x] ✅ Séquence **dans une planche qui a déjà un fond maître** — mesuré 27/07, **rien ne casse**.
+      Le squelette openpose (0,9) remplace proprement le depth (0,55), et aucun des deux ne se
+      superpose à l'autre. 🟠 **Un constat à connaître (v1.24.0)** : les vignettes sont créées en
+      `kind: 'dialogue'` (codé en dur), donc une séquence lancée depuis une case **ambiance**
+      **perd le décor du fond maître** dans son prompt. C'est cohérent — openpose et depth
+      s'excluent de toute façon — mais **ce n'est dit nulle part à l'écran**.
 - [x] ~~Séquence **sur une case d'un casting à 2 personnages**~~ → **mesuré le 27/07, défaut
       confirmé et plus grave que prévu** (cf. §3). Le prompt est juste ; ce sont les images qui
       échouent : aucune pose appliquée, 3 puis 4 personnages pour `2people`. Contre-épreuve :
       sans casting, la même séquence produit une vraie progression de mouvement.
       **Attend un arbitrage de Quang**, ce n'est pas un correctif mécanique.
-- [ ] Traduction automatique **+** casting **+** comptage, tous actifs en même temps.
-- [ ] Ingestion d'une page réelle **puis** séquence sur une case ingérée (formats de cases variables).
-- [ ] Export PNG/PDF d'une planche **contenant** des vignettes de séquence (formats hétérogènes).
-- [ ] Deux appareils en même temps (PC + téléphone) sur le **même** projet : qui gagne ?
+- [x] ✅ Traduction **+** casting **+** comptage tous actifs — mesuré 27/07, **la chaîne tient** :
+      le français est traduit avant d'atteindre le moteur, le comptage relevé *avant* traduction
+      survit, les deux personnages du casting arrivent, `solo` ne passe pas, `2people` est injecté.
+- [ ] ⏳ **SEULE COMBINAISON NON MESURÉE** : ingestion d'une page réelle **puis** séquence sur une
+      case ingérée (formats de cases variables). Demande YOLO + le venv `kohya` — à faire.
+- [x] ✅ Export d'une planche aux formats **hétérogènes** — mesuré 27/07 : la planche s'assemble
+      (3096×4480 pour 4 cases de tailles mêlées), sans erreur.
+- [x] ✅ Deux appareils sur le **même** projet — mesuré 27/07 : **le dernier écrivain gagne**,
+      sans erreur ni doublon. 🟠 **Constat (v1.24.0)** : aucune fusion, aucun avertissement — le
+      travail du premier est écrasé **en silence**. Acceptable pour un usage solo, à savoir avant
+      d'éditer la même planche depuis le PC et le téléphone en parallèle.
 
 ### Étape 5 — Nettoyage
 
