@@ -108,8 +108,42 @@ def main():
                 all(ids), "ids=%s" % (ids,))
 
         print("\n--- le casting de la planche ---")
-        pg.click('nav button[data-tab="tPlate"]')
-        pg.wait_for_timeout(700)
+        # ⚠ Depuis la v1.39.0, « Qui joue sur cette planche » ne montre QUE LA
+        # TROUPE du manga — la base entière en cases à cocher était le mur qu'on
+        # venait justement de retirer. Ce banc créait ses deux fiches sans les
+        # inscrire à la troupe : il ne trouvait plus aucune case à cocher et
+        # accusait l'app. C'est le troisième banc périmé de la même famille
+        # (test_perso_dessiner et test_references, v1.38.0) : quand l'UI replie
+        # ou filtre une liste, les bancs qui la parcouraient meurent en silence.
+        # On inscrit donc la troupe AVANT — c'est de la préparation d'état, pas
+        # le geste mesuré.
+        # ⚠ On retrouve le projet PAR SON NOM, on ne se fie pas a `S.proj` : creer
+        # une fiche recharge la liste et `S.proj` peut avoir change sous nos pieds.
+        # Le meme piege est deja note plus bas dans ce banc — il valait aussi ici.
+        pg.evaluate("""async ([nom, ids]) => {
+            const proj = ((await api('/manga/projects')).items || [])
+                           .find(p => p.name === nom);
+            if (!proj) throw new Error('projet ' + nom + ' introuvable');
+            proj.recipe = Object.assign({}, proj.recipe || {}, {casting: ids});
+            await api('/manga/projects', proj);
+            S.proj = proj;
+            // ⚠ Et la planche part de PERSONNE d'actif. Sans cette ligne, la
+            // troupe devient le casting par defaut (`castingPage()` retombe sur
+            // elle quand `layout.casting` est absent) : le premier controle du
+            // banc — « sans casting, aucun tag de personnage » — n'aurait plus
+            // rien a mesurer. Inscrire quelqu'un au manga n'est pas le faire
+            // jouer dans la case, et c'est justement ce que ce banc verifie.
+            S.page.layout = Object.assign({}, S.page.layout || {}, {casting: []});
+            await api('/manga/pages', S.page);
+            renderCasting();
+        }""", [NOM, ids])
+        # ⚠ « Qui joue sur cette planche » vit dans l'onglet PROJET (v1.39.0, la
+        # troupe). Le banc basculait sur l'onglet Planche puis cochait une case
+        # qui n'y est plus : Playwright attendait un element invisible jusqu'au
+        # timeout. Ce que le banc mesure — `promptFinal` — ne depend pas de
+        # l'onglet affiche ; ce qu'il TOUCHE, si.
+        pg.click('nav button[data-tab="tProj"]')
+        pg.wait_for_timeout(900)
         boites = pg.evaluate("document.querySelectorAll('#casting input[data-cast]').length")
         verifie("les fiches apparaissent dans « Qui joue sur cette planche »",
                 boites >= 2, "%s case(s) a cocher" % boites)

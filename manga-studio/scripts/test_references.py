@@ -145,8 +145,18 @@ def main():
                 pg.evaluate("(id) => !!document.querySelector('input[data-chref=\"'+id+'\"]')",
                             st["char"]))
         pg.set_input_files('input[data-chref="%s"]' % st["char"], ref_src)
-        pg.wait_for_timeout(5000)
-        refs = pg.evaluate("(id) => (CHARS.find(c => c.id === id) || {}).refs || []", st["char"])
+        # ⚠ On ATTEND que la reference apparaisse, on ne parie pas sur un delai.
+        # Depuis la v1.53.0 l'ajout passe par un aller-retour serveur (recadrage
+        # sur le visage, YOLO) : les 5 s fixes d'avant suffisaient hier et plus
+        # aujourd'hui — le banc tombait sur `refs[0]` avec une liste vide, en
+        # accusant l'app d'un defaut qui n'existait pas.
+        refs = []
+        for _ in range(40):
+            refs = pg.evaluate("(id) => (CHARS.find(c => c.id === id) || {}).refs || []",
+                               st["char"])
+            if refs:
+                break
+            pg.wait_for_timeout(1000)
         verifie("la reference est enregistree sur la fiche", len(refs) == 1, str(refs))
         verifie("une vignette de la reference s'affiche dans la fiche",
                 pg.evaluate("document.querySelectorAll('#charList img').length") >= 1)
