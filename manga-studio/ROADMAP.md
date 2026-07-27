@@ -1472,6 +1472,41 @@ constater la présence d'un bouton. Mutation rouge (2 échecs).
 > 2. sa tolérance d'ancrage était de 25 px, et **un zoom centré passait encore** (il dérape de
 >    24 px). Un seuil confortable ne mesure plus rien — serré à 8 px.
 
+#### 12.14 — ✅ La troupe d'un manga *(livré v1.39.0)*
+
+Quang, 27/07 : *« c'est quoi la suite quand je crée des personnages, que je crée un nouveau projet,
+comment j'ai inclus ces personnages dans le projet ? »* — la question a mis le doigt sur deux
+manques réels : le casting appartenait à la **planche seule** (chaque planche neuve repartait vide),
+et la ligne affichait **toute la base** en cases à cocher.
+
+**Trois niveaux, une phrase chacun** :
+
+| Niveau | Où | Ce que ça veut dire |
+|---|---|---|
+| **La base** | onglet Personnages | toutes mes fiches, réutilisables d'un manga à l'autre |
+| **La troupe** | `proj.recipe.casting` | ceux qui jouent dans **ce** manga |
+| **La planche** | `layout.casting` | ceux qui apparaissent sur **cette** page |
+
+Une planche neuve **hérite** de la troupe. Nuance qui compte : casting **absent** = « je suis la
+troupe » ; casting **vide** = « personne sur cette page ». Ce n'est pas la même chose, et le banc le
+vérifie après rechargement. Ajouter quelqu'un à la troupe le fait jouer **aussi** sur la planche
+ouverte (sinon le geste est à faire deux fois) ; l'en retirer le retire des deux.
+
+Et la ligne remonte **sous le choix de la planche** — c'est une décision de début, elle n'avait rien
+à faire sous « Exporter ».
+
+🐛 **Une boîte native oubliée** : « Démarrer une planche » demandait encore le nom **et** le nombre de
+cases par des `prompt()`. Mon commit v1.34.0 annonçait « plus aucune boîte native » — j'avais
+vérifié les `confirm(`, **pas** les `prompt(`. L'annonce était donc fausse ; c'est corrigé.
+
+> ⚠️ **La leçon la plus utile de ce chantier vient du banc, qui a échoué deux fois à rougir :**
+> 1. `window.troupeProjet = …` ne remplace **pas** une `const` de module (la résolution lexicale
+>    l'emporte) : le code muté n'était jamais appelé, et le banc restait vert **en ne prouvant
+>    rien**. Les fonctions d'héritage sont désormais des **déclarations**, donc remplaçables.
+> 2. Retirer `casting` à l'**écriture** ne cassait rien non plus : l'app hérite **aussi à la
+>    lecture**. Bonne nouvelle sur le code — deux mécanismes indépendants — mais preuve qu'**une
+>    mutation doit viser le comportement, pas une ligne**.
+
 #### Ordre d'exécution *(chronologie tenue par Claude, mandat Quang du 27/07)*
 
 | # | Chantier | État | Pourquoi ce rang |
@@ -1484,6 +1519,7 @@ constater la présence d'un bouton. Mutation rouge (2 échecs).
 | — | **12.11 question d'arrêt** | ✅ v1.34.0 | + les 5 dernières boîtes natives de l'app |
 | — | **12.5 zone + consigne** | ✅ v1.35.0 | un seul bouton ; a révélé que `p.zone` n'était pas persistée depuis la v1.26.1 |
 | — | **12.12 dessiner un personnage** | ✅ v1.37.0 | demande ancienne et jamais faite ; a révélé que la fiche échappait à la traduction obligatoire |
+| — | **12.14 la troupe du manga** | ✅ v1.39.0 | répond à « comment j'inclus mes personnages » ; a révélé un `prompt()` natif oublié |
 | — | **12.13 visionneuse + liste** | ✅ v1.38.0 | zoom ancré, navigation, liste repliée — et le zoom de la planche a désormais une implémentation de référence |
 | 1 | **12.7 💬 Répliques** | ⏳ | brique écrite à 80 %, zéro GPU, répond à une incompréhension réelle |
 | 3 | **12.1 case-groupe** | ⏳ | gros gain de lisibilité ; `sequence.gid` (v1.31.0) est déjà posé pour elle |

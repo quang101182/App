@@ -44,6 +44,14 @@
 >
 > | **v1.38.0** | **visionneuse plein écran** (zoom ancré + pan borné + ◀ ▶ + action « garder ») · nombre d'images **annoncé** · **liste de personnages repliée** (1 fiche = 1 ligne) + filtre | `test_visionneuse_et_liste.py` — 20 ✓, mutation rouge |
 >
+> | **v1.39.0** | **la troupe du manga** : base → troupe (projet) → casting (planche), avec héritage des planches neuves · ligne remontée sous le choix de planche · 🐛 deux `prompt()` natifs oubliés dans « Démarrer une planche » | `test_troupe.py` — 12 ✓, mutation rouge |
+>
+> ⚠️ **Règle qui sort de la v1.39.0 — sur les BANCS** : une `const` de module n'est **pas**
+> remplaçable (`window.x = …` ne l'atteint pas, la résolution lexicale gagne) ; et une mutation doit
+> viser **le comportement**, pas une ligne — ici l'héritage se joue à l'écriture *et* à la lecture,
+> donc casser un seul des deux ne rougissait pas. Un banc vert dont la mutation ne rougit pas ne
+> prouve rien.
+>
 > ⚠️ **Règle qui sort de la v1.37.0** : **traduire n'est pas enrichir.** Une traduction automatique
 > ne doit **rien inventer** — sinon elle alourdit la fiche de traits que Quang n'a pas écrits, *et*
 > laisse le français partir quand même. Consigne stricte (`TRAD_CONSIGNE`) pour la traduction,
