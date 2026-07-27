@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.20.0</title>
+<title>Manga Studio v1.20.1</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -92,6 +92,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .panel .num{position:absolute;top:6px;left:6px;background:#000a;border-radius:6px;
   padding:1px 7px;font-size:12px;font-weight:700}
 .panel .verdict{position:absolute;top:6px;right:6px;font-size:16px}
+.panel .seqbadge{position:absolute;top:6px;left:40px;background:#000a;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:700;color:#8fd8ff}
 .spin{width:22px;height:22px;border:2px solid var(--line);border-top-color:var(--accent2);
   border-radius:50%;animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -211,7 +212,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.20.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.20.1</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -532,7 +533,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.20.0";
+const VERSION = "1.20.1";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1283,12 +1284,17 @@ function panelHTML(p, i){
     ? '<img src="' + imgURL(p.file) + '" alt="case ' + (i+1) + '">'
     : '<span class="ph">◻</span>';
   const v = p.verdict === "ok" ? "✅" : (p.verdict === "ko" ? "❌" : "");
+  // Une case issue d'une sequence le DIT. Quang : « visuellement, je ne vois pas
+  // de difference » -- et il avait raison, rien ne la signalait.
+  const sq = (p.recipe && p.recipe.sequence)
+    ? '<span class="seqbadge">🎬 ' + (p.recipe.sequence.index + 1) + "/"
+      + p.recipe.sequence.total + '</span>' : "";
   const nb = (p.bubbles || []).length;
   return '<div class="panel' + (p.id === S.lettering ? " lettering" : "") + '" data-pid="' + p.id + '">'
    // Le format vient de la CASE : une case ingeree garde celui de son cadre d'origine,
    // sinon elle serait rognee a l'ecran et ecrasee a l'export.
    + '<div class="img" style="aspect-ratio:1/' + panelAspect(p).toFixed(4) + '">'
-   + '<span class="num">' + (i+1) + '</span><span class="verdict">' + v + '</span>'
+   + '<span class="num">' + (i+1) + '</span>' + sq + '<span class="verdict">' + v + '</span>'
    + img + bubblesSVG(p, p.id === S.lettering, S.selBub)
    + '<div class="busy" data-busy hidden><div class="spin"></div><span data-busytxt></span></div></div>'
    + '<div class="body">'
@@ -2529,6 +2535,35 @@ $("btnIngCreate").onclick = () => createFromIngest()
   .catch(e => { log("création depuis ingestion: " + e.message, "e"); toast("échec"); });
 
 $("plate").addEventListener("click", async e => {
+  // Choix d'un geste de sequence : on demande ENSUITE le nombre, dans la meme zone.
+  const sg = e.target.closest("[data-seqg]");
+  if (sg){
+    const c = e.target.closest("[data-pid]");
+    const pp = S.panels.find(x => x.id === c.dataset.pid);
+    const zone = c.querySelector("[data-idees]");
+    const g = sg.dataset.seqg;
+    zone.innerHTML = '<span class="titre">« ' + GESTES[g].nom
+      + ' » — combien de vignettes ?</span>'
+      + [2, 3, 4, 5, 6].map(n =>
+          '<button data-seqn="' + n + '" data-seqgeste="' + g + '">' + n + ' vignettes</button>').join("")
+      + '<button data-seqannule="1">Annuler</button>';
+    return;
+  }
+  const sn = e.target.closest("[data-seqn]");
+  if (sn){
+    const c = e.target.closest("[data-pid]");
+    const pp = S.panels.find(x => x.id === c.dataset.pid);
+    c.querySelector("[data-idees]").hidden = true;
+    return sequence(pp, sn.dataset.seqgeste, +sn.dataset.seqn).catch(err => {
+      log("séquence : " + err.message, "e");
+      refus(pp, "La séquence a échoué : " + err.message);
+      busyOff("");
+    });
+  }
+  if (e.target.closest("[data-seqannule]")){
+    e.target.closest("[data-pid]").querySelector("[data-idees]").hidden = true;
+    return;
+  }
   // Une proposition cliquee remplit la case. On la traite AVANT [data-act] :
   // ce sont des boutons, ils n'ont pas d'action au sens des autres.
   const idee = e.target.closest("[data-idee]");
@@ -2571,14 +2606,20 @@ $("plate").addEventListener("click", async e => {
   }
   if (act === "sequence"){
     if (!(p.prompt || "").trim()) return toast("écris d'abord l'action de la case");
-    const g = (prompt("Quel geste ?\n\ncoup · marche · chute", "coup") || "").trim().toLowerCase();
-    if (!GESTES[g]) return toast("geste inconnu");
-    const n = Math.max(2, Math.min(6, +(prompt("Combien de vignettes ? (2 à 6)", "4") || 4)));
-    return sequence(p, g, n).catch(e => {
-      log("séquence : " + e.message, "e");
-      refus(p, "La séquence a échoué : " + e.message);
-      busyOff("");
-    });
+    // Panneau INLINE, pas deux prompt() en cascade. Le 27/07, Quang a clique le
+    // bouton et rien ne s'est passe : sur telephone, une boite annulee ou une
+    // saisie hors des trois mots attendus laissait un toast de 2,6 s pour seule
+    // explication -- et le journal, lui, ne montrait aucune sequence. Un reglage
+    // se CHOISIT a l'ecran, il ne se tape pas de memoire.
+    const carte = document.querySelector('[data-pid="' + p.id + '"]');
+    const zone = carte.querySelector("[data-idees]");
+    zone.innerHTML = '<span class="titre">Décomposer ce geste en plusieurs vignettes '
+      + '(même personnage, même dessin) :</span>'
+      + Object.keys(GESTES).map(g =>
+          '<button data-seqg="' + g + '">🎬 ' + GESTES[g].nom + '</button>').join("")
+      + '<button data-seqannule="1">Annuler</button>';
+    zone.hidden = false;
+    return;
   }
   if (act === "idees"){
     const carte = document.querySelector('[data-pid="' + p.id + '"]');
