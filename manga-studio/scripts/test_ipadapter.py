@@ -116,7 +116,14 @@ def upload(path, en_nb=False):
     """
     if en_nb:
         from PIL import Image
-        gris = os.path.join(OUT, "_ref_nb.png")
+        # ⚠ Le nom du gris DERIVE de la source. Une version precedente ecrivait
+        # toujours « _ref_nb.png » : deux references uploadees a la suite (deux
+        # personnages) arrivaient sous le MEME nom, avec overwrite=true -- la
+        # seconde ecrasait la premiere et le graphe chargeait deux fois la meme
+        # image, sans la moindre erreur. Trouve par `test_deux_refs.py`, dont
+        # deux bras rendaient des chiffres identiques au millieme pres.
+        base = os.path.splitext(os.path.basename(path))[0]
+        gris = os.path.join(OUT, "_nb_" + base + ".png")
         Image.open(path).convert("L").convert("RGB").save(gris)
         path = gris
     nom = "manga_ref_" + os.path.basename(path)

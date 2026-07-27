@@ -912,8 +912,54 @@ existe précisément pour recueillir ce verdict-là.
 > **⏳ Restent ouvertes, dans cet ordre :**
 > 1. Un sujet **sans LoRA du tout** (robot, mecha, créature) — mesuré ici sur un personnage qui *a* un LoRA,
 >    donc la question « n'importe quel sujet » n'est pas close.
-> 2. **Deux personnages dans une même case** — trou de mesure signalé par le volet adulte.
+> 2. ~~**Deux personnages dans une même case** — trou de mesure signalé par le volet adulte.~~
+>    → ✅ **mesuré et livré le 28/07 (v1.52.0)**, voir ci-dessous.
 > 3. Le transfert de **style** d'une page de Quang (brique de la phase 8).
+
+#### ✅ DEUX identités dans une même case — mesuré le 28/07 (`scripts/test_deux_refs.py`)
+
+C'était le trou de mesure n°2, et il expliquait une gêne concrète de Quang : *« Jo n'apparaît pas
+vraiment »*. La cause n'était pas que Jo manquait d'ancre — c'est que **l'ancre de l'autre le recouvrait**.
+
+Quatre bras, même seed, même prompt à deux personnages, 6 seeds chacun. L'instrument est celui du
+27/07 (YOLO face + CLIP-ViT-H), rejoué sur ses étalons : il sépare A de B avec une marge de 0,145,
+donc il a le droit de juger **cet** écart-là — et rien de plus fin.
+
+| Bras | Deux identités distinctes | Chacune à sa place | Saturation |
+|---|---|---|---|
+| prompt seul (témoin) | 2/6 | 1/6 | 0,185 |
+| **une seule référence** *(= l'app jusqu'à la v1.51.0)* | **1/6** | 1/6 | 0,181 |
+| deux références **sans masque** | **0/3** | 0/3 | 0,215 |
+| deux références **masquées, poids 0,4** | 5/6 | 5/6 | 0,134 |
+| **deux références masquées, poids 0,6** ⭐ | **6/6** | **6/6** | **0,105** |
+| deux références masquées, poids 0,8 | 4/6 | 4/6 | 0,208 *(la couleur revient)* |
+
+**Trois choses que ces chiffres établissent, et qu'on ne pouvait pas deviner :**
+1. **Une seule référence est PIRE que rien pour le second personnage** (1/6 contre 2/6 au témoin) :
+   elle ne se contente pas de ne pas le tenir, elle lui **impose le visage de l'autre**. Le
+   commentaire du code redoutait le mélange en empilant deux références — le mélange était déjà là,
+   avec une seule.
+2. **Empiler deux références sans masque est le pire bras de tous** (0/3). La crainte écrite dans le
+   code était donc juste — mais elle visait la mauvaise parade : ce n'est pas « deux » qui est
+   mauvais, c'est « deux, partout ».
+3. **Le poids n'est pas le même qu'à une référence.** 0,4 est le réglage plein cadre mesuré le 27/07 ;
+   borné à une moitié, il faut 0,6. À 0,8 on repasse le seuil où IPAdapter réinjecte la palette.
+
+**Et le prompt n'a rien à dire du placement** : rejoué avec une scène qui ne précise **pas** qui est
+à gauche, le bras masqué tient toujours **6/6**. C'est le masque qui place, pas le texte — donc
+l'app n'ajoute rien à ce que Quang écrit.
+
+**⚠ Ce que ça ne dit pas** : l'instrument distingue une brune à frange d'une blonde en blouse, il a
+échoué (27/07) à voir un changement d'yeux. Ces 6/6 signifient « deux personnages **nettement**
+différents restent chacun à leur place », pas « l'identité fine de chacun est tenue ». Pour deux
+personnages proches, aucune mesure ne le couvre.
+
+**Un défaut de banc payé au passage, et il avait de quoi tromper** : les deux références étaient
+uploadées sous **le même nom** dans `ComfyUI/input` (le fichier N&B intermédiaire s'appelait toujours
+`_ref_nb.png`, avec `overwrite`). Deux bras rendaient donc des chiffres **identiques au millième**
+sur des images identiques — un tableau parfaitement rempli, qui ne mesurait qu'une seule identité.
+Corrigé à la racine (`test_ipadapter.upload` dérive le nom de sa source) et le banc **refuse
+désormais de démarrer** si ses deux entrées portent le même nom.
 
 ### Phase 10 — Créer un manga entier : les questions de faisabilité *(Quang, 27/07)*
 
@@ -927,7 +973,7 @@ existe précisément pour recueillir ce verdict-là.
 | Personnages par case | Faisable aujourd'hui ? |
 |---|---|
 | **1** | ✅ **Oui, solide.** Identité tenue (LoRA 100 %, IPAdapter validé), décor tenu, lettrage. |
-| **2** | ✅ **Oui, mesuré** (`test_duo.py` : co-présence et contact simple passent). ⚠ Mais tenir **DEUX identités précises** dans la même case n'est PAS mesuré : le modèle mélange volontiers les attributs. |
+| **2** | ✅ **Oui, mesuré** (`test_duo.py` : co-présence et contact simple passent). ~~⚠ Mais tenir **DEUX identités précises** dans la même case n'est PAS mesuré~~ → ✅ **mesuré le 28/07** : deux références **masquées gauche/droite** à poids 0,6 tiennent **6/6** ; une seule référence n'y arrive que **1/6** et contamine le second. Livré en v1.52.0. Réserve : mesuré sur deux personnages **nettement** distincts. |
 | **3** | 🟠 **Dégradé.** SDXL perd le compte et fusionne les corps. Parade réelle : **openpose à N squelettes** (`make_pose.py` sait déjà en composer) pour imposer les places. |
 | **4-5** | ⛔ **Pas de façon fiable, et je ne le promets pas.** La voie réaliste n'est pas de tout générer d'un coup : c'est de **composer** — générer les personnages séparément et les assembler. Ce n'est plus de la génération, c'est du montage, et ça change l'outil. |
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.51.0</title>
+<title>Manga Studio v1.52.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -347,7 +347,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.51.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.52.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -824,7 +824,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.51.0";
+const VERSION = "1.52.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1321,25 +1321,50 @@ function wfMaster(r, decor, seed, prefix){
        conversion de la reference en N&B, cote client, avant l'upload.
    Le reglage retenu : PLUS / 0,4 / end_at 0,5 / reference N&B. Identite 0,839
    sur 3/3, saturation 0,149 : plus proprement monochrome que le LoRA (0,333). */
-const IPA = { preset: "PLUS (high strength)", poids: 0.4, endAt: 0.5 };
+/* DEUX references (v1.52.0) : chacune bornee a une moitie de l'image, et le poids
+   n'est PAS le meme qu'a une seule. Balayage `test_deux_refs.py`, 6 seeds :
+     une seule reference  -> 1/6  (elle CONTAMINE le second personnage)
+     deux + masque @ 0,4  -> 5/6
+     deux + masque @ 0,6  -> 6/6  et la saturation la plus basse (0,105) ⭐
+     deux + masque @ 0,8  -> 4/6  et la couleur revient (0,208)
+   Logique : chaque adapter n'agissant plus que sur une moitie, il faut peser plus
+   fort pour la meme influence -- mais 0,8 depasse et reinjecte la palette. */
+const IPA = { preset: "PLUS (high strength)", poids: 0.4, poidsDuo: 0.6, endAt: 0.5 };
 
-/** L'image de reference a utiliser pour cette case, s'il y en a une.
- *  ⚠ UNE SEULE, volontairement : IPAdapter melangerait les identites si on en
- *  empilait deux (« combine_embeds »), et on ne sait pas encore ce que ca vaut.
- *  On prend celle du premier personnage du casting qui en a une, et l'app le DIT
- *  a l'ecran plutot que de laisser croire que les deux sont verrouilles. */
-function refDuCasting(p){
-  const retires = (p && p.recipe && p.recipe.sansCasting) || [];
-  for (const id of castingPage()){
-    if (retires.includes(id)) continue;
+/** Les images de reference a utiliser pour cette case — JUSQU'A DEUX (v1.52.0).
+ *
+ *  Jusqu'ici l'app n'en appliquait qu'UNE, et le commentaire disait pourquoi :
+ *  « IPAdapter melangerait les identites si on en empilait deux, et on ne sait
+ *  pas encore ce que ca vaut ». C'est mesure depuis (`scripts/test_deux_refs.py`),
+ *  et le constat est double :
+ *    - empiler deux references SANS masque melange effectivement tout — c'est le
+ *      pire des trois bras, les deux visages tirent vers la meme identite ;
+ *    - mais borner chaque reference a une MOITIE de l'image (`attn_mask`) place
+ *      reellement chaque personnage a sa place.
+ *  Et surtout, une SEULE reference etait pire que rien pour le second personnage :
+ *  elle le contaminait, les deux visages sortant a l'identite du premier. C'est
+ *  exactement le symptome decrit par Quang (« Jo n'apparait pas vraiment »).
+ *
+ *  L'ordre est celui du casting : le premier tient la gauche, le second la droite.
+ *  L'app le DIT a l'ecran — un placement impose qu'on ne pourrait pas prevoir
+ *  serait pire qu'un placement absent. */
+function refsDuCasting(p){
+  // ⚠ `castingCase(p)`, pas `castingPage()`. La v1.51.0 a fait qu'une case
+  // n'attrape plus les personnages de ses voisines -- mais seulement pour les
+  // TAGS : l'image de reference, elle, continuait de se choisir sur le casting
+  // de la PLANCHE. Une case dont on avait retire quelqu'un pouvait donc encore
+  // porter son visage, sans que rien ne le dise.
+  const out = [];
+  for (const id of castingCase(p)){
     const c = CHARS.find(x => x.id === id);
     const r = c && (c.refs || [])[0];
-    if (r) return { nom: r, perso: c.name || id };
+    if (r) out.push({ nom: r, perso: c.name || id });
+    if (out.length === 2) break;   // au-dela, aucune mesure ne dit ce que ca vaut
   }
-  return null;
+  return out;
 }
 
-function wfPanel(r, positive, seed, prefix, depthName, poseName, poseW, refNom){
+function wfPanel(r, positive, seed, prefix, depthName, poseName, poseW, refNoms){
   // Sans LoRA, le noeud est RETIRE du graphe -- il n'est pas laisse avec un nom
   // vide. ComfyUI refuse alors tout le workflow (HTTP 400) et l'app n'affichait
   // qu'« [object Object] » : une case qui ne se genere pas, sans raison lisible.
@@ -1363,16 +1388,47 @@ function wfPanel(r, positive, seed, prefix, depthName, poseName, poseW, refNom){
   }
   // IPAdapter s'insere sur la chaine du MODELE, en aval du LoRA s'il y en a un.
   // Il ne touche ni au conditionnement ni au ControlNet : les deux cohabitent.
+  //
+  // UNE reference  -> un IPAdapter plein cadre, poids 0,4 (mesure du 27/07).
+  // DEUX references -> deux IPAdapter en serie, chacun borne a une MOITIE de
+  //   l'image par `attn_mask`, poids 0,6. Sans le masque, les deux identites se
+  //   melangent : mesure `test_deux_refs.py`, 0/3 -- c'est le pire des bras.
+  const refs = (Array.isArray(refNoms) ? refNoms : (refNoms ? [refNoms] : []))
+                 .filter(Boolean).slice(0, 2);
   let modele = [src, 0];
-  if (refNom){
-    g["20"] = { class_type: "LoadImage", inputs: { image: refNom } };
+  if (refs.length){
+    const duo = refs.length > 1;
     g["21"] = { class_type: "IPAdapterUnifiedLoader", inputs: {
                  model: [src, 0], preset: IPA.preset } };
-    g["22"] = { class_type: "IPAdapterAdvanced", inputs: {
-                 model: ["21", 0], ipadapter: ["21", 1], image: ["20", 0],
-                 weight: IPA.poids, weight_type: "linear", combine_embeds: "concat",
-                 start_at: 0.0, end_at: IPA.endAt, embeds_scaling: "V only" } };
-    modele = ["22", 0];
+    if (duo){
+      // Les masques sont CALCULES dans le graphe : un masque est une geometrie
+      // exacte, la faire faire a ComfyUI evite un fichier de plus a televerser
+      // et a garder d'accord avec la taille de la case.
+      g["30"] = { class_type: "SolidMask",
+                  inputs: { value: 0.0, width: +r.w, height: +r.h } };
+      g["31"] = { class_type: "SolidMask",
+                  inputs: { value: 1.0, width: Math.round(+r.w / 2), height: +r.h } };
+      g["32"] = { class_type: "MaskComposite", inputs: {
+                   destination: ["30",0], source: ["31",0], x: 0, y: 0, operation: "add" } };
+      g["33"] = { class_type: "MaskComposite", inputs: {
+                   destination: ["30",0], source: ["31",0],
+                   x: Math.round(+r.w / 2), y: 0, operation: "add" } };
+    }
+    // Le chainage part du modele SORTI du loader (["21",0]), pas de `src` : c'est
+    // lui qui porte l'IPAdapter charge. Repartir de `src` laisserait le premier
+    // adapter brancher sur un modele nu -- et le graphe serait refuse.
+    modele = ["21", 0];
+    refs.forEach((nom, i) => {
+      const ld = String(40 + i * 2), ip = String(41 + i * 2);
+      g[ld] = { class_type: "LoadImage", inputs: { image: nom } };
+      g[ip] = { class_type: "IPAdapterAdvanced", inputs: {
+                 model: modele, ipadapter: ["21", 1], image: [ld, 0],
+                 weight: duo ? IPA.poidsDuo : IPA.poids, weight_type: "linear",
+                 combine_embeds: "concat", start_at: 0.0, end_at: IPA.endAt,
+                 embeds_scaling: "V only" } };
+      if (duo) g[ip].inputs.attn_mask = [i ? "33" : "32", 0];
+      modele = [ip, 0];
+    });
   }
   g["5"].inputs.model = modele;
   // Un seul ControlNet a la fois : la profondeur (fond maitre) OU la pose
@@ -2103,6 +2159,30 @@ function panelHTML(p, i){
                  + '+ ajouter (' + reste.length + ')</button>' : "")
             + (ici.length ? "" : '<span class="muted" style="font-size:11px">'
                                  + 'personne → dessin libre</span>')
+            /* ---- QUI EST VRAIMENT TENU (v1.52.0) ----
+               Une case peut caster trois personnes ; seules celles qui ont une
+               image de reference gardent leur visage, et l'app en applique DEUX
+               au maximum. Le dire ici evite exactement ce que Quang a constate :
+               « Jo n'apparait pas vraiment » -- il etait caste, sans image, donc
+               contamine par le visage de l'autre. Le placement est annonce parce
+               qu'il est IMPOSE (masque gauche/droite), pas devine. */
+            + (function(){
+                const tenus = refsDuCasting(p);
+                if (!tenus.length) return "";
+                const sans = castingCase(p)
+                  .map(id => CHARS.find(x => x.id === id))
+                  .filter(c => c && !(c.refs || []).length)
+                  .map(c => c.name || c.id);
+                return '<span class="muted" style="font-size:11px;flex-basis:100%">'
+                  + '🖼 ' + (tenus.length > 1
+                      ? esc(tenus[0].perso) + ' à gauche, ' + esc(tenus[1].perso) + ' à droite'
+                      : esc(tenus[0].perso) + ' tenu par son image')
+                  + (sans.length
+                      ? ' — ' + esc(sans.join(", "))
+                        + (sans.length > 1 ? ' n\'ont' : ' n\'a') + ' pas d\'image de référence'
+                      : "")
+                  + '</span>';
+              })()
             + '</div>';
         })()
       : "")
@@ -2474,11 +2554,15 @@ async function genPanel(p, positifForce){
     // L'image de reference du casting : c'est elle qui tient l'identite sans
     // entrainement. Elle est enregistree dans la recette, donc la case reste
     // rejouable meme si la fiche du personnage change plus tard.
-    const ref = refDuCasting(p);
-    if (ref) log("identité tenue par l'image de référence de « " + ref.perso + " »", "s");
+    const refs = refsDuCasting(p);
+    if (refs.length === 1)
+      log("identité tenue par l'image de référence de « " + refs[0].perso + " »", "s");
+    else if (refs.length === 2)
+      log("deux identités tenues : « " + refs[0].perso + " » à gauche, « "
+          + refs[1].perso + " » à droite", "s");
     const imgs = await runGraph(
       wfPanel(rr, positive, p.recipe.seed, prefix, depthName, null, null,
-              ref && ref.nom), "case " + p.id);
+              refs.map(x => x.nom)), "case " + p.id);
     // ⚠ UN NOM UNIQUE PAR GENERATION. Jusqu'a la v1.48.0 c'etait `p.id + ".png"`,
     // donc chaque « Regénérer » ECRASAIT l'image precedente : impossible de
     // revenir en arriere, et impossible de comparer deux essais. Quang, 27/07 :
@@ -3418,7 +3502,7 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
   // existante ne se sacrifie pas pour faire de la place a une nouveaute.
   // La reference est relevee UNE fois : toutes les vignettes d'une meme suite
   // doivent tenir la meme identite, comme elles partagent deja le meme seed.
-  const refSeq = refDuCasting(p);
+  const refSeq = refsDuCasting(p).map(x => x.nom);
   const lot = [];
   for (let i = 0; i < n; i++){
     const neuf = { pageId: S.page.id, idx: i0 + 1 + i, kind: "dialogue",
@@ -3461,7 +3545,7 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
       pos = promptFinal(cible) + ", " + (cadrageLibre || "upper body") + ", " + L;
     }
     const imgs = await runGraph(
-      wfPanel(r, pos, seed, prefix, null, nom, 0.9, refSeq && refSeq.nom),
+      wfPanel(r, pos, seed, prefix, null, nom, 0.9, refSeq),
       "séquence " + (i + 1));
     cible.file = await harvest(imgs[0], cible.id + ".png");
     cible.recipe = Object.assign({}, cible.recipe, {

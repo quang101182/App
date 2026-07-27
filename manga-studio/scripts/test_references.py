@@ -133,6 +133,14 @@ def main():
         print("\n--- ajouter une image par le VRAI champ de la fiche ---")
         pg.click('nav button[data-tab="tPerso"]')
         pg.wait_for_timeout(600)
+        # ⚠ DEPLIER la fiche. Depuis la v1.38.0 la liste des personnages est
+        # repliee (1 fiche = 1 ligne) : le champ « ＋ image de reference » n'est
+        # pas cache, il N'EXISTE PAS tant que la fiche est fermee. Ce banc echouait
+        # donc depuis la v1.38.0 en accusant l'app -- exactement ce qui etait
+        # arrive a `test_perso_dessiner`. Un banc qui suit l'UI doit OUVRIR ce
+        # qu'un utilisateur ouvrirait.
+        pg.click('[data-chopen="%s"]' % st["char"])
+        pg.wait_for_timeout(400)
         verifie("la fiche propose d'ajouter une image de reference",
                 pg.evaluate("(id) => !!document.querySelector('input[data-chref=\"'+id+'\"]')",
                             st["char"]))
@@ -167,12 +175,13 @@ def main():
             pg.wait_for_timeout(2500)
 
         g = pg.evaluate("window.__g")
-        ipa, loader, ks = {}, {}, {}
+        ipa, loader, ks, ipa_ids = {}, {}, {}, []
         if g:
-            for n in g[-1].values():
+            for k, n in g[-1].items():
                 ct = n.get("class_type")
                 if ct == "IPAdapterAdvanced":
                     ipa = n["inputs"]
+                    ipa_ids.append(k)
                 elif ct == "IPAdapterUnifiedLoader":
                     loader = n["inputs"]
                 elif ct == "KSampler":
@@ -184,8 +193,14 @@ def main():
                 abs(float(ipa.get("weight") or 0) - 0.4) < 0.001, str(ipa.get("weight")))
         verifie("end_at = 0,5 (l'ancre se pose au DEBUT du debruitage)",
                 abs(float(ipa.get("end_at") or 0) - 0.5) < 0.001, str(ipa.get("end_at")))
+        # ⚠ On verifie le BRANCHEMENT, pas le numero du noeud. Ce controle disait
+        # « == \"22\" » : la v1.52.0 a renumerote les noeuds IPAdapter pour pouvoir
+        # en chainer deux, et le banc a rougi sur un graphe pourtant juste. Un
+        # numero est une convention interne ; ce qui doit tenir, c'est que le
+        # KSampler consomme bien un IPAdapter.
         verifie("le KSampler consomme bien la sortie de l'IPAdapter",
-                (ks.get("model") or [None])[0] == "22", str(ks.get("model")))
+                (ks.get("model") or [None])[0] in ipa_ids,
+                "%s (IPAdapter : %s)" % (ks.get("model"), ipa_ids))
 
         if args.reel:
             f = pg.evaluate("(id) => (S.panels.find(x => x.id === id) || {}).file", st["pid"])

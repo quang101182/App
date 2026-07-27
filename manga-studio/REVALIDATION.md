@@ -56,6 +56,16 @@
 >
 > | **v1.46/47.0** | 🐛 trois défauts trouvés **par le journal du Honor** : `castingPage()` renvoyait `null` (6 erreurs JS pendant que Quang ajoutait quelqu'un) · la troupe se **doublonnait** à chaque tap · **+ Case** n'existait qu'en haut de planche | `test_troupe` 12 ✓ · `test_perso_dessiner` 15 ✓ |
 >
+> | **v1.52.0** | **deux images de référence dans une même case** (une par personnage, chacune bornée à sa moitié) · 🐛 la référence se choisissait sur le casting de la **planche**, pas de la case — la v1.51.0 avait corrigé les tags, pas l'image | `test_deux_refs_app.py` — 20 ✓, mutation rouge, + `--live` (image réelle) et `--samsung` (6 ✓) |
+>
+> ⚠️ **Règle qui sort de la v1.52.0 — un banc ne vérifie pas un NUMÉRO de nœud.**
+> `test_references.py` exigeait que le KSampler consomme le nœud « 22 » : renuméroter pour
+> pouvoir en chaîner deux l'a fait rougir sur un graphe pourtant juste. Un numéro est une
+> convention interne ; ce qui doit tenir, c'est le **branchement**.
+> Et `test_references.py` était **mort depuis la v1.38.0** pour la même raison que
+> `test_perso_dessiner` : la liste repliée fait que le champ « ＋ image de référence »
+> **n'existe pas** tant que la fiche est fermée — le banc accusait l'app. Réparé.
+>
 > 🎨 **Les « taches noires » sur les personnages : c'était `ink`** — mesuré, pas supposé
 > (`scripts/mesure_taches_encre.py`, même seed, un tag retiré à la fois) : le modèle dessine
 > littéralement de l'encre **qui coule** sur les visages ; `high contrast` noircissait le reste
@@ -312,7 +322,7 @@ Ce qui n'a **jamais** été testé ensemble :
 
 | Défaut | Gravité | Note |
 |---|---|---|
-| ~~**Fiches de personnages sans image de référence**~~ → ✅ **livré v1.25.0** | 🟢 | La table a `refs[]`, l'UI ne permet pas d'en ajouter. Un personnage tient donc à ~50 % (texte seul) au lieu du verrou IPAdapter mesuré et validé. ~~**Chantier n°1.**~~ → **FAIT le 27/07 (v1.25.0)** : bouton « ＋ image de référence » sur chaque fiche (il ouvre la galerie ou l'appareil photo sur téléphone), vignette + retrait, et branchement IPAdapter dans le graphe aux réglages **mesurés** (PLUS 0,4 / end_at 0,5). La référence est **convertie en N&B côté client avant l'upload** — IPAdapter transfère la palette et le négatif textuel ne pèse rien contre une image. Vérifié en génération réelle : référence rouge vif → case rendue à **1,5 de saturation**, identité tenue. Banc `test_references.py` (13 vérifications), mutation rouge à 180 de saturation. ⚠ **Une seule référence est utilisée** (le premier personnage du casting qui en a une) : empiler deux identités n'a pas été mesuré. |
+| ~~**Fiches de personnages sans image de référence**~~ → ✅ **livré v1.25.0** | 🟢 | La table a `refs[]`, l'UI ne permet pas d'en ajouter. Un personnage tient donc à ~50 % (texte seul) au lieu du verrou IPAdapter mesuré et validé. ~~**Chantier n°1.**~~ → **FAIT le 27/07 (v1.25.0)** : bouton « ＋ image de référence » sur chaque fiche (il ouvre la galerie ou l'appareil photo sur téléphone), vignette + retrait, et branchement IPAdapter dans le graphe aux réglages **mesurés** (PLUS 0,4 / end_at 0,5). La référence est **convertie en N&B côté client avant l'upload** — IPAdapter transfère la palette et le négatif textuel ne pèse rien contre une image. Vérifié en génération réelle : référence rouge vif → case rendue à **1,5 de saturation**, identité tenue. Banc `test_references.py` (13 vérifications), mutation rouge à 180 de saturation. ~~⚠ **Une seule référence est utilisée** (le premier personnage du casting qui en a une) : empiler deux identités n'a pas été mesuré.~~ → ✅ **périmé le 28/07 (v1.52.0)** : l'app en applique **deux**, chacune bornée à une moitié par `attn_mask`, poids 0,6 — mesuré **6/6** contre **1/6** à une seule référence, qui *contaminait* le second personnage. Détail : `ROADMAP.md` § IPAdapter. |
 | ~~**Pas de zone ciblée (masque manuel)**~~ → ✅ **livré v1.26.1** | 🟢 | `inpaint_zone.py` est mesuré et fonctionne ; rien dans l'app. Une case bonne à 90 % ne peut aujourd'hui qu'être **entièrement** régénérée. ~~**Chantier n°2.**~~ → **FAIT le 27/07 (v1.26.1)** : bouton **⬚ Zone** sur toute case générée, rectangle tracé **au doigt** (précision mesurée 0,001 sur le Samsung), cadre visible même hors mode tracé, puis **↻ la zone**. ⚠ **Le piège, mesuré** : l'inpaint réencode l'image ENTIÈRE par le VAE — une case de 1500×1200 revenait en **1496×1200**, donc elle rétrécissait à chaque reprise et tout le dessin était retouché alors qu'on promettait l'inverse. Corrigé **dans le graphe** (`ImageScale` + `ImageCompositeMasked`) : mesure finale **taille préservée, 0 pixel modifié hors de la zone**, 234 898 dedans. La promesse est vraie par construction, pas par confiance. |
 | **Traduction auto intermittente** | 🟠 (constaté v1.23.0) | Elle échoue parfois (API), et c'est **volontairement non bloquant** : on génère alors le texte tel quel, en le notant dans le journal. Mais l'utilisateur ne le voit pas. À rendre visible dans l'aperçu. Depuis la v1.23.0 la traduction n'est plus optionnelle, donc cet angle mort porte désormais sur **tous** les chemins. |
 | **Un objet partiel dans `S.page` détache la planche, en silence** | 🟠 (constaté v1.23.0) | L'upsert serveur réécrit **tous** les champs d'une planche. Un `api('/manga/pages', obj)` avec un objet incomplet (par ex. la réponse `{ok, id}` d'une écriture) remet `project_id` à vide : la planche devient **orpheline**, sans la moindre erreur. Aucun chemin de l'app ne fait ça aujourd'hui (`S.page` vient toujours de `loadPages`), mais rien ne l'empêche. Trouvé en écrivant `test_personnages.py`, qui est tombé dedans. |
@@ -329,6 +339,7 @@ Ce qui n'a **jamais** été testé ensemble :
    poids 0,4, `end_at` 0,5, **référence convertie en N&B**). C'est ce qui fait passer un personnage
    de « ~50 % » à une identité tenue, sans entraînement.
 2. **Zone ciblée** : tracer un masque sur une case et ne régénérer que lui.
+2-bis. ~~**Deux références IPAdapter**~~ → ✅ **fait le 28/07 (v1.52.0)**, mesuré 6/6.
 3. **Bibliothèque de références** (phase 8) : nourrir l'app de pages que Quang aime — style,
    apparence, **et gabarit de planche** (le découpage YOLO existe déjà et n'a jamais servi à ça).
 4. **Mode chapitre automatique** (phase 7) : les 4 briques existent (storyboard, casting,
