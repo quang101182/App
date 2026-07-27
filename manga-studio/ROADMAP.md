@@ -474,7 +474,23 @@ du dessin, elle épouse la composition.
 (donc en portrait). Il y est plus haché qu'il ne le serait dans une bulle conçue pour lui — c'est le prix
 de la fidélité au dessin, et c'est le bon arbitrage.
 
-### Phase 7 — Un chapitre depuis un texte ⏳ *(la cible ; déclencheur : après le LoRA v2)*
+### Phase 7 — Un chapitre depuis un texte ⏳ *(la cible)*
+
+> **Rappel de Quang, 27/07** : « un mode qui m'aide a generer automatiquement, selon ce que je definis,
+> plusieurs images et plusieurs chapitres, qui cree automatiquement l'histoire que je dois valider, et
+> qui remplit automatiquement chaque champ que je remplis a la main. […] C'est a cadrer, mais on en
+> reparle. »
+>
+> **Ce que ca suppose, et qui existe deja** : le storyboard (`scripts/storyboard.py`, texte → cases +
+> dialogues, jamais branche a l'app), la **base de personnages** (v1.14.0 — sans casting, une histoire
+> generee ne saurait pas qui la joue), l'**amelioration de prompt** (v1.13.0 — c'est elle qui remplira
+> les champs), et la boucle de validation (phase 6 — c'est elle qui recueille son accord).
+> ⇒ **Le mode auto n'est plus de la recherche : c'est l'assemblage de quatre briques deja mesurees.**
+> Reste a cadrer AVEC lui : quels champs il definit en entree (genre, personnages, longueur, ton), et
+> a quel grain il valide (chaque case ? chaque page ? le decoupage avant toute image ?).
+> ⚠ Le point dur reste celui du premier jour : la **continuite sur la longueur**, pas la generation.
+
+
 
 Entrée : un **texte** (synopsis, script, découpage). Sortie : la suite des cases d'un chapitre, prêtes à
 relire et à corriger. C'est le but de l'outil, rappelé par Quang le 27/07.
@@ -1080,6 +1096,8 @@ texte : ce qui doit être maîtrisé ne se génère pas, il se **superpose**.
 
 | Date | Événement |
 |---|---|
+| 2026-07-27 | **v1.14.0 — la BASE DE PERSONNAGES, et le casting par planche** (demande Quang : « je ne comprends pas a quel moment je peux selectionner les personnages […] c'est plus un controle qu'un aleatoire »). Table `manga_chars` (schema v4), **globale** et non rattachee a un projet : une fiche se cree une fois et sert partout, avec son role (heros LoRA / secondaire IPAdapter / figurant texte) qui decide du **niveau de coherence**. Le CASTING appartient a la **planche** ; une case en herite et peut le surcharger ; **rien de coche = generation libre** — la base est un moyen de controle, jamais un prealable. Le LoRA d'un heros du casting prime sur celui de la recette. Mesure bout en bout : 2 fiches creees, 2 cochees, tags des DEUX injectes dans la case. |
+| 2026-07-27 | **v1.13.0 — pourquoi les essais de Quang ne donnaient pas ce qu'il demandait.** « 2 maitres en arts martiaux » et « une femme assise sur la table » ont rendu **la meme lyceenne en uniforme**. Le prompt reel disait `zqmg1rl, 1girl, solo, sailor uniform, red scarf, <sa phrase>` : (1) la recette PAR DEFAUT portait le personnage de test du LoRA, injecte dans **chaque case de chaque projet** ; (2) le negatif contenait `multiple girls`, donc **deux personnages etaient impossibles par construction** ; (3) le moteur ne lit que des tags booru **anglais** — une phrase francaise est ignoree, pas traduite ; (4) rien ne permettait de dire « cette case, c'est autre chose ». Corriges : defaut neutre, negatif nettoye, bouton **✨ Ameliorer** (route `/enhance`), personnage decochable par case. Verifie a l'oeil sur SA demande : un karateka en garde au lieu de la lyceenne. Et sur son 2e essai (explicite) : traduit fidelement, image produite, saturation 0,081 (N&B tenu). Deux pieges attrapes en corrigeant : sans LoRA le noeud restait avec un nom **vide** (ComfyUI refusait tout le graphe, HTTP 400), et ce refus s'affichait **« [object Object] »** — ComfyUI renvoie ses erreurs en objet imbrique, que la concatenation ecrasait. |
 | 2026-07-27 | **v1.10.1 — la version affichee etait FAUSSE depuis trois versions.** Signale par Quang (« tu oublies de versionner le bandeau du haut »), et il avait raison. Cause invisible dans le fichier : la version existe a **trois** endroits et `const VERSION` **ecrase** le titre et le badge au chargement. Je bumpais les deux premiers, jamais le troisieme : le depot disait v1.10.0, l'ecran disait **v1.7.0**. ⇒ `scripts/check_version.py` verifie les trois declarations **et le badge reellement affiche par le navigateur** -- la seule valeur que Quang voit. Falsifiable : l'oubli exact que j'avais commis fait sortir exit 1. |
 | 2026-07-27 | **⛔ CORRECTION, le jour meme : mon diagnostic sur la scene femdom etait FAUX.** J'avais conclu « le rapport de force ne s'ecrit pas, il faut openpose » et j'avais deja construit les squelettes a deux corps. Mesure : **le texte seul donne 3/3 et la scene est exactement la bonne** (femme debout, homme a genoux tete levee) ; le **ControlNet openpose DEGRADE** (2/3 et rendu mauvais -- le modele lit un squelette agenouille comme un **homme debout de petite taille**). La vraie cause, isolee par un banc a une seule variable sur 8 seeds : **`low angle shot from below`**, qui fait passer la presence du second personnage de **6/8 a 3/8**. ⇒ La regle est l'INVERSE de ce que j'avais ecrit : la mise en scene s'ecrit, c'est le **cadrage** qu'il ne faut pas melanger au meme prompt. **Lecon : j'ai tire une regle generale d'un echec dont je n'avais pas isole la variable, puis bati un outil pour la contourner. Le banc qui tranchait coutait dix minutes.** |
 | 2026-07-27 | **v1.8.0 — la galerie SERT enfin a quelque chose** (« je ne peux rien faire dessus ») : plein ecran (taille MESUREE, pas supposee), selection multiple, suppression qui NOMME les fichiers, et une route proxy a trois verrous (anti-traversee verifiee en direct). Trois defauts trouves en chemin, tous invisibles autrement : `id="gal"` **en double**, le bloc du plein ecran pose **apres** le `<script>` (une erreur qui eteignait TOUT le script, galerie vide sans message), et une barre d'onglets qui **debordait en douce** (418 px pour 360) donc des onglets inatteignables sur telephone. responsive-audit OK a 320/360/384. |

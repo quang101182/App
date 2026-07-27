@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.13.0</title>
+<title>Manga Studio v1.14.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -199,7 +199,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.13.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.14.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -211,6 +211,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
   <button data-tab="tProj">Projet</button>
   <button data-tab="tIng">Ingestion</button>
   <button data-tab="tVal">Validé</button>
+  <button data-tab="tPerso">Personnages</button>
   <button data-tab="tGal">Galerie</button>
   <button data-tab="tSet">Réglages</button>
 </nav>
@@ -269,6 +270,10 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
     <!-- L'ordre des gestes n'etait ecrit NULLE PART : Quang a lettre et valide des
          cases avant de les generer, puis a demande « et apres, je fais quoi ? ».
          Une interface qui suppose son ordre connu le fait deviner. -->
+    <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:10px;align-items:center">
+      <b style="font-size:12px">Qui joue sur cette planche :</b>
+      <span id="casting" style="display:flex;gap:10px;flex-wrap:wrap"></span>
+    </div>
     <p id="etape" class="etape"></p>
   </div>
 
@@ -391,6 +396,34 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 </section>
 
 <!-- ============ GALERIE ============ -->
+<!-- ============ PERSONNAGES ============ -->
+<section id="tPerso">
+  <div class="card">
+    <h3>Base de personnages</h3>
+    <p class="muted" style="margin:0 0 8px">
+      Une fiche se crée UNE fois et sert dans tous tes projets. Tu choisis ensuite qui joue,
+      planche par planche. Sans personnage sélectionné, l'app génère librement.
+    </p>
+    <div class="row">
+      <input class="grow" id="chName" placeholder="nom (ex : Léa)">
+      <select id="chRole" style="width:auto">
+        <option value="heros">héros — LoRA (le plus fidèle)</option>
+        <option value="secondaire" selected>secondaire — image de référence</option>
+        <option value="figurant">figurant — texte seul</option>
+      </select>
+      <button class="btn pri" id="btnNewChar">Ajouter</button>
+    </div>
+    <label>Traits CONSTANTS (tags anglais, ou écris en français puis ✨)</label>
+    <textarea id="chTags" placeholder="ex : 1girl, long silver hair, green eyes, black hoodie"></textarea>
+    <div class="row">
+      <button class="btn sm" id="btnCharEnhance">✨ Améliorer</button>
+      <span class="muted" style="font-size:11px">Ne mets QUE ce qui ne change jamais :
+        coiffure, yeux, tenue. La pose et l'expression appartiennent à la case.</span>
+    </div>
+  </div>
+  <div id="charList"></div>
+</section>
+
 <section id="tGal">
   <div class="card">
     <h3>Galerie du projet</h3>
@@ -467,7 +500,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.13.0";
+const VERSION = "1.14.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -995,6 +1028,9 @@ async function loadProjects(){
   if (S.proj){ sel.value = S.proj.id; localStorage.setItem("manga_proj", S.proj.id); }
   renderProjList(); fillRecipe();
   await loadPages();
+  // Le casting s'affiche des l'ouverture : sans ca, il faut passer par l'onglet
+  // Personnages pour que la planche sache qui existe.
+  if (!CHARS.length){ try { await loadChars(); } catch {} } else { renderCasting(); }
 }
 
 async function loadPages(){
@@ -1360,7 +1396,12 @@ async function genPanel(p){
   // etait injectee dans toutes les cases : « 2 maitres en arts martiaux » sortait
   // une lyceenne en uniforme, parce que le prompt reel disait « 1girl, solo,
   // uniforme sailor » avant meme de lire la phrase de Quang.
-  const ident = (p.sansPerso ? [] : [r.trigger, r.ident]).filter(x => x && x.trim());
+  // Le casting de la planche d'abord ; a defaut, l'identite unique de la recette
+  // (les projets d'avant la base de personnages continuent de fonctionner).
+  const duCasting = tagsCasting(p);
+  const ident = duCasting.length
+    ? duCasting
+    : (p.sansPerso ? [] : [r.trigger, r.ident].filter(x => x && x.trim()));
   const positive = [r.style].concat(ident).concat([p.prompt.trim()]).join(", ")
                  + (ambiance && S.page.master.decor ? ", " + S.page.master.decor : "");
   // Le nom de fichier est UNIQUE a chaque execution, et ce n'est pas cosmetique.
@@ -1378,7 +1419,13 @@ async function genPanel(p){
   const numero = S.panels.indexOf(p) + 1;
   busyOn("Génération de la case " + numero + "… (10 à 20 s)");
   try {
-    const imgs = await runGraph(wfPanel(r, positive, p.recipe.seed, prefix, depthName), "case " + p.id);
+    // Si un heros du casting a son LoRA, c'est LUI qu'on charge : c'est le niveau
+    // de coherence le plus fiable (100 % mesure en phase 1).
+    const heros = castingPage()
+      .map(id => CHARS.find(c => c.id === id))
+      .find(c => c && c.lora && c.lora.trim());
+    const rr = heros ? Object.assign({}, r, { lora: heros.lora }) : r;
+    const imgs = await runGraph(wfPanel(rr, positive, p.recipe.seed, prefix, depthName), "case " + p.id);
     p.file = await harvest(imgs[0], p.id + ".png");
     // La recette complete est enregistree AVEC la case : c'est ce qui rend le resultat rejouable.
     p.recipe = Object.assign({}, p.recipe, {
@@ -1903,6 +1950,77 @@ document.addEventListener("keydown", e => {
   else if (e.key === "ArrowRight") lbShow(LB + 1);
 });
 
+/* ---------- base de personnages ----------
+   Quang, 27/07 : « je ne comprends pas a quel moment je peux selectionner les
+   personnages que j'aurai dans ma base de donnees […] c'est plus un controle
+   qu'un aleatoire ».
+   Une fiche est GLOBALE (reutilisable d'un manga a l'autre) ; le CASTING, lui,
+   appartient a la planche. Une case herite du casting de sa planche et peut le
+   surcharger. Rien de selectionne = generation libre : la base est un moyen de
+   controle, jamais un prealable. */
+let CHARS = [];
+
+async function loadChars(){
+  CHARS = (await api("/manga/chars")).items || [];
+  renderChars();
+  renderCasting();
+}
+
+function renderChars(){
+  const el = $("charList");
+  if (!el) return;
+  if (!CHARS.length){
+    el.innerHTML = '<p class="muted">Aucun personnage. Ajoute-en un ci-dessus, '
+      + "ou continue sans : l’app génère très bien sans casting.</p>";
+    return;
+  }
+  const ROLE = { heros: "héros", secondaire: "secondaire", figurant: "figurant" };
+  el.innerHTML = '<div class="card"><h3>' + CHARS.length + ' personnage(s)</h3>'
+    + CHARS.map(c =>
+        '<div class="row" style="align-items:flex-start;border-top:1px solid var(--line);padding-top:8px">'
+        + '<div class="grow">'
+        + '<b>' + esc(c.name || "(sans nom)") + '</b> '
+        + '<span class="tag">' + (ROLE[c.role] || c.role) + '</span> '
+        + (c.valide ? '<span class="tag amb">validé ✅</span>' : '')
+        + '<div class="muted" style="font-size:11px;margin-top:3px">' + esc(c.tags || "(aucun trait)") + '</div>'
+        + '</div>'
+        + '<button class="btn sm" data-chvalide="' + c.id + '">' + (c.valide ? "dévalider" : "valider ✅") + '</button>'
+        + '<button class="btn sm" data-chedit="' + c.id + '">modifier</button>'
+        + '<button class="btn sm" data-chdel="' + c.id + '">suppr.</button>'
+        + '</div>').join("")
+    + '</div>';
+}
+
+/** Le casting de la PLANCHE : qui est present sur cette page. */
+function renderCasting(){
+  const el = $("casting");
+  if (!el) return;
+  if (!CHARS.length){
+    el.innerHTML = '<span class="muted" style="font-size:12px">Aucun personnage en base '
+      + '— onglet <b>Personnages</b> pour en créer, ou continue sans.</span>';
+    return;
+  }
+  const actifs = castingPage();
+  el.innerHTML = CHARS.map(c =>
+    '<label style="margin:0;display:flex;align-items:center;gap:5px;color:var(--txt);font-size:12px">'
+    + '<input type="checkbox" data-cast="' + c.id + '" style="width:auto"'
+    + (actifs.includes(c.id) ? " checked" : "") + '> ' + esc(c.name || c.id) + '</label>').join("");
+}
+
+const castingPage = () => (S.page && S.page.layout && S.page.layout.casting) || [];
+
+/** Les tags a injecter pour une case : le casting de la planche, moins ce que la
+ *  case retire. Deux personnages = leurs deux jeux de tags, dans l'ordre. */
+function tagsCasting(p){
+  const retires = (p.recipe && p.recipe.sansCasting) || [];
+  return castingPage()
+    .filter(id => !retires.includes(id))
+    .map(id => CHARS.find(c => c.id === id))
+    .filter(Boolean)
+    .map(c => [c.trigger, c.tags].filter(x => x && x.trim()).join(", "))
+    .filter(x => x);
+}
+
 /* ---------- recette ---------- */
 function fillRecipe(){
   const r = recipe();
@@ -1941,6 +2059,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("main section").forEach(x => x.classList.remove("sel"));
   b.classList.add("sel"); $(b.dataset.tab).classList.add("sel");
   if (b.dataset.tab === "tGal") refreshGal();
+  if (b.dataset.tab === "tPerso") loadChars().catch(e => log("personnages: " + e.message, "e"));
   if (b.dataset.tab === "tVal") loadValides().catch(e => log("validé: " + e.message, "e"));
   if (b.dataset.tab === "tSet"){ $("cfgBase").value = CFG.base; $("cfgKey").value = CFG.key; }
 });
@@ -1999,6 +2118,54 @@ $("btnDemarrer").onclick = async () => {
     await loadProjects();
     document.querySelector('nav button[data-tab="tPlate"]').click();
   }, n + " case(s) prêtes — décris-les puis Générer");
+};
+
+/* ---------- actions : personnages et casting ---------- */
+$("btnNewChar").onclick = async () => {
+  const name = $("chName").value.trim();
+  if (!name) return toast("donne un nom");
+  await api("/manga/chars", { name, role: $("chRole").value,
+                              tags: $("chTags").value.trim() });
+  $("chName").value = ""; $("chTags").value = "";
+  await loadChars(); toast("personnage ajouté");
+};
+$("btnCharEnhance").onclick = () => {
+  const idee = $("chTags").value.trim() || $("chName").value.trim();
+  if (!idee) return toast("décris d'abord le personnage");
+  return avecTemoin("Traduction des traits…", async () => {
+    const r = await api("/enhance", { idea:
+      "Character design for a black and white manga. ONLY constant physical traits "
+      + "and outfit, no pose, no expression, no background : " + idee, format: "tags" });
+    if (r.prompt) $("chTags").value = r.prompt;
+  }, "Traits traduits");
+};
+$("charList").onclick = async e => {
+  const d = e.target.dataset || {};
+  const c = CHARS.find(x => x.id === (d.chvalide || d.chedit || d.chdel));
+  if (!c) return;
+  if (d.chvalide){ c.valide = !c.valide; await api("/manga/chars", c); return loadChars(); }
+  if (d.chedit){
+    $("chName").value = c.name; $("chTags").value = c.tags; $("chRole").value = c.role;
+    await api("/manga/chars", { delete: c.id });
+    await loadChars(); toast("fiche rouverte — modifie puis Ajouter");
+    return;
+  }
+  if (d.chdel){
+    if (!confirm("Supprimer « " + (c.name || c.id) + " » de la base ?")) return;
+    await api("/manga/chars", { delete: c.id });
+    return loadChars();
+  }
+};
+$("casting").onchange = async e => {
+  const id = e.target.dataset && e.target.dataset.cast;
+  if (!id || !S.page) return;
+  const l = new Set(castingPage());
+  e.target.checked ? l.add(id) : l.delete(id);
+  S.page.layout = Object.assign({}, S.page.layout, { casting: [...l] });
+  await api("/manga/pages", S.page);
+  renderPlate();
+  log("casting de la planche : " + ([...l].map(i =>
+      (CHARS.find(c => c.id === i) || {}).name || i).join(", ") || "personne"), "s");
 };
 
 $("projList").onclick = async e => {

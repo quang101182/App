@@ -1,0 +1,90 @@
+--- _studio_db.py.bak	2026-07-27 09:22:01.859227400 +0200
++++ _studio_db.py	2026-07-27 09:22:01.895886600 +0200
+@@ -24,7 +24,7 @@
+     "STUDIO_DB_PATH",
+     os.path.join(os.path.dirname(os.path.abspath(__file__)), "studio_content.db"),
+ )
+-SCHEMA_VERSION = 3  # v3 : tables manga_* (app Manga Studio, hierarchie projet->chapitre->planche->case)
++SCHEMA_VERSION = 4  # v4 : table manga_chars (base de personnages, selection par planche)
+ 
+ _lock = threading.RLock()
+ _conn = None  # connexion unique partagee (check_same_thread=False + verrou)
+@@ -157,6 +157,31 @@
+           bubbles TEXT    NOT NULL DEFAULT '[]'      -- bulles/lettrage (phase 5), pose des maintenant
+         );
+         CREATE INDEX IF NOT EXISTS idx_manga_panels_page ON manga_panels(page_id, idx);
++
++        -- v4 : la BASE DE PERSONNAGES. Volontairement GLOBALE, pas rattachee a un
++        -- projet : Quang veut « une base de donnees de tout type de personnages
++        -- differents » reutilisable d'un manga a l'autre, et c'est LUI qui valide
++        -- ce qui y entre (colonne `valide`).
++        CREATE TABLE IF NOT EXISTS manga_chars (
++          id      TEXT PRIMARY KEY,
++          ts      INTEGER NOT NULL DEFAULT 0,
++          name    TEXT    NOT NULL DEFAULT '',
++          -- role : 'heros' (LoRA) | 'secondaire' (IPAdapter) | 'figurant' (texte seul).
++          -- Il decide du NIVEAU DE COHERENCE, mesure phase 1 : 100 % / verrou facial / ~50 %.
++          role    TEXT    NOT NULL DEFAULT 'secondaire',
++          -- tags : UNIQUEMENT ce qui est constant chez le personnage (coiffure, yeux,
++          -- tenue). Tout ce qui varie -- pose, expression, cadrage -- appartient a la
++          -- case. C'est la meme discipline que les captions de LoRA, et c'est elle qui
++          -- fait tenir la coherence : decrire un attribut variable apprend au modele
++          -- qu'il est detachable du personnage.
++          tags    TEXT    NOT NULL DEFAULT '',
++          refs    TEXT    NOT NULL DEFAULT '[]',     -- images de reference (IPAdapter)
++          lora    TEXT    NOT NULL DEFAULT '',
++          trigger TEXT    NOT NULL DEFAULT '',
++          valide  INTEGER NOT NULL DEFAULT 0,        -- rien n'entre en base sans son accord
++          notes   TEXT    NOT NULL DEFAULT ''
++        );
++        CREATE INDEX IF NOT EXISTS idx_manga_chars_ts ON manga_chars(ts DESC);
+         """
+         )
+         row = c.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
+@@ -411,6 +436,46 @@
+             "idx": r["idx"], "title": r["title"], "layout": _jload(r["layout"]),
+             "master": _jload(r["master"])}
+ 
++def _row_char(r):
++    return {"id": r["id"], "ts": r["ts"], "name": r["name"], "role": r["role"],
++            "tags": r["tags"], "refs": _jload(r["refs"], []), "lora": r["lora"],
++            "trigger": r["trigger"], "valide": bool(r["valide"]), "notes": r["notes"]}
++
++
++def list_manga_chars():
++    with _lock:
++        c = _connect()
++        return [_row_char(r) for r in
++                c.execute("SELECT * FROM manga_chars ORDER BY ts DESC").fetchall()]
++
++
++def upsert_manga_char(p):
++    cid = p.get("id") or _uid("mh")
++    with _lock:
++        c = _connect()
++        c.execute(
++            "INSERT INTO manga_chars(id,ts,name,role,tags,refs,lora,trigger,valide,notes) "
++            "VALUES(?,?,?,?,?,?,?,?,?,?) "
++            "ON CONFLICT(id) DO UPDATE SET ts=excluded.ts,name=excluded.name,"
++            "role=excluded.role,tags=excluded.tags,refs=excluded.refs,lora=excluded.lora,"
++            "trigger=excluded.trigger,valide=excluded.valide,notes=excluded.notes",
++            (cid, int(p.get("ts") or _now_ms()), p.get("name") or "",
++             p.get("role") or "secondaire", p.get("tags") or "",
++             json.dumps(p.get("refs") or []), p.get("lora") or "",
++             p.get("trigger") or "", 1 if p.get("valide") else 0, p.get("notes") or ""),
++        )
++        c.commit()
++    return {"ok": True, "id": cid}
++
++
++def delete_manga_char(cid):
++    with _lock:
++        c = _connect()
++        c.execute("DELETE FROM manga_chars WHERE id=?", (cid,))
++        c.commit()
++    return {"ok": True, "deleted": cid}
++
++
+ def _row_panel(r):
+     return {"id": r["id"], "pageId": r["page_id"], "ts": r["ts"], "idx": r["idx"],
+             "kind": r["kind"], "prompt": r["prompt"], "recipe": _jload(r["recipe"]),
