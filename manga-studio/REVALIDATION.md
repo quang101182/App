@@ -25,6 +25,21 @@
 >
 > **Prochain** : la bibliothèque de références (phase 8) ou le mode chapitre automatique
 > (phase 7) — cf. §4. Et la dernière combinaison de l'étape 4 (ingestion puis séquence).
+>
+> ### ⏱ Suite de la session — soir du 27/07 (app **v1.29.0**)
+>
+> L'essai du bouton 🎬 par Quang a ouvert **huit** demandes de conception, toutes arbitrées et
+> ordonnées dans `ROADMAP.md` § **Phase 12**. Deux sont déjà livrées :
+>
+> | Version | Livré | Banc |
+> |---|---|---|
+> | **v1.28.0** | vitesse de défilement **globale et persistante**, réglable pendant la lecture · largeur PC ramenée à une colonne (760 px) · carte **Moteur** (VRAM réelle, arrêt avec garde-fou, confirmation à l'écran) | `test_lecture_vitesse.py` — 14 ✓, mutation rouge |
+> | **v1.29.0** | **ouvrir un projet existant** depuis l'onglet Projets · la galerie dit quel projet elle montre et peut en regarder un autre sans déplacer l'atelier | `test_ouvrir_projet.py` — 11 ✓, mutation rouge |
+>
+> 🔴 **Le point qui commande la suite** (Quang : *« on empile beaucoup de choses […] on peut vite
+> perdre l'ergonomie »*) : compté dans le code, une case générée affiche **11 boutons**. Rien de
+> neuf ne doit s'ajouter à cette rangée — d'où le chantier **12.0 « ⚙ Affiner »**, qui conditionne
+> les autres. Détail et ordre d'exécution : `ROADMAP.md` § Phase 12.
 
 > Écrit le **2026-07-27** en fin de session, à la demande de Quang :
 > *« dresse une feuille de route bien détaillée, revalide tout ce qu'il faut valider, avec le

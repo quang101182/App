@@ -1150,6 +1150,182 @@ texte : ce qui doit être maîtrisé ne se génère pas, il se **superpose**.
 
 ---
 
+### Phase 12 — Monter une séquence, et affiner une case ⏳ *(demandes Quang du 27/07 au soir)*
+
+Six demandes arrivées coup sur coup pendant l'essai du bouton 🎬, plus un avertissement qui les
+domine toutes : *« on empile beaucoup de choses au fur et à mesure, et on peut vite perdre
+l'ergonomie de l'application »*. Il a raison, et c'est mesurable — voir le budget en fin de section.
+Chaque demande est traitée ici avec un **avis tranché**, pas seulement enregistrée.
+
+#### 12.0 — Le fait qui commande tout le reste : le budget de boutons 🔴
+
+**Compté dans le code, pas à l'œil** (`panelHTML`, v1.28.0) : une case **générée** affiche
+**11 boutons** — ✨ Améliorer · 💡 3 suites · 🎬 Séquence · ▶ Jouer · Générer · ✎ Lettrage · ⬚ Zone ·
+↻ la zone · ✅ · ❌ · suppr. — plus deux zones de texte, un choix de type, un champ seed et une case
+à cocher. En mode lettrage, **5 de plus**. Et les demandes ci-dessous en ajoutent au moins **4**
+(◀ ▶ de navigation, réordonner ×2, analyser).
+
+⇒ **Rien de neuf ne doit s'ajouter à cette rangée.** La suite se construit avec une règle : la case
+montre **ce qu'on fait maintenant** (écrire, générer, juger) ; tout ce qui **affine** (zone, analyse,
+séquence, réordonner) passe dans **un seul bouton « ⚙ Affiner »** qui déplie un panneau *dans* la
+case — le même geste que 💡 3 suites, déjà connu de l'utilisateur. C'est ce qui rend les 4 demandes
+suivantes tenables sans usine à gaz : **elles ne coûtent aucun bouton de plus.**
+
+#### 12.1 — Regrouper les vignettes d'une séquence 🎯 *(la plus rentable)*
+
+Demande : *« je les imagine plutôt regroupées ensemble sur la même fenêtre, avec un bouton pouvant
+les faire défiler […] suivant/précédent avec l'affichage du numéro d'image »*.
+
+✅ **D'accord, et c'est le bon diagnostic** : une séquence de 6 vignettes est **un moment**, pas six
+moments. Aujourd'hui elle occupe 6 cases dans le fil de la planche et noie tout le reste.
+
+⚠️ **Le piège à ne pas commettre — et il est sérieux** : ne **jamais** fusionner les données. Une
+vignette **est** une case de manga : elle doit rester dans la planche exportée en PNG/PDF, sinon le
+regroupement détruit le livrable. Le regroupement est donc un **mode d'affichage de l'atelier**,
+pas une fusion. Une case-groupe montre **la vignette courante + ◀ 3/6 ▶ + ▶ Jouer**, et un
+« déplier » rend les 6 cases visibles à l'ancienne. `renderPlate` ne change pas de données, il
+change de rendu.
+
+#### 12.2 — Réordonner les vignettes 🎯
+
+Demande : *« changer l'ordre des images […] mais au niveau ergonomie, de quelle manière ? »*
+
+✅ Oui, et **ma réponse à la question « de quelle manière » : surtout pas du glisser-déposer.** Au
+doigt, sur un téléphone, un drag entre en conflit avec le défilement de la page — c'est la source
+de bug d'ergonomie la plus classique, et ce projet a déjà payé le clavier qui se refermait. La
+version qui marche du premier coup : sur la case-groupe, **deux boutons `◀ déplacer` / `déplacer ▶`**
+qui échangent la vignette avec sa voisine. Un tap, un résultat visible, aucune ambiguïté,
+annulable en retapant l'autre. Le `sequence.index` est réécrit sur les deux cases échangées, rien
+d'autre ne bouge.
+
+#### 12.3 — Page par page plutôt qu'ascenseur 🟡 *(après 12.1)*
+
+Demande : *« passer en affichage rapide, soit en ascenseur, soit page suivante/précédente,
+gauche-droite […] on voit plus facilement chronologiquement ce qui se passe »*.
+
+🤔 **D'accord sur le fond, mais je le mets APRÈS 12.1, et voici pourquoi** : le vrai problème
+aujourd'hui, c'est la **longueur** de la planche, et c'est la séquence qui la fabrique. Le
+regroupement (12.1) fait passer une planche de 12 cases à 4 blocs — il se peut que le besoin de
+défilement horizontal **disparaisse de lui-même**. Construire les deux en même temps, c'est risquer
+de payer un mode d'affichage entier pour un problème déjà résolu par l'autre. À réévaluer **après**
+12.1, sur une vraie planche.
+
+Si le besoin persiste : un basculeur **global et persistant** (même mécanique que la vitesse de
+défilement, v1.28.0) « défilement vertical / page par page », jamais un réglage par projet.
+
+#### 12.4 — Supprimer une vignette d'une séquence : ce que fait le code aujourd'hui
+
+Question de Quang : *« qu'est-ce qui se passe si je décide de supprimer une des images de la
+séquence ? Est-ce que ça fonctionne toujours ? »* — **Réponse lue dans le code** (`jouerSequence`,
+`act === "del"`), pas supposée :
+
+- La lecture **continue** : elle rassemble les cases qui ont la **même seed** et un fichier, triées
+  par leur index. Une case supprimée est simplement absente ; les autres gardent leur ordre.
+- En dessous de **2 vignettes**, elle refuse proprement : *« séquence incomplète »*. Pas de plantage.
+- 🔴 **MAIS un vrai défaut, trouvé en répondant à cette question** : le badge `🎬 3/6` est **figé à
+  la création** (`sequence.index` / `sequence.total` écrits une fois pour toutes). Supprimer une
+  vignette laisse donc une séquence de 5 images qui continue d'afficher **« /6 »**, et des numéros
+  qui sautent (1, 2, 4, 5, 6). L'app **ment** sur son propre contenu. À corriger avec 12.1 : le
+  numéro et le total se **calculent à l'affichage**, ils ne se stockent pas.
+
+#### 12.5 — Corriger une zone en DISANT ce qu'on veut 🎯
+
+Demande : *« corriger une image sans expliquer en quoi consiste la correction, ou avec le bouton de
+zone on cible une zone et on explique ce qu'on veut corriger »*.
+
+État réel (v1.26.1) : ⬚ Zone + ↻ la zone existent et sont mesurés (taille préservée, 0 pixel modifié
+hors zone), mais l'inpaint **rejoue le prompt de la case entière**. On ne peut donc pas dire
+« ici, une cicatrice » — on ne peut que **retenter la même chose**.
+
+✅ Les deux demandes sont en fait **deux boutons sur le même mécanisme**, et c'est peu de code :
+- **« Autre essai »** = même consigne, **seed différente** (= « corriger sans expliquer »).
+- **« Dire quoi »** = un champ texte propre à la zone, traduit comme partout ailleurs, injecté à la
+  place du prompt de case. La consigne est **gardée sur la case** : une retouche se refait souvent.
+
+#### 12.6 — Analyser et noter une case, comme Generate Studio 🟡
+
+Demande : *« un bouton qui analyse et améliore, avec potentiellement un score et la possibilité de
+relancer une génération »*.
+
+🤔 **Oui, mais avec une réserve nette, et elle vient d'une mesure de ce projet** : Generate Studio
+note le **prompt** (`ImageScorer`), pas l'image — c'est écrit noir sur blanc dans le bilan du Mode
+Série. Un score de prompt sur une case déjà dessinée ne dit **rien** de ce qu'on voit : il notera
+« bien écrit » une case aux mains ratées. Le porter tel quel serait un **chiffre décoratif**, et un
+chiffre décoratif fait plus de mal que pas de chiffre — on lui fait confiance.
+
+⇒ Ce qui a du sens ici, c'est la **critique vision** (Pixtral, déjà branchée dans le proxy et déjà
+utilisée par ce projet) : elle **regarde l'image** et dit *ce qui cloche*, en français. Proposition :
+un bouton **« Qu'est-ce qui cloche ? »** dans le panneau ⚙ Affiner, qui rend 2-3 défauts nommés et,
+pour chacun, l'action qui les répare (⬚ Zone pré-remplie avec la consigne, ou relance seed). Une
+phrase utile vaut mieux qu'un 7,4/10. **Un score chiffré ne sera ajouté que s'il note l'image et
+qu'on a mesuré qu'il est d'accord avec Quang** — sinon il ne sera pas ajouté du tout.
+
+#### 12.7 — « On ne génère pas de bulle de texte ? » 🎯 *(question Quang, 27/07)*
+
+**Deux choses différentes se cachent dans cette question, et une seule manque.**
+
+1. **Poser une bulle et écrire dedans : ça existe** (phase 5, v1.2.0). Bouton **✎ Lettrage** sur une
+   case → ＋ Bulle / ＋ Pensée / ＋ Récitatif, on la déplace au doigt, on tape la réplique, la queue
+   se règle. Le rendu est un **calque SVG par-dessus l'image**, jamais du texte dessiné par le
+   modèle — décision d'architecture, et elle est bonne : un modèle d'image écrit du charabia, et un
+   texte qu'on ne peut pas corriger n'est pas du lettrage. *(Si ce n'était pas trouvable, c'est le
+   même problème d'ergonomie que 12.0 : le bouton est noyé dans une rangée de 11.)*
+2. **Ce qui manque vraiment : l'app n'ÉCRIT jamais la réplique.** Le texte vient toujours de Quang.
+   Or l'app sait déjà lire les dialogues des cases précédentes — 💡 3 suites s'en sert pour proposer
+   la suite du récit.
+
+✅ **Proposition : « 💬 Répliques »**, le pendant exact de 💡 3 suites, appliqué au dialogue. Sur une
+case dessinée, il propose **2-3 répliques** tenant compte des cases précédentes et de qui est dans
+la case (le casting est connu) ; un tap en pose une dans une bulle, qui reste **entièrement
+modifiable**. Texte vers texte, **zéro GPU**, et la brique est déjà écrite à 80 % (contexte de
+`3 suites` + `addBubble`). C'est, avec 12.5, le meilleur rapport gain/effort de la liste.
+
+⚠️ Réserve à tenir : une réplique proposée ne doit **jamais** s'écrire toute seule dans une bulle
+existante — elle **ajoute**, elle n'écrase pas. Un texte écrit à la main qui disparaît, c'est le
+genre de perte qu'on ne pardonne pas à un outil de création.
+
+#### 12.8 — ✅ Ouvrir un projet existant *(livré v1.29.0, le jour même)*
+
+Quang : *« je ne vois aucun moyen de charger un projet déjà en cours ou déjà créé »*. **Vérifié dans
+le code : ce n'était pas un malentendu.** L'onglet **Projets** — le seul endroit où l'on va pour
+reprendre un travail — ne proposait que *supprimer* ; ouvrir n'était possible que par une liste
+déroulante en haut d'un **autre** onglet, qui changeait l'état **sans changer l'écran**.
+
+Livré : bouton **Ouvrir** sur chaque projet (le projet courant se signale), qui charge ses planches
+**et amène sur la planche**. Et la galerie dit enfin quel projet elle montre, avec un sélecteur pour
+en regarder un autre **sans déplacer l'atelier** — *consulter n'est pas ouvrir*, vérifié dans les
+deux sens (`test_ouvrir_projet.py`, 11 vérifications, mutation rouge).
+
+> 📌 **La leçon, qui vaut pour tout le reste de cette phase** : la fonction existait, elle était
+> même correcte. Ce qui manquait, c'est qu'elle soit **là où on la cherche**. Deux des questions de
+> Quang ce soir (celle-ci et 12.7) ne sont pas des demandes de fonctions — ce sont des **rapports de
+> panne d'ergonomie**. C'est exactement ce que 12.0 doit empêcher de se reproduire.
+
+#### Ordre d'exécution proposé
+
+| # | Chantier | Pourquoi ce rang |
+|---|---|---|
+| 1 | **12.4 badge menteur** | c'est un **bug**, pas une fonction — et il coûte 10 lignes |
+| 2 | **12.0 ⚙ Affiner** | tout le reste s'y range ; le faire après = tout refaire |
+| 3 | **12.5 zone + consigne** | plus fort gain par ligne de code, mécanique déjà mesurée |
+| 4 | **12.1 case-groupe** | gros gain de lisibilité, mais touche `renderPlate` |
+| 5 | **12.2 réordonner** | trivial **une fois** la case-groupe posée |
+| 6 | **12.7 💬 Répliques** | brique écrite à 80 %, zéro GPU — peut passer devant 12.1 si l'envie est là |
+| 7 | **12.6 critique vision** | dépend du panneau ⚙, et demande sa propre mesure |
+| 8 | **12.3 page par page** | à réévaluer **après** 12.1 — peut-être sans objet |
+
+*(12.8 « ouvrir un projet » est **livré**, v1.29.0.)*
+
+#### 🟠 Constat de ménage relevé en passant (constaté v1.29.0)
+
+Deux `confirm()` **natifs** subsistent hors de la séquence : la suppression d'images en galerie et
+la suppression d'un projet. Ce sont les deux plus destructeurs de l'app, et ce sont les deux qui
+dépendent d'une boîte que le navigateur peut refuser d'afficher — le défaut exact payé en v1.20.1
+puis v1.27.0. À remplacer par une confirmation **à l'écran**, comme celle du bouton « Arrêter »
+du moteur (v1.28.0), qui sert désormais de modèle.
+
+---
+
 ## 5. Pièges connus (payés ou repérés — ne pas les repayer)
 
 | Piège | Détail |
