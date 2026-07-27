@@ -1725,6 +1725,62 @@ détruit *et* ce qu'elle préserve (« les images déjà dessinées restent sur 
 
 ---
 
+## 4-bis. L'essai utilisateur du 28/07 — 10 puis 12 cases, pilotées comme Quang
+
+> Demande de Quang : *« fais l'essai toi-même, en pilotant comme si tu étais moi, pour voir si au
+> niveau ergonomie et efficacité tout est en ordre »*. Harnais : `scripts/essai_combat.py` —
+> **aucun appel `api()` pour agir**, uniquement des gestes d'écran. Un script qui triche mesure son
+> propre confort, pas celui de l'utilisateur.
+
+**L'ergonomie tient.** 52 gestes, 2 min 48, **zéro erreur JS** pour dix cases de bout en bout
+(nettoyer les fiches → créer le projet → écrire → caster → générer → exporter). Une seule friction
+d'usage : sur un projet **neuf**, la troupe est vide, donc aucune pastille « Qui est là » n'est
+proposée — il faut déplier « + ajouter » d'abord, et le refaire à chaque case.
+
+### 🔴 Le vrai défaut, trouvé en LISANT le prompt envoyé (pas en le supposant)
+
+La case 1 disait *« plan large du dojo **vide** »*. Le prompt réellement envoyé :
+
+```
+masterpiece, 2people, …, 1girl, black hair, …, 1man, short hair, …, wide shot, empty dojo…
+```
+
+**Le casting est appliqué à toutes les cases sans exception**, y compris celles qui ne parlent que
+d'un personnage — ou d'aucun. D'où douze cases avec la même composition à deux corps, quel que soit
+le découpage. Une part est une **erreur de pilotage** (j'avais coché les deux personnages partout,
+ce que l'app n'impose pas depuis la v1.49.0), mais l'app n'aide pas : rien ne signale qu'un
+`close-up on the face of a man` cohabite avec un casting de deux et un `2people` dérivé.
+
+⇒ **Règle de production, à appliquer dans un découpage** : le casting se décide **case par case**,
+comme au storyboard. Une case de décor n'a personne.
+⏳ **Piste pour l'app** (non faite) : avertir dans l'aperçu quand le texte d'une case ne mentionne
+manifestement qu'un personnage alors que le casting en compte deux.
+
+### ✅ Une cause secondaire, mesurée : les fiches qui décrivent la tenue jusqu'aux chaussures
+
+Même seed, même action, seuls les tags changent — mesure = part de l'image occupée par le visage :
+
+| Tags de la fiche | Action « coup de pied sauté » | Gros plan demandé |
+|---|---|---|
+| complets (`black socks, black shoes, black skirt…`) | **4,8 %** | 10,2 % |
+| allégés (traits + `sailor uniform`) | **15,2 %** | 13,0 % |
+
+**Un modèle à qui l'on décrit des chaussures dessine des pieds** : la fiche tire vers le plan en
+pied, et le cadrage demandé passe après. Une fiche décrit ce qui **identifie** un personnage, pas sa
+garde-robe complète. *(Le 🧹 Nettoyer actuel retire le style et les couleurs, pas ces éléments-là.)*
+
+### ⛔ Trois hypothèses posées et INFIRMÉES le même jour — elles auraient toutes coûté un chantier
+
+| Hypothèse | Mesure | Verdict |
+|---|---|---|
+| « les masques gauche/droite imposent une composition en deux bandes » | prompts d'action, avec/sans masque | ⛔ **faux** — le masque donne de vraies scènes dynamiques |
+| « l'app met l'action en fin de prompt, donc elle est noyée » | même prompt, action en tête vs identités en tête | ⛔ **faux** — 13,0 % contre 13,0 %, aucun écart |
+| « le format portrait 832×1216 rend les masques trop étroits » | carré vs portrait, avec/sans masque | ⛔ **faux** — en portrait, **avec** masque 9,1 % contre **4,1 %** sans : le masque *aide* |
+
+*Trois fois, une explication plausible a été démentie par la mesure — et la vraie cause était
+lisible en une ligne dans le prompt enregistré. La leçon n'est pas nouvelle sur ce projet, elle est
+juste plus nette : **lire la donnée avant de construire la parade**.*
+
 ## 5. Pièges connus (payés ou repérés — ne pas les repayer)
 
 | Piège | Détail |

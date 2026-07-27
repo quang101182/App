@@ -66,6 +66,8 @@ def main():
     ap.add_argument("--nettoyer", action="store_true",
                     help="passe les fiches par 🧹 Nettoyer avant l'essai "
                          "(tags d'origine sauvegardes dans essai_out/tags_avant.json)")
+    ap.add_argument("--scenario", help="fichier JSON : {titre, cases:[...]} — "
+                    "au-dela de 12 cases, l'essai enchaine plusieurs planches")
     ap.add_argument("--sans-gpu", action="store_true", dest="sans_gpu",
                     help="tout le parcours SAUF les generations (mesure l'ergonomie seule)")
     args = ap.parse_args()
@@ -73,7 +75,21 @@ def main():
 
     os.makedirs(SORTIE, exist_ok=True)
     secret = open(SECRET_FILE, encoding="utf-8").read().strip()
-    scenario = SCENARIO[:args.cases]
+    titre = PROJET
+    if args.scenario:
+        with open(args.scenario, encoding="utf-8") as f:
+            d = json.load(f)
+        titre, scenario = d.get("titre", PROJET), d["cases"]
+        # Une case peut porter SON casting : {"texte": ..., "qui": [...]}.
+        # C'est ce que fait un decoupage reel — une case de dojo vide n'a
+        # personne, un gros plan n'a qu'un visage. Caster tout le monde partout
+        # force « 2people » dans chaque prompt, et on obtient douze fois la meme
+        # composition a deux corps (constat du 28/07, lu dans le prompt envoye).
+        castings = [c.get("qui") if isinstance(c, dict) else None for c in scenario]
+        scenario = [c["texte"] if isinstance(c, dict) else c for c in scenario]
+    else:
+        scenario = SCENARIO[:args.cases]
+        castings = [None] * len(scenario)
     erreurs = []
     depart = time.time()
     with sync_playwright() as pw:
@@ -141,7 +157,7 @@ def main():
         # ---------- 1. projet + planche, par le seul bouton prevu pour ça
         t = time.time()
         pg.click('nav button[data-tab="tProj"]')
-        pg.fill("#npName", PROJET)
+        pg.fill("#npName", titre)
         pg.fill("#npCases", str(len(scenario)))
         pg.click("#btnDemarrer")
         pg.wait_for_timeout(5000)
@@ -165,7 +181,7 @@ def main():
             taps += 2
             pg.wait_for_timeout(150)
             # « Qui est là » : une pastille par personnage, DANS la case (v1.49.0)
-            for qui in ("Kimiko", "Jo"):
+            for qui in (castings[i] if castings[i] is not None else ["Kimiko", "Jo"]):
                 sel = ('[data-pid="%s"] .quila .pers' % pid)
                 trouve = pg.evaluate("""([pid, qui]) => {
                     const b = [...document.querySelectorAll('[data-pid="'+pid+'"] .quila .pers')]
@@ -233,6 +249,20 @@ def main():
             fini, tmax = False, time.time() + 900
             while time.time() < tmax:
                 pg.wait_for_timeout(5000)
+                # ⚠ On DEFILE avant de compter : depuis la v1.55.0 les images
+                # sont en `loading=lazy`, donc celles qui sont hors ecran ne se
+                # chargent pas — les compter sans defiler donne « 3/12 » sur une
+                # planche complete, et le banc attend 15 min pour rien. Defiler,
+                # c'est aussi ce que fait un lecteur.
+                pg.evaluate("""async () => {
+                    const pas = innerHeight * 0.8;
+                    for (let y = 0; y < document.documentElement.scrollHeight; y += pas){
+                        scrollTo(0, y);
+                        await new Promise(r => setTimeout(r, 120));
+                    }
+                    scrollTo(0, 0);
+                }""")
+                pg.wait_for_timeout(1500)
                 # ⚠ On compte les images REELLEMENT CHARGEES, pas les balises.
                 # La premiere version comptait `querySelectorAll('img').length`
                 # et annoncait « 10 images » alors qu'une case etait vide a
@@ -243,6 +273,14 @@ def main():
                 if n >= len(scenario):
                     fini = True
                     break
+            pg.evaluate("""async () => {
+                const pas = innerHeight * 0.8;
+                for (let y = 0; y < document.documentElement.scrollHeight; y += pas){
+                    scrollTo(0, y); await new Promise(r => setTimeout(r, 120));
+                }
+                scrollTo(0, 0);
+            }""")
+            pg.wait_for_timeout(2000)
             etat_img = pg.evaluate("""() => {
                 const im = [...document.querySelectorAll('[data-pid] .img img')];
                 return {balises: im.length,
