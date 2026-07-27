@@ -54,6 +54,24 @@
 >
 > | **v1.43.0** | **🔎 Qu'est-ce qui cloche ?** — Pixtral regarde la case, dit le défaut en français et propose une correction régénérable ; le score annonce **ce qu'il mesure** (conformité, pas qualité) | `test_critique.py` — 11 ✓, mutation rouge |
 >
+> | **v1.46/47.0** | 🐛 trois défauts trouvés **par le journal du Honor** : `castingPage()` renvoyait `null` (6 erreurs JS pendant que Quang ajoutait quelqu'un) · la troupe se **doublonnait** à chaque tap · **+ Case** n'existait qu'en haut de planche | `test_troupe` 12 ✓ · `test_perso_dessiner` 15 ✓ |
+>
+> 🎨 **Les « taches noires » sur les personnages : c'était `ink`** — mesuré, pas supposé
+> (`scripts/mesure_taches_encre.py`, même seed, un tag retiré à la fois) : le modèle dessine
+> littéralement de l'encre **qui coule** sur les visages ; `high contrast` noircissait le reste
+> (sol noir à **88 %** → **3 %** sans les deux). Retirés du style par défaut, **les trames restent**.
+> Les projets déjà créés gardent leur style — l'onglet Projet propose le nettoyage, il ne le fait pas
+> dans le dos de Quang.
+>
+> ⚠️ **Règle qui sort de la v1.47.0 — les FICHES ne portent ni couleur ni style** : « red hair » dans
+> une app N&B fait basculer l'image **en couleur**, et « sketch » dans une fiche contredit le
+> **négatif** du projet. Une fiche décrit la **valeur** (clair/foncé) et des traits ; le style
+> appartient au projet.
+>
+> ⚠️ **Et un banc peut mourir en silence** : `test_perso_dessiner` était cassé depuis la v1.38.0 (la
+> liste repliée avait rendu son bouton invisible) — il coûte 2 min de GPU, donc il n'avait pas été
+> rejoué. **Un banc coûteux qu'on ne rejoue pas ne protège plus rien.**
+>
 > ⚠️ **Règle qui sort de la v1.39.0 — sur les BANCS** : une `const` de module n'est **pas**
 > remplaçable (`window.x = …` ne l'atteint pas, la résolution lexicale gagne) ; et une mutation doit
 > viser **le comportement**, pas une ligne — ici l'héritage se joue à l'écriture *et* à la lecture,
