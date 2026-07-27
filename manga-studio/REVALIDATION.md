@@ -46,6 +46,8 @@
 >
 > | **v1.39.0** | **la troupe du manga** : base → troupe (projet) → casting (planche), avec héritage des planches neuves · ligne remontée sous le choix de planche · 🐛 deux `prompt()` natifs oubliés dans « Démarrer une planche » | `test_troupe.py` — 12 ✓, mutation rouge |
 >
+> | **v1.40.0** | **💬 Répliques** : l'app propose 3 dialogues d'après les cases précédentes et le casting ; une réplique choisie **ajoute** une bulle et n'écrase jamais un texte écrit à la main | `test_repliques.py` — 13 ✓, mutation rouge |
+>
 > ⚠️ **Règle qui sort de la v1.39.0 — sur les BANCS** : une `const` de module n'est **pas**
 > remplaçable (`window.x = …` ne l'atteint pas, la résolution lexicale gagne) ; et une mutation doit
 > viser **le comportement**, pas une ligne — ici l'héritage se joue à l'écriture *et* à la lecture,

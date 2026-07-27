@@ -1302,7 +1302,7 @@ pour chacun, l'action qui les répare (⬚ Zone pré-remplie avec la consigne, o
 phrase utile vaut mieux qu'un 7,4/10. **Un score chiffré ne sera ajouté que s'il note l'image et
 qu'on a mesuré qu'il est d'accord avec Quang** — sinon il ne sera pas ajouté du tout.
 
-#### 12.7 — « On ne génère pas de bulle de texte ? » 🎯 *(question Quang, 27/07)*
+#### 12.7 — ✅ « On ne génère pas de bulle de texte ? » *(livré v1.40.0)*
 
 **Deux choses différentes se cachent dans cette question, et une seule manque.**
 
@@ -1322,9 +1322,20 @@ la case (le casting est connu) ; un tap en pose une dans une bulle, qui reste **
 modifiable**. Texte vers texte, **zéro GPU**, et la brique est déjà écrite à 80 % (contexte de
 `3 suites` + `addBubble`). C'est, avec 12.5, le meilleur rapport gain/effort de la liste.
 
-⚠️ Réserve à tenir : une réplique proposée ne doit **jamais** s'écrire toute seule dans une bulle
-existante — elle **ajoute**, elle n'écrase pas. Un texte écrit à la main qui disparaît, c'est le
-genre de perte qu'on ne pardonne pas à un outil de création.
+⚠️ **Réserve tenue** : une réplique proposée n'écrit **jamais** dans une bulle existante — elle
+**ajoute**. Un texte écrit à la main qui disparaît, c'est la perte qu'on ne pardonne pas à un outil
+de création. Le banc pose une bulle « ECRIT A LA MAIN » **avant** de demander des répliques et exige
+qu'elle soit encore là après ; c'est précisément ce que la mutation casse.
+
+**Livré v1.40.0.** Le contexte envoyé au modèle : les cases précédentes **avec leurs dialogues**,
+l'action de la case à écrire, et **qui est présent** — le casting sait ce que le prompt ne dit pas
+toujours (« un vieux maître balaie la cour » ne nomme personne). Consigne : **moins de 12 mots**,
+parce qu'une bulle de manga ne tient pas un paragraphe. Deux répliques posées ne se superposent pas,
+et on bascule en lettrage dans la foulée — après avoir posé un texte, on veut le **placer**.
+Le bouton vit dans ⚙ Affiner : la rangée reste à 6.
+
+Banc : `test_repliques.py` — 13 ✓, réponse du modèle **figée** (on teste la chaîne de l'app, pas
+l'inspiration d'un modèle un jour donné), mutation rouge à 3 échecs.
 
 #### 12.8 — ✅ Ouvrir un projet existant *(livré v1.29.0, le jour même)*
 
@@ -1521,7 +1532,7 @@ vérifié les `confirm(`, **pas** les `prompt(`. L'annonce était donc fausse ; 
 | — | **12.12 dessiner un personnage** | ✅ v1.37.0 | demande ancienne et jamais faite ; a révélé que la fiche échappait à la traduction obligatoire |
 | — | **12.14 la troupe du manga** | ✅ v1.39.0 | répond à « comment j'inclus mes personnages » ; a révélé un `prompt()` natif oublié |
 | — | **12.13 visionneuse + liste** | ✅ v1.38.0 | zoom ancré, navigation, liste repliée — et le zoom de la planche a désormais une implémentation de référence |
-| 1 | **12.7 💬 Répliques** | ⏳ | brique écrite à 80 %, zéro GPU, répond à une incompréhension réelle |
+| — | **12.7 💬 Répliques** | ✅ v1.40.0 | brique déjà écrite aux ¾ ; la réserve « ajoute, n'écrase pas » est tenue et mesurée |
 | 3 | **12.1 case-groupe** | ⏳ | gros gain de lisibilité ; `sequence.gid` (v1.31.0) est déjà posé pour elle |
 | 4 | **12.2 réordonner** | ⏳ | trivial **une fois** la case-groupe posée |
 | 5 | **12.6 critique vision** | ⏳ | dépend du panneau ⚙, et demande sa propre mesure |
