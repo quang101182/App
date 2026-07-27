@@ -92,7 +92,7 @@ SCENE_MUETTE = ("2girls, standing side by side, facing viewer, upper body, "
 MUET = [False]
 
 
-def wf(seed, refs, masques, poids=None):
+def wf(seed, refs, masques, poids=None, pos=None):
     """Un squelette unique ; SEULES les ancres d'identite changent d'un bras a l'autre.
 
     `refs`    : 0, 1 ou 2 noms de fichiers deja deposes dans ComfyUI/input.
@@ -102,7 +102,10 @@ def wf(seed, refs, masques, poids=None):
     qu'uploades : un masque est une donnee geometrique exacte, le faire calculer
     par ComfyUI evite un fichier de plus a garder d'accord avec le format.
     """
-    pos = QUAL + BW + ((SCENE_MUETTE if MUET[0] else SCENE) % (IDENT_A, IDENT_B))
+    # `pos` permet a un autre banc (test_crop_ref.py) de reutiliser EXACTEMENT ce
+    # graphe avec sa propre scene : le graphe duo n'existe qu'ici, il ne se
+    # recopie pas ailleurs -- deux copies divergent toujours.
+    pos = pos or (QUAL + BW + ((SCENE_MUETTE if MUET[0] else SCENE) % (IDENT_A, IDENT_B)))
     g = {
         "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": CKPT}},
         "2": {"class_type": "CLIPTextEncode", "inputs": {"text": pos, "clip": ["1", 1]}},
@@ -152,10 +155,10 @@ def wf(seed, refs, masques, poids=None):
     return g
 
 
-def run(label, seed, refs, masques, poids=None):
+def run(label, seed, refs, masques, poids=None, pos=None):
     t0 = time.time()
     try:
-        pid = post("/prompt", {"prompt": wf(seed, refs, masques, poids),
+        pid = post("/prompt", {"prompt": wf(seed, refs, masques, poids, pos),
                                "client_id": str(uuid.uuid4())})["prompt_id"]
     except urllib.error.HTTPError as e:
         print("  [%s] REFUS ComfyUI : %s" % (label, e.read().decode()[:600]), flush=True)

@@ -63,7 +63,16 @@ atteint franchement, avec le LoRA v1.**
 
 Le « moteur GS » n'est pas le HTML : c'est **`C:\Users\quang\Documents\ComfyUI\_studio_llm_proxy.py`**
 (port 8190, ~60 routes) + **ComfyUI** (port 8188). Le proxy renvoie `Access-Control-Allow-Origin: *`
-(ligne 1570) ⇒ une app tierce consomme tout le moteur **sans modifier une ligne de proxy**.
+(ligne 1570) ⇒ une app tierce consomme tout le moteur ~~**sans modifier une ligne de proxy**~~.
+
+> ⚠️ **CE CONSTAT EST PÉRIMÉ DEPUIS LA PHASE 4 ELLE-MÊME** (relevé le 28/07). Le manga a bien des
+> routes **à lui** dans le proxy — `/manga/projects|pages|panels|chars|files|ingest|dataset|harvest`,
+> et `/manga/crop_ref` depuis le 28/07. La promesse initiale était « pas de modification » ; la
+> réalité est « des routes ajoutées, aucune route existante touchée » — ce qui est une autre
+> propriété, tout aussi bonne, mais qu'il faut dire.
+> 🔴 **Conséquence à connaître** : `C:\Users\quang\Documents\ComfyUI\_studio_llm_proxy.py` **n'est
+> pas dans ce dépôt**. Une réinstallation de ComfyUI perdrait ces routes, et l'app tomberait sans
+> que rien ne l'annonce. *(Chantier ouvert : versionner un patch ou une liste des routes ajoutées.)*
 
 | Raison | Détail |
 |---|---|
@@ -1157,6 +1166,40 @@ n'a rien à faire dans un test de registre adulte.
 > **Ce qui reste acquis de ce détour** : `make_pose.py` sait désormais composer des scènes à
 > plusieurs corps (`placer()`, `dessine_pts()`, posture agenouillée) — utile pour le **cadrage**, qui
 > reste son domaine. Simplement, ce n'est pas l'outil du rapport de force.
+
+#### ✅ Recadrer la référence sur le visage — mesuré et livré le 28/07 (v1.53.0)
+
+Le verrou nommé plus haut. Une référence qui est une **planche de personnage** ne transmet pas
+seulement un visage : elle transmet sa **mise en page**. Parade : recadrer sur le visage avant de
+la donner à IPAdapter (`scripts/crop_ref.py`, YOLO face + carré centré sur le visage, ~3,2 largeurs
+de visage pour garder cheveux et épaules).
+
+**Mesuré sur les deux vraies références de Quang** (`test_crop_ref.py`, 6 seeds, mêmes images,
+même graphe duo masqué). La mesure principale n'est **pas** l'identité mais le **nombre de
+personnages** : on en demande deux, une planche de design en produit trois ou quatre.
+
+| Bras | Exactement 2 personnages | Chacun à sa place | Saturation |
+|---|---|---|---|
+| références **brutes** | **4/6** — une case à 1 personnage, une à 3 | 4/6 | 0,069 |
+| références **recadrées** ⭐ | **6/6** | 3/6 | 0,104 |
+
+Recadrage : Kimiko passe d'un visage à **1,9 %** de l'image à **10 %** ; Jo de 26,9 % à 39,3 %.
+À l'œil l'écart est franc : sur un des essais bruts, la case avait littéralement hérité d'une
+**mise en page à cases**. Les six essais recadrés montrent deux personnages côte à côte.
+
+**⚠ Ce que ça n'améliore PAS, et il faut le dire** : le **placement** par identité (chacun de son
+côté) ne progresse pas — 4/6 contre 3/6, dans le bruit à n=6. Le recadrage règle la **composition**,
+pas l'attribution. Et l'instrument est ici plus faible qu'au banc précédent (un seul étalon par
+personnage, deux designs manga N&B moins écartés) : ces colonnes-là se lisent avec prudence.
+
+**Dans l'app (v1.53.0)** : le recadrage est appliqué aux **deux** chemins d'entrée d'une référence
+— import « ＋ image de référence » et « 🎨 Dessiner → garder ». Aucun visage détecté ⇒ l'image est
+**gardée entière** et l'app le dit : une référence peut légitimement être un décor ou un objet, et
+couper au hasard serait pire. Route `POST /manga/crop_ref` (sous-processus venv kohya), banc
+`test_crop_ref_app.py` — 10 vérifications, mutation rouge.
+
+**Un défaut attrapé par le banc** : mon « carré » sortait en **369×370** — chaque coin était tronqué
+séparément. Un cadre carré doit l'être par construction, pas par chance.
 
 **Ce que ça établit :**
 - **Deux corps dans une case, ça marche** dès qu'ils sont simplement co-présents ou en contact simple.

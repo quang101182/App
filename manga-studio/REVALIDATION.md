@@ -23,12 +23,15 @@
 > **Chantiers n°1 et n°2 livrés** : images de référence sur les fiches (v1.25.0, IPAdapter) et
 > **zone ciblée** (v1.26.1, inpaint au doigt). Les deux 🔴 du §3 sont fermés.
 >
-> **🟠 Le verrou suivant, découvert le 28/07 en vérifiant sur Jo et Kimiko** : une image de
-> référence qui est une **planche de design** (plusieurs vues, fond vide) fait hériter la case
-> de sa **composition**, pas seulement de l'identité — grand visage flottant, échelles incohérentes.
-> ⇒ **recadrer la référence sur le visage/buste avant de l'utiliser** (YOLO face sait le faire,
-> l'app ne le fait pas). Et **passer les fiches par 🧹 Nettoyer** reste un préalable : avec leurs
-> tags actuels (`character design`, `simple background`), la case sort en planche de personnage.
+> | **v1.53.0** | **la référence est recadrée sur le visage** à l'entrée (les deux chemins : import et 🎨 Dessiner → garder) · aucun visage ⇒ gardée entière, et l'app le dit · route `POST /manga/crop_ref` | `test_crop_ref_app.py` — 10 ✓, mutation rouge · `test_crop_ref.py` (GPU) : **4/6 → 6/6** personnages |
+>
+> ~~**🟠 Le verrou suivant, découvert le 28/07** : une référence qui est une planche de design fait
+> hériter la case de sa composition.~~ → ✅ **traité le jour même (v1.53.0)**, mesuré 4/6 → 6/6 sur le
+> nombre de personnages. ⚠ Le **placement** par identité, lui, ne progresse pas (4/6 → 3/6, bruit) :
+> le recadrage règle la composition, pas l'attribution.
+> 🟠 **Reste vrai** : **passer les fiches par 🧹 Nettoyer** est un préalable — avec leurs tags actuels
+> (`character design`, `simple background`), la case sort en planche de personnage quoi qu'on fasse
+> aux images. Les fiches de Quang n'ont pas été modifiées, c'est à lui de lancer le nettoyage.
 >
 > **Prochain** : la bibliothèque de références (phase 8) ou le mode chapitre automatique
 > (phase 7) — cf. §4. Et la dernière combinaison de l'étape 4 (ingestion puis séquence).

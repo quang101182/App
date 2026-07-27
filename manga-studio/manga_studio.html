@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.52.0</title>
+<title>Manga Studio v1.53.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -347,7 +347,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.52.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.53.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -824,7 +824,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.52.0";
+const VERSION = "1.53.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -3761,6 +3761,36 @@ async function dessinerPersonnage(c){
   log("personnage « " + (c.name || c.id) + " » : 3 vues dessinées (seed " + seed + ")", "s");
 }
 
+/** Recadre une reference sur le VISAGE, cote serveur, juste apres l'upload.
+ *
+ *  ⚠ Mesure du 28/07, sur les fiches reelles : IPAdapter PLUS ne transfere pas
+ *  que l'identite, il transfere la COMPOSITION de l'image montree. Les references
+ *  de Jo et de Kimiko etaient elles-memes des planches de personnage (plusieurs
+ *  vues, fond vide) -- la case en heritait : grand visage flottant, echelles
+ *  incoherentes, et parfois trois ou quatre tetes pour deux personnages demandes.
+ *  Un portrait serre, lui, n'a pas de mise en page a transmettre.
+ *
+ *  Aucun visage detecte => on GARDE l'image entiere et on le dit. Recadrer au
+ *  hasard couperait le sujet sans que personne ne le sache -- et une reference
+ *  qui n'est pas un personnage (un decor, un objet) est un usage legitime.
+ */
+async function recadrerSurLeVisage(nom, qui){
+  try {
+    const r = await api("/manga/crop_ref", { filename: nom });
+    if (r && r.ok && r.name){
+      log("référence de « " + qui + " » recadrée sur le visage ("
+          + Math.round(100 * r.visage_avant) + " % → "
+          + Math.round(100 * r.visage_apres) + " % de l'image)", "s");
+      return r.name;
+    }
+    log("référence de « " + qui + " » gardée entière : "
+        + ((r && (r.raison || r.error)) || "recadrage indisponible"), "w");
+  } catch(e){
+    log("recadrage indisponible (" + e.message + ") — référence gardée entière", "w");
+  }
+  return nom;
+}
+
 /** Garder une vue = elle devient une reference IPAdapter de la fiche.
  *  Meme chemin que l'import (v1.25.0) : conversion en N&B AVANT l'envoi --
  *  IPAdapter transfere la palette, et un negatif textuel ne pese rien contre
@@ -3772,7 +3802,8 @@ async function garderVue(c, cle){
     const src = await (await fetch(vueURL(v.img), {
       headers: CFG.key ? { Authorization: "Bearer " + CFG.key } : {} })).blob();
     const nb = await enNoirEtBlanc(src);
-    const nom = await uploadToComfy(nb, "ref_" + c.id + "_" + Date.now() + ".png");
+    const brut = await uploadToComfy(nb, "ref_" + c.id + "_" + Date.now() + ".png");
+    const nom = await recadrerSurLeVisage(brut, c.name || c.id);
     c.refs = (c.refs || []).concat([nom]);
     await api("/manga/chars", c);
     delete BROUILLONS[c.id];          // le brouillon a fait son office
@@ -4325,7 +4356,8 @@ $("charList").addEventListener("change", async e => {
   if (!c) return;
   await avecTemoin("Ajout de la référence…", async () => {
     const nb = await enNoirEtBlanc(f);
-    const nom = await uploadToComfy(nb, "ref_" + id + "_" + Date.now() + ".png");
+    const brut = await uploadToComfy(nb, "ref_" + id + "_" + Date.now() + ".png");
+    const nom = await recadrerSurLeVisage(brut, c.name || id);
     c.refs = (c.refs || []).concat([nom]);
     await api("/manga/chars", c);
     await loadChars();
