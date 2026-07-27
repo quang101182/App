@@ -69,6 +69,11 @@ PREPARE = """async ([nom, n]) => {
         p.recipe = {seed: 424242,
                     sequence: {index: i, total: n, geste: 'marche', gid: 'g_' + nom}};
     });
+    // ⚠ Depuis la v1.41.0, une sequence s'affiche REGROUPEE : une seule
+    // vignette a l'ecran. Ce banc parle des cases une par une (badge, panneau
+    // ⚙, seed), donc il DEPLIE le groupe -- c'est l'etat dans lequel ses
+    // questions ont un sens, pas un contournement pour rester vert.
+    S.deplie['g_' + nom] = true;
     renderPlate();
     return {proj: proj.id, ids: S.panels.map(p => p.id)};
 }"""

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.40.0</title>
+<title>Manga Studio v1.41.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -238,6 +238,16 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 /* Le panneau ⚙ Affiner : visiblement DANS la case, et visiblement un aparte —
    un liseré et un fond legerement en retrait suffisent a dire « ceci est un
    reglage », sans ajouter ni cadre ni titre. */
+/* La case-groupe : un lisere et une barre suffisent a dire « ces images vont
+   ensemble ». Le groupe occupe UNE place dans la grille, comme une case. */
+.groupe{border:1px solid var(--line);border-radius:10px;padding:6px;
+  background:rgba(255,255,255,.02)}
+.grpbar{display:flex;align-items:center;gap:6px;padding:2px 4px 6px;font-size:12px;
+  color:var(--dim);flex-wrap:wrap}
+.grpbar b{color:var(--txt);font-weight:600}
+.grpbar .grow{flex:1 1 auto}
+.grpbar.seul{border:1px solid var(--line);border-radius:8px;padding:6px 8px;
+  margin-bottom:6px;grid-column:1/-1}
 .panel .affiner{margin-top:8px;padding:9px;border-radius:8px;background:var(--panel2);
   border:1px solid var(--line);border-left:3px solid var(--accent)}
 .panel .idees{display:flex;flex-direction:column;gap:5px;margin:0 0 4px}
@@ -315,7 +325,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.40.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.41.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -742,7 +752,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.40.0";
+const VERSION = "1.41.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -938,6 +948,8 @@ const DEFAULT_RECIPE = {
 const S = { projects: [], pages: [], panels: [], proj: null, page: null, busy: 0,
             zone: null,        // id de la case dont on trace la zone (une seule a la fois)
             affiner: null,     // id de la case dont le panneau ⚙ Affiner est deplie
+            vueSeq: {},        // gid -> quelle vignette de la sequence est montree
+            deplie: {},        // gid -> la sequence est-elle etalee en cases separees
             lettering: null,   // id de la case en cours de lettrage (une seule a la fois)
             selBub: null };    // id de la bulle selectionnee dans cette case
 const $ = id => document.getElementById(id);
@@ -1730,11 +1742,77 @@ function applyPlateColumns(){
     "repeat(" + (window.innerWidth < 700 ? 1 : cols) + ",1fr)";
 }
 
+/* ================== LA CASE-GROUPE (v1.41.0) ==================
+   Quang, 27/07 : « je trouve ca deroutant quand on cree une sequence […] que
+   chaque image soit chronologiquement l'une apres l'autre dans la presentation.
+   Je les imagine plutot regroupees ensemble sur la meme fenetre, avec un bouton
+   pouvant les faire defiler […] suivant/precedent avec l'affichage du numero. »
+
+   Une sequence de 6 vignettes est UN moment, pas six. Etalee dans le fil, elle
+   noie la planche : 6 cases pour un seul geste.
+
+   ⚠ CE QUI N'EST PAS FAIT, ET C'EST VOLONTAIRE : les donnees ne sont PAS
+   fusionnees. Une vignette EST une case de la planche et doit rester dans
+   l'export -- `buildPlateCanvas` lit `S.panels`, jamais le DOM (verifie), donc
+   regrouper l'AFFICHAGE ne change rien au PNG ni au PDF. Fusionner aurait
+   detruit le livrable pour gagner du confort d'ecran.
+
+   Le groupe montre donc UNE vignette a la fois, avec ◀ n/N ▶, et se deplie si
+   on veut revoir les six cote a cote. */
+function nomGeste(g){
+  return ((GESTES[g] || GESTES_LIBRES[g] || {}).nom) || g || "";
+}
+
+function groupeHTML(gid, soeurs, k, p, i){
+  const sq = p.recipe.sequence;
+  return '<div class="groupe">'
+    + '<div class="grpbar">'
+    + '<button class="btn sm" data-grp="prev" data-gid="' + gid + '" title="vignette précédente">◀</button>'
+    + '<b>🎬 ' + (k + 1) + '/' + soeurs.length
+    + (sq.geste ? ' · ' + esc(nomGeste(sq.geste)) : '') + '</b>'
+    + '<button class="btn sm" data-grp="next" data-gid="' + gid + '" title="vignette suivante">▶</button>'
+    + '<span class="grow"></span>'
+    + '<button class="btn sm" data-grp="deplier" data-gid="' + gid + '">déplier les '
+    + soeurs.length + '</button>'
+    + '</div>'
+    + panelHTML(p, i)
+    + '</div>';
+}
+
 function renderPlate(){
   const el = $("plate");
   applyPlateColumns();
   if (!S.page){ el.innerHTML = '<p class="muted">Aucune planche. Crée-en une.</p>'; return; }
-  el.innerHTML = S.panels.map((p,i) => panelHTML(p,i)).join("")
+  const vus = new Set(), morceaux = [];
+  S.panels.forEach((p, i) => {
+    const sq = p.recipe && p.recipe.sequence;
+    const gid = sq && sq.gid;
+    if (!gid){ morceaux.push(panelHTML(p, i)); return; }
+    if (S.deplie[gid]){
+      // Deplie : les cases redeviennent ce qu'elles sont, avec de quoi refermer.
+      const soeurs = soeursSequence(p) || [p];
+      if (soeurs[0] === p){
+        morceaux.push('<div class="grpbar seul">'
+          + '<b>🎬 ' + soeurs.length + ' vignettes'
+          + (sq.geste ? ' · ' + esc(nomGeste(sq.geste)) : '') + '</b>'
+          + '<span class="grow"></span>'
+          + '<button class="btn sm" data-grp="replier" data-gid="' + gid + '">regrouper</button>'
+          + '</div>');
+      }
+      morceaux.push(panelHTML(p, i));
+      return;
+    }
+    if (vus.has(gid)) return;              // le groupe a deja ete rendu
+    vus.add(gid);
+    const soeurs = soeursSequence(p) || [p];
+    let k = S.vueSeq[gid] || 0;
+    if (k > soeurs.length - 1) k = soeurs.length - 1;   // une suppression a raccourci la serie
+    if (k < 0) k = 0;
+    S.vueSeq[gid] = k;
+    const cible = soeurs[k];
+    morceaux.push(groupeHTML(gid, soeurs, k, cible, S.panels.indexOf(cible)));
+  });
+  el.innerHTML = morceaux.join("")
     || '<p class="muted">Aucune case. Ajoute-en une.</p>';
   $("plateState").textContent = S.panels.length + " case(s), "
     + S.panels.filter(p => p.file).length + " générée(s)";
@@ -4027,6 +4105,22 @@ $("btnIngCreate").onclick = () => createFromIngest()
   .catch(e => { log("création depuis ingestion: " + e.message, "e"); toast("échec"); });
 
 $("plate").addEventListener("click", async e => {
+  // La barre du groupe se traite EN PREMIER : ses boutons n'ont pas de
+  // `data-act`, ils ne doivent pas tomber dans le routage des cases.
+  const g = e.target.closest("[data-grp]");
+  if (g){
+    const gid = g.dataset.gid, quoi = g.dataset.grp;
+    if (quoi === "deplier"){ S.deplie[gid] = true; return renderPlate(); }
+    if (quoi === "replier"){ delete S.deplie[gid]; return renderPlate(); }
+    const soeurs = S.panels.filter(x => x.recipe && x.recipe.sequence
+                                     && x.recipe.sequence.gid === gid);
+    if (!soeurs.length) return;
+    const k = S.vueSeq[gid] || 0;
+    // On tourne en boucle : arrive au bout, « suivant » revient au debut plutot
+    // que de ne rien faire -- un bouton qui ne repond pas passe pour casse.
+    S.vueSeq[gid] = ((quoi === "next" ? k + 1 : k - 1) + soeurs.length) % soeurs.length;
+    return renderPlate();
+  }
   // Choix d'un geste de sequence : on demande ENSUITE le nombre, dans la meme zone.
   const sg = e.target.closest("[data-seqg]");
   if (sg){
