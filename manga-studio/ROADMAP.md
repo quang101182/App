@@ -30,6 +30,23 @@ Trois besoins exprimés par Quang le 26/07/2026, dans l'ordre où ils sont arriv
    si le personnage et le décor tiennent sur la durée — c'est exactement ce que les phases 1, 2 et 6
    servent à garantir. Générer 40 cases avec un personnage instable produirait 40 images à jeter.
 
+### 🎯 Ce qui compte, et ce qui ne compte pas *(directive Quang, 27/07)*
+
+> « Les petits détails, comme le grain de beauté, on s'en fiche totalement. Ce qui compte, c'est la
+> **qualité de l'ensemble** et les **détails les plus importants**. »
+
+C'est une règle de priorité, pas une remarque : elle décide où passe l'effort.
+
+- **Compte** : la lisibilité d'une planche, la continuité d'une scène, le rendu N&B, un personnage
+  reconnaissable, un lettrage propre, un enchaînement de cases qui se lit.
+- **Ne compte pas** : un grain de beauté, une mèche, un pli. Un micro-détail qui coûte des heures de GPU
+  et qu'on ne voit pas à la lecture n'est pas un objectif — c'est une distraction.
+
+⇒ **Le grain de beauté est RETIRÉ du design du personnage.** La réserve n°1 de la phase 1 est close par
+décision, pas par correctif. Recalcul du comparatif de la phase 1 sans cette ligne : **15/15 = 100 %**
+(c'était 16/18 = 89 %, et l'unique échec était le grain). **Le critère de sortie de la phase 1 est donc
+atteint franchement, avec le LoRA v1.**
+
 ### Hors périmètre (assumé)
 
 - Publication / diffusion : le projet est personnel. Le **style** graphique n'est pas protégé, les
@@ -126,7 +143,7 @@ Chaque phase a un **critère de sortie mesurable**. Rien n'est « fait » sans s
 ### Phase 0 — Socle technique ✅ *(fait le 26/07)*
 Checkpoint Illustrious installé, kohya opérationnel, pipeline ComfyUI piloté par script, essais 1-4 mesurés.
 
-### Phase 1 — Verrouiller le personnage ✅ *(atteinte à 89 %, le 26/07 — 2 réserves ouvertes)*
+### Phase 1 — Verrouiller le personnage ✅ *(89 % le 26/07 ; **100 % le 27/07**, les 2 réserves closes)*
 1. Dataset bootstrap ReActor — ✅ 24 images.
 2. Entraînement LoRA — ✅ `zqmg1rl_v1.safetensors` (218 Mo, dim 32 / alpha 16, 1 152 steps, 8 epochs, ~34 min).
 3. Essai 5 = essai 2 rejoué **avec** le LoRA @ 0.8 — mêmes 3 prompts, même seed 222222, même checkpoint.
@@ -595,6 +612,24 @@ teste donc pas la boucle elle-même, seulement la correction des deux réserves.
    (inpainting ciblé), ou **le retirer du design du personnage**. Mettre plus de poids dans le prompt
    ne marche pas : c'est mesuré.
 
+### ⛔ Chantier LoRA v2 : CLOS le 27/07, sans suite
+
+Mesure refaite avec l'instrument **valide** (`mesure_cadrage.py`), à seed identique :
+
+| Case | v1 | v2 |
+|---|---|---|
+| gros plan | serré | serré |
+| **full body** | **plan en pied** | **plan en pied** |
+| émotion | serré | serré |
+
+**Identique sur les trois.** Le v2 n'apporte donc rien de mesurable — ni sur le cadrage (seule réserve
+encore ouverte), ni ailleurs. Et la réserve du grain de beauté est close par décision.
+⇒ **Le LoRA v1 est le bon, et le restera.** Le v2 reste sur le disque mais n'a pas d'usage.
+
+*Ce chantier a coûté ~1 h de GPU pour un résultat nul. Ce qu'il a produit de vraiment utile est ailleurs :
+la réparation de `prep_train.py` et `train_lora.sh` (le v1 n'était réentraînable par personne), et la
+découverte que ma mesure de cadrage était invalide.*
+
 **Décision : le v1 reste le LoRA par défaut de l'app.** Le v2 est installé à côté
 (`ComfyUI/models/loras/_manga_test/zqmg1rl_v2.safetensors`) et sélectionnable. Changer le défaut pour
 un gain de 11 % sur un seul axe, avec un style légèrement plus bruité sur la case 3, ne se justifie pas.
@@ -664,6 +699,7 @@ vérifié : 24 images × 6 repeats = 1 152 steps, exactement les chiffres de la 
 | 2026-07-26 | Ouverture du chantier. Décision d'archi (app séparée). Checkpoint Illustrious installé. Essais 1-4 mesurés. Recherche web + vote 3 voix. kohya installé (3 pièges payés : cu128, versions transformers, encodage cp1252). |
 | 2026-07-26 | **Phase 1 franchie à 89 %** (contre 50 % sans LoRA). LoRA `zqmg1rl_v1` entraîné et validé sur comparatif strict. 2 réserves ouvertes → LoRA v2 avant la phase 4. |
 | 2026-07-26 | **Phase 3 : pipeline d'ingestion écrit et mesuré** (`manga_ingest.py`). Découpage 83 % à IoU 0,66 mais **Pixtral quantifie sur une grille** ⇒ raffinement OpenCV nécessaire. Volet style : OK. **Bloqué sur la validation** faute de scans réels de Quang. Premier test = faux positif, corrigé par un test à vérité terrain. |
+| 2026-07-27 | **Directive Quang : la qualite de l'ENSEMBLE prime, les micro-details ne comptent pas.** Le grain de beaute est **retire du design** ⇒ reserve n°1 de la phase 1 close par DECISION, et le comparatif recalcule sans cette ligne donne **15/15 = 100 %** (au lieu de 16/18) : **le critere de la phase 1 est atteint franchement avec le LoRA v1**. Mesure valide a seed identique : v1 et v2 donnent le **meme cadrage sur les 3 cases** ⇒ **chantier LoRA v2 CLOS, sans suite**. |
 | 2026-07-27 | **Mesure de cadrage refaite sur une base valide** (`mesure_cadrage.py`) : plus de proxy, la DEFINITION — quelles articulations sont dans le champ (keypoints OpenPose), + un detecteur de visage la ou OpenPose est aveugle. Calibration passee AVANT usage : 7/9, avec **2 sous-estimations et 0 surestimation** ⇒ l'outil declare lui-meme qu'il ne peut donner qu'un **plancher**. Resultat : dataset v1 = **0** plan large sur 24, dataset v2 = **au moins 8** sur 28. **Le reequilibrage du v2 est reel, et c'est desormais etabli.** |
 | 2026-07-27 | **⛔ CORRECTION : ma mesure de cadrage etait invalide.** Calibree apres coup sur des images dont j'avais verifie le cadrage a l'oeil, la « taille du visage » donne **0,448 pour un buste et 0,207 pour un plan en pied** — elle ne separe pas les classes, et le detecteur echoue sur 2 plans larges. Retires : la repartition des cadrages des datasets, « aucun vrai plan en pied n'est atteint », « le v2 cadre 11 % plus large ». **Lecon : j'ai pose un seuil que je n'avais jamais etabli, et un second juge non calibre disait la meme chose — leur accord m'a rendu confiant alors qu'ils se trompaient ensemble.** Ajoute `make_pose.py` (squelettes OpenPose synthetiques : la position du squelette EST le cadrage). |
 | 2026-07-27 | **LoRA v2 entraine et mesure — critere NON atteint, et c'est le resultat utile.** Cadrage : 11 % plus large seulement, les deux restent des bustes malgre 7 prompts « full body » ⇒ **le modele de base resiste, ce n'est pas (que) le dataset** ; il faudra ControlNet openpose. Grain de beaute : toujours 0/3, et la mesure dit pourquoi — il n'est visible que sur **3/12** images du dataset v2 malgre `(mole:1.4)`. **On n'a jamais montre ce detail assez souvent pour savoir s'il est apprenable.** Le v1 reste le defaut. Trouve au passage : `train_lora.sh` pointait vers une session morte. |

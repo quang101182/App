@@ -41,9 +41,12 @@ SEED = 222222
 
 QUAL = "masterpiece, best quality, amazing quality, very aesthetic, absurdres, "
 BW = "monochrome, greyscale, manga, screentone, halftone, lineart, ink, high contrast, "
+# Le grain de beaute est RETIRE du design (decision Quang, 27/07 : « les petits
+# details, on s'en fiche totalement ; ce qui compte, c'est la qualite de
+# l'ensemble et les details les plus importants »). On ne mesure donc plus un
+# attribut qui n'appartient plus au personnage.
 IDENT = (TRIGGER + ", 1girl, solo, 18 years old, short messy black hair, blunt bangs, "
-         "sharp amber eyes, small mole under left eye, black sailor uniform with red scarf, "
-         "slender build")
+         "sharp amber eyes, black sailor uniform with red scarf, slender build")
 NEG = ("bad quality, worst quality, worst detail, sketch, censor, jpeg artifacts, "
        "watermark, signature, text, english text, speech bubble, extra digits, "
        "bad hands, bad anatomy, color, colored, vibrant colors")

@@ -38,9 +38,11 @@ os.makedirs(OUT, exist_ok=True)
 
 QUAL = "masterpiece, best quality, amazing quality, very aesthetic, absurdres, "
 BW = "monochrome, greyscale, manga, screentone, halftone, lineart, ink, "
-# Le grain de beaute est ACCENTUE : il doit etre visible pour etre appris.
+# Grain de beaute RETIRE du design (decision Quang, 27/07). L'accentuation a 1.4
+# n'avait de toute facon donne que 3/12 images le montrant : le detail ne valait
+# pas la peine qu'on le poursuive.
 IDENT = (TRIGGER + ", 1girl, solo, short messy black hair, blunt bangs, amber eyes, "
-         "(mole under left eye:1.4), black sailor uniform, red scarf")
+         "black sailor uniform, red scarf")
 NEG = ("bad quality, worst quality, sketch, censor, jpeg artifacts, watermark, "
        "signature, text, speech bubble, extra digits, bad hands, bad anatomy, "
        "multiple girls, 2girls, blurry, out of focus, color, colored")
