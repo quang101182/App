@@ -827,13 +827,69 @@ proxy Generate Studio** (chaîne de parenté vérifiée) ; le proxy expose `POST
 le garde-fou du mandat Quang du 22/06 : *on coupe depuis n'importe quelle appli, mais jamais une génération en
 cours*. Le dry-run a confirmé `busy: false` avant de couper. Secret : `ComfyUI/.studio_secret`, en Bearer.
 
-> **⏳ Reste à MESURER — l'installation n'est pas un résultat.** Trois questions, dans cet ordre :
-> 1. IPAdapter tient-il l'identité **sans entraînement** ? Protocole : rejouer l'essai 2/5 (mêmes 3 cadrages,
->    même seed 222222) avec une image de référence à la place du LoRA → comparable aux **50 % (rien)** et
->    **100 % (LoRA)** déjà mesurés.
-> 2. Tient-il sur un sujet **sans LoRA** (robot, créature) ? C'est ce qui décide si la phase 7 peut viser
->    « n'importe quel sujet ».
-> 3. Transfère-t-il le **style** d'une page de Quang ? C'est la brique de la phase 8 ci-dessous.
+#### ✅ MESURÉ le 27/07 — `scripts/test_ipadapter.py`
+
+**IPAdapter fonctionne sur ce checkpoint, mais seulement à un réglage que rien n'annonçait.**
+Aux valeurs par défaut il est inutilisable ; aux bonnes, il tient le personnage en gardant le N&B.
+
+| Réglage | Ce qui se passe |
+|---|---|
+| Preset **`PLUS FACE (portraits)`** — le nom invite pourtant à le choisir | ⛔ **détruit le rendu** : noir 0,112-0,290 contre 0,599 au témoin |
+| Preset **`PLUS (high strength)`** | ✅ préserve le noir (0,443-0,593) |
+| Poids **0,8** | ⛔ la planche **vire au bleu**, et la case « full body » part hors sujet |
+| **Poids 0,4 · `end_at` 0,5 · référence convertie en N&B** ⭐ | ✅ les 3 cases propres, N&B tenu |
+
+**Comparatif final, mêmes 3 cadrages, même seed 222222 :**
+
+| Mesure | prompt seul | LoRA v1 | **IPAdapter 0,4** |
+|---|---|---|---|
+| Proximité à la référence (cosinus) | 0,851 (2/3) | **0,894** (3/3) | 0,839 (3/3) |
+| **Saturation** (un vrai N&B tend vers 0) | 0,198 | 0,333 | **0,149** ⭐ |
+| Fraction de noir | 0,498 | 0,500 | 0,456 |
+
+⇒ **IPAdapter sort la planche la plus proprement monochrome des trois** — plus que le LoRA, dont le dataset
+très contrasté tirait vers la « spot color » rouge (effet secondaire déjà noté en phase 1).
+
+**⚠️ Ce que ces chiffres NE disent PAS, et le banc le dit lui-même.**
+L'instrument (YOLO recadre le visage → CLIP-ViT-H l'embedde) a passé l'épreuve **facile** : il sépare ce
+personnage d'une blonde de 30 ans en blouse (0,908 contre 0,650). Il a **échoué à l'épreuve difficile** — le
+même personnage avec **les yeux et la forme du visage changés** sort à 0,868, en plein dans le nuage
+« même personnage » (0,868-0,941). ⇒ Il mesure « est-ce le même **genre** de personnage », **pas l'identité
+fine** que la phase 1 mesurait. Les trois colonnes se comparent entre elles ; **aucune ne prouve « c'est bien
+lui »**. *C'est pourquoi le banc refuse d'afficher une frontière : un chiffre sans instrument valide est pire
+qu'un chiffre absent.* Le juge qui tranche reste **l'œil de Quang** — et la boucle de validation de la phase 6
+existe précisément pour recueillir ce verdict-là.
+
+**Quatre pièges payés pendant cette mesure, tous instructifs :**
+1. **insightface — l'outil « standard » — est inutilisable ici.** C'est la mesure d'identité de toute la
+   littérature IPAdapter/InstantID… sur du **photoréaliste**. Sur du manga N&B : 2/12 visages détectés au
+   seuil normal, 7/12 en descendant à 0,1 (au prix de l'alignement), et **5/12 même sur un visage déjà
+   recadré par YOLO**, qui en trouve 11/12. Deux échecs de même nature ⇒ changer d'outil, pas s'acharner.
+2. **La référence donnée à IPAdapter était choisie au hasard.** Le code prenait la première image où un visage
+   était détecté, pendant que le commentaire affirmait prendre « celle où le visage est le plus grand ».
+   Corrigé : `ds_20`, **visage à 52 % de l'image** — et le résultat en dépend fortement. *Un commentaire qui
+   décrit une intention plutôt que le code est un mensonge à retardement.*
+3. **Ma première mesure du défaut était aveugle au défaut.** J'avais vu un rendu « délavé » et mesuré la
+   **noirceur**. La planche contact a montré autre chose : IPAdapter **injectait de la couleur** (bleu, cyan)
+   — et du bleu sombre est *sombre*, donc la noirceur n'y voyait rien. La bonne mesure était la
+   **saturation**. Même faute que « mesurer au mauvais endroit » sur l'effacement des bulles.
+4. **La couleur venait de la référence elle-même.** IPAdapter transfère la **palette** de l'image montrée, et
+   le négatif textuel `color` ne pèse rien face à un conditionnement par image. ⇒ **Toujours convertir la
+   référence en N&B** avant de la lui donner (`--ref-nb`).
+
+**Conséquence pour la phase 7 — la question « faut-il un LoRA par sujet ? » a sa réponse :**
+
+| Rôle | Moyen | État |
+|---|---|---|
+| Héros récurrent | **LoRA** | ✅ 100 % (phase 1), le plus fidèle sur les attributs fins (yeux ambre 3/3) |
+| **Secondaires, sujets ponctuels, « n'importe quel sujet »** | **IPAdapter PLUS 0,4 / end 0,5 / réf N&B** | ✅ **utilisable — c'était le verrou de la phase 7** |
+| Figurants | fiche texte + seed | ~50 % (phase 1) |
+
+> **⏳ Restent ouvertes, dans cet ordre :**
+> 1. Un sujet **sans LoRA du tout** (robot, mecha, créature) — mesuré ici sur un personnage qui *a* un LoRA,
+>    donc la question « n'importe quel sujet » n'est pas close.
+> 2. **Deux personnages dans une même case** — trou de mesure signalé par le volet adulte.
+> 3. Le transfert de **style** d'une page de Quang (brique de la phase 8).
 
 ### Phase 8 — La bibliothèque de références ⏳ *(demande Quang du 27/07)*
 
@@ -909,6 +965,7 @@ phase 6 : *l'app propose, elle n'impose jamais*. La taxonomie n'est pas à inven
 
 | Date | Événement |
 |---|---|
+| 2026-07-27 | **IPAdapter MESURE — il marche, mais a un reglage que rien n'annoncait.** Par defaut il est inutilisable : le preset `PLUS FACE`, dont le nom invite pourtant a le choisir, **detruit le rendu** (noir 0,112 contre 0,599 au temoin), et a poids 0,8 la planche **vire au bleu**. Le reglage utile est **PLUS / poids 0,4 / end_at 0,5 / reference convertie en N&B** : identite 0,839 sur 3/3, et **saturation 0,149 — la planche la plus proprement monochrome des trois bras**, devant le LoRA (0,333). ⇒ **le verrou de la phase 7 est leve** : un sujet ponctuel n'a plus besoin d'un LoRA. ⚠️ Mais **l'instrument a echoue a l'epreuve difficile** (il ne distingue pas un changement d'yeux et de morphologie) : les chiffres se comparent entre bras, **aucun ne prouve « c'est bien lui »** — le juge reste l'oeil de Quang. Quatre pieges payes : insightface **inutilisable sur du dessin** (5/12 meme sur visage recadre), une reference **choisie au hasard** pendant que le commentaire pretendait le contraire, une **mesure aveugle au defaut** (noirceur au lieu de saturation : du bleu sombre est sombre), et la couleur qui venait **de la reference elle-meme** — IPAdapter transfere la palette, le negatif textuel ne pese rien contre une image. |
 | 2026-07-27 | **IPAdapter INSTALLE** — le blocage annonce depuis le 26/07 est leve. 774 -> **811 noeuds**, 5,7 Go de poids (encodeur ViT-H, PLUS, PLUS FACE, FaceID v2 + son LoRA), tous rapportables par `fetch_models.py --dest`. ComfyUI redemarre **par le chemin du proxy** (`/shutdown` + `/start`, dry-run `busy:false` d'abord), pas en tuant un process. Deux pieges payes : le **nom** de l'encodeur CLIP (cherche par motif, invisible sous son nom d'origine) et **FaceID inutilisable sans son LoRA compagnon**. ⏳ **Rien n'est encore mesure** : une installation n'est pas un resultat. |
 | 2026-07-27 | **Trois demandes de Quang inscrites dans la feuille de route.** (1) **Volet adulte explicite** : la matrice ne disait que « pornographie » — desormais 4 sous-genres nommes (explicite · **fetichisme** · **femdom/domination** · suggestif), avec ce que chacun met a l'epreuve. Consequence relevee : **tout ce qui a ete mesure l'a ete sur UN personnage seul** — « deux personnages dans une case » est un **trou de mesure**, pas un acquis. (2) **Phase 8, bibliotheque de references** : une image sert a trois choses distinctes (style / apparence / **composition**), a ne surtout pas melanger ; **la bibliotheque est un accelerateur, jamais un prerequis** — rien de charge = generation de A a Z. (3) **Muse a deja resolu la moitie du probleme** (taxonomie, routage LoRA, negatif casting, filet d'interdits **en code**) : on reutilise, on ne recopie pas — et le catalogue explicite **reste chez Muse**, hors synchro. |
 | 2026-07-26 | Ouverture du chantier. Décision d'archi (app séparée). Checkpoint Illustrious installé. Essais 1-4 mesurés. Recherche web + vote 3 voix. kohya installé (3 pièges payés : cu128, versions transformers, encodage cp1252). |
