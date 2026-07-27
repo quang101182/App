@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.8.0</title>
+<title>Manga Studio v1.9.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -112,6 +112,35 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .bubed textarea{min-height:56px}
 .bubed .row select,.bubed .row input{width:auto;flex:1;min-width:80px}
 
+/* Le verdict se voit AUSSI sur le bouton qu'on vient de toucher.
+   Sur telephone, la coche est en haut de l'image et le bouton tout en bas : une
+   case mesurait 726 px pour un ecran de 780, et il fallait 708 px visibles pour
+   voir les deux. Le retour d'action doit etre la ou est le doigt. */
+.btn.on{background:var(--accent2);border-color:var(--accent2);color:#0a0c10;font-weight:700}
+
+/* ---------- telephone : une case doit tenir dans un ecran ---------- */
+@media (max-width:700px){
+  /* On limite la HAUTEUR sans toucher au ratio : `width:auto` laisse la largeur
+     se deduire de `aspect-ratio`. Forcer une hauteur en cassant le ratio aurait
+     decale les bulles du dessin -- elles sont posees en FRACTIONS de la case, et
+     l'image est en `object-fit:cover`. Le confort ne vaut pas un lettrage faux. */
+  .panel .img{max-width:64%;margin:0 auto}
+  .panel .body{padding:8px;gap:6px}
+  /* L'editeur de bulle ouvert portait la case a 757 px sur un ecran de 780 : on
+     ne voyait plus l'image et les boutons ensemble. On compacte l'EDITEUR, pas
+     l'image -- il faut voir la bulle qu'on deplace. */
+  .bubed{padding:5px;margin-top:4px;gap:4px}
+  .bubed textarea{min-height:38px}
+  .bubbar{padding-top:4px;gap:4px}
+  .bubbar .btn.sm,.panel .body .row .btn.sm{padding:5px 8px;font-size:12px}
+  .panel .body .row{gap:4px}
+  /* Pendant le lettrage, le champ « action de la case » ne sert a rien : on ne
+     reecrit pas le prompt en posant des bulles. Le masquer rend l'image et les
+     boutons visibles ENSEMBLE -- ce qui etait tout le probleme. Il reste dans le
+     DOM (display:none), donc le code qui lit sa valeur continue de fonctionner. */
+  .panel.lettering [data-prompt]{display:none}
+}
+
 /* ---------- galerie ---------- */
 .grid-img{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .grid-img figure{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -120,6 +149,9 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .grid-img figure.sel{outline:2px solid var(--accent2);outline-offset:-2px}
 .grid-img .pick{position:absolute;top:6px;left:6px;width:26px;height:26px;margin:0;
   cursor:pointer;accent-color:var(--accent2);z-index:2}
+.etape{margin:8px 0 0;padding:8px 10px;border-radius:8px;font-size:13px;
+  background:var(--panel2);border-left:3px solid var(--accent2);color:var(--txt)}
+.etape b{color:var(--accent2)}
 #lightbox[hidden]{display:none}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:90;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
@@ -153,7 +185,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.8.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.9.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -220,6 +252,10 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
       <button class="btn" id="btnExportPdf">Exporter (PDF)</button>
       <span class="muted" id="plateState"></span>
     </div>
+    <!-- L'ordre des gestes n'etait ecrit NULLE PART : Quang a lettre et valide des
+         cases avant de les generer, puis a demande « et apres, je fais quoi ? ».
+         Une interface qui suppose son ordre connu le fait deviner. -->
+    <p id="etape" class="etape"></p>
   </div>
 
   <div id="plate"></div>
@@ -896,6 +932,36 @@ function renderPlate(){
     || '<p class="muted">Aucune case. Ajoute-en une.</p>';
   $("plateState").textContent = S.panels.length + " case(s), "
     + S.panels.filter(p => p.file).length + " générée(s)";
+  majEtape();
+}
+
+/** Dit, a chaque instant, quel est le geste SUIVANT.
+ *
+ * L'ordre des gestes (generer -> lettrer -> valider -> exporter) n'etait ecrit
+ * nulle part : rien n'empeche de lettrer une case vide ni de la valider avant de
+ * l'avoir vue, et c'est exactement ce qui est arrive. Plutot qu'un mode d'emploi
+ * que personne ne lit, l'app regarde l'etat reel de la planche et nomme l'action
+ * qui a du sens maintenant. */
+function majEtape(){
+  const el = $("etape");
+  if (!el) return;
+  const n = S.panels.length;
+  const gen = S.panels.filter(p => p.file).length;
+  const lettrees = S.panels.filter(p => p.file && (p.bubbles || []).length).length;
+  const jugees = S.panels.filter(p => p.file && p.verdict).length;
+  let t;
+  if (!S.page)       t = "<b>1.</b> Crée une planche pour commencer.";
+  else if (!n)       t = "<b>1.</b> Ajoute une case avec <b>+ Case</b>.";
+  else if (gen < n)  t = "<b>2.</b> Décris l'action dans la case, puis <b>Générer</b> — "
+                       + (n - gen) + " case(s) encore vide(s). Le lettrage vient APRÈS l'image.";
+  else if (!lettrees) t = "<b>3.</b> Les images sont là. <b>✎ Lettrage</b> pour poser les bulles "
+                        + "et écrire les répliques par-dessus.";
+  else if (jugees < gen) t = "<b>4.</b> Juge les cases avec <b>✅</b> ou <b>❌</b> "
+                           + "(recliquer annule le verdict). Les ✅ nourrissent l'onglet "
+                           + "<b>Validé</b> : recettes réutilisables, et le dataset du prochain LoRA.";
+  else               t = "<b>5.</b> Tout est jugé — <b>Exporter (PNG)</b> ou <b>(PDF)</b>. "
+                       + "Tes ✅ sont dans l'onglet <b>Validé</b>.";
+  el.innerHTML = t;
 }
 
 function panelHTML(p, i){
@@ -938,10 +1004,12 @@ function panelHTML(p, i){
    + esc(p.prompt) + '</textarea>'
    + '<div class="row"><input data-seed type="number" style="width:120px" value="'
    + ((p.recipe && p.recipe.seed) || "") + '" placeholder="seed"> '
-   + '<button class="btn sm" data-act="gen">Générer</button>'
-   + '<button class="btn sm" data-act="letter">✎ Lettrage' + (nb ? " (" + nb + ")" : "") + '</button>'
-   + '<button class="btn sm" data-act="ok">✅</button>'
-   + '<button class="btn sm" data-act="ko">❌</button>'
+   + '<button class="btn sm" data-act="gen" title="Dessine cette case">Générer</button>'
+   + '<button class="btn sm" data-act="letter" title="Poser les bulles et le texte par-dessus">✎ Lettrage' + (nb ? " (" + nb + ")" : "") + '</button>'
+   + '<button class="btn sm' + (p.verdict === "ok" ? " on" : "")
+   + '" data-act="ok" title="Je garde cette case (recliquer annule)">✅</button>'
+   + '<button class="btn sm' + (p.verdict === "ko" ? " on" : "")
+   + '" data-act="ko" title="Je la refuse (recliquer annule)">❌</button>'
    + '<button class="btn sm" data-act="del">suppr.</button></div>'
    + '</div></div>';
 }
@@ -961,6 +1029,7 @@ const curBub = () => { const p = curPanel();
 
 async function saveBubbles(p){
   await api("/manga/panels", p);
+  majEtape();
   const btn = document.querySelector('[data-pid="' + p.id + '"] [data-act="letter"]');
   if (btn) btn.textContent = "✎ Lettrage" + ((p.bubbles || []).length ? " (" + p.bubbles.length + ")" : "");
 }
@@ -1744,7 +1813,19 @@ $("plate").addEventListener("click", async e => {
   }
   // Le verdict alimentera la boucle de validation (phase 6) : l'app propose, elle n'impose pas.
   p.verdict = (p.verdict === act) ? "" : act;
-  await api("/manga/panels", p); renderPlate();
+  // Mise a jour SUR PLACE plutot qu'un renderPlate : reconstruire la planche
+  // ramene le defilement en haut, et sur telephone la case fait presque un ecran
+  // -- on perdait de vue celle qu'on venait de juger. Le badge ET le bouton
+  // touche changent donc directement, la ou l'oeil est deja.
+  const carte = document.querySelector('[data-pid="' + p.id + '"]');
+  if (carte){
+    carte.querySelector(".verdict").textContent =
+      p.verdict === "ok" ? "✅" : (p.verdict === "ko" ? "❌" : "");
+    carte.querySelector('[data-act="ok"]').classList.toggle("on", p.verdict === "ok");
+    carte.querySelector('[data-act="ko"]').classList.toggle("on", p.verdict === "ko");
+  }
+  majEtape();
+  await api("/manga/panels", p);
 });
 $("plate").addEventListener("change", async e => {
   const card = e.target.closest("[data-pid]"); if (!card) return;
