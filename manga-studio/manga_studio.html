@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.15.0</title>
+<title>Manga Studio v1.17.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -204,7 +204,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.15.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.17.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -310,6 +310,13 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
     </div>
     <label>Style (tags N&amp;B — l'essai 1 a montré que ce sont eux qui font tout)</label>
     <textarea id="rStyle"></textarea>
+    <label>Style du projet — libre, en français si tu veux</label>
+    <textarea id="rTheme" placeholder="ex : manga de mecha, encrage épais, trames grossières, plans très contrastés"></textarea>
+    <div class="row">
+      <button class="btn sm" id="btnThemeEnhance">✨ Traduire en tags</button>
+      <span class="muted" style="font-size:11px">Ajouté à TOUTES les cases du projet.
+        Un texte libre plutôt qu'une liste de genres : ton « n'importe quel sujet » ne doit pas être plafonné.</span>
+    </div>
     <label>Négatif</label><textarea id="rNeg"></textarea>
     <div class="row">
       <div style="width:100px"><label>Largeur</label><input id="rW" type="number" value="832"></div>
@@ -450,6 +457,18 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <!-- ============ RÉGLAGES ============ -->
 <section id="tSet">
   <div class="card">
+    <h3>Écriture des prompts</h3>
+    <label style="display:flex;align-items:center;gap:8px;margin:0 0 6px">
+      <input type="checkbox" id="cfgAutoEnhance" style="width:auto">
+      <b>Améliorer automatiquement avant de générer</b>
+    </label>
+    <p class="muted" style="margin:0">
+      Tu écris en français, l'app traduit en tags juste avant la génération —
+      sans que tu aies à cliquer ✨. Le texte traduit reste dans la case : tu peux
+      le relire et le corriger. Une case déjà en tags anglais n'est pas retouchée.
+    </p>
+  </div>
+  <div class="card">
     <h3>Connexion</h3>
     <label>Proxy Generate Studio</label><input id="cfgBase">
     <label>Clé (STUDIO_SECRET)</label><input id="cfgKey" type="password" placeholder="collée automatiquement via #k=">
@@ -506,7 +525,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.15.0";
+const VERSION = "1.17.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -717,18 +736,73 @@ function promptFinal(p){
   const ident = duCasting.length
     ? duCasting
     : (p.sansPerso ? [] : [r.trigger, r.ident].filter(x => x && x.trim()));
-  return [r.style].concat(ident).concat([(p.prompt || "").trim()])
+  let out = [r.style].concat(r.theme && r.theme.trim() ? [r.theme.trim()] : [])
+    .concat(ident).concat([(p.prompt || "").trim()])
     .concat(ambiance && S.page && S.page.master && S.page.master.decor
             ? [S.page.master.decor] : [])
     .filter(x => x && x.trim()).join(", ");
+  // « solo » l'emporte sur tout le reste : il suffit qu'il traine dans l'identite
+  // d'un personnage pour qu'une scene a deux soit impossible. Des que plusieurs
+  // personnages sont demandes -- par le casting ou par un tag de comptage -- on
+  // le retire, sinon le modele n'en dessine qu'un et rien ne l'explique.
+  const n = Math.max(tagsCasting(p).length,
+                     nbPersonnages(p.prompt || ""),
+                     (p.recipe && p.recipe.nbPersos) || 0);
+  if (n > 1){
+    // On RETIRE « solo » (il l'emporte sur tout le reste) et on AJOUTE le tag de
+    // comptage s'il manque. Le modele compte avec des tags, pas avec des mots.
+    out = out.replace(/(^|,\s*)solo(?=\s*(,|$))/gi, "$1").replace(/,\s*,/g, ",");
+    if (!new RegExp("\b" + n + "(boys|girls|people)\b", "i").test(out)
+        && !/1boy 1girl/i.test(out)){
+      out = out.replace(/^([^,]+,)/, "$1 " + n + "people,");
+    }
+  }
+  return out;
 }
 
 /** Un texte qui ressemble a du francais n'est PAS compris par le moteur : il est
  *  ignore. On le dit AVANT de depenser 25 s de carte graphique. */
+const MOTS_FR = ["une", "un", "des", "les", "le", "la", "du", "dans", "avec", "sur",
+  "sous", "qui", "que", "pour", "est", "sont", "et", "ses", "son", "sa", "leur",
+  "montrant", "assise", "assis", "debout", "deux", "trois", "quatre", "femme",
+  "homme", "fille", "garcon", "jeune", "vieux", "grand", "petite", "petit"];
+
+/** Combien de personnages la phrase demande-t-elle ? Compté ICI, pas par le LLM.
+ *
+ * Mesure du 27/07 : meme avec une consigne explicite (« utilise 2boys, n'emets
+ * jamais solo »), le modele de langue a rendu « solo, martial arts, master ».
+ * Un tag qui decide du nombre de personnages ne peut pas dependre de la bonne
+ * volonte d'un LLM : on le derive du texte, et on impose le resultat.
+ * Retourne 0 quand rien n'est demande explicitement (on ne force alors rien).
+ */
+const CHIFFRES_FR = { "deux": 2, "trois": 3, "quatre": 4, "cinq": 5,
+                      "2": 2, "3": 3, "4": 4, "5": 5,
+                      "two": 2, "three": 3, "four": 4, "five": 5 };
+const SUJETS_FR = ["personnage", "personnages", "homme", "hommes", "femme", "femmes",
+  "fille", "filles", "garcon", "garcons", "maitre", "maitres", "guerrier", "guerriers",
+  "robot", "robots", "mecha", "mechas", "combattant", "combattants", "people",
+  "characters", "men", "women", "girls", "boys", "masters", "robots"];
+
+function nbPersonnages(t){
+  const mots = String(t || "").toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .split(/[^a-z0-9]+/).filter(Boolean);
+  for (let i = 0; i < mots.length - 1; i++){
+    const n = CHIFFRES_FR[mots[i]];
+    // Le sujet doit suivre de pres le nombre : « deux maitres » compte,
+    // « deux heures plus tard, un maitre » ne compte pas.
+    if (n) for (let j = i + 1; j <= Math.min(i + 3, mots.length - 1); j++){
+      if (SUJETS_FR.includes(mots[j])) return n;
+    }
+  }
+  return 0;
+}
+
 function sembleFrancais(t){
-  if (!t) return false;
-  return /[àâäéèêëîïôöùûüçœ]/i.test(t)
-      || /(une?|des|les?|la|dans|avec|sur|sous|qui|pour|est|sont|montrant|assise?)/i.test(t);
+  const s = String(t || "").toLowerCase();
+  if (!s.trim()) return false;
+  if (/[à-ÿŒœ]/.test(s)) return true;
+  return s.split(/[^a-z]+/).filter(Boolean).some(m => MOTS_FR.includes(m));
 }
 
 /* =====================================================================
@@ -1257,8 +1331,13 @@ function majApercu(p){
   const fr = sembleFrancais((p.prompt || "").trim());
   el.innerHTML = "<b>Sera envoyé :</b> " + esc(txt.slice(0, 260))
     + (txt.length > 260 ? "…" : "")
-    + (fr ? '<br><span class="alerte">⚠ Ta phrase est en français : le moteur ne la '
-            + 'comprend pas, il l’ignorera. Clique <b>✨ Améliorer</b>.</span>' : "");
+    + (!fr ? ""
+        : OPT.autoEnhance
+          ? '<br><span style="color:#8fd8a8">✓ Français détecté : il sera traduit '
+            + 'automatiquement juste avant la génération.</span>'
+          : '<br><span class="alerte">⚠ Ta phrase est en français : le moteur ne la '
+            + 'comprend pas, il l’ignorera. Clique <b>✨ Améliorer</b> — ou active '
+            + 'la traduction automatique dans <b>Réglages</b>.</span>');
 }
 
 function majApercus(){ (S.panels || []).forEach(majApercu); }
@@ -1461,6 +1540,38 @@ async function genPanel(p){
   // cache (donc toujours rapide) mais l'image est bel et bien reecrite.
   const prefix = "manga/" + S.proj.slug + "/" + S.page.id
                + "/" + Date.now().toString(36);
+
+  // Amelioration automatique : on traduit AVANT de generer, seulement si le texte
+  // en a besoin. Une case deja en tags anglais n'est pas retouchee -- retraduire
+  // une traduction la degrade a chaque passage.
+  // Le nombre de personnages se lit sur le texte D'ORIGINE. La traduction le perd
+  // regulierement (« deux maitres » ressort en « martial arts master », au
+  // singulier) : compter apres, c'est compter sur un texte deja appauvri.
+  const nDemande = nbPersonnages(p.prompt || "");
+  if (nDemande > 1) p.recipe = Object.assign({}, p.recipe, { nbPersos: nDemande });
+
+  if (OPT.autoEnhance && sembleFrancais(p.prompt)){
+    try {
+      busyOn("Traduction de ta phrase en tags…");
+      const rr = await api("/enhance", { idea: "Manga panel, black and white. IMPORTANT: if the scene involves several "
+      + "characters, you MUST use danbooru count tags (2boys, 2girls, 1boy 1girl, "
+      + "3boys, multiple boys, multiple girls) and you must NOT output the tag "
+      + "\"solo\". If it involves exactly one, use solo. Scene: " + p.prompt.trim(),
+                                         format: "tags" });
+      if (rr.prompt){
+        p.prompt = rr.prompt;
+        const c2 = document.querySelector('[data-pid="' + p.id + '"] [data-prompt]');
+        if (c2) c2.value = rr.prompt;
+        majApercu(p);
+        await api("/manga/panels", p);
+        log("prompt traduit automatiquement : " + rr.prompt.slice(0, 80), "s");
+      }
+    } catch(e){
+      // On NE bloque PAS la generation : une traduction ratee vaut mieux qu'une
+      // case qu'on refuse de dessiner. On le dit, et on continue.
+      log("traduction auto impossible (" + e.message + ") — on génère tel quel", "w");
+    }
+  }
 
   refus(p, "");
   panelBusy(p.id, ambiance ? "ambiance…" : "dialogue…");
@@ -1998,6 +2109,12 @@ document.addEventListener("keydown", e => {
   else if (e.key === "ArrowRight") lbShow(LB + 1);
 });
 
+/* Reglages d'ecriture. Demande de Quang le 27/07 : « une option bien placee
+   pour que je puisse le mettre sur actif en permanence ». */
+const OPT = {
+  autoEnhance: localStorage.getItem("manga_auto_enhance") === "1",
+};
+
 /* ---------- base de personnages ----------
    Quang, 27/07 : « je ne comprends pas a quel moment je peux selectionner les
    personnages que j'aurai dans ma base de donnees […] c'est plus un controle
@@ -2074,6 +2191,7 @@ function fillRecipe(){
   const r = recipe();
   $("rLora").value = r.lora; $("rLoraW").value = r.loraW; $("rTrigger").value = r.trigger;
   $("rIdent").value = r.ident; $("rStyle").value = r.style; $("rNeg").value = r.neg;
+  $("rTheme").value = r.theme || "";
   $("rW").value = r.w; $("rH").value = r.h; $("rSteps").value = r.steps;
   $("rCfg").value = r.cfg; $("rCnW").value = r.cnW;
   const sel = $("rCkpt");
@@ -2109,7 +2227,8 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   if (b.dataset.tab === "tGal") refreshGal();
   if (b.dataset.tab === "tPerso") loadChars().catch(e => log("personnages: " + e.message, "e"));
   if (b.dataset.tab === "tVal") loadValides().catch(e => log("validé: " + e.message, "e"));
-  if (b.dataset.tab === "tSet"){ $("cfgBase").value = CFG.base; $("cfgKey").value = CFG.key; }
+  if (b.dataset.tab === "tSet"){
+    $("cfgAutoEnhance").checked = OPT.autoEnhance; $("cfgBase").value = CFG.base; $("cfgKey").value = CFG.key; }
 });
 
 $("selProj").onchange = async e => {
@@ -2294,8 +2413,13 @@ $("plate").addEventListener("click", async e => {
     // du prompt lui dicte. C'est ce qui est arrive le 27/07 -- deux demandes
     // tres differentes ont donne deux fois la meme image.
     return avecTemoin("Amélioration du prompt…", async () => {
-      const r = await api("/enhance", { idea:
-        "Manga panel, black and white. " + idee, format: "tags" });
+      // Le modele compte avec des TAGS, pas avec des mots : « two martial arts
+      // masters » ne pese rien face a « 2boys ». C'est ce qui rendait une scene
+      // a deux personnages muette -- Quang obtenait un seul combattant.
+      const r = await api("/enhance", { idea: "Manga panel, black and white. IMPORTANT: if the scene involves several "
+      + "characters, you MUST use danbooru count tags (2boys, 2girls, 1boy 1girl, "
+      + "3boys, multiple boys, multiple girls) and you must NOT output the tag "
+      + "\"solo\". If it involves exactly one, use solo. Scene: " + idee, format: "tags" });
       if (!r.prompt) throw new Error("réponse vide");
       p.prompt = r.prompt;
       champ.value = r.prompt;
@@ -2361,6 +2485,18 @@ $("plate").addEventListener("pointerdown", bubPointerDown);
 // Les projets crees AVANT la v1.13.0 ont le personnage de test COPIE dans leur
 // recette : corriger le defaut ne les corrigeait pas, et Quang a continue
 // d'obtenir la lyceenne apres que je lui aie annonce le contraire.
+$("btnThemeEnhance").onclick = () => {
+  const idee = $("rTheme").value.trim();
+  if (!idee) return toast("décris d'abord le style voulu");
+  return avecTemoin("Traduction du style…", async () => {
+    const r = await api("/enhance", { idea:
+      "Art style tags for a black and white manga. ONLY style, rendering, "
+      + "linework, shading and mood — no character, no scene, no action : " + idee,
+      format: "tags" });
+    if (r.prompt) $("rTheme").value = r.prompt;
+  }, "Style traduit — pense à Enregistrer la recette");
+};
+
 $("btnSansPerso").onclick = async () => {
   if (!S.proj) return toast("aucun projet");
   if (!confirm(`Retirer le personnage (LoRA, déclencheur, identité) de ce projet ?\n\n`
@@ -2379,6 +2515,7 @@ $("btnSaveRecipe").onclick = async () => {
   S.proj.recipe = Object.assign({}, recipe(), {
     ckpt: $("rCkpt").value, lora: $("rLora").value, loraW: +$("rLoraW").value,
     trigger: $("rTrigger").value, ident: $("rIdent").value, style: $("rStyle").value,
+    theme: $("rTheme").value,
     neg: $("rNeg").value, w: +$("rW").value, h: +$("rH").value,
     steps: +$("rSteps").value, cfg: +$("rCfg").value, cnW: +$("rCnW").value });
   await api("/manga/projects", S.proj); toast("recette enregistrée");
@@ -2398,6 +2535,12 @@ $("btnStartComfy").onclick = async () => {
   try { await api("/start", {}); toast("ComfyUI démarre…"); log("demande de démarrage ComfyUI"); }
   catch(e){ log("start: " + e.message, "e"); toast("échec"); }
   setTimeout(health, 8000);
+};
+$("cfgAutoEnhance").onchange = e => {
+  OPT.autoEnhance = e.target.checked;
+  localStorage.setItem("manga_auto_enhance", OPT.autoEnhance ? "1" : "0");
+  toast(OPT.autoEnhance ? "amélioration automatique activée" : "désactivée");
+  majApercus();
 };
 $("btnClearLog").onclick = () => { LOG.length = 0; $("log").innerHTML = ""; };
 $("btnCopyLog").onclick = () => {
