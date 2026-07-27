@@ -545,6 +545,25 @@ que ReActor interdisait : des plans larges au visage résolu. Entraînement 1 34
 > le fond. **Deux instruments non calibrés qui s'accordent ne se corroborent pas : ils se trompent
 > ensemble, et cet accord m'a rendu confiant.** Un seuil doit être calibré sur des cas dont on connaît la
 > réponse *avant* de servir à conclure.
+>
+> ### ✅ Mesure refaite sur une base valide — `mesure_cadrage.py` (27/07)
+>
+> Plus de proxy : on prend la **définition**. Un cadrage, c'est ce qui entre dans le champ, et les
+> keypoints OpenPose le disent — chevilles visibles ⇒ plan en pied, genoux ⇒ américain, etc. Un détecteur
+> de visage prend le relais sur les cadrages serrés, où OpenPose ne voit aucun corps (et pour cause).
+>
+> **`--calibrer` est passé avant tout usage** : 7/9 sur l'étalon, et surtout **2 sous-estimations,
+> 0 surestimation**. L'outil rate des plans larges, il n'en invente jamais. Il le dit lui-même et en tire
+> ses propres limites : « c'est un plan large » est fiable, « ce n'est pas » ne l'est pas ⇒ **il ne peut
+> pas établir une répartition, seulement un plancher.**
+>
+> | Dataset | Plans larges (genoux ou chevilles visibles) |
+> |---|---|
+> | v1 — 24 images | **0** — pas un seul |
+> | v2 — 28 images | **≥ 8** (6 en pied + 2 américains) = **≥ 29 %** |
+>
+> ⇒ **Le rééquilibrage du dataset v2 est réel, et cette fois c'est établi.** Ce qui reste retiré, faute
+> d'instrument capable de le soutenir : la répartition détaillée, et le « 11 % plus large » du LoRA v2.
 
 **Comparatif v1 vs v2, même seed (222222), même checkpoint, poids 0,8 :**
 
@@ -624,6 +643,7 @@ vérifié : 24 images × 6 repeats = 1 152 steps, exactement les chiffres de la 
 | **Créer ≠ sélectionner** | Le projet fraîchement créé n'était pas le projet courant → 6 cases rangées chez un voisin, **sans aucune erreur**. Toujours vérifier *où* un fichier atterrit, pas seulement *qu'il* atterrit. |
 | **`hidden` écrasé par un `display` d'auteur** | `.busy{display:flex}` annule l'attribut `hidden` : le voile est resté affiché sur chaque case pendant toute la v1.0.1, masquant l'image et **avalant les clics**. Toujours écrire `.x[hidden]{display:none}` quand on donne un `display` à un élément qu'on masque par attribut. |
 | **Un banc qui ne regarde jamais l'écran** | Les 3 défauts de la phase 5 étaient verts sur tous les chiffres. Un banc d'UI doit produire une **capture** — et un contrôle géométrique (`getBBox`) quand la question est « est-ce que ça tient dedans ». |
+| **Un secours qui echoue en silence** | Le detecteur de visage de repli etait dans un `try/except` muet. Lance avec le mauvais interpreteur (sans `ultralytics`), il repondait « pas de visage » — et la calibration accusait l'OUTIL au lieu de l'ENVIRONNEMENT. Un secours doit crier quand il ne peut pas fonctionner. |
 | **Un seuil de mesure jamais calibre** | J'ai classe des cadrages avec « taille du visage < 0,09 = plan en pied », un seuil **invente**. Calibration a posteriori : un buste mesure 0,448, un plan en pied 0,207 — l'instrument ne separe rien. Toute conclusion tiree d'un seuil doit d'abord montrer que le seuil separe des cas connus. |
 | **Deux instruments non calibres qui s'accordent** | Pixtral disait « buste » sur des images en pied ; ma mesure disait pareil. J'ai lu leur accord comme une corroboration et classe le desaccord restant en « bruit ». Ils se trompaient **ensemble**. Un accord ne vaut que si au moins un des deux a ete verifie contre la realite. |
 | **Un chemin relatif apres un rangement de fichiers** | `prep_train.py` pointait vers `HERE/dataset` ; les scripts ont ete deplaces dans `scripts/`, le dataset est reste a la racine. Il ne trouvait plus rien **sans rien dire** — un `continue` silencieux dans une boucle. Tout script qui peut finir avec 0 element doit le DIRE bruyamment. |
@@ -644,6 +664,7 @@ vérifié : 24 images × 6 repeats = 1 152 steps, exactement les chiffres de la 
 | 2026-07-26 | Ouverture du chantier. Décision d'archi (app séparée). Checkpoint Illustrious installé. Essais 1-4 mesurés. Recherche web + vote 3 voix. kohya installé (3 pièges payés : cu128, versions transformers, encodage cp1252). |
 | 2026-07-26 | **Phase 1 franchie à 89 %** (contre 50 % sans LoRA). LoRA `zqmg1rl_v1` entraîné et validé sur comparatif strict. 2 réserves ouvertes → LoRA v2 avant la phase 4. |
 | 2026-07-26 | **Phase 3 : pipeline d'ingestion écrit et mesuré** (`manga_ingest.py`). Découpage 83 % à IoU 0,66 mais **Pixtral quantifie sur une grille** ⇒ raffinement OpenCV nécessaire. Volet style : OK. **Bloqué sur la validation** faute de scans réels de Quang. Premier test = faux positif, corrigé par un test à vérité terrain. |
+| 2026-07-27 | **Mesure de cadrage refaite sur une base valide** (`mesure_cadrage.py`) : plus de proxy, la DEFINITION — quelles articulations sont dans le champ (keypoints OpenPose), + un detecteur de visage la ou OpenPose est aveugle. Calibration passee AVANT usage : 7/9, avec **2 sous-estimations et 0 surestimation** ⇒ l'outil declare lui-meme qu'il ne peut donner qu'un **plancher**. Resultat : dataset v1 = **0** plan large sur 24, dataset v2 = **au moins 8** sur 28. **Le reequilibrage du v2 est reel, et c'est desormais etabli.** |
 | 2026-07-27 | **⛔ CORRECTION : ma mesure de cadrage etait invalide.** Calibree apres coup sur des images dont j'avais verifie le cadrage a l'oeil, la « taille du visage » donne **0,448 pour un buste et 0,207 pour un plan en pied** — elle ne separe pas les classes, et le detecteur echoue sur 2 plans larges. Retires : la repartition des cadrages des datasets, « aucun vrai plan en pied n'est atteint », « le v2 cadre 11 % plus large ». **Lecon : j'ai pose un seuil que je n'avais jamais etabli, et un second juge non calibre disait la meme chose — leur accord m'a rendu confiant alors qu'ils se trompaient ensemble.** Ajoute `make_pose.py` (squelettes OpenPose synthetiques : la position du squelette EST le cadrage). |
 | 2026-07-27 | **LoRA v2 entraine et mesure — critere NON atteint, et c'est le resultat utile.** Cadrage : 11 % plus large seulement, les deux restent des bustes malgre 7 prompts « full body » ⇒ **le modele de base resiste, ce n'est pas (que) le dataset** ; il faudra ControlNet openpose. Grain de beaute : toujours 0/3, et la mesure dit pourquoi — il n'est visible que sur **3/12** images du dataset v2 malgre `(mole:1.4)`. **On n'a jamais montre ce detail assez souvent pour savoir s'il est apprenable.** Le v1 reste le defaut. Trouve au passage : `train_lora.sh` pointait vers une session morte. |
 | 2026-07-27 | **Boucle de validation livree** (v1.7.0) : onglet Valide, bibliotheque de recettes rejouables, ecriture du dataset du LoRA suivant, `prep_train.py` rendu generique. La propriete « l'app propose, elle n'impose rien » est **falsifiable** et verifiee rouge sous sabotage. Bug latent trouve : `prep_train.py` ne trouvait plus le dataset depuis le rangement des scripts — le LoRA v1 n'etait plus reentrainable, en silence. RESTE l'entrainement du v2 (GPU, ComfyUI a couper ~40 min). |
