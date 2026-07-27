@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.41.0</title>
+<title>Manga Studio v1.42.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -325,7 +325,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.41.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.42.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -752,7 +752,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.41.0";
+const VERSION = "1.42.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1771,12 +1771,57 @@ function groupeHTML(gid, soeurs, k, p, i){
     + '<b>🎬 ' + (k + 1) + '/' + soeurs.length
     + (sq.geste ? ' · ' + esc(nomGeste(sq.geste)) : '') + '</b>'
     + '<button class="btn sm" data-grp="next" data-gid="' + gid + '" title="vignette suivante">▶</button>'
+    + (soeurs.length > 1
+       ? '<span style="width:8px"></span>'
+         + '<button class="btn sm" data-grp="gauche" data-gid="' + gid + '"'
+         + (k === 0 ? " disabled" : "")
+         + ' title="Déplacer cette vignette plus tôt dans la séquence">⇤</button>'
+         + '<button class="btn sm" data-grp="droite" data-gid="' + gid + '"'
+         + (k === soeurs.length - 1 ? " disabled" : "")
+         + ' title="Déplacer cette vignette plus tard dans la séquence">⇥</button>'
+       : "")
     + '<span class="grow"></span>'
     + '<button class="btn sm" data-grp="deplier" data-gid="' + gid + '">déplier les '
     + soeurs.length + '</button>'
     + '</div>'
     + panelHTML(p, i)
     + '</div>';
+}
+
+/** Deplacer une vignette d'un cran dans sa sequence.
+ *
+ *  Quang, 27/07 : « est-ce qu'il serait interessant de pouvoir changer l'ordre
+ *  des images […] mais au niveau ergonomie, de quelle maniere ? »
+ *  Reponse : SURTOUT PAS du glisser-deposer. Au doigt, sur un telephone, un drag
+ *  entre en conflit avec le defilement de la page -- c'est la source de bug
+ *  d'ergonomie la plus classique, et ce projet a deja paye le clavier qui se
+ *  refermait. Deux boutons qui echangent avec la voisine : un tap, un resultat
+ *  visible, annulable en tapant l'autre.
+ *
+ *  ⚠ On echange DEUX ordres, pas un : `sequence.index` (ce que disent le badge et
+ *  le lecteur) ET `idx` (la position dans la planche, donc dans l'EXPORT, que la
+ *  base trie). N'echanger que le premier ferait dire a l'ecran l'inverse du PNG. */
+async function deplacerVignette(gid, sens){
+  const soeurs = S.panels
+    .filter(x => x.recipe && x.recipe.sequence && x.recipe.sequence.gid === gid)
+    .sort((a, b) => a.recipe.sequence.index - b.recipe.sequence.index);
+  const k = Math.min(S.vueSeq[gid] || 0, soeurs.length - 1);
+  const j = k + sens;
+  if (j < 0 || j >= soeurs.length) return toast("déjà au bout de la séquence");
+  const a = soeurs[k], b = soeurs[j];
+  const ia = a.recipe.sequence.index, ib = b.recipe.sequence.index;
+  a.recipe = Object.assign({}, a.recipe,
+    { sequence: Object.assign({}, a.recipe.sequence, { index: ib }) });
+  b.recipe = Object.assign({}, b.recipe,
+    { sequence: Object.assign({}, b.recipe.sequence, { index: ia }) });
+  const xa = a.idx, xb = b.idx;
+  a.idx = xb; b.idx = xa;
+  await api("/manga/panels", a);
+  await api("/manga/panels", b);
+  S.panels.sort((x, y) => (x.idx || 0) - (y.idx || 0));   // la planche suit
+  S.vueSeq[gid] = j;    // on continue de voir la vignette qu'on vient de deplacer
+  renderPlate();
+  log("vignette déplacée en position " + (j + 1) + "/" + soeurs.length, "s");
 }
 
 function renderPlate(){
@@ -4112,6 +4157,10 @@ $("plate").addEventListener("click", async e => {
     const gid = g.dataset.gid, quoi = g.dataset.grp;
     if (quoi === "deplier"){ S.deplie[gid] = true; return renderPlate(); }
     if (quoi === "replier"){ delete S.deplie[gid]; return renderPlate(); }
+    if (quoi === "gauche" || quoi === "droite"){
+      return deplacerVignette(gid, quoi === "gauche" ? -1 : 1)
+        .catch(err => { log("déplacement : " + err.message, "e"); toast("échec"); });
+    }
     const soeurs = S.panels.filter(x => x.recipe && x.recipe.sequence
                                      && x.recipe.sequence.gid === gid);
     if (!soeurs.length) return;

@@ -143,7 +143,58 @@ def main():
         verifie("« regrouper » les remet dans un bloc",
                 pg.eval_on_selector_all("#plate .panel", "els => els.length") == 3)
 
-        # ---------- 5. supprimer une vignette ne casse rien ----------
+        # ---------- 5. REORDONNER (v1.42.0) ----------
+        # On revient sur la 1re vignette, puis on la pousse d'un cran.
+        # ⚠ Boucle BORNEE : sous mutation le groupe ne contient qu'une vignette,
+        # « 1/6 » n'arrive jamais et la version non bornee tournait a l'infini --
+        # le banc mourait sur un timeout au lieu d'annoncer un echec.
+        for _ in range(8):
+            if "1/6" in pg.eval_on_selector(".groupe .grpbar b", "el => el.textContent"):
+                break
+            pg.click('[data-grp="next"]'); pg.wait_for_timeout(250)
+        avant_ordre = pg.evaluate("""(gid) => S.panels
+            .filter(p => p.recipe && p.recipe.sequence && p.recipe.sequence.gid === gid)
+            .sort((a, b) => a.recipe.sequence.index - b.recipe.sequence.index)
+            .map(p => p.id)""", d["gid"])
+        # ⚠ On CONSTATE l'absence des boutons au lieu de mourir dessus : sous
+        # mutation la sequence n'a qu'une vignette, donc ils ne sont pas rendus.
+        # Un banc qui touche a une UI mouvante doit savoir echouer proprement.
+        a_boutons = pg.eval_on_selector_all('[data-grp="gauche"]', "els => els.length") == 1
+        verifie("« plus tot » est desactive sur la 1re vignette",
+                a_boutons and pg.eval_on_selector('[data-grp="gauche"]',
+                                                  "el => el.disabled") is True,
+                "boutons de deplacement absents" if not a_boutons else "")
+        if a_boutons:
+            pg.click('[data-grp="droite"]')
+            pg.wait_for_timeout(1500)
+        apres_ordre = pg.evaluate("""(gid) => S.panels
+            .filter(p => p.recipe && p.recipe.sequence && p.recipe.sequence.gid === gid)
+            .sort((a, b) => a.recipe.sequence.index - b.recipe.sequence.index)
+            .map(p => p.id)""", d["gid"])
+        assez = len(avant_ordre) >= 2 and len(apres_ordre) >= 2
+        verifie("la vignette a bien echange sa place avec la suivante",
+                assez and apres_ordre[0] == avant_ordre[1]
+                and apres_ordre[1] == avant_ordre[0],
+                "%s -> %s" % (avant_ordre[:2], apres_ordre[:2]))
+        verifie("on continue de VOIR la vignette deplacee",
+                "2/6" in pg.eval_on_selector(".groupe .grpbar b", "el => el.textContent"),
+                pg.eval_on_selector(".groupe .grpbar b", "el => el.textContent"))
+        # ⚠ L'ORDRE DE LA PLANCHE doit suivre, sinon l'ecran dit l'inverse du PNG :
+        # `buildPlateCanvas` lit S.panels dans l'ordre, que la base trie par `idx`.
+        ordre_planche = pg.evaluate("""(ids) => S.panels
+            .filter(p => ids.includes(p.id))
+            .sort((a, b) => (a.idx || 0) - (b.idx || 0))
+            .map(p => p.id)""", avant_ordre[:2])
+        verifie("l'ordre de la PLANCHE suit (donc l'export aussi)",
+                assez and len(ordre_planche) >= 1
+                and ordre_planche[0] == avant_ordre[1], str(ordre_planche))
+
+        # on remet la sequence dans son ordre d'origine
+        if a_boutons:
+            pg.click('[data-grp="gauche"]')
+            pg.wait_for_timeout(1500)
+
+        # ---------- 6. supprimer une vignette ne casse rien ----------
         pg.evaluate("""(id) => {
             S.panels = S.panels.filter(p => p.id !== id);
             renderPlate();
