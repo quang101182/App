@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.12.0</title>
+<title>Manga Studio v1.13.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -199,7 +199,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.12.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.13.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -467,7 +467,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.12.0";
+const VERSION = "1.13.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -620,7 +620,16 @@ async function api(path, body, opts){
   const r = await fetch(CFG.base + path, o);
   const txt = await r.text();
   let j; try { j = JSON.parse(txt); } catch { j = { raw: txt }; }
-  if (!r.ok) throw new Error("HTTP " + r.status + " " + path + " : " + (j.error || txt.slice(0,120)));
+  if (!r.ok){
+    // Un « [object Object] » a coute un diagnostic le 27/07 : ComfyUI renvoie
+    // ses refus sous forme d'objet imbrique (node_errors), et le concatener a
+    // une chaine effacait tout. On rend le detail LISIBLE.
+    let detail = j.error;
+    if (detail && typeof detail === "object") detail = detail.message || JSON.stringify(detail);
+    if (j.node_errors && Object.keys(j.node_errors).length)
+      detail = (detail || "") + " — " + JSON.stringify(j.node_errors).slice(0, 300);
+    throw new Error("HTTP " + r.status + " " + path + " : " + (detail || txt.slice(0, 200)));
+  }
   if (j && j.error) throw new Error(path + " : " + j.error);
   return j;
 }
@@ -630,13 +639,19 @@ const imgURL = p => CFG.base + "/manga/file?p=" + encodeURIComponent(p) + (CFG.k
 /* ---------- reglages mesures (phases 0 a 2) ---------- */
 const DEFAULT_RECIPE = {
   ckpt: "waiIllustriousSDXL_v170.safetensors",
-  lora: "_manga_test\\zqmg1rl_v1.safetensors",
-  loraW: 0.8,
-  trigger: "zqmg1rl",
-  ident: "1girl, solo, short messy black hair, blunt bangs, amber eyes, black sailor uniform, red scarf",
+  // ⚠ AUCUN personnage par defaut, et c'est une correction du 27/07.
+  // Le defaut portait le personnage de test du LoRA (« zqmg1rl, 1girl, solo,
+  // uniforme sailor, echarpe rouge ») : il etait donc ajoute a CHAQUE case de
+  // CHAQUE projet. Quang a demande « 2 maitres en arts martiaux » et a obtenu la
+  // lyceenne -- son texte etait noye sous une identite qu'il n'avait pas choisie.
+  // Un personnage se declare dans l'onglet Recette du projet qui en veut un.
+  lora: "", loraW: 0.8, trigger: "", ident: "",
   // Essai 1 : ces tags SEULS sortent de vraies trames halftone. Sans eux, meme seed = illustration couleur.
   style: "masterpiece, best quality, very aesthetic, absurdres, monochrome, greyscale, manga, screentone, halftone, lineart, ink, high contrast",
-  neg: "bad quality, worst quality, sketch, censor, watermark, signature, text, speech bubble, extra digits, bad hands, bad anatomy, multiple girls, color, colored",
+  // « multiple girls » a ete RETIRE du defaut : il rendait toute scene a deux
+  // personnages impossible par construction. Il appartient a l'identite d'un
+  // personnage solo, pas au style de l'app.
+  neg: "bad quality, worst quality, sketch, censor, watermark, signature, text, speech bubble, extra digits, bad hands, bad anatomy, color, colored",
   w: 832, h: 1216, steps: 30, cfg: 5.5,
   sampler: "euler_ancestral", scheduler: "normal",
   cn: "depth-sdxl.safetensors",
@@ -675,19 +690,27 @@ function wfMaster(r, decor, seed, prefix){
 
 /** Une case. `depthName` non vide => mode AMBIANCE (ControlNet depth sur le fond maitre). */
 function wfPanel(r, positive, seed, prefix, depthName){
+  // Sans LoRA, le noeud est RETIRE du graphe -- il n'est pas laisse avec un nom
+  // vide. ComfyUI refuse alors tout le workflow (HTTP 400) et l'app n'affichait
+  // qu'« [object Object] » : une case qui ne se genere pas, sans raison lisible.
+  const avecLora = !!(r.lora && r.lora.trim());
+  const src = avecLora ? "10" : "1";
   const g = {
     "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: r.ckpt } },
-    "10":{ class_type: "LoraLoader", inputs: { lora_name: r.lora,
-            strength_model: +r.loraW, strength_clip: +r.loraW, model: ["1",0], clip: ["1",1] } },
-    "2": { class_type: "CLIPTextEncode", inputs: { text: positive, clip: ["10",1] } },
-    "3": { class_type: "CLIPTextEncode", inputs: { text: r.neg, clip: ["10",1] } },
+    "2": { class_type: "CLIPTextEncode", inputs: { text: positive, clip: [src,1] } },
+    "3": { class_type: "CLIPTextEncode", inputs: { text: r.neg, clip: [src,1] } },
     "4": { class_type: "EmptyLatentImage", inputs: { width: +r.w, height: +r.h, batch_size: 1 } },
     "5": { class_type: "KSampler", inputs: { seed: seed, steps: +r.steps, cfg: +r.cfg,
             sampler_name: r.sampler, scheduler: r.scheduler, denoise: 1.0,
-            model: ["10",0], positive: ["2",0], negative: ["3",0], latent_image: ["4",0] } },
+            model: [src,0], positive: ["2",0], negative: ["3",0], latent_image: ["4",0] } },
     "6": { class_type: "VAEDecode", inputs: { samples: ["5",0], vae: ["1",2] } },
     "7": { class_type: "SaveImage", inputs: { images: ["6",0], filename_prefix: prefix + "/case" } }
   };
+  if (avecLora){
+    g["10"] = { class_type: "LoraLoader", inputs: { lora_name: r.lora,
+                 strength_model: +r.loraW, strength_clip: +r.loraW,
+                 model: ["1",0], clip: ["1",1] } };
+  }
   if (depthName){
     g["11"] = { class_type: "ControlNetLoader", inputs: { control_net_name: r.cn } };
     g["12"] = { class_type: "LoadImage", inputs: { image: depthName } };
@@ -1127,8 +1150,16 @@ function panelHTML(p, i){
    + '<option value="ambiance"' + (p.kind==="ambiance"?" selected":"") + '>ambiance — fond maître</option>'
    + '</select><span class="tag ' + (p.kind==="ambiance"?"amb":"dia") + '">'
    + (p.kind==="ambiance" ? "ControlNet " + recipe().cnW : "identité fine") + '</span></div>'
-   + '<textarea data-prompt placeholder="action du personnage — ex : sitting at a desk, chin on hand, upper body">'
+   + '<textarea data-prompt placeholder="Décris la case — en français si tu veux. Ex : deux maîtres en arts martiaux face à face sous la pluie">'
    + esc(p.prompt) + '</textarea>'
+   + '<div class="row">'
+   + '<button class="btn sm" data-act="ameliorer" title="Traduit ta phrase en tags que le modèle comprend vraiment">✨ Améliorer</button>'
+   + (recipe().trigger
+       ? '<label style="margin:0;display:flex;align-items:center;gap:5px;color:var(--txt);font-size:12px">'
+         + '<input data-perso type="checkbox" style="width:auto"'
+         + (p.sansPerso ? "" : " checked") + '> personnage du projet</label>'
+       : '<span class="muted" style="font-size:11px">aucun personnage défini (onglet Recette)</span>')
+   + '</div>'
    + '<div class="row"><input data-seed type="number" style="width:120px" value="'
    + ((p.recipe && p.recipe.seed) || "") + '" placeholder="seed"> '
    + '<button class="btn sm" data-act="gen" title="Dessine cette case">Générer</button>'
@@ -1325,7 +1356,12 @@ async function genPanel(p){
     log("case " + p.id + " en ambiance sans fond maître -> ignorée", "w");
     return;
   }
-  const positive = r.style + ", " + r.trigger + ", " + r.ident + ", " + p.prompt.trim()
+  // L'identite du personnage n'est ajoutee QUE si la case la demande. Avant, elle
+  // etait injectee dans toutes les cases : « 2 maitres en arts martiaux » sortait
+  // une lyceenne en uniforme, parce que le prompt reel disait « 1girl, solo,
+  // uniforme sailor » avant meme de lire la phrase de Quang.
+  const ident = (p.sansPerso ? [] : [r.trigger, r.ident]).filter(x => x && x.trim());
+  const positive = [r.style].concat(ident).concat([p.prompt.trim()]).join(", ")
                  + (ambiance && S.page.master.decor ? ", " + S.page.master.decor : "");
   // Le nom de fichier est UNIQUE a chaque execution, et ce n'est pas cosmetique.
   // ComfyUI met en cache par empreinte du graphe : regenerer une case avec le
@@ -2033,6 +2069,29 @@ $("plate").addEventListener("click", async e => {
     p.bubbles = p.bubbles.filter(x => x.id !== b.id); S.selBub = null;
     redrawBubbles(p); fillBubEditor(); return saveBubbles(p);
   }
+  if (act === "ameliorer"){
+    const carte = document.querySelector('[data-pid="' + p.id + '"]');
+    const champ = carte.querySelector("[data-prompt]");
+    const idee = champ.value.trim();
+    if (!idee) return toast("écris d'abord ce que tu veux voir");
+    // Le moteur ne comprend QUE des tags booru anglais. Une phrase francaise
+    // n'est pas traduite par lui : elle est ignoree, et il rend ce que le reste
+    // du prompt lui dicte. C'est ce qui est arrive le 27/07 -- deux demandes
+    // tres differentes ont donne deux fois la meme image.
+    return avecTemoin("Amélioration du prompt…", async () => {
+      const r = await api("/enhance", { idea:
+        "Manga panel, black and white. " + idee, format: "tags" });
+      if (!r.prompt) throw new Error("réponse vide");
+      p.prompt = r.prompt;
+      champ.value = r.prompt;
+      await api("/manga/panels", p);
+      log("prompt amélioré : " + r.prompt.slice(0, 90), "s");
+      if (r.negativeAdd) log("négatif suggéré : " + r.negativeAdd, "w");
+    }, "Prompt amélioré").catch(e => {
+      log("amélioration : " + e.message, "e");
+      refus(p, "L'amélioration a échoué : " + e.message);
+    });
+  }
   // Le verdict alimentera la boucle de validation (phase 6) : l'app propose, elle n'impose pas.
   p.verdict = (p.verdict === act) ? "" : act;
   // Mise a jour SUR PLACE plutot qu'un renderPlate : reconstruire la planche
@@ -2053,6 +2112,11 @@ $("plate").addEventListener("change", async e => {
   const card = e.target.closest("[data-pid]"); if (!card) return;
   const p = S.panels.find(x => x.id === card.dataset.pid); if (!p) return;
   // Un champ de l'editeur de bulle ne doit PAS etre confondu avec les champs de la case.
+  if (e.target.matches("[data-perso]")){
+    p.sansPerso = !e.target.checked;
+    await api("/manga/panels", p);
+    return;
+  }
   if (e.target.matches("[data-btext],[data-bshape],[data-bsize],[data-bbold]")){
     const b = curBub(); if (!b) return;
     b.text  = card.querySelector("[data-btext]").value;
