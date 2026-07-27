@@ -159,11 +159,20 @@ def main():
         verifie("le champ seed est retrouvable",
                 pg.eval_on_selector_all(sel + " [data-seed]", "els => els.length") == 1)
 
-        # ---------- 3. un seul panneau a la fois ----------
+        # ---------- 3. ⚙ est un MODE, plus un clic par case (v1.48.0) ----------
+        # Le contrat a CHANGE, et c'est une demande de Quang : « ce n'est pas tres
+        # ergonomique de cliquer a chaque fois sur Affiner ». L'ancienne regle
+        # (« un seul panneau a la fois ») a donc ete remplacee, pas contournee.
+        ouverts = pg.eval_on_selector_all(".panel .affiner", "els => els.length")
+        verifie("ouvrir ⚙ une fois l'ouvre sur toutes les cases",
+                ouverts == len(d["ids"]), "%d ouverts pour %d cases"
+                % (ouverts, len(d["ids"])))
         pg.click('[data-pid="%s"] [data-act="affiner"]' % d["ids"][1])
         pg.wait_for_timeout(400)
-        ouverts = pg.eval_on_selector_all(".panel .affiner", "els => els.length")
-        verifie("un seul panneau deplie a la fois", ouverts == 1, "%d ouverts" % ouverts)
+        verifie("le replier les referme toutes",
+                pg.eval_on_selector_all(".panel .affiner", "els => els.length") == 0)
+        pg.click('[data-pid="%s"] [data-act="affiner"]' % d["ids"][0])
+        pg.wait_for_timeout(400)
 
         # ---------- 4. LE PIEGE : generer AU PANNEAU FERME ----------
         pg.click('[data-pid="%s"] [data-act="affiner"]' % d["ids"][1])   # on referme
