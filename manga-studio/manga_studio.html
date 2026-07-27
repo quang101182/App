@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.55.0</title>
+<title>Manga Studio v1.56.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -364,7 +364,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.55.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.56.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -841,7 +841,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.55.0";
+const VERSION = "1.56.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -2364,6 +2364,56 @@ function panelHTML(p, i){
  * obtient une lyceenne en uniforme. Deux causes invisibles depuis l'ecran --
  * l'identite du projet passait AVANT sa phrase, et sa phrase etait en francais
  * donc ignoree. Aucune des deux n'etait affichee nulle part. */
+/* ---------- l'alerte de casting (v1.56.0) ----------
+   Constat de l'essai du 28/07, lu dans le prompt REELLEMENT envoye : une case
+   qui disait « plan large du dojo VIDE » portait quand meme « 2people, 1girl…,
+   1man… ». Le casting s'applique a toutes les cases, y compris celles qui ne
+   parlent que d'un personnage — ou d'aucun. Resultat : douze cases avec la meme
+   composition a deux corps, quel que soit le decoupage.
+
+   ⚠ C'est un AVERTISSEMENT, jamais un refus, et c'est deliberé. La meme
+   heuristique de texte avait ete jugee « trop faillible pour retirer un bouton »
+   (v1.24.0) — ce jugement tient toujours. Mais le cout d'un faux positif change
+   du tout au tout : ici, c'est une phrase de trop a l'ecran ; la, c'etait un
+   geste rendu impossible. On avertit, l'utilisateur decide. */
+const MARQ_F = ["elle", "femme", "fille", "she", "her", "woman", "girl", "1girl", "2girls"];
+const MARQ_M = ["il", "homme", "garcon", "he", "his", "him", "man", "boy", "1man", "2boys"];
+const MARQ_DUO = ["deux", "both", "ensemble", "together", "2people", "affrontent",
+                  "face", "chacun", "each", "other", "duel", "adversaires"];
+
+/** Le texte de la case parle-t-il d'un seul personnage, ou d'aucun ?
+ *  Rend un message a afficher, ou "" quand rien ne cloche. */
+function alerteCasting(p){
+  const ici = castingCase(p)
+    .map(id => CHARS.find(c => c.id === id))
+    .filter(Boolean);
+  if (!ici.length) return "";
+  const mots = new Set(String(p.prompt || "").toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .split(/[^a-z0-9]+/).filter(Boolean));
+  if (!mots.size) return "";
+  const nomme = ici.filter(c => mots.has(String(c.name || "").toLowerCase()));
+  const duo = MARQ_DUO.some(m => mots.has(m)) || nomme.length > 1;
+  if (duo) return "";
+  const f = MARQ_F.some(m => mots.has(m));
+  const m = MARQ_M.some(m => mots.has(m));
+  // Aucune personne evoquee : c'est une case de decor.
+  if (!f && !m && !nomme.length){
+    return "Ce texte décrit un décor, mais " + ici.length + " personnage"
+      + (ici.length > 1 ? "s sont castés" : " est casté")
+      + " : " + ici.map(c => c.name || c.id).join(", ")
+      + (ici.length > 1 ? " seront dessinés" : " sera dessiné")
+      + " quand même. Décoche-les dans « Qui est là » pour une case vide.";
+  }
+  // Un seul genre evoque alors que le casting en compte plusieurs.
+  if (ici.length > 1 && (f !== m)){
+    return "Ce texte ne semble parler que d’un personnage, mais "
+      + ici.length + " sont castés (" + ici.map(c => c.name || c.id).join(", ")
+      + ") : ils seront tous dessinés. Décoche ceux qui ne sont pas dans cette case.";
+  }
+  return "";
+}
+
 function majApercu(p){
   const carte = document.querySelector('[data-pid="' + p.id + '"]');
   if (!carte) return;
@@ -2379,7 +2429,14 @@ function majApercu(p){
     + (!fr ? ""
         : '<br><span style="color:#8fd8a8">✓ Français détecté : il sera traduit '
           + 'en tags anglais juste avant la génération'
-          + (OPT.autoEnhance ? ', puis amélioré' : '') + '.</span>');
+          + (OPT.autoEnhance ? ', puis amélioré' : '') + '.</span>')
+    // L'alerte de casting vient APRES l'aperçu, et pas ailleurs : c'est ici
+    // qu'on lit ce qui va etre envoye, donc ici qu'un ecart entre le texte et
+    // le casting se voit.
+    + (function(){
+        const a = alerteCasting(p);
+        return a ? '<br><span style="color:var(--warn)">⚠ ' + esc(a) + '</span>' : "";
+      })();
 }
 
 function majApercus(){ (S.panels || []).forEach(majApercu); }
