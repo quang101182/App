@@ -24,6 +24,13 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODELS = os.path.join(HERE, "models")
+COMFY = os.environ.get("COMFYUI_HOME", r"C:\Users\quang\Documents\ComfyUI")
+
+# `dest` : dossier de destination. Absent -> scripts/models/ (outils du chantier).
+# Les poids d'IPAdapter vont dans ComfyUI, c'est lui qui les charge.
+IPADAPTER = os.path.join(COMFY, "models", "ipadapter")
+CLIP_VISION = os.path.join(COMFY, "models", "clip_vision")
+LORAS = os.path.join(COMFY, "models", "loras")
 
 # Detecteur de cases ET de bulles, YOLO26-nano fine-tune sur Manga109-s.
 # Licence Apache 2.0 -> utilisable, contrairement a Magi (recherche academique).
@@ -34,6 +41,47 @@ ASSETS = [
         "min_octets": 5_000_000,
         "a_quoi": "detection des cases (classe frame) et des bulles (classe text)",
     },
+    # --- IPAdapter (cohérence d'un personnage SANS entrainement) -------------
+    # Le nom du fichier de l'encodeur d'image n'est pas cosmetique : le noeud
+    # IPAdapterUnifiedLoader cherche par MOTIF dans models/clip_vision. Depose
+    # sous le nom d'origine (model.safetensors), il n'est jamais trouve.
+    {
+        "nom": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors",
+        "dest": CLIP_VISION,
+        "url": "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors",
+        "min_octets": 2_000_000_000,
+        "a_quoi": "encodeur d'image ViT-H, requis par TOUS les IPAdapter _vit-h",
+    },
+    {
+        "nom": "ip-adapter-plus_sdxl_vit-h.safetensors",
+        "dest": IPADAPTER,
+        "url": "https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors",
+        "min_octets": 700_000_000,
+        "a_quoi": "PLUS SDXL : transfert de style/sujet depuis une image de reference",
+    },
+    {
+        "nom": "ip-adapter-plus-face_sdxl_vit-h.safetensors",
+        "dest": IPADAPTER,
+        "url": "https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter-plus-face_sdxl_vit-h.safetensors",
+        "min_octets": 700_000_000,
+        "a_quoi": "PLUS FACE SDXL : verrou facial, sans insightface",
+    },
+    # FaceID v2 : le plus fort sur le visage, mais il exige insightface (present,
+    # installe par ReActor) ET son LoRA compagnon -- les deux, sinon le rendu part.
+    {
+        "nom": "ip-adapter-faceid-plusv2_sdxl.bin",
+        "dest": IPADAPTER,
+        "url": "https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sdxl.bin",
+        "min_octets": 700_000_000,
+        "a_quoi": "FACEID PLUS V2 SDXL (usage NON commercial -- projet perso)",
+    },
+    {
+        "nom": "ip-adapter-faceid-plusv2_sdxl_lora.safetensors",
+        "dest": LORAS,
+        "url": "https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sdxl_lora.safetensors",
+        "min_octets": 300_000_000,
+        "a_quoi": "LoRA compagnon OBLIGATOIRE de FaceID plus v2",
+    },
 ]
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -41,7 +89,8 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 
 
 def fetch(a, force=False):
-    dest = os.path.join(MODELS, a["nom"])
+    dossier = a.get("dest", MODELS)
+    dest = os.path.join(dossier, a["nom"])
     if os.path.isfile(dest) and not force:
         n = os.path.getsize(dest)
         if n >= a["min_octets"]:
@@ -49,7 +98,7 @@ def fetch(a, force=False):
             return True
         print("  %-34s present mais TRONQUE (%d octets) -> retelechargement"
               % (a["nom"], n))
-    os.makedirs(MODELS, exist_ok=True)
+    os.makedirs(dossier, exist_ok=True)
     print("  %-34s telechargement..." % a["nom"], flush=True)
     req = urllib.request.Request(a["url"], headers={"User-Agent": UA})
     tmp = dest + ".part"
@@ -73,8 +122,13 @@ def fetch(a, force=False):
         os.remove(tmp)
         return False
     os.replace(tmp, dest)
-    h = hashlib.sha256(open(dest, "rb").read()).hexdigest()[:16]
-    print("      OK %.1f Mo  sha256:%s" % (n / 1e6, h))
+    # Par blocs : l'encodeur d'image fait 2,5 Go, le lire d'un coup en RAM
+    # marcherait ici et exploserait ailleurs.
+    hsh = hashlib.sha256()
+    with open(dest, "rb") as f:
+        for bloc in iter(lambda: f.read(1 << 20), b""):
+            hsh.update(bloc)
+    print("      OK %.1f Mo  sha256:%s" % (n / 1e6, hsh.hexdigest()[:16]))
     return True
 
 
@@ -83,10 +137,12 @@ def main():
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
     print("=== MODELES DE MANGA STUDIO ===")
-    print("destination : %s\n" % MODELS)
+    print("outils du chantier : %s" % MODELS)
+    print("poids ComfyUI      : %s\n" % COMFY)
     ok = True
     for a in ASSETS:
         print("  (%s)" % a["a_quoi"])
+        print("   -> %s" % a.get("dest", MODELS))
         ok = fetch(a, args.force) and ok
     print("\n%s" % ("tout est en place." if ok else "AU MOINS UN MODELE MANQUE."))
     return 0 if ok else 1

@@ -500,10 +500,64 @@ un couloir ne prouve rien sur un duel de mechas.
 
 | Axe | À couvrir |
 |---|---|
-| **Genre** | romance · combat/action · pornographie · quotidien/slice of life · horreur ou tension |
+| **Genre** | romance · combat/action · **adulte / pornographie (voir le détail ci-dessous)** · quotidien/slice of life · horreur ou tension |
 | **Sujet** | humain réaliste · humain stylisé · **robot / mecha** · créature imaginaire · décor futuriste |
 | **Échelle** | une page · une séquence de 2-3 pages · un chapitre |
 | **Registre visuel** | intimiste (peu de cases, gros plans) · cinématographique (plans larges, mouvement) |
+
+#### Le volet adulte — explicité *(rappel de Quang, 27/07)*
+
+> « Un des thèmes aussi importants pour moi à tester est le thème pornographique sur plusieurs genres,
+> tout en restant légal bien sûr […] mais aussi les thèmes sexuels, de fétichisme et de domination femdom. »
+
+C'était écrit en un mot (« pornographie ») dans la matrice — **trop peu pour être testable**. Un axe qui ne
+nomme pas ses sous-genres ne se vérifie pas : « ça marche en porno » ne veut rien dire si l'un des registres
+casse. Sous-genres à couvrir, **entre adultes**, tous légaux en France :
+
+| Sous-genre | À vérifier en propre |
+|---|---|
+| Scène sexuelle explicite « classique » | anatomie tenue à deux personnages, cadrages serrés, N&B tramé sans bouillie |
+| **Fétichisme** | accessoires et matières (cuir, latex, bas, bondage de corde…) — c'est du **détail constant**, donc de la fiche personnage/scène, pas du prompt jetable |
+| **Femdom / domination** | ce qui casse ici n'est pas l'anatomie mais le **rapport de force** : posture, hauteur relative, regard, qui domine le cadre. C'est de la **mise en scène**, l'axe le plus dur pour un modèle de diffusion |
+| Registre suggestif / ecchi | l'autre bout de l'échelle — vérifie que l'app sait aussi ne PAS être explicite quand on ne le demande pas |
+
+**Ce que ça implique techniquement, et qui n'est pas neutre :**
+1. **Deux personnages dans une case** — tout ce qui a été mesuré jusqu'ici l'a été sur **un** personnage seul.
+   L'identité, le LoRA, IPAdapter : rien ne dit qu'ils tiennent à deux. C'est un **trou de mesure**, pas un acquis.
+2. **L'anatomie en interaction** est le point de rupture connu de SDXL (membres fusionnés, mains). Le négatif
+   par défaut de l'app devra probablement s'enrichir sur ce registre.
+3. **La chaîne de vision (Pixtral) n'a pas refusé** la page explicite de Quang (mesuré, phase 3) — mais Pixtral
+   sert à *analyser*, pas à générer. La génération est locale et non censurée : aucun verrou externe.
+4. **Le femdom se juge sur la composition**, donc il se contrôle par **ControlNet openpose** (`make_pose.py` sait
+   déjà fabriquer des squelettes synthétiques) plus que par le prompt.
+
+**Limites, inchangées et non négociables** : mineurs ou apparence de mineur (« loli/shota » compris — réprimé en
+France même en dessin), visages de personnes réelles. Projet personnel, aucune diffusion.
+
+#### 🔁 Ne PAS repartir de zéro : **Muse a déjà résolu la moitié du problème** *(constaté le 27/07)*
+
+Quang : « pour comprendre, tu peux t'inspirer du projet Muse par rapport à mes préférences ».
+Muse (`D:\Download\02-Apps-Web\Muse\`, **dépôt local sans remote, délibérément hors synchro**) est son app de
+roleplay adulte. Elle tourne sur **le même ComfyUI, la même carte**. Quatre briques y sont déjà éprouvées et
+se transposent — *les recopier ici serait une duplication, on les réutilise* :
+
+| Brique de Muse | Où | Ce qu'elle apporte au manga |
+|---|---|---|
+| **Taxonomie de contenu** (actes · contextes · effets · styles · lieux) | `app/src/lib/taxonomie.ts` | la catégorisation par thème que la bibliothèque de références réclame — **déjà écrite, en français, et validée par l'usage** |
+| **Dictionnaire FR → tags booru** + **routage LoRA par pratique** | `app/src/lib/studio.ts` | les **LoRA correspondants sont déjà installés** dans `ComfyUI/models/loras/` : rien à télécharger |
+| **Négatif « casting »** (interdit les personnages en trop) | `studio.ts` | répond directement au **trou de mesure « deux personnages »** : Muse a payé ce problème avant nous |
+| **Filet déterministe d'interdits** (`INTERDIT_MAP`) | `studio.ts` | garde-fou **par code**, pas par prompt : mineurs · zoophilie · létal sont strippés du positif **et** poussés au négatif |
+
+**Ce qui est à porter en priorité, et c'est un choix de sécurité, pas de confort** : le filet déterministe.
+Un garde-fou écrit dans un prompt se négocie ; un garde-fou en code, non.
+
+⚠️ **Discipline : le catalogue explicite reste chez Muse.** Ici on écrit le **mécanisme** (comment on
+catégorise, comment on route, comment on garde-fou), jamais la liste détaillée de ses préférences — elle a
+déjà un seul domicile, et c'est un dépôt que Quang garde volontairement local. *Une info = un seul endroit.*
+
+⚠️ **Différence de moteur à vérifier avant de croire l'acquis de Muse** : Muse génère en **Pony**, le manga en
+**Illustrious**. Les LoRA et le comportement des tags **ne sont pas garantis transférables** — c'est à
+mesurer, pas à supposer. (Les 168 LoRA locaux comptent 65 Pony et 34 Illustrious.)
 
 ### 🚩 Conséquence d'architecture à trancher AVANT de construire
 
@@ -512,8 +566,8 @@ Tout l'acquis des phases 1 et 2 repose sur **un LoRA entraîné pour UN personna
 robot, par créature et par figurant. Il faut une stratégie de cohérence qui ne demande **aucun
 entraînement**. Pistes, par ordre de crédibilité :
 
-1. **IPAdapter** (référence par image, sans entraînement) — **⛔ pas installé**, identifié comme manque
-   depuis le 26/07. C'est le candidat le plus sérieux et il est bloqué sur une installation.
+1. **IPAdapter** (référence par image, sans entraînement) — ~~⛔ pas installé~~ → **✅ INSTALLÉ le 27/07**
+   (voir la section dédiée plus bas). C'est le candidat le plus sérieux ; il reste à **mesurer**.
 2. **Fiche de personnage textuelle détaillée + seed fixe** — mesuré à ~50 % en phase 1. Insuffisant seul,
    utile en complément.
 3. **LoRA à la demande**, réservé aux personnages **récurrents** d'un projet long (ce que la phase 6 sait
@@ -744,6 +798,79 @@ qu'il est à la racine du projet. Il ne trouvait donc **plus rien, en silence, d
 été rangés dans `scripts/`** (commit `d2ccc5c`) — le LoRA v1 n'aurait pas pu être réentraîné. Corrigé, et
 vérifié : 24 images × 6 repeats = 1 152 steps, exactement les chiffres de la phase 1.
 
+### IPAdapter — installé le 27/07 ✅ *(le blocage annoncé depuis le 26/07 est levé)*
+
+C'était le **chantier technique n°1** : la seule brique manquante pour tenir un sujet quelconque **sans
+entraîner**. Installée par le chemin reproductible, pas à la main.
+
+| Élément | Détail |
+|---|---|
+| Nœuds | `cubiq/ComfyUI_IPAdapter_plus` → `ComfyUI/custom_nodes/` — **774 → 811 nœuds**, 36 nœuds IPAdapter |
+| Encodeur d'image | `CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors` (2,53 Go) → `models/clip_vision/` |
+| PLUS SDXL | `ip-adapter-plus_sdxl_vit-h.safetensors` (848 Mo) — style / sujet |
+| PLUS FACE SDXL | `ip-adapter-plus-face_sdxl_vit-h.safetensors` (848 Mo) — verrou facial sans insightface |
+| FACEID PLUS V2 | `ip-adapter-faceid-plusv2_sdxl.bin` (1,49 Go) **+ son LoRA compagnon** (372 Mo, `models/loras/`) |
+| Presets exposés | `STANDARD` · `VIT-G` · `PLUS (high strength)` · `PLUS FACE (portraits)` |
+
+**Tout passe par `scripts/fetch_models.py`** (étendu ce jour avec un champ `dest`) — c'est la leçon du modèle
+YOLO disparu : un poids binaire ne se versionne pas, **la commande qui le rapporte, si**.
+
+**Deux pièges payés pendant l'installation :**
+1. **Le nom du fichier de l'encodeur n'est pas cosmétique.** Sur HuggingFace il s'appelle `model.safetensors` ;
+   déposé sous ce nom, `IPAdapterUnifiedLoader` ne le trouve **jamais** — il cherche par motif dans
+   `models/clip_vision/`. Il faut le renommer `CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors`.
+2. **FaceID v2 sans son LoRA compagnon ne marche pas** — ce sont deux fichiers, dans deux dossiers différents,
+   et l'un sans l'autre donne un rendu qui part en vrille sans message d'erreur.
+
+**Redémarrage de ComfyUI — par son propre chemin, pas en tuant un process.** ComfyUI est ici lancé **par le
+proxy Generate Studio** (chaîne de parenté vérifiée) ; le proxy expose `POST /shutdown` et `POST /start`, avec
+le garde-fou du mandat Quang du 22/06 : *on coupe depuis n'importe quelle appli, mais jamais une génération en
+cours*. Le dry-run a confirmé `busy: false` avant de couper. Secret : `ComfyUI/.studio_secret`, en Bearer.
+
+> **⏳ Reste à MESURER — l'installation n'est pas un résultat.** Trois questions, dans cet ordre :
+> 1. IPAdapter tient-il l'identité **sans entraînement** ? Protocole : rejouer l'essai 2/5 (mêmes 3 cadrages,
+>    même seed 222222) avec une image de référence à la place du LoRA → comparable aux **50 % (rien)** et
+>    **100 % (LoRA)** déjà mesurés.
+> 2. Tient-il sur un sujet **sans LoRA** (robot, créature) ? C'est ce qui décide si la phase 7 peut viser
+>    « n'importe quel sujet ».
+> 3. Transfère-t-il le **style** d'une page de Quang ? C'est la brique de la phase 8 ci-dessous.
+
+### Phase 8 — La bibliothèque de références ⏳ *(demande Quang du 27/07)*
+
+> « L'application pourrait se nourrir de scans ou d'images […] de mangas que j'apprécie. Il faudra les
+> catégoriser correctement par thème […] cela peut aider à la compréhension de ce que je souhaite créer, et
+> surtout au style d'image qui doit être créé. Si je ne charge rien de spécial, ce sera créé par
+> l'application de A à Z. »
+
+**Le principe qui commande tout le reste : la bibliothèque est un ACCÉLÉRATEUR, jamais un PRÉREQUIS.**
+Une app qui exige d'être nourrie avant de servir est inutilisable au premier lancement. Rien de chargé ⇒ elle
+génère de A à Z avec la recette par défaut (Illustrious + tags N&B de l'essai 1 + LoRA du projet s'il y en a
+un). Une référence ne fait que **remplacer un défaut**, elle n'ouvre aucune fonction.
+
+**Une image donnée ne sert pas à une chose mais à trois, et il faut les séparer** — les mélanger est
+exactement ce qui produit un « ça ressemble vaguement » inexploitable :
+
+| Ce qu'on prend dans la référence | Par quel moyen | État |
+|---|---|---|
+| **Le style** (trait, trames, contraste, ambiance) | fiche de style Pixtral → `reusable_prompt` injecté dans le prompt | ✅ **acquis** (phase 3) |
+| **L'apparence** d'un personnage / d'un objet | **IPAdapter** (image de référence, sans entraînement) | ✅ installé, ⏳ à mesurer |
+| **La composition** (mise en page, rythme des cases) | détection YOLO de la page → la grille devient un **gabarit de planche** | ✅ **acquis** (phase 3), jamais réutilisé dans ce sens |
+
+⇒ **Le gabarit de planche est le gain le moins cher et le plus sous-estimé** : le découpage YOLO existe déjà et
+tourne en ~14 s. Réutiliser la *grille* d'une page qu'il aime — sans rien copier de son dessin — donne
+immédiatement un rythme de lecture crédible, ce qu'aucun prompt ne sait produire.
+
+**La catégorisation par thème** : Pixtral **propose** les tags (il classe déjà correctement les mises en page
+et sort une fiche de style structurée), **Quang valide**. Même règle que la boucle de validation de la
+phase 6 : *l'app propose, elle n'impose jamais*. La taxonomie n'est pas à inventer — celle de Muse existe.
+
+**Ce qu'une référence N'EST PAS** : un modèle à copier. Le style graphique n'est pas protégé, les
+**personnages et les planches** le sont. La bibliothèque sert à orienter une création, pas à reproduire une page.
+
+> **Critère de sortie** : sur 3 références chargées et catégorisées, une planche générée que Quang juge « dans
+> l'esprit » de la catégorie demandée — **et** une planche générée **sans aucune référence chargée**, qui reste
+> correcte. Le second test compte autant que le premier : il prouve que la dépendance n'existe pas.
+
 ---
 
 ## 5. Pièges connus (payés ou repérés — ne pas les repayer)
@@ -771,6 +898,9 @@ vérifié : 24 images × 6 repeats = 1 152 steps, exactement les chiffres de la 
 | **Un garde-fou cale sur une fenetre arbitraire** | Decider « est-ce une bulle ? » selon que l'aplat touche les bords d'une fenetre qu'on a soi-meme choisie se declenche **a l'envers sur le cas normal** (texte au centre d'une grande bulle : la fenetre est entierement dedans). Le bon critere etait la **surface atteinte** par la diffusion. |
 | **Mesurer au mauvais endroit** | Verifier l'effacement du japonais dans la page **exportee**, la ou l'on vient de poser le francais : le noir augmente, et la mesure conclut a l'inverse de la verite. Mesurer sur la **case nettoyee**, avant lettrage. Une mesure mal placee donne l'assurance sans le controle. |
 | **Cadres qui se chevauchent** | YOLO detecte parfois une grande zone contenant des petites. En une seule passe de dessin, les cases suivantes **recouvrent les bulles** des precedentes (3/6 perdues, invisibles dans tous les autres controles). Dessiner **toutes les images d'abord**, tous les calques de texte ensuite. |
+| **Nom de fichier d'un encodeur CLIP** | `IPAdapterUnifiedLoader` cherche l'encodeur d'image **par motif** dans `models/clip_vision/`. Depose sous son nom d'origine HuggingFace (`model.safetensors`), un fichier parfaitement valide de 2,5 Go n'est **jamais trouve**. Renommer `CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors`. |
+| **FaceID sans son LoRA compagnon** | `ip-adapter-faceid-plusv2_sdxl.bin` **exige** `ip-adapter-faceid-plusv2_sdxl_lora.safetensors` — deux fichiers, deux dossiers differents. L'un sans l'autre : rendu qui part en vrille, **sans message d'erreur**. |
+| **Tuer ComfyUI au lieu de le redemarrer** | Ici ComfyUI est lance **par le proxy Generate Studio** (parente verifiee). Le tuer dans le dos de son parent, c'est se priver du garde-fou « ne pas couper une generation en cours » que le proxy applique deja. Passer par `POST /shutdown` puis `POST /start` (Bearer `.studio_secret`), avec `dryRun` d'abord. |
 | **Ids générés à la milliseconde** | `prefix + hex(now_ms)` donne le **même id** à deux insertions dans la même ms — et créer 6 cases d'un coup est une rafale. `_studio_db._uid()` ajoute un compteur monotone. Attrapé par le self-test, pas en production. |
 
 ---
@@ -779,6 +909,8 @@ vérifié : 24 images × 6 repeats = 1 152 steps, exactement les chiffres de la 
 
 | Date | Événement |
 |---|---|
+| 2026-07-27 | **IPAdapter INSTALLE** — le blocage annonce depuis le 26/07 est leve. 774 -> **811 noeuds**, 5,7 Go de poids (encodeur ViT-H, PLUS, PLUS FACE, FaceID v2 + son LoRA), tous rapportables par `fetch_models.py --dest`. ComfyUI redemarre **par le chemin du proxy** (`/shutdown` + `/start`, dry-run `busy:false` d'abord), pas en tuant un process. Deux pieges payes : le **nom** de l'encodeur CLIP (cherche par motif, invisible sous son nom d'origine) et **FaceID inutilisable sans son LoRA compagnon**. ⏳ **Rien n'est encore mesure** : une installation n'est pas un resultat. |
+| 2026-07-27 | **Trois demandes de Quang inscrites dans la feuille de route.** (1) **Volet adulte explicite** : la matrice ne disait que « pornographie » — desormais 4 sous-genres nommes (explicite · **fetichisme** · **femdom/domination** · suggestif), avec ce que chacun met a l'epreuve. Consequence relevee : **tout ce qui a ete mesure l'a ete sur UN personnage seul** — « deux personnages dans une case » est un **trou de mesure**, pas un acquis. (2) **Phase 8, bibliotheque de references** : une image sert a trois choses distinctes (style / apparence / **composition**), a ne surtout pas melanger ; **la bibliotheque est un accelerateur, jamais un prerequis** — rien de charge = generation de A a Z. (3) **Muse a deja resolu la moitie du probleme** (taxonomie, routage LoRA, negatif casting, filet d'interdits **en code**) : on reutilise, on ne recopie pas — et le catalogue explicite **reste chez Muse**, hors synchro. |
 | 2026-07-26 | Ouverture du chantier. Décision d'archi (app séparée). Checkpoint Illustrious installé. Essais 1-4 mesurés. Recherche web + vote 3 voix. kohya installé (3 pièges payés : cu128, versions transformers, encodage cp1252). |
 | 2026-07-26 | **Phase 1 franchie à 89 %** (contre 50 % sans LoRA). LoRA `zqmg1rl_v1` entraîné et validé sur comparatif strict. 2 réserves ouvertes → LoRA v2 avant la phase 4. |
 | 2026-07-26 | **Phase 3 : pipeline d'ingestion écrit et mesuré** (`manga_ingest.py`). Découpage 83 % à IoU 0,66 mais **Pixtral quantifie sur une grille** ⇒ raffinement OpenCV nécessaire. Volet style : OK. **Bloqué sur la validation** faute de scans réels de Quang. Premier test = faux positif, corrigé par un test à vérité terrain. |
