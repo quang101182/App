@@ -1062,7 +1062,13 @@ demi-tour** : encore une mesure aveugle au défaut qu'elle était censée attrap
   mouvement en gros plan, il faudrait le FaceDetailer du dataset v2.
 
 > **Critère de sortie** : une séquence de 3-4 cases d'un même geste, intégrée dans une planche, que
-> Quang juge lisible comme un mouvement. ⏳ Reste à brancher dans l'app (aujourd'hui : script seul).
+> Quang juge lisible comme un mouvement.
+> ~~⏳ Reste à brancher dans l'app (aujourd'hui : script seul).~~
+> → **✅ PÉRIMÉ, vérifié dans le code le 28/07** : c'est le bouton **🎬 Séquence** (v1.21.0), qui
+> impose les mêmes squelettes openpose à 0,9, plus **▶ Jouer** (v1.22.0), la **case-groupe**
+> (v1.41.0) et le **réordonnancement** (v1.42.0). Le branchement a été fait le jour même, sous un
+> autre nom, et ce constat n'a jamais été revisité.
+> **Il ne reste donc que le verdict de Quang** : est-ce que ça se lit comme un mouvement ?
 
 ### Phase 8 — La bibliothèque de références ⏳ *(demande Quang du 27/07)*
 
