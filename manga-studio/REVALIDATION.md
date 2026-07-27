@@ -208,8 +208,17 @@ Ce qui n'a **jamais** été testé ensemble :
       ⚠ Piège payé : une première version de `test_personnages.py` supprimait `S.proj` **après
       un rechargement**, où `S.proj` est le dernier projet *ouvert* — elle a détruit un projet
       qui n'était pas le sien. Un banc vise ses objets **par leur nom**, jamais par l'état de l'app.
-- [ ] Vérifier qu'aucune sortie n'a fui dans `ComfyUI/output/` à la racine (règle d'isolation
-      Generate Studio) : le compte doit être **identique** avant/après une génération.
+- [x] Aucune sortie n'a fui **à la racine** de `ComfyUI/output/` (règle d'isolation Generate
+      Studio) : les seuls fichiers du jour y sont des `friday_*`, qui ne viennent pas d'ici.
+- [ ] 🟠 **(constaté 27/07)** En revanche `ComfyUI/output/manga/` accumule : **42 dossiers de
+      travail et 186 fichiers** pour la seule journée. `harvest` déplace l'image finale vers
+      `App/manga-studio/output/`, mais ce qui reste (squelettes openpose uploadés, intermédiaires)
+      n'est jamais purgé. Ce n'est pas une fuite — c'est un répertoire qui grossit sans fin.
+      **Ne pas supprimer à l'aveugle** : vérifier d'abord ce que sont ces 186 fichiers.
+- [ ] 🟡 Un dossier `undefined/` y est apparu : un script de test avait mis la **réponse
+      d'écriture** `{ok, id}` dans `S.proj`, donc `S.proj.slug` valait `undefined` (même piège que
+      `S.page`, cf. §3). L'app, elle, recharge ses projets après création — elle n'est pas
+      concernée. Mais le préfixe de sortie mériterait un garde-fou.
 - [ ] `git status` propre, et **ne jamais** relancer `git add -A` depuis un sous-dossier
       (1 438 fichiers commités par erreur le 27/07, dont un profil Edge entier).
 
