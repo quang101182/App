@@ -489,6 +489,14 @@ de la fidélité au dessin, et c'est le bon arbitrage.
 > Reste a cadrer AVEC lui : quels champs il definit en entree (genre, personnages, longueur, ton), et
 > a quel grain il valide (chaque case ? chaque page ? le decoupage avant toute image ?).
 > ⚠ Le point dur reste celui du premier jour : la **continuite sur la longueur**, pas la generation.
+>
+> **Idée de Quang (27/07), retenue** : un bouton proposant **3 suites possibles** pour la case
+> suivante, appuyé non sur la dernière case mais sur **les 4-5 précédentes** — « pour avoir une
+> chronologie et une suite plutôt logique ». Manuel ou automatique, comme l'amélioration de prompt.
+> *Avis : c'est la brique la MOINS risquée du mode auto* — texte vers texte, zéro GPU — et elle
+> attaque le point dur là où il se joue vraiment : dans le **récit**, pas dans l'image. Elle est aussi
+> la plus facile à valider (il lit trois phrases, il en choisit une). À faire **avant** la génération
+> de chapitre entier.
 
 
 
@@ -907,6 +915,50 @@ existe précisément pour recueillir ce verdict-là.
 > 2. **Deux personnages dans une même case** — trou de mesure signalé par le volet adulte.
 > 3. Le transfert de **style** d'une page de Quang (brique de la phase 8).
 
+### Phase 10 — Créer un manga entier : les questions de faisabilité *(Quang, 27/07)*
+
+> « Si tu devais créer un petit manga de 10 ou 20 pages, sur trois ou quatre thèmes, avec un, deux,
+> trois, quatre, voire cinq personnages — est-ce que tu y arrives ? Comment génères-tu ces
+> personnages ? […] faut-il afficher seulement leur visage ou leur corps entier, leurs vêtements,
+> leur style vestimentaire ? […] et même leur corpulence. Reste critique sur la faisabilité. »
+
+**Réponse par nombre de personnages — c'est LA variable qui décide.**
+
+| Personnages par case | Faisable aujourd'hui ? |
+|---|---|
+| **1** | ✅ **Oui, solide.** Identité tenue (LoRA 100 %, IPAdapter validé), décor tenu, lettrage. |
+| **2** | ✅ **Oui, mesuré** (`test_duo.py` : co-présence et contact simple passent). ⚠ Mais tenir **DEUX identités précises** dans la même case n'est PAS mesuré : le modèle mélange volontiers les attributs. |
+| **3** | 🟠 **Dégradé.** SDXL perd le compte et fusionne les corps. Parade réelle : **openpose à N squelettes** (`make_pose.py` sait déjà en composer) pour imposer les places. |
+| **4-5** | ⛔ **Pas de façon fiable, et je ne le promets pas.** La voie réaliste n'est pas de tout générer d'un coup : c'est de **composer** — générer les personnages séparément et les assembler. Ce n'est plus de la génération, c'est du montage, et ça change l'outil. |
+
+**Fabriquer un personnage — trois voies, par coût croissant :**
+
+| Voie | Comment | Fiabilité |
+|---|---|---|
+| **Texte seul** | ses traits constants, injectés partout | ~50 % (phase 1) — suffit pour un figurant |
+| **Image de référence** (générée par l'app **ou** apportée par Quang) | IPAdapter, réglage validé le 27/07 | bon sur le visage, sans entraînement |
+| **LoRA** | 20-30 images, 35 min de GPU | **100 %** (phase 1), pour un héros récurrent |
+
+⇒ **Une image récupérée vaut une image générée** — même mécanisme. Seule contrainte mesurée : la
+**convertir en N&B** avant de la donner à IPAdapter, sinon il transfère sa palette.
+
+**Visage, corps, vêtements ou corpulence ? La question la plus technique, et elle a une réponse mesurée :**
+- **Le visage décide de l'identité**, et IPAdapter le veut **GRAND** : la référence retenue au banc
+  occupe **52 % de l'image**. Une référence en pied ne porte presque aucune information de visage —
+  c'est exactement l'échec de l'essai 3 (character sheet « visages non résolus »).
+- **Vêtements et corpulence ne se transmettent PAS fiablement par l'image.** Ils s'écrivent en
+  **tags** (`black hoodie`, `tall`, `muscular`, `petite`) — le modèle les respecte bien, et un tag se
+  corrige sans rien régénérer.
+- ⇒ **La bonne fiche est MIXTE : un portrait serré en référence + les tags de tenue et de corpulence.**
+  C'est déjà ce que la table `manga_chars` stocke (`refs[]` + `tags`).
+- ⚠ **Ce que je ne promets pas** : une corpulence identique d'une case à l'autre. Les micro-détails
+  dérivent (mesuré : réserve n°1 de la phase 1), et la directive du 27/07 s'applique — *la qualité de
+  l'ensemble prime*.
+
+**Verdict sur « 10-20 pages » : oui, à une condition.** 1 à 2 personnages par case, un casting de 3-4
+sur l'ensemble, les gros plans à un seul personnage. Le coût principal ne sera pas la génération mais
+la **continuité** — le piège n°1 depuis le premier jour.
+
 ### Phase 8 — La bibliothèque de références ⏳ *(demande Quang du 27/07)*
 
 > « L'application pourrait se nourrir de scans ou d'images […] de mangas que j'apprécie. Il faudra les
@@ -1096,6 +1148,8 @@ texte : ce qui doit être maîtrisé ne se génère pas, il se **superpose**.
 
 | Date | Événement |
 |---|---|
+| 2026-07-27 | **v1.17.0 — traduction auto, style de projet, comptage des personnages.** Option « ameliorer automatiquement avant de generer » : elle ne traduit que si besoin (retraduire une traduction la degrade) et ne BLOQUE jamais la generation. **Style du projet en texte LIBRE** plutot qu'une liste de genres — une liste plafonnerait le « n'importe quel sujet » et figerait ce qui doit varier. Et le correctif qui comptait : « il n'y a qu'un seul personnage » venait de `solo` (herite de l'identite du projet, il l'emporte sur tout le reste) et du fait que **le modele compte avec des TAGS, pas avec des mots**. Mesure : meme avec la consigne explicite, le LLM rend « solo, martial arts master » ⇒ le nombre est desormais **derive du texte** (4/4 sur les cas reels), `solo` retire, tag de comptage impose. Piege d'enchainement attrape en testant : le compte se lit sur le texte **d'origine**, la traduction perdant regulierement le nombre (« deux maitres » ressort au singulier). |
+| 2026-07-27 | **Faisabilite d'un manga entier : repondu par ecrit (phase 10).** Par nombre de personnages — 1 solide, 2 mesure, 3 degrade, **4-5 pas fiablement et je ne le promets pas** (la voie realiste y est le montage, pas la generation). Sur la fabrication d'un personnage : le **visage** decide de l'identite et IPAdapter le veut GRAND (52 % de l'image au banc ; une reference en pied echoue — essai 3), tandis que **vetements et corpulence** ne passent pas par l'image mais par les **tags**. ⇒ fiche MIXTE, ce que `manga_chars` stocke deja. Non promis : une corpulence identique d'une case a l'autre. |
 | 2026-07-27 | **v1.14.0 — la BASE DE PERSONNAGES, et le casting par planche** (demande Quang : « je ne comprends pas a quel moment je peux selectionner les personnages […] c'est plus un controle qu'un aleatoire »). Table `manga_chars` (schema v4), **globale** et non rattachee a un projet : une fiche se cree une fois et sert partout, avec son role (heros LoRA / secondaire IPAdapter / figurant texte) qui decide du **niveau de coherence**. Le CASTING appartient a la **planche** ; une case en herite et peut le surcharger ; **rien de coche = generation libre** — la base est un moyen de controle, jamais un prealable. Le LoRA d'un heros du casting prime sur celui de la recette. Mesure bout en bout : 2 fiches creees, 2 cochees, tags des DEUX injectes dans la case. |
 | 2026-07-27 | **v1.13.0 — pourquoi les essais de Quang ne donnaient pas ce qu'il demandait.** « 2 maitres en arts martiaux » et « une femme assise sur la table » ont rendu **la meme lyceenne en uniforme**. Le prompt reel disait `zqmg1rl, 1girl, solo, sailor uniform, red scarf, <sa phrase>` : (1) la recette PAR DEFAUT portait le personnage de test du LoRA, injecte dans **chaque case de chaque projet** ; (2) le negatif contenait `multiple girls`, donc **deux personnages etaient impossibles par construction** ; (3) le moteur ne lit que des tags booru **anglais** — une phrase francaise est ignoree, pas traduite ; (4) rien ne permettait de dire « cette case, c'est autre chose ». Corriges : defaut neutre, negatif nettoye, bouton **✨ Ameliorer** (route `/enhance`), personnage decochable par case. Verifie a l'oeil sur SA demande : un karateka en garde au lieu de la lyceenne. Et sur son 2e essai (explicite) : traduit fidelement, image produite, saturation 0,081 (N&B tenu). Deux pieges attrapes en corrigeant : sans LoRA le noeud restait avec un nom **vide** (ComfyUI refusait tout le graphe, HTTP 400), et ce refus s'affichait **« [object Object] »** — ComfyUI renvoie ses erreurs en objet imbrique, que la concatenation ecrasait. |
 | 2026-07-27 | **v1.10.1 — la version affichee etait FAUSSE depuis trois versions.** Signale par Quang (« tu oublies de versionner le bandeau du haut »), et il avait raison. Cause invisible dans le fichier : la version existe a **trois** endroits et `const VERSION` **ecrase** le titre et le badge au chargement. Je bumpais les deux premiers, jamais le troisieme : le depot disait v1.10.0, l'ecran disait **v1.7.0**. ⇒ `scripts/check_version.py` verifie les trois declarations **et le badge reellement affiche par le navigateur** -- la seule valeur que Quang voit. Falsifiable : l'oubli exact que j'avais commis fait sortir exit 1. |
