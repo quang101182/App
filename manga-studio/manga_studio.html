@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.37.0</title>
+<title>Manga Studio v1.38.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -268,7 +268,17 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 #lightbox[hidden]{display:none}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:90;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
-#lightbox img{max-width:96vw;max-height:82vh;object-fit:contain}
+/* Le cadre qui decoupe : `touch-action:none` est INDISPENSABLE, sinon le
+   navigateur interprete le glisse comme un defilement de page et le pan ne
+   marche pas au doigt (piege deja paye sur le trace de zone). */
+#lbWrap{flex:1 1 auto;width:100%;display:flex;align-items:center;justify-content:center;
+  overflow:hidden;touch-action:none;min-height:0}
+/* `transform-origin:0 0` : le zoom est ancre sur le POINT VISE (calcul dans
+   `zoomVers`). Avec l'origine au centre — le defaut — zoomer eloigne du doigt
+   ce qu'on voulait justement regarder de plus pres. */
+#lightbox img{max-width:96vw;max-height:78vh;object-fit:contain;
+  transform-origin:0 0;will-change:transform}
+#lightbox img.zoome{cursor:grab}
 #lightbox .lbbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;
   padding:0 8px;color:#ddd;font-size:12px}
 #lightbox .lbvit{display:flex;align-items:center;gap:6px;color:#bbb;font-size:11px;
@@ -305,7 +315,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.37.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.38.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -674,11 +684,19 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 
 <div id="busy" hidden><div class="spin"></div><span id="busyTxt"></span></div>
 <div id="lightbox" hidden>
-  <img id="lbImg" alt="">
+  <!-- L'image vit dans un cadre qui DECOUPE : sans lui, une image zoomee
+       deborderait de l'ecran et pousserait la barre de boutons hors de vue. -->
+  <div id="lbWrap"><img id="lbImg" alt=""></div>
   <div class="lbbar">
     <button class="btn sm" id="lbPrev">◀</button>
     <span id="lbName"></span>
     <button class="btn sm" id="lbNext">▶</button>
+    <button class="btn sm" id="lbZoomM" title="Dézoomer">−</button>
+    <button class="btn sm" id="lbZoom" title="Revenir à la taille d'origine">1:1</button>
+    <button class="btn sm" id="lbZoomP" title="Zoomer">+</button>
+    <!-- L'action de l'image en cours (ex : « garder le buste ») : on choisit EN
+         REGARDANT en grand, pas d'apres une vignette de 110 px. -->
+    <button class="btn pri" id="lbAct" hidden></button>
     <button class="btn sm" id="lbClose">Fermer</button>
     <!-- Visible SEULEMENT pendant la lecture d'une sequence : c'est en regardant
          defiler qu'on sait si c'est trop rapide, pas dans un menu. Le reglage est
@@ -712,7 +730,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.37.0";
+const VERSION = "1.38.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -2653,24 +2671,101 @@ function galSelState(){
   });
 }
 
-/* ---------- plein ecran ---------- */
-let LB = -1;
+/* ==================== PLEIN ECRAN : voir en grand, et de pres ====================
+   Quang, 27/07 : « ici c'est tout petit, je ne peux pas agrandir, zoomer,
+   dezoomer, donc je ne vois pas bien. Il faudrait pouvoir zoomer et dezoomer,
+   avec les boutons suivant et precedent pour aller plus vite, au lieu de fermer
+   a chaque image. »
+
+   La visionneuse ne connait plus SEULEMENT la galerie : elle prend une LISTE
+   d'images et, en option, une ACTION sur celle qu'on regarde (« garder le
+   buste »). C'est ce qui permet de choisir une reference **en la voyant en
+   grand**, au lieu de trancher sur une vignette de 110 px. */
+let LB = -1, LB_LISTE = [], LB_ACTION = null;
+
+/* --- zoom ancre sur le point vise --- */
+let Z = { k: 1, tx: 0, ty: 0 };
+const ZMAX = 6;
+
+function zoomAppliquer(){
+  const im = $("lbImg");
+  im.style.transform = "translate(" + Z.tx + "px," + Z.ty + "px) scale(" + Z.k + ")";
+  im.classList.toggle("zoome", Z.k > 1);
+  $("lbZoom").textContent = Z.k > 1 ? (Math.round(Z.k * 10) / 10) + "×" : "1:1";
+}
+
+/** Empeche l'image de partir hors du cadre.
+ *  Un pan NON BORNE est le defaut deja identifie sur la visionneuse de planche :
+ *  on pousse l'image trop loin, l'ecran devient noir, et on croit l'avoir perdue. */
+function zoomBorner(){
+  if (Z.k <= 1){ Z.tx = 0; Z.ty = 0; return; }
+  const wrap = $("lbWrap"), im = $("lbImg");
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  const L = im.offsetLeft, T = im.offsetTop;          // place de l'image au repos
+  const w = im.offsetWidth * Z.k, h = im.offsetHeight * Z.k;
+  const MARGE = 60;                                    // ce qui doit rester visible
+  // Bornes exprimees sur la position REELLE du bord gauche (L + tx) : c'est
+  // elle qu'on voit, pas la translation seule.
+  Z.tx = Math.min(W - MARGE - L, Math.max(MARGE - w - L, Z.tx));
+  Z.ty = Math.min(H - MARGE - T, Math.max(MARGE - h - T, Z.ty));
+}
+
+function zoomReset(){ Z = { k: 1, tx: 0, ty: 0 }; zoomAppliquer(); }
+
+function zoomVers(k2, px, py){
+  k2 = Math.min(ZMAX, Math.max(1, k2));
+  const r = $("lbWrap").getBoundingClientRect();
+  const im = $("lbImg");
+  // ⚠ Le point vise se mesure par rapport au COIN DE L'IMAGE, pas au coin du
+  // cadre : l'image est centree dans son cadre, donc elle commence a
+  // `offsetLeft`. En l'oubliant, le zoom derapait de cette marge -- le detail
+  // vise s'echappait pendant qu'on zoomait dessus, exactement le defaut deja
+  // identifie sur la visionneuse de planche. Trouve par le banc, pas a l'oeil.
+  const L = im.offsetLeft, T = im.offsetTop;
+  const x = (px == null ? r.width / 2 : px - r.left) - L;
+  const y = (py == null ? r.height / 2 : py - r.top) - T;
+  // Le point vise reste sous le doigt : t' = p - (p - t) * k'/k
+  Z.tx = x - (x - Z.tx) * (k2 / Z.k);
+  Z.ty = y - (y - Z.ty) * (k2 / Z.k);
+  Z.k = k2;
+  zoomBorner();
+  zoomAppliquer();
+}
+
+/** Ouvre la visionneuse sur une liste. `action` = {libelle(item), faire(item)}. */
+function ouvrirVisionneuse(items, i, action){
+  if (!items || !items.length) return;
+  LB_LISTE = items; LB_ACTION = action || null;
+  lbShow(i || 0);
+}
+
 function lbShow(i){
-  if (!GAL.length) return;
+  if (!LB_LISTE.length) return;
   arreterLecture();     // la galerie n'est pas un flipbook : ni minuteur, ni curseur de vitesse
-  LB = (i + GAL.length) % GAL.length;
-  const f = GAL[LB];
-  $("lbImg").src = imgURL(f.path);
-  $("lbName").textContent = (LB + 1) + "/" + GAL.length + " · " + f.name;
+  LB = (i + LB_LISTE.length) % LB_LISTE.length;
+  const it = LB_LISTE[LB];
+  $("lbImg").src = it.url;
+  zoomReset();          // chaque image repart a sa taille : un zoom herite desoriente
+  $("lbName").textContent = (LB + 1) + "/" + LB_LISTE.length
+                          + (it.nom ? " · " + it.nom : "");
+  const act = $("lbAct");
+  act.hidden = !LB_ACTION;
+  if (LB_ACTION) act.textContent = LB_ACTION.libelle(it);
   $("lightbox").hidden = false;
 }
-const lbClose = () => { arreterLecture(); $("lightbox").hidden = true; $("lbImg").src = ""; };
+
+const lbClose = () => {
+  arreterLecture(); zoomReset();
+  $("lightbox").hidden = true; $("lbImg").src = "";
+  LB_LISTE = []; LB_ACTION = null;
+};
 
 $("gal").addEventListener("click", e => {
   const c = e.target.closest("[data-pick]");
   if (c) return galSelState();          // cocher ne doit PAS ouvrir le plein ecran
   const fig = e.target.closest("figure[data-i]");
-  if (fig) lbShow(+fig.dataset.i);
+  if (fig) ouvrirVisionneuse(GAL.map(f => ({ url: imgURL(f.path), nom: f.name })),
+                             +fig.dataset.i);
 });
 $("btnGalAll").onclick = () => {
   document.querySelectorAll("#gal [data-pick]").forEach(c => { c.checked = true; });
@@ -2705,6 +2800,75 @@ $("btnGalDel").onclick = async () => {
 $("lbClose").onclick = lbClose;
 $("lbPrev").onclick = () => lbShow(LB - 1);
 $("lbNext").onclick = () => lbShow(LB + 1);
+$("lbZoomP").onclick = () => zoomVers(Z.k * 1.6, null, null);
+$("lbZoomM").onclick = () => zoomVers(Z.k / 1.6, null, null);
+$("lbZoom").onclick  = () => zoomReset();
+$("lbAct").onclick   = () => {
+  if (!LB_ACTION) return;
+  const it = LB_LISTE[LB];
+  lbClose();
+  LB_ACTION.faire(it);
+};
+
+/* ---------- les gestes du zoom ----------
+   Molette et double-clic sur PC, pincee et glisse au doigt. Tout est ancre sur
+   le point vise : c'est la seule facon de regarder un DETAIL (un visage, une
+   main) plutot que de grossir le centre de l'image. */
+(function(){
+  const wrap = $("lbWrap"), im = $("lbImg");
+  wrap.addEventListener("wheel", e => {
+    e.preventDefault();
+    zoomVers(Z.k * (e.deltaY < 0 ? 1.25 : 1 / 1.25), e.clientX, e.clientY);
+  }, { passive: false });
+
+  wrap.addEventListener("dblclick", e => {
+    zoomVers(Z.k > 1 ? 1 : 2.5, e.clientX, e.clientY);
+  });
+
+  const pts = new Map();
+  let dep = null, ecartDep = 0, kDep = 1, dernierTap = 0;
+
+  wrap.addEventListener("pointerdown", e => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    wrap.setPointerCapture(e.pointerId);
+    if (pts.size === 1){
+      dep = { x: e.clientX, y: e.clientY, tx: Z.tx, ty: Z.ty };
+      // Double-TAP au doigt : `dblclick` n'est pas fiable sur mobile.
+      const t = Date.now();
+      if (t - dernierTap < 300) zoomVers(Z.k > 1 ? 1 : 2.5, e.clientX, e.clientY);
+      dernierTap = t;
+    } else if (pts.size === 2){
+      const [a, b] = [...pts.values()];
+      ecartDep = Math.hypot(a.x - b.x, a.y - b.y);
+      kDep = Z.k;
+      dep = null;                       // la pincee prend la main sur le glisse
+    }
+  });
+
+  wrap.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2 && ecartDep){
+      const [a, b] = [...pts.values()];
+      const ec = Math.hypot(a.x - b.x, a.y - b.y);
+      zoomVers(kDep * (ec / ecartDep), (a.x + b.x) / 2, (a.y + b.y) / 2);
+      return;
+    }
+    if (dep && Z.k > 1){
+      Z.tx = dep.tx + (e.clientX - dep.x);
+      Z.ty = dep.ty + (e.clientY - dep.y);
+      zoomBorner(); zoomAppliquer();
+    }
+  });
+
+  const fin = e => {
+    pts.delete(e.pointerId);
+    if (pts.size < 2) ecartDep = 0;
+    if (pts.size === 0) dep = null;
+  };
+  wrap.addEventListener("pointerup", fin);
+  wrap.addEventListener("pointercancel", fin);
+})();
 $("lightbox").addEventListener("click", e => { if (e.target.id === "lightbox") lbClose(); });
 document.addEventListener("keydown", e => {
   if ($("lightbox").hidden) return;
@@ -3041,6 +3205,10 @@ document.addEventListener("click", e => {
    surcharger. Rien de selectionne = generation libre : la base est un moyen de
    controle, jamais un prealable. */
 let CHARS = [];
+/* Quelle fiche est ouverte, et ce qu'on cherche. Volontairement NON persistes :
+   ce sont des etats de lecture, pas des donnees -- retrouver une fiche ouverte
+   trois jours plus tard n'aide personne. */
+let CH_OUVERT = null, CH_FILTRE = "";
 
 /** L'URL d'affichage d'une reference : elle vit dans le dossier `input` de
  *  ComfyUI (c'est de la que `LoadImage` la lit), pas dans les sorties du projet. */
@@ -3155,6 +3323,11 @@ async function dessinerPersonnage(c){
   const prefix = "manga/_perso/" + c.id + "/" + Date.now().toString(36);
   BROUILLONS[c.id] = [];
   renderChars();
+  // Dit ce qui va se passer AVANT que ca commence : trois generations lancees
+  // d'un clic sans prevenir, c'est deux minutes de carte graphique en surprise.
+  toast(VUES_PERSO.length + " vues à dessiner — environ 2 min");
+  log("personnage « " + (c.name || c.id) + " » : "
+      + VUES_PERSO.map(v => v.nom).join(", ") + " (" + VUES_PERSO.length + " images)");
   for (let i = 0; i < VUES_PERSO.length; i++){
     const v = VUES_PERSO[i];
     busyOn("Dessin de « " + (c.name || "ce personnage") + " » — "
@@ -3203,29 +3376,72 @@ function renderChars(){
     return;
   }
   const ROLE = { heros: "héros", secondaire: "secondaire", figurant: "figurant" };
+
+  /* ---- une LISTE, pas un mur (v1.38.0) ----
+     Quang, 27/07 : « la carte des personnages, si j'en cree beaucoup, risque de
+     devenir une liste abominable si l'affichage n'est pas optimise ». Il a
+     raison, et le calcul est simple : chaque fiche depliee occupe ~250 px, donc
+     dix personnages font 2 500 px de defilement pour en trouver un.
+     Une fiche se resume donc a UNE ligne — vignette, nom, role — et ne s'ouvre
+     que si on la touche. Une seule a la fois, comme le panneau ⚙ des cases : le
+     geste est deja connu. Et un filtre apparait des qu'il y a de quoi chercher. */
+  const q = (CH_FILTRE || "").trim().toLowerCase();
+  const vus = q
+    ? CHARS.filter(c => ((c.name || "") + " " + (c.tags || "")).toLowerCase().includes(q))
+    : CHARS;
+
   el.innerHTML = '<div class="card"><h3>' + CHARS.length + ' personnage(s)</h3>'
-    + CHARS.map(c =>
-        '<div class="row" style="align-items:flex-start;border-top:1px solid var(--line);padding-top:8px">'
+    + (CHARS.length > 4
+       ? '<input id="chFiltre" placeholder="chercher un personnage…" value="'
+         + esc(CH_FILTRE) + '" style="margin-bottom:8px">'
+       : "")
+    + (vus.length ? "" : '<p class="muted">aucun personnage ne correspond.</p>')
+    + vus.map(c => {
+      const ouvert = CH_OUVERT === c.id;
+      const vignette = (c.refs || []).length
+        ? '<img src="' + esc(refURL(c.refs[0])) + '" alt="" '
+          + 'style="width:34px;height:34px;object-fit:cover;border-radius:5px;'
+          + 'border:1px solid var(--line);flex:none">'
+        : '<span style="width:34px;height:34px;border-radius:5px;border:1px dashed var(--line);'
+          + 'display:flex;align-items:center;justify-content:center;color:var(--dim);'
+          + 'font-size:15px;flex:none">👤</span>';
+      // La ligne fermee : ce qu'il faut pour RECONNAITRE la fiche, rien de plus.
+      const ligne = '<div class="row" data-chopen="' + c.id + '" '
+        + 'style="align-items:center;gap:8px;border-top:1px solid var(--line);'
+        + 'padding:7px 0;cursor:pointer">'
+        + vignette
+        + '<b class="grow" style="pointer-events:none">' + esc(c.name || "(sans nom)")
+        + ' <span class="tag">' + (ROLE[c.role] || c.role) + '</span>'
+        + (c.valide ? ' <span class="tag amb">✅</span>' : '')
+        + ((c.refs || []).length ? ' <span class="tag">🖼 ' + c.refs.length + '</span>' : '')
+        + '</b>'
+        + '<span class="muted" style="pointer-events:none">' + (ouvert ? "▾" : "▸") + '</span>'
+        + '</div>';
+      if (!ouvert) return ligne;
+      return ligne
+        + '<div class="row" style="align-items:flex-start;padding-bottom:8px">'
         + '<div class="grow">'
-        + '<b>' + esc(c.name || "(sans nom)") + '</b> '
-        + '<span class="tag">' + (ROLE[c.role] || c.role) + '</span> '
-        + (c.valide ? '<span class="tag amb">validé ✅</span>' : '')
-        + '<div class="muted" style="font-size:11px;margin-top:3px">' + esc(c.tags || "(aucun trait)") + '</div>'
+        + '<div class="muted" style="font-size:11px">' + esc(c.tags || "(aucun trait)") + '</div>'
         // Les images de reference : c'est ce qui fait passer un personnage de
         // « ~50 % » (texte seul) a une identite tenue, sans entrainement.
         + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px">'
         + (c.refs || []).map((f, i) =>
              '<span style="position:relative;display:inline-block">'
-             + '<img src="' + esc(refURL(f)) + '" alt="référence" '
-             + 'style="height:54px;border-radius:5px;border:1px solid var(--line)">'
+             + '<img src="' + esc(refURL(f)) + '" alt="référence" data-chvoir="' + c.id + '" '
+             + 'data-i="' + i + '" title="voir en grand" '
+             + 'style="height:54px;border-radius:5px;border:1px solid var(--line);cursor:zoom-in">'
              + '<button class="btn sm" data-chref-del="' + c.id + '" data-i="' + i + '" '
              + 'title="retirer cette référence" '
              + 'style="position:absolute;top:-6px;right:-6px;padding:0 5px">×</button></span>').join("")
         + '<label class="btn sm" style="margin:0;cursor:pointer">＋ image de référence'
         + '<input type="file" accept="image/*" data-chref="' + c.id + '" hidden></label>'
         // On peut aussi la DESSINER : une fiche neuve n'a aucune photo de depart.
+        // Le nombre d'images est ECRIT sur le bouton : rien ne l'annoncait, et
+        // trois generations lancees d'un clic sans le dire, c'est une surprise
+        // de deux minutes de carte graphique.
         + '<button class="btn sm" data-chdraw="' + c.id + '" '
-        + 'title="Dessine 3 vues de ce personnage d\'apres ses traits">🎨 Dessiner</button>'
+        + 'title="Dessine 3 vues (visage, buste, en pied) d\'après ses traits — environ 2 min">'
+        + '🎨 Dessiner 3 vues</button>'
         + ((c.refs || []).length
              ? '<span class="tag amb">identité tenue par l’image</span>'
              : '<span class="muted" style="font-size:11px">texte seul — l’identité tient ~50 %</span>')
@@ -3236,12 +3452,16 @@ function renderChars(){
            tout seul, c'est un choix fait a la place de l'utilisateur. */
         + ((BROUILLONS[c.id] || []).length
            ? '<div class="vues"><span class="muted" style="font-size:11px">'
-             + 'Garde celle qui lui ressemble — elle deviendra sa référence :</span>'
+             + 'Touche une vue pour la voir en grand (' + BROUILLONS[c.id].length
+             + '/' + VUES_PERSO.length + ' dessinée' + (BROUILLONS[c.id].length > 1 ? 's' : '')
+             + ') — puis garde celle qui lui ressemble :</span>'
              + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:5px">'
-             + BROUILLONS[c.id].map(v =>
+             + BROUILLONS[c.id].map((v, i) =>
                  '<figure style="margin:0;text-align:center">'
                  + '<img src="' + esc(vueURL(v.img)) + '" alt="' + esc(v.nom) + '" '
-                 + 'style="height:110px;border-radius:6px;border:1px solid var(--line);display:block">'
+                 + 'data-chvue="' + c.id + '" data-i="' + i + '" title="voir en grand" '
+                 + 'style="height:110px;border-radius:6px;border:1px solid var(--line);'
+                 + 'display:block;cursor:zoom-in">'
                  + '<button class="btn sm" data-chkeep="' + c.id + '" data-vue="' + v.cle + '" '
                  + 'style="margin-top:4px;width:100%">garder le ' + esc(v.nom) + '</button>'
                  + '</figure>').join("")
@@ -3255,7 +3475,8 @@ function renderChars(){
         + '<button class="btn sm" data-chvalide="' + c.id + '">' + (c.valide ? "dévalider" : "valider ✅") + '</button>'
         + '<button class="btn sm" data-chedit="' + c.id + '">modifier</button>'
         + '<button class="btn sm" data-chdel="' + c.id + '">suppr.</button>'
-        + '</div>').join("")
+        + '</div>';
+    }).join("")
     + '</div>';
 }
 
@@ -3515,6 +3736,19 @@ $("btnCharEnhance").onclick = () => {
     if (r.prompt) $("chTags").value = r.prompt.trim();
   }, "Traits enrichis");
 };
+/* Le filtre : on re-rend a chaque frappe, mais on REMET LE FOCUS et le curseur
+   la ou ils etaient -- sinon le champ se vide de son focus a la premiere lettre
+   et il faut recliquer pour taper la deuxieme (le piege du clavier mobile, deja
+   paye sur la planche). */
+$("charList").addEventListener("input", e => {
+  if (e.target.id !== "chFiltre") return;
+  CH_FILTRE = e.target.value;
+  const pos = e.target.selectionStart;
+  renderChars();
+  const champ = $("chFiltre");
+  if (champ){ champ.focus(); try { champ.setSelectionRange(pos, pos); } catch {} }
+});
+
 /* Ajouter une image de reference a une fiche. `change` et non `click` : c'est un
    <input type=file>, et sur telephone il ouvre la galerie ou l'appareil photo. */
 $("charList").addEventListener("change", async e => {
@@ -3566,6 +3800,28 @@ $("charList").onclick = async e => {
     return garderVue(c, d.vue).catch(err => log("référence : " + err.message, "e"));
   }
   if (d.chdrop){ delete BROUILLONS[d.chdrop]; return renderChars(); }
+  // Ouvrir / refermer une fiche. Une seule a la fois : deux fiches ouvertes
+  // cote a cote et on ne sait plus laquelle on regle (meme regle que ⚙ Affiner).
+  if (d.chopen){
+    CH_OUVERT = (CH_OUVERT === d.chopen) ? null : d.chopen;
+    return renderChars();
+  }
+  // Voir une VUE en grand, et pouvoir la garder de la : c'est en la regardant
+  // qu'on decide, pas d'apres une vignette de 110 px.
+  if (d.chvue){
+    const c = CHARS.find(x => x.id === d.chvue);
+    const vues = BROUILLONS[d.chvue] || [];
+    if (!c || !vues.length) return;
+    return ouvrirVisionneuse(
+      vues.map(v => ({ url: vueURL(v.img), nom: v.nom, cle: v.cle })), +d.i,
+      { libelle: it => "garder le " + it.nom, faire: it => garderVue(c, it.cle) });
+  }
+  if (d.chvoir){
+    const c = CHARS.find(x => x.id === d.chvoir);
+    if (!c || !(c.refs || []).length) return;
+    return ouvrirVisionneuse(
+      c.refs.map((f, i) => ({ url: refURL(f), nom: "référence " + (i + 1) })), +d.i);
+  }
 
   const c = CHARS.find(x => x.id === (d.chvalide || d.chedit || d.chdel));
   if (!c) return;
