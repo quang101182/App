@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.29.0</title>
+<title>Manga Studio v1.31.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -29,8 +29,11 @@ button{cursor:pointer}
 
 /* ---------- barre du haut ---------- */
 header{position:sticky;top:0;z-index:50;background:#0d0f13ee;backdrop-filter:blur(8px);
-  border-bottom:1px solid var(--line);padding:10px 14px;
-  display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  border-bottom:1px solid var(--line);padding:8px 14px}
+/* Le bandeau suit la MEME largeur que le reste de l'app (760 px, cf. `main`) :
+   sur un ecran de 1700 px, un header etale pendant qu'un contenu est centre
+   donne deux applications differentes sur la meme page. */
+.hdrin{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .brand{font-weight:700;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
 .brand b{color:var(--accent)}
 .ver{font-size:11px;padding:2px 7px;border:1px solid var(--line);border-radius:99px;color:var(--dim)}
@@ -39,12 +42,38 @@ header{position:sticky;top:0;z-index:50;background:#0d0f13ee;backdrop-filter:blu
 .dot.on{background:var(--ok)} .dot.off{background:var(--ko)}
 .dot-lbl{font-size:11px;color:var(--dim)}
 
+/* ---------- bandeau moteur + VRAM (calque sur Generate Studio v4.49/4.53/4.54) ----------
+   COMPACT EN HAUTEUR, c'est la contrainte n°1 (mandat Quang) : sur un telephone
+   de 360 px, chaque pixel pris ici est pris a la planche. Une seule ligne, des
+   pastilles qui se replient, jamais de bloc qui pousse le contenu vers le bas. */
+.engs{display:flex;gap:6px;align-items:center;margin-left:auto;flex-wrap:wrap}
+.eng{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:99px;
+  border:1px solid var(--line);background:var(--panel);font-size:11px;color:var(--dim)}
+.eng .pw{font-size:10px;color:var(--txt);padding:0 2px;cursor:pointer;line-height:1}
+.eng button.pw{background:none;border:0}
+/* Pulse ORANGE de transition : du clic jusqu'a l'etat cible. Sans lui, demarrer
+   ComfyUI (plusieurs secondes) ressemble a un bouton mort -- piege paye sur
+   Generate Studio, inutile de le repayer ici. */
+.eng.pending{border-color:var(--warn)} .eng.pending .dot{animation:engPulse 1s infinite}
+@keyframes engPulse{0%,100%{background:var(--warn)}50%{background:#5a4a1e}}
+.vram{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);
+  flex:1 1 150px;min-width:120px}
+.vram span:last-child{white-space:nowrap}
+.vbar{flex:1 1 auto;height:6px;border-radius:99px;background:var(--panel2);
+  border:1px solid var(--line);overflow:hidden;min-width:50px}
+.vbar i{display:block;height:100%;width:0;background:var(--ok);transition:width .4s}
+.vbar.mid i{background:var(--warn)} .vbar.low i{background:var(--ko)}
+.vbar.dim i{background:#444}
+
 /* ---------- onglets ---------- */
 /* Les onglets PASSENT A LA LIGNE au lieu de scroller horizontalement.
    Un `overflow-x:auto` masque le probleme au controle automatique (la page
    ne deborde pas) tout en obligeant l'utilisateur a faire defiler une barre
    de 418 px sur un ecran de 360 : les derniers onglets sont invisibles. */
-nav{display:flex;flex-wrap:wrap;gap:4px 2px;padding:8px 10px 0;border-bottom:1px solid var(--line)}
+/* Les onglets suivent la MEME colonne que le bandeau et le contenu : trois
+   alignements differents sur une meme page se lisent comme trois applications. */
+nav{display:flex;flex-wrap:wrap;gap:4px 2px;padding:8px 10px 0;border-bottom:1px solid var(--line);
+  max-width:760px;margin:0 auto;box-sizing:content-box}
 nav button{background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px;
   color:var(--dim);white-space:nowrap;border-radius:6px 6px 0 0}
 nav button.sel{color:var(--txt);border-bottom-color:var(--accent);background:var(--panel)}
@@ -176,6 +205,11 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 #busy.done{background:#2e7d4f;color:#fff}
 #busy .spin{border-color:#0a0c1055;border-top-color:#0a0c10;width:16px;height:16px}
 #busy.done .spin{display:none}
+/* Le panneau ⚙ Affiner : visiblement DANS la case, et visiblement un aparte —
+   un liseré et un fond legerement en retrait suffisent a dire « ceci est un
+   reglage », sans ajouter ni cadre ni titre. */
+.panel .affiner{margin-top:8px;padding:9px;border-radius:8px;background:var(--panel2);
+  border:1px solid var(--line);border-left:3px solid var(--accent)}
 .panel .idees{display:flex;flex-direction:column;gap:5px;margin:0 0 4px}
 .panel .idees[hidden]{display:none}
 .panel .idees button{text-align:left;padding:7px 9px;font-size:12px;line-height:1.4;
@@ -229,10 +263,21 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.29.0</span></div>
-  <div class="dots">
-    <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
-    <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
+  <div class="hdrin">
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.31.0</span></div>
+    <div class="engs">
+      <span class="eng"><span class="dot" id="dProxy"></span>proxy</span>
+      <span class="eng" id="engComfy"><span class="dot" id="dComfy"></span>ComfyUI<button
+        class="pw" id="engPw" title="Démarrer / arrêter le moteur">▶</button></span>
+    </div>
+    <!-- La VRAM vient de nvidia-smi (proxy /vram) et NON de ComfyUI : elle doit
+         rester lisible moteur ETEINT, c'est justement le moment ou l'on veut
+         savoir ce qu'il reste. -->
+    <div class="vram" title="Mémoire libre sur la carte graphique">
+      <span>VRAM</span>
+      <span class="vbar" id="vramBar"><i id="vramFill"></i></span>
+      <span id="vramTxt">—</span>
+    </div>
   </div>
 </header>
 
@@ -608,7 +653,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.29.0";
+const VERSION = "1.31.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -803,6 +848,7 @@ const DEFAULT_RECIPE = {
 /* ---------- etat ---------- */
 const S = { projects: [], pages: [], panels: [], proj: null, page: null, busy: 0,
             zone: null,        // id de la case dont on trace la zone (une seule a la fois)
+            affiner: null,     // id de la case dont le panneau ⚙ Affiner est deplie
             lettering: null,   // id de la case en cours de lettrage (une seule a la fois)
             selBub: null };    // id de la bulle selectionnee dans cette case
 const $ = id => document.getElementById(id);
@@ -1589,6 +1635,39 @@ function majEtape(){
   el.innerHTML = t;
 }
 
+/** Les vignettes d'une meme sequence, dans l'ordre — telles qu'elles sont
+ *  MAINTENANT sur la planche. Une sequence se reconnait a sa seed : c'est deja
+ *  le critere de la lecture, et deux sequences n'en partagent jamais.
+ *
+ *  ⚠ Pourquoi calculer au lieu de lire `sequence.index/total` : ces deux nombres
+ *  sont ecrits UNE fois, a la creation. Supprimer une vignette laissait donc une
+ *  serie de 5 afficher « /6 », avec des numeros qui sautent (1,2,4,5,6). L'app
+ *  mentait sur son propre contenu. Un numero d'ordre se DEDUIT de l'ordre, il ne
+ *  se stocke pas. */
+function soeursSequence(p){
+  const sq = p.recipe && p.recipe.sequence;
+  if (!sq) return null;
+  // Par identifiant de groupe (v1.31.0). Repli sur la seed pour les sequences
+  // creees AVANT : elles n'ont pas de `gid` et doivent continuer de fonctionner.
+  const memeGroupe = sq.gid
+    ? (x => x.recipe && x.recipe.sequence && x.recipe.sequence.gid === sq.gid)
+    : (p.recipe.seed == null ? null
+       : (x => x.recipe && x.recipe.sequence && !x.recipe.sequence.gid
+              && x.recipe.seed === p.recipe.seed));
+  if (!memeGroupe) return null;
+  return S.panels.filter(memeGroupe)
+                 .sort((a, b) => a.recipe.sequence.index - b.recipe.sequence.index);
+}
+
+function posSequence(p){
+  const sq = p.recipe && p.recipe.sequence;
+  if (!sq) return null;
+  const soeurs = soeursSequence(p);
+  if (!soeurs) return { n: sq.index + 1, total: sq.total };   // rien pour grouper
+  const n = soeurs.indexOf(p);
+  return n < 0 ? null : { n: n + 1, total: soeurs.length };
+}
+
 function panelHTML(p, i){
   const img = (p.file
     ? '<img src="' + imgURL(p.file) + '" alt="case ' + (i+1) + '">'
@@ -1605,9 +1684,8 @@ function panelHTML(p, i){
   const v = p.verdict === "ok" ? "✅" : (p.verdict === "ko" ? "❌" : "");
   // Une case issue d'une sequence le DIT. Quang : « visuellement, je ne vois pas
   // de difference » -- et il avait raison, rien ne la signalait.
-  const sq = (p.recipe && p.recipe.sequence)
-    ? '<span class="seqbadge">🎬 ' + (p.recipe.sequence.index + 1) + "/"
-      + p.recipe.sequence.total + '</span>' : "";
+  const pos = posSequence(p);
+  const sq = pos ? '<span class="seqbadge">🎬 ' + pos.n + "/" + pos.total + '</span>' : "";
   const nb = (p.bubbles || []).length;
   return '<div class="panel' + (p.id === S.lettering ? " lettering" : "") + '" data-pid="' + p.id + '">'
    // Le format vient de la CASE : une case ingeree garde celui de son cadre d'origine,
@@ -1643,33 +1721,56 @@ function panelHTML(p, i){
    + esc(p.prompt) + '</textarea>'
    + '<div class="idees" data-idees hidden></div>'
    + '<p class="apercu" data-apercu></p>'
+   /* ---- LA RANGEE : ce qu'on fait MAINTENANT, et rien d'autre ----
+      Quang, 27/07 : « on empile beaucoup de choses au fur et a mesure, et on
+      peut vite perdre l'ergonomie de l'application ». Compte avant refonte :
+      11 boutons par case generee, 13 avec une zone tracee, 16 en lettrage.
+      Une case montre desormais son geste du moment -- ecrire, generer, lettrer,
+      juger -- et TOUT ce qui affine passe par un seul « ⚙ Affiner ». */
    + '<div class="row">'
-   + '<button class="btn sm" data-act="ameliorer" title="Traduit ta phrase en tags que le modèle comprend vraiment">✨ Améliorer</button>'
-   + '<button class="btn sm" data-act="idees" title="Propose 3 suites, d\'après les cases précédentes">💡 3 suites</button>'
-   + '<button class="btn sm" data-act="sequence" title="Décompose ce geste en plusieurs vignettes (même personnage)">🎬 Séquence</button>'
-   + ((p.recipe && p.recipe.sequence && p.file)
-       ? '<button class="btn sm" data-act="jouer" title="Joue la séquence en boucle">▶ Jouer</button>' : "")
-   + (recipe().trigger
-       ? '<label style="margin:0;display:flex;align-items:center;gap:5px;color:var(--txt);font-size:12px">'
-         + '<input data-perso type="checkbox" style="width:auto"'
-         + (p.sansPerso ? "" : " checked") + '> personnage du projet</label>'
-       : '<span class="muted" style="font-size:11px">aucun personnage défini (onglet Recette)</span>')
-   + '</div>'
-   + '<div class="row"><input data-seed type="number" style="width:120px" value="'
-   + ((p.recipe && p.recipe.seed) || "") + '" placeholder="seed"> '
-   + '<button class="btn sm" data-act="gen" title="Dessine cette case">Générer</button>'
+   + '<button class="btn sm" data-act="gen" title="Dessine cette case">'
+   + (p.file ? "Regénérer" : "Générer") + '</button>'
    + '<button class="btn sm" data-act="letter" title="Poser les bulles et le texte par-dessus">✎ Lettrage' + (nb ? " (" + nb + ")" : "") + '</button>'
-   // Reparer 10 % d'une case sans perdre les 90 % qui vont bien.
-   + (p.file ? '<button class="btn sm' + (S.zone === p.id ? " on" : "")
-       + '" data-act="zone" title="Redessiner UNE zone de la case, sans toucher au reste">⬚ Zone'
-       + (p.zone ? " ✓" : "") + '</button>' : "")
-   + (p.file && p.zone ? '<button class="btn sm" data-act="zonego" '
-       + 'title="Regenerer seulement la zone tracee">↻ la zone</button>' : "")
+   // ▶ Jouer reste dehors : sur une vignette de sequence, c'est le geste du moment.
+   + (pos && p.file
+       ? '<button class="btn sm" data-act="jouer" title="Joue la séquence en boucle">▶ Jouer</button>' : "")
    + '<button class="btn sm' + (p.verdict === "ok" ? " on" : "")
    + '" data-act="ok" title="Je garde cette case (recliquer annule)">✅</button>'
    + '<button class="btn sm' + (p.verdict === "ko" ? " on" : "")
    + '" data-act="ko" title="Je la refuse (recliquer annule)">❌</button>'
-   + '<button class="btn sm" data-act="del">suppr.</button></div>'
+   + '<button class="btn sm' + (S.affiner === p.id ? " on" : "")
+   + '" data-act="affiner" title="Améliorer le texte, décomposer un geste, retoucher une zone…">⚙ Affiner</button>'
+   + '</div>'
+
+   /* ---- LE PANNEAU : tout ce qui AFFINE, deplie a la demande ----
+      Deplie DANS la case, comme 💡 3 suites -- un geste deja connu. Ferme par
+      defaut : une case au repos n'a plus l'air d'un tableau de bord. */
+   + (S.affiner === p.id
+     ? '<div class="affiner">'
+       + '<div class="row">'
+       + '<button class="btn sm" data-act="ameliorer" title="Traduit ta phrase en tags que le modèle comprend vraiment">✨ Améliorer</button>'
+       + '<button class="btn sm" data-act="idees" title="Propose 3 suites, d\'après les cases précédentes">💡 3 suites</button>'
+       + '<button class="btn sm" data-act="sequence" title="Décompose ce geste en plusieurs vignettes (même personnage)">🎬 Séquence</button>'
+       // Reparer 10 % d'une case sans perdre les 90 % qui vont bien.
+       + (p.file ? '<button class="btn sm' + (S.zone === p.id ? " on" : "")
+           + '" data-act="zone" title="Redessiner UNE zone de la case, sans toucher au reste">⬚ Zone'
+           + (p.zone ? " ✓" : "") + '</button>' : "")
+       + (p.file && p.zone ? '<button class="btn sm" data-act="zonego" '
+           + 'title="Regenerer seulement la zone tracee">↻ la zone</button>' : "")
+       + '</div>'
+       + '<div class="row" style="margin-top:8px">'
+       + '<input data-seed type="number" style="width:110px" value="'
+       + ((p.recipe && p.recipe.seed) || "") + '" placeholder="seed">'
+       + (recipe().trigger
+           ? '<label style="margin:0;display:flex;align-items:center;gap:5px;color:var(--txt);font-size:12px">'
+             + '<input data-perso type="checkbox" style="width:auto"'
+             + (p.sansPerso ? "" : " checked") + '> personnage du projet</label>'
+           : '<span class="muted" style="font-size:11px">aucun personnage défini (onglet Recette)</span>')
+       // La suppression descend ici : c'est irreversible, ca n'a rien a faire
+       // a cote des boutons qu'on touche a chaque case.
+       + '<button class="btn sm" data-act="del" style="margin-left:auto">supprimer la case</button>'
+       + '</div></div>'
+     : "")
    + '</div></div>';
 }
 
@@ -1863,8 +1964,22 @@ async function genPanel(p){
   if (card){
     p.kind   = card.querySelector("[data-kind]").value;
     p.prompt = card.querySelector("[data-prompt]").value;
-    const sv = card.querySelector("[data-seed]").value;
-    p.recipe = Object.assign({}, p.recipe, { seed: sv ? +sv : Math.floor(Math.random()*1e9) });
+    // Le champ seed vit dans le panneau ⚙ Affiner : il peut etre REPLIE.
+    // Sans cette garde, generer une case au panneau ferme jetait une
+    // TypeError et ne dessinait rien -- une rangee simplifiee qui casse la
+    // generation serait un tres mauvais marche.
+    const champSeed = card.querySelector("[data-seed]");
+    const sv = champSeed ? champSeed.value
+                         : ((p.recipe && p.recipe.seedManuelle) || "");
+    // Dans une SEQUENCE, la seed n'est pas un reglage : c'est ce qui tient le
+    // personnage d'une vignette a l'autre, ET ce qui identifie le groupe. En
+    // tirer une nouvelle detachait la vignette de sa serie -- son badge passait
+    // a « 1/1 » sous les yeux de l'utilisateur (trouve par le banc, v1.30.0).
+    // Hors sequence, « Regénérer » veut dire « un autre essai » : on tire.
+    const enSerie = !!(p.recipe && p.recipe.sequence && p.recipe.seed != null);
+    const seed = sv ? +sv
+               : (enSerie ? p.recipe.seed : Math.floor(Math.random() * 1e9));
+    p.recipe = Object.assign({}, p.recipe, { seed: seed });
   }
   // Le motif de refus RESTE affiche dans la case. Un toast de 2,6 s se manque,
   // et l'utilisateur conclut « le bouton ne fait rien » -- c'est arrive le 27/07.
@@ -2669,6 +2784,12 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
   const base = (p.prompt || "").trim();
   // Le seed est FIXE sur toute la suite : c'est lui qui garde le meme dessin.
   const seed = (p.recipe && p.recipe.seed) || Math.floor(Math.random() * 1e9);
+  // Identifiant EXPLICITE du groupe. La seed servait a reconnaitre les soeurs
+  // d'une meme sequence -- pratique, mais fragile : changer la seed d'UNE
+  // vignette pour la retenter la faisait sortir de sa serie (badge « 1/1 »),
+  // alors qu'on voulait juste corriger un dessin. Une appartenance ne se deduit
+  // pas d'un reglage : elle se nomme.
+  const gid = "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const i0 = S.panels.indexOf(p);
   const faites = [];
   // La sequence cree N cases NEUVES, apres celle-ci, et n'ECRASE PAS son image.
@@ -2722,7 +2843,8 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
       "séquence " + (i + 1));
     cible.file = await harvest(imgs[0], cible.id + ".png");
     cible.recipe = Object.assign({}, cible.recipe, {
-      positive: pos, seed: seed, sequence: { geste: geste, index: i, total: n } });
+      positive: pos, seed: seed,
+      sequence: { geste: geste, index: i, total: n, gid: gid } });
     await api("/manga/panels", cible);
     faites.push(cible.id);
     renderPlate();
@@ -2761,10 +2883,9 @@ function arreterLecture(){
 }
 
 function jouerSequence(p){
-  const idx = S.panels.filter(x => x.recipe && x.recipe.sequence
-                                   && x.file
-                                   && x.recipe.seed === p.recipe.seed)
-                      .sort((a, b) => a.recipe.sequence.index - b.recipe.sequence.index);
+  // Meme critere d'appartenance que le badge (identifiant de groupe, repli sur
+  // la seed) : deux definitions du mot « sequence » finiraient par diverger.
+  const idx = (soeursSequence(p) || []).filter(x => x.file);
   if (idx.length < 2) return toast("séquence incomplète");
   const boite = document.getElementById("lightbox");
   const img = document.getElementById("lbImg");
@@ -2935,12 +3056,67 @@ async function loadCheckpoints(){
   } catch(e){ log("liste des checkpoints indisponible (ComfyUI éteint ?) : " + e.message, "w"); }
 }
 
-/* ---------- sante ---------- */
+/* ---------- sante + bandeau moteur ----------
+   Porte de Generate Studio (header v4.49, toggles v4.53, pulse v4.54), reduit a
+   ce que ce projet a vraiment : UN moteur. Le bandeau est PERMANENT et tient sur
+   une ligne -- ce qu'on veut savoir en permanence, c'est si la carte peut
+   dessiner, et combien il lui reste. */
+let COMFY_UP = null;          // dernier etat connu (null = pas encore mesure)
+let ENG_CIBLE = null;         // etat vise pendant une transition (true/false)
+let ENG_DEADLINE = 0;         // securite : au-dela, on cesse d'attendre
+
 async function health(){
   try { await api("/ping"); $("dProxy").className = "dot on"; }
   catch { $("dProxy").className = "dot off"; }
-  try { await api("/comfy/system_stats"); $("dComfy").className = "dot on"; }
-  catch { $("dComfy").className = "dot off"; }
+  let up = false;
+  try { await api("/comfy/system_stats"); up = true; } catch { up = false; }
+  COMFY_UP = up;
+  $("dComfy").className = "dot " + (up ? "on" : "off");
+  $("engPw").textContent = up ? "■" : "▶";
+  $("engPw").title = up ? "Arrêter le moteur (libère la carte)" : "Démarrer le moteur";
+  // La transition se termine quand l'etat CIBLE est atteint -- ou quand le
+  // delai de securite expire. Un pulse qui ne s'arrete jamais est pire que pas
+  // de pulse : il apprend a ne plus le regarder.
+  if (ENG_CIBLE !== null && (up === ENG_CIBLE || Date.now() > ENG_DEADLINE)){
+    if (up !== ENG_CIBLE) log("le moteur n'a pas atteint l'état demandé en 90 s", "w");
+    ENG_CIBLE = null;
+  }
+  $("engComfy").classList.toggle("pending", ENG_CIBLE !== null);
+  majVram(up);
+}
+
+/** Jauge VRAM. Seuils calques sur Muse et Generate Studio (vert ≥ 8 Go libres,
+ *  orange 4-8, rouge en dessous) : ce sont les paliers ou une generation SDXL
+ *  commence a echouer, pas des couleurs decoratives. */
+async function majVram(moteurUp){
+  const bar = $("vramBar"), fill = $("vramFill"), txt = $("vramTxt");
+  if (!bar) return;
+  try {
+    const v = await api("/vram");                    // en Mo, via nvidia-smi
+    if (!v || !v.total) throw new Error("pas de mesure");
+    const libreGo = v.free / 1024, totGo = v.total / 1024;
+    fill.style.width = Math.round(v.used * 100 / v.total) + "%";
+    bar.className = "vbar " + (!moteurUp ? "dim"
+                              : libreGo >= 8 ? "" : libreGo >= 4 ? "mid" : "low");
+    // Format COURT : « 5,1 / 16 Go ». En toutes lettres, la phrase repassait a
+    // la ligne sur un ecran de 360 px et faisait grandir le bandeau d'un tiers
+    // -- exactement ce que « compact en hauteur, surtout sur smartphone »
+    // interdit. Le sens est porte par le titre au survol et par la couleur.
+    txt.textContent = libreGo.toFixed(1).replace(".", ",") + " / "
+                    + totGo.toFixed(0) + " Go";
+  } catch {
+    fill.style.width = "0"; bar.className = "vbar dim"; txt.textContent = "—";
+  }
+}
+
+/** Le bouton ▶/■ du bandeau : un seul geste, il sait ce qu'il doit faire. */
+async function basculerMoteur(){
+  if (COMFY_UP){ return stopComfy(false); }
+  ENG_CIBLE = true; ENG_DEADLINE = Date.now() + 90000;
+  $("engComfy").classList.add("pending");
+  try { await api("/start", {}); log("démarrage du moteur demandé"); }
+  catch(e){ ENG_CIBLE = null; log("start: " + e.message, "e"); toast("échec"); }
+  health();
 }
 
 /* =====================================================================
@@ -3249,6 +3425,9 @@ $("plate").addEventListener("click", async e => {
     if (S.zone === p.id) toast("glisse sur l'image pour entourer la zone à refaire");
     return renderPlate();
   }
+  // Un seul panneau ⚙ deplie a la fois : deux cases ouvertes cote a cote, et on
+  // ne sait plus laquelle on regle.
+  if (act === "affiner"){ S.affiner = (S.affiner === pid) ? null : pid; return renderPlate(); }
   if (act === "zonego") return regenererZone(p);
   if (act === "del"){ await api("/manga/panels", { delete: pid });
                       S.panels = S.panels.filter(x => x.id !== pid); return renderPlate(); }
@@ -3387,6 +3566,15 @@ $("plate").addEventListener("change", async e => {
   if (e.target.matches("[data-perso]")){
     p.sansPerso = !e.target.checked;
     majApercu(p);
+    await api("/manga/panels", p);
+    return;
+  }
+  // Une seed FIXEE a la main survit a la fermeture du panneau ⚙ : sinon
+  // replier le panneau la perdrait en silence, et la case suivante repartirait
+  // sur un tirage au hasard sans que rien ne le dise.
+  if (e.target.matches("[data-seed]")){
+    const v = e.target.value.trim();
+    p.recipe = Object.assign({}, p.recipe, { seedManuelle: v ? +v : null });
     await api("/manga/panels", p);
     return;
   }
@@ -3602,6 +3790,17 @@ async function majGPU(){
   }
 }
 $("btnGpuRefresh").onclick = () => { majGPU(); health(); };
+$("engPw").onclick = () => basculerMoteur();
+/* Le bandeau se tient a jour TOUT SEUL : un etat qu'il faut rafraichir a la main
+   n'est pas un etat, c'est une photo. Un seul minuteur, deux cadences : toutes
+   les 3 s pendant une transition (c'est la seule periode ou la seconde compte),
+   toutes les 15 s sinon -- assez pour voir la VRAM bouger sans marteler le
+   proxy pendant qu'il genere. */
+let _tick = 0;
+setInterval(() => {
+  _tick++;
+  if (ENG_CIBLE !== null || _tick % 5 === 0) health().catch(() => {});
+}, 3000);
 
 async function stopComfy(force){
   try {
@@ -3612,6 +3811,8 @@ async function stopComfy(force){
       return;
     }
     $("stopConfirm").hidden = true;
+    ENG_CIBLE = false; ENG_DEADLINE = Date.now() + 90000;
+    $("engComfy").classList.add("pending");
     toast(j && j.killed ? "ComfyUI arrêté" : "ComfyUI était déjà éteint");
     log("ComfyUI arrêté" + (j && j.killed ? " (pid " + j.killed + ")" : " — déjà éteint"), "s");
   } catch(e){ log("arrêt ComfyUI : " + e.message, "e"); toast("échec"); }
