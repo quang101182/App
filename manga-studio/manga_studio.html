@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.27.0</title>
+<title>Manga Studio v1.28.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -49,7 +49,11 @@ nav button{background:none;border:0;border-bottom:2px solid transparent;padding:
   color:var(--dim);white-space:nowrap;border-radius:6px 6px 0 0}
 nav button.sel{color:var(--txt);border-bottom-color:var(--accent);background:var(--panel)}
 
-main{padding:14px;max-width:1400px;margin:0 auto}
+/* Une SEULE colonne, meme sur un grand ecran (Quang, 27/07 : « la largeur bornee
+   sur PC […] a ramener a une colonne facon telephone »). L'app est pensee au
+   doigt : etalee sur 1400 px, chaque case s'eloignait de son bouton et l'oeil
+   devait traverser l'ecran. 760 px = la largeur d'un telephone confortable. */
+main{padding:14px;max-width:760px;margin:0 auto}
 section{display:none} section.sel{display:block}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:14px}
@@ -193,6 +197,11 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 #lightbox img{max-width:96vw;max-height:82vh;object-fit:contain}
 #lightbox .lbbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;
   padding:0 8px;color:#ddd;font-size:12px}
+#lightbox .lbvit{display:flex;align-items:center;gap:6px;color:#bbb;font-size:11px;
+  flex:1 1 100%;justify-content:center;max-width:320px;margin:0 auto}
+#lightbox .lbvit[hidden]{display:none}
+#lightbox .lbvit input{flex:1 1 auto;min-width:0;width:auto;accent-color:var(--accent)}
+#lightbox .lbvit b{color:#eee;font-weight:600;min-width:64px;text-align:right}
 .grid-img figcaption{padding:5px 7px;font-size:11px;color:var(--dim);word-break:break-all}
 
 /* ---------- journal ---------- */
@@ -220,7 +229,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.27.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.28.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -500,7 +509,41 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
     <div class="row" style="margin-top:10px">
       <button class="btn pri" id="btnSaveCfg">Enregistrer</button>
       <button class="btn" id="btnPing">Tester</button>
-      <button class="btn" id="btnStartComfy">Lancer ComfyUI</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Lecture d'une séquence</h3>
+    <label>Vitesse de défilement</label>
+    <div class="row" style="align-items:center;gap:10px">
+      <span class="muted">rapide</span>
+      <input type="range" id="cfgVit" min="60" max="800" step="20" style="flex:1 1 120px;min-width:0">
+      <span class="muted">lent</span>
+      <b id="cfgVitVal"></b>
+    </div>
+    <p class="muted" style="margin:8px 0 0">
+      Ce réglage vaut pour <b>toutes les séquences, de tous les projets</b>, et il
+      est gardé d'une fois sur l'autre. Le même curseur est disponible
+      <b>pendant</b> la lecture — c'est là qu'on juge vraiment.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Moteur (ComfyUI)</h3>
+    <p class="muted" id="gpuEtat" style="margin:0 0 8px">état non mesuré</p>
+    <div class="row">
+      <button class="btn pri" id="btnStartComfy">Lancer ComfyUI</button>
+      <button class="btn" id="btnStopComfy">Arrêter — libère la carte</button>
+      <button class="btn sm" id="btnGpuRefresh">Actualiser</button>
+    </div>
+    <div id="stopConfirm" hidden style="margin-top:10px">
+      <p class="muted" style="margin:0 0 6px">
+        <b>Une génération est en cours.</b> Couper maintenant la perd.
+      </p>
+      <div class="row">
+        <button class="btn" id="btnStopForce">Couper quand même</button>
+        <button class="btn sm" id="btnStopAnnule">Laisser finir</button>
+      </div>
     </div>
   </div>
   <div class="card">
@@ -527,6 +570,15 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
     <span id="lbName"></span>
     <button class="btn sm" id="lbNext">▶</button>
     <button class="btn sm" id="lbClose">Fermer</button>
+    <!-- Visible SEULEMENT pendant la lecture d'une sequence : c'est en regardant
+         defiler qu'on sait si c'est trop rapide, pas dans un menu. Le reglage est
+         GLOBAL et garde d'une fois sur l'autre, quel que soit le projet. -->
+    <label class="lbvit" id="lbVitWrap" hidden>
+      <span>rapide</span>
+      <input type="range" id="lbVit" min="60" max="800" step="20">
+      <span>lent</span>
+      <b id="lbVitVal"></b>
+    </label>
   </div>
 </div>
 <script>
@@ -550,7 +602,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.27.0";
+const VERSION = "1.28.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -2314,13 +2366,14 @@ function galSelState(){
 let LB = -1;
 function lbShow(i){
   if (!GAL.length) return;
+  arreterLecture();     // la galerie n'est pas un flipbook : ni minuteur, ni curseur de vitesse
   LB = (i + GAL.length) % GAL.length;
   const f = GAL[LB];
   $("lbImg").src = imgURL(f.path);
   $("lbName").textContent = (LB + 1) + "/" + GAL.length + " · " + f.name;
   $("lightbox").hidden = false;
 }
-const lbClose = () => { $("lightbox").hidden = true; $("lbImg").src = ""; };
+const lbClose = () => { arreterLecture(); $("lightbox").hidden = true; $("lbImg").src = ""; };
 
 $("gal").addEventListener("click", e => {
   const c = e.target.closest("[data-pick]");
@@ -2371,7 +2424,28 @@ document.addEventListener("keydown", e => {
    pour que je puisse le mettre sur actif en permanence ». */
 const OPT = {
   autoEnhance: localStorage.getItem("manga_auto_enhance") === "1",
+  // Vitesse de defile d'une sequence, en millisecondes par image. GLOBALE et
+  // persistante : elle ne depend pas du projet ouvert (demande de Quang, 27/07 —
+  // « controler la persistance memoire, quel que soit le projet »). Une valeur
+  // illisible dans le stockage ne doit pas casser la lecture : on retombe sur 180.
+  vitesse: (function(){
+    const v = parseInt(localStorage.getItem("manga_vitesse") || "", 10);
+    return (v >= 60 && v <= 800) ? v : 180;
+  })(),
 };
+
+/** Change la vitesse de lecture, la retient, et l'applique A CHAUD.
+ *  Regler pendant que ca defile est le seul moyen de juger : sans reprise
+ *  immediate, il faudrait fermer, rouvrir, et avoir oublie ce qu'on comparait. */
+function setVitesse(ms){
+  ms = Math.min(800, Math.max(60, parseInt(ms, 10) || 180));
+  OPT.vitesse = ms;
+  localStorage.setItem("manga_vitesse", String(ms));
+  const txt = ms + " ms/image";
+  ["lbVit", "cfgVit"].forEach(id => { const el = $(id); if (el) el.value = ms; });
+  ["lbVitVal", "cfgVitVal"].forEach(id => { const el = $(id); if (el) el.textContent = txt; });
+  if (LECT) relancerLecture();          // la sequence en cours prend la nouvelle vitesse
+}
 
 
 /* ================== SEQUENCE : un geste decompose en N cases ==================
@@ -2616,6 +2690,26 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
  * on voit si le geste tient. Aller-retour (ping-pong) plutot que boucle seche :
  * un geste qui revient brutalement a son debut se lit comme un saut. */
 let LECT = null;
+let LECT_SUITE = null, LECT_K = 0;
+
+/** Relance le minuteur a la vitesse courante SANS repartir du debut :
+ *  on garde l'image ou on en est, sinon regler la vitesse ferait sauter la
+ *  lecture au premier dessin a chaque cran du curseur. */
+function relancerLecture(){
+  if (!LECT_SUITE) return;
+  clearInterval(LECT);
+  const img = $("lbImg");
+  LECT = setInterval(() => {
+    img.src = imgURL(LECT_SUITE[LECT_K % LECT_SUITE.length].file);
+    LECT_K++;
+  }, OPT.vitesse);
+}
+
+function arreterLecture(){
+  clearInterval(LECT); LECT = null; LECT_SUITE = null; LECT_K = 0;
+  const w = $("lbVitWrap"); if (w) w.hidden = true;
+}
+
 function jouerSequence(p){
   const idx = S.panels.filter(x => x.recipe && x.recipe.sequence
                                    && x.file
@@ -2624,22 +2718,19 @@ function jouerSequence(p){
   if (idx.length < 2) return toast("séquence incomplète");
   const boite = document.getElementById("lightbox");
   const img = document.getElementById("lbImg");
-  const suite = idx.concat(idx.slice(1, -1).reverse());   // aller-retour
-  let k = 0;
   document.getElementById("lbName").textContent =
     "▶ " + idx.length + " vignettes · " + (p.recipe.sequence.geste || "");
   boite.hidden = false;
-  clearInterval(LECT);
-  LECT = setInterval(() => {
-    img.src = imgURL(suite[k % suite.length].file);
-    k++;
-  }, 180);
+  img.src = imgURL(idx[0].file);            // une image TOUT DE SUITE, pas un noir d'un tour
+  LECT_SUITE = idx.concat(idx.slice(1, -1).reverse());   // aller-retour
+  LECT_K = 1;
+  const w = $("lbVitWrap"); if (w) w.hidden = false;     // le curseur n'apparait qu'ici
+  setVitesse(OPT.vitesse);                  // remet le curseur et l'etiquette a jour
+  relancerLecture();
 }
 // La lecture s'arrete avec la fenetre, sinon elle continue a tourner en fond.
 document.addEventListener("click", e => {
-  if (e.target.id === "lbClose" || e.target.id === "lightbox"){
-    clearInterval(LECT); LECT = null;
-  }
+  if (e.target.id === "lbClose" || e.target.id === "lightbox") arreterLecture();
 }, true);
 
 /* ---------- base de personnages ----------
@@ -2813,7 +2904,9 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   if (b.dataset.tab === "tPerso") loadChars().catch(e => log("personnages: " + e.message, "e"));
   if (b.dataset.tab === "tVal") loadValides().catch(e => log("validé: " + e.message, "e"));
   if (b.dataset.tab === "tSet"){
-    $("cfgAutoEnhance").checked = OPT.autoEnhance; $("cfgBase").value = CFG.base; $("cfgKey").value = CFG.key; }
+    $("cfgAutoEnhance").checked = OPT.autoEnhance; $("cfgBase").value = CFG.base; $("cfgKey").value = CFG.key;
+    setVitesse(OPT.vitesse);   // le curseur montre la valeur REELLE, pas son defaut HTML
+    majGPU(); }
 });
 
 $("selProj").onchange = async e => {
@@ -3425,8 +3518,56 @@ $("btnPing").onclick = async () => {
 $("btnStartComfy").onclick = async () => {
   try { await api("/start", {}); toast("ComfyUI démarre…"); log("demande de démarrage ComfyUI"); }
   catch(e){ log("start: " + e.message, "e"); toast("échec"); }
-  setTimeout(health, 8000);
+  setTimeout(() => { health(); majGPU(); }, 8000);
 };
+
+/* ---------- vitesse de lecture (globale, persistante) ---------- */
+["cfgVit", "lbVit"].forEach(id => {
+  const el = $(id);
+  if (el) el.addEventListener("input", e => setVitesse(e.target.value));
+});
+
+/* ---------- moteur : etat de la carte + arret garde-fou ----------
+   Le proxy expose /comfy/system_stats (relaye par ComfyUI), POST /start et
+   POST /shutdown. Le garde-fou est cote proxy (mandat Quang 22/06) : sans
+   `force`, un shutdown pendant une generation repond {ok:false, needConfirm}
+   au lieu de couper. On lui repond par une confirmation A L'ECRAN -- aucune
+   boite native dans cette app, c'est ce qui a coute la v1.27.0. */
+async function majGPU(){
+  const el = $("gpuEtat");
+  if (!el) return;
+  try {
+    const j = await api("/comfy/system_stats");
+    const d = (j.devices || [])[0] || {};
+    const go = o => (o / 1073741824).toFixed(1).replace(".", ",") + " Go";
+    el.innerHTML = d.vram_total
+      ? "<b>ComfyUI allumé</b> · " + esc(d.name || "carte") + " — "
+        + go(d.vram_free) + " libres sur " + go(d.vram_total)
+      : "<b>ComfyUI allumé</b> (mémoire non rapportée)";
+  } catch {
+    el.innerHTML = "<b>ComfyUI éteint</b> — la carte est libre. "
+                 + "Générer le rallume pas tout seul : utilise « Lancer ».";
+  }
+}
+$("btnGpuRefresh").onclick = () => { majGPU(); health(); };
+
+async function stopComfy(force){
+  try {
+    const j = await api("/shutdown", force ? { force: true } : {});
+    if (j && j.needConfirm){          // generation en cours : on demande, a l'ecran
+      $("stopConfirm").hidden = false;
+      log("arrêt refusé : une génération est en cours", "w");
+      return;
+    }
+    $("stopConfirm").hidden = true;
+    toast(j && j.killed ? "ComfyUI arrêté" : "ComfyUI était déjà éteint");
+    log("ComfyUI arrêté" + (j && j.killed ? " (pid " + j.killed + ")" : " — déjà éteint"), "s");
+  } catch(e){ log("arrêt ComfyUI : " + e.message, "e"); toast("échec"); }
+  setTimeout(() => { health(); majGPU(); }, 1500);
+}
+$("btnStopComfy").onclick   = () => stopComfy(false);
+$("btnStopForce").onclick   = () => stopComfy(true);
+$("btnStopAnnule").onclick  = () => { $("stopConfirm").hidden = true; };
 $("cfgAutoEnhance").onchange = e => {
   OPT.autoEnhance = e.target.checked;
   localStorage.setItem("manga_auto_enhance", OPT.autoEnhance ? "1" : "0");
@@ -3448,6 +3589,11 @@ window.addEventListener("resize", () => applyPlateColumns());
    ===================================================================== */
 async function boot(){
   $("verBadge").textContent = "v" + VERSION;
+  // Le curseur de vitesse porte la valeur RETENUE des le depart. Sans cette
+  // ligne il affichait le milieu de son intervalle (440 ms) tant qu'on n'avait
+  // ni ouvert les Reglages ni lance une lecture : un reglage juste, affiche
+  // faux -- exactement le mensonge silencieux que ce projet a deja paye.
+  setVitesse(OPT.vitesse);
   document.title = "Manga Studio v" + VERSION;
   log("Manga Studio v" + VERSION + " — proxy " + CFG.base + (CFG.key ? " (clé présente)" : " (SANS clé)"),
       CFG.key ? "" : "w");
