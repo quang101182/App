@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.44.0</title>
+<title>Manga Studio v1.45.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -325,7 +325,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.44.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.45.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -455,9 +455,19 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
     <p class="muted" style="margin:0 0 8px">Une case qui ne redéfinit rien hérite d'ici.</p>
     <label>Checkpoint</label><select id="rCkpt"></select>
     <div class="row">
-      <div class="grow"><label>LoRA de personnage</label><input id="rLora"></div>
+      <!-- Une LISTE, pas un champ libre : il y a 172 LoRA installes, et il
+           fallait taper un nom exact (sous-dossier compris) pour en viser un.
+           Un champ ou l'on ne peut pas deviner la bonne valeur n'est pas un
+           reglage, c'est une devinette. -->
+      <div class="grow"><label>LoRA de personnage</label><select id="rLora"></select></div>
       <div style="width:110px"><label>Poids</label><input id="rLoraW" type="number" step="0.05" value="0.8"></div>
     </div>
+    <p class="muted" style="margin:-4px 0 8px;font-size:11px">
+      <b>Aucun = le cas normal.</b> Un LoRA n'est utile que si tu en as entraîné un pour
+      TON personnage. Sinon, l'identité tient par les <b>images de référence</b> d'une fiche
+      (onglet <b>Personnages</b> → 🎨 Dessiner, puis garde une vue) — c'est la voie mesurée
+      et retenue sur ce projet.
+    </p>
     <div class="row">
       <div class="grow"><label>Déclencheur (trigger)</label><input id="rTrigger"></div>
       <div class="grow"><label>Identité du personnage</label><input id="rIdent"></div>
@@ -752,7 +762,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.44.0";
+const VERSION = "1.45.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -3724,7 +3734,15 @@ function tagsCasting(p){
 /* ---------- recette ---------- */
 function fillRecipe(){
   const r = recipe();
-  $("rLora").value = r.lora; $("rLoraW").value = r.loraW; $("rTrigger").value = r.trigger;
+  // Le select des LoRA peut ne pas etre encore rempli (moteur lent, premier
+  // affichage) : on pose une option de secours plutot que de perdre la valeur.
+  const selL = $("rLora");
+  if (r.lora && !selL.querySelector('option[value="' + CSS.escape(r.lora) + '"]')){
+    selL.insertAdjacentHTML("afterbegin",
+      '<option value="' + esc(r.lora) + '">' + esc(r.lora) + '</option>');
+  }
+  selL.value = r.lora || "";
+  $("rLoraW").value = r.loraW; $("rTrigger").value = r.trigger;
   $("rIdent").value = r.ident; $("rStyle").value = r.style; $("rNeg").value = r.neg;
   $("rTheme").value = r.theme || "";
   $("rW").value = r.w; $("rH").value = r.h; $("rSteps").value = r.steps;
@@ -3732,6 +3750,36 @@ function fillRecipe(){
   const sel = $("rCkpt");
   if (!sel.options.length) sel.innerHTML = '<option>' + esc(r.ckpt) + '</option>';
   sel.value = r.ckpt;
+}
+
+/** Remplit la liste des LoRA depuis ComfyUI. « Aucun » est en TETE et c'est le
+ *  defaut : sur ce projet, l'identite d'un personnage tient par les images de
+ *  reference (IPAdapter), pas par un LoRA -- le chantier LoRA v2 a ete clos le
+ *  27/07 sans suite. Le champ reste utile a qui en a entraine un, il ne doit
+ *  simplement plus ressembler a une case obligatoire. */
+async function loadLoras(){
+  const sel = $("rLora");
+  if (!sel) return;
+  const choisi = (recipe().lora || "").trim();
+  try {
+    const info = await api("/comfy/object_info/LoraLoader");
+    const liste = (info.LoraLoader.input.required.lora_name[0]) || [];
+    sel.innerHTML = '<option value="">— aucun (recommandé) —</option>'
+      + liste.map(n => '<option value="' + esc(n) + '"'
+                     + (n === choisi ? " selected" : "") + '>' + esc(n) + '</option>').join("");
+    // Un LoRA enregistre qui n'existe PLUS cote moteur doit rester visible :
+    // le faire disparaitre en silence changerait la recette sans le dire.
+    if (choisi && !liste.includes(choisi)){
+      sel.innerHTML = '<option value="' + esc(choisi) + '" selected>'
+        + esc(choisi) + ' (introuvable côté moteur)</option>' + sel.innerHTML;
+    }
+    sel.value = choisi;
+    log("LoRA disponibles : " + liste.length);
+  } catch(e){
+    sel.innerHTML = '<option value="' + esc(choisi) + '">'
+      + (choisi || "— aucun —") + '</option>';
+    log("liste des LoRA indisponible (moteur éteint ?) : " + e.message, "w");
+  }
 }
 
 async function loadCheckpoints(){
@@ -4970,6 +5018,7 @@ async function boot(){
     await loadProjects();
     if (!S.projects.length) log("aucun projet — crée-en un dans l'onglet Projet", "w");
     loadCheckpoints();
+    loadLoras();
   } catch(e){ log("démarrage: " + e.message, "e"); toast("échec de connexion — voir Réglages"); }
 }
 boot();
