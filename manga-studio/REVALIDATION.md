@@ -20,10 +20,11 @@
 > personnages. L'étape 4 est mesurée à **5 combinaisons sur 6** (`test_compositions.py`, 18
 > vérifications, **zéro GPU** — il lit le graphe envoyé à ComfyUI au lieu de générer).
 >
-> **Chantier n°1 livré (v1.25.0)** : images de référence sur les fiches (IPAdapter). Un personnage
-> ne tient plus par le texte seul. **Prochain** : la **zone ciblée** (§3, 🔴) — `inpaint_zone.py`
-> fonctionne et n'est branché nulle part ; aujourd'hui une case bonne à 90 % ne peut qu'être
-> entièrement régénérée.
+> **Chantiers n°1 et n°2 livrés** : images de référence sur les fiches (v1.25.0, IPAdapter) et
+> **zone ciblée** (v1.26.1, inpaint au doigt). Les deux 🔴 du §3 sont fermés.
+>
+> **Prochain** : la bibliothèque de références (phase 8) ou le mode chapitre automatique
+> (phase 7) — cf. §4. Et la dernière combinaison de l'étape 4 (ingestion puis séquence).
 
 > Écrit le **2026-07-27** en fin de session, à la demande de Quang :
 > *« dresse une feuille de route bien détaillée, revalide tout ce qu'il faut valider, avec le
@@ -246,7 +247,7 @@ Ce qui n'a **jamais** été testé ensemble :
 | Défaut | Gravité | Note |
 |---|---|---|
 | ~~**Fiches de personnages sans image de référence**~~ → ✅ **livré v1.25.0** | 🟢 | La table a `refs[]`, l'UI ne permet pas d'en ajouter. Un personnage tient donc à ~50 % (texte seul) au lieu du verrou IPAdapter mesuré et validé. ~~**Chantier n°1.**~~ → **FAIT le 27/07 (v1.25.0)** : bouton « ＋ image de référence » sur chaque fiche (il ouvre la galerie ou l'appareil photo sur téléphone), vignette + retrait, et branchement IPAdapter dans le graphe aux réglages **mesurés** (PLUS 0,4 / end_at 0,5). La référence est **convertie en N&B côté client avant l'upload** — IPAdapter transfère la palette et le négatif textuel ne pèse rien contre une image. Vérifié en génération réelle : référence rouge vif → case rendue à **1,5 de saturation**, identité tenue. Banc `test_references.py` (13 vérifications), mutation rouge à 180 de saturation. ⚠ **Une seule référence est utilisée** (le premier personnage du casting qui en a une) : empiler deux identités n'a pas été mesuré. |
-| **Pas de zone ciblée (masque manuel)** | 🔴 | `inpaint_zone.py` est mesuré et fonctionne ; rien dans l'app. Une case bonne à 90 % ne peut aujourd'hui qu'être **entièrement** régénérée. **Chantier n°2** (demandé par Quang, inspiré de Muse). |
+| ~~**Pas de zone ciblée (masque manuel)**~~ → ✅ **livré v1.26.1** | 🟢 | `inpaint_zone.py` est mesuré et fonctionne ; rien dans l'app. Une case bonne à 90 % ne peut aujourd'hui qu'être **entièrement** régénérée. ~~**Chantier n°2.**~~ → **FAIT le 27/07 (v1.26.1)** : bouton **⬚ Zone** sur toute case générée, rectangle tracé **au doigt** (précision mesurée 0,001 sur le Samsung), cadre visible même hors mode tracé, puis **↻ la zone**. ⚠ **Le piège, mesuré** : l'inpaint réencode l'image ENTIÈRE par le VAE — une case de 1500×1200 revenait en **1496×1200**, donc elle rétrécissait à chaque reprise et tout le dessin était retouché alors qu'on promettait l'inverse. Corrigé **dans le graphe** (`ImageScale` + `ImageCompositeMasked`) : mesure finale **taille préservée, 0 pixel modifié hors de la zone**, 234 898 dedans. La promesse est vraie par construction, pas par confiance. |
 | **Traduction auto intermittente** | 🟠 (constaté v1.23.0) | Elle échoue parfois (API), et c'est **volontairement non bloquant** : on génère alors le texte tel quel, en le notant dans le journal. Mais l'utilisateur ne le voit pas. À rendre visible dans l'aperçu. Depuis la v1.23.0 la traduction n'est plus optionnelle, donc cet angle mort porte désormais sur **tous** les chemins. |
 | **Un objet partiel dans `S.page` détache la planche, en silence** | 🟠 (constaté v1.23.0) | L'upsert serveur réécrit **tous** les champs d'une planche. Un `api('/manga/pages', obj)` avec un objet incomplet (par ex. la réponse `{ok, id}` d'une écriture) remet `project_id` à vide : la planche devient **orpheline**, sans la moindre erreur. Aucun chemin de l'app ne fait ça aujourd'hui (`S.page` vient toujours de `loadPages`), mais rien ne l'empêche. Trouvé en écrivant `test_personnages.py`, qui est tombé dedans. |
 | **Une régénération accumule les fichiers** | 🟠 | Chaque génération écrit un fichier de plus ; l'ancien n'est pas supprimé. Choix assumé (on ne détruit pas sans demander) mais **à trancher avec Quang** : supprimer, ou garder comme historique avec retour arrière. |

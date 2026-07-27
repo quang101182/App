@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.25.0</title>
+<title>Manga Studio v1.26.1</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -93,6 +93,14 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
   padding:1px 7px;font-size:12px;font-weight:700}
 .panel .verdict{position:absolute;top:6px;right:6px;font-size:16px}
 .panel .seqbadge{position:absolute;top:6px;left:40px;background:#000a;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:700;color:#8fd8ff}
+/* La zone tracee reste VISIBLE hors du mode trace : on doit voir ce qu'on va
+   redessiner avant de depenser une generation. */
+.panel .zonebox{position:absolute;border:2px dashed #ffb4b4;background:#ff6b6b22;
+  pointer-events:none;border-radius:3px}
+/* Le capteur de gestes ne se pose QUE pendant le trace : sinon il volerait le
+   defilement de la page a chaque glisse sur une image. */
+.panel .zonecap{position:absolute;inset:0;touch-action:none;cursor:crosshair;
+  background:#0003}
 .spin{width:22px;height:22px;border:2px solid var(--line);border-top-color:var(--accent2);
   border-radius:50%;animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -212,7 +220,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.25.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.26.1</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -542,7 +550,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.25.0";
+const VERSION = "1.26.1";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -736,6 +744,7 @@ const DEFAULT_RECIPE = {
 
 /* ---------- etat ---------- */
 const S = { projects: [], pages: [], panels: [], proj: null, page: null, busy: 0,
+            zone: null,        // id de la case dont on trace la zone (une seule a la fois)
             lettering: null,   // id de la case en cours de lettrage (une seule a la fois)
             selBub: null };    // id de la bulle selectionnee dans cette case
 const $ = id => document.getElementById(id);
@@ -781,7 +790,7 @@ function promptFinal(p){
  *   - le CASTING est explicite et fiable : Quang a coche des fiches ;
  *   - `nbPersonnages` est une heuristique sur le texte, donc faillible.
  *  Les deux comptent pour construire le prompt, mais seule la premiere est assez
- *  sure pour REFUSER quelque chose a l'utilisateur (cf. sequence, v1.25.0).
+ *  sure pour REFUSER quelque chose a l'utilisateur (cf. sequence, v1.26.1).
  */
 function nbPersosCase(p){
   return Math.max(tagsCasting(p).length,
@@ -1045,6 +1054,57 @@ function wfPanel(r, positive, seed, prefix, depthName, poseName, poseW, refNom){
                  strength: cnPds, start_percent: 0.0, end_percent: 0.9 } };
     g["5"].inputs.positive = ["13",0];
     g["5"].inputs.negative = ["13",1];
+  }
+  return g;
+}
+
+/** Regenerer UNE ZONE d'une case, sans toucher au reste (chantier n°2).
+ *
+ *  Jusqu'ici, une case bonne a 90 % ne pouvait qu'etre ENTIEREMENT regeneree --
+ *  on perdait les 90 % pour reparer les 10 %. Le graphe vient de
+ *  `scripts/inpaint_zone.py`, deja mesure ; ce qui change ici, c'est qu'il
+ *  travaille avec la RECETTE DE LA CASE (meme checkpoint, meme LoRA, meme
+ *  negatif) au lieu de constantes : une reparation doit ressembler a son voisin.
+ *
+ *  `grow_mask_by` fait deborder le masque de quelques pixels : sans lui, la
+ *  jointure entre l'ancien et le neuf se voit comme une decoupe.
+ *  `denoise` < 1 garde une trace de ce qui etait la -- c'est ce qui permet a la
+ *  zone de se raccorder au dessin plutot que d'inventer un ilot.
+ */
+function wfInpaint(r, positive, imgNom, maskNom, seed, prefix, denoise, dims){
+  const avecLora = !!(r.lora && r.lora.trim());
+  const src = avecLora ? "10" : "1";
+  const g = {
+    "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: r.ckpt } },
+    "2": { class_type: "CLIPTextEncode", inputs: { text: positive, clip: [src,1] } },
+    "3": { class_type: "CLIPTextEncode", inputs: { text: r.neg, clip: [src,1] } },
+    "8": { class_type: "LoadImage", inputs: { image: imgNom } },
+    "9": { class_type: "LoadImage", inputs: { image: maskNom } },
+    "10b": { class_type: "ImageToMask", inputs: { image: ["9",0], channel: "red" } },
+    "11": { class_type: "VAEEncodeForInpaint", inputs: {
+             pixels: ["8",0], vae: ["1",2], mask: ["10b",0], grow_mask_by: 12 } },
+    "5": { class_type: "KSampler", inputs: { seed: seed, steps: +r.steps, cfg: +r.cfg,
+            sampler_name: r.sampler, scheduler: r.scheduler,
+            denoise: (denoise === undefined ? 0.85 : denoise),
+            model: [src,0], positive: ["2",0], negative: ["3",0], latent_image: ["11",0] } },
+    "6": { class_type: "VAEDecode", inputs: { samples: ["5",0], vae: ["1",2] } },
+    // ⚠ MESURE DU 27/07 : l'inpaint reencode l'image ENTIERE par le VAE, et SDXL
+    // travaille par pas de 8 px -- une case de 1500x1200 revenait en 1496x1200.
+    // Deux consequences, invisibles sur un seul passage : la case RETRECIT a
+    // chaque reprise, et TOUT le dessin est retouche alors qu'on promet l'inverse.
+    // On remet donc la sortie a la taille exacte de l'original, puis on ne
+    // recolle QUE le masque : hors zone, ce sont les pixels d'origine, au bit pres.
+    "12": { class_type: "ImageScale", inputs: { image: ["6",0], upscale_method: "lanczos",
+             width: dims.w, height: dims.h, crop: "disabled" } },
+    "13": { class_type: "ImageCompositeMasked", inputs: {
+             destination: ["8",0], source: ["12",0], mask: ["10b",0],
+             x: 0, y: 0, resize_source: false } },
+    "7": { class_type: "SaveImage", inputs: { images: ["13",0], filename_prefix: prefix + "/zone" } }
+  };
+  if (avecLora){
+    g["10"] = { class_type: "LoraLoader", inputs: { lora_name: r.lora,
+                 strength_model: +r.loraW, strength_clip: +r.loraW,
+                 model: ["1",0], clip: ["1",1] } };
   }
   return g;
 }
@@ -1445,9 +1505,18 @@ function majEtape(){
 }
 
 function panelHTML(p, i){
-  const img = p.file
+  const img = (p.file
     ? '<img src="' + imgURL(p.file) + '" alt="case ' + (i+1) + '">'
-    : '<span class="ph">◻</span>';
+    : '<span class="ph">◻</span>')
+    // Le cadre de la zone se voit MEME hors du mode trace : sinon on ne sait plus
+    // ce qu'on a selectionne, et on regenere a l'aveugle.
+    + (p.zone
+        ? '<div class="zonebox" style="left:' + (p.zone.x * 100) + '%;top:' + (p.zone.y * 100)
+          + '%;width:' + (p.zone.w * 100) + '%;height:' + (p.zone.h * 100) + '%"></div>'
+        : "")
+    + (S.zone === p.id
+        ? '<div class="zonecap" data-zonecap="' + p.id + '"></div>'
+        : "");
   const v = p.verdict === "ok" ? "✅" : (p.verdict === "ko" ? "❌" : "");
   // Une case issue d'une sequence le DIT. Quang : « visuellement, je ne vois pas
   // de difference » -- et il avait raison, rien ne la signalait.
@@ -1505,6 +1574,12 @@ function panelHTML(p, i){
    + ((p.recipe && p.recipe.seed) || "") + '" placeholder="seed"> '
    + '<button class="btn sm" data-act="gen" title="Dessine cette case">Générer</button>'
    + '<button class="btn sm" data-act="letter" title="Poser les bulles et le texte par-dessus">✎ Lettrage' + (nb ? " (" + nb + ")" : "") + '</button>'
+   // Reparer 10 % d'une case sans perdre les 90 % qui vont bien.
+   + (p.file ? '<button class="btn sm' + (S.zone === p.id ? " on" : "")
+       + '" data-act="zone" title="Redessiner UNE zone de la case, sans toucher au reste">⬚ Zone'
+       + (p.zone ? " ✓" : "") + '</button>' : "")
+   + (p.file && p.zone ? '<button class="btn sm" data-act="zonego" '
+       + 'title="Regenerer seulement la zone tracee">↻ la zone</button>' : "")
    + '<button class="btn sm' + (p.verdict === "ok" ? " on" : "")
    + '" data-act="ok" title="Je garde cette case (recliquer annule)">✅</button>'
    + '<button class="btn sm' + (p.verdict === "ko" ? " on" : "")
@@ -2453,7 +2528,7 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
   etapesLibres = etapesLibres || [];
   const r = recipe();
   if (!(p.prompt || "").trim()) return toast("écris d'abord l'action de la case");
-  // Le bouton est deja retire de l'ecran dans ce cas (v1.25.0) ; ceci tient si un
+  // Le bouton est deja retire de l'ecran dans ce cas (v1.26.1) ; ceci tient si un
   // autre chemin y mene. Un refus vaut mieux que N generations qui ne montreront
   // ni la pose demandee, ni le bon nombre de personnages.
   if (GESTES[geste] && tagsCasting(p).length > 1){
@@ -2994,6 +3069,14 @@ $("plate").addEventListener("click", async e => {
   const p = S.panels.find(x => x.id === pid); if (!p) return;
   const act = btn.dataset.act;
   if (act === "gen") return genPanel(p);
+  if (act === "zone"){
+    // Une seule case en mode trace : deux capteurs actifs voleraient le
+    // defilement de la page sur toute la planche.
+    S.zone = (S.zone === p.id) ? null : p.id;
+    if (S.zone === p.id) toast("glisse sur l'image pour entourer la zone à refaire");
+    return renderPlate();
+  }
+  if (act === "zonego") return regenererZone(p);
   if (act === "del"){ await api("/manga/panels", { delete: pid });
                       S.panels = S.panels.filter(x => x.id !== pid); return renderPlate(); }
   // --- lettrage ---
@@ -3157,6 +3240,109 @@ $("plate").addEventListener("input", e => {
   const p = curPanel(), b = curBub(); if (!p || !b) return;
   b.text = e.target.value; redrawBubbles(p);
 });
+/* ---------- tracer une zone AU DOIGT ----------
+   Un rectangle, pas un pinceau : c'est ce qui se trace le plus surement avec un
+   pouce sur un ecran de 6 pouces, et `grow_mask_by` adoucit de toute facon les
+   bords. `touch-action:none` sur le capteur est indispensable -- sans lui, le
+   navigateur interprete le glisse comme un defilement et rien ne se trace. */
+let _zoneDep = null;
+$("plate").addEventListener("pointerdown", e => {
+  const cap = e.target.closest("[data-zonecap]");
+  if (!cap) return;
+  const r = cap.getBoundingClientRect();
+  _zoneDep = { pid: cap.dataset.zonecap, r: r,
+               x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+  cap.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+$("plate").addEventListener("pointermove", e => {
+  if (!_zoneDep) return;
+  const d = _zoneDep, r = d.r;
+  const x2 = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  const y2 = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+  const p = S.panels.find(z => z.id === d.pid); if (!p) return;
+  p.zone = { x: Math.min(d.x, x2), y: Math.min(d.y, y2),
+             w: Math.abs(x2 - d.x), h: Math.abs(y2 - d.y) };
+  const box = document.querySelector('[data-pid="' + d.pid + '"] .zonebox');
+  if (box){
+    box.style.left = (p.zone.x * 100) + "%"; box.style.top = (p.zone.y * 100) + "%";
+    box.style.width = (p.zone.w * 100) + "%"; box.style.height = (p.zone.h * 100) + "%";
+  } else {
+    renderPlate();
+  }
+  e.preventDefault();
+});
+$("plate").addEventListener("pointerup", async e => {
+  if (!_zoneDep) return;
+  const p = S.panels.find(z => z.id === _zoneDep.pid);
+  _zoneDep = null;
+  if (!p || !p.zone) return;
+  // Une zone d'un pixel est un clic, pas une intention : on l'efface plutot que
+  // de lancer une generation sur trois pixels.
+  if (p.zone.w < 0.03 || p.zone.h < 0.03){
+    p.zone = null;
+    renderPlate();
+    return toast("zone trop petite — glisse pour tracer un rectangle");
+  }
+  await api("/manga/panels", p);
+  renderPlate();
+  toast("zone tracée — « ↻ la zone » pour la redessiner");
+});
+
+/** Le masque attendu par ComfyUI : NOIR partout, BLANC sur la zone a refaire.
+ *  Il doit faire exactement la taille de l'image, sinon le recadrage decale la
+ *  reparation par rapport a ce que Quang a montre du doigt. */
+function masqueBlob(w, h, zone){
+  const cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  const cx = cv.getContext("2d");
+  cx.fillStyle = "#000"; cx.fillRect(0, 0, w, h);
+  cx.fillStyle = "#fff";
+  cx.fillRect(Math.round(zone.x * w), Math.round(zone.y * h),
+              Math.round(zone.w * w), Math.round(zone.h * h));
+  return new Promise(res => cv.toBlob(res, "image/png"));
+}
+
+/** Redessine SEULEMENT la zone tracee. Le reste de la case est preserve. */
+async function regenererZone(p){
+  if (!p.file || !p.zone) return toast("trace d'abord une zone");
+  const r = recipe();
+  return avecTemoin("Reprise de la zone…", async () => {
+    // L'image de la case vit dans les sorties du projet ; ComfyUI lit ses entrees
+    // ailleurs. On la remonte donc dans `input` avant de pouvoir l'inpainter.
+    const src = await (await fetch(imgURL(p.file), {
+      headers: CFG.key ? { Authorization: "Bearer " + CFG.key } : {} })).blob();
+    const dims = await new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res({ w: im.naturalWidth, h: im.naturalHeight });
+      im.onerror = () => rej(new Error("image de la case illisible"));
+      im.src = URL.createObjectURL(src);
+    });
+    const nomImg = await uploadToComfy(src, "zone_src_" + p.id + ".png");
+    const nomMsk = await uploadToComfy(await masqueBlob(dims.w, dims.h, p.zone),
+                                       "zone_msk_" + p.id + ".png");
+    const prefix = "manga/" + S.proj.slug + "/" + S.page.id + "/" + Date.now().toString(36);
+    // Un seed NEUF : redemander la meme zone avec le meme seed rendrait la meme
+    // reparation, donc le bouton semblerait ne rien faire.
+    const seed = Math.floor(Math.random() * 1e9);
+    const imgs = await runGraph(
+      wfInpaint(r, promptFinal(p), nomImg, nomMsk, seed, prefix, 0.85, dims),
+      "zone " + p.id);
+
+    // La recomposition est faite DANS le graphe (ImageScale + ImageCompositeMasked) :
+    // hors zone, ce sont les pixels d'origine au bit pres, et la taille est tenue.
+    p.file = await harvest(imgs[0], p.id + "_zone" + Date.now().toString(36) + ".png");
+    p.recipe = Object.assign({}, p.recipe, { zoneSeed: seed, zone: p.zone });
+    await api("/manga/panels", p);
+    renderPlate();
+    log("zone redessinée (" + Math.round(p.zone.w * 100) + "×"
+        + Math.round(p.zone.h * 100) + " % de la case)", "s");
+  }, "Zone redessinée").catch(e => {
+    log("zone : " + e.message, "e");
+    refus(p, "La reprise de la zone a échoué : " + e.message);
+  });
+}
+
 $("plate").addEventListener("pointerdown", bubPointerDown);
 
 // Les projets crees AVANT la v1.13.0 ont le personnage de test COPIE dans leur
