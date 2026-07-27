@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.31.0</title>
+<title>Manga Studio v1.33.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -28,8 +28,13 @@ button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 
 /* ---------- barre du haut ---------- */
-header{position:sticky;top:0;z-index:50;background:#0d0f13ee;backdrop-filter:blur(8px);
-  border-bottom:1px solid var(--line);padding:8px 14px}
+/* Bandeau ET onglets figes ENSEMBLE, dans un seul bloc colle en haut.
+   Quang, 27/07 : « surtout si je me retrouve tout en bas, pouvoir cliquer
+   rapidement sur un onglet toujours visible ». Un seul conteneur sticky plutot
+   que deux : deux elements colles a `top:0` se chevauchent des que la hauteur du
+   premier change (et elle change -- 42 px sur PC, 72 px sur telephone). */
+.topbar{position:sticky;top:0;z-index:50;background:#0d0f13ee;backdrop-filter:blur(8px)}
+header{border-bottom:1px solid var(--line);padding:8px 14px}
 /* Le bandeau suit la MEME largeur que le reste de l'app (760 px, cf. `main`) :
    sur un ecran de 1700 px, un header etale pendant qu'un contenu est centre
    donne deux applications differentes sur la meme page. */
@@ -49,8 +54,15 @@ header{position:sticky;top:0;z-index:50;background:#0d0f13ee;backdrop-filter:blu
 .engs{display:flex;gap:6px;align-items:center;margin-left:auto;flex-wrap:wrap}
 .eng{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:99px;
   border:1px solid var(--line);background:var(--panel);font-size:11px;color:var(--dim)}
-.eng .pw{font-size:10px;color:var(--txt);padding:0 2px;cursor:pointer;line-height:1}
-.eng button.pw{background:none;border:0}
+/* `display:flex` ci-dessus l'emporte sur le `display:none` implicite de
+   l'attribut `hidden` : sans cette ligne, le temoin « proxy injoignable »
+   restait affiche en permanence, point vert a l'appui -- un bandeau qui
+   annonce une panne pendant que tout marche. */
+.eng[hidden]{display:none}
+.eng .pw{font-size:10px;color:var(--txt);padding:0 2px;line-height:1}
+button.eng{cursor:pointer;font:inherit;font-size:11px}
+button.eng:hover{border-color:var(--accent)}
+button.eng:active{transform:scale(.97)}
 /* Pulse ORANGE de transition : du clic jusqu'a l'etat cible. Sans lui, demarrer
    ComfyUI (plusieurs secondes) ressemble a un bouton mort -- piege paye sur
    Generate Studio, inutile de le repayer ici. */
@@ -74,6 +86,24 @@ header{position:sticky;top:0;z-index:50;background:#0d0f13ee;backdrop-filter:blu
    alignements differents sur une meme page se lisent comme trois applications. */
 nav{display:flex;flex-wrap:wrap;gap:4px 2px;padding:8px 10px 0;border-bottom:1px solid var(--line);
   max-width:760px;margin:0 auto;box-sizing:content-box}
+nav button i{font-style:normal}
+nav button b{font-weight:inherit}
+
+/* ---------- onglets COMPACTS sur telephone (≤ 480 px) ----------
+   Sept onglets en toutes lettres prenaient DEUX lignes sur un 360 px, soit ~40 px
+   voles a la planche en permanence. Solution deja validee sur Generate Studio
+   (v4.49) : les libelles cedent la place aux icones.
+   ⚠ Ce que l'on ne refait PAS : `overflow-x:auto`. Il rendrait la barre « propre »
+   au controle automatique tout en cachant les derniers onglets derriere un
+   defilement que personne ne devine -- le piege deja paye ici.
+   L'onglet ACTIF garde son mot : sinon on sait ou aller, mais plus ou l'on est. */
+@media (max-width:480px){
+  nav{gap:2px;padding:6px 6px 0;flex-wrap:nowrap;justify-content:space-between}
+  nav button{padding:8px 9px;font-size:15px;line-height:1}
+  nav button b{display:none}
+  nav button.sel b{display:inline;font-size:12px;margin-left:5px;vertical-align:middle}
+  nav button.sel{padding:8px 10px}
+}
 nav button{background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px;
   color:var(--dim);white-space:nowrap;border-radius:6px 6px 0 0}
 nav button.sel{color:var(--txt);border-bottom-color:var(--accent);background:var(--panel)}
@@ -262,13 +292,24 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 </head>
 <body>
 
+<div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.31.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.33.0</span></div>
     <div class="engs">
-      <span class="eng"><span class="dot" id="dProxy"></span>proxy</span>
-      <span class="eng" id="engComfy"><span class="dot" id="dComfy"></span>ComfyUI<button
-        class="pw" id="engPw" title="Démarrer / arrêter le moteur">▶</button></span>
+      <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
+           du tout). Un temoin permanent qui est vert 100 % du temps n'informe
+           plus personne : il prend de la place sur un telephone et on cesse de
+           le lire. Ici il devient une ALERTE -- absent quand tout va bien, et
+           impossible a manquer quand plus rien ne repond. -->
+      <span class="eng" id="engProxy" hidden><span class="dot" id="dProxy"></span>proxy injoignable</span>
+      <!-- Meme nom et meme geste que Generate Studio : la pastille « Local » est
+           ELLE-MEME le bouton (tap = allumer / couper ce moteur). Deux apps du
+           meme atelier ne doivent pas s'appeler autrement ni se piloter
+           autrement -- c'est ce qui fait qu'on ne se demande jamais ou cliquer. -->
+      <button class="eng" id="engComfy" title="Démarrer / arrêter le moteur local">
+        <span class="dot" id="dComfy"></span>🖥 Local<span class="pw" id="engPw">▶</span>
+      </button>
     </div>
     <!-- La VRAM vient de nvidia-smi (proxy /vram) et NON de ComfyUI : elle doit
          rester lisible moteur ETEINT, c'est justement le moment ou l'on veut
@@ -282,14 +323,15 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 </header>
 
 <nav>
-  <button data-tab="tPlate" class="sel">Planche</button>
-  <button data-tab="tProj">Projet</button>
-  <button data-tab="tIng">Ingestion</button>
-  <button data-tab="tVal">Validé</button>
-  <button data-tab="tPerso">Personnages</button>
-  <button data-tab="tGal">Galerie</button>
-  <button data-tab="tSet">Réglages</button>
+  <button data-tab="tPlate" class="sel"><i>▦</i><b>Planche</b></button>
+  <button data-tab="tProj"><i>🗂</i><b>Projet</b></button>
+  <button data-tab="tIng"><i>📥</i><b>Ingestion</b></button>
+  <button data-tab="tVal"><i>✅</i><b>Validé</b></button>
+  <button data-tab="tPerso"><i>👤</i><b>Personnages</b></button>
+  <button data-tab="tGal"><i>🖼</i><b>Galerie</b></button>
+  <button data-tab="tSet"><i>⚙</i><b>Réglages</b></button>
 </nav>
+</div>
 
 <main>
 
@@ -653,7 +695,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.31.0";
+const VERSION = "1.33.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -3066,14 +3108,17 @@ let ENG_CIBLE = null;         // etat vise pendant une transition (true/false)
 let ENG_DEADLINE = 0;         // securite : au-dela, on cesse d'attendre
 
 async function health(){
-  try { await api("/ping"); $("dProxy").className = "dot on"; }
-  catch { $("dProxy").className = "dot off"; }
+  let proxyOk = true;
+  try { await api("/ping"); } catch { proxyOk = false; }
+  $("dProxy").className = "dot " + (proxyOk ? "on" : "off");
+  $("engProxy").hidden = proxyOk;      // temoin muet tant que tout va bien
   let up = false;
   try { await api("/comfy/system_stats"); up = true; } catch { up = false; }
   COMFY_UP = up;
   $("dComfy").className = "dot " + (up ? "on" : "off");
   $("engPw").textContent = up ? "■" : "▶";
-  $("engPw").title = up ? "Arrêter le moteur (libère la carte)" : "Démarrer le moteur";
+  $("engComfy").title = up ? "Arrêter le moteur local (libère la carte)"
+                          : "Démarrer le moteur local";
   // La transition se termine quand l'etat CIBLE est atteint -- ou quand le
   // delai de securite expire. Un pulse qui ne s'arrete jamais est pire que pas
   // de pulse : il apprend a ne plus le regarder.
@@ -3790,7 +3835,7 @@ async function majGPU(){
   }
 }
 $("btnGpuRefresh").onclick = () => { majGPU(); health(); };
-$("engPw").onclick = () => basculerMoteur();
+$("engComfy").onclick = () => basculerMoteur();
 /* Le bandeau se tient a jour TOUT SEUL : un etat qu'il faut rafraichir a la main
    n'est pas un etat, c'est une photo. Un seul minuteur, deux cadences : toutes
    les 3 s pendant une transition (c'est la seule periode ou la seconde compte),
