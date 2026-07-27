@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.9.0</title>
+<title>Manga Studio v1.10.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -152,6 +152,20 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .etape{margin:8px 0 0;padding:8px 10px;border-radius:8px;font-size:13px;
   background:var(--panel2);border-left:3px solid var(--accent2);color:var(--txt)}
 .etape b{color:var(--accent2)}
+/* Temoin d'activite GLOBAL (demande Quang, 27/07 : « il ne faut pas un bouton
+   silencieux, partout ou c'est necessaire »). Colle en haut, il survit au
+   defilement : sur telephone, l'action se declenche souvent hors de l'ecran ou
+   son effet apparaitra. */
+#busy{position:fixed;left:0;right:0;top:0;z-index:80;display:flex;align-items:center;
+  gap:8px;padding:8px 12px;background:var(--accent2);color:#0a0c10;font-size:13px;
+  font-weight:700;box-shadow:0 2px 10px #0006}
+#busy[hidden]{display:none}
+#busy.done{background:#2e7d4f;color:#fff}
+#busy .spin{border-color:#0a0c1055;border-top-color:#0a0c10;width:16px;height:16px}
+#busy.done .spin{display:none}
+.panel .refus{margin:0;padding:6px 8px;border-radius:6px;background:#4a2020;
+  color:#ffc9c9;font-size:12px}
+.panel .refus[hidden]{display:none}
 #lightbox[hidden]{display:none}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:90;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
@@ -185,7 +199,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.9.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.10.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -419,6 +433,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 </main>
 <div id="toast"></div>
 
+<div id="busy" hidden><div class="spin"></div><span id="busyTxt"></span></div>
 <div id="lightbox" hidden>
   <img id="lbImg" alt="">
   <div class="lbbar">
@@ -474,6 +489,44 @@ function toast(m){
   const t = document.getElementById("toast");
   t.textContent = m; t.classList.add("on");
   clearTimeout(toast._h); toast._h = setTimeout(() => t.classList.remove("on"), 2600);
+}
+
+/** Temoin d'activite : on ANNONCE qu'on travaille, et on dit quand c'est fini.
+ *
+ * Demande de Quang le 27/07 : « il me faut un temoin d'activite visuel pour
+ * savoir que c'est en cours et quand c'est fini. Pas un bouton silencieux. »
+ * Un toast de 2,6 s ne suffit pas : une generation dure 10 a 20 s, et sur
+ * telephone le bouton qu'on vient de toucher est souvent hors de l'ecran ou
+ * l'image apparaitra.
+ */
+function busyOn(txt){
+  const b = document.getElementById("busy");
+  b.classList.remove("done");
+  document.getElementById("busyTxt").textContent = txt;
+  b.hidden = false;
+}
+function busyOff(txt){
+  const b = document.getElementById("busy");
+  if (!txt){ b.hidden = true; return; }
+  b.classList.add("done");
+  document.getElementById("busyTxt").textContent = txt;
+  clearTimeout(busyOff._h);
+  busyOff._h = setTimeout(() => { b.hidden = true; b.classList.remove("done"); }, 2600);
+}
+
+/** Enveloppe une action longue : temoin visible, bouton neutralise, message de
+ *  fin -- et surtout le temoin RETOMBE meme si l'action echoue (finally). Un
+ *  temoin bloque en « en cours… » serait pire que pas de temoin du tout. */
+async function avecTemoin(txt, fn, fini){
+  busyOn(txt);
+  try {
+    const r = await fn();
+    busyOff(fini || "terminé");
+    return r;
+  } catch(e){
+    busyOff("");
+    throw e;
+  }
 }
 
 /* ---------- config / auth ---------- */
@@ -1014,6 +1067,20 @@ function panelHTML(p, i){
    + '</div></div>';
 }
 
+/** Affiche (ou efface) le motif pour lequel une case n'a pas pu etre generee. */
+function refus(p, texte){
+  const carte = document.querySelector('[data-pid="' + p.id + '"]');
+  if (!carte) return;
+  let el = carte.querySelector(".refus");
+  if (!el){
+    el = document.createElement("p");
+    el.className = "refus";
+    carte.querySelector(".body").prepend(el);
+  }
+  el.textContent = texte;
+  el.hidden = !texte;
+}
+
 function panelBusy(pid, txt){
   const el = document.querySelector('[data-pid="' + pid + '"] [data-busy]');
   if (!el) return;
@@ -1164,11 +1231,19 @@ async function genPanel(p){
     const sv = card.querySelector("[data-seed]").value;
     p.recipe = Object.assign({}, p.recipe, { seed: sv ? +sv : Math.floor(Math.random()*1e9) });
   }
-  if (!p.prompt.trim()){ toast("case " + (S.panels.indexOf(p)+1) + " : prompt vide"); return; }
+  // Le motif de refus RESTE affiche dans la case. Un toast de 2,6 s se manque,
+  // et l'utilisateur conclut « le bouton ne fait rien » -- c'est arrive le 27/07.
+  if (!p.prompt.trim()){
+    refus(p, "Rien à dessiner : décris l'action de la case dans le champ ci-dessus, puis Générer.");
+    toast("case " + (S.panels.indexOf(p)+1) + " : prompt vide");
+    return;
+  }
 
   const ambiance = p.kind === "ambiance";
   const depthName = ambiance ? (S.page.master && S.page.master.depthInput) : "";
   if (ambiance && !depthName){
+    refus(p, "Case « ambiance » : elle a besoin du fond maître de la planche. "
+          + "Génère-le en haut de la page, ou passe la case en « dialogue ».");
     toast("case ambiance : génère d'abord le fond maître");
     log("case " + p.id + " en ambiance sans fond maître -> ignorée", "w");
     return;
@@ -1177,7 +1252,10 @@ async function genPanel(p){
                  + (ambiance && S.page.master.decor ? ", " + S.page.master.decor : "");
   const prefix = "manga/" + S.proj.slug + "/" + S.page.id;
 
+  refus(p, "");
   panelBusy(p.id, ambiance ? "ambiance…" : "dialogue…");
+  const numero = S.panels.indexOf(p) + 1;
+  busyOn("Génération de la case " + numero + "… (10 à 20 s)");
   try {
     const imgs = await runGraph(wfPanel(r, positive, p.recipe.seed, prefix, depthName), "case " + p.id);
     p.file = await harvest(imgs[0], p.id + ".png");
@@ -1190,14 +1268,28 @@ async function genPanel(p){
     });
     await api("/manga/panels", p);
     renderPlate();
-  } catch(e){ log("case: " + e.message, "e"); toast("échec : " + e.message); panelBusy(p.id, null); }
+    busyOff("Case " + numero + " terminée");
+  } catch(e){
+    log("case: " + e.message, "e"); toast("échec : " + e.message);
+    panelBusy(p.id, null);
+    refus(p, "La génération a échoué : " + e.message);
+    busyOff("");   // le temoin doit RETOMBER meme en cas d'echec
+  }
 }
 
 async function genAll(){
   const todo = S.panels.filter(p => !p.file && p.prompt.trim());
   if (!todo.length) return toast("rien à générer");
   log("génération de " + todo.length + " case(s)");
-  for (const p of todo) await genPanel(p);   // en serie : une seule carte, 16 Go de VRAM
+  // En serie : une seule carte, 16 Go de VRAM. Le temoin dit OU on en est, sinon
+  // une planche de 6 cases est deux minutes d'ecran muet.
+  let n = 0;
+  for (const p of todo){
+    n++;
+    busyOn("Planche : case " + n + " sur " + todo.length + "…");
+    await genPanel(p);
+  }
+  busyOff("Planche terminée — " + todo.length + " case(s)");
   toast("planche terminée");
 }
 
@@ -1665,13 +1757,15 @@ $("btnGalDel").onclick = async () => {
     + (sel.length > 5 ? `\n· … et ${sel.length - 5} autre(s)` : "");
   if (!confirm(`Supprimer définitivement ${sel.length} image(s) ?\n\n${noms}`)) return;
   $("btnGalDel").disabled = true;
+  busyOn("Suppression de " + sel.length + " image(s)…");
   try {
     const r = await api("/manga/files", { delete: sel.map(f => f.path) });
     log("galerie : " + r.supprimes + " image(s) supprimée(s)", "s");
     if (r.refuses && r.refuses.length) log("refusées : " + r.refuses.join(", "), "e");
     toast(r.supprimes + " image(s) supprimée(s)");
     await refreshGal();
-  } catch(e){ log("suppression : " + e.message, "e"); toast("échec : " + e.message); }
+    busyOff(r.supprimes + " image(s) supprimée(s)");
+  } catch(e){ log("suppression : " + e.message, "e"); toast("échec : " + e.message); busyOff(""); }
   finally { galSelState(); }
 };
 $("lbClose").onclick = lbClose;
@@ -1770,19 +1864,26 @@ $("btnDelPage").onclick = async () => {
   localStorage.removeItem("manga_page"); await loadPages();
 };
 
-$("btnMaster").onclick = genMaster;
+// Le fond maitre demande deux passes (decor puis carte de profondeur) : c'est
+// la plus longue attente de l'app apres une planche entiere.
+$("btnMaster").onclick = () => avecTemoin("Fond maître : décor puis profondeur (~25 s)…",
+    genMaster, "Fond maître prêt")
+  .catch(e => { log("fond maître: " + e.message, "e"); toast("échec : " + e.message); });
 $("btnAddPanel").onclick = addPanel;
 $("btnGenAll").onclick = genAll;
-$("btnExport").onclick = () => exportPlate().catch(e => { log("export PNG: " + e.message, "e"); toast("échec export"); });
-$("btnExportPdf").onclick = () => exportPDF().catch(e => { log("export PDF: " + e.message, "e"); toast("échec export PDF"); });
+$("btnExport").onclick = () => avecTemoin("Export PNG de la planche…", exportPlate, "PNG exporté").catch(e => { log("export PNG: " + e.message, "e"); toast("échec export"); });
+$("btnExportPdf").onclick = () => avecTemoin("Export PDF de la planche…", exportPDF, "PDF exporté").catch(e => { log("export PDF: " + e.message, "e"); toast("échec export PDF"); });
 $("btnRefreshGal").onclick = refreshGal;
 $("btnValRefresh").onclick = () => loadValides().catch(e => log("validé: " + e.message, "e"));
-$("btnDataset").onclick = ecrireDataset;
+$("btnDataset").onclick = () => avecTemoin("Écriture du dataset…", ecrireDataset,
+    "Dataset écrit")
+  .catch(e => { log("dataset: " + e.message, "e"); toast("échec : " + e.message); });
 $("valList").addEventListener("click", e => {
   const id = e.target.dataset && e.target.dataset.reuse;
   if (id) reuseRecipe(id).catch(x => { log("réutilisation: " + x.message, "e"); toast("échec"); });
 });
-$("btnIngest").onclick = ingestPage;
+$("btnIngest").onclick = () => avecTemoin("Analyse de la page (détection + traduction, ~15 s)…",
+    ingestPage, "Page analysée").catch(e => { log("ingestion: " + e.message, "e"); toast("échec"); });
 $("btnIngCreate").onclick = () => createFromIngest()
   .catch(e => { log("création depuis ingestion: " + e.message, "e"); toast("échec"); });
 
