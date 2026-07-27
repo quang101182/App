@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.34.0</title>
+<title>Manga Studio v1.35.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -305,7 +305,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.34.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.35.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -711,7 +711,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.34.0";
+const VERSION = "1.35.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1596,7 +1596,23 @@ async function loadPages(){
 
 async function loadPanels(){
   S.panels = S.page ? ((await api("/manga/panels?page=" + S.page.id)).items || []) : [];
+  S.panels.forEach(restaurerZone);
   renderPlate();
+}
+
+/** La zone tracee vit dans `recipe`, pas a la racine de la case.
+ *
+ *  La table `manga_panels` a des colonnes FIXES (id, page_id, idx, kind, prompt,
+ *  recipe, file, verdict, bubbles) : tout champ pose ailleurs qu'a l'interieur de
+ *  `recipe` est accepte par l'API... et jete a l'ecriture. `p.zone` etait dans ce
+ *  cas depuis la v1.26.1 : le rectangle disparaissait au rechargement de la page,
+ *  sans la moindre erreur. Verifie en lisant `upsert_manga_panel`, pas en le
+ *  supposant. On restaure donc la zone -- et sa consigne -- au chargement. */
+const zoneConsigne = p => ((p.recipe && p.recipe.zonePrompt) || "").trim();
+
+function restaurerZone(p){
+  if (!p.zone && p.recipe && p.recipe.zone) p.zone = p.recipe.zone;
+  return p;
 }
 
 function fillPage(){
@@ -1850,6 +1866,23 @@ function panelHTML(p, i){
        + (p.file && p.zone ? '<button class="btn sm" data-act="zonego" '
            + 'title="Regenerer seulement la zone tracee">↻ la zone</button>' : "")
        + '</div>'
+       /* ---- DIRE ce qu'on veut a cet endroit (v1.35.0) ----
+          Le champ est FACULTATIF, et c'est tout l'interet : vide, « ↻ la zone »
+          retente la meme chose autrement (corriger sans avoir a expliquer) ;
+          rempli, il dit quoi dessiner la. Un seul bouton pour les deux : un
+          seul geste, deux usages -- plutot qu'un bouton de plus a comprendre. */
+       + (p.file && p.zone
+         ? '<div class="zonetxt">'
+           + '<label style="margin:8px 0 4px">Ce que tu veux à cet endroit '
+           + '<span class="muted">— facultatif</span></label>'
+           + '<input data-zonetxt placeholder="ex : une main ouverte, sans bague" value="'
+           + esc(zoneConsigne(p)) + '">'
+           + '<p class="muted" style="margin:5px 0 0;font-size:11px">'
+           + (zoneConsigne(p)
+              ? 'Le reste de la case ne bouge pas. Vide ce champ pour simplement retenter.'
+              : 'Laisse vide pour retenter la zone autrement, sans rien expliquer.')
+           + '</p></div>'
+         : "")
        + '<div class="row" style="margin-top:8px">'
        + '<input data-seed type="number" style="width:110px" value="'
        + ((p.recipe && p.recipe.seed) || "") + '" placeholder="seed">'
@@ -3535,7 +3568,14 @@ $("plate").addEventListener("click", async e => {
   // Un seul panneau ⚙ deplie a la fois : deux cases ouvertes cote a cote, et on
   // ne sait plus laquelle on regle.
   if (act === "affiner"){ S.affiner = (S.affiner === pid) ? null : pid; return renderPlate(); }
-  if (act === "zonego") return regenererZone(p);
+  if (act === "zonego"){
+    // Meme piege que la seed : on relit le champ AVANT de partir. Cliquer le
+    // bouton declenche bien un `change`, mais s'y fier seul, c'est perdre la
+    // consigne dans le cas ou il ne part pas (clavier mobile, tap rapide).
+    const champ = document.querySelector('[data-pid="' + pid + '"] [data-zonetxt]');
+    if (champ) p.recipe = Object.assign({}, p.recipe, { zonePrompt: champ.value.trim() });
+    return regenererZone(p);
+  }
   if (act === "del"){ await api("/manga/panels", { delete: pid });
                       S.panels = S.panels.filter(x => x.id !== pid); return renderPlate(); }
   // --- lettrage ---
@@ -3676,6 +3716,13 @@ $("plate").addEventListener("change", async e => {
     await api("/manga/panels", p);
     return;
   }
+  // La consigne de zone est GARDEE sur la case : une retouche se refait souvent,
+  // et la reecrire a chaque essai serait la punir d'avoir insiste.
+  if (e.target.matches("[data-zonetxt]")){
+    p.recipe = Object.assign({}, p.recipe, { zonePrompt: e.target.value.trim() });
+    await api("/manga/panels", p);
+    return;
+  }
   // Une seed FIXEE a la main survit a la fermeture du panneau ⚙ : sinon
   // replier le panneau la perdrait en silence, et la case suivante repartirait
   // sur un tirage au hasard sans que rien ne le dise.
@@ -3749,9 +3796,13 @@ $("plate").addEventListener("pointerup", async e => {
   // de lancer une generation sur trois pixels.
   if (p.zone.w < 0.03 || p.zone.h < 0.03){
     p.zone = null;
+    p.recipe = Object.assign({}, p.recipe, { zone: null });
+    await api("/manga/panels", p);
     renderPlate();
     return toast("zone trop petite — glisse pour tracer un rectangle");
   }
+  // Dans `recipe`, sinon la base la jette en silence (cf. restaurerZone).
+  p.recipe = Object.assign({}, p.recipe, { zone: p.zone });
   await api("/manga/panels", p);
   renderPlate();
   toast("zone tracée — « ↻ la zone » pour la redessiner");
@@ -3772,10 +3823,54 @@ function masqueBlob(w, h, zone){
 }
 
 /** Redessine SEULEMENT la zone tracee. Le reste de la case est preserve. */
+/** Le prompt envoye pour REPARER une zone.
+ *
+ *  Sans consigne : celui de la case -- on retente la meme chose, autrement.
+ *  Avec consigne : elle REMPLACE l'action, mais le style et l'identite restent.
+ *  C'est le point qui fait la difference entre « repare ca » et « dessine
+ *  n'importe quoi la » : envoyer la seule consigne ferait perdre a la zone le
+ *  rendu manga N&B et le personnage, et la reparation se verrait comme une
+ *  piece rapportee. On rejoue donc `promptFinal` sur une copie de la case dont
+ *  seule l'action change -- tout le reste (comptage compris) est deja traite la. */
+function promptZone(p){
+  const consigne = ((p.recipe && p.recipe.zonePromptEn) || "").trim();
+  return consigne ? promptFinal(Object.assign({}, p, { prompt: consigne }))
+                  : promptFinal(p);
+}
+
+/** Traduit la consigne de zone si elle est en francais, et la GARDE traduite.
+ *  Le moteur ne lit que l'anglais : une consigne francaise n'y est pas mal
+ *  comprise, elle est ignoree -- et on croirait que la zone ne tient pas compte
+ *  de ce qu'on demande. On ne retraduit que si le texte a change. */
+async function prepareConsigneZone(p){
+  const src = zoneConsigne(p);
+  const rec = p.recipe || {};
+  if (!src){ p.recipe = Object.assign({}, rec, { zonePromptEn: "" }); return; }
+  if (rec.zonePromptSrc === src && rec.zonePromptEn) return;   // deja traduite
+  if (!sembleFrancais(src)){
+    p.recipe = Object.assign({}, rec, { zonePromptEn: src, zonePromptSrc: src });
+    return;
+  }
+  try {
+    const r = await api("/enhance", { idea: TRAD_CONSIGNE + src, format: "raw" });
+    const t = (r.prompt || "").trim().split("\n")[0].trim();
+    if (!t) throw new Error("traduction vide");
+    p.recipe = Object.assign({}, p.recipe, { zonePromptEn: t, zonePromptSrc: src });
+    log("zone, consigne traduite : " + t.slice(0, 80), "s");
+  } catch(e){
+    // Comme ailleurs : on ne refuse pas de dessiner pour une traduction ratee,
+    // mais on le DIT -- sinon la zone ignore la consigne sans que rien ne l'explique.
+    p.recipe = Object.assign({}, p.recipe, { zonePromptEn: src, zonePromptSrc: src });
+    log("consigne de zone non traduite (" + e.message + ") — envoyée telle quelle", "w");
+  }
+}
+
 async function regenererZone(p){
   if (!p.file || !p.zone) return toast("trace d'abord une zone");
   const r = recipe();
   return avecTemoin("Reprise de la zone…", async () => {
+    // La consigne est preparee AVANT de depenser la carte graphique.
+    await prepareConsigneZone(p);
     // L'image de la case vit dans les sorties du projet ; ComfyUI lit ses entrees
     // ailleurs. On la remonte donc dans `input` avant de pouvoir l'inpainter.
     const src = await (await fetch(imgURL(p.file), {
@@ -3794,7 +3889,7 @@ async function regenererZone(p){
     // reparation, donc le bouton semblerait ne rien faire.
     const seed = Math.floor(Math.random() * 1e9);
     const imgs = await runGraph(
-      wfInpaint(r, promptFinal(p), nomImg, nomMsk, seed, prefix, 0.85, dims),
+      wfInpaint(r, promptZone(p), nomImg, nomMsk, seed, prefix, 0.85, dims),
       "zone " + p.id);
 
     // La recomposition est faite DANS le graphe (ImageScale + ImageCompositeMasked) :
@@ -3804,7 +3899,9 @@ async function regenererZone(p){
     await api("/manga/panels", p);
     renderPlate();
     log("zone redessinée (" + Math.round(p.zone.w * 100) + "×"
-        + Math.round(p.zone.h * 100) + " % de la case)", "s");
+        + Math.round(p.zone.h * 100) + " % de la case)"
+        + (p.recipe.zonePromptEn ? " — consigne : " + p.recipe.zonePromptEn.slice(0, 60)
+                          : " — sans consigne, autre tirage"), "s");
   }, "Zone redessinée").catch(e => {
     log("zone : " + e.message, "e");
     refus(p, "La reprise de la zone a échoué : " + e.message);
