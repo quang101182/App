@@ -959,6 +959,50 @@ existe précisément pour recueillir ce verdict-là.
 sur l'ensemble, les gros plans à un seul personnage. Le coût principal ne sera pas la génération mais
 la **continuité** — le piège n°1 depuis le premier jour.
 
+### Phase 11 — Un semblant de MOUVEMENT par une suite d'images 🔄 *(idée Quang, 27/07 — testée le jour même)*
+
+> « Est-ce possible de créer plusieurs images qui créent un semblant de mouvement, comme les
+> dessinateurs qui enchaînent plusieurs pages ? Un effet de mouvement, ou un GIF. »
+
+**Ce qu'on n'utilise PAS, et pourquoi.** Aucun modèle vidéo n'est installé (`animatediff_models/` et
+`CogVideo/` sont **vides** — vérifié). Et ces modèles produisent du photoréaliste ou de l'anime
+**couleur** : plusieurs Go à télécharger pour un rendu hors sujet. Le manga N&B tramé n'est pas leur
+domaine.
+
+**Ce qu'on fait à la place — la méthode des dessinateurs : des POSES CLÉS.** Même seed, même prompt,
+même checkpoint ; **seule la pose change**, imposée par des squelettes openpose interpolés entre deux
+postures (`test_mouvement.py`, qui réutilise `make_pose.py`). Déterministe, gratuit, et le mouvement
+est **choisi** plutôt que subi.
+
+**Mesuré sur 6 images (un coup de poing) :**
+
+| Mesure | Valeur |
+|---|---|
+| Cohérence entre images **voisines** (CLIP) | min 0,841 · **moy 0,895** |
+| Écart entre la **première** et la **dernière** | 0,845 |
+| Durée | ~14 s par image |
+
+Les deux critères comptent **ensemble** : une suite très cohérente mais immobile est un échec aussi net
+qu'une suite qui bouge en changeant de personnage à chaque vignette.
+
+**⚠️ Un défaut trouvé à l'œil, qu'aucun chiffre ne signalait** : au premier essai, les images 1-2
+sortaient **de dos** et les suivantes **de face**. Cause : *un squelette openpose est en 2D et ne dit
+pas l'orientation* — les mêmes points se lisent dans les deux sens. Corrigé en fixant `front view,
+facing viewer` au prompt et `from behind, back view` au négatif. **Le cosinus global ne voyait pas ce
+demi-tour** : encore une mesure aveugle au défaut qu'elle était censée attraper.
+
+**Ce que ça fait, et ce que ça ne fait pas — à ne pas confondre :**
+- ✅ **Une séquence de cases** qui donne l'impression du mouvement dans une planche : c'est utile, et
+  c'est exactement le langage du manga (les cases successives d'un même geste).
+- ⛔ **Pas un GIF fluide.** 6 poses ne font pas une animation ; les plis du vêtement et les détails
+  sont redessinés à chaque image, donc ça « fourmille ». Pour du fluide il faudrait un modèle vidéo —
+  hors sujet ici (voir plus haut).
+- ⚠️ **Le visage n'est pas résolu** en plan large : limite structurelle déjà connue (phase 2). Pour un
+  mouvement en gros plan, il faudrait le FaceDetailer du dataset v2.
+
+> **Critère de sortie** : une séquence de 3-4 cases d'un même geste, intégrée dans une planche, que
+> Quang juge lisible comme un mouvement. ⏳ Reste à brancher dans l'app (aujourd'hui : script seul).
+
 ### Phase 8 — La bibliothèque de références ⏳ *(demande Quang du 27/07)*
 
 > « L'application pourrait se nourrir de scans ou d'images […] de mangas que j'apprécie. Il faudra les
@@ -1148,6 +1192,7 @@ texte : ce qui doit être maîtrisé ne se génère pas, il se **superpose**.
 
 | Date | Événement |
 |---|---|
+| 2026-07-27 | **Phase 11 — le MOUVEMENT par poses cles, teste le jour meme de l'idee.** Aucun modele video installe (dossiers VIDES) et ceux-ci rendent du couleur photorealiste ⇒ on fait comme les dessinateurs : meme seed, meme prompt, **seule la pose change** via des squelettes openpose interpoles. Mesure sur 6 images : coherence entre voisines **0,895** en moyenne, ecart premiere/derniere **0,845** — le personnage tient ET ca bouge. **Defaut trouve a l'oeil que le chiffre ne voyait pas** : les 2 premieres images sortaient DE DOS, les suivantes de face — un squelette openpose est en 2D et ne dit pas l'orientation. Corrige au prompt. Verdict honnete : c'est une **sequence de cases**, pas un GIF fluide — 6 poses ne font pas une animation, et les details redessines a chaque image fourmillent. |
 | 2026-07-27 | **v1.18.0 — bouton « 3 suites », la premiere brique du mode automatique.** Idee de Quang, retenue parce qu'elle est la MOINS risquee : texte vers texte, zero GPU, et elle attaque le point dur du chantier -- la continuite -- la ou il se joue vraiment, dans le **recit** et non dans l'image. Le contexte, ce sont les **4-5 cases precedentes** (leurs actions ET leurs dialogues), pas la derniere : une suite ne se deduit pas d'une image isolee. Trois directions volontairement differentes (logique / intense / inattendue) ; un clic remplit la case. Mesure sur une sequence reelle (couloir, visage inquiet, porte qui s'ouvre) : 3 propositions coherentes et distinctes, reprise en un clic. Elle est aussi la plus facile a valider -- Quang lit trois phrases et en choisit une. |
 | 2026-07-27 | **v1.17.0 — traduction auto, style de projet, comptage des personnages.** Option « ameliorer automatiquement avant de generer » : elle ne traduit que si besoin (retraduire une traduction la degrade) et ne BLOQUE jamais la generation. **Style du projet en texte LIBRE** plutot qu'une liste de genres — une liste plafonnerait le « n'importe quel sujet » et figerait ce qui doit varier. Et le correctif qui comptait : « il n'y a qu'un seul personnage » venait de `solo` (herite de l'identite du projet, il l'emporte sur tout le reste) et du fait que **le modele compte avec des TAGS, pas avec des mots**. Mesure : meme avec la consigne explicite, le LLM rend « solo, martial arts master » ⇒ le nombre est desormais **derive du texte** (4/4 sur les cas reels), `solo` retire, tag de comptage impose. Piege d'enchainement attrape en testant : le compte se lit sur le texte **d'origine**, la traduction perdant regulierement le nombre (« deux maitres » ressort au singulier). |
 | 2026-07-27 | **Faisabilite d'un manga entier : repondu par ecrit (phase 10).** Par nombre de personnages — 1 solide, 2 mesure, 3 degrade, **4-5 pas fiablement et je ne le promets pas** (la voie realiste y est le montage, pas la generation). Sur la fabrication d'un personnage : le **visage** decide de l'identite et IPAdapter le veut GRAND (52 % de l'image au banc ; une reference en pied echoue — essai 3), tandis que **vetements et corpulence** ne passent pas par l'image mais par les **tags**. ⇒ fiche MIXTE, ce que `manga_chars` stocke deja. Non promis : une corpulence identique d'une case a l'autre. |
