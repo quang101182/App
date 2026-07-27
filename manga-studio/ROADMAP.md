@@ -486,6 +486,43 @@ Ce que les phases précédentes ont déjà posé, et qui n'est donc pas à refai
 - **la recette complète** de chaque case est enregistrée, donc une planche est rejouable ;
 - **le lettrage** sait poser les répliques, et la **boucle de validation** sait recycler ce qui marche.
 
+### Le périmètre réel *(précisé par Quang le 27/07)*
+
+> « Ce qui sera important, ce sera surtout **la création**. […] la définition des images, la **cohérence des
+> actions**, les **textes de dialogue générés automatiquement**, même si je pourrai les corriger. Il faut
+> imaginer **plusieurs tests** : plusieurs types de scènes ou de séquences, de deux mangas, de chapitres ou
+> de pages — cela peut aller d'une **romance** au **combat**, voire à la **pornographie**, sous plusieurs
+> thèmes. Au final n'importe quel sujet : des **personnages humains**, des choses plus **extravagantes ou
+> cinématographiques**, **imaginaires**, **futuristes**, des **robots**, etc. »
+
+**Matrice de test — un chantier n'est pas validé sur un seul thème.** Ce qui marche sur une lycéenne dans
+un couloir ne prouve rien sur un duel de mechas.
+
+| Axe | À couvrir |
+|---|---|
+| **Genre** | romance · combat/action · pornographie · quotidien/slice of life · horreur ou tension |
+| **Sujet** | humain réaliste · humain stylisé · **robot / mecha** · créature imaginaire · décor futuriste |
+| **Échelle** | une page · une séquence de 2-3 pages · un chapitre |
+| **Registre visuel** | intimiste (peu de cases, gros plans) · cinématographique (plans larges, mouvement) |
+
+### 🚩 Conséquence d'architecture à trancher AVANT de construire
+
+Tout l'acquis des phases 1 et 2 repose sur **un LoRA entraîné pour UN personnage** (35 min de GPU).
+**Ça ne passe pas à l'échelle d'un outil « n'importe quel sujet »** : on ne va pas entraîner un LoRA par
+robot, par créature et par figurant. Il faut une stratégie de cohérence qui ne demande **aucun
+entraînement**. Pistes, par ordre de crédibilité :
+
+1. **IPAdapter** (référence par image, sans entraînement) — **⛔ pas installé**, identifié comme manque
+   depuis le 26/07. C'est le candidat le plus sérieux et il est bloqué sur une installation.
+2. **Fiche de personnage textuelle détaillée + seed fixe** — mesuré à ~50 % en phase 1. Insuffisant seul,
+   utile en complément.
+3. **LoRA à la demande**, réservé aux personnages **récurrents** d'un projet long (ce que la phase 6 sait
+   déjà préparer depuis les cases validées). Bon pour un héros, pas pour une figuration.
+
+⇒ **Décision à prendre avec Quang** : installer IPAdapter et bâtir la cohérence dessus, ou assumer que
+seuls les personnages récurrents ont un LoRA. Tant que ce n'est pas tranché, la phase 7 ne peut livrer que
+ce qui est **indépendant du sujet** — c'est-à-dire le découpage narratif et les dialogues.
+
 Ce qui manque, et qui est le vrai travail :
 1. **Le découpage narratif** — un LLM transforme le texte en *storyboard* : combien de cases, quel
    cadrage, quelle action, quelle réplique. C'est du texte vers du texte, donc peu risqué.
