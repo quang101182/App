@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.10.1</title>
+<title>Manga Studio v1.11.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -199,7 +199,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.10.1</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.11.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -424,6 +424,8 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
     <div class="row" style="margin-bottom:8px">
       <button class="btn sm" id="btnClearLog">Vider</button>
       <button class="btn sm" id="btnCopyLog">Copier</button>
+      <button class="btn sm" id="btnExportLog">Exporter</button>
+      <button class="btn sm" id="btnSendLog">Envoyer au PC</button>
       <span class="muted" id="logState"></span>
     </div>
     <div id="log"></div>
@@ -464,7 +466,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.10.1";
+const VERSION = "1.11.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -474,10 +476,27 @@ const FONT_CSS =
 
 /* ---------- journal (obligatoire des la conception) ---------- */
 const LOG = [];
+/** Le journal. Il doit etre exploitable SANS que Quang ait a copier-coller.
+ *
+ * Le 27/07, une generation echouait de facon incomprehensible ; c'est son
+ * copier-coller qui a tranche en une lecture. La trace existait, elle n'etait
+ * simplement pas accessible d'ici. Trois manques comblés :
+ *   - le CONTEXTE (projet / planche / appareil) : « case mc19… » ne dit rien
+ *     hors de la session ou l'on regarde ;
+ *   - la PERSISTANCE : un rechargement effacait tout, donc les bugs qui font
+ *     recharger effacaient leur propre trace ;
+ *   - l'ACCES : le journal part sur le PC, ou je le lis en direct.
+ */
 function log(msg, cls){
-  const t = new Date().toISOString().slice(11,19);
-  LOG.push({t, msg, cls: cls || ""});
-  if (LOG.length > 500) LOG.shift();
+  const d0 = new Date();
+  const t = d0.toISOString().slice(11, 23);   // a la milliseconde : les durees comptent
+  LOG.push({t, ms: d0.getTime(), msg: String(msg), cls: cls || "",
+            proj: (S.proj && S.proj.slug) || "", page: (S.page && S.page.id) || ""});
+  if (LOG.length > 800) LOG.shift();
+  try { localStorage.setItem("manga_log", JSON.stringify(LOG.slice(-300))); } catch {}
+  // Une erreur part AUSSITOT sur le PC : c'est le moment ou la trace compte, et
+  // c'est aussi celui ou l'app peut ne pas survivre pour l'envoyer plus tard.
+  if (cls === "e") envoiLogDiffere(1200);
   const el = document.getElementById("log");
   if (el){
     const d = document.createElement("div");
@@ -486,9 +505,51 @@ function log(msg, cls){
     el.appendChild(d); el.scrollTop = el.scrollHeight;
   }
 }
+// Le journal survit a un rechargement : sinon un bug qui recharge la page
+// efface sa propre trace, ce qui est exactement le pire moment.
+try {
+  const anc = JSON.parse(localStorage.getItem("manga_log") || "[]");
+  if (anc.length){ LOG.push(...anc.slice(-150)); }
+} catch {}
 window.addEventListener("error", e => log("JS ERROR: " + e.message + " @" + e.filename + ":" + e.lineno, "e"));
 window.addEventListener("unhandledrejection", e => log("PROMISE REJETEE: " + (e.reason && e.reason.message || e.reason), "e"));
-window.MangaLog = { dump: n => LOG.slice(-(n||200)), errors: () => LOG.filter(x => x.cls === "e") };
+window.MangaLog = {
+  dump: n => LOG.slice(-(n || 200)),
+  errors: () => LOG.filter(x => x.cls === "e"),
+  envoyer: () => envoiLog(),
+};
+
+/** Envoie le journal au PC (le proxy l'ecrit dans Documents/ComfyUI/logs/).
+ *  Nom STABLE : on ecrase toujours le meme fichier, pour qu'il soit lisible
+ *  « en live » sans avoir a chercher le plus recent. */
+let _envoiEnCours = false;
+async function envoiLog(){
+  if (_envoiEnCours) return;
+  _envoiEnCours = true;
+  try {
+    // La route exige une LISTE (elle refuse un objet, et le refus etait
+    // silencieux cote app). Le contexte devient donc le PREMIER element.
+    const contexte = { type: "contexte", app: "manga-studio", version: VERSION,
+      appareil: navigator.userAgent, ecran: innerWidth + "x" + innerHeight,
+      envoye: new Date().toISOString(),
+      projet: (S.proj && S.proj.slug) || null,
+      planche: (S.page && S.page.id) || null,
+      cases: (S.panels || []).map(p => ({id: p.id, kind: p.kind, generee: !!p.file,
+                                         bulles: (p.bubbles || []).length,
+                                         verdict: p.verdict || ""})) };
+    await api("/savelog", { ts: "manga-live",
+                            events: [contexte].concat(LOG.slice(-300)) });
+  } catch(e){ /* jamais bloquant : un journal qui casse l'app serait absurde */ }
+  finally { _envoiEnCours = false; }
+}
+let _envoiH = null;
+function envoiLogDiffere(ms){
+  clearTimeout(_envoiH);
+  _envoiH = setTimeout(() => envoiLog(), ms || 4000);
+}
+// Filet : au depart de la page, et regulierement tant qu'elle vit.
+window.addEventListener("pagehide", () => { try { envoiLog(); } catch {} });
+setInterval(() => { if (LOG.length) envoiLog(); }, 60000);
 
 function toast(m){
   const t = document.getElementById("toast");
@@ -1201,7 +1262,10 @@ async function genMaster(){
   const decor = $("mstPrompt").value.trim();
   if (!decor) return toast("décris le décor d'abord");
   const r = recipe(), seed = Math.floor(Math.random()*1e9);
-  const prefix = "manga/" + S.proj.slug + "/" + S.page.id;
+  // Nom unique par execution : meme raison que pour les cases (cache ComfyUI
+  // + fichier deplace par harvest = « source introuvable » a la 2e fois).
+  const prefix = "manga/" + S.proj.slug + "/" + S.page.id
+               + "/" + Date.now().toString(36);
   $("btnMaster").disabled = true; $("mstState").textContent = "génération du décor…";
   try {
     const imgs = await runGraph(wfMaster(r, decor, seed, prefix), "fond maître");
@@ -1255,7 +1319,15 @@ async function genPanel(p){
   }
   const positive = r.style + ", " + r.trigger + ", " + r.ident + ", " + p.prompt.trim()
                  + (ambiance && S.page.master.decor ? ", " + S.page.master.decor : "");
-  const prefix = "manga/" + S.proj.slug + "/" + S.page.id;
+  // Le nom de fichier est UNIQUE a chaque execution, et ce n'est pas cosmetique.
+  // ComfyUI met en cache par empreinte du graphe : regenerer une case avec le
+  // meme seed lui faisait renvoyer le resultat precedent en 2 s, SANS reecrire
+  // le fichier -- que /manga/harvest avait justement DEPLACE hors de ComfyUI.
+  // D'ou « source introuvable » a la deuxieme generation (log de Quang, 06:28:59).
+  // Changer le prefixe invalide le seul noeud SaveImage : le calcul reste en
+  // cache (donc toujours rapide) mais l'image est bel et bien reecrite.
+  const prefix = "manga/" + S.proj.slug + "/" + S.page.id
+               + "/" + Date.now().toString(36);
 
   refus(p, "");
   panelBusy(p.id, ambiance ? "ambiance…" : "dialogue…");
@@ -1277,7 +1349,10 @@ async function genPanel(p){
   } catch(e){
     log("case: " + e.message, "e"); toast("échec : " + e.message);
     panelBusy(p.id, null);
-    refus(p, "La génération a échoué : " + e.message);
+    refus(p, /source introuvable/.test(e.message)
+      ? "L'image a été produite mais n'a pas pu être rangée (fichier déjà déplacé). "
+        + "Regénère : le nom de sortie est maintenant unique à chaque fois."
+      : "La génération a échoué : " + e.message);
     busyOff("");   // le temoin doit RETOMBER meme en cas d'echec
   }
 }
