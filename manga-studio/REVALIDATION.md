@@ -42,6 +42,8 @@
 >
 > | **v1.37.0** | **🎨 Dessiner un personnage** depuis sa fiche (3 vues, on garde la bonne → référence IPAdapter) · 🐛 **la fiche de personnage échappait à la traduction obligatoire** depuis la v1.23.0 — une fiche en français est **invisible dans toutes** les cases qui la castent | `test_perso_dessiner.py` — 15 ✓, génération réelle, mutation rouge |
 >
+> | **v1.38.0** | **visionneuse plein écran** (zoom ancré + pan borné + ◀ ▶ + action « garder ») · nombre d'images **annoncé** · **liste de personnages repliée** (1 fiche = 1 ligne) + filtre | `test_visionneuse_et_liste.py` — 20 ✓, mutation rouge |
+>
 > ⚠️ **Règle qui sort de la v1.37.0** : **traduire n'est pas enrichir.** Une traduction automatique
 > ne doit **rien inventer** — sinon elle alourdit la fiche de traits que Quang n'a pas écrits, *et*
 > laisse le français partir quand même. Consigne stricte (`TRAD_CONSIGNE`) pour la traduction,

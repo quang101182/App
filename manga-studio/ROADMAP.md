@@ -1440,6 +1440,38 @@ Banc : `test_perso_dessiner.py` — 15 ✓, **génération réelle** (3 images, 
 « est-ce que ça dessine vraiment *ce* personnage », et aucun stub n'y répond). Mutation rouge,
 8 échecs.
 
+#### 12.13 — ✅ Voir en grand, zoomer, et une liste qui tient *(livré v1.38.0)*
+
+Quatre remarques de Quang, capture à l'appui, sur la v1.37.0 :
+
+| Remarque | Réponse |
+|---|---|
+| *« c'est tout petit, je ne peux pas agrandir »* | toucher une vue l'ouvre **en grand**, avec « garder le buste » dans la barre — on choisit **en voyant**, pas d'après 110 px |
+| *« zoomer, dézoomer »* | molette + double-clic (PC), **pincée** + double-tap (doigt), boutons − / 1:1 / + |
+| *« suivant/précédent au lieu de fermer à chaque image »* | ◀ ▶ naviguent **sans fermer** ; chaque image repart à sa taille |
+| *« à aucun moment il n'est indiqué que trois images seront générées »* | bouton **« 🎨 Dessiner 3 vues »**, annonce au lancement (« ~2 min ») et compteur pendant |
+| *« la carte des personnages risque de devenir une liste abominable »* | **une fiche = une ligne**, dépliée au toucher, une seule à la fois, + filtre au-delà de 4 fiches |
+
+**Le zoom est ancré sur le point visé** — avec l'origine au centre (le défaut CSS), zoomer *éloigne
+du doigt* ce qu'on voulait regarder de plus près. Et **le pan est borné** : impossible de pousser
+l'image hors du cadre et de se retrouver devant du noir. Ce sont **les deux défauts déjà identifiés
+sur la visionneuse de planche** (§ RESTE) ; ils ne sont pas repayés ici.
+
+🐛 **Trouvé par le banc, pas à l'œil** : ma formule mesurait le point visé depuis le coin du
+**cadre**, en oubliant que l'image y est centrée (elle commence à `offsetLeft`). Le zoom dérapait
+donc de cette marge — le détail visé s'échappait pendant qu'on zoomait dessus. Après correction :
+coin attendu 51 px, obtenu **51 px**.
+
+Banc : `test_visionneuse_et_liste.py` — 20 ✓, zéro GPU, il **mesure des rectangles** au lieu de
+constater la présence d'un bouton. Mutation rouge (2 échecs).
+
+> **Deux leçons du banc lui-même**, à ne pas réapprendre :
+> 1. il servait une image SVG en base64 **écrite à la main** — invalide, donc mesurée à 0 px : il
+>    accusait le zoom d'un défaut qui n'était pas le sien. *(Et `window.vueURL = …` ne remplace
+>    **pas** une `const` de module — la résolution lexicale gagne, même piège que `$`.)*
+> 2. sa tolérance d'ancrage était de 25 px, et **un zoom centré passait encore** (il dérape de
+>    24 px). Un seuil confortable ne mesure plus rien — serré à 8 px.
+
 #### Ordre d'exécution *(chronologie tenue par Claude, mandat Quang du 27/07)*
 
 | # | Chantier | État | Pourquoi ce rang |
@@ -1452,6 +1484,7 @@ Banc : `test_perso_dessiner.py` — 15 ✓, **génération réelle** (3 images, 
 | — | **12.11 question d'arrêt** | ✅ v1.34.0 | + les 5 dernières boîtes natives de l'app |
 | — | **12.5 zone + consigne** | ✅ v1.35.0 | un seul bouton ; a révélé que `p.zone` n'était pas persistée depuis la v1.26.1 |
 | — | **12.12 dessiner un personnage** | ✅ v1.37.0 | demande ancienne et jamais faite ; a révélé que la fiche échappait à la traduction obligatoire |
+| — | **12.13 visionneuse + liste** | ✅ v1.38.0 | zoom ancré, navigation, liste repliée — et le zoom de la planche a désormais une implémentation de référence |
 | 1 | **12.7 💬 Répliques** | ⏳ | brique écrite à 80 %, zéro GPU, répond à une incompréhension réelle |
 | 3 | **12.1 case-groupe** | ⏳ | gros gain de lisibilité ; `sequence.gid` (v1.31.0) est déjà posé pour elle |
 | 4 | **12.2 réordonner** | ⏳ | trivial **une fois** la case-groupe posée |
