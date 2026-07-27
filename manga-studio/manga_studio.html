@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.38.0</title>
+<title>Manga Studio v1.39.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -315,7 +315,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.38.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.39.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -372,6 +372,14 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
         <button class="btn" id="btnDelPage">Suppr.</button>
       </div>
     </div>
+    <!-- « Qui joue » est une decision de DEBUT : elle etait sous les boutons
+         d'export, c'est-a-dire a la fin de tout. Remontee ici, avec le choix de
+         la planche. -->
+    <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:10px;align-items:center;
+                            padding-top:10px;border-top:1px solid var(--line)">
+      <b style="font-size:12px">Qui joue sur cette planche :</b>
+      <span id="casting" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"></span>
+    </div>
     <div class="row" style="margin-top:10px">
       <div style="width:110px"><label>Chapitre</label><input id="pgChapter" value="1"></div>
       <div class="grow"><label>Titre de la planche</label><input id="pgTitle" placeholder="ex : la rencontre"></div>
@@ -407,10 +415,6 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
     <!-- L'ordre des gestes n'etait ecrit NULLE PART : Quang a lettre et valide des
          cases avant de les generer, puis a demande « et apres, je fais quoi ? ».
          Une interface qui suppose son ordre connu le fait deviner. -->
-    <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:10px;align-items:center">
-      <b style="font-size:12px">Qui joue sur cette planche :</b>
-      <span id="casting" style="display:flex;gap:10px;flex-wrap:wrap"></span>
-    </div>
     <p id="etape" class="etape"></p>
   </div>
 
@@ -424,7 +428,15 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
     <div class="row">
       <input class="grow" id="npName" placeholder="nom du projet">
       <button class="btn pri" id="btnNewProj">Créer</button>
+    </div>
+    <!-- Le nombre de cases se REGLE ici, il ne se demande plus par une boite
+         native : `prompt()` peut etre refuse par le navigateur, et le geste
+         echoue alors sans un mot (defaut paye en v1.20.1 puis v1.27.0). -->
+    <div class="row" style="margin-top:8px;align-items:center">
       <button class="btn" id="btnDemarrer">Démarrer une planche</button>
+      <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--txt)">
+        avec <input id="npCases" type="number" min="1" max="12" value="4" style="width:64px"> cases
+      </label>
     </div>
     <div id="projList" style="margin-top:10px"></div>
   </div>
@@ -730,7 +742,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.38.0";
+const VERSION = "1.39.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -3481,6 +3493,41 @@ function renderChars(){
 }
 
 /** Le casting de la PLANCHE : qui est present sur cette page. */
+/* ================== LA TROUPE : trois niveaux, et c'est voulu ==================
+   Quang, 27/07 : « c'est quoi la suite quand je cree des personnages, que je
+   cree un nouveau projet, comment j'ai inclus ces personnages dans le projet ? »
+
+   La question etait juste, et elle pointait deux manques reels :
+     - le casting appartenait a la PLANCHE seule. Chaque nouvelle planche
+       repartait VIDE : vingt planches de chapitre = vingt fois le meme geste
+       pour recocher les memes heros ;
+     - la ligne affichait TOUTE la base, sans filtre — le meme « mur » que
+       l'onglet Personnages, mais en travers de l'ecran de la planche.
+
+   D'ou trois niveaux, qui se lisent en une phrase chacun :
+     1. LA BASE     — toutes mes fiches, reutilisables d'un manga a l'autre ;
+     2. LA TROUPE   — ceux qui jouent dans CE projet (`proj.recipe.casting`) ;
+     3. LA PLANCHE  — ceux qui apparaissent sur CETTE page (`layout.casting`).
+
+   Une planche neuve herite de la troupe. Elle peut ensuite s'en ecarter, et
+   c'est la nuance importante : `layout.casting` ABSENT = « je suis la troupe »,
+   `layout.casting` VIDE = « personne sur cette page », et ce n'est pas pareil. */
+function troupeProjet(){
+  return (S.proj && S.proj.recipe && S.proj.recipe.casting) || [];
+}
+
+/* ⚠ Declarations de FONCTION, pas des const flechees : l'heritage se joue ici,
+   a la LECTURE, et un banc doit pouvoir remplacer ces deux-la pour prouver que
+   son test sait echouer. Une `const` de module n'est pas remplacable (la
+   resolution lexicale l'emporte sur `window.x = ...`) -- une premiere version
+   de `test_troupe.py` mutait ainsi et restait verte, donc ne prouvait rien. */
+function castingPage(){
+  const l = S.page && S.page.layout && S.page.layout.casting;
+  return l === undefined ? troupeProjet() : l;   // absent = herite, vide = personne
+}
+
+let AJOUT_TROUPE = false;      // le petit panneau « + quelqu'un » est-il ouvert
+
 function renderCasting(){
   const el = $("casting");
   if (!el) return;
@@ -3489,14 +3536,35 @@ function renderCasting(){
       + '— onglet <b>Personnages</b> pour en créer, ou continue sans.</span>';
     return;
   }
+  const troupe = troupeProjet();
   const actifs = castingPage();
-  el.innerHTML = CHARS.map(c =>
-    '<label style="margin:0;display:flex;align-items:center;gap:5px;color:var(--txt);font-size:12px">'
-    + '<input type="checkbox" data-cast="' + c.id + '" style="width:auto"'
-    + (actifs.includes(c.id) ? " checked" : "") + '> ' + esc(c.name || c.id) + '</label>').join("");
+  // On ne montre QUE la troupe : la base entiere en cases a cocher redevient le
+  // mur qu'on vient de retirer de l'onglet Personnages.
+  const dehors = CHARS.filter(c => !troupe.includes(c.id));
+  el.innerHTML =
+    (troupe.length
+      ? troupe.map(id => {
+          const c = CHARS.find(x => x.id === id);
+          if (!c) return "";
+          return '<label style="margin:0;display:flex;align-items:center;gap:5px;'
+            + 'color:var(--txt);font-size:12px">'
+            + '<input type="checkbox" data-cast="' + c.id + '" style="width:auto"'
+            + (actifs.includes(c.id) ? " checked" : "") + '> ' + esc(c.name || c.id)
+            + '<button class="btn sm" data-troupedel="' + c.id + '" '
+            + 'title="Retirer de ce manga" style="padding:0 5px">×</button></label>';
+        }).join("")
+      : '<span class="muted" style="font-size:12px">personne dans ce manga pour l\'instant</span>')
+    + '<button class="btn sm" id="btnTroupe">' + (AJOUT_TROUPE ? "fermer" : "+ quelqu'un") + '</button>'
+    + (AJOUT_TROUPE
+       ? '<div style="flex:1 1 100%;margin-top:6px">'
+         + (dehors.length
+            ? dehors.map(c => '<button class="btn sm" data-troupeadd="' + c.id + '" '
+                + 'style="margin:0 5px 5px 0">＋ ' + esc(c.name || c.id) + '</button>').join("")
+            : '<span class="muted" style="font-size:11px">toute la base joue déjà '
+              + 'dans ce manga.</span>')
+         + '</div>'
+       : "");
 }
-
-const castingPage = () => (S.page && S.page.layout && S.page.layout.casting) || [];
 
 /** Les tags a injecter pour une case : le casting de la planche, moins ce que la
  *  case retire. Deux personnages = leurs deux jeux de tags, dans l'ordre. */
@@ -3646,10 +3714,15 @@ $("btnNewProj").onclick = async () => {
  * dans le projet de test d'un banc, ou tout etait deja fait.
  * Le premier pas doit etre un seul bouton. */
 $("btnDemarrer").onclick = async () => {
-  const nom = ($("npName").value.trim())
-    || prompt("Nom de la planche ?", "ma planche") || "";
-  if (!nom.trim()) return;
-  const n = Math.max(1, Math.min(12, +(prompt("Combien de cases ?", "4") || 4)));
+  const nom = $("npName").value.trim();
+  // Plus de boite native pour le nom non plus : on dit ce qui manque, a l'ecran,
+  // et on met le curseur dans le champ. Un bouton qui ne fait rien passe pour
+  // casse -- c'est trois fois le meme defaut sur ce projet.
+  if (!nom){
+    $("npName").focus();
+    return toast("donne un nom à ton manga, puis « Démarrer une planche »");
+  }
+  const n = Math.max(1, Math.min(12, +($("npCases").value || 4)));
   await avecTemoin("Création du projet et de la planche…", async () => {
     const slug = nom.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
                     .replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || ("p" + Date.now());
@@ -3846,11 +3919,54 @@ $("casting").onchange = async e => {
   if (!id || !S.page) return;
   const l = new Set(castingPage());
   e.target.checked ? l.add(id) : l.delete(id);
+  // Premiere modification = la planche cesse d'heriter et prend son propre
+  // casting. C'est le moment ou l'on MATERIALISE l'heritage, pas avant : tant
+  // qu'on n'a rien touche, une planche doit suivre la troupe du manga.
   S.page.layout = Object.assign({}, S.page.layout, { casting: [...l] });
   await api("/manga/pages", S.page);
   renderPlate();
   log("casting de la planche : " + ([...l].map(i =>
       (CHARS.find(c => c.id === i) || {}).name || i).join(", ") || "personne"), "s");
+};
+
+/** La troupe du MANGA : qui peut apparaitre dans ce projet. */
+async function majTroupe(ids){
+  if (!S.proj) return toast("ouvre un projet d'abord");
+  S.proj.recipe = Object.assign({}, S.proj.recipe, { casting: ids });
+  await api("/manga/projects", S.proj);
+  renderCasting();
+  log("troupe du manga : " + (ids.map(i =>
+      (CHARS.find(c => c.id === i) || {}).name || i).join(", ") || "personne"), "s");
+}
+
+$("casting").onclick = async e => {
+  const d = e.target.dataset || {};
+  if (e.target.id === "btnTroupe"){ AJOUT_TROUPE = !AJOUT_TROUPE; return renderCasting(); }
+  if (d.troupeadd){
+    // Ajouter quelqu'un a la troupe le fait AUSSI jouer sur la planche ouverte :
+    // sinon le geste est a faire deux fois, et on croit que le clic n'a servi a rien.
+    await majTroupe(troupeProjet().concat([d.troupeadd]));
+    if (S.page){
+      const l = new Set(castingPage()); l.add(d.troupeadd);
+      S.page.layout = Object.assign({}, S.page.layout, { casting: [...l] });
+      await api("/manga/pages", S.page);
+    }
+    AJOUT_TROUPE = false;
+    renderPlate(); renderCasting();
+    return toast("ajouté au manga et à cette planche");
+  }
+  if (d.troupedel){
+    await majTroupe(troupeProjet().filter(x => x !== d.troupedel));
+    // On le retire aussi de la planche ouverte, sinon il continuerait d'etre
+    // dessine alors qu'il ne fait plus partie du manga.
+    if (S.page){
+      const l = castingPage().filter(x => x !== d.troupedel);
+      S.page.layout = Object.assign({}, S.page.layout, { casting: l });
+      await api("/manga/pages", S.page);
+    }
+    renderPlate(); renderCasting();
+    return toast("retiré de ce manga");
+  }
 };
 
 $("projList").onclick = async e => {
@@ -3868,8 +3984,11 @@ $("projList").onclick = async e => {
 
 $("btnNewPage").onclick = async () => {
   if (!S.proj) return toast("crée un projet d'abord");
+  // Une planche neuve HERITE de la troupe du manga : sans ca, vingt planches de
+  // chapitre = vingt fois le meme geste pour recocher les memes heros.
   const r = await api("/manga/pages", { projectId: S.proj.id, chapter: $("pgChapter").value || "1",
-    idx: S.pages.length, title: "", layout: { cols: +$("pgCols").value }, master: {} });
+    idx: S.pages.length, title: "",
+    layout: { cols: +$("pgCols").value, casting: troupeProjet() }, master: {} });
   localStorage.setItem("manga_page", r.id); await loadPages(); toast("planche créée");
 };
 $("btnDelPage").onclick = async () => {
