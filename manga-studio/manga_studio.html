@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.20.1</title>
+<title>Manga Studio v1.21.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -212,7 +212,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.20.1</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.21.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -533,7 +533,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.20.1";
+const VERSION = "1.21.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -2181,18 +2181,77 @@ const OS_CORPS = {
 // Un geste = les articulations qui bougent, de leur position de depart a celle
 // d'arrivee. Tout le reste du corps ne bouge pas : c'est ce qui garde le
 // personnage identique d'une vignette a l'autre.
+// Deux FAMILLES, et la distinction n'est pas cosmetique.
+//
+// « corps » : la pose est imposee par un squelette openpose -> la progression du
+//   geste est GARANTIE. C'est ce qu'il faut des que le corps bouge.
+// « libre » : aucun squelette, seul le prompt decrit l'etape. Universel (y compris
+//   pour un visage, un robot, une creature) mais la progression n'est PAS garantie.
+//   Mesure du 27/07 : sur « lever le bras » decrit en 4 etapes de texte, la 3e
+//   vignette REDESCENDAIT le bras avant de le relever. Coherence du personnage
+//   correcte (0,880), enchainement du geste non. On le dit a l'utilisateur.
 const GESTES = {
-  coup:   { nom: "coup de poing",
-            k: { 3:[[-0.150,0.300],[-0.020,0.250]], 4:[[-0.170,0.400],[0.230,0.235]],
-                 6:[[0.115,0.290],[0.140,0.330]],   7:[[0.130,0.410],[0.180,0.430]] } },
-  marche: { nom: "marche",
-            k: { 9:[[-0.055,0.730],[-0.130,0.700]], 10:[[-0.058,0.960],[-0.190,0.930]],
-                 12:[[0.055,0.730],[0.120,0.740]],  13:[[0.058,0.960],[0.150,0.960]],
-                 3:[[-0.115,0.290],[-0.150,0.270]], 6:[[0.115,0.290],[0.075,0.320]] } },
-  chute:  { nom: "chute",
-            k: { 1:[[0,0.150],[0.060,0.230]], 0:[[0,0.075],[0.090,0.160]],
-                 4:[[-0.130,0.410],[-0.210,0.330]], 7:[[0.130,0.410],[0.215,0.470]],
-                 10:[[-0.058,0.960],[-0.150,0.930]] } }
+  coup:     { nom: "coup de poing", famille: "corps",
+              k: { 3:[[-0.150,0.300],[-0.020,0.250]], 4:[[-0.170,0.400],[0.230,0.235]],
+                   6:[[0.115,0.290],[0.140,0.330]],   7:[[0.130,0.410],[0.180,0.430]] } },
+  marche:   { nom: "marche", famille: "corps",
+              k: { 9:[[-0.055,0.730],[-0.130,0.700]], 10:[[-0.058,0.960],[-0.190,0.930]],
+                   12:[[0.055,0.730],[0.120,0.740]],  13:[[0.058,0.960],[0.150,0.960]],
+                   3:[[-0.115,0.290],[-0.150,0.270]], 6:[[0.115,0.290],[0.075,0.320]] } },
+  chute:    { nom: "chute", famille: "corps",
+              k: { 1:[[0,0.150],[0.060,0.230]], 0:[[0,0.075],[0.090,0.160]],
+                   4:[[-0.130,0.410],[-0.210,0.330]], 7:[[0.130,0.410],[0.215,0.470]],
+                   10:[[-0.058,0.960],[-0.150,0.930]] } },
+  saut:     { nom: "saut", famille: "corps",
+              // Tout le corps remonte, les jambes se replient, les bras s'ouvrent.
+              k: { 0:[[0,0.075],[0,0.020]], 1:[[0,0.150],[0,0.095]],
+                   2:[[-0.075,0.165],[-0.085,0.110]], 5:[[0.075,0.165],[0.085,0.110]],
+                   3:[[-0.115,0.290],[-0.165,0.150]], 6:[[0.115,0.290],[0.165,0.150]],
+                   4:[[-0.130,0.410],[-0.195,0.055]], 7:[[0.130,0.410],[0.195,0.055]],
+                   8:[[-0.050,0.500],[-0.050,0.470]], 11:[[0.050,0.500],[0.050,0.470]],
+                   9:[[-0.055,0.730],[-0.090,0.640]], 12:[[0.055,0.730],[0.090,0.640]],
+                   10:[[-0.058,0.960],[-0.135,0.760]], 13:[[0.058,0.960],[0.135,0.760]] } },
+  tendre:   { nom: "tendre la main", famille: "corps",
+              k: { 3:[[-0.115,0.290],[-0.150,0.230]], 4:[[-0.130,0.410],[-0.235,0.185]] } },
+  agenouil: { nom: "s'agenouiller", famille: "corps",
+              k: { 0:[[0,0.075],[0,0.300]], 1:[[0,0.150],[0,0.370]],
+                   2:[[-0.075,0.165],[-0.085,0.385]], 5:[[0.075,0.165],[0.085,0.385]],
+                   3:[[-0.115,0.290],[-0.130,0.510]], 6:[[0.115,0.290],[0.130,0.510]],
+                   4:[[-0.130,0.410],[-0.140,0.640]], 7:[[0.130,0.410],[0.140,0.640]],
+                   8:[[-0.050,0.500],[-0.060,0.660]], 11:[[0.050,0.500],[0.060,0.660]],
+                   9:[[-0.055,0.730],[-0.075,0.930]], 12:[[0.055,0.730],[0.075,0.930]],
+                   10:[[-0.058,0.960],[-0.230,0.955]], 13:[[0.058,0.960],[0.230,0.955]] } },
+  retourne: { nom: "se retourner", famille: "corps",
+              // Le corps pivote : les epaules se rapprochent en projection 2D.
+              k: { 2:[[-0.075,0.165],[-0.020,0.170]], 5:[[0.075,0.165],[0.110,0.170]],
+                   3:[[-0.115,0.290],[-0.040,0.300]], 6:[[0.115,0.290],[0.150,0.300]],
+                   4:[[-0.130,0.410],[-0.050,0.420]], 7:[[0.130,0.410],[0.165,0.420]],
+                   8:[[-0.050,0.500],[-0.015,0.500]], 11:[[0.050,0.500],[0.080,0.500]],
+                   14:[[-0.022,0.062],[-0.005,0.062]], 15:[[0.022,0.062],[0.038,0.062]],
+                   16:[[-0.048,0.070],[-0.015,0.072]], 17:[[0.048,0.070],[0.058,0.070]] } },
+};
+
+// Gestes SANS squelette : le prompt seul decrit l'etape. Indispensable pour tout
+// ce qui n'est pas une pose du corps -- une expression, un regard, un souffle --
+// ou pour un sujet non humain. Progression non garantie : c'est le prix.
+const GESTES_LIBRES = {
+  clindoeil: { nom: "clin d'oeil", cadrage: "close-up portrait, face focus",
+               etapes: ["both eyes open, neutral expression",
+                        "one eye starting to close, slight smile",
+                        "one eye closed, playful wink, smiling"] },
+  soupir:    { nom: "soupir", cadrage: "upper body, face focus",
+               etapes: ["neutral expression, mouth closed",
+                        "eyes half closed, breathing in, shoulders raised",
+                        "eyes closed, exhaling, shoulders dropped, tired"] },
+  sourire:   { nom: "sourire", cadrage: "close-up portrait, face focus",
+               etapes: ["neutral expression, calm",
+                        "slight smile forming, eyes softening",
+                        "wide warm smile, eyes closed happily"] },
+  colere:    { nom: "colere qui monte", cadrage: "upper body, face focus",
+               etapes: ["calm expression",
+                        "frowning, jaw tightening, angry eyes",
+                        "shouting, furious expression, anger veins"] },
+  autre:     { nom: "autre geste (à décrire)", libreTexte: true },
 };
 
 /** Dessine un squelette openpose dans un canvas et renvoie son PNG (blob). */
@@ -2227,8 +2286,25 @@ function squeletteBlob(geste, t, w, h){
   return new Promise(res => cv.toBlob(res, "image/png"));
 }
 
+/** Decoupe un geste decrit en francais en N etapes anglaises, via le LLM.
+ *  C'est ce qui rend le nombre de gestes ILLIMITE : je ne peux pas ecrire a la
+ *  main un squelette par action possible, mais une description se decoupe. */
+async function etapesDepuisTexte(quoi, n){
+  const r = await api("/enhance", { format: "raw", temp: 0.5, idea:
+    "Decompose ce geste en EXACTEMENT " + n + " etapes successives, une par ligne, "
+    + "en tags anglais booru courts decrivant la POSE et l'EXPRESSION a cet instant "
+    + "precis (pas le decor, pas le personnage). Les etapes doivent PROGRESSER dans "
+    + "le meme sens, du debut a la fin du geste, sans revenir en arriere. "
+    + "Geste : " + quoi });
+  const lignes = String(r.prompt || "").split("\n")
+    .map(x => x.replace(/^\s*[-*\d.)\s]+/, "").trim()).filter(x => x.length > 3);
+  if (lignes.length < 2) throw new Error("découpage du geste impossible");
+  return lignes.slice(0, n);
+}
+
 /** Decompose le geste de la case en N vignettes. */
-async function sequence(p, geste, n){
+async function sequence(p, geste, n, etapesLibres, cadrageLibre){
+  etapesLibres = etapesLibres || [];
   const r = recipe();
   const base = (p.prompt || "").trim();
   if (!base) return toast("écris d'abord l'action de la case");
@@ -2251,13 +2327,21 @@ async function sequence(p, geste, n){
     } else {
       cible.recipe = Object.assign({}, cible.recipe, { seed: seed });
     }
-    const blob = await squeletteBlob(geste, t, +r.w, +r.h);
-    const nom = await uploadToComfy(blob, "seq_" + cible.id + "_" + i + ".png");
     const prefix = "manga/" + S.proj.slug + "/" + S.page.id + "/" + Date.now().toString(36);
-    // « front view » n'est pas decoratif : un squelette est en 2D et ne dit pas
-    // l'orientation. Sans lui, le personnage se retournait au milieu de la suite
-    // (mesure du 27/07 : images 1-2 de dos, 3-6 de face).
-    const pos = promptFinal(cible) + ", front view, facing viewer, full body";
+    let nom = null, pos;
+    if (GESTES[geste]){
+      const blob = await squeletteBlob(geste, t, +r.w, +r.h);
+      nom = await uploadToComfy(blob, "seq_" + cible.id + "_" + i + ".png");
+      // « front view » n'est pas decoratif : un squelette est en 2D et ne dit pas
+      // l'orientation. Sans lui, le personnage se retournait au milieu de la suite.
+      pos = promptFinal(cible) + ", front view, facing viewer, full body";
+    } else {
+      // Famille LIBRE : pas de squelette, l'etape est decrite en toutes lettres.
+      // Le cadrage est fixe sur toute la suite -- sans lui, le modele change de
+      // plan d'une vignette a l'autre et le geste devient illisible.
+      const L = etapesLibres[i] || "";
+      pos = promptFinal(cible) + ", " + (cadrageLibre || "upper body") + ", " + L;
+    }
     const imgs = await runGraph(
       wfPanel(r, pos, seed, prefix, null, nom, 0.9), "séquence " + (i + 1));
     cible.file = await harvest(imgs[0], cible.id + ".png");
@@ -2268,7 +2352,8 @@ async function sequence(p, geste, n){
     renderPlate();
   }
   busyOff("Séquence terminée — " + faites.length + " vignette(s)");
-  log("sequence « " + GESTES[geste].nom + " » : " + faites.length + " vignettes, seed " + seed, "s");
+  const nomG = (GESTES[geste] || GESTES_LIBRES[geste] || {}).nom || geste;
+  log("sequence « " + nomG + " » : " + faites.length + " vignettes, seed " + seed, "s");
 }
 
 /* ---------- base de personnages ----------
@@ -2542,7 +2627,22 @@ $("plate").addEventListener("click", async e => {
     const pp = S.panels.find(x => x.id === c.dataset.pid);
     const zone = c.querySelector("[data-idees]");
     const g = sg.dataset.seqg;
-    zone.innerHTML = '<span class="titre">« ' + GESTES[g].nom
+    const def = GESTES[g] || GESTES_LIBRES[g];
+    if (def && def.libreTexte){
+      // Geste quelconque : on demande sa description, et le LLM la decoupe en
+      // etapes. C'est ce qui leve la limite des gestes ecrits a la main.
+      const quoi = (prompt("Décris le geste (en français) :\n\n"
+        + "ex : elle saute par-dessus une barrière · il serre les poings de rage") || "").trim();
+      if (!quoi) { zone.hidden = true; return; }
+      pp.recipe = Object.assign({}, pp.recipe, { gesteLibre: quoi });
+      zone.innerHTML = '<span class="titre">« ' + esc(quoi)
+        + ' » — combien de vignettes ?</span>'
+        + [2, 3, 4, 5, 6].map(n =>
+            '<button data-seqn="' + n + '" data-seqgeste="' + g + '">' + n + ' vignettes</button>').join("")
+        + '<button data-seqannule="1">Annuler</button>';
+      return;
+    }
+    zone.innerHTML = '<span class="titre">« ' + def.nom
       + ' » — combien de vignettes ?</span>'
       + [2, 3, 4, 5, 6].map(n =>
           '<button data-seqn="' + n + '" data-seqgeste="' + g + '">' + n + ' vignettes</button>').join("")
@@ -2554,7 +2654,15 @@ $("plate").addEventListener("click", async e => {
     const c = e.target.closest("[data-pid]");
     const pp = S.panels.find(x => x.id === c.dataset.pid);
     c.querySelector("[data-idees]").hidden = true;
-    return sequence(pp, sn.dataset.seqgeste, +sn.dataset.seqn).catch(err => {
+    const gg = sn.dataset.seqgeste, nn = +sn.dataset.seqn;
+    const lib = GESTES_LIBRES[gg];
+    const prep = (!GESTES[gg] && lib)
+      ? (lib.libreTexte
+          ? etapesDepuisTexte((pp.recipe || {}).gesteLibre || "", nn)
+              .then(et => sequence(pp, gg, nn, et, "upper body"))
+          : sequence(pp, gg, Math.min(nn, lib.etapes.length), lib.etapes, lib.cadrage))
+      : sequence(pp, gg, nn);
+    return Promise.resolve(prep).catch(err => {
       log("séquence : " + err.message, "e");
       refus(pp, "La séquence a échoué : " + err.message);
       busyOff("");
@@ -2613,10 +2721,14 @@ $("plate").addEventListener("click", async e => {
     // se CHOISIT a l'ecran, il ne se tape pas de memoire.
     const carte = document.querySelector('[data-pid="' + p.id + '"]');
     const zone = carte.querySelector("[data-idees]");
-    zone.innerHTML = '<span class="titre">Décomposer ce geste en plusieurs vignettes '
-      + '(même personnage, même dessin) :</span>'
+    zone.innerHTML = '<span class="titre">Décomposer un geste en vignettes '
+      + '(même personnage, même dessin) — <b>pose garantie</b> :</span>'
       + Object.keys(GESTES).map(g =>
           '<button data-seqg="' + g + '">🎬 ' + GESTES[g].nom + '</button>').join("")
+      + '<span class="titre">Expressions et gestes libres — <b>progression non '
+      + 'garantie</b> (pas de squelette) :</span>'
+      + Object.keys(GESTES_LIBRES).map(g =>
+          '<button data-seqg="' + g + '">🎭 ' + GESTES_LIBRES[g].nom + '</button>').join("")
       + '<button data-seqannule="1">Annuler</button>';
     zone.hidden = false;
     return;
