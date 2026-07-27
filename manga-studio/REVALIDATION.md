@@ -35,6 +35,8 @@
 > |---|---|---|
 > | **v1.28.0** | vitesse de défilement **globale et persistante**, réglable pendant la lecture · largeur PC ramenée à une colonne (760 px) · carte **Moteur** (VRAM réelle, arrêt avec garde-fou, confirmation à l'écran) | `test_lecture_vitesse.py` — 14 ✓, mutation rouge |
 > | **v1.29.0** | **ouvrir un projet existant** depuis l'onglet Projets · la galerie dit quel projet elle montre et peut en regarder un autre sans déplacer l'atelier | `test_ouvrir_projet.py` — 11 ✓, mutation rouge |
+> | **v1.31.0** | **⚙ Affiner : 11 boutons → 6** · le badge 🎬 ne ment plus après suppression (+ 2 défauts de seed trouvés par le banc) · **bandeau moteur + VRAM** aligné sur la colonne de l'app | `test_affiner_et_badge.py` — 14 ✓, mutation rouge |
+> | **v1.33.0** | pastille **« 🖥 Local »** cliquable en entier (comme Generate Studio) · témoin proxy visible seulement en panne · **onglets compacts (1 ligne) et figés** sous le bandeau | test live du moteur — 9 ✓ (coupe + rallume réels) |
 >
 > 🔴 **Le point qui commande la suite** (Quang : *« on empile beaucoup de choses […] on peut vite
 > perdre l'ergonomie »*) : compté dans le code, une case générée affiche **11 boutons**. Rien de

@@ -1157,7 +1157,7 @@ domine toutes : *« on empile beaucoup de choses au fur et à mesure, et on peut
 l'ergonomie de l'application »*. Il a raison, et c'est mesurable — voir le budget en fin de section.
 Chaque demande est traitée ici avec un **avis tranché**, pas seulement enregistrée.
 
-#### 12.0 — Le fait qui commande tout le reste : le budget de boutons 🔴
+#### 12.0 — ✅ Le budget de boutons *(livré v1.31.0)* — **11 → 6**
 
 **Compté dans le code, pas à l'œil** (`panelHTML`, v1.28.0) : une case **générée** affiche
 **11 boutons** — ✨ Améliorer · 💡 3 suites · 🎬 Séquence · ▶ Jouer · Générer · ✎ Lettrage · ⬚ Zone ·
@@ -1170,6 +1170,13 @@ montre **ce qu'on fait maintenant** (écrire, générer, juger) ; tout ce qui **
 séquence, réordonner) passe dans **un seul bouton « ⚙ Affiner »** qui déplie un panneau *dans* la
 case — le même geste que 💡 3 suites, déjà connu de l'utilisateur. C'est ce qui rend les 4 demandes
 suivantes tenables sans usine à gaz : **elles ne coûtent aucun bouton de plus.**
+
+✅ **Livré v1.31.0. Mesuré : 6 boutons visibles** (Générer · ✎ Lettrage · ▶ Jouer · ✅ · ❌ · ⚙).
+La suppression est descendue dans le panneau — irréversible, elle n'a rien à faire à côté des
+boutons qu'on touche à chaque case. **Piège désamorcé au passage** : `genPanel` lisait le champ
+seed sans garde ; ce champ vivant désormais dans un panneau **repliable**, générer au panneau fermé
+aurait jeté une `TypeError`. Une rangée simplifiée qui casse la génération serait un très mauvais
+marché — le banc le vérifie explicitement (`test_affiner_et_badge.py`, 14 ✓, mutation rouge).
 
 #### 12.1 — Regrouper les vignettes d'une séquence 🎯 *(la plus rentable)*
 
@@ -1222,11 +1229,22 @@ séquence ? Est-ce que ça fonctionne toujours ? »* — **Réponse lue dans le 
 - La lecture **continue** : elle rassemble les cases qui ont la **même seed** et un fichier, triées
   par leur index. Une case supprimée est simplement absente ; les autres gardent leur ordre.
 - En dessous de **2 vignettes**, elle refuse proprement : *« séquence incomplète »*. Pas de plantage.
-- 🔴 **MAIS un vrai défaut, trouvé en répondant à cette question** : le badge `🎬 3/6` est **figé à
-  la création** (`sequence.index` / `sequence.total` écrits une fois pour toutes). Supprimer une
-  vignette laisse donc une séquence de 5 images qui continue d'afficher **« /6 »**, et des numéros
-  qui sautent (1, 2, 4, 5, 6). L'app **ment** sur son propre contenu. À corriger avec 12.1 : le
-  numéro et le total se **calculent à l'affichage**, ils ne se stockent pas.
+- ✅ **Le badge menteur : corrigé v1.31.0.** Il était **figé à la création** — supprimer une vignette
+  laissait 5 images afficher « /6 » avec des numéros qui sautent. Un numéro d'ordre se **déduit** de
+  l'ordre, il ne se stocke pas.
+
+  **Et le banc a trouvé deux défauts de plus en le corrigeant** — c'est le meilleur exemple de
+  session sur « un banc sert à découvrir, pas à confirmer » :
+  1. **Régénérer une vignette lui donnait une seed aléatoire** (au panneau ⚙ fermé), ce qui cassait
+     la continuité du personnage *et* la détachait de sa série. **Dans une séquence, la seed n'est
+     pas un réglage : elle est constitutive.** Hors séquence, « Regénérer » veut dire « un autre
+     essai » — on tire. Les deux cas sont maintenant distingués.
+  2. **L'appartenance à une séquence se déduisait de la seed.** Forcer une autre seed sur une
+     vignette pour la retenter la faisait sortir du groupe (badge « 1/1 »). **Une appartenance ne se
+     déduit pas d'un réglage : elle se nomme.** D'où `sequence.gid`, posé à la création, avec repli
+     sur la seed pour les séries existantes. Le lecteur ▶ utilise le **même** critère — deux
+     définitions du mot « séquence » finiraient par diverger. *(Cet identifiant est aussi la
+     fondation dont 12.1 avait besoin : une case-groupe doit savoir qui elle groupe.)*
 
 #### 12.5 — Corriger une zone en DISANT ce qu'on veut 🎯
 
@@ -1301,20 +1319,74 @@ deux sens (`test_ouvrir_projet.py`, 11 vérifications, mutation rouge).
 > Quang ce soir (celle-ci et 12.7) ne sont pas des demandes de fonctions — ce sont des **rapports de
 > panne d'ergonomie**. C'est exactement ce que 12.0 doit empêcher de se reproduire.
 
-#### Ordre d'exécution proposé
+#### 12.9 — ✅ Bandeau moteur + VRAM *(livré v1.31.0, demande Quang du 27/07 au soir)*
 
-| # | Chantier | Pourquoi ce rang |
-|---|---|---|
-| 1 | **12.4 badge menteur** | c'est un **bug**, pas une fonction — et il coûte 10 lignes |
-| 2 | **12.0 ⚙ Affiner** | tout le reste s'y range ; le faire après = tout refaire |
-| 3 | **12.5 zone + consigne** | plus fort gain par ligne de code, mécanique déjà mesurée |
-| 4 | **12.1 case-groupe** | gros gain de lisibilité, mais touche `renderPlate` |
-| 5 | **12.2 réordonner** | trivial **une fois** la case-groupe posée |
-| 6 | **12.7 💬 Répliques** | brique écrite à 80 %, zéro GPU — peut passer devant 12.1 si l'envie est là |
-| 7 | **12.6 critique vision** | dépend du panneau ⚙, et demande sa propre mesure |
-| 8 | **12.3 page par page** | à réévaluer **après** 12.1 — peut-être sans objet |
+Demande : *« le bandeau VRAM comme je l'ai demandé, même sur navigateur web PC. Il doit respecter la
+largeur globale de l'application […] les mêmes comportements que Generate Studio […] rester affiché
+en permanence tout en restant compact en hauteur, surtout sur smartphone »*.
 
-*(12.8 « ouvrir un projet » est **livré**, v1.29.0.)*
+Porté de Generate Studio (header v4.49, toggles ■/▶ v4.53, pulse de transition v4.54), **réduit à
+ce que ce projet a réellement : un seul moteur**. État proxy + ComfyUI, bouton **▶/■** qui sait ce
+qu'il doit faire, **pulse orange** du clic jusqu'à l'état cible (sécurité 90 s — un pulse qui ne
+s'arrête jamais apprend à ne plus le regarder), **jauge VRAM live** aux seuils de Muse/GS
+(vert ≥ 8 Go libres · orange 4-8 · rouge en dessous), grisée moteur éteint.
+
+- **Source = `nvidia-smi` via `/vram`, PAS ComfyUI.** La VRAM doit rester lisible **moteur éteint** —
+  c'est justement le moment où l'on veut savoir ce qu'il reste.
+- **Largeur respectée** : bandeau, **onglets** et contenu sur la même colonne de 760 px. Trois
+  alignements différents sur une même page se lisent comme trois applications.
+- **Compact, mesuré** : **42 px** sur PC, **72 px** sur un téléphone de 360 px. Le texte est
+  volontairement court (« 5,1 / 16 Go ») : en toutes lettres il repassait à la ligne et faisait
+  grandir le bandeau d'un tiers — l'inverse exact de la consigne.
+- Il se tient à jour seul (3 s pendant une transition, 15 s au repos) : *un état qu'il faut
+  rafraîchir à la main n'est pas un état, c'est une photo*.
+
+**Complété v1.33.0** — *« j'aimerais que ce soit le même nom […] un bouton Local qui permet
+d'activer et de désactiver le moteur »* :
+
+- La pastille s'appelle **« 🖥 Local »** et c'est **elle, en entier**, qui allume et coupe — plus un
+  petit glyphe à viser. Deux apps du même atelier ne doivent ni s'appeler autrement ni se piloter
+  autrement. **Vérifié en vrai** (moteur coupé puis rallumé par le bouton, pulse observé, VRAM
+  grisée moteur éteint, moteur rendu dans l'état trouvé) — 9 vérifications.
+- **Le témoin proxy disparaît** (décision qui m'était laissée) : affiché **seulement s'il tombe**.
+  Un témoin vert 100 % du temps n'informe plus personne. 🐛 *Défaut attrapé à la capture, pas au
+  raisonnement : `.eng` est en `display:flex`, qui l'emporte sur le `display:none` implicite de
+  `hidden` — le témoin « proxy injoignable » restait donc affiché en permanence, **point vert à
+  l'appui**.*
+
+#### 12.10 — ✅ Onglets compacts et figés *(livré v1.33.0)*
+
+Demandes : *« tu aurais dû figer les onglets […] surtout si je me retrouve tout en bas »* et
+*« sur mobile, compacte les onglets, sinon ça s'affiche sur plusieurs lignes […] on consomme
+beaucoup de lignes en hauteur pour rien »*.
+
+- **Compacts** : sous 480 px, les libellés cèdent la place aux **icônes** (solution déjà validée sur
+  Generate Studio v4.49) ; **l'onglet actif garde son mot** — sinon on sait où aller, mais plus où
+  l'on est. Mesuré : **une seule ligne**, sans débordement, là où sept onglets en toutes lettres en
+  prenaient deux (~44 px volés à la planche en permanence).
+- ⚠️ **Ce qui n'a PAS été refait : `overflow-x:auto`.** Il rendrait la barre « propre » au contrôle
+  automatique tout en cachant les derniers onglets derrière un défilement que personne ne devine —
+  piège déjà payé sur ce projet.
+- **Figés** : bandeau et onglets dans **un seul** conteneur collant. Deux éléments collés à `top:0`
+  se chevauchent dès que la hauteur du premier change — et elle change (42 px sur PC, 66 px sur
+  téléphone). Mesure en bas de page : onglets visibles des deux côtés.
+- **Barre du haut complète : 108 px sur téléphone, 91 px sur PC.**
+
+#### Ordre d'exécution *(chronologie tenue par Claude, mandat Quang du 27/07)*
+
+| # | Chantier | État | Pourquoi ce rang |
+|---|---|---|---|
+| — | **12.8 ouvrir un projet** | ✅ v1.29.0 | blocage d'usage : il ne pouvait pas reprendre son travail |
+| — | **12.0 ⚙ Affiner** | ✅ v1.31.0 | tout le reste s'y range ; le faire après = tout refaire |
+| — | **12.4 badge menteur** | ✅ v1.31.0 | un bug, pas une fonction |
+| — | **12.9 bandeau VRAM** | ✅ v1.31.0 → v1.33.0 | demande explicite, et il rend le moteur pilotable d'un doigt |
+| — | **12.10 onglets compacts + figés** | ✅ v1.33.0 | 44 px rendus à la planche, et un onglet atteignable depuis le bas |
+| 1 | **12.5 zone + consigne** | ⏳ | plus fort gain par ligne de code, mécanique d'inpaint déjà mesurée |
+| 2 | **12.7 💬 Répliques** | ⏳ | brique écrite à 80 %, zéro GPU, répond à une incompréhension réelle |
+| 3 | **12.1 case-groupe** | ⏳ | gros gain de lisibilité ; `sequence.gid` (v1.31.0) est déjà posé pour elle |
+| 4 | **12.2 réordonner** | ⏳ | trivial **une fois** la case-groupe posée |
+| 5 | **12.6 critique vision** | ⏳ | dépend du panneau ⚙, et demande sa propre mesure |
+| 6 | **12.3 page par page** | 🤔 | à réévaluer **après** 12.1 — peut-être sans objet |
 
 #### 🟠 Constat de ménage relevé en passant (constaté v1.29.0)
 
