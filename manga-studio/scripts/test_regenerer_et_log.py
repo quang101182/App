@@ -28,7 +28,12 @@ import time
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 SECRET_FILE = r"C:\Users\quang\Documents\ComfyUI\.studio_secret"
-LOG_PC = r"C:\Users\quang\Documents\ComfyUI\logs\log-manga-live.json"
+# ⚠ Depuis la v1.11.1, le journal est ecrit PAR APPAREIL (`-pc` / `-mobile`) :
+# sans suffixe, le telephone de Quang et les bancs du PC s'ecrasaient l'un
+# l'autre. Ce banc visait encore l'ancien nom et declarait « journal ABSENT »
+# alors qu'il arrivait bien -- un rouge qui n'accusait que le banc (27/07).
+# Playwright n'est pas un mobile pour l'app (userAgent Edge desktop) => "-pc".
+LOG_PC = r"C:\Users\quang\Documents\ComfyUI\logs\log-manga-live-pc.json"
 APP_URL = "http://127.0.0.1:8190/manga"
 NOM = "_regen_%d" % os.getpid()
 
