@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.24.0</title>
+<title>Manga Studio v1.25.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -212,7 +212,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.24.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.25.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -542,7 +542,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.24.0";
+const VERSION = "1.25.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -781,7 +781,7 @@ function promptFinal(p){
  *   - le CASTING est explicite et fiable : Quang a coche des fiches ;
  *   - `nbPersonnages` est une heuristique sur le texte, donc faillible.
  *  Les deux comptent pour construire le prompt, mais seule la premiere est assez
- *  sure pour REFUSER quelque chose a l'utilisateur (cf. sequence, v1.24.0).
+ *  sure pour REFUSER quelque chose a l'utilisateur (cf. sequence, v1.25.0).
  */
 function nbPersosCase(p){
   return Math.max(tagsCasting(p).length,
@@ -968,7 +968,35 @@ function wfMaster(r, decor, seed, prefix){
 }
 
 /** Une case. `depthName` non vide => mode AMBIANCE (ControlNet depth sur le fond maitre). */
-function wfPanel(r, positive, seed, prefix, depthName, poseName, poseW){
+/* ---------- IPAdapter : une identite tenue SANS entrainement ----------
+   Reglage MESURE le 27/07 (banc `scripts/test_ipadapter.py`), et il n'a rien
+   d'evident -- par defaut IPAdapter est inutilisable ici :
+     - le preset « PLUS FACE (portraits) », dont le nom invite pourtant a le
+       choisir, DETRUIT le rendu (noir 0,112 contre 0,599 au temoin) ;
+     - a poids 0,8 la planche VIRE AU BLEU. IPAdapter transfere la PALETTE de la
+       reference, et un negatif textuel ne pese rien contre une image -- d'ou la
+       conversion de la reference en N&B, cote client, avant l'upload.
+   Le reglage retenu : PLUS / 0,4 / end_at 0,5 / reference N&B. Identite 0,839
+   sur 3/3, saturation 0,149 : plus proprement monochrome que le LoRA (0,333). */
+const IPA = { preset: "PLUS (high strength)", poids: 0.4, endAt: 0.5 };
+
+/** L'image de reference a utiliser pour cette case, s'il y en a une.
+ *  ⚠ UNE SEULE, volontairement : IPAdapter melangerait les identites si on en
+ *  empilait deux (« combine_embeds »), et on ne sait pas encore ce que ca vaut.
+ *  On prend celle du premier personnage du casting qui en a une, et l'app le DIT
+ *  a l'ecran plutot que de laisser croire que les deux sont verrouilles. */
+function refDuCasting(p){
+  const retires = (p && p.recipe && p.recipe.sansCasting) || [];
+  for (const id of castingPage()){
+    if (retires.includes(id)) continue;
+    const c = CHARS.find(x => x.id === id);
+    const r = c && (c.refs || [])[0];
+    if (r) return { nom: r, perso: c.name || id };
+  }
+  return null;
+}
+
+function wfPanel(r, positive, seed, prefix, depthName, poseName, poseW, refNom){
   // Sans LoRA, le noeud est RETIRE du graphe -- il n'est pas laisse avec un nom
   // vide. ComfyUI refuse alors tout le workflow (HTTP 400) et l'app n'affichait
   // qu'« [object Object] » : une case qui ne se genere pas, sans raison lisible.
@@ -990,6 +1018,20 @@ function wfPanel(r, positive, seed, prefix, depthName, poseName, poseW){
                  strength_model: +r.loraW, strength_clip: +r.loraW,
                  model: ["1",0], clip: ["1",1] } };
   }
+  // IPAdapter s'insere sur la chaine du MODELE, en aval du LoRA s'il y en a un.
+  // Il ne touche ni au conditionnement ni au ControlNet : les deux cohabitent.
+  let modele = [src, 0];
+  if (refNom){
+    g["20"] = { class_type: "LoadImage", inputs: { image: refNom } };
+    g["21"] = { class_type: "IPAdapterUnifiedLoader", inputs: {
+                 model: [src, 0], preset: IPA.preset } };
+    g["22"] = { class_type: "IPAdapterAdvanced", inputs: {
+                 model: ["21", 0], ipadapter: ["21", 1], image: ["20", 0],
+                 weight: IPA.poids, weight_type: "linear", combine_embeds: "concat",
+                 start_at: 0.0, end_at: IPA.endAt, embeds_scaling: "V only" } };
+    modele = ["22", 0];
+  }
+  g["5"].inputs.model = modele;
   // Un seul ControlNet a la fois : la profondeur (fond maitre) OU la pose
   // (sequence). Les cumuler ferait s'annuler les deux contraintes.
   const cnNom = poseName ? "openpose-sdxl-xinsir.safetensors" : r.cn;
@@ -1718,7 +1760,14 @@ async function genPanel(p){
       .map(id => CHARS.find(c => c.id === id))
       .find(c => c && c.lora && c.lora.trim());
     const rr = heros ? Object.assign({}, r, { lora: heros.lora }) : r;
-    const imgs = await runGraph(wfPanel(rr, positive, p.recipe.seed, prefix, depthName), "case " + p.id);
+    // L'image de reference du casting : c'est elle qui tient l'identite sans
+    // entrainement. Elle est enregistree dans la recette, donc la case reste
+    // rejouable meme si la fiche du personnage change plus tard.
+    const ref = refDuCasting(p);
+    if (ref) log("identité tenue par l'image de référence de « " + ref.perso + " »", "s");
+    const imgs = await runGraph(
+      wfPanel(rr, positive, p.recipe.seed, prefix, depthName, null, null,
+              ref && ref.nom), "case " + p.id);
     p.file = await harvest(imgs[0], p.id + ".png");
     // La recette complete est enregistree AVEC la case : c'est ce qui rend le resultat rejouable.
     p.recipe = Object.assign({}, p.recipe, {
@@ -2404,7 +2453,7 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
   etapesLibres = etapesLibres || [];
   const r = recipe();
   if (!(p.prompt || "").trim()) return toast("écris d'abord l'action de la case");
-  // Le bouton est deja retire de l'ecran dans ce cas (v1.24.0) ; ceci tient si un
+  // Le bouton est deja retire de l'ecran dans ce cas (v1.25.0) ; ceci tient si un
   // autre chemin y mene. Un refus vaut mieux que N generations qui ne montreront
   // ni la pose demandee, ni le bon nombre de personnages.
   if (GESTES[geste] && tagsCasting(p).length > 1){
@@ -2428,6 +2477,9 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
   // perdait l'image deja generee, et tout semblait « se placer au meme endroit »
   // (journal du 27/07 : deux fichiers ranges dans la meme case). Une case
   // existante ne se sacrifie pas pour faire de la place a une nouveaute.
+  // La reference est relevee UNE fois : toutes les vignettes d'une meme suite
+  // doivent tenir la meme identite, comme elles partagent deja le meme seed.
+  const refSeq = refDuCasting(p);
   const lot = [];
   for (let i = 0; i < n; i++){
     const neuf = { pageId: S.page.id, idx: i0 + 1 + i, kind: "dialogue",
@@ -2467,7 +2519,8 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
       pos = promptFinal(cible) + ", " + (cadrageLibre || "upper body") + ", " + L;
     }
     const imgs = await runGraph(
-      wfPanel(r, pos, seed, prefix, null, nom, 0.9), "séquence " + (i + 1));
+      wfPanel(r, pos, seed, prefix, null, nom, 0.9, refSeq && refSeq.nom),
+      "séquence " + (i + 1));
     cible.file = await harvest(imgs[0], cible.id + ".png");
     cible.recipe = Object.assign({}, cible.recipe, {
       positive: pos, seed: seed, sequence: { geste: geste, index: i, total: n } });
@@ -2524,6 +2577,48 @@ document.addEventListener("click", e => {
    controle, jamais un prealable. */
 let CHARS = [];
 
+/** L'URL d'affichage d'une reference : elle vit dans le dossier `input` de
+ *  ComfyUI (c'est de la que `LoadImage` la lit), pas dans les sorties du projet. */
+const refURL = nom => CFG.base + "/comfy/view?filename=" + encodeURIComponent(nom)
+                    + "&type=input" + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
+
+/** Convertit une image en NIVEAUX DE GRIS avant de la donner a IPAdapter.
+ *
+ *  ⚠ Ce n'est pas un detail esthetique, c'est la mesure du 27/07 : IPAdapter
+ *  transfere la PALETTE de sa reference, et le negatif textuel (« monochrome,
+ *  greyscale ») ne pese RIEN contre une image. Une reference en couleur faisait
+ *  virer la planche entiere -- au bleu a poids 0,8. On coupe donc la couleur a
+ *  la source, la seule ou elle ne peut pas revenir.
+ *  On borne aussi le cote a 1024 px : au-dela, l'upload d'une photo de telephone
+ *  est long pour un encodeur CLIP qui travaille de toute facon en 224.
+ */
+function enNoirEtBlanc(file, maxCote){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const m = maxCote || 1024;
+      const ech = Math.min(1, m / Math.max(img.width, img.height));
+      const cv = document.createElement("canvas");
+      cv.width = Math.round(img.width * ech);
+      cv.height = Math.round(img.height * ech);
+      const cx = cv.getContext("2d");
+      cx.drawImage(img, 0, 0, cv.width, cv.height);
+      const d = cx.getImageData(0, 0, cv.width, cv.height);
+      const px = d.data;
+      for (let i = 0; i < px.length; i += 4){
+        // Luminance perceptuelle : une moyenne brute ecrase les rouges et les
+        // bleus, et un manga N&B vit justement de ses contrastes.
+        const y = 0.2126 * px[i] + 0.7152 * px[i+1] + 0.0722 * px[i+2];
+        px[i] = px[i+1] = px[i+2] = y;
+      }
+      cx.putImageData(d, 0, 0);
+      cv.toBlob(b => b ? resolve(b) : reject(new Error("conversion impossible")), "image/png");
+    };
+    img.onerror = () => reject(new Error("image illisible"));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 async function loadChars(){
   CHARS = (await api("/manga/chars")).items || [];
   renderChars();
@@ -2547,6 +2642,22 @@ function renderChars(){
         + '<span class="tag">' + (ROLE[c.role] || c.role) + '</span> '
         + (c.valide ? '<span class="tag amb">validé ✅</span>' : '')
         + '<div class="muted" style="font-size:11px;margin-top:3px">' + esc(c.tags || "(aucun trait)") + '</div>'
+        // Les images de reference : c'est ce qui fait passer un personnage de
+        // « ~50 % » (texte seul) a une identite tenue, sans entrainement.
+        + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px">'
+        + (c.refs || []).map((f, i) =>
+             '<span style="position:relative;display:inline-block">'
+             + '<img src="' + esc(refURL(f)) + '" alt="référence" '
+             + 'style="height:54px;border-radius:5px;border:1px solid var(--line)">'
+             + '<button class="btn sm" data-chref-del="' + c.id + '" data-i="' + i + '" '
+             + 'title="retirer cette référence" '
+             + 'style="position:absolute;top:-6px;right:-6px;padding:0 5px">×</button></span>').join("")
+        + '<label class="btn sm" style="margin:0;cursor:pointer">＋ image de référence'
+        + '<input type="file" accept="image/*" data-chref="' + c.id + '" hidden></label>'
+        + ((c.refs || []).length
+             ? '<span class="tag amb">identité tenue par l’image</span>'
+             : '<span class="muted" style="font-size:11px">texte seul — l’identité tient ~50 %</span>')
+        + '</div>'
         + '</div>'
         + '<button class="btn sm" data-chvalide="' + c.id + '">' + (c.valide ? "dévalider" : "valider ✅") + '</button>'
         + '<button class="btn sm" data-chedit="' + c.id + '">modifier</button>'
@@ -2705,8 +2816,40 @@ $("btnCharEnhance").onclick = () => {
     if (r.prompt) $("chTags").value = r.prompt;
   }, "Traits traduits");
 };
+/* Ajouter une image de reference a une fiche. `change` et non `click` : c'est un
+   <input type=file>, et sur telephone il ouvre la galerie ou l'appareil photo. */
+$("charList").addEventListener("change", async e => {
+  const id = e.target.dataset && e.target.dataset.chref;
+  if (!id) return;
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const c = CHARS.find(x => x.id === id);
+  if (!c) return;
+  await avecTemoin("Ajout de la référence…", async () => {
+    const nb = await enNoirEtBlanc(f);
+    const nom = await uploadToComfy(nb, "ref_" + id + "_" + Date.now() + ".png");
+    c.refs = (c.refs || []).concat([nom]);
+    await api("/manga/chars", c);
+    await loadChars();
+    log("référence ajoutée à « " + (c.name || id) + " » (convertie en N&B)", "s");
+  }, "Référence ajoutée").catch(err => {
+    log("référence : " + err.message, "e");
+    toast("échec : " + err.message);
+  });
+});
+
 $("charList").onclick = async e => {
   const d = e.target.dataset || {};
+  if (d.chrefDel !== undefined && d.chrefDel !== ""){
+    const c = CHARS.find(x => x.id === d.chrefDel);
+    if (!c) return;
+    // On retire la reference de la FICHE ; le fichier reste dans ComfyUI, il
+    // peut encore etre lu par les cases deja generees avec lui.
+    c.refs = (c.refs || []).filter((_, i) => i !== +d.i);
+    await api("/manga/chars", c);
+    await loadChars();
+    return toast("référence retirée");
+  }
   const c = CHARS.find(x => x.id === (d.chvalide || d.chedit || d.chdel));
   if (!c) return;
   if (d.chvalide){ c.valide = !c.valide; await api("/manga/chars", c); return loadChars(); }
