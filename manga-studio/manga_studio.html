@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.26.1</title>
+<title>Manga Studio v1.27.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -220,7 +220,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.26.1</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.27.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -550,7 +550,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.26.1";
+const VERSION = "1.27.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -790,7 +790,7 @@ function promptFinal(p){
  *   - le CASTING est explicite et fiable : Quang a coche des fiches ;
  *   - `nbPersonnages` est une heuristique sur le texte, donc faillible.
  *  Les deux comptent pour construire le prompt, mais seule la premiere est assez
- *  sure pour REFUSER quelque chose a l'utilisateur (cf. sequence, v1.26.1).
+ *  sure pour REFUSER quelque chose a l'utilisateur (cf. sequence, v1.27.0).
  */
 function nbPersosCase(p){
   return Math.max(tagsCasting(p).length,
@@ -2528,7 +2528,7 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
   etapesLibres = etapesLibres || [];
   const r = recipe();
   if (!(p.prompt || "").trim()) return toast("écris d'abord l'action de la case");
-  // Le bouton est deja retire de l'ecran dans ce cas (v1.26.1) ; ceci tient si un
+  // Le bouton est deja retire de l'ecran dans ce cas (v1.27.0) ; ceci tient si un
   // autre chemin y mene. Un refus vaut mieux que N generations qui ne montreront
   // ni la pose demandee, ni le bon nombre de personnages.
   if (GESTES[geste] && tagsCasting(p).length > 1){
@@ -3005,21 +3005,49 @@ $("plate").addEventListener("click", async e => {
     const g = sg.dataset.seqg;
     const def = GESTES[g] || GESTES_LIBRES[g];
     if (def && def.libreTexte){
-      // Geste quelconque : on demande sa description, et le LLM la decoupe en
-      // etapes. C'est ce qui leve la limite des gestes ecrits a la main.
-      const quoi = (prompt("Décris le geste (en français) :\n\n"
-        + "ex : elle saute par-dessus une barrière · il serre les poings de rage") || "").trim();
-      if (!quoi) { zone.hidden = true; return; }
-      pp.recipe = Object.assign({}, pp.recipe, { gesteLibre: quoi });
-      zone.innerHTML = '<span class="titre">« ' + esc(quoi)
-        + ' » — combien de vignettes ?</span>'
-        + [2, 3, 4, 5, 6].map(n =>
-            '<button data-seqn="' + n + '" data-seqgeste="' + g + '">' + n + ' vignettes</button>').join("")
+      // ⚠ Ici se trouvait le DERNIER prompt() natif de la sequence, et il a coute
+      // exactement ce que la v1.20.1 avait deja corrige ailleurs : Quang, 27/07 --
+      // « j'ai utilise l'option Autres gestes, je n'ai pas eu de proposition de
+      // nombre de vignettes ». Une boite annulee, vide, ou simplement bloquee par
+      // le navigateur refermait le panneau SANS UN MOT, et le journal ne montrait
+      // rien puisque aucune sequence n'avait demarre.
+      // Un reglage se CHOISIT a l'ecran. On demande donc la description INLINE,
+      // et le choix du nombre s'affiche dans la foulee, sans quitter la case.
+      zone.innerHTML = '<span class="titre">Décris le geste, en français — '
+        + 'le reste se choisit juste après :</span>'
+        + '<input data-seqlibre="1" placeholder="ex : elle saute par-dessus une barrière" '
+        + 'style="flex:1 1 100%;min-width:0">'
+        + '<button data-seqlibreok="' + g + '">Continuer</button>'
         + '<button data-seqannule="1">Annuler</button>';
+      const champ = zone.querySelector("[data-seqlibre]");
+      if (champ) champ.focus();
       return;
     }
     zone.innerHTML = '<span class="titre">« ' + def.nom
       + ' » — combien de vignettes ?</span>'
+      + [2, 3, 4, 5, 6].map(n =>
+          '<button data-seqn="' + n + '" data-seqgeste="' + g + '">' + n + ' vignettes</button>').join("")
+      + '<button data-seqannule="1">Annuler</button>';
+    return;
+  }
+  // Étape 2 du geste libre : la description est saisie, on propose le nombre.
+  const libreOk = e.target.closest("[data-seqlibreok]");
+  if (libreOk){
+    const c = e.target.closest("[data-pid]");
+    const pp = S.panels.find(x => x.id === c.dataset.pid);
+    const zone = c.querySelector("[data-idees]");
+    const champ = zone.querySelector("[data-seqlibre]");
+    const quoi = ((champ && champ.value) || "").trim();
+    // On ne referme PLUS en silence : c'est ce silence qui a fait croire que le
+    // bouton ne servait a rien.
+    if (!quoi){
+      if (champ) champ.focus();
+      return toast("décris le geste en une phrase, puis « Continuer »");
+    }
+    const g = libreOk.dataset.seqlibreok;
+    pp.recipe = Object.assign({}, pp.recipe, { gesteLibre: quoi });
+    zone.innerHTML = '<span class="titre">« ' + esc(quoi)
+      + ' » — combien de vignettes ? (autant de cases ajoutées à la planche)</span>'
       + [2, 3, 4, 5, 6].map(n =>
           '<button data-seqn="' + n + '" data-seqgeste="' + g + '">' + n + ' vignettes</button>').join("")
       + '<button data-seqannule="1">Annuler</button>';
