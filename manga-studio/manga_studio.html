@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.28.0</title>
+<title>Manga Studio v1.29.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -229,7 +229,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.28.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.29.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -469,6 +469,12 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
       Ne lit que <code>manga-studio/output/&lt;projet&gt;/</code>. Les images de Generate Studio
       n'y entrent jamais : ComfyUI écrit dans un sous-dossier, puis le proxy déplace le fichier ici.
     </p>
+    <!-- La galerie ne montrait QUE le projet ouvert, sans jamais dire lequel.
+         On choisit ici ce qu'on regarde, SANS changer le projet de travail :
+         consulter les images d'un autre manga ne doit pas deplacer l'atelier. -->
+    <div class="row" style="margin-bottom:8px">
+      <div class="grow"><label>Images du projet</label><select id="galProj"></select></div>
+    </div>
     <div class="row"><button class="btn" id="btnRefreshGal">Rafraîchir</button>
       <button class="btn sm" id="btnGalAll">Tout sélectionner</button>
       <button class="btn sm" id="btnGalNone">Aucune</button>
@@ -602,7 +608,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.28.0";
+const VERSION = "1.29.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1488,13 +1494,40 @@ async function savePage(){
    ===================================================================== */
 const esc = s => String(s == null ? "" : s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
 
+/* Quang, 27/07 : « je ne vois aucun moyen de charger un projet deja cree ».
+   Il avait raison, et ce n'etait pas un malentendu : ouvrir un projet n'etait
+   possible QUE par la petite liste deroulante en haut de l'onglet Planche.
+   L'onglet Projets -- le seul endroit ou on va naturellement pour reprendre un
+   travail -- ne proposait que « supprimer ». On y ouvre desormais, et le projet
+   en cours se voit. */
 function renderProjList(){
-  $("projList").innerHTML = S.projects.map(p =>
-    '<div class="row" style="padding:6px 0;border-top:1px solid var(--line)">'
-    + '<b class="grow">' + esc(p.name) + '</b>'
+  $("projList").innerHTML = S.projects.map(p => {
+    const ouvert = S.proj && S.proj.id === p.id;
+    return '<div class="row" style="padding:6px 0;border-top:1px solid var(--line)'
+    + (ouvert ? ';background:rgba(255,255,255,.03)' : '') + '">'
+    + '<b class="grow">' + esc(p.name)
+    + (ouvert ? ' <span class="tag">ouvert</span>' : '') + '</b>'
     + '<span class="tag">output/' + esc(p.slug) + '/</span>'
-    + '<button class="btn sm" data-delproj="' + p.id + '">supprimer</button></div>').join("")
-    || '<p class="muted">aucun projet</p>';
+    + (ouvert ? '' : '<button class="btn sm pri" data-openproj="' + p.id + '">Ouvrir</button>')
+    + '<button class="btn sm" data-delproj="' + p.id + '">supprimer</button></div>';
+  }).join("") || '<p class="muted">aucun projet</p>';
+}
+
+/** Ouvre un projet et EMMENE l'utilisateur sur sa planche.
+ *  Charger sans montrer ne sert a rien : c'est ce qui rendait la liste
+ *  deroulante invisible -- elle changeait l'etat sans changer l'ecran. */
+async function ouvrirProjet(id){
+  const p = S.projects.find(x => x.id === id);
+  if (!p) return;
+  S.proj = p;
+  localStorage.setItem("manga_proj", p.id);
+  $("selProj").value = p.id;
+  fillRecipe();
+  await loadPages();
+  renderProjList();
+  document.querySelector('nav button[data-tab="tPlate"]').click();
+  toast("projet « " + p.name + " » ouvert");
+  log("projet ouvert : " + p.name + " (" + S.pages.length + " planche(s))");
 }
 
 /** Le nombre de colonnes, et RIEN d'autre.
@@ -2334,9 +2367,22 @@ async function ecrireDataset(){
    chaque fois marcherait, mais casserait des qu'un rendu intervient au milieu. */
 let GAL = [];
 
+/* Le projet REGARDE dans la galerie. Par defaut celui qui est ouvert, mais on
+   peut consulter un autre manga sans quitter le sien (GAL_SLUG ≠ S.proj). */
+let GAL_SLUG = null;
+
 async function refreshGal(){
-  if (!S.proj) return;
-  const j = await api("/manga/files?slug=" + encodeURIComponent(S.proj.slug));
+  if (!S.proj && !GAL_SLUG) return;
+  const sel = $("galProj");
+  if (sel){
+    sel.innerHTML = S.projects.map(p =>
+      '<option value="' + esc(p.slug) + '">' + esc(p.name) + "</option>").join("");
+    if (!GAL_SLUG || !S.projects.some(p => p.slug === GAL_SLUG))
+      GAL_SLUG = S.proj ? S.proj.slug : (S.projects[0] || {}).slug;
+    sel.value = GAL_SLUG;
+  }
+  const slug = GAL_SLUG || S.proj.slug;
+  const j = await api("/manga/files?slug=" + encodeURIComponent(slug));
   GAL = j.files || [];
   $("gal").innerHTML = GAL.map((f, i) =>
     '<figure data-i="' + i + '">'
@@ -2346,8 +2392,12 @@ async function refreshGal(){
     + '</figure>').join("")
     || '<p class="muted">Aucune image dans ce projet.</p>';
   galSelState();
-  $("galState").textContent = GAL.length + " image(s) — output/" + S.proj.slug + "/";
+  $("galState").textContent = GAL.length + " image(s) — output/" + slug + "/";
 }
+$("galProj").onchange = e => {
+  GAL_SLUG = e.target.value;
+  refreshGal().catch(err => log("galerie : " + err.message, "e"));
+};
 
 const galPicked = () => [...document.querySelectorAll("#gal [data-pick]:checked")]
   .map(c => GAL[+c.dataset.pick]).filter(Boolean);
@@ -3046,6 +3096,8 @@ $("casting").onchange = async e => {
 };
 
 $("projList").onclick = async e => {
+  const ouvre = e.target.dataset && e.target.dataset.openproj;
+  if (ouvre) return ouvrirProjet(ouvre);
   const id = e.target.dataset && e.target.dataset.delproj;
   if (!id) return;
   if (!confirm("Supprimer ce projet et ses planches ? Les images sur disque sont conservées.")) return;
