@@ -72,8 +72,16 @@ def main():
     ap.add_argument("--ou", choices=["pc", "mobile"], default=None)
     args = ap.parse_args()
 
-    motif = "log-manga-live-%s.json" % (args.ou or "*")
-    fichiers = sorted(glob.glob(os.path.join(LOGS, motif)))
+    # Depuis la v1.44.0, chaque NAVIGATEUR a son fichier :
+    #   log-manga-live-mobile-<id>.json
+    # Avant, tous les telephones partageaient « mobile » et s'ecrasaient : le
+    # 27/07, un onglet reste ouvert sur une vieille version a recouvert en boucle
+    # le journal de l'incident qu'on cherchait. Le fichier etait a l'heure et
+    # racontait la mauvaise session -- le pire cas, parce qu'on le croit bon.
+    motif = "log-manga-live-%s*.json" % (args.ou or "")
+    fichiers = glob.glob(os.path.join(LOGS, motif))
+    # Le PLUS RECENT en dernier : c'est celui qu'on lit en premier a l'ecran.
+    fichiers.sort(key=os.path.getmtime)
     # Compatibilite : le premier format n'avait pas de suffixe d'appareil.
     ancien = os.path.join(LOGS, "log-manga-live.json")
     if not args.ou and os.path.isfile(ancien):

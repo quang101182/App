@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.43.0</title>
+<title>Manga Studio v1.44.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -325,7 +325,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.43.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.44.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -752,7 +752,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.43.0";
+const VERSION = "1.44.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -817,17 +817,28 @@ async function envoiLog(){
     // silencieux cote app). Le contexte devient donc le PREMIER element.
     const contexte = { type: "contexte", app: "manga-studio", version: VERSION,
       appareil: navigator.userAgent, ecran: innerWidth + "x" + innerHeight,
+      appareilId: localStorage.getItem("manga_dev") || null,
       envoye: new Date().toISOString(),
       projet: (S.proj && S.proj.slug) || null,
       planche: (S.page && S.page.id) || null,
       cases: (S.panels || []).map(p => ({id: p.id, kind: p.kind, generee: !!p.file,
                                          bulles: (p.bubbles || []).length,
                                          verdict: p.verdict || ""})) };
-    // Un fichier PAR APPAREIL : avec un nom unique, le telephone de Quang et mes
-    // bancs sur le PC s'ecrasaient mutuellement -- constate le 27/07 en lisant le
-    // journal, qui ne contenait plus que la derniere des deux sessions.
+    // Un fichier PAR APPAREIL -- et « appareil » veut dire UN appareil, pas une
+    // FAMILLE. La v1.11.1 separait deja `pc` de `mobile`, mais tous les
+    // telephones partageaient le meme fichier : le Samsung de test et le Honor
+    // de Quang s'ecrasaient l'un l'autre toutes les 60 s. Le 27/07, un onglet
+    // reste ouvert sur une v1.26.1 a ainsi recouvert, en boucle, le journal de
+    // l'incident que Quang venait de signaler -- le fichier etait a l'heure, et
+    // racontait la mauvaise session.
+    // D'ou un identifiant par NAVIGATEUR, garde localement.
+    let dev = localStorage.getItem("manga_dev");
+    if (!dev){
+      dev = Math.random().toString(36).slice(2, 7);
+      localStorage.setItem("manga_dev", dev);
+    }
     const ou = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ? "mobile" : "pc";
-    await api("/savelog", { ts: "manga-live-" + ou,
+    await api("/savelog", { ts: "manga-live-" + ou + "-" + dev,
                             events: [contexte].concat(LOG.slice(-300)) });
   } catch(e){ /* jamais bloquant : un journal qui casse l'app serait absurde */ }
   finally { _envoiEnCours = false; }
@@ -4785,8 +4796,20 @@ $("btnThemeEnhance").onclick = () => {
       "Art style tags for a black and white manga. ONLY style, rendering, "
       + "linework, shading and mood — no character, no scene, no action : " + idee,
       format: "tags" });
-    if (r.prompt) $("rTheme").value = r.prompt;
-  }, "Style traduit — pense à Enregistrer la recette");
+    if (!r.prompt) return;
+    $("rTheme").value = r.prompt;
+    // ENREGISTRE TOUT DE SUITE. Avant, ce bouton se contentait d'un toast
+    // « pense a Enregistrer la recette » : quitter l'onglet sans cliquer perdait
+    // la traduction en silence -- et on croit alors que le bouton a « efface »
+    // quelque chose. Un toast de 2,6 s se manque ; ce projet l'a deja paye.
+    // Tout le reste de l'app s'enregistre seul (prompt, seed, zone, casting) :
+    // ce bouton faisait exception sans raison.
+    if (S.proj){
+      S.proj.recipe = Object.assign({}, recipe(), { theme: r.prompt });
+      await api("/manga/projects", S.proj);
+      fillRecipe();       // l'ecran remontre ce qui est REELLEMENT enregistre
+    }
+  }, "Style traduit et enregistré");
 };
 
 $("btnSansPerso").onclick = async () => {

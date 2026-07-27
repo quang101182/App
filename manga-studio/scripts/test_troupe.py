@@ -184,9 +184,23 @@ def main():
             await api('/manga/pages', S.page);
         }""")
         pg.wait_for_timeout(1000)
+        # ⚠ On note l'id de LA planche du banc AVANT de recharger : apres, `S.page`
+        # est deja la planche memorisee (celle de Quang), et on le lirait donc
+        # trop tard -- l'argument aurait ete evalue sur le mauvais objet.
+        page_banc = pg.evaluate("S.page && S.page.id")
         pg.reload(wait_until="domcontentloaded")
         pg.wait_for_timeout(3000)
-        vide = pg.evaluate("castingPage()")
+        # ⚠ Apres un rechargement, l'app rouvre le projet et la planche MEMORISES
+        # -- ceux de Quang, pas ceux du banc. Ce test mesurait donc le casting
+        # d'une planche qui n'etait pas la sienne, et il n'est passe que tant que
+        # cette planche-la etait vide. « Un banc vise ses objets par leur NOM,
+        # jamais par l'etat de l'app » (piege deja paye sur ce projet).
+        vide = pg.evaluate("""async ([proj, page]) => {
+            await ouvrirProjet(proj);
+            S.page = (S.pages || []).find(x => x.id === page) || S.page;
+            await loadPanels();
+            return castingPage();
+        }""", [d["proj"], page_banc])
         verifie("une planche VIDEE volontairement le reste apres rechargement",
                 vide == [], str(vide))
 
