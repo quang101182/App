@@ -1246,7 +1246,7 @@ séquence ? Est-ce que ça fonctionne toujours ? »* — **Réponse lue dans le 
      définitions du mot « séquence » finiraient par diverger. *(Cet identifiant est aussi la
      fondation dont 12.1 avait besoin : une case-groupe doit savoir qui elle groupe.)*
 
-#### 12.5 — Corriger une zone en DISANT ce qu'on veut 🎯
+#### 12.5 — ✅ Corriger une zone en DISANT ce qu'on veut *(livré v1.35.0)*
 
 Demande : *« corriger une image sans expliquer en quoi consiste la correction, ou avec le bouton de
 zone on cible une zone et on explique ce qu'on veut corriger »*.
@@ -1255,10 +1255,34 @@ zone on cible une zone et on explique ce qu'on veut corriger »*.
 hors zone), mais l'inpaint **rejoue le prompt de la case entière**. On ne peut donc pas dire
 « ici, une cicatrice » — on ne peut que **retenter la même chose**.
 
-✅ Les deux demandes sont en fait **deux boutons sur le même mécanisme**, et c'est peu de code :
-- **« Autre essai »** = même consigne, **seed différente** (= « corriger sans expliquer »).
-- **« Dire quoi »** = un champ texte propre à la zone, traduit comme partout ailleurs, injecté à la
-  place du prompt de case. La consigne est **gardée sur la case** : une retouche se refait souvent.
+✅ **Livré — et avec UN bouton, pas deux.** En l'écrivant, le second est apparu inutile : « ↻ la
+zone » tire déjà une seed neuve à chaque essai. Un champ **facultatif** suffit donc à couvrir les
+deux demandes — vide, il retente la même chose autrement ; rempli, il dit quoi dessiner là. *Un
+geste, deux usages*, plutôt qu'un bouton de plus à comprendre (règle 12.0).
+
+**Le point qui compte** : la consigne **remplace l'action, mais le style et l'identité restent**.
+C'est ce qui sépare « répare ça » de « dessine n'importe quoi là » — envoyer la seule consigne ferait
+perdre à la zone le rendu N&B et le personnage, et la réparation se verrait comme une pièce
+rapportée. On rejoue donc `promptFinal` sur une copie de la case dont **seule l'action** change : le
+reste (comptage des personnages compris) est déjà traité là et ne se dédouble pas.
+
+La consigne est **traduite** comme partout ailleurs (le moteur ne lit que l'anglais : une consigne
+française n'y est pas mal comprise, elle est **ignorée**), traduite **une seule fois**, et **gardée
+sur la case** — une retouche se refait souvent.
+
+🐛 **Défaut plus ancien, trouvé en lisant la base — pas en le supposant** : la table `manga_panels`
+a des colonnes **fixes** (`id, page_id, idx, kind, prompt, recipe, file, verdict, bubbles`). Tout
+champ posé **hors de `recipe`** est accepté par l'API puis **jeté à l'écriture**, sans la moindre
+erreur. **`p.zone` était dans ce cas depuis la v1.26.1** : le rectangle tracé disparaissait au
+rechargement de la page. Zone et consigne vivent désormais dans `recipe`, et sont restaurées au
+chargement. *(Règle à retenir pour tout nouveau champ de case : dans `recipe`, ou il n'existera
+pas demain.)*
+
+Banc : `test_zone_consigne.py` — 14 ✓, zéro GPU (le graphe envoyé au moteur est intercepté),
+mutation rouge. Il a aussi corrigé **deux de ses propres mesures** : il mettait la réponse
+`{ok, id}` dans `S.proj` (le piège du §3, donc l'app tournait *sans recette*), et il cherchait
+« screentone » pour prouver que le style survit — alors que ce mot est déjà dans le style **par
+défaut**. Un vert sans valeur.
 
 #### 12.6 — Analyser et noter une case, comme Generate Studio 🟡
 
@@ -1381,8 +1405,9 @@ beaucoup de lignes en hauteur pour rien »*.
 | — | **12.4 badge menteur** | ✅ v1.31.0 | un bug, pas une fonction |
 | — | **12.9 bandeau VRAM** | ✅ v1.31.0 → v1.33.0 | demande explicite, et il rend le moteur pilotable d'un doigt |
 | — | **12.10 onglets compacts + figés** | ✅ v1.33.0 | 44 px rendus à la planche, et un onglet atteignable depuis le bas |
-| 1 | **12.5 zone + consigne** | ⏳ | plus fort gain par ligne de code, mécanique d'inpaint déjà mesurée |
-| 2 | **12.7 💬 Répliques** | ⏳ | brique écrite à 80 %, zéro GPU, répond à une incompréhension réelle |
+| — | **12.11 question d'arrêt** | ✅ v1.34.0 | + les 5 dernières boîtes natives de l'app |
+| — | **12.5 zone + consigne** | ✅ v1.35.0 | un seul bouton ; a révélé que `p.zone` n'était pas persistée depuis la v1.26.1 |
+| 1 | **12.7 💬 Répliques** | ⏳ | brique écrite à 80 %, zéro GPU, répond à une incompréhension réelle |
 | 3 | **12.1 case-groupe** | ⏳ | gros gain de lisibilité ; `sequence.gid` (v1.31.0) est déjà posé pour elle |
 | 4 | **12.2 réordonner** | ⏳ | trivial **une fois** la case-groupe posée |
 | 5 | **12.6 critique vision** | ⏳ | dépend du panneau ⚙, et demande sa propre mesure |
