@@ -25,6 +25,17 @@
 >
 > | **v1.53.0** | **la référence est recadrée sur le visage** à l'entrée (les deux chemins : import et 🎨 Dessiner → garder) · aucun visage ⇒ gardée entière, et l'app le dit · route `POST /manga/crop_ref` | `test_crop_ref_app.py` — 10 ✓, mutation rouge · `test_crop_ref.py` (GPU) : **4/6 → 6/6** personnages |
 >
+> | **v1.56.0** | **l'aperçu prévient** quand le texte d'une case et son casting divergent (décor + personnages castés · un seul personnage évoqué pour deux castés) — il **avertit**, il ne refuse rien | `test_alerte_casting.py` — 11 ✓, mutation rouge · vérifie aussi qu'elle **se tait** quand tout va bien |
+>
+> | **v1.57.0** | **💬 Dialogues de la planche** : les répliques de toute la planche écrites **d'un seul tenant** (le bouton par case, v1.40.0, n'écrivait que des phrases isolées qui ne se répondaient pas). Deux garde-fous **vérifiés dans le code, pas seulement demandés au modèle** : une case déjà écrite à la main n'est jamais touchée, une case sans personne au casting ne reçoit rien | `test_dialogues_planche.py` — 9 ✓, mutation rouge · essai réel sur 12 cases, 0 erreur JS |
+>
+> ⚠️ **Règle qui sort de la v1.57.0 — une consigne dans un prompt n'est PAS un garde-fou.**
+> La consigne « une case sans personne n'a aucune réplique » était bien écrite ; le modèle l'a
+> ignorée au premier essai et l'app a posé la bulle sans broncher. Le banc l'a vu tout de suite.
+> Et le correctif a lui-même introduit une régression, attrapée par le même banc : en relisant
+> `p.bubbles` au lieu d'un état **figé avant le passage**, la première réplique posée dans une case
+> fermait la porte à la seconde.
+>
 > ~~**🟠 Le verrou suivant, découvert le 28/07** : une référence qui est une planche de design fait
 > hériter la case de sa composition.~~ → ✅ **traité le jour même (v1.53.0)**, mesuré 4/6 → 6/6 sur le
 > nombre de personnages. ⚠ Le **placement** par identité, lui, ne progresse pas (4/6 → 3/6, bruit) :

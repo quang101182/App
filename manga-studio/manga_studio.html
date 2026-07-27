@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.56.0</title>
+<title>Manga Studio v1.57.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -364,7 +364,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.56.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.57.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -463,6 +463,7 @@ body.epure .aide{display:none}
     <div class="row">
       <button class="btn" id="btnAddPanel">+ Case</button>
       <button class="btn" id="btnGenAll">Générer toutes les cases vides</button>
+      <button class="btn" id="btnDialogues" title="Écrit les répliques de TOUTE la planche d'un seul tenant, pour qu'elles s'enchaînent">💬 Dialogues de la planche</button>
       <button class="btn" id="btnExport">Exporter (PNG)</button>
       <button class="btn" id="btnExportPdf">Exporter (PDF)</button>
       <span class="muted" id="plateState"></span>
@@ -841,7 +842,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.56.0";
+const VERSION = "1.57.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4739,6 +4740,112 @@ $("btnMaster").onclick = () => avecTemoin("Fond maître : décor puis profondeur
 $("btnAddPanel").onclick = addPanel;
 $("btnAddPanelBas").onclick = addPanel;
 $("btnGenAll").onclick = genAll;
+
+/* ---- 💬 LES DIALOGUES DE TOUTE LA PLANCHE (v1.57.0) ----
+   Quang, 28/07 : « il faudra aussi generer les bulles de texte de dialogue.
+   Fais les choses en deux temps » — les images d'abord, le texte ensuite.
+
+   Le bouton 💬 par case existe depuis la v1.40.0, mais il ecrit une replique
+   ISOLEE : douze cases traitees une a une donnent douze phrases qui ne se
+   repondent pas. Une conversation ne s'ecrit pas case par case, elle s'ecrit
+   d'un seul tenant — c'est pour ca que ce bouton envoie le DECOUPAGE COMPLET
+   et recoit toutes les repliques en une fois.
+
+   Trois garde-fous, tous des consequences de regles deja payees :
+   1. ⛔ Une case qui a DEJA du texte n'est jamais touchee. Le travail a la main
+      ne se fait pas ecraser par une proposition automatique (regle v1.40.0).
+   2. Le casting de CHAQUE case part avec le decoupage : sans lui le modele fait
+      parler quelqu'un qui n'est pas dans la case — c'est exactement le defaut
+      des images corrige en v1.56.0, et il se reproduirait mot pour mot.
+   3. Une case peut ne recevoir AUCUNE replique. Un decor n'a pas de dialogue, et
+      forcer une bulle par case remplirait la planche de bavardage. */
+/** Cette case peut-elle recevoir un dialogue ECRIT PAR L'APP ?
+ *
+ *  ⚠ Ces deux refus sont VERIFIES ICI, pas seulement demandes au modele dans le
+ *  prompt. Le banc l'a montre du premier coup : la consigne « une case sans
+ *  personne n'a aucune replique » etait bien ecrite, le modele l'a ignoree, et
+ *  l'app a pose la bulle sans broncher. Une consigne n'est pas un garde-fou. */
+function peutRecevoirDialogue(p, interdits){
+  if (!p) return false;
+  // ⚠ L'etat « avait deja du texte » est FIGE AVANT le passage, il ne se relit
+  // pas dans `p.bubbles`. Sinon la premiere replique posee dans une case ferme
+  // la porte a la seconde : le banc a attrape la regression aussitot — une case
+  // a deux personnages ne recevait plus qu'une seule bulle.
+  if ((interdits || []).includes(p.id)) return false;
+  if (!castingCase(p).length) return false;                              // personne ici
+  return true;
+}
+
+async function dialoguesPlanche(){
+  if (!S.page) return toast("ouvre d'abord une planche");
+  const cases = (S.panels || []).filter(p => (p.prompt || "").trim());
+  if (!cases.length) return toast("décris d'abord les cases");
+  const dejaEcrites = cases.filter(p => (p.bubbles || []).some(b => (b.text || "").trim()));
+  const aRemplir = cases.filter(p => !dejaEcrites.includes(p));
+  if (!aRemplir.length)
+    return toast("toutes les cases décrites ont déjà du texte — rien n'est écrasé");
+
+  const numero = p => S.panels.indexOf(p) + 1;
+  const qui = p => castingCase(p)
+    .map(id => (CHARS.find(c => c.id === id) || {}).name)
+    .filter(Boolean);
+  const decoupage = cases.map(p =>
+    "Case " + numero(p) + " : " + (p.prompt || "").trim()
+    + (qui(p).length ? " [présents : " + qui(p).join(", ") + "]" : " [personne]")
+    + (dejaEcrites.includes(p)
+        ? " (dialogue DEJA ecrit, ne pas le refaire : "
+          + (p.bubbles || []).map(b => b.text).filter(Boolean).join(" / ") + ")"
+        : "")).join("\n");
+
+  return avecTemoin("Écriture des dialogues…", async () => {
+    const r = await api("/enhance", { format: "raw", temp: 0.9, idea:
+      "Voici le decoupage complet d'une planche de manga :\n" + decoupage
+      + "\n\nEcris les dialogues de cette planche, comme UNE SEULE scene qui "
+      + "s'enchaine. Une ligne par replique, au format exact :\n"
+      + "numero_de_case | nom du personnage qui parle | replique\n"
+      + "Regles : en francais ; COURT (moins de 12 mots par replique, une bulle "
+      + "de manga ne tient pas un paragraphe) ; au plus 2 repliques par case ; "
+      + "SEULS les personnages listes comme presents peuvent parler ; une case "
+      + "sans personne ou un plan de decor n'a AUCUNE replique — ne l'ecris pas ; "
+      + "n'ecris rien pour les cases marquees « dialogue DEJA ecrit ». "
+      + "Aucun commentaire, aucun titre, rien d'autre que ces lignes." });
+
+    const lignes = String(r.prompt || "").split("\n")
+      .map(x => x.trim()).filter(x => x.includes("|"));
+    let posees = 0, ignorees = 0;
+    for (const l of lignes){
+      const part = l.split("|").map(x => x.trim());
+      if (part.length < 3) continue;
+      const n = parseInt(String(part[0]).replace(/[^0-9]/g, ""), 10);
+      const texte = part.slice(2).join(" | ").replace(/^["'«»\s]+|["'«»\s]+$/g, "").trim();
+      const p = S.panels[n - 1];
+      if (!p || !texte){ ignorees++; continue; }
+      if (!peutRecevoirDialogue(p, dejaEcrites.map(x => x.id))){ ignorees++; continue; }
+      await addBubble(p, "oval");
+      const b = (p.bubbles || [])[p.bubbles.length - 1];
+      if (!b) continue;
+      b.text = texte;
+      const rang = (p.bubbles || []).length;
+      b.y = Math.min(0.72, (BUB_DEFAULT.y || 0.1) + 0.16 * (rang - 1));
+      // Deux locuteurs dans une case : la seconde bulle passe a droite, sinon
+      // les deux se superposent au meme endroit et l'ordre de lecture se perd.
+      b.x = rang > 1 ? 0.68 : 0.32;
+      await saveBubbles(p);
+      posees++;
+    }
+    S.lettering = null;
+    renderPlate();
+    if (!posees) throw new Error("aucune réplique exploitable n’est revenue");
+    log("dialogues : " + posees + " réplique(s) posée(s) sur "
+        + aRemplir.length + " case(s) à remplir"
+        + (dejaEcrites.length ? " — " + dejaEcrites.length + " case(s) déjà écrite(s), laissée(s) intacte(s)" : "")
+        + (ignorees ? " — " + ignorees + " ligne(s) ignorée(s)" : ""), "s");
+  }, "Dialogues écrits — corrige-les dans ✎ Lettrage").catch(e => {
+    log("dialogues : " + e.message, "e");
+    toast("échec : " + e.message);
+  });
+}
+$("btnDialogues").onclick = dialoguesPlanche;
 $("btnExport").onclick = () => avecTemoin("Export PNG de la planche…", exportPlate, "PNG exporté").catch(e => { log("export PNG: " + e.message, "e"); toast("échec export"); });
 $("btnExportPdf").onclick = () => avecTemoin("Export PDF de la planche…", exportPDF, "PDF exporté").catch(e => { log("export PDF: " + e.message, "e"); toast("échec export PDF"); });
 $("btnRefreshGal").onclick = refreshGal;
