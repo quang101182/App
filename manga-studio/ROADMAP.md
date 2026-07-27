@@ -1396,6 +1396,50 @@ beaucoup de lignes en hauteur pour rien »*.
   téléphone). Mesure en bas de page : onglets visibles des deux côtés.
 - **Barre du haut complète : 108 px sur téléphone, 91 px sur PC.**
 
+#### 12.12 — ✅ Dessiner un personnage depuis sa fiche *(livré v1.37.0)*
+
+Quang, 27/07 : *« je ne vois toujours pas dans le personnage la création des images des personnages.
+Ça fait un moment qu'on en parle et ça n'a toujours pas été fait. »* **Vérifié dans le code : il
+avait raison.** L'app savait **importer** une référence (v1.25.0), pas en **fabriquer** une — or une
+fiche neuve n'a aucune photo de départ, le personnage n'existe que dans les traits qu'on vient
+d'écrire.
+
+**🎨 Dessiner** produit **trois vues** (visage · buste · en pied) à la même seed ; on garde celle qui
+ressemble, elle devient la référence IPAdapter de la fiche.
+
+> **Trois vues, et c'est un choix, pas une hésitation.** `test_cadrage_reference.py` a comparé
+> quatre cadrages le 27/07 et **n'a rien tranché** : les rendus se ressemblent trop pour départager
+> à l'œil, et l'instrument automatique de ce projet a déjà échoué à juger une identité. Imposer un
+> cadrage serait **inventer un verdict qui n'existe pas**. On propose ; la question se résout par
+> l'usage, personnage par personnage. *(La planche `scripts/cadrage_out/planche_cadrages.png`
+> reste disponible — elle montre bien que les quatre se valent.)*
+
+**Ce qui n'entre PAS dans le prompt** : ni le LoRA, ni le déclencheur, ni l'identité du **projet**.
+Ils dessineraient le héros du manga en cours à la place de la fiche — le défaut exact corrigé le
+27/07, où chaque case héritait de la lycéenne de test. Et **rien n'est ajouté à la fiche tant qu'on
+n'a pas choisi** : un brouillon qui s'installe tout seul est un choix fait à la place de l'utilisateur.
+
+##### 🐛 Le défaut que ce chantier a révélé, et qui dépasse largement le bouton
+
+Depuis la **v1.23.0**, la traduction est obligatoire *« sur tous les chemins »*. **La fiche de
+personnage était le dernier à l'avoir oublié** : son champ disait *« tags anglais, ou écris en
+français puis ✨ »*, donc la traduction dépendait d'un bouton qu'on pouvait ne pas voir. Le coût
+n'est pas local — les tags d'une fiche partent dans **chaque case qui la caste** : une fiche restée
+en français ne rate pas une image, **elle est invisible dans toutes**. Traduction désormais faite à
+l'enregistrement, et les fiches déjà en base sont corrigées au premier dessin.
+
+⚠️ **Et traduire n'est pas enrichir — confondre les deux s'est payé immédiatement.** Ma première
+version réutilisait la consigne du bouton ✨ ; le modèle a **ajouté** des tags anglais en **gardant**
+le français à côté (*« vieux maitre barbu, cicatrice sur la joue, kimono sombre, black and white,
+manga style… »*). Le français partait donc quand même, **et** la fiche s'était alourdie de traits que
+Quang n'avait pas écrits. *Une traduction automatique ne doit rien inventer* : on reprend la consigne
+stricte déjà éprouvée pour les cases (`TRAD_CONSIGNE`). Mesuré après correction : *« old master with
+beard, scar on cheek, dark kimono »*. L'enrichissement reste le rôle du bouton ✨ — un geste **voulu**.
+
+Banc : `test_perso_dessiner.py` — 15 ✓, **génération réelle** (3 images, ~2 min : la question est
+« est-ce que ça dessine vraiment *ce* personnage », et aucun stub n'y répond). Mutation rouge,
+8 échecs.
+
 #### Ordre d'exécution *(chronologie tenue par Claude, mandat Quang du 27/07)*
 
 | # | Chantier | État | Pourquoi ce rang |
@@ -1407,6 +1451,7 @@ beaucoup de lignes en hauteur pour rien »*.
 | — | **12.10 onglets compacts + figés** | ✅ v1.33.0 | 44 px rendus à la planche, et un onglet atteignable depuis le bas |
 | — | **12.11 question d'arrêt** | ✅ v1.34.0 | + les 5 dernières boîtes natives de l'app |
 | — | **12.5 zone + consigne** | ✅ v1.35.0 | un seul bouton ; a révélé que `p.zone` n'était pas persistée depuis la v1.26.1 |
+| — | **12.12 dessiner un personnage** | ✅ v1.37.0 | demande ancienne et jamais faite ; a révélé que la fiche échappait à la traduction obligatoire |
 | 1 | **12.7 💬 Répliques** | ⏳ | brique écrite à 80 %, zéro GPU, répond à une incompréhension réelle |
 | 3 | **12.1 case-groupe** | ⏳ | gros gain de lisibilité ; `sequence.gid` (v1.31.0) est déjà posé pour elle |
 | 4 | **12.2 réordonner** | ⏳ | trivial **une fois** la case-groupe posée |

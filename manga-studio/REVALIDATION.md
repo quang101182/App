@@ -40,6 +40,13 @@
 > | **v1.34.0** | **question de sécurité avant de couper le moteur** (+ la seconde, quand une génération tourne) · **les 5 dernières boîtes natives** de l'app remplacées par une question à l'écran | `test_arret_moteur.py` — 14 ✓, moteur réellement coupé puis rallumé |
 > | **v1.35.0** | **zone + consigne écrite** (« ce que tu veux à cet endroit », facultatif) · 🐛 **`p.zone` n'était pas persistée depuis la v1.26.1** — la zone tracée disparaissait au rechargement | `test_zone_consigne.py` — 14 ✓, mutation rouge |
 >
+> | **v1.37.0** | **🎨 Dessiner un personnage** depuis sa fiche (3 vues, on garde la bonne → référence IPAdapter) · 🐛 **la fiche de personnage échappait à la traduction obligatoire** depuis la v1.23.0 — une fiche en français est **invisible dans toutes** les cases qui la castent | `test_perso_dessiner.py` — 15 ✓, génération réelle, mutation rouge |
+>
+> ⚠️ **Règle qui sort de la v1.37.0** : **traduire n'est pas enrichir.** Une traduction automatique
+> ne doit **rien inventer** — sinon elle alourdit la fiche de traits que Quang n'a pas écrits, *et*
+> laisse le français partir quand même. Consigne stricte (`TRAD_CONSIGNE`) pour la traduction,
+> consigne d'enrichissement **seulement** derrière un bouton explicite.
+>
 > ⚠️ **Règle qui sort de la v1.35.0, à ne pas réapprendre** : la table `manga_panels` a des colonnes
 > **fixes**. Tout champ d'une case posé **hors de `recipe`** est accepté par l'API puis **jeté à
 > l'écriture, sans erreur**. Un nouveau champ va dans `recipe`, ou il n'existera pas demain.
