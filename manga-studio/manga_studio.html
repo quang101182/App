@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.19.0</title>
+<title>Manga Studio v1.20.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -211,7 +211,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.19.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.20.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -532,7 +532,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.19.0";
+const VERSION = "1.20.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -844,7 +844,7 @@ function wfMaster(r, decor, seed, prefix){
 }
 
 /** Une case. `depthName` non vide => mode AMBIANCE (ControlNet depth sur le fond maitre). */
-function wfPanel(r, positive, seed, prefix, depthName){
+function wfPanel(r, positive, seed, prefix, depthName, poseName, poseW){
   // Sans LoRA, le noeud est RETIRE du graphe -- il n'est pas laisse avec un nom
   // vide. ComfyUI refuse alors tout le workflow (HTTP 400) et l'app n'affichait
   // qu'« [object Object] » : une case qui ne se genere pas, sans raison lisible.
@@ -866,12 +866,17 @@ function wfPanel(r, positive, seed, prefix, depthName){
                  strength_model: +r.loraW, strength_clip: +r.loraW,
                  model: ["1",0], clip: ["1",1] } };
   }
-  if (depthName){
-    g["11"] = { class_type: "ControlNetLoader", inputs: { control_net_name: r.cn } };
-    g["12"] = { class_type: "LoadImage", inputs: { image: depthName } };
+  // Un seul ControlNet a la fois : la profondeur (fond maitre) OU la pose
+  // (sequence). Les cumuler ferait s'annuler les deux contraintes.
+  const cnNom = poseName ? "openpose-sdxl-xinsir.safetensors" : r.cn;
+  const cnImg = poseName || depthName;
+  const cnPds = poseName ? (poseW || 0.9) : +r.cnW;
+  if (cnImg){
+    g["11"] = { class_type: "ControlNetLoader", inputs: { control_net_name: cnNom } };
+    g["12"] = { class_type: "LoadImage", inputs: { image: cnImg } };
     g["13"] = { class_type: "ControlNetApplyAdvanced", inputs: {
                  positive: ["2",0], negative: ["3",0], control_net: ["11",0], image: ["12",0],
-                 strength: +r.cnW, start_percent: 0.0, end_percent: 0.8 } };
+                 strength: cnPds, start_percent: 0.0, end_percent: 0.9 } };
     g["5"].inputs.positive = ["13",0];
     g["5"].inputs.negative = ["13",1];
   }
@@ -1316,6 +1321,7 @@ function panelHTML(p, i){
    + '<div class="row">'
    + '<button class="btn sm" data-act="ameliorer" title="Traduit ta phrase en tags que le modèle comprend vraiment">✨ Améliorer</button>'
    + '<button class="btn sm" data-act="idees" title="Propose 3 suites, d\'après les cases précédentes">💡 3 suites</button>'
+   + '<button class="btn sm" data-act="sequence" title="Décompose ce geste en plusieurs vignettes (même personnage)">🎬 Séquence</button>'
    + (recipe().trigger
        ? '<label style="margin:0;display:flex;align-items:center;gap:5px;color:var(--txt);font-size:12px">'
          + '<input data-perso type="checkbox" style="width:auto"'
@@ -2140,6 +2146,125 @@ const OPT = {
   autoEnhance: localStorage.getItem("manga_auto_enhance") === "1",
 };
 
+
+/* ================== SEQUENCE : un geste decompose en N cases ==================
+   Mesure du 27/07 (scripts/test_mouvement.py) : meme seed + meme prompt, SEULE
+   la pose change, imposee par des squelettes openpose interpoles. Coherence
+   entre vignettes voisines 0,895 ; ecart premiere/derniere 0,845 -- le
+   personnage tient ET ca bouge. C'est la methode des dessinateurs : des poses
+   cles, pas de la video (aucun modele video installe, et ils rendent du couleur).
+   Ce n'est PAS une animation fluide, c'est une suite de CASES. */
+
+// COCO-18, la convention que le ControlNet openpose attend. Changer ces couleurs
+// reviendrait a lui parler une autre langue.
+const OS_LIMBS = [[1,2],[1,5],[2,3],[3,4],[5,6],[6,7],[1,8],[8,9],[9,10],
+                  [1,11],[11,12],[12,13],[1,0],[0,14],[14,16],[0,15],[15,17]];
+const OS_LCOL = ["#ff0000","#ff5500","#ffaa00","#ffff00","#aaff00","#55ff00","#00ff00",
+                 "#00ff55","#00ffaa","#00ffff","#00aaff","#0055ff","#0000ff","#5500ff",
+                 "#aa00ff","#ff00ff","#ff00aa"];
+const OS_PCOL = OS_LCOL.concat(["#ff0055"]);
+// Corps debout, x centre sur 0, y de 0 (crane) a 1 (pieds).
+const OS_CORPS = {
+  0:[0,0.075], 1:[0,0.150],
+  2:[-0.075,0.165], 3:[-0.115,0.290], 4:[-0.130,0.410],
+  5:[0.075,0.165], 6:[0.115,0.290], 7:[0.130,0.410],
+  8:[-0.050,0.500], 9:[-0.055,0.730], 10:[-0.058,0.960],
+  11:[0.050,0.500], 12:[0.055,0.730], 13:[0.058,0.960],
+  14:[-0.022,0.062], 15:[0.022,0.062], 16:[-0.048,0.070], 17:[0.048,0.070]
+};
+// Un geste = les articulations qui bougent, de leur position de depart a celle
+// d'arrivee. Tout le reste du corps ne bouge pas : c'est ce qui garde le
+// personnage identique d'une vignette a l'autre.
+const GESTES = {
+  coup:   { nom: "coup de poing",
+            k: { 3:[[-0.150,0.300],[-0.020,0.250]], 4:[[-0.170,0.400],[0.230,0.235]],
+                 6:[[0.115,0.290],[0.140,0.330]],   7:[[0.130,0.410],[0.180,0.430]] } },
+  marche: { nom: "marche",
+            k: { 9:[[-0.055,0.730],[-0.130,0.700]], 10:[[-0.058,0.960],[-0.190,0.930]],
+                 12:[[0.055,0.730],[0.120,0.740]],  13:[[0.058,0.960],[0.150,0.960]],
+                 3:[[-0.115,0.290],[-0.150,0.270]], 6:[[0.115,0.290],[0.075,0.320]] } },
+  chute:  { nom: "chute",
+            k: { 1:[[0,0.150],[0.060,0.230]], 0:[[0,0.075],[0.090,0.160]],
+                 4:[[-0.130,0.410],[-0.210,0.330]], 7:[[0.130,0.410],[0.215,0.470]],
+                 10:[[-0.058,0.960],[-0.150,0.930]] } }
+};
+
+/** Dessine un squelette openpose dans un canvas et renvoie son PNG (blob). */
+function squeletteBlob(geste, t, w, h){
+  const cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  const c = cv.getContext("2d");
+  c.fillStyle = "#000"; c.fillRect(0, 0, w, h);
+  const corps = Object.assign({}, OS_CORPS);
+  const k = GESTES[geste].k;
+  for (const cle in k){
+    const [a, b] = k[cle];
+    corps[cle] = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  }
+  const y0 = 0.03, y1 = 0.985, ech = y1 - y0, cx = 0.5;
+  const pt = {};
+  for (const i in corps){
+    pt[i] = [(cx + corps[i][0] * ech * (h / w)) * w, (y0 + corps[i][1] * ech) * h];
+  }
+  c.lineWidth = Math.max(4, h * 0.010);
+  c.lineCap = "round";
+  OS_LIMBS.forEach((seg, i) => {
+    c.strokeStyle = OS_LCOL[i];
+    c.beginPath(); c.moveTo(pt[seg[0]][0], pt[seg[0]][1]);
+    c.lineTo(pt[seg[1]][0], pt[seg[1]][1]); c.stroke();
+  });
+  const r = Math.max(4, h * 0.007);
+  for (const i in pt){
+    c.fillStyle = OS_PCOL[i] || "#fff";
+    c.beginPath(); c.arc(pt[i][0], pt[i][1], r, 0, 6.284); c.fill();
+  }
+  return new Promise(res => cv.toBlob(res, "image/png"));
+}
+
+/** Decompose le geste de la case en N vignettes. */
+async function sequence(p, geste, n){
+  const r = recipe();
+  const base = (p.prompt || "").trim();
+  if (!base) return toast("écris d'abord l'action de la case");
+  // Le seed est FIXE sur toute la suite : c'est lui qui garde le meme dessin.
+  const seed = (p.recipe && p.recipe.seed) || Math.floor(Math.random() * 1e9);
+  const i0 = S.panels.indexOf(p);
+  const faites = [];
+  for (let i = 0; i < n; i++){
+    const t = n > 1 ? i / (n - 1) : 0;
+    busyOn("Séquence : vignette " + (i + 1) + " sur " + n + "…");
+    // La case 1 est celle d'origine ; les suivantes sont creees a la file.
+    let cible = p;
+    if (i > 0){
+      const neuf = { pageId: S.page.id, idx: i0 + i, kind: "dialogue",
+                     prompt: base, recipe: { seed: seed } };
+      const rep = await api("/manga/panels", neuf);
+      neuf.id = rep.id;
+      S.panels.splice(i0 + i, 0, neuf);
+      cible = neuf;
+    } else {
+      cible.recipe = Object.assign({}, cible.recipe, { seed: seed });
+    }
+    const blob = await squeletteBlob(geste, t, +r.w, +r.h);
+    const nom = await uploadToComfy(blob, "seq_" + cible.id + "_" + i + ".png");
+    const prefix = "manga/" + S.proj.slug + "/" + S.page.id + "/" + Date.now().toString(36);
+    // « front view » n'est pas decoratif : un squelette est en 2D et ne dit pas
+    // l'orientation. Sans lui, le personnage se retournait au milieu de la suite
+    // (mesure du 27/07 : images 1-2 de dos, 3-6 de face).
+    const pos = promptFinal(cible) + ", front view, facing viewer, full body";
+    const imgs = await runGraph(
+      wfPanel(r, pos, seed, prefix, null, nom, 0.9), "séquence " + (i + 1));
+    cible.file = await harvest(imgs[0], cible.id + ".png");
+    cible.recipe = Object.assign({}, cible.recipe, {
+      positive: pos, seed: seed, sequence: { geste: geste, index: i, total: n } });
+    await api("/manga/panels", cible);
+    faites.push(cible.id);
+    renderPlate();
+  }
+  busyOff("Séquence terminée — " + faites.length + " vignette(s)");
+  log("sequence « " + GESTES[geste].nom + " » : " + faites.length + " vignettes, seed " + seed, "s");
+}
+
 /* ---------- base de personnages ----------
    Quang, 27/07 : « je ne comprends pas a quel moment je peux selectionner les
    personnages que j'aurai dans ma base de donnees […] c'est plus un controle
@@ -2443,6 +2568,17 @@ $("plate").addEventListener("click", async e => {
     const b = curBub(); if (!b) return toast("sélectionne une bulle");
     p.bubbles = p.bubbles.filter(x => x.id !== b.id); S.selBub = null;
     redrawBubbles(p); fillBubEditor(); return saveBubbles(p);
+  }
+  if (act === "sequence"){
+    if (!(p.prompt || "").trim()) return toast("écris d'abord l'action de la case");
+    const g = (prompt("Quel geste ?\n\ncoup · marche · chute", "coup") || "").trim().toLowerCase();
+    if (!GESTES[g]) return toast("geste inconnu");
+    const n = Math.max(2, Math.min(6, +(prompt("Combien de vignettes ? (2 à 6)", "4") || 4)));
+    return sequence(p, g, n).catch(e => {
+      log("séquence : " + e.message, "e");
+      refus(p, "La séquence a échoué : " + e.message);
+      busyOff("");
+    });
   }
   if (act === "idees"){
     const carte = document.querySelector('[data-pid="' + p.id + '"]');
