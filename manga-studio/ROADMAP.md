@@ -518,6 +518,34 @@ Dataset v2 (`manga_dataset_v2.py`, 28 images) généré **sans ReActor** — le 
 d'identité — avec un **FaceDetailer** qui re-rend le visage à 512 px, ce qui rendait enfin possible ce
 que ReActor interdisait : des plans larges au visage résolu. Entraînement 1 344 steps, 8 epochs, ~35 min.
 
+> ## ⛔ CORRECTION DU 27/07 — une partie des chiffres ci-dessous est INVALIDE
+>
+> La « taille du visage détecté / hauteur d'image » a été **calibrée après coup**, sur des images dont
+> j'avais vérifié le cadrage à l'œil. Elle **ne sépare pas les classes** :
+>
+> | Cadrage constaté visuellement | Mesure |
+> |---|---|
+> | gros plan | 0,470 · 0,479 |
+> | **buste** | **0,448** — indiscernable d'un gros plan |
+> | américain | 0,201 |
+> | **plan en pied** | **0,207 · 0,192 · 0,150 · 0,000 · 0,000** — chevauche l'américain, et le détecteur échoue deux fois |
+>
+> **Ce qui est retiré** : la répartition des cadrages des datasets (« 75 % gros plan », « 18 % américain »…),
+> l'affirmation « aucun vrai plan en pied n'est atteint », et « le v2 cadre 11 % plus large » — un écart de
+> 0,227 → 0,202 est **dans le bruit** d'un instrument qui donne 0,448 pour un buste et 0,207 pour un pied.
+>
+> **Ce qui reste vrai**, parce que vérifié à l'œil : le dataset v1 est visiblement presque tout en buste ;
+> le dataset v2 contient des cadrages **visiblement distincts** (gros plan, buste, américain, pied) ;
+> et un prompt « full body » **produit bien un plan en pied** — donc le modèle ne « résiste » pas comme je
+> l'ai écrit.
+>
+> **La leçon, et elle est plus utile que le LoRA** : j'ai posé un seuil (« < 0,09 = plan en pied ») que je
+> n'avais **jamais établi**, et j'en ai tiré des conclusions confiantes. Un second juge (Pixtral) disait
+> « buste » sur les mêmes images en pied — j'ai classé son verdict en bruit alors qu'il tombait juste sur
+> le fond. **Deux instruments non calibrés qui s'accordent ne se corroborent pas : ils se trompent
+> ensemble, et cet accord m'a rendu confiant.** Un seuil doit être calibré sur des cas dont on connaît la
+> réponse *avant* de servir à conclure.
+
 **Comparatif v1 vs v2, même seed (222222), même checkpoint, poids 0,8 :**
 
 | Mesure | v1 | v2 | Lecture |
@@ -533,12 +561,13 @@ teste donc pas la boucle elle-même, seulement la correction des deux réserves.
 
 **Ce que la mesure a appris, et qui vaut plus que le LoRA :**
 
-1. **Réserve n°2 (cadrage) — partiellement réduite.** L'étalement du dataset progresse pour de vrai
-   (américain 0 % → 18 %, étendue des tailles de visage ×3,1 → ×4,1) mais **aucun vrai plan en pied**
-   n'est atteint, ni dans le dataset ni en sortie, malgré 7 prompts « full body » et un négatif qui
-   pousse activement hors du plan rapproché. ⇒ **Ce n'est pas (que) le dataset : le modèle de base
-   résiste.** Le fixer demande de forcer le cadrage à la génération — ControlNet **openpose** — et pas
-   seulement de rééquilibrer le dataset. C'était l'intuition initiale de la roadmap ; elle est confirmée.
+1. ~~**Réserve n°2 (cadrage)** — « aucun vrai plan en pied n'est atteint », « le modèle de base résiste ».~~
+   ⛔ **RETIRÉ** : ces deux affirmations reposaient sur l'instrument invalide (voir l'encadré ci-dessus).
+   Vérification à l'œil : le dataset v2 contient bien des cadrages distincts jusqu'au plan en pied, et un
+   prompt « full body » en produit un. **La réserve n°2 est donc probablement moins grave qu'annoncé —
+   mais elle n'est pas mesurée, faute d'instrument valide.** C'est l'état honnête : *on ne sait pas*.
+   Il faut d'abord une mesure de cadrage qui tienne (piste : le rapport hauteur du visage / hauteur du
+   personnage, invariant d'échelle, plutôt que la hauteur du visage seule).
 2. **Réserve n°1 (grain de beauté) — non corrigée, mais on sait enfin pourquoi.** Mesure directe sur les
    datasets : le grain n'est visible que sur **2/12** images du v1 et **3/12** du v2, malgré une
    accentuation à `(mole:1.4)`. Le dataset reste **muet** sur ce détail. ⇒ L'explication « un
@@ -551,7 +580,18 @@ teste donc pas la boucle elle-même, seulement la correction des deux réserves.
 (`ComfyUI/models/loras/_manga_test/zqmg1rl_v2.safetensors`) et sélectionnable. Changer le défaut pour
 un gain de 11 % sur un seul axe, avec un style légèrement plus bruité sur la case 3, ne se justifie pas.
 
-**⏳ Ce qui reste** : forcer le cadrage par ControlNet openpose, trancher le sort du grain de beauté
+### ControlNet openpose — squelettes synthétiques (27/07)
+
+`make_pose.py` fabrique des squelettes **OpenPose synthétiques** (COCO-18, palette canonique) plutôt que
+d'en extraire d'une image : une pose extraite hérite du cadrage de son image d'origine, alors qu'ici la
+position et l'échelle du squelette dans la toile **sont** le cadrage. Déterministe, gratuit, sans modèle.
+
+Constat **visuel** (la mesure de cadrage n'étant pas fiable, on ne prétend pas chiffrer) : à strength
+**0,8-1,0**, on obtient des plans en pied propres et bien composés, avec la pose imposée. À 0,6 l'effet est
+plus lâche. Le prompt seul donne aussi un plan en pied sur ce sujet — l'apport d'openpose est donc surtout
+le **contrôle** de la pose et de la place du personnage dans le cadre, pas le fait d'obtenir un plan large.
+
+**⏳ Ce qui reste** : une mesure de cadrage valide, trancher le sort du grain de beauté
 (incruster ou retirer du design), puis entraîner un LoRA **depuis des cases réellement validées** —
 c'est seulement là que le critère de la phase 6 sera testé pour ce qu'il dit.
 
@@ -584,6 +624,8 @@ vérifié : 24 images × 6 repeats = 1 152 steps, exactement les chiffres de la 
 | **Créer ≠ sélectionner** | Le projet fraîchement créé n'était pas le projet courant → 6 cases rangées chez un voisin, **sans aucune erreur**. Toujours vérifier *où* un fichier atterrit, pas seulement *qu'il* atterrit. |
 | **`hidden` écrasé par un `display` d'auteur** | `.busy{display:flex}` annule l'attribut `hidden` : le voile est resté affiché sur chaque case pendant toute la v1.0.1, masquant l'image et **avalant les clics**. Toujours écrire `.x[hidden]{display:none}` quand on donne un `display` à un élément qu'on masque par attribut. |
 | **Un banc qui ne regarde jamais l'écran** | Les 3 défauts de la phase 5 étaient verts sur tous les chiffres. Un banc d'UI doit produire une **capture** — et un contrôle géométrique (`getBBox`) quand la question est « est-ce que ça tient dedans ». |
+| **Un seuil de mesure jamais calibre** | J'ai classe des cadrages avec « taille du visage < 0,09 = plan en pied », un seuil **invente**. Calibration a posteriori : un buste mesure 0,448, un plan en pied 0,207 — l'instrument ne separe rien. Toute conclusion tiree d'un seuil doit d'abord montrer que le seuil separe des cas connus. |
+| **Deux instruments non calibres qui s'accordent** | Pixtral disait « buste » sur des images en pied ; ma mesure disait pareil. J'ai lu leur accord comme une corroboration et classe le desaccord restant en « bruit ». Ils se trompaient **ensemble**. Un accord ne vaut que si au moins un des deux a ete verifie contre la realite. |
 | **Un chemin relatif apres un rangement de fichiers** | `prep_train.py` pointait vers `HERE/dataset` ; les scripts ont ete deplaces dans `scripts/`, le dataset est reste a la racine. Il ne trouvait plus rien **sans rien dire** — un `continue` silencieux dans une boucle. Tout script qui peut finir avec 0 element doit le DIRE bruyamment. |
 | **Un caractere non-ASCII dans un message** | Un `⚠` dans un `print()` fait planter le script sur une console Windows cp1252. Le banc qui lisait sa sortie a conclu a un echec d'entrainement **qui n'avait jamais eu lieu**. Forcer `sys.stdout` en UTF-8, ou rester en ASCII. |
 | **Un poids de modele non versionne ET non scriptable** | Le detecteur YOLO avait ete telecharge dans un scratchpad, jamais range. A la session suivante il avait disparu, emportant la reproductibilite de la phase 3 alors que ses chiffres etaient soigneusement consignes. Un binaire n'a pas sa place dans le depot, mais **la commande qui le rapporte, si** : `scripts/fetch_models.py`. |
@@ -602,6 +644,7 @@ vérifié : 24 images × 6 repeats = 1 152 steps, exactement les chiffres de la 
 | 2026-07-26 | Ouverture du chantier. Décision d'archi (app séparée). Checkpoint Illustrious installé. Essais 1-4 mesurés. Recherche web + vote 3 voix. kohya installé (3 pièges payés : cu128, versions transformers, encodage cp1252). |
 | 2026-07-26 | **Phase 1 franchie à 89 %** (contre 50 % sans LoRA). LoRA `zqmg1rl_v1` entraîné et validé sur comparatif strict. 2 réserves ouvertes → LoRA v2 avant la phase 4. |
 | 2026-07-26 | **Phase 3 : pipeline d'ingestion écrit et mesuré** (`manga_ingest.py`). Découpage 83 % à IoU 0,66 mais **Pixtral quantifie sur une grille** ⇒ raffinement OpenCV nécessaire. Volet style : OK. **Bloqué sur la validation** faute de scans réels de Quang. Premier test = faux positif, corrigé par un test à vérité terrain. |
+| 2026-07-27 | **⛔ CORRECTION : ma mesure de cadrage etait invalide.** Calibree apres coup sur des images dont j'avais verifie le cadrage a l'oeil, la « taille du visage » donne **0,448 pour un buste et 0,207 pour un plan en pied** — elle ne separe pas les classes, et le detecteur echoue sur 2 plans larges. Retires : la repartition des cadrages des datasets, « aucun vrai plan en pied n'est atteint », « le v2 cadre 11 % plus large ». **Lecon : j'ai pose un seuil que je n'avais jamais etabli, et un second juge non calibre disait la meme chose — leur accord m'a rendu confiant alors qu'ils se trompaient ensemble.** Ajoute `make_pose.py` (squelettes OpenPose synthetiques : la position du squelette EST le cadrage). |
 | 2026-07-27 | **LoRA v2 entraine et mesure — critere NON atteint, et c'est le resultat utile.** Cadrage : 11 % plus large seulement, les deux restent des bustes malgre 7 prompts « full body » ⇒ **le modele de base resiste, ce n'est pas (que) le dataset** ; il faudra ControlNet openpose. Grain de beaute : toujours 0/3, et la mesure dit pourquoi — il n'est visible que sur **3/12** images du dataset v2 malgre `(mole:1.4)`. **On n'a jamais montre ce detail assez souvent pour savoir s'il est apprenable.** Le v1 reste le defaut. Trouve au passage : `train_lora.sh` pointait vers une session morte. |
 | 2026-07-27 | **Boucle de validation livree** (v1.7.0) : onglet Valide, bibliotheque de recettes rejouables, ecriture du dataset du LoRA suivant, `prep_train.py` rendu generique. La propriete « l'app propose, elle n'impose rien » est **falsifiable** et verifiee rouge sous sabotage. Bug latent trouve : `prep_train.py` ne trouvait plus le dataset depuis le rangement des scripts — le LoRA v1 n'etait plus reentrainable, en silence. RESTE l'entrainement du v2 (GPU, ComfyUI a couper ~40 min). |
 | 2026-07-27 | **Effacement du texte source** (v1.6.2). Les bulles d'origine sont VIDEES (diffusion bornee depuis un pixel clair, sans IA) et leur contour survit ⇒ on les REUTILISE au lieu d'en empiler de nouvelles. Mesure : noir dans la zone du japonais 0,070 -> **0,000**, 0 texte qui deborde. Deux erreurs de methode notees : un garde-fou qui se declenchait **a l'envers sur le cas normal**, et une mesure faite **au mauvais endroit** (dans l'export lettre au lieu de la case nettoyee) qui concluait a l'inverse de la verite. |
