@@ -36,7 +36,11 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.12.0';
+const VERSION = '1.14.0';
+// v1.14.0 (2026-07-15) — Funnel analytics (ADDITIF, lecture seule) : GET /api/click renvoie désormais
+//   `by_btn_all` = ventilation COMPLÈTE par bouton (via KV.list), en plus des 5 clés fixes conservées.
+//   Permet au dashboard de lire le funnel du hub se7 (f:demo/f:chat/f:cta/f:waitlist + out:*). Zéro
+//   changement de comportement pour les compteurs existants (dk/swp) ni pour aucune route SWP/NF/SV.
 // v1.12.0 (2026-06-17) — StoryVoice monitoring (ADDITIF, lecture seule): endpoint /admin/sv/overview
 //   (clés sv_ vendues, crédits restants/consommés, heures écoutées, revenu estimé, conversion démo→achat)
 //   + 'sv' ajouté à l'agrégat /api/visit?page=all. Aucune logique SWP/NF/DK touchée.
@@ -320,8 +324,40 @@ async function proxyAzure(request, env, url) {
 // never calls checkUsageLimit / PLAN_LIMITS / incrementUsage. Additive (v1.8.0).
 //   Brain (summaries/Q&A) via /api/deepseek = FREE (reuses proxyDeepSeek).
 //   Voice via /api/openai + X-Api-Path:/v1/audio/speech = METERED (1 credit = 1 char).
+//   Premium voice via /api/gcptts (Gemini Cloud TTS, OAuth SA) = METERED ×2 (2 credits/char).
 //   plan 'unlimited' (owner/family) = never metered, just a high anti-disaster guard.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ── OAuth compte de service pour Gemini-TTS (Cloud TTS, texttospeech.googleapis.com). ──
+// Clé SA (JSON) en KV PRO_KV `key:GCPTTS_SA_JSON` → JWT RS256 signé → token OAuth (caché ~55 min).
+// Copié du gateway normal (v1.45) pour exposer la voix Gemini premium aux clés sv_ (v1.13.0).
+let _gcpSaToken = { token: null, exp: 0 };
+function _b64urlBytes(u8) { let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_'); }
+function _b64urlStr(str) { return _b64urlBytes(new TextEncoder().encode(str)); }
+async function _importPkcs8(pem) {
+  const b64 = pem.replace(/-----BEGIN PRIVATE KEY-----/, '').replace(/-----END PRIVATE KEY-----/, '').replace(/\s+/g, '');
+  const der = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  return crypto.subtle.importKey('pkcs8', der.buffer, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+}
+async function getGcpSaToken(env) {
+  const now = Math.floor(Date.now() / 1000);
+  if (_gcpSaToken.token && _gcpSaToken.exp > now + 60) return _gcpSaToken.token;
+  const raw = await env.PRO_KV.get('key:GCPTTS_SA_JSON');
+  if (!raw) throw new Error('GCPTTS_SA_JSON not configured');
+  const sa = JSON.parse(raw);
+  const aud = sa.token_uri || 'https://oauth2.googleapis.com/token';
+  const signingInput = _b64urlStr(JSON.stringify({ alg: 'RS256', typ: 'JWT' })) + '.' +
+    _b64urlStr(JSON.stringify({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/cloud-platform', aud, iat: now, exp: now + 3600 }));
+  const key = await _importPkcs8(sa.private_key);
+  const sig = await crypto.subtle.sign({ name: 'RSASSA-PKCS1-v1_5' }, key, new TextEncoder().encode(signingInput));
+  const jwt = signingInput + '.' + _b64urlBytes(new Uint8Array(sig));
+  const resp = await fetch(aud, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}` });
+  const j = await resp.json().catch(() => ({}));
+  if (!resp.ok || !j.access_token) throw new Error('SA token failed ' + resp.status);
+  _gcpSaToken = { token: j.access_token, exp: now + (j.expires_in || 3600) };
+  return j.access_token;
+}
 
 async function debitCredits(proKey, chars, env) {
   const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
@@ -387,6 +423,35 @@ async function handleStoryVoice(request, env, ctx, path, proKey, proData) {
       });
     }
     return proxyOpenaiSV(request, env, apiPath);
+  }
+
+  // Gemini premium voice (Cloud TTS, OAuth SA) — METERED ×2 (Gemini ≈ 2× le coût OpenAI). Pas de cap journalier.
+  if (path.startsWith('/api/gcptts')) {
+    let body;
+    try { body = await request.json(); } catch { return err('invalid JSON body', 400); }
+    const text = (body && body.input && typeof body.input.text === 'string') ? body.input.text : '';
+    const units = text.length * 2; // 2 crédits / caractère pour la voix premium Gemini
+    const credits = Number(proData.credits || 0);
+    if (!unlimited && units > credits) {
+      return json({ error: 'insufficient_credits', credits, needed: units }, 402);
+    }
+    let token;
+    try { token = await getGcpSaToken(env); } catch (e) { return err('GCP SA auth failed: ' + e.message, 503); }
+    let subPath = path.slice('/api/gcptts'.length) || '/v1/text:synthesize';
+    if (!subPath.startsWith('/')) subPath = '/' + subPath;
+    subPath = safeApiPath(subPath, '/v1/text:synthesize');
+    const resp = await fetch('https://texttospeech.googleapis.com' + subPath, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (resp.ok && !unlimited && units > 0) {
+      ctx.waitUntil(debitCredits(proKey, units, env));
+    }
+    return new Response(resp.body, {
+      status: resp.status,
+      headers: { ...CORS_HEADERS, 'Content-Type': resp.headers.get('Content-Type') || 'application/json' },
+    });
   }
 
   return err('Route not available for StoryVoice', 404);
@@ -834,15 +899,16 @@ export default {
       const today = new Date().toISOString().slice(0, 10);
       // If page=all, return all counters
       if (page === 'all') {
-        const [swpT, ncfT, nfT, dkT, tucT, svT] = await Promise.all([
+        const [swpT, ncfT, nfT, dkT, tucT, svT, se7T] = await Promise.all([
           env.PRO_KV.get('stats:visits:swp:total'),
           env.PRO_KV.get('stats:visits:ncf:total'),
           env.PRO_KV.get('stats:visits:nf:total'),
           env.PRO_KV.get('stats:visits:dk:total'),
           env.PRO_KV.get('stats:visits:tuc:total'),
           env.PRO_KV.get('stats:visits:sv:total'),
+          env.PRO_KV.get('stats:visits:se7:total'),
         ]);
-        return json({ swp: parseInt(swpT) || 0, ncf: parseInt(ncfT) || 0, nf: parseInt(nfT) || 0, dk: parseInt(dkT) || 0, tuc: parseInt(tucT) || 0, sv: parseInt(svT) || 0 });
+        return json({ swp: parseInt(swpT) || 0, ncf: parseInt(ncfT) || 0, nf: parseInt(nfT) || 0, dk: parseInt(dkT) || 0, tuc: parseInt(tucT) || 0, sv: parseInt(svT) || 0, se7: parseInt(se7T) || 0 });
       }
       const prefix = `stats:visits:${page}`;
       const totalRaw = await env.PRO_KV.get(`${prefix}:total`);
@@ -897,6 +963,22 @@ export default {
         env.PRO_KV.get(`${prefix}:btn:cta:total`),
         env.PRO_KV.get(`${prefix}:btn:sticky:total`),
       ]);
+      // v1.14.0 ADDITIF : ventilation COMPLÈTE par bouton via KV.list (funnel dashboards, ex se7).
+      // Les 5 clés fixes ci-dessus sont conservées pour compat. Non bloquant si la list échoue.
+      // Le btn peut contenir des ':' (ex 'f:demo', 'out:DictoKey') → on retire le préfixe et le suffixe ':total'.
+      const by_btn_all = {};
+      try {
+        const listPrefix = `${prefix}:btn:`;
+        let cursor;
+        do {
+          const res = await env.PRO_KV.list({ prefix: listPrefix, cursor });
+          await Promise.all(res.keys.map(async (k) => {
+            const name = k.name.slice(listPrefix.length).replace(/:total$/, '');
+            if (name) by_btn_all[name] = parseInt(await env.PRO_KV.get(k.name)) || 0;
+          }));
+          cursor = res.list_complete ? null : res.cursor;
+        } while (cursor);
+      } catch (e) { /* non-fatal — by_btn_all reste partiel/vide */ }
       return json({
         page, total: parseInt(totalRaw) || 0, today: parseInt(todayRaw) || 0,
         by_btn: {
@@ -905,7 +987,8 @@ export default {
           nav: parseInt(navRaw) || 0,
           cta: parseInt(ctaRaw) || 0,
           sticky: parseInt(stickyRaw) || 0,
-        }
+        },
+        by_btn_all,
       });
     }
 

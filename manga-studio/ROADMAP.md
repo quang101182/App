@@ -940,15 +940,52 @@ n'a rien à faire dans un test de registre adulte.
 | **n3 — rapport de force** (elle debout, lui à genoux, femdom) | ⛔ **échec** — l'homme à genoux **n'apparaît pas**. Il reste la femme seule et une forme confuse au sol |
 | **n4 — étreinte serrée** | ✅ visuellement bon (2 personnes enlacées), mais le compteur n'en voit qu'une |
 
-**Ce que ça établit, et c'est exactement la prédiction du volet adulte :**
+> ## ⛔ CORRECTION DU 27/07 (même jour) — mon diagnostic sur n3 était FAUX
+>
+> J'avais conclu : « le rapport de force ne s'écrit pas, il faut ControlNet openpose ». J'ai construit
+> les squelettes à deux corps (`make_pose.py`, posture agenouillée + scènes duo) pour l'imposer.
+> **Les deux affirmations sont infirmées, mesure à l'appui :**
+>
+> | Bras | Deux personnages |
+> |---|---|
+> | **Texte seul**, sans le terme de cadrage | **3/3**, et visuellement **exactement la scène voulue** — femme debout dominante, homme à genoux, tête levée vers elle |
+> | Texte + **ControlNet openpose 0,8** | 2/3, et **le rendu est mauvais** |
+> | Texte + **ControlNet openpose 1,0** | 2/3, mauvais également |
+>
+> **Le ControlNet DÉGRADE ici**, il n'aide pas : le modèle lit mon squelette agenouillé comme un
+> **homme debout de petite taille** — cuisse verticale et tibia au sol ne disent pas « à genoux »,
+> ils disent « jambes courtes ». Un squelette openpose transmet des positions d'articulations, pas
+> une intention de posture.
+>
+> **La vraie cause de l'échec, isolée par un banc à une seule variable** (`test_lowangle.py`, 8 seeds
+> par bras) : **`low angle shot from below`**.
+>
+> | Prompt | Deux personnages |
+> |---|---|
+> | sans le terme de cadrage | **6/8** |
+> | avec `low angle shot from below` | **3/8** |
+>
+> ⇒ **Ce n'est pas la mise en scène qui ne passe pas, c'est le terme de CADRAGE qui efface le second
+> personnage** — il fait dériver la composition vers un sujet unique vu d'en bas. La règle utile est
+> donc l'inverse de ce que j'avais écrit : **le rapport de force s'écrit très bien en toutes lettres ;
+> c'est le cadrage qu'il ne faut pas mélanger au même prompt.**
+>
+> **La leçon, et elle se répète** : j'ai tiré une règle générale (« la mise en scène ne passe pas par
+> le texte ») d'un échec dont je n'avais pas isolé la variable, puis j'ai construit un outil pour la
+> contourner. Le banc qui départageait les deux explications coûtait dix minutes. *Avant de bâtir une
+> parade, il faut avoir mesuré ce qu'on contourne.*
+>
+> **Ce qui reste acquis de ce détour** : `make_pose.py` sait désormais composer des scènes à
+> plusieurs corps (`placer()`, `dessine_pts()`, posture agenouillée) — utile pour le **cadrage**, qui
+> reste son domaine. Simplement, ce n'est pas l'outil du rapport de force.
+
+**Ce que ça établit :**
 - **Deux corps dans une case, ça marche** dès qu'ils sont simplement co-présents ou en contact simple.
   Ce n'était pas acquis — ça l'est maintenant.
-- **Ce qui casse, c'est la MISE EN SCÈNE, pas l'anatomie.** Le femdom ne se joue pas sur les corps mais
-  sur le rapport de force — qui domine le cadre, qui est en hauteur, qui regarde qui. Le modèle ne
-  compose pas ça tout seul : décrit en texte, il produit une femme debout et oublie l'homme.
-  ⇒ **Parade identifiée et déjà outillée : ControlNet openpose.** `make_pose.py` fabrique des squelettes
-  synthétiques où *la position dans la toile EST le cadrage* — c'est précisément ce qu'il faut ici :
-  deux squelettes, l'un debout, l'autre agenouillé. À faire, et c'est le prochain pas du volet adulte.
+- ~~**Ce qui casse, c'est la MISE EN SCÈNE, pas l'anatomie**, ⇒ parade : ControlNet openpose.~~
+  ⛔ **RETIRÉ le jour même** — voir l'encadré ci-dessus. Le rapport de force **s'écrit très bien** (3/3
+  en texte seul, et la scène est juste) ; c'est le terme de **cadrage** `low angle shot from below` qui
+  effaçait le second personnage (6/8 sans, 3/8 avec). Le ControlNet openpose, lui, **dégrade**.
 - **Limite d'instrument déclarée** : le compteur (visages YOLO, calibré 9/9 sur des images à une
   personne) **sous-compte en cadrage serré**, quand les visages se chevauchent. Il vaut pour les plans
   larges ; sur un gros plan enlacé, seul le regard tranche.
@@ -1042,6 +1079,7 @@ texte : ce qui doit être maîtrisé ne se génère pas, il se **superpose**.
 
 | Date | Événement |
 |---|---|
+| 2026-07-27 | **⛔ CORRECTION, le jour meme : mon diagnostic sur la scene femdom etait FAUX.** J'avais conclu « le rapport de force ne s'ecrit pas, il faut openpose » et j'avais deja construit les squelettes a deux corps. Mesure : **le texte seul donne 3/3 et la scene est exactement la bonne** (femme debout, homme a genoux tete levee) ; le **ControlNet openpose DEGRADE** (2/3 et rendu mauvais -- le modele lit un squelette agenouille comme un **homme debout de petite taille**). La vraie cause, isolee par un banc a une seule variable sur 8 seeds : **`low angle shot from below`**, qui fait passer la presence du second personnage de **6/8 a 3/8**. ⇒ La regle est l'INVERSE de ce que j'avais ecrit : la mise en scene s'ecrit, c'est le **cadrage** qu'il ne faut pas melanger au meme prompt. **Lecon : j'ai tire une regle generale d'un echec dont je n'avais pas isole la variable, puis bati un outil pour la contourner. Le banc qui tranchait coutait dix minutes.** |
 | 2026-07-27 | **v1.8.0 — la galerie SERT enfin a quelque chose** (« je ne peux rien faire dessus ») : plein ecran (taille MESUREE, pas supposee), selection multiple, suppression qui NOMME les fichiers, et une route proxy a trois verrous (anti-traversee verifiee en direct). Trois defauts trouves en chemin, tous invisibles autrement : `id="gal"` **en double**, le bloc du plein ecran pose **apres** le `<script>` (une erreur qui eteignait TOUT le script, galerie vide sans message), et une barre d'onglets qui **debordait en douce** (418 px pour 360) donc des onglets inatteignables sur telephone. responsive-audit OK a 320/360/384. |
 | 2026-07-27 | **v1.7.1 — le clavier du telephone ne se referme plus.** Bug remonte par Quang : impossible d'ecrire dans une case. Cause lue dans le code : un clavier virtuel qui s'ouvre **redimensionne la fenetre**, le `resize` rappelait `renderPlate()` qui reconstruit tout en `innerHTML` -- le champ focalise etait **detruit**. Un redimensionnement ne touche plus qu'aux colonnes. Banc falsifiable (`--muter` -> ROUGE, verifie). |
 | 2026-07-27 | **DEUX personnages dans une case — mesure, et le trou est partiellement comble.** Co-presence et contact simple : ca marche. **Le rapport de force (femdom) ECHOUE** : decrit en texte, le modele produit la femme debout et **oublie l'homme a genoux**. ⇒ ce qui casse n'est pas l'anatomie mais la **mise en scene**, et la parade est deja outillee (`make_pose.py`, deux squelettes openpose). Limite d'instrument declaree : le compteur de visages **sous-compte en cadrage serre**. |

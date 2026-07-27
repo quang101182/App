@@ -39,7 +39,23 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
-const VERSION = '1.0.4';
+const VERSION = '1.1.27';  // v1.1.27 (17/05) - Contour bulle PiP : double drawbox (noir 2px outer + blanc 2px inner) autour de l'overlay bubble = look video-call pro. Inject 3 sites bubble (no-intro + with-intro + phaseB combo postSpeech). Toggle bubbleBorderEnabled default OFF. v1.1.26 Ken Burns + Vignette preserved.
+
+// v1.1.0 — Hardware-accelerated H.264 encoding via NVENC (NVIDIA GPU) for local PromoClip Local
+// PC backend (zero cloud). Toggle via env USE_NVENC=true. Fallback libx264 si absent.
+const USE_NVENC = process.env.USE_NVENC === 'true';
+// Presets NVENC : p1 (fastest) ... p7 (slowest, best quality). p4 = balanced.
+// libx264 presets : ultrafast | fast (used for higher quality finals).
+const ENCODER_FAST = USE_NVENC
+  ? ['-c:v', 'h264_nvenc', '-preset', 'p3', '-rc', 'vbr', '-cq', '23', '-b:v', '0']
+  : ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23'];
+const ENCODER_QUALITY = USE_NVENC
+  ? ['-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'vbr', '-cq', '20', '-b:v', '0']
+  : ['-c:v', 'libx264', '-preset', 'fast', '-crf', '20'];
+const ENCODER_FINAL = USE_NVENC
+  ? ['-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'vbr', '-cq', '23', '-b:v', '0']
+  : ['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'];
+console.log('[encoder] ' + (USE_NVENC ? 'NVENC GPU (h264_nvenc)' : 'libx264 CPU') + ' — set USE_NVENC=true env to toggle.');
 
 // ---------------------------------------------------------------------------
 // Etat global
@@ -48,15 +64,63 @@ const VERSION = '1.0.4';
 let activeJobs = 0;
 const startTime = Date.now();
 
+// v1.1.15 — SFX paths : 2 fichiers synthétiques générés au boot via ffmpeg (idempotent).
+// whoosh.wav (150ms) = sweep filtré → transition intro→split. Anticipation visuelle (-0.2s avant cut).
+// ding.wav (350ms) = sine 880Hz + decay → outro final. Sensation de "fini propre", boost partage.
+const SFX_DIR = path.join(__dirname, '..', 'sfx');
+const SFX_WHOOSH = path.join(SFX_DIR, 'whoosh.wav');
+const SFX_DING = path.join(SFX_DIR, 'ding.wav');
+
+function ensureSfxFiles() {
+  try { fs.mkdirSync(SFX_DIR, { recursive: true }); } catch (_) {}
+
+  if (!fs.existsSync(SFX_WHOOSH)) {
+    // Whoosh = bandpass filtered noise + sweep + fade in/out
+    const r = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'anoisesrc=duration=0.15:color=brown:amplitude=0.5',
+      '-af', 'bandpass=f=1200:w=2400,afade=t=in:st=0:d=0.02,afade=t=out:st=0.10:d=0.05,volume=2.0',
+      '-ar', '44100', '-ac', '1',
+      SFX_WHOOSH
+    ], { stdio: 'pipe', windowsHide: true });
+    if (r.status === 0) console.log(`[SFX] generated whoosh.wav (${fs.statSync(SFX_WHOOSH).size}B)`);
+    else console.warn(`[SFX] whoosh generation failed: ${(r.stderr||'').toString().slice(-200)}`);
+  }
+  if (!fs.existsSync(SFX_DING)) {
+    // Ding = sine 880Hz + 660Hz harmonic + exp decay
+    const r = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'sine=frequency=880:duration=0.35',
+      '-f', 'lavfi',
+      '-i', 'sine=frequency=1320:duration=0.35',
+      '-filter_complex', '[0:a]volume=0.7[a1];[1:a]volume=0.3[a2];[a1][a2]amix=inputs=2:normalize=0,afade=t=out:st=0.05:d=0.30,volume=1.5[aout]',
+      '-map', '[aout]',
+      '-ar', '44100', '-ac', '1',
+      SFX_DING
+    ], { stdio: 'pipe', windowsHide: true });
+    if (r.status === 0) console.log(`[SFX] generated ding.wav (${fs.statSync(SFX_DING).size}B)`);
+    else console.warn(`[SFX] ding generation failed: ${(r.stderr||'').toString().slice(-200)}`);
+  }
+}
+const { spawnSync } = require('child_process');
+ensureSfxFiles();
+
 // ---------------------------------------------------------------------------
 // Auto-shutdown : eteindre la machine apres IDLE_SHUTDOWN_MS sans jobs actifs.
 // Necessaire car auto_stop_machines = "off" (empeche Fly.io de tuer les jobs).
 // Fly redemarrera la machine a la prochaine requete (auto_start_machines=true).
 // ---------------------------------------------------------------------------
+// v1.1.4 — IDLE_SHUTDOWN désactivable via env (NO_IDLE_SHUTDOWN=true en mode local PC).
+// Sur Fly.io cloud : 30min idle → exit pour économiser ressources / coûts.
+// Sur PC local : on veut que ça tourne en continu → set NO_IDLE_SHUTDOWN=true.
 const IDLE_SHUTDOWN_MS = 30 * 60 * 1000; // 30 minutes
+const IDLE_SHUTDOWN_DISABLED = process.env.NO_IDLE_SHUTDOWN === 'true';
 let idleTimer = null;
 
 function resetIdleTimer() {
+  if (IDLE_SHUTDOWN_DISABLED) return;
   if (idleTimer) clearTimeout(idleTimer);
   if (activeJobs > 0) return;
   idleTimer = setTimeout(() => {
@@ -67,6 +131,7 @@ function resetIdleTimer() {
   }, IDLE_SHUTDOWN_MS);
 }
 resetIdleTimer();
+if (IDLE_SHUTDOWN_DISABLED) console.log('[idle] AUTO-SHUTDOWN désactivé (NO_IDLE_SHUTDOWN=true)');
 
 // ---------------------------------------------------------------------------
 // Auto-cleanup des tmpDir orphelins (jobs crashes, streams coupes, timeouts)
@@ -294,14 +359,14 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
         '-loop', '1',
         '-i', clipPaths[i],
         '-vf', `${preFilter},${zoompanFilter}`,
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+        ...ENCODER_FAST,
         '-pix_fmt', 'yuv420p',
         '-t', String(dur),
         '-y', clipOutPath
       ];
 
       await new Promise((resolve, reject) => {
-        const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+        const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
         let stderr = '';
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => {
@@ -344,14 +409,14 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
         ...xfadeInputs,
         '-filter_complex', xfadeFilters.join(';'),
         '-map', '[outv]',
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+        ...ENCODER_FAST,
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
         '-y', concatOut
       ];
 
       await new Promise((resolve, reject) => {
-        const ff = spawn('ffmpeg', xfadeArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+        const ff = spawn('ffmpeg', xfadeArgs, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
         let stderr = '';
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => {
@@ -410,14 +475,14 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
           '-filter_complex', circleFilter,
           '-map', '[outv]',
           '-map', '1:a?',
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+          ...ENCODER_FAST,
           '-c:a', 'aac', '-b:a', '128k',
           '-pix_fmt', 'yuv420p',
           '-y', avatarOutPath
         ];
 
         await new Promise((resolve, reject) => {
-          const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+          const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
           let stderr = '';
           ff.stderr.on('data', d => { stderr += d.toString(); });
           ff.on('close', code => {
@@ -448,7 +513,7 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
           '-filter_complex', filterComplex,
           '-map', '[outv]',
           '-map', '1:a?',
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+          ...ENCODER_FAST,
           '-c:a', 'aac', '-b:a', '128k',
           '-pix_fmt', 'yuv420p',
           '-t', String(Math.min(30, clips.length * 10)),
@@ -456,7 +521,7 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
         ];
 
         await new Promise((resolve, reject) => {
-          const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+          const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
           let stderr = '';
           ff.stderr.on('data', d => { stderr += d.toString(); });
           ff.on('close', code => {
@@ -522,7 +587,7 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
       );
 
       await new Promise((resolve, reject) => {
-        const ff = spawn('ffmpeg', mixArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+        const ff = spawn('ffmpeg', mixArgs, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
         let stderr = '';
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => {
@@ -543,19 +608,22 @@ app.post('/promo-assembly', jsonSmall, requireAnySecret, async (req, res) => {
     if (subtitles) {
       const subsPath = path.join(tmpDir, 'subs.ass');
       fs.writeFileSync(subsPath, subtitles);
+      // v1.1.2 — utilise path relatif + cwd=tmpDir au spawn (cf comment plus haut promo-assembly-pro)
+      const subsPathFF = 'subs.ass';
       const subsOut = path.join(tmpDir, 'final-subs.mp4');
 
       const subsArgs = [
         '-i', finalOut,
-        '-vf', `ass=${subsPath}`,
-        '-c:v', 'libx264', '-preset', 'fast', '-crf', '20',
+        '-vf', `ass=${subsPathFF}`,
+        ...ENCODER_QUALITY,
         '-c:a', 'copy',
         '-movflags', '+faststart',
         '-y', subsOut
       ];
 
       await new Promise((resolve, reject) => {
-        const ff = spawn('ffmpeg', subsArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+        // v1.1.2 — cwd=tmpDir pour que `ass=subs.ass` (relative) marche sur Windows.
+        const ff = spawn('ffmpeg', subsArgs, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, cwd: tmpDir });
         let stderr = '';
         ff.stderr.on('data', d => { stderr += d.toString(); });
         ff.on('close', code => {
@@ -616,7 +684,50 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
     return res.status(503).json({ error: 'Server busy, try again later' });
   }
 
-  const { video, videoMime, moments, avatarVideo, avatarMode, subtitles, width, height, outroClip, outroDuration, avatarIntroFullscreen, avatarIntroDuration } = req.body;
+  const { video, videoMime, moments, avatarVideo, avatarMode, subtitles, width, height, outroClip, outroDuration, avatarIntroFullscreen, avatarIntroDuration, avatarPostSpeechFullscreen, jumpCutsEnabled, hookText, sfxEnabled, safeZonesEnabled, lutBrandEnabled, loopHookEnabled, kenBurnsEnabled, vignetteEnabled, bubbleBorderEnabled, avatarBubblePosition, avatarBubbleSize, subtitleKaraokeColor } = req.body;
+
+  // v1.1.24 — Cropdetect dynamique : helper qui lance ffmpeg cropdetect=30:2:0 sur l'avatar
+  // post-chromakey et retourne {w, h, x, y} de la bbox du contenu réel (pas de bandes dark).
+  // Test scientifique 17/05 : limit=30 capture le dark #0F0F13 (luma~17) comme bord, retourne
+  // crop=500:776:110:310 sur avatar Lumen 720×1280 (= contenu réel visage SadTalker).
+  async function cropdetectBands(videoPath, limit) {
+    const lim = limit || 30;
+    return new Promise((resolve) => {
+      const ff = spawn('ffmpeg', ['-i', videoPath, '-vf', `cropdetect=${lim}:2:0`, '-t', '1', '-f', 'null', '-'], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+      let stderr = '';
+      ff.stderr.on('data', d => { stderr += d.toString(); });
+      ff.on('close', () => {
+        const matches = [...stderr.matchAll(/crop=(\d+):(\d+):(\d+):(\d+)/g)];
+        if (matches.length === 0) return resolve(null);
+        const last = matches[matches.length - 1];
+        resolve({ w: parseInt(last[1]), h: parseInt(last[2]), x: parseInt(last[3]), y: parseInt(last[4]) });
+      });
+      ff.on('error', () => resolve(null));
+      setTimeout(() => { try { ff.kill(); } catch(_){} resolve(null); }, 15000);
+    });
+  }
+
+  // v1.1.24 — Helper bubble PiP étendu avec ratio détecté dynamiquement (cropParams).
+  // Si cropParams fourni (cropdetect réussi) : pipHeight adapté = pipWidth × (h/w) du contenu réel.
+  // Sinon fallback ratio 1:1 (carré) comme v1.1.23.
+  function computeBubbleGeom(outWidth, outHeight, position, size, cropParams) {
+    const sz = (size === 3) ? 0.56 : (size === 2 ? 0.42 : 0.28);
+    const pipWidth = Math.round(outWidth * sz);
+    // Ratio detected : si cropParams valide → utiliser ratio h/w du contenu réel, sinon carré 1:1
+    const sourceRatio = (cropParams && cropParams.w > 0 && cropParams.h > 0) ? (cropParams.h / cropParams.w) : 1.0;
+    const pipHeight = Math.round(pipWidth * sourceRatio);
+    const margin = 20;
+    const topMargin = 80;
+    const bottomMargin = 120;
+    let pipX, pipY;
+    switch ((position || 'br').toLowerCase()) {
+      case 'tl': pipX = margin; pipY = topMargin; break;
+      case 'tr': pipX = outWidth - pipWidth - margin; pipY = topMargin; break;
+      case 'bl': pipX = margin; pipY = outHeight - pipHeight - bottomMargin; break;
+      case 'br': default: pipX = outWidth - pipWidth - margin; pipY = outHeight - pipHeight - bottomMargin; break;
+    }
+    return { pipSize: pipWidth, pipWidth, pipHeight, pipX, pipY };
+  }
   if (!video) return res.status(400).json({ error: 'Missing video (base64)' });
 
   const tmpDir = path.join(os.tmpdir(), jobId);
@@ -639,7 +750,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
 
     // 2. Get recording duration via ffprobe
     const probeDur = await new Promise((resolve, reject) => {
-      const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', recordingPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+      const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', recordingPath], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
       let out = '';
       ff.stdout.on('data', d => { out += d.toString(); });
       ff.on('close', code => {
@@ -658,8 +769,43 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
       avatarPath = path.join(tmpDir, 'avatar.mp4');
       fs.writeFileSync(avatarPath, Buffer.from(avatarVideo, 'base64'));
       console.log(`[${jobId}] Avatar: ${(fs.statSync(avatarPath).size / 1048576).toFixed(1)} MB`);
+
+      // v1.1.3 — Preprocess chromakey si avatar Lumen greenscreen (body.avatarMatteColor).
+      // Sans ça, le fond vert reste visible dans le split-screen final (visuellement moche).
+      // Pipeline : chromakey + despill anti-bleed + composer sur fond dark cohérent #0F0F13.
+      const matteColor = req.body.avatarMatteColor;
+      if (matteColor && /^0x[0-9a-fA-F]{6}$/.test(matteColor)) {
+        const cleanPath = path.join(tmpDir, 'avatar_clean.mp4');
+        console.log(`[${jobId}] Pre-chromakey avatar matteColor=${matteColor}...`);
+        await new Promise((resolve, reject) => {
+          // v1.1.5 — fix : `overlay` accepte `format=yuv420` (sans 'p'), pas `yuv420p`.
+          // Pour garantir un yuv420p final pour libx264, ajouter `,format=yuv420p` après overlay.
+          const fc = (
+            `[0:v]split=2[a_src][bg_src];` +
+            `[a_src]chromakey=${matteColor}:0.30:0.10,despill=type=green:mix=0.5,format=yuva420p[a_clean];` +
+            `[bg_src]drawbox=color=0x0F0F13:t=fill,format=yuv420p[bg];` +
+            `[bg][a_clean]overlay=shortest=1,format=yuv420p[outv]`
+          );
+          const ff = spawn('ffmpeg', [
+            '-i', avatarPath,
+            '-filter_complex', fc,
+            '-map', '[outv]', '-map', '0:a?',
+            ...ENCODER_FAST, '-pix_fmt', 'yuv420p',
+            '-c:a', 'copy',
+            '-movflags', '+faststart',
+            '-y', cleanPath
+          ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, cwd: tmpDir });
+          let stderr = '';
+          ff.stderr.on('data', d => { stderr += d.toString(); });
+          ff.on('close', code => code === 0 ? resolve() : reject(new Error(`Pre-chromakey exit ${code}: ${stderr.slice(-300)}`)));
+          ff.on('error', reject);
+          setTimeout(() => { try { ff.kill('SIGKILL'); } catch (_) {} reject(new Error('Pre-chromakey timeout 60s')); }, 60000);
+        });
+        avatarPath = cleanPath;
+        console.log(`[${jobId}] Pre-chromakey OK → avatar matte extracted + composed on #0F0F13`);
+      }
       avatarDur = await new Promise((resolve) => {
-        const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', avatarPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+        const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', avatarPath], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
         let out = '';
         ff.stdout.on('data', d => { out += d.toString(); });
         ff.on('close', code => {
@@ -670,6 +816,20 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         setTimeout(() => { try { ff.kill(); } catch(_){} resolve(0); }, 5000);
       });
       console.log(`[${jobId}] Avatar duration: ${avatarDur.toFixed(2)}s (recording: ${probeDur.toFixed(2)}s)`);
+    }
+
+    // v1.1.24 — Cropdetect dynamique avatar pour mode bubble (1 fois par job, après pre-chromakey).
+    // Détecte la bbox du contenu visage SadTalker (post-chromakey dark fond), élimine bandes dark.
+    let avatarCropParams = null;
+    if (avatarMode === 'bubble' && avatarPath) {
+      try {
+        avatarCropParams = await cropdetectBands(avatarPath, 30);
+        if (avatarCropParams) {
+          console.log(`[${jobId}] Avatar cropdetect bbox : w=${avatarCropParams.w} h=${avatarCropParams.h} x=${avatarCropParams.x} y=${avatarCropParams.y} (ratio ${(avatarCropParams.h / avatarCropParams.w).toFixed(3)})`);
+        } else {
+          console.log(`[${jobId}] Avatar cropdetect : aucun bord détecté, fallback crop min(iw,ih) carré`);
+        }
+      } catch (e) { console.log(`[${jobId}] Avatar cropdetect FAIL: ${e.message}`); }
     }
 
     // Computed max duration for the main video assembly
@@ -695,7 +855,93 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
     let subPath = null;
     if (subtitles) {
       subPath = path.join(tmpDir, 'subs.ass');
-      fs.writeFileSync(subPath, subtitles, 'utf8');
+      // v1.1.2 — Sur Windows, le filter ffmpeg `ass=PATH` ne parse pas correctement les paths
+      // absolus avec drive letter (le `:` de `C:` est interprété comme option separator).
+      // Solution robuste : passer cwd=tmpDir au spawn ffmpeg et utiliser le filename relatif 'subs.ass'.
+      // Les `-i` arguments (paths abs) restent intacts car ne traversent pas le filter parser.
+      var subPathFF = 'subs.ass';
+      let subsContent = subtitles;
+      // v1.1.16 — Safe zones TikTok : patch MarginV pour faire remonter les subs au-dessus de la zone
+      // caption native TikTok (~220px du bas). Regex sur les lignes Style: ou Dialogue: \r? \N MarginV.
+      // Pattern ASS standard : Style: Default,Arial Black,42,...,2.5,1,1,2,10,10,MARGINV,1
+      //                        Dialogue: 0,...,Default,,LMargin,RMargin,MarginV,,Text
+      if (safeZonesEnabled) {
+        const SAFE_MARGIN_V = 220;
+        try {
+          // Style lines : 16e champ = MarginV (séparateur ,)
+          subsContent = subsContent.replace(/^(Style: [^\r\n]+)$/gm, (line) => {
+            const parts = line.split(',');
+            if (parts.length >= 21) {  // ASS v4+ Style a 23 fields
+              parts[parts.length - 2] = String(SAFE_MARGIN_V);  // avant-dernier = MarginV
+              return parts.join(',');
+            }
+            return line;
+          });
+          // Dialogue lines : champ MarginV (9e après Dialogue:) - mais souvent =0 (utilise Style MarginV)
+          // On laisse les Dialogue tels quels (la modif Style suffit dans 99% cas).
+          console.log(`[ass] safeZones : Style MarginV patched to ${SAFE_MARGIN_V}px`);
+        } catch (e) { console.log(`[ass] safeZones patch failed: ${e.message}`); }
+      }
+
+      // v1.1.23 (vote 3-LLM Q2 = B Kimi + C DeepSeek combinés) — Karaoké couleur dynamique.
+      // Spec ASS : PrimaryColour = couleur APRÈS highlight (= mot lu), SecondaryColour = AVANT.
+      // Tag \k<dur> dans Dialogue fait transition Secondary → Primary au passage temporel.
+      // Diagnostic v1.1.21 sans-effet : Lumen injecte overrides inline `\1c&Hxxx` ou `\c&Hxxx`
+      // dans le texte de chaque syllabe qui figent la couleur (cassent la transition \k).
+      // Fix v1.1.23 : (1) patch Style global Primary+Secondary, (2) STRIPPER les overrides
+      // inline (les retirer, pas les remplacer) pour laisser ma Style Primary s'appliquer.
+      if (subtitleKaraokeColor && /^#[0-9a-fA-F]{6}$/.test(subtitleKaraokeColor)) {
+        const hex = subtitleKaraokeColor.slice(1);
+        const r = hex.slice(0, 2), g = hex.slice(2, 4), b = hex.slice(4, 6);
+        const assBgr = '&H00' + b.toUpperCase() + g.toUpperCase() + r.toUpperCase();
+        try {
+          // (1) Patch Style global PrimaryColour + SecondaryColour
+          subsContent = subsContent.replace(/^(Style: [^\r\n]+)$/gm, (line) => {
+            const parts = line.split(',');
+            if (parts.length >= 21) {
+              parts[3] = assBgr;  // PrimaryColour
+              if (parts[4] && parts[4].startsWith('&H')) parts[4] = '&H00FFFFFF';  // SecondaryColour blanc
+              return parts.join(',');
+            }
+            return line;
+          });
+          // (2) Strip overrides inline qui figent la couleur : \1c, \c, \2c
+          // \1c = primary color override, \c = primary alias, \2c = secondary
+          // Replace ces tags par chaîne vide → renderer utilise les Style Primary/Secondary
+          const beforeStripLen = subsContent.length;
+          subsContent = subsContent.replace(/\\1c&H[0-9a-fA-F]+&?/g, '');
+          subsContent = subsContent.replace(/\\c&H[0-9a-fA-F]+&?/g, '');
+          subsContent = subsContent.replace(/\\2c&H[0-9a-fA-F]+&?/g, '');
+          const afterStripLen = subsContent.length;
+          const strippedChars = beforeStripLen - afterStripLen;
+          console.log(`[ass] karaoke : PrimaryColour=${assBgr} + stripped ${strippedChars} chars inline color overrides`);
+
+          // (3) Debug dump : sauve un sample des 2000 premiers chars dans le log pour analyse
+          const sampleHead = subsContent.slice(0, 2000).replace(/\r?\n/g, ' | ');
+          console.log(`[ass] DEBUG sample (post-patch first 2KB): ${sampleHead}`);
+        } catch (e) { console.log(`[ass] karaoke color patch failed: ${e.message}`); }
+      }
+
+      // v1.1.20 — MarginL/MarginR anti-débordement subs L/R. Default 60px chaque côté.
+      // Style fields ASS v4+ : MarginL=index 19, MarginR=index 20 (avant MarginV=21, Encoding=22).
+      // Wait, structure exacte ASS Style :
+      // Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,
+      // Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,
+      // Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
+      // → index 19=MarginL, 20=MarginR, 21=MarginV, 22=Encoding (23 fields total v4+)
+      try {
+        subsContent = subsContent.replace(/^(Style: [^\r\n]+)$/gm, (line) => {
+          const parts = line.split(',');
+          if (parts.length >= 23) {
+            parts[19] = '60';  // MarginL
+            parts[20] = '60';  // MarginR
+            return parts.join(',');
+          }
+          return line;
+        });
+        console.log(`[ass] MarginL/R set to 60px (anti-débordement)`);
+      } catch (e) { console.log(`[ass] margin L/R patch failed: ${e.message}`); }
+      fs.writeFileSync(subPath, subsContent, 'utf8');
     }
 
     if (avatarPath) {
@@ -706,15 +952,177 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         ? `tpad=stop_mode=clone:stop_duration=${freezeAvatarExtra.toFixed(2)},`
         : '';
 
+      // v1.1.26 — Ken Burns deplace en POST-PROCESS (apres assembly, avant outro).
+      // Raison : zoompan dans filter_complex avec d=1 a un comportement instable selon
+      // l'input video (reset zoom potentiel par input frame). En post-process sur 1 input
+      // unique, zoompan est fiable et le code reste simple. Helper conserve mais retourne ''.
+      const kenBurnsChain = (w, h, dur) => '';
+
+      // v1.1.27 — Contour bulle PiP : double drawbox (black 2px outer + white 2px inner)
+      // autour de l'overlay bubble = look video-call pro qui separe nettement avatar du
+      // recording. Inject IN-LINE apres overlay dans 3 sites bubble. Default OFF (toggle).
+      // Safe : drawbox accepte coords negatives (clip auto si pip pres du bord).
+      const bubbleBorderChain = (px, py, pw, ph) => {
+        if (!bubbleBorderEnabled) return '';
+        return `,drawbox=x=${px-3}:y=${py-3}:w=${pw+6}:h=${ph+6}:color=black@0.4:t=2,drawbox=x=${px-1}:y=${py-1}:w=${pw+2}:h=${ph+2}:color=white@0.8:t=2`;
+      };
+
       const introDur = avatarIntroFullscreen
         ? Math.max(1, Math.min(5, Number(avatarIntroDuration) || 2))
         : 0;
+
+      // v1.1.6 — Mode Pro pro-grade : switch fullscreen quand avatar fini de parler.
+      // S'active si toggle ON ET recording > avatar + 0.5s. Désactive le tpad freeze avatar
+      // (l'avatar termine sa parole, puis recording prend tout l'écran). Plus pro qu'un
+      // avatar figé pendant que la vidéo continue à défiler. Premier chantier de la roadmap
+      // viralité vote 3-LLM 16/05 (item #8).
+      const postSpeechActive = !!avatarPostSpeechFullscreen && avatarDur > 0 && probeDur > avatarDur + 0.5;
+      if (postSpeechActive) {
+        console.log(`[${jobId}] Post-speech fullscreen ACTIVE : split 0-${avatarDur.toFixed(1)}s + fullscreen ${avatarDur.toFixed(1)}-${probeDur.toFixed(1)}s`);
+      }
 
       let filterComplex;
       let mapVideo;
       let totalDur;
 
-      if (introDur > 0) {
+      if (postSpeechActive && introDur > 0) {
+        // ── PHASE 2b : Hero intro + split + post-speech fullscreen-trail (3 segments concat) ──
+        // Filter graph 3 phases :
+        //   Phase A (0 → introDur)       : intro fullscreen avatar (avatar[0:introDur])
+        //   Phase B (introDur → introDur+avatarDur) : split avatar+recording (avatar[0:avatarDur] + recording[0:avatarDur])
+        //   Phase C (introDur+avatarDur → introDur+probeDur) : fullscreen recording (recording[avatarDur:probeDur])
+        // Pas de tpad freeze (postSpeechActive prend précédence sur le freeze) — l'avatar
+        // termine naturellement à avatarDur puis recording prend tout l'écran.
+        const introClamped = Math.max(1, Math.min(5, introDur));
+        const avd = avatarDur;
+        totalDur = introClamped + Math.min(60, probeDur);
+        console.log(`[${jobId}] Phase 2b combo: intro ${introClamped}s + split 0-${avd.toFixed(1)}s + fullscreen-trail ${avd.toFixed(1)}-${probeDur.toFixed(1)}s, total ${totalDur.toFixed(1)}s`);
+
+        // Avatar split en 2 : intro fullscreen + split-zone
+        const avSplit = `[0:v]split=2[av_intro_src][av_split_src]`;
+        const avIntro = `[av_intro_src]trim=0:${introClamped},setpts=PTS-STARTPTS,fps=30,scale=${outWidth}:${outHeight}:force_original_aspect_ratio=increase,crop=${outWidth}:${outHeight}:(iw-${outWidth})/2:(ih-${outHeight})/2,setsar=1[phaseA]`;
+        const avZone = `[av_split_src]trim=0:${avd.toFixed(2)},setpts=PTS-STARTPTS,fps=30`;
+
+        // Recording split en 2 : split-zone + fullscreen-trail
+        const recSplit = `[1:v]split=2[rec_split_src][rec_full_src]`;
+        const recSplitPart = `[rec_split_src]trim=0:${avd.toFixed(2)},setpts=PTS-STARTPTS,fps=30`;
+        const recFullPart = `[rec_full_src]trim=${avd.toFixed(2)}:${probeDur.toFixed(2)},setpts=PTS-STARTPTS,fps=30,scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[phaseC]`;
+
+        // Split phase B (mode-dependent)
+        let phaseB;
+        if (mode === 'split-top') {
+          const avatarH = Math.round(outHeight * 0.35);
+          const recordH = outHeight - avatarH;
+          phaseB = [
+            `${avZone},split=2[avM_av_zone][avB_av_zone];[avB_av_zone]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH},boxblur=30:8,eq=brightness=-0.15,setsar=1[avBf_av_zone];[avM_av_zone]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=decrease,setsar=1[avMf_av_zone];[avBf_av_zone][avMf_av_zone]overlay=(W-w)/2:(H-h)/2[av_zone]`,
+            `${recSplitPart},scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[rec_zone]`,
+            `[av_zone][rec_zone]vstack=inputs=2[phaseB]`
+          ].join(';');
+        } else if (mode === 'split-bottom') {
+          const avatarH = Math.round(outHeight * 0.35);
+          const recordH = outHeight - avatarH;
+          phaseB = [
+            `${recSplitPart},scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[rec_zone]`,
+            `${avZone},split=2[avM_av_zone][avB_av_zone];[avB_av_zone]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH},boxblur=30:8,eq=brightness=-0.15,setsar=1[avBf_av_zone];[avM_av_zone]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=decrease,setsar=1[avMf_av_zone];[avBf_av_zone][avMf_av_zone]overlay=(W-w)/2:(H-h)/2[av_zone]`,
+            `[rec_zone][av_zone]vstack=inputs=2[phaseB]`
+          ].join(';');
+        } else {
+          // bubble PiP
+          // v1.1.24 — Bulle PiP avec cropdetect dynamique + ratio adaptatif
+          const _bg = computeBubbleGeom(outWidth, outHeight, avatarBubblePosition, avatarBubbleSize, avatarCropParams);
+          const pipSize = _bg.pipSize, pipX = _bg.pipX, pipY = _bg.pipY;
+          const pipWidth = _bg.pipWidth, pipHeight = _bg.pipHeight;
+          // Crop filter dynamique : si cropParams détecté, retire les bandes dark ; sinon fallback min(iw,ih) carré
+          const _cropFilter = avatarCropParams
+            ? `crop=${avatarCropParams.w}:${avatarCropParams.h}:${avatarCropParams.x}:${avatarCropParams.y}`
+            : `crop='min(iw\\,ih)':'min(iw\\,ih)'`;
+          phaseB = [
+            `${recSplitPart},scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[rec_zone]`,
+            `${avZone},${_cropFilter},scale=${pipWidth}:${pipHeight},setsar=1,fps=30,format=yuv420p[av_pip]`,
+            `[rec_zone][av_pip]overlay=${pipX}:${pipY}${bubbleBorderChain(pipX, pipY, pipWidth, pipHeight)}[phaseB]`
+          ].join(';');
+        }
+
+        // v1.1.9 — Crossfade 0.4s entre les 3 phases (pro look vs hard cut concat).
+        // Total durée réduit de 2*XF = 0.8s mais ergonomie pro vaut largement la perte.
+        const XF = 0.4;
+        // 1er xfade A→B : offset = introDur - XF
+        // 2e xfade (AB)→C : offset = (introDur - XF) + avd - XF
+        const off1 = (introClamped - XF).toFixed(3);
+        const off2 = (introClamped + avd - XF - XF).toFixed(3);
+        const xfade1 = `[phaseA][phaseB]xfade=transition=fade:duration=${XF}:offset=${off1}[ab_xf]`;
+        const xfade2 = `[ab_xf][phaseC]xfade=transition=fade:duration=${XF}:offset=${off2}[outv]`;
+        const subFilter = subPath ? `;[outv]ass=${subPathFF}[final]` : '';
+        mapVideo = subFilter ? '[final]' : '[outv]';
+        filterComplex = [avSplit, avIntro, recSplit, phaseB, recFullPart, xfade1, xfade2].join(';') + subFilter;
+        // Durée finale = introDur + avd + (probeDur - avd) - 2*XF = introDur + probeDur - 2*XF
+        totalDur = totalDur - 2 * XF;
+
+      } else if (postSpeechActive && introDur === 0) {
+        // ── POST-SPEECH FULLSCREEN MODE (Phase 1 : without hero intro) ──
+        // Phase A (0 → avatarDur)    : split-screen avatar+recording
+        // Phase B (avatarDur → probeDur) : recording fullscreen
+        totalDur = Math.min(60, probeDur);
+        const avd = avatarDur;
+        const bDur = Math.min(60, probeDur) - avd;
+
+        // Recording split en 2 portions (avant/après avatarDur) — split=2 explicite pour clarté
+        const recSplit = `[1:v]split=2[r_a][r_b]`;
+        const recPartA = `[r_a]trim=0:${avd.toFixed(2)},setpts=PTS-STARTPTS,fps=30`;
+        const recPartB = `[r_b]trim=${avd.toFixed(2)}:${(avd + bDur).toFixed(2)},setpts=PTS-STARTPTS,fps=30`;
+
+        // Avatar trim (no tpad — l'avatar va finir naturellement à avatarDur, c'est OK)
+        const avTrim = `[0:v]trim=0:${avd.toFixed(2)},setpts=PTS-STARTPTS,fps=30`;
+
+        let splitGraph;
+        let fullGraph;
+        if (mode === 'split-top') {
+          const avatarH = Math.round(outHeight * 0.35);
+          const recordH = outHeight - avatarH;
+          splitGraph = [
+            `${avTrim},split=2[avM_av_top][avB_av_top];[avB_av_top]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH},boxblur=30:8,eq=brightness=-0.15,setsar=1[avBf_av_top];[avM_av_top]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=decrease,setsar=1[avMf_av_top];[avBf_av_top][avMf_av_top]overlay=(W-w)/2:(H-h)/2[av_top]`,
+            `${recPartA},scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[rec_split]`,
+            `[av_top][rec_split]vstack=inputs=2[phaseA]`
+          ].join(';');
+          fullGraph = `${recPartB},scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[phaseB]`;
+        } else if (mode === 'split-bottom') {
+          const avatarH = Math.round(outHeight * 0.35);
+          const recordH = outHeight - avatarH;
+          splitGraph = [
+            `${recPartA},scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[rec_split]`,
+            `${avTrim},split=2[avM_av_bot][avB_av_bot];[avB_av_bot]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH},boxblur=30:8,eq=brightness=-0.15,setsar=1[avBf_av_bot];[avM_av_bot]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=decrease,setsar=1[avMf_av_bot];[avBf_av_bot][avMf_av_bot]overlay=(W-w)/2:(H-h)/2[av_bot]`,
+            `[rec_split][av_bot]vstack=inputs=2[phaseA]`
+          ].join(';');
+          fullGraph = `${recPartB},scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[phaseB]`;
+        } else {
+          // bubble PiP
+          // v1.1.24 — Bulle PiP avec cropdetect dynamique + ratio adaptatif
+          const _bg = computeBubbleGeom(outWidth, outHeight, avatarBubblePosition, avatarBubbleSize, avatarCropParams);
+          const pipSize = _bg.pipSize, pipX = _bg.pipX, pipY = _bg.pipY;
+          const pipWidth = _bg.pipWidth, pipHeight = _bg.pipHeight;
+          // Crop filter dynamique : si cropParams détecté, retire les bandes dark ; sinon fallback min(iw,ih) carré
+          const _cropFilter = avatarCropParams
+            ? `crop=${avatarCropParams.w}:${avatarCropParams.h}:${avatarCropParams.x}:${avatarCropParams.y}`
+            : `crop='min(iw\\,ih)':'min(iw\\,ih)'`;
+          splitGraph = [
+            `${recPartA},scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[rec_split]`,
+            `${avTrim},${_cropFilter},scale=${pipWidth}:${pipHeight},setsar=1,fps=30,format=yuv420p[av_pip]`,
+            `[rec_split][av_pip]overlay=${pipX}:${pipY}[phaseA]`
+          ].join(';');
+          fullGraph = `${recPartB},scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[phaseB]`;
+        }
+
+        // v1.1.9 — Xfade au lieu de concat brut (transition pro 0.4s entre split et fullscreen-trail)
+        const XF_PS = 0.4;
+        const offPS = (avd - XF_PS).toFixed(3);
+        const concatGraph = `[phaseA][phaseB]xfade=transition=fade:duration=${XF_PS}:offset=${offPS}[outv]`;
+        // Durée finale = avd + (probeDur - avd) - XF = probeDur - XF
+        totalDur = totalDur - XF_PS;
+        const subFilter = subPath ? `;[outv]ass=${subPathFF}[final]` : '';
+        mapVideo = subFilter ? '[final]' : '[outv]';
+        filterComplex = [recSplit, splitGraph, fullGraph, concatGraph].join(';') + subFilter;
+
+      } else if (introDur > 0) {
         // ── SINGLE-PASS: hero intro fullscreen + split-screen via concat FILTER ──
         totalDur = introDur + maxMainDur;
         console.log(`[${jobId}] Hero intro ${introDur}s (single-pass concat filter, total ${totalDur.toFixed(1)}s)`);
@@ -725,36 +1133,47 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         // Branch B: split-screen (mode-dependent, with tpad)
         let splitFilter;
         if (mode === 'split-top') {
-          const avatarH = Math.round(outHeight * 0.3);
+          const avatarH = Math.round(outHeight * 0.35);
           const recordH = outHeight - avatarH;
           splitFilter = [
-            `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
-            `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
+            `[0:v]${avatarPrefilter}split=2[avM_avatar][avB_avatar];[avB_avatar]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH},boxblur=30:8,eq=brightness=-0.15,setsar=1[avBf_avatar];[avM_avatar]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=decrease,setsar=1[avMf_avatar];[avBf_avatar][avMf_avatar]overlay=(W-w)/2:(H-h)/2[avatar]`,
+            `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1${kenBurnsChain(outWidth, recordH, probeDur)}[record]`,
             `[avatar][record]vstack=inputs=2[split]`
           ].join(';');
         } else if (mode === 'split-bottom') {
-          const avatarH = Math.round(outHeight * 0.3);
+          const avatarH = Math.round(outHeight * 0.35);
           const recordH = outHeight - avatarH;
           splitFilter = [
-            `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
-            `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
+            `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1${kenBurnsChain(outWidth, recordH, probeDur)}[record]`,
+            `[0:v]${avatarPrefilter}split=2[avM_avatar][avB_avatar];[avB_avatar]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH},boxblur=30:8,eq=brightness=-0.15,setsar=1[avBf_avatar];[avM_avatar]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=decrease,setsar=1[avMf_avatar];[avBf_avatar][avMf_avatar]overlay=(W-w)/2:(H-h)/2[avatar]`,
             `[record][avatar]vstack=inputs=2[split]`
           ].join(';');
         } else {
-          const pipSize = Math.round(outWidth * 0.28);
-          const pipX = outWidth - pipSize - 20;
-          const pipY = outHeight - pipSize - 120;
+          // v1.1.24 — Bulle PiP avec cropdetect dynamique + ratio adaptatif
+          const _bg = computeBubbleGeom(outWidth, outHeight, avatarBubblePosition, avatarBubbleSize, avatarCropParams);
+          const pipSize = _bg.pipSize, pipX = _bg.pipX, pipY = _bg.pipY;
+          const pipWidth = _bg.pipWidth, pipHeight = _bg.pipHeight;
+          // Crop filter dynamique : si cropParams détecté, retire les bandes dark ; sinon fallback min(iw,ih) carré
+          const _cropFilter = avatarCropParams
+            ? `crop=${avatarCropParams.w}:${avatarCropParams.h}:${avatarCropParams.x}:${avatarCropParams.y}`
+            : `crop='min(iw\\,ih)':'min(iw\\,ih)'`;
+          // v1.1.24c — Ajout format=yuv420p après scale pour compatibilité encoder libx264 (pixfmt explicit)
+          // + ajout fps=30 pour matcher [intro] qui fait setsar=1,fps=30 (xfade exige même framerate)
           splitFilter = [
-            `[1:v]${recordPrefilter}scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
-            `[0:v]${avatarPrefilter}scale=${pipSize}:${pipSize}:force_original_aspect_ratio=decrease,pad=${pipSize}:${pipSize}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipSize}/2,2)+pow(Y-${pipSize}/2,2),pow(${pipSize}/2-4,2)),0,255)'[pip]`,
-            `[record][pip]overlay=${pipX}:${pipY}[split]`
+            `[1:v]${recordPrefilter}scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30${kenBurnsChain(outWidth, outHeight, probeDur)}[record]`,
+            `[0:v]${avatarPrefilter}${_cropFilter},scale=${pipWidth}:${pipHeight},setsar=1,fps=30,format=yuv420p[pip]`,
+            `[record][pip]overlay=${pipX}:${pipY}${bubbleBorderChain(pipX, pipY, pipWidth, pipHeight)}[split]`
           ].join(';');
         }
 
-        // Concat filter: intro + split → single output
-        const concatF = `[intro][split]concat=n=2:v=1:a=0[outv]`;
-        // Subtitles applied AFTER concat (timestamps match full audio timeline)
-        const subFilter = subPath ? `;[outv]ass=${subPath}[final]` : '';
+        // v1.1.9 — Xfade au lieu de concat brut (transition pro 0.4s intro → split)
+        const XF_IS = 0.4;
+        const offIS = (introDur - XF_IS).toFixed(3);
+        const concatF = `[intro][split]xfade=transition=fade:duration=${XF_IS}:offset=${offIS}[outv]`;
+        // Durée finale = introDur + maxMainDur - XF
+        totalDur = totalDur - XF_IS;
+        // Subtitles applied AFTER xfade (timestamps match full audio timeline)
+        const subFilter = subPath ? `;[outv]ass=${subPathFF}[final]` : '';
         mapVideo = subFilter ? '[final]' : '[outv]';
         filterComplex = [introFilter, splitFilter, concatF].join(';') + subFilter;
 
@@ -763,33 +1182,38 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         totalDur = maxMainDur;
 
         if (mode === 'split-top') {
-          const avatarH = Math.round(outHeight * 0.3);
+          const avatarH = Math.round(outHeight * 0.35);
           const recordH = outHeight - avatarH;
           filterComplex = [
-            `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
-            `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
+            `[0:v]${avatarPrefilter}split=2[avM_avatar][avB_avatar];[avB_avatar]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH},boxblur=30:8,eq=brightness=-0.15,setsar=1[avBf_avatar];[avM_avatar]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=decrease,setsar=1[avMf_avatar];[avBf_avatar][avMf_avatar]overlay=(W-w)/2:(H-h)/2[avatar]`,
+            `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1${kenBurnsChain(outWidth, recordH, probeDur)}[record]`,
             `[avatar][record]vstack=inputs=2[outv]`
           ].join(';');
         } else if (mode === 'split-bottom') {
-          const avatarH = Math.round(outHeight * 0.3);
+          const avatarH = Math.round(outHeight * 0.35);
           const recordH = outHeight - avatarH;
           filterComplex = [
-            `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1[record]`,
-            `[0:v]${avatarPrefilter}scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH}:0:(ih-${avatarH})*0.30,setsar=1[avatar]`,
+            `[1:v]${recordPrefilter}scale=${outWidth}:${recordH}:force_original_aspect_ratio=decrease,pad=${outWidth}:${recordH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1${kenBurnsChain(outWidth, recordH, probeDur)}[record]`,
+            `[0:v]${avatarPrefilter}split=2[avM_avatar][avB_avatar];[avB_avatar]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=increase,crop=${outWidth}:${avatarH},boxblur=30:8,eq=brightness=-0.15,setsar=1[avBf_avatar];[avM_avatar]scale=${outWidth}:${avatarH}:force_original_aspect_ratio=decrease,setsar=1[avMf_avatar];[avBf_avatar][avMf_avatar]overlay=(W-w)/2:(H-h)/2[avatar]`,
             `[record][avatar]vstack=inputs=2[outv]`
           ].join(';');
         } else {
-          const pipSize = Math.round(outWidth * 0.28);
-          const pipX = outWidth - pipSize - 20;
-          const pipY = outHeight - pipSize - 120;
+          // v1.1.24 — Bulle PiP avec cropdetect dynamique + ratio adaptatif
+          const _bg = computeBubbleGeom(outWidth, outHeight, avatarBubblePosition, avatarBubbleSize, avatarCropParams);
+          const pipSize = _bg.pipSize, pipX = _bg.pipX, pipY = _bg.pipY;
+          const pipWidth = _bg.pipWidth, pipHeight = _bg.pipHeight;
+          // Crop filter dynamique : si cropParams détecté, retire les bandes dark ; sinon fallback min(iw,ih) carré
+          const _cropFilter = avatarCropParams
+            ? `crop=${avatarCropParams.w}:${avatarCropParams.h}:${avatarCropParams.x}:${avatarCropParams.y}`
+            : `crop='min(iw\\,ih)':'min(iw\\,ih)'`;
           filterComplex = [
-            `[1:v]${recordPrefilter}scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[record]`,
-            `[0:v]${avatarPrefilter}scale=${pipSize}:${pipSize}:force_original_aspect_ratio=decrease,pad=${pipSize}:${pipSize}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuva420p,geq=lum='p(X,Y)':cb='p(X,Y)':cr='p(X,Y)':a='if(gt(pow(X-${pipSize}/2,2)+pow(Y-${pipSize}/2,2),pow(${pipSize}/2-4,2)),0,255)'[pip]`,
-            `[record][pip]overlay=${pipX}:${pipY}[outv]`
+            `[1:v]${recordPrefilter}scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1${kenBurnsChain(outWidth, outHeight, probeDur)}[record]`,
+            `[0:v]${avatarPrefilter}${_cropFilter},scale=${pipWidth}:${pipHeight},setsar=1,fps=30,format=yuv420p[pip]`,
+            `[record][pip]overlay=${pipX}:${pipY}${bubbleBorderChain(pipX, pipY, pipWidth, pipHeight)}[outv]`
           ].join(';');
         }
 
-        const subFilter = subPath ? `,ass=${subPath}` : '';
+        const subFilter = subPath ? `,ass=${subPathFF}` : '';
         filterComplex = filterComplex + (subFilter ? `;[outv]${subFilter.slice(1)}[final]` : '');
         mapVideo = subFilter ? '[final]' : '[outv]';
       }
@@ -800,7 +1224,7 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         '-filter_complex', filterComplex,
         '-map', mapVideo,
         '-map', '0:a?',
-        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+        ...ENCODER_FINAL,
         '-c:a', 'aac', '-b:a', '128k',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
@@ -808,11 +1232,11 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         '-y', outputPath
       ];
     } else {
-      const subFilter = subPath ? `,ass=${subPath}` : '';
+      const subFilter = subPath ? `,ass=${subPathFF}` : '';
       ffArgs = [
         '-i', recordingPath,
         '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1${subFilter}`,
-        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+        ...ENCODER_FINAL,
         '-c:a', 'aac', '-b:a', '128k',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
@@ -823,7 +1247,8 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
 
     console.log(`[${jobId}] FFmpeg Pro start (mode: ${mode}, avatar: ${!!avatarPath}, intro: ${avatarIntroFullscreen ? 'yes' : 'no'})...`);
     await new Promise((resolve, reject) => {
-      const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      // v1.1.2 — cwd=tmpDir pour que le filter `ass=subs.ass` (relative) marche sur Windows.
+      const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, cwd: tmpDir });
       let stderr = '';
       ff.stderr.on('data', d => { stderr += d.toString(); });
       ff.on('close', code => {
@@ -837,13 +1262,341 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
       }, 180000);
     });
 
+    // v1.1.13 — Hook visuel 3s intro : drawtext anime fade-in/hold/fade-out sur 0-3s.
+    // Post-process apres main ffmpeg (modulaire, n'affecte pas filter_complex existant).
+    // Kimi TOP 1 vote 3-LLM 17/05 roadmap viralite TikTok 2026 (scroll-stop 80% des swipes en 3s).
+    if (hookText && typeof hookText === 'string' && hookText.trim().length > 0) {
+      const hookRaw = hookText.trim().slice(0, 120);  // max 120 char input
+
+      // v1.1.14 — Auto-wrap word-boundary : pour fontsize=80px sur outWidth=1080,
+      // ~22 chars/ligne tient confortablement avec marge 8% chaque cote. Max 3 lignes,
+      // sinon truncate avec ellipsis. ffmpeg drawtext rend nativement le multi-ligne
+      // depuis textfile (line-height auto = fontsize * 1.2).
+      const MAX_CHARS_PER_LINE = Math.max(14, Math.round(outWidth / 50));  // ~22 sur 1080, ~14 sur 720
+      const MAX_LINES = 3;
+      function wrapHook(text, maxChars, maxLines) {
+        const words = text.split(/\s+/);
+        const lines = [];
+        let current = '';
+        for (const w of words) {
+          const candidate = current ? (current + ' ' + w) : w;
+          if (candidate.length <= maxChars) {
+            current = candidate;
+          } else {
+            if (current) lines.push(current);
+            current = w.length > maxChars ? w.slice(0, maxChars - 1) + '…' : w;
+            if (lines.length >= maxLines) break;
+          }
+        }
+        if (current && lines.length < maxLines) lines.push(current);
+        if (lines.length === maxLines) {
+          // Ellipsis si truncate
+          const lastIdx = lines.length - 1;
+          const allText = lines.join(' ');
+          if (allText.length < text.length) {
+            lines[lastIdx] = lines[lastIdx].replace(/\W*$/, '') + '…';
+          }
+        }
+        return lines.join('\n');
+      }
+      const hookWrapped = wrapHook(hookRaw, MAX_CHARS_PER_LINE, MAX_LINES);
+      const nLines = hookWrapped.split('\n').length;
+      console.log(`[${jobId}] Hook intro 3s : "${hookRaw}" → wrapped ${nLines} lines (${MAX_CHARS_PER_LINE} chars/line max)`);
+
+      // Copie font Arial Bold dans tmpDir (path relatif robuste cwd=tmpDir)
+      const fontSrc = 'C:\\Windows\\Fonts\\arialbd.ttf';
+      const fontDst = path.join(tmpDir, 'hook_font.ttf');
+      try { fs.copyFileSync(fontSrc, fontDst); }
+      catch (e) { console.log(`[${jobId}] WARN font copy failed: ${e.message} — fallback sans fontfile`); }
+      const fontfileArg = fs.existsSync(fontDst) ? 'fontfile=hook_font.ttf:' : '';
+
+      // Texte via fichier (textfile=) pour eviter problemes d'escape ' : , \ dans drawtext
+      // v1.1.14 — Multi-ligne via \n dans hook.txt (drawtext rend natif line-height auto).
+      const hookFile = path.join(tmpDir, 'hook.txt');
+      fs.writeFileSync(hookFile, hookWrapped, 'utf-8');
+
+      // Animation alpha : fade-in 0.4s, hold, fade-out 0.4s avant t=3
+      const alphaExpr = 'if(lt(t,0.4),t/0.4,if(lt(t,2.6),1,if(lt(t,3),(3-t)/0.4,0)))';
+      const fontsize = Math.round(outWidth * 0.075);  // ~80px sur 1080
+      const drawFilter = (
+        `drawtext=${fontfileArg}` +
+        `textfile=hook.txt:reload=0:` +
+        `fontsize=${fontsize}:fontcolor=white:` +
+        `borderw=4:bordercolor=black:` +
+        `x=(w-text_w)/2:y=h*0.18:` +
+        `box=1:boxcolor=black@0.35:boxborderw=18:` +
+        `alpha='${alphaExpr}':` +
+        `enable='lt(t,3)'`
+      );
+      console.log(`[${jobId}] Hook drawtext filter: ${drawFilter.slice(0, 200)}...`);
+
+      const withHookPath = path.join(tmpDir, 'with_hook.mp4');
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', [
+          '-i', outputPath,
+          '-vf', drawFilter,
+          ...ENCODER_FAST, '-pix_fmt', 'yuv420p',
+          '-c:a', 'copy',
+          '-movflags', '+faststart',
+          '-y', withHookPath
+        ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, cwd: tmpDir });
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`Hook drawtext exit ${code}: ${stderr.slice(-400)}`));
+        });
+        ff.on('error', reject);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Hook drawtext timeout 60s')); }, 60000);
+      });
+      // Remplace outputPath par la version avec hook (pipeline outro continue inchange)
+      fs.renameSync(withHookPath, outputPath);
+      console.log(`[${jobId}] Hook intro 3s applied OK`);
+    }
+
+    // v1.1.15 — #10 Sound design SFX : whoosh transition + ding outro (post-process audio).
+    // Default OFF. Body param sfxEnabled=true requis. Skip whoosh si pas d'intro avatar fullscreen.
+    if (sfxEnabled && fs.existsSync(SFX_WHOOSH) && fs.existsSync(SFX_DING)) {
+      // Re-probe la duree exacte du output (peut differ post hook re-encoding)
+      const curDur = await new Promise((resolve) => {
+        const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', outputPath], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+        let out = '';
+        ff.stdout.on('data', d => { out += d.toString(); });
+        ff.on('close', code => resolve(code === 0 ? (parseFloat(out.trim()) || 30) : 30));
+        ff.on('error', () => resolve(30));
+        setTimeout(() => { try { ff.kill(); } catch(_){} resolve(30); }, 5000);
+      });
+
+      // v1.1.15 — Detect audio stream presence (en prod le mode Pro a toujours audio
+      // depuis avatar + recording, mais skip propre si absent pour robustesse).
+      const hasAudioStream = await new Promise((resolve) => {
+        const ff = spawn('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', outputPath], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+        let out = '';
+        ff.stdout.on('data', d => { out += d.toString(); });
+        ff.on('close', () => resolve(out.trim().length > 0));
+        ff.on('error', () => resolve(false));
+        setTimeout(() => { try { ff.kill(); } catch(_){} resolve(false); }, 3000);
+      });
+      if (!hasAudioStream) {
+        console.log(`[${jobId}] SFX skip: video has no audio stream (no source to mix with)`);
+      } else {
+
+      const introDurEff = avatarIntroFullscreen ? Math.max(1, Math.min(5, parseInt(avatarIntroDuration) || 2)) : 0;
+      const whooshAtMs = introDurEff > 0 ? Math.max(0, Math.round((introDurEff - 0.2) * 1000)) : -1;  // -1 = skip whoosh
+      const dingAtMs = Math.max(0, Math.round((curDur - 0.32) * 1000));
+
+      console.log(`[${jobId}] SFX : curDur=${curDur.toFixed(2)}s, whoosh@${whooshAtMs}ms (skip=${whooshAtMs<0}), ding@${dingAtMs}ms`);
+
+      // Construction filter_complex selon whether whoosh present
+      let fcParts = [];
+      let amixInputs = ['[0:a]'];  // video audio
+      let inputArgs = ['-i', outputPath, '-i', SFX_DING];  // ding always in
+      let dingInputIdx = 1;
+      if (whooshAtMs >= 0) {
+        inputArgs.push('-i', SFX_WHOOSH);
+        const whooshInputIdx = 2;
+        fcParts.push(`[${whooshInputIdx}:a]adelay=${whooshAtMs}|${whooshAtMs},volume=0.45[w]`);
+        amixInputs.push('[w]');
+      }
+      fcParts.push(`[${dingInputIdx}:a]adelay=${dingAtMs}|${dingAtMs},volume=0.55[d]`);
+      amixInputs.push('[d]');
+      fcParts.push(`${amixInputs.join('')}amix=inputs=${amixInputs.length}:normalize=0:duration=first[aout]`);
+      const fcSfx = fcParts.join(';');
+
+      const withSfxPath = path.join(tmpDir, 'with_sfx.mp4');
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', [
+          ...inputArgs,
+          '-filter_complex', fcSfx,
+          '-map', '0:v', '-map', '[aout]',
+          '-c:v', 'copy',  // video inchangee (audio only modif)
+          '-c:a', 'aac', '-b:a', '128k',
+          '-movflags', '+faststart',
+          '-y', withSfxPath
+        ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, cwd: tmpDir });
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`SFX mix exit ${code}: ${stderr.slice(-400)}`));
+        });
+        ff.on('error', reject);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('SFX mix timeout 60s')); }, 60000);
+      });
+      fs.renameSync(withSfxPath, outputPath);
+      console.log(`[${jobId}] SFX applied OK`);
+      }  // end else (hasAudioStream)
+    } else if (sfxEnabled) {
+      console.log(`[${jobId}] WARN sfxEnabled but SFX files missing (whoosh.wav OR ding.wav)`);
+    }
+
+    // v1.1.17 — #19 Loop Hook <=5s : boomerang forward+reverse pour boucle parfaite TikTok.
+    // Trim video à 2.5s max + concat avec reverse = 5s total avec last frame = first frame.
+    // Audio : original 2.5s répété 2× (au lieu de reverse audio bizarre).
+    if (loopHookEnabled) {
+      console.log(`[${jobId}] Loop Hook <=5s : applying boomerang (trim 2.5s + reverse concat)...`);
+      const loopFilter = (
+        '[0:v]trim=0:2.5,setpts=PTS-STARTPTS,split=2[vf][vr_src];' +
+        '[vr_src]reverse,setpts=PTS-STARTPTS[vr];' +
+        '[vf][vr]concat=n=2:v=1:a=0[outv];' +
+        '[0:a]atrim=0:2.5,asetpts=PTS-STARTPTS,asplit=2[af][af2];' +
+        '[af][af2]concat=n=2:v=0:a=1[outa]'
+      );
+      const withLoopPath = path.join(tmpDir, 'with_loop.mp4');
+      // Check audio presence first (skip audio chain si absent)
+      const loopHasAudio = await new Promise((resolve) => {
+        const ff = spawn('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', outputPath], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+        let out = '';
+        ff.stdout.on('data', d => { out += d.toString(); });
+        ff.on('close', () => resolve(out.trim().length > 0));
+        ff.on('error', () => resolve(false));
+        setTimeout(() => { try { ff.kill(); } catch(_){} resolve(false); }, 3000);
+      });
+      const loopFilterFinal = loopHasAudio ? loopFilter : (
+        '[0:v]trim=0:2.5,setpts=PTS-STARTPTS,split=2[vf][vr_src];' +
+        '[vr_src]reverse,setpts=PTS-STARTPTS[vr];' +
+        '[vf][vr]concat=n=2:v=1:a=0[outv]'
+      );
+      const loopMaps = loopHasAudio ? ['-map', '[outv]', '-map', '[outa]'] : ['-map', '[outv]'];
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', [
+          '-i', outputPath,
+          '-filter_complex', loopFilterFinal,
+          ...loopMaps,
+          ...ENCODER_FAST, '-pix_fmt', 'yuv420p',
+          ...(loopHasAudio ? ['-c:a', 'aac', '-b:a', '128k'] : []),
+          '-movflags', '+faststart',
+          '-y', withLoopPath
+        ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, cwd: tmpDir });
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`Loop boomerang exit ${code}: ${stderr.slice(-400)}`));
+        });
+        ff.on('error', reject);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Loop boomerang timeout 90s')); }, 90000);
+      });
+      fs.renameSync(withLoopPath, outputPath);
+      console.log(`[${jobId}] Loop Hook boomerang applied OK (5s total, has_audio=${loopHasAudio})`);
+    }
+
+    // v1.1.16 — #13 LUT brand DictoKey : color grading subtle vers palette brand
+    // (violet #7C3AED + dark #0F0F13). Approche pragmatique sans .cube : eq + colorbalance ffmpeg.
+    // Effet : boost bleu+rouge midtones/highlights, dark shadows, saturation +10%. Non destructif.
+    if (lutBrandEnabled) {
+      console.log(`[${jobId}] LUT brand DictoKey : applying color grading...`);
+      // eq=contrast=1.05 : très subtil boost contraste
+      // eq=saturation=1.08 : très subtil boost saturation (couleurs plus vives sans cartoon)
+      // colorbalance=rs=0.04:bs=0.10 : shadows shift rouge+bleu (= violet) léger
+      // colorbalance=rm=0.02:bm=0.06 : midtones shift rouge+bleu plus léger encore
+      // gamma_b=1.08 : boost bleu global (= ambiance dark+violet)
+      const lutFilter = 'eq=contrast=1.05:saturation=1.08:gamma_b=1.08,colorbalance=rs=0.04:bs=0.10:rm=0.02:bm=0.06';
+      const withLutPath = path.join(tmpDir, 'with_lut.mp4');
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', [
+          '-i', outputPath,
+          '-vf', lutFilter,
+          ...ENCODER_FAST, '-pix_fmt', 'yuv420p',
+          '-c:a', 'copy',
+          '-movflags', '+faststart',
+          '-y', withLutPath
+        ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, cwd: tmpDir });
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`LUT brand exit ${code}: ${stderr.slice(-400)}`));
+        });
+        ff.on('error', reject);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('LUT brand timeout 60s')); }, 60000);
+      });
+      fs.renameSync(withLutPath, outputPath);
+      console.log(`[${jobId}] LUT brand applied OK`);
+    }
+
+    // v1.1.26 — #14 Ken Burns POST-PROCESS : zoom-in CENTRE 1.00 -> 1.04 progressif sur
+    // toute la duree finale. Subtile = sujet reste centre, juste un effet cinema vivant
+    // (evite l'aspect "video figee 9:16"). En post-process pour fiabilite zoompan + simplicite.
+    // Toggle kenBurnsEnabled, default OFF.
+    if (kenBurnsEnabled) {
+      console.log(`[${jobId}] Ken Burns subtle 1.00 -> 1.06 : applying centered zoom-in...`);
+      // Probe duree actuelle pour calculer increment par frame
+      const kbDur = await new Promise((resolve) => {
+        const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', outputPath], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+        let out = '';
+        ff.stdout.on('data', d => { out += d.toString(); });
+        ff.on('close', () => resolve(parseFloat(out.trim()) || 0));
+        ff.on('error', () => resolve(0));
+        setTimeout(() => { try { ff.kill(); } catch(_){} resolve(0); }, 5000);
+      });
+      if (kbDur < 1.5) {
+        console.log(`[${jobId}] Ken Burns SKIP : duree ${kbDur.toFixed(1)}s < 1.5s (eviter zoom abrupt)`);
+      } else {
+        const totalFrames = Math.max(45, Math.round(kbDur * 30));
+        const inc = (0.06 / totalFrames).toFixed(7);
+        // zoompan en -vf simple (1 input, fiable) ; centre strict via x/y
+        const kbFilter = `zoompan=z='min(zoom+${inc}\\,1.06)':d=1:fps=30:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${outWidth}x${outHeight}`;
+        const withKbPath = path.join(tmpDir, 'with_kenburns.mp4');
+        await new Promise((resolve, reject) => {
+          const ff = spawn('ffmpeg', [
+            '-i', outputPath,
+            '-vf', kbFilter,
+            ...ENCODER_FAST, '-pix_fmt', 'yuv420p',
+            '-c:a', 'copy',
+            '-movflags', '+faststart',
+            '-y', withKbPath
+          ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, cwd: tmpDir });
+          let stderr = '';
+          ff.stderr.on('data', d => { stderr += d.toString(); });
+          ff.on('close', code => {
+            if (code === 0) resolve();
+            else reject(new Error(`Ken Burns exit ${code}: ${stderr.slice(-400)}`));
+          });
+          ff.on('error', reject);
+          setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Ken Burns timeout 90s')); }, 90000);
+        });
+        fs.renameSync(withKbPath, outputPath);
+        console.log(`[${jobId}] Ken Burns applied OK (${totalFrames} frames, inc=${inc})`);
+      }
+    }
+
+    // v1.1.26 — #14 Vignette douce : assombrissement subtil des coins (cinema-like).
+    // angle=PI/5 = 36deg = vignette douce ; eval=init = calcul une fois (perf).
+    // mode=forward = darkening (default). Toggle vignetteEnabled, default OFF.
+    if (vignetteEnabled) {
+      console.log(`[${jobId}] Vignette douce : applying soft corner darkening...`);
+      const vignFilter = 'vignette=angle=PI/5:mode=forward:eval=init';
+      const withVignPath = path.join(tmpDir, 'with_vignette.mp4');
+      await new Promise((resolve, reject) => {
+        const ff = spawn('ffmpeg', [
+          '-i', outputPath,
+          '-vf', vignFilter,
+          ...ENCODER_FAST, '-pix_fmt', 'yuv420p',
+          '-c:a', 'copy',
+          '-movflags', '+faststart',
+          '-y', withVignPath
+        ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, cwd: tmpDir });
+        let stderr = '';
+        ff.stderr.on('data', d => { stderr += d.toString(); });
+        ff.on('close', code => {
+          if (code === 0) resolve();
+          else reject(new Error(`Vignette exit ${code}: ${stderr.slice(-400)}`));
+        });
+        ff.on('error', reject);
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('Vignette timeout 60s')); }, 60000);
+      });
+      fs.renameSync(withVignPath, outputPath);
+      console.log(`[${jobId}] Vignette applied OK`);
+    }
+
     // Outro image assembly (optional)
     if (outroClip) {
       const XFADE_DUR = 0.3;
       const clips = [];
 
       const actualMainDur = await new Promise((resolve) => {
-        const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', outputPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+        const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', outputPath], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
         let out = '';
         ff.stdout.on('data', d => { out += d.toString(); });
         ff.on('close', code => {
@@ -867,9 +1620,9 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
           const ff = spawn('ffmpeg', [
             '-loop', '1', '-i', outroImgPath,
             '-vf', `scale=${outWidth}:${outHeight}:force_original_aspect_ratio=decrease,pad=${outWidth}:${outHeight}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13,setsar=1,zoompan=z=1:d=${oDur * 15}:x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':s=${outWidth}x${outHeight}:fps=15`,
-            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p',
+            ...ENCODER_FAST, '-pix_fmt', 'yuv420p',
             '-t', String(oDur), '-y', outroVidPath
-          ], { stdio: ['ignore', 'pipe', 'pipe'] });
+          ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
           let stderr = '';
           ff.stderr.on('data', d => { stderr += d.toString(); });
           ff.on('close', code => code === 0 ? resolve() : reject(new Error('Outro clip: ' + stderr.slice(-200))));
@@ -907,10 +1660,10 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
             ...xInputs,
             '-filter_complex', fullFilter,
             '-map', '[outv]', '-map', `${mainIdx}:a?`,
-            '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+            ...ENCODER_FINAL,
             '-c:a', 'aac', '-b:a', '128k', '-pix_fmt', 'yuv420p',
             '-movflags', '+faststart', '-y', finalPath
-          ], { stdio: ['ignore', 'pipe', 'pipe'] });
+          ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
           let stderr = '';
           ff.stderr.on('data', d => { stderr += d.toString(); });
           ff.on('close', code => code === 0 ? resolve() : reject(new Error('Xfade Pro: ' + stderr.slice(-300))));
@@ -919,6 +1672,84 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
         });
         fs.renameSync(finalPath, outputPath);
         console.log(`[${jobId}] Intro/Outro xfade OK`);
+      }
+    }
+
+    // v1.1.12 — Jump cuts auto silences (Kimi #1 vote 17/05 : rétention TikTok #1 facteur 2026).
+    // Post-process : silencedetect sur l'audio → liste segments à garder → trim+concat.
+    // Le subs ASS est déjà burned dans outputPath donc reste sync avec l'audio raccourci.
+    if (jumpCutsEnabled) {
+      console.log(`[${jobId}] Jump cuts auto silences : analyse audio...`);
+      const SILENCE_THRESHOLD_DB = -30;
+      const SILENCE_MIN_DURATION = 0.4;
+      // 1. silencedetect (parse stderr)
+      const silences = await new Promise((resolve) => {
+        const ff = spawn('ffmpeg', ['-i', outputPath, '-af',
+          `silencedetect=noise=${SILENCE_THRESHOLD_DB}dB:d=${SILENCE_MIN_DURATION}`,
+          '-f', 'null', '-'], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+        let stderr = '';
+        ff.stderr.on('data', d => stderr += d.toString());
+        ff.on('close', () => {
+          const out = [];
+          const startRe = /silence_start:\s*([\d.]+)/g;
+          const endRe = /silence_end:\s*([\d.]+)/g;
+          const starts = [...stderr.matchAll(startRe)].map(m => parseFloat(m[1]));
+          const ends = [...stderr.matchAll(endRe)].map(m => parseFloat(m[1]));
+          for (let i = 0; i < starts.length; i++) {
+            out.push({ start: starts[i], end: ends[i] != null ? ends[i] : starts[i] + SILENCE_MIN_DURATION });
+          }
+          resolve(out);
+        });
+        ff.on('error', () => resolve([]));
+        setTimeout(() => { try { ff.kill(); } catch(_){} resolve([]); }, 60000);
+      });
+      console.log(`[${jobId}] Silences détectés : ${silences.length}`);
+      if (silences.length > 0) {
+        // 2. Build segments à garder (inverser les silences)
+        // ffprobe duration totale
+        const totalDur = await new Promise((resolve) => {
+          const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', outputPath], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+          let out = ''; ff.stdout.on('data', d => out += d.toString());
+          ff.on('close', () => resolve(parseFloat(out.trim()) || 0));
+          ff.on('error', () => resolve(0));
+          setTimeout(() => { try { ff.kill(); } catch(_){} resolve(0); }, 5000);
+        });
+        // Marges de 0.05s autour des silences pour ne pas couper net
+        const MARGIN = 0.05;
+        const keepSegs = [];
+        let cursor = 0;
+        for (const s of silences) {
+          const segStart = cursor;
+          const segEnd = Math.max(cursor, s.start - MARGIN);
+          if (segEnd - segStart > 0.05) keepSegs.push([segStart, segEnd]);
+          cursor = s.end + MARGIN;
+        }
+        if (totalDur > cursor + 0.05) keepSegs.push([cursor, totalDur]);
+        if (keepSegs.length > 0) {
+          // Build select/aselect expressions
+          const selectExpr = keepSegs.map(([a, b]) => `between(t,${a.toFixed(3)},${b.toFixed(3)})`).join('+');
+          const cutPath = path.join(tmpDir, 'jumpcut.mp4');
+          await new Promise((resolve, reject) => {
+            const ff = spawn('ffmpeg', ['-i', outputPath,
+              '-vf', `select='${selectExpr}',setpts=N/FRAME_RATE/TB`,
+              '-af', `aselect='${selectExpr}',asetpts=N/SR/TB`,
+              ...ENCODER_FINAL,
+              '-c:a', 'aac', '-b:a', '128k',
+              '-pix_fmt', 'yuv420p',
+              '-movflags', '+faststart',
+              '-y', cutPath
+            ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+            let stderr = '';
+            ff.stderr.on('data', d => stderr += d.toString());
+            ff.on('close', code => code === 0 ? resolve() : reject(new Error(`JumpCut exit ${code}: ${stderr.slice(-300)}`)));
+            ff.on('error', reject);
+            setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('JumpCut timeout 120s')); }, 120000);
+          });
+          const cutStat = fs.statSync(cutPath);
+          const savedSec = (totalDur - keepSegs.reduce((a, [s, e]) => a + (e - s), 0)).toFixed(2);
+          console.log(`[${jobId}] Jump cuts OK : ${keepSegs.length} segments gardés, ${savedSec}s économisés`);
+          fs.renameSync(cutPath, outputPath);
+        }
       }
     }
 
@@ -946,6 +1777,167 @@ app.post('/promo-assembly-pro', jsonLarge, requireAnySecret, async (req, res) =>
     if (!res.headersSent) {
       res.status(500).json({ error: err.message });
     }
+  } finally {
+    if (jobCounted) {
+      activeJobs--;
+      resetIdleTimer();
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /promo-assembly-split — Split-Screen Frustration (killer feature DictoKey)
+// v1.1.7 — vote 3-LLM 16/05 (Kimi #1) : démontre la valeur produit en un visuel viral.
+// Vstack vertical : top = capture saisie manuelle slow, bottom = capture dictée DictoKey.
+// Labels "AVANT — Manuel" / "APRÈS — DictoKey" + voiceover live commentary + subs.
+// ---------------------------------------------------------------------------
+app.post('/promo-assembly-split', jsonLarge, requireAnySecret, async (req, res) => {
+  const jobId = `pas-${Date.now().toString(36)}`;
+  console.log(`[${jobId}] /promo-assembly-split start`);
+
+  if (activeJobs >= MAX_CONCURRENT_JOBS) {
+    return res.status(503).json({ error: 'Server busy, try again later' });
+  }
+
+  const {
+    videoLeft, videoLeftMime, videoRight, videoRightMime,
+    audio, subtitles,
+    leftLabel, rightLabel,
+    width = 1080, height = 1920,
+  } = req.body;
+
+  if (!videoLeft || !videoRight) {
+    return res.status(400).json({ error: 'videoLeft and videoRight (base64) both required' });
+  }
+
+  const tmpDir = path.join(os.tmpdir(), jobId);
+  let jobCounted = false;
+  try {
+    fs.mkdirSync(tmpDir, { recursive: true });
+    activeJobs++;
+    jobCounted = true;
+    resetIdleTimer();
+
+    // 1. Write inputs
+    const extL = (videoLeftMime || '').includes('webm') ? 'webm' : 'mp4';
+    const extR = (videoRightMime || '').includes('webm') ? 'webm' : 'mp4';
+    const leftPath = path.join(tmpDir, `left.${extL}`);
+    const rightPath = path.join(tmpDir, `right.${extR}`);
+    fs.writeFileSync(leftPath, Buffer.from(videoLeft, 'base64'));
+    fs.writeFileSync(rightPath, Buffer.from(videoRight, 'base64'));
+    console.log(`[${jobId}] Inputs: left=${(fs.statSync(leftPath).size / 1048576).toFixed(1)}MB right=${(fs.statSync(rightPath).size / 1048576).toFixed(1)}MB`);
+
+    // Audio (voiceover) optional
+    let audioPath = null;
+    if (audio) {
+      audioPath = path.join(tmpDir, 'voice.mp3');
+      fs.writeFileSync(audioPath, Buffer.from(audio, 'base64'));
+    }
+
+    // Subtitles
+    let subPath = null;
+    let subPathFF = null;
+    if (subtitles) {
+      subPath = path.join(tmpDir, 'subs.ass');
+      subPathFF = 'subs.ass';
+      fs.writeFileSync(subPath, subtitles, 'utf8');
+    }
+
+    // 2. Probe durations
+    const probeDur = (p) => new Promise((resolve) => {
+      const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', p], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+      let out = '';
+      ff.stdout.on('data', d => out += d.toString());
+      ff.on('close', code => resolve(code === 0 ? (parseFloat(out.trim()) || 0) : 0));
+      ff.on('error', () => resolve(0));
+      setTimeout(() => { try { ff.kill(); } catch(_){} resolve(0); }, 5000);
+    });
+    const [leftDur, rightDur] = await Promise.all([probeDur(leftPath), probeDur(rightPath)]);
+    const totalDur = Math.min(60, Math.max(leftDur, rightDur) || 14);
+    console.log(`[${jobId}] Durations: left=${leftDur.toFixed(2)}s right=${rightDur.toFixed(2)}s -> total=${totalDur.toFixed(2)}s`);
+
+    // 3. Build filter complex : vstack top/bottom + labels + subs
+    const halfH = Math.floor(height / 2);
+    // Escape labels for drawtext (single quotes + colons need backslash)
+    const escDt = (s) => (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/:/g, '\\:');
+    const lLabel = escDt(leftLabel || 'AVANT — Manuel');
+    const rLabel = escDt(rightLabel || 'APRÈS — DictoKey');
+
+    // Each input : scale+pad to width x halfH, then drawtext label top-left
+    // tpad to make sure each stream lasts totalDur (loop last frame if shorter)
+    const leftFilter = [
+      `[0:v]scale=${width}:${halfH}:force_original_aspect_ratio=decrease`,
+      `pad=${width}:${halfH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13`,
+      `setsar=1,fps=30`,
+      `tpad=stop_mode=clone:stop_duration=${Math.max(0, totalDur - leftDur).toFixed(2)}`,
+      `drawtext=text='${lLabel}':fontsize=42:fontcolor=white:fontfile='/Windows/Fonts/arialbd.ttf':box=1:boxcolor=#EF4444@0.85:boxborderw=10:x=20:y=20`
+    ].join(',') + '[top]';
+
+    const rightFilter = [
+      `[1:v]scale=${width}:${halfH}:force_original_aspect_ratio=decrease`,
+      `pad=${width}:${halfH}:(ow-iw)/2:(oh-ih)/2:color=0x0F0F13`,
+      `setsar=1,fps=30`,
+      `tpad=stop_mode=clone:stop_duration=${Math.max(0, totalDur - rightDur).toFixed(2)}`,
+      `drawtext=text='${rLabel}':fontsize=42:fontcolor=white:fontfile='/Windows/Fonts/arialbd.ttf':box=1:boxcolor=#14B8A6@0.85:boxborderw=10:x=20:y=20`
+    ].join(',') + '[bot]';
+
+    // Vstack + draw separator + subs overlay
+    const vstack = `[top][bot]vstack=inputs=2[stacked]`;
+    // Separator : 4px teal line at y=halfH
+    const sep = `[stacked]drawbox=y=${halfH - 2}:w=${width}:h=4:color=#14B8A6@0.9:t=fill[outv]`;
+    const subFilter = subPathFF ? `;[outv]ass=${subPathFF}[final]` : '';
+    const mapVideo = subFilter ? '[final]' : '[outv]';
+
+    const filterComplex = [leftFilter, rightFilter, vstack, sep].join(';') + subFilter;
+
+    // 4. ffmpeg command : 2 video inputs + optional audio + filter graph
+    const outputPath = path.join(tmpDir, 'output.mp4');
+    const ffArgs = ['-i', leftPath, '-i', rightPath];
+    if (audioPath) ffArgs.push('-i', audioPath);
+    ffArgs.push(
+      '-filter_complex', filterComplex,
+      '-map', mapVideo,
+    );
+    if (audioPath) {
+      ffArgs.push('-map', '2:a');
+    }
+    ffArgs.push(
+      ...ENCODER_FINAL,
+      '-c:a', 'aac', '-b:a', '128k',
+      '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart',
+      '-t', String(totalDur),
+      '-y', outputPath
+    );
+
+    console.log(`[${jobId}] FFmpeg split start...`);
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', ffArgs, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, cwd: tmpDir });
+      let stderr = '';
+      ff.stderr.on('data', d => stderr += d.toString());
+      ff.on('close', code => code === 0 ? resolve() : reject(new Error(`split exit ${code}: ${stderr.slice(-500)}`)));
+      ff.on('error', reject);
+      setTimeout(() => { try { ff.kill('SIGKILL'); } catch(_){} reject(new Error('split timeout 120s')); }, 120000);
+    });
+
+    // 5. Stream output
+    const stat = fs.statSync(outputPath);
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader('X-Job-Id', jobId);
+    const stream = fs.createReadStream(outputPath);
+    stream.pipe(res);
+    stream.on('end', () => {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+      console.log(`[${jobId}] DONE ${(stat.size / 1048576).toFixed(1)}MB`);
+    });
+    stream.on('error', () => {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    });
+  } catch (e) {
+    console.error(`[${jobId}] ERR:`, e.message);
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    if (!res.headersSent) res.status(500).json({ error: e.message });
   } finally {
     if (jobCounted) {
       activeJobs--;

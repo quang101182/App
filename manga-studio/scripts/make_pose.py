@@ -56,6 +56,50 @@ CORPS = {
     16: (-0.048, 0.070), 17: (0.048, 0.070),                        # oreilles
 }
 
+# Corps AGENOUILLE, meme convention : y de 0 (crane) a 1 (genou pose au sol).
+# Ajoute le 27/07 apres une mesure sans appel : demande en TEXTE (« the man kneels
+# at her feet »), le modele produit la femme debout et OUBLIE l'homme -- 0/3. Ce
+# qui casse une scene de domination n'est pas l'anatomie, c'est le rapport de
+# force, et un rapport de force est une GEOMETRIE : qui est haut, qui est bas.
+# Un squelette le dit sans ambiguite la ou une phrase echoue.
+CORPS_GENOUX = {
+    0:  (0.000, 0.100),   # nez
+    1:  (0.000, 0.210),   # cou
+    2:  (-0.100, 0.230), 3: (-0.150, 0.420), 4: (-0.160, 0.600),   # bras droit
+    5:  (0.100, 0.230),  6: (0.150, 0.420),  7: (0.160, 0.600),    # bras gauche
+    # Cuisse VERTICALE (hanche au-dessus du genou) puis tibia HORIZONTAL vers
+    # l'arriere, cheville au sol a la meme hauteur que le genou. Premiere version
+    # ratee : la cheville etait a peine decalee, et le squelette ressemblait a un
+    # petit personnage DEBOUT -- ce que le ControlNet aurait fidelement reproduit.
+    8:  (-0.070, 0.680), 9: (-0.075, 1.000), 10: (-0.300, 1.005),  # jambe D repliee
+    11: (0.070, 0.680), 12: (0.075, 1.000), 13: (0.290, 1.005),    # jambe G repliee
+    14: (-0.028, 0.085), 15: (0.028, 0.085),
+    16: (-0.060, 0.095), 17: (0.060, 0.095),
+}
+
+# Une SCENE a deux corps. Chaque acteur : (corps, x_centre, y_haut, y_bas) en
+# fractions de la toile. La hauteur occupee EST le rapport de force : celle qui
+# domine tient toute la hauteur, celui qui est soumis en occupe la moitie basse.
+SCENES_DUO = {
+    "femdom_debout_genoux": [
+        (CORPS, 0.63, 0.030, 0.985),   # elle, debout, pleine hauteur
+        (CORPS_GENOUX, 0.28, 0.420, 0.985),   # lui, a genoux (~0,6x sa taille debout)
+    ],
+    "femdom_contre_plongee": [
+        # Meme rapport, cadre plus serre : elle deborde par le haut (contre-plongee),
+        # il occupe le tiers bas. Le hors-champ fait partie de la mise en scene.
+        (CORPS, 0.58, -0.120, 0.900),
+        (CORPS_GENOUX, 0.28, 0.560, 0.985),
+    ],
+    "duo_debout": [
+        # Temoin : deux corps debout, aucun rapport de force. Sert a distinguer
+        # « le ControlNet fait apparaitre 2 personnes » de « il impose une posture ».
+        (CORPS, 0.34, 0.040, 0.985),
+        (CORPS, 0.66, 0.040, 0.985),
+    ],
+}
+
+
 # Un cadrage, c'est : quelle PART du corps est visible, et quelle hauteur elle
 # occupe dans la toile. Rien d'autre.
 CADRAGES = {
@@ -77,6 +121,38 @@ def squelette(y_haut, y_bas, marge=0.04, decal_x=0.0):
         py = (marge + (y - y_haut) * ech) * H
         pts[i] = (px, py)
     return pts
+
+
+def placer(corps, cx, y_haut, y_bas):
+    """Place un corps ENTIER entre deux hauteurs de la toile, centre sur cx.
+
+    Contrairement a squelette(), qui recadre sur une PORTION du corps, ici on
+    pose un personnage complet a une place et une taille voulues : c'est ce qu'il
+    faut pour composer une scene a plusieurs acteurs.
+    """
+    ech = (y_bas - y_haut)
+    pts = {}
+    for i, (x, y) in corps.items():
+        pts[i] = ((cx + x * ech * (H / float(W))) * W, (y_haut + y * ech) * H)
+    return pts
+
+
+def dessine_pts(groupes):
+    """Dessine un ou plusieurs squelettes sur la MEME toile."""
+    from PIL import Image, ImageDraw
+    im = Image.new("RGB", (W, H), (0, 0, 0))
+    d = ImageDraw.Draw(im)
+    ep = max(4, int(H * 0.010))
+    r = max(4, int(H * 0.007))
+    for pts in groupes:
+        visible = {i for i, (x, y) in pts.items() if -20 <= y <= H + 20}
+        for (a, b), col in zip(LIMBS, LIMB_COL):
+            if a in visible and b in visible:
+                d.line([pts[a], pts[b]], fill=col, width=ep)
+        for i in sorted(visible):
+            x, y = pts[i]
+            d.ellipse([x - r, y - r, x + r, y + r], fill=PT_COL[i])
+    return im
 
 
 def dessine(pts, y_bas):
@@ -109,6 +185,13 @@ def main():
         im.save(p)
         faits.append(p)
         print("  %-11s -> %s" % (nom, os.path.basename(p)))
+    for nom, acteurs in SCENES_DUO.items():
+        im = dessine_pts([placer(c, cx, yh, yb) for c, cx, yh, yb in acteurs])
+        p = os.path.join(OUT, "duo_%s.png" % nom)
+        im.save(p)
+        faits.append(p)
+        print("  %-22s -> %s (%d acteurs)"
+              % (nom, os.path.basename(p), len(acteurs)))
     if a.show:
         from PIL import Image
         n = len(faits)
