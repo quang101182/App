@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.42.0</title>
+<title>Manga Studio v1.43.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -325,7 +325,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.42.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.43.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -752,7 +752,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.42.0";
+const VERSION = "1.43.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -2016,6 +2016,9 @@ function panelHTML(p, i){
        + '<button class="btn sm" data-act="repliques" '
        + 'title="Propose des répliques d\'après les cases précédentes et qui est là">💬 Répliques</button>'
        // Reparer 10 % d'une case sans perdre les 90 % qui vont bien.
+       + (p.file ? '<button class="btn sm" data-act="critique" '
+           + 'title="Un modèle qui REGARDE l\'image dit ce qui ne colle pas à ta demande">'
+           + '🔎 Qu\'est-ce qui cloche ?</button>' : "")
        + (p.file ? '<button class="btn sm' + (S.zone === p.id ? " on" : "")
            + '" data-act="zone" title="Redessiner UNE zone de la case, sans toucher au reste">⬚ Zone'
            + (p.zone ? " ✓" : "") + '</button>' : "")
@@ -2239,7 +2242,11 @@ async function genMaster(){
   finally { $("btnMaster").disabled = false; }
 }
 
-async function genPanel(p){
+/** @param positifForce  positif COMPLET impose (correction de la critique
+ *  vision). Il remplace `promptFinal` tel quel : le modele renvoie le prompt
+ *  entier corrige, pas seulement l'action, donc le repasser dans le champ de la
+ *  case ferait doublonner le style et l'identite. */
+async function genPanel(p, positifForce){
   const r = recipe();
   const card = document.querySelector('[data-pid="' + p.id + '"]');
   if (card){
@@ -2303,7 +2310,7 @@ async function genPanel(p){
   // `positive` etait fige avant que la traduction ne s'execute. La traduction ne
   // prenait donc effet qu'a la generation SUIVANTE, ce qui est le pire des cas :
   // ca marche « une fois sur deux » sans que rien ne l'explique.
-  const positive = promptFinal(p);
+  const positive = (positifForce && positifForce.trim()) || promptFinal(p);
 
   refus(p, "");
   panelBusy(p.id, ambiance ? "ambiance…" : "dialogue…");
@@ -4266,6 +4273,21 @@ $("plate").addEventListener("click", async e => {
     }
     return;
   }
+  // La correction proposee par la critique vision : on regenere AVEC, sans
+  // toucher au texte de la case. Le modele renvoie le positif COMPLET corrige
+  // (« un petit diff »), pas une action -- l'ecrire dans le champ ferait
+  // doublonner le style et l'identite a la generation suivante.
+  const fix = e.target.closest("[data-critfix]");
+  if (fix){
+    const c = e.target.closest("[data-pid]");
+    const pp = S.panels.find(x => x.id === c.dataset.pid);
+    const zone = c.querySelector("[data-idees]");
+    if (zone) zone.hidden = true;
+    if (pp) return genPanel(pp, fix.dataset.critfix).catch(err => {
+      log("regénération corrigée : " + err.message, "e"); toast("échec");
+    });
+    return;
+  }
   // Une replique cliquee AJOUTE une bulle. Elle n'ecrase JAMAIS un texte
   // existant : une replique ecrite a la main qui disparait, c'est la perte qu'on
   // ne pardonne pas a un outil de creation. Et on bascule en lettrage dans la
@@ -4458,6 +4480,61 @@ $("plate").addEventListener("click", async e => {
     }, "Répliques proposées").catch(e => {
       log("répliques : " + e.message, "e");
       refus(p, "Impossible de proposer des répliques : " + e.message);
+    });
+  }
+
+  /* ---- 🔎 QU'EST-CE QUI CLOCHE ? (v1.43.0) ----
+     Quang, 27/07 : « un bouton qui analyse et ameliore, avec potentiellement un
+     score et la possibilite de relancer une generation ».
+
+     Ma reserve, ecrite dans la ROADMAP avant de coder, portait sur le SCORE :
+     celui de Generate Studio note le PROMPT (`ImageScorer`), pas l'image -- il
+     mettrait une bonne note a une case aux mains ratees, et un chiffre
+     decoratif fait plus de mal que pas de chiffre.
+
+     Le proxy expose autre chose, et ca change tout : `/critique` envoie l'image
+     a Pixtral, qui la REGARDE. Le score porte donc sur du reel. Mais il faut
+     dire lequel : il mesure la CONFORMITE a ce qui a ete demande (sujet, compte,
+     attributs, action), PAS la qualite du dessin. Une case peut etre conforme a
+     95 % et avoir six doigts. C'est ecrit a l'ecran, mot pour mot -- un chiffre
+     dont on ignore ce qu'il mesure est pire qu'un chiffre absent. */
+  if (act === "critique"){
+    if (!p.file) return toast("génère d'abord cette case");
+    const carte = document.querySelector('[data-pid="' + p.id + '"]');
+    const zone = carte.querySelector("[data-idees]");
+    return avecTemoin("Lecture de l'image…", async () => {
+      const blob = await (await fetch(imgURL(p.file), {
+        headers: CFG.key ? { Authorization: "Bearer " + CFG.key } : {} })).blob();
+      const b64 = await new Promise((res, rej) => {
+        const fr = new FileReader();
+        fr.onload = () => res(String(fr.result).split(",")[1]);
+        fr.onerror = () => rej(new Error("image illisible"));
+        fr.readAsDataURL(blob);
+      });
+      // Le prompt REELLEMENT envoye au moteur, pas celui qu'on recalculerait
+      // aujourd'hui : la recette a pu changer depuis la generation.
+      const utilise = (p.recipe && p.recipe.positive) || promptFinal(p);
+      const r = await api("/critique", { image: b64, prompt: utilise, mime: "image/png" });
+      const sc = (typeof r.score === "number") ? r.score : null;
+      const memeProm = !r.prompt || r.prompt.trim() === utilise.trim();
+      zone.innerHTML = '<span class="titre">'
+        + (sc === null ? "Lecture faite" : "Conforme à ta demande à " + sc + " %")
+        + ' <span class="muted">— ce chiffre mesure si l\'image correspond à ce que tu as '
+        + 'demandé, PAS la qualité du dessin.</span></span>'
+        + '<span class="titre">' + (r.issues ? esc(r.issues) : "Rien ne cloche de ce côté-là.")
+        + '</span>'
+        + (memeProm
+           ? '<span class="titre muted">Le modèle ne propose aucune correction de texte. '
+             + 'Pour un défaut de dessin (mains, anatomie), utilise ⬚ Zone.</span>'
+           : '<button data-critfix="' + esc(r.prompt) + '">↻ Regénérer avec : '
+             + esc(r.prompt.slice(0, 110)) + (r.prompt.length > 110 ? "…" : "") + '</button>')
+        + '<button data-seqannule="1">Fermer</button>';
+      zone.hidden = false;
+      log("critique vision : score " + (sc === null ? "?" : sc)
+          + (r.issues ? " — " + r.issues : ""), "s");
+    }, "Image relue").catch(e => {
+      log("critique : " + e.message, "e");
+      refus(p, "La relecture a échoué : " + e.message);
     });
   }
 
