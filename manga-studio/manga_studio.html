@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.48.0</title>
+<title>Manga Studio v1.49.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -248,6 +248,14 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .grpbar .grow{flex:1 1 auto}
 .grpbar.seul{border:1px solid var(--line);border-radius:8px;padding:6px 8px;
   margin-bottom:6px;grid-column:1/-1}
+.panel .quila{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin:2px 0 6px}
+.panel .quila .muted{font-size:11px}
+.pers{font:inherit;font-size:11px;padding:3px 9px;border-radius:99px;cursor:pointer;
+  background:var(--panel2);border:1px solid var(--line);color:var(--dim)}
+/* Un personnage ACTIF sur la case se voit d'un coup d'oeil : c'est la seule
+   information qui compte quand on relit une planche. */
+.pers.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.pers.plus{border-style:dashed}
 .panel .affiner{margin-top:8px;padding:9px;border-radius:8px;background:var(--panel2);
   border:1px solid var(--line);border-left:3px solid var(--accent)}
 .panel .idees{display:flex;flex-direction:column;gap:5px;margin:0 0 4px}
@@ -325,7 +333,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.48.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.49.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -796,7 +804,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.48.0";
+const VERSION = "1.49.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1014,6 +1022,7 @@ const DEFAULT_RECIPE = {
 const S = { projects: [], pages: [], panels: [], proj: null, page: null, busy: 0,
             zone: null,        // id de la case dont on trace la zone (une seule a la fois)
             affiner: null,     // id de la case dont le panneau ⚙ Affiner est deplie
+            quiLa: null,       // id de la case dont la liste « Qui est la » est depliee
             vueSeq: {},        // gid -> quelle vignette de la sequence est montree
             deplie: {},        // gid -> la sequence est-elle etalee en cases separees
             lettering: null,   // id de la case en cours de lettrage (une seule a la fois)
@@ -2051,6 +2060,33 @@ function panelHTML(p, i){
    + esc(p.prompt) + '</textarea>'
    + '<div class="idees" data-idees hidden></div>'
    + '<p class="apercu" data-apercu></p>'
+   /* ---- QUI EST LA (v1.49.0) : le choix se fait DANS la case ----
+      Une ligne de pastilles, pas des boutons d'action : la rangee du bas reste
+      a 6. Toucher un nom l'active pour CETTE case, et l'inscrit au manga s'il
+      n'y etait pas -- « le premier entre tout seul », sans passer par un
+      ecran de declaration. */
+   + (CHARS.length
+      ? (function(){
+          const ici = castingCase(p);
+          const troupe = troupeProjet();
+          const vus = CHARS.filter(c => troupe.includes(c.id) || ici.includes(c.id));
+          const reste = CHARS.filter(c => !vus.includes(c));
+          const ouvert = S.quiLa === p.id;
+          return '<div class="quila"><span class="muted">Qui est là :</span>'
+            + (vus.concat(ouvert ? reste : []).map(c =>
+                '<button class="pers' + (ici.includes(c.id) ? " on" : "") + '" '
+                + 'data-quila="' + p.id + '" data-ch="' + c.id + '">'
+                + esc(c.name || c.id) + '</button>').join("")
+               || '<span class="muted" style="font-size:11px">aucune fiche — '
+                  + 'onglet Personnages</span>')
+            + (reste.length && !ouvert
+               ? '<button class="pers plus" data-quilaplus="' + p.id + '">+ '
+                 + reste.length + '</button>' : "")
+            + (ici.length ? "" : '<span class="muted" style="font-size:11px">'
+                                 + 'personne → dessin libre</span>')
+            + '</div>';
+        })()
+      : "")
    /* ---- LA RANGEE : ce qu'on fait MAINTENANT, et rien d'autre ----
       Quang, 27/07 : « on empile beaucoup de choses au fur et a mesure, et on
       peut vite perdre l'ergonomie de l'application ». Compte avant refonte :
@@ -3824,10 +3860,30 @@ function renderCasting(){
 
 /** Les tags a injecter pour une case : le casting de la planche, moins ce que la
  *  case retire. Deux personnages = leurs deux jeux de tags, dans l'ordre. */
-function tagsCasting(p){
+/** Qui est dans CETTE case.
+ *
+ *  Quang, 27/07, trois fois : « j'ai du mal a comprendre la fonction d'ajouter
+ *  des personnes a la planche », « a quel moment j'indique que je veux que telle
+ *  personne apparaisse », « ce n'est vraiment pas clair, ni logique ni
+ *  ergonomique ».
+ *
+ *  Le defaut n'etait pas l'explication, c'etait l'ENDROIT : on declarait les
+ *  personnages au niveau de la PLANCHE, alors que la question se pose au niveau
+ *  de la CASE, au moment ou l'on ecrit l'action. Une interface qu'il faut
+ *  expliquer est deja ratee.
+ *
+ *  Une case porte donc sa propre liste des qu'on y touche. Tant qu'on n'y a pas
+ *  touche, elle suit la planche -- l'ancien comportement, et les cases deja
+ *  creees continuent de marcher (`sansCasting` reste lu). */
+function castingCase(p){
+  const propre = p.recipe && p.recipe.casting;
+  if (Array.isArray(propre)) return propre;
   const retires = (p.recipe && p.recipe.sansCasting) || [];
-  return castingPage()
-    .filter(id => !retires.includes(id))
+  return castingPage().filter(id => !retires.includes(id));
+}
+
+function tagsCasting(p){
+  return castingCase(p)
     .map(id => CHARS.find(c => c.id === id))
     .filter(Boolean)
     .map(c => [c.trigger, c.tags].filter(x => x && x.trim()).join(", "))
@@ -4459,6 +4515,29 @@ $("plate").addEventListener("click", async e => {
       toast("proposition reprise");
     }
     return;
+  }
+  // Une pastille : qui est dans CETTE case. Toucher un nom l'active ici, et
+  // l'inscrit au manga s'il n'y etait pas encore -- c'est le geste unique que
+  // Quang cherchait (« a quel moment j'indique que telle personne apparait »).
+  const qui = e.target.closest("[data-quila]");
+  if (qui){
+    const pp = S.panels.find(x => x.id === qui.dataset.quila);
+    const id = qui.dataset.ch;
+    if (pp){
+      const l = new Set(castingCase(pp));
+      l.has(id) ? l.delete(id) : l.add(id);
+      pp.recipe = Object.assign({}, pp.recipe, { casting: [...l] });
+      await api("/manga/panels", pp);
+      // Entrer dans le manga sans avoir a le declarer ailleurs.
+      if (l.has(id) && !troupeProjet().includes(id)) await majTroupe(troupeProjet().concat([id]));
+      majApercu(pp);
+      renderPlate();
+    }
+    return;
+  }
+  if (e.target.closest("[data-quilaplus]")){
+    S.quiLa = e.target.closest("[data-quilaplus]").dataset.quilaplus;
+    return renderPlate();
   }
   // Revenir a un essai precedent. On ne SUPPRIME rien : on change seulement
   // celle qui est retenue. Les autres restent disponibles, y compris celle
