@@ -1,0 +1,68 @@
+--- a/_studio_llm_proxy.py
++++ b/_studio_llm_proxy.py
+@@ -1070,6 +1070,7 @@
+ # ultralytics et torch cu128. Le venv de ComfyUI ne les a pas, et on ne les y met pas.
+ MANGA_PY = os.environ.get("MANGA_PY", r"D:\Download\02-Apps-Web\kohya-trainer\.venv\Scripts\python.exe")
+ MANGA_INGEST = os.path.join(MANGA_ROOT, "scripts", "ingest_page.py")
++MANGA_CROP = os.path.join(MANGA_ROOT, "scripts", "crop_ref.py")
+ SECRET  = os.environ.get("WORKER_SECRET", "<WORKER_SECRET — retire du depot le 28/07, a CHANGER cote gateway>")
+ # --- Securite acces proxy (parite Muse) ---
+ # Loopback (PC en file:// + smartphone via `adb reverse` = USB) : TOUJOURS libre, zero friction.
+@@ -1674,6 +1675,48 @@
+         # Le script ecrit ses logs sur stderr precisement pour que ca n'arrive pas.
+         return {"error": "sortie d'ingestion illisible", "detail": out[:800]}
+     data["log"] = err[-2000:]
++    return data
++
++
++def manga_crop_ref(filename):
++    """Recadre une image de reference sur le VISAGE, dans ComfyUI/input.
++
++    Mesure du 28/07 : IPAdapter transfere la COMPOSITION de la reference autant
++    que l'identite. Une reference qui est une planche de personnage (plusieurs
++    vues, fond vide) fait donc heriter la case de sa mise en page. Le recadrage
++    sur le visage supprime la cause -- un portrait serre n'a pas de mise en page
++    a transmettre.
++
++    Delegue a `scripts/crop_ref.py` (venv kohya : ultralytics + YOLO face) ; le
++    proxy appelle, il ne reimplemente rien. Aucun visage trouve => on le DIT et
++    l'appelant garde l'image entiere : recadrer au hasard couperait le sujet.
++    """
++    if not os.path.isfile(MANGA_PY):
++        return {"error": "venv kohya introuvable: %s" % MANGA_PY}
++    if not os.path.isfile(MANGA_CROP):
++        return {"error": "script de recadrage introuvable: %s" % MANGA_CROP}
++    nom = os.path.basename(filename or "")
++    src = os.path.join(COMFY_INPUT_DIR, nom)
++    if not nom or not os.path.isfile(src):
++        return {"error": "image introuvable dans input: %s" % nom}
++    base, ext = os.path.splitext(nom)
++    dest_nom = base + "_crop.png"
++    dest = os.path.join(COMFY_INPUT_DIR, dest_nom)
++    cmd = [MANGA_PY, MANGA_CROP, src, "--out", dest, "--json"]
++    try:
++        p = subprocess.run(cmd, capture_output=True, timeout=180,
++                           cwd=os.path.dirname(MANGA_CROP))
++    except subprocess.TimeoutExpired:
++        return {"error": "recadrage : delai depasse (180 s)"}
++    out = (p.stdout or b"").decode("utf-8", "replace").strip()
++    err = (p.stderr or b"").decode("utf-8", "replace").strip()
++    try:
++        data = json.loads(out.splitlines()[-1]) if out else {}
++    except Exception:
++        return {"error": "sortie de recadrage illisible", "detail": (out or err)[:600]}
++    if not data.get("ok"):
++        return {"ok": False, "raison": data.get("raison") or err[-300:] or "echec"}
++    data["name"] = dest_nom
+     return data
+ 
+ 
+@@ -2235,6 +2278,8 @@
+                                              bool(data.get("translate")),
+                                              float(data.get("conf") or 0.25),
+                                              bool(data.get("clean"))))
++            elif self.path == "/manga/crop_ref":
++                self._json(200, manga_crop_ref(data.get("filename") or ""))
+             elif self.path == "/manga/dataset":
+                 self._json(200, manga_dataset(data.get("slug") or "",
+                                               data.get("trigger") or "",

@@ -24,6 +24,7 @@ On le comble ici plutôt que de le signaler une deuxième fois.
 |---|---|
 | `_studio_db.diff` | schéma **v3** : tables `manga_projects` / `manga_pages` / `manga_panels` + leur CRUD + `_uid()` |
 | `_studio_llm_proxy.diff` | constantes `MANGA_*`, `manga_harvest()`, `manga_files()`, `_manga_safe()`, les routes `/manga/*`, le service du HTML sur `/manga` |
+| `_studio_llm_proxy_crop_ref.diff` | `MANGA_CROP` + `manga_crop_ref()` + la route `POST /manga/crop_ref` — le recadrage d'une image de référence sur le visage (v1.53.0). Sans lui, l'app perd le recadrage **en silence** : elle garde l'image entière et le dit dans le journal, mais rien à l'écran n'indique qu'une brique manque |
 
 **Ce sont des ajouts purs.** Aucune ligne existante de Generate Studio n'est modifiée : les diffs ne
 contiennent que des `+`, à l'exception de la ligne `SCHEMA_VERSION = 2` → `3` et de l'ajout de `shutil`
@@ -56,3 +57,16 @@ passage en v3).
 Réécrire `_studio_db.py` avec `open(p,'w')` en Python **sur Windows** convertit tout le fichier en CRLF
 (il était en LF) : le diff passe de 247 à 983 lignes et devient illisible. Utiliser `newline=''`, ou
 écrire en binaire. Aucun effet fonctionnel, mais ça détruit la lisibilité de toute comparaison future.
+
+## 🔴 Le secret du gateway a été exposé — et il doit être CHANGÉ (28/07/2026)
+
+`_studio_llm_proxy.diff` portait le `WORKER_SECRET` **en clair** dans une ligne de contexte,
+versionné le 26/07 (commit `61cbab9`) dans un dépôt **public**. Cinq scripts de `scripts/`
+l'avaient aussi en dur. Tout est retiré depuis le 28/07 : les scripts lisent `WORKER_SECRET`
+dans l'environnement, ou `ComfyUI/.worker_secret` (hors dépôt), et s'arrêtent en le disant s'il
+manque.
+
+⚠️ **Retirer un secret d'un fichier ne le retire pas de l'historique git.** Il reste lisible
+dans les commits précédents, sur un dépôt public. La seule remédiation réelle est de **changer
+le secret côté gateway Cloudflare** — décision de Quang, parce que ce secret est partagé avec
+d'autres applications et que le faire tourner les impacte toutes.

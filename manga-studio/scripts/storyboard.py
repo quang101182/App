@@ -34,7 +34,25 @@ import urllib.request
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
-SECRET = "333a33b16f8cab5aec61eb5806eeaee332a50e1172ad1b3e3d710b3d84b9cc7b"
+# ⚠ Le secret du gateway NE VIT PLUS DANS LE CODE (28/07). Ce depot est PUBLIC,
+# et le secret y a ete versionne en clair du 26 au 28/07 : l'historique git en garde
+# la trace, donc il doit etre CHANGE cote gateway, pas seulement retire d'ici.
+def _secret():
+    s = os.environ.get('WORKER_SECRET', '').strip()
+    if s:
+        return s
+    base = os.path.join(os.path.expanduser('~'), 'Documents', 'ComfyUI')
+    for nom in ('.worker_secret', '.studio_secret'):
+        p = os.path.join(base, nom)
+        if os.path.isfile(p):
+            v = open(p, encoding='utf-8').read().strip()
+            if v:
+                return v
+    raise SystemExit('ARRET : secret du gateway introuvable. Definir WORKER_SECRET '
+                     'dans l environnement, ou le poser dans ComfyUI/.worker_secret.')
+
+
+SECRET = _secret()
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 SYS = """You are a manga storyboard artist. You turn a premise into a page breakdown.
