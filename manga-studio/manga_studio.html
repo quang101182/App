@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.33.0</title>
+<title>Manga Studio v1.34.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -255,6 +255,16 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .panel .refus{margin:0;padding:6px 8px;border-radius:6px;background:#4a2020;
   color:#ffc9c9;font-size:12px}
 .panel .refus[hidden]{display:none}
+/* ---------- question de securite (remplace les boites natives) ---------- */
+#ask{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:95;
+  display:flex;align-items:center;justify-content:center;padding:18px}
+#ask[hidden]{display:none}
+.askbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:16px;max-width:420px;width:100%;box-shadow:0 18px 50px rgba(0,0,0,.55)}
+.askbox h4{margin:0 0 8px;font-size:15px}
+.askbox p{margin:0;color:var(--dim);font-size:13px;line-height:1.5}
+.btn.danger{background:var(--ko);border-color:var(--ko);color:#fff}
+
 #lightbox[hidden]{display:none}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:90;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
@@ -295,7 +305,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.33.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.34.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -629,15 +639,6 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
       <button class="btn" id="btnStopComfy">Arrêter — libère la carte</button>
       <button class="btn sm" id="btnGpuRefresh">Actualiser</button>
     </div>
-    <div id="stopConfirm" hidden style="margin-top:10px">
-      <p class="muted" style="margin:0 0 6px">
-        <b>Une génération est en cours.</b> Couper maintenant la perd.
-      </p>
-      <div class="row">
-        <button class="btn" id="btnStopForce">Couper quand même</button>
-        <button class="btn sm" id="btnStopAnnule">Laisser finir</button>
-      </div>
-    </div>
   </div>
   <div class="card">
     <h3>Journal</h3>
@@ -654,6 +655,21 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 
 </main>
 <div id="toast"></div>
+
+<!-- La question de securite, A L'ECRAN. Generate Studio pose la meme avant de
+     couper le moteur, mais avec un `confirm()` natif : ici c'est proscrit, une
+     boite native peut etre bloquee par le navigateur et l'action disparait alors
+     en silence (defaut paye en v1.20.1 puis v1.27.0). -->
+<div id="ask" hidden>
+  <div class="askbox">
+    <h4 id="askT"></h4>
+    <p id="askX"></p>
+    <div class="row" style="justify-content:flex-end;margin-top:12px">
+      <button class="btn sm" id="askNo">Annuler</button>
+      <button class="btn pri" id="askYes">Continuer</button>
+    </div>
+  </div>
+</div>
 
 <div id="busy" hidden><div class="spin"></div><span id="busyTxt"></span></div>
 <div id="lightbox" hidden>
@@ -695,7 +711,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.33.0";
+const VERSION = "1.34.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -894,6 +910,40 @@ const S = { projects: [], pages: [], panels: [], proj: null, page: null, busy: 0
             lettering: null,   // id de la case en cours de lettrage (une seule a la fois)
             selBub: null };    // id de la bulle selectionnee dans cette case
 const $ = id => document.getElementById(id);
+
+/** Pose une question et attend la reponse — A L'ECRAN, jamais `confirm()`.
+ *
+ *  Pourquoi pas la boite native : le navigateur peut la refuser (onglet en
+ *  arriere-plan, blocage de boites repetees) et elle renvoie alors « non » sans
+ *  que rien ne s'affiche. L'action disparait en silence et l'utilisateur conclut
+ *  que le bouton est mort -- c'est exactement ce qui a coute les v1.20.1 et
+ *  v1.27.0 sur la sequence. Une question de securite qui peut ne pas s'afficher
+ *  n'est pas une securite. */
+let _askRes = null;
+function demander(o){
+  $("askT").textContent = o.titre;
+  $("askX").textContent = o.texte || "";
+  $("askYes").textContent = o.oui || "Continuer";
+  $("askNo").textContent  = o.non || "Annuler";
+  $("askYes").classList.toggle("danger", !!o.danger);
+  $("ask").hidden = false;
+  setTimeout(() => $("askYes").focus(), 30);
+  return new Promise(res => { _askRes = res; });
+}
+function repondre(v){
+  $("ask").hidden = true;
+  const f = _askRes; _askRes = null;
+  if (f) f(v);
+}
+$("askYes").onclick = () => repondre(true);
+$("askNo").onclick  = () => repondre(false);
+// Cliquer le fond ou faire Echap = repondre NON. Le defaut d'une question de
+// securite doit toujours etre « on ne fait rien ».
+$("ask").onclick = e => { if (e.target.id === "ask") repondre(false); };
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !$("ask").hidden) repondre(false);
+});
+
 const recipe = () => Object.assign({}, DEFAULT_RECIPE, (S.proj && S.proj.recipe) || {});
 
 /** Construit le prompt REELLEMENT envoye. Une seule fonction, appelee par la
@@ -2603,7 +2653,9 @@ $("btnGalDel").onclick = async () => {
   // seulement "des images".
   const noms = sel.slice(0, 5).map(f => `· ${f.name}`).join("\n")
     + (sel.length > 5 ? `\n· … et ${sel.length - 5} autre(s)` : "");
-  if (!confirm(`Supprimer définitivement ${sel.length} image(s) ?\n\n${noms}`)) return;
+  if (!await demander({ titre: "Supprimer définitivement "
+                             + sel.length + " image" + (sel.length > 1 ? "s" : "") + " ?",
+                        texte: noms, oui: "Supprimer", non: "Annuler", danger: true })) return;
   $("btnGalDel").disabled = true;
   busyOn("Suppression de " + sel.length + " image(s)…");
   try {
@@ -3299,7 +3351,10 @@ $("charList").onclick = async e => {
     return;
   }
   if (d.chdel){
-    if (!confirm("Supprimer « " + (c.name || c.id) + " » de la base ?")) return;
+    if (!await demander({ titre: "Supprimer « " + (c.name || c.id) + " » de la base ?",
+                          texte: "La fiche disparaît de tous les projets. "
+                               + "Les cases déjà dessinées ne changent pas.",
+                          oui: "Supprimer", non: "Annuler", danger: true })) return;
     await api("/manga/chars", { delete: c.id });
     return loadChars();
   }
@@ -3321,7 +3376,11 @@ $("projList").onclick = async e => {
   if (ouvre) return ouvrirProjet(ouvre);
   const id = e.target.dataset && e.target.dataset.delproj;
   if (!id) return;
-  if (!confirm("Supprimer ce projet et ses planches ? Les images sur disque sont conservées.")) return;
+  const p = S.projects.find(x => x.id === id);
+  if (!await demander({ titre: "Supprimer le projet « " + ((p && p.name) || "?") + " » ?",
+                        texte: "Ses planches et ses cases sont supprimées. "
+                             + "Les images déjà dessinées restent sur le disque.",
+                        oui: "Supprimer", non: "Annuler", danger: true })) return;
   await api("/manga/projects", { delete: id }); await loadProjects(); toast("projet supprimé");
 };
 
@@ -3333,7 +3392,10 @@ $("btnNewPage").onclick = async () => {
 };
 $("btnDelPage").onclick = async () => {
   if (!S.page) return;
-  if (!confirm("Supprimer cette planche et ses cases ?")) return;
+  if (!await demander({ titre: "Supprimer cette planche ?",
+                        texte: "Ses " + S.panels.length + " case(s) sont supprimées avec elle. "
+                             + "Les images déjà dessinées restent sur le disque.",
+                        oui: "Supprimer", non: "Annuler", danger: true })) return;
   await api("/manga/pages", { delete: S.page.id });
   localStorage.removeItem("manga_page"); await loadPages();
 };
@@ -3768,9 +3830,12 @@ $("btnThemeEnhance").onclick = () => {
 
 $("btnSansPerso").onclick = async () => {
   if (!S.proj) return toast("aucun projet");
-  if (!confirm(`Retirer le personnage (LoRA, déclencheur, identité) de ce projet ?\n\n`
-    + `Les cases générées sont conservées. Tu pourras choisir un personnage `
-    + `de la base, planche par planche.`)) return;
+  if (!await demander({
+        titre: "Retirer le personnage de ce projet ?",
+        texte: "Le LoRA, le déclencheur et l'identité sont effacés de la recette. "
+             + "Les cases déjà générées sont conservées, et tu pourras choisir un "
+             + "personnage de la base, planche par planche.",
+        oui: "Retirer", non: "Annuler" })) return;
   $("rLora").value = ""; $("rTrigger").value = ""; $("rIdent").value = "";
   S.proj.recipe = Object.assign({}, S.proj.recipe, { lora: "", trigger: "", ident: "" });
   await api("/manga/projects", S.proj);
@@ -3847,15 +3912,38 @@ setInterval(() => {
   if (ENG_CIBLE !== null || _tick % 5 === 0) health().catch(() => {});
 }, 3000);
 
+/** Arreter le moteur — avec la question de securite, comme Generate Studio.
+ *
+ *  DEUX questions possibles, et elles ne disent pas la meme chose :
+ *   1. la securite normale (« ca coupe la generation pour un moment ») ;
+ *   2. celle que le PROXY impose quand un dessin est en cours -- la seule ou
+ *      quelque chose se PERD. Elle ne remplace pas la premiere : elle s'ajoute.
+ *
+ *  Rien de tel au demarrage : allumer ne detruit rien et n'a donc pas a etre
+ *  confirme. Une question posee sans enjeu apprend a repondre « oui » sans lire,
+ *  et affaiblit celle qui compte. Le delai de chargement est dit par le journal
+ *  et par le pulse, pas par une boite a fermer.
+ */
 async function stopComfy(force){
+  if (!force){
+    const ok = await demander({
+      titre: "Couper le moteur local ?",
+      texte: "La mémoire de la carte est libérée. Plus aucune case ne pourra être "
+           + "dessinée tant qu'il n'est pas relancé (30 à 60 s de chargement).",
+      oui: "Couper", non: "Laisser tourner", danger: true });
+    if (!ok) return;
+  }
   try {
     const j = await api("/shutdown", force ? { force: true } : {});
-    if (j && j.needConfirm){          // generation en cours : on demande, a l'ecran
-      $("stopConfirm").hidden = false;
+    if (j && j.needConfirm){          // un dessin est en cours : seconde question
       log("arrêt refusé : une génération est en cours", "w");
+      const quandMeme = await demander({
+        titre: "Une génération est en cours",
+        texte: "Couper maintenant perd l'image en train d'être dessinée.",
+        oui: "Couper quand même", non: "La laisser finir", danger: true });
+      if (quandMeme) return stopComfy(true);
       return;
     }
-    $("stopConfirm").hidden = true;
     ENG_CIBLE = false; ENG_DEADLINE = Date.now() + 90000;
     $("engComfy").classList.add("pending");
     toast(j && j.killed ? "ComfyUI arrêté" : "ComfyUI était déjà éteint");
@@ -3864,8 +3952,6 @@ async function stopComfy(force){
   setTimeout(() => { health(); majGPU(); }, 1500);
 }
 $("btnStopComfy").onclick   = () => stopComfy(false);
-$("btnStopForce").onclick   = () => stopComfy(true);
-$("btnStopAnnule").onclick  = () => { $("stopConfirm").hidden = true; };
 $("cfgAutoEnhance").onchange = e => {
   OPT.autoEnhance = e.target.checked;
   localStorage.setItem("manga_auto_enhance", OPT.autoEnhance ? "1" : "0");

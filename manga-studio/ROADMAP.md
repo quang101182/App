@@ -1388,13 +1388,38 @@ beaucoup de lignes en hauteur pour rien »*.
 | 5 | **12.6 critique vision** | ⏳ | dépend du panneau ⚙, et demande sa propre mesure |
 | 6 | **12.3 page par page** | 🤔 | à réévaluer **après** 12.1 — peut-être sans objet |
 
-#### 🟠 Constat de ménage relevé en passant (constaté v1.29.0)
+#### 12.11 — ✅ La question de sécurité avant de couper le moteur *(livré v1.34.0)*
 
-Deux `confirm()` **natifs** subsistent hors de la séquence : la suppression d'images en galerie et
-la suppression d'un projet. Ce sont les deux plus destructeurs de l'app, et ce sont les deux qui
-dépendent d'une boîte que le navigateur peut refuser d'afficher — le défaut exact payé en v1.20.1
-puis v1.27.0. À remplacer par une confirmation **à l'écran**, comme celle du bouton « Arrêter »
-du moteur (v1.28.0), qui sert désormais de modèle.
+Demande : *« il manque la pop-up de sécurité quand je veux arrêter le moteur, comme sur Generate
+Studio. Après, attends de voir si tu fais aussi la pop-up de démarrage, mais a minima celle
+d'arrêt »*.
+
+Generate Studio la pose avec un `confirm()` **natif** (lu dans son `shutdownEngines`). **Ici, non** :
+une boîte native peut être refusée par le navigateur et renvoie alors « non » **sans rien
+afficher** — l'action disparaît en silence et le bouton passe pour mort. C'est exactement ce qui a
+coûté les v1.20.1 et v1.27.0. *Une question de sécurité qui peut ne pas s'afficher n'est pas une
+sécurité.* La question est donc posée **à l'écran**, et le défaut de réponse est toujours **« on ne
+fait rien »** (Échap et clic hors de la boîte valent non).
+
+**Deux questions, qui ne disent pas la même chose** : la sécurité normale (« la carte est libérée,
+plus une seule case dessinée avant 30-60 s de rechargement ») et celle que le **proxy** impose quand
+un dessin est en cours — la seule où quelque chose se **perd**. La seconde s'ajoute à la première,
+elle ne la remplace pas.
+
+**Et rien au démarrage — c'est un choix, pas un oubli** (la question m'était laissée) : allumer ne
+détruit rien. Une question posée sans enjeu apprend à répondre « oui » sans lire, et **affaiblit
+celle qui compte**. Le délai de chargement est dit par le pulse et le journal, pas par une boîte à
+fermer.
+
+#### ✅ Constat de ménage fermé — plus une seule boîte native dans l'app *(v1.34.0)*
+
+~~Deux `confirm()` natifs subsistent hors de la séquence : la suppression d'images en galerie et la
+suppression d'un projet.~~ → **Il y en avait cinq**, comptés en les cherchant : galerie, projet,
+planche, fiche de personnage, et retrait du personnage d'un projet — c'est-à-dire **toutes les
+actions destructrices de l'app**, toutes suspendues à une boîte que le navigateur peut refuser.
+**Les cinq passent par la question à l'écran** (`demander()`), et chacune dit désormais ce qu'elle
+détruit *et* ce qu'elle préserve (« les images déjà dessinées restent sur le disque »).
+**Vérifié : `grep confirm(` ne renvoie plus que des commentaires.**
 
 ---
 

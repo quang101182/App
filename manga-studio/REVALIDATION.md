@@ -37,6 +37,7 @@
 > | **v1.29.0** | **ouvrir un projet existant** depuis l'onglet Projets · la galerie dit quel projet elle montre et peut en regarder un autre sans déplacer l'atelier | `test_ouvrir_projet.py` — 11 ✓, mutation rouge |
 > | **v1.31.0** | **⚙ Affiner : 11 boutons → 6** · le badge 🎬 ne ment plus après suppression (+ 2 défauts de seed trouvés par le banc) · **bandeau moteur + VRAM** aligné sur la colonne de l'app | `test_affiner_et_badge.py` — 14 ✓, mutation rouge |
 > | **v1.33.0** | pastille **« 🖥 Local »** cliquable en entier (comme Generate Studio) · témoin proxy visible seulement en panne · **onglets compacts (1 ligne) et figés** sous le bandeau | test live du moteur — 9 ✓ (coupe + rallume réels) |
+> | **v1.34.0** | **question de sécurité avant de couper le moteur** (+ la seconde, quand une génération tourne) · **les 5 dernières boîtes natives** de l'app remplacées par une question à l'écran | `test_arret_moteur.py` — moteur réellement coupé puis rallumé |
 >
 > 🔴 **Le point qui commande la suite** (Quang : *« on empile beaucoup de choses […] on peut vite
 > perdre l'ergonomie »*) : compté dans le code, une case générée affiche **11 boutons**. Rien de
