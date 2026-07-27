@@ -50,6 +50,8 @@
 >
 > | **v1.41.0** | **case-groupe** : une séquence occupe un seul bloc (◀ n/N ▶ + déplier), **sans fusionner les données** — l'export continue de voir toutes les cases | `test_case_groupe.py` — 12 ✓, mutation rouge |
 >
+> | **v1.42.0** | **réordonner une séquence** au tap (⇤ ⇥, pas de glisser-déposer) — l'ordre de la **planche** suit, donc l'export aussi | `test_case_groupe.py` — 16 ✓, mutation rouge |
+>
 > ⚠️ **Règle qui sort de la v1.39.0 — sur les BANCS** : une `const` de module n'est **pas**
 > remplaçable (`window.x = …` ne l'atteint pas, la résolution lexicale gagne) ; et une mutation doit
 > viser **le comportement**, pas une ligne — ici l'héritage se joue à l'écriture *et* à la lecture,

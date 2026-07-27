@@ -1207,17 +1207,29 @@ Banc : `test_case_groupe.py` — 12 ✓, mutation rouge à 7 échecs.
 > panneau ⚙, seed case par case) ont un sens. Ce n'est pas un contournement pour rester vert — sa
 > mutation rougit toujours.
 
-#### 12.2 — Réordonner les vignettes 🎯
+#### 12.2 — ✅ Réordonner les vignettes *(livré v1.42.0)*
 
 Demande : *« changer l'ordre des images […] mais au niveau ergonomie, de quelle manière ? »*
 
-✅ Oui, et **ma réponse à la question « de quelle manière » : surtout pas du glisser-déposer.** Au
-doigt, sur un téléphone, un drag entre en conflit avec le défilement de la page — c'est la source
-de bug d'ergonomie la plus classique, et ce projet a déjà payé le clavier qui se refermait. La
-version qui marche du premier coup : sur la case-groupe, **deux boutons `◀ déplacer` / `déplacer ▶`**
-qui échangent la vignette avec sa voisine. Un tap, un résultat visible, aucune ambiguïté,
-annulable en retapant l'autre. Le `sequence.index` est réécrit sur les deux cases échangées, rien
-d'autre ne bouge.
+✅ **Livré, et la réponse à « de quelle manière » a tenu : surtout pas du glisser-déposer.** Au
+doigt, un drag entre en conflit avec le défilement de la page — la source de bug d'ergonomie la plus
+classique, et ce projet a déjà payé le clavier qui se refermait. Deux boutons **⇤ ⇥** dans la barre
+du groupe échangent la vignette avec sa voisine : un tap, un résultat visible, annulable en tapant
+l'autre. Ils se **désactivent aux extrémités** plutôt que de ne rien faire.
+
+⚠️ **Correction de ce qui était écrit ici** : « le `sequence.index` est réécrit, rien d'autre ne
+bouge » était **faux**. Il faut échanger **deux** ordres — `sequence.index` (le badge, le lecteur)
+**et `idx`**, la position dans la planche, que la base trie et que `buildPlateCanvas` suit.
+N'échanger que le premier aurait fait dire à l'écran **l'inverse du PNG**. Le banc vérifie
+explicitement que l'ordre de la *planche* suit, pas seulement celui de la séquence.
+
+Banc : `test_case_groupe.py` étendu à 16 ✓, mutation rouge à 11 échecs.
+
+> **Trois défauts du banc, corrigés en route, tous de la même famille** — *un banc qui touche à une
+> UI mouvante doit savoir échouer, pas mourir* : une boucle de repositionnement **non bornée** (sous
+> mutation, « 1/6 » n'arrive jamais et il tournait jusqu'au timeout) ; l'interrogation de boutons
+> **sans vérifier qu'ils existent** ; une comparaison sur `avant_ordre[1]` **sans vérifier qu'il y a
+> deux éléments**.
 
 #### 12.3 — Page par page plutôt qu'ascenseur 🟡 *(après 12.1)*
 
@@ -1548,7 +1560,7 @@ vérifié les `confirm(`, **pas** les `prompt(`. L'annonce était donc fausse ; 
 | — | **12.13 visionneuse + liste** | ✅ v1.38.0 | zoom ancré, navigation, liste repliée — et le zoom de la planche a désormais une implémentation de référence |
 | — | **12.7 💬 Répliques** | ✅ v1.40.0 | brique déjà écrite aux ¾ ; la réserve « ajoute, n'écrase pas » est tenue et mesurée |
 | — | **12.1 case-groupe** | ✅ v1.41.0 | l'export lit `S.panels`, pas le DOM : le regroupement ne pouvait pas le casser |
-| 4 | **12.2 réordonner** | ⏳ | trivial **une fois** la case-groupe posée |
+| — | **12.2 réordonner** | ✅ v1.42.0 | ⇤ ⇥ plutôt qu'un drag ; échange `sequence.index` **et** `idx` |
 | 5 | **12.6 critique vision** | ⏳ | dépend du panneau ⚙, et demande sa propre mesure |
 | 6 | **12.3 page par page** | 🤔 | à réévaluer **après** 12.1 — peut-être sans objet |
 
