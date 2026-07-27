@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.50.0</title>
+<title>Manga Studio v1.51.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -347,7 +347,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.50.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.51.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -824,7 +824,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.50.0";
+const VERSION = "1.51.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -2531,7 +2531,12 @@ async function genAll(){
 
 async function addPanel(){
   if (!S.page) return toast("crée une planche d'abord");
-  const p = { pageId: S.page.id, idx: S.panels.length, kind: "dialogue", prompt: "", recipe: {} };
+  // Une case neuve HERITE de ce qui joue en ce moment -- mais en COPIE.
+  // Quang, 27/07 : « je fais la case 1, j'active Kimiko […] j'ajoute la case 2,
+  // automatiquement Kimiko est ajoutee. Je peux decider a tout moment de
+  // l'enlever ou de l'ajouter ». Heritage a la CREATION, independance ENSUITE.
+  const p = { pageId: S.page.id, idx: S.panels.length, kind: "dialogue", prompt: "",
+              recipe: { casting: castingPage().slice() } };
   const r = await api("/manga/panels", p);
   p.id = r.id; S.panels.push(p); renderPlate();
   // On AMENE a la case qu'on vient de creer, et on met le curseur dedans :
@@ -3417,7 +3422,10 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
   const lot = [];
   for (let i = 0; i < n; i++){
     const neuf = { pageId: S.page.id, idx: i0 + 1 + i, kind: "dialogue",
-                   prompt: base, recipe: { seed: seed } };
+                   prompt: base,
+                   // La vignette joue les MEMES personnages que la case d'ou
+                   // elle sort : c'est le meme moment, decompose.
+                   recipe: { seed: seed, casting: castingCase(p).slice() } };
     const rep = await api("/manga/panels", neuf);
     neuf.id = rep.id;
     lot.push(neuf);
@@ -3720,10 +3728,15 @@ function renderChars(){
     + (vus.length ? "" : '<p class="muted aide">aucun personnage ne correspond.</p>')
     + vus.map(c => {
       const ouvert = CH_OUVERT === c.id;
+      // La vignette de la LIGNE FERMEE s'agrandit d'un tap, sans deplier la
+      // fiche. Quang, 27/07 : « je suis oblige de deplier pour pouvoir agrandir
+      // la photo ». Regarder qui c'est et regler sa fiche sont deux gestes
+      // differents -- le premier ne doit pas coûter le second.
       const vignette = (c.refs || []).length
-        ? '<img src="' + esc(refURL(c.refs[0])) + '" alt="" '
+        ? '<img src="' + esc(refURL(c.refs[0])) + '" alt="" data-chvoir="' + c.id + '" '
+          + 'data-i="0" title="voir en grand" '
           + 'style="width:34px;height:34px;object-fit:cover;border-radius:5px;'
-          + 'border:1px solid var(--line);flex:none">'
+          + 'border:1px solid var(--line);flex:none;cursor:zoom-in">'
         : '<span style="width:34px;height:34px;border-radius:5px;border:1px dashed var(--line);'
           + 'display:flex;align-items:center;justify-content:center;color:var(--dim);'
           + 'font-size:15px;flex:none">👤</span>';
@@ -3761,6 +3774,8 @@ function renderChars(){
         // Le nombre d'images est ECRIT sur le bouton : rien ne l'annoncait, et
         // trois generations lancees d'un clic sans le dire, c'est une surprise
         // de deux minutes de carte graphique.
+        + '<button class="btn sm" data-chnet="' + c.id + '" '
+        + 'title="Retire de cette fiche les mots de STYLE et les couleurs — ils appartiennent au projet, pas au personnage">🧹 Nettoyer</button>'
         + '<button class="btn sm" data-chdraw="' + c.id + '" '
         + 'title="Dessine 3 vues (visage, buste, en pied) d\'après ses traits — environ 2 min">'
         + '🎨 Dessiner 3 vues</button>'
@@ -4266,6 +4281,58 @@ $("charList").onclick = async e => {
     return garderVue(c, d.vue).catch(err => log("référence : " + err.message, "e"));
   }
   if (d.chdrop){ delete BROUILLONS[d.chdrop]; return renderChars(); }
+  /* ---- 🧹 NETTOYER UNE FICHE (v1.51.0) ----
+     Mesure sur la case de Quang du 27/07 : son prompt faisait 984 caracteres,
+     dont `monochrome` x3, `lineart` x3, `black and white` x3, `high contrast` x2
+     -- et surtout « character design sheet, multiple angles, front view, side
+     view, back view », venu de la fiche Kimiko. Le modele dessinait donc une
+     PLANCHE DE PERSONNAGE au lieu d'une scene, et le second personnage se noyait.
+     Ces mots decrivent le RENDU : ils appartiennent au projet, une seule fois.
+     La consigne du bouton ✨ ne les produit plus (v1.47.0) -- restait a nettoyer
+     les fiches ECRITES AVANT. */
+  if (d.chnet){
+    const c = CHARS.find(x => x.id === d.chnet);
+    if (!c) return;
+    const STYLE = ["monochrome","greyscale","grayscale","black and white","lineart",
+      "line art","sketch","manga","manga style","manga panel","screentone","halftone",
+      "flat colors","no background","simple background","character design sheet",
+      "character design","multiple angles","front view","side view","back view",
+      "high contrast","heavy inking","crosshatching","ink","masterpiece","best quality",
+      "absurdres","very aesthetic","full body","upper body","portrait"];
+    // Une couleur n'a aucun sens dans une app N&B ; une VALEUR, si.
+    // Ecrite via RegExp : une generation precedente avait laisse un caractere
+    // de controle a la place de la limite de mot, et la couleur n'etait donc
+    // jamais detectee -- « red hair » survivait au nettoyage.
+    // Pas de regex ici, et c'est deliberé : deux tentatives d'ecrire une
+    // limite de mot ont laisse un caractere de CONTROLE dans le fichier, et la
+    // regex ne matchait alors plus rien -- « red hair » survivait au nettoyage
+    // sans que rien ne le signale. Une comparaison mot a mot n'a rien a echapper.
+    const COULEURS = ["red", "blue", "green", "purple", "pink", "orange", "yellow",
+      "brown", "blonde", "golden", "silver", "violet", "crimson", "scarlet"];
+    const estCouleur = t => t.toLowerCase().split(/[^a-z]+/).filter(Boolean)
+                            .some(m => COULEURS.indexOf(m) >= 0);
+    const avant = (c.tags || "").split(",").map(x => x.trim()).filter(Boolean);
+    const retires = [];
+    const apres = avant.filter(t => {
+      const b = t.toLowerCase();
+      if (STYLE.includes(b) || estCouleur(b)){ retires.push(t); return false; }
+      return true;
+    });
+    if (!retires.length) return toast("cette fiche est déjà propre");
+    if (!await demander({
+          titre: "Nettoyer « " + (c.name || c.id) + " » ?",
+          texte: "À retirer : " + retires.join(", ")
+               + ". Ce sont des mots de style ou des couleurs. Le style appartient "
+               + "au projet, et une couleur n'a pas de sens en noir et blanc. "
+               + "Ses traits restent : " + (apres.join(", ") || "(plus rien !)"),
+          oui: "Nettoyer", non: "Laisser" })) return;
+    c.tags = apres.join(", ");
+    await api("/manga/chars", c);
+    await loadChars();
+    log("fiche « " + (c.name || c.id) + " » nettoyée : " + retires.length
+        + " tag(s) retiré(s) — " + retires.join(", "), "s");
+    return toast(retires.length + " tag(s) retiré(s)");
+  }
   // Ouvrir / refermer une fiche. Une seule a la fois : deux fiches ouvertes
   // cote a cote et on ne sait plus laquelle on regle (meme regle que ⚙ Affiner).
   if (d.chopen){
@@ -4285,6 +4352,7 @@ $("charList").onclick = async e => {
   if (d.chvoir){
     const c = CHARS.find(x => x.id === d.chvoir);
     if (!c || !(c.refs || []).length) return;
+    e.stopPropagation();
     return ouvrirVisionneuse(
       c.refs.map((f, i) => ({ url: refURL(f), nom: "référence " + (i + 1) })), +d.i);
   }
@@ -4321,6 +4389,24 @@ $("casting").onchange = async e => {
   log("casting de la planche : " + ([...l].map(i =>
       (CHARS.find(c => c.id === i) || {}).name || i).join(", ") || "personne"), "s");
 };
+
+/** Fige le casting AFFICHE de chaque case dans la case elle-meme.
+ *
+ *  Tant qu'une case n'a pas de liste propre, elle SUIT la troupe -- pratique au
+ *  depart, mais cela veut dire qu'ajouter quelqu'un au manga l'ajoute d'un coup
+ *  a toutes ces cases-la. Quang : « ce n'est pas bon, il ne faut pas melanger et
+ *  contaminer toutes les cases ».
+ *  On appelle donc ceci AVANT toute modification de la troupe : chaque case
+ *  garde noir sur blanc ce qu'elle montrait, et ce qui change ensuite ne
+ *  concerne que les cases a venir. */
+async function figerCastings(){
+  const aEcrire = S.panels.filter(x => !Array.isArray(x.recipe && x.recipe.casting));
+  for (const x of aEcrire){
+    x.recipe = Object.assign({}, x.recipe, { casting: castingCase(x) });
+    await api("/manga/panels", x);
+  }
+  if (aEcrire.length) log(aEcrire.length + " case(s) gardent leur casting actuel", "s");
+}
 
 /** La troupe du MANGA : qui peut apparaitre dans ce projet. */
 async function majTroupe(ids){
@@ -4549,11 +4635,13 @@ $("plate").addEventListener("click", async e => {
     const pp = S.panels.find(x => x.id === qui.dataset.quila);
     const id = qui.dataset.ch;
     if (pp){
+      // On fige d'abord les AUTRES cases : ce clic ne doit toucher que celle-ci.
+      await figerCastings();
       const l = new Set(castingCase(pp));
       l.has(id) ? l.delete(id) : l.add(id);
       pp.recipe = Object.assign({}, pp.recipe, { casting: [...l] });
       await api("/manga/panels", pp);
-      // Entrer dans le manga sans avoir a le declarer ailleurs.
+      // Entrer dans le manga sert aux cases SUIVANTES, plus aux actuelles.
       if (l.has(id) && !troupeProjet().includes(id)) await majTroupe(troupeProjet().concat([id]));
       majApercu(pp);
       renderPlate();
