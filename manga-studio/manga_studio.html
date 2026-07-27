@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.17.0</title>
+<title>Manga Studio v1.18.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -163,6 +163,13 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 #busy.done{background:#2e7d4f;color:#fff}
 #busy .spin{border-color:#0a0c1055;border-top-color:#0a0c10;width:16px;height:16px}
 #busy.done .spin{display:none}
+.panel .idees{display:flex;flex-direction:column;gap:5px;margin:0 0 4px}
+.panel .idees[hidden]{display:none}
+.panel .idees button{text-align:left;padding:7px 9px;font-size:12px;line-height:1.4;
+  background:var(--panel2);border:1px solid var(--line);border-radius:7px;color:var(--txt);
+  cursor:pointer}
+.panel .idees button:hover{border-color:var(--accent2)}
+.panel .idees .titre{font-size:11px;color:var(--dim)}
 .panel .apercu{margin:0;padding:6px 8px;border-radius:6px;background:var(--panel2);
   color:var(--dim);font-size:11px;line-height:1.45;word-break:break-word;
   border-left:3px solid var(--line)}
@@ -204,7 +211,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.17.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.18.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -525,7 +532,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.17.0";
+const VERSION = "1.18.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1295,9 +1302,11 @@ function panelHTML(p, i){
    + (p.kind==="ambiance" ? "ControlNet " + recipe().cnW : "identité fine") + '</span></div>'
    + '<textarea data-prompt placeholder="Décris la case — en français si tu veux. Ex : deux maîtres en arts martiaux face à face sous la pluie">'
    + esc(p.prompt) + '</textarea>'
+   + '<div class="idees" data-idees hidden></div>'
    + '<p class="apercu" data-apercu></p>'
    + '<div class="row">'
    + '<button class="btn sm" data-act="ameliorer" title="Traduit ta phrase en tags que le modèle comprend vraiment">✨ Améliorer</button>'
+   + '<button class="btn sm" data-act="idees" title="Propose 3 suites, d\'après les cases précédentes">💡 3 suites</button>'
    + (recipe().trigger
        ? '<label style="margin:0;display:flex;align-items:center;gap:5px;color:var(--txt);font-size:12px">'
          + '<input data-perso type="checkbox" style="width:auto"'
@@ -2379,6 +2388,22 @@ $("btnIngCreate").onclick = () => createFromIngest()
   .catch(e => { log("création depuis ingestion: " + e.message, "e"); toast("échec"); });
 
 $("plate").addEventListener("click", async e => {
+  // Une proposition cliquee remplit la case. On la traite AVANT [data-act] :
+  // ce sont des boutons, ils n'ont pas d'action au sens des autres.
+  const idee = e.target.closest("[data-idee]");
+  if (idee){
+    const c = e.target.closest("[data-pid]");
+    const pp = S.panels.find(x => x.id === c.dataset.pid);
+    if (pp){
+      pp.prompt = idee.dataset.idee;
+      c.querySelector("[data-prompt]").value = pp.prompt;
+      c.querySelector("[data-idees]").hidden = true;
+      majApercu(pp);
+      await api("/manga/panels", pp);
+      toast("proposition reprise");
+    }
+    return;
+  }
   const btn = e.target.closest("[data-act]"); if (!btn) return;
   const pid = e.target.closest("[data-pid]").dataset.pid;
   const p = S.panels.find(x => x.id === pid); if (!p) return;
@@ -2402,6 +2427,47 @@ $("plate").addEventListener("click", async e => {
     const b = curBub(); if (!b) return toast("sélectionne une bulle");
     p.bubbles = p.bubbles.filter(x => x.id !== b.id); S.selBub = null;
     redrawBubbles(p); fillBubEditor(); return saveBubbles(p);
+  }
+  if (act === "idees"){
+    const carte = document.querySelector('[data-pid="' + p.id + '"]');
+    const zone = carte.querySelector("[data-idees]");
+    // Le contexte, ce sont les 4-5 cases PRECEDENTES, pas seulement la derniere.
+    // Une suite ne se deduit pas d'une image isolee : c'est la sequence qui porte
+    // la chronologie, et c'est exactement le point dur du chantier -- la
+    // continuite. Ici elle se joue dans le RECIT, sans depenser un watt de GPU.
+    const i = S.panels.indexOf(p);
+    const avant = S.panels.slice(Math.max(0, i - 5), i)
+      .map((x, k) => "Case " + (Math.max(0, i - 5) + k + 1) + " : "
+           + ((x.prompt || "").trim() || "(vide)")
+           + ((x.bubbles || []).length
+              ? " — dialogue : " + x.bubbles.map(b => b.text || "").filter(Boolean).join(" / ")
+              : ""))
+      .filter(Boolean);
+    return avecTemoin("Recherche de 3 suites…", async () => {
+      const contexte = avant.length
+        ? "Voici les cases precedentes d'une planche de manga :\n" + avant.join("\n")
+          + "\n\nPropose EXACTEMENT 3 suites possibles pour la case suivante."
+        : "Debut d'une planche de manga"
+          + (recipe().theme ? " (style : " + recipe().theme + ")" : "")
+          + ". Propose EXACTEMENT 3 premieres cases possibles.";
+      const r = await api("/enhance", { format: "raw", temp: 0.95, idea:
+        contexte + " Une par ligne, en francais, une phrase courte et concrete "
+        + "decrivant l'ACTION et le CADRAGE. Varie les directions : une suite "
+        + "logique, une plus intense, une inattendue. Pas de numerotation, pas de "
+        + "commentaire." });
+      const lignes = String(r.prompt || "").split("\n")
+        .map(x => x.replace(/^\s*[-*\d.)\s]+/, "").trim())
+        .filter(x => x.length > 8).slice(0, 3);
+      if (!lignes.length) throw new Error("aucune proposition");
+      zone.innerHTML = '<span class="titre">Clique une proposition pour la reprendre '
+        + '(elle remplace le texte de la case) :</span>'
+        + lignes.map(x => '<button data-idee="' + esc(x) + '">' + esc(x) + '</button>').join("");
+      zone.hidden = false;
+      log("3 suites proposees d'apres " + avant.length + " case(s) precedente(s)", "s");
+    }, "3 suites proposées").catch(e => {
+      log("idees : " + e.message, "e");
+      refus(p, "Impossible de proposer des suites : " + e.message);
+    });
   }
   if (act === "ameliorer"){
     const carte = document.querySelector('[data-pid="' + p.id + '"]');
