@@ -189,7 +189,45 @@ def main():
         verifie("la lecture s'arrete a la fermeture (sinon elle tourne en fond)",
                 pg.evaluate("LECT === null"))
 
-        pg.evaluate("async (id) => api('/manga/projects', {delete: id})", etat0["proj"])
+        # --- pose garantie + casting de 2 : on ne promet plus ce qu'on ne tient pas ---
+        # Mesure du 27/07 : un squelette openpose ne porte QU'UN corps et pese 0,9.
+        # Sur une case a 2 personnages, les images rendues n'avaient AUCUNE pose et
+        # montraient 3 puis 4 personnages pour « 2people ». Sans casting, la meme
+        # sequence marche. On retire donc la famille garantie, au lieu de mentir.
+        print("\n--- garde-fou : pose garantie avec un casting de 2 (v1.24.0) ---")
+        duo = pg.evaluate("""async ([nom, pid]) => {
+            const a = await api('/manga/chars', {name: nom+'A', tags: '1girl, sailor uniform'});
+            const b = await api('/manga/chars', {name: nom+'B', tags: '1boy, old man'});
+            CHARS = (await api('/manga/chars')).items || [];
+            S.page.layout = Object.assign({}, S.page.layout, {casting: [a.id, b.id]});
+            await api('/manga/pages', S.page);
+            renderPlate();
+            const p = S.panels.find(x => x.id === pid);
+            const avant = S.panels.length;
+            await sequence(p, 'coup', 2);          // appel DIRECT, bouton contourne
+            return {chars: [a.id, b.id], creees: S.panels.length - avant};
+        }""", [NOM, etat0["depart"]])
+
+        pg.click(sel + ' [data-act="sequence"]')
+        pg.wait_for_timeout(600)
+        garanties = pg.evaluate("(s) => [...document.querySelectorAll(s + ' [data-seqg]')]"
+                                ".filter(b => b.textContent.includes('🎬')).length", sel)
+        libres = pg.evaluate("(s) => [...document.querySelectorAll(s + ' [data-seqg]')]"
+                             ".filter(b => b.textContent.includes('🎭')).length", sel)
+        txt = pg.inner_text(sel + " [data-idees]")
+        verifie("casting de 2 : aucune pose garantie n'est proposee",
+                garanties == 0, "%s bouton(s) 🎬" % garanties)
+        verifie("casting de 2 : les gestes LIBRES restent disponibles",
+                libres >= 3, "%s bouton(s) 🎭" % libres)
+        verifie("casting de 2 : l'ecran explique POURQUOI",
+                "squelette" in txt and "personnages" in txt, txt[:80])
+        verifie("appel direct de sequence() : AUCUNE vignette n'est creee",
+                duo["creees"] == 0, "%s case(s) creee(s)" % duo["creees"])
+
+        pg.evaluate("""async ([proj, chars]) => {
+            await api('/manga/projects', {delete: proj});
+            for (const c of chars) await api('/manga/chars', {delete: c});
+        }""", [etat0["proj"], duo["chars"]])
         br.close()
 
     verifie("aucune erreur JS", not erreurs, "; ".join(erreurs[:2]))

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.23.0</title>
+<title>Manga Studio v1.24.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -212,7 +212,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.23.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.24.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -542,7 +542,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.23.0";
+const VERSION = "1.24.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -762,9 +762,7 @@ function promptFinal(p){
   // d'un personnage pour qu'une scene a deux soit impossible. Des que plusieurs
   // personnages sont demandes -- par le casting ou par un tag de comptage -- on
   // le retire, sinon le modele n'en dessine qu'un et rien ne l'explique.
-  const n = Math.max(tagsCasting(p).length,
-                     nbPersonnages(p.prompt || ""),
-                     (p.recipe && p.recipe.nbPersos) || 0);
+  const n = nbPersosCase(p);
   if (n > 1){
     // On RETIRE « solo » (il l'emporte sur tout le reste) et on AJOUTE le tag de
     // comptage s'il manque. Le modele compte avec des tags, pas avec des mots.
@@ -775,6 +773,20 @@ function promptFinal(p){
     }
   }
   return out;
+}
+
+/** Combien de personnages cette case demande-t-elle, tous signaux confondus ?
+ *
+ *  Deux sources de nature differente, et il ne faut pas les confondre :
+ *   - le CASTING est explicite et fiable : Quang a coche des fiches ;
+ *   - `nbPersonnages` est une heuristique sur le texte, donc faillible.
+ *  Les deux comptent pour construire le prompt, mais seule la premiere est assez
+ *  sure pour REFUSER quelque chose a l'utilisateur (cf. sequence, v1.24.0).
+ */
+function nbPersosCase(p){
+  return Math.max(tagsCasting(p).length,
+                  nbPersonnages(p.prompt || ""),
+                  (p && p.recipe && p.recipe.nbPersos) || 0);
 }
 
 /* =====================================================================
@@ -2392,6 +2404,15 @@ async function sequence(p, geste, n, etapesLibres, cadrageLibre){
   etapesLibres = etapesLibres || [];
   const r = recipe();
   if (!(p.prompt || "").trim()) return toast("écris d'abord l'action de la case");
+  // Le bouton est deja retire de l'ecran dans ce cas (v1.24.0) ; ceci tient si un
+  // autre chemin y mene. Un refus vaut mieux que N generations qui ne montreront
+  // ni la pose demandee, ni le bon nombre de personnages.
+  if (GESTES[geste] && tagsCasting(p).length > 1){
+    refus(p, "Pose garantie impossible avec " + tagsCasting(p).length
+          + " personnages au casting : un squelette ne porte qu'un corps. "
+          + "Décoche un personnage sur la planche, ou choisis un geste libre 🎭.");
+    return toast("pose garantie : un seul personnage à la fois");
+  }
   // ⚠ AVANT de creer la moindre vignette : le moteur ne lit que l'anglais, et une
   // sequence depense N generations. Le 27/07, trois vignettes ont ete produites
   // sur « Les autres eleves chuchotent et se retournent » -- le moteur a ignore
@@ -2859,12 +2880,28 @@ $("plate").addEventListener("click", async e => {
     // se CHOISIT a l'ecran, il ne se tape pas de memoire.
     const carte = document.querySelector('[data-pid="' + p.id + '"]');
     const zone = carte.querySelector("[data-idees]");
-    zone.innerHTML = '<span class="titre">Décomposer un geste en vignettes '
-      + '(même personnage, même dessin) — <b>pose garantie</b> :</span>'
-      + Object.keys(GESTES).map(g =>
-          '<button data-seqg="' + g + '">🎬 ' + GESTES[g].nom + '</button>').join("")
-      + '<span class="titre">Expressions et gestes libres — <b>progression non '
-      + 'garantie</b> (pas de squelette) :</span>'
+    // ⚠ MESURE DU 27/07 : un squelette openpose ne porte QU'UN corps, et il est
+    // impose a 0,9. Sur une case a deux personnages, le modele abandonne la pose
+    // ET multiplie les corps -- deux vignettes generees ont rendu 3 puis 4
+    // personnages, tous debout, bras le long du corps, pour « 2people ».
+    // Contre-epreuve le meme jour : SANS casting, la meme sequence rend une vraie
+    // progression de mouvement. Le defaut est donc precisement la.
+    // On ne propose plus une garantie qu'on ne peut pas tenir. Le refus se fonde
+    // sur le CASTING seul (explicite, fiable) : `nbPersonnages` est une
+    // heuristique de texte, trop faillible pour retirer un bouton a Quang.
+    const duo = tagsCasting(p).length > 1;
+    zone.innerHTML = (duo
+        ? '<span class="titre">⚠ Cette planche a <b>' + tagsCasting(p).length
+          + ' personnages</b> au casting : la <b>pose garantie</b> est indisponible '
+          + 'ici. Un squelette ne porte qu\'un corps — mesuré le 27/07, la pose est '
+          + 'perdue et le nombre de personnages devient faux. Décoche un personnage '
+          + 'sur la planche pour y revenir, ou choisis un geste libre :</span>'
+        : '<span class="titre">Décomposer un geste en vignettes '
+          + '(même personnage, même dessin) — <b>pose garantie</b> :</span>'
+          + Object.keys(GESTES).map(g =>
+              '<button data-seqg="' + g + '">🎬 ' + GESTES[g].nom + '</button>').join("")
+          + '<span class="titre">Expressions et gestes libres — <b>progression non '
+          + 'garantie</b> (pas de squelette) :</span>')
       + Object.keys(GESTES_LIBRES).map(g =>
           '<button data-seqg="' + g + '">🎭 ' + GESTES_LIBRES[g].nom + '</button>').join("")
       + '<button data-seqannule="1">Annuler</button>';

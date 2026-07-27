@@ -1,6 +1,6 @@
 # Revalidation — repartir d'une base propre
 
-> ## ⏱ Où on en est — session du 27/07 après-midi (app **v1.23.0**)
+> ## ⏱ Où on en est — session du 27/07 après-midi (app **v1.24.0**)
 >
 > **Étapes 1, 2 et 3 : faites.** Étape 4 : commencée, elle a livré le défaut le plus grave.
 >
@@ -9,15 +9,15 @@
 > | 1 · Samsung réel | ✅ **12 gestes sur 12**, 0 erreur JS | 3 défauts, tous corrigés (v1.22.1 → v1.23.0) |
 > | 2 · Rejouer les bancs | ✅ tous verts, mutations rouges | 1 banc **périmé** qui accusait l'app à tort |
 > | 3 · Bancs manquants | ✅ **5 sur 5 écrits**, tous falsifiés | les 20 fonctions ont enfin un filet |
-> | 4 · Effets de bord | 🟠 1 sur 6 mesuré | **défaut confirmé** : séquence + casting (ci-dessous) |
+> | 4 · Effets de bord | 🟠 1 sur 6 mesuré | défaut séquence + casting **corrigé en v1.24.0** |
 > | 5 · Nettoyage | ✅ projets et fiches de test supprimés | restent `test A`, `Test A`, `Salle de classe` |
 >
 > **La lacune de fond est levée** : le Samsung `SM-A326B` a servi, au doigt, avec
 > `scripts/samsung.py` (CDP pour mesurer, `adb` pour toucher). Deux des trois défauts du
 > jour ne se voyaient que là.
 >
-> **Ce qui attend une décision de Quang** : le défaut « séquence + casting » (§3), qui
-> n'est pas un bug mais un choix de conception.
+> **Décidé et livré (v1.24.0)** : la pose garantie n'est plus proposée quand le casting a ≥ 2
+> personnages. Restent **5 combinaisons sur 6** à mesurer à l'étape 4.
 
 > Écrit le **2026-07-27** en fin de session, à la demande de Quang :
 > *« dresse une feuille de route bien détaillée, revalide tout ce qu'il faut valider, avec le
@@ -93,7 +93,7 @@ Livré aujourd'hui, dans l'ordre chronologique. La colonne « testé » dit **co
 | 16 | Style du projet | 1.17.0 | Playwright | *(toujours sans banc dédié)* ⚠ |
 | 17 | Comptage des personnages | 1.19.0 | **Samsung réel** | `test_prompt_chaine.py` (4 cas + ordre) |
 | 18 | 💡 3 suites | 1.18.0 | **Samsung réel** | `test_suites.py` (+ `--muter`) |
-| 19 | 🎬 Séquence (11 gestes + libre) | 1.21.0 | **Samsung réel** | `test_sequence_live.py` — ⚠ défaut §3 avec casting |
+| 19 | 🎬 Séquence (11 gestes + libre) | 1.21.0 | **Samsung réel** | `test_sequence_live.py` — garde-fou casting v1.24.0 |
 | 20 | Séquence : cases séparées + ▶ jouer | 1.22.0 | **Samsung réel** | `test_sequence_live.py` (+ `--muter`) |
 
 ~~**11 fonctions sur 20 n'ont pas de banc rejouable.**~~ → ✅ **couvert le 27/07 (étape 3 terminée).**
@@ -103,7 +103,7 @@ Les 5 bancs manquants sont écrits, verts, et **chacun a été falsifié par mut
 |---|---|---|
 | `test_prompt_chaine.py` | 26 | fonctions 11, 12, 14, 15, 17 — réponse LLM figée |
 | `test_personnages.py` | 13 | fonctions 13, 17 — fiche → casting → prompt → suppression |
-| `test_sequence_live.py` | 15 | fonctions 19, 20 — 2 vraies vignettes (~30 s GPU) |
+| `test_sequence_live.py` | 19 | fonctions 19, 20 — 2 vraies vignettes (~30 s GPU) |
 | `test_suites.py` | 12 | fonction 18 — lit la **requête**, pas la réponse |
 | `test_demarrage.py` | 8 | fonction 10 — relit la **base**, pas l'écran |
 
@@ -233,7 +233,7 @@ Ce qui n'a **jamais** été testé ensemble :
 | **Traduction auto intermittente** | 🟠 (constaté v1.23.0) | Elle échoue parfois (API), et c'est **volontairement non bloquant** : on génère alors le texte tel quel, en le notant dans le journal. Mais l'utilisateur ne le voit pas. À rendre visible dans l'aperçu. Depuis la v1.23.0 la traduction n'est plus optionnelle, donc cet angle mort porte désormais sur **tous** les chemins. |
 | **Un objet partiel dans `S.page` détache la planche, en silence** | 🟠 (constaté v1.23.0) | L'upsert serveur réécrit **tous** les champs d'une planche. Un `api('/manga/pages', obj)` avec un objet incomplet (par ex. la réponse `{ok, id}` d'une écriture) remet `project_id` à vide : la planche devient **orpheline**, sans la moindre erreur. Aucun chemin de l'app ne fait ça aujourd'hui (`S.page` vient toujours de `loadPages`), mais rien ne l'empêche. Trouvé en écrivant `test_personnages.py`, qui est tombé dedans. |
 | **Une régénération accumule les fichiers** | 🟠 | Chaque génération écrit un fichier de plus ; l'ancien n'est pas supprimé. Choix assumé (on ne détruit pas sans demander) mais **à trancher avec Quang** : supprimer, ou garder comme historique avec retour arrière. |
-| **Séquence sur un casting de 2 : la pose est PERDUE** | 🔴 | ~~Non testé, défaut probable.~~ → **Mesuré le 27/07, et c'est pire que soupçonné.** Le prompt est pourtant juste (`2people`, les deux identités, pas de `solo`). Ce sont les **images** qui échouent : sur les 2 vignettes, **aucune pose n'est appliquée** — personnages debout, bras le long du corps, quasi identiques — et le compte est faux (**3 puis 4 personnages** pour `2people`). Contre-épreuve faite le même jour : **sans casting, la pose fonctionne parfaitement** (course dans un couloir, membres qui changent d'une vignette à l'autre). Le squelette openpose est mono-corps et imposé à un poids de **0,9** ; face à deux identités, le modèle abandonne la pose et multiplie les corps. ⚠ **Décision de conception attendue** — trois routes : (a) refuser la famille « pose garantie » quand le casting a ≥ 2 personnages et le dire ; (b) dessiner N squelettes côte à côte ; (c) baisser le poids et accepter que la pose ne soit qu'indicative. **Aucune n'est un simple correctif.** |
+| ~~**Séquence sur un casting de 2 : la pose est PERDUE**~~ → ✅ **traité v1.24.0** | 🟢 | ~~Non testé, défaut probable.~~ → **Mesuré le 27/07, et c'est pire que soupçonné.** Le prompt est pourtant juste (`2people`, les deux identités, pas de `solo`). Ce sont les **images** qui échouent : sur les 2 vignettes, **aucune pose n'est appliquée** — personnages debout, bras le long du corps, quasi identiques — et le compte est faux (**3 puis 4 personnages** pour `2people`). Contre-épreuve faite le même jour : **sans casting, la pose fonctionne parfaitement** (course dans un couloir, membres qui changent d'une vignette à l'autre). Le squelette openpose est mono-corps et imposé à un poids de **0,9** ; face à deux identités, le modèle abandonne la pose et multiplie les corps. ⚠ **Décision de conception attendue** — trois routes : (a) refuser la famille « pose garantie » quand le casting a ≥ 2 personnages et le dire ; (b) dessiner N squelettes côte à côte ; (c) baisser le poids et accepter que la pose ne soit qu'indicative. **Aucune n'est un simple correctif.** → **Route (a) retenue et livrée le 27/07 (v1.24.0)** : dès que le casting compte ≥ 2 personnages, la famille « pose garantie » 🎬 n'est plus proposée et l'écran dit pourquoi ; les gestes libres 🎭 restent disponibles. Un second garde-fou dans `sequence()` refuse l'appel même si un autre chemin y mène — un bouton retiré de l'écran n'est pas une garantie. Le refus se fonde sur le **casting seul** (explicite), pas sur `nbPersonnages` (heuristique de texte, trop faillible pour retirer un bouton). Les routes (b) N squelettes et (c) poids abaissé restent ouvertes si tu veux vraiment animer deux corps. |
 | **Le projet `test-a` porte encore le personnage de test** | 🟡 | Quang doit cliquer *Recette → Retirer le personnage de ce projet*, ou le faire soi-même à la reprise. |
 | **`sembleFrancais` : liste de mots** | 🟡 | Robuste mais approximative (« action » est français **et** anglais). Faux positif possible → traduction inutile d'un texte déjà bon. Sans gravité : la traduction d'un texte anglais le laisse anglais. |
 
