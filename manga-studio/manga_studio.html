@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.18.0</title>
+<title>Manga Studio v1.19.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -211,7 +211,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 <body>
 
 <header>
-  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.18.0</span></div>
+  <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.19.0</span></div>
   <div class="dots">
     <span class="dot" id="dProxy"></span><span class="dot-lbl">proxy</span>
     <span class="dot" id="dComfy"></span><span class="dot-lbl">ComfyUI</span>
@@ -532,7 +532,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.18.0";
+const VERSION = "1.19.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -802,8 +802,17 @@ function nbPersonnages(t){
       if (SUJETS_FR.includes(mots[j])) return n;
     }
   }
-  return 0;
+  // Pas de chiffre ? On compte les SUJETS DISTINCTS nommes. « Le maitre frappe la
+  // fille » ne contient aucun nombre et vaut pourtant deux personnages : c'est le
+  // cas reel de Quang le 27/07, ou la case sortait encore « solo, 1girl ».
+  const distincts = new Set();
+  for (const m of mots) if (SUJETS_FR.includes(m)) distincts.add(racine(m));
+  return distincts.size >= 2 ? distincts.size : 0;
 }
+
+/** « maitres » et « maitre » sont le meme sujet : on ne veut pas compter deux
+ *  personnages parce que le texte emploie un singulier puis un pluriel. */
+function racine(m){ return m.replace(/s$/, ""); }
 
 function sembleFrancais(t){
   const s = String(t || "").toLowerCase();
@@ -1539,7 +1548,6 @@ async function genPanel(p){
   // etait injectee dans toutes les cases : « 2 maitres en arts martiaux » sortait
   // une lyceenne en uniforme, parce que le prompt reel disait « 1girl, solo,
   // uniforme sailor » avant meme de lire la phrase de Quang.
-  const positive = promptFinal(p);
   // Le nom de fichier est UNIQUE a chaque execution, et ce n'est pas cosmetique.
   // ComfyUI met en cache par empreinte du graphe : regenerer une case avec le
   // meme seed lui faisait renvoyer le resultat precedent en 2 s, SANS reecrire
@@ -1581,6 +1589,14 @@ async function genPanel(p){
       log("traduction auto impossible (" + e.message + ") — on génère tel quel", "w");
     }
   }
+
+  // Le prompt final se calcule ICI, APRES la traduction automatique -- pas avant.
+  // Bug du 27/07, visible dans la case de Quang : le texte affiche etait bien
+  // traduit, mais l'image avait ete generee avec la phrase FRANCAISE, parce que
+  // `positive` etait fige avant que la traduction ne s'execute. La traduction ne
+  // prenait donc effet qu'a la generation SUIVANTE, ce qui est le pire des cas :
+  // ca marche « une fois sur deux » sans que rien ne l'explique.
+  const positive = promptFinal(p);
 
   refus(p, "");
   panelBusy(p.id, ambiance ? "ambiance…" : "dialogue…");
