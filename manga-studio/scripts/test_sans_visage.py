@@ -44,39 +44,49 @@ VARIANTES = [
 ]
 
 
-def juge_visage(chemin):
-    """Rend (part_du_visage, message). part < 0 = l'outil n'a pas pu conclure.
+# `ultralytics` vit dans le venv de ComfyUI, pas dans le Python qui pilote le
+# navigateur. On ne l'installe pas deux fois : on appelle CE python-la, et on
+# utilise le MEME modele que crop_ref.py / compare_lora.py -- deux juges
+# differents ne se comparent pas.
+PY_COMFY = r"C:\Users\quang\Documents\ComfyUI\.venv\Scripts\python.exe"
+MODELE_FACE = (r"C:\Users\quang\Documents\ComfyUI\models"
+               r"\ultralytics\bbox\face_yolov8m.pt")
+
+CODE_JUGE = (
+    "import sys, json\n"
+    "from ultralytics import YOLO\n"
+    "from PIL import Image\n"
+    "y = YOLO(sys.argv[1])\n"
+    "out = {}\n"
+    "for f in sys.argv[2:]:\n"
+    "    im = Image.open(f); W, H = im.size; best = 0.0\n"
+    "    for r in y(f, verbose=False):\n"
+    "        for b in (r.boxes or []):\n"
+    "            x1, y1, x2, y2 = [float(v) for v in b.xyxy[0]]\n"
+    "            best = max(best, ((x2-x1)*(y2-y1))/(W*H))\n"
+    "    out[f] = best\n"
+    "print(json.dumps(out))\n")
+
+
+def juge_visages(fichiers):
+    """Rend {chemin: part_du_visage}. Vide = l'outil n'a PAS pu conclure.
 
     Un secours muet a deja fait accuser l'OUTIL au lieu de l'ENVIRONNEMENT
     (piege connu du projet) : ici l'echec est explicite et remonte tel quel.
     """
+    import subprocess
+    for chemin, quoi in ((PY_COMFY, "le python de ComfyUI"),
+                         (MODELE_FACE, "le modele de visage")):
+        if not os.path.isfile(chemin):
+            print("  ARRET : %s est introuvable (%s)" % (quoi, chemin))
+            return {}
     try:
-        from ultralytics import YOLO
+        r = subprocess.run([PY_COMFY, "-c", CODE_JUGE, MODELE_FACE] + list(fichiers),
+                           capture_output=True, timeout=600)
+        return json.loads(r.stdout.decode("utf-8", "replace").strip().splitlines()[-1])
     except Exception as e:
-        return -1.0, "ultralytics indisponible (%s)" % e
-    modele = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                          "models", "yolov8n-face.pt")
-    if not os.path.isfile(modele):
-        for autre in ("yolov8n.pt",):
-            p2 = os.path.join(os.path.dirname(modele), autre)
-            if os.path.isfile(p2):
-                modele = p2
-                break
-        else:
-            return -1.0, "aucun modele de detection (lance scripts/fetch_models.py)"
-    try:
-        from PIL import Image
-        im = Image.open(chemin)
-        W, H = im.size
-        res = YOLO(modele)(chemin, verbose=False)
-        best = 0.0
-        for r in res:
-            for b in (r.boxes or []):
-                x1, y1, x2, y2 = [float(v) for v in b.xyxy[0]]
-                best = max(best, ((x2 - x1) * (y2 - y1)) / float(W * H))
-        return best, "part de l'image occupee par le visage detecte"
-    except Exception as e:
-        return -1.0, "detection impossible : %s" % e
+        print("  ARRET : la detection a echoue (%s)" % e)
+        return {}
 
 
 def main():
@@ -127,27 +137,31 @@ def main():
                     return Array.from(b);
                 }""", src)
                 io.open(dst, "wb").write(bytes(data))
-                part, msg = juge_visage(dst)
-                resultats[nom].append((seed, part, dst))
-                print("  %-16s seed %d -> visage %s   %s"
-                      % (nom, seed,
-                         ("%.3f" % part) if part >= 0 else "?(" + msg + ")",
-                         os.path.basename(dst)))
+                resultats[nom].append(dst)
+                print("  %-16s seed %d -> %s" % (nom, seed, os.path.basename(dst)))
         br.close()
 
+    tous = [f for v in resultats.values() for f in v]
+    parts = juge_visages(tous)
+    if not parts:
+        print("\nAUCUN VERDICT : le juge n a pas pu conclure. Les images sont dans "
+              + SORTIE + " — a regarder a l oeil, mais NE PAS conclure au chiffre.")
+        return 2
+
     print("\n=== VERDICT (part de l'image occupee par un visage, plus bas = mieux) ===")
-    ok = True
-    for nom, vals in resultats.items():
-        mesures = [p for _, p, _ in vals if p >= 0]
+    for nom, fichiers in resultats.items():
+        mesures = [parts.get(f, -1) for f in fichiers]
+        mesures = [m for m in mesures if m >= 0]
         if not mesures:
-            print("  %-16s : NON MESURE (le detecteur n a pas pu conclure)" % nom)
-            ok = False
+            print("  %-16s : NON MESURE" % nom)
             continue
         moy = sum(mesures) / len(mesures)
         sans = sum(1 for m in mesures if m < 0.02)
-        print("  %-16s : moyenne %.3f · sans visage %d/%d" % (nom, moy, sans, len(mesures)))
+        petit = sum(1 for m in mesures if m < 0.10)
+        print("  %-16s : moyenne %.3f · aucun visage %d/%d · visage < 10%% %d/%d"
+              % (nom, moy, sans, len(mesures), petit, len(mesures)))
     print("images : " + SORTIE)
-    return 0 if ok else 2
+    return 0
 
 
 if __name__ == "__main__":

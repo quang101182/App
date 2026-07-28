@@ -370,7 +370,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.57.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.58.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -1210,6 +1210,22 @@ function separeNegations(tags){
   return { positif: pos, negatif: neg.join(", ") };
 }
 
+/** Un meme tag ne peut pas etre demande ET interdit.
+ *
+ *  Mesure du 28/07 : une case « le dojo est vide, aucun personnage » partait
+ *  avec `empty` au POSITIF (c'est ce qu'elle demande) et `empty` au NEGATIF
+ *  (la ligne NEG du modele l'y avait mis). Les deux s'annulent, et l'utilisateur
+ *  ne peut pas le voir -- le negatif ne s'affiche nulle part.
+ *  Le positif gagne : c'est ce que Quang a ecrit. On ne compare que des tags
+ *  ENTIERS, sinon `humans` disparaitrait du negatif a cause du `no humans`
+ *  positif -- alors que ces deux-la disent la meme chose et doivent coexister. */
+function sansContradiction(neg, positif){
+  const pos = new Set(String(positif || "").split(",")
+    .map(t => t.trim().toLowerCase()).filter(Boolean));
+  return dedoublonne(String(neg || "").split(",")
+    .map(t => t.trim()).filter(t => t && !pos.has(t.toLowerCase())).join(", "));
+}
+
 /** Le NEGATIF veut le SUJET, pas sa negation.
  *
  *  Le LLM rend volontiers « NEG: no characters, no person » ou « face visible ».
@@ -1258,6 +1274,18 @@ function sceneSansPersonne(p){
 /** Ce qu'on interdit au moteur quand la case ne doit contenir personne.
  *  Sans ca, un decor « vide » sort avec une silhouette : le modele est entraine
  *  sur des images de personnages, il en met par defaut. */
+/* La parade du gros plan sans visage, CHOISIE PAR LA MESURE (15 generations,
+   3 formulations, memes seeds -- scripts/test_sans_visage.py) :
+     identite retiree seule ............ 1/5 sans visage, moyenne 0,501
+     + comptage retire + negatif elargi  3/5,             moyenne 0,227
+     + tags POSITIFS de recadrage ...... 4/5,             moyenne 0,037
+   Ce que la mesure a corrige dans mon idee de depart : `1girl` suffisait a
+   ramener le visage plein cadre, et un negatif ne RECADRE pas -- il faut
+   dire au positif ou se trouve le cadre. */
+const POS_GROS_PLAN_SANS_VISAGE = "head out of frame, cropped";
+const NEG_GROS_PLAN_SANS_VISAGE =
+  "face, head, portrait, looking at viewer, solo, full body";
+
 const NEG_SANS_PERSONNE =
   "1girl, 1boy, 2girls, 2boys, solo, person, people, human, character, face, portrait";
 
@@ -1326,8 +1354,13 @@ const TAG_COMPTE = /^(1girl|1boy|1man|1woman|2girls|2boys|multiple (girls|boys)|
 function filtreIdentite(bloc, niveau){
   const tags = String(bloc || "").split(",").map(s => s.trim()).filter(Boolean);
   if (niveau >= 2) return tags.join(", ");
+  // ⚠ Niveau 0 : on ne garde MEME PAS le comptage. Premiere version, je le
+  // gardais en me disant que des mains ont bien un proprietaire -- mesure :
+  // `1girl` seul fait dessiner un visage plein cadre 4 fois sur 5. Le
+  // proprietaire des mains n a pas besoin d etre annonce pour exister.
+  if (niveau <= 0) return "";
   return tags.filter(t => TAG_COMPTE.test(t)
-                       || (niveau === 1 && PARTIES_VISAGE.test(t))).join(", ");
+                       || PARTIES_VISAGE.test(t)).join(", ");
 }
 
 /** Construit le prompt REELLEMENT envoye. Une seule fonction, appelee par la
@@ -1363,7 +1396,9 @@ function promptFinal(p){
   // deux tags contradictoires. Retirer l'identite du casting ne suffit donc
   // pas : il faut retirer le comptage que la traduction a insere dans SES
   // propres tags, sinon `1girl` reste et le decor se peuple.
-  if (vide){
+  if (vide || niveau === 0){
+    // Le comptage vient AUSSI des tags de la case (le LLM en produit tout
+    // seul). Le retirer du casting sans le retirer d ici ne sert a rien.
     corps = corps.split(",").map(t => t.trim())
       .filter(t => t && !TAG_COMPTE.test(t)
                      && !/^(1girl|1boy|person|people|human|character|schoolgirl)$/i.test(t))
@@ -1373,6 +1408,9 @@ function promptFinal(p){
     .concat(r.theme && r.theme.trim() ? [r.theme.trim()] : [])
     .concat(vide ? ["no humans"] : [])
     .concat(ident).concat([corps])
+    // Dire ou est le cadre, au POSITIF : c est ce qui a fait passer la
+    // mesure de 3/5 a 4/5. Un negatif interdit, il ne cadre pas.
+    .concat(!vide && niveau === 0 ? [POS_GROS_PLAN_SANS_VISAGE] : [])
     .concat(ambiance && S.page && S.page.master && S.page.master.decor
             ? [S.page.master.decor] : [])
     .filter(x => x && x.trim()).join(", ");
@@ -3044,10 +3082,13 @@ async function genPanel(p, positifForce){
     // Le negatif de la recette + ce que SES negations ont produit + le verrou
     // « personne dans cette case ». Trois sources, un seul champ : le moteur
     // n en lit qu un. (v1.58.0)
+    const _vide = sceneSansPersonne(p);
     const negPlus = [r.neg, (p.recipe && p.recipe.negAuto) || "",
-                     sceneSansPersonne(p) ? NEG_SANS_PERSONNE : ""]
+                     _vide ? NEG_SANS_PERSONNE : "",
+                     (!_vide && echelleIdentite(p) === 0)
+                       ? NEG_GROS_PLAN_SANS_VISAGE : ""]
                     .filter(x => x && x.trim()).join(", ");
-    const rr = Object.assign({}, r, { neg: dedoublonne(negPlus) },
+    const rr = Object.assign({}, r, { neg: sansContradiction(negPlus, positive) },
                              heros ? { lora: heros.lora } : {});
     // L'image de reference du casting : c'est elle qui tient l'identite sans
     // entrainement. Elle est enregistree dans la recette, donc la case reste
