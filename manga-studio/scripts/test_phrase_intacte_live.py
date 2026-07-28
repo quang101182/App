@@ -37,6 +37,12 @@ CAS = [
      ["hand"], ["sailor uniform", "black hair"]),
     ("le dojo est vide au petit matin, aucun personnage, juste la lumiere des fenetres",
      ["no humans"], ["1girl", "sailor uniform", "solo"]),
+    # v1.61.0 -- LE COMPTAGE. Cette phrase est celle qui a piege l'app le 28/07 a
+    # 11h36 (log de Quang) : ni « elle » ni « lui » n'etant dans la liste fermee
+    # de mots, elle est sortie en `solo` pour une scene a DEUX. Le compte vient
+    # desormais du modele, qui lit la phrase entiere.
+    ("elle est debout au-dessus de lui, il est attache sur le lit, elle le domine",
+     ["2"], ["solo"]),
 ]
 
 cas = []
@@ -115,6 +121,7 @@ def main():
                          negAuto: (p.recipe && p.recipe.negAuto) || '',
                          envoye: promptFinal(p),
                          negEnvoye: (p.recipe && p.recipe.negative) || '',
+                         compte: (p.recipe && p.recipe.compteLLM),
                          file: p.file || '' };
             }""", pid)
 
@@ -137,6 +144,10 @@ def main():
                     + ("interdit présent : %s" % ", ".join(intrus) if intrus else ""))
             if not args.sans_gpu:
                 verifie(n + " — une image a bien été produite", bool(r["file"]), r["file"])
+            # Le compte lu par le modele doit ARRIVER jusqu'a la case.
+            if i == 2:
+                verifie(n + " — le modèle a compté 2 personnages",
+                        r.get("compte") == 2, "compteLLM = %s" % r.get("compte"))
             print("      envoyé : " + r["envoye"][:150])
             if r["negAuto"]:
                 print("      au négatif : " + r["negAuto"][:100])

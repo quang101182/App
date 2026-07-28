@@ -39,15 +39,42 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 PROXY = os.environ.get("MANGA_PROXY", "http://127.0.0.1:8190")
 SECRET_FILE = r"C:\Users\quang\Documents\ComfyUI\.studio_secret"
 
-# Copie EXACTE de la consigne de l'app (manga_studio.html, TRAD_CONSIGNE).
-# Si elle change la-bas, elle doit changer ici -- sinon le banc mesure une
-# version qui n'existe plus. C'est le defaut paye trois fois sur les bancs d'UI.
-TRAD_CONSIGNE = (
-    "Translate the following manga panel description into English danbooru-style tags, "
-    "comma-separated, on ONE line. TRANSLATE ONLY: do not add a single tag that is not "
-    "in the original text - no lighting, no camera angle, no quality tag, no background, "
-    "no emotion the text does not state. Keep the SAME number of characters and the SAME "
-    "action. Output only the tags, nothing else.\n\nText: ")
+# ⚠ La consigne est LUE DANS L'APP, jamais recopiee ici.
+# Le premier jet en gardait une copie « exacte » -- et une copie diverge : le
+# banc aurait mesure une consigne qui n'existe plus, avec l'assurance du chiffre.
+# C'est la meme famille de defaut que les trois bancs perimes du 28/07 matin.
+APP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "manga_studio.html")
+
+
+def consigne_de_lapp(nom):
+    """Extrait une consigne du source de l'app (concatenation de litteraux JS).
+
+    On reconstitue la chaine que le navigateur enverra : les litteraux entre
+    guillemets sont concatenes, et les echappements JS (\\n, \\") redeviennent
+    ce qu'ils designent. Les lignes de commentaire sont ignorees -- elles ne
+    contiennent pas de litteral en fin de ligne.
+    """
+    src = io.open(APP, encoding="utf-8").read()
+    i = src.index("const " + nom + " =")
+    # ⚠ On retire les commentaires AVANT de chercher le point-virgule final.
+    # Premier jet : la coupure tombait sur un « ; » situe DANS un commentaire
+    # (« il rendait `solo` malgre la consigne ; »), et le banc mesurait une
+    # consigne tronquee -- sans le bloc COUNT, donc sans ce qu'il venait
+    # justement verifier. Un extracteur qui lit du code doit ignorer les
+    # commentaires en premier, jamais en dernier.
+    brut = src[i:i + 6000]
+    brut = "\n".join(l for l in brut.splitlines()
+                     if not l.strip().startswith("//"))
+    bout = brut[:brut.index(";")]
+    morceaux = re.findall(r'"((?:[^"\\]|\\.)*)"', bout)
+    txt = "".join(morceaux)
+    for avant, apres in (("\\n", "\n"), ('\\"', '"'), ("\\'", "'"),
+                         ("\\\\", "\\")):
+        txt = txt.replace(avant, apres)
+    return txt
+
+
+TRAD_CONSIGNE = consigne_de_lapp("TRAD_CONSIGNE")
 
 AMELIO_CONSIGNE = (
     "Manga panel, black and white. IMPORTANT: if the scene involves several "
@@ -149,11 +176,21 @@ def joue(cas, cle):
     out = dict(cas)
     try:
         r = enhance(TRAD_CONSIGNE + cas["txt"], "raw", cle)
-        out["traduit"] = (r.get("prompt") or "").strip().split("\n")[0].strip()
+        # ⚠ Le COUNT arrive sur la DEUXIEME ligne. Ne garder que la premiere
+        # avant de le chercher, c'est le jeter puis constater qu'il manque --
+        # ce que le banc a fait au premier jet, en concluant « 0 sur 14 » alors
+        # que le modele repondait « COUNT:2 » a chaque fois.
+        brut = (r.get("prompt") or "").strip()
+        m = re.search(r"COUNT\s*[:：]\s*(\d+)", brut, re.I)
+        out["count"] = int(m.group(1)) if m else None
+        brut = re.sub(r"[,;]?\s*COUNT\s*[:：]\s*\d+", "", brut, flags=re.I)
+        out["traduit"] = brut.strip().split("\n")[0].strip()
         out["trad_neg"] = r.get("negativeAdd") or ""
     except Exception as e:
         out["traduit"] = "ERREUR: %s" % e
         out["trad_neg"] = ""
+        out["count"] = None
+        out["count"] = None
     try:
         r = enhance(AMELIO_CONSIGNE + cas["txt"], "tags", cle)
         out["ameliore"] = (r.get("prompt") or "").strip()
@@ -197,7 +234,8 @@ def main():
     print("=" * 78)
     print("BANC TRADUCTION -- %d cas, proxy %s" % (len(res), PROXY))
     print("=" * 78)
-    stats = dict(fr_rate=0, neg_pos=0, cadrage_perdu=0, compte_faux=0, invente=0)
+    stats = dict(fr_rate=0, neg_pos=0, cadrage_perdu=0, compte_faux=0,
+                 invente=0, count_absent=0, count_faux=0)
     for r in res:
         det_fr = semble_francais(r["txt"])
         n_app = nb_personnages(r["txt"])
@@ -208,8 +246,12 @@ def main():
         print("\n--- %s  %s" % (r["id"], r["txt"]))
         print("    detecte francais : %s   (sinon la phrase part TELLE QUELLE au moteur)"
               % ("oui" if det_fr else "NON  <-- DEFAUT"))
-        print("    personnages attendus %s | nbPersonnages() rend %s%s"
-              % (r["nb"], n_app, "   <-- ECART" if n_app != r["nb"] and not (r["nb"] <= 1 and n_app == 0) else ""))
+        print("    personnages attendus %s | COUNT du modèle : %s | nbPersonnages() rend %s%s"
+              % (r["nb"], r.get("count"), n_app,
+                 "   <-- ECART heuristique" if n_app != r["nb"]
+                    and not (r["nb"] <= 1 and n_app == 0) else ""))
+        print("    _%s"
+              % ("",))
         print("    TRADUIT  : %s" % r["traduit"][:200])
         if r["trad_neg"]:
             print("      NEG    : %s" % r["trad_neg"][:120])
@@ -231,13 +273,25 @@ def main():
             stats["cadrage_perdu"] += 1
         if n_app != r["nb"] and not (r["nb"] <= 1 and n_app == 0):
             stats["compte_faux"] += 1
+        # ⚠ Ces deux compteurs manquaient au premier jet : le verdict annoncait
+        # « 0 COUNT absent » alors qu'il l'etait sur les 14 cas. Un compteur
+        # jamais incremente affiche zero, et zero se lit comme une reussite.
+        # Un chiffre doit venir d'une addition, jamais d'une valeur par defaut.
+        if r.get("count") is None:
+            stats["count_absent"] += 1
+        elif r["count"] != r["nb"]:
+            stats["count_faux"] += 1
 
     print("\n" + "=" * 78)
     print("VERDICT sur %d cas" % len(res))
     print("  phrases francaises NON detectees (partent non traduites) : %d" % stats["fr_rate"])
     print("  negations rendues en tag POSITIF                         : %d" % stats["neg_pos"])
     print("  cadrages explicitement demandes et PERDUS                : %d" % stats["cadrage_perdu"])
-    print("  comptages de personnages faux                            : %d" % stats["compte_faux"])
+    print("  comptages faux -- ancienne heuristique de mots            : %d" % stats["compte_faux"])
+    print("  comptages faux -- COUNT demande au modele (v1.61.0)       : %d"
+          % stats["count_faux"])
+    print("  COUNT absent de la reponse                                : %d"
+          % stats["count_absent"])
     if args.json:
         json.dump(res, io.open(args.json, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
         print("  detail -> %s" % args.json)

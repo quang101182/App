@@ -138,9 +138,14 @@ def main():
         pg.evaluate("() => { window.__vus = []; }")
         pg.evaluate("""async () => { await traduire(S.panels[2]); }""")
         envois = pg.evaluate("() => window.__vus")
-        corps = envois[-1] if envois else ""
-        verifie("la requête /enhance porte bien le contexte",
-                "CONTEXT" in corps and "seiza" in corps,
+        # ⚠ TOUTES les requetes, pas seulement la derniere : la traduction se
+        # RELANCE quand le modele repond en francais. Le premier jet ne regardait
+        # que `[-1]` et echouait une fois sur deux -- un banc non deterministe est
+        # inexploitable. Il a quand meme servi : la relance perdait REELLEMENT le
+        # contexte de scene, et c'est ainsi qu'on l'a vu.
+        corps = "".join(envois) if envois else ""
+        verifie("chaque requête /enhance porte le contexte de la scène",
+                bool(envois) and all("CONTEXT" in c and "seiza" in c for c in envois),
                 "%d requête(s), extrait : %s" % (len(envois), corps[:80].replace("\n", " ⏎ ")))
         verifie("… et elle porte aussi la phrase de la case",
                 "elle le regarde" in corps, "")
@@ -153,9 +158,11 @@ def main():
 
         # --- 5 : rien de tout cela n'entre dans le prompt IMAGE --------------
         final = pg.evaluate("() => promptFinal(S.panels[2])")
+        fuites = [m for m in ("seiza", "panel 1", "panel 2", "dojo desert")
+                  if m in final.lower()]
         verifie("le contexte n'entre PAS dans le prompt envoyé au moteur",
-                "seiza" not in final.lower() and "Panel 1" not in final,
-                final[:90])
+                not fuites,
+                ("a fui : %s | " % ", ".join(fuites) if fuites else "") + final[:120])
 
         # --- 6 : le separateur bascule, et il tient au rechargement ----------
         avant = pg.evaluate("() => S.panels.map((p,i) => ouvreUneScene(p,i))")

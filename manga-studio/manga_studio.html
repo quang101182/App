@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.60.0</title>
+<title>Manga Studio v1.61.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -113,6 +113,16 @@ nav button.sel{color:var(--txt);border-bottom-color:var(--accent);background:var
    doigt : etalee sur 1400 px, chaque case s'eloignait de son bouton et l'oeil
    devait traverser l'ecran. 760 px = la largeur d'un telephone confortable. */
 main{padding:14px;max-width:760px;margin:0 auto}
+/* ⚠ v1.61.0 -- L ELARGISSEMENT A ETE RETIRE, a la demande de Quang (capture
+   du 28/07) : « tu es cense respecter la largeur initiale de l application,
+   par exemple par rapport au bandeau du haut, et ne pas la faire depasser ».
+   Le contenu s etalait a 1600 px pendant que le bandeau et les onglets, eux,
+   restaient centres sur 760 px -- deux largeurs pour une meme page.
+   Sa gene initiale (« c est dommage de perdre en affichage ») venait en fait
+   d une REGRESSION : le separateur de scene ramenait la planche a UNE colonne.
+   Celle-la est corrigee ; la largeur, elle, redevient ce qu il avait demande
+   le 27/07. Elargir reste possible, mais il faudrait alors elargir AUSSI le
+   bandeau et la barre d onglets -- et c est sa decision, pas la mienne. */
 section{display:none} section.sel{display:block}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:14px}
@@ -225,6 +235,25 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .tagsline textarea{width:100%;font-size:11px;line-height:1.35;color:#9fb0c8;
   background:#0b0e13;border:1px dashed var(--line);border-radius:6px;padding:5px}
 .panel.lettering .tagsline{display:none}
+
+.scenetag{position:absolute;top:6px;right:6px;z-index:3;border:1px solid var(--line);
+  background:rgba(10,12,16,.72);color:var(--dim);border-radius:99px;
+  padding:2px 8px;font-size:11px;line-height:1.5;cursor:pointer}
+.scenetag:hover{color:var(--txt);border-color:var(--accent)}
+.scenetag.on{color:var(--accent);border-color:var(--accent);background:rgba(10,12,16,.9)}
+
+/* ---------- LE REMEDE DEFINITIF AU PIEGE `hidden` (v1.61.0) ----------
+   Paye TROIS fois dans ce fichier : le voile des cases (v1.0.1, il avalait
+   les clics pendant toute une version), le temoin « proxy injoignable »
+   (v1.33.0, affiche en permanence, point vert a l appui), et maintenant le
+   bandeau « revenir a la planche » (v1.61.0, vu sur la capture du banc).
+   La cause est toujours la meme : une regle d auteur `display:flex` l emporte
+   sur le `display:none` IMPLICITE que le navigateur donne a `[hidden]`.
+   La ROADMAP demandait d ecrire la parade element par element -- c est une
+   discipline, donc ca rate. Une regle globale, elle, ne s oublie pas.
+   `!important` est ici le comportement VOULU : un element marque `hidden`
+   doit disparaitre, sans exception et quoi qu en dise une autre regle. */
+[hidden]{display:none !important}
 
 /* ---------- separateur de scene (v1.59.0) ----------
    Il traverse toute la grille : une scene se lit d un coup d oeil, sinon
@@ -379,7 +408,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.60.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.61.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -861,7 +890,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.60.0";
+const VERSION = "1.61.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1386,6 +1415,11 @@ const MARQ_VIDE = [
 function sceneSansPersonne(p){
   if (p && p.recipe && p.recipe.videForce === true) return true;
   if (p && p.recipe && p.recipe.videForce === false) return false;
+  // Le modele a compte ZERO personnage en lisant la phrase : c est un decor.
+  // Plus fiable que mes tournures fermees (« aucun personnage », « personne
+  // dedans »...), qui ne couvriront jamais toutes les facons de dire le vide.
+  const lu = p && p.recipe && p.recipe.compteLLM;
+  if (lu === 0 && !tagsCasting(p).length) return true;
   const t = String((p && p.prompt) || "") + " " + tagsCase(p);
   return MARQ_VIDE.some(rx => rx.test(t));
 }
@@ -1588,8 +1622,21 @@ function dedoublonne(s){
  *  sure pour REFUSER quelque chose a l'utilisateur (cf. sequence, v1.27.0).
  */
 function nbPersosCase(p){
-  return Math.max(tagsCasting(p).length,
-                  nbPersonnages(p.prompt || ""),
+  // v1.61.0 -- ORDRE DE CONFIANCE, pas un maximum aveugle.
+  // Le `Math.max` d avant prenait le plus grand des trois signaux : une
+  // heuristique qui se trompe EN TROP l emportait donc sur un casting
+  // explicite. Desormais le premier qui SAIT parle, et lui seul.
+  const castes = tagsCasting(p).length;
+  const lu = p && p.recipe && p.recipe.compteLLM;   // le modele a lu la phrase
+  // ⚠ Le casting dit QUI est identifie, pas COMBIEN de corps il y a. Mesure du
+  // 28/07 : « elle est debout au-dessus de lui, il est attache sur le lit » avec
+  // UNE fiche cochee -- le casting repondait 1, et l homme non fiche disparaissait.
+  // Le casting est donc un PLANCHER (ces gens-la sont la, c'est un fait), et le
+  // compte du modele peut le relever s'il voit des figurants en plus.
+  if (castes || (lu != null && lu >= 0)){
+    return Math.max(castes, (lu != null && lu >= 0) ? lu : 0);
+  }
+  return Math.max(nbPersonnages(p.prompt || ""),    // dernier recours
                   (p && p.recipe && p.recipe.nbPersos) || 0);
 }
 
@@ -1635,8 +1682,24 @@ const TRAD_CONSIGNE =
   // Le modele a deja rendu la phrase francaise TELLE QUELLE (banc live du
   // 28/07). « Translate » ne suffit pas : on le dit en toutes lettres.
   + "The output MUST be in ENGLISH. Never leave a French word in the tags. "
-  + "Output the tag line, then the NEG line only if something is negated. "
-  + "Nothing else.\n\nText: ";
+  // v1.61.0 -- LE COMPTE, demande a qui lit la phrase.
+  // Une liste fermee de mots francais ne peut pas couvrir « les deux
+  // adversaires », « elle [...] lui », « les autres eleves ». Le modele, lui,
+  // lit la phrase entiere. On lui demande un CHIFFRE, pas un tag : un tag,
+  // il l oublie (mesure v1.17.0, il rendait `solo` malgre la consigne) ;
+  // un chiffre sur sa propre ligne, il le donne -- et c est NOUS qui en
+  // tirons le tag, dans le code.
+  + "COUNT: on a separate FINAL line, write COUNT: followed by the number of "
+  + "distinct human characters visible in the panel (0 if none). Count people, "
+  + "not body parts: a panel showing only hands or feet still has the person "
+  + "they belong to. Pronouns count (elle, il, lui, they).\n"
+  // ⚠ Mesure du 28/07 : le COUNT etait demande plus haut, puis cette ligne
+  // finissait par « Nothing else » -- et le modele a suivi la DERNIERE
+  // instruction : 0 COUNT rendu sur 14 cas. Une consigne qui se contredit est
+  // tranchee par sa fin. On enumere donc les trois lignes attendues ICI, a
+  // l'endroit meme ou l'on dit « rien d'autre ».
+  + "OUTPUT FORMAT, in this exact order: line 1 = the tags; line 2 = COUNT: <n>; "
+  + "line 3 = NEG: ... (only if something is negated). Nothing else.\n\nText: ";
 
 /** Traduit la case en anglais si besoin. Rend true si elle a ete traduite.
  *  N'ENRICHIT PAS : c'est le role de `ameliorerPrompt`. */
@@ -1652,10 +1715,35 @@ async function traduire(p){
       + "know who « elle »/« il » refers to and how many characters are present):\n"
       + ctx + "\n\n"
     : "";
-  const r = await api("/enhance", { idea: avecCtx + TRAD_CONSIGNE + (p.prompt || "").trim(),
-                                    format: "raw" });
+  let r = await api("/enhance", { idea: avecCtx + TRAD_CONSIGNE + (p.prompt || "").trim(),
+                                  format: "raw" });
   if (!r.prompt || !r.prompt.trim()) throw new Error("traduction vide");
-  await poseTags(p, r.prompt.trim().split("\n")[0].trim(), r.negativeAdd, false);
+  // ⚠ UNE SECONDE CHANCE, PARCE QUE LE MODELE RECOPIE PARFOIS LE FRANCAIS.
+  // Mesure du 28/07 : « elle est debout au-dessus de lui... » est ressorti mot
+  // pour mot. Le moteur ne le comprend pas -- il ne s'en plaint pas non plus,
+  // il DESSINE quand meme, et l'image n'a plus aucun rapport avec la demande.
+  // On ne peut pas empecher un modele de se tromper ; on peut le rappeler une
+  // fois, en le lui disant crument. Une seule fois : si la deuxieme echoue
+  // aussi, `poseTags` le SIGNALE plutot que de boucler en silence.
+  if (sembleFrancais((r.prompt || "").split("\n")[0])){
+    log("la traduction est revenue en français — seconde tentative", "w");
+    // ⚠ La relance REPREND LE CONTEXTE. Premier jet : elle repartait de la
+    // phrase seule, donc une case retraduite perdait sa desambiguisation --
+    // « elle » redevenait indeterminee, et le comptage avec. Trouve par le banc
+    // de scene, qui a vu la 2e requete partir sans contexte.
+    const r2 = await api("/enhance", { idea:
+        "The previous answer was in FRENCH, which is unusable. Translate to "
+      + "ENGLISH danbooru tags. Output English words ONLY.\n\n"
+      + avecCtx + TRAD_CONSIGNE + (p.prompt || "").trim(), format: "raw" });
+    if (r2 && r2.prompt && r2.prompt.trim()
+        && !sembleFrancais(r2.prompt.split("\n")[0])) r = r2;
+  }
+  // ⚠ ON PASSE LA REPONSE ENTIERE, pas sa premiere ligne. Le COUNT arrive sur
+  // la DEUXIEME (le modele repond bien « COUNT:2 », verifie en direct le 28/07) :
+  // couper ici, c'etait le jeter puis constater plus loin qu'il manque. Le
+  // decoupage appartient a `poseTags`, qui sait ce qu'il cherche -- ici on ne
+  // sait pas encore ce que porte la 2e ligne.
+  await poseTags(p, r.prompt.trim(), r.negativeAdd, false);
   log("traduit : " + tagsCase(p).slice(0, 90), "s");
   return true;
 }
@@ -1672,9 +1760,21 @@ async function poseTags(p, tags, negDuLLM, ameliores){
   // a part -- le proxy ne l extrait alors pas, et le fragment restait colle
   // aux tags positifs (« ...clenched hands, hands,NEG: »). Vu au banc live.
   let brut = String(tags || "");
+  // Le COUNT arrive sur sa propre ligne, mais le modele le colle parfois en
+  // fin de tags -- meme comportement que pour NEG, meme parade.
+  let compte = null;
+  const mc = brut.match(/[,;]?\s*COUNT\s*[:：]\s*(\d+)/i);
+  if (mc){
+    compte = parseInt(mc[1], 10);
+    brut = (brut.slice(0, mc.index) + brut.slice(mc.index + mc[0].length)).trim();
+  }
   const m = brut.match(/[,;]?\s*NEG\s*[:：]\s*(.*)$/i);
   let negEnLigne = "";
   if (m){ negEnLigne = (m[1] || "").trim(); brut = brut.slice(0, m.index).trim(); }
+  // Une fois COUNT et NEG retires, ce qui reste doit tenir sur UNE ligne : la
+  // ligne de tags. On prend la premiere non vide -- si le modele en ajoute une
+  // de commentaire, elle n'a rien a faire dans le prompt du moteur.
+  brut = brut.split("\n").map(x => x.trim()).filter(Boolean)[0] || "";
   const sep = separeNegations(brut);
   const negs = nettoieNeg([negDuLLM, negEnLigne, sep.negatif]
                   .filter(x => x && x.trim()).join(", "));
@@ -1684,6 +1784,14 @@ async function poseTags(p, tags, negDuLLM, ameliores){
     tagsAmeliores: !!ameliores,
     negAuto: negs
   });
+  // Le compte LU sur la phrase. On l enregistre a part de `nbPersos` (qui
+  // vient de l heuristique) : deux sources de nature differente ne doivent
+  // pas se melanger dans un meme champ, sinon on ne sait plus laquelle a
+  // parle -- et on ne peut plus corriger celle qui se trompe.
+  if (compte !== null && !isNaN(compte) && compte >= 0 && compte <= 12){
+    p.recipe = Object.assign({}, p.recipe, { compteLLM: compte });
+    log("personnages comptés dans la phrase : " + compte, "s");
+  }
   const champT = document.querySelector('[data-pid="' + p.id + '"] [data-tags]');
   if (champT) champT.value = sep.positif;
   else renderPlate();          // la case n affichait pas encore sa ligne de tags
@@ -2454,8 +2562,12 @@ async function ouvrirProjet(id){
  * de toucher au contenu. */
 function applyPlateColumns(){
   const cols = (S.page && S.page.layout && S.page.layout.cols) || 2;
-  $("plate").style.gridTemplateColumns =
-    "repeat(" + (window.innerWidth < 700 ? 1 : cols) + ",1fr)";
+  const reelles = window.innerWidth < 700 ? 1 : cols;
+  $("plate").style.gridTemplateColumns = "repeat(" + reelles + ",1fr)";
+  // La largeur de la page ne bouge PAS : elle reste celle du bandeau du haut
+  // (760 px), comme Quang l a demande le 27/07 puis rappele le 28/07. Ce qui
+  // avait ete perdu, c etaient les COLONNES -- pas la largeur.
+  document.body.classList.remove("plateLarge");
 }
 
 /* ================== LA CASE-GROUPE (v1.41.0) ==================
@@ -2549,8 +2661,14 @@ function renderPlate(){
     // Il se pose AVANT la case, dans l espace qui la separe de la
     // precedente : c est la ou vit une frontiere. Sur la premiere case il
     // n y a rien a couper -- une planche commence toujours une scene.
-    if (i > 0){
-      const coupe = ouvreUneScene(p, i);
+    // ⚠ REGRESSION v1.59.0, signalee par Quang (capture PC du 28/07) : ce
+    // bloc etait pose AVANT CHAQUE case, en `grid-column:1/-1`. Chaque case
+    // demarrait donc apres une ligne pleine largeur = UNE case par ligne, et
+    // sa planche a 2 colonnes n en avait plus qu une. Une frontiere de scene
+    // MERITE une ligne entiere ; une non-frontiere ne doit rien occuper.
+    // Couper une scene reste possible partout : le geste vit dans « Affiner ».
+    if (i > 0 && ouvreUneScene(p, i)){
+      const coupe = true;
       morceaux.push('<div class="scenesep' + (coupe ? " coupe" : "") + '">'
         + '<hr>'
         + (coupe ? '<b>✂ scène ' + reperesScene(p).scene + '</b>' : "")
@@ -2712,6 +2830,20 @@ function panelHTML(p, i){
    // sinon elle serait rognee a l'ecran et ecrasee a l'export.
    + '<div class="img" style="aspect-ratio:1/' + panelAspect(p).toFixed(4) + '">'
    + '<span class="num">' + (i+1) + '</span>' + sq + '<span class="verdict">' + v + '</span>'
+   /* ---- COUPER LA SCENE, depuis n importe quelle case (v1.61.0) ----
+      Le separateur pleine largeur ne s affiche plus qu aux frontieres : il
+      cassait la grille a 2 colonnes (regression signalee par Quang). Le
+      GESTE, lui, doit rester trouvable partout -- sinon la premiere coupure
+      est impossible a decouvrir. Ce badge vit DANS le coin de l image :
+      visible sur chaque case, et il ne prend aucune place dans la grille. */
+   + (i > 0
+      ? '<button class="scenetag' + (ouvreUneScene(p, i) ? ' on' : '')
+        + '" data-scenecut="' + p.id + '" title="'
+        + (ouvreUneScene(p, i)
+           ? 'Cette case ouvre une scène — la rattacher à la précédente'
+           : 'Commencer une nouvelle scène ici (les suivantes ne reprendront plus le contexte des précédentes)')
+        + '">' + (ouvreUneScene(p, i) ? '✂ scène ' + reperesScene(p).scene : '✂') + '</button>'
+      : '')
    + img + bubblesSVG(p, p.id === S.lettering, S.selBub)
    + '<div class="busy" data-busy hidden><div class="spin"></div><span data-busytxt></span></div></div>'
    + '<div class="body">'
@@ -2896,8 +3028,12 @@ function panelHTML(p, i){
              + '<input data-perso type="checkbox" style="width:auto"'
              + (p.sansPerso ? "" : " checked") + '> personnage du projet (LoRA)</label>'
            : "")
+       /* ---- COUPER LA SCENE (v1.61.0) ----
+          Le separateur ne s affiche plus qu aux frontieres (il cassait la
+          grille a 2 colonnes). Le geste, lui, doit rester accessible depuis
+          n importe quelle case -- il vit donc ici, avec les actions rares. */
        // La suppression descend ici : c'est irreversible, ca n'a rien a faire
-       // a cote des boutons qu'on touche a chaque case.
+       // a cote des boutons qu on touche a chaque case.
        + '<button class="btn sm" data-act="del">🗑 supprimer</button>'
        + '</div></div>'
      : "")
