@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.58.0</title>
+<title>Manga Studio v1.59.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -226,6 +226,15 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
   background:#0b0e13;border:1px dashed var(--line);border-radius:6px;padding:5px}
 .panel.lettering .tagsline{display:none}
 
+/* ---------- separateur de scene (v1.59.0) ----------
+   Il traverse toute la grille : une scene se lit d un coup d oeil, sinon
+   la frontiere devient invisible des que la planche a deux colonnes. */
+.scenesep{grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:2px 0}
+.scenesep hr{flex:1;border:0;border-top:1px dashed var(--line);margin:0}
+.scenesep .btn{white-space:nowrap}
+.scenesep b{color:var(--accent);font-size:12px;white-space:nowrap}
+.scenesep.coupe hr{border-top-style:solid;border-top-color:var(--accent)}
+
 /* ---------- galerie ---------- */
 .grid-img{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .grid-img figure{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -370,7 +379,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.58.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.59.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -848,7 +857,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.58.0";
+const VERSION = "1.59.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1161,6 +1170,64 @@ const recipe = () => Object.assign({}, DEFAULT_RECIPE, (S.proj && S.proj.recipe)
      p.recipe.negAuto= ce que ses negations ont produit, pour le NEGATIF.
    Compatibilite : une case d'avant la v1.58.0 n'a pas de `tags` -- son `prompt`
    EST deja des tags, on continue de l'utiliser tel quel. */
+/* =====================================================================
+   LA SCENE (v1.59.0)
+   =====================================================================
+   Une scene = des cases CONSECUTIVES de la meme planche. La premiere case
+   d une planche ouvre toujours une scene ; ensuite, `recipe.debutScene`
+   marque une rupture. Rien d autre n est stocke : la scene n est pas un
+   objet de plus a gerer, c est une FRONTIERE entre deux cases.
+
+   Pourquoi pas « une planche = une scene » : une planche est une unite de
+   MISE EN PAGE, une scene une unite de RECIT. Les confondre laisse le
+   format du papier decider du decoupage narratif -- et obligerait Quang a
+   casser sa mise en page pour changer de lieu. */
+function ouvreUneScene(p, i){
+  return i === 0 || !!(p && p.recipe && p.recipe.debutScene);
+}
+
+/** Les cases qui precedent `p` DANS SA SCENE, de la plus ancienne a la plus
+ *  recente. Vide si `p` ouvre la scene -- et c est exactement ce que Quang
+ *  demande : au changement de scene, on repart de rien. */
+function casesAvantDansScene(p){
+  const i = S.panels.indexOf(p);
+  if (i <= 0) return [];
+  let debut = 0;
+  for (let k = i; k >= 0; k--){
+    if (ouvreUneScene(S.panels[k], k)){ debut = k; break; }
+  }
+  return debut >= i ? [] : S.panels.slice(debut, i);
+}
+
+/** Le numero de la scene (1, 2, 3...) et le rang de la case dedans.
+ *  Sert au TEMOIN : Quang doit pouvoir lire ce qui a ete pris en compte,
+ *  sinon un contexte automatique devient une boite noire -- et une boite
+ *  noire qui se trompe est indebogable. */
+function reperesScene(p){
+  let scene = 0, rang = 0;
+  for (let k = 0; k < S.panels.length; k++){
+    if (ouvreUneScene(S.panels[k], k)){ scene++; rang = 0; }
+    rang++;
+    if (S.panels[k] === p) return { scene: scene, rang: rang };
+  }
+  return { scene: 1, rang: 1 };
+}
+
+/** Le contexte, mis en mots pour le LLM. On donne la PHRASE de Quang (pas
+ *  les tags) : c est elle qui porte le sens, les tags n en sont qu une
+ *  projection appauvrie. Les dialogues comptent aussi -- « qui parle a qui »
+ *  dit combien ils sont, ce que le comptage automatique rate (mesure : sa
+ *  case du 28/07 a 11h36 est sortie en `solo` pour une scene a deux). */
+function contexteScene(p, combien){
+  const avant = casesAvantDansScene(p).slice(-(combien || 5));
+  if (!avant.length) return "";
+  return avant.map((x, k) => "Panel " + (k + 1) + ": "
+      + ((x.prompt || "").trim() || tagsCase(x) || "(vide)")
+      + ((x.bubbles || []).length
+         ? " [dialogue: " + x.bubbles.map(b => b.text || "").filter(Boolean).join(" / ") + "]"
+         : "")).join("\n");
+}
+
 function tagsCase(p){
   const t = p && p.recipe && p.recipe.tags;
   return (t && t.trim()) ? t.trim() : String((p && p.prompt) || "").trim();
@@ -1524,7 +1591,18 @@ const TRAD_CONSIGNE =
 /** Traduit la case en anglais si besoin. Rend true si elle a ete traduite.
  *  N'ENRICHIT PAS : c'est le role de `ameliorerPrompt`. */
 async function traduire(p){
-  const r = await api("/enhance", { idea: TRAD_CONSIGNE + (p.prompt || "").trim(),
+  // ⚠ La traduction reste FIDELE : le contexte sert UNIQUEMENT a lever les
+  // ambiguites (« elle » = qui ? combien sont-ils ?), jamais a enrichir. La
+  // consigne le dit explicitement, et le banc le verifie : une case dont la
+  // phrase ne parle pas du decor ne doit pas recuperer le decor d a cote.
+  const ctx = contexteScene(p, 4);
+  const avecCtx = ctx
+    ? "CONTEXT (previous panels of the SAME scene, for DISAMBIGUATION ONLY -- "
+      + "never translate it, never add its content to the output; use it only to "
+      + "know who « elle »/« il » refers to and how many characters are present):\n"
+      + ctx + "\n\n"
+    : "";
+  const r = await api("/enhance", { idea: avecCtx + TRAD_CONSIGNE + (p.prompt || "").trim(),
                                     format: "raw" });
   if (!r.prompt || !r.prompt.trim()) throw new Error("traduction vide");
   await poseTags(p, r.prompt.trim().split("\n")[0].trim(), r.negativeAdd, false);
@@ -1585,8 +1663,15 @@ async function ameliorerPrompt(p){
   // Le modele compte avec des TAGS, pas avec des mots : « two martial arts
   // masters » ne pese rien face a « 2boys ». C'est ce qui rendait une scene
   // a deux personnages muette -- Quang obtenait un seul combattant.
+  // Ici le contexte sert pleinement : c est le role du bouton ✨ d ajouter ce
+  // que Quang n a pas ecrit, et la continuite du lieu et des personnages en
+  // fait partie. Borne a LA SCENE : au-dela, ce serait le decor d une autre.
+  const ctxA = contexteScene(p, 5);
   const r = await api("/enhance", { idea:
-      "Manga panel, black and white. IMPORTANT: if the scene involves several "
+      (ctxA ? "Previous panels of the SAME scene (keep the place, the lighting "
+            + "and the characters consistent with them; do NOT redescribe them "
+            + "unless the new panel needs it):\n" + ctxA + "\n\n" : "")
+    + "Manga panel, black and white. IMPORTANT: if the scene involves several "
     + "characters, you MUST use danbooru count tags (2boys, 2girls, 1boy 1girl, "
     + "3boys, multiple boys, multiple girls) and you must NOT output the tag "
     + "\"solo\". If it involves exactly one, use solo. Scene: " + idee, format: "tags" });
@@ -2390,6 +2475,22 @@ function renderPlate(){
   if (!S.page){ el.innerHTML = '<p class="muted aide">Aucune planche. Crée-en une.</p>'; return; }
   const vus = new Set(), morceaux = [];
   S.panels.forEach((p, i) => {
+    // ---- SEPARATEUR DE SCENE (v1.59.0) ----
+    // Il se pose AVANT la case, dans l espace qui la separe de la
+    // precedente : c est la ou vit une frontiere. Sur la premiere case il
+    // n y a rien a couper -- une planche commence toujours une scene.
+    if (i > 0){
+      const coupe = ouvreUneScene(p, i);
+      morceaux.push('<div class="scenesep' + (coupe ? " coupe" : "") + '">'
+        + '<hr>'
+        + (coupe ? '<b>✂ scène ' + reperesScene(p).scene + '</b>' : "")
+        + '<button class="btn sm" data-scenecut="' + p.id + '" title="'
+        + (coupe
+           ? "Rattacher cette case à la scène précédente : elle en reprendra le contexte"
+           : "Commencer une nouvelle scène ici : les cases suivantes ne reprendront plus le contexte des précédentes")
+        + '">' + (coupe ? "rattacher" : "✂ nouvelle scène") + '</button>'
+        + '<hr></div>');
+    }
     const sq = p.recipe && p.recipe.sequence;
     const gid = sq && sq.gid;
     if (!gid){ morceaux.push(panelHTML(p, i)); return; }
@@ -2796,6 +2897,8 @@ function majApercu(p){
   const vide = sceneSansPersonne(p);
   const niv = vide ? 0 : echelleIdentite(p);
   const negAuto = (p.recipe && p.recipe.negAuto) || "";
+  const ctxN = casesAvantDansScene(p).length;
+  const rep = reperesScene(p);
   const pasEncore = !(p.recipe && p.recipe.tags)
                     && String(p.prompt || "").trim().length > 0;
   el.innerHTML = "<b>Sera envoyé :</b> " + esc(txt.slice(0, 260))
@@ -2812,6 +2915,17 @@ function majApercu(p){
         + '</span>')
     + (!negAuto ? "" : '<br><span style="color:#d8b48f">⊘ Au négatif : '
         + esc(negAuto.slice(0, 120)) + '</span>')
+    // ⚠ Le temoin du contexte. Un contexte automatique invisible est une
+    // boite noire : quand le resultat surprend, on ne peut pas savoir si
+    // c'est la case d'a cote qui a deteint. On dit donc TOUJOURS ce qui a
+    // ete lu -- y compris « rien », qui est l information la plus utile
+    // au moment ou Quang vient de couper une scene.
+    + '<br><span style="color:#7f8ea3">🎬 scène ' + rep.scene
+        + ' · case ' + rep.rang + ' — '
+        + (ctxN ? 'écrite avec les ' + Math.min(ctxN, 5)
+                  + ' case(s) précédente(s) de la scène'
+                : 'début de scène : aucun contexte repris')
+        + '</span>'
     + (!(p.recipe && p.recipe.tagsDouteux) ? ""
         : '<br><span style="color:var(--ko)">⚠ La traduction a laissé du '
           + 'français dans les tags : le moteur ignorera ces mots. '
@@ -5593,9 +5707,13 @@ $("plate").addEventListener("click", async e => {
     // Une suite ne se deduit pas d'une image isolee : c'est la sequence qui porte
     // la chronologie, et c'est exactement le point dur du chantier -- la
     // continuite. Ici elle se joue dans le RECIT, sans depenser un watt de GPU.
-    const i = S.panels.indexOf(p);
-    const avant = S.panels.slice(Math.max(0, i - 5), i)
-      .map((x, k) => "Case " + (Math.max(0, i - 5) + k + 1) + " : "
+    // v1.59.0 : borne a LA SCENE. Avant, il prenait les 5 cases precedentes
+    // quoi qu il arrive -- donc, apres un changement de scene, il proposait
+    // des suites pour une scene terminee. Une seule notion de contexte dans
+    // toute l app, sinon deux fonctions voisines repondent differemment sans
+    // que rien ne l explique.
+    const avant = casesAvantDansScene(p).slice(-5)
+      .map((x, k) => "Case " + (k + 1) + " : "
            + ((x.prompt || "").trim() || "(vide)")
            + ((x.bubbles || []).length
               ? " — dialogue : " + x.bubbles.map(b => b.text || "").filter(Boolean).join(" / ")
@@ -5802,6 +5920,23 @@ $("plate").addEventListener("change", async e => {
   await api("/manga/panels", p);
 });
 // Le texte se voit s'ecrire pendant la frappe : sans ca, on lettre a l'aveugle.
+/* Couper (ou recoller) une scene. Un seul drapeau sur la case qui OUVRE :
+   pas de duree, pas de fin a tenir a jour, donc rien qui puisse devenir
+   incoherent. Supprimer une case ne casse jamais la structure. */
+$("plate").addEventListener("click", async e => {
+  const b = e.target.closest("[data-scenecut]");
+  if (!b) return;
+  const p = S.panels.find(x => x.id === b.dataset.scenecut);
+  if (!p) return;
+  const i = S.panels.indexOf(p);
+  const avant = ouvreUneScene(p, i);
+  p.recipe = Object.assign({}, p.recipe, { debutScene: !avant });
+  await api("/manga/panels", p);
+  renderPlate();
+  log(avant ? "case rattachée à la scène précédente"
+            : "nouvelle scène à partir de la case " + (i + 1), "s");
+});
+
 $("plate").addEventListener("input", e => {
   const c0 = e.target.closest("[data-pid]");
   if (c0 && e.target.matches("[data-prompt]")){
