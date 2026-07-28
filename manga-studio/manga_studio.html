@@ -1210,6 +1210,25 @@ function separeNegations(tags){
   return { positif: pos, negatif: neg.join(", ") };
 }
 
+/** Le NEGATIF veut le SUJET, pas sa negation.
+ *
+ *  Le LLM rend volontiers « NEG: no characters, no person » ou « face visible ».
+ *  Mis tels quels dans le negatif, ce sont des negations de negations : elles
+ *  ne fonctionnent que par accident, parce que le mot utile s'y trouve encore.
+ *  On ne laisse pas une chose marcher par accident -- le jour ou le modele
+ *  ecrira « absence of characters », l'accident cessera sans prevenir. */
+function nettoieNeg(s){
+  return dedoublonne(String(s || "").split(",").map(t => t.trim().toLowerCase()
+    .replace(/^(no|without|not|zero)\s+/, "")
+    .replace(/^(aucun|aucune|pas de|sans)\s+/, "")
+    .replace(/\s+(not\s+)?visible$/, "")
+    .trim())
+    // Un mot creux tout seul (« visible », « view ») n'interdit rien : il
+    // encombre le negatif et brouille la lecture de ce qui y compte vraiment.
+    .filter(t => t && !/^(visible|view|shown|seen|present|any)$/.test(t))
+    .join(", "));
+}
+
 /* ---------- UNE CASE SANS PERSONNE (mesure : 3 cas sur 14) ----------
    « le dojo est vide, personne dedans » ressortait avec `solo` ; « aucun
    personnage » avec `1girl`. Le casting de la planche, lui, continuait
@@ -1254,16 +1273,38 @@ const NEG_SANS_PERSONNE =
      1 = tete seulement      (gros plan sur le visage / les yeux)
      0 = aucune identite     (gros plan sur une partie du corps hors visage,
                               ou negation explicite du visage) + IPAdapter coupe */
+/** Les phrases arrivent tantot accentuees, tantot non (clavier mobile).
+ *  Comparer sans accent evite d avoir a ecrire chaque motif deux fois. */
+function deAccent(t){
+  return String(t || "").toLowerCase().normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
 const TAGS_GROS_PLAN = /\b(extreme close-?up|close-?up|closeup|macro shot|detail shot|plan serr)/i;
 const PARTIES_VISAGE = /\b(face|eyes?|eye|mouth|lips|nose|hair|head|portrait|expression|regard|visage|yeux)\b/i;
 const PARTIES_CORPS  = /\b(hands?|feet|foot|toes?|fingers?|legs?|arms?|wrists?|ankles?|back|shoulders?|neck|navel|chest|breasts?|penis|genital|thighs?|knees?|mains?|pieds?|orteils?|doigts?|jambes?)\b/i;
 
+/** « on ne doit pas voir son visage » NOMME le visage tout en le refusant.
+ *  Sans ce test, le mot compte comme une partie du visage et l app rendait
+ *  le niveau 1 (traits gardes) sur une phrase qui demandait exactement le
+ *  contraire -- trouve par le banc LIVE, pas par le banc unitaire, parce que
+ *  seul le premier fait passer la vraie phrase de bout en bout. */
+const NIE_LE_VISAGE = new RegExp([
+  "no (head|face)",
+  "(face|head|visage|tete) not visible",
+  "sans (voir |montrer )?(son |le |sa )?(visage|tete|figure)",
+  "(ne|on ne) (doit |dois |veut |voit )?(pas |plus )(voir |montrer )?(son |le |sa )?(visage|tete)",
+  "pas de (tete|visage)",
+  "hors champ",
+  "(visage|tete) (cache|masque|hors)"
+].join("|"), "i");
+
 function echelleIdentite(p){
   if (p && p.recipe && p.recipe.identNiveau != null) return +p.recipe.identNiveau;
-  const t = tagsCase(p) + " " + String((p && p.prompt) || "");
+  const t = deAccent(tagsCase(p) + " " + String((p && p.prompt) || ""));
   if (!TAGS_GROS_PLAN.test(t)) return 2;
-  // Un gros plan qui NIE le visage ne veut pas de tete du tout.
-  if (/\bno (head|face)\b|not visible|sans (le )?visage|pas de (tete|t[eê]te|visage)/i.test(t)) return 0;
+  // Un gros plan qui NIE le visage ne veut pas de tete du tout, et cette
+  // negation l emporte sur le fait que le mot « visage » soit prononce.
+  if (NIE_LE_VISAGE.test(t)) return 0;
   const corps = PARTIES_CORPS.test(t);
   const visage = PARTIES_VISAGE.test(t);
   if (corps && !visage) return 0;
@@ -1429,6 +1470,9 @@ const TRAD_CONSIGNE =
   + "positive tag. Put those on a FINAL separate line starting exactly with "
   + "'NEG:' instead. Never write a positive tag containing the negated "
   + "word.\n"
+  // Le modele a deja rendu la phrase francaise TELLE QUELLE (banc live du
+  // 28/07). « Translate » ne suffit pas : on le dit en toutes lettres.
+  + "The output MUST be in ENGLISH. Never leave a French word in the tags. "
   + "Output the tag line, then the NEG line only if something is negated. "
   + "Nothing else.\n\nText: ";
 
@@ -1451,8 +1495,16 @@ async function traduire(p){
  *  Sans ce temoin, on retraduirait a chaque generation (une depense inutile)
  *  ou jamais (des tags perimes sous une phrase corrigee, le pire des deux). */
 async function poseTags(p, tags, negDuLLM, ameliores){
-  const sep = separeNegations(tags);
-  const negs = [negDuLLM, sep.negatif].filter(x => x && x.trim()).join(", ");
+  // WARN Le LLM pose parfois son « NEG: » en FIN DE LIGNE au lieu d une ligne
+  // a part -- le proxy ne l extrait alors pas, et le fragment restait colle
+  // aux tags positifs (« ...clenched hands, hands,NEG: »). Vu au banc live.
+  let brut = String(tags || "");
+  const m = brut.match(/[,;]?\s*NEG\s*[:：]\s*(.*)$/i);
+  let negEnLigne = "";
+  if (m){ negEnLigne = (m[1] || "").trim(); brut = brut.slice(0, m.index).trim(); }
+  const sep = separeNegations(brut);
+  const negs = nettoieNeg([negDuLLM, negEnLigne, sep.negatif]
+                  .filter(x => x && x.trim()).join(", "));
   p.recipe = Object.assign({}, p.recipe, {
     tags: sep.positif,
     tagsDe: String(p.prompt || "").trim(),
@@ -1463,6 +1515,18 @@ async function poseTags(p, tags, negDuLLM, ameliores){
   if (champT) champT.value = sep.positif;
   else renderPlate();          // la case n affichait pas encore sa ligne de tags
   if (negs) log("négations mises au négatif : " + negs.slice(0, 80), "w");
+  // WARN Une traduction qui rend du FRANCAIS est pire qu une traduction ratee :
+  // le moteur ne la comprend pas, il l IGNORE, et l image sort quand meme.
+  // Le banc live du 28/07 a attrape « le dojo est vide au petit matin, la
+  // lumiere des fenetres » rendu tel quel par le modele. On ne peut pas
+  // l empecher, mais on peut refuser de faire comme si de rien n etait.
+  if (sembleFrancais(sep.positif)){
+    p.recipe = Object.assign({}, p.recipe, { tagsDouteux: true });
+    log("⚠ la traduction a laissé du français : « " + sep.positif.slice(0, 60)
+        + " » — le moteur ne le comprendra pas. Corrige la ligne de tags.", "e");
+  } else if (p.recipe && p.recipe.tagsDouteux){
+    p.recipe = Object.assign({}, p.recipe, { tagsDouteux: false });
+  }
   majApercu(p);
   await api("/manga/panels", p);
 }
@@ -2645,6 +2709,13 @@ function alerteCasting(p){
     .map(id => CHARS.find(c => c.id === id))
     .filter(Boolean);
   if (!ici.length) return "";
+  // ⚠ v1.58.0 -- NE PAS CONTREDIRE L'ECRAN JUSTE AU-DESSUS. Sur un gros plan
+  // sans visage, l'apercu vient d'annoncer « identité et image de référence
+  // retirées » ; l'alerte, elle, repondait « Kimiko sera dessiné quand même ».
+  // Les deux phrases se suivaient dans la meme case, et la seconde etait
+  // FAUSSE depuis que l'identite tombe toute seule. Vu sur la capture du banc,
+  // pas dans le code : deux messages justes separement peuvent se contredire.
+  if (sceneSansPersonne(p) || echelleIdentite(p) === 0) return "";
   const mots = new Set(String(p.prompt || "").toLowerCase()
     .normalize("NFD").replace(/[̀-ͯ]/g, "")
     .split(/[^a-z0-9]+/).filter(Boolean));
@@ -2696,6 +2767,10 @@ function majApercu(p){
         + '</span>')
     + (!negAuto ? "" : '<br><span style="color:#d8b48f">⊘ Au négatif : '
         + esc(negAuto.slice(0, 120)) + '</span>')
+    + (!(p.recipe && p.recipe.tagsDouteux) ? ""
+        : '<br><span style="color:var(--ko)">⚠ La traduction a laissé du '
+          + 'français dans les tags : le moteur ignorera ces mots. '
+          + 'Corrige-les directement ci-dessous.</span>')
     // La traduction n'est plus une option (27/07) : l'alerte « le moteur ne
     // comprend pas » n'a plus lieu d'etre, elle mentait sur ce qui va se passer.
     // On annonce ce qui VA arriver, ce qui est le role d'un apercu.
