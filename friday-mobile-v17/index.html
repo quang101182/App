@@ -15,7 +15,7 @@
 <meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRIDAY · v1.95.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
+<title>FRIDAY · v1.96.0</title><!-- 🚨 3e marqueur de version : bumper AVEC la const VERSION et le badge -->
 <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="none" stroke="%2300d4ff" stroke-width="3"/><circle cx="32" cy="32" r="14" fill="none" stroke="%2300d4ff" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="%2300d4ff"/></svg>'>
 <!--
   ================================================================================
@@ -2984,7 +2984,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
       <div class="conn-status">
         <span class="conn-dot" id="connDot"></span>
         <span id="connLabel">…</span>
-        <span class="version-tag version-badge">· v1.95.0</span>
+        <span class="version-tag version-badge">· v1.96.0</span>
         <span class="version-tag" id="backendVer" style="display:none"></span>
       </div>
     </div>
@@ -3639,6 +3639,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     <div class="settings-row">
       <button class="settings-btn settings-btn-danger" id="settingsReset">🗑 Reset config (efface localStorage)</button>
     </div>
+    <!-- v1.19.0 — Le fond « carte de session ». Désactivé par défaut : c'est
+         une interface ALTERNATIVE, l'affichage actuel reste celui de base. -->
+    <div class="settings-row">
+      <span class="settings-label">Fond carte de session</span>
+      <button class="settings-btn" id="settingsCarte">◻ Désactivé</button>
+    </div>
   </div>
 </aside>
 
@@ -3751,7 +3757,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.95.0'; /* v1.95.0 — PARITÉ APK v1.104.0 (mandat Quang 16/07 : solution durable, pas un pansement) : (1) RÉCONCILIATEUR D'ÉTAT 1 Hz horloge murale — le ré-armement était événementiel (suspendu à tts_end) → 1 événement perdu = conversation morte ; 4 blocages en 4 jours = 4 façons de perdre tts_end. Boucle idempotente convergeant vers « mode conv + aucun tour en cours + TTS fini ⇒ micro ouvert » → tts_end devient une optimisation de latence, plus une condition de survie. (2) RACINE des ABORT cause=stop : _vadReset ne remettait pas _vadLastVoiceWallTs → _recSafetyCheck coupait le start en vol au 1er tick (~1s) sans geste user ; fix = reset + garde structurelle (>= started). Backend v2.21.0 en regard (timeout+pacing TTS, garde STT anti-hallu). */ /* v1.94.2 — FIX reprise conversation continue (parité APK v1.103.2, bug Honor BT prouvé log : ABORT start#1 cause=stop) : handlers mediaSession pause/stop ne coupent QUE si recSentStart (rec réellement démarré) → la bascule SCO Bluetooth pendant getStream ne tue plus le start en vol. */ /* v1.94.1 — INSTRUMENTATION reprise continue (parité APK v1.103.1) : _lastGenBump trace la cause de chaque incrément de _startGen (stop|ws-close|new-start) + les 2 blocs ABANDON loggent client_log 'ABORT start#N cause=…'. ZÉRO changement de comportement. */ /* v1.94.0 — ANTI-COURSE ASYNC conversation continue (bug Honor 15/07) : jeton _startGen invalide un start dont le getUserMedia (lent BT/4G) est encore en vol ou juste avant .start() → plus de MediaRecorder zombie. + B3 onclose. Backend v2.19.0 : B1 watchdog anti-zombie + B2 ping explicite. Complète la sérialisation v1.74.0. */; /* v1.91.0 — FILET anti-blocage ENREGISTREMENT (parité APK v1.100.0, bug Honor 14/07, hologramme JAUNE figé plusieurs minutes) : le VAD tourne sur requestAnimationFrame, GELÉ quand l'app passe en arrière-plan/écran éteint (voiture) → rec_start sans jamais de STOP. Fix : deadline horloge murale + watchdog setInterval(1s) + rattrapage sur `visibilitychange visible` → _recSafetyCheck coupe un rec zombie (cap 60s dur OU silence VAD évalué sur l'horloge) dès le retour au premier plan. Complète v1.90.0 (qui ne cassait PAS un rec ouvert : `if(ui.recording) return`). */ /* v1.90.0 — FILET anti-blocage conversation continue (parité APK v1.99.0, bug Honor 13/07 hologramme jaune) : handler `turn_dropped` (backend v2.13.3) + watchdog 9 s ré-arment l'écoute quand le backend droppe un tour ou ne répond pas. */ /* v1.89.0 — FIX cohérence PC/mobile focus ville (bug log 13/07 « c'est pas Paris ») : le scale ville était figé à 11 px/degré = vue CONTINENT sur le renderer maison ; désormais cadré sur la BBOX du geojson frontières ville (parité fit_country + PC core v1.27.0), fallback scale 55. */ /* v1.88.0 — CAPITALES au zoom sur la carte (199 NE 110m, point+label, anti-chevauchement par priorite pop, invisibles en vue monde scale<2) */ /* v1.87.0 — FRONTIERES PAYS sur la carte (retour Quang 13/07) : WORLD_BORDERS embarque (NE 110m interieures, 326 lignes/3000 pts/24Ko) + drawBorders sous les couches data */ /* v1.86.0 — S5v2 : suggestions a payload globe (seisme majeur -> carte), tap rejoue SceneMobile.apply complet */ /* v1.85.0 — HOTFIX micro/route audio (Headset earpiece = ecouteur interne exclu du pick BT) + get_config au boot (hydratation reglages persistes) */   // v1.84.0 — S5 PROACTIVITÉ DE SCÈNE : case WS scene_suggestion → FlashStack.onSuggestion (carte 💡 tappable, tap = SceneMobile.apply {tab,cmd} + retrait, TTL borné), réglage ⚙ « Proactivité de scène » (flag BACKEND scene_proactivity_enabled partagé PC, hydraté config_state). // v1.83.0 — S4b LIENS CODE↔SYSTÈME (parité APK v1.92.0, backend v2.9.0, PC v1.24.0) : CodemapNative.load reçoit `project` (dépôt d'origine) → ligne tappable « 🛰 vit dans <repo> → » = bascule onglet SYSTÈME + focusCard ; SystemeNative.onEcosystem stocke le détail commit enrichi (subject/hash/functions) → ligne « ⤷ » sous la card projet. | v1.82.0 — S7 PHOTOTHÈQUE WEB (parité APK v1.91.0, backend v2.8.0, PC v1.23.0) : onglet galerie « 🌐 Web » (kind='web', compteur séparé, exclu de l'onglet Galerie), flash image préfère flash.local_url (copie photothèque servie par le backend via API_BASE — fallback URL source Wikimedia), FIX préexistant : srcOf/fullSrcOf laissent passer les URLs http(s) absolues (avant : API_BASE+URL absolue = src invalide, le tap flash→viewer chargeait une image morte). | v1.81.0 — RESPECT DU RATIO des images flash (retour Quang : 9:16 recadrée en 16:9 ; parité APK v1.90.0, PC v1.22.2) : #mediaFlash img + carte FlashStack en width:auto/max-width:100%/max-height:2×réglage/contain — portrait entier sans clic, paysage inchangé. | v1.80.0 — S4a TRACE AU SOL ISS (pont cosmos→carte, parité APK v1.89.0, backend v2.7.0, PC core v1.22.0) : case globe iss_track/iss_track_clear → issTrack {coords,now}, drawIssTrack (polyligne dorée pointillée, garde antiméridien, 🛰+label position courante), chip ISS au HUD couches, getState().layers.iss. | v1.79.0 — S3 COUCHES CARTE ANIMÉES opt-in (parité APK v1.88.0, backend v2.5.0, PC core v1.21.0) : flag `animate` des payloads globe → lecture chrono séismes ts USGS ~12s (drawSeisms filtre par playhead), traînées vols extrapolées cap+vitesse dash animé ~25s (drawFlightTrails sous les ✈), respiration alpha aurore ~20s ; animations BORNÉES via animStep() dans loop() (dirty-flag préservé, batterie), retour statique pixel-identique ; bouton rejeu #mapAnimBtn 44px (bottom:68px au-dessus du HUD couches) ; getState().anim pour le harnais. | v1.78.0 — (1) SCO Bluetooth natif pattern DictoKey (mandat Quang) : AudioFocusPlugin.enableSco/disableSco (setCommunicationDevice API31+ / startBluetoothSco sinon), rearme a CHAQUE tour au takeAudioFocus, coupe au release, log SCO client_log — no-op sans casque/hors Capacitor ; (2) VRAI fix swipe 3e essai : body user-select:none global heritait sur le champ -> gesture typing Gboard desactive ; exemption user-select:text sur .text-input. // v1.77.0 — retours Quang soir : (1) retour EN HAUT auto a la fermeture du clavier (blur + visualViewport resize -> .main scrollTop 0, l'hologramme reste visible) ; (2) swipe 2e essai : attributs textarea alignes EXACTEMENT PromoClip (zero autocomplete/spellcheck/enterkeyhint/inputmode). // v1.76.0 — 3 retours Quang 12/07 : (1) flash image TAPPABLE -> viewer plein ecran comme la pensee (MediaImages.openExternal, sans id = pas de coeur/corbeille) ; (2) champ texte = TEXTAREA rows=1 (glide typing Gboard marche sur textarea, pas sur input — parite PromoClip) ; (3) micro BT best-effort : deviceId du casque bluetooth si expose par la WebView + log MIC diagnostic, fallback micro defaut inchange. // v1.75.0 — MISE EN SCENE P2.2 hors-onglet : FlashStack.onSceneFlash (carte ephemere texte court ou image web verifiee Wikipedia, tab 'flash' de scene_directive, aucune bascule de vue). // v1.74.0 — FIX effets de bord voix (log Quang 12/07) : serialisation recording (rec_end de l'ancien flux AVANT nouveau rec_start + callbacks recorder perime no-op) = fin zombie/blob invalide Groq 400 ; ISS honnete (chip indisponible si echec fetch, parite NEO/SW) + poke fetch immediat au retour vue cosmos. // v1.73.0 — MISE EN SCENE P2.1 : _sceneApply etendu cosmos/systeme/codemap (m.cmd {tool,args} rejoue dans le module natif via les memes cases que les events *_cmd + bascule vue remote reversible). // v1.72.0 — « dynamiques » cadrage pays mobile (parité APK v1.81.0) : fit_country dessine le CONTOUR pays (highlights '_fit', magenta #e91e63) + badge fiche 3 lignes (NOM · coords · VUE PAYS) ; focus ville retire le contour | v1.71.0 — MISE EN SCÈNE P2.0 (parité APK v1.80.0) : case WS scene_directive + onSceneDirective/_sceneBindMeta/_sceneApply — route pc = fire réception+offset, route mobile = directive liée au PROCHAIN tts_audio_meta et calée sur le planning AudioContext (_ttsNextStartTime), filet off+4 s ; application = setActiveView('map',{remote}) + MapNative.onGlobe(payload), flag backend mise_en_scene_enabled OFF défaut | v1.70.0 — P1.5 PILE DE FLASHS haut-droite (parité APK v1.79.0, cadrage validé Quang 12/07) : module FlashStack — case WS 'tool_call' branché (avant JETÉ) → carte éphémère par outil, max 3, récent en haut, durée = ephemeral_hud_duration_ms backend partagé, deadline horloge + watchdog 1s anti-throttling, pensée #mediaFlash INTACTE empilée dessous, réglage ⚙ « Taille des flashs » S/M/L (100/126/170px), contenant prêt P2.2. // v1.69.0 — P1.4 CODE mobile (parité APK v1.78.0) : AUDIT local hubs/cycles/dead (case 'audit' du codemap_cmd, avant ignoré — HUB_MIN parité PC, SCC Tarjan, dead=fan-in 0, card #codeAuditCard tappable) + DIFF GIT exploité (args[2]=fonctions touchées par le backend git, avant jeté : liste ± modifiée, badge MODIFIÉE sur la fiche, focus auto si 1 seule fonction). // v1.62.0 — parité mobile v1.71.0 : (B) jauge ne se dissipe plus entre 2 phrases (attend tts_end + GRACE_MS), (C) pensée flash cliquable partout + watchdog auto-hide, (D) itinéraire carte accumulé (routes[] + event 'itinerary') = parcours continu. // v1.61.0 — BADGE ✦ « pensée » dans le VIEWER plein écran (#mediaLightbox) : span #lbPass alimenté par renderView (it.passive galerie OU it.mode==='passive' flash), vert GS, masqué si vide. Parité PC/APK. // v1.60.0 — PORT depuis l'APK : BARRE DU BAS 3 zones (mini-hologramme d'état à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE, l'ancien FAB flottant est retiré) + JAUGE DE PAROLE (barre magenta fine en haut + anneau concentrique autour du mini-holo, décroissants et exacts via _ttsRemainingMs, gate target==='mobile', fondu au barge-in). La PWA était restée à l'ancien layout (lignée v1.59.x divergente) — patchs ciblés, aucun écrasement. // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
+  const VERSION = '1.96.0'; /* v1.96.0 — FOND « CARTE DE SESSION », OPTIONNEL ET PERSISTÉ (décision Quang 27/07 : « l'affichage actuel reste et on ajoute une option dans configuration pour activer cette interface alternative », « l'option sera en persistance mémoire »). Le cœur de session du PC (le die SESSION) prend la place de l'hologramme atomique, entouré des moteurs et de leurs TÉMOINS DE SESSION, des dossiers en connecteurs de tranche, des panneaux RÉSEAU·WEB et AVIS·LLM, et de la chronologie. Défaut = OFF : rien ne change tant que l'interrupteur n'est pas activé, et le retour arrière est immédiat. ⚠️ CE QUI COMMANDE L'IMPLÉMENTATION EST LA CONSO, MESURÉE SUR TÉLÉPHONE RÉEL (banc session-scope/banc-conso-mobile.py, différentiel contre une page noire immobile) : dessin FIGÉ +0 %, animation continue +202 %, sans aucun filtre SVG +199 %, en SMIL natif +201 %, en transform composé GPU +94 %, PAR SALVES (2 s / 30 s) +5,7 %. Et le chiffre qui décide : DEUX impulsions coûtent 84 %, DOUZE en coûtent 94 % — le coût est quasi indépendant du NOMBRE d'éléments animés, il tient au FAIT qu'une animation tourne. Réduire les effets ne sert à rien ; seule compte la DURÉE pendant laquelle ça bouge. D'où trois règles non négociables : (1) aucune animation permanente, des SALVES brèves espacées, et entre elles animation:'none' (une animation finie mais encore déclarée garde sa couche de composition vivante) ; (2) ce qui bouge vit HORS du SVG (dès qu'un élément bouge dedans, Chrome repeint les ~1000 nœuds) ; (3) transform uniquement, seule propriété dont la composition GPU est garantie (offset-path mesuré à +124 %). ⚠️ Le fond n'est pas encore branché sur le flux réel : il l'écrit en toutes lettres (RELEVÉ · DÉMO, HORS LIGNE, EN ATTENTE DE SOURCE) plutôt que de faire passer des chiffres d'exemple pour du direct. ⚠️ Le CALAGE reste à finir : la maquette a été calée sur la capture de l'APK du Honor, or la PWA a une disposition différente — sous 300 px de place libre, on cesse de s'imbriquer et on redevient un fond plein écran, lisible mais moins ajusté. Vérifié en live sur le Samsung (13/13 : option OFF par défaut, allumage, dessin présent, zéro débordement, PERSISTANCE après rechargement, extinction complète). */ /* v1.95.0 — PARITÉ APK v1.104.0 (mandat Quang 16/07 : solution durable, pas un pansement) : (1) RÉCONCILIATEUR D'ÉTAT 1 Hz horloge murale — le ré-armement était événementiel (suspendu à tts_end) → 1 événement perdu = conversation morte ; 4 blocages en 4 jours = 4 façons de perdre tts_end. Boucle idempotente convergeant vers « mode conv + aucun tour en cours + TTS fini ⇒ micro ouvert » → tts_end devient une optimisation de latence, plus une condition de survie. (2) RACINE des ABORT cause=stop : _vadReset ne remettait pas _vadLastVoiceWallTs → _recSafetyCheck coupait le start en vol au 1er tick (~1s) sans geste user ; fix = reset + garde structurelle (>= started). Backend v2.21.0 en regard (timeout+pacing TTS, garde STT anti-hallu). */ /* v1.94.2 — FIX reprise conversation continue (parité APK v1.103.2, bug Honor BT prouvé log : ABORT start#1 cause=stop) : handlers mediaSession pause/stop ne coupent QUE si recSentStart (rec réellement démarré) → la bascule SCO Bluetooth pendant getStream ne tue plus le start en vol. */ /* v1.94.1 — INSTRUMENTATION reprise continue (parité APK v1.103.1) : _lastGenBump trace la cause de chaque incrément de _startGen (stop|ws-close|new-start) + les 2 blocs ABANDON loggent client_log 'ABORT start#N cause=…'. ZÉRO changement de comportement. */ /* v1.94.0 — ANTI-COURSE ASYNC conversation continue (bug Honor 15/07) : jeton _startGen invalide un start dont le getUserMedia (lent BT/4G) est encore en vol ou juste avant .start() → plus de MediaRecorder zombie. + B3 onclose. Backend v2.19.0 : B1 watchdog anti-zombie + B2 ping explicite. Complète la sérialisation v1.74.0. */; /* v1.91.0 — FILET anti-blocage ENREGISTREMENT (parité APK v1.100.0, bug Honor 14/07, hologramme JAUNE figé plusieurs minutes) : le VAD tourne sur requestAnimationFrame, GELÉ quand l'app passe en arrière-plan/écran éteint (voiture) → rec_start sans jamais de STOP. Fix : deadline horloge murale + watchdog setInterval(1s) + rattrapage sur `visibilitychange visible` → _recSafetyCheck coupe un rec zombie (cap 60s dur OU silence VAD évalué sur l'horloge) dès le retour au premier plan. Complète v1.90.0 (qui ne cassait PAS un rec ouvert : `if(ui.recording) return`). */ /* v1.90.0 — FILET anti-blocage conversation continue (parité APK v1.99.0, bug Honor 13/07 hologramme jaune) : handler `turn_dropped` (backend v2.13.3) + watchdog 9 s ré-arment l'écoute quand le backend droppe un tour ou ne répond pas. */ /* v1.89.0 — FIX cohérence PC/mobile focus ville (bug log 13/07 « c'est pas Paris ») : le scale ville était figé à 11 px/degré = vue CONTINENT sur le renderer maison ; désormais cadré sur la BBOX du geojson frontières ville (parité fit_country + PC core v1.27.0), fallback scale 55. */ /* v1.88.0 — CAPITALES au zoom sur la carte (199 NE 110m, point+label, anti-chevauchement par priorite pop, invisibles en vue monde scale<2) */ /* v1.87.0 — FRONTIERES PAYS sur la carte (retour Quang 13/07) : WORLD_BORDERS embarque (NE 110m interieures, 326 lignes/3000 pts/24Ko) + drawBorders sous les couches data */ /* v1.86.0 — S5v2 : suggestions a payload globe (seisme majeur -> carte), tap rejoue SceneMobile.apply complet */ /* v1.85.0 — HOTFIX micro/route audio (Headset earpiece = ecouteur interne exclu du pick BT) + get_config au boot (hydratation reglages persistes) */   // v1.84.0 — S5 PROACTIVITÉ DE SCÈNE : case WS scene_suggestion → FlashStack.onSuggestion (carte 💡 tappable, tap = SceneMobile.apply {tab,cmd} + retrait, TTL borné), réglage ⚙ « Proactivité de scène » (flag BACKEND scene_proactivity_enabled partagé PC, hydraté config_state). // v1.83.0 — S4b LIENS CODE↔SYSTÈME (parité APK v1.92.0, backend v2.9.0, PC v1.24.0) : CodemapNative.load reçoit `project` (dépôt d'origine) → ligne tappable « 🛰 vit dans <repo> → » = bascule onglet SYSTÈME + focusCard ; SystemeNative.onEcosystem stocke le détail commit enrichi (subject/hash/functions) → ligne « ⤷ » sous la card projet. | v1.82.0 — S7 PHOTOTHÈQUE WEB (parité APK v1.91.0, backend v2.8.0, PC v1.23.0) : onglet galerie « 🌐 Web » (kind='web', compteur séparé, exclu de l'onglet Galerie), flash image préfère flash.local_url (copie photothèque servie par le backend via API_BASE — fallback URL source Wikimedia), FIX préexistant : srcOf/fullSrcOf laissent passer les URLs http(s) absolues (avant : API_BASE+URL absolue = src invalide, le tap flash→viewer chargeait une image morte). | v1.81.0 — RESPECT DU RATIO des images flash (retour Quang : 9:16 recadrée en 16:9 ; parité APK v1.90.0, PC v1.22.2) : #mediaFlash img + carte FlashStack en width:auto/max-width:100%/max-height:2×réglage/contain — portrait entier sans clic, paysage inchangé. | v1.80.0 — S4a TRACE AU SOL ISS (pont cosmos→carte, parité APK v1.89.0, backend v2.7.0, PC core v1.22.0) : case globe iss_track/iss_track_clear → issTrack {coords,now}, drawIssTrack (polyligne dorée pointillée, garde antiméridien, 🛰+label position courante), chip ISS au HUD couches, getState().layers.iss. | v1.79.0 — S3 COUCHES CARTE ANIMÉES opt-in (parité APK v1.88.0, backend v2.5.0, PC core v1.21.0) : flag `animate` des payloads globe → lecture chrono séismes ts USGS ~12s (drawSeisms filtre par playhead), traînées vols extrapolées cap+vitesse dash animé ~25s (drawFlightTrails sous les ✈), respiration alpha aurore ~20s ; animations BORNÉES via animStep() dans loop() (dirty-flag préservé, batterie), retour statique pixel-identique ; bouton rejeu #mapAnimBtn 44px (bottom:68px au-dessus du HUD couches) ; getState().anim pour le harnais. | v1.78.0 — (1) SCO Bluetooth natif pattern DictoKey (mandat Quang) : AudioFocusPlugin.enableSco/disableSco (setCommunicationDevice API31+ / startBluetoothSco sinon), rearme a CHAQUE tour au takeAudioFocus, coupe au release, log SCO client_log — no-op sans casque/hors Capacitor ; (2) VRAI fix swipe 3e essai : body user-select:none global heritait sur le champ -> gesture typing Gboard desactive ; exemption user-select:text sur .text-input. // v1.77.0 — retours Quang soir : (1) retour EN HAUT auto a la fermeture du clavier (blur + visualViewport resize -> .main scrollTop 0, l'hologramme reste visible) ; (2) swipe 2e essai : attributs textarea alignes EXACTEMENT PromoClip (zero autocomplete/spellcheck/enterkeyhint/inputmode). // v1.76.0 — 3 retours Quang 12/07 : (1) flash image TAPPABLE -> viewer plein ecran comme la pensee (MediaImages.openExternal, sans id = pas de coeur/corbeille) ; (2) champ texte = TEXTAREA rows=1 (glide typing Gboard marche sur textarea, pas sur input — parite PromoClip) ; (3) micro BT best-effort : deviceId du casque bluetooth si expose par la WebView + log MIC diagnostic, fallback micro defaut inchange. // v1.75.0 — MISE EN SCENE P2.2 hors-onglet : FlashStack.onSceneFlash (carte ephemere texte court ou image web verifiee Wikipedia, tab 'flash' de scene_directive, aucune bascule de vue). // v1.74.0 — FIX effets de bord voix (log Quang 12/07) : serialisation recording (rec_end de l'ancien flux AVANT nouveau rec_start + callbacks recorder perime no-op) = fin zombie/blob invalide Groq 400 ; ISS honnete (chip indisponible si echec fetch, parite NEO/SW) + poke fetch immediat au retour vue cosmos. // v1.73.0 — MISE EN SCENE P2.1 : _sceneApply etendu cosmos/systeme/codemap (m.cmd {tool,args} rejoue dans le module natif via les memes cases que les events *_cmd + bascule vue remote reversible). // v1.72.0 — « dynamiques » cadrage pays mobile (parité APK v1.81.0) : fit_country dessine le CONTOUR pays (highlights '_fit', magenta #e91e63) + badge fiche 3 lignes (NOM · coords · VUE PAYS) ; focus ville retire le contour | v1.71.0 — MISE EN SCÈNE P2.0 (parité APK v1.80.0) : case WS scene_directive + onSceneDirective/_sceneBindMeta/_sceneApply — route pc = fire réception+offset, route mobile = directive liée au PROCHAIN tts_audio_meta et calée sur le planning AudioContext (_ttsNextStartTime), filet off+4 s ; application = setActiveView('map',{remote}) + MapNative.onGlobe(payload), flag backend mise_en_scene_enabled OFF défaut | v1.70.0 — P1.5 PILE DE FLASHS haut-droite (parité APK v1.79.0, cadrage validé Quang 12/07) : module FlashStack — case WS 'tool_call' branché (avant JETÉ) → carte éphémère par outil, max 3, récent en haut, durée = ephemeral_hud_duration_ms backend partagé, deadline horloge + watchdog 1s anti-throttling, pensée #mediaFlash INTACTE empilée dessous, réglage ⚙ « Taille des flashs » S/M/L (100/126/170px), contenant prêt P2.2. // v1.69.0 — P1.4 CODE mobile (parité APK v1.78.0) : AUDIT local hubs/cycles/dead (case 'audit' du codemap_cmd, avant ignoré — HUB_MIN parité PC, SCC Tarjan, dead=fan-in 0, card #codeAuditCard tappable) + DIFF GIT exploité (args[2]=fonctions touchées par le backend git, avant jeté : liste ± modifiée, badge MODIFIÉE sur la fiche, focus auto si 1 seule fonction). // v1.62.0 — parité mobile v1.71.0 : (B) jauge ne se dissipe plus entre 2 phrases (attend tts_end + GRACE_MS), (C) pensée flash cliquable partout + watchdog auto-hide, (D) itinéraire carte accumulé (routes[] + event 'itinerary') = parcours continu. // v1.61.0 — BADGE ✦ « pensée » dans le VIEWER plein écran (#mediaLightbox) : span #lbPass alimenté par renderView (it.passive galerie OU it.mode==='passive' flash), vert GS, masqué si vide. Parité PC/APK. // v1.60.0 — PORT depuis l'APK : BARRE DU BAS 3 zones (mini-hologramme d'état à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE, l'ancien FAB flottant est retiré) + JAUGE DE PAROLE (barre magenta fine en haut + anneau concentrique autour du mini-holo, décroissants et exacts via _ttsRemainingMs, gate target==='mobile', fondu au barge-in). La PWA était restée à l'ancien layout (lignée v1.59.x divergente) — patchs ciblés, aucun écrasement. // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -3824,7 +3830,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     silencePauseS: 2.5,                     // 1.0 - 5.0 s
     // Durée écoute follow-up = combien de secondes le mic reste ouvert post-TTS
     // pour que Quang puisse répondre. Pattern PC `follow_up_window_s` (default 6).
-    followUpWindowS: 6                      // 3 - 15 s
+    followUpWindowS: 6,                     // 3 - 15 s
+    // v1.19.0 — Fond « carte de session ». FAUX par défaut : décision Quang du
+    // 27/07, « l'affichage actuel reste et on ajoute une option ». Persisté ici
+    // même, donc il survit au redémarrage (« l'option sera en persistance
+    // mémoire »).
+    carteFond: false
   };
   let config = {};
 
@@ -3847,6 +3858,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
     if(!['off','conv','continuous'].includes(config.convMode)) config.convMode = 'off';
     if(!['idle','listening','thinking','speaking'].includes(config.state)) config.state = 'idle';
     if(!['home','map','cosmos'].includes(config.view)) config.view = 'home';
+    config.carteFond = config.carteFond === true;   // rien d'autre que vrai/faux
     return config;
   }
 
@@ -11805,7 +11817,559 @@ releaseMediaStream(); // cleanup any leftover dead tracks
     } catch(e){}
     try { if(ws) ws.close(1000, 'unload'); } catch(e){}
   });
+
+  /* ── v1.19.0 — L'interrupteur du fond « carte de session » ────────────────
+     Restauré au boot depuis `config.carteFond` : c'est ce qui rend le choix
+     persistant d'une session à l'autre (« l'option sera en persistance
+     mémoire »). Le module vit dans un second bloc <script>, injecté APRÈS
+     celui-ci — d'où la petite attente : au moment où ces lignes s'exécutent,
+     `window.CarteFond` n'existe pas encore. */
+  (function cablerCarte(){
+    const btn = document.getElementById('settingsCarte');
+    const appliquer = on => {
+      if (window.CarteFond) window.CarteFond.activer(on);
+      if (btn) btn.textContent = on ? '◼ Activé' : '◻ Désactivé';
+    };
+    if (btn) btn.addEventListener('click', () => {
+      config.carteFond = !config.carteFond;
+      saveConfig();
+      appliquer(config.carteFond);
+    });
+    const poser = () => { if (window.CarteFond) appliquer(config.carteFond);
+                          else setTimeout(poser, 60); };
+    poser();
+  })();
 })();
 </script>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     CARTE DE SESSION — fond d'écran optionnel (v1.19.0, 28/07/2026)
+
+     Ce que c'est : le fond « carte de session » du PC, porté sur mobile. Le
+     cœur de session (le die « SESSION ») prend la place de l'hologramme
+     atomique, entouré des moteurs, des dossiers touchés, des deux panneaux
+     et de la chronologie.
+
+     ⚠️ C'EST UNE OPTION, et l'affichage actuel reste le DÉFAUT (décision Quang,
+     27/07) : rien ne change tant que l'interrupteur des réglages n'est pas
+     activé. Le choix est persisté dans `friday.mobile.config` — il survit au
+     redémarrage.
+
+     ── CE QUI COMMANDE TOUTE L'IMPLÉMENTATION : LA CONSOMMATION ──────────────
+     Mesuré sur téléphone réel (banc `session-scope/banc-conso-mobile.py`,
+     différentiel de temps CPU contre une page noire immobile) :
+
+        dessin FIGÉ ......................  +0 %      ← le dessin est GRATUIT
+        animation continue ..............  +202 %
+        … sans aucun filtre SVG .........  +199 %
+        … en SMIL natif .................  +201 %
+        … en transform composé GPU ......   +94 %
+        PAR SALVES (2 s / 30 s) .........   +5,7 %   ← retenu
+
+     Et le chiffre qui décide : DEUX impulsions coûtent 84 %, DOUZE en coûtent
+     94 %. Le coût est donc quasi indépendant du NOMBRE d'éléments animés — il
+     tient au FAIT qu'une animation tourne (le navigateur bascule la page en
+     mode animé et recompose à chaque image). Réduire le nombre d'effets ne
+     sert à rien ; seule compte la DURÉE pendant laquelle ça bouge.
+
+     ⇒ Trois règles non négociables ici :
+       1. AUCUNE animation permanente. Des SALVES brèves, espacées, et entre
+          elles plus une seule animation déclarée (`animation:none`, pas
+          seulement « terminée » : une animation finie mais encore déclarée
+          garde la couche de composition vivante).
+       2. Ce qui bouge vit HORS du SVG. Dès qu'un élément bouge DANS le SVG,
+          Chrome repeint le SVG entier (~1000 nœuds).
+       3. `transform` uniquement pour déplacer — la seule propriété dont la
+          composition GPU est garantie. Pas `offset-path` (mesuré : +124 %).
+
+     ── HONNÊTETÉ DE LA SOURCE ───────────────────────────────────────────────
+     Le fond n'est pas encore branché sur le flux réel des sessions. Il l'écrit
+     donc en toutes lettres (« RELEVÉ · DÉMO ») au lieu de faire passer des
+     chiffres d'exemple pour du direct. Un fond qui ment quand la source manque
+     est pire qu'un fond sans source.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="carteFond" aria-hidden="true"><div id="carteImp"></div></div>
+<style>
+  /* Le calque : DERRIÈRE tout le HUD, et il ne vole jamais un clic. */
+  #carteFond{ position:fixed; inset:0; z-index:0; pointer-events:none;
+              display:none; overflow:hidden; background:#02050a; }
+  body[data-carte="1"] #carteFond{ display:block; }
+  #carteFond > svg{ position:absolute; left:0; top:0; transform-origin:0 0; }
+  /* Le calque des impulsions : hors du SVG (voir règle 2), et sa propre couche
+     de composition (`will-change`) pour que le GPU les déplace sans repeindre. */
+  #carteImp{ position:absolute; left:0; top:0; transform-origin:0 0; }
+  #carteImp i{ position:absolute; left:0; top:0; display:block;
+               width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%;
+               opacity:0; will-change:transform; }
+  #carteImp i::after{ content:''; position:absolute; left:5.9px; top:5.9px;
+                      width:2.2px; height:2.2px; border-radius:50%; background:#fff; }
+
+  /* En mode carte : le cœur de la carte REMPLACE l'hologramme, et le transcript
+     se replie — c'est ce repli qui rend sa hauteur à la carte (décision Quang :
+     « si le transcript fait perdre de la place en hauteur »). */
+  body[data-carte="1"] #sphereWrap{ display:none; }
+  /* ⚠️ `min-height:0` est INDISPENSABLE : la règle d'origine impose
+     min-height:200px, et un min-height l'emporte toujours sur un max-height.
+     Sans cette ligne le transcript ne se replie pas du tout. */
+  body[data-carte="1"] .transcript-primary{ flex:0 0 auto; min-height:0;
+                                            max-height:34px; overflow:hidden; }
+  body[data-carte="1"] .transcript-primary.carte-deplie{ flex:1 1 auto;
+                                                         max-height:none; }
+  body[data-carte="1"] .transcript-primary .transcript-header{ cursor:pointer; }
+  body[data-carte="1"] .sat-grid{ display:none; }
+  /* Le HUD doit rester au-dessus du fond. */
+  body[data-carte="1"] .app{ position:relative; z-index:1; }
+</style>
+<script>
+/* Tout est enfermé dans une fonction : ce fichier fait ~12 000 lignes et une
+   collision de nom casserait Friday. Rien ne sort, sauf `window.CarteFond`. */
+(function(){
+  'use strict';
+  const L = 360, H = 787;                       /* le repère de la maquette */
+  const CO = { lire:'#3ad9ff', ecrire:'#ffcf4a', shell:'#93aab8', web:'#41ffa8',
+               avis:'#ff5f92', agent:'#b98cff', livrer:'#ff9b4f', autre:'#4b636f' };
+  const CM = { CLAUDE:'#00d4ff', GLM:'#fbbf24', KIMI:'#c084fc', DEEPSEEK:'#4ade80' };
+  const CY_ = '#3ad9ff', BL = '#eafffb', MONO = 'ui-monospace,monospace';
+  const NS = 'http://www.w3.org/2000/svg';
+  const CX = 180, CY = 306, DW = 96, DH = 56;
+  const MB = 79, MG = 8, MH = 34, MY = 176, MX0 = 10, RAIL = 222;
+  const GW = 32, GLX = 10, GRX = 318;
+  const FX0 = 6, FX1 = 354, FY0 = 112, FY1 = 470;
+
+  const hote = document.getElementById('carteFond');
+  const calque = document.getElementById('carteImp');
+  let svg = null, impulsions = [], salveEnCours = false, minuteur = null;
+
+  const el = (p, t, a) => { const n = document.createElementNS(NS, t);
+    for (const k in (a || {})) if (a[k] != null) n.setAttribute(k, a[k]);
+    p.appendChild(n); return n; };
+  const tx = (p, s, a) => { const n = el(p, 'text', a); n.textContent = s; return n; };
+
+  /* ── Les données. Figées tant que le flux n'est pas branché — et DITES comme
+     telles à l'écran (« RELEVÉ · DÉMO »). ── */
+  let D = {
+    direct: false,
+    evenements: 0,
+    tokens: '—',
+    etat: 'IDLE',
+    flux: [],
+    moteurs: { CLAUDE:['vide','vide','vide','vide'], GLM:['vide','vide','vide','vide'],
+               KIMI:['vide','vide','vide','vide'], DEEPSEEK:['vide','vide','vide','vide'] },
+    dossiers: [],
+    web: 0, avis: 0,
+  };
+
+  const ROUTES = [
+    { d:'M 49.5 222 V 268 H 84',         fam:'agent', mot:0 },
+    { d:'M 136.5 222 V 236 H 132 V 250', fam:'lire',  mot:1 },
+    { d:'M 223.5 222 V 236 H 228 V 250', fam:'agent', mot:2 },
+    { d:'M 310.5 222 V 268 H 276',       fam:'web',   mot:3 },
+    { d:'M 84 280 H 42',   fam:'ecrire', dos:0 },
+    { d:'M 84 340 H 42',   fam:'lire',   dos:1 },
+    { d:'M 276 280 H 318', fam:'lire',   dos:2 },
+    { d:'M 276 340 H 318', fam:'shell',  dos:3 },
+    { d:'M 132 370 V 384', fam:'web'   },
+    { d:'M 228 370 V 384', fam:'avis'  },
+    { d:'M 180 370 V 424', fam:'livrer' },
+  ];
+  const ORDRE_M = ['CLAUDE', 'GLM', 'KIMI', 'DEEPSEEK'];
+  const C_ETAT = { travaille:'#ff9d2e', attend:'#c084fc', vide:'#12303c' };
+
+  function construire(){
+    hote.querySelectorAll('svg').forEach(n => n.remove());
+    calque.innerHTML = '';
+    impulsions = [];
+    svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${L} ${H}`);
+    svg.setAttribute('width', L); svg.setAttribute('height', H);
+    hote.insertBefore(svg, calque);
+
+    const defs = el(svg, 'defs');
+    const flou = el(defs, 'filter', { id:'cfDoux', x:'-150%', y:'-150%',
+                                      width:'400%', height:'400%' });
+    el(flou, 'feGaussianBlur', { stdDeviation:5 });
+    const bl = el(defs, 'filter', { id:'cfBloom', x:'-120%', y:'-120%',
+                                    width:'340%', height:'340%' });
+    el(bl, 'feGaussianBlur', { stdDeviation:1.5, result:'b' });
+    const mg = el(bl, 'feMerge');
+    el(mg, 'feMergeNode', { in:'b' }); el(mg, 'feMergeNode', { in:'SourceGraphic' });
+    const grad = (id, arr, vert) => {
+      const g = el(defs, 'linearGradient', { id, x1:0, y1:0, x2:vert ? 0 : 1, y2:vert ? 1 : 0 });
+      arr.forEach(a => el(g, 'stop', { offset:a[0], 'stop-color':a[1], 'stop-opacity':a[2] }));
+    };
+    grad('cfSi', [['0%','#0b2430'],['55%','#071a24'],['100%','#04121a']], true);
+    grad('cfVerre', [['0%','#ffffff',.13],['100%','#ffffff',.015]], true);
+    grad('cfCu', [['0%','#d59b52'],['50%','#f6d08a'],['100%','#a8722f']], false);
+
+    /* La fenêtre : un seul cadre, ses équerres disent « ceci est UN objet ». */
+    const cad = el(svg, 'g', { opacity:.9 });
+    el(cad, 'rect', { x:FX0, y:FY0, width:FX1-FX0, height:FY1-FY0, rx:10,
+                      fill:'none', stroke:'#0e3040', 'stroke-width':1 });
+    [[FX0,FY0,1,1],[FX1,FY0,-1,1],[FX0,FY1,1,-1],[FX1,FY1,-1,-1]].forEach(q =>
+      el(cad, 'path', { d:`M ${q[0]+q[2]*22} ${q[1]} H ${q[0]} V ${q[1]+q[3]*22}`,
+                        fill:'none', stroke:CY_, 'stroke-width':1.8, 'stroke-opacity':.34 }));
+
+    /* Le FLUX, en haut à gauche — trois lignes, pas toute la fenêtre. */
+    const gf = el(svg, 'g', { opacity:.5 });
+    tx(gf, 'FLUX', { x:FX0+14, y:FY0+16, fill:'#4b7f92', 'font-size':7,
+                     'letter-spacing':2, 'font-family':MONO });
+    el(gf, 'line', { x1:FX0+14, y1:FY0+21, x2:FX0+200, y2:FY0+21,
+                     stroke:'#0e2a34', 'stroke-width':1 });
+    D.flux.slice(0, 3).forEach((e, i) => {
+      const y = FY0+30+i*10, c = CO[e.fam] || CO.autre;
+      el(gf, 'rect', { x:FX0+14, y:y-4.6, width:3, height:6, rx:1, fill:c,
+                       opacity:i === 0 ? 1 : .6 });
+      tx(gf, e.t, { x:FX0+22, y, fill:'#3d5f6e', 'font-size':6.4, 'font-family':MONO });
+      tx(gf, (e.outil||'').toUpperCase().slice(0,7), { x:FX0+62, y, fill:c,
+         'font-size':6.4, 'font-family':MONO, opacity:i === 0 ? 1 : .75 });
+      /* 14 caractères : au-delà, ça dépasse les 192 px de la zone. Le
+         débordement se MESURE, il ne s'estime pas. */
+      tx(gf, (e.cible||'').slice(0, 14), { x:FX0+96, y, fill:i === 0 ? BL : '#7d97a4',
+         'font-size':6.4, 'font-family':MONO, opacity:i === 0 ? .95 : .7 });
+    });
+
+    /* L'état de Friday, repris de l'hologramme qu'on remplace : sans lui on
+       gagnerait une jolie carte en perdant une information lue en permanence. */
+    tx(svg, '● ' + D.etat + ' · TAP MIC TO SPEAK', { x:FX1-14, y:FY0+16,
+       fill:'#5a7090', 'font-size':7, 'letter-spacing':1.6, 'text-anchor':'end',
+       'font-family':MONO });
+    tx(svg, D.direct ? ('● DIRECT · ' + D.tokens) : '○ RELEVÉ · DÉMO',
+       { x:FX1-14, y:FY0+33, fill:D.direct ? CY_ : '#c9863a', 'font-size':6.6,
+         'letter-spacing':1.4, 'text-anchor':'end', 'font-family':MONO, opacity:.75 });
+
+    /* Les tubes. Ils reculent (opacité) : une piste est du câblage, pas une
+       alerte — mais les impulsions qui y courent, elles, restent vives. */
+    const gt = el(svg, 'g', { opacity:.62 });
+    el(gt, 'line', { x1:40, y1:RAIL, x2:320, y2:RAIL, stroke:'#0e2a34', 'stroke-width':3 });
+    const chemins = [];
+    ROUTES.forEach((r, i) => {
+      const mortM = r.mot != null &&
+        !(D.moteurs[ORDRE_M[r.mot]] || []).some(e => e !== 'vide');
+      const mortD = r.dos != null && !(D.dossiers[r.dos]);
+      const mort = mortM || mortD;
+      el(gt, 'path', { d:r.d, fill:'none', stroke:'#0e2a34', 'stroke-width':2.6,
+                       'stroke-linecap':'round', 'stroke-linejoin':'round' });
+      const p = el(gt, 'path', { d:r.d, fill:'none', stroke:CY_, 'stroke-width':1,
+                                 'stroke-opacity':mort ? .05 : .16,
+                                 'stroke-linecap':'round', 'stroke-linejoin':'round' });
+      /* Une piste vers un moteur SANS session existe, mais rien n'y circule :
+         une impulsion partant d'un « 0 SES » serait un joli mensonge. */
+      chemins.push(mort ? null : { p, fam:r.fam, i });
+    });
+    [[132,236],[228,236],[49.5,268],[310.5,268]].forEach(q =>
+      el(gt, 'circle', { cx:q[0], cy:q[1], r:2.6, fill:'#071a22', stroke:CY_,
+                         'stroke-width':.9, 'stroke-opacity':.4 }));
+
+    /* Les moteurs, EN HAUT (comme sur PC : ils alimentent, le courant descend),
+       avec leurs TÉMOINS DE SESSION. Orange = travaille, violet = a fini et
+       attend, éteint = pas de session. Ces couleurs disent l'ÉTAT, jamais QUI —
+       sinon une session Kimi (violette) qui travaille serait indiscernable
+       d'une session qui attend. Ils gardent TOUTE leur intensité : c'est
+       l'information vive de la carte. */
+    ORDRE_M.forEach((nom, i) => {
+      const x = MX0+i*(MB+MG), c = CM[nom];
+      const et = D.moteurs[nom] || ['vide','vide','vide','vide'];
+      const actif = et.some(e => e !== 'vide'), g = el(svg, 'g');
+      if (actif) el(g, 'rect', { x:x-4, y:MY-4, width:MB+8, height:MH+8, rx:8,
+                                 fill:c, opacity:.06, filter:'url(#cfDoux)' });
+      el(g, 'rect', { x, y:MY, width:MB, height:MH, rx:4, fill:'#061620', stroke:c,
+                      'stroke-width':1.1, 'stroke-opacity':actif ? .8 : .22 });
+      el(g, 'circle', { cx:x+7, cy:MY+7, r:2, fill:'none', stroke:c,
+                        'stroke-width':.9, 'stroke-opacity':actif ? .7 : .25 });
+      tx(g, nom, { x:x+MB/2, y:MY+15, fill:actif ? BL : '#6b8b9c', 'font-size':7.5,
+                   'letter-spacing':1, 'text-anchor':'middle', 'font-family':MONO });
+      tx(g, et.filter(e => e !== 'vide').length + ' SES', { x:x+MB/2, y:MY+26,
+         fill:actif ? c : '#3d5866', 'font-size':6.5, 'text-anchor':'middle',
+         'font-family':MONO, opacity:.9 });
+      et.slice(0, 4).forEach((e, k) => {
+        const px = x+12+k*((MB-24)/3), cc = C_ETAT[e] || C_ETAT.vide;
+        el(g, 'line', { x1:px, y1:MY+MH, x2:px, y2:MY+MH+6, stroke:cc,
+                        'stroke-width':1.5, opacity:e === 'vide' ? .35 : .85 });
+        if (e !== 'vide') el(g, 'circle', { cx:px, cy:MY+MH+9.5, r:4.4, fill:cc,
+                                            opacity:.34, filter:'url(#cfDoux)' });
+        el(g, 'circle', { cx:px, cy:MY+MH+9.5, r:2.2, fill:cc,
+                          opacity:e === 'vide' ? .5 : 1,
+                          filter:e === 'vide' ? null : 'url(#cfBloom)' });
+      });
+    });
+
+    /* Les dossiers, en CONNECTEURS DE TRANCHE : sur une vraie carte, ce qui
+       longe le bord EST un connecteur. Ils reculent d'un cran — un dossier est
+       un repère, pas une alerte. */
+    const places = [[GLX,248],[GLX,312],[GRX,248],[GRX,312]];
+    places.forEach((pl, i) => {
+      const dd = D.dossiers[i];
+      const c = dd ? (CO[dd.fam] || CO.autre) : CO.autre;
+      const chaud = dd ? Math.min(1, dd.ev/40) : 0;
+      const g = el(svg, 'g', { opacity:dd ? .72 : .3 });
+      if (dd) el(g, 'rect', { x:pl[0]-3, y:pl[1]-3, width:GW+6, height:60, rx:7,
+                              fill:c, opacity:.04+chaud*.06, filter:'url(#cfDoux)' });
+      el(g, 'rect', { x:pl[0], y:pl[1], width:GW, height:54, rx:4, fill:'#071a22',
+                      stroke:c, 'stroke-width':1.1, 'stroke-opacity':.3+chaud*.6 });
+      el(g, 'path', { d:`M ${pl[0]+11} ${pl[1]} a 5 5 0 0 0 10 0`, fill:'none',
+                      stroke:c, 'stroke-width':1, 'stroke-opacity':.55 });
+      const bord = pl[0] < 180 ? pl[0]-5 : pl[0]+GW;
+      for (let k = 0; k < 5; k++)
+        el(g, 'rect', { x:bord, y:pl[1]+11+k*8, width:5, height:4.2, rx:1.2,
+                        fill:c, opacity:.35+(k/5)*.45 });
+      /* 6,2 px et non 6,6 : « SESSION-SCOPE » fait 13 caractères pour 54 px de
+         hauteur utile. Ça se calcule, ça ne s'estime pas. */
+      tx(g, dd ? dd.nom.toUpperCase().slice(0, 13) : '—', { x:0, y:0, fill:BL,
+         'font-size':6.2, 'font-family':MONO, 'letter-spacing':.2,
+         'text-anchor':'middle', opacity:.94,
+         transform:`translate(${pl[0]+12} ${pl[1]+27}) rotate(-90)` });
+      if (dd) tx(g, dd.ev + ' EV', { x:0, y:0, fill:c, 'font-size':6.2,
+         'font-family':MONO, 'text-anchor':'middle', opacity:.85,
+         transform:`translate(${pl[0]+24} ${pl[1]+27}) rotate(-90)` });
+    });
+
+    /* Le die « SESSION » : le cœur, qui remplace l'hologramme. Il AVANCE (halo
+       + contour franc) — c'est lui qu'on doit voir en premier, sans effort. */
+    const die = el(svg, 'g');
+    el(die, 'rect', { x:CX-DW-14, y:CY-DH-14, width:DW*2+28, height:DH*2+28, rx:16,
+                      fill:CY_, opacity:.07, filter:'url(#cfDoux)' });
+    el(die, 'rect', { x:CX-DW, y:CY-DH, width:DW*2, height:DH*2, rx:9, fill:'#000',
+                      opacity:.5, filter:'url(#cfDoux)' });
+    for (let i = 0; i < 15; i++){
+      const t = -84+i*12;
+      el(die, 'rect', { x:CX+t-2, y:CY-DH-8, width:4, height:10, fill:'url(#cfCu)' });
+      el(die, 'rect', { x:CX+t-2, y:CY+DH-2, width:4, height:10, fill:'url(#cfCu)' });
+    }
+    for (let i = 0; i < 9; i++){
+      const t = -48+i*12;
+      el(die, 'rect', { x:CX-DW-10, y:CY+t-2, width:10, height:4, fill:'url(#cfCu)' });
+      el(die, 'rect', { x:CX+DW, y:CY+t-2, width:10, height:4, fill:'url(#cfCu)' });
+    }
+    el(die, 'rect', { x:CX-DW, y:CY-DH, width:DW*2, height:DH*2, rx:9,
+                      fill:'url(#cfSi)', stroke:CY_, 'stroke-width':1.8 });
+    el(die, 'rect', { x:CX-DW, y:CY-DH, width:DW*2, height:DH, rx:9, fill:'url(#cfVerre)' });
+    for (let i = 1; i < 12; i++)
+      el(die, 'line', { x1:CX-DW+i*16, y1:CY-DH+9, x2:CX-DW+i*16, y2:CY+DH-9,
+                        stroke:CY_, 'stroke-width':.6, 'stroke-opacity':.08 });
+    [[-DW,-DH,1,1],[DW,-DH,-1,1],[-DW,DH,1,-1],[DW,DH,-1,-1]].forEach(q =>
+      el(die, 'path', { d:`M ${CX+q[0]+q[2]*14} ${CY+q[1]} H ${CX+q[0]} V ${CY+q[1]+q[3]*14}`,
+                        fill:'none', stroke:CY_, 'stroke-width':2.2 }));
+    /* La pluie de code : STATIQUE. Elle est dessinée une fois et ne bouge plus —
+       une pluie animée en permanence, c'est exactement ce que la mesure
+       interdit (+202 %). Le mouvement, c'est la salve, et rien d'autre. */
+    const GLY = 'ABCDEF0123456789/\\<>[]{}=+*·:;アイウエオカキクケコサシスセソタチツテト';
+    let gr = 20260728;
+    const alea = () => (gr = (gr*1103515245+12345) & 0x7fffffff) / 0x7fffffff;
+    const cl = el(defs, 'clipPath', { id:'cfClip' });
+    el(cl, 'rect', { x:CX-DW+2, y:CY-DH+2, width:DW*2-4, height:DH*2-4, rx:8 });
+    const gp = el(die, 'g', { 'clip-path':'url(#cfClip)' });
+    for (let i = 0; i < 16; i++){
+      const x = CX-DW+8+i*12.2, tete = alea()*9;
+      for (let j = 0; j < 10; j++){
+        const d = ((j-tete)+10)%10;
+        const op = d < 1 ? .95 : d < 4 ? .5-d*.1 : .06;
+        tx(gp, GLY[(alea()*GLY.length)|0], { x, y:CY-DH+13+j*11.4, 'font-size':10,
+           'font-family':MONO, fill:CY_, opacity:op, 'text-anchor':'middle' });
+      }
+    }
+    tx(die, 'SESSION', { x:CX, y:CY-10, fill:BL, stroke:'#07131a', 'stroke-width':3.4,
+       'paint-order':'stroke', 'text-anchor':'middle', 'font-size':15,
+       'letter-spacing':5, 'font-family':MONO });
+    tx(die, String(D.evenements), { x:CX, y:CY+14, fill:CY_, stroke:'#07131a',
+       'stroke-width':3.4, 'paint-order':'stroke', 'text-anchor':'middle',
+       'font-size':18, 'letter-spacing':2.4, 'font-family':MONO });
+    tx(die, D.direct ? 'ÉVÉNEMENTS · DIRECT' : 'ÉVÉNEMENTS · HORS LIGNE',
+       { x:CX, y:CY+32, fill:'#5b98a0', stroke:'#07131a', 'stroke-width':3,
+         'paint-order':'stroke', 'text-anchor':'middle', 'font-size':7.4,
+         'letter-spacing':2, 'font-family':MONO });
+    el(die, 'circle', { cx:CX+DW-16, cy:CY-DH+14, r:3.2,
+                        fill:D.direct ? '#41ffa8' : '#3d5866',
+                        filter:D.direct ? 'url(#cfBloom)' : null });
+
+    /* Les deux panneaux du PC : RÉSEAU · WEB et AVIS EXTERNE · LLM. */
+    [['RÉSEAU · WEB', 44, 'web', D.web, 'REQUÊTES'],
+     ['AVIS EXTERNE · LLM', 188, 'avis', D.avis, 'AVIS']].forEach(pn => {
+      const c = CO[pn[2]], g = el(svg, 'g', { opacity:.6 }), W = 128, Y = 384, HH = 30;
+      el(g, 'rect', { x:pn[1]-3, y:Y-3, width:W+6, height:HH+6, rx:7, fill:c,
+                      opacity:pn[3] ? .05 : .02, filter:'url(#cfDoux)' });
+      el(g, 'rect', { x:pn[1], y:Y, width:W, height:HH, rx:4, fill:'#071a22', stroke:c,
+                      'stroke-width':1, 'stroke-opacity':pn[3] ? .55 : .2 });
+      tx(g, pn[0], { x:pn[1]+8, y:Y+12, fill:BL, 'font-size':6.4, 'letter-spacing':.8,
+                     'font-family':MONO, opacity:.9 });
+      tx(g, pn[3] + ' ' + pn[4], { x:pn[1]+8, y:Y+23, fill:c, 'font-size':6.2,
+                                   'font-family':MONO, opacity:.85 });
+      for (let k = 0; k < 5; k++)
+        el(g, 'rect', { x:pn[1]+W-12-k*7, y:Y+11, width:3.4, height:9, rx:1.2,
+                        fill:c, opacity:k < pn[3] ? .95 : .16 });
+    });
+
+    /* La chronologie : elle dit le rythme, jamais rien d'urgent — donc elle
+       recule elle aussi. */
+    const g2 = el(svg, 'g', { opacity:.55 }), FY = 438;
+    el(g2, 'line', { x1:FX0+12, y1:FY, x2:FX1-12, y2:FY, stroke:'#0e2a34', 'stroke-width':1 });
+    const barres = D.flux.length ? D.flux : [];
+    for (let i = 0; i < 36; i++){
+      const e = barres[i % (barres.length || 1)];
+      const f = e ? e.fam : 'autre';
+      const x = FX0+14+i*((FX1-FX0-28)/36), h = 3+(i%5)*1.4;
+      el(g2, 'rect', { x, y:FY-h, width:1.5, height:h*2, fill:CO[f] || CO.autre,
+                       opacity:barres.length ? .5 : .12 });
+    }
+    tx(g2, 'CHRONOLOGIE · 2 H', { x:FX0+14, y:FY+19, fill:'#4b7f92', 'font-size':6.5,
+       'letter-spacing':1.2, 'font-family':MONO });
+    tx(g2, D.direct ? 'MAINTENANT' : 'EN ATTENTE DE SOURCE', { x:FX1-14, y:FY+19,
+       fill:'#4b7f92', 'font-size':6.5, 'letter-spacing':1.2, 'text-anchor':'end',
+       'font-family':MONO });
+
+    /* ── Les impulsions : HORS du SVG, en transform, et ARMÉES seulement le
+       temps d'une salve. Voir les trois règles en tête de module. ── */
+    const regles = [];
+    chemins.forEach(ch => {
+      if (!ch) return;
+      const lg = ch.p.getTotalLength();
+      const nom = 'cfp' + ch.i;
+      const pas = Math.max(4, Math.round(lg/10));
+      let regle = `@keyframes ${nom}{`;
+      for (let j = 0; j <= pas; j++){
+        const q = ch.p.getPointAtLength(lg*j/pas);
+        regle += `${(j/pas*100).toFixed(2)}%{transform:translate(${q.x.toFixed(1)}px,${q.y.toFixed(1)}px)}`;
+      }
+      regles.push(regle + '}');
+      const d = document.createElement('i');
+      const c = CO[ch.fam] || CO.autre;
+      d.style.background = `radial-gradient(circle, ${c}f2 0%, ${c}73 35%, ${c}00 70%)`;
+      d.dataset.nom = nom;
+      d.dataset.retard = (ch.i*.05).toFixed(2);
+      calque.appendChild(d);
+      impulsions.push(d);
+    });
+    let feuille = document.getElementById('carteKeyframes');
+    if (!feuille){
+      feuille = document.createElement('style');
+      feuille.id = 'carteKeyframes';
+      document.head.appendChild(feuille);
+    }
+    feuille.textContent = regles.join(' ');
+    ajuster();
+  }
+
+  /* Mise à l'échelle : on ne DÉFORME pas et on ne ROGNE pas (piège déjà payé :
+     `preserveAspectRatio: slice` faisait sortir la chronologie du cadre). On
+     met à l'échelle proportionnellement et on centre. */
+  function ajuster(){
+    if (!svg) return;
+    const w = hote.clientWidth || window.innerWidth;
+    const h = hote.clientHeight || window.innerHeight;
+    /* ⚠️ On ne se cale PAS sur l'écran, mais sur la place réellement laissée
+       libre par l'interface : du bas des onglets au haut du bouton de dictée.
+       Se caler sur l'écran posait la carte n'importe où — ses moteurs
+       tombaient sur le transcript et son cœur au milieu des boutons. La
+       géométrie de la PWA n'est pas celle de la maquette (masquer
+       l'hologramme fait tout remonter), donc elle se MESURE. */
+    const enTete = document.querySelector('.app > header');
+    const dictee = document.querySelector('.mic-row');
+    const y0 = enTete ? enTete.getBoundingClientRect().bottom : 0;
+    const y1 = dictee ? dictee.getBoundingClientRect().top : h;
+    /* ⚠️ PLANCHER. La maquette a été calée sur la capture de l'APK du Honor ;
+       la PWA a une disposition DIFFÉRENTE (elles ont divergé) et, une fois
+       l'hologramme masqué, il ne lui reste qu'une centaine de pixels entre les
+       onglets et le bouton de dictée. S'y ajuster écrasait la carte jusqu'à
+       l'illisible. En dessous de ce plancher, on cesse de s'imbriquer et on
+       redevient un FOND plein écran -- moins joliment ajusté, mais lisible, et
+       ça vaut toujours mieux qu'un dessin réduit à 40 %. */
+    const PLANCHER = 300;
+    let zone = y1 - y0;
+    if (zone < PLANCHER) zone = h;
+    /* Tout le dessin tient entre FY0 et FY1 : mettre CETTE bande à l'échelle
+       de la zone libre suffit, et rien n'est déformé ni rogné. */
+    const k = Math.min(w/L, zone/(FY1 - FY0));
+    const dx = (w - L*k)/2;
+    /* Imbriqué quand la place le permet, centré sinon. */
+    const dy = (zone === h) ? (h - (FY1 - FY0)*k)/2 - FY0*k : y0 - FY0*k;
+    const t = `translate(${dx}px,${dy}px) scale(${k})`;
+    svg.style.transform = t;
+    calque.style.transform = t;
+    calque.style.width = L + 'px';
+    calque.style.height = H + 'px';
+  }
+
+  /* ── LA SALVE ──────────────────────────────────────────────────────────────
+     Chaque impulsion parcourt sa piste UNE fois, puis on remet TOUT à zéro :
+     `animation:'none'`, pas seulement « terminée ». Une animation finie mais
+     encore déclarée garde sa couche de composition vivante, et c'est
+     précisément ce qui coûte. Entre deux salves, la page doit être strictement
+     identique à sa version figée. */
+  const PERIODE_MIN_MS = 30000;   /* plafond : une salve au plus toutes les 30 s,
+                                     MÊME si les événements arrivent en rafale.
+                                     C'est une décision, pas une limitation : la
+                                     carte dit « il se passe quelque chose »,
+                                     elle ne rejoue pas chaque appel d'outil. */
+  let derniereSalve = 0;
+
+  function salve(){
+    if (salveEnCours || !impulsions.length) return;
+    const t = Date.now();
+    if (t - derniereSalve < PERIODE_MIN_MS) return;
+    derniereSalve = t;
+    salveEnCours = true;
+    let reste = impulsions.length;
+    impulsions.forEach(d => {
+      d.style.opacity = '1';
+      d.style.animation = `${d.dataset.nom} 1.2s linear ${d.dataset.retard}s 1 both`;
+      const fin = () => {
+        d.removeEventListener('animationend', fin);
+        d.style.animation = 'none';
+        d.style.opacity = '0';
+        if (--reste === 0) salveEnCours = false;
+      };
+      d.addEventListener('animationend', fin);
+    });
+  }
+
+  function stopper(){
+    if (minuteur){ clearInterval(minuteur); minuteur = null; }
+    impulsions.forEach(d => { d.style.animation = 'none'; d.style.opacity = '0'; });
+    salveEnCours = false;
+  }
+
+  window.addEventListener('resize', ajuster);
+  /* La mise en page bouge sans que la fenêtre change de taille : repli du
+     transcript, clavier qui s'ouvre, onglet qui change. On resuit. */
+  if (window.ResizeObserver){
+    const ro = new ResizeObserver(() => ajuster());
+    const app = document.querySelector('.app');
+    if (app) ro.observe(app);
+  }
+  /* Onglet en arrière-plan : on n'anime plus rien. Rien à mesurer pour savoir
+     que dessiner un écran qu'on ne regarde pas est du gaspillage. */
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopper();
+    else if (document.body.dataset.carte === '1') demarrer();
+  });
+
+  function demarrer(){
+    if (!svg) construire();
+    ajuster();
+    if (!minuteur) minuteur = setInterval(salve, 5000);   /* le plafond décide */
+  }
+
+  window.CarteFond = {
+    activer(on){
+      document.body.dataset.carte = on ? '1' : '0';
+      if (on) demarrer(); else stopper();
+    },
+    /* Le point d'entrée du branchement au flux réel (chantier suivant) :
+       passer les vraies données puis appeler `salve()` sur un événement. */
+    donnees(d){
+      D = Object.assign(D, d || {});
+      if (document.body.dataset.carte === '1'){ construire(); }
+    },
+    salve,
+  };
+
+  /* Le transcript replié se déplie d'un geste sur son en-tête — il est replié
+     pour rendre sa hauteur à la carte, pas pour être inaccessible. */
+  document.addEventListener('click', e => {
+    const h = e.target.closest('.transcript-primary .transcript-header');
+    if (h && document.body.dataset.carte === '1')
+      h.parentElement.classList.toggle('carte-deplie');
+  });
+})();
+</script>
+
 </body>
 </html>
