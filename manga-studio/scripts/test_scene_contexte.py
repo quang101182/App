@@ -144,25 +144,49 @@ def main():
         # inexploitable. Il a quand meme servi : la relance perdait REELLEMENT le
         # contexte de scene, et c'est ainsi qu'on l'a vu.
         corps = "".join(envois) if envois else ""
-        verifie("chaque requête /enhance porte le contexte de la scène",
-                bool(envois) and all("CONTEXT" in c and "seiza" in c for c in envois),
+        # ⛔ v1.64.1 : le contexte est SORTI de la traduction. Il y était « pour
+        # désambiguïser », avec consigne explicite de ne rien en reprendre — et ce
+        # banc a attrapé « seiza » (venu de la case précédente) dans les tags d'une
+        # case qui parlait d'autre chose, UNE FOIS SUR DEUX. Un défaut intermittent
+        # est le pire : il passe les contrôles et vit chez l'utilisateur.
+        # Le banc vérifie donc l'inverse de sa 1re version : le chemin FIDÈLE ne
+        # reçoit rien, le chemin qui ENRICHIT reçoit tout.
+        verifie("la traduction (chemin fidèle) ne porte PAS le contexte",
+                bool(envois) and all("CONTEXT" not in c and "seiza" not in c
+                                     for c in envois),
                 "%d requête(s), extrait : %s" % (len(envois), corps[:80].replace("\n", " ⏎ ")))
-        verifie("… et elle porte aussi la phrase de la case",
+        verifie("… et elle porte bien la phrase de la case",
                 "elle le regarde" in corps, "")
 
-        pg.evaluate("() => { window.__vus = []; }")
-        pg.evaluate("""async () => { await traduire(S.panels[3]); }""")
-        corps2 = (pg.evaluate("() => window.__vus") or [""])[-1]
-        verifie("une case qui ouvre une scène n'envoie AUCUN contexte",
-                "CONTEXT" not in corps2, corps2[:70].replace("\n", " ⏎ "))
-
-        # --- 5 : rien de tout cela n'entre dans le prompt IMAGE --------------
+        # --- 5 : le contexte n'entre pas dans le prompt IMAGE ----------------
+        # ⚠ CE TEST DOIT PASSER AVANT TOUTE AMELIORATION, et c'est la lecon :
+        # `ameliorerPrompt` a le DROIT de reprendre le decor du contexte -- c'est
+        # sa raison d'etre. Mesure a l'appui, il reprend parfois davantage
+        # (« seiza », une posture d'une AUTRE case). Le tester apres l'avoir
+        # appele revenait donc a lui reprocher son travail : le banc echouait une
+        # fois sur deux sur un comportement voulu. Ici on mesure le chemin
+        # TRADUIT, celui qui doit rester fidele.
         final = pg.evaluate("() => promptFinal(S.panels[2])")
         fuites = [m for m in ("seiza", "panel 1", "panel 2", "dojo desert")
                   if m in final.lower()]
-        verifie("le contexte n'entre PAS dans le prompt envoyé au moteur",
+        verifie("après TRADUCTION seule, le contexte n'entre pas dans le prompt image",
                 not fuites,
                 ("a fui : %s | " % ", ".join(fuites) if fuites else "") + final[:120])
+
+        pg.evaluate("() => { window.__vus = []; }")
+        pg.evaluate("""async () => { await ameliorerPrompt(S.panels[2]); }""")
+        amel = pg.evaluate("() => window.__vus")
+        verifie("l'amélioration, elle, REÇOIT le contexte de la scène",
+                bool(amel) and any("seiza" in c for c in amel),
+                "%d requête(s)" % len(amel))
+
+        pg.evaluate("() => { window.__vus = []; }")
+        pg.evaluate("""async () => { await ameliorerPrompt(S.panels[3]); }""")
+        amel2 = pg.evaluate("() => window.__vus")
+        verifie("… et une case qui OUVRE une scène n'en reçoit aucun",
+                bool(amel2) and all("Previous panels" not in c for c in amel2),
+                "%d requête(s)" % len(amel2))
+
 
         # --- 6 : le separateur bascule, et il tient au rechargement ----------
         avant = pg.evaluate("() => S.panels.map((p,i) => ouvreUneScene(p,i))")

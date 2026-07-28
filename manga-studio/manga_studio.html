@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.63.0</title>
+<title>Manga Studio v1.64.1</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -242,6 +242,22 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .scenetag:hover{color:var(--txt);border-color:var(--accent)}
 .scenetag.on{color:var(--accent);border-color:var(--accent);background:rgba(10,12,16,.9)}
 
+/* ---------- pop-up « regenerer » (v1.64.0) ---------- */
+.modal{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.62);
+  display:flex;align-items:center;justify-content:center;padding:14px}
+.modal-in{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+  padding:16px;max-width:760px;width:100%;max-height:86vh;overflow:auto}
+.regen-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+.regen-grid label{position:relative;display:block;margin:0;cursor:pointer;
+  border:2px solid var(--line);border-radius:8px;overflow:hidden;background:#0b0e13}
+.regen-grid label.on{border-color:var(--accent)}
+.regen-grid img{width:100%;display:block;aspect-ratio:3/4;object-fit:cover}
+.regen-grid .vide{display:flex;align-items:center;justify-content:center;
+  aspect-ratio:3/4;color:var(--dim);font-size:11px;text-align:center;padding:6px}
+.regen-grid .no{position:absolute;top:4px;left:4px;background:rgba(10,12,16,.85);
+  border-radius:99px;padding:1px 7px;font-size:11px;color:var(--txt)}
+.regen-grid input{position:absolute;top:5px;right:5px;width:auto;margin:0}
+
 /* ---------- LE REMEDE DEFINITIF AU PIEGE `hidden` (v1.61.0) ----------
    Paye TROIS fois dans ce fichier : le voile des cases (v1.0.1, il avalait
    les clics pendant toute une version), le temoin « proxy injoignable »
@@ -408,7 +424,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.63.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.64.1</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -507,10 +523,34 @@ body.epure .aide{display:none}
     <div id="mstPrev" class="row" style="margin-top:10px"></div>
   </div>
 
+  <!-- ---------- REGENERER PLUSIEURS CASES (v1.64.0) ----------
+       Une pop-up de MINIATURES : on choisit ce qu on refait en regardant ce
+       qu on a. Les cases deja dessinees sont pre-cochees (le cas courant est
+       « je veux revoir ma planche ») ; les vides sont proposees, decochees. -->
+  <div id="regen" class="modal" hidden>
+    <div class="modal-in">
+      <h3 style="margin:0 0 4px">Régénérer des cases</h3>
+      <p class="muted" style="margin:0 0 10px;font-size:12px">
+        Chaque case cochée est redessinée avec une <b>nouvelle seed</b>.
+        Les essais précédents restent accessibles sous la case.</p>
+      <div class="row" style="margin-bottom:8px">
+        <button class="btn sm" id="regenAll">tout cocher</button>
+        <button class="btn sm" id="regenNone">tout décocher</button>
+        <span class="muted" id="regenState"></span>
+      </div>
+      <div id="regenGrid" class="regen-grid"></div>
+      <div class="row" style="margin-top:12px;justify-content:flex-end">
+        <button class="btn" id="regenCancel">Annuler</button>
+        <button class="btn pri" id="regenGo">Régénérer</button>
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="row">
       <button class="btn" id="btnAddPanel">+ Case</button>
-      <button class="btn" id="btnGenAll">Générer toutes les cases vides</button>
+      <button class="btn" id="btnGenAll" title="Dessine les cases qui ont un texte et pas encore d'image">Générer les cases décrites</button>
+      <button class="btn" id="btnRegenAll" title="Choisir les cases a redessiner, et les relancer d'un coup">🔁 Régénérer…</button>
       <button class="btn" id="btnDialogues" title="Écrit les répliques de TOUTE la planche d'un seul tenant, pour qu'elles s'enchaînent">💬 Dialogues de la planche</button>
       <button class="btn" id="btnExport">Exporter (PNG)</button>
       <button class="btn" id="btnExportPdf">Exporter (PDF)</button>
@@ -890,7 +930,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.63.0";
+const VERSION = "1.64.1";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1764,11 +1804,23 @@ const TRAD_CONSIGNE =
 /** Traduit la case en anglais si besoin. Rend true si elle a ete traduite.
  *  N'ENRICHIT PAS : c'est le role de `ameliorerPrompt`. */
 async function traduire(p){
-  // ⚠ La traduction reste FIDELE : le contexte sert UNIQUEMENT a lever les
+  // ⛔ LE CONTEXTE A ETE RETIRE DE LA TRADUCTION (28/07, v1.64.1, apres mesure).
+  // Il y etait pour desambiguiser, avec une consigne explicite (« never add
+  // its content »). Le banc de scene a montre que le modele ne la respecte pas
+  // toujours : « seiza », venu de la case PRECEDENTE, est ressorti dans les
+  // tags d une case qui parlait d autre chose -- et une fois sur deux
+  // seulement, donc invisible. Une consigne ne contraint pas un modele : ce
+  // projet l a mesure trois fois.
+  // La distinction du 27/07 tranche : TRADUIRE est le chemin FIDELE, il ne
+  // recoit rien qui ne soit dans la phrase ; AMELIORER enrichit, le contexte
+  // y reste. Ce qu on perd est minime : le COUNT se lit dans la phrase seule
+  // et l identite vient du casting.
+  // (ancien commentaire) La traduction reste FIDELE : le contexte servait a lever les
   // ambiguites (« elle » = qui ? combien sont-ils ?), jamais a enrichir. La
   // consigne le dit explicitement, et le banc le verifie : une case dont la
   // phrase ne parle pas du decor ne doit pas recuperer le decor d a cote.
-  const ctx = contexteScene(p, 4);
+  // Voir le bloc ci-dessus : `avecCtx` est desormais vide sur ce chemin.
+  const ctx = "";
   const avecCtx = ctx
     ? "CONTEXT (previous panels of the SAME scene, for DISAMBIGUATION ONLY -- "
       + "never translate it, never add its content to the output; use it only to "
@@ -2804,7 +2856,7 @@ function majEtape(){
                        + "(crée le projet, la planche et ses cases d'un coup).";
   else if (!n)       t = "<b>1.</b> Ajoute une case avec <b>+ Case</b>.";
   else if (gen < n)  t = "<b>2.</b> Décris l'action de chaque case (ex : <i>close-up, "
-                       + "looking at viewer</i>), puis <b>Générer toutes les cases vides</b> "
+                       + "looking at viewer</i>), puis <b>Générer les cases décrites</b> "
                        + "— ou <b>Générer</b> case par case. " + (n - gen)
                        + " encore vide(s). Le lettrage vient APRÈS l'image.";
   else if (!lettrees) t = "<b>3.</b> Les images sont là. <b>✎ Lettrage</b> pour poser les bulles "
@@ -3558,7 +3610,27 @@ async function genPanel(p, positifForce){
 
 async function genAll(){
   const todo = S.panels.filter(p => !p.file && p.prompt.trim());
-  if (!todo.length) return toast("rien à générer");
+  // ⚠ « rien à générer » MENTAIT, et Quang l'a signalé le 28/07 : « j'ajoute des
+  // cases vides, je clique, il dit qu'il n'y a aucune case vide à générer ».
+  // Le filtre exige un TEXTE -- une case sans description ne peut pas être
+  // dessinée -- mais le message parlait comme si la case n'existait pas. Un
+  // refus doit nommer SA raison, sinon il se lit comme une panne.
+  if (!todo.length){
+    const sansImage = S.panels.filter(p => !p.file);
+    const sansTexte = sansImage.filter(p => !(p.prompt || "").trim());
+    if (!S.panels.length) return toast("aucune case sur cette planche");
+    if (!sansImage.length) return toast("toutes les cases sont déjà dessinées — "
+                                        + "utilise 🔁 Régénérer pour les refaire");
+    if (sansTexte.length){
+      const numeros = sansTexte.map(p => S.panels.indexOf(p) + 1).join(", ");
+      sansTexte.forEach(p => refus(p, "Décris l'action de cette case : sans texte, "
+                                    + "il n'y a rien à dessiner."));
+      log("génération de planche : " + sansTexte.length
+          + " case(s) sans texte (n°" + numeros + ")", "w");
+      return toast("case(s) n°" + numeros + " : écris d'abord ce qu'on y voit");
+    }
+    return toast("rien à générer");
+  }
   log("génération de " + todo.length + " case(s)");
   // En serie : une seule carte, 16 Go de VRAM. Le temoin dit OU on en est, sinon
   // une planche de 6 cases est deux minutes d'ecran muet.
@@ -3571,6 +3643,125 @@ async function genAll(){
   busyOff("Planche terminée — " + todo.length + " case(s)");
   toast("planche terminée");
 }
+
+/* ---------- REGENERER UN LOT DE CASES (v1.64.0) ----------
+   `genAll` ne touche QUE les cases vides -- c est voulu, il sert a lancer une
+   planche. Ici on refait des cases DEJA dessinees, ce qui est une autre
+   intention : on ne melange donc pas les deux boutons. */
+function ouvrirRegen(){
+  if (!S.page) return toast("crée une planche d'abord");
+  if (!S.panels.length) return toast("aucune case");
+  const g = $("regenGrid");
+  g.innerHTML = S.panels.map((p, i) => {
+    const vide = !p.file;
+    // Pre-coche ce qui EXISTE deja : « regenerer » parle de ce qu on a. Une
+    // case vide n a rien a regenerer, elle a son propre bouton.
+    const coche = !vide && !!(p.prompt || "").trim();
+    return '<label class="' + (coche ? "on" : "") + '" data-rid="' + p.id + '">'
+      + '<span class="no">' + (i + 1) + '</span>'
+      + '<input type="checkbox" ' + (coche ? "checked" : "")
+      + ((p.prompt || "").trim() ? "" : " disabled") + '>'
+      + (vide
+         ? '<div class="vide">' + ((p.prompt || "").trim()
+              ? "jamais générée" : "case vide<br>(pas de texte)") + '</div>'
+         : '<img src="' + imgURL(p.file) + '" alt="case ' + (i + 1) + '">')
+      + '</label>';
+  }).join("");
+  majRegenState();
+  $("regen").hidden = false;
+}
+
+function casesRegenChoisies(){
+  return [...document.querySelectorAll('#regenGrid input:checked')]
+    .map(i => i.closest("[data-rid]").dataset.rid)
+    .map(id => S.panels.find(p => p.id === id))
+    .filter(Boolean);
+}
+
+function majRegenState(){
+  const n = casesRegenChoisies().length;
+  $("regenState").textContent = n ? n + " case(s) sélectionnée(s)"
+                                  : "aucune case sélectionnée";
+  const b = $("regenGo");
+  if (b){ b.disabled = !n; b.textContent = n ? "Régénérer " + n + " case(s)" : "Régénérer"; }
+}
+
+$("regenGrid").addEventListener("change", e => {
+  const l = e.target.closest("[data-rid]");
+  if (l) l.classList.toggle("on", e.target.checked);
+  majRegenState();
+});
+// Cocher en touchant la vignette, pas seulement la petite case : sur un
+// telephone, viser une case de 16 px est un test d adresse.
+$("regenGrid").addEventListener("click", e => {
+  if (e.target.matches("input")) return;
+  const l = e.target.closest("[data-rid]");
+  if (!l) return;
+  const c = l.querySelector("input");
+  if (!c || c.disabled) return;
+  c.checked = !c.checked;
+  l.classList.toggle("on", c.checked);
+  majRegenState();
+});
+
+function cocherRegen(v){
+  document.querySelectorAll("#regenGrid [data-rid]").forEach(l => {
+    const c = l.querySelector("input");
+    if (!c || c.disabled) return;
+    c.checked = v; l.classList.toggle("on", v);
+  });
+  majRegenState();
+}
+
+/** Le tirage de la seed d un nouvel essai.
+ *  ⚠ C est une fonction NOMMEE, et ce n est pas cosmetique : ecrit en ligne,
+ *  ce tirage n etait pas remplacable, donc pas falsifiable -- la mutation du
+ *  banc restait VERTE et ne prouvait rien. Un comportement qu on veut pouvoir
+ *  saboter doit avoir un nom. */
+function seedNeuve(p){ return Math.floor(Math.random() * 1e9); }
+
+async function lancerRegen(){
+  const todo = casesRegenChoisies();
+  if (!todo.length) return;
+  $("regen").hidden = true;
+  log("régénération de " + todo.length + " case(s)");
+  let n = 0, rates = 0;
+  for (const p of todo){
+    n++;
+    // ⚠ Une SEED NEUVE par case : regenerer veut dire « un autre essai ».
+    // Sans ca, la meme seed rendrait la meme image et le lot serait un long
+    // geste sans effet -- le pire des resultats, parce qu il RESSEMBLE a un
+    // fonctionnement.
+    // ⚠⚠ Et il ne suffit pas de l ecrire dans la recette : `genPanel` lit le
+    // CHAMP `[data-seed]` du panneau « Affiner » et le laisse gagner. Tiroir
+    // ferme, le champ n existe pas et tout va bien ; tiroir OUVERT, il porte
+    // l ancienne valeur -- et le lot redessinait la MEME image, en silence.
+    // On ecrit donc la seed AUX DEUX endroits. Trouve par la mutation du banc,
+    // qui restait verte : le comportement teste n etait pas celui qui agit.
+    const s2 = seedNeuve(p);
+    p.recipe = Object.assign({}, p.recipe, { seed: s2 });
+    const champ = document.querySelector('[data-pid="' + p.id + '"] [data-seed]');
+    if (champ) champ.value = s2;
+    busyOn("Régénération : case " + n + " sur " + todo.length + "…");
+    try { await genPanel(p); }
+    catch(e){ rates++; log("case " + n + " : " + e.message, "e"); }
+  }
+  busyOff("Régénération terminée — " + (todo.length - rates) + "/" + todo.length);
+  toast(rates ? (rates + " case(s) en échec — voir le journal")
+              : todo.length + " case(s) régénérée(s)");
+}
+
+$("btnRegenAll").onclick = ouvrirRegen;
+$("regenAll").onclick    = () => cocherRegen(true);
+$("regenNone").onclick   = () => cocherRegen(false);
+$("regenCancel").onclick = () => { $("regen").hidden = true; };
+$("regenGo").onclick     = lancerRegen;
+// Cliquer le fond ferme, comme la boite de confirmation : le defaut d une
+// pop-up de securite doit toujours etre « on ne fait rien ».
+$("regen").onclick = e => { if (e.target.id === "regen") $("regen").hidden = true; };
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !$("regen").hidden) $("regen").hidden = true;
+});
 
 async function addPanel(){
   if (!S.page) return toast("crée une planche d'abord");
