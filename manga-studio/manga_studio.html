@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.59.0</title>
+<title>Manga Studio v1.60.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -379,7 +379,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.59.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.60.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -470,6 +470,10 @@ body.epure .aide{display:none}
     <div class="row" style="margin-top:8px">
       <button class="btn pri" id="btnMaster">Générer le fond maître</button>
       <span class="muted" id="mstState">aucun fond</span>
+    </div>
+    <div class="row" id="mstCible" style="margin-top:6px" hidden>
+      <span class="muted" id="mstCibleTxt"></span>
+      <button class="btn sm" id="btnCibleReset">revenir à la planche</button>
     </div>
     <div id="mstPrev" class="row" style="margin-top:10px"></div>
   </div>
@@ -857,7 +861,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.59.0";
+const VERSION = "1.60.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1111,7 +1115,13 @@ const DEFAULT_RECIPE = {
 };
 
 /* ---------- etat ---------- */
-const S = { projects: [], pages: [], panels: [], proj: null, page: null, busy: 0,
+/* `sceneCible` = l id de la case qui ouvre la scene dont on edite le decor.
+   null = on edite le fond maitre de la PLANCHE (le comportement d origine).
+   Un seul etat, lisible a l ecran : le panneau annonce toujours pour qui il
+   travaille -- un panneau qui ecrit ailleurs qu on ne croit est la meilleure
+   facon de perdre un decor qu on vient de generer. */
+const S = { sceneCible: null,
+            projects: [], pages: [], panels: [], proj: null, page: null, busy: 0,
             zone: null,        // id de la case dont on trace la zone (une seule a la fois)
             affiner: null,     // id de la case dont le panneau ⚙ Affiner est deplie
             quiLa: null,       // id de la case dont la liste « Qui est la » est depliee
@@ -1145,6 +1155,11 @@ function repondre(v){
   const f = _askRes; _askRes = null;
   if (f) f(v);
 }
+$("btnCibleReset").onclick = () => {
+  S.sceneCible = null;
+  $("mstPrompt").value = (S.page && S.page.master && S.page.master.decor) || "";
+  majCibleDecor();
+};
 $("askYes").onclick = () => repondre(true);
 $("askNo").onclick  = () => repondre(false);
 // Cliquer le fond ou faire Echap = repondre NON. Le defaut d'une question de
@@ -1197,6 +1212,42 @@ function casesAvantDansScene(p){
     if (ouvreUneScene(S.panels[k], k)){ debut = k; break; }
   }
   return debut >= i ? [] : S.panels.slice(debut, i);
+}
+
+/** La case qui OUVRE la scene de `p` (elle-meme si elle l ouvre).
+ *  C est la porteuse : le casting de la scene est le sien, et son
+ *  `recipe.sceneMaster` tient le decor propre a la scene s il y en a un. */
+function caseOuvranteDeScene(p){
+  const i = S.panels.indexOf(p);
+  if (i < 0) return p;
+  for (let k = i; k >= 0; k--){
+    if (ouvreUneScene(S.panels[k], k)) return S.panels[k];
+  }
+  return S.panels[0] || p;
+}
+
+/** Qui joue dans cette scene ? Le casting de sa PREMIERE case.
+ *
+ *  ⚠ On lit `recipe.casting` de la case ouvrante SANS repasser par
+ *  `castingCase`, qui redescendrait ici : la recursion serait infinie. Une
+ *  case ouvrante qui ne dit rien laisse donc parler la PLANCHE, exactement
+ *  comme avant la v1.60.0 -- toutes les planches existantes gardent leur
+ *  comportement, sans migration. */
+function castingScene(p){
+  const ouvre = caseOuvranteDeScene(p);
+  const propre = ouvre && ouvre.recipe && ouvre.recipe.casting;
+  if (Array.isArray(propre)) return propre;
+  return castingPage();
+}
+
+/** Le decor fige de la scene, sinon celui de la planche.
+ *  Une scene peut avoir le sien (`recipe.sceneMaster`) : c est ce qui permet
+ *  a une planche de contenir un dojo PUIS un couloir. */
+function masterScene(p){
+  const ouvre = caseOuvranteDeScene(p);
+  const m = ouvre && ouvre.recipe && ouvre.recipe.sceneMaster;
+  if (m && (m.decor || m.depthInput)) return m;
+  return (S.page && S.page.master) || {};
 }
 
 /** Le numero de la scene (1, 2, 3...) et le rang de la case dedans.
@@ -1478,8 +1529,7 @@ function promptFinal(p){
     // Dire ou est le cadre, au POSITIF : c est ce qui a fait passer la
     // mesure de 3/5 a 4/5. Un negatif interdit, il ne cadre pas.
     .concat(!vide && niveau === 0 ? [POS_GROS_PLAN_SANS_VISAGE] : [])
-    .concat(ambiance && S.page && S.page.master && S.page.master.decor
-            ? [S.page.master.decor] : [])
+    .concat(ambiance && masterScene(p).decor ? [masterScene(p).decor] : [])
     .filter(x => x && x.trim()).join(", ");
   // Une case sans personne ne compte pas ses personnages : on sort avant que
   // le bloc de comptage ci-dessous n'y remette `2people`.
@@ -2304,11 +2354,31 @@ function restaurerZone(p){
   return p;
 }
 
+/** Le panneau de decor ecrit soit dans la PLANCHE, soit dans une SCENE.
+ *  Il l annonce, toujours : sans ce bandeau, generer un decor depuis le
+ *  separateur de la scene 2 puis remonter au panneau donnerait l impression
+ *  d editer la planche -- et le geste suivant ecraserait le mauvais decor. */
+function majCibleDecor(){
+  const el = $("mstCible");
+  if (!el) return;
+  const p0 = S.sceneCible && S.panels.find(x => x.id === S.sceneCible);
+  el.hidden = !p0;
+  const t = $("mstCibleTxt");
+  if (p0 && t){
+    t.innerHTML = "🎞 ce décor sera celui de la <b>scène "
+      + reperesScene(p0).scene + "</b>, pas de toute la planche.";
+  }
+  const b = $("btnMaster");
+  if (b) b.textContent = p0 ? "Générer le décor de la scène" : "Générer le fond maître";
+}
+
 function fillPage(){
   const p = S.page;
   $("pgChapter").value = p ? p.chapter : "1";
   $("pgTitle").value   = p ? p.title : "";
   $("pgCols").value    = String((p && p.layout && p.layout.cols) || 2);
+  S.sceneCible = null;      // une scene appartient a SA planche
+  majCibleDecor();
   $("mstPrompt").value = (p && p.master && p.master.decor) || "";
   const has = p && p.master && p.master.depthInput;
   $("mstState").textContent = has ? "fond maître prêt (profondeur déposée)" : "aucun fond";
@@ -2489,6 +2559,15 @@ function renderPlate(){
            ? "Rattacher cette case à la scène précédente : elle en reprendra le contexte"
            : "Commencer une nouvelle scène ici : les cases suivantes ne reprendront plus le contexte des précédentes")
         + '">' + (coupe ? "rattacher" : "✂ nouvelle scène") + '</button>'
+        // Le decor propre a la scene ne se propose QUE sur une vraie coupure :
+        // ailleurs, il n y a pas de scene a decorer, et un bouton qui ne veut
+        // rien dire coute plus cher qu un bouton absent.
+        + (coupe
+           ? '<button class="btn sm" data-scenedecor="' + p.id + '" title="'
+             + "Donner à cette scène son propre décor figé, au lieu de partager celui de la planche"
+             + '">' + (p.recipe && p.recipe.sceneMaster && p.recipe.sceneMaster.decor
+                        ? '🎞 décor propre' : '🎞 décor…') + '</button>'
+           : "")
         + '<hr></div>');
     }
     const sq = p.recipe && p.recipe.sequence;
@@ -2925,6 +3004,11 @@ function majApercu(p){
         + (ctxN ? 'écrite avec les ' + Math.min(ctxN, 5)
                   + ' case(s) précédente(s) de la scène'
                 : 'début de scène : aucun contexte repris')
+        // D ou viennent les personnages et le decor : la question « pourquoi
+        // cette case dessine-t-elle CE lieu et CES gens » doit avoir sa
+        // reponse dans la case, pas dans trois panneaux differents.
+        + (masterScene(p).decor && p.kind === 'ambiance'
+           ? ' · décor : ' + esc(masterScene(p).decor.slice(0, 40)) : '')
         + '</span>'
     + (!(p.recipe && p.recipe.tagsDouteux) ? ""
         : '<br><span style="color:var(--ko)">⚠ La traduction a laissé du '
@@ -3093,15 +3177,30 @@ async function genMaster(){
     const dq = await fetch(CFG.base + "/comfy/view?filename=" + encodeURIComponent(depthImg.filename)
       + "&type=" + depthImg.type + "&subfolder=" + encodeURIComponent(depthImg.subfolder || ""),
       { headers: CFG.key ? { Authorization: "Bearer " + CFG.key } : {} });
-    const depthInput = await uploadToComfy(await dq.blob(), "mangadepth_" + S.page.id + ".png");
+    const depthInput = await uploadToComfy(await dq.blob(),
+                       "mangadepth_" + (S.sceneCible || S.page.id) + ".png");
 
-    const fondPath  = await harvest(fondImg,  S.page.id + "_fond.png");
-    const depthPath = await harvest(depthImg, S.page.id + "_depth.png");
+    // ⚠ Un nom par CIBLE. Avec `S.page.id` seul, le decor de la scene 2
+    // ecrasait celui de la scene 1 : meme planche, meme nom de fichier.
+    const cle = S.sceneCible ? (S.page.id + "_" + S.sceneCible) : S.page.id;
+    const fondPath  = await harvest(fondImg,  cle + "_fond.png");
+    const depthPath = await harvest(depthImg, cle + "_depth.png");
 
-    S.page.master = { decor, seed, fond: fondPath, depth: depthPath, depthInput };
-    await api("/manga/pages", S.page);
-    fillPage();
-    toast("fond maître prêt");
+    const bloc = { decor, seed, fond: fondPath, depth: depthPath, depthInput };
+    // La cible est une SCENE (v1.60.0) ou la planche entiere. Ecrire au bon
+    // endroit est tout ce qui distingue les deux : le graphe, lui, est le meme.
+    const cible = S.sceneCible && S.panels.find(x => x.id === S.sceneCible);
+    if (cible){
+      cible.recipe = Object.assign({}, cible.recipe, { sceneMaster: bloc });
+      await api("/manga/panels", cible);
+      renderPlate();
+      toast("décor de la scène prêt");
+    } else {
+      S.page.master = bloc;
+      await api("/manga/pages", S.page);
+      fillPage();
+      toast("fond maître prêt");
+    }
   } catch(e){ log("fond maître: " + e.message, "e"); toast("échec : " + e.message); $("mstState").textContent = "échec"; }
   finally { $("btnMaster").disabled = false; }
 }
@@ -3149,10 +3248,11 @@ async function genPanel(p, positifForce){
   }
 
   const ambiance = p.kind === "ambiance";
-  const depthName = ambiance ? (S.page.master && S.page.master.depthInput) : "";
+  const depthName = ambiance ? (masterScene(p).depthInput || "") : "";
   if (ambiance && !depthName){
-    refus(p, "Case « ambiance » : elle a besoin du fond maître de la planche. "
-          + "Génère-le en haut de la page, ou passe la case en « dialogue ».");
+    refus(p, "Case « ambiance » : elle a besoin d un décor figé. Génère le fond "
+          + "maître (en haut de la page, ou « décor de la scène » sur le "
+          + "séparateur), ou passe la case en « dialogue ».");
     toast("case ambiance : génère d'abord le fond maître");
     log("case " + p.id + " en ambiance sans fond maître -> ignorée", "w");
     return;
@@ -3236,7 +3336,7 @@ async function genPanel(p, positifForce){
     p.recipe = Object.assign({}, p.recipe, {
       ckpt: r.ckpt, lora: r.lora, loraW: r.loraW, steps: r.steps, cfg: r.cfg,
       sampler: r.sampler, w: r.w, h: r.h,
-      controlnet: ambiance ? { name: r.cn, weight: r.cnW, depth: S.page.master.depth } : null,
+      controlnet: ambiance ? { name: r.cn, weight: r.cnW, depth: masterScene(p).depth } : null,
       positive: positive, negative: rr.neg,
       // L'historique des essais. On n'EFFACE jamais : revenir en arriere doit
       // rester possible meme apres dix regenerations, et c'est la version
@@ -4696,7 +4796,10 @@ function castingCase(p){
   const propre = p.recipe && p.recipe.casting;
   if (Array.isArray(propre)) return propre;
   const retires = (p.recipe && p.recipe.sansCasting) || [];
-  return castingPage().filter(id => !retires.includes(id));
+  // v1.60.0 : la SCENE s intercale entre la planche et la case. Une case
+  // qui ne dit rien suit sa scene ; une scene qui ne dit rien suit sa
+  // planche. Aucun palier n est obligatoire.
+  return castingScene(p).filter(id => !retires.includes(id));
 }
 
 function tagsCasting(p){
@@ -5924,6 +6027,17 @@ $("plate").addEventListener("change", async e => {
    pas de duree, pas de fin a tenir a jour, donc rien qui puisse devenir
    incoherent. Supprimer une case ne casse jamais la structure. */
 $("plate").addEventListener("click", async e => {
+  const d = e.target.closest("[data-scenedecor]");
+  if (d){
+    S.sceneCible = d.dataset.scenedecor;
+    const p0 = S.panels.find(x => x.id === S.sceneCible);
+    const m = (p0 && p0.recipe && p0.recipe.sceneMaster) || {};
+    $("mstPrompt").value = m.decor || "";
+    majCibleDecor();
+    $("mstPrompt").scrollIntoView({ behavior: "smooth", block: "center" });
+    $("mstPrompt").focus({ preventScroll: true });
+    return;
+  }
   const b = e.target.closest("[data-scenecut]");
   if (!b) return;
   const p = S.panels.find(x => x.id === b.dataset.scenecut);
