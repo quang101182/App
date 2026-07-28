@@ -3757,7 +3757,7 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
   // Pattern ChatGPT vocal mode mobile : zéro encombrement UI, zone tactile
   // déjà connue du user. Race Web Audio mitigée via flag _ttsInterruptPending
   // (Kimi recommandation vote 3-LLM 17/05).
-  const VERSION = '1.99.0'; /* v1.99.0 (28/07) — LA CARTE MOBILE NE MENT PLUS QUAND ELLE PERD SA SOURCE. Signale par Quang : apres un redemarrage de Jarvis sur le PC, le telephone affichait encore SESSION 261 pendant que le PC etait revenu a 0. Ce n etait pas un defaut de synchronisation : le WebSocket etait tombe, plus aucun carte_state n arrivait, et le dessin gardait le dernier etat recu SANS LE DIRE -- exactement ce que la regle du projet interdit (« la carte ne ment jamais sur sa source »). Elle repasse desormais en HORS LIGNE a la fermeture du WS ; le backend la re-hydrate a la reconnexion. */ /* v1.98.0 (28/07) — LA CARTE MOBILE SE CALE, SE SOUVIENT, ET NE FAIT PLUS SEMBLANT. Trois retours de Quang le 28/07. (1) « juste en dessous de la fenetre ou il y a tout le mock-up, tu as un espace vide, tu peux encore etendre la fenetre et gagner en ergonomie » — la cause n etait pas un mauvais calage : le facteur d echelle est min(largeur/L, hauteur/(FY1-FY0)) et c est la LARGEUR qui commande sur un telephone, donc le dessin ne faisait que 358 unites de haut dans une zone qui en offrait ~420, et les ~60 restantes tombaient en bas, vides. FY1 470 -> 522, panneaux du bas +26, chronologie +52, et les TROIS PISTES qui y menent descendent avec (sans quoi elles s arretent dans le vide — piege deja paye sur le PC le 27/07). Verifie sur appareil reel : le bas du cadre touche desormais la rangee de boutons. (2) L ATTRIBUTION DES CONNECTEURS SUIVAIT LE RANG D ACTIVITE : les 4 emplacements sont fixes, mais le backend envoie les dossiers tries par activite et le module les posait dans l ordre recu — deux dossiers echangeaient donc leur place des que l un passait devant l autre. C est exactement le defaut que Quang a vu sur le PC (« un rectangle qui etait en bas a droite est maintenant en haut a gauche »), reintroduit ici sans le voir. Meme regle que session-scope/placement.js desormais : un dossier connu retrouve sa place, un nouveau venu prend la premiere libre a partir de celle que son NOM designe, memoire persistee et purgee a 40 entrees. Les nouveaux sont servis dans l ordre du nom et jamais du classement, sinon a memoire vide c est le rang qui tranche les collisions. Banc sur le Samsung reel : 5/5, mutation prouvee rouge. (3) « je trouve ca triste de ne pas avoir d activite du tout, que ce ne soit pas dynamique comme sur PC » — la vraie cause n etait pas la frequence mais le fait qu un setInterval declenchait une salve des que le plafond le permettait, qu il se soit passe quelque chose ou NON. La carte bougeait pareil pendant une session intense et pendant une nuit vide, et un mouvement qui ne veut rien dire, l oeil cesse de le voir : c est la definition du fige. Deux regimes desormais — sur EVENEMENT reel jusqu a une salve toutes les 10 s, au repos une respiration toutes les 60 s. Mesure sur le Samsung (differentiel contre une page noire, 120 s par regime) : 60 s = +3,2 points d un coeur, 30 s = +7,5, 10 s = +24,6. L ancien regime coutait donc 7,5 points en permanence pour du mouvement muet ; le nouveau coute 3,2 au repos et ne depense que quand il se passe quelque chose. */ /* v1.97.0 — LA CARTE DE SESSION EST BRANCHÉE SUR SA VRAIE SOURCE. Elle affichait des zéros et le disait (« HORS LIGNE ») ; elle reçoit désormais `carte_state`, poussé par le backend v3.6.0 sur le WebSocket existant. Pourquoi ce canal : le téléphone n'a aucun accès aux transcripts (ils sont sur le PC) et le serveur de flux écoute sur 127.0.0.1, donc n'est pas joignable en 4G — alors que le WS de Friday l'est déjà de partout via Tailscale. Le backend RÉSUME côté serveur (4 dossiers les plus touchés, 3 dernières lignes de flux, état des sessions par moteur) : le téléphone reçoit du prêt-à-peindre, il ne trie ni ne compte. Il n'émet QUE si l'état a changé — le fond reconstruit ~450 nœuds SVG à chaque réception. Une SALVE part à chaque nouvel état : le mouvement est un signal, jamais un minuteur, et le module plafonne à une salve / 30 s même en rafale. */ /* v1.96.0 — FOND « CARTE DE SESSION », OPTIONNEL ET PERSISTÉ (décision Quang 27/07 : « l'affichage actuel reste et on ajoute une option dans configuration pour activer cette interface alternative », « l'option sera en persistance mémoire »). Le cœur de session du PC (le die SESSION) prend la place de l'hologramme atomique, entouré des moteurs et de leurs TÉMOINS DE SESSION, des dossiers en connecteurs de tranche, des panneaux RÉSEAU·WEB et AVIS·LLM, et de la chronologie. Défaut = OFF : rien ne change tant que l'interrupteur n'est pas activé, et le retour arrière est immédiat. ⚠️ CE QUI COMMANDE L'IMPLÉMENTATION EST LA CONSO, MESURÉE SUR TÉLÉPHONE RÉEL (banc session-scope/banc-conso-mobile.py, différentiel contre une page noire immobile) : dessin FIGÉ +0 %, animation continue +202 %, sans aucun filtre SVG +199 %, en SMIL natif +201 %, en transform composé GPU +94 %, PAR SALVES (2 s / 30 s) +5,7 %. Et le chiffre qui décide : DEUX impulsions coûtent 84 %, DOUZE en coûtent 94 % — le coût est quasi indépendant du NOMBRE d'éléments animés, il tient au FAIT qu'une animation tourne. Réduire les effets ne sert à rien ; seule compte la DURÉE pendant laquelle ça bouge. D'où trois règles non négociables : (1) aucune animation permanente, des SALVES brèves espacées, et entre elles animation:'none' (une animation finie mais encore déclarée garde sa couche de composition vivante) ; (2) ce qui bouge vit HORS du SVG (dès qu'un élément bouge dedans, Chrome repeint les ~1000 nœuds) ; (3) transform uniquement, seule propriété dont la composition GPU est garantie (offset-path mesuré à +124 %). ⚠️ Le fond n'est pas encore branché sur le flux réel : il l'écrit en toutes lettres (RELEVÉ · DÉMO, HORS LIGNE, EN ATTENTE DE SOURCE) plutôt que de faire passer des chiffres d'exemple pour du direct. ⚠️ Le CALAGE reste à finir : la maquette a été calée sur la capture de l'APK du Honor, or la PWA a une disposition différente — sous 300 px de place libre, on cesse de s'imbriquer et on redevient un fond plein écran, lisible mais moins ajusté. Vérifié en live sur le Samsung (13/13 : option OFF par défaut, allumage, dessin présent, zéro débordement, PERSISTANCE après rechargement, extinction complète). */ /* v1.95.0 — PARITÉ APK v1.104.0 (mandat Quang 16/07 : solution durable, pas un pansement) : (1) RÉCONCILIATEUR D'ÉTAT 1 Hz horloge murale — le ré-armement était événementiel (suspendu à tts_end) → 1 événement perdu = conversation morte ; 4 blocages en 4 jours = 4 façons de perdre tts_end. Boucle idempotente convergeant vers « mode conv + aucun tour en cours + TTS fini ⇒ micro ouvert » → tts_end devient une optimisation de latence, plus une condition de survie. (2) RACINE des ABORT cause=stop : _vadReset ne remettait pas _vadLastVoiceWallTs → _recSafetyCheck coupait le start en vol au 1er tick (~1s) sans geste user ; fix = reset + garde structurelle (>= started). Backend v2.21.0 en regard (timeout+pacing TTS, garde STT anti-hallu). */ /* v1.94.2 — FIX reprise conversation continue (parité APK v1.103.2, bug Honor BT prouvé log : ABORT start#1 cause=stop) : handlers mediaSession pause/stop ne coupent QUE si recSentStart (rec réellement démarré) → la bascule SCO Bluetooth pendant getStream ne tue plus le start en vol. */ /* v1.94.1 — INSTRUMENTATION reprise continue (parité APK v1.103.1) : _lastGenBump trace la cause de chaque incrément de _startGen (stop|ws-close|new-start) + les 2 blocs ABANDON loggent client_log 'ABORT start#N cause=…'. ZÉRO changement de comportement. */ /* v1.94.0 — ANTI-COURSE ASYNC conversation continue (bug Honor 15/07) : jeton _startGen invalide un start dont le getUserMedia (lent BT/4G) est encore en vol ou juste avant .start() → plus de MediaRecorder zombie. + B3 onclose. Backend v2.19.0 : B1 watchdog anti-zombie + B2 ping explicite. Complète la sérialisation v1.74.0. */; /* v1.91.0 — FILET anti-blocage ENREGISTREMENT (parité APK v1.100.0, bug Honor 14/07, hologramme JAUNE figé plusieurs minutes) : le VAD tourne sur requestAnimationFrame, GELÉ quand l'app passe en arrière-plan/écran éteint (voiture) → rec_start sans jamais de STOP. Fix : deadline horloge murale + watchdog setInterval(1s) + rattrapage sur `visibilitychange visible` → _recSafetyCheck coupe un rec zombie (cap 60s dur OU silence VAD évalué sur l'horloge) dès le retour au premier plan. Complète v1.90.0 (qui ne cassait PAS un rec ouvert : `if(ui.recording) return`). */ /* v1.90.0 — FILET anti-blocage conversation continue (parité APK v1.99.0, bug Honor 13/07 hologramme jaune) : handler `turn_dropped` (backend v2.13.3) + watchdog 9 s ré-arment l'écoute quand le backend droppe un tour ou ne répond pas. */ /* v1.89.0 — FIX cohérence PC/mobile focus ville (bug log 13/07 « c'est pas Paris ») : le scale ville était figé à 11 px/degré = vue CONTINENT sur le renderer maison ; désormais cadré sur la BBOX du geojson frontières ville (parité fit_country + PC core v1.27.0), fallback scale 55. */ /* v1.88.0 — CAPITALES au zoom sur la carte (199 NE 110m, point+label, anti-chevauchement par priorite pop, invisibles en vue monde scale<2) */ /* v1.87.0 — FRONTIERES PAYS sur la carte (retour Quang 13/07) : WORLD_BORDERS embarque (NE 110m interieures, 326 lignes/3000 pts/24Ko) + drawBorders sous les couches data */ /* v1.86.0 — S5v2 : suggestions a payload globe (seisme majeur -> carte), tap rejoue SceneMobile.apply complet */ /* v1.85.0 — HOTFIX micro/route audio (Headset earpiece = ecouteur interne exclu du pick BT) + get_config au boot (hydratation reglages persistes) */   // v1.84.0 — S5 PROACTIVITÉ DE SCÈNE : case WS scene_suggestion → FlashStack.onSuggestion (carte 💡 tappable, tap = SceneMobile.apply {tab,cmd} + retrait, TTL borné), réglage ⚙ « Proactivité de scène » (flag BACKEND scene_proactivity_enabled partagé PC, hydraté config_state). // v1.83.0 — S4b LIENS CODE↔SYSTÈME (parité APK v1.92.0, backend v2.9.0, PC v1.24.0) : CodemapNative.load reçoit `project` (dépôt d'origine) → ligne tappable « 🛰 vit dans <repo> → » = bascule onglet SYSTÈME + focusCard ; SystemeNative.onEcosystem stocke le détail commit enrichi (subject/hash/functions) → ligne « ⤷ » sous la card projet. | v1.82.0 — S7 PHOTOTHÈQUE WEB (parité APK v1.91.0, backend v2.8.0, PC v1.23.0) : onglet galerie « 🌐 Web » (kind='web', compteur séparé, exclu de l'onglet Galerie), flash image préfère flash.local_url (copie photothèque servie par le backend via API_BASE — fallback URL source Wikimedia), FIX préexistant : srcOf/fullSrcOf laissent passer les URLs http(s) absolues (avant : API_BASE+URL absolue = src invalide, le tap flash→viewer chargeait une image morte). | v1.81.0 — RESPECT DU RATIO des images flash (retour Quang : 9:16 recadrée en 16:9 ; parité APK v1.90.0, PC v1.22.2) : #mediaFlash img + carte FlashStack en width:auto/max-width:100%/max-height:2×réglage/contain — portrait entier sans clic, paysage inchangé. | v1.80.0 — S4a TRACE AU SOL ISS (pont cosmos→carte, parité APK v1.89.0, backend v2.7.0, PC core v1.22.0) : case globe iss_track/iss_track_clear → issTrack {coords,now}, drawIssTrack (polyligne dorée pointillée, garde antiméridien, 🛰+label position courante), chip ISS au HUD couches, getState().layers.iss. | v1.79.0 — S3 COUCHES CARTE ANIMÉES opt-in (parité APK v1.88.0, backend v2.5.0, PC core v1.21.0) : flag `animate` des payloads globe → lecture chrono séismes ts USGS ~12s (drawSeisms filtre par playhead), traînées vols extrapolées cap+vitesse dash animé ~25s (drawFlightTrails sous les ✈), respiration alpha aurore ~20s ; animations BORNÉES via animStep() dans loop() (dirty-flag préservé, batterie), retour statique pixel-identique ; bouton rejeu #mapAnimBtn 44px (bottom:68px au-dessus du HUD couches) ; getState().anim pour le harnais. | v1.78.0 — (1) SCO Bluetooth natif pattern DictoKey (mandat Quang) : AudioFocusPlugin.enableSco/disableSco (setCommunicationDevice API31+ / startBluetoothSco sinon), rearme a CHAQUE tour au takeAudioFocus, coupe au release, log SCO client_log — no-op sans casque/hors Capacitor ; (2) VRAI fix swipe 3e essai : body user-select:none global heritait sur le champ -> gesture typing Gboard desactive ; exemption user-select:text sur .text-input. // v1.77.0 — retours Quang soir : (1) retour EN HAUT auto a la fermeture du clavier (blur + visualViewport resize -> .main scrollTop 0, l'hologramme reste visible) ; (2) swipe 2e essai : attributs textarea alignes EXACTEMENT PromoClip (zero autocomplete/spellcheck/enterkeyhint/inputmode). // v1.76.0 — 3 retours Quang 12/07 : (1) flash image TAPPABLE -> viewer plein ecran comme la pensee (MediaImages.openExternal, sans id = pas de coeur/corbeille) ; (2) champ texte = TEXTAREA rows=1 (glide typing Gboard marche sur textarea, pas sur input — parite PromoClip) ; (3) micro BT best-effort : deviceId du casque bluetooth si expose par la WebView + log MIC diagnostic, fallback micro defaut inchange. // v1.75.0 — MISE EN SCENE P2.2 hors-onglet : FlashStack.onSceneFlash (carte ephemere texte court ou image web verifiee Wikipedia, tab 'flash' de scene_directive, aucune bascule de vue). // v1.74.0 — FIX effets de bord voix (log Quang 12/07) : serialisation recording (rec_end de l'ancien flux AVANT nouveau rec_start + callbacks recorder perime no-op) = fin zombie/blob invalide Groq 400 ; ISS honnete (chip indisponible si echec fetch, parite NEO/SW) + poke fetch immediat au retour vue cosmos. // v1.73.0 — MISE EN SCENE P2.1 : _sceneApply etendu cosmos/systeme/codemap (m.cmd {tool,args} rejoue dans le module natif via les memes cases que les events *_cmd + bascule vue remote reversible). // v1.72.0 — « dynamiques » cadrage pays mobile (parité APK v1.81.0) : fit_country dessine le CONTOUR pays (highlights '_fit', magenta #e91e63) + badge fiche 3 lignes (NOM · coords · VUE PAYS) ; focus ville retire le contour | v1.71.0 — MISE EN SCÈNE P2.0 (parité APK v1.80.0) : case WS scene_directive + onSceneDirective/_sceneBindMeta/_sceneApply — route pc = fire réception+offset, route mobile = directive liée au PROCHAIN tts_audio_meta et calée sur le planning AudioContext (_ttsNextStartTime), filet off+4 s ; application = setActiveView('map',{remote}) + MapNative.onGlobe(payload), flag backend mise_en_scene_enabled OFF défaut | v1.70.0 — P1.5 PILE DE FLASHS haut-droite (parité APK v1.79.0, cadrage validé Quang 12/07) : module FlashStack — case WS 'tool_call' branché (avant JETÉ) → carte éphémère par outil, max 3, récent en haut, durée = ephemeral_hud_duration_ms backend partagé, deadline horloge + watchdog 1s anti-throttling, pensée #mediaFlash INTACTE empilée dessous, réglage ⚙ « Taille des flashs » S/M/L (100/126/170px), contenant prêt P2.2. // v1.69.0 — P1.4 CODE mobile (parité APK v1.78.0) : AUDIT local hubs/cycles/dead (case 'audit' du codemap_cmd, avant ignoré — HUB_MIN parité PC, SCC Tarjan, dead=fan-in 0, card #codeAuditCard tappable) + DIFF GIT exploité (args[2]=fonctions touchées par le backend git, avant jeté : liste ± modifiée, badge MODIFIÉE sur la fiche, focus auto si 1 seule fonction). // v1.62.0 — parité mobile v1.71.0 : (B) jauge ne se dissipe plus entre 2 phrases (attend tts_end + GRACE_MS), (C) pensée flash cliquable partout + watchdog auto-hide, (D) itinéraire carte accumulé (routes[] + event 'itinerary') = parcours continu. // v1.61.0 — BADGE ✦ « pensée » dans le VIEWER plein écran (#mediaLightbox) : span #lbPass alimenté par renderView (it.passive galerie OU it.mode==='passive' flash), vert GS, masqué si vide. Parité PC/APK. // v1.60.0 — PORT depuis l'APK : BARRE DU BAS 3 zones (mini-hologramme d'état à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE, l'ancien FAB flottant est retiré) + JAUGE DE PAROLE (barre magenta fine en haut + anneau concentrique autour du mini-holo, décroissants et exacts via _ttsRemainingMs, gate target==='mobile', fondu au barge-in). La PWA était restée à l'ancien layout (lignée v1.59.x divergente) — patchs ciblés, aucun écrasement. // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
+  const VERSION = '1.100.0'; /* v1.100.0 (28/07) — LA CARTE VIT — MAIS SEULEMENT QUAND IL SE PASSE QUELQUE CHOSE, ET C EST MESURE. Trois retours de Quang le 28/07 : « les bulles partent toutes en meme temps dans tous les sens, ca ne reflete pas la realite » · « j aimerais que les puces s illuminent, car elles sont sombres […] si une activite arrive vraiment sur une puce, qu elle s illumine pendant cinq secondes » · « que la puce de session soit animee comme sur PC, et que les LED clignotent, mais de facon plus visible sur mobile ». (1) LES IMPULSIONS DISENT LA VERITE. Elles partaient TOUTES, sur TOUTES les routes, parce que le resume envoye par le backend disait combien d evenements et de quelle famille, jamais SUR QUEL DOSSIER. Le backend envoie desormais `recents` (famille + dossier), et chaque impulsion part sur la piste de l evenement qui l a declenchee. Sur PC c etait deja le cas depuis le debut -- d ou l ecart que Quang voyait. (2) LE CONNECTEUR TOUCHE S ALLUME ~5 s, et une activite qui continue REPOUSSE l extinction : un dossier qui travaille reste allume. (3) LES TEMOINS PULSENT ET LA PLUIE TOMBE, en animations CSS BORNEES relancees par chaque salve. ⚠️ LE CHIFFRE QUI COMMANDE TOUT CA : j avais d abord ecrit une boucle a 20 images/s, en pensant que l arret hors ecran la rendait abordable. Mesure sur le Samsung (module extrait tel quel, differentiel contre une page noire) : temoins SEULS +190 points d un coeur, pluie SEULE +209, les deux ensemble +191. Le cout ne vient PAS du nombre d elements animes mais du FAIT DE TOUCHER LE SVG a chaque image -- Chrome repeint alors tout le dessin, et huit cercles coutent autant que cent soixante. En animations bornees declarees en CSS, le meme rendu tombe a +18,8 points avec un evenement toutes les 6 secondes, contre +7,9 pour l ancien regime qui, lui, ne disait rien. Rien ne survit a la sortie de l ecran : minuteries annulees, animations retirees. */ /* v1.99.0 (28/07) — LA CARTE MOBILE NE MENT PLUS QUAND ELLE PERD SA SOURCE. Signale par Quang : apres un redemarrage de Jarvis sur le PC, le telephone affichait encore SESSION 261 pendant que le PC etait revenu a 0. Ce n etait pas un defaut de synchronisation : le WebSocket etait tombe, plus aucun carte_state n arrivait, et le dessin gardait le dernier etat recu SANS LE DIRE -- exactement ce que la regle du projet interdit (« la carte ne ment jamais sur sa source »). Elle repasse desormais en HORS LIGNE a la fermeture du WS ; le backend la re-hydrate a la reconnexion. */ /* v1.98.0 (28/07) — LA CARTE MOBILE SE CALE, SE SOUVIENT, ET NE FAIT PLUS SEMBLANT. Trois retours de Quang le 28/07. (1) « juste en dessous de la fenetre ou il y a tout le mock-up, tu as un espace vide, tu peux encore etendre la fenetre et gagner en ergonomie » — la cause n etait pas un mauvais calage : le facteur d echelle est min(largeur/L, hauteur/(FY1-FY0)) et c est la LARGEUR qui commande sur un telephone, donc le dessin ne faisait que 358 unites de haut dans une zone qui en offrait ~420, et les ~60 restantes tombaient en bas, vides. FY1 470 -> 522, panneaux du bas +26, chronologie +52, et les TROIS PISTES qui y menent descendent avec (sans quoi elles s arretent dans le vide — piege deja paye sur le PC le 27/07). Verifie sur appareil reel : le bas du cadre touche desormais la rangee de boutons. (2) L ATTRIBUTION DES CONNECTEURS SUIVAIT LE RANG D ACTIVITE : les 4 emplacements sont fixes, mais le backend envoie les dossiers tries par activite et le module les posait dans l ordre recu — deux dossiers echangeaient donc leur place des que l un passait devant l autre. C est exactement le defaut que Quang a vu sur le PC (« un rectangle qui etait en bas a droite est maintenant en haut a gauche »), reintroduit ici sans le voir. Meme regle que session-scope/placement.js desormais : un dossier connu retrouve sa place, un nouveau venu prend la premiere libre a partir de celle que son NOM designe, memoire persistee et purgee a 40 entrees. Les nouveaux sont servis dans l ordre du nom et jamais du classement, sinon a memoire vide c est le rang qui tranche les collisions. Banc sur le Samsung reel : 5/5, mutation prouvee rouge. (3) « je trouve ca triste de ne pas avoir d activite du tout, que ce ne soit pas dynamique comme sur PC » — la vraie cause n etait pas la frequence mais le fait qu un setInterval declenchait une salve des que le plafond le permettait, qu il se soit passe quelque chose ou NON. La carte bougeait pareil pendant une session intense et pendant une nuit vide, et un mouvement qui ne veut rien dire, l oeil cesse de le voir : c est la definition du fige. Deux regimes desormais — sur EVENEMENT reel jusqu a une salve toutes les 10 s, au repos une respiration toutes les 60 s. Mesure sur le Samsung (differentiel contre une page noire, 120 s par regime) : 60 s = +3,2 points d un coeur, 30 s = +7,5, 10 s = +24,6. L ancien regime coutait donc 7,5 points en permanence pour du mouvement muet ; le nouveau coute 3,2 au repos et ne depense que quand il se passe quelque chose. */ /* v1.97.0 — LA CARTE DE SESSION EST BRANCHÉE SUR SA VRAIE SOURCE. Elle affichait des zéros et le disait (« HORS LIGNE ») ; elle reçoit désormais `carte_state`, poussé par le backend v3.6.0 sur le WebSocket existant. Pourquoi ce canal : le téléphone n'a aucun accès aux transcripts (ils sont sur le PC) et le serveur de flux écoute sur 127.0.0.1, donc n'est pas joignable en 4G — alors que le WS de Friday l'est déjà de partout via Tailscale. Le backend RÉSUME côté serveur (4 dossiers les plus touchés, 3 dernières lignes de flux, état des sessions par moteur) : le téléphone reçoit du prêt-à-peindre, il ne trie ni ne compte. Il n'émet QUE si l'état a changé — le fond reconstruit ~450 nœuds SVG à chaque réception. Une SALVE part à chaque nouvel état : le mouvement est un signal, jamais un minuteur, et le module plafonne à une salve / 30 s même en rafale. */ /* v1.96.0 — FOND « CARTE DE SESSION », OPTIONNEL ET PERSISTÉ (décision Quang 27/07 : « l'affichage actuel reste et on ajoute une option dans configuration pour activer cette interface alternative », « l'option sera en persistance mémoire »). Le cœur de session du PC (le die SESSION) prend la place de l'hologramme atomique, entouré des moteurs et de leurs TÉMOINS DE SESSION, des dossiers en connecteurs de tranche, des panneaux RÉSEAU·WEB et AVIS·LLM, et de la chronologie. Défaut = OFF : rien ne change tant que l'interrupteur n'est pas activé, et le retour arrière est immédiat. ⚠️ CE QUI COMMANDE L'IMPLÉMENTATION EST LA CONSO, MESURÉE SUR TÉLÉPHONE RÉEL (banc session-scope/banc-conso-mobile.py, différentiel contre une page noire immobile) : dessin FIGÉ +0 %, animation continue +202 %, sans aucun filtre SVG +199 %, en SMIL natif +201 %, en transform composé GPU +94 %, PAR SALVES (2 s / 30 s) +5,7 %. Et le chiffre qui décide : DEUX impulsions coûtent 84 %, DOUZE en coûtent 94 % — le coût est quasi indépendant du NOMBRE d'éléments animés, il tient au FAIT qu'une animation tourne. Réduire les effets ne sert à rien ; seule compte la DURÉE pendant laquelle ça bouge. D'où trois règles non négociables : (1) aucune animation permanente, des SALVES brèves espacées, et entre elles animation:'none' (une animation finie mais encore déclarée garde sa couche de composition vivante) ; (2) ce qui bouge vit HORS du SVG (dès qu'un élément bouge dedans, Chrome repeint les ~1000 nœuds) ; (3) transform uniquement, seule propriété dont la composition GPU est garantie (offset-path mesuré à +124 %). ⚠️ Le fond n'est pas encore branché sur le flux réel : il l'écrit en toutes lettres (RELEVÉ · DÉMO, HORS LIGNE, EN ATTENTE DE SOURCE) plutôt que de faire passer des chiffres d'exemple pour du direct. ⚠️ Le CALAGE reste à finir : la maquette a été calée sur la capture de l'APK du Honor, or la PWA a une disposition différente — sous 300 px de place libre, on cesse de s'imbriquer et on redevient un fond plein écran, lisible mais moins ajusté. Vérifié en live sur le Samsung (13/13 : option OFF par défaut, allumage, dessin présent, zéro débordement, PERSISTANCE après rechargement, extinction complète). */ /* v1.95.0 — PARITÉ APK v1.104.0 (mandat Quang 16/07 : solution durable, pas un pansement) : (1) RÉCONCILIATEUR D'ÉTAT 1 Hz horloge murale — le ré-armement était événementiel (suspendu à tts_end) → 1 événement perdu = conversation morte ; 4 blocages en 4 jours = 4 façons de perdre tts_end. Boucle idempotente convergeant vers « mode conv + aucun tour en cours + TTS fini ⇒ micro ouvert » → tts_end devient une optimisation de latence, plus une condition de survie. (2) RACINE des ABORT cause=stop : _vadReset ne remettait pas _vadLastVoiceWallTs → _recSafetyCheck coupait le start en vol au 1er tick (~1s) sans geste user ; fix = reset + garde structurelle (>= started). Backend v2.21.0 en regard (timeout+pacing TTS, garde STT anti-hallu). */ /* v1.94.2 — FIX reprise conversation continue (parité APK v1.103.2, bug Honor BT prouvé log : ABORT start#1 cause=stop) : handlers mediaSession pause/stop ne coupent QUE si recSentStart (rec réellement démarré) → la bascule SCO Bluetooth pendant getStream ne tue plus le start en vol. */ /* v1.94.1 — INSTRUMENTATION reprise continue (parité APK v1.103.1) : _lastGenBump trace la cause de chaque incrément de _startGen (stop|ws-close|new-start) + les 2 blocs ABANDON loggent client_log 'ABORT start#N cause=…'. ZÉRO changement de comportement. */ /* v1.94.0 — ANTI-COURSE ASYNC conversation continue (bug Honor 15/07) : jeton _startGen invalide un start dont le getUserMedia (lent BT/4G) est encore en vol ou juste avant .start() → plus de MediaRecorder zombie. + B3 onclose. Backend v2.19.0 : B1 watchdog anti-zombie + B2 ping explicite. Complète la sérialisation v1.74.0. */; /* v1.91.0 — FILET anti-blocage ENREGISTREMENT (parité APK v1.100.0, bug Honor 14/07, hologramme JAUNE figé plusieurs minutes) : le VAD tourne sur requestAnimationFrame, GELÉ quand l'app passe en arrière-plan/écran éteint (voiture) → rec_start sans jamais de STOP. Fix : deadline horloge murale + watchdog setInterval(1s) + rattrapage sur `visibilitychange visible` → _recSafetyCheck coupe un rec zombie (cap 60s dur OU silence VAD évalué sur l'horloge) dès le retour au premier plan. Complète v1.90.0 (qui ne cassait PAS un rec ouvert : `if(ui.recording) return`). */ /* v1.90.0 — FILET anti-blocage conversation continue (parité APK v1.99.0, bug Honor 13/07 hologramme jaune) : handler `turn_dropped` (backend v2.13.3) + watchdog 9 s ré-arment l'écoute quand le backend droppe un tour ou ne répond pas. */ /* v1.89.0 — FIX cohérence PC/mobile focus ville (bug log 13/07 « c'est pas Paris ») : le scale ville était figé à 11 px/degré = vue CONTINENT sur le renderer maison ; désormais cadré sur la BBOX du geojson frontières ville (parité fit_country + PC core v1.27.0), fallback scale 55. */ /* v1.88.0 — CAPITALES au zoom sur la carte (199 NE 110m, point+label, anti-chevauchement par priorite pop, invisibles en vue monde scale<2) */ /* v1.87.0 — FRONTIERES PAYS sur la carte (retour Quang 13/07) : WORLD_BORDERS embarque (NE 110m interieures, 326 lignes/3000 pts/24Ko) + drawBorders sous les couches data */ /* v1.86.0 — S5v2 : suggestions a payload globe (seisme majeur -> carte), tap rejoue SceneMobile.apply complet */ /* v1.85.0 — HOTFIX micro/route audio (Headset earpiece = ecouteur interne exclu du pick BT) + get_config au boot (hydratation reglages persistes) */   // v1.84.0 — S5 PROACTIVITÉ DE SCÈNE : case WS scene_suggestion → FlashStack.onSuggestion (carte 💡 tappable, tap = SceneMobile.apply {tab,cmd} + retrait, TTL borné), réglage ⚙ « Proactivité de scène » (flag BACKEND scene_proactivity_enabled partagé PC, hydraté config_state). // v1.83.0 — S4b LIENS CODE↔SYSTÈME (parité APK v1.92.0, backend v2.9.0, PC v1.24.0) : CodemapNative.load reçoit `project` (dépôt d'origine) → ligne tappable « 🛰 vit dans <repo> → » = bascule onglet SYSTÈME + focusCard ; SystemeNative.onEcosystem stocke le détail commit enrichi (subject/hash/functions) → ligne « ⤷ » sous la card projet. | v1.82.0 — S7 PHOTOTHÈQUE WEB (parité APK v1.91.0, backend v2.8.0, PC v1.23.0) : onglet galerie « 🌐 Web » (kind='web', compteur séparé, exclu de l'onglet Galerie), flash image préfère flash.local_url (copie photothèque servie par le backend via API_BASE — fallback URL source Wikimedia), FIX préexistant : srcOf/fullSrcOf laissent passer les URLs http(s) absolues (avant : API_BASE+URL absolue = src invalide, le tap flash→viewer chargeait une image morte). | v1.81.0 — RESPECT DU RATIO des images flash (retour Quang : 9:16 recadrée en 16:9 ; parité APK v1.90.0, PC v1.22.2) : #mediaFlash img + carte FlashStack en width:auto/max-width:100%/max-height:2×réglage/contain — portrait entier sans clic, paysage inchangé. | v1.80.0 — S4a TRACE AU SOL ISS (pont cosmos→carte, parité APK v1.89.0, backend v2.7.0, PC core v1.22.0) : case globe iss_track/iss_track_clear → issTrack {coords,now}, drawIssTrack (polyligne dorée pointillée, garde antiméridien, 🛰+label position courante), chip ISS au HUD couches, getState().layers.iss. | v1.79.0 — S3 COUCHES CARTE ANIMÉES opt-in (parité APK v1.88.0, backend v2.5.0, PC core v1.21.0) : flag `animate` des payloads globe → lecture chrono séismes ts USGS ~12s (drawSeisms filtre par playhead), traînées vols extrapolées cap+vitesse dash animé ~25s (drawFlightTrails sous les ✈), respiration alpha aurore ~20s ; animations BORNÉES via animStep() dans loop() (dirty-flag préservé, batterie), retour statique pixel-identique ; bouton rejeu #mapAnimBtn 44px (bottom:68px au-dessus du HUD couches) ; getState().anim pour le harnais. | v1.78.0 — (1) SCO Bluetooth natif pattern DictoKey (mandat Quang) : AudioFocusPlugin.enableSco/disableSco (setCommunicationDevice API31+ / startBluetoothSco sinon), rearme a CHAQUE tour au takeAudioFocus, coupe au release, log SCO client_log — no-op sans casque/hors Capacitor ; (2) VRAI fix swipe 3e essai : body user-select:none global heritait sur le champ -> gesture typing Gboard desactive ; exemption user-select:text sur .text-input. // v1.77.0 — retours Quang soir : (1) retour EN HAUT auto a la fermeture du clavier (blur + visualViewport resize -> .main scrollTop 0, l'hologramme reste visible) ; (2) swipe 2e essai : attributs textarea alignes EXACTEMENT PromoClip (zero autocomplete/spellcheck/enterkeyhint/inputmode). // v1.76.0 — 3 retours Quang 12/07 : (1) flash image TAPPABLE -> viewer plein ecran comme la pensee (MediaImages.openExternal, sans id = pas de coeur/corbeille) ; (2) champ texte = TEXTAREA rows=1 (glide typing Gboard marche sur textarea, pas sur input — parite PromoClip) ; (3) micro BT best-effort : deviceId du casque bluetooth si expose par la WebView + log MIC diagnostic, fallback micro defaut inchange. // v1.75.0 — MISE EN SCENE P2.2 hors-onglet : FlashStack.onSceneFlash (carte ephemere texte court ou image web verifiee Wikipedia, tab 'flash' de scene_directive, aucune bascule de vue). // v1.74.0 — FIX effets de bord voix (log Quang 12/07) : serialisation recording (rec_end de l'ancien flux AVANT nouveau rec_start + callbacks recorder perime no-op) = fin zombie/blob invalide Groq 400 ; ISS honnete (chip indisponible si echec fetch, parite NEO/SW) + poke fetch immediat au retour vue cosmos. // v1.73.0 — MISE EN SCENE P2.1 : _sceneApply etendu cosmos/systeme/codemap (m.cmd {tool,args} rejoue dans le module natif via les memes cases que les events *_cmd + bascule vue remote reversible). // v1.72.0 — « dynamiques » cadrage pays mobile (parité APK v1.81.0) : fit_country dessine le CONTOUR pays (highlights '_fit', magenta #e91e63) + badge fiche 3 lignes (NOM · coords · VUE PAYS) ; focus ville retire le contour | v1.71.0 — MISE EN SCÈNE P2.0 (parité APK v1.80.0) : case WS scene_directive + onSceneDirective/_sceneBindMeta/_sceneApply — route pc = fire réception+offset, route mobile = directive liée au PROCHAIN tts_audio_meta et calée sur le planning AudioContext (_ttsNextStartTime), filet off+4 s ; application = setActiveView('map',{remote}) + MapNative.onGlobe(payload), flag backend mise_en_scene_enabled OFF défaut | v1.70.0 — P1.5 PILE DE FLASHS haut-droite (parité APK v1.79.0, cadrage validé Quang 12/07) : module FlashStack — case WS 'tool_call' branché (avant JETÉ) → carte éphémère par outil, max 3, récent en haut, durée = ephemeral_hud_duration_ms backend partagé, deadline horloge + watchdog 1s anti-throttling, pensée #mediaFlash INTACTE empilée dessous, réglage ⚙ « Taille des flashs » S/M/L (100/126/170px), contenant prêt P2.2. // v1.69.0 — P1.4 CODE mobile (parité APK v1.78.0) : AUDIT local hubs/cycles/dead (case 'audit' du codemap_cmd, avant ignoré — HUB_MIN parité PC, SCC Tarjan, dead=fan-in 0, card #codeAuditCard tappable) + DIFF GIT exploité (args[2]=fonctions touchées par le backend git, avant jeté : liste ± modifiée, badge MODIFIÉE sur la fiche, focus auto si 1 seule fonction). // v1.62.0 — parité mobile v1.71.0 : (B) jauge ne se dissipe plus entre 2 phrases (attend tts_end + GRACE_MS), (C) pensée flash cliquable partout + watchdog auto-hide, (D) itinéraire carte accumulé (routes[] + event 'itinerary') = parcours continu. // v1.61.0 — BADGE ✦ « pensée » dans le VIEWER plein écran (#mediaLightbox) : span #lbPass alimenté par renderView (it.passive galerie OU it.mode==='passive' flash), vert GS, masqué si vide. Parité PC/APK. // v1.60.0 — PORT depuis l'APK : BARRE DU BAS 3 zones (mini-hologramme d'état à GAUCHE + bouton parler CENTRÉ + STOP cercle à DROITE, l'ancien FAB flottant est retiré) + JAUGE DE PAROLE (barre magenta fine en haut + anneau concentrique autour du mini-holo, décroissants et exacts via _ttsRemainingMs, gate target==='mobile', fondu au barge-in). La PWA était restée à l'ancien layout (lignée v1.59.x divergente) — patchs ciblés, aucun écrasement. // v1.59.3 — PARITÉ PC : (1) boutons ❤/🗑 sur l'IMAGE UNIQUE GS générée par Friday (viewer/center/flash) — le garde-fou masquait à tort sur engine==='gs' au lieu de source==='gs' (read-only galerie GS uniquement), aligné sur le PC (rapporté par Quang, images GS sans boutons sur mobile alors que présents sur PC). (2) LED du bouton moteur GS (.studio-dot) VERTE quand actif (avant bleu). // v1.59.2 — HOTFIX galerie #2 : v1.59.1 remontait le BAS de la galerie de --ptt-h SANS réduire sa hauteur (84vh) → le HAUT dépassait par le haut de l'écran (croix de fermeture inaccessible), pire sur petit écran (Honor < Samsung). Fix : height:calc(84vh - --ptt-h) → le haut reste à ~16vh du haut quelle que soit la taille d'écran. // v1.59.1 — HOTFIX galerie : v1.59.0 posait `bottom` en dur sur #galleryPanel, mais elle s'escamote par translateY(100%) → son HAUT restait affiché en bas EN PERMANENCE (galerie « bloquée » sans l'ouvrir, le resize au boot déclenchait le bug). Fix : la galerie passe par la variable CSS --ptt-h (bottom + translateY(calc(100% + --ptt-h))), plus aucun `bottom` inline. Les autres fenêtres (opacity) restent en placeAboveBar. // v1.59.0 — BOUTON TAP TO TALK TOUJOURS ACCESSIBLE (mandat Quang 11/07) : toutes les fenêtres image plein écran (triptyque #mediaCompare, explore #mediaExplore, viewer #mediaLightbox) ET la galerie s'arrêtent AU-DESSUS du pied de page (generalisation de placeCenter → placeAboveBar/placeOverlaysAboveBar), comme #mediaCenter le faisait déjà. Le bouton pour parler n'est plus jamais recouvert ni en collision. // v1.58.0 — GESTES MANUELS PHASE 3 : ✓ valider / ❤ favori / 🗑 supprimer sur le TRIPTYQUE de comparaison 3 moteurs (même canal WS media_manual_action que la grille explore et l'image unique). L'apex Generate Studio est supprimable/favorisable (id normal en Mode C). Synchro croisée PC↔mobile, retrait de cellule au 🗑, non-régression du zoom pyramide. // v1.57.0 — Retour visuel immédiat au clic sur ⬇ (toast « Téléchargement… ») sur PC et mobile — avant, le téléchargement unitaire était silencieux (demande Quang). // v1.56.0 — FIX flash « pensée » qui restait affiché POUR TOUJOURS sur mobile : le setTimeout d'auto-masquage gèle quand l'app passe en arrière-plan. On rattrape sur l'horloge au retour au premier plan (comme si le timer PC avait tourné). Rapporté par Quang 2026-07-10. // v1.55.0 — FIX confirmation coupure moteur sur le BON bouton (bouton STUDIO de la barre d'outils, collé à 🖼 GAL — avant j'avais sécurisé le mauvais). + Download qui MARCHE sur l'APK Honor : écriture native via plugin Capacitor Filesystem → Documents/ (la WebView ignorait <a download>). Rapporté par Quang 2026-07-10. // v1.54.0 — GALERIE : deux ONGLETS séparés « 🖼 Galerie » (non-favoris, ≤ plafond) / « ★ Favoris » (comptés à part). + Bouton TÉLÉCHARGER (⬇ unitaire par image + ⬇ multiple via mode Sélection, fetch→blob, OK cross-origin Honor). + Confirmation avant coupure du moteur GS (tap accidentel, bouton collé à Galerie). + LED « GS actif » verte (avant bleue). Choix Quang 2026-07-10. // v1.53.0 — Onglet CODE : exemple démo « Minuteur » par défaut (parité PC, fiche native), remplacé dès que Friday ouvre un vrai fichier. // v1.52.0 — GESTES MANUELS PHASE 2 : ❤/🗑 sur image unique (viewer/center/flash), envoi WS media_manual_action action delete/favorite. // v1.48.0 — P2 CARTE+COSMOS NATIFS : le flux JPEG remote_frame (capture ecran PC) est remplace par des canvas LOCAUX (MapNative: fond WORLD_LAND embarque, pins/meteo/arcs/routes via events `globe`, pan 1 doigt + pinch zoom ; CosmosNative: systeme solaire leger, focus_planet via cosmos_cmd, drag rotation). Fonctionne PC eteint. Couches avancees PC (seisms/aurora/flights/ISS/stories) non portees, choix assume.   // v1.47.0 — P1 RAIL DE SYNCHRO (roadmap onglets) : 5 onglets (+ SYSTEME 🛰 + CODE 📊, vues minimales honnetes), le tel suit les bascules de scene de Friday via ui_mode_switch (voix, tool, clic PC), noteSceneAction affiche la derniere action systeme/codemap. setActiveView(remote:true) = pas de re-pilotage PC (anti-boucle).   // v1.46.1 — collision explore vs image plein ecran : la grille ferme les vues d'image simple a l'ouverture (meme logique que PC v1.10.1)   // v1.46.0 — EXPLORE (P2) : grille de N candidats numerotes (event media_explore), tap = visionneuse par-dessus, suppression vocale retire la vignette sans fermer. Zero hierarchie (pas de couronne) : Quang choisit.   // v1.45.1 — bouton GS + onglets icones de largeur egale
   // Phase 5a : client WS live. Override mock via ?mock=1. Override URL via ?ws=...
   const QUERY = new URLSearchParams(location.search);
   const LIVE_MODE = QUERY.get('mock') !== '1';
@@ -9650,7 +9650,12 @@ body[data-state="speaking"] .cortex-variant .v-zone[data-zone="broca"]{
         // plafonne lui-même à une salve toutes les 30 s, même en rafale.
         case 'carte_state':
           try {
-            if (window.CarteFond) { window.CarteFond.donnees(m); window.CarteFond.salve(); }
+            if (window.CarteFond) {
+              window.CarteFond.donnees(m);
+              /* v2.00 — on passe CE QUI VIENT DE SE PASSER : la salve n'allume
+                 plus que les pistes concernées, au lieu de tout lancer. */
+              window.CarteFond.salve(false, m && m.recents);
+            }
           } catch(_) {}
           break;
         case 'voice_avatar_hint':
@@ -11926,6 +11931,18 @@ releaseMediaStream(); // cleanup any leftover dead tracks
   #carteImp i::after{ content:''; position:absolute; left:5.9px; top:5.9px;
                       width:2.2px; height:2.2px; border-radius:50%; background:#fff; }
 
+  /* ⚠️ LES ANIMATIONS SONT DÉCLARÉES ICI, BORNÉES, ET ELLES S'ARRÊTENT SEULES.
+     Aucune n'est infinie : une animation `infinite` garde sa couche de
+     composition vivante et coûte alors exactement ce qu'une boucle coûterait
+     (mesuré : +190 points d'un cœur pour huit cercles retouchés par image).
+     Chacune est relancée par une SALVE, donc par un événement réel. */
+  @keyframes cfBat  {                       /* une session qui TRAVAILLE : vif */
+    0%,100% { opacity:.35 } 45% { opacity:1 } }
+  @keyframes cfResp {                       /* une session qui ATTEND : ample  */
+    0%,100% { opacity:.45 } 50% { opacity:.95 } }
+  @keyframes cfGoutte {                     /* l'averse du die, une seule fois */
+    0% { opacity:.06 } 12% { opacity:.95 } 40% { opacity:.35 } 100% { opacity:.06 } }
+
   /* En mode carte : le cœur de la carte REMPLACE l'hologramme, et le transcript
      se replie — c'est ce repli qui rend sa hauteur à la carte (décision Quang :
      « si le transcript fait perdre de la place en hauteur »). */
@@ -11971,6 +11988,8 @@ releaseMediaStream(); // cleanup any leftover dead tracks
   const hote = document.getElementById('carteFond');
   const calque = document.getElementById('carteImp');
   let svg = null, impulsions = [], salveEnCours = false, minuteur = null;
+  let parPlace = [], connecteurs = [], chaleurs = [0, 0, 0, 0], anim = null;
+  let pluie = [], temoins = [], horloge = 0;
 
   const el = (p, t, a) => { const n = document.createElementNS(NS, t);
     for (const k in (a || {})) if (a[k] != null) n.setAttribute(k, a[k]);
@@ -12080,6 +12099,18 @@ releaseMediaStream(); // cleanup any leftover dead tracks
   }
 
   function construire(){
+    /* ⚠️ CALCULE ICI, ET PAS PLUS BAS. Depuis que les connecteurs sont attribues
+       par le NOM, `D.dossiers[i]` n'est plus le dossier de l'emplacement `i` --
+       or les ROUTES testent justement « ce connecteur est-il occupe ? » pour
+       savoir si une piste est morte. Le calculer apres les routes laissait donc
+       des pistes vivantes vers des connecteurs vides, et mortes vers des
+       connecteurs pleins. Defaut introduit par ma propre correction, trouve en
+       branchant les impulsions ciblees. */
+    parPlace = rangerDossiers(D.dossiers || []);
+    /* ⚠️ Les témoins se remplissent PENDANT le dessin des moteurs, qui vient
+       avant les connecteurs : les remettre à zéro plus bas effaçait ce qu'on
+       venait d'y mettre. On repart de zéro ici, une fois, au tout début. */
+    temoins = []; pluie = [];
     hote.querySelectorAll('svg').forEach(n => n.remove());
     calque.innerHTML = '';
     impulsions = [];
@@ -12149,7 +12180,7 @@ releaseMediaStream(); // cleanup any leftover dead tracks
     ROUTES.forEach((r, i) => {
       const mortM = r.mot != null &&
         !(D.moteurs[ORDRE_M[r.mot]] || []).some(e => e !== 'vide');
-      const mortD = r.dos != null && !(D.dossiers[r.dos]);
+      const mortD = r.dos != null && !(parPlace[r.dos]);
       const mort = mortM || mortD;
       el(gt, 'path', { d:r.d, fill:'none', stroke:'#0e2a34', 'stroke-width':2.6,
                        'stroke-linecap':'round', 'stroke-linejoin':'round' });
@@ -12158,7 +12189,7 @@ releaseMediaStream(); // cleanup any leftover dead tracks
                                  'stroke-linecap':'round', 'stroke-linejoin':'round' });
       /* Une piste vers un moteur SANS session existe, mais rien n'y circule :
          une impulsion partant d'un « 0 SES » serait un joli mensonge. */
-      chemins.push(mort ? null : { p, fam:r.fam, i });
+      chemins.push(mort ? null : { p, fam:r.fam, i, dos:r.dos, mot:r.mot });
     });
     [[132,236],[228,236],[49.5,268],[310.5,268]].forEach(q =>
       el(gt, 'circle', { cx:q[0], cy:q[1], r:2.6, fill:'#071a22', stroke:CY_,
@@ -12189,11 +12220,20 @@ releaseMediaStream(); // cleanup any leftover dead tracks
         const px = x+12+k*((MB-24)/3), cc = C_ETAT[e] || C_ETAT.vide;
         el(g, 'line', { x1:px, y1:MY+MH, x2:px, y2:MY+MH+6, stroke:cc,
                         'stroke-width':1.5, opacity:e === 'vide' ? .35 : .85 });
-        if (e !== 'vide') el(g, 'circle', { cx:px, cy:MY+MH+9.5, r:4.4, fill:cc,
-                                            opacity:.34, filter:'url(#cfDoux)' });
-        el(g, 'circle', { cx:px, cy:MY+MH+9.5, r:2.2, fill:cc,
+        const aur = e !== 'vide' ? el(g, 'circle', { cx:px, cy:MY+MH+9.5, r:4.4, fill:cc,
+                                            opacity:.34, filter:'url(#cfDoux)' }) : null;
+        const led = el(g, 'circle', { cx:px, cy:MY+MH+9.5, r:2.2, fill:cc,
                           opacity:e === 'vide' ? .5 : 1,
                           filter:e === 'vide' ? null : 'url(#cfBloom)' });
+        /* ⚠️ ON RETIENT LES TÉMOINS QUI VIVENT, et eux seuls.
+           Quang, 28/07 : « que les LED d'activité ainsi que les moteurs
+           clignotent d'une certaine manière, comme sur PC, mais de façon plus
+           VISIBLE sur mobile » — d'où une respiration plus ample ici que sur le
+           PC : l'écran est petit et on le regarde quelques secondes, pas une
+           heure. Une session qui ATTEND respire lentement, une session qui
+           TRAVAILLE bat vite : le rythme dit l'état, la couleur dit déjà qui. */
+        if (e !== 'vide') temoins.push({ led, aur, travaille: e === 'travaille',
+                                         phase: temoins.length * 1.1 });
       });
     });
 
@@ -12201,16 +12241,26 @@ releaseMediaStream(); // cleanup any leftover dead tracks
        longe le bord EST un connecteur. Ils reculent d'un cran — un dossier est
        un repère, pas une alerte. */
     const places = [[GLX,248],[GLX,312],[GRX,248],[GRX,312]];
-    const parPlace = rangerDossiers(D.dossiers || []);
+    connecteurs = [];
     places.forEach((pl, i) => {
       const dd = parPlace[i];
       const c = dd ? (CO[dd.fam] || CO.autre) : CO.autre;
       const chaud = dd ? Math.min(1, dd.ev/40) : 0;
       const g = el(svg, 'g', { opacity:dd ? .72 : .3 });
-      if (dd) el(g, 'rect', { x:pl[0]-3, y:pl[1]-3, width:GW+6, height:60, rx:7,
-                              fill:c, opacity:.04+chaud*.06, filter:'url(#cfDoux)' });
-      el(g, 'rect', { x:pl[0], y:pl[1], width:GW, height:54, rx:4, fill:'#071a22',
+      /* ⚠️ Le halo existe TOUJOURS quand le dossier existe, même à froid : c'est
+         lui qu'on rallume à l'arrivée d'une activité. Le créer seulement quand
+         il est déjà chaud rendrait l'illumination impossible. */
+      const halo = dd ? el(g, 'rect', { x:pl[0]-3, y:pl[1]-3, width:GW+6, height:60, rx:7,
+                              fill:c, opacity:.04+chaud*.06, filter:'url(#cfDoux)' }) : null;
+      const cadre = el(g, 'rect', { x:pl[0], y:pl[1], width:GW, height:54, rx:4, fill:'#071a22',
                       stroke:c, 'stroke-width':1.1, 'stroke-opacity':.3+chaud*.6 });
+      /* Le voile : ce qui fait passer le connecteur de « sombre » à « allumé »
+         (retour de Quang, 28/07 : « les puces sont sombres […] qu'elle
+         s'illumine d'une certaine manière pendant cinq secondes »). */
+      const voile = dd ? el(g, 'rect', { x:pl[0], y:pl[1], width:GW, height:54, rx:4,
+                      fill:c, opacity:0 }) : null;
+      connecteurs[i] = dd ? { g, halo, cadre, voile, base:.72, baseHalo:.04+chaud*.06,
+                              baseCadre:.3+chaud*.6 } : null;
       el(g, 'path', { d:`M ${pl[0]+11} ${pl[1]} a 5 5 0 0 0 10 0`, fill:'none',
                       stroke:c, 'stroke-width':1, 'stroke-opacity':.55 });
       const bord = pl[0] < 180 ? pl[0]-5 : pl[0]+GW;
@@ -12263,14 +12313,26 @@ releaseMediaStream(); // cleanup any leftover dead tracks
     const cl = el(defs, 'clipPath', { id:'cfClip' });
     el(cl, 'rect', { x:CX-DW+2, y:CY-DH+2, width:DW*2-4, height:DH*2-4, rx:8 });
     const gp = el(die, 'g', { 'clip-path':'url(#cfClip)' });
+    /* ⚠️ ELLE N'EST PLUS STATIQUE — mais elle ne tourne QUE devant les yeux.
+       Quang, 28/07 : « je souhaiterais que la puce de session soit animée comme
+       sur PC, au minimum ». Ce qui rendait ça impensable, c'était de lire les
+       mesures de consommation comme un coût PERMANENT — alors que l'arrêt hors
+       écran (`document.hidden`) était déjà total. Le coût ne se paie que
+       pendant qu'il regarde, et c'est ce qui le rend finançable.
+       On garde les colonnes et on ne déplace RIEN : seule l'opacité change,
+       c'est-à-dire la propriété la moins chère à animer. */
+    pluie = [];
     for (let i = 0; i < 16; i++){
       const x = CX-DW+8+i*12.2, tete = alea()*9;
+      const col = { tete, v: .55 + alea() * .9, cells: [] };
       for (let j = 0; j < 10; j++){
         const d = ((j-tete)+10)%10;
         const op = d < 1 ? .95 : d < 4 ? .5-d*.1 : .06;
-        tx(gp, GLY[(alea()*GLY.length)|0], { x, y:CY-DH+13+j*11.4, 'font-size':10,
-           'font-family':MONO, fill:CY_, opacity:op, 'text-anchor':'middle' });
+        col.cells.push(tx(gp, GLY[(alea()*GLY.length)|0], { x, y:CY-DH+13+j*11.4,
+           'font-size':10, 'font-family':MONO, fill:CY_, opacity:op,
+           'text-anchor':'middle' }));
       }
+      pluie.push(col);
     }
     tx(die, 'SESSION', { x:CX, y:CY-10, fill:BL, stroke:'#07131a', 'stroke-width':3.4,
        'paint-order':'stroke', 'text-anchor':'middle', 'font-size':15,
@@ -12340,6 +12402,9 @@ releaseMediaStream(); // cleanup any leftover dead tracks
       d.style.background = `radial-gradient(circle, ${c}f2 0%, ${c}73 35%, ${c}00 70%)`;
       d.dataset.nom = nom;
       d.dataset.retard = (ch.i*.05).toFixed(2);
+      /* De quoi ROUTER : sans ça, une salve ne peut qu'allumer tout le monde. */
+      d.dataset.fam = ch.fam || '';
+      d.dataset.dos = (ch.dos != null ? ch.dos : '');
       calque.appendChild(d);
       impulsions.push(d);
     });
@@ -12439,30 +12504,177 @@ releaseMediaStream(); // cleanup any leftover dead tracks
      regarde ; au repos, une respiration toutes les 60 s, qui dit seulement
      « je suis branchée » pour moins cher qu'avant. */
   const PERIODE_REPOS_MS = 60000;
-  let derniereSalve = 0;
+  /* ⚠️ DEUX HORODATAGES, ET C'EST INDISPENSABLE. Avec un seul, une simple
+     respiration de repos pouvait faire taire la salve d'un VRAI événement
+     pendant dix secondes. Le repos ne doit jamais couvrir le signal : il n'est
+     borné que par lui-même, l'événement seulement par les événements. */
+  let derniereSalve = 0, dernierRepos = 0;
 
-  function salve(auRepos){
+  /* ══════════════════════════════════════════════════════════════════════
+     LA SALVE DIT CE QUI VIENT DE SE PASSER — pas « il se passe des choses »
+
+     Quang, 28/07 : « les bulles partent toutes en même temps dans tous les
+     sens. Pour moi, ça ne reflète pas la réalité, contrairement au PC. »
+
+     Il avait raison, et ce n'était pas un défaut de réglage : la salve lançait
+     TOUTES les impulsions de TOUTES les routes, parce qu'elle n'avait aucun
+     moyen de faire autrement — le résumé envoyé par le backend disait combien
+     d'événements et de quelle famille, jamais SUR QUEL DOSSIER. Il le dit
+     maintenant (`recents`), et chaque impulsion part donc sur la piste de
+     l'événement qui l'a déclenchée : la bonne famille, vers le bon connecteur.
+
+     Sur le PC c'était déjà le cas depuis le début — d'où l'écart qu'il voyait. */
+  function impulsionsPour(evts){
+    if (!evts || !evts.length) return [];
+    const sortie = [];
+    evts.forEach(e => {
+      const dos = e && e.dos, fam = e && e.fam;
+      /* 1. La piste qui MÈNE au connecteur de ce dossier : c'est la plus juste,
+            elle dit à la fois quoi et où. */
+      let i = -1;
+      if (dos){
+        const place = parPlace.findIndex(d => d && d.nom === dos);
+        if (place >= 0) i = impulsions.findIndex(d => +d.dataset.dos === place);
+      }
+      /* 2. Sinon, la piste de la FAMILLE (web, avis, livraison…). */
+      if (i < 0 && fam) i = impulsions.findIndex(d => d.dataset.fam === fam);
+      if (i >= 0 && sortie.indexOf(impulsions[i]) < 0) sortie.push(impulsions[i]);
+    });
+    return sortie;
+  }
+
+  function salve(auRepos, evts){
     if (salveEnCours || !impulsions.length) return;
     const t = Date.now();
-    if (t - derniereSalve < (auRepos ? PERIODE_REPOS_MS : PERIODE_MIN_MS)) return;
-    derniereSalve = t;
+    if (auRepos){
+      if (t - dernierRepos < PERIODE_REPOS_MS || t - derniereSalve < PERIODE_REPOS_MS) return;
+    } else if (t - derniereSalve < PERIODE_MIN_MS) return;
+    /* Une salve de repos est une RESPIRATION : une seule impulsion, pas la
+       carte entière. Ce qui part en nombre doit vouloir dire quelque chose. */
+    const lot = auRepos ? impulsions.slice(0, 1)
+                        : (impulsionsPour(evts).length ? impulsionsPour(evts) : impulsions);
+    if (!lot.length) return;
+    if (auRepos) dernierRepos = t; else derniereSalve = t;
     salveEnCours = true;
-    let reste = impulsions.length;
-    impulsions.forEach(d => {
+    let reste = lot.length;
+    lot.forEach((d, k) => {
       d.style.opacity = '1';
-      d.style.animation = `${d.dataset.nom} 1.2s linear ${d.dataset.retard}s 1 both`;
+      d.style.animation = `${d.dataset.nom} 1.2s linear ${(k * .09).toFixed(2)}s 1 both`;
       const fin = () => {
         d.removeEventListener('animationend', fin);
         d.style.animation = 'none';
         d.style.opacity = '0';
+        /* L'impulsion ARRIVE : c'est là que le connecteur s'allume, pas au
+           départ. Une puce qui s'illumine avant que le signal l'atteigne
+           raconterait l'histoire à l'envers. */
+        const pl = +d.dataset.dos;
+        if (!isNaN(pl) && d.dataset.dos !== '' && connecteurs[pl]) allumer(pl);
         if (--reste === 0) salveEnCours = false;
       };
       d.addEventListener('animationend', fin);
+    });
+    reveiller();
+  }
+
+  /* ── L'ILLUMINATION, ~5 s ──────────────────────────────────────────────────
+     Une boucle qui ne tourne QUE tant qu'il reste de la chaleur à dissiper, et
+     qui s'arrête d'elle-même. C'est la règle du module : rien ne tourne en
+     permanence — mais quand quelque chose arrive, ça se voit franchement. */
+  /* ══════════════════════════════════════════════════════════════════════
+     LA VIE — PAR À-COUPS, JAMAIS EN BOUCLE. Et voici le chiffre qui l'impose.
+
+     J'ai d'abord écrit une boucle à 20 images/s qui faisait respirer les
+     témoins et tomber la pluie, en me disant que l'arrêt hors écran la rendait
+     abordable. Mesure sur le Samsung, module extrait tel quel, différentiel
+     contre une page noire :
+
+         témoins SEULS (8 cercles retouchés/image) ....  +190 points d'un cœur
+         pluie SEULE   (160 opacités/image) ..........  +209 points
+         les deux ensemble ...........................  +191 points
+
+     Trois chiffres qui disent la même chose, et qui tranchent : **le coût ne
+     vient pas du nombre d'éléments animés, mais du FAIT DE TOUCHER LE SVG à
+     chaque image** — Chrome repeint alors tout le dessin. Huit cercles coûtent
+     déjà autant que cent soixante. C'est la leçon n°2 du projet, que je venais
+     de re-payer en croyant l'avoir contournée.
+
+     ⇒ Donc PAS de boucle, même écran ouvert. Mais la demande de Quang reste
+     entière et elle est juste : « il faut que ça reflète la réalité, que ce
+     soit visuel, joli et dynamique ». La réponse n'est pas de moins bouger,
+     c'est de ne bouger QUE SUR ÉVÉNEMENT — et alors franchement :
+
+       · le connecteur touché s'ALLUME et reste allumé ~5 s (deux écritures
+         espacées de 5 s, pas une animation : le coût est nul) ;
+       · les témoins pulsent DEUX fois, en animation CSS bornée, qui s'arrête
+         toute seule ;
+       · la pluie fait une averse d'une seconde et demie, puis se fige.
+
+     Tout est déclaré en CSS et se termine seul : rien ne survit à l'événement
+     qui l'a déclenché. C'est la règle du projet — « le mouvement est un
+     SIGNAL » — appliquée jusqu'au bout, et c'est aussi ce qui la rend enfin
+     VRAIE : ce qui bouge à l'écran correspond à quelque chose qui vient
+     réellement de se passer.
+     ══════════════════════════════════════════════════════════════════════ */
+  const DUREE_ALLUME_MS = 5000;
+  const minuteries = [null, null, null, null];
+
+  function allumer(i){
+    const co = connecteurs[i];
+    if (!co) return;
+    co.g.setAttribute('opacity', (co.base + .28).toFixed(3));
+    if (co.halo) co.halo.setAttribute('opacity', (co.baseHalo + .5).toFixed(3));
+    if (co.voile) co.voile.setAttribute('opacity', '0.17');
+    co.cadre.setAttribute('stroke-opacity', '1');
+    /* Une activité qui continue REPOUSSE l'extinction : un dossier qui
+       travaille sans arrêt reste allumé, ce qui est l'information utile. */
+    if (minuteries[i]) clearTimeout(minuteries[i]);
+    minuteries[i] = setTimeout(() => {
+      minuteries[i] = null;
+      co.g.setAttribute('opacity', co.base.toFixed(3));
+      if (co.halo) co.halo.setAttribute('opacity', co.baseHalo.toFixed(3));
+      if (co.voile) co.voile.setAttribute('opacity', '0');
+      co.cadre.setAttribute('stroke-opacity', co.baseCadre.toFixed(3));
+    }, DUREE_ALLUME_MS);
+  }
+
+  /* Les témoins et la pluie : une animation CSS BORNÉE, relancée à chaque
+     salve. On retire la classe avant de la remettre, sinon une animation déjà
+     en cours ne repart pas. */
+  function reveiller(){
+    temoins.forEach(w => {
+      const n = w.travaille ? 'cfBat' : 'cfResp';
+      [w.led, w.aur].forEach(e => {
+        if (!e) return;
+        e.style.animation = 'none';
+        void e.getBBox;                          // force la reprise
+        /* ⚠️ SANS `both`. Avec, l'animation IMPOSE son dernier keyframe une fois
+           finie : la pluie restait éteinte à .06 et le die paraissait vide
+           après chaque averse (vu sur le Samsung). Sans, l'élément retrouve
+           l'opacité de son attribut SVG — c'est-à-dire son état de repos, qui
+           est déjà le bon. */
+        e.style.animation = `${n} ${w.travaille ? '.5s' : '1.1s'} ease-in-out ` +
+                            `${(w.phase * .06).toFixed(2)}s ${w.travaille ? 4 : 2}`;
+      });
+    });
+    pluie.forEach((col, i) => {
+      col.cells.forEach((c, j) => {
+        c.style.animation = 'none';
+        void c.getBBox;
+        c.style.animation = `cfGoutte 1.5s linear ${((j * .12 + i * .05) % 1.5).toFixed(2)}s 1`;
+      });
     });
   }
 
   function stopper(){
     if (minuteur){ clearInterval(minuteur); minuteur = null; }
+    /* ⚠️ L'illumination aussi. C'est la promesse tenue à Quang : hors écran,
+       RIEN ne tourne — pas un ralenti, un arrêt. C'est précisément ce qui rend
+       finançable d'être franchement vivant quand il regarde. */
+    /* Rien ne survit a la sortie de l ecran : on coupe les minuteries et les
+       animations CSS en cours. */
+    minuteries.forEach((m, i) => { if (m){ clearTimeout(m); minuteries[i] = null; } });
+    temoins.forEach(w => [w.led, w.aur].forEach(e => { if (e) e.style.animation = 'none'; }));
+    pluie.forEach(c => c.cells.forEach(e => { e.style.animation = 'none'; }));
     impulsions.forEach(d => { d.style.animation = 'none'; d.style.opacity = '0'; });
     salveEnCours = false;
   }
@@ -12499,11 +12711,19 @@ releaseMediaStream(); // cleanup any leftover dead tracks
        passer les vraies données puis appeler `salve()` sur un événement. */
     donnees(d){
       if (!d) return;
+      /* ⚠️ RECONSTRUIRE COÛTE ~450 NŒUDS SVG, ET LES ÉVÉNEMENTS ARRIVENT SANS
+         ARRÊT. Depuis que le backend envoie `recents` (ce qui vient de se
+         passer, et où), l'état change à chaque appel d'outil — reconstruire à
+         chaque fois annulerait tout le travail sur la consommation. On compare
+         donc le DESSIN, en ignorant ce qui ne fait que déclencher des
+         impulsions : si seul `recents` a bougé, le dessin est déjà juste. */
+      const cle = (o) => {
+        const c = Object.assign({}, o); delete c.recents; return JSON.stringify(c);
+      };
+      const avant = cle(D);
       D = Object.assign(D, d);
-      /* L'état de Friday ne vient PAS de la carte : il est déjà sur le body,
-         mis à jour par tout le reste de l'app. On le lit là où il est vrai. */
       D.etat = (document.body.dataset.state || 'idle').toUpperCase();
-      if (document.body.dataset.carte === '1'){ construire(); }
+      if (document.body.dataset.carte === '1' && cle(D) !== avant) construire();
     },
     salve,
     /* Qui occupe quel connecteur, MESURÉ sur le dessin réel. On lit les quatre
