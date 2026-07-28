@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.62.0</title>
+<title>Manga Studio v1.63.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -408,7 +408,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.62.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.63.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -890,7 +890,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.62.0";
+const VERSION = "1.63.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1438,6 +1438,23 @@ const POS_GROS_PLAN_SANS_VISAGE = "head out of frame, cropped";
 const NEG_GROS_PLAN_SANS_VISAGE =
   "face, head, portrait, looking at viewer, solo, full body";
 
+/* ---------- UNE CASE N EST PAS UNE PLANCHE (v1.63.0) ----------
+   Ces tags demandent une PAGE decoupee, pas une image. `grid lines` est
+   arrive par l amelioration dans une case de Quang et a produit HUIT
+   fenetres (mesure sur sa propre seed). On les retire du positif -- une
+   case est l unite de dessin, la mise en page appartient a la planche.
+   ⚠ `manga panel` n en fait PAS partie : mesure, il ne cause pas le defaut
+   (3/4 avec ou sans) et il porte le style. On retire ce qui NUIT, pas ce
+   qui ressemble. */
+const TAGS_PLANCHE = new RegExp("^(" + [
+  "grid ?lines?", "grid", "comics?", "4koma", "multiple views", "panels",
+  "borders?", "panel borders", "split screen", "sequential art", "storyboard",
+  "montage", "page layout", "multi ?panel", "frames?"
+].join("|") + ")$", "i");
+const NEG_PLANCHE =
+  "comic, 4koma, multiple views, panels, borders, grid, split screen, "
+  + "sequential art, storyboard, montage, multiple panels";
+
 const NEG_SANS_PERSONNE =
   "1girl, 1boy, 2girls, 2boys, solo, person, people, human, character, face, portrait";
 
@@ -1542,6 +1559,9 @@ function promptFinal(p){
   // Les tags de la case : la traduction de SA phrase, debarrassee de ses
   // negations (elles partent au negatif, cf. separeNegations).
   let corps = separeNegations(tagsCase(p)).positif;
+  // Une case ne se decoupe pas : ce qui demande une planche sort du positif.
+  corps = corps.split(",").map(t => t.trim())
+    .filter(t => t && !TAGS_PLANCHE.test(t)).join(", ");
   // ⚠ Une case sans personne doit l'etre JUSQU'AU BOUT. Mesure du 28/07 :
   // « un plan de coupe sur la fenetre, aucun personnage » ressort du LLM en
   // « 1girl, classroom window, rain, no humans » -- il produit lui-meme les
@@ -1734,6 +1754,10 @@ const TRAD_CONSIGNE =
   // instruction : 0 COUNT rendu sur 14 cas. Une consigne qui se contredit est
   // tranchee par sa fin. On enumere donc les trois lignes attendues ICI, a
   // l'endroit meme ou l'on dit « rien d'autre ».
+  // Le code retire ces tags de toute facon (TAGS_PLANCHE) : le demander ici
+  // evite seulement de payer un aller-retour pour rien.
+  + "This is ONE single panel, never a page: never output grid, grid lines, "
+  + "panels, borders, comic, 4koma, multiple views or storyboard.\n"
   + "OUTPUT FORMAT, in this exact order: line 1 = the tags; line 2 = COUNT: <n>; "
   + "line 3 = NEG: ... (only if something is negated). Nothing else.\n\nText: ";
 
@@ -3469,7 +3493,8 @@ async function genPanel(p, positifForce){
     // « personne dans cette case ». Trois sources, un seul champ : le moteur
     // n en lit qu un. (v1.58.0)
     const _vide = sceneSansPersonne(p);
-    const negPlus = [r.neg, (p.recipe && p.recipe.negAuto) || "",
+    const negPlus = [r.neg, NEG_PLANCHE,
+                     (p.recipe && p.recipe.negAuto) || "",
                      _vide ? NEG_SANS_PERSONNE : "",
                      (!_vide && echelleIdentite(p) === 0)
                        ? NEG_GROS_PLAN_SANS_VISAGE : ""]
