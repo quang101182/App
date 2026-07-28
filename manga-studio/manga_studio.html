@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.57.0</title>
+<title>Manga Studio v1.58.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -219,6 +219,12 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
      DOM (display:none), donc le code qui lit sa valeur continue de fonctionner. */
   .panel.lettering [data-prompt]{display:none}
 }
+
+.tagsline{margin:2px 0 0}
+.tagsline .muted{font-size:11px;display:block;margin-bottom:2px}
+.tagsline textarea{width:100%;font-size:11px;line-height:1.35;color:#9fb0c8;
+  background:#0b0e13;border:1px dashed var(--line);border-radius:6px;padding:5px}
+.panel.lettering .tagsline{display:none}
 
 /* ---------- galerie ---------- */
 .grid-img{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
@@ -842,7 +848,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.57.0";
+const VERSION = "1.58.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1289,14 +1295,32 @@ function promptFinal(p){
   // L'identite est FILTREE par l'echelle du plan. Au niveau 0 elle disparait :
   // un gros plan sur des mains n'a que faire d'un uniforme scolaire, et le lui
   // donner, c'est demander au modele d'elargir le cadre pour le montrer.
-  const duCasting = tagsCasting(p).map(b => filtreIdentite(b, niveau)).filter(x => x);
+  // ⚠ `vide` coupe le casting AVANT le filtrage. Sans ce court-circuit, le
+  // niveau 0 laissait passer les tags de COMPTAGE (`1girl`, `1man`), qu'il garde
+  // volontairement sur un gros plan -- des mains ont bien un proprietaire. Mais
+  // une case sans personne n'a pas de proprietaire du tout : le banc l'a montre
+  // sur « empty dojo, no people », qui repartait avec `1girl, 1man`.
+  const duCasting = vide ? []
+    : tagsCasting(p).map(b => filtreIdentite(b, niveau)).filter(x => x);
   const ident = duCasting.length
     ? duCasting
     : (p.sansPerso || vide ? []
        : [r.trigger, filtreIdentite(r.ident, niveau)].filter(x => x && x.trim()));
   // Les tags de la case : la traduction de SA phrase, debarrassee de ses
   // negations (elles partent au negatif, cf. separeNegations).
-  const corps = separeNegations(tagsCase(p)).positif;
+  let corps = separeNegations(tagsCase(p)).positif;
+  // ⚠ Une case sans personne doit l'etre JUSQU'AU BOUT. Mesure du 28/07 :
+  // « un plan de coupe sur la fenetre, aucun personnage » ressort du LLM en
+  // « 1girl, classroom window, rain, no humans » -- il produit lui-meme les
+  // deux tags contradictoires. Retirer l'identite du casting ne suffit donc
+  // pas : il faut retirer le comptage que la traduction a insere dans SES
+  // propres tags, sinon `1girl` reste et le decor se peuple.
+  if (vide){
+    corps = corps.split(",").map(t => t.trim())
+      .filter(t => t && !TAG_COMPTE.test(t)
+                     && !/^(1girl|1boy|person|people|human|character|schoolgirl)$/i.test(t))
+      .join(", ");
+  }
   let out = [dedoublonne(r.style)]
     .concat(r.theme && r.theme.trim() ? [r.theme.trim()] : [])
     .concat(vide ? ["no humans"] : [])
@@ -1321,8 +1345,13 @@ function promptFinal(p){
     // JAMAIS reconnaitre un 2boys deja present, et le prompt partait avec 2people
     // ET 1girl, 1boy -- visible dans « Le dernier eleve », case 11. Deux comptages
     // qui se contredisent valent moins qu un seul.
-    if (!new RegExp("\\b" + n + "\\s?(boys|girls|people)\\b", "i").test(out)
-        && !/\b1boy 1girl\b/i.test(out)){
+    // Un comptage deja exprime AUTREMENT compte aussi. « 1girl, 1boy » est le
+    // tag danbooru canonique pour deux personnes ; y ajouter « 2people » donne
+    // deux comptages concurrents. Ils n'ont pas a etre ADJACENTS pour valoir :
+    // l'identite du casting s'intercale entre eux (mesure du banc, cas E).
+    const dejaCompte = new RegExp("\\b" + n + "\\s?(boys|girls|people)\\b", "i").test(out)
+      || (/\b1girl\b/i.test(out) && /\b1boy\b/i.test(out));
+    if (!dejaCompte){
       out = out.replace(/^([^,]+,)/, "$1 " + n + "people,");
     }
   }
@@ -1388,21 +1417,54 @@ const TRAD_CONSIGNE =
   + "comma-separated, on ONE line. TRANSLATE ONLY: do not add a single tag that is not "
   + "in the original text — no lighting, no camera angle, no quality tag, no background, "
   + "no emotion the text does not state. Keep the SAME number of characters and the SAME "
-  + "action. Output only the tags, nothing else.\n\nText: ";
+  + "action.\n"
+  // WARN v1.58.0 -- LE defaut n1, mesure sur 14 phrases reelles le 28/07 :
+  // 5 fois sur 14 une NEGATION ressortait en tag POSITIF. « on ne voit pas
+  // son visage » devenait `face not visible` (qui contient `face`), « pas de
+  // tete » devenait `no head, no face`. CLIP n a pas de negation : ces tags
+  // DEMANDENT ce qu on refuse. Le proxy sait deja extraire une ligne « NEG: »
+  // (v5.44) et la rendre dans `negativeAdd` -- il suffisait de la demander.
+  + "NEGATIONS: anything the text says must NOT be visible (for instance "
+  + "sans son visage, pas de tete, aucun personnage) must NEVER become a "
+  + "positive tag. Put those on a FINAL separate line starting exactly with "
+  + "'NEG:' instead. Never write a positive tag containing the negated "
+  + "word.\n"
+  + "Output the tag line, then the NEG line only if something is negated. "
+  + "Nothing else.\n\nText: ";
 
 /** Traduit la case en anglais si besoin. Rend true si elle a ete traduite.
  *  N'ENRICHIT PAS : c'est le role de `ameliorerPrompt`. */
 async function traduire(p){
-  const champ = document.querySelector('[data-pid="' + p.id + '"] [data-prompt]');
   const r = await api("/enhance", { idea: TRAD_CONSIGNE + (p.prompt || "").trim(),
                                     format: "raw" });
   if (!r.prompt || !r.prompt.trim()) throw new Error("traduction vide");
-  p.prompt = r.prompt.trim().split("\n")[0].trim();
-  if (champ) champ.value = p.prompt;
+  await poseTags(p, r.prompt.trim().split("\n")[0].trim(), r.negativeAdd, false);
+  log("traduit : " + tagsCase(p).slice(0, 90), "s");
+  return true;
+}
+
+/** Enregistre les tags SANS toucher a la phrase de l'utilisateur.
+ *
+ *  C'est ici que se joue la decision du 28/07 : `p.prompt` est SA phrase et
+ *  ne bouge plus ; `recipe.tags` est ce qui part au moteur. `tagsDe` retient
+ *  de quelle phrase ces tags sont issus -- des quelle change, ils sont refaits.
+ *  Sans ce temoin, on retraduirait a chaque generation (une depense inutile)
+ *  ou jamais (des tags perimes sous une phrase corrigee, le pire des deux). */
+async function poseTags(p, tags, negDuLLM, ameliores){
+  const sep = separeNegations(tags);
+  const negs = [negDuLLM, sep.negatif].filter(x => x && x.trim()).join(", ");
+  p.recipe = Object.assign({}, p.recipe, {
+    tags: sep.positif,
+    tagsDe: String(p.prompt || "").trim(),
+    tagsAmeliores: !!ameliores,
+    negAuto: negs
+  });
+  const champT = document.querySelector('[data-pid="' + p.id + '"] [data-tags]');
+  if (champT) champT.value = sep.positif;
+  else renderPlate();          // la case n affichait pas encore sa ligne de tags
+  if (negs) log("négations mises au négatif : " + negs.slice(0, 80), "w");
   majApercu(p);
   await api("/manga/panels", p);
-  log("traduit : " + p.prompt.slice(0, 90), "s");
-  return true;
 }
 
 /** Enrichit la case : le LLM ajoute cadrage, lumiere et details. Traduit au
@@ -1420,13 +1482,9 @@ async function ameliorerPrompt(p){
     + "3boys, multiple boys, multiple girls) and you must NOT output the tag "
     + "\"solo\". If it involves exactly one, use solo. Scene: " + idee, format: "tags" });
   if (!r.prompt) throw new Error("réponse vide");
-  p.prompt = r.prompt;
-  if (champ) champ.value = r.prompt;
-  // ⚠ Ecrire .value par JS ne declenche PAS l'evenement `input` : sans cet
-  // appel, l'apercu gardait la phrase FRANCAISE et son alerte, alors que le
-  // champ contenait deja les tags anglais (bug v1.22.1, mesure sur le Samsung).
-  majApercu(p);
-  await api("/manga/panels", p);
+  // WARN v1.58.0 : on n ecrit plus dans [data-prompt]. Sa phrase reste sa
+  // phrase ; le resultat va dans la ligne de tags, relisible et corrigeable.
+  await poseTags(p, r.prompt, r.negativeAdd, true);
   log("prompt amélioré : " + r.prompt.slice(0, 90), "s");
   if (r.negativeAdd) log("négatif suggéré : " + r.negativeAdd, "w");
   return r;
@@ -1447,12 +1505,26 @@ async function preparePrompt(p){
   const n = nbPersonnages(p.prompt || "");
   if (n > 1) p.recipe = Object.assign({}, p.recipe, { nbPersos: n });
 
+  // WARN v1.58.0 -- ON NE PARIE PLUS SUR LA DETECTION DU FRANCAIS.
+  // `sembleFrancais` est une liste fermee de 36 mots : « elle s elance, coup
+  // de pied saute, lignes de vitesse » n en contient AUCUN et n a pas
+  // d accent. Deux cases reelles du projet « Le dernier eleve » (7 et 10)
+  // sont ainsi parties EN FRANCAIS au moteur, qui ne lit que l anglais : il
+  // ne les a pas mal comprises, il les a IGNOREES. Le prompt enregistre dans
+  // leur recette le prouve.
+  // Desormais on traduit TOUJOURS une phrase pas encore traduite -- et jamais
+  // deux fois la meme. Traduire de l anglais vers l anglais coute un appel ;
+  // ne pas traduire coute une image a jeter.
+  const source = String(p.prompt || "").trim();
+  const aJour = p.recipe && p.recipe.tags && p.recipe.tagsDe === source
+                && !!p.recipe.tagsAmeliores === !!OPT.autoEnhance;
+  if (aJour) return;
   try {
     if (OPT.autoEnhance){
       // L'amelioration traduit deja : inutile de payer deux appels.
       busyOn("Amélioration du prompt…");
       await ameliorerPrompt(p);
-    } else if (sembleFrancais(p.prompt)){
+    } else {
       busyOn("Traduction de ta phrase en tags…");
       await traduire(p);
     }
@@ -2380,6 +2452,18 @@ function panelHTML(p, i){
    + esc(p.prompt) + '</textarea>'
    + '<div class="idees" data-idees hidden></div>'
    + '<p class="apercu" data-apercu></p>'
+   /* ---- LES TAGS ENVOYES AU MOTEUR (v1.58.0) ----
+      Ils n ecrasent plus la phrase : ils vivent a cote d elle. Quang, 28/07 :
+      « mes requetes sont plus des phrases explicatives que de vrais prompts ».
+      Sa phrase reste donc lisible et modifiable, et ce qui en a ete tire est
+      juste en dessous -- corrigeable a la main sans tout reecrire. La ligne
+      n apparait qu une fois la traduction faite : avant, elle serait vide et
+      n apprendrait rien. */
+   + ((p.recipe && p.recipe.tags)
+      ? '<div class="tagsline"><span class="muted">tags envoyés au moteur —'
+        + ' modifiables :</span>'
+        + '<textarea data-tags rows="2">' + esc(p.recipe.tags) + '</textarea></div>'
+      : '')
    /* ---- QUI EST LA (v1.49.0) : le choix se fait DANS la case ----
       Une ligne de pastilles, pas des boutons d'action : la rangee du bas reste
       a 6. Toucher un nom l'active pour CETTE case, et l'inscrit au manga s'il
@@ -2593,15 +2677,31 @@ function majApercu(p){
   const el = carte.querySelector("[data-apercu]");
   if (!el) return;
   const txt = promptFinal(p);
-  const fr = sembleFrancais((p.prompt || "").trim());
+  const vide = sceneSansPersonne(p);
+  const niv = vide ? 0 : echelleIdentite(p);
+  const negAuto = (p.recipe && p.recipe.negAuto) || "";
+  const pasEncore = !(p.recipe && p.recipe.tags)
+                    && String(p.prompt || "").trim().length > 0;
   el.innerHTML = "<b>Sera envoyé :</b> " + esc(txt.slice(0, 260))
     + (txt.length > 260 ? "…" : "")
+    // Le temoin promis avec la modulation : ce qui est retire doit se VOIR,
+    // sinon on ne peut pas distinguer « l app a decide » de « ca a rate ».
+    + (niv === 2 ? "" : '<br><span style="color:#8fd8a8">'
+        + (vide ? "✓ Case sans personne : aucun personnage, no humans imposé,"
+                + " et tout ce qui en dessine un est mis au négatif."
+           : niv === 0 ? "✓ Gros plan sans visage : identité et image de"
+                       + " référence retirées (elles élargiraient le cadre)."
+                       : "✓ Gros plan sur le visage : seuls les traits du visage"
+                       + " sont gardés, pas la tenue.")
+        + '</span>')
+    + (!negAuto ? "" : '<br><span style="color:#d8b48f">⊘ Au négatif : '
+        + esc(negAuto.slice(0, 120)) + '</span>')
     // La traduction n'est plus une option (27/07) : l'alerte « le moteur ne
     // comprend pas » n'a plus lieu d'etre, elle mentait sur ce qui va se passer.
     // On annonce ce qui VA arriver, ce qui est le role d'un apercu.
-    + (!fr ? ""
-        : '<br><span style="color:#8fd8a8">✓ Français détecté : il sera traduit '
-          + 'en tags anglais juste avant la génération'
+    + (!pasEncore ? ""
+        : '<br><span style="color:#8fd8a8">✓ Ta phrase sera traduite en tags '
+          + 'anglais juste avant la génération'
           + (OPT.autoEnhance ? ', puis amélioré' : '') + '.</span>')
     // L'alerte de casting vient APRES l'aperçu, et pas ailleurs : c'est ici
     // qu'on lit ce qui va etre envoye, donc ici qu'un ecart entre le texte et
@@ -2782,6 +2882,13 @@ async function genPanel(p, positifForce){
   if (card){
     p.kind   = card.querySelector("[data-kind]").value;
     p.prompt = card.querySelector("[data-prompt]").value;
+    // Les tags corriges a la main priment : on les relit AVANT de partir,
+    // exactement comme la seed et la consigne de zone. Se fier au seul
+    // evenement `input` perd la derniere frappe sur un clavier mobile.
+    const champT = card.querySelector("[data-tags]");
+    if (champT && champT.value.trim()){
+      p.recipe = Object.assign({}, p.recipe, { tags: champT.value.trim() });
+    }
     // Le champ seed vit dans le panneau ⚙ Affiner : il peut etre REPLIE.
     // Sans cette garde, generer une case au panneau ferme jetait une
     // TypeError et ne dessinait rien -- une rangee simplifiee qui casse la
@@ -2852,11 +2959,27 @@ async function genPanel(p, positifForce){
     const heros = castingPage()
       .map(id => CHARS.find(c => c.id === id))
       .find(c => c && c.lora && c.lora.trim());
-    const rr = heros ? Object.assign({}, r, { lora: heros.lora }) : r;
+    // Le negatif de la recette + ce que SES negations ont produit + le verrou
+    // « personne dans cette case ». Trois sources, un seul champ : le moteur
+    // n en lit qu un. (v1.58.0)
+    const negPlus = [r.neg, (p.recipe && p.recipe.negAuto) || "",
+                     sceneSansPersonne(p) ? NEG_SANS_PERSONNE : ""]
+                    .filter(x => x && x.trim()).join(", ");
+    const rr = Object.assign({}, r, { neg: dedoublonne(negPlus) },
+                             heros ? { lora: heros.lora } : {});
     // L'image de reference du casting : c'est elle qui tient l'identite sans
     // entrainement. Elle est enregistree dans la recette, donc la case reste
     // rejouable meme si la fiche du personnage change plus tard.
-    const refs = refsDuCasting(p);
+    // ⚠ v1.58.0 -- SUR UN GROS PLAN SANS VISAGE, ON COUPE L IPADAPTER.
+    // Quang, 28/07 : « si je veux un plan tres rapproche, sans visage, il ne
+    // faut surtout pas activer les personnages, sinon le generateur insistera
+    // pour les faire apparaitre ». C est exact, et retirer les TAGS d identite
+    // ne suffit pas : la reference est une IMAGE de visage, elle ramene le
+    // visage a elle seule. Les deux doivent tomber ensemble.
+    const niveauIdent = sceneSansPersonne(p) ? 0 : echelleIdentite(p);
+    const refs = niveauIdent === 0 ? [] : refsDuCasting(p);
+    if (niveauIdent === 0 && refsDuCasting(p).length)
+      log("gros plan sans visage : identité et image de référence retirées", "w");
     if (refs.length === 1)
       log("identité tenue par l'image de référence de « " + refs[0].perso + " »", "s");
     else if (refs.length === 2)
@@ -2877,7 +3000,7 @@ async function genPanel(p, positifForce){
       ckpt: r.ckpt, lora: r.lora, loraW: r.loraW, steps: r.steps, cfg: r.cfg,
       sampler: r.sampler, w: r.w, h: r.h,
       controlnet: ambiance ? { name: r.cn, weight: r.cnW, depth: S.page.master.depth } : null,
-      positive: positive, negative: r.neg,
+      positive: positive, negative: rr.neg,
       // L'historique des essais. On n'EFFACE jamais : revenir en arriere doit
       // rester possible meme apres dix regenerations, et c'est la version
       // AFFICHEE (`p.file`) qui dit laquelle est retenue -- pas la derniere née.
@@ -5268,8 +5391,23 @@ $("plate").addEventListener("click", async e => {
     if (champ) p.recipe = Object.assign({}, p.recipe, { zonePrompt: champ.value.trim() });
     return regenererZone(p);
   }
-  if (act === "del"){ await api("/manga/panels", { delete: pid });
-                      S.panels = S.panels.filter(x => x.id !== pid); return renderPlate(); }
+  if (act === "del"){
+    // Signale par Quang le 28/07 : « quand je supprime une case, les images
+    // en galerie restent dans le projet ». C est VOULU (on n efface jamais un
+    // essai, cf. les versions d une case), mais rien ne le disait au moment du
+    // clic -- et un comportement voulu que personne ne peut deviner se lit
+    // comme un bug. On le dit, et la galerie reste le seul endroit ou l on
+    // supprime vraiment une image.
+    const n = ((p.recipe && p.recipe.versions) || []).length || (p.file ? 1 : 0);
+    if (n && !await demander({
+          titre: "Supprimer cette case ?",
+          texte: n + " image(s) déjà dessinée(s) restent dans la galerie du "
+               + "projet — la case, elle, disparaît. Pour effacer aussi les "
+               + "fichiers, passe par l onglet Galerie.",
+          oui: "Supprimer la case", non: "Annuler", danger: true })) return;
+    await api("/manga/panels", { delete: pid });
+    S.panels = S.panels.filter(x => x.id !== pid); return renderPlate();
+  }
   // --- lettrage ---
   if (act === "letter"){ S.lettering = (S.lettering === pid) ? null : pid;
                          S.selBub = null; return renderPlate(); }
@@ -5536,6 +5674,8 @@ $("plate").addEventListener("change", async e => {
   }
   p.kind   = card.querySelector("[data-kind]").value;
   p.prompt = card.querySelector("[data-prompt]").value;
+  const chT = card.querySelector("[data-tags]");
+  if (chT) p.recipe = Object.assign({}, p.recipe, { tags: chT.value.trim() });
   await api("/manga/panels", p);
 });
 // Le texte se voit s'ecrire pendant la frappe : sans ca, on lettre a l'aveugle.
@@ -5544,6 +5684,17 @@ $("plate").addEventListener("input", e => {
   if (c0 && e.target.matches("[data-prompt]")){
     const pp = S.panels.find(x => x.id === c0.dataset.pid);
     if (pp){ pp.prompt = e.target.value; majApercu(pp); }
+  }
+  // Corriger les tags a la main est un droit, pas un contournement : la
+  // correction survit a la generation suivante parce que `tagsDe` continue
+  // de designer la phrase courante -- donc rien ne les retraduira derriere
+  // son dos. Le seul moyen de les refaire est de changer la phrase.
+  if (c0 && e.target.matches("[data-tags]")){
+    const pp = S.panels.find(x => x.id === c0.dataset.pid);
+    if (pp){
+      pp.recipe = Object.assign({}, pp.recipe, { tags: e.target.value });
+      majApercu(pp);
+    }
   }
   if (!e.target.matches("[data-btext]")) return;
   const p = curPanel(), b = curBub(); if (!p || !b) return;
