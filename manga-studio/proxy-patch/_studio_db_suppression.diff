@@ -1,0 +1,73 @@
+--- _studio_db.py.bak-20260728-menage	2026-07-28 16:56:58.082004700 +0200
++++ _studio_db.py	2026-07-28 16:58:33.538350200 +0200
+@@ -526,18 +526,67 @@
+     return {"ok": True, "id": pid}
+ 
+ 
++# Les deux dossiers ou vivent les images d un projet manga. Le premier est celui
++# que l app montre ; le second est l atelier de ComfyUI, invisible depuis l app
++# et jamais nettoye -- 702 Mo au 28/07, dont une bonne part de bancs.
++_MANGA_OUT_APP = r"D:\Download\02-Apps-Web\Repo-github\App\manga-studio\output"
++_MANGA_OUT_COMFY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "manga")
++
++
++def _effacer_images_du_projet(slug):
++    """Efface les images d un slug dans les DEUX dossiers. Rend le compte.
++
++    WARN Un slug vide ou suspect n efface RIEN : sans cette garde, un projet sans
++    slug viserait la RACINE des sorties. Une suppression qui deborde de son
++    perimetre est le seul defaut qu on ne peut pas rattraper.
++    """
++    import shutil
++    slug = (slug or "").strip().strip("/\\")
++    if not slug or slug in (".", "..") or "/" in slug or "\\" in slug:
++        return 0
++    n = 0
++    for base in (_MANGA_OUT_APP, _MANGA_OUT_COMFY):
++        cible = os.path.normpath(os.path.join(base, slug))
++        if not cible.startswith(os.path.normpath(base) + os.sep):
++            continue                      # anti-traversee, meme improbable
++        if not os.path.isdir(cible):
++            continue
++        for _, _, fichiers in os.walk(cible):
++            n += len(fichiers)
++        shutil.rmtree(cible, ignore_errors=True)
++    return n
++
++
+ def delete_manga_project(pid):
+-    """Supprime le projet ET sa descendance. Les fichiers sur disque ne sont PAS touches :
+-    effacer une fiche ne doit jamais effacer des images (elles se re-rattachent si besoin)."""
++    """Supprime le projet, sa descendance ET SES IMAGES.
++
++    WARN Le comportement d origine gardait les fichiers (« effacer une fiche ne
++    doit jamais effacer des images »). Quang l a renverse le 28/07 : « si je
++    supprime un projet, tout ce qui est associe devrait etre supprime
++    egalement [...] le repertoire manga est vraiment contamine de vieilles
++    donnees ». Un projet supprime qu on retrouve en fouillant le disque n est
++    pas supprime.
++
++    DEUX dossiers, pas un : les images RANGEES (manga-studio/output/<slug>/) et
++    le dossier de TRAVAIL de ComfyUI (output/manga/<slug>/), invisible depuis
++    l app et jamais nettoye -- 702 Mo au moment du signalement.
++
++    Le nombre de fichiers effaces est RENDU : une suppression silencieuse ne se
++    verifie pas, et celle-ci est irreversible.
++    """
+     with _lock:
+         c = _connect()
++        row = c.execute("SELECT slug FROM manga_projects WHERE id=?", (pid,)).fetchone()
+         pages = [r["id"] for r in c.execute("SELECT id FROM manga_pages WHERE project_id=?", (pid,)).fetchall()]
+         for pg in pages:
+             c.execute("DELETE FROM manga_panels WHERE page_id=?", (pg,))
+         c.execute("DELETE FROM manga_pages WHERE project_id=?", (pid,))
+         c.execute("DELETE FROM manga_projects WHERE id=?", (pid,))
+         c.commit()
+-    return {"ok": True, "id": pid, "pages_deleted": len(pages)}
++        slug = (row["slug"] if row else "") or ""
++    fichiers = _effacer_images_du_projet(slug)
++    return {"ok": True, "id": pid, "pages_deleted": len(pages),
++            "files_deleted": fichiers}
+ 
+ 
+ def list_manga_pages(project_id=None):
