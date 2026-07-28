@@ -1141,6 +1141,141 @@ document.addEventListener("keydown", e => {
 
 const recipe = () => Object.assign({}, DEFAULT_RECIPE, (S.proj && S.proj.recipe) || {});
 
+/* =====================================================================
+   LA PHRASE ET LES TAGS SONT DEUX CHOSES (v1.58.0, mesure du 28/07)
+   =====================================================================
+   Jusqu'ici, `traduire()` et `ameliorerPrompt()` faisaient `p.prompt = <sortie
+   du LLM>` puis enregistraient. La phrase de Quang etait donc DETRUITE : ni la
+   base, ni le journal ne la gardaient. Consequences mesurees le 28/07 :
+     - impossible de corriger une traduction ratee autrement qu'en reecrivant ;
+     - impossible d'auditer « ce que j'ai demande » contre « ce qui est parti ».
+   Desormais :
+     p.prompt        = LA PHRASE, telle qu'il l'ecrit. Plus jamais ecrasee.
+     p.recipe.tags   = les tags anglais reellement envoyes (editables).
+     p.recipe.negAuto= ce que ses negations ont produit, pour le NEGATIF.
+   Compatibilite : une case d'avant la v1.58.0 n'a pas de `tags` -- son `prompt`
+   EST deja des tags, on continue de l'utiliser tel quel. */
+function tagsCase(p){
+  const t = p && p.recipe && p.recipe.tags;
+  return (t && t.trim()) ? t.trim() : String((p && p.prompt) || "").trim();
+}
+
+/* ---------- LES NEGATIONS (le defaut n°1, mesure : 5 cas sur 14) ----------
+   CLIP n'a pas de negation. « on ne voit pas son visage » traduit en
+   `face not visible` contient `face` : le tag DEMANDE un visage. Mesure du
+   28/07 sur 14 phrases reelles :
+     « pas de tete »        -> `no head, no face`     (2 tags qui appellent une tete)
+     « aucun personnage »   -> `1girl, ..., no humans` ET `solo`
+     « sans voir le visage »-> `face not visible`
+   Ce qui est NIE doit aller dans le NEGATIF, jamais dans le positif. Et cela se
+   fait ICI, dans le code : la v1.57.0 a deja mesure qu'une consigne de prompt
+   n'est pas un garde-fou (« une case sans personne n'a aucune replique »,
+   ignoree par le modele). */
+const MOTIFS_NIES = [
+  /\bno\s+([a-z][a-z\s-]{2,24})/gi,          // no head, no face, no humans*
+  /\bwithout\s+([a-z][a-z\s-]{2,24})/gi,     // without face
+  /\b([a-z][a-z\s-]{2,24}?)\s+not\s+visible/gi,  // face not visible
+  /\bhidden\s+([a-z][a-z\s-]{2,24})/gi       // hidden face
+];
+/** `no humans` est le SEUL « no » que le modele comprend vraiment : c'est un tag
+ *  danbooru a part entiere, massivement appris. On le laisse donc au positif. */
+const NEGATIONS_GARDEES = ["humans", "human", "people", "person", "text", "background"];
+
+/** Separe un bloc de tags en { positif, negatif }.
+ *  Rend le positif nettoye de ses fausses negations, et le negatif a ajouter. */
+function separeNegations(tags){
+  let pos = String(tags || "");
+  const neg = [];
+  for (const rx of MOTIFS_NIES){
+    rx.lastIndex = 0;
+    let m;
+    const aRetirer = [];
+    while ((m = rx.exec(pos)) !== null){
+      const sujet = m[1].trim().toLowerCase();
+      if (NEGATIONS_GARDEES.some(g => sujet === g || sujet.endsWith(" " + g))) continue;
+      neg.push(sujet);
+      aRetirer.push(m[0]);
+    }
+    for (const frag of aRetirer){
+      pos = pos.replace(frag, "");
+    }
+  }
+  pos = pos.replace(/,\s*,/g, ",").replace(/^\s*,\s*/, "").replace(/,\s*$/, "").trim();
+  return { positif: pos, negatif: neg.join(", ") };
+}
+
+/* ---------- UNE CASE SANS PERSONNE (mesure : 3 cas sur 14) ----------
+   « le dojo est vide, personne dedans » ressortait avec `solo` ; « aucun
+   personnage » avec `1girl`. Le casting de la planche, lui, continuait
+   d'injecter l'identite complete. Une case de decor doit etre VIDE, et c'est
+   verifiable sans LLM : ce sont des tournures fermees, peu nombreuses. */
+const MARQ_VIDE = [
+  /\baucun(e)?\s+(personnage|personne|humain|figure)/i,
+  /\bpersonne\s+(dedans|dans|n'?y|ne)/i,
+  /\bsans\s+(aucun\s+)?(personnage|personne|humain|figure)/i,
+  /\bvide\s+de\s+(monde|personnage|gens)/i,
+  /\bno\s+(humans?|people|person|character)/i,
+  /\bempty\s+(room|street|hallway|corridor|dojo|classroom)\b/i
+];
+function sceneSansPersonne(p){
+  if (p && p.recipe && p.recipe.videForce === true) return true;
+  if (p && p.recipe && p.recipe.videForce === false) return false;
+  const t = String((p && p.prompt) || "") + " " + tagsCase(p);
+  return MARQ_VIDE.some(rx => rx.test(t));
+}
+/** Ce qu'on interdit au moteur quand la case ne doit contenir personne.
+ *  Sans ca, un decor « vide » sort avec une silhouette : le modele est entraine
+ *  sur des images de personnages, il en met par defaut. */
+const NEG_SANS_PERSONNE =
+  "1girl, 1boy, 2girls, 2boys, solo, person, people, human, character, face, portrait";
+
+/* ---------- L'ECHELLE DU PLAN COMMANDE L'IDENTITE (intuition de Quang, 28/07)
+   -----------------------------------------------------------------------
+   Quang, 28/07 : « si je veux un plan de scene tres rapproche, sans visage, il
+   ne faut surtout pas activer les personnages, sinon le generateur insistera
+   pour les faire apparaitre, ce qui est logique. »
+
+   C'est exact, et ses propres cases le prouvent :
+     « close-up, his hands, clenched fists » -> envoye avec `1man, short hair,
+       30 years old` ;  une scene nue -> envoyee avec `sailor uniform`.
+   L'identite d'une fiche decrit une PERSONNE ENTIERE. Sur un gros plan de
+   mains ou de pieds, elle demande au modele de cadrer plus large pour montrer
+   ce qu'on lui decrit -- et l'IPAdapter, lui, ramene le visage.
+
+   Trois niveaux, derives des tags de cadrage REELS (le banc du 28/07 mesure
+   0 cadrage perdu sur 14 : le cadrage, lui, passe bien) :
+     2 = identite complete   (plan large, plan moyen, ou aucun indice)
+     1 = tete seulement      (gros plan sur le visage / les yeux)
+     0 = aucune identite     (gros plan sur une partie du corps hors visage,
+                              ou negation explicite du visage) + IPAdapter coupe */
+const TAGS_GROS_PLAN = /\b(extreme close-?up|close-?up|closeup|macro shot|detail shot|plan serr)/i;
+const PARTIES_VISAGE = /\b(face|eyes?|eye|mouth|lips|nose|hair|head|portrait|expression|regard|visage|yeux)\b/i;
+const PARTIES_CORPS  = /\b(hands?|feet|foot|toes?|fingers?|legs?|arms?|wrists?|ankles?|back|shoulders?|neck|navel|chest|breasts?|penis|genital|thighs?|knees?|mains?|pieds?|orteils?|doigts?|jambes?)\b/i;
+
+function echelleIdentite(p){
+  if (p && p.recipe && p.recipe.identNiveau != null) return +p.recipe.identNiveau;
+  const t = tagsCase(p) + " " + String((p && p.prompt) || "");
+  if (!TAGS_GROS_PLAN.test(t)) return 2;
+  // Un gros plan qui NIE le visage ne veut pas de tete du tout.
+  if (/\bno (head|face)\b|not visible|sans (le )?visage|pas de (tete|t[eê]te|visage)/i.test(t)) return 0;
+  const corps = PARTIES_CORPS.test(t);
+  const visage = PARTIES_VISAGE.test(t);
+  if (corps && !visage) return 0;
+  if (visage) return 1;
+  return 1;   // gros plan sans partie nommee : la tete suffit, la tenue non
+}
+
+/** Decoupe les tags d'une fiche selon le niveau. `1girl`/`1boy` (le comptage)
+ *  reste TOUJOURS : c'est lui qui dit au modele combien de corps dessiner, il
+ *  n'a rien a voir avec l'identite. */
+const TAG_COMPTE = /^(1girl|1boy|1man|1woman|2girls|2boys|multiple (girls|boys)|solo)$/i;
+function filtreIdentite(bloc, niveau){
+  const tags = String(bloc || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (niveau >= 2) return tags.join(", ");
+  return tags.filter(t => TAG_COMPTE.test(t)
+                       || (niveau === 1 && PARTIES_VISAGE.test(t))).join(", ");
+}
+
 /** Construit le prompt REELLEMENT envoye. Une seule fonction, appelee par la
  *  generation ET par l'apercu -- sinon l'apercu finirait par mentir, et c'est
  *  precisement ce qui manquait : Quang ecrivait une action et obtenait autre
@@ -1149,15 +1284,29 @@ const recipe = () => Object.assign({}, DEFAULT_RECIPE, (S.proj && S.proj.recipe)
 function promptFinal(p){
   const r = recipe();
   const ambiance = p.kind === "ambiance";
-  const duCasting = tagsCasting(p);
+  const vide = sceneSansPersonne(p);
+  const niveau = vide ? 0 : echelleIdentite(p);
+  // L'identite est FILTREE par l'echelle du plan. Au niveau 0 elle disparait :
+  // un gros plan sur des mains n'a que faire d'un uniforme scolaire, et le lui
+  // donner, c'est demander au modele d'elargir le cadre pour le montrer.
+  const duCasting = tagsCasting(p).map(b => filtreIdentite(b, niveau)).filter(x => x);
   const ident = duCasting.length
     ? duCasting
-    : (p.sansPerso ? [] : [r.trigger, r.ident].filter(x => x && x.trim()));
-  let out = [r.style].concat(r.theme && r.theme.trim() ? [r.theme.trim()] : [])
-    .concat(ident).concat([(p.prompt || "").trim()])
+    : (p.sansPerso || vide ? []
+       : [r.trigger, filtreIdentite(r.ident, niveau)].filter(x => x && x.trim()));
+  // Les tags de la case : la traduction de SA phrase, debarrassee de ses
+  // negations (elles partent au negatif, cf. separeNegations).
+  const corps = separeNegations(tagsCase(p)).positif;
+  let out = [dedoublonne(r.style)]
+    .concat(r.theme && r.theme.trim() ? [r.theme.trim()] : [])
+    .concat(vide ? ["no humans"] : [])
+    .concat(ident).concat([corps])
     .concat(ambiance && S.page && S.page.master && S.page.master.decor
             ? [S.page.master.decor] : [])
     .filter(x => x && x.trim()).join(", ");
+  // Une case sans personne ne compte pas ses personnages : on sort avant que
+  // le bloc de comptage ci-dessous n'y remette `2people`.
+  if (vide) return dedoublonne(out);
   // « solo » l'emporte sur tout le reste : il suffit qu'il traine dans l'identite
   // d'un personnage pour qu'une scene a deux soit impossible. Des que plusieurs
   // personnages sont demandes -- par le casting ou par un tag de comptage -- on
@@ -1167,12 +1316,35 @@ function promptFinal(p){
     // On RETIRE « solo » (il l'emporte sur tout le reste) et on AJOUTE le tag de
     // comptage s'il manque. Le modele compte avec des tags, pas avec des mots.
     out = out.replace(/(^|,\s*)solo(?=\s*(,|$))/gi, "$1").replace(/,\s*,/g, ",");
-    if (!new RegExp("\b" + n + "(boys|girls|people)\b", "i").test(out)
-        && !/1boy 1girl/i.test(out)){
+    // WARN v1.58.0 : ce test etait ecrit "\b" + n -- dans une CHAINE JS,
+    // \b est le caractere BACKSPACE, pas une limite de mot. Il ne pouvait donc
+    // JAMAIS reconnaitre un 2boys deja present, et le prompt partait avec 2people
+    // ET 1girl, 1boy -- visible dans « Le dernier eleve », case 11. Deux comptages
+    // qui se contredisent valent moins qu un seul.
+    if (!new RegExp("\\b" + n + "\\s?(boys|girls|people)\\b", "i").test(out)
+        && !/\b1boy 1girl\b/i.test(out)){
       out = out.replace(/^([^,]+,)/, "$1 " + n + "people,");
     }
   }
-  return out;
+  return dedoublonne(out);
+}
+
+/** Retire les tags repetes en gardant le PREMIER (donc l ordre voulu).
+ *  Mesure du 28/07 sur le projet « Magic woman » : son style declare 31 tags,
+ *  dont monochrome, screentone et high contrast en DOUBLE -- et la phrase de
+ *  Quang arrivait en 45e position, au-dela des 77 tokens que CLIP encode dans un
+ *  chunk. Repeter un tag ne le renforce pas utilement : ca decale ce qui suit,
+ *  et ce qui suit, c est justement sa demande. */
+function dedoublonne(s){
+  const vus = new Set(); const out = [];
+  for (const t of String(s || "").split(",")){
+    const v = t.trim();
+    if (!v) continue;
+    const k = v.toLowerCase();
+    if (vus.has(k)) continue;
+    vus.add(k); out.push(v);
+  }
+  return out.join(", ");
 }
 
 /** Combien de personnages cette case demande-t-elle, tous signaux confondus ?
@@ -4195,7 +4367,7 @@ function fillRecipe(){
   if (!sel.options.length) sel.innerHTML = '<option>' + esc(r.ckpt) + '</option>';
   sel.value = r.ckpt;
   const al = $("styleAlerte");
-  if (al) al.hidden = !/ink|high contrast/i.test(r.style || "");
+  if (al) al.hidden = !/\bink\b|high contrast/i.test(r.style || "");
 }
 
 /** Remplit la liste des LoRA depuis ComfyUI. « Aucun » est en TETE et c'est le
@@ -5578,7 +5750,7 @@ $("btnSansPerso").onclick = async () => {
 $("btnStyleFix").onclick = async () => {
   if (!S.proj) return toast("ouvre un projet d'abord");
   const propre = ($("rStyle").value || "")
-    .replace(/,\s*ink/gi, "").replace(/ink\s*,\s*/gi, "")
+    .replace(/,\s*ink\b/gi, "").replace(/\bink\s*,\s*/gi, "")
     .replace(/,\s*high contrast/gi, "").replace(/high contrast\s*,\s*/gi, "")
     .replace(/,\s*,/g, ",").replace(/^\s*,|,\s*$/g, "").trim();
   $("rStyle").value = propre;
