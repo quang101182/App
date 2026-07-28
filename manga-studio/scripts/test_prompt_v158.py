@@ -39,6 +39,10 @@ APP_URL = "http://127.0.0.1:8190/manga"
 # Les deux fiches reelles du projet, telles qu'elles sont en base.
 KIMIKO = {"id": "K", "name": "Kimiko", "role": "second", "refs": ["kimiko.png"],
           "tags": "1girl, black hair, short hair, sharp eyes, pale skin, sailor uniform"}
+# Une seconde femme : sert a verifier que deux personnages du MEME genre donnent
+# « 2girls » et non « 1boy 1girl » (le tag doit suivre le casting reel).
+KIMIKO2 = {"id": "K2", "name": "Aya", "role": "second", "refs": ["aya.png"],
+           "tags": "1girl, long hair, glasses"}
 JO = {"id": "J", "name": "Jo", "role": "second", "refs": ["jo.png"],
       "tags": "1man, short hair, 30 years old"}
 
@@ -61,6 +65,12 @@ CAS = [
      ["no head", "no face"], ["close-up", "toes"]),
     ("E-comptage", "1girl, 1boy, standing, guard up", ["K", "J"],
      ["2people"], ["1girl", "1boy"]),
+    # v1.62.0 : plus JAMAIS « Npeople » (mesure : 2/5 contre 3/5 sans rien).
+    # Deux femmes -> « 2girls », le tag que le modele connait.
+    ("E-2filles", "standing, guard up, dojo", ["K", "K2"],
+     ["2people", "multiple people"], ["2girls"]),
+    ("E-mixte", "facing each other, dojo", ["K", "J"],
+     ["2people", "multiple people"], ["1boy 1girl"]),
     ("F-large", "wide shot, dojo, two characters facing each other", ["K", "J"],
      [], ["sailor uniform", "30 years old"]),
 ]
@@ -134,11 +144,11 @@ def main():
             # complete, quelle que soit l'echelle). Les cas A et B DOIVENT tomber.
             pg.evaluate("() => { window.filtreIdentite = (b) => b; }")
 
-        n_fiches = pg.evaluate(JS_PREPARE, {"chars": [KIMIKO, JO], "style": STYLE})
+        n_fiches = pg.evaluate(JS_PREPARE, {"chars": [KIMIKO, KIMIKO2, JO], "style": STYLE})
         # Temoin positif : sans lui, un decor vide rend VERTS tous les cas qui
         # attendent une absence -- exactement ce qui est arrive au 1er jet.
-        if not verifie("le décor du banc est monté (2 fiches visibles par la page)",
-                       n_fiches == 2, "CHARS.length = %s" % n_fiches):
+        if not verifie("le décor du banc est monté (3 fiches visibles par la page)",
+                       n_fiches == 3, "CHARS.length = %s" % n_fiches):
             print("\nARRET : le banc ne peut rien prouver sans son décor.")
             br.close()
             return 2
@@ -146,11 +156,11 @@ def main():
         for nom, tags, casting, absents, presents in CAS:
             r = pg.evaluate(JS_CAS, {"phrase": "phrase francaise de Quang, intacte",
                                      "tags": tags, "casting": casting,
-                                     "chars": [KIMIKO, JO], "style": STYLE})
+                                     "chars": [KIMIKO, KIMIKO2, JO], "style": STYLE})
             final = r["final"].lower()
             manquants = [x for x in presents if x.lower() not in final]
             intrus = [x for x in absents if x.lower() in final]
-            ok = not manquants and not intrus and r["fiches"] == 2
+            ok = not manquants and not intrus and r["fiches"] == 3
             detail = ""
             if intrus:
                 detail += "présent alors qu'interdit : %s. " % ", ".join(intrus)
@@ -163,7 +173,7 @@ def main():
 
         # F : le style ne doit plus porter ses doublons.
         r = pg.evaluate(JS_CAS, {"phrase": "x", "tags": "wide shot", "casting": [],
-                                 "chars": [KIMIKO, JO], "style": STYLE})
+                                 "chars": [KIMIKO, KIMIKO2, JO], "style": STYLE})
         n_mono = r["final"].lower().count("monochrome")
         n_scr = r["final"].lower().count("screentone")
         verifie("F-dedoublonnage du style", n_mono == 1 and n_scr == 1,

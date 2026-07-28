@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.61.0</title>
+<title>Manga Studio v1.62.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -408,7 +408,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.61.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.62.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -890,7 +890,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.61.0";
+const VERSION = "1.62.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1589,7 +1589,11 @@ function promptFinal(p){
     const dejaCompte = new RegExp("\\b" + n + "\\s?(boys|girls|people)\\b", "i").test(out)
       || (/\b1girl\b/i.test(out) && /\b1boy\b/i.test(out));
     if (!dejaCompte){
-      out = out.replace(/^([^,]+,)/, "$1 " + n + "people,");
+      // v1.62.0 : le tag vient du vocabulaire du modele, plus de « Npeople ».
+      // Le contexte de lecture du genre, c est le prompt DEJA construit --
+      // il porte l identite du casting et les tags de la case.
+      const tag = tagComptage(n, out);
+      if (tag) out = out.replace(/^([^,]+,)/, "$1 " + tag + ",");
     }
   }
   return dedoublonne(out);
@@ -1621,6 +1625,38 @@ function dedoublonne(s){
  *  Les deux comptent pour construire le prompt, mais seule la premiere est assez
  *  sure pour REFUSER quelque chose a l'utilisateur (cf. sequence, v1.27.0).
  */
+/** Le tag de comptage a poser pour `n` personnages, dans le vocabulaire que
+ *  le modele connait VRAIMENT -- mesure, pas suppose (25 generations) :
+ *      2people ............ 2/5   (ce que l app envoyait : PIRE que rien)
+ *      aucun tag .......... 3/5
+ *      1boy 1girl ......... 3/5
+ *      2boys .............. 4/5
+ *      multiple people .... 0/5   (des foules de 7 a 24)
+ *
+ *  Le genre se lit dans ce qui est DEJA la : les tags d identite du casting
+ *  (`1girl`, `1man`...) et les tags de la case. Quand il reste indetermine,
+ *  on n ajoute RIEN : le temoin sans tag fait mieux (3/5) qu un tag invente
+ *  (2/5). Ne rien dire vaut mieux que dire un mot que l autre ne connait pas. */
+function tagComptage(n, contexte){
+  if (n < 2) return "";
+  const t = " " + String(contexte || "").toLowerCase() + " ";
+  const f = (t.match(/\b(1girl|2girls|3girls|girl|woman|female|1woman)\b/g) || []).length;
+  const m = (t.match(/\b(1boy|2boys|3boys|boy|man|male|1man)\b/g) || []).length;
+  if (n === 2){
+    if (f && m) return "1boy 1girl";
+    if (f && !m) return "2girls";
+    if (m && !f) return "2boys";
+    return "";                       // genre inconnu : le silence fait mieux
+  }
+  // Au-dela de deux, danbooru compte jusqu a 6 puis passe au pluriel. On ne
+  // sort JAMAIS « multiple people » : mesure, il produit des foules.
+  const nn = Math.min(n, 6);
+  if (f && !m) return nn + "girls";
+  if (m && !f) return nn + "boys";
+  if (f && m) return "multiple girls, multiple boys";
+  return "";
+}
+
 function nbPersosCase(p){
   // v1.61.0 -- ORDRE DE CONFIANCE, pas un maximum aveugle.
   // Le `Math.max` d avant prenait le plus grand des trois signaux : une
