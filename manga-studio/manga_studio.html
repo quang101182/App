@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.64.1</title>
+<title>Manga Studio v1.65.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -424,7 +424,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.64.1</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.65.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -930,7 +930,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.64.1";
+const VERSION = "1.65.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -3457,6 +3457,23 @@ async function genMaster(){
  *  vision). Il remplace `promptFinal` tel quel : le modele renvoie le prompt
  *  entier corrige, pas seulement l'action, donc le repasser dans le champ de la
  *  case ferait doublonner le style et l'identite. */
+/** Les essais de la case, en y REINTEGRANT une image d origine oubliee.
+ *
+ *  Une case creee avant la v1.48.0 a un `file` mais pas de `versions` : son
+ *  unique image n a jamais ete inscrite comme essai. Sans ce rattrapage, la
+ *  premiere regeneration la rendait inatteignable -- « ca remplace », vu par
+ *  Quang le 28/07. On la remet donc en tete, une seule fois : c est bien un
+ *  essai, le tout premier.
+ *  ⚠ On compare par NOM DE FICHIER, pas par identite d objet : les versions
+ *  reviennent de la base, ce ne sont plus les memes objets. */
+function essaisAvec(p, fichier, seed){
+  const liste = ((p.recipe && p.recipe.versions) || []).slice();
+  if (fichier && !liste.some(v => v && v.file === fichier)){
+    liste.unshift({ file: fichier, seed: seed, ts: 0, recupere: true });
+  }
+  return liste;
+}
+
 async function genPanel(p, positifForce){
   const r = recipe();
   const card = document.querySelector('[data-pid="' + p.id + '"]');
@@ -3495,6 +3512,17 @@ async function genPanel(p, positifForce){
     return;
   }
 
+  // ⚠ v1.65.0 -- CE QUI EXISTAIT AVANT CETTE GENERATION.
+  // Signale par Quang : « le lot remplace litteralement les images qui etaient
+  // presentes avant ». Verifie en base : ses cases regenerees ne portaient plus
+  // qu UN essai. La cause n est PAS le lot -- c est que ces cases dataient
+  // d AVANT la v1.48.0, quand `versions` n existait pas : elles avaient un
+  // `file` mais aucun historique. `versions` repartait donc de [] et la
+  // premiere image ne s y trouvait jamais.
+  // (Rien n a ete perdu sur le DISQUE : le fichier d origine est toujours la,
+  //  il n etait simplement plus atteignable depuis l app.)
+  const ancienFichier = p.file || "";
+  const ancienneSeed  = (p.recipe && p.recipe.seed) || null;
   const ambiance = p.kind === "ambiance";
   const depthName = ambiance ? (masterScene(p).depthInput || "") : "";
   if (ambiance && !depthName){
@@ -3590,7 +3618,7 @@ async function genPanel(p, positifForce){
       // L'historique des essais. On n'EFFACE jamais : revenir en arriere doit
       // rester possible meme apres dix regenerations, et c'est la version
       // AFFICHEE (`p.file`) qui dit laquelle est retenue -- pas la derniere née.
-      versions: ((p.recipe && p.recipe.versions) || [])
+      versions: essaisAvec(p, ancienFichier, ancienneSeed)
                   .concat([{ file: p.file, ts: Date.now(), seed: p.recipe.seed,
                              positive: positive }])
     });

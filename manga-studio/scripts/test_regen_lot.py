@@ -197,6 +197,34 @@ def main():
                     apres["versions"] > avant["versions"],
                     "%d -> %d essais" % (avant["versions"], apres["versions"]))
 
+        # --- 6 : UNE CASE ANCIENNE NE PERD PAS SON IMAGE ---------------------
+        # LE cas de Quang (28/07) : « ca remplace litteralement les images qui
+        # etaient presentes avant ». Ses cases dataient d'AVANT la v1.48.0 -- un
+        # `file`, mais AUCUN `versions`. La regeneration repartait donc de [] et
+        # l'image d'origine n'entrait jamais dans l'historique : toujours sur le
+        # disque, mais plus atteignable depuis l'app.
+        # ⚠ Le banc precedent ne pouvait PAS le voir : ses cases avaient toutes
+        # un historique. Un banc ne trouve que les cas qu'il met en scene.
+        etat = pg.evaluate("""() => {
+            const p = S.panels[0];
+            // On recree exactement l'etat ancien : une image, zero historique.
+            p.file = 'magic-woman/vieille_image.png';
+            p.recipe = { seed: 4242 };
+            const avant = essaisAvec(p, p.file, p.recipe.seed);
+            return { n: avant.length, premier: avant[0] && avant[0].file,
+                     recupere: !!(avant[0] && avant[0].recupere) };
+        }""")
+        verifie("une case sans historique récupère son image d'origine",
+                etat["n"] == 1 and etat["premier"] == "magic-woman/vieille_image.png",
+                "%d essai(s), premier = %s" % (etat["n"], etat["premier"]))
+        verifie("… et elle est marquée comme récupérée", etat["recupere"])
+        double = pg.evaluate("""() => {
+            const p = S.panels[0];
+            p.recipe = { seed: 4242, versions: [{file: 'magic-woman/vieille_image.png'}] };
+            return essaisAvec(p, p.file, 4242).length;
+        }""")
+        verifie("… et elle n'est PAS ajoutée deux fois", double == 1, "%d" % double)
+
         # Rien ne doit deborder a 360 px avec la pop-up ouverte.
         pg.evaluate("() => ouvrirRegen()")
         pg.wait_for_timeout(250)
