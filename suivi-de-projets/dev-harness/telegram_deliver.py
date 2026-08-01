@@ -1,14 +1,38 @@
 """Livraison Telegram du HTML final + note de release.
-Bot principal Quang (token 8716414004, chat 5867229613).
 Pattern Python urllib UTF-8 (curl casse les accents).
+
+SECURITE — le token ne doit JAMAIS etre ecrit ici : ce fichier vit dans un depot
+PUBLIC. Un token en clair y a ete expose du 03/06 au 01/08/2026, ramasse par un
+robot, et le bot a ete detourne. Il se lit desormais depuis l'environnement, ou
+a defaut depuis jarvis/.env (hors depot). Voir security-incident-2026-08-01/.
 """
 import json
+import os
+import re
 import sys
 import urllib.request
 from pathlib import Path
 
-BOT_TOKEN = "8716414004:AAFVSPchPl236LCgA2H9UPp0xx8EQcM7h_E"
-CHAT_ID = "5867229613"
+
+def _load_bot_token() -> str:
+    """1) variable d'environnement, 2) jarvis/.env (hors depot). Jamais en dur."""
+    tok = os.environ.get("JARVIS_TELEGRAM_BOT_TOKEN")
+    if tok:
+        return tok.strip()
+    env = Path(r"D:/Download/02-Apps-Web/Repo-github/jarvis/.env")
+    if env.exists():
+        m = re.search(r"^JARVIS_TELEGRAM_BOT_TOKEN\s*=\s*(\S+)", env.read_text(encoding="utf-8", errors="ignore"), re.M)
+        if m:
+            return m.group(1).strip("\"'")
+    sys.exit(
+        "[telegram] token introuvable.\n"
+        "  -> definir JARVIS_TELEGRAM_BOT_TOKEN, ou renseigner jarvis/.env.\n"
+        "  -> ne JAMAIS ecrire le token dans ce fichier (depot public)."
+    )
+
+
+BOT_TOKEN = _load_bot_token()
+CHAT_ID = os.environ.get("JARVIS_TELEGRAM_CHAT_ID", "5867229613")
 HTML_PATH = Path(r"D:/Download/02-Apps-Web/Repo-github/App/suivi-de-projets/index.html")
 
 
