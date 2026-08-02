@@ -44,7 +44,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
-const VERSION = '1.55';
+const VERSION = '1.58';
 
 // v1.53 — la constante CLAUDE_FALLBACK_MODEL a été SUPPRIMÉE avec le fallback silencieux
 // qu'elle servait (voir proxyClaude) : le gateway ne substitue plus jamais un modèle.
@@ -137,7 +137,7 @@ export default {
 
       // ── Config (auth: WORKER_SECRET) ──────────────────────────────────────
       if (method === 'GET' && path === '/config') {
-        const authErr = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
+        const authErr = await checkBearer(request, wsSecrets(env), 'WORKER_SECRET', env);
         if (authErr) return authErr;
         return await handleConfig(env);
       }
@@ -146,7 +146,7 @@ export default {
       // Jarvis récupère STUDIO_SECRET depuis le KV (jamais stocké en clair sur son
       // disque) pour piloter le proxy Generate Studio local (/start ComfyUI).
       if (method === 'GET' && path === '/api/studio-secret') {
-        const authErr = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
+        const authErr = await checkBearer(request, wsSecrets(env), 'WORKER_SECRET', env);
         if (authErr) return authErr;
         // Worker Secret en priorité (comme les autres clés du gateway), fallback KV.
         const secret = env.STUDIO_SECRET || (await kvGetKey(env, 'STUDIO_SECRET')) || '';
@@ -155,7 +155,7 @@ export default {
 
       // ── Telegram media routes (dual auth: WORKER_SECRET or ADMIN_TOKEN) ──
       if (method === 'POST' && (path === '/api/send-photo' || path === '/api/send-video' || path === '/api/send-video-openai')) {
-        const authWS = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
+        const authWS = await checkBearer(request, wsSecrets(env), 'WORKER_SECRET', env);
         const authAT = authWS ? await checkBearer(request, env.ADMIN_TOKEN, 'ADMIN_TOKEN') : null;
         if (authWS && authAT) return authWS; // both failed → unauthorized
         const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
@@ -169,7 +169,7 @@ export default {
       // ── Read-only GET passthrough (ElevenLabs : voices, user, subscription, models) ──
       // v1.42 — ElevenLabs expose ces infos en GET ; le bloc POST plus bas ne les routait pas.
       if (method === 'GET' && path.startsWith('/api/elevenlabs')) {
-        const authErr = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
+        const authErr = await checkBearer(request, wsSecrets(env), 'WORKER_SECRET', env);
         if (authErr) return authErr;
         const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
         const rlErr = await checkRateLimit(env, ctx, 'api', ip, RL_API_MAX);
@@ -182,7 +182,7 @@ export default {
       // heartbeat est frais, le cron scheduled() ne coupe PAS (session active). Hors rate limit
       // exprès : un 429 périmerait le heartbeat -> le cron tuerait un pod en cours d'usage.
       if (method === 'POST' && path === '/api/ltx_heartbeat') {
-        const authErr = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
+        const authErr = await checkBearer(request, wsSecrets(env), 'WORKER_SECRET', env);
         if (authErr) return authErr;
         return await handleLtxHeartbeat(request, env);
       }
@@ -190,7 +190,7 @@ export default {
       // ── API routes ────────────────────────────────────────────────────────
       if (method === 'POST' && path.startsWith('/api/')) {
         // Auth check (async — constant-time comparison)
-        const authErr = await checkBearer(request, env.WORKER_SECRET, 'WORKER_SECRET');
+        const authErr = await checkBearer(request, wsSecrets(env), 'WORKER_SECRET', env);
         if (authErr) return authErr;
 
         // Rate limit (fire-and-forget counter update)
@@ -965,11 +965,24 @@ setInterval(function(){
 }
 
 async function handleProxy(request, env, ctx, parsedUrl) {
-  // Auth via query param 's'
-  const secret = parsedUrl.searchParams.get('s') || '';
-  if (!env.WORKER_SECRET || !(await timingSafeEqual(secret, env.WORKER_SECRET))) {
+  // Auth via query param 's' (VideoGrab : seule app à emprunter cette route).
+  // v1.58 — cette porte ne connaissait QUE env.WORKER_SECRET : la rotation à double
+  // clé du 01/08 (v1.57) ne couvrait que checkBearer, donc VideoGrab v5.2, installé
+  // avec l'ancien secret, s'est mis à répondre "Unauthorized". Une rotation « sans
+  // coupure » doit couvrir TOUTES les portes, pas seulement la principale.
+  const secret   = parsedUrl.searchParams.get('s') || '';
+  const accepted = wsSecrets(env);
+  if (!accepted.length) {
     return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
   }
+  let matched = -1;
+  for (let i = 0; i < accepted.length; i++) {
+    if (await timingSafeEqual(secret, accepted[i])) { matched = i; break; }
+  }
+  if (matched < 0) {
+    return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
+  }
+  if (matched > 0) await noteLegacySecretUse(env);
 
   const targetUrl = parsedUrl.searchParams.get('url');
   if (!targetUrl) return jsonResponse({ error: 'missing url parameter' }, 400);
@@ -1761,21 +1774,44 @@ async function handleSendVideoOpenAI(request, env) {
  * POST /admin/keys/list
  * Returns each known key as "set (N chars)" or "not set".
  */
+/**
+ * Un nom de clé désigne-t-il un SECRET (à masquer) ou une simple config (URL,
+ * région, identifiant de dossier) qu'il est utile de lire en clair ?
+ */
+function isSecretName(name) {
+  return /(_KEY|_KEYS|_SECRET|_TOKEN|_SA_JSON|^OPENAIKEY$)/.test(name);
+}
+
+/**
+ * Masque une valeur secrète : on garde de quoi l'identifier, pas de quoi s'en servir.
+ * Ex: "sk-proj-abc…xyz9 (164 chars)"
+ */
+function maskSecret(val) {
+  if (typeof val !== 'string' || !val) return 'not set';
+  const head = val.slice(0, val.startsWith('sk-') ? 7 : 4);
+  const tail = val.slice(-4);
+  return `${head}…${tail} (${val.length} chars)`;
+}
+
 async function adminKeysList(env) {
+  // SECURITE (01/08/2026) — cet endpoint renvoyait les 46 secrets EN CLAIR, et il
+  // était protégé par un ADMIN_TOKEN qui a été public sur GitHub du 06/03 au 01/08.
+  // Il ne sert qu'à faire l'inventaire : une valeur masquée suffit à vérifier qu'une
+  // clé est bien configurée. Pour récupérer une valeur réelle : /admin/keys/get,
+  // une clé à la fois et nommément. Voir security-incident-2026-08-01/ROADMAP.md
   const result = {};
-  // KNOWN_KEYS toujours présents (avec statut)
-  for (const name of KNOWN_KEYS) {
+  const put = async (name) => {
     const val = await kvGetKey(env, name);
-    result[name] = val ? val : 'not set';
-  }
+    if (!val) { result[name] = 'not set'; return; }
+    result[name] = isSecretName(name) ? maskSecret(val) : val;
+  };
+  // KNOWN_KEYS toujours présents (avec statut)
+  for (const name of KNOWN_KEYS) await put(name);
   // Clés custom (ex: *_SHARE) via KV.list
   const listed = await env.GATEWAY_KV.list({ prefix: 'key:' });
   for (const item of listed.keys) {
     const name = item.name.replace(/^key:/, '');
-    if (!KNOWN_KEYS.includes(name)) {
-      const val = await kvGetKey(env, name);
-      result[name] = val ? val : 'not set';
-    }
+    if (!KNOWN_KEYS.includes(name)) await put(name);
   }
   return jsonResponse(result);
 }
@@ -2157,18 +2193,53 @@ async function timingSafeEqual(a, b) {
  * Uses constant-time comparison to prevent timing attacks.
  * Returns null if valid, or a 401/503 Response if invalid/missing.
  */
-async function checkBearer(request, expectedSecret, secretName) {
-  if (!expectedSecret) {
+async function checkBearer(request, expectedSecret, secretName, env = null) {
+  // Accepte une valeur unique OU une liste (rotation sans coupure : on tolère
+  // l'ancien secret le temps que toutes les apps installées soient mises à jour).
+  const expected = (Array.isArray(expectedSecret) ? expectedSecret : [expectedSecret]).filter(Boolean);
+  if (!expected.length) {
     return jsonResponse({ error: `server misconfiguration: ${secretName} not set` }, 503);
   }
   const auth     = request.headers.get('Authorization') ?? '';
   const spaceIdx = auth.indexOf(' ');
   const scheme   = spaceIdx > -1 ? auth.slice(0, spaceIdx) : auth;
   const token    = spaceIdx > -1 ? auth.slice(spaceIdx + 1) : '';
-  if (scheme !== 'Bearer' || !(await timingSafeEqual(token, expectedSecret))) {
-    return jsonResponse({ error: 'unauthorized' }, 401);
+  if (scheme !== 'Bearer') return jsonResponse({ error: 'unauthorized' }, 401);
+
+  let matched = -1;
+  for (let i = 0; i < expected.length; i++) {
+    if (await timingSafeEqual(token, expected[i])) { matched = i; break; }
   }
+  if (matched < 0) return jsonResponse({ error: 'unauthorized' }, 401);
+
+  if (matched > 0) await noteLegacySecretUse(env);
   return null;
+}
+
+/**
+ * Secrets acceptés sur TOUTES les routes authentifiées — celles qui lisent un
+ * en-tête Bearer (checkBearer) comme celle qui lit le paramètre `?s=` (/proxy) :
+ * le courant, et le précédent tant que des applications installées ne sont pas
+ * mises à jour (WORKER_SECRET_PREV).
+ * Retirer WORKER_SECRET_PREV quand 'stat:worker_secret_prev_last_seen' est ancien.
+ */
+function wsSecrets(env) {
+  return [env.WORKER_SECRET, env.WORKER_SECRET_PREV].filter(Boolean);
+}
+
+/**
+ * Un appelant utilise encore l'ANCIEN secret -> on garde la trace du jour.
+ * C'est ce compteur qui dira, avec des chiffres, quand on peut retirer l'ancien
+ * — il doit donc être alimenté par CHAQUE porte d'entrée, sans quoi il annonce
+ * une migration terminée alors qu'une application vit encore sur l'ancien secret.
+ */
+async function noteLegacySecretUse(env) {
+  if (!env || !env.GATEWAY_KV) return;
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const seen  = await env.GATEWAY_KV.get('stat:worker_secret_prev_last_seen');
+    if (seen !== today) await env.GATEWAY_KV.put('stat:worker_secret_prev_last_seen', today);
+  } catch (_) { /* jamais bloquer une requête légitime pour une statistique */ }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
