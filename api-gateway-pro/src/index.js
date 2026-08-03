@@ -36,7 +36,14 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.14.0';
+const VERSION = '1.15.0';
+// v1.15.0 (2026-08-03) — Source des visites (ADDITIF) : POST /api/visit accepte `src` et
+//   incremente `stats:visits:<page>:src:<src>:total` ; GET renvoie `by_src` (via KV.list, meme
+//   procede que `by_btn_all`). Ne s'ecrit QUE si `src` est fourni : dk/swp/nf/sv/ncf/tuc ne
+//   l'envoient pas et gardent un comportement identique. `src` est sanitise cote worker aussi
+//   ([a-z0-9.-], 24 car. max) — un parametre d'URL est saisissable par n'importe qui et ne doit
+//   jamais creer de cle KV arbitraire. Motif : jusqu'ici les visites du hub se7 etaient un bloc
+//   indistinct, le lien epingle TikTok (debloque le 03/08 a 1000 abonnes) n'aurait pas ete mesurable.
 // v1.14.0 (2026-07-15) — Funnel analytics (ADDITIF, lecture seule) : GET /api/click renvoie désormais
 //   `by_btn_all` = ventilation COMPLÈTE par bouton (via KV.list), en plus des 5 clés fixes conservées.
 //   Permet au dashboard de lire le funnel du hub se7 (f:demo/f:chat/f:cta/f:waitlist + out:*). Zéro
@@ -911,6 +918,14 @@ export default {
         return json({ swp: parseInt(swpT) || 0, ncf: parseInt(ncfT) || 0, nf: parseInt(nfT) || 0, dk: parseInt(dkT) || 0, tuc: parseInt(tucT) || 0, sv: parseInt(svT) || 0, se7: parseInt(se7T) || 0 });
       }
       const prefix = `stats:visits:${page}`;
+      // v1.15.0 — ventilation par SOURCE. `src` est fourni par le site (?src=tiktok sur le lien
+      // épinglé du profil TikTok, débloqué le 03/08 au passage des 1000 abonnés ; sinon domaine
+      // du referrer, sinon 'direct'). Sanitisé ICI AUSSI et pas seulement côté client : un
+      // paramètre d'URL est saisissable par n'importe qui, il ne doit jamais créer de clé KV
+      // arbitraire. Absent ⇒ on n'écrit rien : les pages qui n'envoient pas `src` (dk/swp/nf/sv)
+      // gardent exactement le comportement d'avant.
+      const srcRaw = (url.searchParams.get('src') || '').toLowerCase();
+      const src = srcRaw.replace(/[^a-z0-9.-]/g, '').slice(0, 24);
       const totalRaw = await env.PRO_KV.get(`${prefix}:total`);
       const todayRaw = await env.PRO_KV.get(`${prefix}:${today}`);
       let total = parseInt(totalRaw) || 0;
@@ -919,12 +934,30 @@ export default {
       if (method === 'POST' && !isBotUA(request.headers.get('user-agent') || '')) {
         total++;
         todayCount++;
-        ctx.waitUntil(Promise.all([
+        const writes = [
           env.PRO_KV.put(`${prefix}:total`, String(total)),
           env.PRO_KV.put(`${prefix}:${today}`, String(todayCount), { expirationTtl: 90 * 86400 }),
-        ]));
+        ];
+        if (src) {
+          const srcKey = `${prefix}:src:${src}:total`;
+          const srcRawVal = await env.PRO_KV.get(srcKey);
+          writes.push(env.PRO_KV.put(srcKey, String((parseInt(srcRawVal) || 0) + 1)));
+        }
+        ctx.waitUntil(Promise.all(writes));
       }
-      return json({ page, total, today: todayCount });
+      // GET : ventilation complète par source (même procédé que `by_btn_all` de /api/click).
+      let by_src = {};
+      if (method !== 'POST') {
+        try {
+          const listed = await env.PRO_KV.list({ prefix: `${prefix}:src:` });
+          const vals = await Promise.all(listed.keys.map((k) => env.PRO_KV.get(k.name)));
+          listed.keys.forEach((k, i) => {
+            const m = k.name.match(/:src:(.+):total$/);
+            if (m) by_src[m[1]] = parseInt(vals[i]) || 0;
+          });
+        } catch (e) { by_src = {}; }
+      }
+      return json({ page, total, today: todayCount, by_src });
     }
 
     // ── Click counter (Play Store CTA tracking) ────────────────────────
