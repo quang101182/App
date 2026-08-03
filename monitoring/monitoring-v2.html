@@ -564,7 +564,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.22.0-ondine';
+    const VERSION = 'v2.23.0-ondine';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -755,7 +755,59 @@
       // anonymes uniquement, cache 5 min côté worker.
       const leads = await fetch('https://se7enai-chat.quang101182.workers.dev/api/leads_stats', { signal })
         .then(r => r.json()).catch(() => null);
-      return { se7: { visit: r[0], clicks: r[1], leads }, dk: { visit: r[2], clicks: r[3] }, swp: { visit: r[4], clicks: r[5] }, sv: { visit: r[6], clicks: r[7] }, generatedAt: Date.now() };
+      // v2.23.0 (03/08) — ONDINE EST PUBLIQUE DEPUIS LE 02/08 : le funnel ne mesurait que des CLICS
+      // sur le bouton (beacons, bloquables par un adblock, répétables). Le seul chiffre DUR — combien
+      // de fois l'installeur est réellement parti — vit chez GitHub (`download_count` par asset),
+      // en lecture publique, sans token, CORS ouvert. Il n'était lu nulle part : à l'ouverture, la
+      // question « est-ce que des gens l'ont téléchargé ? » n'avait pas de réponse dans le dashboard.
+      const dlReal = await fetchOndineDownloads(signal);
+      return { se7: { visit: r[0], clicks: r[1], leads, dlReal }, dk: { visit: r[2], clicks: r[3] }, swp: { visit: r[4], clicks: r[5] }, sv: { visit: r[6], clicks: r[7] }, generatedAt: Date.now() };
+    }
+
+    // Téléchargements RÉELS d'Ondine (GitHub Releases) + historique quotidien pour le delta.
+    // Deux sources, volontairement séparées :
+    //  • GitHub = le cumul VIVANT, toujours juste, mais SANS mémoire (aucune série temporelle) ;
+    //  • `data/ondine-downloads.json` = les instantanés datés poussés par `ondine/scripts/downloads_snapshot.py`.
+    //    C'est lui, et lui seul, qui permet de dire « +N depuis hier ». Absent → on n'invente pas de
+    //    delta, on affiche le cumul seul (un delta faux serait pire que pas de delta).
+    const ONDINE_RELEASES_API = 'https://api.github.com/repos/quang101182/ondine-releases/releases';
+    const ONDINE_DL_HISTORY_URL = 'data/ondine-downloads.json';
+    const ONDINE_PUBLIC_TAG = 'v0.98.19';   // version ouverte au public le 02/08 — sert de référence d'affichage
+    async function fetchOndineDownloads(signal) {
+      const rels = await fetch(ONDINE_RELEASES_API, { signal, headers: { Accept: 'application/vnd.github+json' } })
+        .then(r => (r.ok ? r.json() : null)).catch(() => null);
+      if (!Array.isArray(rels)) return { ok: false };
+      // On ne compte QUE les installeurs (.exe / .zip portable). Les `.sha256` sont des fichiers de
+      // vérification : les additionner gonflerait le total avec des lectures qui ne sont pas des installs.
+      const isInstaller = name => /\.(exe|zip)$/i.test(name || '');
+      let total = 0; const byTag = [];
+      rels.forEach(rel => {
+        const n = (rel.assets || []).filter(a => isInstaller(a.name))
+          .reduce((sum, a) => sum + (parseInt(a.download_count, 10) || 0), 0);
+        total += n;
+        byTag.push({ tag: rel.tag_name, published: rel.published_at, n });
+      });
+      // Le chiffre MIS EN AVANT est celui de la version publique, PAS le cumul de tous les tags.
+      // Le cumul (~70 le 03/08) est domine par les builds de test distribues au cercle restreint en
+      // juillet : affiche seul, il repond a une question que personne ne pose et noie celle qui compte
+      // — « depuis qu'on a ouvert, est-ce que des gens telechargent ? ». Le cumul reste en note.
+      const latest = byTag.find(t => t.tag === ONDINE_PUBLIC_TAG) || byTag[0] || null;
+      const publicTotal = latest ? latest.n : 0;
+      const history = await fetch(`${ONDINE_DL_HISTORY_URL}?t=${Date.now()}`, { signal })
+        .then(r => (r.ok ? r.json() : null)).catch(() => null);
+      return { ok: true, total, publicTotal, latest, byTag, history: (history && Array.isArray(history.snapshots)) ? history.snapshots : null };
+    }
+    // Delta depuis le dernier instantané STRICTEMENT antérieur à aujourd'hui. Renvoie null si
+    // l'historique manque ou ne contient que le jour même : sans point de comparaison, il n'y a
+    // pas de « depuis hier » — et l'écrire quand même serait une mesure inventée.
+    function ondineDlDelta(dlReal) {
+      if (!dlReal || !dlReal.ok || !dlReal.history || !dlReal.history.length) return null;
+      const today = new Date().toISOString().slice(0, 10);
+      // Delta sur la version PUBLIQUE (cf. `publicTotal`) : c'est la seule serie qui parle de l'ouverture.
+      const past = dlReal.history.filter(s => s.date && s.date < today && typeof s.public_total === 'number');
+      if (!past.length) return null;
+      past.sort((a, b) => (a.date < b.date ? 1 : -1));
+      return { since: past[0].date, delta: dlReal.publicTotal - past[0].public_total };
     }
 
     // P2 — Home : fetch léger des agrégats publics (mêmes compteurs que la vue Acquisition).
@@ -883,7 +935,14 @@
       // (f:unlock, ère du gel) et clics réels sur l'installeur (f:download + f:download:<os>).
       // Avant : le funnel s'arrêtait à la waitlist — le téléchargement était invisible
       // (reproche Quang : « je ne vois pas l'analytique des clics/téléchargements »).
+      // v2.23.0 (03/08) — `f:unlock` (code d'accès) n'est plus une étape du parcours : le gel a été
+      // levé le 02/08 (`DL_FROZEN=false`, site v0.15.0), le bouton de téléchargement est offert à tout
+      // le monde. Le compteur reste lu pour l'afficher en HISTORIQUE, jamais comme maillon vivant :
+      // laissé dans le funnel, il serait un dénominateur figé sous une étape qui, elle, monte.
       const unlock = g('f:unlock'), dl = g('f:download');
+      const dlReal = (se7 && se7.dlReal) || null;
+      const dlRealOk = !!(dlReal && dlReal.ok);
+      const dlDelta = ondineDlDelta(dlReal);
       let dlViewTotal = 0; const dlViewParts = [];
       const dlOsParts = [];
       Object.keys(bb).forEach(key => {
@@ -908,13 +967,20 @@
         { label: '✨ Clic CTA', val: cta, prev: vTot, note: 'accès anticipé / sur-mesure / soutien' },
         { label: '📧 Waitlist envoyée', val: wait, prev: cta, note: 'soumissions trackées (le détail KV est dans la tuile Leads)' },
         { label: '📥 Modale DL ouverte', val: dlViewTotal, prev: vTot, note: osNote(dlViewParts) },
-        { label: '🔓 Code débloqué', val: unlock, prev: dlViewTotal, note: 'testeurs (ère du gel)' },
-        { label: '⬇ Téléchargement', val: dl, prev: dlViewTotal, note: osNote(dlOsParts) },
+        { label: '⬇ Clic sur l’installeur', val: dl, prev: dlViewTotal, note: osNote(dlOsParts) },
+        // Dernier maillon, et le SEUL qui ne soit pas déclaratif : le fichier est réellement parti.
+        // `prev: dl` met en regard les deux mesures — un écart fort dit soit des clics bloqués par un
+        // adblock (beacon perdu), soit des téléchargements venus d'ailleurs que du site (lien direct).
+        { label: '💾 Installeur récupéré (GitHub)', val: dlRealOk ? dlReal.publicTotal : '—', prev: dlRealOk ? dl : null,
+          note: dlRealOk ? `${ONDINE_PUBLIC_TAG} · mesure GitHub · hors winget` : 'GitHub injoignable' },
         { label: '🔗 Clic sortant', val: outTotal, prev: vTot, note: 'vers store / app' }
       ];
-      const max = Math.max(1, vTot, demo, chat, cta, wait, dlViewTotal, unlock, dl, outTotal);
+      const max = Math.max(1, vTot, demo, chat, cta, wait, dlViewTotal, dl, outTotal, dlRealOk ? dlReal.publicTotal : 0);
       const rows = steps.map(s => {
-        const w = Math.max(2, Math.round((s.val / max) * 100));
+        // `val` peut être '—' (source injoignable) : une barre se calcule sur un nombre, sinon NaN
+        // arrive jusqu'au style et la ligne disparaît sans rien dire.
+        const num = typeof s.val === 'number' ? s.val : 0;
+        const w = Math.max(2, Math.round((num / max) * 100));
         // Une etape qui DEPASSE la precedente ne se rend pas en pourcentage : « 160 % de conversion »
         // se lit comme un taux alors que les deux compteurs ne comptent pas la meme chose (ouvertures de
         // modale vs CLICS sur l'installeur, repetables). On affiche les deux comptes bruts, sans %.
@@ -932,10 +998,19 @@
       // seuil, « 1,1 % » et « 0 % » sont le même non-résultat présenté avec l'autorité d'un pourcentage.
       const outRate = vTot >= ACQ_MIN_DENOM ? `${acqPct(outTotal, vTot)} des visites` : `sur ${vTot} visite(s) — trop peu pour un taux`;
       const outDest = outParts.length ? ` · ${outParts.map(o => `${o.name} ${o.v}`).join(' · ')}` : '';
-      // ⚠ « Téléchargements » compte des CLICS, pas des personnes : le gel étant actif, ce bouton n'existe
-      // qu'après un code débloqué — 8 clics pour 2 déblocages, donc au plus 2 testeurs. Ne pas le lire
-      // comme un nombre d'utilisateurs.
-      const dlNote = unlock > 0 ? `clics · ${unlock} code(s) débloqué(s)` : 'clics sur l’installeur';
+      // v2.23.0 (03/08) — la tuile affiche désormais la MESURE (GitHub), plus le déclaratif (clics).
+      // Avant, elle comptait des clics et sa note parlait de codes débloqués : écrit pour l'ère du gel,
+      // devenu faux le 02/08 à l'ouverture publique. Deux limites qui doivent rester ÉCRITES sur la tuile,
+      // sinon le chiffre se lit comme un nombre d'utilisateurs :
+      //   • ce sont des téléchargements, pas des installations, ni des personnes (un même curieux compte
+      //     autant de fois qu'il télécharge ; les robots d'indexation et antivirus comptent aussi) ;
+      //   • winget n'est PAS dedans — Microsoft n'expose aucun compteur public par paquet. Le jour où la
+      //     PR passe, ce total devient un plancher, pas un total.
+      const dlDeltaTxt = dlDelta ? ` · +${dlDelta.delta} depuis le ${dlDelta.since}` : '';
+      const dlNote = dlRealOk
+        ? `sur ${ONDINE_PUBLIC_TAG} (publique) · ${dl} clic(s) · hors winget · ${dlReal.total} tous builds${dlDeltaTxt}`
+        : `GitHub injoignable — ${dl} clic(s) sur l’installeur (déclaratif)`;
+      const dlVal = dlRealOk ? dlReal.publicTotal : dl;
       // v2.20.0 (25/07, demande Quang) : la tuile « Waitlist » (beacons, 4 au
       // compteur alors que 7 leads réels) devient « Leads » lue dans le KV —
       // total, ventilation par voie, accusés automatiques, en attente de réponse.
@@ -945,8 +1020,20 @@
         ? `accès ${bt.early} · sur-mesure ${bt.custom} · soutien ${bt.support} · accusés auto ${leads.acks_sent} · en attente ${leads.awaiting}`
         : 'stats indisponibles (worker)';
       const leadsVal = leads && leads.ok ? leads.total : '—';
-      const recap = `<div class="kpi-grid acq-recap">${KpiTile('Clics sortants', outTotal, safeText(outRate + outDest))}${KpiTile('Visites', vTot, vToday > 0 ? `+${vToday} auj.` : '—')}${KpiTile('Téléchargements', dl, dlNote)}${KpiTile('Leads', leadsVal, safeText(leadsNote))}</div>`;
-      return `<div class="acq-hub-head"><h3>🌐 Hub — <a href="https://se7enai.com" target="_blank" rel="noopener">se7enai.com ↗</a></h3></div><p class="acq-hub-desc">Tête de pont (lien bio TikTok). Visite → démo → chat → CTA → waitlist → téléchargement → clic sortant.</p>${recap}<div class="acq-sub">Funnel d’acquisition du hub</div><div class="funnel">${rows}</div>${detail}`;
+      const recap = `<div class="kpi-grid acq-recap">${KpiTile('Téléchargements', dlVal, dlNote)}${KpiTile('Clics sortants', outTotal, safeText(outRate + outDest))}${KpiTile('Visites', vTot, vToday > 0 ? `+${vToday} auj.` : '—')}${KpiTile('Leads', leadsVal, safeText(leadsNote))}</div>`;
+      // Détail par version + trace de l'ère du gel. La ventilation par tag répond à la seule question qui
+      // compte depuis l'ouverture : combien sur la version RÉELLEMENT publique, par opposition aux builds
+      // de test distribués au cercle restreint avant le 02/08.
+      const dlByTag = dlRealOk && dlReal.byTag && dlReal.byTag.length
+        ? `<div class="acq-detail">Par version : ${dlReal.byTag.slice(0, 6).map(t => `${safeText(t.tag)}${t.tag === ONDINE_PUBLIC_TAG ? ' (publique)' : ''} <strong>${t.n}</strong>`).join(' · ')}</div>`
+        : '';
+      const dlLegacy = unlock > 0
+        ? `<div class="acq-detail">Historique : ${unlock} code(s) d’accès débloqué(s) du temps où le téléchargement était gelé — étape retirée du funnel le 03/08, le gel a été levé le 02/08.</div>`
+        : '';
+      const dlHint = dlRealOk && !dlDelta
+        ? `<div class="acq-detail">Pas encore de « depuis hier » : GitHub ne donne qu’un cumul. Le delta apparaîtra dès le 2ᵉ instantané de <code>ondine/scripts/downloads_snapshot.py</code>.</div>`
+        : '';
+      return `<div class="acq-hub-head"><h3>🌐 Hub — <a href="https://se7enai.com" target="_blank" rel="noopener">se7enai.com ↗</a></h3></div><p class="acq-hub-desc">Tête de pont (lien bio TikTok). Visite → démo → chat → CTA → waitlist → téléchargement → clic sortant.</p>${recap}${dlByTag}${dlHint}<div class="acq-sub">Funnel d’acquisition du hub</div><div class="funnel">${rows}</div>${detail}${dlLegacy}`;
     }
     function renderAcqSites(data) {
       return ['dk', 'swp', 'sv'].map(key => {
