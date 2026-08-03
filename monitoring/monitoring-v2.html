@@ -564,7 +564,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.23.0-ondine';
+    const VERSION = 'v2.24.0-sources';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -991,6 +991,22 @@
         return `<div class="funnel-step"><div class="funnel-meta"><strong>${safeText(s.label)} <span class="funnel-note">${safeText(s.note)}</span></strong><span>${s.val}</span></div><div class="funnel-line"><div class="funnel-bar"><i style="--bar-width:${w}%"></i></div>${conv}</div></div>`;
       }).join('');
       const detail = outParts.length ? `<div class="acq-detail">Détail sortants : ${outParts.map(o => `${safeText(o.name)} <strong>${o.v}</strong>`).join(' · ')}</div>` : '';
+      // v2.24.0 (03/08) — D'OÙ VIENNENT LES VISITEURS. Jusqu'ici le hub ne savait dire QUE
+      // « 234 visites » : un bloc indistinct. Les liens épinglés des profils (débloqués le 03/08
+      // au passage des 1000 abonnés TikTok) portent `?src=` et le gateway pro v1.15.0 les ventile.
+      // ⚠️ Le décompte ne démarre qu'au 03/08 : les visites antérieures n'ont AUCUNE source et ne
+      // sont pas réparties ici. La somme des sources est donc normalement < total des visites —
+      // c'est attendu, pas une perte. On l'écrit sur la tuile pour que personne ne lise un écart
+      // comme un bug (et ne « corrige » un compteur qui est juste).
+      const bySrc = (visit && visit.by_src) || {};
+      const srcParts = Object.keys(bySrc)
+        .map(k => ({ name: k, v: acqInt(bySrc[k]) }))
+        .filter(o => o.v > 0)
+        .sort((a, b) => b.v - a.v);
+      const srcSum = srcParts.reduce((n, o) => n + o.v, 0);
+      const srcDetail = srcParts.length
+        ? `<div class="acq-detail">Origine des visites : ${srcParts.map(o => `${safeText(o.name)} <strong>${o.v}</strong>`).join(' · ')}${srcSum < vTot ? ` — <span style="opacity:.75">sur ${vTot} visites au total ; l’origine n’est mesurée que depuis le 03/08</span>` : ''}</div>`
+        : `<div class="acq-detail">Origine des visites : <span style="opacity:.75">rien encore — la mesure démarre au 03/08 (liens épinglés <code>?src=</code>)</span></div>`;
       // Ordre des tuiles (21/07) — « Clics sortants » passe EN TÊTE : si Ondine sert de vitrine aux autres
       // apps, c'est LE chiffre qui dit si la vitrine fait entrer quelqu'un. Il était en dernier, et sa
       // ventilation par app se lisait tout en bas du funnel.
@@ -1033,7 +1049,7 @@
       const dlHint = dlRealOk && !dlDelta
         ? `<div class="acq-detail">Pas encore de « depuis hier » : GitHub ne donne qu’un cumul. Le delta apparaîtra dès le 2ᵉ instantané de <code>ondine/scripts/downloads_snapshot.py</code>.</div>`
         : '';
-      return `<div class="acq-hub-head"><h3>🌐 Hub — <a href="https://se7enai.com" target="_blank" rel="noopener">se7enai.com ↗</a></h3></div><p class="acq-hub-desc">Tête de pont (lien bio TikTok). Visite → démo → chat → CTA → waitlist → téléchargement → clic sortant.</p>${recap}${dlByTag}${dlHint}<div class="acq-sub">Funnel d’acquisition du hub</div><div class="funnel">${rows}</div>${detail}${dlLegacy}`;
+      return `<div class="acq-hub-head"><h3>🌐 Hub — <a href="https://se7enai.com" target="_blank" rel="noopener">se7enai.com ↗</a></h3></div><p class="acq-hub-desc">Tête de pont (lien bio TikTok). Visite → démo → chat → CTA → waitlist → téléchargement → clic sortant.</p>${recap}${dlByTag}${dlHint}<div class="acq-sub">Funnel d’acquisition du hub</div><div class="funnel">${rows}</div>${detail}${srcDetail}${dlLegacy}`;
     }
     function renderAcqSites(data) {
       return ['dk', 'swp', 'sv'].map(key => {
