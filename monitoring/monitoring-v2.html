@@ -564,7 +564,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.24.0-sources';
+    const VERSION = 'v2.25.0-offrable';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -940,20 +940,50 @@
       // le monde. Le compteur reste lu pour l'afficher en HISTORIQUE, jamais comme maillon vivant :
       // laissé dans le funnel, il serait un dénominateur figé sous une étape qui, elle, monte.
       const unlock = g('f:unlock'), dl = g('f:download');
+      // v2.25.0 — `f:donate` etait EMIS par le site depuis le 19/07 (clic « Faire un don »,
+      // site/index.html `window.donateLS`) et lu par PERSONNE : le dashboard n'en parlait nulle
+      // part. Meme famille que le bug `dl_view:` du 21/07 — une mesure collectee qui n'arrive
+      // jamais a l'ecran ne se signale pas toute seule, elle se decouvre en relisant les cles.
+      const donate = g('f:donate');
       const dlReal = (se7 && se7.dlReal) || null;
       const dlRealOk = !!(dlReal && dlReal.ok);
       const dlDelta = ondineDlDelta(dlReal);
       let dlViewTotal = 0; const dlViewParts = [];
       const dlOsParts = [];
+      // v2.25.0 (17/08) — TOUS LES OS N'ONT PAS DE BOUTON, et le taux comptait comme s'ils en
+      // avaient un. Ondine est Windows uniquement : `dlContent()` (site/index.html) ne rend un
+      // lien d'installeur que pour `win` et `other` (UA inconnu) ; `mobile`, `mac` et `linux`
+      // recoivent un TEXTE et une porte email, jamais un bouton. Or l'etape « clic sur
+      // l'installeur » se rapportait a la somme des ouvertures de modale — mobile compris.
+      // Mesure du 17/08 : 65 ouvertures dont 28 mobile et 3 mac, pour 34 clics → « 52 % » alors
+      // que 31 de ces visiteurs n'avaient RIEN a cliquer. Le vrai denominateur, c'est le nombre
+      // de visiteurs a qui on a effectivement propose le fichier.
+      const DL_OFFERED = ['win', 'other'];
+      let dlViewOffer = 0, dlViewBlocked = 0;
       Object.keys(bb).forEach(key => {
         // 🐛 Corrigé le 21/07 : le préfixe cherché était `dl_view:` alors que TOUTES les clés du site sont
         // préfixées `f:` (`beaconFunnel`, site/index.html:977 → `f:dl_view:win`). Le test ne mordait jamais.
         // Conséquence : l'étape affichait « 0 » avec 4 ouvertures réelles en base, ET comme elle sert de
         // dénominateur aux 2 étapes suivantes (`prev: dlViewTotal`), leurs taux tombaient à « — ».
         // Un zéro affiché n'était pas une mesure — c'était une clé qui ne correspondait à rien.
-        if (key.indexOf('f:dl_view:') === 0) { const v = acqInt(bb[key]); dlViewTotal += v; dlViewParts.push({ name: key.slice(10), v }); }
+        if (key.indexOf('f:dl_view:') === 0) {
+          const v = acqInt(bb[key]), os = key.slice(10);
+          dlViewTotal += v; dlViewParts.push({ name: os, v });
+          if (DL_OFFERED.indexOf(os) >= 0) dlViewOffer += v; else dlViewBlocked += v;
+        }
         else if (key.indexOf('f:download:') === 0) { const v = acqInt(bb[key]); dlOsParts.push({ name: key.slice(11), v }); }
       });
+      // Rattrapage des visiteurs sans bouton : le site leur propose « laisse ton email, on
+      // t'envoie le lien pour ton PC ». Cle emise par le site depuis la v0.19.0 (17/08) — donc
+      // 0 tant que personne n'est passe par la depuis cette date, ce qui n'est PAS la meme chose
+      // que « ca ne convertit pas ». La note l'ecrit.
+      const dlRescue = ['mobile', 'mac', 'other', 'frozen'].reduce((n, k) => n + acqInt(bb['f:waitlist:' + k]), 0);
+      // Somme des clics VENTILES par OS. `f:download` (compteur global) et `f:download:<os>` sont
+      // emis par le meme geste depuis le correctif du 21/07 — avant, seul le global partait. Les
+      // deux series ne peuvent donc pas coincider, et l'ecart est exactement le passif d'avant ce
+      // correctif. Affiches cote a cote sans un mot, ils se lisaient comme une contradiction.
+      const dlOsSum = dlOsParts.reduce((n, o) => n + o.v, 0);
+      const dlGap = dl - dlOsSum;
       dlViewParts.sort((a, b) => b.v - a.v);
       dlOsParts.sort((a, b) => b.v - a.v);
       let outTotal = 0; const outParts = [];
@@ -967,7 +997,11 @@
         { label: '✨ Clic CTA', val: cta, prev: vTot, note: 'accès anticipé / sur-mesure / soutien' },
         { label: '📧 Waitlist envoyée', val: wait, prev: cta, note: 'soumissions trackées (le détail KV est dans la tuile Leads)' },
         { label: '📥 Modale DL ouverte', val: dlViewTotal, prev: vTot, note: osNote(dlViewParts) },
-        { label: '⬇ Clic sur l’installeur', val: dl, prev: dlViewTotal, note: osNote(dlOsParts) },
+        // Le maillon qui manquait : entre « la modale s'ouvre » et « on clique », il y a « un
+        // bouton existe-t-il pour cet OS ». Sans lui, l'echec du taux etait attribue au visiteur.
+        { label: '💻 Installeur proposé', val: dlViewOffer, prev: dlViewTotal,
+          note: dlViewBlocked > 0 ? `${dlViewBlocked} sans bouton (Ondine est Windows) → porte email` : 'Windows uniquement' },
+        { label: '⬇ Clic sur l’installeur', val: dl, prev: dlViewOffer, note: osNote(dlOsParts) },
         // Dernier maillon, et le SEUL qui ne soit pas déclaratif : le fichier est réellement parti.
         // `prev: dl` met en regard les deux mesures — un écart fort dit soit des clics bloqués par un
         // adblock (beacon perdu), soit des téléchargements venus d'ailleurs que du site (lien direct).
@@ -975,7 +1009,7 @@
           note: dlRealOk ? `${ONDINE_PUBLIC_TAG} · mesure GitHub · hors winget` : 'GitHub injoignable' },
         { label: '🔗 Clic sortant', val: outTotal, prev: vTot, note: 'vers store / app' }
       ];
-      const max = Math.max(1, vTot, demo, chat, cta, wait, dlViewTotal, dl, outTotal, dlRealOk ? dlReal.publicTotal : 0);
+      const max = Math.max(1, vTot, demo, chat, cta, wait, dlViewTotal, dlViewOffer, dl, outTotal, dlRealOk ? dlReal.publicTotal : 0);
       const rows = steps.map(s => {
         // `val` peut être '—' (source injoignable) : une barre se calcule sur un nombre, sinon NaN
         // arrive jusqu'au style et la ligne disparaît sans rien dire.
@@ -1046,10 +1080,19 @@
       const dlLegacy = unlock > 0
         ? `<div class="acq-detail">Historique : ${unlock} code(s) d’accès débloqué(s) du temps où le téléchargement était gelé — étape retirée du funnel le 03/08, le gel a été levé le 02/08.</div>`
         : '';
+      // La branche de rattrapage : ce que deviennent les visiteurs a qui on ne peut rien offrir.
+      // C'est le seul chemin de conversion du trafic TikTok, qui arrive massivement sur mobile.
+      const rescueTxt = dlViewBlocked > 0
+        ? `<div class="acq-detail">Rattrapage sans bouton : ${dlRescue} email(s) laissé(s) sur ${dlViewBlocked} visiteur(s) mobile/mac${dlRescue > 0 ? ` — ${acqPct(dlRescue, dlViewBlocked)}` : ' — mesuré depuis le 17/08 seulement (site v0.19.0), un 0 ici ne veut pas encore dire « ça ne convertit pas »'}</div>`
+        : '';
+      const gapTxt = dlGap > 0
+        ? `<div class="acq-detail">Écart clics : ${dl} au total contre ${dlOsSum} ventilés par OS — les ${dlGap} de différence sont antérieurs au 21/07, quand seul le compteur global partait (le détail par OS n’existait pas encore).</div>`
+        : '';
+      const donateTxt = `<div class="acq-detail">Dons : ${donate} clic(s) vers le checkout Lemon Squeezy${donate > 0 ? '' : ' — aucun à ce jour'} (clic, pas un paiement : le montant réel se lit chez Lemon Squeezy).</div>`;
       const dlHint = dlRealOk && !dlDelta
         ? `<div class="acq-detail">Pas encore de « depuis hier » : GitHub ne donne qu’un cumul. Le delta apparaîtra dès le 2ᵉ instantané de <code>ondine/scripts/downloads_snapshot.py</code>.</div>`
         : '';
-      return `<div class="acq-hub-head"><h3>🌐 Hub — <a href="https://se7enai.com" target="_blank" rel="noopener">se7enai.com ↗</a></h3></div><p class="acq-hub-desc">Tête de pont (lien bio TikTok). Visite → démo → chat → CTA → waitlist → téléchargement → clic sortant.</p>${recap}${dlByTag}${dlHint}<div class="acq-sub">Funnel d’acquisition du hub</div><div class="funnel">${rows}</div>${detail}${srcDetail}${dlLegacy}`;
+      return `<div class="acq-hub-head"><h3>🌐 Hub — <a href="https://se7enai.com" target="_blank" rel="noopener">se7enai.com ↗</a></h3></div><p class="acq-hub-desc">Tête de pont (lien bio TikTok). Visite → démo → chat → CTA → waitlist → téléchargement → clic sortant.</p>${recap}${dlByTag}${dlHint}<div class="acq-sub">Funnel d’acquisition du hub</div><div class="funnel">${rows}</div>${detail}${rescueTxt}${gapTxt}${srcDetail}${donateTxt}${dlLegacy}`;
     }
     function renderAcqSites(data) {
       return ['dk', 'swp', 'sv'].map(key => {

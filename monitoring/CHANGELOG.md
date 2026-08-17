@@ -6,6 +6,40 @@ Le worker `se7enai-dash` lit **github.io en direct** : un `git push` suffit à m
 
 ---
 
+## v2.25.0-offrable — 17/08/2026 · Le funnel reprochait aux visiteurs de ne pas cliquer un bouton qui n'existait pas
+
+**Le denominateur comptait des gens a qui on n'offre rien.** Ondine est Windows uniquement.
+Le site ne rend un lien d'installeur que pour `win` et `other` : `mobile`, `mac` et `linux`
+recoivent un texte et une porte email. Or l'etape « clic sur l'installeur » se rapportait a
+**toutes** les ouvertures de modale. Mesure du jour : 65 ouvertures dont **28 mobile et 3 mac**,
+34 clics → le tableau affichait **52 %** de conversion. Le vrai chiffre est **100 %** : sur 34
+visiteurs a qui un bouton a ete propose, 34 ont clique. On lisait un echec produit la ou il n'y
+avait qu'un defaut de comptage — et le vrai sujet, lui, restait invisible.
+
+- Nouvelle etape **« Installeur propose »** entre l'ouverture de la modale et le clic. Elle nomme
+  ce qui manquait : *« 31 sans bouton (Ondine est Windows) → porte email »*.
+- Nouvelle ligne **« Rattrapage sans bouton »** : combien de ces visiteurs laissent leur email pour
+  recevoir le lien sur leur PC. C'est le seul chemin de conversion du trafic TikTok, massivement
+  mobile, et personne ne savait s'il fonctionnait. Alimentee par `f:waitlist:<provenance>`,
+  emise par le site depuis sa **v0.19.0** — donc **0 jusqu'a nouvelle mesure**, ce qui n'est pas la
+  meme chose que « ca ne convertit pas ». La note l'ecrit, pour qu'on ne lise pas un zero neuf
+  comme un verdict.
+- **Dons enfin affiches.** `f:donate` etait emis par le site depuis le 19/07 et lu par **personne**.
+  Meme famille que le bug `dl_view:` du 21/07 : une mesure qui n'arrive jamais a l'ecran ne se
+  signale pas toute seule.
+- **Ecart de clics explique** : `f:download` (34) contre la somme par OS (26). Les deux series ne
+  peuvent pas coincider — avant le correctif du 21/07, seul le compteur global partait. Affiches
+  cote a cote sans un mot, ils se lisaient comme une contradiction.
+
+Preuve : banc Playwright sur les donnees de prod, valeurs lues au DOM et **taux recalcules a la
+main** ; mutation verifiee rouge (en restaurant l'ancien denominateur, le banc echoue).
+
+> ⚠️ **Trou de journal assume** : les versions **v2.20.0 a v2.24.0** (tuile Leads, telechargements
+> reels GitHub, origine des visites) ne sont documentees que dans les commentaires du code et les
+> messages de commit. Elles ne sont pas reecrites ici apres coup — ce serait de la reconstitution.
+
+---
+
 ## v2.19.0-ondine — 21/07/2026 · Ondine entre au Studio, et un funnel qui ne mesurait rien
 
 **Studio** — Ondine devient un projet de plein droit (couleur `--ondine` `#2dd4bf`, choisie **par mesure** :
