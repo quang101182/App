@@ -564,7 +564,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.27.0-dkpc';
+    const VERSION = 'v2.28.0-dkpc-usage';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -588,7 +588,7 @@
       // PC ne doit pas pouvoir casser une dictée Android. D'où une entrée et un token distincts.
       { key: 'dkpc', name: 'DictoKey PC', icon: '🖥', family: 'products', color: PRODUCT_COLORS.dk, auth: 'token',
         tokenKey: 'monitoring_dkpc_token', gateway: 'https://api-gateway-dictokey-pc.quang101182.workers.dev',
-        endpoints: { licences: '/admin/licences' },
+        endpoints: { licences: '/admin/licences', usage: '/admin/usage?jours=30' },
         subtitle: 'Licences, abonnements et revenu de la version Windows.', sections: [] },
       { key: 'acq', name: 'Acquisition', icon: '⌁', family: 'acquisition', auth: 'none', endpoints: {}, subtitle: 'Sites, visites, engagement et clics sortants.', sections: [] },
       // Factory : `auth: 'none'` DÉLIBÉRÉ — le token n'ouvre que ventes/abonnés, la vue doit vivre sans lui (pas de TokenGate en dur).
@@ -1985,15 +1985,48 @@
         ? `<div class="table-wrap"><table class="data-table swp-table"><thead><tr><th>Santé</th><th>Email</th><th>Clé</th><th>Statut</th><th>Motif</th><th>Créé le</th><th>Échéance</th><th>Appareils</th></tr></thead><tbody>${rows}</tbody></table></div>`
         : `<div class="empty">Aucune licence pour le moment — le produit LemonSqueezy est encore en brouillon.</div>`;
 
-      // ⚠️ AUCUNE colonne d'usage ni de dernière activité, contrairement à SubWhisper Pro :
-      // la passerelle PC lit `u:mots:*` / `u:audio:*` mais ne les écrit JAMAIS. Ces
-      // compteurs vaudraient 0 à vie. Une colonne vide se lirait « personne ne s'en
-      // sert » là où la vérité est « on ne mesure pas encore ». Elles reviendront le
-      // jour où la passerelle comptera pour de bon.
-      const note = `<div class="acq-when">Passerelle ${safeText(data.version || '?')} · l'usage par licence n'est pas encore compté côté serveur : aucune colonne d'activité tant que ce sera le cas.</div>`;
+      // ── Usage réel (depuis la passerelle v0.4.0) ─────────────────────────
+      // Ces chiffres n'existaient pas avant : la dictée PC passait par la
+      // passerelle Android et rien n'était compté ici. C'est pourquoi cette
+      // section est apparue APRÈS le tableau des licences, et pas avant.
+      const u = payload && payload.usage;
+      let usageHtml = `<div class="empty">Usage indisponible — la passerelle ne répond pas sur /admin/usage.</div>`;
+      let serieHtml = '';
+      if (u && u.total) {
+        const tot = u.total, cout = u.cout || {};
+        const jours = u.jours || 30;
+        const motsParJour = Math.round((tot.mots || 0) / jours);
+        const minutes = Math.round((tot.audioSec || 0) / 60);
+        usageHtml = `<div class="kpi-grid">`
+          + KpiTile('👥 Utilisateurs actifs', tot.appareilsUniques || 0, `appareils ayant dicté sur ${jours} jours`)
+          + KpiTile('🎙 Dictées', (tot.appels || 0).toLocaleString('fr-FR'), `${motsParJour.toLocaleString('fr-FR')} mots/jour en moyenne`)
+          + KpiTile('📝 Mots transcrits', (tot.mots || 0).toLocaleString('fr-FR'), `l'unité du quota : 2 000/semaine en gratuit`)
+          + KpiTile('⏱ Audio traité', `${minutes} min`, `${(tot.audioSec || 0).toLocaleString('fr-FR')} s — l'unité que Groq facture`)
+          + `</div>`
+          + `<div class="kpi-grid">`
+          + KpiTile('💸 Coût estimé', `${(cout.total || 0).toFixed(3)} $`, `STT ${(cout.stt || 0).toFixed(3)} $ · LLM ${(cout.llm || 0).toFixed(3)} $ — estimation, la facture reste la vérité`)
+          + KpiTile('📊 Marge', payants.length ? `${Math.round((1 - (cout.total || 0) / 1.1 / (payants.length * DKPC_NET_EUR)) * 100)} %` : '—',
+                    payants.length ? `sur ${mrrNet} € encaissés` : 'aucun abonné payant pour le moment')
+          + `</div>`;
+
+        // Une série à zéro partout ne mérite pas un graphique : elle mérite une phrase.
+        const actifs = (u.serie || []).filter(j => j.appels > 0);
+        if (actifs.length) {
+          const max = Math.max(...actifs.map(j => j.appels));
+          serieHtml = `<div class="funnel">` + actifs.slice(-14).map(j =>
+            FunnelBar(j.jour, `${j.appels} dictées · ${j.mots} mots`, Math.max(3, Math.round((j.appels / max) * 100)))
+          ).join('') + `</div>`;
+        } else {
+          serieHtml = `<div class="empty">Aucune dictée enregistrée sur la période.</div>`;
+        }
+      }
+
+      const note = `<div class="acq-when">Passerelle ${safeText(data.version || '?')} · usage compté côté serveur depuis la v0.4.0 (avant, la dictée PC passait par la passerelle Android et n'était comptée nulle part).</div>`;
 
       return (alertHtml ? `<section class="section"><div class="alert-list">${alertHtml}</div></section>` : '')
         + `<section class="section"><div class="section-head"><h2>💶 Revenu &amp; abonnements</h2></div>${money}</section>`
+        + `<section class="section"><div class="section-head"><h2>Usage réel · 30 jours</h2></div>${usageHtml}</section>`
+        + `<section class="section"><div class="section-head"><h2>Activité par jour</h2></div>${serieHtml}</section>`
         + `<section class="section"><div class="section-head"><h2>Parc de licences</h2></div>${parc}</section>`
         + `<section class="section"><div class="section-head"><h2>Détail des licences · triées par risque</h2></div>${table}</section>`
         + note;
