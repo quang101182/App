@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.15.0';
+const VERSION = '1.16.0';
 // v1.15.0 (2026-08-03) — Source des visites (ADDITIF) : POST /api/visit accepte `src` et
 //   incremente `stats:visits:<page>:src:<src>:total` ; GET renvoie `by_src` (via KV.list, meme
 //   procede que `by_btn_all`). Ne s'ecrit QUE si `src` est fourni : dk/swp/nf/sv/ncf/tuc ne
@@ -963,7 +963,17 @@ export default {
     // ── Click counter (Play Store CTA tracking) ────────────────────────
     if (path === '/api/click') {
       const page = url.searchParams.get('page') || 'dk';
-      const btn = url.searchParams.get('btn') || 'unknown';
+      // v1.16.0 (17/08) — `btn` s'ecrivait BRUT dans une cle KV. C'est un parametre d'URL :
+      // n'importe qui pouvait creer `stats:clicks:se7:btn:<ce qu'il veut>:total`, le voir
+      // apparaitre dans le dashboard (`by_btn_all` liste tout le prefixe) et faire grossir le KV
+      // a volonte. `src` avait deja ete sanitise ici meme pour cette raison exacte (l.921-928) —
+      // le meme raisonnement n'avait simplement jamais ete applique a `btn`.
+      // Alphabet volontairement large : les cles LEGITIMES portent des ':' (`f:dl_view:win`) et
+      // des espaces (`out:SubWhisper Pro`). Toutes passent ce filtre — verifie sur les 14 cles
+      // reellement en base le 17/08. Ce qui ne passe pas retombe sur 'unknown' plutot que d'etre
+      // tronque en une cle voisine plausible : un compteur faux est pire qu'un compteur nomme.
+      const btnRawParam = url.searchParams.get('btn') || 'unknown';
+      const btn = /^[A-Za-z0-9 :._-]{1,32}$/.test(btnRawParam) ? btnRawParam : 'unknown';
       const today = new Date().toISOString().slice(0, 10);
       const prefix = `stats:clicks:${page}`;
       if (method === 'POST') {
