@@ -564,7 +564,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.26.1-studio-aout';
+    const VERSION = 'v2.27.0-dkpc';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -584,6 +584,12 @@
         role: 'repos', roleLabel: 'Pas encore promu',
         roleNote: 'Produit <b>récent, mis en place mais jamais promu</b> — aucune pub, aucun marketing à ce stade : c’est <b>délibéré</b>, la mise en place d’abord, le reste au rythme choisi. <b>« 0 € de revenu » et « 0 clic sortant » sont donc attendus</b> : on ne mesure pas l’échec d’un lancement qui n’a pas eu lieu.',
         tokenKey: 'monitoring_storyvoice_token', gateway: 'https://api-gateway-pro.quang101182.workers.dev', endpoints: { overview: '/admin/sv/overview' }, subtitle: 'Crédits, conversion et revenus.', sections: [] },
+      // DictoKey PC — passerelle SÉPARÉE de celle de l'Android (décision D3) : un bug de licence
+      // PC ne doit pas pouvoir casser une dictée Android. D'où une entrée et un token distincts.
+      { key: 'dkpc', name: 'DictoKey PC', icon: '🖥', family: 'products', color: PRODUCT_COLORS.dk, auth: 'token',
+        tokenKey: 'monitoring_dkpc_token', gateway: 'https://api-gateway-dictokey-pc.quang101182.workers.dev',
+        endpoints: { licences: '/admin/licences' },
+        subtitle: 'Licences, abonnements et revenu de la version Windows.', sections: [] },
       { key: 'acq', name: 'Acquisition', icon: '⌁', family: 'acquisition', auth: 'none', endpoints: {}, subtitle: 'Sites, visites, engagement et clics sortants.', sections: [] },
       // Factory : `auth: 'none'` DÉLIBÉRÉ — le token n'ouvre que ventes/abonnés, la vue doit vivre sans lui (pas de TokenGate en dur).
       // `tokenKey` est lue via getToken(cfg) : la prod réécrit la chaîne en dur à 5 endroits alors que sa config la déclare déjà.
@@ -685,7 +691,7 @@
       // 17/08 par tools/check_studio_sync.py des sa 1re execution reelle — elles etaient en
       // ligne depuis 10 jours et le dashboard les ignorait.
       { date: '2026-08-05', time: '12:30', project: 'Ondine', lang: 'FR', channels: ['tiktok'], subs: true, music: 'bedN_173 (signature Ondine)', title: 'Demonstration — recherche puis image (444 vues au 17/08)' },
-      { date: '2026-08-07', time: '20:15', project: 'Ondine', lang: 'FR', channels: ['tiktok'], subs: true, music: 'bedN_173 (signature Ondine)', title: 'Transparence — « C'est gratuit ? » (348 vues au 17/08)' },
+      { date: '2026-08-07', time: '20:15', project: 'Ondine', lang: 'FR', channels: ['tiktok'], subs: true, music: 'bedN_173 (signature Ondine)', title: "Transparence — « C'est gratuit ? » (348 vues au 17/08)" },
       // ── Reprise des 3 APPLICATIONS (17/08) — la pause du 21/07 est levee depuis le 03/08, et le
       // compte etait muet depuis le 07/08. Un post tous les 2 jours, lane FR sur TikTok.
       // Les 3 ouvrent sur une CAPTURE REELLE du produit : mandat Quang du 17/08, un hook illustratif
@@ -1899,6 +1905,100 @@
         + `<div class="acq-when">Dernière mise à jour : ${safeText(when)}</div>`;
     }
 
+    // === DictoKey PC — licences de la version Windows ==========================
+    //
+    // Source : GET /admin/licences de la passerelle PC. Elle renvoie `payant` ET
+    // `actif`, et ce sont DEUX choses différentes : un abonnement annulé garde
+    // l'accès jusqu'à la fin de la période payée (décision du 17/08, alignée sur
+    // l'Android) mais ne rapporte plus rien. Les confondre, c'est reproduire le
+    // MRR surestimé de SubWhisper Pro — 27 € affichés contre 9 € réels.
+
+    // 11,99 € TTC affichés. Ce n'est PAS ce qu'on encaisse : LemonSqueezy est
+    // Merchant of Record, la TVA (2,00 €) et sa commission (~1,06 €) sortent du
+    // prix. On montre donc les deux, sinon la marge se raisonne sur un chiffre faux.
+    const DKPC_PRICE_TTC = 11.99;
+    const DKPC_NET_EUR = 8.89;
+
+    function dkpcSante(l) {
+      if (l.payant) return { cls: 'ok', label: 'Payant', rank: 3 };
+      if (l.actif && l.raison === 'essai') return { cls: 'warn', label: 'Essai', rank: 2 };
+      if (l.actif && l.tier === 'pro') return { cls: 'test', label: 'Offert', rank: 4 };
+      // Accès encore ouvert mais plus payé : annulation en cours, ou paiement en échec.
+      if (l.actif) return { cls: 'warn', label: 'À surveiller', rank: 1 };
+      return { cls: 'rev', label: 'Terminé', rank: 0 };
+    }
+
+    function renderDkpcView(payload) {
+      const data = payload && payload.licences;
+      if (!data) return EmptyState('DictoKey PC', 'Aucune donnée reçue de /admin/licences.');
+
+      const liste = (data.licences || []).map(l => Object.assign({}, l, { _h: dkpcSante(l) }));
+      liste.sort((a, b) => (a._h.rank - b._h.rank) || String(b.creeLe || '').localeCompare(String(a.creeLe || '')));
+
+      const payants = liste.filter(l => l.payant);
+      const essais = liste.filter(l => l.actif && l.raison === 'essai');
+      const offerts = liste.filter(l => l.actif && l.tier === 'pro');
+      // Le cas qui coûte de l'argent sans en rapporter : l'accès tourne, le paiement non.
+      const sursis = liste.filter(l => l.actif && !l.payant && l.raison !== 'essai' && l.tier !== 'pro');
+      const termines = liste.filter(l => !l.actif);
+
+      let alertHtml = '';
+      if (sursis.length > 0) {
+        const qui = sursis.slice(0, 3).map(l => l.email).join(', ') + (sursis.length > 3 ? ' …' : '');
+        alertHtml = Alert('critique', `${sursis.length} accès ouvert(s) sans paiement`,
+          `annulation en cours ou paiement en échec — l'accès tourne à nos frais : ${qui}`);
+      } else if (payants.length > 0) {
+        alertHtml = Alert('ok', 'Aucun accès à découvert', `les ${payants.length} abonnement(s) actif(s) sont bien payés.`);
+      }
+
+      const mrrBrut = (payants.length * DKPC_PRICE_TTC).toFixed(2);
+      const mrrNet = (payants.length * DKPC_NET_EUR).toFixed(2);
+      const money = `<div class="kpi-grid">`
+        + KpiTile('💶 MRR encaissé', `${mrrNet} €`, `${payants.length} × ${DKPC_NET_EUR}€ nets — après TVA 20% et commission LemonSqueezy`)
+        + KpiTile('🏷 MRR affiché', `${mrrBrut} €`, `${payants.length} × ${DKPC_PRICE_TTC}€ TTC — ce que le client paie, pas ce qu'on touche`)
+        + KpiTile('💳 Payants', payants.length, `LemonSqueezy « active » STRICT — ni essai, ni annulé, ni offert`)
+        + KpiTile('🎁 Essais en cours', essais.length, 'essai 7 jours, sans carte — ne rapporte encore rien')
+        + `</div>`;
+
+      const parc = `<div class="kpi-grid">`
+        + KpiTile('Licences totales', liste.length, `${termines.length} terminée(s) · ${offerts.length} offerte(s) (admin)`)
+        + KpiTile('Accès actifs', liste.filter(l => l.actif).length, 'toutes raisons confondues')
+        + KpiTile('À surveiller', sursis.length, 'accès ouvert mais plus payé')
+        + KpiTile('Appareils liés', liste.reduce((n, l) => n + (l.appareils || 0), 0), 'plafond : 20 par licence')
+        + `</div>`;
+
+      const rows = liste.map(l => {
+        const h = l._h;
+        const cls = h.rank <= 1 ? 'row-risk' : h.cls === 'test' ? 'row-test' : h.cls === 'rev' ? 'row-rev' : '';
+        return `<tr class="${cls}">`
+          + `<td data-label="Santé"><span class="health h-${h.cls}"><span class="hdot"></span>${safeText(h.label)}</span></td>`
+          + `<td data-label="Email">${safeText(l.email || '—')}</td>`
+          + `<td data-label="Clé" class="mono muted">${safeText(l.cle || '')}</td>`
+          + `<td data-label="Statut">${safeText(l.lsStatus || '—')}</td>`
+          + `<td data-label="Motif">${safeText(l.raison || '—')}</td>`
+          + `<td data-label="Créé le">${swpFmtDate(l.creeLe)}</td>`
+          + `<td data-label="Échéance">${swpFmtDate(l.jusquA)}</td>`
+          + `<td data-label="Appareils" class="mono">${safeText(l.appareils || 0)}</td>`
+          + `</tr>`;
+      }).join('');
+      const table = liste.length
+        ? `<div class="table-wrap"><table class="data-table swp-table"><thead><tr><th>Santé</th><th>Email</th><th>Clé</th><th>Statut</th><th>Motif</th><th>Créé le</th><th>Échéance</th><th>Appareils</th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : `<div class="empty">Aucune licence pour le moment — le produit LemonSqueezy est encore en brouillon.</div>`;
+
+      // ⚠️ AUCUNE colonne d'usage ni de dernière activité, contrairement à SubWhisper Pro :
+      // la passerelle PC lit `u:mots:*` / `u:audio:*` mais ne les écrit JAMAIS. Ces
+      // compteurs vaudraient 0 à vie. Une colonne vide se lirait « personne ne s'en
+      // sert » là où la vérité est « on ne mesure pas encore ». Elles reviendront le
+      // jour où la passerelle comptera pour de bon.
+      const note = `<div class="acq-when">Passerelle ${safeText(data.version || '?')} · l'usage par licence n'est pas encore compté côté serveur : aucune colonne d'activité tant que ce sera le cas.</div>`;
+
+      return (alertHtml ? `<section class="section"><div class="alert-list">${alertHtml}</div></section>` : '')
+        + `<section class="section"><div class="section-head"><h2>💶 Revenu &amp; abonnements</h2></div>${money}</section>`
+        + `<section class="section"><div class="section-head"><h2>Parc de licences</h2></div>${parc}</section>`
+        + `<section class="section"><div class="section-head"><h2>Détail des licences · triées par risque</h2></div>${table}</section>`
+        + note;
+    }
+
     // === P3 — Vue StoryVoice (parité stricte avec renderSv, index.html l.2506-2552) ===
     function renderSvView(payload) {
       const data = payload && payload.overview;
@@ -2739,6 +2839,7 @@
       else if (app.key === 'swp') content = renderSwpView(data);
       else if (app.key === 'sv') content = renderSvView(data);
       else if (app.key === 'dk') content = renderDkView(data);
+      else if (app.key === 'dkpc') content = renderDkpcView(data);
       else if (app.key === 'factory') content = renderFactoryView(data);
       else if (app.key === 'studio') content = renderStudioView(data);
       else content = renderPlaceholder(app, data);
