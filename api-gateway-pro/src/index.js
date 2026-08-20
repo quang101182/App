@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.16.0';
+const VERSION = '1.17.0';
 // v1.15.0 (2026-08-03) — Source des visites (ADDITIF) : POST /api/visit accepte `src` et
 //   incremente `stats:visits:<page>:src:<src>:total` ; GET renvoie `by_src` (via KV.list, meme
 //   procede que `by_btn_all`). Ne s'ecrit QUE si `src` est fourni : dk/swp/nf/sv/ncf/tuc ne
@@ -854,6 +854,231 @@ async function handleLemonSqueezyWebhook(request, env, ctx) {
 // Email activation (customer enters email → gets their key)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Webhook Polar (Standard Webhooks) — adaptateur SubWhisper Pro + StoryVoice
+// ═══════════════════════════════════════════════════════════════════════════
+// Pourquoi un ADAPTATEUR et pas un second webhook copié-collé : Polar a son
+// propre vocabulaire de statuts. Le reste du gateway (et le dashboard de
+// monitoring) raisonne sur `lsStatus` avec le vocabulaire LemonSqueezy, et des
+// clés issues de LS vivent encore dans ce KV. On traduit donc ICI, à la
+// frontière, et rien en aval ne change.
+//
+// ⚠️ Le dashboard compte un payant sur `lsStatus === 'active'` STRICT. Écrire
+// un statut Polar brut ('trialing', 'canceled') ferait disparaître des abonnés
+// des compteurs sans que personne ne s'en aperçoive.
+const POLAR_STATUS_TO_INTERNAL = {
+  active: 'active',
+  trialing: 'on_trial',
+  canceled: 'cancelled',
+  past_due: 'past_due',
+  unpaid: 'unpaid',
+  paused: 'paused',
+  incomplete: 'unpaid',
+  incomplete_expired: 'expired',
+};
+
+function polarB64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function polarConstantEquals(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+// Standard Webhooks : contenu signé = `${id}.${timestamp}.${body}`, secret en
+// base64 derrière `whsec_`, en-tête pouvant porter plusieurs `v1,<sig>`.
+async function verifyPolarSignature(body, request, rawSecret) {
+  const id = request.headers.get('webhook-id');
+  const ts = request.headers.get('webhook-timestamp');
+  const header = request.headers.get('webhook-signature');
+  if (!id || !ts || !header) return false;
+
+  // Polar horodate le contenu signé (LemonSqueezy ne le faisait pas) : un rejeu
+  // tardif est refusé d'emblée, pas seulement détecté après coup.
+  const ageS = Math.abs(Date.now() / 1000 - Number(ts));
+  if (!Number.isFinite(ageS) || ageS > 300) return false;
+
+  const secret = rawSecret.startsWith('whsec_') ? rawSecret.slice(6) : rawSecret;
+  const key = await crypto.subtle.importKey(
+    'raw', polarB64ToBytes(secret),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${id}.${ts}.${body}`));
+  const expected = btoa(String.fromCharCode(...new Uint8Array(sig)));
+
+  return header.split(' ')
+    .map((s) => s.split(',')[1] || '')
+    .some((s) => polarConstantEquals(s, expected));
+}
+
+// La clé complète n'est jamais dans le webhook (seulement un `display_key`
+// masqué). On la lit via l'API avec le jeton rangé dans le KV.
+async function fetchPolarLicenseKey(env, licenseKeyId) {
+  const token = await env.PRO_KV.get('cfg:polar_api_key');
+  if (!token) { console.log('[polar] cfg:polar_api_key absent'); return null; }
+  const res = await fetch(`https://api.polar.sh/v1/license-keys/${licenseKeyId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) { console.log(`[polar] license-keys ${res.status}`); return null; }
+  const b = await res.json().catch(() => null);
+  return b?.key || null;
+}
+
+async function handlePolarWebhook(request, env, ctx) {
+  const rawBody = await request.text();
+  const secret = await env.PRO_KV.get('cfg:polar_webhook_secret');
+
+  // Pas de secret = endpoint ouvert. On refuse : cet endpoint crée des licences.
+  if (!secret) return err('webhook not configured (cfg:polar_webhook_secret missing)', 503);
+  if (!await verifyPolarSignature(rawBody, request, secret)) return err('Invalid webhook signature', 401);
+
+  const eventId = request.headers.get('webhook-id');
+  const replayKey = `wh:polar:${eventId}`;
+  if (await env.PRO_KV.get(replayKey)) {
+    return json({ ok: true, action: 'ignored', reason: 'event already processed' });
+  }
+  ctx.waitUntil(env.PRO_KV.put(replayKey, '1', { expirationTtl: 2592000 }));
+
+  let payload;
+  try { payload = JSON.parse(rawBody); } catch { return err('Invalid JSON', 400); }
+
+  const type = payload.type;
+  const data = payload.data || {};
+  const email = String(data.customer?.email || '').toLowerCase();
+
+  // ── StoryVoice : crédits prépayés, achat unique. Le nombre de crédits vient
+  // des MÉTADONNÉES du produit — plus de table d'identifiants codée en dur
+  // comme l'était `LS_VARIANTS`. Changer un pack ne demandera plus de déploiement.
+  if (type === 'order.paid') {
+    const meta = data.product?.metadata || {};
+    if (meta.app !== 'sv') {
+      return json({ ok: true, action: 'ignored', reason: 'order for a non-sv product', app: meta.app || null });
+    }
+    const credits = Number(meta.credits || 0);
+    if (!Number.isFinite(credits) || credits <= 0) {
+      return json({ ok: true, action: 'ignored', reason: 'product has no credits metadata' });
+    }
+    if (!email) return err('No email in webhook payload', 400);
+
+    const emailKey = `email:sv:${email}`;
+    let key = await env.PRO_KV.get(emailKey);
+    let d = key ? await env.PRO_KV.get(`pro:${key}`, 'json') : null;
+    if (!key || !d) {
+      key = generateProKey('sv');
+      d = { email, app: 'sv', plan: 'prepaid', credits: 0, created: new Date().toISOString(), revoked: false };
+      await env.PRO_KV.put(emailKey, key);
+    }
+    d.credits = Math.max(0, Number(d.credits || 0)) + credits;
+    d.lastUsed = new Date().toISOString();
+    d.source = 'polar';
+    if (d.revoked) d.revoked = false; // un nouvel achat réactive
+    await env.PRO_KV.put(`pro:${key}`, JSON.stringify(d));
+
+    let emailQueued = false;
+    if (ctx?.waitUntil) { ctx.waitUntil(sendStoryVoiceKeyEmail({ email, key, credits: d.credits, env })); emailQueued = true; }
+    return json({ ok: true, action: 'sv_credited', email, creditsAdded: credits, balance: d.credits, emailQueued });
+  }
+
+  // ── SubWhisper Pro : la clé est CELLE DE POLAR (activations limitées,
+  // révocation automatique à l'annulation — ce que LemonSqueezy ne faisait pas).
+  // `handleActivate` retrouve la clé par email et n'impose aucun format : rien
+  // à changer côté client.
+  if (type === 'benefit_grant.created') {
+    const expectedBenefit = await env.PRO_KV.get('cfg:polar_swp_benefit_id');
+    if (!expectedBenefit) return json({ ok: true, action: 'ignored', reason: 'cfg:polar_swp_benefit_id not set' });
+    if (String(data.benefit_id || '') !== expectedBenefit) {
+      return json({ ok: true, action: 'ignored', reason: 'benefit of another product' });
+    }
+    if (!email) return err('No email in webhook payload', 400);
+
+    const licenseKeyId = data.properties?.license_key_id;
+    if (!licenseKeyId) return json({ ok: true, action: 'ignored', reason: 'no license_key_id' });
+    const key = await fetchPolarLicenseKey(env, licenseKeyId);
+    if (!key) return err('license key unreadable', 502);
+
+    // 🪤 Un email qui a DÉJÀ une clé n'en reçoit jamais une seconde (doublons
+    // Mark 29/05, thomas_olaf 02/06). On réutilise l'enregistrement existant.
+    const emailKey = `email:swp:${email}`;
+    const previous = (await env.PRO_KV.get(emailKey)) || (await env.PRO_KV.get(`email:${email}`));
+    const d = (previous ? await env.PRO_KV.get(`pro:${previous}`, 'json') : null) || {
+      email, app: 'swp', created: new Date().toISOString(),
+      usage: { transcriptions: 0, translations: 0 }, monthlyUsage: {},
+    };
+    d.app = 'swp';
+    d.plan = d.plan === 'trial' ? 'trial' : (d.plan || 'pro');
+    d.revoked = false;
+    d.source = 'polar';
+    d.polarLicenseKeyId = licenseKeyId;
+    d.subscriptionId = String(data.subscription_id || d.subscriptionId || '');
+
+    await env.PRO_KV.put(emailKey, key);
+    await env.PRO_KV.put(`pro:${key}`, JSON.stringify(d));
+    if (previous && previous !== key) ctx.waitUntil(env.PRO_KV.delete(`pro:${previous}`));
+    if (ctx?.waitUntil) {
+      ctx.waitUntil(sendActivationEmail({ email, key, plan: d.plan, trialEndsAt: d.expiresAt || null, app: 'swp', env }));
+    }
+    return json({ ok: true, action: 'created_or_reactivated', email, app: 'swp' });
+  }
+
+  // ── Suivi d'abonnement : on met à jour l'état, on ne crée jamais de clé ici.
+  if (type.startsWith('subscription.')) {
+    const app = data.product?.metadata?.app;
+    if (app && app !== 'swp') {
+      return json({ ok: true, action: 'ignored', reason: 'subscription of another app', app });
+    }
+    if (!email) return err('No email in webhook payload', 400);
+
+    let key = await env.PRO_KV.get(`email:swp:${email}`);
+    if (!key) key = await env.PRO_KV.get(`email:${email}`);
+    if (!key) return json({ ok: true, action: 'ignored', reason: 'no key for this email' });
+    const d = await env.PRO_KV.get(`pro:${key}`, 'json');
+    if (!d) return json({ ok: true, action: 'ignored', reason: 'key without data' });
+
+    const raw = String(data.status || '');
+    const internal = POLAR_STATUS_TO_INTERNAL[raw];
+    // Un statut que Polar ajouterait demain ne doit pas être écrit tel quel :
+    // il ferait mentir les compteurs. On conserve l'ancien et on le signale.
+    if (!internal) {
+      console.log(`[polar] unknown subscription status "${raw}" — state kept`);
+      return json({ ok: true, action: 'ignored', reason: 'unknown status', status: raw });
+    }
+
+    d.lsStatus = internal;
+    d.source = 'polar';
+    d.plan = internal === 'on_trial' ? 'trial' : 'pro';
+    if (data.trial_end) d.expiresAt = data.trial_end; else if (internal !== 'on_trial') delete d.expiresAt;
+    d.renewsAt = data.current_period_end ?? d.renewsAt ?? null;
+    d.endsAt = data.ends_at ?? d.endsAt ?? null;
+
+    // `cancelled` NE révoque pas : l'accès court jusqu'à la fin de la période payée.
+    await env.PRO_KV.put(`pro:${key}`, JSON.stringify(d));
+    return json({ ok: true, action: 'updated', type, status: internal });
+  }
+
+  // Révocation explicite (remboursement, litige) — là, on coupe.
+  if (type === 'benefit_grant.revoked' || type === 'order.refunded') {
+    if (!email) return json({ ok: true, action: 'ignored', reason: 'no email' });
+    for (const scope of ['swp', 'sv']) {
+      const key = await env.PRO_KV.get(`email:${scope}:${email}`);
+      if (!key) continue;
+      const d = await env.PRO_KV.get(`pro:${key}`, 'json');
+      if (!d) continue;
+      d.revoked = true;
+      d.lastUsed = new Date().toISOString();
+      await env.PRO_KV.put(`pro:${key}`, JSON.stringify(d));
+      return json({ ok: true, action: 'revoked', email, app: scope });
+    }
+    return json({ ok: true, action: 'ignored', reason: 'no key for this email' });
+  }
+
+  return json({ ok: true, action: 'ignored', type });
+}
+
 async function handleActivate(request, env) {
   const body = await request.json().catch(() => null);
   if (!body?.email) return err('email required', 400);
@@ -1039,6 +1264,9 @@ export default {
 
     if (path === '/webhook/lemonsqueezy' && method === 'POST') {
       return handleLemonSqueezyWebhook(request, env, ctx);
+    }
+    if (path === '/webhook/polar' && method === 'POST') {
+      return handlePolarWebhook(request, env, ctx);
     }
 
     // ── Email activation ──────────────────────────────────────────────────
