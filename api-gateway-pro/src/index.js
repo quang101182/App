@@ -25,8 +25,8 @@
  *   POST /api/assemblyai    → Proxy to AssemblyAI API (pro key required)
  *   POST /api/deepseek      → Proxy to DeepSeek API (pro key required)
  *   POST /api/azure         → Proxy to Azure Translator (pro key required)
- *   POST /api/subscribe       → Add email subscriber via LemonSqueezy API
- *   POST /webhook/lemonsqueezy → LemonSqueezy webhook (auto-create/revoke keys)
+ *   POST /api/subscribe       → Add email subscriber (stored in KV)
+ *   POST /webhook/polar       → Polar webhook (émission/révocation de clés)
  *   POST /api/activate        → Activate by email (returns pro key)
  *   POST /admin/keys/set    → Set API keys in KV
  *   POST /admin/keys/list   → List API keys
@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.21.0';
+const VERSION = '1.22.0';
 // v1.15.0 (2026-08-03) — Source des visites (ADDITIF) : POST /api/visit accepte `src` et
 //   incremente `stats:visits:<page>:src:<src>:total` ; GET renvoie `by_src` (via KV.list, meme
 //   procede que `by_btn_all`). Ne s'ecrit QUE si `src` est fourni : dk/swp/nf/sv/ncf/tuc ne
@@ -71,36 +71,6 @@ const PLAN_LIMITS = {
   trial: { transcriptions: 10, translations: 100 },
 };
 const RATE_LIMIT_PER_MIN = 10;
-
-// ── LemonSqueezy product dispatch ───────────────────────────────────────────
-// variant_id → which app handles this product in the gateway.
-// Source of truth: LS API (store 314871). Update when creating/recreating variants.
-// Unhandled variants are acknowledged (200) but ignored — they belong to other services
-// (e.g. VoiceBox has its own bot endpoint) or don't need a gateway key (Prompt Pack).
-const LS_VARIANTS = {
-  '1427150': { app: 'swp', handled: true  }, // SubWhisper Pro   €9/mo
-  '1427188': { app: 'nf',  handled: true  }, // NoteFlowing Pro  €15/mo
-  '1427180': { app: 'vb',  handled: false }, // VoiceBox Pro     €3/mo (handled by bot /lemon)
-  '1427191': { app: 'pp',  handled: false }, // SubWhisper Prompt Pack €19 (one-time, no key)
-  '1803203': { app: 'sv',  handled: true, credits: 300000  }, // StoryVoice Pack Découverte €7.90 (300k crédits voix)
-  '1803132': { app: 'sv',  handled: true, credits: 1000000 }, // StoryVoice Pack Lecteur €24.90 (1M crédits voix)
-  '1803204': { app: 'sv',  handled: true, credits: 3000000 }, // StoryVoice Pack Passionné €64.90 (3M crédits voix)
-};
-
-function extractVariantId(payload) {
-  const a = payload?.data?.attributes || {};
-  const id = a.variant_id
-    || a.first_order_item?.variant_id
-    || a.first_subscription_item?.variant_id
-    || null;
-  return id == null ? null : String(id);
-}
-
-function resolveApp(payload) {
-  const variantId = extractVariantId(payload);
-  const entry = variantId ? LS_VARIANTS[variantId] : null;
-  return { variantId, app: entry?.app || null, handled: !!entry?.handled };
-}
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -489,7 +459,7 @@ function generateProKey(app = 'swp') {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Newsletter subscriber via LemonSqueezy API
+// Newsletter subscriber (stocké en KV)
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function handleSubscribe(request, env) {
@@ -511,7 +481,7 @@ async function handleSubscribe(request, env) {
   const existing = await env.PRO_KV.get(subKey);
   if (existing) return json({ ok: true, message: 'Already subscribed' });
 
-  // Store in KV (LemonSqueezy has no subscriber API — import manually)
+  // Stocké en KV — import manuel vers l'outil d'emailing
   const data = { email, name: body.name || '', source: body.source || 'nocode-flow', date: new Date().toISOString() };
   await env.PRO_KV.put(subKey, JSON.stringify(data));
 
@@ -522,18 +492,6 @@ async function handleSubscribe(request, env) {
   return json({ ok: true, message: 'Subscribed!' });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LemonSqueezy webhook signature verification (HMAC-SHA256)
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function verifyWebhookSignature(rawBody, signature, secret) {
-  if (!secret || !signature) return false;
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(rawBody));
-  const hex = [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('');
-  return timingSafeEqual(hex, signature);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Activation email delivery (Resend HTTPS API) — fire-and-forget from webhook
@@ -713,165 +671,6 @@ async function recordEmailOutcome(env, proKey, res) {
   } catch (e) { console.log('[email] outcome not recorded:', String(e)); }
 }
 
-// LemonSqueezy webhook handler
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function handleLemonSqueezyWebhook(request, env, ctx) {
-  const rawBody = await request.text();
-  const signature = request.headers.get('X-Signature');
-  const secret = await env.PRO_KV.get('cfg:lemonsqueezy_signing_secret');
-
-  // Verify signature if secret is configured
-  if (secret) {
-    if (!await verifyWebhookSignature(rawBody, signature, secret)) {
-      return err('Invalid webhook signature', 401);
-    }
-  }
-
-  let payload;
-  try { payload = JSON.parse(rawBody); } catch { return err('Invalid JSON', 400); }
-
-  const event = payload.meta?.event_name;
-  const attrs = payload.data?.attributes || {};
-  const email = attrs.user_email;
-  const subscriptionId = String(payload.data?.id || '');
-
-  if (!email) return err('No email in webhook payload', 400);
-
-  // Dispatch by LS variant_id. Variants not in LS_VARIANTS are acknowledged but ignored.
-  const route = resolveApp(payload);
-  if (!route.handled) {
-    return json({ ok: true, action: 'ignored', reason: 'variant not handled by gateway', variantId: route.variantId, app: route.app });
-  }
-  const app = route.app;
-  const emailKey = `email:${app}:${email.toLowerCase()}`;
-  const emailLegacyKey = `email:${email.toLowerCase()}`;
-
-  // ── StoryVoice (app 'sv') : achat ONE-TIME de crédits prépayés voix. ISOLÉ de SWP/NF (abonnements).
-  // Seul order_created compte (pas de subscription). Crédite la clé sv_ de l'email (créée si nouvelle). ──
-  if (app === 'sv') {
-    if (event !== 'order_created') {
-      return json({ ok: true, action: 'ignored', reason: 'sv: only order_created credits', event });
-    }
-    const credits = (LS_VARIANTS[route.variantId] && LS_VARIANTS[route.variantId].credits) || 0;
-    let key = await env.PRO_KV.get(emailKey);
-    let data = key ? await env.PRO_KV.get(`pro:${key}`, 'json') : null;
-    if (!key || !data) {
-      key = generateProKey('sv');
-      data = { email: email.toLowerCase(), app: 'sv', plan: 'prepaid', credits: 0, created: new Date().toISOString(), revoked: false };
-      await env.PRO_KV.put(emailKey, key);
-    }
-    data.credits = Math.max(0, Number(data.credits || 0)) + credits;
-    data.lastUsed = new Date().toISOString();
-    if (data.revoked) data.revoked = false; // un nouvel achat réactive
-    await env.PRO_KV.put(`pro:${key}`, JSON.stringify(data));
-    // Livraison du code par email (fire-and-forget, n'impacte pas la réponse webhook ni le crédit).
-    let emailQueued = false;
-    if (ctx && ctx.waitUntil) { ctx.waitUntil(sendStoryVoiceKeyEmail({ email, key, credits: data.credits, env }).then((r) => recordEmailOutcome(env, key, r))); emailQueued = true; }
-    return json({ ok: true, action: 'sv_credited', email, app: 'sv', creditsAdded: credits, balance: data.credits, emailQueued });
-  }
-
-  // subscription_created → create pro key.
-  // order_created is intentionally IGNORED here: LS fires both events for every subscription
-  // purchase (order_created first, then subscription_created ~0.3s later). Handling both
-  // caused a race in KV (eventually consistent) and created duplicate keys for the same email
-  // (Mark 29/05, thomas_olaf 02/06). Subscriptions are the only product type the gateway handles
-  // — one-time purchases (PromptPack) are routed to "ignored" via LS_VARIANTS anyway.
-  if (event === 'order_created') {
-    return json({ ok: true, action: 'ignored', reason: 'order_created handled by subscription_created' });
-  }
-  if (event === 'subscription_created') {
-    const status = attrs.status; // 'active', 'on_trial', 'cancelled', etc.
-    const plan = (status === 'on_trial') ? 'trial' : 'pro';
-    const trialEndsAt = attrs.trial_ends_at || null;
-
-    // Check if email already has a key (app-scoped first, then legacy)
-    let existingKey = await env.PRO_KV.get(emailKey);
-    if (!existingKey) existingKey = await env.PRO_KV.get(emailLegacyKey);
-    if (existingKey) {
-      // Reactivate if revoked
-      const existingData = await env.PRO_KV.get(`pro:${existingKey}`, 'json');
-      if (existingData && existingData.revoked) {
-        existingData.revoked = false;
-        existingData.plan = plan;
-        existingData.lsStatus = status; // v1.6.0 — track real LS status
-        existingData.subscriptionId = subscriptionId;
-        if (trialEndsAt) existingData.expiresAt = trialEndsAt;
-        else delete existingData.expiresAt;
-        await env.PRO_KV.put(`pro:${existingKey}`, JSON.stringify(existingData));
-      }
-      if (ctx?.waitUntil) {
-        ctx.waitUntil(sendActivationEmail({ email: email.toLowerCase(), key: existingKey, plan, trialEndsAt, app, env }).then((r) => recordEmailOutcome(env, existingKey, r)));
-      }
-      return json({ ok: true, action: 'reactivated', email });
-    }
-
-    // Create new pro key
-    const key = generateProKey(app);
-    const data = {
-      email: email.toLowerCase(),
-      plan,
-      app,
-      created: new Date().toISOString(),
-      subscriptionId,
-      lsStatus: status, // v1.6.0 — real LS status ('on_trial', 'active', ...) for honest payer counting
-      usage: { transcriptions: 0, translations: 0 },
-      monthlyUsage: {},
-      revoked: false,
-    };
-    if (trialEndsAt) data.expiresAt = trialEndsAt;
-
-    await env.PRO_KV.put(`pro:${key}`, JSON.stringify(data));
-    await env.PRO_KV.put(emailKey, key);
-
-    if (ctx?.waitUntil) {
-      ctx.waitUntil(sendActivationEmail({ email: email.toLowerCase(), key, plan, trialEndsAt, app, env }).then((r) => recordEmailOutcome(env, key, r)));
-    }
-
-    return json({ ok: true, action: 'created', email, app, plan });
-  }
-
-  // subscription_updated → update plan/status
-  if (event === 'subscription_updated') {
-    let proKey = await env.PRO_KV.get(emailKey);
-    if (!proKey) proKey = await env.PRO_KV.get(emailLegacyKey);
-    if (!proKey) return json({ ok: true, action: 'ignored', reason: 'no key for email' });
-    const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
-    if (!data) return json({ ok: true, action: 'ignored' });
-
-    const status = attrs.status;
-    if (status === 'active') {
-      data.plan = 'pro';
-      data.revoked = false;
-      delete data.expiresAt;
-    } else if (status === 'on_trial') {
-      data.plan = 'trial';
-      if (attrs.trial_ends_at) data.expiresAt = attrs.trial_ends_at;
-    } else if (status === 'cancelled' || status === 'expired' || status === 'unpaid') {
-      data.revoked = true;
-    }
-    data.lsStatus = status; // v1.6.0 — always record the real LS status (incl. past_due, paused)
-    data.subscriptionId = subscriptionId;
-    await env.PRO_KV.put(`pro:${proKey}`, JSON.stringify(data));
-    return json({ ok: true, action: 'updated', email, app, status });
-  }
-
-  // subscription_cancelled / subscription_expired → revoke
-  if (event === 'subscription_cancelled' || event === 'subscription_expired') {
-    let proKey = await env.PRO_KV.get(emailKey);
-    if (!proKey) proKey = await env.PRO_KV.get(emailLegacyKey);
-    if (!proKey) return json({ ok: true, action: 'ignored' });
-    const data = await env.PRO_KV.get(`pro:${proKey}`, 'json');
-    if (data) {
-      data.revoked = true;
-      data.lsStatus = attrs.status || (event === 'subscription_cancelled' ? 'cancelled' : 'expired'); // v1.6.0
-      await env.PRO_KV.put(`pro:${proKey}`, JSON.stringify(data));
-    }
-    return json({ ok: true, action: 'revoked', email, app });
-  }
-
-  return json({ ok: true, action: 'ignored', event, app });
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Email activation (customer enters email → gets their key)
@@ -1316,11 +1115,7 @@ export default {
       });
     }
 
-    // ── LemonSqueezy webhook ─────────────────────────────────────────────
 
-    if (path === '/webhook/lemonsqueezy' && method === 'POST') {
-      return handleLemonSqueezyWebhook(request, env, ctx);
-    }
     if (path === '/webhook/polar' && method === 'POST') {
       return handlePolarWebhook(request, env, ctx);
     }
@@ -1440,54 +1235,6 @@ export default {
         return json({ ok: true, revoked: body.key });
       }
 
-      // Reconcile lsStatus from LemonSqueezy (backfill + on-demand resync).
-      // For each SWP pro key with a numeric subscriptionId, query the LS API and
-      // store the real subscription status. Lets the dashboard tell a genuine
-      // active payer from a past_due (failed payment) or an orphan key whose
-      // subscriptionId isn't a real subscription (e.g. an order_id → 404).
-      if (path === '/admin/swp/sync-ls-status' && method === 'POST') {
-        const lsToken = await env.PRO_KV.get('cfg:lemonsqueezy_api_key');
-        if (!lsToken) return err('cfg:lemonsqueezy_api_key not set in KV', 500);
-        const list = await env.PRO_KV.list({ prefix: 'pro:' });
-        const results = [];
-        for (const k of list.keys) {
-          const data = await env.PRO_KV.get(k.name, 'json');
-          if (!data) continue;
-          const keyName = k.name.replace('pro:', '');
-          const isSwp = data.app === 'swp' || (!data.app && keyName.startsWith('swp_'));
-          if (!isSwp || data.plan !== 'pro') continue;
-          const subId = data.subscriptionId;
-          if (!subId || !/^\d+$/.test(String(subId))) {
-            results.push({ key: keyName, email: data.email, subscriptionId: subId || null, action: 'skipped_no_numeric_sub', lsStatus: data.lsStatus || null });
-            continue;
-          }
-          let lsStatus = null, http = null;
-          try {
-            const res = await fetch(`https://api.lemonsqueezy.com/v1/subscriptions/${subId}`, {
-              headers: { 'Authorization': `Bearer ${lsToken}`, 'Accept': 'application/vnd.api+json' },
-            });
-            http = res.status;
-            if (res.status === 404) {
-              lsStatus = 'not_found'; // subscriptionId is not a real LS subscription (orphan / order_id)
-            } else if (res.ok) {
-              const b = await res.json().catch(() => ({}));
-              lsStatus = (b && b.data && b.data.attributes && b.data.attributes.status) || 'unknown';
-            } else {
-              results.push({ key: keyName, email: data.email, subscriptionId: subId, action: 'ls_http_error', http });
-              continue;
-            }
-          } catch (e) {
-            results.push({ key: keyName, email: data.email, subscriptionId: subId, action: 'exception', error: e.message });
-            continue;
-          }
-          const previous = data.lsStatus || null;
-          data.lsStatus = lsStatus;
-          data.lsStatusCheckedAt = new Date().toISOString();
-          await env.PRO_KV.put(k.name, JSON.stringify(data));
-          results.push({ key: keyName, email: data.email, subscriptionId: subId, previous, lsStatus, http });
-        }
-        return json({ ok: true, checked: results.length, results });
-      }
 
       // Test activation email delivery — bypasses LS webhook signature, calls
       // sendActivationEmail directly so we can validate the real subscription_created
@@ -1579,7 +1326,7 @@ export default {
       if (path === '/admin/sv/overview' && method === 'GET') {
         const list = await env.PRO_KV.list({ prefix: 'pro:' });
         const today = new Date().toISOString().slice(0, 10);
-        // Tarifs packs LemonSqueezy (desc) — pour estimer le revenu à partir des crédits accordés
+        // Tarifs des packs (desc) — pour estimer le revenu à partir des crédits accordés
         const PACKS = [
           { credits: 3000000, eur: 64.90 },
           { credits: 1000000, eur: 24.90 },
