@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.18.0';
+const VERSION = '1.21.0';
 // v1.15.0 (2026-08-03) — Source des visites (ADDITIF) : POST /api/visit accepte `src` et
 //   incremente `stats:visits:<page>:src:<src>:total` ; GET renvoie `by_src` (via KV.list, meme
 //   procede que `by_btn_all`). Ne s'ecrit QUE si `src` est fourni : dk/swp/nf/sv/ncf/tuc ne
@@ -695,6 +695,24 @@ Any question? Just reply to this email.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Trace d'envoi des mails de cle ───────────────────────────────────────────
+// Les envois restent « fire-and-forget » (le webhook ne doit pas echouer parce
+// que Resend est lent), mais leur RESULTAT etait jusqu'ici perdu. Domaine
+// expediteur non verifie, cle revoquee, quota depasse : le client payait, le
+// webhook repondait `ok`, et rien ne le signalait.
+// L'issue est desormais ecrite sur la cle : un mail non parti devient visible.
+async function recordEmailOutcome(env, proKey, res) {
+  try {
+    const d = await env.PRO_KV.get(`pro:${proKey}`, 'json');
+    if (!d) return;
+    d.emailSent = !!(res && res.sent);
+    d.emailAt = new Date().toISOString();
+    if (res && res.reason) d.emailError = res.reason; else delete d.emailError;
+    await env.PRO_KV.put(`pro:${proKey}`, JSON.stringify(d));
+    if (!d.emailSent) console.log(`[email] FAILED for ${d.email} — ${d.emailError}`);
+  } catch (e) { console.log('[email] outcome not recorded:', String(e)); }
+}
+
 // LemonSqueezy webhook handler
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -749,7 +767,7 @@ async function handleLemonSqueezyWebhook(request, env, ctx) {
     await env.PRO_KV.put(`pro:${key}`, JSON.stringify(data));
     // Livraison du code par email (fire-and-forget, n'impacte pas la réponse webhook ni le crédit).
     let emailQueued = false;
-    if (ctx && ctx.waitUntil) { ctx.waitUntil(sendStoryVoiceKeyEmail({ email, key, credits: data.credits, env })); emailQueued = true; }
+    if (ctx && ctx.waitUntil) { ctx.waitUntil(sendStoryVoiceKeyEmail({ email, key, credits: data.credits, env }).then((r) => recordEmailOutcome(env, key, r))); emailQueued = true; }
     return json({ ok: true, action: 'sv_credited', email, app: 'sv', creditsAdded: credits, balance: data.credits, emailQueued });
   }
 
@@ -783,7 +801,7 @@ async function handleLemonSqueezyWebhook(request, env, ctx) {
         await env.PRO_KV.put(`pro:${existingKey}`, JSON.stringify(existingData));
       }
       if (ctx?.waitUntil) {
-        ctx.waitUntil(sendActivationEmail({ email: email.toLowerCase(), key: existingKey, plan, trialEndsAt, app, env }));
+        ctx.waitUntil(sendActivationEmail({ email: email.toLowerCase(), key: existingKey, plan, trialEndsAt, app, env }).then((r) => recordEmailOutcome(env, existingKey, r)));
       }
       return json({ ok: true, action: 'reactivated', email });
     }
@@ -807,7 +825,7 @@ async function handleLemonSqueezyWebhook(request, env, ctx) {
     await env.PRO_KV.put(emailKey, key);
 
     if (ctx?.waitUntil) {
-      ctx.waitUntil(sendActivationEmail({ email: email.toLowerCase(), key, plan, trialEndsAt, app, env }));
+      ctx.waitUntil(sendActivationEmail({ email: email.toLowerCase(), key, plan, trialEndsAt, app, env }).then((r) => recordEmailOutcome(env, key, r)));
     }
 
     return json({ ok: true, action: 'created', email, app, plan });
@@ -909,16 +927,29 @@ async function verifyPolarSignature(body, request, rawSecret) {
   const ageS = Math.abs(Date.now() / 1000 - Number(ts));
   if (!Number.isFinite(ageS) || ageS > 300) return false;
 
-  const secret = rawSecret.startsWith('whsec_') ? rawSecret.slice(6) : rawSecret;
-  const key = await crypto.subtle.importKey(
-    'raw', polarB64ToBytes(secret),
-    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${id}.${ts}.${body}`));
-  const expected = btoa(String.fromCharCode(...new Uint8Array(sig)));
+  // ⚠️ PIEGE PAYE LE 20/08 : Polar S'ECARTE de la spec Standard Webhooks.
+  // La spec signe avec le secret DECODE depuis sa base64 (prefixe `whsec_` retire).
+  // Polar signe avec la CHAINE BRUTE, prefixe COMPRIS, en UTF-8. Suivre la spec
+  // renvoyait 401 sur CHAQUE livraison reelle — invisible au banc maison, qui
+  // forgeait ses signatures avec la meme hypothese que le code : il validait la
+  // croyance, pas la realite. Seul un achat reel l'a revele.
+  // Les deux derivations sont essayees, pour survivre a un futur alignement.
+  const candidates = [
+    new TextEncoder().encode(rawSecret),                                                  // Polar (reel)
+    polarB64ToBytes(rawSecret.startsWith('whsec_') ? rawSecret.slice(6) : rawSecret),      // spec
+  ];
+  const received = header.split(' ').map((s) => s.split(',')[1] || '').filter(Boolean);
 
-  return header.split(' ')
-    .map((s) => s.split(',')[1] || '')
-    .some((s) => polarConstantEquals(s, expected));
+  for (const material of candidates) {
+    let key;
+    try {
+      key = await crypto.subtle.importKey('raw', material, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    } catch { continue; }
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${id}.${ts}.${body}`));
+    const expected = btoa(String.fromCharCode(...new Uint8Array(sig)));
+    if (received.some((s) => polarConstantEquals(s, expected))) return true;
+  }
+  return false;
 }
 
 // La clé complète n'est jamais dans le webhook (seulement un `display_key`
@@ -985,7 +1016,7 @@ async function handlePolarWebhook(request, env, ctx) {
     await env.PRO_KV.put(`pro:${key}`, JSON.stringify(d));
 
     let emailQueued = false;
-    if (ctx?.waitUntil) { ctx.waitUntil(sendStoryVoiceKeyEmail({ email, key, credits: d.credits, env })); emailQueued = true; }
+    if (ctx?.waitUntil) { ctx.waitUntil(sendStoryVoiceKeyEmail({ email, key, credits: d.credits, env }).then((r) => recordEmailOutcome(env, key, r))); emailQueued = true; }
     return json({ ok: true, action: 'sv_credited', email, creditsAdded: credits, balance: d.credits, emailQueued });
   }
 
@@ -1016,6 +1047,12 @@ async function handlePolarWebhook(request, env, ctx) {
     };
     d.app = 'swp';
     d.plan = d.plan === 'trial' ? 'trial' : (d.plan || 'pro');
+    // Meme ordre d'evenements que cote DictoKey PC : `subscription.active` peut
+    // arriver avant que la cle existe, donc `lsStatus` resterait vide. Ici
+    // `validateProKey` ne s'en sert pas (l'acces ne serait pas coupe), mais le
+    // dashboard compte les payants sur `lsStatus === 'active'` STRICT : sans ca,
+    // un vrai payant serait invisible dans les compteurs.
+    if (!d.lsStatus) d.lsStatus = 'active';
     d.revoked = false;
     d.source = 'polar';
     d.polarLicenseKeyId = licenseKeyId;
@@ -1025,7 +1062,7 @@ async function handlePolarWebhook(request, env, ctx) {
     await env.PRO_KV.put(`pro:${key}`, JSON.stringify(d));
     if (previous && previous !== key) ctx.waitUntil(env.PRO_KV.delete(`pro:${previous}`));
     if (ctx?.waitUntil) {
-      ctx.waitUntil(sendActivationEmail({ email, key, plan: d.plan, trialEndsAt: d.expiresAt || null, app: 'swp', env }));
+      ctx.waitUntil(sendActivationEmail({ email, key, plan: d.plan, trialEndsAt: d.expiresAt || null, app: 'swp', env }).then((r) => recordEmailOutcome(env, key, r)));
     }
     return json({ ok: true, action: 'created_or_reactivated', email, app: 'swp' });
   }
