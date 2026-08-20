@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.17.0';
+const VERSION = '1.18.0';
 // v1.15.0 (2026-08-03) — Source des visites (ADDITIF) : POST /api/visit accepte `src` et
 //   incremente `stats:visits:<page>:src:<src>:total` ; GET renvoie `by_src` (via KV.list, meme
 //   procede que `by_btn_all`). Ne s'ecrit QUE si `src` est fourni : dk/swp/nf/sv/ncf/tuc ne
@@ -145,6 +145,11 @@ async function validateProKey(proKey, env) {
   if (data.revoked) return null;
   // Check expiration
   if (data.expiresAt && new Date(data.expiresAt) < new Date()) return null;
+  // v1.18.0 — garde-fou par DATE, indépendant des webhooks. `endsAt` porte la fin
+  // d'accès d'un abonnement résilié : si le webhook de révocation se perd (panne,
+  // signature refusée, worker indisponible), l'accès s'arrête quand même à la date.
+  // Un abonnement sain n'a pas d'`endsAt` — seule une résiliation en pose un.
+  if (data.endsAt && new Date(data.endsAt) < new Date()) return null;
   return data;
 }
 
@@ -1055,9 +1060,23 @@ async function handlePolarWebhook(request, env, ctx) {
     d.renewsAt = data.current_period_end ?? d.renewsAt ?? null;
     d.endsAt = data.ends_at ?? d.endsAt ?? null;
 
-    // `cancelled` NE révoque pas : l'accès court jusqu'à la fin de la période payée.
+    // ── Coupure. Deux temps, et il faut les DEUX :
+    //  • `subscription.canceled` = « ne se renouvellera pas ». L'accès COURT jusqu'à
+    //    la fin de la période déjà payée — on ne révoque pas, on note `endsAt`.
+    //  • `subscription.revoked`  = « l'accès est terminé » (Polar l'émet à échéance).
+    //    Là on révoque pour de bon.
+    // `unpaid` et `incomplete_expired` coupent aussi : plus personne ne paie.
+    // ⚠️ L'ancien code LemonSqueezy révoquait dès `cancelled`, ce qui coupait un
+    // client encore dans son mois payé. Le comportement retenu est celui décidé le
+    // 17/08 pour DictoKey PC (et pour l'Android) : on va au bout du mois payé.
+    if (type === 'subscription.revoked' || internal === 'unpaid' || internal === 'expired') {
+      d.revoked = true;
+    } else if (internal === 'active' || internal === 'on_trial') {
+      d.revoked = false;
+    }
+
     await env.PRO_KV.put(`pro:${key}`, JSON.stringify(d));
-    return json({ ok: true, action: 'updated', type, status: internal });
+    return json({ ok: true, action: 'updated', type, status: internal, revoked: !!d.revoked });
   }
 
   // Révocation explicite (remboursement, litige) — là, on coupe.
