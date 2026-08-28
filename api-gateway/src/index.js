@@ -513,6 +513,14 @@ async function proxyClaude(request, env, path) {
   forwardHeaders.set('x-api-key', apiKey);
   forwardHeaders.set('anthropic-version', request.headers.get('anthropic-version') || '2023-06-01');
 
+  // v1.57 (28/08/2026) — Les cles Anthropic emises depuis aout 2026 sont « identity-linked » :
+  // sans l'en-tete anthropic-workspace-id, l'API repond 400 « ... is required when authenticating
+  // with an identity-linked API key ». L'ID vit dans le KV (CLAUDE_WORKSPACE_ID) et non en dur,
+  // pour qu'une rotation de workspace ne demande pas un redeploiement.
+  // Un client peut le surcharger ; si rien n'est configure, on n'envoie rien (anciennes cles OK).
+  const wsId = request.headers.get('anthropic-workspace-id') || await resolveKey(env, 'CLAUDE_WORKSPACE_ID');
+  if (wsId) forwardHeaders.set('anthropic-workspace-id', wsId);
+
   let upstreamResp = await fetch(upstream, {
     method : request.method,
     headers: forwardHeaders,
