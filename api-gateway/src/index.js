@@ -107,7 +107,89 @@ const AUDIT_TTL_SEC = 30 * 24 * 3600;
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default {
+  // Le vrai routage est dans handleFetch(). Ce wrapper ne fait qu'une chose :
+  // MESURER ce qui passe. Il n'a aucune logique metier, ne peut donc rien casser,
+  // et journalise meme les 500 — c'est justement la qu'on veut une trace.
   async fetch(request, env, ctx) {
+    const t0 = Date.now();
+    let res;
+    try {
+      res = await handleFetch(request, env, ctx);
+    } catch (err) {
+      console.error('[gateway] unhandled (wrapper)', err);
+      res = jsonResponse({ error: 'internal server error' }, 500);
+    }
+    try { logCall(env, ctx, request, res, t0); } catch (e) { /* jamais bloquer sur le journal */ }
+    return res;
+  },
+
+  // ── Cron : filet de securite anti-fuite pod RunPod LTX (toutes les 2 min) ──
+  // Coupe tout pod ltx-gs RUNNING dont le heartbeat est perime (proxy mort / PC en veille).
+  // Independant du PC de Quang -> protege meme app fermee / PC eteint.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runLtxReaper(env).catch(e => console.error('[ltx-reaper] scheduled error', e)));
+  },
+};
+
+/**
+ * Journal des appels — ecrit le 29/08/2026 (P4.1 de ROADMAP-securite-cles-api.md).
+ *
+ * POURQUOI : le 28/08, une cle volee a fait 1200 requetes en 17 minutes chez Anthropic.
+ * Ce worker n'en gardait AUCUNE trace — il a fallu une heure et les analytics Cloudflare
+ * pour seulement l'ecarter des suspects. Un proxy qui depense de l'argent sans journal
+ * est aveugle par construction.
+ *
+ * POURQUOI PAS LE KV : le rate limiter y ecrit deja une fois par requete (~1900
+ * ecritures/jour mesurees le 29/08). Une rafale a 16 req/s le noierait, et le KV n'est
+ * pas fait pour ca. Analytics Engine encaisse le debit, ne consomme aucun quota KV, et
+ * se relit en SQL.
+ *
+ * NE JOURNALISE JAMAIS : ni cle, ni token, ni corps de requete. Seulement QUI, QUOI,
+ * QUAND, D'OU et COMBIEN. L'IP est tronquee (/24, ou /48 en IPv6) : assez pour voir
+ * qu'une rafale vient d'un meme reseau, pas assez pour etre une donnee de trafic.
+ */
+function logCall(env, ctx, request, res, t0) {
+  if (!env.GATEWAY_LOG) return;               // binding absent = silencieux, jamais d'erreur
+  const url = new URL(request.url);
+  const p = url.pathname;
+  // Le bruit de fond n'apprend rien et couterait des points de donnees : /health est
+  // appele par toutes les LED de statut des apps, le cron s'auto-declenche.
+  if (p === '/health' || p === '/favicon.ico') return;
+
+  const ip = request.headers.get('CF-Connecting-IP') || '';
+  const ipNet = ip.includes(':')
+    ? ip.split(':').slice(0, 3).join(':') + '::/48'
+    : ip.split('.').slice(0, 3).join('.') + '.0/24';
+
+  // 'route' = le prefixe stable, pas le chemin complet : /api/claude/v1/messages
+  // et /api/claude/v1/models doivent s'agreger ensemble pour qu'une courbe ait du sens.
+  const seg = p.split('/').filter(Boolean);
+  const route = seg.length >= 2 ? '/' + seg[0] + '/' + seg[1] : p;
+
+  ctx.waitUntil(Promise.resolve().then(() => {
+    env.GATEWAY_LOG.writeDataPoint({
+      blobs: [
+        route,                                                  // 1 /api/claude, /proxy...
+        request.method,                                         // 2
+        String(res.status),                                     // 3
+        (request.headers.get('Origin') || '(aucune)').slice(0, 80),   // 4 quelle app appelle
+        (request.headers.get('CF-IPCountry') || '??'),                // 5 d'ou
+        ipNet,                                                  // 6 reseau, jamais l'IP exacte
+        (request.headers.get('User-Agent') || '').slice(0, 120),      // 7
+        p.slice(0, 120),                                        // 8 chemin complet (diagnostic)
+      ],
+      doubles: [
+        Date.now() - t0,                                        // 1 duree ms
+        res.status >= 400 ? 1 : 0,                              // 2 erreur ? (somme = nb erreurs)
+        res.status === 401 || res.status === 403 ? 1 : 0,        // 3 refus d'auth : le signal d'une cle qui traine
+      ],
+      indexes: [route.slice(0, 32)],                            // echantillonnage groupe par route
+    });
+  }));
+}
+
+async function handleFetch(request, env, ctx) {
+  {
     const url    = new URL(request.url);
     const method = request.method.toUpperCase();
     const path   = url.pathname;
@@ -270,15 +352,8 @@ export default {
       console.error('[gateway] unhandled error', err);
       return jsonResponse({ error: 'internal server error' }, 500);
     }
-  },
-
-  // ── Cron : filet de sécurité anti-fuite pod RunPod LTX (toutes les 2 min) ──
-  // Coupe tout pod ltx-gs RUNNING dont le heartbeat est périmé (proxy mort / PC en veille).
-  // Indépendant du PC de Quang -> protège même app fermée / PC éteint.
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(runLtxReaper(env).catch(e => console.error('[ltx-reaper] scheduled error', e)));
-  },
-};
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /health
