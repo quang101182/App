@@ -564,7 +564,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.29.0-polar';
+    const VERSION = 'v2.30.0-polar';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -1818,7 +1818,13 @@
       swpList.sort((a, b) => (a._h.rank - b._h.rank) || String(b.created || '').localeCompare(String(a.created || '')));
       const real = swpList.filter(c => !swpIsTest(c.email));
       const proNonRevoked = real.filter(c => c.plan === 'pro' && !c.revoked);
-      const payants = proNonRevoked.filter(c => c.lsStatus === 'active');   // 'active' STRICT
+      // v2.30.0 (30/08/2026) — « active » ne suffit plus : la gateway sait desormais dire
+      // si ce statut a ete CONSTATE chez Polar ou seulement SUPPOSE faute d'evenement
+      // (`lsStatusAssumed`). Le 30/08, un essai gratuit etait compte 9 EUR de MRR pour
+      // cette raison exacte. Un chiffre suppose ne doit jamais s'afficher comme un fait.
+      const payants = proNonRevoked.filter(c => c.lsStatus === 'active' && !c.lsStatusAssumed);
+      const payantsSupposes = proNonRevoked.filter(c => c.lsStatus === 'active' && c.lsStatusAssumed);
+      const resilies = real.filter(c => !c.revoked && c.cancelAtPeriodEnd);
       const pastDue = proNonRevoked.filter(c => c.lsStatus === 'past_due' || c.lsStatus === 'unpaid');
       const orphanPro = proNonRevoked.filter(c => c.lsStatus === 'not_found');
       const trialsActifs = real.filter(c => c.plan === 'trial' && !c.revoked);
@@ -1842,11 +1848,30 @@
         alertHtml = Alert('ok', 'Aucun payant à risque', `les ${payants.length} abonnement(s) actif(s) ont une activité récente.`);
       }
 
-      const payantsSub = `${payants.length} abonnement(s) LS « active »`
+      // v2.30.0 — deux avertissements qui ne remplacent pas le bandeau ci-dessus, ils s'y ajoutent.
+      if (payantsSupposes.length > 0) {
+        alertHtml += Alert('attention', `${payantsSupposes.length} statut(s) d'abonnement non confirmé(s)`,
+          `compté(s) « active » sans qu'aucun événement Polar ne l'ait dit → lancer POST /admin/swp/sync-polar-status avant de croire le MRR. Concerné(s) : `
+          + payantsSupposes.slice(0, 3).map(c => c.email).join(', '));
+      }
+      const dups = (data.duplicate_suspects || { by_normalized_email: [], by_ip_hash: [] });
+      const dupGroups = [].concat(dups.by_normalized_email || [], dups.by_ip_hash || [])
+        .filter(g => new Set(g.emails).size > 1);   // deux clés d'un même email = un doublon technique connu, pas un abus
+      if (dupGroups.length > 0) {
+        alertHtml += Alert('attention', `${dupGroups.length} groupe(s) de comptes multiples`,
+          dupGroups.slice(0, 3).map(g => g.emails.join(' + ')).join(' · ')
+          + ' — plusieurs essais ouverts par la même personne. Signalé, jamais bloqué automatiquement.');
+      }
+
+      const payantsSub = `${payants.length} abonnement(s) Polar « active » CONSTATÉ(S)`
+        + (payantsSupposes.length > 0 ? ` · ${payantsSupposes.length} supposé(s), non compté(s)` : '')
+        + (resilies.length > 0 ? ` · ${resilies.length} résilié(s) en cours` : '')
         + (pastDue.length > 0 ? ` · ${pastDue.length} paiement échoué` : '')
         + (orphanPro.length > 0 ? ` · ${orphanPro.length} clé orpheline` : '');
       const money = `<div class="kpi-grid">`
-        + KpiTile('💶 MRR réel', `${mrr} €`, `${payants.length} abonnement(s) Polar « active » × ${SWP_PRICE_EUR}€ (prix liste)`)
+        + KpiTile('💶 MRR réel', `${mrr} €`, `${payants.length} abonnement(s) Polar « active » constaté(s) × ${SWP_PRICE_EUR}€ (prix liste)`
+            + (payantsSupposes.length > 0 ? ` — ${payantsSupposes.length} statut supposé exclu(s)` : '')
+            + (trialsActifs.length > 0 ? ` · ${trialsActifs.length} essai(s) gratuit(s) en cours, hors MRR` : ''))
         + KpiTile('💳 Payants actifs', payants.length, payantsSub)
         + KpiTile('⚠️ À risque', atRisk.length, 'payé jamais utilisé / inactif >14j / paiement en échec')
         + KpiTile('📉 Churn', swpPct(revokedReal.length, real.length), `${revokedReal.length} révoqués / ${real.length} clients réels (cumulé, pas mensuel)`)
@@ -1863,7 +1888,8 @@
       const clients = `<div class="kpi-grid">`
         + KpiTile('Clients réels SWP', real.length, `${cActive} non révoqués · ${revokedReal.length} révoqués · ${nbTest} test/démo exclus`)
         + KpiTile('Trial', trialsActifs.length, 'en période d’essai')
-        + KpiTile('Pro (payant)', payants.length, `${proNonRevoked.length} clé(s) pro non-révoquée(s) · ${payants.length} active(s)`)
+        + KpiTile('Pro (payant)', payants.length, `${proNonRevoked.length} clé(s) pro non-révoquée(s) · ${payants.length} active(s) constatée(s)`
+            + (resilies.length > 0 ? ` · ${resilies.length} résiliation(s) programmée(s)` : ''))
         + KpiTile('Revoked', revokedReal.length, 'annulés / expirés')
         + `</div>`;
 
