@@ -36,7 +36,21 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.22.0';
+const VERSION = '1.23.0';
+// v1.23.0 (2026-08-30) - Exactitude du statut d'abonnement + comptes multiples (ADDITIF).
+//   Constat du 30/08 : le dashboard annoncait « MRR REEL 9 EUR / 1 payant actif » pour une cle
+//   dont AUCUN evenement `subscription.*` n'etait jamais arrive. Cause tracee dans ce fichier :
+//   Polar emet `subscription.*` AVANT `benefit_grant.created`, et le handler jetait l'evenement
+//   (`no key for this email`) ; la cle naissait ensuite avec un `lsStatus` SUPPOSE « active ».
+//   Un chiffre suppose etait donc presente comme un fait. Trois reparations :
+//     (a) un `subscription.*` sans cle est MIS EN ATTENTE (`pendingsub:swp:<email>`, TTL 30j)
+//         et applique a la creation de la cle, au lieu d'etre perdu ;
+//     (b) le defaut optimiste subsiste (le dashboard compte les payants sur `lsStatus ===
+//         'active'` STRICT - l'enlever ferait disparaitre de vrais payants) mais il est
+//         desormais ESTAMPILLE `lsStatusAssumed: true`, donc affichable comme non confirme ;
+//     (c) POST /admin/swp/sync-polar-status interroge Polar et repare l'historique.
+//   S'y ajoute la detection (JAMAIS le blocage) des comptes multiples : email normalise
+//   (alias +tag, points, googlemail) et empreinte reseau HACHEE du premier appel.
 // v1.15.0 (2026-08-03) — Source des visites (ADDITIF) : POST /api/visit accepte `src` et
 //   incremente `stats:visits:<page>:src:<src>:total` ; GET renvoie `by_src` (via KV.list, meme
 //   procede que `by_btn_all`). Ne s'ecrit QUE si `src` est fourni : dk/swp/nf/sv/ncf/tuc ne
@@ -102,6 +116,48 @@ const BOT_UA_RE = /bot\b|crawl|spider|slurp|scrape|headless|phantom|puppeteer|pl
 function isBotUA(ua) {
   if (!ua) return true;            // empty UA = scanner/bot
   return BOT_UA_RE.test(ua);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v1.23.0 - Comptes multiples : DETECTER, jamais bloquer
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Deux adresses ecrites differemment peuvent viser la MEME boite : `a+x@gmail.com`,
+// `a.b@googlemail.com` et `ab@gmail.com` sont un seul destinataire chez Google.
+// Sert UNIQUEMENT au monitoring. Refuser un acces la-dessus couterait un client
+// payant sur un faux positif - ce qu'aucune economie de quota ne justifie.
+function normalizeEmail(raw) {
+  const e = String(raw || '').trim().toLowerCase();
+  const at = e.lastIndexOf('@');
+  if (at < 1) return e;
+  let local = e.slice(0, at);
+  let domain = e.slice(at + 1);
+  const plus = local.indexOf('+');
+  if (plus > 0) local = local.slice(0, plus);
+  if (domain === 'googlemail.com') domain = 'gmail.com';
+  if (domain === 'gmail.com') local = local.replace(/\./g, '');
+  return `${local}@${domain}`;
+}
+
+async function sha256Hex(s) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Empreinte du PREMIER appel d'une cle. On stocke un hache tronque, jamais l'IP :
+// il ne sert qu'a rapprocher deux cles l'une de l'autre. Ecrit dans une cle KV
+// SEPAREE (`fp:`) et non dans `pro:<key>`, qui subit deja un read-modify-write a
+// chaque appel dans `incrementUsage` - deux ecritures concurrentes s'y perdraient.
+async function recordFingerprint(proKey, request, env) {
+  try {
+    if (await env.PRO_KV.get(`fp:${proKey}`)) return;
+    const ip = request.headers.get('CF-Connecting-IP') || '';
+    if (!ip) return;
+    const ipHash = (await sha256Hex(`swp:${ip}`)).slice(0, 16);
+    await env.PRO_KV.put(`fp:${proKey}`, JSON.stringify({ ipHash, at: new Date().toISOString() }));
+  } catch (e) {
+    console.log(`[fp] ${e}`); // le monitoring ne doit jamais casser un appel client
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -851,7 +907,23 @@ async function handlePolarWebhook(request, env, ctx) {
     // `validateProKey` ne s'en sert pas (l'acces ne serait pas coupe), mais le
     // dashboard compte les payants sur `lsStatus === 'active'` STRICT : sans ca,
     // un vrai payant serait invisible dans les compteurs.
-    if (!d.lsStatus) d.lsStatus = 'active';
+    // v1.23.0 - on reprend d'abord un etat arrive TROP TOT (cf `pendingsub:`), au lieu
+    // de supposer. Le defaut optimiste reste en dernier recours, mais estampille.
+    const pendingSub = await env.PRO_KV.get(`pendingsub:swp:${email}`, 'json');
+    if (pendingSub) {
+      const pendingInternal = POLAR_STATUS_TO_INTERNAL[String(pendingSub.status || '')];
+      if (pendingInternal) {
+        d.lsStatus = pendingInternal;
+        d.plan = pendingInternal === 'on_trial' ? 'trial' : 'pro';
+        delete d.lsStatusAssumed;
+        if (pendingSub.trial_end) d.expiresAt = pendingSub.trial_end;
+        d.renewsAt = pendingSub.current_period_end || d.renewsAt || null;
+        d.endsAt = pendingSub.ends_at || d.endsAt || null;
+        d.cancelAtPeriodEnd = !!pendingSub.cancel_at_period_end;
+      }
+      if (ctx?.waitUntil) ctx.waitUntil(env.PRO_KV.delete(`pendingsub:swp:${email}`));
+    }
+    if (!d.lsStatus) { d.lsStatus = 'active'; d.lsStatusAssumed = true; }
     d.revoked = false;
     d.source = 'polar';
     d.polarLicenseKeyId = licenseKeyId;
@@ -876,7 +948,23 @@ async function handlePolarWebhook(request, env, ctx) {
 
     let key = await env.PRO_KV.get(`email:swp:${email}`);
     if (!key) key = await env.PRO_KV.get(`email:${email}`);
-    if (!key) return json({ ok: true, action: 'ignored', reason: 'no key for this email' });
+    if (!key) {
+      // v1.23.0 - LE trou qui a fait mentir le MRR (constate le 30/08/2026).
+      // Polar envoie `subscription.*` AVANT `benefit_grant.created` : jete ici,
+      // l'etat reel (essai ? annule ? fin de periode ?) etait perdu POUR TOUJOURS,
+      // et la cle naissait juste apres avec un `lsStatus` suppose « active ».
+      // On le met en attente ; `benefit_grant.created` l'appliquera.
+      await env.PRO_KV.put(`pendingsub:swp:${email}`, JSON.stringify({
+        status: data.status || null,
+        type,
+        trial_end: data.trial_end || null,
+        current_period_end: data.current_period_end || null,
+        ends_at: data.ends_at || null,
+        cancel_at_period_end: !!data.cancel_at_period_end,
+        receivedAt: new Date().toISOString(),
+      }), { expirationTtl: 2592000 });
+      return json({ ok: true, action: 'deferred', reason: 'no key yet - state stored for the upcoming key', type, status: data.status || null });
+    }
     const d = await env.PRO_KV.get(`pro:${key}`, 'json');
     if (!d) return json({ ok: true, action: 'ignored', reason: 'key without data' });
 
@@ -895,6 +983,11 @@ async function handlePolarWebhook(request, env, ctx) {
     if (data.trial_end) d.expiresAt = data.trial_end; else if (internal !== 'on_trial') delete d.expiresAt;
     d.renewsAt = data.current_period_end ?? d.renewsAt ?? null;
     d.endsAt = data.ends_at ?? d.endsAt ?? null;
+    // v1.23.0 - « actif mais deja resilie » : le dashboard doit pouvoir le dire AVANT
+    // l'echeance, au lieu d'afficher un abonne comme acquis jusqu'au jour ou il
+    // disparait. Ne change aucun acces : l'abonnement court jusqu'a `endsAt`.
+    d.cancelAtPeriodEnd = !!data.cancel_at_period_end;
+    delete d.lsStatusAssumed; // on tient un statut REEL : plus rien de suppose ici
 
     // ── Coupure. Deux temps, et il faut les DEUX :
     //  • `subscription.canceled` = « ne se renouvellera pas ». L'accès COURT jusqu'à
@@ -1254,6 +1347,63 @@ export default {
       }
 
       // SWP-only overview (monitoring dashboard)
+      // v1.23.0 - Verite sur les abonnements Polar, a la demande. Equivalent du
+      // /admin/swp/sync-ls-status de l'ere LemonSqueezy : le webhook tient l'etat en
+      // temps reel, ceci REPARE l'historique (evenement perdu, arrive avant la cle,
+      // ou statut seulement suppose). Bearer admin, pas de body.
+      if (path === '/admin/swp/sync-polar-status' && method === 'POST') {
+        const token = await env.PRO_KV.get('cfg:polar_api_key');
+        if (!token) return err('cfg:polar_api_key missing', 503);
+        const list = await env.PRO_KV.list({ prefix: 'pro:' });
+        const results = [];
+        for (const k of list.keys) {
+          const d = await env.PRO_KV.get(k.name, 'json');
+          if (!d || d.app !== 'swp' || d.source !== 'polar' || !d.subscriptionId) continue;
+          const before = d.lsStatus || null;
+          const res = await fetch(`https://api.polar.sh/v1/subscriptions/${d.subscriptionId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.status === 404) {
+            // Abonnement introuvable chez Polar : cle orpheline. On le DIT, on ne
+            // revoque pas tout seul - une revocation se decide, elle ne se devine pas.
+            d.lsStatus = 'not_found';
+            delete d.lsStatusAssumed;
+            d.lsStatusCheckedAt = new Date().toISOString();
+            await env.PRO_KV.put(k.name, JSON.stringify(d));
+            results.push({ email: d.email, before, after: 'not_found' });
+            continue;
+          }
+          if (!res.ok) {
+            results.push({ email: d.email, before, after: null, error: `http_${res.status}` });
+            continue;
+          }
+          const s = await res.json().catch(() => ({}));
+          const internal = POLAR_STATUS_TO_INTERNAL[String(s.status || '')] || null;
+          if (internal) {
+            d.lsStatus = internal;
+            d.plan = internal === 'on_trial' ? 'trial' : 'pro';
+            delete d.lsStatusAssumed;
+          } else if (s.status) {
+            console.log(`[polar] unknown subscription status "${s.status}" - state kept`);
+          }
+          if (s.current_period_end) d.renewsAt = s.current_period_end;
+          if (s.ends_at) d.endsAt = s.ends_at;
+          if (s.started_at) d.startedAt = s.started_at;
+          if (s.trial_end) d.expiresAt = s.trial_end;
+          d.cancelAtPeriodEnd = !!s.cancel_at_period_end;
+          if (typeof s.amount === 'number') d.amountCents = s.amount;
+          if (s.currency) d.currency = s.currency;
+          d.lsStatusCheckedAt = new Date().toISOString();
+          await env.PRO_KV.put(k.name, JSON.stringify(d));
+          results.push({
+            email: d.email, before, after: d.lsStatus, rawStatus: s.status || null,
+            cancelAtPeriodEnd: !!d.cancelAtPeriodEnd, endsAt: d.endsAt || null,
+            amountCents: d.amountCents ?? null, currency: d.currency || null,
+          });
+        }
+        return json({ ok: true, checked: results.length, results });
+      }
+
       if (path === '/admin/swp/overview' && method === 'GET') {
         const list = await env.PRO_KV.list({ prefix: 'pro:' });
         const mk = monthKey();
@@ -1293,6 +1443,15 @@ export default {
             subscriptionId: data.subscriptionId || null,
             lsStatus: data.lsStatus || null, // v1.6.0 — real LS status for honest payer/MRR classification
             lsStatusCheckedAt: data.lsStatusCheckedAt || null,
+            // v1.23.0 — « active » constate ou seulement suppose ? Un dashboard qui
+            // ne peut pas faire la difference finit par annoncer un MRR invente.
+            lsStatusAssumed: !!data.lsStatusAssumed,
+            cancelAtPeriodEnd: !!data.cancelAtPeriodEnd,
+            renewsAt: data.renewsAt || null,
+            endsAt: data.endsAt || null,
+            amountCents: data.amountCents ?? null,
+            currency: data.currency || null,
+            emailNormalized: normalizeEmail(data.email),
             usageMonth: monthly,
             usageTotal: data.usage || { transcriptions: 0, translations: 0 },
           });
@@ -1302,6 +1461,43 @@ export default {
           const kb = b.lastUsed || b.created || '';
           return kb.localeCompare(ka);
         });
+
+        // v1.23.0 — Comptes multiples. Deux signaux, aucun bloquant :
+        //   • meme adresse une fois normalisee (alias +tag, points, googlemail)
+        //   • meme empreinte reseau au premier appel (hachee, l'IP n'est pas stockee)
+        // Le cas du 30/08 (deux essais le meme jour) n'aurait ete vu QUE par le
+        // second : `@me.com` et `@googlemail.com` sont deux adresses reellement
+        // distinctes. Un seul des deux signaux ne suffit donc pas.
+        const fpList = await env.PRO_KV.list({ prefix: 'fp:' });
+        const fpByKey = {};
+        for (const f of fpList.keys) {
+          const v = await env.PRO_KV.get(f.name, 'json');
+          if (v && v.ipHash) fpByKey[f.name.replace('fp:', '')] = v.ipHash;
+        }
+        for (const c of customers) c.ipHash = fpByKey[c.key] || null;
+
+        const groupBy = (field) => {
+          const buckets = {};
+          for (const c of customers) {
+            const v = c[field];
+            if (!v) continue;
+            (buckets[v] = buckets[v] || []).push(c);
+          }
+          return Object.entries(buckets)
+            .filter(([, arr]) => arr.length > 1)
+            .map(([value, arr]) => ({
+              value,
+              emails: arr.map((c) => c.email),
+              keys: arr.map((c) => c.key),
+              plans: arr.map((c) => c.plan),
+              created: arr.map((c) => c.created),
+              usage: arr.map((c) => c.usageTotal),
+            }));
+        };
+        const duplicateSuspects = {
+          by_normalized_email: groupBy('emailNormalized'),
+          by_ip_hash: groupBy('ipHash'),
+        };
         const [visitsTotalRaw, visitsTodayRaw] = await Promise.all([
           env.PRO_KV.get('stats:visits:swp:total'),
           env.PRO_KV.get(`stats:visits:swp:${today}`),
@@ -1313,6 +1509,13 @@ export default {
           usage_this_month: { transcriptions: mTranscriptions, translations: mTranslations },
           usage_this_month_active: { transcriptions: mTranscriptionsActive, translations: mTranslationsActive },
           limits_per_plan: PLAN_LIMITS,
+          // v1.23.0 — de quoi afficher un chiffre honnete cote dashboard sans
+          // qu'il ait a redecouvrir la regle : un payant CONFIRME est un abonnement
+          // `active`, non revoque, dont le statut n'est pas suppose.
+          payers_confirmed: customers.filter((c) => !c.revoked && c.lsStatus === 'active' && !c.lsStatusAssumed).length,
+          payers_unconfirmed: customers.filter((c) => !c.revoked && c.lsStatus === 'active' && c.lsStatusAssumed).length,
+          cancelling: customers.filter((c) => !c.revoked && c.cancelAtPeriodEnd).length,
+          duplicate_suspects: duplicateSuspects,
           site_visits: {
             total: parseInt(visitsTotalRaw) || 0,
             today: parseInt(visitsTodayRaw) || 0,
@@ -1417,6 +1620,10 @@ export default {
       if (!proKey) return err('X-Pro-Key header required', 401);
       const proData = await validateProKey(proKey, env);
       if (!proData) return err('Invalid, expired, or revoked pro key', 403);
+
+      // v1.23.0 - empreinte (hachee) du premier appel de la cle, pour le seul
+      // monitoring des comptes multiples. Sort immediatement si deja enregistree.
+      if (ctx?.waitUntil) ctx.waitUntil(recordFingerprint(proKey, request, env));
 
       // ── StoryVoice (sv_ keys): fully isolated prepaid-credits path. Returns BEFORE
       // any SubWhisper usage logic runs (checkUsageLimit / PLAN_LIMITS / incrementUsage). ──
