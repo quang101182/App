@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.41</title>
+<title>SubWhisper v9.42</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1127,6 +1127,9 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 .diff-cell .diff-id{font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:2px}
 #diffActions{display:flex;gap:8px;padding:12px 20px;border-top:1px solid var(--border);justify-content:flex-end}
 @media(max-width:600px){#diffModal{inset:0;width:100vw;max-width:100vw;overflow-x:hidden}#diffHdr{padding:10px 12px;gap:6px;flex-wrap:wrap}#diffHdr button{min-width:36px;min-height:36px;font-size:20px;padding:4px 8px}#diffBody{padding:6px}#diffActions{padding:10px 12px;flex-wrap:wrap}.diff-row{flex-direction:column}.diff-cell{border-left:3px solid transparent;font-size:11px;padding:5px 6px;overflow-wrap:break-word;word-break:break-word}.diff-cell.cell-before{border-left-color:var(--accent)!important}.diff-cell.cell-after{border-left-color:var(--accent3)!important}.diff-row-hdr span{font-size:11px;padding:6px 8px;font-weight:700}}
+.pwa-install{display:none;padding:5px 10px;border-radius:9px;border:1px solid color-mix(in srgb,var(--success) 30%,transparent);background:color-mix(in srgb,var(--success) 8%,transparent);color:var(--success);font-size:11px;font-weight:700;font-family:var(--mono);cursor:pointer;transition:all .2s;align-items:center;gap:4px;white-space:nowrap}
+.pwa-install.show{display:inline-flex}
+.pwa-install:hover{background:color-mix(in srgb,var(--success) 15%,transparent);border-color:color-mix(in srgb,var(--success) 50%,transparent);transform:translateY(-1px)}
 </style>
 </head>
 <body>
@@ -1134,7 +1137,8 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.41</span>
+    <span class="ver-badge">v9.42</span>
+    <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app sur l'ecran d'accueil">&#8615; Install</button>
   </div>
   <div class="hdr-r">
     <div id="apiBar" title="Clés API configurées">
@@ -1473,7 +1477,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.41 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.42 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -2427,7 +2431,7 @@ async function transcribeCloud(workerUrl, srcLang, outLang, groqKey, gatewayKey,
 async function pollCloudJob(base, jobId, outLang) {
   var maxPolls = 600; // 30 min max
   var pollCount = 0;
-  // Détection passive d'inactivité serveur (v9.41) — pas de reject auto, warning info only
+  // Détection passive d'inactivité serveur (v9.42) — pas de reject auto, warning info only
   var lastActivityTs = Date.now();
   var lastLogSeen = '';
   var lastProgressSeen = -1;
@@ -4136,7 +4140,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.41',
+    version: 'v9.42',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -6011,6 +6015,36 @@ document.addEventListener('keydown', function(e) {
   }
 });
 // PWA Service Worker
+// PWA install (v9.42) — Chrome n'emet beforeinstallprompt que si le manifeste
+// remplit ses criteres : icones bitmap 192 ET 512. Sans le listener ci-dessous,
+// aucun bouton ne peut apparaitre, meme quand l'app EST installable.
+var _deferredInstall = null;
+
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();               // sinon Chrome affiche sa propre banniere
+  _deferredInstall = e;
+  var b = document.getElementById('pwaInstall');
+  if (b) b.classList.add('show');
+});
+
+window.addEventListener('appinstalled', function() {
+  _deferredInstall = null;
+  var b = document.getElementById('pwaInstall');
+  if (b) b.classList.remove('show');
+});
+
+function installPWA() {
+  if (!_deferredInstall) return;    // le bouton n'est visible que si l'event a eu lieu
+  _deferredInstall.prompt();
+  _deferredInstall.userChoice.then(function(r) {
+    if (r.outcome === 'accepted') {
+      var b = document.getElementById('pwaInstall');
+      if (b) b.classList.remove('show');
+    }
+    _deferredInstall = null;        // l'event n'est utilisable qu'une seule fois
+  });
+}
+
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(function() {});
   navigator.serviceWorker.addEventListener('message', function(e) {
