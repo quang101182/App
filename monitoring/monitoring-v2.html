@@ -564,7 +564,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.31.0-brut';
+    const VERSION = 'v2.32.0-public-since';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -801,7 +801,12 @@
     //    delta, on affiche le cumul seul (un delta faux serait pire que pas de delta).
     const ONDINE_RELEASES_API = 'https://api.github.com/repos/quang101182/ondine-releases/releases';
     const ONDINE_DL_HISTORY_URL = 'data/ondine-downloads.json';
-    const ONDINE_PUBLIC_TAG = 'v0.98.19';   // version ouverte au public le 02/08 — sert de référence d'affichage
+    const ONDINE_PUBLIC_TAG = 'v0.98.19';   // PREMIÈRE version ouverte au public le 02/08 — référence d'affichage
+    const ONDINE_PUBLIC_SINCE = '2026-08-02';
+    // v2.32.0 (04/09) — le chiffre « public » est la SOMME des releases publiées depuis le 02/08, plus un
+    // seul tag. Le 04/09, v0.98.20 puis v0.98.21 sont sorties et le site a pointé sur la 21 le jour même :
+    // avec le tag unique, la tuile se figeait à 63 pendant que les vrais téléchargements partaient ailleurs.
+    const ondineIsPublic = rel => !rel.draft && !rel.prerelease && String(rel.published_at || '').slice(0, 10) >= ONDINE_PUBLIC_SINCE;
     async function fetchOndineDownloads(signal) {
       const rels = await fetch(ONDINE_RELEASES_API, { signal, headers: { Accept: 'application/vnd.github+json' } })
         .then(r => (r.ok ? r.json() : null)).catch(() => null);
@@ -809,22 +814,23 @@
       // On ne compte QUE les installeurs (.exe / .zip portable). Les `.sha256` sont des fichiers de
       // vérification : les additionner gonflerait le total avec des lectures qui ne sont pas des installs.
       const isInstaller = name => /\.(exe|zip)$/i.test(name || '');
-      let total = 0; const byTag = [];
+      let total = 0, publicTotal = 0; const byTag = [], publicTags = [];
       rels.forEach(rel => {
         const n = (rel.assets || []).filter(a => isInstaller(a.name))
           .reduce((sum, a) => sum + (parseInt(a.download_count, 10) || 0), 0);
         total += n;
-        byTag.push({ tag: rel.tag_name, published: rel.published_at, n });
+        const pub = ondineIsPublic(rel);
+        if (pub) { publicTotal += n; publicTags.push(rel.tag_name); }
+        byTag.push({ tag: rel.tag_name, published: rel.published_at, n, pub });
       });
       // Le chiffre MIS EN AVANT est celui de la version publique, PAS le cumul de tous les tags.
       // Le cumul (~70 le 03/08) est domine par les builds de test distribues au cercle restreint en
       // juillet : affiche seul, il repond a une question que personne ne pose et noie celle qui compte
       // — « depuis qu'on a ouvert, est-ce que des gens telechargent ? ». Le cumul reste en note.
-      const latest = byTag.find(t => t.tag === ONDINE_PUBLIC_TAG) || byTag[0] || null;
-      const publicTotal = latest ? latest.n : 0;
+      const latest = byTag.find(t => t.pub) || byTag[0] || null;
       const history = await fetch(`${ONDINE_DL_HISTORY_URL}?t=${Date.now()}`, { signal })
         .then(r => (r.ok ? r.json() : null)).catch(() => null);
-      return { ok: true, total, publicTotal, latest, byTag, history: (history && Array.isArray(history.snapshots)) ? history.snapshots : null };
+      return { ok: true, total, publicTotal, publicTags, latest, byTag, history: (history && Array.isArray(history.snapshots)) ? history.snapshots : null };
     }
     // Delta depuis le dernier instantané STRICTEMENT antérieur à aujourd'hui. Renvoie null si
     // l'historique manque ou ne contient que le jour même : sans point de comparaison, il n'y a
@@ -1035,7 +1041,7 @@
         // `prev: dl` met en regard les deux mesures — un écart fort dit soit des clics bloqués par un
         // adblock (beacon perdu), soit des téléchargements venus d'ailleurs que du site (lien direct).
         { label: '💾 Installeur récupéré (GitHub)', val: dlRealOk ? dlReal.publicTotal : '—', prev: dlRealOk ? dl : null,
-          note: dlRealOk ? `${ONDINE_PUBLIC_TAG} · mesure GitHub · hors winget` : 'GitHub injoignable' },
+          note: dlRealOk ? `depuis ${ONDINE_PUBLIC_TAG} (${dlReal.publicTags.length} version${dlReal.publicTags.length > 1 ? 's' : ''}) · mesure GitHub · hors winget` : 'GitHub injoignable' },
         { label: '🔗 Clic sortant', val: outTotal, prev: vTot, note: 'vers store / app' }
       ];
       const max = Math.max(1, vTot, demo, chat, cta, wait, dlViewTotal, dlViewOffer, dl, outTotal, dlRealOk ? dlReal.publicTotal : 0);
@@ -1087,7 +1093,7 @@
       //     PR passe, ce total devient un plancher, pas un total.
       const dlDeltaTxt = dlDelta ? ` · +${dlDelta.delta} depuis le ${dlDelta.since}` : '';
       const dlNote = dlRealOk
-        ? `sur ${ONDINE_PUBLIC_TAG} (publique) · ${dl} clic(s) · hors winget · ${dlReal.total} tous builds${dlDeltaTxt}`
+        ? `versions publiques depuis le 02/08 (${dlReal.publicTags.length}) · ${dl} clic(s) · hors winget · ${dlReal.total} tous builds${dlDeltaTxt}`
         : `GitHub injoignable — ${dl} clic(s) sur l’installeur (déclaratif)`;
       const dlVal = dlRealOk ? dlReal.publicTotal : dl;
       // v2.20.0 (25/07, demande Quang) : la tuile « Waitlist » (beacons, 4 au
@@ -1104,7 +1110,7 @@
       // compte depuis l'ouverture : combien sur la version RÉELLEMENT publique, par opposition aux builds
       // de test distribués au cercle restreint avant le 02/08.
       const dlByTag = dlRealOk && dlReal.byTag && dlReal.byTag.length
-        ? `<div class="acq-detail">Par version : ${dlReal.byTag.slice(0, 6).map(t => `${safeText(t.tag)}${t.tag === ONDINE_PUBLIC_TAG ? ' (publique)' : ''} <strong>${t.n}</strong>`).join(' · ')}</div>`
+        ? `<div class="acq-detail">Par version : ${dlReal.byTag.slice(0, 6).map(t => `${safeText(t.tag)}${t.pub ? ' (publique)' : ''} <strong>${t.n}</strong>`).join(' · ')}</div>`
         : '';
       const dlLegacy = unlock > 0
         ? `<div class="acq-detail">Historique : ${unlock} code(s) d’accès débloqué(s) du temps où le téléchargement était gelé — étape retirée du funnel le 03/08, le gel a été levé le 02/08.</div>`
