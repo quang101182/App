@@ -564,7 +564,7 @@
   <script>
     'use strict';
 
-    const VERSION = 'v2.32.0-public-since';
+    const VERSION = 'v2.32.1-cache-guard';
     const PRODUCT_COLORS = { dk: 'var(--dk)', swp: 'var(--swp)', sv: 'var(--sv)' };
     const APPS = [
       { key: 'home', name: 'Vue d’ensemble', icon: '⌂', family: 'home', auth: 'none', endpoints: {}, subtitle: 'Synthèse inter-produits — agrégats publics + caches produit déjà chargés.', sections: [] },
@@ -982,6 +982,9 @@
       const donate = g('f:donate');
       const dlReal = (se7 && se7.dlReal) || null;
       const dlRealOk = !!(dlReal && dlReal.ok);
+      // v2.32.1 — un cache persisté d'avant v2.32.0 n'a pas `publicTags` : sans ce garde, TypeError au rendu
+      // et la vue Acquisition restait VIDE (constaté par Quang le 04/09 au soir, juste après le déploiement).
+      const dlPubN = dlRealOk && Array.isArray(dlReal.publicTags) ? dlReal.publicTags.length : 1;
       const dlDelta = ondineDlDelta(dlReal);
       let dlViewTotal = 0; const dlViewParts = [];
       const dlOsParts = [];
@@ -1041,7 +1044,7 @@
         // `prev: dl` met en regard les deux mesures — un écart fort dit soit des clics bloqués par un
         // adblock (beacon perdu), soit des téléchargements venus d'ailleurs que du site (lien direct).
         { label: '💾 Installeur récupéré (GitHub)', val: dlRealOk ? dlReal.publicTotal : '—', prev: dlRealOk ? dl : null,
-          note: dlRealOk ? `depuis ${ONDINE_PUBLIC_TAG} (${dlReal.publicTags.length} version${dlReal.publicTags.length > 1 ? 's' : ''}) · mesure GitHub · hors winget` : 'GitHub injoignable' },
+          note: dlRealOk ? `depuis ${ONDINE_PUBLIC_TAG} (${dlPubN} version${dlPubN > 1 ? 's' : ''}) · mesure GitHub · hors winget` : 'GitHub injoignable' },
         { label: '🔗 Clic sortant', val: outTotal, prev: vTot, note: 'vers store / app' }
       ];
       const max = Math.max(1, vTot, demo, chat, cta, wait, dlViewTotal, dlViewOffer, dl, outTotal, dlRealOk ? dlReal.publicTotal : 0);
@@ -1093,7 +1096,7 @@
       //     PR passe, ce total devient un plancher, pas un total.
       const dlDeltaTxt = dlDelta ? ` · +${dlDelta.delta} depuis le ${dlDelta.since}` : '';
       const dlNote = dlRealOk
-        ? `versions publiques depuis le 02/08 (${dlReal.publicTags.length}) · ${dl} clic(s) · hors winget · ${dlReal.total} tous builds${dlDeltaTxt}`
+        ? `versions publiques depuis le 02/08 (${dlPubN}) · ${dl} clic(s) · hors winget · ${dlReal.total} tous builds${dlDeltaTxt}`
         : `GitHub injoignable — ${dl} clic(s) sur l’installeur (déclaratif)`;
       const dlVal = dlRealOk ? dlReal.publicTotal : dl;
       // v2.20.0 (25/07, demande Quang) : la tuile « Waitlist » (beacons, 4 au
