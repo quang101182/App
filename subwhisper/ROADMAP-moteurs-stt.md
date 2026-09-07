@@ -287,11 +287,17 @@ longs ou défiler trop vite, sans que rien ne le signale.
       figurait pas, alors qu'il a **déjà été cassé** par une mort de modèle (le commentaire
       « l'alias `deepseek-chat` est mort le 24/07 » est dans le fichier). Un portage se
       surveille comme son original.
-- [ ] Porter le moteur retenu (P2-P4) dans `soustitres.py`, **après** validation sur le perso.
-- [ ] Aligner les 3 règles manquantes (`MAX_CHARS`, `MAX_CPS`, `MIN_MERGE`).
-- [ ] Décider du mode de couplage pour la suite : soit une **discipline de propagation écrite**
-      (une seule ligne dans les deux ROADMAP), soit extraire les constantes dans un JSON lu par
-      les deux. **À trancher avec Quang** — la copie manuelle a déjà prouvé qu'elle dérive.
+- [x] Moteur porté dans `soustitres.py` (`transcrire_gemini`, `transcrire_auto`, `_mots_vers_blocs`) — **défaut `croise`** ici, car le mandat était « obtenir automatiquement le meilleur » et il n'y a pas d'utilisateur à surprendre sur un traitement de fond. Surcharge par `TV_MOTEUR_STT`. ⚠️ La bascule sur désaccord n'est **pas** portée, délibérément.
+- [x] Règles alignées. ⚠️ **Rectification de mon diagnostic initial** : ce n'était pas 3 règles manquantes mais **1 absente** (`MAX_CPS`) **et 1 déclarée sans jamais servir** (`FUSION_MINI_MS`) — je les avais cherchées sous leurs noms anglais alors qu'elles sont en français (`MAX_CARACTERES`, `FUSION_MINI_MS`). Les 5 sont désormais appliquées.
+- [x] **Couplage tranché : un garde-fou plutôt qu'une source partagée.**
+      `telegram-video/verif_coherence_subwhisper.py` compare les 8 constantes et les noms de
+      modèles entre les deux implémentations. Un JSON partagé aurait imposé une dépendance
+      réseau à une app volontairement single-file ; un contrôle qui **crie quand ça dérive**
+      donne le même bénéfice sans rien coûter à l'architecture.
+      Il rend **exit 2** s'il ne sait plus lire ses sources — il crie au lieu de rassurer à
+      tort. ✅ Validé par **mutation** (`MAX_CPS` 25→30 ⇒ `DIVERGE`, exit 1).
+      📌 Ce qu'il ne fait PAS, et c'est assumé : il ne compare ni les prompts ni la logique.
+      Une constante se lit sans ambiguïté, une logique non.
 
 ---
 
@@ -302,5 +308,12 @@ longs ou défiler trop vite, sans que rien ne le signale.
 - **07/09/2026** — ✅ **P0 livré et poussé** : `App` **2172fe8** (perso) et `subwhisper-pro`
   **5990429** (Pro, correctif seul). ✅ **P1 livré et poussé** : `llm-cli` **95901ce**,
   validé par mutation.
-- **07/09/2026** — 🛑 P1-bis ouvert : 6 applications hors mandat sont cassées. En attente
-  d'arbitrage de Quang. **Prochaine étape dans le mandat : P2.**
+- **07/09/2026** — 🛑 P1-bis : 6 applications hors mandat cassées → arbitrage Quang « go »,
+  **toutes corrigées** (`App` 6c354da · `noteflowing` 4472790 · `storyvoice` a158a93).
+  ⚠️ 2 faux positifs évités en lisant le code appelant : le TTS de StoryVoice est **vivant**
+  sur Cloud TTS, et `gemini-1.5-flash` n'y était qu'une ligne de tarif.
+- **07/09/2026** — ✅ **P2 à P6 livrés** : SubWhisper **v9.50** (`App` 4834713), puis la
+  recalibration du mode croisé après test sur vraies vidéos (`App` 21b1456).
+- **07/09/2026** — ✅ **P7 livré** : telegram-video **v0.83.0** (commit local **9966dc5** —
+  ce dépôt n'a **pas de remote**, rien à pousser) + garde-fou de cohérence.
+  **La feuille de route est terminée.**
