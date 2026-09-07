@@ -17,7 +17,11 @@ Fly **1.32.0** et le worker Cloudflare sont déployés, et un test sur une vraie
 
 **Les deux réserves ouvertes en fin de soirée ont été mesurées, et toutes deux sont tombées** :
 la progression **arrive bien**, et le déclencheur du mode croisé **ne doit pas être élargi**.
-Détail et chiffres en bas de ce fichier. ⇒ **Aucun chantier ne reste ouvert sur ce chemin.**
+
+🔴 **Puis Quang a lancé une vraie vidéo, et elle s'est bloquée à 35 %.** C'était une régression
+introduite le matin même, sur la voie **multipart** (fichiers > 100 Mo) — celle qu'aucun de mes
+tests n'empruntait. Corrigée en **v9.53** / worker redéployé. Détail : § « Le blocage à 35 % ».
+⇒ **Aucun chantier ouvert, mais lire ce paragraphe avant de retoucher au dispatch.**
 
 ### Historique — l'état au matin du 07/09 (conservé)
 
@@ -233,3 +237,82 @@ Tous lisent le `WORKER_SECRET` sans jamais l'imprimer (`secret.py`).
    que la question portait sur l'état complet. **Tracer le tuple `(status, progress, log)`.**
 2. un job de 53 s est **plus court que le cache** qu'on prétend observer. **Un banc doit durer plus
    longtemps que le phénomène qu'il mesure**, sinon il mesure sa propre fenêtre.
+
+
+---
+
+# 🔴 Le blocage à 35 % — une régression du matin, révélée par le premier usage réel
+
+## Le symptôme, tel que Quang l'a vu
+
+*« Je ne sais pas si c'est bloqué ou si ça avance ; ça en est à l'étape du serveur cloud. »*
+Puis : *« Traitement sur serveur cloud à 35 %. »* — et ça n'a plus bougé.
+
+**Ce n'était ni lent ni capricieux** : `fly logs` montrait que le job avait été **abandonné cinq
+minutes plus tôt**, après 5 × `Groq HTTP 401 Invalid API Key`. Et `/job-status` rendait
+`status: "uploaded"`, sans progression ni erreur : le worker n'avait **jamais** eu de nouvelles
+de Fly. Le navigateur interrogeait donc un état figé, pour toujours.
+
+## La cause — un argument manquant, et deux implémentations au lieu d'une
+
+Le matin (`000ec17`), `dispatchToFly` a gagné un paramètre **`sttEngine` en 5ᵉ position**. Or il
+existait **deux** implémentations du même dispatch vers Fly :
+
+| Chemin | Implémentation | A suivi ? |
+|---|---|---|
+| `handleProcess` (≤ 100 Mo) | un `fetch` **inline**, dupliqué | ✅ oui |
+| `handleUploadComplete` (> 100 Mo) | `dispatchToFly` | ❌ **non** |
+
+Les arguments étant **positionnels**, tout s'est décalé d'un cran chez le second :
+
+```
+sttEngine         <- groqKey (null)
+groqKey           <- l'URL de callback   => Fly présentait une URL à Groq comme clé => 401
+workerCallbackUrl <- la clé du gateway   => les updates partaient dans le vide
+gatewayKey        <- gatewayUrl
+```
+
+⛔ **Rien ne pouvait le signaler** : les deux valeurs mal placées étaient des **chaînes non
+vides**, donc aucun contrôle de présence ne mordait, et `if (groqKey)` était même *vrai* — ce qui
+a fait basculer Fly sur l'appel direct à Groq au lieu du gateway.
+
+## Pourquoi mes six tests de la soirée sont tous passés au vert
+
+`index.html` : `isMultipart = filesize > 100 * 1024 * 1024`. **Tous mes fichiers de test faisaient
+moins de 100 Mo** et empruntaient donc l'autre branche. La branche cassée est précisément celle
+que le poids réserve aux **vraies grosses vidéos** — les seules qui aillent dans le cloud.
+
+📌 **Une branche non testée n'est pas une branche qui marche.** Quand un code choisit son chemin
+sur un **seuil** (taille, durée, format), le banc doit franchir ce seuil, sinon il valide l'autre
+moitié du code en croyant tout valider. Mon corpus était biaisé par sa commodité : des fichiers
+petits, parce qu'ils s'uploadent vite.
+
+## Ce qui a été corrigé — la cause, pas le symptôme
+
+- **`dispatchToFly` prend un objet nommé.** Un appelant qui oublie un champ passe désormais
+  `undefined` sur *ce* champ ; il ne décale plus les suivants. Le mode de panne devient
+  structurellement impossible.
+- **`handleProcess` n'a plus son `fetch` inline** : un seul point de dispatch, donc plus aucune
+  copie à oublier de mettre à jour. C'était ça, la cause profonde.
+- **La voie multipart transmet enfin `sttEngine`** (client *et* worker). ⚠️ À noter : même sans
+  le décalage, le sélecteur de moteur n'avait **aucun effet** sur les fichiers > 100 Mo — le
+  client ne l'envoyait pas dans `/upload-complete`. Le chantier du matin était donc incomplet
+  sur sa moitié la plus utile.
+- **`/upload-complete` marque le job `processing`** et non plus `uploaded` : c'est l'état figé
+  que Quang avait sous les yeux.
+
+## La preuve
+
+Voie multipart, 363 Mo / 22 min, mode croisé :
+
+```
+presign multipart OK · 4 parties
+/upload-complete -> 200 {"status":"processing"}
+[Fly] Moteur STT = croise -> chunks de 11.0 Mo (360s) · 4 chunk(s)
+[Fly] Chunk 0..3 : 11, 24, 29, 30 segments reçus de Gemini
+[Fly] SRT assemblé: 5148 caractères, 94 segments · Pipeline terminé avec succès
+done en 80 s · zéro 401
+```
+
+`harness/test_multipart.py` couvre désormais cette branche, et **refuse de tourner sur un fichier
+de moins de 100 Mo** — un banc qui ne franchit pas le seuil qu'il prétend tester ne prouve rien.
