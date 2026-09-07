@@ -54,6 +54,32 @@ const GROQ_MIN_INTERVAL_MS = 4000;
 const CHUNK_MAX_BYTES = Math.floor((24 * 1024 * 1024 - 44) / 2) * 2; // ~24MB WAV - 44 bytes header
 const CHUNK_DUR_SEC = CHUNK_MAX_BYTES / 32000; // durée en secondes du chunk PCM
 
+// ── Limite propre a Gemini, MESUREE le 07/09/2026 (cote telegram-video) ──────
+// Gemini recoit l'audio en BASE64 dans un corps JSON (voir transcribeWithGemini),
+// ce qui gonfle la charge d'un tiers, et l'API refuse au-dela d'environ 16 Mo de
+// base64. Mesure par dichotomie sur de vraies tranches :
+//     11,4 Mo (base64 15,3) -> OK en 100 s
+//     13,4 Mo (base64 17,8) -> HTTP 400
+//     23,7 Mo (base64 31,5) -> HTTP 400   <- c'est le chunk standard de 24 Mo
+// Autrement dit : sans cette limite, TOUS les chunks de ce serveur partaient en
+// 400 cote Gemini. Le mode croise les rattrapait (bascule sur Groq), donc rien
+// ne cassait visiblement — mais Gemini n'aurait alors JAMAIS servi sur le chemin
+// cloud, c'est-a-dire precisement la ou il devait servir.
+// Groq, lui, accepte 25 Mo : sa limite ne bouge pas.
+// 11 Mo de PCM 16 kHz mono = ~5 min 45 d'audio, base64 ~14,7 Mo.
+// 📌 Alternative non retenue (scope) : reencoder le chunk en mp3 pour Gemini —
+// ffmpeg est present ici, cela permettrait de garder des chunks longs. A garder
+// en tete si le nombre d'appels devient un probleme.
+const CHUNK_MAX_BYTES_GEMINI = Math.floor((11 * 1024 * 1024) / 2) * 2;
+
+function moteurUtiliseGemini(sttEngine) {
+  const m = (sttEngine || 'groq').toLowerCase();
+  return m === 'gemini' || m === 'croise';
+}
+function chunkMaxBytesPour(sttEngine) {
+  return moteurUtiliseGemini(sttEngine) ? CHUNK_MAX_BYTES_GEMINI : CHUNK_MAX_BYTES;
+}
+
 // Groq
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_MODEL = 'whisper-large-v3-turbo';
@@ -236,7 +262,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.31.0'
+    version: '1.32.0'
   });
 });
 
@@ -629,6 +655,14 @@ async function processJob(job) {
 // ---------------------------------------------------------------------------
 
 async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, sttEngine, groqKey, gatewayKey, gatewayUrl, workerCallbackUrl, workerSecret }) {
+  // La taille de decoupe depend du MOTEUR : Gemini refuse au-dela de ~16 Mo de
+  // base64 (cf. CHUNK_MAX_BYTES_GEMINI). Sans ca, tous les chunks partaient en 400.
+  const chunkMax = chunkMaxBytesPour(sttEngine);
+  const chunkDur = chunkMax / 32000;
+  const nomMoteur = moteurUtiliseGemini(sttEngine)
+    ? ((sttEngine || '').toLowerCase() === 'croise' ? 'Gemini+Groq (croise)' : 'Gemini')
+    : 'Groq Whisper';
+  console.log(`[${jobId}] Moteur STT = ${sttEngine || 'groq'} -> chunks de ${(chunkMax / 1024 / 1024).toFixed(1)} Mo (${chunkDur.toFixed(0)}s)`);
   return new Promise((resolve, reject) => {
     const ffmpeg = spawn('ffmpeg', ffmpegArgs, {
       stdio: ['ignore', 'pipe', 'pipe']
@@ -663,7 +697,7 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, sttEngine, groq
           // Note: en mode pipe (pipe:1), FFmpeg ne peut pas seek-back pour écrire la vraie taille
           // → dataSize est souvent 0 ou un placeholder. On affiche "?" si < 32000 bytes (~1s)
           const dataValid = dataSize > 32000 && dataSize < 0x7FFFFFFF;
-          const estimatedChunks = dataValid ? Math.ceil(dataSize / CHUNK_MAX_BYTES) : '?';
+          const estimatedChunks = dataValid ? Math.ceil(dataSize / chunkMax) : '?';
           const estimatedMin = dataValid && bytesPerSec > 0 ? (dataSize / bytesPerSec / 60).toFixed(1) : '?';
           updateWorker(workerCallbackUrl, workerSecret, {
             jobId,
@@ -693,7 +727,7 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, sttEngine, groq
 
       // Découper en chunks et transcrire séquentiellement
       try {
-        const totalChunks = Math.ceil(pcmAccum.length / CHUNK_MAX_BYTES);
+        const totalChunks = Math.ceil(pcmAccum.length / chunkMax);
         console.log(`[${jobId}] ${totalChunks} chunk(s) à transcrire séquentiellement`);
 
         const allSegments = [];
@@ -701,8 +735,8 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, sttEngine, groq
         let lastGroqCallTime = 0;
 
         for (let i = 0; i < totalChunks; i++) {
-          const start = i * CHUNK_MAX_BYTES;
-          const end = Math.min(start + CHUNK_MAX_BYTES, pcmAccum.length);
+          const start = i * chunkMax;
+          const end = Math.min(start + chunkMax, pcmAccum.length);
           const pcmChunk = pcmAccum.slice(start, end);
           const chunkDurationSec = pcmChunk.length / 32000;
 
@@ -717,13 +751,13 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, sttEngine, groq
             await sleep(wait);
           }
 
-          const offsetSec = i * CHUNK_DUR_SEC;
+          const offsetSec = i * chunkDur;
           const progress = Math.min(85, 20 + Math.round((i / totalChunks) * 65));
 
           await updateWorker(workerCallbackUrl, workerSecret, {
             jobId,
             progress,
-            log: `🎯 Chunk ${i + 1}/${totalChunks} → Groq Whisper (${formatTime(offsetSec)} → ${formatTime(offsetSec + chunkDurationSec)})...`,
+            log: `🎯 Chunk ${i + 1}/${totalChunks} → ${nomMoteur} (${formatTime(offsetSec)} → ${formatTime(offsetSec + chunkDurationSec)})...`,
             status: 'processing'
           }).catch(() => {});
 
@@ -3537,8 +3571,9 @@ app.listen(PORT, () => {
   console.log(`[SubWhisper FFmpeg Server v1.30.0] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
-  console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM)`);
-  console.log(`  CHUNK_DUR_SEC = ${CHUNK_DUR_SEC.toFixed(1)} secondes`);
+  console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM) [Groq]`);
+  console.log(`  CHUNK_DUR_SEC = ${CHUNK_DUR_SEC.toFixed(1)} secondes [Groq]`);
+  console.log(`  CHUNK_MAX_BYTES_GEMINI = ${CHUNK_MAX_BYTES_GEMINI} bytes (${(CHUNK_MAX_BYTES_GEMINI / 1024 / 1024).toFixed(1)} MB PCM, ${(CHUNK_MAX_BYTES_GEMINI / 32000).toFixed(0)}s) [Gemini/croise]`);
   console.log(`  GROQ_MODEL = ${GROQ_MODEL}`);
   console.log(`  Node.js: ${process.version} — FormData natif: ${typeof FormData !== 'undefined' ? 'OUI' : 'NON'}`);
 });
