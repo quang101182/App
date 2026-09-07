@@ -15,9 +15,9 @@ Fly **1.32.0** et le worker Cloudflare sont déployés, et un test sur une vraie
 | `gemini` | 3 × 11 Mo | 22 | 1263 car | 63,7 s | **0** |
 | `croise` | 3 × 11 Mo | 22 | 1249 car | 63,7 s | **0** |
 
-Deux choses restent ouvertes, elles sont détaillées en bas de ce fichier :
-🔴 **la progression n'atteint jamais le navigateur** (mesuré) — et
-🟠 **Gemini rate ~60 % des répliques sur ce type d'audio**, sans que le mode croisé le rattrape.
+**Les deux réserves ouvertes en fin de soirée ont été mesurées, et toutes deux sont tombées** :
+la progression **arrive bien**, et le déclencheur du mode croisé **ne doit pas être élargi**.
+Détail et chiffres en bas de ce fichier. ⇒ **Aucun chantier ne reste ouvert sur ce chemin.**
 
 ### Historique — l'état au matin du 07/09 (conservé)
 
@@ -115,8 +115,8 @@ Le même fichier en `groq` donne bien `2 chunk(s)` de 24 Mo : la borne suit le m
    EN+FR), les 3 modes, chemin cloud complet (presign → R2 → `/process` → poll `/job-status`).
    - ✅ `segments reçus de Gemini` bien présent dans `fly logs`, sur les 3 chunks ;
    - ✅ **aucun HTTP 400** ;
-   - ❌ **le log client ne nomme PAS le moteur** — pour une raison sans rapport avec le moteur :
-     **aucun log intermédiaire n'atteint le navigateur**. Voir la section rouge en bas.
+   - ✅ **le log client nomme bien le moteur** — vérifié sur un job long, le navigateur reçoit
+     `53% · 🎯 Chunk 5/8 → Gemini+Groq (croise) (24m01s → 30m02s)`.
 
 ## Deux autres choses réparées le 07/09 sur ce chemin (déjà poussées)
 
@@ -142,65 +142,94 @@ Feuille de route complète du chantier : `ROADMAP-moteurs-stt.md` (même dossier
 
 ---
 
-# 🔴 Ce que le test a révélé, et qui n'était pas dans le périmètre
+# ✅ Les deux réserves, mesurées et refermées le 07/09 au soir
 
-## 1. La progression n'atteint JAMAIS le navigateur (mesuré, pas supposé)
+Les deux points que j'avais ouverts en fin de journée étaient **l'un faux, l'autre à ne pas
+corriger**. Ils sont conservés ici avec ce qui les a tranchés, pour que personne ne les rouvre.
 
-**Le symptôme** : pendant les 53 s de traitement, le client ne voit **rien**. Mesure faite en
-traçant l'état complet renvoyé par `/job-status`, et pas seulement le champ `log` :
+## 1. « La progression n'atteint jamais le navigateur » → ❌ FAUX, c'était mon échantillon
+
+**Ce que j'avais écrit** : le client ne voit rien pendant tout le traitement, il faudrait changer
+le transport d'état (Durable Object ou poll direct sur Fly).
+
+**Ce que la mesure a montré** : sur un job long, la progression **arrive**, et elle nomme le
+moteur. Relevé réel sur 43 min d'audio (`banc_43min.py`) :
 
 ```
-[  0.2s] ('processing', None, None)
-[ 52.9s] ('done', 100, 'Transcription terminée.')
+[   0.6s] None% | None
+[  53.5s]  53% | 🎯 Chunk 5/8 → Gemini (24m01s → 30m02s)...
+[  96.3s] 100% | Transcription terminée.
 ```
 
-Rien entre les deux. Or Fly a bien émis au moins cinq mises à jour (`Audio…`, `Chunk 1/3 → …`,
-2/3, 3/3, fin), et **aucune n'a échoué** : `fly logs` ne contient aucun `[updateWorker] Callback
-HTTP` ni `Erreur callback`. Les écritures partent, le worker répond 200.
+**Mon erreur de raisonnement** : mon premier test durait **53 s**, soit moins que le TTL du cache
+de lecture KV (~60 s). Dans ce régime — et seulement dans celui-là — on ne voit effectivement
+rien. J'en avais conclu, à tort, que rien ne passait *jamais*, et j'avais extrapolé « une barre
+immobile pendant vingt minutes sur une vidéo de 2 h ». **C'est l'inverse** : plus le job est long,
+plus il reçoit de mises à jour.
 
-**Où ça se perd** : `handleJobDone` écrit l'état dans **Cloudflare KV**, et `handleJobStatus`
-le relit avec `env.JOB_KV.get(key)`. KV est un cache de lecture à l'edge : une valeur relue en
-boucle depuis le même POP reste figée le temps de son TTL. Un job de 53 s se termine donc
-**avant** que la moindre mise à jour devienne visible.
+📌 **Ce que Quang a corrigé, et il avait raison** : *« l'outil a toujours fonctionné avant, même
+sur une vidéo de 2 h voire 3 h »*. Un outil qui marche depuis des mois est une donnée ; une mesure
+qui semble dire le contraire doit d'abord être suspectée, elle.
 
-⛔ **Ce n'est pas réglable en restant sur KV** : le `cacheTtl` de KV a un **plancher de 60 s**,
-soit plus long que le job entier. Il faut changer de transport — Durable Object, ou faire poller
-le client directement sur Fly.
+**Le fait exact, à retenir** : la progression a une **granularité d'environ 45 à 55 s** (écarts
+mesurés : 52,8 · 42,9 s), imposée par le cache KV dont le `cacheTtl` a un plancher de 60 s. Un
+job de 43 min d'audio (96 s de traitement) donne 3 mises à jour. **Ce n'est pas un blocage, c'est
+une cadence** — et elle n'a jamais gêné personne.
 
-📌 **Pourquoi ça compte plus qu'il n'y paraît** : c'est la moitié invisible du bug du 07/09.
-La v9.51 a réparé la *détection* d'un job mort (404 → rejet en 3 s). Mais le **silence** de
-l'interface pendant tout un traitement n'a jamais été causé par le job mort : il est structurel.
-Sur une vidéo de 2 h, l'utilisateur regarde une barre immobile pendant vingt minutes.
+⇒ **Rien à corriger.** Rendre la progression fluide supposerait de faire relayer l'état par Fly
+en direct : du confort, pour un défaut que l'usage réel n'a jamais fait remonter.
 
-🛑 **Non corrigé volontairement** — changer le transport d'état est une décision d'architecture,
-hors du mandat « déployer et valider le choix de moteur ». **En attente d'arbitrage de Quang.**
+## 2. « Le mode croisé a une maille trop large » → ⛔ VRAI, mais NE PAS le corriger
 
-## 2. Sur ce type d'audio, Gemini rate ~60 % des répliques — et le croisé ne le rattrape pas
+L'observation de départ était juste : le croisé ne bascule que si Gemini rend **totalement vide**,
+donc un chunk simplement *lacunaire* passe pour un succès. J'allais élargir le déclencheur avec un
+ratio Gemini/Groq. **La calibration l'interdit.**
 
-Sur la même vidéo : **Groq 56 segments, Gemini 22**. Le mode `croise` rend exactement le même
-résultat que Gemini seul (22 segments) et **n'a basculé aucune fois**.
+Mesure sur 7 extraits réels, 3 régimes, chunks de 6 min, les deux moteurs appelés par les mêmes
+endpoints que Fly (`calibrer_croise.py`) — ratio de **caractères** transcrits :
 
-C'est **conforme au code**, et c'est précisément le point : le croisé ne bascule que si Gemini
-rend **totalement vide**. Un chunk où Gemini rend *2 segments au lieu de 12* passe pour un succès.
-Ici les chunks 0 et 1 portent un contenu très comparable (les mêmes clips, répétés) et rendent
-**2** contre **12** segments : Gemini est instable, jamais muet, donc jamais rattrapé.
+| ratio | extrait | régime |
+|---|---|---|
+| **0,00** | cjk-2 | dialogue CJK réel *(Gemini muet)* |
+| 0,37 | cjk-3 | dialogue CJK réel |
+| 0,50 | cjk-1 | dialogue CJK réel |
+| 0,78 | perso-2 | parole spontanée bruitée |
+| 0,99 | perso-1 | parole spontanée bruitée |
+| 1,03 | cjk-4 | dialogue CJK réel |
+| **1,15** | clips-1 | faible parole — *Gemini fait MIEUX que Groq* |
 
-⚠️ Le corpus est le régime défavorable déjà documenté dans la ROADMAP (« audio à faible parole
-articulée », Gemini muet 9/40) : clips courts, musique, répliques éparses. **Ce n'est pas une
-contradiction des mesures de la campagne**, qui portaient sur du dialogue continu japonais et
-chinois. Mais ça montre que le filet a une maille trop large : *muet* est un cas particulier de
-*lacunaire*, et seul le cas particulier est couvert.
+⛔ **Le ratio ne sépare rien.** Il va de **0,00 à 1,03 à l'intérieur du seul régime CJK**. Un seuil
+à 0,60 ferait basculer `cjk-1` et `cjk-3` sans qu'aucune mesure ne dise que Gemini y a tort — il
+peut simplement être plus concis là où Whisper se répète. Pire : le régime que je croyais
+défavorable à Gemini (`clips-1`) est celui où il gagne.
 
-🛑 **Non corrigé volontairement** : élargir le déclencheur (p. ex. « Gemini rend moins de N % des
-segments de Groq ») obligerait à faire tourner les deux moteurs systématiquement et à recalibrer
-sur corpus — exactement le genre de seuil dont le 07/09 a montré qu'il ne se transporte pas d'un
-corpus à l'autre. **À décider, pas à improviser.**
+⚠️ **Le même contenu peut donner deux ratios opposés selon le découpage** : les clips YouCut
+donnent **0,42** en concaténation de 15 min et **1,15** sur un extrait isolé. Une grandeur aussi
+instable ne peut pas piloter une bascule.
 
-## Le harness de test, réutilisable
+📌 **Deuxième fois en une journée qu'un seuil comparatif entre deux moteurs échoue.** Le 07/09 au
+matin, c'était le seuil de *désaccord textuel* à 30 % ; le soir, le ratio de *volume*. Les deux
+paraissaient nets sur un corpus, aucun ne s'est transporté. ⇒ voir `feedback_seuil_comparatif_deux_moteurs.md`.
 
-`test_cloud.py` (scratchpad de session) rejoue le chemin cloud complet hors navigateur :
-presign → PUT R2 → `POST /process` avec `sttEngine` → poll `/job-status`. Il lit le
-`WORKER_SECRET` sans jamais l'imprimer.
-🪤 **Piège de mesure payé ici** : sa première version ne traçait que le champ `log`, et faisait
-donc conclure « aucun log » alors que la vraie question était l'état complet. **Tracer le tuple
-`(status, progress, log)`**, jamais un seul champ — sinon on mesure son propre harness.
+✅ **Le déclencheur actuel est le bon, et la mesure le valide** : `cjk-2` rend un ratio de 0,00,
+c'est-à-dire exactement le cas « Gemini muet » que le croisé attrape déjà. Le seul signal fiable
+est **binaire** (vide / pas vide), et il est en place.
+
+⇒ **Ne pas rouvrir ce point.** Le croisé restera imparfait sur les chunks lacunaires : c'est un
+choix mesuré, pas un oubli. Quiconque veut le rouvrir doit d'abord produire un discriminant qui
+sépare sur les 7 points ci-dessus.
+
+## Les harnesses, réutilisables
+
+Dans le scratchpad de session, versionnables si besoin :
+- `test_cloud.py` — rejoue le chemin cloud complet hors navigateur (presign → R2 → `/process` → poll).
+- `banc_43min.py` — le même audio dans les 3 moteurs + cadence réelle des mises à jour reçues.
+- `calibrer_croise.py` — appelle Groq et Gemini sur les mêmes chunks, rend le tableau de ratios.
+
+Tous lisent le `WORKER_SECRET` sans jamais l'imprimer (`secret.py`).
+
+🪤 **Piège de mesure payé deux fois ce soir, à ne pas repayer** :
+1. la première version de `test_cloud.py` ne traçait que le champ `log` — d'où « aucun log » alors
+   que la question portait sur l'état complet. **Tracer le tuple `(status, progress, log)`.**
+2. un job de 53 s est **plus court que le cache** qu'on prétend observer. **Un banc doit durer plus
+   longtemps que le phénomène qu'il mesure**, sinon il mesure sa propre fenêtre.

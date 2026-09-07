@@ -191,13 +191,16 @@ Erreur moyenne **3,4 %** contre 6,3 % (Groq seul) et 5,3 % (Gemini seul) → **b
       silencieuse.
 - [ ] ⚠️ Réserve à garder en tête : **une seule hallucination observée** sur 60 phrases. La
       séparation est nette mais le détecteur n'est validé que sur un cas positif.
-- 🟠 **(constaté v9.52 / Fly 1.32.0, 07/09 au soir)** Le filet a une **maille trop large** :
-      il ne se déclenche que si Gemini rend **totalement vide**. Mesuré sur une vidéo de
-      14 min 47 à faible parole articulée : **Groq 56 segments, Gemini 22**, et le mode
-      `croise` rend les mêmes 22 — **zéro bascule**, parce qu'aucun chunk n'était vide.
-      *Muet* est un cas particulier de *lacunaire*, et seul le cas particulier est couvert.
-      🛑 Élargir le déclencheur = refaire tourner les deux moteurs systématiquement + recalibrer
-      sur corpus. **En attente d'arbitrage**, cf `HANDOFF-moteur-cloud.md` § 2.
+- ✅ **QUESTION FERMÉE PAR LA MESURE (07/09 au soir) — ne pas élargir le déclencheur.**
+      Le filet ne se déclenche que si Gemini rend **totalement vide**, et j'ai voulu l'élargir
+      avec un ratio Gemini/Groq. **La calibration l'interdit** : sur 7 extraits réels de 3 régimes,
+      le ratio de caractères va de **0,00 à 1,03 à l'intérieur du seul régime CJK**, et le régime
+      que je croyais défavorable à Gemini est celui où il **gagne** (1,15). Le même contenu donne
+      **0,42 ou 1,15** selon le découpage. ⇒ aucun seuil ne sépare, tout seuil ferait basculer à
+      tort. La mesure **valide le déclencheur actuel** : l'extrait muet ressort à **0,00**, pile
+      le cas déjà couvert. Tableau complet : `HANDOFF-moteur-cloud.md` § 2.
+      📌 **Deuxième échec d'un seuil comparatif dans la même journée** (après le désaccord à 30 %
+      retiré le matin) → règle transverse : `feedback_seuil_comparatif_deux_moteurs.md`.
 
 ## P5 — Vue RICH oui, diarisation NON (arbitrage Quang, 07/09)
 
@@ -331,8 +334,11 @@ longs ou défiler trop vite, sans que rien ne le signale.
     n'aurait jamais servi sur ce chemin — le mode croisé l'aurait masqué en basculant sur Groq.
   - ❌ **Le redémarrage Fly n'était pas un OOM** : c'est l'auto-shutdown à 30 min, `exit code 0`.
     L'hypothèse « passer à 4 Go » était fausse et n'a pas été appliquée.
-  - 🔴 **Découverte hors périmètre : la progression n'atteint jamais le navigateur.** L'état
-    passe par Cloudflare KV, dont le cache de lecture a un plancher de 60 s — plus long que le
-    job lui-même. `('processing', None, None)` puis directement `('done', 100)`. Structurel,
-    **non corrigé**, en attente d'arbitrage : cf `HANDOFF-moteur-cloud.md` § 1.
-  **La feuille de route est terminée ; les deux points ouverts sont dans le HANDOFF.**
+  - ❌ **Fausse alerte que j'ai levée puis démentie moi-même** : j'ai annoncé que « la progression
+    n'atteint jamais le navigateur ». **C'était mon échantillon, pas l'outil** — mon banc durait
+    53 s, soit moins que le cache KV (~60 s) qu'il prétendait observer. Sur un job long la
+    progression **arrive** et nomme le moteur : `53% · Chunk 5/8 → Gemini+Groq (croise)`.
+    Granularité réelle **45-55 s**. Quang avait raison de contester : *« l'outil a toujours
+    fonctionné, même sur une vidéo de 2 h »*.
+  **La feuille de route est terminée, et les deux réserves du soir sont refermées par la mesure.
+  Aucun chantier ouvert sur SubWhisper.**
