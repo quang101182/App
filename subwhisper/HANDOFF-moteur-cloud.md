@@ -316,3 +316,59 @@ done en 80 s · zéro 401
 
 `harness/test_multipart.py` couvre désormais cette branche, et **refuse de tourner sur un fichier
 de moins de 100 Mo** — un banc qui ne franchit pas le seuil qu'il prétend tester ne prouve rien.
+
+
+---
+
+# 🛑 FIN DE SESSION 07/09/2026 — la gestion des sous-titres est revenue au comportement d'avant
+
+Après tout ce qui précède, Quang a testé sur ses vraies vidéos et signalé que le rendu
+s'était **dégradé** : *« les textes ne correspondent pas du tout à la vidéo, même les
+synchronisations avec les voix, alors qu'avant c'était quasiment parfait »*, puis
+*« tu n'as rien à inventer […] mais en gardant les avantages de toutes les mises à jour
+d'aujourd'hui »*.
+
+## Ce qui a été RETIRÉ (v9.55 / Fly 1.36.0, commit `App` 100ba47)
+
+Les trois modifications de post-traitement introduites le soir même :
+déduplication conditionnée à la contiguïté · suppression des blocs de durée nulle ·
+durées d'affichage minimale et maximale.
+
+⚠️ **Les défauts qu'elles corrigeaient sont réels et mesurés** (un bloc affiché 594 s,
+168 blocs de durée nulle sur 545, 67 % des blocs sous la seconde). Mais elles changeaient
+**l'entrée du nettoyage IA et de la traduction**, donc tout l'aval — et le **traitement
+automatique de Quang est toujours actif**, donc elles le touchaient à 100 %.
+Le travail retiré est sur la branche **`travail-timings-2026-09-07`**.
+
+✅ Vérifié par empreinte : `autoFormatSRT`, `dedupConsecutiveBlocks`, `motsVersBlocs`,
+`parseSRT`, `buildSRT`, `tsToMs`, `msToTs`, `translateSRT`, `cleanAI`, `_cleanAIDetect`,
+`shiftSRT`, `secToSrtTime` sont **identiques à la v9.43 du 30/08**, ainsi que le pipeline
+automatique.
+
+## Ce qui est CONSERVÉ
+
+Le sélecteur de moteur STT (groq/gemini/croisé), `transcribeChunkGemini` /
+`transcribeChunkCroise` / `motsVersBlocs`, la taille de chunk adaptée au moteur (11 Mo pour
+Gemini), la voie multipart réparée, les modèles Gemini vivants. Le traitement automatique
+reste compatible avec les nouveaux moteurs **par construction** : il travaille sur le SRT
+produit sans jamais regarder quel moteur l'a produit.
+
+## ⛔ Ce qui n'est PAS résolu, et l'élément qui manque
+
+**Le problème de rendu signalé par Quang n'a jamais été reproduit** — je n'ai pas eu la
+vidéo source, seulement des SRT dont j'ignorais la vérité audio.
+
+Ce qui est **établi** :
+- les **timestamps ne dérivent pas** : écart médian **+0,00 s** sur 8 tranches de 500 s,
+  entre le SRT d'avant et celui d'après, sur tout un fichier de 66 min ;
+- `transcribeWithGroq` côté serveur est **identique** à la veille ;
+- les 168 blocs invalides venaient d'**une seule** hallucination Whisper (un segment de
+  durée nulle à 429,815 s, rempli de virgules) que le formatage a découpée.
+
+Ce qui reste **inexpliqué** : 378 blocs la veille contre 545 le lendemain sur le même
+fichier, avec un code de chemin Groq identique.
+
+⇒ **Pour trancher : demander la vidéo source, ou 2-3 minutes autour d'un passage
+visiblement décalé.** Rejouer le même extrait avec le code de la veille et celui du jour
+est la seule mesure qui tranche. Sans le fichier, on raisonne sur des sous-titres dont on
+ne connaît pas la vérité — c'est exactement ce qui a produit trois correctifs inutiles.
