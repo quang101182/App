@@ -203,8 +203,11 @@ horodatés qui leur manquent.
 
 ## P6 — Tests et livraison
 
-- [ ] Bump **v9.43 → v9.50** aux **4 endroits** : `<title>` l.15, badge `.ver-badge` l.1141,
-      footer l.1481, champ `version:` l.4144.
+- [ ] Bump **v9.43 → v9.50** aux **4 endroits imposés par `App/CLAUDE.md`** :
+      `<title>` (l.15) · badge `.ver-badge` (l.1141) · **la variable `CACHE` dans `sw.js`**
+      (⚠️ oubliée dans la 1re version de cette roadmap : sans elle le service worker sert
+      l'ancienne page depuis son cache, et la mise à jour est invisible) · champ `version:`
+      de l'export DIAG (l.4144). Le footer (l.1481) porte aussi la version : le faire aussi.
 - [ ] `node --check` sur toute string JS éditée (règle projet).
 - [ ] Test **live réel** : une vidéo JP, une ZH, une avec dialogue — sur les 3 modes, avec le
       **switch auto activé** (c'est ainsi que Quang s'en sert) et **traduction FR via DeepSeek**.
