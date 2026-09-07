@@ -2696,17 +2696,14 @@ async function transcribeChunkGemini(file, srcLang, key, chunkNum, totalChunks, 
 }
 
 // ── Mode CROISE : Groq en garde-fou de Gemini ──────────────────────────────
-// Mesure du 07/09 sur 60 phrases / 6 langues : l'hallucination de Gemini ressort a
-// 190 % de desaccord, alors que la phrase saine la PIRE est a 20,5 % (mediane 2,7 %).
-// Aucun recouvrement -> un seuil existe vraiment. A 30 % : 1 bascule sur 60,
-// l'hallucination rattrapee, ZERO bascule inutile, et une erreur moyenne de 3,4 %
-// contre 6,3 % (Groq seul) et 5,3 % (Gemini seul) : la combinaison bat les deux.
-// Cout : +13 % seulement (0,30 + 0,04 $/h), et la latence ne bouge pas puisque les
-// deux appels partent EN PARALLELE.
-// ⚠️ Reserve assumee : UNE seule hallucination observee. Le seuil est net, mais le
-// detecteur n'est valide que sur un cas positif.
-var SEUIL_DESACCORD = 0.30;
-
+// Gemini est le moteur retenu ; Groq tourne en parallele et sert de FILET pour le
+// seul defaut mesure de facon fiable : Gemini rend VIDE sur un audio a faible parole
+// articulee (9 fois sur 40 extraits reels), la ou Groq n'est jamais muet (0/40).
+// Cout : +13 % (0,30 + 0,04 $/h) et latence inchangee, les deux appels partant
+// EN PARALLELE — verifie en live : 3021 ms pour le croise contre 3437 ms pour
+// Gemini seul.
+// 📌 Ce mode ne detecte PAS les hallucinations : voir le commentaire dans
+// transcribeChunkCroise pour la raison, elle est mesuree.
 // Distance de caracteres normalisee (0 = identique, 1 = tout different).
 // Sur caracteres et non sur mots : c'est la seule mesure qui traverse a la fois
 // l'alphabet latin et le chinois/japonais, qui n'ecrivent pas d'espaces.
@@ -2755,15 +2752,21 @@ async function transcribeChunkCroise(file, srcLang, key, chunkNum, totalChunks, 
     appendLog('🛟 Croise ' + chunkNum + '/' + totalChunks + ' — Gemini muet, bascule sur Groq');
     return q;
   }
+  // ⚠️ LA BASCULE SUR DESACCORD A ETE RETIREE LE 07/09/2026, APRES MESURE.
+  // Elle etait calibree a 30 % sur le corpus FLEURS, ou l'hallucination ressortait
+  // a 190 % de desaccord contre 20,5 % au pire pour une phrase saine. Deux erreurs :
+  //   1. les 190 % venaient d'un WER NON BORNE, alors qu'ici la distance est un CER
+  //      BORNE a 100 % — les deux echelles ne sont pas comparables ;
+  //   2. surtout, FLEURS est de l'audio de studio. Sur des videos reelles a faible
+  //      parole articulee, les deux moteurs divergent NATURELLEMENT de 49 a 100 %
+  //      sans que personne n'hallucine. Mesure du 07/09 : la bascule se declenchait
+  //      sur 3 extraits reels sur 3, donc « croise » revenait a « Groq » et annulait
+  //      tout l'apport de Gemini.
+  // Ne reste que le declencheur mesure, sans faux positif : Gemini muet (traite
+  // au-dessus). Le desaccord est desormais AFFICHE a titre indicatif, jamais agi.
   var d = _distanceTexte(tg, tq);
-  if (d > SEUIL_DESACCORD && tq) {
-    wordData.length = avant;
-    appendLog('🛟 Croise ' + chunkNum + '/' + totalChunks + ' — desaccord ' +
-              Math.round(d * 100) + ' % (> ' + Math.round(SEUIL_DESACCORD * 100) + ' %), bascule sur Groq');
-    return q;
-  }
-  appendLog('✅ Croise ' + chunkNum + '/' + totalChunks + ' — accord ' +
-            Math.round((1 - d) * 100) + ' %, Gemini retenu');
+  appendLog('✅ Croise ' + chunkNum + '/' + totalChunks + ' — Gemini retenu (desaccord ' +
+            Math.round(d * 100) + ' %, indicatif)');
   return g;
 }
 

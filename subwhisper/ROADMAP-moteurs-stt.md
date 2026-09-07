@@ -232,9 +232,30 @@ tient qu'aux **mots horodatés**, que Gemini `verbatim` fournit gratuitement.
       Gemini rend **20 mots horodatés**, le bouton RICH **s'active seul**, la case diarisation
       a bien disparu, **aucune erreur JS**. Latences : groq 587 ms · gemini 3437 ms ·
       croisé 3021 ms.
-- [ ] Reste à faire **avec de vraies vidéos** : une JP, une ZH, une bavarde, sur les 3 modes,
-      **switch auto activé** et **traduction FR via DeepSeek** — puis vérifier les 3 défauts
-      connus (blocs muets, boucles, hallucination).
+- [x] **Fait avec de vraies vidéos** (3 extraits de 60 s : japonais avec dialogue, chinois,
+      audio à faible parole) × 3 modes, **switch auto activé**, sortie FR, **traduction
+      DeepSeek**. Résultat : **aucun bloc vide, aucune boucle, aucun CJK résiduel** — la
+      traduction française sort proprement sur les 9 runs, zéro erreur JS.
+
+🔴 **ET C'EST CE TEST QUI A INVALIDÉ LA CALIBRATION DU MODE CROISÉ.** Il basculait sur Groq
+**3 fois sur 3** (49 %, 100 %, 100 % de désaccord) : « croisé » revenait donc à « Groq » et
+annulait tout l'apport de Gemini. Deux erreurs, la seconde étant la vraie :
+1. le seuil de 30 % était calibré sur un **WER non borné** (l'hallucination FLEURS ressortait
+   à 190 %) mais implémenté sur une **distance bornée à 100 %** — échelles incomparables ;
+2. surtout, **FLEURS est de l'audio de studio**. Sur des vidéos réelles à faible parole
+   articulée, les deux moteurs divergent **naturellement de 49 à 100 %** sans que personne
+   n'hallucine. Un seuil de désaccord n'y sépare rien.
+⇒ **La bascule sur désaccord est RETIRÉE.** Ne reste que le déclencheur mesuré et sans faux
+positif : **Gemini muet** (9 fois sur 40). Le désaccord reste affiché dans le log, à titre
+indicatif, mais n'agit plus. Revérifié après correction : le croisé retient bien Gemini
+(20 mots horodatés) sur les 3 extraits.
+📌 **Leçon transposable : un seuil calibré sur un corpus propre ne se transporte pas sur du
+terrain.** C'est le test sur les vraies vidéos qui l'a montré, aucun banc ne l'aurait fait.
+
+📌 Piège de mesure au passage : `transcribe()` rend la main **avant** que le SRT soit posé
+(`showRes()` vit dans un `setTimeout(…, 400)`). Lire `getCurrentSRT()` juste après fait
+conclure à tort « le moteur n'a rien rendu ». Vérifié en comparant v9.43 et v9.50 sur le même
+extrait : **les deux rendaient vide**, donc ce n'était pas une régression — c'était le harness.
 - [ ] Commit + push (⚠️ dépôt `App` **public**, un push déploie ; **zéro secret**).
 
 ## P7 — telegram-video doit hériter du résultat (demande Quang, 07/09)
