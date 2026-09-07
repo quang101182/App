@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.30.0 — Added /smart-zoom, /speed-ramp, /promo-assembly, /promo-assembly-pro, zoom effects, xfade transitions
+ * Version: 1.32.0 (voir SERVER_VERSION, source unique) — 1.30.0: /smart-zoom, /speed-ramp, /promo-assembly, /promo-assembly-pro, zoom effects, xfade transitions
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -42,6 +42,10 @@ const os = require('os');
 // Configuration
 // ---------------------------------------------------------------------------
 
+// Source UNIQUE de la version : la banniere de demarrage et /health la lisent
+// toutes les deux ici. Le 07/09 elles avaient diverge (1.30.0 vs 1.32.0), ce qui
+// rend le log de demarrage menteur — donc inutilisable pour verifier un deploiement.
+const SERVER_VERSION = '1.32.0';
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
@@ -262,7 +266,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.32.0'
+    version: SERVER_VERSION
   });
 });
 
@@ -3568,7 +3572,7 @@ app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, re
 // ---------------------------------------------------------------------------
 
 app.listen(PORT, () => {
-  console.log(`[SubWhisper FFmpeg Server v1.30.0] Démarré sur le port ${PORT}`);
+  console.log(`[SubWhisper FFmpeg Server v${SERVER_VERSION}] Démarré sur le port ${PORT}`);
   console.log(`  MAX_CONCURRENT_JOBS = ${MAX_CONCURRENT_JOBS}`);
   console.log(`  FLY_SECRET configuré: ${FLY_SECRET ? 'OUI' : 'NON (mode dev)'}`);
   console.log(`  CHUNK_MAX_BYTES = ${CHUNK_MAX_BYTES} bytes (${(CHUNK_MAX_BYTES / 1024 / 1024).toFixed(1)} MB PCM) [Groq]`);
