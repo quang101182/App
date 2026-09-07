@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.43</title>
+<title>SubWhisper v9.50</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1138,7 +1138,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.43</span>
+    <span class="ver-badge">v9.50</span>
     <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app sur l'ecran d'accueil">&#8615; Install</button>
   </div>
   <div class="hdr-r">
@@ -1213,10 +1213,6 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     <div class="crow">
       <span class="clbl">OPTIONS</span>
       <div class="opts">
-        <label class="oitem">
-          <input type="checkbox" id="optDiarize">
-          <span>Diarisation</span>
-        </label>
         <label class="oitem">
           <input type="checkbox" id="optPunct" checked>
           <span>Ponctuation</span>
@@ -1309,6 +1305,13 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
     <option value="ja">Japonais</option>
     <option value="zh">Chinois</option>
     <option value="ko">Coréen</option>
+  </select>
+  <span class="lb-div"></span>
+  <span class="lb-lbl" title="Moteur de transcription. Groq : rapide, jamais muet. Gemini : nettement plus juste, mais muet sur un audio sans parole articulee. Croise : Gemini avec Groq en filet.">STT</span>
+  <select id="sttEngine" onchange="saveSttEngine(this.value)">
+    <option value="groq">Groq</option>
+    <option value="gemini">Gemini</option>
+    <option value="croise">Croise</option>
   </select>
   <span class="lb-div"></span>
   <span class="lb-lbl">IA</span>
@@ -1478,7 +1481,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.43 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.50 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -1689,13 +1692,12 @@ function init() {
     var s = localStorage.getItem('sw_srcLang'); if (s !== null) { document.getElementById('srcLang').value = s; document.getElementById('srcLangMain').value = s; }
     var o = localStorage.getItem('sw_outLang'); if (o !== null) { document.getElementById('outLang').value = o; document.getElementById('outLangMain').value = o; }
     var ae = localStorage.getItem('sw_aiengine'); if (ae) document.getElementById('aiEngine').value = ae;
+    var se = localStorage.getItem('sw_sttengine'); if (se) document.getElementById('sttEngine').value = se;
     var at = localStorage.getItem('sw_autoToggle'); if (at === '1') document.getElementById('autoToggle').checked = true;
   } catch(e) {}
   // Sync config selects → main bar
   document.getElementById('srcLang').addEventListener('change', function() { try { localStorage.setItem('sw_srcLang', this.value); document.getElementById('srcLangMain').value = this.value; } catch(e) {} });
   document.getElementById('outLang').addEventListener('change', function() { try { localStorage.setItem('sw_outLang', this.value); document.getElementById('outLangMain').value = this.value; } catch(e) {} });
-  try { var dz = localStorage.getItem('sw_diarize'); if (dz === '1') document.getElementById('optDiarize').checked = true; } catch(e) {}
-  document.getElementById('optDiarize').addEventListener('change', function() { try { localStorage.setItem('sw_diarize', this.checked ? '1' : '0'); } catch(e) {} });
   try {
     var th = localStorage.getItem('sw_theme');
     if (th === 'light') { document.body.classList.add('light'); document.getElementById('thmBtn').textContent = '\u2600\uFE0F'; }
@@ -1732,6 +1734,12 @@ function getOpenAIKey() { return ''; }
 function getGeminiKey()   { return ''; }
 function getDeepSeekKey() { return ''; }
 function getAIEngine()    { return document.getElementById('aiEngine')?.value || 'gemini'; }
+// Moteur STT. Defaut 'groq' = comportement historique inchange : quelqu'un qui ne
+// touche a rien ne voit aucune difference. Mesures du 07/09 : Gemini `verbatim` est
+// meilleur partout ou il y a de la parole articulee (reunions bruitees 14,7 % contre
+// 22,2 %), mais il rend VIDE 9 fois sur 40 sur un audio a faible parole, la ou Groq
+// n'est jamais muet (0/40). D'ou le 3e mode.
+function getSttEngine()   { return document.getElementById('sttEngine')?.value || 'groq'; }
 function syncLangMain(type, val) {
   if (type === 'src') {
     document.getElementById('srcLang').value = val;
@@ -1742,6 +1750,7 @@ function syncLangMain(type, val) {
   }
 }
 function saveAIEngine(val) { try { localStorage.setItem('sw_aiengine', val); } catch(e) {} checkAIEngine(); }
+function saveSttEngine(val) { try { localStorage.setItem('sw_sttengine', val); } catch(e) {} }
 function saveAutoToggle(checked) { try { localStorage.setItem('sw_autoToggle', checked ? '1' : '0'); } catch(e) {} }
 function getAzureKey()  { return ''; }
 function getAzureRegion(){ return ''; }
@@ -1969,7 +1978,10 @@ async function transcribe() {
     var outLang = document.getElementById('outLang').value;
     var body = { audio_url: upload_url, speech_models: ['universal-3-pro', 'universal-2'] };
     if (srcLang) { body.language_code = srcLang; } else { body.language_detection = true; }
-    if (document.getElementById('optDiarize').checked) body.speaker_labels = true;
+    // Diarisation retiree en v9.50 : elle etait branchee sur AssemblyAI (inatteignable),
+    // et Gemini ne la ferait pas mieux — 3 locuteurs max, et INCOMPATIBLE avec les
+    // timestamps au mot, qu'on prefere garder (calage + vue RICH). Decision Quang 07/09.
+    // La case n'existe plus : ce test resterait faux, on le neutralise proprement.
     if (!document.getElementById('optPunct').checked) body.punctuate = false;
     var jobRes = await fetch(AAI_BASE + '/transcript', {
       method: 'POST',
@@ -2171,7 +2183,7 @@ async function transcribeOpenAI() {
     var finalSrt = srt;
     var wasTranslated = false;
     _rawGroqSrt = srt; // Batch Lab: stocker brut transcription pour bouton téléchargement
-    _diagSteps.transcription_engine = 'assemblyai';
+    _diagSteps.transcription_engine = 'openai';   // etait 'assemblyai' — mauvais moteur dans les DIAG
     var skipTranslation = (outLang === 'same') || (detectedLang && detectedLang === outLang);
     if (!skipTranslation) {
       if (hasTranslationEngine()) {
@@ -2222,7 +2234,7 @@ async function transcribeGroq() {
     if (selFile.size <= MAX_BYTES) {
       // ── Fichier unique ───────────────────────────────────
       setPct(10, 'Envoi Groq'); setLog('Envoi à Groq Whisper large-v3-turbo...');
-      var res = await transcribeChunkGroq(selFile, srcLang, key, 1, 1, 0);
+      var res = await transcribeChunkAuto(selFile, srcLang, key, 1, 1, 0);
       detectedLang = res.lang;
       srt = res.srt;
       setPct(80, 'Transcription OK');
@@ -2264,7 +2276,7 @@ async function transcribeGroq() {
           var blob = new Blob([hdr, pcm], {type:'audio/wav'});
           var chunkFile = new File([blob], 'slice_'+ci+'.wav', {type:'audio/wav'});
           var actualChunkDurSec = pcmLen / wavMeta.bytesPerSec;
-          var res = await transcribeChunkGroq(chunkFile, srcLang, key, ci+1, totalWavChunks, offsetSec, actualChunkDurSec);
+          var res = await transcribeChunkAuto(chunkFile, srcLang, key, ci+1, totalWavChunks, offsetSec, actualChunkDurSec);
           if (ci === 0) detectedLang = res.lang || detectedLang;
           logChunkReport(ci+1, totalWavChunks, res.segments, offsetSec, actualChunkDurSec, res.rawSegments);
           allSegments = allSegments.concat(res.segments);
@@ -2303,7 +2315,7 @@ async function transcribeGroq() {
           var resampled = await offCtx.startRendering();
           var wavBuf = encodeWav(resampled);
           var chunkFile = new File([new Blob([wavBuf], {type:'audio/wav'})], 'chunk_'+ci+'.wav', {type:'audio/wav'});
-          var res = await transcribeChunkGroq(chunkFile, srcLang, key, ci+1, totalChunks, chunkStartSec, chunkActualDur);
+          var res = await transcribeChunkAuto(chunkFile, srcLang, key, ci+1, totalChunks, chunkStartSec, chunkActualDur);
           if (ci === 0) detectedLang = res.lang || detectedLang;
           logChunkReport(ci+1, totalChunks, res.segments, chunkStartSec, chunkActualDur, res.rawSegments);
           allSegments = allSegments.concat(res.segments);
@@ -2319,7 +2331,7 @@ async function transcribeGroq() {
     var finalSrt = srt;
     var wasTranslated = false;
     _rawGroqSrt = srt; // Batch Lab: stocker brut Groq pour bouton téléchargement
-    _diagSteps.transcription_engine = 'groq';
+    _diagSteps.transcription_engine = getSttEngine();
     var skipTranslation = (outLang === 'same') || (detectedLang && detectedLang === outLang);
     if (!skipTranslation) {
       if (hasTranslationEngine()) {
@@ -2432,7 +2444,7 @@ async function transcribeCloud(workerUrl, srcLang, outLang, groqKey, gatewayKey,
 async function pollCloudJob(base, jobId, outLang) {
   var maxPolls = 600; // 30 min max
   var pollCount = 0;
-  // Détection passive d'inactivité serveur (v9.43) — pas de reject auto, warning info only
+  // Détection passive d'inactivité serveur (v9.50) — pas de reject auto, warning info only
   var lastActivityTs = Date.now();
   var lastLogSeen = '';
   var lastProgressSeen = -1;
@@ -2542,6 +2554,226 @@ async function transcribeChunkOpenAI(file, srcLang, key, chunkNum, totalChunks, 
     return (i+1)+'\n'+secToSrtTime(seg.start)+' --> '+secToSrtTime(seg.end)+'\n'+seg.text.trim();
   }).join('\n\n') + '\n';
   return { srt: srt, lang: lang, segments: segments, rawSegments: rawSegmentsForLog };
+}
+
+// Gemini attend du BCP-47 (`fr-FR`), la ou l'app manipule de l'ISO court (`fr`).
+// Table minimale : tout code absent est transmis tel quel, et l'auto-detection
+// reste le cas par defaut (on n'envoie pas language_codes du tout).
+var BCP47_STT = { fr:'fr-FR', en:'en-US', de:'de-DE', es:'es-ES', it:'it-IT',
+  pt:'pt-PT', ru:'ru-RU', ja:'ja-JP', zh:'cmn-Hans-CN', ko:'ko-KR', ar:'ar-EG',
+  vi:'vi-VN', nl:'nl-NL', pl:'pl-PL', tr:'tr-TR', hi:'hi-IN' };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MOTEUR GEMINI 3.5 TRANSCRIBE — ajoute en v9.50 (mesures du 07/09/2026)
+//
+// Pourquoi ce moteur, et pourquoi en `verbatim` :
+//   - reunions bruitees (AMI)  : 14,7 % d'erreur contre 22,2 % pour Groq turbo
+//   - bout en bout vers le FR via DeepSeek : ecart au plafond d'une transcription
+//     PARFAITE de -0,2 pt en japonais (indiscernable) et +2,9 pt en chinois,
+//     contre +2,2 et +10,3 pour Groq.
+//   - ⛔ le mode `smart` est PROSCRIT : muet 25 fois sur 40 sur des videos reelles,
+//     et PIRE que Groq sur du dialogue (28,1 %). Il « nettoie » jusqu'a supprimer,
+//     et il reformule. `verbatim` toujours.
+//
+// Deux contraintes d'API, verifiees en direct et non supposees :
+//   1. `custom_vocabulary` n'existe que sur /v1beta/interactions, et il est
+//      INCOMPATIBLE avec les timestamps -> on choisit le calage, donc pas de vocabulaire.
+//   2. `timestamp_granularities:["segment"]` ne rend AUCUN timestamp chez Gemini :
+//      c'est le MOT ou rien. D'ou la fabrication de blocs ci-dessous.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Fabrique des blocs de sous-titres a partir de mots horodates.
+// Coupe sur une pause > 0,6 s OU quand le bloc atteint MAX_CHARS (84, le meme
+// plafond que autoFormatSRT). Mesure du 07/09 : ces blocs sont PLUS conformes que
+// les segments natifs de Groq (38 % de blocs en violation contre 82 % en francais),
+// parce qu'on controle la coupe au lieu de la subir.
+function motsVersBlocs(mots, maxRelEnd) {
+  var PAUSE = 0.6, MAX_CH = 84;
+  var blocs = [], cur = [], t0 = null, prevFin = null;
+  for (var i = 0; i < mots.length; i++) {
+    var w = mots[i];
+    var coupe = (prevFin !== null && w.start - prevFin > PAUSE) ||
+                (cur.length && (cur.join(' ').length + 1 + w.text.length) > MAX_CH);
+    if (coupe && cur.length) {
+      blocs.push({ start: t0, end: prevFin, text: cur.join(' ') });
+      cur = []; t0 = null;
+    }
+    if (t0 === null) t0 = w.start;
+    cur.push(w.text);
+    prevFin = w.end;
+  }
+  if (cur.length) blocs.push({ start: t0, end: prevFin, text: cur.join(' ') });
+  // Meme garde-fou anti-hallucination que le chemin Groq : un bloc ne peut ni
+  // depasser 30 s ni sortir de la duree du chunk.
+  var cap = maxRelEnd || Infinity;
+  return blocs.map(function(b) {
+    return { start: b.start, end: Math.min(b.end, b.start + 30, cap), text: b.text };
+  });
+}
+
+// "2.200s" -> 2.2 ; null si le format change (on prefere ignorer un mot que fabriquer
+// un timestamp faux qui decalerait tout le sous-titre).
+function _gemSec(v) {
+  if (v === undefined || v === null) return null;
+  var m = /^([\d.]+)s?$/.exec(String(v).trim());
+  return m ? parseFloat(m[1]) : null;
+}
+
+async function transcribeChunkGemini(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec) {
+  var b64 = await new Promise(function(res, rej) {
+    var fr = new FileReader();
+    fr.onload = function() { res(String(fr.result).split(',')[1]); };
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+
+  var tc = { mode: { type: 'verbatim', timestamp_granularities: ['word'] } };
+  // Auto-detection = on n'envoie PAS language_codes. C'est l'usage reel, et elle ne
+  // coute quasiment rien (mesure : ecarts de ±1 pt sur fr/en/ja/zh).
+  if (srcLang && srcLang !== '') tc.language_codes = [BCP47_STT[srcLang] || srcLang];
+
+  var body = {
+    model: 'gemini-3.5-transcribe',
+    // L'audio se passe en `data` + `mime_type` A PLAT : `inline_data` -> HTTP 400
+    // sur l'Interactions API (verifie le 07/09).
+    input: [{ type: 'audio', mime_type: file.type || 'audio/wav', data: b64 }],
+    generation_config: { transcription_config: tc }
+  };
+
+  var _gwKey = getGatewayKey();
+  var resp = await fetch(GATEWAY_URL + '/api/gemini/v1beta/interactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _gwKey },
+    body: JSON.stringify(body),
+    signal: _abortCtrl ? _abortCtrl.signal : undefined
+  });
+  if (!resp.ok) {
+    var errData = await resp.json().catch(function() { return {}; });
+    throw new Error('Gemini chunk ' + chunkNum + '/' + totalChunks + ' — ' +
+                    (errData.error ? errData.error.message : resp.statusText));
+  }
+  var data = await resp.json();
+
+  // La reponse se lit dans steps[].content[].text ; les mots dans annotations[]
+  // de type "word_info". Ni l'un ni l'autre au meme endroit que generateContent.
+  var texte = '', mots = [];
+  (data.steps || []).forEach(function(st) {
+    (st.content || []).forEach(function(c) {
+      texte += (c.text || '');
+      (c.annotations || []).forEach(function(an) {
+        if (an.type !== 'word_info') return;
+        var s0 = _gemSec(an.start_offset), s1 = _gemSec(an.end_offset);
+        if (s0 === null) return;
+        mots.push({ start: s0, end: (s1 === null ? s0 : s1), text: an.text || '' });
+      });
+    });
+  });
+
+  var segments, rawSegmentsForLog;
+  if (mots.length) {
+    segments = motsVersBlocs(mots, chunkDurSec).map(function(b) {
+      return { start: b.start + offsetSec, end: b.end + offsetSec, text: b.text };
+    });
+    rawSegmentsForLog = mots.map(function(w) { return { start: w.start, end: w.end }; });
+    // Alimente la vue RICH (surlignage mot a mot + clic pour se positionner).
+    // Elle ne depend PAS des locuteurs : `speaker` n'ajoute qu'une classe CSS.
+    mots.forEach(function(w) {
+      wordData.push({ start: w.start + offsetSec, end: w.end + offsetSec, text: w.text });
+    });
+  } else {
+    // Pas de mots horodates : on garde au moins le texte, en un bloc couvrant le chunk.
+    // Cas rare mais reel — c'est aussi le signal qui declenche le repli en mode croise.
+    var t = (texte || '').trim();
+    segments = t ? [{ start: offsetSec, end: offsetSec + (chunkDurSec || 0), text: t }] : [];
+    rawSegmentsForLog = [];
+  }
+
+  var srt = segments.map(function(seg, i) {
+    return (i + 1) + '\n' + secToSrtTime(seg.start) + ' --> ' + secToSrtTime(seg.end) + '\n' + seg.text.trim();
+  }).join('\n\n') + '\n';
+
+  return { srt: srt, lang: srcLang || '', segments: segments, rawSegments: rawSegmentsForLog };
+}
+
+// ── Mode CROISE : Groq en garde-fou de Gemini ──────────────────────────────
+// Mesure du 07/09 sur 60 phrases / 6 langues : l'hallucination de Gemini ressort a
+// 190 % de desaccord, alors que la phrase saine la PIRE est a 20,5 % (mediane 2,7 %).
+// Aucun recouvrement -> un seuil existe vraiment. A 30 % : 1 bascule sur 60,
+// l'hallucination rattrapee, ZERO bascule inutile, et une erreur moyenne de 3,4 %
+// contre 6,3 % (Groq seul) et 5,3 % (Gemini seul) : la combinaison bat les deux.
+// Cout : +13 % seulement (0,30 + 0,04 $/h), et la latence ne bouge pas puisque les
+// deux appels partent EN PARALLELE.
+// ⚠️ Reserve assumee : UNE seule hallucination observee. Le seuil est net, mais le
+// detecteur n'est valide que sur un cas positif.
+var SEUIL_DESACCORD = 0.30;
+
+// Distance de caracteres normalisee (0 = identique, 1 = tout different).
+// Sur caracteres et non sur mots : c'est la seule mesure qui traverse a la fois
+// l'alphabet latin et le chinois/japonais, qui n'ecrivent pas d'espaces.
+function _distanceTexte(a, b) {
+  a = (a || '').toLowerCase().replace(/[^\w぀-鿿]/g, '');
+  b = (b || '').toLowerCase().replace(/[^\w぀-鿿]/g, '');
+  if (!a && !b) return 0;
+  if (!a || !b) return 1;
+  if (a === b) return 0;
+  // Levenshtein a deux lignes : O(n) en memoire, suffisant pour un chunk.
+  var prev = new Array(b.length + 1), cur = new Array(b.length + 1), i, j;
+  for (j = 0; j <= b.length; j++) prev[j] = j;
+  for (i = 1; i <= a.length; i++) {
+    cur[0] = i;
+    for (j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1,
+                        prev[j - 1] + (a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1));
+    }
+    for (j = 0; j <= b.length; j++) prev[j] = cur[j];
+  }
+  return prev[b.length] / Math.max(a.length, b.length);
+}
+
+async function transcribeChunkCroise(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec) {
+  var avant = wordData.length;   // pour pouvoir defaire si on bascule sur Groq
+  var res = await Promise.all([
+    transcribeChunkGemini(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec)
+      .then(function(r) { return r; }, function(e) { return { _err: e }; }),
+    transcribeChunkGroq(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec)
+      .then(function(r) { return r; }, function(e) { return { _err: e }; })
+  ]);
+  var g = res[0], q = res[1];
+  function txt(r) {
+    return (r && r.segments) ? r.segments.map(function(s) { return s.text; }).join(' ').trim() : '';
+  }
+  if (g._err && q._err) throw g._err;
+  if (g._err) { appendLog('⚠️ Croise ' + chunkNum + '/' + totalChunks + ' — Gemini en erreur, Groq retenu'); return q; }
+  if (q._err) { appendLog('⚠️ Croise ' + chunkNum + '/' + totalChunks + ' — Groq en erreur, Gemini retenu'); return g; }
+
+  var tg = txt(g), tq = txt(q);
+  // Deux raisons de basculer, et la 1re est la plus frequente : Gemini rend VIDE
+  // sur un audio a faible parole articulee (9 fois sur 40 mesurees), la ou Groq
+  // n'est jamais muet.
+  if (!tg && tq) {
+    wordData.length = avant;
+    appendLog('🛟 Croise ' + chunkNum + '/' + totalChunks + ' — Gemini muet, bascule sur Groq');
+    return q;
+  }
+  var d = _distanceTexte(tg, tq);
+  if (d > SEUIL_DESACCORD && tq) {
+    wordData.length = avant;
+    appendLog('🛟 Croise ' + chunkNum + '/' + totalChunks + ' — desaccord ' +
+              Math.round(d * 100) + ' % (> ' + Math.round(SEUIL_DESACCORD * 100) + ' %), bascule sur Groq');
+    return q;
+  }
+  appendLog('✅ Croise ' + chunkNum + '/' + totalChunks + ' — accord ' +
+            Math.round((1 - d) * 100) + ' %, Gemini retenu');
+  return g;
+}
+
+// Dispatch : c'est le SEUL point ou le choix de moteur agit. Toute la logique de
+// decoupage, de traduction et d'affichage reste celle de transcribeGroq().
+async function transcribeChunkAuto(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec) {
+  var moteur = getSttEngine();
+  if (moteur === 'gemini') return transcribeChunkGemini(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec);
+  if (moteur === 'croise') return transcribeChunkCroise(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec);
+  return transcribeChunkGroq(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec);
 }
 
 async function transcribeChunkGroq(file, srcLang, key, chunkNum, totalChunks, offsetSec, chunkDurSec) {
@@ -4141,7 +4373,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.43',
+    version: 'v9.50',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -6016,7 +6248,7 @@ document.addEventListener('keydown', function(e) {
   }
 });
 // PWA Service Worker
-// PWA install (v9.43) — Chrome n'emet beforeinstallprompt que si le manifeste
+// PWA install (v9.50) — Chrome n'emet beforeinstallprompt que si le manifeste
 // remplit ses criteres : icones bitmap 192 ET 512. Sans le listener ci-dessous,
 // aucun bouton ne peut apparaitre, meme quand l'app EST installable.
 var _deferredInstall = null;

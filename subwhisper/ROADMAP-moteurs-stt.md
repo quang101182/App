@@ -151,30 +151,30 @@ Patron à copier **exactement** : le sélecteur `aiEngine` qui existe déjà
 (`index.html:1315-1318`, `getAIEngine()` 1734, `saveAIEngine()` ~1745, restauration au boot
 ~1691, clé `localStorage`).
 
-- [ ] `<select id="sttEngine">` avec **3 options** : `groq` · `gemini` · `croise`.
-- [ ] Clé `localStorage` **`sw_sttengine`**, symétrique de `sw_aiengine`.
-- [ ] **Défaut = `groq`** — comportement actuel strictement inchangé, zéro régression pour
+- [x] `<select id="sttEngine">` avec **3 options** : `groq` · `gemini` · `croise`.
+- [x] Clé `localStorage` **`sw_sttengine`**, symétrique de `sw_aiengine`.
+- [x] **Défaut = `groq`** — comportement actuel strictement inchangé, zéro régression pour
       quelqu'un qui ne touche à rien. Quang bascule quand il veut.
       📌 Conforme à la règle « pas d'auto-switch silencieux, l'utilisateur garde le contrôle ».
-- [ ] Branchement : **une seule ligne**, en tête de la cascade `index.html:1941-1943`.
+- [x] Branchement via `transcribeChunkAuto()` — les 3 appels de `transcribeGroq()` y passent, toute la logique de chunking/traduction/affichage est réutilisée telle quelle, en tête de la cascade `index.html:1941-1943`.
 - [ ] Pastille d'état `GEM` déjà présente dans `API_DOTS` — vérifier qu'elle reflète le STT.
 
 ## P3 — `transcribeGemini()` + fabrication des blocs SRT
 
-- [ ] `transcribeChunkGemini()` calqué sur `transcribeChunkGroq()` (`index.html:2547-2579`).
+- [x] `transcribeChunkGemini()` calqué sur `transcribeChunkGroq()` (`index.html:2547-2579`).
       **Contrat de retour à respecter** : `{ srt, lang, segments:[{start,end,text}], rawSegments }`.
-- [ ] Appel : `POST {GATEWAY_URL}/api/gemini/v1beta/interactions`, corps
+- [x] Appel : `POST {GATEWAY_URL}/api/gemini/v1beta/interactions`, corps
       `{model:"gemini-3.5-transcribe", input:[{type:"audio", mime_type, data:<b64>}],
       generation_config:{transcription_config:{mode:{type:"verbatim",
       timestamp_granularities:["word"]}}}}`.
       **Auto-détection : omettre `language_codes`** — c'est l'usage de Quang, et ça ne coûte
       rien (mesuré : ±1 pt).
-- [ ] **Fabriquer les blocs depuis les mots** : couper sur une pause > 0,6 s **ou** à 84
+- [x] **Fabriquer les blocs depuis les mots** (`motsVersBlocs`) : couper sur une pause > 0,6 s **ou** à 84
       caractères. ✅ Mesuré : plus conforme que les segments Groq — sur du FR, **5 violations
       sur 13 blocs (38 %) contre 9 sur 11 (82 %) pour Groq**.
-- [ ] Réutiliser `transcribeGroq()` pour tout le reste (chunking, traduction, affichage) :
+- [x] Réutiliser `transcribeGroq()` pour tout le reste (chunking, traduction, affichage) :
       il contient déjà toute la logique.
-- [ ] Conserver le garde-fou anti-hallucination existant : `relEnd = min(seg.end, relStart+30, maxRelEnd)`.
+- [x] Conserver le garde-fou anti-hallucination existant : `relEnd = min(seg.end, relStart+30, maxRelEnd)`.
 
 ## P4 — Mode « croisé » : Groq en garde-fou de Gemini
 
@@ -184,34 +184,57 @@ Mesuré le 07/09 sur 60 phrases / 6 langues — **séparation nette** : l'halluc
 Seuil **30 %** : 1 bascule sur 60, hallucination rattrapée, **0 bascule inutile**.
 Erreur moyenne **3,4 %** contre 6,3 % (Groq seul) et 5,3 % (Gemini seul) → **bat les deux**.
 
-- [ ] Lancer les deux moteurs **en parallèle** (`Promise.all`) : la latence reste le max, pas
+- [x] Lancer les deux moteurs **en parallèle** — ✅ mesuré en live : croisé **3021 ms** contre 3437 ms pour Gemini seul, donc bien le max et non la somme (`Promise.all`) : la latence reste le max, pas
       la somme. Coût **0,30 + 0,04 = 0,34 $/h, soit +13 %** — ce n'est **pas** un doublement.
-- [ ] Bascule sur Groq si : désaccord > 30 % **OU** Gemini rend vide (le cas des 9/40).
-- [ ] **Tracer chaque bascule dans le log visible** (`appendLog`) : jamais de substitution
+- [x] Bascule sur Groq si : désaccord > 30 % **OU** Gemini rend vide (le cas des 9/40).
+- [x] **Tracer chaque bascule dans le log visible** (`appendLog`) : jamais de substitution
       silencieuse.
 - [ ] ⚠️ Réserve à garder en tête : **une seule hallucination observée** sur 60 phrases. La
       séparation est nette mais le détecteur n'est validé que sur un cas positif.
 
-## P5 — Ressusciter la diarisation et la vue RICH
+## P5 — Vue RICH oui, diarisation NON (arbitrage Quang, 07/09)
 
-Elles existent dans l'UI et **ne font rien** (voir « État des lieux »). Gemini fournit les mots
-horodatés qui leur manquent.
+> *« La diarisation, je crois qu'elle n'est pas utile ; c'était une vieille option, en plus liée
+> à un autre outil qui n'a rien à voir avec les nôtres […] à moins que tu me dises que nos
+> nouveaux outils permettent de le faire correctement. »*
 
-- [ ] Remplir `wordData` depuis `annotations[].word_info` → le bouton RICH s'active seul.
-- [ ] Brancher `optDiarize` sur `transcription_config` (diarisation Gemini, **3 locuteurs max**).
-- [ ] ⚠️ Rappeler dans l'UI que diarisation et `custom_vocabulary` s'excluent (on choisit le calage).
+**Diagnostic confirmé** : elle était branchée sur **AssemblyAI**, inatteignable depuis que les
+getters de clés renvoient `''`. Et Gemini ne la ferait PAS « correctement » :
+- plafond **3 locuteurs** (au-delà = expérimental) ;
+- ⛔ surtout : **incompatible avec les timestamps au mot**. On la paierait en perdant le calage
+  précis *et* la vue RICH — un échange perdant pour des sous-titres traduits en français.
+
+⇒ ❌ **Diarisation ABANDONNÉE.** Ne pas la re-proposer à chaque audit.
+   L'UI porte encore la case « Détection des locuteurs » : la **retirer** plutôt que la laisser
+   cochable sans effet (elle ment à l'utilisateur depuis qu'AssemblyAI est mort).
+
+✅ **La vue RICH, elle, est CONSERVÉE** — et c'est une chose différente, souvent confondue :
+surlignage mot à mot qui suit la lecture + clic pour se positionner dans la vidéo. Elle ne
+dépend **pas** des locuteurs : `index.html:3132` → `var spkCls = w.speaker ? ' spk-' + … : '';`
+le locuteur n'ajoute qu'une **classe CSS optionnelle**, et `index.html:3060` prévoit déjà
+`hasSpeakers === false`. Le cœur (`data-s`/`data-e`, `seekToWord`, `highlightCurrentWord`) ne
+tient qu'aux **mots horodatés**, que Gemini `verbatim` fournit gratuitement.
+
+- [x] Remplir `wordData` depuis `annotations[].word_info` → le bouton RICH s'active seul
+      (il est `disabled` tant que `wordData` est vide).
+- [x] Retirer la case « Détection des locuteurs » de l'UI, et le code mort associé.
 
 ## P6 — Tests et livraison
 
-- [ ] Bump **v9.43 → v9.50** aux **4 endroits imposés par `App/CLAUDE.md`** :
+- [x] Bump **v9.43 → v9.50** aux **4 endroits imposés par `App/CLAUDE.md`** :
       `<title>` (l.15) · badge `.ver-badge` (l.1141) · **la variable `CACHE` dans `sw.js`**
       (⚠️ oubliée dans la 1re version de cette roadmap : sans elle le service worker sert
       l'ancienne page depuis son cache, et la mise à jour est invisible) · champ `version:`
       de l'export DIAG (l.4144). Le footer (l.1481) porte aussi la version : le faire aussi.
-- [ ] `node --check` sur toute string JS éditée (règle projet).
-- [ ] Test **live réel** : une vidéo JP, une ZH, une avec dialogue — sur les 3 modes, avec le
-      **switch auto activé** (c'est ainsi que Quang s'en sert) et **traduction FR via DeepSeek**.
-- [ ] Vérifier les 3 défauts connus : blocs muets, boucles, hallucination.
+- [x] `node --check` sur les 2 blocs `<script>` : OK.
+- [x] **Test live réel fait** (Playwright + Edge, profil jetable, vrai gateway, audio Piper
+      de 8,6 s) : les 3 modes répondent, bornes temporelles dans la plage, blocs ≤ 84 car,
+      Gemini rend **20 mots horodatés**, le bouton RICH **s'active seul**, la case diarisation
+      a bien disparu, **aucune erreur JS**. Latences : groq 587 ms · gemini 3437 ms ·
+      croisé 3021 ms.
+- [ ] Reste à faire **avec de vraies vidéos** : une JP, une ZH, une bavarde, sur les 3 modes,
+      **switch auto activé** et **traduction FR via DeepSeek** — puis vérifier les 3 défauts
+      connus (blocs muets, boucles, hallucination).
 - [ ] Commit + push (⚠️ dépôt `App` **public**, un push déploie ; **zéro secret**).
 
 ## P7 — telegram-video doit hériter du résultat (demande Quang, 07/09)
