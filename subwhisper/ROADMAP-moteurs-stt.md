@@ -214,6 +214,41 @@ horodatés qui leur manquent.
 - [ ] Vérifier les 3 défauts connus : blocs muets, boucles, hallucination.
 - [ ] Commit + push (⚠️ dépôt `App` **public**, un push déploie ; **zéro secret**).
 
+## P7 — telegram-video doit hériter du résultat (demande Quang, 07/09)
+
+> *« quand ce sera en place et fonctionnel au niveau du SubWhisper perso, je veux que le projet
+> Telegram vidéo obtienne automatiquement le meilleur de ce qui a été fait »* — et
+> *« normalement il utilise les mêmes paramétrages […] que mon SubWhisper perso ».*
+
+**Point d'ancrage** : `telegram-video/moteur/soustitres.py`. C'est un **portage Python de
+SubWhisper**, revendiqué comme tel en tête de fichier (*« repris mot pour mot de
+App/subwhisper/prompts.js »*). Il appelle `whisper-large-v3-turbo` via `/api/groq` (l.57, l.191)
+et `deepseek-v4-flash` pour le nettoyage/traduction (l.58).
+
+⚠️ **« Automatiquement » n'existe pas aujourd'hui : le couplage est une COPIE MANUELLE.**
+JS d'un côté, Python de l'autre — aucune source partagée. Et la copie **a déjà dérivé**
+(mesuré le 07/09) :
+
+| Règle de formatage | SubWhisper | telegram-video |
+|---|---|---|
+| 42 car/ligne · 2 lignes | ✅ | ✅ (`MAX_LIGNE`, `MAX_LIGNES` l.49-50) |
+| **84 car/bloc** (`MAX_CHARS`) | ✅ | ❌ **absent** |
+| **25 CPS** (vitesse de lecture) | ✅ | ❌ **absent** |
+| **fusion des blocs < 500 ms** (`MIN_MERGE`) | ✅ | ❌ **absent** |
+
+⇒ telegram-video n'applique que **2 des 5 règles**. Ses sous-titres peuvent donc être trop
+longs ou défiler trop vite, sans que rien ne le signale.
+
+- [x] **Ajouté à la surveillance** de `model_watch.py` : il porte 2 modèles en dur et n'y
+      figurait pas, alors qu'il a **déjà été cassé** par une mort de modèle (le commentaire
+      « l'alias `deepseek-chat` est mort le 24/07 » est dans le fichier). Un portage se
+      surveille comme son original.
+- [ ] Porter le moteur retenu (P2-P4) dans `soustitres.py`, **après** validation sur le perso.
+- [ ] Aligner les 3 règles manquantes (`MAX_CHARS`, `MAX_CPS`, `MIN_MERGE`).
+- [ ] Décider du mode de couplage pour la suite : soit une **discipline de propagation écrite**
+      (une seule ligne dans les deux ROADMAP), soit extraire les constantes dans un JSON lu par
+      les deux. **À trancher avec Quang** — la copie manuelle a déjà prouvé qu'elle dérive.
+
 ---
 
 ## Journal
