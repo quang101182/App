@@ -230,7 +230,8 @@ async function handleProcess(request, env, ctx) {
     return jsonResponse({ error: 'missing required fields: jobId, r2Key' }, 400);
   }
 
-  const { jobId, r2Key, srcLang = null, groqKey = null, gatewayKey = null, gatewayUrl = null } = body;
+  const { jobId, r2Key, srcLang = null, groqKey = null, gatewayKey = null, gatewayUrl = null,
+          sttEngine = 'groq' } = body;
 
   // Verify job exists
   const existing = await kvGet(env, jobId);
@@ -262,6 +263,9 @@ async function handleProcess(request, env, ctx) {
         r2Key,
         presignedDownload,
         srcLang,
+        // Ajoute le 07/09/2026 : sans ce relais, le serveur Fly forcait Groq et le
+        // selecteur de moteur de SubWhisper restait sans effet sur les gros fichiers.
+        sttEngine,
         workerCallbackUrl,
         workerSecret: env.WORKER_SECRET,
         groqKey,
@@ -383,7 +387,7 @@ async function handleJobDelete(request, env, path) {
 // Helper: dispatch to Fly.io (used by /upload-complete for non-process flow)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function dispatchToFly(env, jobId, r2Key, srcLang, groqKey = null, workerCallbackUrl = null, gatewayKey = null, gatewayUrl = null) {
+async function dispatchToFly(env, jobId, r2Key, srcLang, sttEngine, groqKey = null, workerCallbackUrl = null, gatewayKey = null, gatewayUrl = null) {
   try {
     const s3Config         = getS3Config(env);
     const presignedDownload = await presignGet(s3Config, r2Key, PRESIGN_TTL_GET);

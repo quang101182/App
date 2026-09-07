@@ -57,6 +57,11 @@ const CHUNK_DUR_SEC = CHUNK_MAX_BYTES / 32000; // durée en secondes du chunk PC
 // Groq
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_MODEL = 'whisper-large-v3-turbo';
+// Ajoute le 07/09/2026. Jusque-la ce serveur forcait Groq, ce qui rendait le
+// selecteur de moteur de SubWhisper SANS EFFET sur les gros fichiers non-WAV —
+// precisement ceux qui passent par ici. L'outil etait donc incomplet : le choix
+// existait dans l'interface mais s'arretait a la porte du serveur.
+const GEMINI_MODEL = 'gemini-3.5-transcribe';
 
 // ---------------------------------------------------------------------------
 // État global
@@ -231,7 +236,7 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: '1.30.3'
+    version: '1.31.0'
   });
 });
 
@@ -482,6 +487,7 @@ app.post('/extract', requireFlySecret, (req, res) => {
     jobId,
     presignedDownload,
     srcLang,
+    sttEngine = 'groq',
     workerCallbackUrl,
     workerSecret,
     groqKey,
@@ -514,7 +520,7 @@ app.post('/extract', requireFlySecret, (req, res) => {
   );
 
   Promise.race([
-    processJob({ jobId, presignedDownload, srcLang, workerCallbackUrl, workerSecret, groqKey, gatewayKey, gatewayUrl }),
+    processJob({ jobId, presignedDownload, srcLang, sttEngine, workerCallbackUrl, workerSecret, groqKey, gatewayKey, gatewayUrl }),
     jobTimeout
   ])
     .catch(async err => {
@@ -535,7 +541,7 @@ app.post('/extract', requireFlySecret, (req, res) => {
 // ---------------------------------------------------------------------------
 
 async function processJob(job) {
-  const { jobId, presignedDownload, srcLang, workerCallbackUrl, workerSecret, groqKey, gatewayKey, gatewayUrl } = job;
+  const { jobId, presignedDownload, srcLang, sttEngine, workerCallbackUrl, workerSecret, groqKey, gatewayKey, gatewayUrl } = job;
 
   console.log(`[${jobId}] Démarrage du pipeline. URL: ${presignedDownload.substring(0, 80)}...`);
 
@@ -570,6 +576,7 @@ async function processJob(job) {
       jobId,
       ffmpegArgs,
       srcLang,
+      sttEngine,
       groqKey,
       gatewayKey,
       gatewayUrl,
@@ -621,7 +628,7 @@ async function processJob(job) {
 // Streaming FFmpeg → accumulation PCM → chunks séquentiels → Groq
 // ---------------------------------------------------------------------------
 
-async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, gatewayKey, gatewayUrl, workerCallbackUrl, workerSecret }) {
+async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, sttEngine, groqKey, gatewayKey, gatewayUrl, workerCallbackUrl, workerSecret }) {
   return new Promise((resolve, reject) => {
     const ffmpeg = spawn('ffmpeg', ffmpegArgs, {
       stdio: ['ignore', 'pipe', 'pipe']
@@ -723,11 +730,12 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, gatewa
           lastGroqCallTime = Date.now();
 
           const wavBuffer = buildWavBuffer(pcmChunk);
-          const segments = await transcribeWithGroq({
+          const segments = await transcribeChunkAuto({
             jobId,
             wavBuffer,
             chunkIdx: i,
             srcLang,
+            sttEngine,
             groqKey,
             gatewayKey,
             gatewayUrl,
@@ -805,6 +813,133 @@ async function streamAndTranscribe({ jobId, ffmpegArgs, srcLang, groqKey, gatewa
 // ---------------------------------------------------------------------------
 // Transcription Groq avec retry x3 — FormData NATIF Node.js 20
 // ---------------------------------------------------------------------------
+
+/**
+ * Transcription par Gemini 3.5 Transcribe, via la gateway.
+ *
+ * Rend EXACTEMENT le meme tableau de segments que transcribeWithGroq (start/end
+ * decales de offsetSec, texte non vide) : tout l'appelant continue de fonctionner
+ * sans savoir quel moteur a travaille.
+ *
+ * ⛔ mode `verbatim` et pas `smart` : `smart` est muet 25 fois sur 40 sur des
+ * videos reelles et reformule ce qu'il entend (mesures du 07/09/2026).
+ * ⚠️ Gemini ne rend AUCUN timestamp en granularite `segment` — c'est le mot ou
+ * rien. On fabrique donc les blocs : coupe sur une pause > 0,6 s ou a 84
+ * caracteres, comme le fait SubWhisper cote navigateur.
+ */
+async function transcribeWithGemini({ jobId, wavBuffer, chunkIdx, srcLang, gatewayKey,
+                                      gatewayUrl, offsetSec, chunkDurationSec }) {
+  const MAX_RETRIES = 3;
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`[${jobId}] Chunk ${chunkIdx}: appel Gemini (tentative ${attempt}/${MAX_RETRIES})...`);
+      const tc = { mode: { type: 'verbatim', timestamp_granularities: ['word'] } };
+      // Pas de language_codes : auto-detection, le reglage reel de l'utilisateur.
+      const body = {
+        model: GEMINI_MODEL,
+        // `data`/`mime_type` A PLAT : `inline_data` rend HTTP 400 sur cette API.
+        input: [{ type: 'audio', mime_type: 'audio/wav',
+                  data: Buffer.from(wavBuffer).toString('base64') }],
+        generation_config: { transcription_config: tc },
+      };
+      const response = await fetch(`${gatewayUrl}/api/gemini/v1beta/interactions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${gatewayKey}`,
+                   'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        const e = new Error(`Gemini HTTP ${response.status}: ${errText.slice(0, 200)}`);
+        e.is429 = response.status === 429;
+        throw e;
+      }
+      const data = await response.json();
+
+      // Reponse dans steps[].content[].text ; mots dans annotations[] "word_info".
+      const mots = [];
+      for (const st of data.steps || []) {
+        for (const c of st.content || []) {
+          for (const an of c.annotations || []) {
+            if (an.type !== 'word_info') continue;
+            const m0 = /^([\d.]+)s?$/.exec(String(an.start_offset || '').trim());
+            const m1 = /^([\d.]+)s?$/.exec(String(an.end_offset || '').trim());
+            if (!m0) continue;
+            mots.push({ start: parseFloat(m0[1]),
+                        end: m1 ? parseFloat(m1[1]) : parseFloat(m0[1]),
+                        text: an.text || '' });
+          }
+        }
+      }
+      if (!mots.length) {
+        console.warn(`[${jobId}] Chunk ${chunkIdx}: Gemini n'a rendu aucun mot horodate`);
+        return [];
+      }
+
+      const PAUSE = 0.6, MAX_CH = 84;
+      const maxRelEnd = chunkDurationSec || Infinity;
+      const blocs = [];
+      let cur = [], t0 = null, finPrec = null;
+      for (const w of mots) {
+        const joint = cur.join(' ');
+        const coupe = (finPrec !== null && w.start - finPrec > PAUSE) ||
+                      (cur.length && joint.length + 1 + w.text.length > MAX_CH);
+        if (coupe && cur.length) {
+          blocs.push({ start: t0, end: finPrec, text: cur.join(' ') });
+          cur = []; t0 = null;
+        }
+        if (t0 === null) t0 = w.start;
+        cur.push(w.text);
+        finPrec = w.end;
+      }
+      if (cur.length) blocs.push({ start: t0, end: finPrec, text: cur.join(' ') });
+
+      const segments = blocs.map(b => {
+        const relEnd = Math.min(b.end, b.start + 30, maxRelEnd);
+        return { start: b.start + offsetSec,
+                 end: Math.max(relEnd + offsetSec, b.start + offsetSec + 0.1),
+                 text: (b.text || '').trim() };
+      }).filter(seg => seg.text.length > 0);
+
+      console.log(`[${jobId}] Chunk ${chunkIdx}: ${segments.length} segments reçus de Gemini (offset=${offsetSec.toFixed(1)}s)`);
+      return segments;
+    } catch (err) {
+      lastError = err;
+      console.error(`[${jobId}] Chunk ${chunkIdx}: Gemini tentative ${attempt} échouée:`, err.message);
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, attempt * 5000));
+      }
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Dispatch de moteur. C'est le SEUL endroit ou le choix agit cote serveur.
+ * `croise` = Gemini, avec Groq en filet quand Gemini ne rend rien — le seul
+ * declencheur mesure sans faux positif (Gemini rend vide 9 fois sur 40 sur un
+ * audio a faible parole ; Groq n'est jamais muet, 0 sur 40).
+ * ⚠️ Ne PAS y ajouter de bascule sur desaccord : elle a ete retiree cote client
+ * le 07/09 apres mesure (sur des videos reelles les deux moteurs divergent
+ * naturellement de 49 a 100 % sans que personne n'hallucine).
+ */
+async function transcribeChunkAuto(args) {
+  const moteur = (args.sttEngine || 'groq').toLowerCase();
+  if (moteur === 'groq') return transcribeWithGroq(args);
+  if (moteur === 'gemini') return transcribeWithGemini(args);
+
+  let segs = [];
+  try {
+    segs = await transcribeWithGemini(args);
+  } catch (e) {
+    console.warn(`[${args.jobId}] Chunk ${args.chunkIdx}: Gemini en echec (${e.message}) -> Groq`);
+    return transcribeWithGroq(args);
+  }
+  if (segs.length) return segs;
+  console.warn(`[${args.jobId}] Chunk ${args.chunkIdx}: Gemini muet -> bascule sur Groq`);
+  return transcribeWithGroq(args);
+}
 
 async function transcribeWithGroq({ jobId, wavBuffer, chunkIdx, srcLang, groqKey, gatewayKey, gatewayUrl, offsetSec, chunkDurationSec, workerCallbackUrl, workerSecret }) {
   const MAX_RETRIES = 5; // augmenté pour couvrir plusieurs fenêtres rate-limit Groq
