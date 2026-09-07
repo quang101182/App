@@ -169,7 +169,8 @@ async function handleUploadComplete(request, env, ctx) {
     return jsonResponse({ error: 'missing required fields: uploadId, r2Key, jobId, parts' }, 400);
   }
 
-  const { uploadId, r2Key, jobId, parts, groqKey = null, gatewayKey = null, gatewayUrl = null, skipDispatch = false } = body;
+  const { uploadId, r2Key, jobId, parts, groqKey = null, gatewayKey = null,
+          gatewayUrl = null, skipDispatch = false, sttEngine = 'groq' } = body;
 
   // Validate parts
   if (parts.length === 0) {
@@ -185,14 +186,23 @@ async function handleUploadComplete(request, env, ctx) {
   const mpu = env.BUCKET.resumeMultipartUpload(r2Key, uploadId);
   await mpu.complete(parts.map(p => ({ partNumber: p.PartNumber, etag: p.ETag })));
 
-  // Update KV
+  // Update KV. Le statut suit ce qu'on va REELLEMENT faire : 'processing' des lors
+  // qu'on dispatche, sinon le job resterait affiche comme 'uploaded' pendant tout
+  // le traitement — c'est exactement l'etat ou le navigateur s'est fige le 07/09.
   const existing = await kvGet(env, jobId);
-  const updated  = { ...(existing ?? {}), status: 'uploaded', jobId, r2Key, ts: Date.now() };
+  const updated  = { ...(existing ?? {}), status: skipDispatch ? 'uploaded' : 'processing',
+                     jobId, r2Key, ts: Date.now() };
   await kvPut(env, jobId, updated, KV_TTL_SECONDS);
 
   // Fire-and-forget dispatch to Fly.io /extract (skip for VoxSplit — uses its own Deepgram flow)
   if (!skipDispatch) {
-    ctx.waitUntil(dispatchToFly(env, jobId, r2Key, existing?.srcLang ?? null, groqKey, buildCallbackUrl(request.url), gatewayKey, gatewayUrl));
+    // ⚠️ `sttEngine` doit passer ICI aussi : c'est la voie des fichiers de plus de
+    // 100 Mo, donc precisement les grosses videos pour lesquelles le choix de
+    // moteur a ete ecrit. Sans lui, le selecteur restait sans effet dessus.
+    ctx.waitUntil(dispatchToFly(env, {
+      jobId, r2Key, srcLang: existing?.srcLang ?? null, sttEngine, groqKey,
+      workerCallbackUrl: buildCallbackUrl(request.url), gatewayKey, gatewayUrl,
+    }));
   }
 
   return jsonResponse({ status: skipDispatch ? 'uploaded' : 'processing', jobId });
@@ -239,41 +249,18 @@ async function handleProcess(request, env, ctx) {
     return jsonResponse({ error: 'job not found' }, 404);
   }
 
-  // Generate presigned GET URL for Fly.io to download the file from R2
-  const s3Config         = getS3Config(env);
-  const presignedDownload = await presignGet(s3Config, r2Key, PRESIGN_TTL_GET);
-
   // Update KV: mark as processing, store srcLang
   const updated = { ...existing, status: 'processing', srcLang, ts: Date.now() };
   await kvPut(env, jobId, updated, KV_TTL_SECONDS);
 
-  // Worker public URL (used as callback)
-  const workerCallbackUrl = buildCallbackUrl(request.url);
-
-  // Fire-and-forget POST to Fly.io /extract
-  ctx.waitUntil(
-    fetch(`${env.FLY_URL}/extract`, {
-      method : 'POST',
-      headers: {
-        'Content-Type' : 'application/json',
-        'Authorization': `Bearer ${env.FLY_SECRET}`,
-      },
-      body: JSON.stringify({
-        jobId,
-        r2Key,
-        presignedDownload,
-        srcLang,
-        // Ajoute le 07/09/2026 : sans ce relais, le serveur Fly forcait Groq et le
-        // selecteur de moteur de SubWhisper restait sans effet sur les gros fichiers.
-        sttEngine,
-        workerCallbackUrl,
-        workerSecret: env.WORKER_SECRET,
-        groqKey,
-        gatewayKey,
-        gatewayUrl,
-      }),
-    }).catch(err => console.error('[worker] fly dispatch error', err))
-  );
+  // Un SEUL point de dispatch pour les deux voies d'upload (voir dispatchToFly).
+  // Il y avait ici un second fetch inline, duplique de dispatchToFly : le 07/09, seule
+  // cette copie-ci a recu le parametre sttEngine, et la voie multipart est restee
+  // en arriere sans que rien ne le signale. Une implementation, pas deux.
+  ctx.waitUntil(dispatchToFly(env, {
+    jobId, r2Key, srcLang, sttEngine, groqKey,
+    workerCallbackUrl: buildCallbackUrl(request.url), gatewayKey, gatewayUrl,
+  }));
 
   return jsonResponse({ status: 'processing', jobId });
 }
@@ -387,7 +374,27 @@ async function handleJobDelete(request, env, path) {
 // Helper: dispatch to Fly.io (used by /upload-complete for non-process flow)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function dispatchToFly(env, jobId, r2Key, srcLang, sttEngine, groqKey = null, workerCallbackUrl = null, gatewayKey = null, gatewayUrl = null) {
+/**
+ * Envoie un job au serveur Fly. UNIQUE point de dispatch : les deux voies
+ * d'upload (directe et multipart) passent par ici.
+ *
+ * ⚠️ ARGUMENTS NOMMES, ET CE N'EST PAS UNE QUESTION DE STYLE. Le 07/09/2026,
+ * cette fonction a gagne un parametre (`sttEngine`) en 5e position. Le dispatch
+ * inline de handleProcess a suivi, celui-ci non — et comme les arguments etaient
+ * positionnels, TOUT s'est decale d'un cran sur la voie multipart :
+ *   groqKey           <- l'URL de callback  => Fly appelait Groq en presentant une
+ *                                              URL comme cle => HTTP 401 ;
+ *   workerCallbackUrl <- la cle du gateway  => les mises a jour partaient dans le
+ *                                              vide, le job restait a "uploaded"
+ *                                              et le navigateur se figeait a 35 %.
+ * Rien ne pouvait le signaler : les deux valeurs etaient des chaines non vides,
+ * donc aucun controle de presence ne mordait. Un objet nomme rend ce mode de
+ * panne structurellement impossible.
+ */
+async function dispatchToFly(env, {
+  jobId, r2Key, srcLang = null, sttEngine = 'groq',
+  groqKey = null, workerCallbackUrl = null, gatewayKey = null, gatewayUrl = null,
+}) {
   try {
     const s3Config         = getS3Config(env);
     const presignedDownload = await presignGet(s3Config, r2Key, PRESIGN_TTL_GET);
@@ -403,6 +410,7 @@ async function dispatchToFly(env, jobId, r2Key, srcLang, sttEngine, groqKey = nu
         r2Key,
         presignedDownload,
         srcLang,
+        sttEngine,
         workerCallbackUrl,
         workerSecret: env.WORKER_SECRET,
         groqKey,
