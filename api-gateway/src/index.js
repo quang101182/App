@@ -423,8 +423,8 @@ async function proxyGemini(request, env, path) {
   const apiKey = await resolveKey(env, 'GEMINI_KEY');
   if (!apiKey) return jsonResponse({ error: 'GEMINI_KEY not configured' }, 503);
 
-  // Extract the sub-path after /api/gemini (may be empty or e.g. /v1beta/models/gemini-2.0-flash:generateContent)
-  let subPath = path.slice('/api/gemini'.length) || '/v1beta/models/gemini-1.5-flash:generateContent';
+  // Extract the sub-path after /api/gemini (may be empty or e.g. /v1beta/models/gemini-3.6-flash:generateContent)
+  let subPath = path.slice('/api/gemini'.length) || '/v1beta/models/gemini-3.6-flash:generateContent';
   if (!subPath.startsWith('/')) subPath = '/' + subPath;
 
   const upstream = `https://generativelanguage.googleapis.com${subPath}?key=${apiKey}`;
