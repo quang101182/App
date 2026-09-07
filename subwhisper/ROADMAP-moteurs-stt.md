@@ -105,12 +105,45 @@ surveillés (les deux fichiers SubWhisper y sont, l.324 et l.326) mais **ne les 
 ✅ Or ils **sont** testables — vérifié : `gemini-2.0-flash` → **404 net**, `gemini-3.6-flash`
 → **200**, `gemini-2.5-flash` → **200**, via un `generateContent` de 16 tokens.
 
-- [ ] Retirer `"gemini-"` de `UNTESTABLE_PREFIXES`.
-- [ ] Ajouter un testeur Gemini dans `PROVIDERS` (appel réel via le gateway).
-- [ ] Rejouer `python llm-cli/model_watch.py` → doit sortir **exit 1** tant que P0 n'est pas poussé.
+- [x] Retiré `"gemini-"` de `UNTESTABLE_PREFIXES`.
+- [x] Provider `gemini` ajouté dans `PROVIDERS`, avec **`url_template`** : chez Gemini le
+      modèle vit dans l'URL, pas dans le corps.
+- [x] **Regex manquante** — c'est la seconde moitié du bug, et la plus sournoise : `BARE_RE`
+      ne capturait aucun `gemini-*`, et dans SubWhisper le nom vit **dans une URL**
+      (`models/<model>:generateContent`) sans toucher de quote. `GEMINI_RE` couvre les deux formes.
+- [x] ✅ **Validé par MUTATION** : après le seul correctif du provider, remettre
+      `gemini-2.0-flash` dans `index.html` laissait le watcher **muet (exit 0)**. Sans ce test,
+      j'annonçais une réparation qui ne répare rien. Avec la regex : **exit 1**.
+      ⇒ Commit `llm-cli` **95901ce**, poussé.
 
 ⚠️ Troisième incident du même genre après Groq (09/07) et DeepSeek (24/07) : **une surveillance
 qui exclut un fournisseur finit par payer cette exclusion.**
+
+## P1-bis — ⚠️ CE QUE LE WATCHER RÉPARÉ A RÉVÉLÉ : 8 apps, pas une
+
+Dès sa première passe utile, il sort **3 modèles morts** — le problème n'était pas SubWhisper,
+c'était le parc entier :
+
+| Modèle mort | Où, et ce que ça casse |
+|---|---|
+| `gemini-1.5-flash` | `App/api-gateway/src/index.js:427` (**le modèle de repli du proxy**) · `smart-reader-spikes/storyvoice.html:2753` · `storyvoice/index.html:2753` |
+| `gemini-2.0-flash` | `App/voxsplit/index.html:1343` et `:1772` (segmentation) · `App/noteflow/index.html:999` · `noteflowing/index.html:1017` · `voiceforge/voiceforge-v0.19.0.html:1615` · **SubWhisper ×2 (corrigé, P0)** |
+| `gemini-2.5-flash-tts` | `storyvoice.html:4289` et `:4609` · `storyvoice/index.html:4290` et `:4611` · `storyvoice/_pregen_demo.js:165` |
+
+**Remplaçants vérifiés vivants le 07/09** : `gemini-3.6-flash` (200) · `gemini-2.5-flash` (200) ·
+**`gemini-2.5-flash-preview-tts`** pour le TTS — il rend **400 « response modalities »**, une
+erreur qui porte sur les *modalités* et non sur le modèle : **le modèle existe**, contrairement
+à `gemini-2.5-flash-tts` / `gemini-3.6-flash-tts` / `gemini-2.5-pro-tts` qui rendent **404**.
+
+🛑 **HORS DU MANDAT VALIDÉ — arrêt volontaire, en attente d'arbitrage.** Le mandat du 07/09
+portait sur *« la plus grosse partie sur le SubWhisper perso »* + *« corriger ce qui
+dysfonctionne »* sur Pro. Ces 6 autres applications n'en font pas partie, et **chaque push
+déploie en production**. Conformément à la règle « drift de scope découvert en cours
+d'implémentation = STOP + question courte », rien n'a été touché hors SubWhisper.
+
+⚠️ Le cas `storyvoice` demande en plus une vérification avant tout remplacement : le TTS Gemini
+passe peut-être par la route `gcptts` (OAuth compte de service) et non `/api/gemini` — le nom du
+modèle y voyage dans `voice.model_name`. **Tracer le chemin d'appel avant de substituer.**
 
 ## P2 — Sélecteur de moteur STT (le cœur de la demande)
 
@@ -183,4 +216,9 @@ horodatés qui leur manquent.
 ## Journal
 
 - **07/09/2026** — Campagne de mesure (4 régimes, ~500 appels), roadmap ouverte.
-  P0 corrigé localement, non poussé. Corpus de bancs (4,1 Go) supprimés après usage.
+  Corpus de bancs (4,1 Go) supprimés après usage.
+- **07/09/2026** — ✅ **P0 livré et poussé** : `App` **2172fe8** (perso) et `subwhisper-pro`
+  **5990429** (Pro, correctif seul). ✅ **P1 livré et poussé** : `llm-cli` **95901ce**,
+  validé par mutation.
+- **07/09/2026** — 🛑 P1-bis ouvert : 6 applications hors mandat sont cassées. En attente
+  d'arbitrage de Quang. **Prochaine étape dans le mandat : P2.**
