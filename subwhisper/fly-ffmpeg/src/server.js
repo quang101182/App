@@ -45,7 +45,7 @@ const os = require('os');
 // Source UNIQUE de la version : la banniere de demarrage et /health la lisent
 // toutes les deux ici. Le 07/09 elles avaient diverge (1.30.0 vs 1.32.0), ce qui
 // rend le log de demarrage menteur — donc inutilisable pour verifier un deploiement.
-const SERVER_VERSION = '1.32.0';
+const SERVER_VERSION = '1.33.0';
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
@@ -915,6 +915,12 @@ async function transcribeWithGemini({ jobId, wavBuffer, chunkIdx, srcLang, gatew
         return [];
       }
 
+      // Duree minimale d'affichage d'un sous-titre. Un bloc finit a la fin de son
+      // dernier mot : trois mots prononces vite donnaient 0,6 s a l'ecran, illisible
+      // (mesure du 07/09/2026 : 67 % des blocs sous la seconde, 32 % au-dessus de la
+      // limite de 25 caracteres/seconde). On ETEND la fin, jamais le debut — la
+      // synchronisation reste celle de la parole.
+      const DUREE_MINI = 1.2, DUREE_MAX = 7, ECART = 0.04;
       const PAUSE = 0.6, MAX_CH = 84;
       const maxRelEnd = chunkDurationSec || Infinity;
       const blocs = [];
@@ -933,8 +939,16 @@ async function transcribeWithGemini({ jobId, wavBuffer, chunkIdx, srcLang, gatew
       }
       if (cur.length) blocs.push({ start: t0, end: finPrec, text: cur.join(' ') });
 
-      const segments = blocs.map(b => {
-        const relEnd = Math.min(b.end, b.start + 30, maxRelEnd);
+      const segments = blocs.map((b, i) => {
+        let relEnd = Math.min(b.end, b.start + DUREE_MAX, maxRelEnd);
+        // Duree minimale d'affichage : on ETEND la fin, jamais le debut, et on
+        // n'empiete pas sur le bloc suivant. Le DERNIER bloc reste tel quel pour ne
+        // pas deborder sur le chunk d'apres, dont on ne connait pas encore le debut.
+        if (i < blocs.length - 1) {
+          const voulu = Math.max(relEnd, b.start + DUREE_MINI);
+          relEnd = Math.max(relEnd,
+                            Math.min(voulu, blocs[i + 1].start - ECART, b.start + DUREE_MAX, maxRelEnd));
+        }
         return { start: b.start + offsetSec,
                  end: Math.max(relEnd + offsetSec, b.start + offsetSec + 0.1),
                  text: (b.text || '').trim() };

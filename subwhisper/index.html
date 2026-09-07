@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.53</title>
+<title>SubWhisper v9.54</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1138,7 +1138,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.53</span>
+    <span class="ver-badge">v9.54</span>
     <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app sur l'ecran d'accueil">&#8615; Install</button>
   </div>
   <div class="hdr-r">
@@ -1481,7 +1481,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.53 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.54 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -2625,6 +2625,14 @@ var BCP47_STT = { fr:'fr-FR', en:'en-US', de:'de-DE', es:'es-ES', it:'it-IT',
 // plafond que autoFormatSRT). Mesure du 07/09 : ces blocs sont PLUS conformes que
 // les segments natifs de Groq (38 % de blocs en violation contre 82 % en francais),
 // parce qu'on controle la coupe au lieu de la subir.
+var BLOC_DUREE_MINI_S = 1.2;  // duree minimale d'affichage d'un sous-titre
+// Duree MAXIMALE d'un bloc fabrique depuis les mots. Le cap historique de 30 s
+// est un garde-fou anti-hallucination, pas une regle de lisibilite : un bloc
+// plafonne a 84 caracteres se lit en 3,4 s a 25 c/s, donc 30 s a l'ecran pour
+// une phrase de 44 signes n'a aucun sens — c'est le « texte qui reste affiche
+// extremement longtemps » signale le 07/09/2026. On ne touche PAS aux segments
+// natifs de Groq, qui epousent la vraie duree de la parole.
+var BLOC_DUREE_MAX_S = 7;
 function motsVersBlocs(mots, maxRelEnd) {
   var PAUSE = 0.6, MAX_CH = 84;
   var blocs = [], cur = [], t0 = null, prevFin = null;
@@ -2644,8 +2652,24 @@ function motsVersBlocs(mots, maxRelEnd) {
   // Meme garde-fou anti-hallucination que le chemin Groq : un bloc ne peut ni
   // depasser 30 s ni sortir de la duree du chunk.
   var cap = maxRelEnd || Infinity;
-  return blocs.map(function(b) {
+  blocs = blocs.map(function(b) {
     return { start: b.start, end: Math.min(b.end, b.start + 30, cap), text: b.text };
+  });
+  // DUREE MINIMALE D'AFFICHAGE. Un bloc finit a la fin de son dernier mot : trois
+  // mots prononces vite donnaient un sous-titre de 0,6 s, illisible — 67 % des blocs
+  // sous la seconde sur une mesure du 07/09, et 32 % au-dessus de la limite de
+  // 25 caracteres/seconde. On ETEND la fin, jamais le debut : la synchronisation
+  // reste exactement celle de la parole. On n'empiete pas sur le bloc suivant, et
+  // on laisse le DERNIER bloc tel quel pour ne pas deborder sur le chunk d'apres.
+  var ECART = 0.04;
+  return blocs.map(function(b, i) {
+    var plafond = Math.min(b.start + BLOC_DUREE_MAX_S, cap);
+    if (i === blocs.length - 1) {
+      return { start: b.start, end: Math.min(b.end, plafond), text: b.text };
+    }
+    var fin = Math.max(b.end, b.start + BLOC_DUREE_MINI_S);
+    fin = Math.min(fin, blocs[i + 1].start - ECART, plafond);
+    return { start: b.start, end: Math.max(Math.min(b.end, plafond), fin), text: b.text };
   });
 }
 
@@ -4414,7 +4438,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.53',
+    version: 'v9.54',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -5018,14 +5042,26 @@ function closeValPanel() {
 // ── AUTO-FORMATEUR SRT ────────────────────────────────────
 // Déduplique blocs consécutifs identiques (hallucination Groq)
 // Retourne { blocks, removed }
+// Deux blocs de MEME texte ne sont fusionnes que s'ils se suivent VRAIMENT.
+// ⚠️ Sans la condition d'ecart, cette fonction etendait la fin jusqu'a la derniere
+// occurrence, meme situee dix minutes plus loin. Constate le 07/09/2026 sur un SRT
+// Gemini : « Voila. Hein ? » affiche de 978,9 s a 1573,1 s, soit 9 min 54 a l'ecran.
+// C'est le cas typique des interjections courtes (« Ouais. », « Oh. »), que Gemini
+// produit en quantite parce qu'il decoupe au mot. Une repetition d'hallucination
+// Whisper, elle, est CONTIGUE — c'est cela, et cela seul, qu'on veut fusionner.
+var DEDUP_ECART_MAX_MS = 2000;  // au-dela, ce sont deux occurrences distinctes
+var BLOC_DUREE_MAX_MS  = 30000; // filet final : un sous-titre ne tient pas 30 s
 function dedupConsecutiveBlocks(blocks) {
   if (!blocks.length) return { blocks: blocks, removed: 0 };
   var deduped = [blocks[0]];
   var removed = 0;
   for (var _di = 1; _di < blocks.length; _di++) {
-    if (blocks[_di].text.trim() === blocks[_di - 1].text.trim()) {
-      var prevPts = deduped[deduped.length - 1].timestamp.split(' --> ');
-      var curPts = blocks[_di].timestamp.split(' --> ');
+    var prevPts = deduped[deduped.length - 1].timestamp.split(' --> ');
+    var curPts  = blocks[_di].timestamp.split(' --> ');
+    var memeTexte = blocks[_di].text.trim() === deduped[deduped.length - 1].text.trim();
+    var ecart     = tsToMs(curPts[0]) - tsToMs(prevPts[1]);
+    var fusionne  = tsToMs(curPts[1]) - tsToMs(prevPts[0]);
+    if (memeTexte && ecart <= DEDUP_ECART_MAX_MS && fusionne <= BLOC_DUREE_MAX_MS) {
       deduped[deduped.length - 1].timestamp = prevPts[0] + ' --> ' + curPts[1];
       removed++;
     } else {
@@ -5066,7 +5102,20 @@ function autoFormatSRT() {
   var MIN_MERGE   = 500; // ms : bloc < 500ms fusionné avec suivant
   var modified    = 0;
 
-  // Étape 0 : dédupliquer blocs consécutifs identiques (hallucination Groq)
+  // Étape 0-a : jeter les blocs qui ne peuvent PAS s'afficher (fin <= début).
+  // Whisper rend parfois un segment degenere (start == end) rempli de ponctuation
+  // repetee ; l'etape de scission le decoupait alors en dizaines de sous-blocs tout
+  // aussi invalides. Mesure du 07/09 sur un SRT reel : 168 blocs de duree nulle sur
+  // 545. On les supprime a la source plutot que de les multiplier.
+  var _avantVides = blocks.length;
+  blocks = blocks.filter(function(b) {
+    var p = b.timestamp.split(' --> ');
+    return tsToMs(p[1]) > tsToMs(p[0]);
+  });
+  modified += (_avantVides - blocks.length);
+  if (!blocks.length) { toast('SRT invalide (aucun bloc affichable)'); return; }
+
+  // Étape 0-b : dédupliquer blocs consécutifs identiques (hallucination Groq)
   var dd = dedupConsecutiveBlocks(blocks);
   blocks = dd.blocks;
   modified += dd.removed;
