@@ -1,6 +1,6 @@
 /**
  * SubWhisper Fly.io FFmpeg Server
- * Version: 1.32.0 (voir SERVER_VERSION, source unique) — 1.30.0: /smart-zoom, /speed-ramp, /promo-assembly, /promo-assembly-pro, zoom effects, xfade transitions
+ * Version: voir SERVER_VERSION (source unique) — 1.37.0 (10/09/2026) : plafond de volume sortant par jour + /promo-assembly-pro authentifiee — 1.30.0: /smart-zoom, /speed-ramp, /promo-assembly, /promo-assembly-pro, zoom effects, xfade transitions
  *
  * Fixes v1.1.0:
  *  - Remplacé form-data npm par native FormData+Blob (Node 20 globals)
@@ -45,7 +45,7 @@ const os = require('os');
 // Source UNIQUE de la version : la banniere de demarrage et /health la lisent
 // toutes les deux ici. Le 07/09 elles avaient diverge (1.30.0 vs 1.32.0), ce qui
 // rend le log de demarrage menteur — donc inutilisable pour verifier un deploiement.
-const SERVER_VERSION = '1.36.0';
+const SERVER_VERSION = '1.37.0';
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const FLY_SECRET = process.env.FLY_SECRET || '';
 const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);
@@ -227,6 +227,51 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '50mb' }));
+// ---------------------------------------------------------------------------
+// v1.37.0 (10/09/2026) — PLAFOND DE VOLUME SORTANT, pose par nous.
+// Fly.io n'a AUCUN plafond de depense (doc « Cost Management » : « there's no soft
+// ceiling. If you go over, we'll bill you ») et le volume sortant est facture au Go.
+// Au-dela du quota du jour, toute requete est refusee (429), sauf /health.
+// Compteur persiste sur le volume /data : il survit a un redemarrage de la machine.
+// ---------------------------------------------------------------------------
+const EGRESS_DAILY_LIMIT_BYTES = Number(process.env.EGRESS_DAILY_LIMIT_BYTES) || 20 * 1024 * 1024 * 1024;
+const EGRESS_FILE = fs.existsSync('/data') ? '/data/egress-quota.json' : path.join(os.tmpdir(), 'egress-quota.json');
+let egress = { day: '', bytes: 0 };
+try { egress = JSON.parse(fs.readFileSync(EGRESS_FILE, 'utf8')); } catch (_) {}
+let egressDirty = false;
+function egressToday() {
+  const day = new Date().toISOString().slice(0, 10);
+  if (egress.day !== day) { egress = { day, bytes: 0 }; egressDirty = true; }
+  return egress;
+}
+function egressFlush() {
+  if (!egressDirty) return;
+  egressDirty = false;
+  try { fs.writeFileSync(EGRESS_FILE, JSON.stringify(egress)); } catch (e) { console.error('[egress] ecriture compteur:', e.message); }
+}
+setInterval(egressFlush, 10000).unref();
+process.on('SIGTERM', egressFlush);
+process.on('SIGINT', egressFlush);
+
+app.use((req, res, next) => {
+  if (req.path === '/health') return next();
+  const q = egressToday();
+  if (q.bytes >= EGRESS_DAILY_LIMIT_BYTES) {
+    console.warn(`[egress] quota du jour atteint (${q.bytes} octets) — refus ${req.method} ${req.path}`);
+    return res.status(429).json({ error: 'Daily egress quota reached', limitBytes: EGRESS_DAILY_LIMIT_BYTES });
+  }
+  const count = (chunk, encoding) => {
+    if (!chunk || typeof chunk === 'function') return;
+    const n = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk), typeof encoding === 'string' ? encoding : 'utf8');
+    egressToday().bytes += n;
+    egressDirty = true;
+  };
+  const write = res.write;
+  const end = res.end;
+  res.write = function (chunk, encoding, cb) { count(chunk, encoding); return write.call(this, chunk, encoding, cb); };
+  res.end = function (chunk, encoding, cb) { count(chunk, encoding); return end.call(this, chunk, encoding, cb); };
+  next();
+});
 
 // Auth middleware that accepts FLY_SECRET or WORKER_SECRET (header or query param ?s=)
 function requireAnySecret(req, res, next) {
@@ -266,7 +311,9 @@ app.get('/health', (req, res) => {
     activeJobs,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     maxConcurrentJobs: MAX_CONCURRENT_JOBS,
-    version: SERVER_VERSION
+    version: SERVER_VERSION,
+    egressBytesToday: egressToday().bytes,
+    egressLimitBytes: EGRESS_DAILY_LIMIT_BYTES
   });
 });
 
@@ -3192,7 +3239,7 @@ app.post('/promo-assembly', requireAnySecret, async (req, res) => {
 // ---------------------------------------------------------------------------
 // /promo-assembly-pro — Pro mode: screen recording + avatar split-screen
 // ---------------------------------------------------------------------------
-app.post('/promo-assembly-pro', express.json({ limit: '200mb' }), async (req, res) => {
+app.post('/promo-assembly-pro', requireAnySecret, express.json({ limit: '200mb' }), async (req, res) => {
   const jobId = `pro-${Date.now().toString(36)}`;
   console.log(`[${jobId}] /promo-assembly-pro start`);
 
