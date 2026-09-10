@@ -22,6 +22,8 @@ export SUBWHISPER_TEST_FILE="ma_video.mp4"
 python test_cloud.py croise
 ```
 
+🔒 **Depuis le Worker v7.1 (11/09/2026)**, `/upload-presign`, `/upload-complete`, `/process`, `/presigned-download` et `DELETE /job` exigent `Authorization: Bearer <clé du gateway>` (validée par le gateway). Les trois scripts l'envoient via `_AUTH()` (clé lue par `secret.py`, jamais imprimée). Sans elle : **401**.
+
 ⚠️ Le fichier de test doit être **non-WAV et > 24 Mo**, sinon le client ne prend pas le chemin
 cloud (`index.html` : `if (!isWavFile && workerUrl)`) et le banc mesure autre chose.
 

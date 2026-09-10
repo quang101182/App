@@ -1,5 +1,5 @@
 /**
- * SubWhisper — Cloudflare Worker v7.0
+ * SubWhisper — Cloudflare Worker v7.1
  *
  * Architecture:
  *   Browser ──presigned PUT──► R2 (direct, bypasses Worker)
@@ -28,6 +28,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Internal-Secret',
 };
 
+const WORKER_VERSION    = 'v7.1';
 const CHUNK_SIZE_BYTES  = 100 * 1024 * 1024; // 100 MB per multipart part
 const KV_TTL_SECONDS    = 3600;               // 1 hour job TTL in KV
 const PRESIGN_TTL_PUT   = 3600;               // 1 hour for upload presigned URL
@@ -51,6 +52,15 @@ export default {
     try {
       // Route dispatcher — await obligatoire pour que le catch capte les erreurs async
       if (method === 'GET'   && path === '/health')                return await handleHealth();
+
+      // v7.1 : les routes qui ÉCRIVENT dans R2, lancent Fly ou suppriment exigent la clé du gateway principal.
+      // /job-status (lecture, jobId aléatoire) et /job-done (secret interne Fly) ne changent pas.
+      const needsKey = (method === 'POST' && ['/upload-presign', '/upload-complete', '/process', '/presigned-download'].includes(path))
+                    || (method === 'DELETE' && path.startsWith('/job/'));
+      if (needsKey) {
+        const denied = await requireGatewayKey(request, env);
+        if (denied) return denied;
+      }
       if (method === 'POST'  && path === '/upload-presign')        return await handleUploadPresign(request, env);
       if (method === 'POST'  && path === '/upload-complete')       return await handleUploadComplete(request, env, ctx);
       if (method === 'POST'  && path === '/process')               return await handleProcess(request, env, ctx);
@@ -74,7 +84,45 @@ export default {
 
 /** GET /health */
 function handleHealth() {
-  return jsonResponse({ ok: true });
+  return jsonResponse({ ok: true, version: WORKER_VERSION });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * v7.1 (11/09/2026) — contrôle d'accès des routes coûteuses.
+ * Avant : /upload-presign délivrait des URL d'envoi R2 à n'importe qui (et /process lançait Fly), alors que
+ * R2 n'a AUCUN plafond de dépense dur (« Budget alerts are informational only », doc Cloudflare).
+ * L'appelant envoie `Authorization: Bearer <clé du gateway>` — la clé que SubWhisper détient déjà
+ * (injectée côté serveur par whisper.se7enai.com). La clé est validée PAR le gateway (GET /config) :
+ * aucun secret recopié ici, la protection suit toute rotation. Service binding obligatoire : un fetch
+ * workers.dev -> workers.dev du même compte est bloqué (erreur 1042). Résultat positif mémorisé 5 min
+ * par isolat, sous empreinte (jamais la clé).
+ */
+const AUTH_CACHE_MS = 5 * 60 * 1000;
+const authOk = new Map();
+
+async function requireGatewayKey(request, env) {
+  const auth = request.headers.get('Authorization') || '';
+  const key = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!key) return jsonResponse({ error: 'unauthorized' }, 401);
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key)));
+  const digest = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+  if ((authOk.get(digest) || 0) > Date.now()) return null;
+  if (!env.GATEWAY) return jsonResponse({ error: 'auth unavailable' }, 503);
+  let res;
+  try {
+    res = await env.GATEWAY.fetch('https://api-gateway/config', { headers: { Authorization: 'Bearer ' + key } });
+  } catch (e) {
+    return jsonResponse({ error: 'auth unavailable' }, 503);
+  }
+  if (res.status === 200) {
+    if (authOk.size > 200) authOk.clear();
+    authOk.set(digest, Date.now() + AUTH_CACHE_MS);
+    return null;
+  }
+  if (res.status === 401 || res.status === 403) return jsonResponse({ error: 'unauthorized' }, 401);
+  return jsonResponse({ error: 'auth unavailable', gateway: res.status }, 503);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
