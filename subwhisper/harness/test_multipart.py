@@ -25,6 +25,9 @@ import json
 import requests
 from secret import worker_secret
 
+# v9.56 : le Worker exige la clé du gateway sur ses routes coûteuses (jamais imprimée)
+_AUTH = lambda: {"Authorization": "Bearer " + worker_secret()}
+
 BASE    = "https://subwhisper-worker.quang101182.workers.dev"
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
 SEUIL   = 100 * 1024 * 1024
@@ -44,7 +47,7 @@ def run(moteur):
     t0 = time.time()
     print(f"\n===== multipart · {moteur} · {taille/1048576:.0f} Mo =====", flush=True)
 
-    p = requests.post(BASE + "/upload-presign", json={
+    p = requests.post(headers=_AUTH(), url=BASE + "/upload-presign", json={
         "filename": os.path.basename(FICHIER), "filesize": taille,
         "mimeType": "video/mp4", "multipart": True}, timeout=120).json()
     job = p["jobId"]
@@ -63,7 +66,7 @@ def run(moteur):
             parts.append({"ETag": etag, "PartNumber": i + 1})
             print(f"[{time.time()-t0:6.1f}s] partie {i+1}/{len(urls)} envoyee", flush=True)
 
-    r = requests.post(BASE + "/upload-complete", json={
+    r = requests.post(headers=_AUTH(), url=BASE + "/upload-complete", json={
         "uploadId": p["uploadId"], "r2Key": p["r2Key"], "jobId": job,
         "parts": parts, "sttEngine": moteur, "groqKey": None,
         "gatewayKey": secret, "gatewayUrl": GATEWAY}, timeout=300)

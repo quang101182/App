@@ -6,6 +6,9 @@ mises a jour de progression reellement recues par le client.
 import sys, time, os, json, requests
 from secret import worker_secret
 
+# v9.56 : le Worker exige la clé du gateway sur ses routes coûteuses (jamais imprimée)
+_AUTH = lambda: {"Authorization": "Bearer " + worker_secret()}
+
 BASE = "https://subwhisper-worker.quang101182.workers.dev"
 GW   = "https://api-gateway.quang101182.workers.dev"
 F    = os.environ.get("SUBWHISPER_TEST_FILE", "").strip() or sys.exit(
@@ -13,13 +16,13 @@ F    = os.environ.get("SUBWHISPER_TEST_FILE", "").strip() or sys.exit(
     "(non-WAV et > 24 Mo pour emprunter le chemin cloud).")
 
 def run(moteur):
-    p = requests.post(BASE + "/upload-presign", json={
+    p = requests.post(headers=_AUTH(), url=BASE + "/upload-presign", json={
         "filename": F, "filesize": os.path.getsize(F),
         "mimeType": "audio/mp4", "multipart": False}, timeout=60).json()
     requests.put(p["presignedUrl"], data=open(F, "rb"),
                  headers={"Content-Type": "audio/mp4"}, timeout=1800)
     t0 = time.time()
-    requests.post(BASE + "/process", json={
+    requests.post(headers=_AUTH(), url=BASE + "/process", json={
         "jobId": p["jobId"], "sttEngine": moteur, "r2Key": p["r2Key"],
         "srcLang": "", "groqKey": None,
         "gatewayKey": worker_secret(), "gatewayUrl": GW}, timeout=120)

@@ -7,6 +7,9 @@ Le secret ne transite jamais par la sortie.
 import os, sys, time, json, requests
 from secret import worker_secret
 
+# v9.56 : le Worker exige la clé du gateway sur ses routes coûteuses (jamais imprimée)
+_AUTH = lambda: {"Authorization": "Bearer " + worker_secret()}
+
 BASE = "https://subwhisper-worker.quang101182.workers.dev"
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
 FICHIER = os.environ.get("SUBWHISPER_TEST_FILE", "").strip() or sys.exit(
@@ -19,7 +22,7 @@ def run(moteur):
     t0 = time.time()
     print(f"\n===== moteur = {moteur} · {taille/1048576:.1f} Mo =====", flush=True)
 
-    r = requests.post(BASE + "/upload-presign", json={
+    r = requests.post(headers=_AUTH(), url=BASE + "/upload-presign", json={
         "filename": FICHIER, "filesize": taille,
         "mimeType": "video/mp4", "multipart": False}, timeout=60)
     r.raise_for_status()
@@ -33,7 +36,7 @@ def run(moteur):
     print(f"[{time.time()-t0:6.1f}s] upload R2 -> {up.status_code}", flush=True)
     up.raise_for_status()
 
-    r = requests.post(BASE + "/process", json={
+    r = requests.post(headers=_AUTH(), url=BASE + "/process", json={
         "jobId": jobId, "sttEngine": moteur, "r2Key": p["r2Key"],
         "srcLang": "", "groqKey": None,
         "gatewayKey": secret, "gatewayUrl": GATEWAY}, timeout=120)
