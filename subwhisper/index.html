@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.57</title>
+<title>SubWhisper v9.58</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1143,7 +1143,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.57</span>
+    <span class="ver-badge">v9.58</span>
     <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app sur l'ecran d'accueil">&#8615; Install</button>
   </div>
   <div class="hdr-r">
@@ -1486,7 +1486,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.57 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.58 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -3621,6 +3621,13 @@ function repairSRTTimestamps(silent) {
   // Fly.io pipeline : chunk 24MB WAV 16kHz mono 16-bit = 786431ms (~13:06)
   var CLUSTER_CHUNK_MS  = 786431;
   var CLUSTER_JUMP_MS   = Math.round(CLUSTER_CHUNK_MS * 0.4); // seuil détection ~5min
+  // v9.58 (12/09/2026) : ce recalibrage suppose des morceaux GROQ de 24 Mo (786 431 ms).
+  // Depuis que Gemini reçoit l'audio par tranches de 360 s (v9.52), il n'a plus de sens
+  // en mode gemini/croisé : sur une vidéo de 70 min avec un silence de 4 min 17 entre
+  // deux répliques, il a déplacé 170 sous-titres de 16:41 à 13:06 (mesuré sur l'audio,
+  // identique dans Telegram vidéo qui exécute ce code). Gemini rend des mots horodatés :
+  // il n'y a pas de « cluster halluciné » à recaler. Actif en Groq seulement.
+  var clusterActif = getSttEngine() === 'groq';
 
   // ── ÉTAPE -1 : Recalibration clusters ────────────────────
   // Détecte les sauts de startMs > CLUSTER_JUMP_MS (hallucinations Groq/Fly)
@@ -3635,7 +3642,7 @@ function repairSRTTimestamps(silent) {
     if (curS - prevS > CLUSTER_JUMP_MS) clBoundaries.push(ci);
   }
   var clustersShifted = 0;
-  if (clBoundaries.length > 1) {
+  if (clusterActif && clBoundaries.length > 1) {
     for (var cn = 1; cn < clBoundaries.length; cn++) {
       var cStart = clBoundaries[cn];
       var cEnd   = cn < clBoundaries.length - 1 ? clBoundaries[cn + 1] : blocks.length;
@@ -4422,7 +4429,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.57',
+    version: 'v9.58',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
