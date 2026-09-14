@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.58</title>
+<title>SubWhisper v9.59</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1143,7 +1143,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.58</span>
+    <span class="ver-badge">v9.59</span>
     <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app sur l'ecran d'accueil">&#8615; Install</button>
   </div>
   <div class="hdr-r">
@@ -1486,7 +1486,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.58 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.59 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -3004,48 +3004,156 @@ async function deeplxTranslate(text, srcLang, tgtLang, deeplxUrl) {
 }
 
 // ── DISPATCH IA (Gemini ou DeepSeek selon sélection) ──────
+// v9.59 (14/09/2026) \u2014 UNE PANNE DU FOURNISSEUR NE PEND PLUS, ET NE PASSE PLUS INAPER\u00c7UE.
+// Constat\u00e9 le 14/09 au soir : DeepSeek Flash satur\u00e9 met les requ\u00eates EN FILE sans aucune
+// erreur \u2014 en flux il n'envoie que \u00ab : keep-alive \u00bb toutes les 12 s (mesur\u00e9), et sa doc
+// (quick_start/rate_limit) ferme la connexion apr\u00e8s 10 min sans inf\u00e9rence. callAIText
+// n'avait AUCUN d\u00e9lai : chaque lot attendait ind\u00e9finiment (T\u00e9l\u00e9gramme Vid\u00e9o perdait la
+// vid\u00e9o au bout de 30 min), et un lot en \u00e9chec gardait le texte source SANS alerte.
+//  1. DeepSeek est lu EN FLUX : un keep-alive n'est pas une r\u00e9ponse. Aucun contenu au bout
+//     de `premier` ms \u21d2 requ\u00eate en file \u21d2 fournisseur indisponible. Une g\u00e9n\u00e9ration qui
+//     produit n'est jamais coup\u00e9e ; seul un silence de `silence` ms l'interrompt.
+//  2. Gemini (non-flux) : d\u00e9lai total `total`.
+//  3. L'erreur porte `.fournisseur = true` et pose l'\u00e9tat de panne : les appels suivants
+//     \u00e9chouent tout de suite pendant `memoire` ms (pas N \u00d7 2 min), l'alerte s'affiche, et
+//     le pilote de T\u00e9l\u00e9gramme Vid\u00e9o refuse de livrer un SRT \u00e0 moiti\u00e9 traduit.
+// \u26d4 AUCUNE bascule automatique vers l'autre moteur (choix de Quang) : panne visible.
+// \u00c9tat tenu dans une FONCTION (et non des `var` globales) : T\u00e9l\u00e9gramme Vid\u00e9o n'extrait que
+// des fonctions de ce fichier.
+function _aiEtat() {
+  if (!_aiEtat.s) _aiEtat.s = { delais: { premier: 120000, silence: 90000, total: 600000, memoire: 90000 }, panne: null };
+  return _aiEtat.s;
+}
+function _aiErreurFournisseur(moteur, message) {
+  var e = new Error(moteur + ' indisponible \u2014 ' + message);
+  e.fournisseur = true;
+  _aiEtat().panne = { moteur: moteur, message: message, t: Date.now() };
+  try { toastPersist('\u26a0 ' + moteur + ' ne r\u00e9pond pas (' + message + ') \u2014 traitement incomplet. R\u00e9essaie plus tard, ou choisis l\u2019autre moteur IA.'); } catch (_) {}
+  return e;
+}
+// Lit la r\u00e9ponse DeepSeek en flux SSE. `ctrl` : l'AbortController de la requ\u00eate.
+async function _aiLireFluxDeepSeek(resp, ctrl) {
+  // Pas de flux lisible (banc sans r\u00e9seau, tr\u00e8s vieux navigateur) : r\u00e9ponse JSON classique.
+  if (!resp.body || typeof resp.body.getReader !== 'function') {
+    var d = await resp.json();
+    return ((d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '').trim();
+  }
+  var D = _aiEtat().delais, lecteur = resp.body.getReader(), dec = new TextDecoder();
+  var tampon = '', texte = '', debut = Date.now(), dernier = 0, fini = false;
+  return await new Promise(function(ok, ko) {
+    function finir(err, val) {
+      if (fini) return; fini = true; clearInterval(veille);
+      if (err) { try { ctrl.abort(); } catch (_) {} ko(err); } else ok(val);
+    }
+    var veille = setInterval(function() {
+      var now = Date.now();
+      if (!dernier && now - debut > D.premier) finir(_aiErreurFournisseur('DeepSeek', 'requ\u00eate en file depuis ' + Math.round((now - debut) / 1000) + ' s sans d\u00e9marrer'));
+      else if (dernier && now - dernier > D.silence) finir(_aiErreurFournisseur('DeepSeek', 'g\u00e9n\u00e9ration arr\u00eat\u00e9e (' + Math.round((now - dernier) / 1000) + ' s sans contenu)'));
+      else if (now - debut > D.total) finir(_aiErreurFournisseur('DeepSeek', 'r\u00e9ponse trop longue (plus de ' + Math.round(D.total / 1000) + ' s)'));
+    }, 1000);
+    (async function() {
+      try {
+        for (;;) {
+          var r = await lecteur.read();
+          if (r.done) break;
+          tampon += dec.decode(r.value, { stream: true });
+          var lignes = tampon.split('\n'); tampon = lignes.pop();
+          for (var i = 0; i < lignes.length; i++) {
+            var l = lignes[i].trim();
+            if (!l || l.charAt(0) === ':' || l.indexOf('data:') !== 0) continue;   // \u00ab : keep-alive \u00bb = en file, pas une r\u00e9ponse
+            var p = l.slice(5).trim();
+            if (p === '[DONE]') continue;
+            var j; try { j = JSON.parse(p); } catch (_) { continue; }
+            if (j.error) throw new Error('DeepSeek : ' + (j.error.message || 'erreur dans le flux'));
+            if (j.choices && j.choices[0]) {
+              dernier = Date.now();                                   // l'inf\u00e9rence a d\u00e9marr\u00e9
+              var delta = j.choices[0].delta || {};
+              if (delta.content) texte += delta.content;
+            }
+          }
+        }
+        if (!dernier) finir(_aiErreurFournisseur('DeepSeek', 'flux ferm\u00e9 sans aucune r\u00e9ponse'));
+        else finir(null, texte.trim());
+      } catch (e) {
+        finir(e && e.fournisseur ? e : (fini ? null : _aiErreurFournisseur('DeepSeek', 'flux interrompu : ' + (e && e.message || e))));
+      }
+    })();
+  });
+}
 async function callAIText(prompt, _retry) {
   var engine = getAIEngine();
+  var moteurNom = engine === 'deepseek' ? 'DeepSeek' : 'Gemini';
+  var etat = _aiEtat(), D = etat.delais;
+  // Panne constat\u00e9e il y a moins de `memoire` ms : \u00e9chouer TOUT DE SUITE (4 lots en
+  // parall\u00e8le ne doivent pas attendre 2 min chacun pour d\u00e9couvrir la m\u00eame panne).
+  if (etat.panne && etat.panne.moteur === moteurNom && Date.now() - etat.panne.t < D.memoire) {
+    var eRapide = new Error(moteurNom + ' indisponible \u2014 ' + etat.panne.message);
+    eRapide.fournisseur = true;
+    throw eRapide;
+  }
+  var ctrl = new AbortController();
+  // Filet AVANT les en-t\u00eates : sans lui, un serveur qui ne r\u00e9pond pas du tout pendrait ici.
+  var filet = setTimeout(function() { try { ctrl.abort(); } catch (_) {} }, engine === 'deepseek' ? D.premier : D.total);
   if (engine === 'deepseek') {
     var key = getDeepSeekKey();
     var _gwKeyDSK = getGatewayKey();
-    if (!key && !_gwKeyDSK) throw new Error('Cl\u00e9 DeepSeek manquante');
+    if (!key && !_gwKeyDSK) { clearTimeout(filet); throw new Error('Cl\u00e9 DeepSeek manquante'); }
     var _dskUrl = _gwKeyDSK ? GATEWAY_URL + '/api/deepseek' : 'https://api.deepseek.com/v1/chat/completions';
     var _dskAuth = _gwKeyDSK ? _gwKeyDSK : key;
-    var resp = await fetch(_dskUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _dskAuth },
-      body: JSON.stringify({ model: 'deepseek-v4-flash', thinking: { type: 'disabled' }, messages: [{ role: 'user', content: prompt }], max_tokens: 8192, temperature: 0 })
-    });
+    var resp;
+    try {
+      resp = await fetch(_dskUrl, {
+        method: 'POST', signal: ctrl.signal,
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _dskAuth },
+        // `deepseek-flash` : nom officiel de V4.1 Flash depuis le 10/09/2026 (`deepseek-v4-flash` n'est plus qu'un alias).
+        body: JSON.stringify({ model: 'deepseek-flash', stream: true, thinking: { type: 'disabled' }, messages: [{ role: 'user', content: prompt }], max_tokens: 8192, temperature: 0 })
+      });
+    } catch (eRes) {
+      clearTimeout(filet);
+      throw _aiErreurFournisseur('DeepSeek', ctrl.signal.aborted ? 'aucune r\u00e9ponse en ' + Math.round(D.premier / 1000) + ' s' : 'r\u00e9seau : ' + eRes.message);
+    }
+    clearTimeout(filet);
     if (!resp.ok) {
       var err = await resp.json().catch(function() { return {}; });
       if (!_retry && (resp.status === 429 || resp.status >= 500)) { await new Promise(function(r) { setTimeout(r, 2000); }); return callAIText(prompt, true); }
-      throw new Error('DeepSeek ' + resp.status + ' : ' + (err.error ? err.error.message : resp.statusText));
+      var msgD = 'HTTP ' + resp.status + ' : ' + (err.error ? err.error.message : resp.statusText);
+      if (resp.status === 429 || resp.status >= 500) throw _aiErreurFournisseur('DeepSeek', msgD);
+      throw new Error('DeepSeek ' + msgD);
     }
-    var data = await resp.json();
-    return (data.choices[0].message.content || '').trim();
+    return await _aiLireFluxDeepSeek(resp, ctrl);
   } else {
     var key = getGeminiKey();
     var _gwKeyGEM = getGatewayKey();
-    if (!key && !_gwKeyGEM) throw new Error('Cl\u00e9 Gemini manquante');
+    if (!key && !_gwKeyGEM) { clearTimeout(filet); throw new Error('Cl\u00e9 Gemini manquante'); }
     var _gemUrl = _gwKeyGEM
       ? GATEWAY_URL + '/api/gemini/v1beta/models/gemini-3.6-flash:generateContent'
       : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + key;
     var _gemHdr = _gwKeyGEM
       ? { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _gwKeyGEM }
       : { 'Content-Type': 'application/json' };
-    var resp = await fetch(_gemUrl, {
-      method: 'POST',
-      headers: _gemHdr,
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 8192, temperature: 0 } })
-    });
-    if (!resp.ok) {
-      var err = await resp.json().catch(function() { return {}; });
-      if (!_retry && (resp.status === 429 || resp.status >= 500)) { await new Promise(function(r) { setTimeout(r, 2000); }); return callAIText(prompt, true); }
-      throw new Error('Gemini ' + resp.status + ' : ' + (err.error ? err.error.message : resp.statusText));
+    try {
+      var resp = await fetch(_gemUrl, {
+        method: 'POST', signal: ctrl.signal,
+        headers: _gemHdr,
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 8192, temperature: 0 } })
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        if (!_retry && (resp.status === 429 || resp.status >= 500)) { clearTimeout(filet); await new Promise(function(r) { setTimeout(r, 2000); }); return callAIText(prompt, true); }
+        var msgG = 'HTTP ' + resp.status + ' : ' + (err.error ? err.error.message : resp.statusText);
+        if (resp.status === 429 || resp.status >= 500) throw _aiErreurFournisseur('Gemini', msgG);
+        throw new Error('Gemini ' + msgG);
+      }
+      var data = await resp.json();
+      return ((data.candidates[0].content.parts[0].text) || '').replace(/^```[a-z]*\r?\n?/im, '').replace(/```\s*$/m, '').trim();
+    } catch (eG) {
+      if (eG && eG.fournisseur) throw eG;
+      if (ctrl.signal.aborted) throw _aiErreurFournisseur('Gemini', 'aucune r\u00e9ponse en ' + Math.round(D.total / 1000) + ' s');
+      if (eG instanceof TypeError && /fetch|network/i.test(eG.message)) throw _aiErreurFournisseur('Gemini', 'r\u00e9seau : ' + eG.message);
+      throw eG;
+    } finally {
+      clearTimeout(filet);
     }
-    var data = await resp.json();
-    return ((data.candidates[0].content.parts[0].text) || '').replace(/^```[a-z]*\r?\n?/im, '').replace(/```\s*$/m, '').trim();
   }
 }
 
@@ -4429,7 +4537,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.58',
+    version: 'v9.59',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
