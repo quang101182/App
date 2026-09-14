@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.60</title>
+<title>SubWhisper v9.61</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1143,7 +1143,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.60</span>
+    <span class="ver-badge">v9.61</span>
     <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app sur l'ecran d'accueil">&#8615; Install</button>
   </div>
   <div class="hdr-r">
@@ -1486,7 +1486,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.60 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.61 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -3039,7 +3039,7 @@ async function _aiLireFluxDeepSeek(resp, ctrl) {
     return ((d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '').trim();
   }
   var D = _aiEtat().delais, lecteur = resp.body.getReader(), dec = new TextDecoder();
-  var tampon = '', texte = '', debut = Date.now(), dernier = 0, fini = false;
+  var tampon = '', texte = '', debut = Date.now(), dernier = 0, fini = false, vuFin = false;
   return await new Promise(function(ok, ko) {
     function finir(err, val) {
       if (fini) return; fini = true; clearInterval(veille);
@@ -3076,10 +3076,14 @@ async function _aiLireFluxDeepSeek(resp, ctrl) {
               dernier = Date.now();                                   // l'inf\u00e9rence a d\u00e9marr\u00e9
               var delta = j.choices[0].delta || {};
               if (delta.content) texte += delta.content;
+              if (j.choices[0].finish_reason) vuFin = true;
             }
           }
         }
         if (!dernier) finir(_aiErreurFournisseur('DeepSeek', 'flux ferm\u00e9 sans aucune r\u00e9ponse'));
+        // Fermé proprement AVANT la fin (ni [DONE] ni finish_reason) = réponse TRONQUÉE : jamais un succès
+        // (l'ancien appel JSON échouait sur une réponse coupée) — revue Codex Terra du 15/09.
+        else if (!vuFin) finir(_aiErreurFournisseur('DeepSeek', 'flux interrompu avant la fin de la r\u00e9ponse'));
         else finir(null, texte.trim());
       } catch (e) {
         finir(e && e.fournisseur ? e : (fini ? null : _aiErreurFournisseur('DeepSeek', 'flux interrompu : ' + (e && e.message || e))));
@@ -4544,7 +4548,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.60',
+    version: 'v9.61',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
