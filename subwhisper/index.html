@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.61</title>
+<title>SubWhisper v9.62</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1143,7 +1143,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.61</span>
+    <span class="ver-badge">v9.62</span>
     <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app sur l'ecran d'accueil">&#8615; Install</button>
   </div>
   <div class="hdr-r">
@@ -1486,7 +1486,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.61 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.62 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -3123,14 +3123,17 @@ async function callAIText(prompt, _retry) {
       clearTimeout(filet);
       throw _aiErreurFournisseur('DeepSeek', ctrl.signal.aborted ? 'aucune r\u00e9ponse en ' + Math.round(D.premier / 1000) + ' s' : 'r\u00e9seau : ' + eRes.message);
     }
-    clearTimeout(filet);
     if (!resp.ok) {
+      // Corps d'erreur lu SOUS le filet : un 429/503 dont le corps ne se termine jamais pendait ici
+      // (revue Codex Terra du 15/09). Le filet interrompt la lecture, l'erreur reste nommée.
       var err = await resp.json().catch(function() { return {}; });
+      clearTimeout(filet);
       if (!_retry && (resp.status === 429 || resp.status >= 500)) { await new Promise(function(r) { setTimeout(r, 2000); }); return callAIText(prompt, true); }
       var msgD = 'HTTP ' + resp.status + ' : ' + (err.error ? err.error.message : resp.statusText);
       if (resp.status === 429 || resp.status >= 500) throw _aiErreurFournisseur('DeepSeek', msgD);
       throw new Error('DeepSeek ' + msgD);
     }
+    clearTimeout(filet);
     return await _aiLireFluxDeepSeek(resp, ctrl);
   } else {
     var key = getGeminiKey();
@@ -4548,7 +4551,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.61',
+    version: 'v9.62',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
