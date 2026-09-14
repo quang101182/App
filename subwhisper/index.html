@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.59</title>
+<title>SubWhisper v9.60</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1143,7 +1143,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.59</span>
+    <span class="ver-badge">v9.60</span>
     <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app sur l'ecran d'accueil">&#8615; Install</button>
   </div>
   <div class="hdr-r">
@@ -1486,7 +1486,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.59 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.60 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -3062,7 +3062,14 @@ async function _aiLireFluxDeepSeek(resp, ctrl) {
             var l = lignes[i].trim();
             if (!l || l.charAt(0) === ':' || l.indexOf('data:') !== 0) continue;   // \u00ab : keep-alive \u00bb = en file, pas une r\u00e9ponse
             var p = l.slice(5).trim();
-            if (p === '[DONE]') continue;
+            // [DONE] = fin, même si un proxy garde la connexion ouverte (sinon : texte complet jeté au bout
+            // de `silence` ms — défaut relevé par la revue Codex Terra du 15/09).
+            if (p === '[DONE]') {
+              try { lecteur.cancel().catch(function() {}); } catch (_) {}
+              if (!dernier) finir(_aiErreurFournisseur('DeepSeek', 'flux fermé sans aucune réponse'));
+              else finir(null, texte.trim());
+              return;
+            }
             var j; try { j = JSON.parse(p); } catch (_) { continue; }
             if (j.error) throw new Error('DeepSeek : ' + (j.error.message || 'erreur dans le flux'));
             if (j.choices && j.choices[0]) {
@@ -4537,7 +4544,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.59',
+    version: 'v9.60',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
