@@ -98,13 +98,13 @@ async function callAI(engine, apiKey, prompt) {
   if (engine === 'deepseek') {
     url = 'https://api.deepseek.com/v1/chat/completions';
     headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey };
-    body = JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: prompt }], max_tokens: 8192 });
+    body = JSON.stringify({ model: 'deepseek-v4-flash', messages: [{ role: 'user', content: prompt }], max_tokens: 8192 });
   } else { // gemini
     url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey;
     headers = { 'Content-Type': 'application/json' };
     body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 8192 } });
   }
-  var resp = await fetch(url, { method: 'POST', headers: headers, body: body });
+  var resp = await fetch(url, { method: 'POST', headers: headers, body: body, signal: AbortSignal.timeout(120000) });
   if (!resp.ok) {
     var e = await resp.json().catch(function() { return {}; });
     throw new Error(engine + ' HTTP ' + resp.status + ': ' + (e.error && e.error.message ? e.error.message : resp.statusText));

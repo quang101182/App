@@ -94,7 +94,7 @@ async function callAI(engine, apiKey, prompt) {
     url     = viaGateway ? (GATEWAY_URL + '/api/deepseek') : 'https://api.deepseek.com/v1/chat/completions';
     headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (viaGateway ? GATEWAY_KEY : apiKey) };
     body    = JSON.stringify({
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 8192
     });
@@ -112,7 +112,7 @@ async function callAI(engine, apiKey, prompt) {
     });
   }
 
-  var resp = await fetch(url, { method: 'POST', headers: headers, body: body });
+  var resp = await fetch(url, { method: 'POST', headers: headers, body: body, signal: AbortSignal.timeout(120000) });
   if (!resp.ok) {
     var e = await resp.json().catch(function() { return {}; });
     throw new Error(engine + ' HTTP ' + resp.status + ': ' + ((e.error && e.error.message) || resp.statusText));
