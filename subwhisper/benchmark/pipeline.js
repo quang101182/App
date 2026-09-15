@@ -94,7 +94,8 @@ async function callAI(engine, apiKey, prompt) {
     url     = viaGateway ? (GATEWAY_URL + '/api/deepseek') : 'https://api.deepseek.com/v1/chat/completions';
     headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (viaGateway ? GATEWAY_KEY : apiKey) };
     body    = JSON.stringify({
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-flash',
+      thinking: { type: 'disabled' },
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 8192
     });

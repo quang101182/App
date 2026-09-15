@@ -98,7 +98,7 @@ async function callAI(engine, apiKey, prompt) {
   if (engine === 'deepseek') {
     url = 'https://api.deepseek.com/v1/chat/completions';
     headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey };
-    body = JSON.stringify({ model: 'deepseek-v4-flash', messages: [{ role: 'user', content: prompt }], max_tokens: 8192 });
+    body = JSON.stringify({ model: 'deepseek-flash', thinking: { type: 'disabled' }, messages: [{ role: 'user', content: prompt }], max_tokens: 8192 });
   } else { // gemini
     url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey;
     headers = { 'Content-Type': 'application/json' };
