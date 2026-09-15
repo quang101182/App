@@ -36,7 +36,23 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.23.0';
+const VERSION = '1.24.0';
+// v1.24.0 (2026-09-15) - Le quota ne compte que ce qui a REUSSI chez le fournisseur.
+//   Constat : `incrementUsage` etait appele AVANT le proxy. Toute requete etait decomptee, y
+//   compris un 429/5xx du fournisseur, un refus ou une coupure reseau. Le 14/09 (DeepSeek
+//   sature), chaque nouvel essai du client consommait son quota mensuel pour une panne qui
+//   n'etait pas la sienne - et le plan pro ne compte que 50 transcriptions (1 par TRANCHE audio).
+//   Desormais : decompte si et seulement si le fournisseur repond 2xx (`relayerEtCompter`), la
+//   tache etant confiee a waitUntil AVANT l'attente (sinon un client qui coupe echappe au decompte).
+//   ⚠️ NON traite, ANTERIEUR a cette version : `incrementUsage` est un lire-modifier-ecrire KV non
+//   atomique - deux succes simultanes sur la meme cle peuvent n'en compter qu'un. Le corriger
+//   demande un compteur atomique (Durable Object), pas un correctif ici.
+//   Une reponse 200 au contenu VIDE reste comptee : le fournisseur l'a facturee, et la reperer
+//   imposerait de relire le flux ici (risque sur le chemin de toutes les requetes payantes).
+//   AssemblyAI : seule la CREATION d'une transcription (POST /v2/transcript) compte - l'envoi du
+//   fichier et chaque consultation d'avancement (GET) comptaient chacun comme une transcription.
+//   Le compteur affiche par l'app (`bumpUsage`) ne bougeait deja qu'en cas de succes : les deux
+//   disent maintenant la meme chose. Banc : test/test_quota_reussite.mjs (+ mutation v1.23.0).
 // v1.23.0 (2026-08-30) - Exactitude du statut d'abonnement + comptes multiples (ADDITIF).
 //   Constat du 30/08 : le dashboard annoncait « MRR REEL 9 EUR / 1 payant actif » pour une cle
 //   dont AUCUN evenement `subscription.*` n'etait jamais arrive. Cause tracee dans ce fichier :
@@ -218,6 +234,21 @@ async function incrementUsage(proKey, type, env, ctx) {
   while (months.length > 3) { delete data.monthlyUsage[months.shift()]; }
   data.lastUsed = new Date().toISOString();
   ctx.waitUntil(env.PRO_KV.put(`pro:${proKey}`, JSON.stringify(data)));
+}
+
+// v1.24.0 - Decompte seulement si le fournisseur a REUSSI (2xx). Un echec (429, 5xx, refus,
+// cle absente, exception reseau) ne consomme plus le quota du client.
+// ⚠️ La tache de decompte est confiee a `waitUntil` AVANT d'attendre le fournisseur (revue
+// Codex Terra, 15/09) : une 1re version attendait la reponse PUIS enregistrait le decompte.
+// Un client qui coupe la connexion pendant l'attente fait annuler le Worker : le fournisseur
+// traitait (et nous facturait) la requete, et rien n'etait compte. `waitUntil` garde la tache
+// vivante apres la deconnexion (30 s max, cf doc Cloudflare « Context »).
+function relayerEtCompter(promesseReponse, proKey, type, env, ctx) {
+  ctx.waitUntil(promesseReponse.then(
+    (rep) => (rep && rep.ok ? incrementUsage(proKey, type, env, ctx) : null),
+    () => null,             // l'exception remonte par la promesse rendue, pas par le decompte
+  ));
+  return promesseReponse;
 }
 
 // Simple rate limiter (per key, per minute) using KV
@@ -1646,35 +1677,38 @@ export default {
         return json({ error: limitCheck.reason, usage: limitCheck.usage, limits: limitCheck.limits }, 429);
       }
 
+      // v1.24.0 - decompte seulement sur succes du fournisseur (`relayerEtCompter`).
+      // ⚠️ PAS de `await` devant les proxys : la tache de decompte doit etre enregistree AVANT
+      // l'attente (client qui coupe = Worker annule, cf `relayerEtCompter`).
       // Gemini proxy
       if (path.startsWith('/api/gemini')) {
-        ctx.waitUntil(incrementUsage(proKey, 'translation', env, ctx));
         const apiPath = request.headers.get('X-Api-Path');
-        return proxyGemini(request, env, apiPath);
+        return relayerEtCompter(proxyGemini(request, env, apiPath), proKey, 'translation', env, ctx);
       }
 
       // Groq proxy
       if (path === '/api/groq') {
-        ctx.waitUntil(incrementUsage(proKey, 'transcription', env, ctx));
-        return proxyGroq(request, env);
+        return relayerEtCompter(proxyGroq(request, env), proKey, 'transcription', env, ctx);
       }
 
-      // AssemblyAI proxy
+      // AssemblyAI proxy - seule la CREATION d'une transcription compte (ni l'upload, ni le suivi GET).
+      // ⚠️ Critere NEGATIF (tout POST sauf /v2/upload), jamais une egalite stricte sur
+      // '/v2/transcript' : `/v2/transcript?x` cree une transcription et echapperait au decompte.
       if (path === '/api/assemblyai' || path.startsWith('/api/assemblyai/')) {
-        ctx.waitUntil(incrementUsage(proKey, 'transcription', env, ctx));
-        return proxyAssemblyAI(request, env);
+        const cheminAAI = safeApiPath(request.headers.get('X-Api-Path'), '/v2/transcript');
+        const creation = method === 'POST' && !cheminAAI.startsWith('/v2/upload');
+        const repAAI = proxyAssemblyAI(request, env);
+        return creation ? relayerEtCompter(repAAI, proKey, 'transcription', env, ctx) : repAAI;
       }
 
       // DeepSeek proxy
       if (path === '/api/deepseek') {
-        ctx.waitUntil(incrementUsage(proKey, 'translation', env, ctx));
-        return proxyDeepSeek(request, env);
+        return relayerEtCompter(proxyDeepSeek(request, env), proKey, 'translation', env, ctx);
       }
 
       // Azure Translator proxy
       if (path === '/api/azure') {
-        ctx.waitUntil(incrementUsage(proKey, 'translation', env, ctx));
-        return proxyAzure(request, env, url);
+        return relayerEtCompter(proxyAzure(request, env, url), proKey, 'translation', env, ctx);
       }
 
       return err('Unknown API route', 404);
