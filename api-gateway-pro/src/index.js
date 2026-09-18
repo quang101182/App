@@ -36,7 +36,7 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.24.0';
+const VERSION = '1.24.1';
 // v1.24.0 (2026-09-15) - Le quota ne compte que ce qui a REUSSI chez le fournisseur.
 //   Constat : `incrementUsage` etait appele AVANT le proxy. Toute requete etait decomptee, y
 //   compris un 429/5xx du fournisseur, un refus ou une coupure reseau. Le 14/09 (DeepSeek
@@ -302,7 +302,10 @@ function timingSafeEqual(a, b) {
 async function proxyGemini(request, env, apiPath) {
   const key = await getApiKey('GEMINI_KEY', env);
   if (!key) return err('Gemini API key not configured', 503);
-  const path = safeApiPath(apiPath || request.headers.get('X-Api-Path'), '/v1beta/models/gemini-2.0-flash:generateContent');
+  // v1.24.1 - repli sur un modele VIVANT. L'ancien (gemini-2.0-flash) a ete retire par Google :
+  // il servait de repli a TOUTES les traductions de l'app (cf route /api/gemini ci-dessous), et
+  // sa disparition a casse le produit en silence -- panne constatee le 18/09/2026.
+  const path = safeApiPath(apiPath || request.headers.get('X-Api-Path'), '/v1beta/models/gemini-3.6-flash:generateContent');
   const url = `https://generativelanguage.googleapis.com${path}?key=${key}`;
   const resp = await fetch(url, {
     method: 'POST',
@@ -1682,7 +1685,15 @@ export default {
       // l'attente (client qui coupe = Worker annule, cf `relayerEtCompter`).
       // Gemini proxy
       if (path.startsWith('/api/gemini')) {
-        const apiPath = request.headers.get('X-Api-Path');
+        // v1.24.1 - l'app met le modele dans l'URL (/api/gemini/v1beta/models/<modele>:generateContent)
+        // et n'envoie PAS X-Api-Path. Le gateway ne lisait que l'en-tete : il ignorait donc le modele
+        // demande et retombait sur son repli -- un modele retire -> 404 sur toutes les traductions
+        // Gemini de SubWhisper Pro (constate 18/09/2026). On lit desormais l'URL, mais UNIQUEMENT si
+        // elle a exactement la forme d'un appel de modele : tout autre suffixe garde le repli.
+        // L'en-tete reste prioritaire (clients qui l'envoient deja). Banc : test/test_gemini_modele.mjs
+        const suffixe = path.slice('/api/gemini'.length);
+        const depuisUrl = /^\/v1(beta)?\/models\/[A-Za-z0-9._-]+:[A-Za-z]+$/.test(suffixe) ? suffixe : null;
+        const apiPath = request.headers.get('X-Api-Path') || depuisUrl;
         return relayerEtCompter(proxyGemini(request, env, apiPath), proKey, 'translation', env, ctx);
       }
 
