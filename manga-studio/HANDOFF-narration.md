@@ -43,9 +43,16 @@
    v1.80 onglet **Bibliothèque en premier**, renommer une série (titre + dossier + tout le lié), capture repliable.
    v1.81 recherche intelligente ; v1.82 « Autre voix » (texte repris) + voix par série ; v1.83 barre de temps
    cliquable du lecteur + recherche dans le texte des narrations (proxy : Range 206 — sans lui, pas de seek MP3).
-   **Reste de la trame (22/09 00h10)** : **vidéo : À DISCUTER avec Quang AVANT de coder** (questions posées) →
-   7 « Précédemment… », 9 suivi de séries, 10 hors-ligne. Musique de fond (13) : **à définir avec Quang**.
-   Étape 8 restante : prononciation des noms, élisions.
+   **ORDRE FIXÉ PAR QUANG (22/09 00h06)** : (1) **traduction des dialogues** ← EN COURS ; (2) musique de fond
+   dans l'app (on/off, volume manuel + défaut) ; (2-bis) sous-titres **karaoké** (récupérer Lumen v2.3 /
+   PromoClip `generateSubtitleASSFromWords`) ; (3) **vidéo : À DISCUTER avant de coder** ; puis 7, 9, 10.
+   **REPRISE IMMÉDIATE — traduction (étape 11 b)** : moteur FAIT et mesuré (`scripts/traduire_chapitre.py`,
+   Claymore p.1-20 déjà traduites dans `sources/claymore/ch_1/traduction/fr/`). RESTE, dans l'ordre :
+   a. appliquer `proxy-patch/patch_traduction.py` au proxy (sauvegarde + diff rejoué + `relance-proxy.ps1`) ;
+   b. appliquer `proxy-patch/app_patch_184_traduction.py` (app v1.83.0 → v1.84.0 ; il vérifie ses ancres) ;
+   c. banc UI (bouton Traduire, sélecteur VO/fr dans grille + visionneuse + lecteur, 1280 + 360 px) ;
+   d. traduire Claymore EN ENTIER (62 p., ~0,55 $) et regarder 5-6 pages ; e. commit + montrer à Quang.
+   Limites connues : texte flottant hors bulle (p.19), lignes qui frôlent le bord.
    ⚠ Une question de Quang (« il me semble que… ») n'est PAS un ordre : répondre, ne rien modifier.
 5. Lien mobile = l'URL du tunnel de Generate Studio (hostname dans `config-generate-agent.yml`, hors dépôt :
    ce dépôt est PUBLIC) suivie de `/manga` (le dossier github.io ne sert que le
