@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -244,10 +244,15 @@ def capture(args) -> int:
         # ⚠ Les lecteurs virtualisés (MangaDex inclus) DÉCHARGENT les images hors écran :
         # scroller tout puis collecter ne ramasse que ce qui reste à l'écran
         # (mesuré : 4 pages sur 22). On attrape chaque page PENDANT qu'elle vit.
-        pages_meta, notes = [], []
-        vues: dict = {}           # src -> {ordre, top, w, h, data}
+        dest = chap_dir(args.out, args.title, args.chapter)
+        os.makedirs(dest, exist_ok=True)
+        notes: list = []
+        vues: dict = {}           # src -> {file, bytes, top, w, h} — ordre d'insertion = lecture
         vus_hashes: set = set()   # dedup par CONTENU : les pagers re-servent une page déjà
-        # affichée sous un blob: neuf (mesuré : 30 images collectées pour 22 pages)
+        # affichée sous un blob: neuf (mesuré : 30 images collectées pour 22 pages).
+        # SAUVEGARDE INCRÉMENTALE : chaque page est écrite dès sa collecte — un arrêt
+        # brutal (kill, crash) ne perd plus tout (incident ch.1→ch.7 du 21/09 : 0 page
+        # sauvée parce que tout vivait en mémoire jusqu'à la fin).
 
         FETCH_JS = """async (url) => {
             const r = await fetch(url);
@@ -286,9 +291,14 @@ def capture(args) -> int:
             return el.screenshot()  # PNG à la taille d'affichage
 
         def collecter() -> None:
-            """Détecte les images de page visibles/chargées et récupère leur contenu."""
+            """Détecte les images de page chargées, les récupère et les ÉCRIT aussitôt."""
+            # Zone morte des ratios CARRÉS (0.93-1.15) : une page de manga est portrait
+            # (~0.7) ou double (~1.4), jamais carrée — mais avatars et logos le sont
+            # (avatar MangaDex 1065×1065 capturé comme 23e page, mesuré 21/09).
             nouvelles = page.evaluate("""() => Array.from(document.images)
-                .filter(i => i.naturalWidth > 250 && i.naturalHeight > 500)
+                .filter(i => i.naturalWidth > 250 && i.naturalHeight > 500
+                    && (i.naturalWidth / i.naturalHeight < 0.93
+                        || i.naturalWidth / i.naturalHeight > 1.15))
                 .map(i => ({src: i.src, top: Math.round(i.getBoundingClientRect().top + window.scrollY),
                             w: i.naturalWidth, h: i.naturalHeight}))""")
             for im in nouvelles:
@@ -305,8 +315,9 @@ def capture(args) -> int:
                         notes.append(f"écartée ({len(data)} octets) : {im['src'][:50]}")
                         continue
                     vus_hashes.add(hsh)
-                    vues[im["src"]] = {"ordre": len(vues), "top": im["top"],
-                                       "w": im["w"], "h": im["h"], "data": data}
+                    nom = save_page(dest, len(vues) + 1, data)
+                    vues[im["src"]] = {"file": nom, "bytes": len(data),
+                                       "top": im["top"], "w": im["w"], "h": im["h"]}
                 except Exception as e:
                     notes.append(f"{im['src'][:60]} : ECHEC {type(e).__name__}")
 
@@ -319,9 +330,28 @@ def capture(args) -> int:
         print(f"Mode {'bande défilante' if mode_strip else 'page par page'} "
               f"(doc {h_doc}px / écran {h_ecran}px)")
 
+        # Fin de chapitre = l'URL change de CHAPITRE. ⚠ MangaDex pagine par URL
+        # (/chapter/<id>/2, /3... — mesuré 21/09) : l'URL change à chaque PAGE.
+        # Un changement ne compte donc que si ce n'est PAS « départ + numéro de page ».
+        # Incident déclencheur : MangaDex charge le chapitre SUIVANT tout seul au scroll/
+        # flèche (ch.1→ch.7 du 21/09 : la boucle d'images nouvelles ne s'arrêtait jamais).
+        url_depart = page.url.split("?")[0].split("#")[0]
+
+        def chapitre_quitte() -> bool:
+            p = page.url.split("?")[0].split("#")[0]
+            if p == url_depart:
+                return False
+            base, _, dernier = p.rpartition("/")
+            if dernier.isdigit() and base == url_depart:
+                return False  # pagination intra-chapitre (/chapter/<id>/<n>)
+            return True
+
         if mode_strip:
             hauteur_prec, stable = 0, 0
             for _ in range(300):
+                if chapitre_quitte():
+                    notes.append("fin : le lecteur est passé au chapitre suivant")
+                    break
                 collecter()
                 page.evaluate("window.scrollBy(0, window.innerHeight * 0.85)")
                 page.wait_for_timeout(1200)
@@ -336,6 +366,9 @@ def capture(args) -> int:
         else:
             sterile, debut_pager, mode_clic = 0, time.time(), False
             for _ in range(500):
+                if chapitre_quitte():
+                    notes.append("fin : le lecteur est passé au chapitre suivant")
+                    break
                 collecter()
                 n_avant = len(vues)
                 if not mode_clic and sterile >= 2:
@@ -347,6 +380,9 @@ def capture(args) -> int:
                 else:
                     page.keyboard.press("ArrowRight")
                 page.wait_for_timeout(1600)
+                if chapitre_quitte():
+                    notes.append("fin : le lecteur est passé au chapitre suivant")
+                    break
                 collecter()
                 if len(vues) == n_avant:
                     sterile += 1
@@ -362,39 +398,43 @@ def capture(args) -> int:
                     notes.append("arrêt sur timeout global (12 min)")
                     break
 
-        # ordre de lecture : position verticale en bande défilante, ordre de découverte en pager
-        uniques = sorted(vues.values(), key=lambda x: x["top"] if mode_strip else x["ordre"])
+        # ordre d'insertion du dict = ordre de découverte = ordre de lecture
+        # (pager : page par page ; strip : au fil du scroll vers le bas)
+        uniques = list(vues.values())
+
+        def echec_propre(msg: str) -> int:
+            print(msg)
+            print(f"Le dossier partiel est retiré : {dest}")
+            shutil.rmtree(dest, ignore_errors=True)
+            return 2
 
         # Garde-fou : une page de manga fait plus de 800 px de haut. Si RIEN ne dépasse,
         # l'onglet capturé n'était pas un chapitre (page d'accueil, mauvais onglet).
+        if not uniques:
+            return echec_propre("ÉCHEC : aucune image détectée — le chapitre est-il affiché ?")
         if not any(im["h"] >= 800 for im in uniques):
-            print("ÉCHEC : aucune image de page (hauteur >= 800 px) détectée.")
-            print("L'onglet capturé ne semble pas contenir de chapitre "
-                  "(page d'accueil ? mauvais onglet ?). Aucun dossier écrit.")
-            return 2
+            return echec_propre("ÉCHEC : aucune image de page (hauteur >= 800 px) — "
+                                "l'onglet capturé ne semble pas contenir de chapitre "
+                                "(page d'accueil ? mauvais onglet ?)")
 
         # Cohérence des largeurs : les vraies pages d'un chapitre sont homogènes ; les
-        # artefacts du site (bannières, cartes de fin) sont plus ÉTROITS. On écarte ce qui
-        # fait moins de 80 % de la largeur médiane — les doubles pages, plus larges, restent.
-        # (mesuré : 22 pages à 1600px + 5 artefacts à 984px capturés ensemble)
+        # artefacts du site (bannières, cartes de fin) sont plus ÉTROITS. Les pages étant
+        # déjà écrites (sauvegarde incrémentale), on SUPPRIME les fichiers des écartées.
         if len(uniques) >= 3:
             mediane = sorted(im["w"] for im in uniques)[len(uniques) // 2]
-            ecartees = [im for im in uniques if im["w"] < 0.8 * mediane]
-            for im in ecartees:
-                notes.append(f"écartée (largeur {im['w']} < 80% de la médiane {mediane})")
-            uniques = [im for im in uniques if im["w"] >= 0.8 * mediane]
-        print(f"{len(uniques)} images de page capturées au fil du défilement.")
-        if not uniques:
-            print("Aucune image détectée — le chapitre est-il affiché ? (connexion requise sur certains sites)")
-            return 2
+            for src, im in list(vues.items()):
+                if im["w"] < 0.8 * mediane:
+                    notes.append(f"écartée (largeur {im['w']} < 80% de la médiane {mediane})")
+                    try:
+                        os.remove(os.path.join(dest, im["file"]))
+                    except OSError:
+                        pass
+                    del vues[src]
+            uniques = list(vues.values())
 
-        # Sauvegarde dans l'ordre de lecture (position verticale)
-        dest = chap_dir(args.out, args.title, args.chapter)
-        for i, im in enumerate(uniques, 1):
-            if len(im["data"]) < 5000:
-                notes.append(f"page {i} : image suspecte ({len(im['data'])} octets)")
-            nom = save_page(dest, i, im["data"])
-            pages_meta.append({"file": nom, "bytes": len(im["data"]), "w": im["w"], "h": im["h"]})
+        pages_meta = [{"file": im["file"], "bytes": im["bytes"], "w": im["w"], "h": im["h"]}
+                      for im in uniques]
+        print(f"{len(uniques)} images de page capturées au fil du défilement.")
         notes = list(dict.fromkeys(notes))  # une même anomalie ne se répète pas dans le manifeste
         write_manifest(dest, slug=slugify(args.title), title=args.title, chapter=args.chapter,
                        source="capture", source_url=page.url, pages=pages_meta, notes=notes)
@@ -486,6 +526,9 @@ def launch_edge() -> int:
     os.makedirs(EDGE_PROFILE, exist_ok=True)
     import subprocess
     subprocess.Popen([cible, "--remote-debugging-port=9223",
+                      # anti-occlusion : une fenêtre COUVERTE par d'autres continue
+                      # d'être rendue (sinon Edge la throttle et la capture casse)
+                      "--disable-features=CalculateNativeWinOcclusion",
                       f"--user-data-dir={EDGE_PROFILE}",
                       "--no-first-run", "--no-default-browser-check",
                       "--window-size=1100,1500", "--window-position=60,40",

@@ -40,6 +40,8 @@ echo.
 echo Capture en cours : la fenetre Edge va DEFILER le chapitre
 echo toute seule et enregistrer chaque page.
 echo   --^> Ne touche a rien pendant 2 a 4 minutes. --
+echo   (ne MINIMISE pas la fenetre Edge pendant la capture ; elle peut
+echo    rester derriere d'autres fenetres, mais pas reduite dans la barre)
 echo.
 "%PY%" "%MOD%" capture --title "%TITRE%" --chapter "%CHAP%"
 set "CODE=%errorlevel%"
