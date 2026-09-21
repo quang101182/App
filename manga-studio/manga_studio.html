@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.77.0</title>
+<title>Manga Studio v1.78.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -492,7 +492,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.77.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.78.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1122,7 +1122,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.77.0";
+const VERSION = "1.78.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4513,7 +4513,9 @@ async function openChap(i){
   $("chapPages").onclick = e => {
     const f = e.target.closest("figure"); if (!f) return;
     if (PAGES_SEL){ const k = +f.dataset.page; PAGES_SEL.has(k) ? PAGES_SEL.delete(k) : PAGES_SEL.add(k); majSel(); return; }
-    window.open(srcURL(j.pages[+f.dataset.page].path), "_blank");
+    // v1.78.0 : la page s'agrandit DANS l'app (Quang 21/09 : zoomer, dezoomer, se deplacer, PC et telephone)
+    // -> la visionneuse de la galerie (molette, pincee, glisse, double-tap, fleches), plus d'onglet ouvert.
+    ouvrirVisionneuse(j.pages.map((pg, k) => ({ url: srcURL(pg.path), nom: "p. " + (k + 1) })), +f.dataset.page);
   };
   $("chapDetail").hidden = false;
   CHAP_PAGES = j.pages.length; narrEstim();
@@ -5157,6 +5159,12 @@ $("lbAct").onclick   = () => {
   });
 
   const fin = e => {
+    // v1.78.0 : BALAYER pour changer de page, au doigt, quand l'image n'est pas zoomee (zoomee, le meme
+    // geste la deplace). Horizontal franc (> 60 px et plus large que haut) : un tap ou un glisse vertical ne tourne rien.
+    if (e.type === "pointerup" && pts.size === 1 && dep && Z.k <= 1 && e.pointerType !== "mouse"){
+      const dx = e.clientX - dep.x, dy = e.clientY - dep.y;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(dy)) lbShow(LB + (dx < 0 ? 1 : -1));
+    }
     pts.delete(e.pointerId);
     if (pts.size < 2) ecartDep = 0;
     if (pts.size === 0) dep = null;

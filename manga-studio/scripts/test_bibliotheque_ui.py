@@ -22,7 +22,7 @@ with sync_playwright() as p:
     b = p.chromium.launch(channel="msedge", headless=True)
     for w, h in ((1280, 900), (360, 780)):
         print("=== %d px" % w)
-        c = b.new_context(viewport={"width": w, "height": h})
+        c = b.new_context(viewport={"width": w, "height": h}, has_touch=(w < 400), is_mobile=(w < 400))
         pg = c.new_page()
         errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
@@ -79,6 +79,45 @@ with sync_playwright() as p:
         check("bouton passe a l'arret", pg.inner_text("#btnVoixApercu").strip() == "■")
         pg.click("#btnVoixApercu"); pg.wait_for_timeout(300)
         check("apercu arrete", pg.evaluate("() => APERCU.paused") and pg.inner_text("#btnVoixApercu").strip() == "▶")
+        # v1.78.0 : clic sur une page = visionneuse DANS l'app (plus d'onglet), zoom, navigation
+        onglets = []
+        c.on("page", lambda np: onglets.append(np))
+        f0 = pg.locator("#chapPages figure").nth(0)
+        f0.evaluate("e => e.scrollIntoView({block: 'center', behavior: 'instant'})"); pg.wait_for_timeout(200)
+        bb = f0.bounding_box(); pg.mouse.click(bb["x"] + bb["width"] / 2, bb["y"] + bb["height"] / 2)
+        pg.wait_for_timeout(700)
+        check("page -> visionneuse dans l'app, aucun onglet", pg.is_visible("#lightbox") and not onglets
+              and pg.evaluate("() => LB === 0 && $('lbImg').naturalWidth > 0"))
+        wb = pg.locator("#lbWrap").bounding_box()
+        if w > 400:
+            pg.mouse.move(wb["x"] + wb["width"] / 2, wb["y"] + wb["height"] / 3)
+            pg.mouse.wheel(0, -300); pg.wait_for_timeout(300)
+            check("molette = zoom", pg.evaluate("() => Z.k > 1"), pg.evaluate("() => Z.k"))
+            pg.keyboard.press("ArrowRight"); pg.wait_for_timeout(300)
+            check("fleche -> page suivante, zoom remis a 1", pg.evaluate("() => LB === 1 && Z.k === 1"))
+        else:
+            cdp = c.new_cdp_session(pg)
+            def glisse(x0, x1, y):
+                cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x0, "y": y}]})
+                for i in range(1, 6):
+                    cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x0 + (x1 - x0) * i / 5, "y": y}]})
+                cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+                pg.wait_for_timeout(400)
+            cx, cy = wb["x"] + wb["width"] / 2, wb["y"] + wb["height"] / 2
+            glisse(cx + 100, cx - 100, cy)
+            check("balayage a gauche (doigt) -> page suivante", pg.evaluate("() => LB") == 1, pg.evaluate("() => LB"))
+            glisse(cx - 100, cx + 100, cy)
+            check("balayage a droite -> page precedente", pg.evaluate("() => LB") == 0, pg.evaluate("() => LB"))
+            cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": cx - 30, "y": cy, "id": 1}, {"x": cx + 30, "y": cy, "id": 2}]})
+            for i in range(1, 6):
+                cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": cx - 30 - 16 * i, "y": cy, "id": 1}, {"x": cx + 30 + 16 * i, "y": cy, "id": 2}]})
+            cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []}); pg.wait_for_timeout(300)
+            k = pg.evaluate("() => Z.k")
+            check("pincee (2 doigts) = zoom", k > 1.5, k)
+            glisse(cx + 100, cx - 100, cy)
+            check("zoome, le glisse deplace l'image et ne tourne PAS la page", pg.evaluate("() => LB") == 0)
+        pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+        check("Echap ferme la visionneuse", not pg.is_visible("#lightbox"))
         # selection de pages : rien n'est supprime
         pg.click("#btnPagesSel")
         def clic_page(k):
