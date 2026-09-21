@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.78.0</title>
+<title>Manga Studio v1.79.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -492,7 +492,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.78.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.79.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -512,7 +512,7 @@ body.epure .aide{display:none}
     <!-- La VRAM vient de nvidia-smi (proxy /vram) et NON de ComfyUI : elle doit
          rester lisible moteur ETEINT, c'est justement le moment ou l'on veut
          savoir ce qu'il reste. -->
-    <div class="vram" title="Mémoire libre sur la carte graphique">
+    <div class="vram" title="Mémoire utilisée sur la carte graphique">
       <span>VRAM</span>
       <span class="vbar" id="vramBar"><i id="vramFill"></i></span>
       <span id="vramTxt">—</span>
@@ -1122,7 +1122,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.78.0";
+const VERSION = "1.79.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4922,7 +4922,17 @@ function afficherCouts(){
         + " · " + esc(r.date.replace("T", " ").slice(0, 16)) + (r.reuse ? " · lecture réutilisée" : "") + "</span>",
         fmtUsd(r.cout))).join("") + "</table>";
 }
-$("hdrCost").onclick = async () => { await chargerCouts(); afficherCouts(); $("coutsModal").hidden = false; };
+// v1.79.0 : la fenetre vivait DANS l'onglet Planche : depuis que l'app rouvre le dernier onglet (v1.73.0), un
+// clic sur la pastille depuis Chapitres ne montrait RIEN (un onglet cache masque aussi ses fenetres fixes).
+// Signale par Quang le 21/09 23h24. Elle est rattachee a la page, visible depuis n'importe quel onglet.
+document.body.appendChild($("coutsModal"));
+$("hdrCost").onclick = async () => {
+  $("coutsCorps").innerHTML = '<p class="muted">chargement…</p>';
+  $("coutsModal").hidden = false;                      // on ouvre TOUT DE SUITE, meme si le serveur tarde
+  await chargerCouts();
+  if (COUTS) afficherCouts();
+  else $("coutsCorps").innerHTML = '<p class="muted">Le serveur ne répond pas (redémarrage en cours ?). Réessaie dans un instant.</p>';
+};
 $("coutsFermer").onclick = () => { $("coutsModal").hidden = true; };
 $("coutsModal").onclick = e => { if (e.target.id === "coutsModal") $("coutsModal").hidden = true; };
 chargerCouts();
@@ -6062,7 +6072,9 @@ async function majVram(moteurUp){
     // la ligne sur un ecran de 360 px et faisait grandir le bandeau d'un tiers
     // -- exactement ce que « compact en hauteur, surtout sur smartphone »
     // interdit. Le sens est porte par le titre au survol et par la couleur.
-    txt.textContent = libreGo.toFixed(1).replace(".", ",") + " / "
+    // v1.79.0 : la memoire UTILISEE sur le total (Quang 21/09 : « plus logique » ; Generate Studio fait
+    // pareil depuis le 27/06). Les couleurs restent calees sur le LIBRE : c'est lui qui fait echouer SDXL.
+    txt.textContent = (v.used / 1024).toFixed(1).replace(".", ",") + " / "
                     + totGo.toFixed(0) + " Go";
   } catch {
     fill.style.width = "0"; bar.className = "vbar dim"; txt.textContent = "—";
@@ -7478,7 +7490,7 @@ async function majGPU(){
     const go = o => (o / 1073741824).toFixed(1).replace(".", ",") + " Go";
     el.innerHTML = d.vram_total
       ? "<b>ComfyUI allumé</b> · " + esc(d.name || "carte") + " — "
-        + go(d.vram_free) + " libres sur " + go(d.vram_total)
+        + go(d.vram_total - d.vram_free) + " utilisés sur " + go(d.vram_total)
       : "<b>ComfyUI allumé</b> (mémoire non rapportée)";
   } catch {
     el.innerHTML = "<b>ComfyUI éteint</b> — la carte est libre. "

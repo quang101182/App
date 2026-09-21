@@ -60,6 +60,16 @@ with sync_playwright() as p:
         essais = pg.query_selector("#narrRuns details.narr-essais")
         check("essais techniques replies", essais is not None and not essais.get_attribute("open"))
         check("titre du chapitre = 301", "301" in pg.inner_text("#chapTitle"), pg.inner_text("#chapTitle"))
+        # v1.79.0 : la pastille des couts s'ouvre DEPUIS Chapitres (la fenetre vivait dans l'onglet Planche)
+        pg.click("#hdrCost"); pg.wait_for_timeout(1500)
+        check("couts : fenetre VISIBLE depuis l'onglet Chapitres", pg.evaluate(
+            "() => !!document.elementFromPoint(innerWidth / 2, innerHeight / 2).closest('#coutsModal')")
+              and "depuis le début" in pg.inner_text("#coutsCorps"))
+        pg.click("#coutsFermer"); pg.wait_for_timeout(200)
+        # v1.79.0 : la jauge montre la memoire UTILISEE
+        v = pg.evaluate("() => api('/vram')")
+        attendu = ("%.1f" % (v["used"] / 1024)).replace(".", ",") + " / " + "%.0f" % (v["total"] / 1024) + " Go"
+        check("VRAM = memoire utilisee / total", pg.inner_text("#vramTxt").strip() == attendu, (pg.inner_text("#vramTxt"), attendu))
         # v1.77.0 : supprimer une narration depuis l'interface (un essai de banc devenu inutile, -> corbeille)
         cible = pg.evaluate("() => NARRS.findIndex(n => n.tag === 'k3-noms-v3-a')")
         if cible >= 0:

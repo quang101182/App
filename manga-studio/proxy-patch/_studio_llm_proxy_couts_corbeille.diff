@@ -1,0 +1,31 @@
+--- _studio_llm_proxy.py.avant
++++ _studio_llm_proxy.py
+@@ -7825,6 +7825,28 @@
+                                          "st": {"cout_juge": (fj.get("bilan") or {}).get("cout", 0)}})
+                         except Exception:
+                             pass
++    # v1.79.0 : les narrations mises a la CORBEILLE restent des depenses (l'argent est parti)
++    corb = os.path.join(racine, "_corbeille")
++    for dp, _dirs, fichiers in (os.walk(corb) if os.path.isdir(corb) else []):
++        rel = os.path.relpath(dp, corb).replace("\\", "/")
++        tag = os.path.basename(dp).split("__")[-1] + " (supprimee)"
++        if "narration.json" in fichiers:
++            try:
++                with open(os.path.join(dp, "narration.json"), encoding="utf-8") as f: n = json.load(f)
++                runs.append({"chap": n.get("chapitre") or ("corbeille/" + rel), "tag": tag, "engine": n.get("engine") or "?",
++                             "date": (n.get("created_at") or time.strftime("%Y-%m-%dT%H:%M:%S",
++                             time.localtime(os.path.getmtime(os.path.join(dp, "narration.json")))))[:19],
++                             "prompt": n.get("prompt"), "reuse": n.get("reuse_vision"), "st": n.get("stats") or {}})
++            except Exception:
++                pass
++        if "fidelite.json" in fichiers:
++            try:
++                with open(os.path.join(dp, "fidelite.json"), encoding="utf-8") as f: fj = json.load(f)
++                runs.append({"chap": "corbeille/" + rel, "tag": tag + " (banc)", "engine": "juge",
++                             "date": (fj.get("date") or "")[:19], "prompt": "juge", "reuse": None,
++                             "st": {"cout_juge": (fj.get("bilan") or {}).get("cout", 0)}})
++            except Exception:
++                pass
+     # anciens runs --reuse-vision (avant le marqueur v1.72) : meme lecture qu'un run PLUS ANCIEN du chapitre
+     vus = {}
+     for r in sorted(runs, key=lambda x: x["date"]):
