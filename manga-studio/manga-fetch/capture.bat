@@ -36,6 +36,9 @@ pause
 
 set "TITRE="
 set "CHAP="
+echo Mangas deja presents dans sources :
+"%PY%" "%MOD%" liste --titres
+echo.
 set /p "TITRE=Titre du manga (ex: Dragon Ball Super) : "
 set /p "CHAP=Numero du chapitre (ex: 104) : "
 echo.

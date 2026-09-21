@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -360,6 +360,21 @@ def capture(args) -> int:
                 methode_onglet=methode_choix, onglet=page.url[:100])
         page.bring_to_front()  # un onglet de fond est THROTTLE par le navigateur :
         # son chargement ralentit et la capture part dans le vide (mesuré : « Loading... »)
+
+        # CONFIRMATION VISUELLE en interactif : la sélection automatique peut se tromper
+        # silencieusement (mesuré 18:47 : « fenêtre-active-OS » a pris la page titre
+        # laissée par un banc → 2 images de Frieren écrites dans le ch_301 d'OPM).
+        # Une frappe élimine toute la classe d'erreurs de sélection.
+        if not args.tab:
+            try:
+                if sys.stdin and sys.stdin.isatty():
+                    rep = input("  Capturer CET onglet ? (Entrée = oui, autre touche = annuler) : ").strip()
+                    if rep:
+                        print("Capture annulée — l'onglet n'était pas le bon.")
+                        log_evt("annulation", "onglet refusé à la confirmation", onglet=page.url[:100])
+                        return 0
+            except EOFError:
+                pass
 
         # MangaDex pagine par URL (/chapter/<uuid>/<n>) : si l'onglet est au MILIEU du
         # chapitre, on capture DEPUIS CETTE PAGE — choix délibéré de l'utilisateur
@@ -745,7 +760,7 @@ def verify(dossier: str) -> int:
     return 0
 
 
-def lister_sources(out: str) -> int:
+def lister_sources(out: str, titres_seuls: bool = False) -> int:
     """Vue des mangas déjà présents dans sources/ (demande Quang 18:39)."""
     if not os.path.isdir(out):
         print(f"Aucun dossier {out} — rien de capturé pour l'instant.")
@@ -757,6 +772,10 @@ def lister_sources(out: str) -> int:
             continue
         chapitres = sorted(c for c in os.listdir(chemin) if c.startswith("ch_"))
         if not chapitres:
+            continue
+        if titres_seuls:
+            print(f"  {d} ({len(chapitres)} chapitre{'s' if len(chapitres) > 1 else ''})")
+            total_ch += len(chapitres)
             continue
         print(f"{d} :")
         for c in chapitres:
@@ -850,7 +869,8 @@ def main() -> int:
     s = sub.add_parser("verify", help="contrôler manifeste <-> fichiers")
     s.add_argument("dossier")
 
-    sub.add_parser("liste", help="vue des mangas déjà présents dans sources/")
+    s = sub.add_parser("liste", help="vue des mangas déjà présents dans sources/")
+    s.add_argument("--titres", action="store_true", help="une ligne par titre (pour le .bat)")
 
     sub.add_parser("launch-edge", help="(re)lancer la fenêtre Edge dédiée")
 
@@ -875,7 +895,7 @@ def main() -> int:
     if args.cmd == "verify":
         return verify(args.dossier)
     if args.cmd == "liste":
-        return lister_sources(DEFAULT_OUT)
+        return lister_sources(DEFAULT_OUT, getattr(args, "titres", False))
     if args.cmd == "launch-edge":
         return launch_edge()
     return 1
