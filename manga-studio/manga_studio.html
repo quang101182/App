@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.83.0</title>
+<title>Manga Studio v1.85.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -320,6 +320,8 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .chap-pages figure.pg-sel{outline:3px solid var(--accent);outline-offset:-3px}
 .chap-pages figure.pg-sel::after{content:"✓";position:absolute;top:6px;right:8px;font-weight:700;color:#fff;
   background:var(--accent);border-radius:50%;width:22px;height:22px;display:grid;place-items:center}
+.trad-box,.mus-box{margin-top:10px}
+.lec-vol{width:90px;accent-color:var(--acc,#e94560)}
 .narr-essais{margin-top:4px}.narr-essais summary{cursor:pointer;padding:6px 2px;opacity:.8}
 .narr-essais .narr-runs{margin-top:6px}
 /* v1.77.0 : chapitres ranges par TOME */
@@ -512,7 +514,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.83.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.85.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -935,6 +937,30 @@ body.epure .aide{display:none}
       </div>
       <div id="narrRuns" class="narr-runs"></div>
     </div>
+    <!-- TRADUCTION DES DIALOGUES (v1.84.0, etape 11 b) : scripts/traduire_chapitre.py via le proxy -->
+    <div class="narr-box trad-box">
+      <div class="row" style="align-items:flex-end">
+        <div style="width:150px"><label>🌐 Traduire en</label><select id="tradLangue">
+          <option value="fr">français</option><option value="en">anglais</option><option value="es">espagnol</option>
+          <option value="de">allemand</option><option value="it">italien</option><option value="pt">portugais</option>
+          <option value="vi">vietnamien</option></select></div>
+        <button class="btn" id="btnTraduire" title="efface le texte des bulles et y pose la traduction (onomatopées laissées telles quelles)">Traduire les dialogues</button>
+        <div style="width:150px"><label>Afficher les pages</label><select id="tradVue"><option value="">VO (original)</option></select></div>
+      </div>
+      <p class="muted aide" id="tradEtat" style="margin:6px 0 0"></p>
+    </div>
+    <!-- MUSIQUE DE FOND DE LA SERIE (v1.85.0, etape 13) : sources/<serie>/musique/ -->
+    <div class="narr-box mus-box">
+      <div class="row" style="align-items:flex-end">
+        <div style="width:240px"><label>🎵 Musique de la série (sous la voix)</label><select id="musChoix">
+          <option value="">aucune</option></select></div>
+        <button class="btn" id="musEcoute" title="écouter ce morceau seul">▶</button>
+        <button class="btn" id="musImport" title="un fichier audio de ton PC ou de ton téléphone (mp3, wav, ogg, m4a, flac)">Importer un morceau…</button>
+        <button class="btn sm danger" id="musSuppr" title="mettre ce morceau à la corbeille">🗑</button>
+        <input type="file" id="musFichier" accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac" hidden>
+      </div>
+      <p class="muted aide" id="musEtat" style="margin:6px 0 0"></p>
+    </div>
     <div id="chapPages" class="grid-img chap-pages"></div>
   </div>
 </section>
@@ -952,10 +978,13 @@ body.epure .aide{display:none}
     <button class="btn" id="lecNext" title="page suivante (→)">⏭</button>
     <select id="lecVit" style="width:auto"><option value="1">1×</option><option value="1.15" selected>1,15×</option><option value="1.3">1,3×</option><option value="1.5">1,5×</option></select>
     <label class="lec-chk"><input type="checkbox" id="lecSousOn" checked> sous-titres</label>
+    <span class="lec-chk" id="lecMusBox" hidden><label class="lec-chk" title="musique de fond de la série"><input type="checkbox" id="lecMusOn"> 🎵</label>
+      <input type="range" class="lec-vol" id="lecMusVol" min="0" max="100" step="1" title="volume de la musique"></span>
     <span id="lecNote" class="lec-note" hidden>Ta note :
       <button class="btn sm" data-note="1">1</button><button class="btn sm" data-note="2">2</button><button class="btn sm" data-note="3">3</button><button class="btn sm" data-note="4">4</button><button class="btn sm" data-note="5">5</button></span>
   </div>
   <audio id="lecAudio" preload="auto"></audio>
+  <audio id="lecMus1" preload="auto"></audio><audio id="lecMus2" preload="auto"></audio>
 </div>
 
 <!-- ============ GALERIE ============ -->
@@ -1148,7 +1177,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.83.0";
+const VERSION = "1.85.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4432,6 +4461,14 @@ let GAL_SLUG = null;
 /* =====================================================================
    CHAPITRES (v1.66.0) -- consomme manga-studio/sources/ (manga-fetch)
    ===================================================================== */
+// v1.84.0 : une page s'affiche en VO ou dans la langue choisie (si ce chapitre a ete traduit)
+let TRADS = [], TRAD_VUE = "", TRAD_POLL = null;
+try { TRAD_VUE = localStorage.getItem("manga_trad_vue") || ""; } catch {}
+function tradMap(){ const t = TRADS.find(x => x.langue === TRAD_VUE && x.etat === "fini"); return t ? t.pages || {} : null; }
+function pageSrc(chemin){
+  const m = tradMap(), f = (chemin || "").split("/").pop();
+  return srcURL(m && m[f] ? m[f] : chemin);
+}
 const srcURL = p => CFG.base + "/manga/source_file?p=" + encodeURIComponent(p) + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
 let CHAPS = [], CHAP_OPEN = null;
 // v1.76.0 : bibliotheque rangee PAR SERIE (demande Quang 21/09). La serie ouverte est memorisee (appareil).
@@ -4591,7 +4628,7 @@ async function openChap(i){
   $("chapNotes").hidden = !(j.notes || []).length;
   $("chapVerif").textContent = "";
   $("chapPages").innerHTML = j.pages.map((p, k) =>
-    '<figure data-page="' + k + '"><img loading="lazy" src="' + srcURL(p.path) + '" alt="page ' + (k + 1) + '">'
+    '<figure data-page="' + k + '"><img loading="lazy" src="' + pageSrc(p.path) + '" alt="page ' + (k + 1) + '">'
     + '<figcaption>p. ' + (k + 1) + (p.w ? ' · ' + p.w + '×' + p.h : "") + '</figcaption></figure>').join("");
   CHAP_PAGE_LIST = j.pages; PAGES_SEL = null; majSel();
   $("chapPages").onclick = e => {
@@ -4599,10 +4636,12 @@ async function openChap(i){
     if (PAGES_SEL){ const k = +f.dataset.page; PAGES_SEL.has(k) ? PAGES_SEL.delete(k) : PAGES_SEL.add(k); majSel(); return; }
     // v1.78.0 : la page s'agrandit DANS l'app (Quang 21/09 : zoomer, dezoomer, se deplacer, PC et telephone)
     // -> la visionneuse de la galerie (molette, pincee, glisse, double-tap, fleches), plus d'onglet ouvert.
-    ouvrirVisionneuse(j.pages.map((pg, k) => ({ url: srcURL(pg.path), nom: "p. " + (k + 1) })), +f.dataset.page);
+    ouvrirVisionneuse(j.pages.map((pg, k) => ({ url: pageSrc(pg.path), nom: "p. " + (k + 1) })), +f.dataset.page);
   };
   $("chapDetail").hidden = false;
   CHAP_PAGES = j.pages.length; narrEstim(); reprendreVoix();
+  refreshTrads().catch(err => log("traductions : " + err.message, "w"));
+  refreshMus().catch(err => log("musique : " + err.message, "w"));
   refreshNarrs().catch(err => log("narrations : " + err.message, "e"));
   $("chapDetail").scrollIntoView({ behavior: "smooth", block: "start" });
   log("chapitre ouvert : " + c.dir + " (" + j.pages.length + " pages)");
@@ -4768,6 +4807,160 @@ function narrEstim(){
   $("narrEstim").textContent = n ? "≈ " + n + " pages · ~" + (n * E[0]).toFixed(2) + " $ · ~" + fmtS(n * E[1]) : "";
 }
 ["narrEngine", "narrPages"].forEach(id => $(id).addEventListener("input", narrEstim));
+const LANGUE_LBL = { fr: "français", en: "anglais", es: "espagnol", de: "allemand", it: "italien", pt: "portugais", vi: "vietnamien" };
+function rafraichirPages(){
+  document.querySelectorAll("#chapPages figure img").forEach((im, k) => {
+    const pg = CHAP_PAGE_LIST[k]; if (pg) im.src = pageSrc(pg.path);
+  });
+}
+async function refreshTrads(){
+  if (!CHAP_OPEN) return;
+  const j = await api("/manga/traductions?d=" + encodeURIComponent(CHAP_OPEN));
+  TRADS = j.items || [];
+  const finies = TRADS.filter(t => t.etat === "fini");
+  $("tradVue").innerHTML = '<option value="">VO (original)</option>'
+    + finies.map(t => '<option value="' + t.langue + '">' + esc(LANGUE_LBL[t.langue] || t.langue) + '</option>').join("");
+  $("tradVue").value = finies.some(t => t.langue === TRAD_VUE) ? TRAD_VUE : "";
+  const enCours = TRADS.find(t => t.etat === "en cours");
+  const f = finies.find(t => t.langue === $("tradVue").value) || finies[0];
+  $("tradEtat").innerHTML = enCours
+      ? "⏳ traduction en " + esc(LANGUE_LBL[enCours.langue] || enCours.langue) + " — page " + ((enCours.progress || {}).fait || 0)
+        + "/" + ((enCours.progress || {}).total || "?")
+      : f && f.stats ? "✅ " + esc(LANGUE_LBL[f.langue] || f.langue) + " : " + f.stats.traduites + " bulle(s) traduite(s), "
+        + f.stats.onomatopees + " onomatopée(s) laissée(s) · " + fmtUsd(f.stats.cout) + " · " + fmtS(f.stats.s || 0)
+      : (TRADS.find(t => t.etat === "echec") ? "❌ la dernière traduction a échoué" : "Pas encore traduit. Les onomatopées restent telles quelles.");
+  $("btnTraduire").disabled = !!enCours;
+  rafraichirPages();
+  if (enCours && !TRAD_POLL) TRAD_POLL = setInterval(() => refreshTrads().catch(e => log("traductions : " + e.message, "w")), 4000);
+  if (!enCours && TRAD_POLL){ clearInterval(TRAD_POLL); TRAD_POLL = null; chargerCouts(); }
+}
+$("tradVue").onchange = () => {
+  TRAD_VUE = $("tradVue").value; try { localStorage.setItem("manga_trad_vue", TRAD_VUE); } catch {}
+  rafraichirPages(); $("tradVue").blur();
+};
+$("btnTraduire").onclick = async () => {
+  const lg = $("tradLangue").value, n = CHAP_PAGES;
+  if (!confirm("Traduire les dialogues des " + n + " pages en " + (LANGUE_LBL[lg] || lg) + " ?\n\nCoût ≈ "
+               + (n * 0.009).toFixed(2) + " $ (mesuré 0,009 $/page), ~" + fmtS(n * 8) + ". Les pages VO ne sont pas modifiées.")) return;
+  try {
+    const r = await api("/manga/traduire", { d: CHAP_OPEN, langue: lg });
+    if (r.error) throw new Error(r.error);
+    log("traduction lancée : " + CHAP_OPEN + " → " + lg);
+    TRAD_VUE = lg; try { localStorage.setItem("manga_trad_vue", lg); } catch {}
+    await refreshTrads();
+  } catch (e){ log("traduction : " + e.message, "e"); alert(e.message); }
+};
+// v1.85.0 : musique de fond PAR SERIE. Le volume et l'interrupteur sont memorises par appareil ;
+// le morceau qui joue est memorise par serie (proxy : musique/choix.json).
+// Niveau : les morceaux de Generate Studio sont mixes pour etre ecoutes SEULS (-11,4 LUFS mesures) ->
+// defaut 25 % = gain 0,1 (-20 dB), et encore -7 dB quand la voix parle (ducking), remonte entre les pages.
+let MUS = { items: [], choix: "" }, MUS_ON = true, MUS_VOL = 25;
+try { MUS_ON = localStorage.getItem("manga_mus_on") !== "0";
+      const v = localStorage.getItem("manga_mus_vol"); if (v !== null && !isNaN(+v)) MUS_VOL = +v; } catch {}
+const serieDe = d => (d || "").split("/")[0];
+const MUS_GAIN_MAX = 0.4, MUS_DUCK = 0.45, MUS_FONDU = 3;
+const musURL = () => { const it = MUS.items.find(x => x.nom === MUS.choix); return it ? srcURL(it.fichier) : ""; };
+async function refreshMus(){
+  if (!CHAP_OPEN) return;
+  MUS = await api("/manga/musiques?serie=" + encodeURIComponent(serieDe(CHAP_OPEN)));
+  $("musChoix").innerHTML = '<option value="">aucune</option>'
+    + MUS.items.map(x => '<option value="' + esc(x.nom) + '">' + esc(x.nom) + '</option>').join("");
+  $("musChoix").value = MUS.choix || "";
+  $("musEcoute").disabled = $("musSuppr").disabled = !MUS.choix;
+  $("musEtat").textContent = !MUS.items.length
+    ? "Aucun morceau pour cette série. Importe un morceau instrumental : il jouera doucement sous la voix, en boucle."
+    : MUS.choix ? "Joue sous la voix de tous les chapitres de la série. Volume et 🎵 on/off : dans le lecteur."
+    : "Aucune musique sous la voix pour cette série.";
+}
+$("musChoix").onchange = async () => {
+  try {
+    const r = await api("/manga/musique_choix", { serie: serieDe(CHAP_OPEN), nom: $("musChoix").value });
+    if (r.error) throw new Error(r.error);
+    MUS_APERCU.pause(); await refreshMus();
+  } catch (e){ log("musique : " + e.message, "e"); alert(e.message); }
+  $("musChoix").blur();
+};
+const MUS_APERCU = new Audio();
+const majMusEcoute = () => { $("musEcoute").textContent = MUS_APERCU.paused ? "▶" : "■"; };
+MUS_APERCU.onplay = MUS_APERCU.onpause = MUS_APERCU.onended = majMusEcoute;
+$("musEcoute").onclick = () => {
+  if (!MUS_APERCU.paused){ MUS_APERCU.pause(); return; }
+  MUS_APERCU.src = musURL(); MUS_APERCU.volume = 0.6;
+  MUS_APERCU.play().catch(e => { if (e.name !== "AbortError") log("musique : " + e.message, "w"); });
+};
+$("musImport").onclick = () => $("musFichier").click();
+$("musFichier").onchange = () => {
+  const f = $("musFichier").files[0]; $("musFichier").value = "";
+  if (!f) return;
+  if (f.size > 40 * 1024 * 1024){ alert("Fichier trop gros (40 Mo au plus)."); return; }
+  const rd = new FileReader();
+  rd.onload = async () => {
+    $("musEtat").textContent = "⏳ import de « " + f.name + " »…";
+    try {
+      const r = await api("/manga/musique_import", { serie: serieDe(CHAP_OPEN), nom: f.name, data: rd.result });
+      if (r.error) throw new Error(r.error);
+      log("musique importée : " + r.nom);
+      await refreshMus();
+    } catch (e){ log("musique : " + e.message, "e"); alert(e.message); await refreshMus(); }
+  };
+  rd.readAsDataURL(f);
+};
+$("musSuppr").onclick = async () => {
+  const nom = $("musChoix").value; if (!nom) return;
+  if (!confirm("Mettre « " + nom + " » à la corbeille ?")) return;
+  try {
+    const r = await api("/manga/musique_suppr", { serie: serieDe(CHAP_OPEN), nom });
+    if (r.error) throw new Error(r.error);
+    MUS_APERCU.pause(); log("musique à la corbeille : " + nom); await refreshMus();
+  } catch (e){ log("musique : " + e.message, "e"); alert(e.message); }
+};
+
+// --- lecture sous la narration : deux lecteurs pour boucler en fondu enchaine, volume suivi toutes les 100 ms
+const MP = { els: [$("lecMus1"), $("lecMus2")], cur: 0, g: 0, url: "", timer: null };
+function musCible(){
+  if (!MP.url || !MUS_ON || $("lecteur").hidden || !LEC.playing) return 0;
+  const a = $("lecAudio"), voix = a.getAttribute("src") && !a.paused && !a.ended;
+  return MUS_VOL / 100 * MUS_GAIN_MAX * (voix ? MUS_DUCK : 1);
+}
+function musEnveloppe(el){                     // fondu d'entree et de sortie de chaque passage de la boucle
+  const d = el.duration, t = el.currentTime;
+  if (!d || !isFinite(d)) return 1;
+  return Math.max(0, Math.min(1, t / MUS_FONDU, (d - t) / MUS_FONDU));
+}
+function musTick(){
+  // baisse vite (0,3 s) quand la voix reprend, remonte en ~2,5 s quel que soit le volume : les 0,45 s entre
+  // deux pages ne font pas pomper
+  const cible = musCible();
+  MP.g += Math.max(-0.02, Math.min(Math.max(0.004, cible * 0.04), cible - MP.g));
+  const a = MP.els[MP.cur], b = MP.els[1 - MP.cur];
+  if (MP.g <= 0.001 && cible === 0){ MP.els.forEach(x => { if (!x.paused) x.pause(); }); return; }
+  if (a.paused) a.play().catch(() => {});
+  // fin du passage en cours -> le 2e lecteur repart du debut, les deux se croisent pendant MUS_FONDU s
+  if (a.duration && a.currentTime > a.duration - MUS_FONDU && b.paused){
+    b.currentTime = 0; b.play().catch(() => {}); MP.cur = 1 - MP.cur;
+  }
+  MP.els.forEach(x => { x.volume = x.paused ? 0 : Math.min(1, MP.g * musEnveloppe(x)); });
+}
+function musDemarrer(){
+  const url = musURL();
+  $("lecMusBox").hidden = !url;
+  $("lecMusOn").checked = MUS_ON; $("lecMusVol").value = MUS_VOL;
+  if (url !== MP.url){
+    MP.els.forEach(x => { x.pause(); if (url) x.src = url; else x.removeAttribute("src"); });
+    MP.url = url; MP.cur = 0; MP.g = 0;
+  }
+  clearInterval(MP.timer); MP.timer = url ? setInterval(musTick, 100) : null;
+}
+function musArreter(){ clearInterval(MP.timer); MP.timer = null; MP.g = 0; MP.els.forEach(x => x.pause()); }
+$("lecMusOn").onchange = () => {
+  MUS_ON = $("lecMusOn").checked; try { localStorage.setItem("manga_mus_on", MUS_ON ? "1" : "0"); } catch {}
+  $("lecMusOn").blur();
+};
+$("lecMusVol").oninput = () => {
+  MUS_VOL = +$("lecMusVol").value; try { localStorage.setItem("manga_mus_vol", String(MUS_VOL)); } catch {}
+};
+$("lecMusVol").onchange = () => $("lecMusVol").blur();
+
 async function refreshNarrs(){
   if (!CHAP_OPEN) return;
   const j = await api("/manga/narrations?d=" + encodeURIComponent(CHAP_OPEN));
@@ -4842,6 +5035,7 @@ async function ouvrirLecteur(tags, aveugle){
   LEC.file = tags; LEC.iFile = 0; LEC.aveugle = !!aveugle; LEC.notes = {};
   $("lecteur").hidden = false; document.body.style.overflow = "hidden";
   $("lecPlay").focus();                  // le clavier reste DANS le lecteur, pas sur un bouton de la page
+  MUS_APERCU.pause(); musDemarrer();
   await chargerNarr();
 }
 async function chargerNarr(){
@@ -4865,7 +5059,7 @@ function montrerPage(){
   const n = LEC.n, p = n.pages[LEC.i], a = $("lecAudio"), img = $("lecImg");
   if (!p){ finNarr(); return; }
   img.classList.remove("kb", "kb2"); void img.offsetWidth;          // relance l'animation de zoom
-  img.src = srcURL(CHAP_OPEN + "/" + p.file);
+  img.src = pageSrc(CHAP_OPEN + "/" + p.file);
   img.style.setProperty("--kb", Math.max(4, (p.dur || 3) / (+$("lecVit").value) + 1) + "s");
   img.classList.add(LEC.i % 2 ? "kb2" : "kb");
   $("lecSous").textContent = $("lecSousOn").checked ? (p.narration || "") : "";
@@ -4874,7 +5068,7 @@ function montrerPage(){
   majBarre();
   $("lecPlay").textContent = LEC.playing ? "⏸" : "▶";
   const suivant = n.pages[LEC.i + 1];
-  if (suivant) (new Image()).src = srcURL(CHAP_OPEN + "/" + suivant.file);        // prechargement
+  if (suivant) (new Image()).src = pageSrc(CHAP_OPEN + "/" + suivant.file);        // prechargement
   if (p.audio){
     a.src = srcURL(n.base + "/" + p.audio); a.playbackRate = +$("lecVit").value;
     // Une navigation rapide change la source pendant play() : le navigateur l'annule (AbortError).
@@ -4955,6 +5149,7 @@ $("lecSousOn").onchange = () => {
 };
 $("lecFermer").onclick = () => {
   $("lecAudio").pause(); clearTimeout(LEC.timer); $("lecteur").hidden = true; document.body.style.overflow = "";
+  musArreter();
 };
 document.addEventListener("keydown", e => {
   // Dans le lecteur, les touches pilotent TOUJOURS la lecture : un menu (vitesse) ou une case

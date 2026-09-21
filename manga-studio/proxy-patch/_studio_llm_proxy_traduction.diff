@@ -1,0 +1,95 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-manga184-1790029710	2026-09-22 00:28:30.828575600 +0200
++++ C:/Users/quang/AppData/Local/Temp/claude/D--Download-02-Apps-Web-Repo-github/8297ee70-7895-4120-9400-2a0b2f99d277/scratchpad/proxy_tmp.py	2026-09-22 00:28:30.880079700 +0200
+@@ -7660,6 +7660,71 @@
+     return bool(p and p.poll() is None)
+ 
+ 
++# --- Traduction des dialogues d'un chapitre (Manga Studio v1.84.0) ---------------------
++MANGA_TRADUIRE = os.path.join(MANGA_ROOT, "scripts", "traduire_chapitre.py")
++_TRAD_JOBS = {}                                  # (chapitre, langue) -> Popen
++
++
++def manga_traduire(d, langue, engine="gemini"):
++    if not re.match(r"^[a-z]{2}$", langue or ""):
++        return {"error": "langue invalide"}
++    if engine not in ("gemini", "kimi"):
++        return {"error": "moteur inconnu"}
++    base = _manga_src_safe(d)
++    if not base or not os.path.isfile(os.path.join(base, "manifest.json")):
++        return {"error": "chapitre introuvable"}
++    if not os.path.isfile(MANGA_PY) or not os.path.isfile(MANGA_TRADUIRE):
++        return {"error": "venv kohya ou traduire_chapitre.py introuvable"}
++    job = _TRAD_JOBS.get((d, langue))
++    if job and job.poll() is None:
++        return {"error": "une traduction %s tourne deja sur ce chapitre" % langue}
++    td = os.path.join(base, "traduction", langue)
++    os.makedirs(td, exist_ok=True)
++    try: os.remove(os.path.join(td, "progress.json"))
++    except Exception: pass
++    lg = open(os.path.join(td, "run.log"), "w", encoding="utf-8")
++    _TRAD_JOBS[(d, langue)] = subprocess.Popen(
++        [MANGA_PY, MANGA_TRADUIRE, d, "--langue", langue, "--engine", engine], stdout=lg, stderr=lg,
++        cwd=os.path.dirname(MANGA_TRADUIRE), creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
++    return {"ok": True, "langue": langue}
++
++
++def manga_traductions(d):
++    base = _manga_src_safe(d)
++    if not base or not os.path.isdir(base):
++        return None
++    racine, out = os.path.join(base, "traduction"), []
++    for lg in sorted(os.listdir(racine)) if os.path.isdir(racine) else []:
++        td = os.path.join(racine, lg)
++        it = {"langue": lg, "etat": "vide"}
++        try:
++            with open(os.path.join(td, "progress.json"), encoding="utf-8") as f:
++                it["progress"] = json.load(f)
++        except Exception:
++            pass
++        job = _TRAD_JOBS.get((d.strip("/"), lg))
++        vivant = (job and job.poll() is None) or (
++            it.get("progress") and not it["progress"].get("fini") and time.time() - float(it["progress"].get("t") or 0) < 180)
++        tj = os.path.join(td, "traduction.json")
++        if vivant:
++            it["etat"] = "en cours"
++        elif os.path.isfile(tj):
++            try:
++                with open(tj, encoding="utf-8") as f:
++                    t = json.load(f)
++                it.update(etat="fini", stats=t.get("stats"), engine=t.get("engine"), created_at=t.get("created_at"),
++                          pages={x["source"]: d.strip("/") + "/traduction/" + lg + "/" + x["file"] for x in t.get("pages") or []})
++            except Exception as e:
++                it.update(etat="illisible", err=str(e))
++        elif os.path.isfile(os.path.join(td, "run.log")):
++            try:
++                it.update(etat="echec", err=open(os.path.join(td, "run.log"), encoding="utf-8", errors="replace").read()[-400:])
++            except Exception:
++                it["etat"] = "echec"
++        out.append(it)
++    return {"items": out}
++
++
+ def manga_narrations(d):
+     nd = _narr_dir(d)
+     if nd is None:
+@@ -8476,6 +8541,10 @@
+             _r = manga_source_pages(_d) if _d else None
+             if _r is None: self._json(404, {"error": "chapitre introuvable"})
+             else: self._json(200, _r)
++        elif self.path.split("?", 1)[0] == "/manga/traductions":           # Manga Studio v1.84.0
++            _r = manga_traductions((parse_qs(urlparse(self.path).query).get("d") or [""])[0])
++            if _r is None: self._json(404, {"error": "chapitre introuvable"})
++            else: self._json(200, _r)
+         elif self.path.split("?", 1)[0] == "/manga/narrations":
+             _r = manga_narrations((parse_qs(urlparse(self.path).query).get("d") or [""])[0])
+             if _r is None: self._json(404, {"error": "chapitre introuvable"})
+@@ -8907,6 +8976,9 @@
+                 self._json(200, manga_source_delete(data))
+             elif self.path == "/manga/serie_infos":            # Manga Studio v1.77.0
+                 self._json(200, manga_serie_infos(data))
++            elif self.path == "/manga/traduire":               # Manga Studio v1.84.0
++                self._json(200, manga_traduire(data.get("d") or "", data.get("langue") or "fr",
++                                               data.get("engine") or "gemini"))
+             elif self.path == "/manga/serie_renommer":         # Manga Studio v1.80.0
+                 self._json(200, manga_serie_renommer(data))
+             elif self.path == "/manga/pochette":               # Manga Studio v1.76.0

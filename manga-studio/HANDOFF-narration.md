@@ -1,9 +1,9 @@
-# HANDOFF — Manga Studio, volet LECTURE NARRÉE (21/09/2026, 19h25)
+# HANDOFF — Manga Studio, volet LECTURE NARRÉE (maj 22/09/2026, 00h55)
 
-> Autosuffisant. « Fait » = `git log` (dernier commit du volet : `fb5a1c1`, v1.72.0). Ce fichier ne porte
+> Autosuffisant. « Fait » = `git log` (version courante : v1.85.0). Ce fichier ne porte
 > que le RESTANT, les pièges et le pourquoi. Le détail des mesures est dans `ROADMAP.md` § 4-ter et 4-ter-bis.
 
-## Où on en est (v1.72.0)
+## Où on en est (v1.72.0 — voir « RESTANT » pour la suite, jusqu'à v1.85.0)
 - Onglet 📚 **Chapitres** : liste des chapitres de `sources/`, **capture DANS l'app** (manga-fetch enveloppé),
   avertissements du manifeste + bouton Vérifier, **Narrer** (moteur/voix/pages), lecteur plein écran,
   écoute à l'aveugle, **pastille des coûts** en en-tête (détail au clic).
@@ -46,13 +46,15 @@
    **ORDRE FIXÉ PAR QUANG (22/09 00h06)** : (1) **traduction des dialogues** ← EN COURS ; (2) musique de fond
    dans l'app (on/off, volume manuel + défaut) ; (2-bis) sous-titres **karaoké** (récupérer Lumen v2.3 /
    PromoClip `generateSubtitleASSFromWords`) ; (3) **vidéo : À DISCUTER avant de coder** ; puis 7, 9, 10.
-   **REPRISE IMMÉDIATE — traduction (étape 11 b)** : moteur FAIT et mesuré (`scripts/traduire_chapitre.py`,
-   Claymore p.1-20 déjà traduites dans `sources/claymore/ch_1/traduction/fr/`). RESTE, dans l'ordre :
-   a. appliquer `proxy-patch/patch_traduction.py` au proxy (sauvegarde + diff rejoué + `relance-proxy.ps1`) ;
-   b. appliquer `proxy-patch/app_patch_184_traduction.py` (app v1.83.0 → v1.84.0 ; il vérifie ses ancres) ;
-   c. banc UI (bouton Traduire, sélecteur VO/fr dans grille + visionneuse + lecteur, 1280 + 360 px) ;
-   d. traduire Claymore EN ENTIER (62 p., ~0,55 $) et regarder 5-6 pages ; e. commit + montrer à Quang.
-   Limites connues : texte flottant hors bulle (p.19), lignes qui frôlent le bord.
+   ✅ **22/09 00h55 — v1.84.0 traduction + v1.85.0 musique LIVRÉES** (Quang dormait, feu vert « tout ce que tu peux faire en autonome ») :
+   traduction branchée (bouton + sélecteur VO/fr grille/visionneuse/lecteur), **Claymore ch.1 entier traduit** (294/305 bulles, 0,54 $) ;
+   musique par série (import, choix, corbeille ; lecteur : 🎵 + volume, ducking, boucle en fondu), 4 échantillons importés.
+   Détail + chiffres : ROADMAP lignes 11 b et 13. Limites : répliques non détectées par YOLO restées en VO (piste écrite).
+   **REPRISE — (2-bis) KARAOKÉ** : `scripts/karaoke_mots.py <chap> <tag>` ÉCRIT (Whisper Groq mot par mot via le gateway, même appel
+   que promoclip-local `whisperTimestamps()` — code lisible par `git -C App show 401b3f7^:promoclip-local/index.html`, l.4735 et
+   ASS `{\k}` l.4857 — puis recalage difflib sur le texte exact) → `pages[].mots` dans narration.json. RESTE : l'essayer sur une
+   narration, route proxy de lancement, affichage mot par mot dans le lecteur (repli : répartition au prorata des longueurs).
+   Ensuite (3) vidéo = **À DISCUTER avec Quang avant tout code**.
    ⚠ Une question de Quang (« il me semble que… ») n'est PAS un ordre : répondre, ne rien modifier.
 5. Lien mobile = l'URL du tunnel de Generate Studio (hostname dans `config-generate-agent.yml`, hors dépôt :
    ce dépôt est PUBLIC) suivie de `/manga` (le dossier github.io ne sert que le
