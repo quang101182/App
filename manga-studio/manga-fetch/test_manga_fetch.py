@@ -152,11 +152,21 @@ def main() -> int:
         verts += etape("capture terminee", r.returncode in (0, 3) and len(cap_files) > 0,
                        (r.stdout.strip().splitlines() or ["?"])[-1][:70])
         if cap_files:
-            verts += etape("controle croise download == capture", len(cap_files) == len(fichiers),
-                           f"download {len(fichiers)} vs capture {len(cap_files)}")
+            # Contrôle croisé par HASH : toutes les pages officielles (download) doivent
+            # être dans la capture. La capture peut avoir un surplus SIGNALÉ par note
+            # (intercalaire du scanlateur affiché par le lecteur, mesuré 18:26) — ce qui
+            # compte, c'est de ne manquer AUCUNE page officielle.
+            import hashlib as _h
+            h_dl = {_h.sha1(open(os.path.join(slug_dir, f), "rb").read()).hexdigest() for f in fichiers}
+            h_cap = {_h.sha1(open(os.path.join(cap_dir, f), "rb").read()).hexdigest() for f in cap_files}
+            verts += etape("controle croise : toutes les pages officielles capturees",
+                           h_dl <= h_cap,
+                           f"manquantes {len(h_dl - h_cap)}/{len(h_dl)} ; capture {len(cap_files)} "
+                           f"fichiers, surplus {len(h_cap - h_dl)}")
             mcap = json.load(open(os.path.join(cap_dir, "manifest.json"), encoding="utf-8"))
-            ws = [pg.get("w") or 0 for pg in mcap["pages"][:3]]
-            verts += etape("largeur des premieres pages >= 800px", ws and min(ws) >= 800, f"w = {ws}")
+            ws = sorted(pg.get("w") or 0 for pg in mcap["pages"])
+            verts += etape("mediane des largeurs >= 800px", ws[len(ws) // 2] >= 800,
+                           f"mediane = {ws[len(ws) // 2]}")
     except Exception as e:
         verts += etape("capture (fenetre dediee joignable ?)", False, f"{type(e).__name__}: {e}")
 

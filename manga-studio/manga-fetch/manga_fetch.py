@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.1.7"
+VERSION = "0.1.9"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -42,6 +42,7 @@ EDGE_CDP = "http://localhost:9223"
 EDGE_PROFILE = os.path.join(os.environ.get("LOCALAPPDATA", "."), "manga-fetch-edge")
 DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA", "."), "manga-fetch")
 LOG_FILE = os.path.join(DATA_DIR, "fetch.log")
+LOG_EVT = os.path.join(DATA_DIR, "events.log")  # journal DÉTAILLÉ (demande Quang 18/18)
 DEFAULT_OUT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources"))
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif"}
 
@@ -55,6 +56,23 @@ def log_event(action: str, **kw) -> None:
     ligne.update(kw)
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(ligne, ensure_ascii=False) + "\n")
+
+
+def log_evt(categorie: str, message: str, **kw) -> None:
+    """Journal DÉTAILLÉ lisible (%LOCALAPPDATA%/manga-fetch/events.log) — une ligne
+    horodatée par événement : choix d'onglet, mode, pages collectées/écartées, fins.
+    Rotation simple à 1 Mo (garde .1). Ne doit JAMAIS faire échouer l'appelant."""
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        if os.path.exists(LOG_EVT) and os.path.getsize(LOG_EVT) > 1_000_000:
+            os.replace(LOG_EVT, LOG_EVT + ".1")
+        ligne = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") + f" [{categorie}] {message}"
+        if kw:
+            ligne += " " + " ".join(f"{k}={v}" for k, v in kw.items())
+        with open(LOG_EVT, "a", encoding="utf-8") as f:
+            f.write(ligne + "\n")
+    except OSError:
+        pass
 
 
 def slugify(titre: str) -> str:
@@ -284,6 +302,7 @@ def capture(args) -> int:
                   f"dans la fenêtre dédiée (CDP {EDGE_CDP}).")
             print("Ouvre le chapitre (onglet affiché) puis relance.")
             return 1
+        methode_choix = "unique"
         if len(candidats) > 1 and not args.tab:
             # Mode interactif : la fenêtre Edge que l'utilisateur regarde (détection OS,
             # Z-order + match des bounds). ⚠ Ne JAMAIS l'appliquer en mode --tab (script) :
@@ -291,6 +310,7 @@ def capture(args) -> int:
             actif = onglet_fenetre_active(candidats)
             if actif is not None:
                 page = actif
+                methode_choix = "fenêtre-active-OS"
                 print("Onglet actif détecté (fenêtre Edge que tu regardes) :")
                 print(f"  {page.url[:88]}")
             else:
@@ -299,9 +319,11 @@ def capture(args) -> int:
                 gagnants = [pg for pg in candidats if score_pages(pg) > 0]
                 if len(gagnants) == 1:
                     page = gagnants[0]
+                    methode_choix = "scoring-contenu"
                     print("Onglet choisi automatiquement (seul à contenir un chapitre) :")
                     print(f"  {page.url[:88]}")
                 else:
+                    methode_choix = "question"
                     liste = gagnants if gagnants else candidats
                     print("=" * 58)
                     print("Plusieurs onglets candidats :")
@@ -315,6 +337,8 @@ def capture(args) -> int:
         else:
             page = candidats[0]
         print(f"Onglet : {page.url[:80]}")
+        log_evt("capture", "démarrage", titre=args.title, chapitre=str(args.chapter),
+                methode_onglet=methode_choix, onglet=page.url[:100])
         page.bring_to_front()  # un onglet de fond est THROTTLE par le navigateur :
         # son chargement ralentit et la capture part dans le vide (mesuré : « Loading... »)
 
@@ -330,11 +354,13 @@ def capture(args) -> int:
                 print(f"Retour à la page 1 (l'onglet était page {num_page})...")
                 page.goto(base, wait_until="domcontentloaded", timeout=45000)
                 page.bring_to_front()
+                log_evt("départ", f"retour page 1 (était page {num_page})")
             else:
                 print(f"Capture depuis la page {num_page} — les pages 1 à {int(num_page) - 1} "
                       f"ne seront pas capturées (--page-1 pour commencer au début).")
                 note_depart = (f"capture démarrée à la page {num_page} "
                                f"(pages 1-{int(num_page) - 1} absentes volontairement)")
+                log_evt("départ", f"page {num_page} (pages 1-{int(num_page) - 1} exclues)")
 
         # attendre que le lecteur ait chargé sa première page (<= 90 s)
         for _ in range(90):
@@ -398,14 +424,18 @@ def capture(args) -> int:
             return el.screenshot()  # PNG à la taille d'affichage
 
         def collecter() -> None:
-            """Détecte les images de page chargées, les récupère et les ÉCRIT aussitôt."""
-            # Zone morte des ratios CARRÉS (0.93-1.15) : une page de manga est portrait
-            # (~0.7) ou double (~1.4), jamais carrée — mais avatars et logos le sont
-            # (avatar MangaDex 1065×1065 capturé comme 23e page, mesuré 21/09).
+            """Détecte les images de page AFFICHÉES, les récupère et les ÉCRIT aussitôt."""
+            # Filtre VISIBLE à l'écran (avec marge 80 px) : le lecteur GARDE en mémoire
+            # les pages déjà visitées (préchargées autour de la page courante) — sans
+            # ce filtre, la page d'AVANT la page de départ était capturée (mesuré 18:16).
+            # + zone morte des ratios CARRÉS (0.93-1.15) : une page de manga est portrait
+            # (~0.7) ou double (~1.4), jamais carrée — mais avatars et logos le sont.
             nouvelles = page.evaluate("""() => Array.from(document.images)
                 .filter(i => i.naturalWidth > 250 && i.naturalHeight > 500
                     && (i.naturalWidth / i.naturalHeight < 0.93
                         || i.naturalWidth / i.naturalHeight > 1.15))
+                .filter(i => { const r = i.getBoundingClientRect();
+                               return r.bottom > 80 && r.top < window.innerHeight - 80; })
                 .map(i => ({src: i.src, top: Math.round(i.getBoundingClientRect().top + window.scrollY),
                             w: i.naturalWidth, h: i.naturalHeight}))""")
             for im in nouvelles:
@@ -420,13 +450,17 @@ def capture(args) -> int:
                         # aucune page de manga ne fait < 10 Ko : logos, boutons,
                         # cartes de fin de chapitre
                         notes.append(f"écartée ({len(data)} octets) : {im['src'][:50]}")
+                        log_evt("écartée", f"trop petite ({len(data)} octets)", src=im["src"][:60])
                         continue
                     vus_hashes.add(hsh)
                     nom = save_page(dest, len(vues) + 1, data)
                     vues[im["src"]] = {"file": nom, "bytes": len(data),
                                        "top": im["top"], "w": im["w"], "h": im["h"]}
+                    log_evt("page", f"{len(vues)} collectée", fichier=nom,
+                            octets=len(data), dim=f"{im['w']}x{im['h']}")
                 except Exception as e:
                     notes.append(f"{im['src'][:60]} : ECHEC {type(e).__name__}")
+                    log_evt("échec", f"extraction {type(e).__name__}", src=im["src"][:60])
 
         # Mode de lecture : bande défilante (scroll) ou page par page (pager).
         # MangaDex web est un PAGER par défaut : scrollBy n'y avance rien
@@ -436,6 +470,8 @@ def capture(args) -> int:
         mode_strip = h_doc > h_ecran * 2.5
         print(f"Mode {'bande défilante' if mode_strip else 'page par page'} "
               f"(doc {h_doc}px / écran {h_ecran}px)")
+        log_evt("mode", "bande défilante" if mode_strip else "page par page",
+                doc=h_doc, ecran=h_ecran)
 
         # Fin de chapitre = l'URL change de CHAPITRE. ⚠ MangaDex pagine par URL
         # (/chapter/<id>/2, /3... — mesuré 21/09) : l'URL change à chaque PAGE.
@@ -444,23 +480,32 @@ def capture(args) -> int:
         # flèche (ch.1→ch.7 du 21/09 : la boucle d'images nouvelles ne s'arrêtait jamais).
         url_depart = page.url.split("?")[0].split("#")[0]
 
+        def _chapitre_path(u: str) -> str:
+            """Path réduit à l'identifiant de CHAPITRE (sans le numéro de PAGE final).
+            MangaDex : /chapter/<uuid 36>/<n>. ⚠ ne retirer le segment numérique final
+            QUE s'il est précédé d'un segment long non numérique (UUID) — sinon
+            /viewer/1000233 (MANGA Plus) perdrait son identifiant de chapitre.
+            (bug 18:13 : départ page 4 → passage en page 5 lu comme « chapitre
+            suivant » → arrêt après 4 pages au lieu de finir le chapitre.)"""
+            base, _, dernier = u.rpartition("/")
+            if dernier.isdigit():
+                av = base.rpartition("/")[2]
+                if len(av) >= 20 and not av.isdigit():
+                    return base
+            return u
+
         def chapitre_quitte() -> bool:
-            p = page.url.split("?")[0].split("#")[0]
-            if p == url_depart:
-                return False
-            base, _, dernier = p.rpartition("/")
-            if dernier.isdigit() and base == url_depart:
-                return False  # pagination intra-chapitre (/chapter/<id>/<n>)
-            return True
+            return _chapitre_path(page.url.split("?")[0].split("#")[0]) != _chapitre_path(url_depart)
 
         if mode_strip:
             hauteur_prec, stable = 0, 0
             for _ in range(300):
                 if chapitre_quitte():
                     notes.append("fin : le lecteur est passé au chapitre suivant")
+                    log_evt("fin", "chapitre suivant atteint (bande défilante)")
                     break
                 collecter()
-                page.evaluate("window.scrollBy(0, window.innerHeight * 0.85)")
+                page.evaluate("window.scrollBy(0, window.innerHeight * 0.7)")
                 page.wait_for_timeout(1200)
                 h = page.evaluate("() => document.documentElement.scrollHeight")
                 if h == hauteur_prec:
@@ -475,6 +520,7 @@ def capture(args) -> int:
             for _ in range(500):
                 if chapitre_quitte():
                     notes.append("fin : le lecteur est passé au chapitre suivant")
+                    log_evt("fin", "chapitre suivant atteint (page par page)")
                     break
                 collecter()
                 n_avant = len(vues)
@@ -484,11 +530,13 @@ def capture(args) -> int:
                     x, y = page.evaluate("() => [Math.round(innerWidth * 0.75), Math.round(innerHeight * 0.5)]")
                     page.mouse.click(x, y)
                     mode_clic = True
+                    log_evt("navigation", "bascule en clic (flèches sans effet)")
                 else:
                     page.keyboard.press("ArrowRight")
                 page.wait_for_timeout(1600)
                 if chapitre_quitte():
                     notes.append("fin : le lecteur est passé au chapitre suivant")
+                    log_evt("fin", "chapitre suivant atteint (après pression)")
                     break
                 collecter()
                 if len(vues) == n_avant:
@@ -498,6 +546,9 @@ def capture(args) -> int:
                     if sterile >= 20 and len(vues) == 0:
                         print("Abandon : le lecteur ne charge aucune page "
                               "(rate-limit ? chapitre vide ? onglet cassé ?)")
+                        log_evt("abandon", "aucune page chargée après 20 itérations",
+                                onglet=page.url[:100])
+                        shutil.rmtree(dest, ignore_errors=True)
                         return 2
                 else:
                     sterile = 0
@@ -512,6 +563,7 @@ def capture(args) -> int:
         def echec_propre(msg: str) -> int:
             print(msg)
             print(f"Le dossier partiel est retiré : {dest}")
+            log_evt("échec", msg, dossier=dest)
             shutil.rmtree(dest, ignore_errors=True)
             return 2
 
@@ -524,20 +576,51 @@ def capture(args) -> int:
                                 "l'onglet capturé ne semble pas contenir de chapitre "
                                 "(page d'accueil ? mauvais onglet ?)")
 
-        # Cohérence des largeurs : les vraies pages d'un chapitre sont homogènes ; les
-        # artefacts du site (bannières, cartes de fin) sont plus ÉTROITS. Les pages étant
-        # déjà écrites (sauvegarde incrémentale), on SUPPRIME les fichiers des écartées.
+        # Largeurs atypiques : NOTE seulement, JAMAIS de suppression — une page étroite
+        # peut être légitime (vraie page 567px supprimée par l'ancien filtre, mesuré
+        # 18:22 grâce au journal détaillé). L'humain vérifie avec l'information.
         if len(uniques) >= 3:
             mediane = sorted(im["w"] for im in uniques)[len(uniques) // 2]
-            for src, im in list(vues.items()):
+            for src, im in vues.items():
                 if im["w"] < 0.8 * mediane:
-                    notes.append(f"écartée (largeur {im['w']} < 80% de la médiane {mediane})")
-                    try:
-                        os.remove(os.path.join(dest, im["file"]))
-                    except OSError:
-                        pass
-                    del vues[src]
+                    notes.append(f"page étroite ({im['w']}px vs médiane {mediane}) — à vérifier")
+                    log_evt("note", "page étroite (gardée)", fichier=im["file"],
+                            w=im["w"], mediane=mediane)
+
+        # DOUBLONS DE RÉSOLUTION : le lecteur charge parfois une version compressée
+        # puis l'originale (data-saver → pleine, mesuré : 23 images pour 22 pages dès
+        # que la médiane ne supprime plus). Signature : MÊME ratio (± 0,7 %) et
+        # largeur supérieure de 3 à 35 % PLUS TARD dans l'ordre de découverte →
+        # la petite version est un doublon, on supprime SON fichier. Une page au
+        # ratio différent (ex. intercalaire chibi du scanlateur) n'est PAS touchée.
+        items = list(vues.items())
+        doublons = []
+        for i, (src, im) in enumerate(items):
+            for _, im2 in items[i + 1:]:
+                r1, r2 = im["w"] / im["h"], im2["w"] / im2["h"]
+                if abs(r1 - r2) / max(r1, r2) < 0.007:
+                    ecart = (im2["w"] - im["w"]) / im["w"]
+                    if 0.03 <= ecart <= 0.35:
+                        doublons.append((src, im, im2))
+                        break
+        for src, im, im2 in doublons:
+            notes.append(f"doublon de résolution écarté : {im['file']} ({im['w']}px, "
+                         f"remplacée par {im2['file']} à {im2['w']}px)")
+            log_evt("doublon", "version compressée écartée", fichier=im["file"],
+                    petite=im["w"], grande=im2["w"])
+            try:
+                os.remove(os.path.join(dest, im["file"]))
+            except OSError:
+                pass
+            del vues[src]
             uniques = list(vues.values())
+        # renumérotation consécutive (les suppressions de doublons laissent des trous)
+        for i, (src, im) in enumerate(list(vues.items()), 1):
+            cible = f"page_{i:03d}{os.path.splitext(im['file'])[1]}"
+            if cible != im["file"]:
+                os.rename(os.path.join(dest, im["file"]), os.path.join(dest, cible))
+                vues[src]["file"] = cible
+        uniques = list(vues.values())
 
         pages_meta = [{"file": im["file"], "bytes": im["bytes"], "w": im["w"], "h": im["h"]}
                       for im in uniques]
@@ -547,6 +630,7 @@ def capture(args) -> int:
                        source="capture", source_url=page.url, pages=pages_meta, notes=notes)
         log_event("capture", url=page.url, title=args.title, chapter=str(args.chapter),
                   pages=len(pages_meta), echecs=sum(1 for n in notes if "ECHEC" in n))
+        log_evt("capture", "terminée", pages=len(pages_meta), notes=len(notes), dossier=dest)
         print(f"OK : {len(pages_meta)}/{len(uniques)} pages -> {dest}")
         if notes:
             print("Notes : " + " ; ".join(notes[:5]))
