@@ -79,6 +79,35 @@ r = api("/manga/source_delete", {"d": "banc-bib/ch_1"})
 check("refuse : narration en cours", "narration" in (r.get("error") or "") and os.path.isdir(os.path.join(BANC, "ch_1")), r)
 shutil.rmtree(os.path.join(BANC, "ch_1", "narration"))
 
+print("=== suppression d'une NARRATION (v1.77.0)")
+nd = os.path.join(BANC, "ch_1", "narration", "essai-a-jeter")
+os.makedirs(nd)
+json.dump({"tag": "essai-a-jeter"}, open(os.path.join(nd, "narration.json"), "w"))
+r = api("/manga/source_delete", {"d": "banc-bib/ch_1", "narration": "essai-a-jeter"})
+check("narration deplacee en corbeille", r.get("ok") and r.get("quoi") == "narration" and not os.path.exists(nd)
+      and os.path.isfile(os.path.join(SRC, r.get("corbeille", "x"), "narration.json")), r)
+check("le chapitre reste en place", os.path.isfile(os.path.join(BANC, "ch_1", "manifest.json")))
+corbeille_nettoie(r.get("corbeille"))
+for nom, body in (("tag invalide", {"d": "banc-bib/ch_1", "narration": "../../x"}),
+                  ("narration absente", {"d": "banc-bib/ch_1", "narration": "nexiste-pas"})):
+    r = api("/manga/source_delete", body)
+    check("refuse : " + nom, "error" in r and os.path.isdir(os.path.join(BANC, "ch_1")), r.get("error"))
+os.makedirs(nd)
+json.dump({"etape": "voix", "t": time.time()}, open(os.path.join(nd, "progress.json"), "w"))
+r = api("/manga/source_delete", {"d": "banc-bib/ch_1", "narration": "essai-a-jeter"})
+check("refuse : narration en cours", "narration" in (r.get("error") or "") and os.path.isdir(nd), r)
+shutil.rmtree(os.path.join(BANC, "ch_1", "narration"))
+
+print("=== tomes et dates (v1.77.0)")
+r = api("/manga/serie_infos", {"slug": "claymore"})
+check("Claymore : 2001-2014, termine, ch.1 = tome 1", r.get("annee_debut") == 2001 and r.get("annee_fin") == 2014
+      and r.get("statut") == "completed" and (r.get("chapitres") or {}).get("1") == "1", {k: r.get(k) for k in ("annee_debut", "annee_fin", "statut", "chapitres")})
+check("couverture du tome 1 telechargee", os.path.isfile(os.path.join(SRC, (r.get("couvertures") or {}).get("1", "x"))))
+it = [i for i in api("/manga/sources")["items"] if i["dir"] == "claymore/ch_1"]
+check("la liste porte le tome et les infos", it and it[0].get("tome") == "1" and (it[0].get("serie_info") or {}).get("annee_debut") == 2001)
+r = api("/manga/serie_infos", {"slug": "one-punch-man"})
+check("OPM 300-301 : hors tome (trop recents)", (r.get("chapitres") or {}) == {"300": None, "301": None}, r.get("chapitres"))
+
 print("=== suppression d'un CHAPITRE puis d'une SERIE")
 r = api("/manga/source_delete", {"d": "banc-bib/ch_1"})
 check("chapitre deplace en corbeille", r.get("ok") and not os.path.exists(os.path.join(BANC, "ch_1"))

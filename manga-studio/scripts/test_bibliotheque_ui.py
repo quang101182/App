@@ -37,8 +37,18 @@ with sync_playwright() as p:
         pg.wait_for_timeout(1500)
         poch = pg.eval_on_selector('#chapList [data-serie="claymore"] img', "i => [i.naturalWidth, i.src.includes('pochette')]")
         check("pochette officielle affichee (claymore)", poch[0] > 0 and poch[1], poch)
+        # v1.77.0 : annees sur la carte, chapitres ranges par tome
+        carte = pg.inner_text('#chapList [data-serie="claymore"]')
+        check("carte Claymore : 2001–2014 · terminé · 27 tomes", "2001–2014" in carte and "terminé" in carte and "27 tomes" in carte, carte.replace("\n", " | "))
+        pg.click('#chapList [data-serie="claymore"]'); pg.wait_for_timeout(1200)
+        tete = pg.query_selector("#chapList .tome-tete")
+        check("Claymore : chapitre range sous « Tome 1 » avec sa couverture",
+              tete is not None and "Tome 1" in tete.inner_text()
+              and pg.eval_on_selector("#chapList .tome-tete img", "i => i.naturalWidth") > 0)
+        pg.click("#btnLibBack"); pg.wait_for_timeout(300)
         pg.click('#chapList [data-serie="one-punch-man"]')
         pg.wait_for_timeout(500)
+        check("OPM : chapitres « Hors tome »", "Hors tome" in pg.inner_text("#chapList"))
         chaps = pg.eval_on_selector_all("#chapList [data-chap]", "e => e.length")
         check("la serie montre SES chapitres (OPM = 2)", chaps == 2 and pg.is_visible("#libNav"), chaps)
         pg.reload(); pg.wait_for_timeout(3500)
@@ -50,6 +60,17 @@ with sync_playwright() as p:
         essais = pg.query_selector("#narrRuns details.narr-essais")
         check("essais techniques replies", essais is not None and not essais.get_attribute("open"))
         check("titre du chapitre = 301", "301" in pg.inner_text("#chapTitle"), pg.inner_text("#chapTitle"))
+        # v1.77.0 : supprimer une narration depuis l'interface (un essai de banc devenu inutile, -> corbeille)
+        cible = pg.evaluate("() => NARRS.findIndex(n => n.tag === 'k3-noms-v3-a')")
+        if cible >= 0:
+            pg.once("dialog", lambda d: d.accept())
+            pg.click("#narrRuns details.narr-essais summary")
+            pg.click('#narrRuns [data-suppr-narr="%d"]' % cible); pg.wait_for_timeout(1500)
+            check("narration supprimee depuis l'app", pg.evaluate("() => !NARRS.some(n => n.tag === 'k3-noms-v3-a')")
+                  and not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources",
+                                                      "one-punch-man", "ch_301", "narration", "k3-noms-v3-a")))
+        check("chaque narration terminee a son bouton 🗑",
+              pg.evaluate("() => NARRS.filter(n => n.etat !== 'en cours').length === document.querySelectorAll('#narrRuns [data-suppr-narr]').length"))
         # apercu de voix
         pg.select_option("#narrVoice", "Fenrir")
         pg.click("#btnVoixApercu"); pg.wait_for_timeout(1500)

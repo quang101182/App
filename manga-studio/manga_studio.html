@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.76.0</title>
+<title>Manga Studio v1.77.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -307,6 +307,10 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
   background:var(--accent);border-radius:50%;width:22px;height:22px;display:grid;place-items:center}
 .narr-essais{margin-top:4px}.narr-essais summary{cursor:pointer;padding:6px 2px;opacity:.8}
 .narr-essais .narr-runs{margin-top:6px}
+/* v1.77.0 : chapitres ranges par TOME */
+.tome-tete{grid-column:1/-1;display:flex;gap:10px;align-items:center;margin:6px 0 0}
+.tome-tete img{width:40px;height:58px;object-fit:cover;border-radius:3px;background:#0003}
+.tome-tete b{font-size:1.05em}.tome-tete small{opacity:.7}
 .btn.danger{border-color:#b54;color:#f99}
 #chapMeta a{color:var(--accent2)}
 /* ---------- Pastille des couts (v1.72.0) ---------- */
@@ -488,7 +492,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.76.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.77.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -864,6 +868,7 @@ body.epure .aide{display:none}
   <div class="lib-nav" id="libNav" hidden>
     <button class="btn sm" id="btnLibBack">← Toutes les séries</button>
     <h3 id="libSerie"></h3>
+    <button class="btn sm" id="btnTomes" title="tomes, années et statut (MangaDex / AniList)">📅 Tomes et dates</button>
     <button class="btn sm" id="btnPochAni" title="pochette officielle de la série (AniList)">🖼 Pochette officielle</button>
     <button class="btn sm" id="btnPochFile">📁 Charger une image</button>
     <button class="btn sm danger" id="btnSerieDel">🗑 Supprimer la série</button>
@@ -1117,7 +1122,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.76.0";
+const VERSION = "1.77.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4408,10 +4413,23 @@ let LIB_SERIE = null; try { LIB_SERIE = localStorage.getItem("manga_serie"); } c
 function seriesDe(chaps){
   const m = new Map();
   chaps.forEach((c, i) => {
-    const s = m.get(c.slug) || { slug: c.slug, title: c.title, chaps: [], pages: 0, pochette: c.pochette, cover: c.cover };
+    const s = m.get(c.slug) || { slug: c.slug, title: c.title, chaps: [], pages: 0, pochette: c.pochette, cover: c.cover, info: c.serie_info };
     s.chaps.push(i); s.pages += c.pages; s.pochette = s.pochette || c.pochette; m.set(c.slug, s);
   });
   return [...m.values()];
+}
+const STATUT_LBL = { completed: "terminé", ongoing: "en cours", hiatus: "en pause", cancelled: "arrêté" };
+const TOMES_DEMANDES = new Set();
+function infoSerie(i){
+  const an = i.annee_debut ? i.annee_debut + (i.annee_fin && i.annee_fin !== i.annee_debut ? "–" + i.annee_fin : "") : "";
+  return [an, STATUT_LBL[i.statut] || i.statut || "", i.tomes_total ? i.tomes_total + " tomes" : ""].filter(Boolean).join(" · ");
+}
+async function chercherTomes(slug, titre){
+  const r = await api("/manga/serie_infos", titre ? { slug, titre } : { slug });
+  if (r.error) throw new Error(r.error);
+  log("tomes et dates : " + slug + " → « " + (r.titre_mangadex || "?") + " » " + infoSerie(r));
+  await refreshChaps();
+  return r;
 }
 function ouvrirSerie(slug){
   LIB_SERIE = slug || null;
@@ -4442,6 +4460,7 @@ function renderLib(){
                                                   : srcURL(s.cover)) + '" alt="">'
       + '<span><b>' + esc(s.title) + '</b>'
       + '<small>' + s.chaps.length + ' chapitre' + (s.chaps.length > 1 ? "s" : "") + ' · ' + s.pages + ' pages</small>'
+      + (s.info ? '<small>' + esc(infoSerie(s.info)) + '</small>' : "")
       + '<small>ch. ' + s.chaps.map(i => esc(CHAPS[i].chapter)).join(", ") + '</small>'
       + (s.pochette ? "" : '<small class="muted">pas encore de pochette</small>')
       + '</span></button>').join("")
@@ -4449,8 +4468,20 @@ function renderLib(){
     $("chapState").textContent = series.length + " série(s), " + CHAPS.length + " chapitre(s) — " + CHAPS_ROOT;
     return;
   }
-  $("libSerie").textContent = serie.title;
-  $("chapList").innerHTML = serie.chaps.map(i => { const c = CHAPS[i]; return (
+  $("libSerie").textContent = serie.title + (serie.info ? " — " + infoSerie(serie.info) : "");
+  if (!serie.info && !TOMES_DEMANDES.has(serie.slug)){        // 1re ouverture : on va chercher tomes et dates
+    TOMES_DEMANDES.add(serie.slug);
+    chercherTomes(serie.slug).catch(e => log("tomes : " + e.message, "w"));
+  }
+  const groupes = new Map();                                 // tome -> [index de chapitre], « hors tome » en dernier
+  serie.chaps.forEach(i => { const t = CHAPS[i].tome || ""; groupes.set(t, (groupes.get(t) || []).concat(i)); });
+  const ordre = [...groupes.keys()].sort((a, b) => (a === "") - (b === "") || parseFloat(a) - parseFloat(b));
+  const couv = (serie.info && serie.info.couvertures) || {};
+  const avecTomes = !!serie.info;                            // « Hors tome » est une info, meme seul
+  $("chapList").innerHTML = ordre.map(t => (avecTomes
+      ? '<div class="tome-tete">' + (couv[t] ? '<img loading="lazy" src="' + srcURL(couv[t]) + '" alt="">' : "")
+        + '<span><b>' + (t ? "Tome " + esc(t) : "Hors tome") + '</b> <small>' + (t ? "" : "pas encore relié en volume") + '</small></span></div>'
+      : "") + groupes.get(t).map(i => { const c = CHAPS[i]; return (
     
     '<button class="chap-item' + (CHAP_OPEN === c.dir ? " sel" : "") + '" data-chap="' + i + '">'
     + '<img loading="lazy" src="' + srcURL(c.cover) + '" alt="">'
@@ -4458,7 +4489,7 @@ function renderLib(){
     + '<small>' + c.pages + ' pages · ' + (c.bytes / 1e6).toFixed(1) + ' Mo</small>'
     + '<small>' + esc(SOURCE_LBL[c.source] || c.source || "?") + (srcHost(c.source_url) ? " · " + esc(srcHost(c.source_url)) : "") + '</small>'
     + '<small>' + (c.captured_at ? esc(c.captured_at.replace("T", " ").slice(0, 16)) : "") + (c.manifest ? "" : " · ⚠ sans manifest") + '</small>'
-    + '</span></button>'); }).join("");
+    + '</span></button>'); }).join("")).join("");
   $("chapState").textContent = serie.title + " : " + serie.chaps.length + " chapitre(s)";
 }
 async function openChap(i){
@@ -4496,6 +4527,15 @@ $("chapList").onclick = e => {
   const b = e.target.closest("[data-chap]"); if (b) openChap(+b.dataset.chap).catch(err => log("chapitre : " + err.message, "e"));
 };
 $("btnLibBack").onclick = () => ouvrirSerie(null);
+$("btnTomes").onclick = () => {
+  const s = seriesDe(CHAPS).find(x => x.slug === LIB_SERIE); if (!s) return;
+  const titre = prompt("Titre à chercher (MangaDex) — laisser tel quel si la série est bonne :",
+                       (s.info && s.info.titre_mangadex) || s.title);
+  if (titre === null) return;
+  chercherTomes(s.slug, titre === ((s.info && s.info.titre_mangadex) || s.title) ? "" : titre)
+    .then(r => toast("« " + (r.titre_mangadex || "?") + " » " + infoSerie(r)))
+    .catch(e => { log("tomes : " + e.message, "e"); alert(e.message); });
+};
 async function poserPochette(body){
   const r = await api("/manga/pochette", Object.assign({ slug: LIB_SERIE }, body));
   if (r.error) throw new Error(r.error);
@@ -4609,6 +4649,7 @@ async function refreshNarrs(){
     return '<div class="narr-run"><b>' + (lbl[n.etat] || "") + " " + esc(n.tag) + "</b>"
       + '<span class="grow muted">' + info + "</span>"
       + (n.etat === "fini" && n.audio ? '<button class="btn sm" data-ecoute="' + i + '">▶ Écouter</button>' : "")
+      + (n.etat !== "en cours" ? '<button class="btn sm danger" data-suppr-narr="' + i + '" title="supprimer cette narration">🗑</button>' : "")
       + "</div>";
   };
   const visibles = [], essais = [];
@@ -4621,7 +4662,14 @@ async function refreshNarrs(){
   if (encours && !NARR_POLL) NARR_POLL = setInterval(() => refreshNarrs().catch(e => log("narrations : " + e.message, "e")), 3000);
   if (!encours && NARR_POLL){ clearInterval(NARR_POLL); NARR_POLL = null; chargerCouts(); }
 }
-$("narrRuns").onclick = e => {
+$("narrRuns").onclick = async e => {
+  const sup = e.target.closest("[data-suppr-narr]");
+  if (sup){
+    const n = NARRS[+sup.dataset.supprNarr]; if (!n) return;
+    if (await supprimer({ d: CHAP_OPEN, narration: n.tag }, "Supprimer la narration « " + n.tag + " » (texte et voix) ?"))
+      await refreshNarrs();
+    return;
+  }
   const b = e.target.closest("[data-ecoute]");
   if (b) ouvrirLecteur([NARRS[+b.dataset.ecoute].tag]).catch(err => log("lecteur : " + err.message, "e"));
 };
@@ -4646,6 +4694,11 @@ async function chargerNarr(){
   const tag = LEC.file[LEC.iFile];
   LEC.n = await api("/manga/narration?d=" + encodeURIComponent(CHAP_OPEN) + "&tag=" + encodeURIComponent(tag));
   LEC.n.pages = LEC.n.pages.filter(p => p.type === "histoire" || p.audio);   // credits / pubs : sautes
+  // v1.77.0 : une page SUPPRIMEE apres la narration (pub, mascotte de scan) est sautee. Chaque page narree
+  // porte son FICHIER, pas un numero : aucun decalage possible, mais sans ce filtre elle s'affichait cassee.
+  const presentes = new Set(CHAP_PAGE_LIST.map(x => x.file)), avant = LEC.n.pages.length;
+  if (presentes.size) LEC.n.pages = LEC.n.pages.filter(p => presentes.has(p.file));
+  if (LEC.n.pages.length < avant) log("lecteur : " + (avant - LEC.n.pages.length) + " page(s) supprimée(s) depuis la narration, sautée(s)");
   LEC.i = 0; LEC.playing = true;
   $("lecTitre").textContent = LEC.aveugle ? "Version " + LETTRES[LEC.iFile] + " / " + LEC.file.length : tag;
   $("lecNote").hidden = !LEC.aveugle;
