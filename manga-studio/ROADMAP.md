@@ -1844,6 +1844,13 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
 > fichiers et d'octets vérifié avant chaque bascule ; routes `/manga/sources` et `/manga/costs` relues OK).
 > ⚠️ Tout NOUVEAU dossier lourd (ex. un futur `scripts/xxx_out`) se crée d'abord sur C: puis se joint.
 > ⚖️ Coût : les TESTS ne sont pas limités ; c'est la **solution finale** (coût + temps par chapitre) qui doit être sobre.
+> 📌 **Ordre révisé par Quang le 21/09 à 22h54** : « faire d'abord le tour correctement des fonctions actuelles
+> et des options actuelles » — **pas** de lecture case par case (étape 4), ni de mode Lecture / Lecture avancée
+> (6), ni de nouvel effort « qui est qui », tant que le socle n'est pas complet. Ordre de travail :
+> **(1)** bibliothèque par manga (12) + suppression pages/chapitres/séries (12-bis) ; **(2)** voix (8) ;
+> **(3)** **vidéo MP4 au niveau PAGE** (5) — page entière + voix + sous-titres, SANS caméra case par case
+> (qui viendra se greffer avec l'étape 4) — **à discuter avec Quang avant tout code** ; **(4)** « Précédemment… » (7),
+> suivi de séries (9), hors-ligne (10). **Plus tard** : 4, 6, et la piste « oui/non/incertain » du verrou qui-est-qui.
 
 | ~~1~~ | ~~Personnages par EXEMPLES visuels~~ → **ÉCHEC mesuré** (v1.69, `--portraits`) | Raki et Zaki se ressemblent | — |
 | ~~1-bis~~ | ~~CONSENSUS « désaccord = prudence »~~ → **mesuré le 21/09 18h55, NON retenu** (`scripts/consensus_narration.py`, hors app) : K3 seul 1/2/1 (4) · K3+Gemini 1/0/2 (3) · Gemini×2 2/1/4 (7) · K3×2 0/1/1 (2). Aucun à 0/0/0 ; gains dans le bruit d'un si petit échantillon, et la FUSION crée ses propres erreurs (p4 « Raki près du cadavre » n'apparaît qu'après fusion). Doubler le coût (K3×2 ≈ 4,20 $/chapitre) pour ~2 erreurs de moins sur 60 pages : non. **Défaut maintenu = K3 seul** (~1 grave / 15 pages, toujours sur un cas ambigu « qui interpelle qui »). | — | — |
