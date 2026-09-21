@@ -44,7 +44,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
-const VERSION = '1.58';
+const VERSION = '1.59';
+// v1.59 (21/09/2026) — runSoldeWatch : sondes de SOLDE pour deepseek, moonshot-kimi, runpod, piapi
+// (les 4 fournisseurs rechargeables, jusque-la angles morts du cost watch). Voir la fonction.
 
 // v1.53 — la constante CLAUDE_FALLBACK_MODEL a été SUPPRIMÉE avec le fallback silencieux
 // qu'elle servait (voir proxyClaude) : le gateway ne substitue plus jamais un modèle.
@@ -129,6 +131,8 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runLtxReaper(env).catch(e => console.error('[ltx-reaper] scheduled error', e)));
     ctx.waitUntil(runCostWatch(env).catch(e => console.error('[cost-watch] scheduled error', e)));
+    ctx.waitUntil(runSoldeWatch(env, { dryRun: env.SOLDES_DRYRUN === '1' })
+      .catch(e => console.error('[solde-watch] scheduled error', e)));
   },
 };
 
@@ -2300,6 +2304,169 @@ async function runCostWatch(env, opts = {}) {
     out.telegram = { sent: false, reason: 'aucune alerte a envoyer' };
   }
   await env.GATEWAY_KV.put('costwatch:last', JSON.stringify(out), { expirationTtl: 1209600 });
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// runSoldeWatch — les fournisseurs RECHARGEABLES (v1.59, 21/09/2026)
+//
+// deepseek, moonshot-kimi, runpod et piapi n'exposent pas de depense quotidienne, seulement
+// un SOLDE. On releve donc le solde une fois par jour (1er cron apres minuit UTC) et la
+// depense est la BAISSE entre deux releves consecutifs. Une hausse = une recharge : ce jour-la
+// est inconnu (depense et recharge melangees) et n'est ni compte ni alerte.
+//
+// Alertes, comme le jumeau OpenAI : seuil absolu, ANOMALIE (>= 4x la mediane des baisses
+// passees, des 3 points d'historique), plus SOLDE BAS. Une sonde qui ne repond pas est une
+// alerte « casse » : un watcher qui ne sait pas doit crier.
+//
+// Garde et trace SEPAREES de runCostWatch : une panne de la cle Admin OpenAI ne doit pas
+// eteindre la surveillance des soldes.
+//
+// LIMITES ASSUMEES (revue 21/09) : une recharge le MEME jour qu'une grosse conso la masque ;
+// un jour sans releve n'est pas compare (improbable : cron toutes les 2 min) ; l'anomalie
+// attend 3 points d'historique (le seuil absolu couvre l'intervalle). Filet dans les 3 cas :
+// l'alerte SOLDE BAS. opts.dryRun (var SOLDES_DRYRUN=1, pour
+// `wrangler dev --test-scheduled`) : sondes reelles, AUCUNE ecriture KV, AUCUN Telegram.
+// ─────────────────────────────────────────────────────────────────────────────
+// Les seuils sont en USD. DeepSeek peut facturer en CNY : converti au taux approximatif
+// ci-dessous POUR LES SEUILS SEULEMENT (ordre de grandeur, pas de la comptabilite).
+const SOLDE_CNY_USD = 0.14;
+const SOLDE_FOURNISSEURS = {
+  deepseek: { seuilJour: 5.00,  soldeBas: 1.00 },
+  moonshot: { seuilJour: 5.00,  soldeBas: 1.00 },
+  runpod:   { seuilJour: 15.00, soldeBas: 5.00 },   // pods GPU : une session LTX coute ~3 $/h
+  piapi:    { seuilJour: 5.00,  soldeBas: 1.00 },
+};
+
+/** Chaque sonde renvoie { solde, devise } ou leve une Error au message court. */
+const SONDES_SOLDE = {
+  async deepseek(env) {
+    const k = await resolveKey(env, 'DEEPSEEK_KEY');
+    if (!k) throw new Error('DEEPSEEK_KEY absente');
+    const r = await fetch('https://api.deepseek.com/user/balance', { headers: { Authorization: `Bearer ${k}` } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    const infos = j.balance_infos || [];
+    const b = infos.find(x => x.currency === 'USD') || infos[0];
+    if (!b || b.total_balance === undefined) throw new Error('format inattendu (balance_infos)');
+    return { solde: Number(b.total_balance), devise: b.currency };
+  },
+  async moonshot(env) {
+    const k = await resolveKey(env, 'MOONSHOT_KEY');
+    if (!k) throw new Error('MOONSHOT_KEY absente');
+    const r = await fetch('https://api.moonshot.ai/v1/users/me/balance', { headers: { Authorization: `Bearer ${k}` } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    const v = j.data && j.data.available_balance;
+    if (v === undefined) throw new Error('format inattendu (data.available_balance)');
+    return { solde: Number(v), devise: 'USD' };
+  },
+  async runpod(env) {
+    const k = await resolveKey(env, 'RUNPOD_KEY');
+    if (!k) throw new Error('RUNPOD_KEY absente');
+    const d = await runpodGraphql(k, 'query{ myself{ clientBalance currentSpendPerHr } }');
+    const m = d && d.data && d.data.myself;
+    if (!m || m.clientBalance === undefined || m.clientBalance === null) {
+      throw new Error(d && d.errors ? JSON.stringify(d.errors).slice(0, 100) : 'format inattendu (myself.clientBalance)');
+    }
+    return { solde: Number(m.clientBalance), devise: 'USD', parHeure: Number(m.currentSpendPerHr || 0) };
+  },
+  async piapi(env) {
+    const k = await resolveKey(env, 'PIAPI_KEY');
+    if (!k) throw new Error('PIAPI_KEY absente');
+    const r = await fetch('https://api.piapi.ai/account/info', { headers: { 'X-API-Key': k } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    const d = j.data || {};
+    const v = d.equivalent_in_usd !== undefined ? d.equivalent_in_usd : undefined;
+    if (v === undefined) throw new Error('format inattendu (data.equivalent_in_usd)');
+    return { solde: Number(v), devise: 'USD' };
+  },
+};
+
+function _medianeSolde(xs) {
+  const s = [...xs].sort((a, b) => a - b);
+  if (!s.length) return 0;
+  return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+}
+
+/** Baisses journalieres a partir de { 'YYYY-MM-DD': solde }. Recharge (hausse) => jour ignore. */
+function baissesDepuisSoldes(soldes) {
+  const jours = Object.keys(soldes).sort();
+  const out = {};
+  for (let i = 1; i < jours.length; i++) {
+    const avant = jours[i - 1], ap = jours[i];
+    if ((Date.parse(ap) - Date.parse(avant)) !== 86400000) continue;   // trou : pas de comparaison
+    const baisse = soldes[avant] - soldes[ap];
+    if (baisse >= 0) out[ap] = Math.round(baisse * 1e6) / 1e6;
+  }
+  return out;
+}
+
+async function runSoldeWatch(env, opts = {}) {
+  const dryRun = !!opts.dryRun;
+  const out = { ts: Date.now(), ran: false, dryRun, alerts: [], soldes: {} };
+  const auj = new Date().toISOString().slice(0, 10);
+  if (!dryRun && !opts.force) {
+    const last = await env.GATEWAY_KV.get('soldewatch:lastday');
+    if (last === auj) return out;
+  }
+
+  let hist = {};
+  try { hist = JSON.parse((await env.GATEWAY_KV.get('soldewatch:hist')) || '{}'); } catch { hist = {}; }
+
+  for (const [nom, sonde] of Object.entries(SONDES_SOLDE)) {
+    const conf = SOLDE_FOURNISSEURS[nom];
+    let rel;
+    try {
+      rel = await sonde(env);
+      if (!Number.isFinite(rel.solde)) throw new Error('solde non numerique');
+    } catch (e) {
+      out.soldes[nom] = { erreur: String(e.message || e).slice(0, 140) };
+      out.alerts.push(`[casse] ${nom} : sonde de solde muette (${out.soldes[nom].erreur})`);
+      continue;
+    }
+    const taux = rel.devise === 'CNY' ? SOLDE_CNY_USD : 1;
+    const h = hist[nom] || {};
+    h[auj] = rel.solde;
+    for (const d of Object.keys(h).sort().slice(0, -16)) delete h[d];   // 16 jours glissants
+    hist[nom] = h;
+
+    const baisses = baissesDepuisSoldes(h);
+    const dBaisse = baisses[auj];                          // conso des ~24 h avant ce releve
+    const passees = Object.keys(baisses).filter(d => d !== auj).map(d => baisses[d]);
+    const mediane = _medianeSolde(passees);
+    out.soldes[nom] = { solde: rel.solde, devise: rel.devise, baisse24h: dBaisse ?? null,
+                        mediane: passees.length ? mediane : null, ...(rel.parHeure !== undefined ? { parHeure: rel.parHeure } : {}) };
+
+    if (dBaisse !== undefined && dBaisse * taux >= COSTWATCH_PLANCHER) {
+      if (dBaisse * taux >= conf.seuilJour) {
+        out.alerts.push(`[seuil] ${nom} : ${dBaisse.toFixed(2)} ${rel.devise} consommes en 24 h (seuil ${conf.seuilJour.toFixed(2)} USD)`);
+      } else if (passees.length >= 3 && mediane > 0 && dBaisse >= COSTWATCH_FACTEUR * mediane) {
+        out.alerts.push(`[anomalie] ${nom} : ${dBaisse.toFixed(2)} ${rel.devise} en 24 h = ${Math.round(dBaisse / mediane)}x la mediane (${mediane.toFixed(2)})`);
+      }
+    }
+    if (rel.solde * taux < conf.soldeBas) {
+      out.alerts.push(`[solde-bas] ${nom} : ${rel.solde.toFixed(2)} ${rel.devise} restants (plancher ${conf.soldeBas.toFixed(2)} USD)`);
+    }
+  }
+
+  out.ran = true;
+  if (dryRun) {
+    console.log('[solde-watch] DRYRUN', JSON.stringify(out));
+    return out;
+  }
+  await env.GATEWAY_KV.put('soldewatch:hist', JSON.stringify(hist));
+  await env.GATEWAY_KV.put('soldewatch:lastday', auj, { expirationTtl: 172800 });
+  // L'ENVOI D'ABORD, LA TRACE ENSUITE (meme raison que runCostWatch).
+  if (out.alerts.length) {
+    const msg = 'ALERTE SOLDES API (gateway, autonome)\n\n' + out.alerts.join('\n')
+              + '\n\nTrace : GATEWAY_KV soldewatch:last';
+    out.telegram = await costWatchTelegram(env, msg);
+  } else {
+    out.telegram = { sent: false, reason: 'aucune alerte a envoyer' };
+  }
+  await env.GATEWAY_KV.put('soldewatch:last', JSON.stringify(out), { expirationTtl: 1209600 });
   return out;
 }
 
