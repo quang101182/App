@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.79.0</title>
+<title>Manga Studio v1.80.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -87,6 +87,8 @@ button.eng:active{transform:scale(.97)}
 nav{display:flex;flex-wrap:wrap;gap:4px 2px;padding:8px 10px 0;border-bottom:1px solid var(--line);
   max-width:760px;margin:0 auto;box-sizing:content-box}
 nav button i{font-style:normal}
+nav button.lib-onglet{margin-right:14px;position:relative}
+nav button.lib-onglet::after{content:"";position:absolute;right:-8px;top:22%;bottom:22%;width:1px;background:var(--line)}
 nav button b{font-weight:inherit}
 
 /* ---------- onglets COMPACTS sur telephone (≤ 480 px) ----------
@@ -101,6 +103,11 @@ nav button b{font-weight:inherit}
   nav{gap:2px;padding:6px 6px 0;flex-wrap:nowrap;justify-content:space-between}
   nav button{padding:8px 9px;font-size:15px;line-height:1}
   nav button b{display:none}
+  /* v1.80.0 : a 360 px, « Bibliotheque » (onglet actif, libelle garde) + son separateur debordaient (banc :
+     366 px). Pas de marge ici, et un espacement plus serre. ⚠ « body nav button » et non « nav button » :
+     la regle @media(max-width:700px) plus bas remet 9 px et l'emportait (meme specificite, placee apres). */
+  nav button.lib-onglet{margin-right:0}nav button.lib-onglet::after{display:none}
+  body nav button{padding-left:7px;padding-right:7px}
   nav button.sel b{display:inline;font-size:12px;margin-left:5px;vertical-align:middle}
   nav button.sel{padding:8px 10px}
 }
@@ -299,6 +306,8 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 /* ⚠ PAS « .pick » : deja pris par la galerie (.grid-img .pick = case 26 px en absolu) -> les pages cochees
    se reduisaient a 26 px et DISPARAISSAIENT de la grille (trouve par le banc UI, 21/09). */
 .serie-item img{width:92px;height:132px}
+.cap-box summary{cursor:pointer;list-style-position:inside}
+.cap-box:not([open]){padding-bottom:10px}
 .lib-nav{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
 .lib-nav h3{margin:0;flex:1;min-width:160px}
 .chap-pages.selmode figure{cursor:pointer}
@@ -492,7 +501,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.79.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.80.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -522,10 +531,12 @@ body.epure .aide{display:none}
 </header>
 
 <nav>
+  <!-- v1.80.0 : LIRE (Bibliotheque) d'abord, puis CREER (Planche, Projet, Ingestion...). L'onglet s'appelait
+       « Chapitres » et vivait au milieu des outils de creation : il est devenu l'usage principal (Quang 21/09). -->
+  <button data-tab="tChap" class="lib-onglet"><i>📚</i><b>Bibliothèque</b></button>
   <button data-tab="tPlate" class="sel"><i>▦</i><b>Planche</b></button>
   <button data-tab="tProj"><i>🗂</i><b>Projet</b></button>
   <button data-tab="tIng"><i>📥</i><b>Ingestion</b></button>
-  <button data-tab="tChap"><i>📚</i><b>Chapitres</b></button>
   <button data-tab="tVal"><i>✅</i><b>Validé</b></button>
   <button data-tab="tPerso"><i>👤</i><b>Personnages</b></button>
   <button data-tab="tGal"><i>🖼</i><b>Galerie</b></button>
@@ -827,8 +838,8 @@ body.epure .aide{display:none}
 <section id="tChap">
   <!-- CAPTURE (v1.71.0) : manga-fetch enveloppe par le proxy. On choisit l'ONGLET dans l'app (plus de
        console, plus de devinette) ; remplacer un chapitre existant se CONFIRME. -->
-  <div class="card cap-box" id="capBox">
-    <h3>📥 Capturer un chapitre</h3>
+  <details class="card cap-box" id="capBox" open>
+    <summary><h3 style="display:inline">📥 Capturer un chapitre</h3></summary>
     <p class="muted aide" style="margin:0 0 8px">
       1. Ouvre le chapitre dans la <b>fenêtre de capture</b> (fenêtre Edge dédiée) · 2. choisis l'onglet ci-dessous ·
       3. donne le titre et le numéro · 4. Capturer.
@@ -855,7 +866,7 @@ body.epure .aide{display:none}
     </div>
     <div class="narr-pbar" id="capBar" hidden><div style="width:0"></div></div>
     <pre class="cap-log" id="capLog" hidden></pre>
-  </div>
+  </details>
   <div class="card">
     <h3>Chapitres disponibles</h3>
     <p class="muted aide" style="margin:0 0 8px">
@@ -868,6 +879,7 @@ body.epure .aide{display:none}
   <div class="lib-nav" id="libNav" hidden>
     <button class="btn sm" id="btnLibBack">← Toutes les séries</button>
     <h3 id="libSerie"></h3>
+    <button class="btn sm" id="btnRenommer" title="changer le titre (et le dossier) de la série">✏ Renommer</button>
     <button class="btn sm" id="btnTomes" title="tomes, années et statut (MangaDex / AniList)">📅 Tomes et dates</button>
     <button class="btn sm" id="btnPochAni" title="pochette officielle de la série (AniList)">🖼 Pochette officielle</button>
     <button class="btn sm" id="btnPochFile">📁 Charger une image</button>
@@ -1122,7 +1134,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.79.0";
+const VERSION = "1.80.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4529,6 +4541,22 @@ $("chapList").onclick = e => {
   const b = e.target.closest("[data-chap]"); if (b) openChap(+b.dataset.chap).catch(err => log("chapitre : " + err.message, "e"));
 };
 $("btnLibBack").onclick = () => ouvrirSerie(null);
+// v1.80.0 : le bloc de capture garde son etat plie / deplie (Quang 21/09 : la capture est ponctuelle)
+try { if (localStorage.getItem("manga_capture_ouvert") === "0") $("capBox").open = false; } catch {}
+$("capBox").addEventListener("toggle", () => { try { localStorage.setItem("manga_capture_ouvert", $("capBox").open ? "1" : "0"); } catch {} });
+// v1.80.0 : renommer = titre ET dossier (sinon la prochaine capture sous le nouveau titre fonde un 2e dossier)
+$("btnRenommer").onclick = async () => {
+  const s = seriesDe(CHAPS).find(x => x.slug === LIB_SERIE); if (!s) return;
+  const titre = (prompt("Nouveau titre de la série :", s.title) || "").trim();
+  if (!titre || titre === s.title) return;
+  try {
+    const r = await api("/manga/serie_renommer", { slug: s.slug, titre });
+    if (r.error) throw new Error(r.error);
+    log("série renommée : « " + s.title + " » → « " + r.titre + " » (" + r.chapitres + " chapitre(s), dossier " + r.slug + ")");
+    toast("renommée : « " + r.titre + " »");
+    ouvrirSerie(r.slug); await refreshChaps();
+  } catch (e){ log("renommer : " + e.message, "e"); alert(e.message); }
+};
 $("btnTomes").onclick = () => {
   const s = seriesDe(CHAPS).find(x => x.slug === LIB_SERIE); if (!s) return;
   const titre = prompt("Titre à chercher (MangaDex) — laisser tel quel si la série est bonne :",
@@ -7597,8 +7625,8 @@ async function boot(){
   setVitesse(OPT.vitesse);
   // v1.73.0 : on rouvre l'onglet quitte en dernier (memoire locale a cet appareil).
   let onglet = null; try { onglet = localStorage.getItem("manga_onglet"); } catch {}
-  const bOnglet = onglet && document.querySelector('nav button[data-tab="' + onglet + '"]');
-  if (bOnglet && onglet !== "tPlate") bOnglet.click();
+  const bOnglet = document.querySelector('nav button[data-tab="' + (onglet || "tChap") + '"]');   // v1.80.0 : defaut = Bibliotheque
+  if (bOnglet && (onglet || "tChap") !== "tPlate") bOnglet.click();
   document.title = "Manga Studio v" + VERSION;
   log("Manga Studio v" + VERSION + " — proxy " + CFG.base + (CFG.key ? " (clé présente)" : " (SANS clé)"),
       CFG.key ? "" : "w");

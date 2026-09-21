@@ -28,7 +28,19 @@ with sync_playwright() as p:
         pg.on("pageerror", lambda e: errs.append(str(e)))
         pg.goto(URL + "#k=" + KEY)
         pg.wait_for_timeout(2500)
-        pg.evaluate("() => { try { localStorage.removeItem('manga_serie'); } catch {} }")
+        pg.evaluate("() => { try { localStorage.removeItem('manga_serie'); localStorage.removeItem('manga_onglet');"
+                    " localStorage.removeItem('manga_capture_ouvert'); } catch {} }")
+        # v1.80.0 : Bibliotheque = 1er onglet, ouvert par defaut a la 1re visite
+        pg.reload(); pg.wait_for_timeout(3000)
+        premier = pg.eval_on_selector("nav button", "b => [b.dataset.tab, b.innerText.trim()]")
+        check("1er onglet = Bibliothèque", premier[0] == "tChap" and "Bibliothèque" in premier[1], premier)
+        check("1re visite : la Bibliothèque s'ouvre", pg.evaluate("() => document.querySelector('#tChap').classList.contains('sel')"))
+        # v1.80.0 : bloc de capture repliable, etat garde
+        pg.click("#capBox > summary"); pg.wait_for_timeout(200)
+        pg.reload(); pg.wait_for_timeout(3000)
+        check("bloc de capture replie apres rechargement", pg.evaluate("() => !$('capBox').open"))
+        pg.click("#capBox > summary"); pg.wait_for_timeout(200)
+        check("et se deplie au clic", pg.evaluate("() => $('capBox').open"))
         pg.click('nav button[data-tab="tChap"]')
         pg.wait_for_selector("#chapList [data-serie]", timeout=15000)
         series = pg.eval_on_selector_all("#chapList [data-serie]", "els => els.map(e => e.dataset.serie)")
@@ -49,6 +61,9 @@ with sync_playwright() as p:
         pg.click('#chapList [data-serie="one-punch-man"]')
         pg.wait_for_timeout(500)
         check("OPM : chapitres « Hors tome »", "Hors tome" in pg.inner_text("#chapList"))
+        pg.once("dialog", lambda d: d.dismiss())             # Renommer -> Annuler : rien ne change
+        pg.click("#btnRenommer"); pg.wait_for_timeout(500)
+        check("Renommer puis Annuler ne change rien", "One Punch-Man" in pg.inner_text("#libSerie"))
         chaps = pg.eval_on_selector_all("#chapList [data-chap]", "e => e.length")
         check("la serie montre SES chapitres (OPM = 2)", chaps == 2 and pg.is_visible("#libNav"), chaps)
         pg.reload(); pg.wait_for_timeout(3500)
@@ -69,7 +84,9 @@ with sync_playwright() as p:
         # v1.79.0 : la jauge montre la memoire UTILISEE
         v = pg.evaluate("() => api('/vram')")
         attendu = ("%.1f" % (v["used"] / 1024)).replace(".", ",") + " / " + "%.0f" % (v["total"] / 1024) + " Go"
-        check("VRAM = memoire utilisee / total", pg.inner_text("#vramTxt").strip() == attendu, (pg.inner_text("#vramTxt"), attendu))
+        lu = pg.inner_text("#vramTxt").strip()        # la VRAM bouge entre deux mesures : tolerance 0,3 Go
+        ok_v = lu.endswith(attendu.split(" / ")[1]) and abs(float(lu.split(" / ")[0].replace(",", ".")) - v["used"] / 1024) <= 0.3
+        check("VRAM = memoire utilisee / total", ok_v, (lu, attendu))
         # v1.77.0 : supprimer une narration depuis l'interface (un essai de banc devenu inutile, -> corbeille)
         cible = pg.evaluate("() => NARRS.findIndex(n => n.tag === 'k3-noms-v3-a')")
         if cible >= 0:
