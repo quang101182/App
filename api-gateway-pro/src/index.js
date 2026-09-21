@@ -36,7 +36,14 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.24.1';
+const VERSION = '1.25.0';
+// v1.25.0 (2026-09-21) - Cles sv_ : OpenAI limite a la VOIX, et la voix verrouillee.
+//   Constat : tout X-Api-Path autre que /v1/audio/speech partait en passthrough vers OpenAI,
+//   non decompte, non journalise, modele au choix du client (gpt-5.6-sol compris). Une cle sv_
+//   vendue = acces gratuit a l'API OpenAI de Quang. Or l'app n'appelle JAMAIS ce chemin : en mode
+//   Pro, callLLM force /api/deepseek (storyvoice/index.html). Donc : 403 sur toute autre route,
+//   modele TTS sur liste blanche, input obligatoirement texte non vide (sinon 0 credit debite),
+//   `instructions` plafonne (facture par OpenAI, jamais debite au client).
 // v1.24.0 (2026-09-15) - Le quota ne compte que ce qui a REUSSI chez le fournisseur.
 //   Constat : `incrementUsage` etait appele AVANT le proxy. Toute requete etait decomptee, y
 //   compris un 429/5xx du fournisseur, un refus ou une coupure reseau. Le 14/09 (DeepSeek
@@ -440,20 +447,13 @@ async function debitCredits(proKey, chars, env) {
   await env.PRO_KV.put(`pro:${proKey}`, JSON.stringify(data));
 }
 
-async function proxyOpenaiSV(request, env, apiPath) {
-  const key = await getApiKey('OPENAI_KEY', env);
-  if (!key) return err('OpenAI API key not configured', 503);
-  const p = safeApiPath(apiPath, '/v1/chat/completions');
-  const resp = await fetch(`https://api.openai.com${p}`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': request.headers.get('Content-Type') || 'application/json' },
-    body: request.body,
-  });
-  return new Response(resp.body, {
-    status: resp.status,
-    headers: { ...CORS_HEADERS, 'Content-Type': resp.headers.get('Content-Type') || 'application/json' },
-  });
-}
+// v1.25.0 - Seuls modeles TTS qu'une cle sv_ peut faire facturer. L'app envoie gpt-4o-mini-tts ;
+// tts-1 = meme prix au caractere, garde pour les versions de l'app encore en cache. tts-1-hd (2x) exclu.
+const SV_TTS_MODELES = new Set(['gpt-4o-mini-tts', 'tts-1']);
+// L'app envoie « Lis en <langue> avec <ton>. » (~60 car. max). Facture par OpenAI mais JAMAIS
+// debite au client (le debiter changerait le prix des clients legitimes) : le plafond borne ce
+// residu. Revue Codex 21/09 : a 500 car., ~1 $/jour/cle au debit max de 10 req/min.
+const SV_TTS_INSTRUCTIONS_MAX = 200;
 
 async function handleStoryVoice(request, env, ctx, path, proKey, proData) {
   // Anti-abuse rate limit (shared helper — safe, just a per-key KV counter)
@@ -467,13 +467,19 @@ async function handleStoryVoice(request, env, ctx, path, proKey, proData) {
     return proxyDeepSeek(request, env);
   }
 
-  // OpenAI: TTS (metered prepaid credits) or chat (free brain)
+  // OpenAI: TTS uniquement (metered prepaid credits). v1.25.0 : plus aucun passthrough.
   if (path === '/api/openai') {
     const apiPath = request.headers.get('X-Api-Path') || '/v1/chat/completions';
     if (apiPath === '/v1/audio/speech') {
       let body;
       try { body = await request.json(); } catch { return err('invalid JSON body', 400); }
-      const chars = (body && typeof body.input === 'string') ? body.input.length : 0;
+      if (!body || typeof body.input !== 'string' || !body.input) return err('input must be a non-empty string', 400);
+      if (!SV_TTS_MODELES.has(body.model)) return err('model not allowed', 400);
+      if (body.instructions !== undefined &&
+          (typeof body.instructions !== 'string' || body.instructions.length > SV_TTS_INSTRUCTIONS_MAX)) {
+        return err('instructions too long', 400);
+      }
+      const chars = body.input.length;
       const credits = Number(proData.credits || 0);
       if (!unlimited && chars > credits) {
         return json({ error: 'insufficient_credits', credits, needed: chars }, 402);
@@ -494,7 +500,7 @@ async function handleStoryVoice(request, env, ctx, path, proKey, proData) {
         headers: { ...CORS_HEADERS, 'Content-Type': resp.headers.get('Content-Type') || 'audio/mpeg' },
       });
     }
-    return proxyOpenaiSV(request, env, apiPath);
+    return err('OpenAI route not allowed for this key', 403);
   }
 
   // Gemini premium voice (Cloud TTS, OAuth SA) — METERED ×2 (Gemini ≈ 2× le coût OpenAI). Pas de cap journalier.
