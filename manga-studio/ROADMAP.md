@@ -1786,6 +1786,15 @@ le verdict fait à la main (K3 v1 : 6 graves ; Pixtral : 13). Coût d'un jugemen
 | v2 | Gemini 3.6 Flash | 2 puis 7 (**instable**) | 0,09 $ | 2 min |
 | **v2.2 = défaut** (noms résolus à part par VOTE puis figés) | Gemini | **3 / 3 / 3** (3 runs) | 0,19 $ | ~5 min |
 | v2.3 (+ vérification des attributions contre l'image) | Gemini | 2 / 4 / 3 | 0,30 $ | ~8 min → option `--verif`, off |
+| v2.4 (+ PORTRAITS de référence découpés, étape 1 de la feuille de route) | Gemini | 3 / **5** / 2 | 0,23 $ | ~5 min → option `--portraits`, off |
+
+⛔ **Étape 1 « personnages par exemples visuels » : ÉCHEC mesuré (21/09 18h), ne pas la rejouer telle quelle.**
+Les portraits étaient JUSTES (vérifiés à l'œil : Raki p12, Zaki p6), mais dans Claymore **Raki et Zaki se ressemblent**
+(mêmes cheveux clairs en épi, même trait) : deux exemples presque identiques ont RÉINTRODUIT la confusion Raki↔Zaki
+(p17-18). Un exemple visuel aide quand les personnages diffèrent à l'œil ; ici ils ne diffèrent que par l'âge/la taille.
+Pistes restantes, à arbitrer par Quang (coût/temps) : **K3 en v2.2** (K3 v2 = 0 confusion d'identité mais 20 min et
+0,57 $ / 20 pages) ; **Magi v2 en local** (spécialisé dans l'attribution des répliques, GPU, licence « recherche ») ;
+ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nommé.
 
 **Ce qu'on a appris (à ne pas repayer)** :
 - 🔴 La consigne v1 « reprends les noms déjà connus, ne les change pas » **verrouillait une erreur précoce** : Raki

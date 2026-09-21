@@ -378,6 +378,17 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
                     + "FICHE : " + (_fiche_texte(fiche) if fiche else "(vide)")
                     + "\nFAITS PRECEDENTS : " + (resume or "(debut du chapitre)")
                     + "\nPages de ce lot : " + ", ".join(map(str, nums))}]
+        portraits = [(n, v["portrait"]) for n, v in (noms or {}).items() if v.get("portrait")]
+        if portraits:                          # v1.69 : EXEMPLES visuels des personnages nommes (approche Magi v2)
+            content.append({"type": "text", "text": (
+                "PORTRAITS DE REFERENCE : ces personnages nommes, et SEULEMENT eux, peuvent etre designes par leur "
+                "nom. Compare visage, coiffure et COULEUR DES CHEVEUX (cheveux blancs/clairs = zones claires ; "
+                "noirs/fonces = zones sombres ou tramees). Un personnage qui ne ressemble a aucun portrait est un "
+                "anonyme (\"un villageois\", \"un homme brun\"), meme s'il a le meme age.")})
+            for n, rel in portraits:
+                content.append({"type": "text", "text": "PORTRAIT DE %s (reference, ce n'est pas une page)" % n})
+                b64 = base64.b64encode(open(os.path.join(chap_dir, rel), "rb").read()).decode()
+                content.append({"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b64}})
         for p in lot:                         # etiquette AVANT chaque image (anti-decalage multi-images)
             content.append({"type": "text", "text": "PAGE %d" % p["num"]})
             b64 = base64.b64encode(page_jpeg(os.path.join(chap_dir, p["file"]))).decode()
@@ -481,8 +492,10 @@ def etape_recit_v2(pages, resume, persos, stats):
 Q_NOMS = ("Page de manga. 1) Liste les PRENOMS de personnages ecrits dans les bulles (pas les noms communs, pas "
           "les titres). 2) Pour chacun : qui PORTE ce prenom (celui qu'on appelle ainsi, PAS celui qui parle) ? "
           "Donne son age apparent (enfant | adolescent | adulte) et sa coiffure / couleur de cheveux, et qui "
-          "prononce la bulle. Aucun prenom : liste vide. JSON : {\"noms\":[{\"nom\":\"...\",\"porteur_age\":"
-          "\"enfant|adolescent|adulte\",\"porteur_cheveux\":\"...\",\"dit_par\":\"...\"}]}")
+          "prononce la bulle. 3) Donne le cadre du VISAGE + epaules du porteur, le plus grand ou il est visible "
+          "sur la page : porteur_box = [ymin, xmin, ymax, xmax] en milliemes de la page (0-1000). "
+          "Aucun prenom : liste vide. JSON : {\"noms\":[{\"nom\":\"...\",\"porteur_age\":"
+          "\"enfant|adolescent|adulte\",\"porteur_cheveux\":\"...\",\"dit_par\":\"...\",\"porteur_box\":[0,0,0,0]}]}")
 VOTES_NOMS = 3
 
 
@@ -498,10 +511,33 @@ def _question_noms(chap_dir, p, stats):
         return []
 
 
-def etape_noms(chap_dir, pages, stats):
-    """Rend {nom: {age, cheveux, votes, pages}} : noms PROUVES par la majorite des votes."""
+def _portrait(chap_dir, fichier, box, dest):
+    """Decoupe le porteur d'un nom (cadre 0-1000 rendu par Gemini) : l'EXEMPLE visuel qui sert ensuite a le
+    reconnaitre (approche Magi v2). Rend le chemin, ou None si le cadre est absurde."""
+    try:
+        y0, x0, y1, x1 = [float(v) for v in box]
+    except Exception:
+        return None
+    if not (0 <= y0 < y1 <= 1000 and 0 <= x0 < x1 <= 1000) or (y1 - y0) * (x1 - x0) < 400:
+        return None                              # cadre vide ou minuscule (< 2 % x 2 % de la page)
+    from PIL import Image
+    im = Image.open(os.path.join(chap_dir, fichier)).convert("RGB")
+    W, H = im.size
+    my, mx = (y1 - y0) * 0.08, (x1 - x0) * 0.08  # un peu de marge : la coiffure deborde souvent du cadre
+    c = im.crop((max(0, int((x0 - mx) * W / 1000)), max(0, int((y0 - my) * H / 1000)),
+                 min(W, int((x1 + mx) * W / 1000)), min(H, int((y1 + my) * H / 1000))))
+    if c.width > 480:
+        c = c.resize((480, round(c.height * 480 / c.width)))
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    c.save(dest, "JPEG", quality=88)
+    return dest
+
+
+def etape_noms(chap_dir, pages, stats, outdir=None):
+    """Rend {nom: {age, cheveux, votes, pages, portrait}} : noms PROUVES par la majorite des votes, et pour
+    chacun un portrait decoupe (v1.69 : exemple visuel, pour ne plus nommer un anonyme qui lui ressemble)."""
     t = time.time()
-    votes = {}                                   # nom -> liste de (page, age, cheveux)
+    votes = {}                                   # nom -> liste de (page, age, cheveux, box, fichier)
     for p in pages:
         premiers = _question_noms(chap_dir, p, stats)
         lus = [premiers]
@@ -510,7 +546,8 @@ def etape_noms(chap_dir, pages, stats):
         for lot in lus:
             for x in lot:
                 nom = x["nom"].strip().strip(".,!?").capitalize()
-                votes.setdefault(nom, []).append((p["num"], x.get("porteur_age") or "?", x.get("porteur_cheveux") or ""))
+                votes.setdefault(nom, []).append((p["num"], x.get("porteur_age") or "?", x.get("porteur_cheveux") or "",
+                                                  x.get("porteur_box"), p["file"]))
         progres("noms", p["num"], pages[-1]["num"])
     retenus = {}
     for nom, vs in votes.items():
@@ -524,6 +561,16 @@ def etape_noms(chap_dir, pages, stats):
             continue
         cheveux = max((v[2] for v in vs if v[1] == age), key=len, default="")
         retenus[nom] = {"age": age, "cheveux": cheveux, "votes": "%d/%d" % (n_age, len(vs)), "pages": pages_nom}
+        if outdir:                               # portrait : le plus GRAND cadre parmi les votes majoritaires
+            def aire(v):
+                try: return (float(v[3][2]) - float(v[3][0])) * (float(v[3][3]) - float(v[3][1]))
+                except Exception: return -1
+            for v in sorted((v for v in vs if v[1] == age), key=aire, reverse=True):
+                chemin = _portrait(chap_dir, v[4], v[3], os.path.join(outdir, "portraits", nom.lower() + ".jpg"))
+                if chemin:
+                    retenus[nom].update(portrait=os.path.relpath(chemin, chap_dir).replace("\\", "/"),
+                                        portrait_page=v[0])
+                    break
     stats["noms_s"] = round(time.time() - t, 1)
     stats["noms"] = retenus
     journal("noms", retenus=retenus)
@@ -639,6 +686,9 @@ def main():
     ap.add_argument("--rate", type=float, default=1.05)
     ap.add_argument("--tag", default="", help="nom du run (defaut : <engine>-<voix>)")
     ap.add_argument("--no-tts", action="store_true")
+    ap.add_argument("--portraits", action="store_true",
+                    help="v2.4 : portraits de reference des personnages nommes (mesure SANS gain le 21/09 : 3/5/2 graves"
+                         " contre 3/3/3 sans ; Raki et Zaki se ressemblent, l'exemple visuel les confond)")
     ap.add_argument("--verif", action="store_true", help="v2 : verification des attributions nommees (mesuree SANS gain le 21/09, en option)")
     ap.add_argument("--reuse-vision", default="", help="reprend l'etape vision d'un run existant (tag)")
     a = ap.parse_args()
@@ -667,7 +717,7 @@ def main():
             stats[k] = prev["stats"][k]
     else:
         if a.prompt == "v2":
-            noms = etape_noms(chap_dir, pages, stats)
+            noms = etape_noms(chap_dir, pages, stats, outdir if a.portraits else None)
             vis, resume, persos = etape_vision_v2(chap_dir, pages, a.engine, a.batch or 2, stats, noms)
         else:
             vis, resume, persos = etape_vision(chap_dir, pages, a.engine, a.batch or 4, stats)
