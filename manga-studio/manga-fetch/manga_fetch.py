@@ -587,40 +587,11 @@ def capture(args) -> int:
                     log_evt("note", "page étroite (gardée)", fichier=im["file"],
                             w=im["w"], mediane=mediane)
 
-        # DOUBLONS DE RÉSOLUTION : le lecteur charge parfois une version compressée
-        # puis l'originale (data-saver → pleine, mesuré : 23 images pour 22 pages dès
-        # que la médiane ne supprime plus). Signature : MÊME ratio (± 0,7 %) et
-        # largeur supérieure de 3 à 35 % PLUS TARD dans l'ordre de découverte →
-        # la petite version est un doublon, on supprime SON fichier. Une page au
-        # ratio différent (ex. intercalaire chibi du scanlateur) n'est PAS touchée.
-        items = list(vues.items())
-        doublons = []
-        for i, (src, im) in enumerate(items):
-            for _, im2 in items[i + 1:]:
-                r1, r2 = im["w"] / im["h"], im2["w"] / im2["h"]
-                if abs(r1 - r2) / max(r1, r2) < 0.007:
-                    ecart = (im2["w"] - im["w"]) / im["w"]
-                    if 0.03 <= ecart <= 0.35:
-                        doublons.append((src, im, im2))
-                        break
-        for src, im, im2 in doublons:
-            notes.append(f"doublon de résolution écarté : {im['file']} ({im['w']}px, "
-                         f"remplacée par {im2['file']} à {im2['w']}px)")
-            log_evt("doublon", "version compressée écartée", fichier=im["file"],
-                    petite=im["w"], grande=im2["w"])
-            try:
-                os.remove(os.path.join(dest, im["file"]))
-            except OSError:
-                pass
-            del vues[src]
-            uniques = list(vues.values())
-        # renumérotation consécutive (les suppressions de doublons laissent des trous)
-        for i, (src, im) in enumerate(list(vues.items()), 1):
-            cible = f"page_{i:03d}{os.path.splitext(im['file'])[1]}"
-            if cible != im["file"]:
-                os.rename(os.path.join(dest, im["file"]), os.path.join(dest, cible))
-                vues[src]["file"] = cible
-        uniques = list(vues.values())
+        # ⚠ PAS de détection de « doublons de résolution » par les dimensions : un
+        # scanlateur mélange des largeurs au même ratio (800px ET 960px dans le même
+        # chapitre OPM, mesuré 18:29) — le détecteur a supprimé de VRAIES pages
+        # (5 capturées au lieu de 16). Si un vrai doublon data-saver survient un jour,
+        # il faudra une comparaison de CONTENU, jamais les dimensions seules.
 
         pages_meta = [{"file": im["file"], "bytes": im["bytes"], "w": im["w"], "h": im["h"]}
                       for im in uniques]
