@@ -1754,7 +1754,7 @@ détruit *et* ce qu'elle préserve (« les images déjà dessinées restent sur 
 ⇒ un chapitre complet de 62 pages ≈ **1,1 $ et ~18 min** avec K3 ; ≈ 0,25 $ et ~5 min avec Pixtral.
 Quatre narrations prêtes pour l'**écoute à l'aveugle** de Quang (même texte K3 en Charon / Kore / Fenrir,
 + Pixtral en Charon) : bouton 🎧 dans l'app, notes écrites dans `sources/<chap>/narration/notes.jsonl`.
-**🟠 Verdict qualité EN ATTENTE de son écoute (constaté v1.67.0)** — c'est lui qui tranche le moteur et la voix par défaut.
+~~**🟠 Verdict qualité EN ATTENTE de son écoute (constaté v1.67.0)**~~ → ✅ **couvert (re-vérifié v1.72.0)** : moteur tranché par Quang (**K3 v2.2 = défaut depuis v1.70.0**) ; écoute à l'aveugle faite le 21/09 (`notes.jsonl` : Fenrir 4, 4 · Charon sur texte Pixtral 4, 4 · Kore 2 · K3-Charon jamais noté). Voix par défaut restée **Charon** (ex æquo avec Fenrir, Kore écartée) — un changement serait à trancher par Quang.
 
 ### Constats du 21/09 (datés — à re-vérifier)
 
@@ -1762,10 +1762,10 @@ Quatre narrations prêtes pour l'**écoute à l'aveugle** de Quang (même texte 
   sur MANGA Plus, les pages 2-3 de Claymore sont une double page couleur. La narration **reconnaît** les
   crédits (`type`), elle n'écarte jamais une page par sa position.
 - 🟠 **Le gateway limite à 20 req/min par IP** (constaté v1.67.0) : la voix d'un chapitre (1 appel par page)
-  prenait des 429. `narrate_chapter.py` plafonne à 18/min et respecte `retry_after`. Le frein est **par
+  prenait des 429. `narrate_chapter.py` plafonne à 18/min et respecte `retry_after`. *(re-vérifié v1.72.0 : `MAX_PAR_MIN = 18`)* Le frein est **par
   processus** : deux narrations en parallèle peuvent encore le dépasser (le 429 est alors absorbé, en plus lent).
 - 🟠 **Le proxy ne connaît que les narrations qu'il a lancées** : après un redémarrage, un run vivant est
-  reconnu par la fraîcheur de son `progress.json` (< 3 min), sinon il serait affiché « échec ».
+  reconnu par la fraîcheur de son `progress.json` (< 3 min), sinon il serait affiché « échec ». *(re-vérifié v1.72.0 : seuil 180 s dans le proxy)*
 
 ### Deux défauts de lecteur trouvés par le banc (corrigés v1.67.0)
 1. Deux « suivant » rapides **arrêtaient la narration** : `play()` interrompu → `AbortError` pris pour un refus.
