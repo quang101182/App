@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.73.0</title>
+<title>Manga Studio v1.76.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -295,6 +295,19 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .chap-item b{display:block;font-size:1.02em}
 .chap-item small{display:block;opacity:.75;line-height:1.35;margin-top:2px}
 .chap-pages img{aspect-ratio:2/3;object-fit:contain;background:#0003}
+/* ---------- Bibliotheque (v1.76.0) : series -> chapitres ; selection de pages ; essais replies ---------- */
+/* ⚠ PAS « .pick » : deja pris par la galerie (.grid-img .pick = case 26 px en absolu) -> les pages cochees
+   se reduisaient a 26 px et DISPARAISSAIENT de la grille (trouve par le banc UI, 21/09). */
+.serie-item img{width:92px;height:132px}
+.lib-nav{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+.lib-nav h3{margin:0;flex:1;min-width:160px}
+.chap-pages.selmode figure{cursor:pointer}
+.chap-pages figure.pg-sel{outline:3px solid var(--accent);outline-offset:-3px}
+.chap-pages figure.pg-sel::after{content:"✓";position:absolute;top:6px;right:8px;font-weight:700;color:#fff;
+  background:var(--accent);border-radius:50%;width:22px;height:22px;display:grid;place-items:center}
+.narr-essais{margin-top:4px}.narr-essais summary{cursor:pointer;padding:6px 2px;opacity:.8}
+.narr-essais .narr-runs{margin-top:6px}
+.btn.danger{border-color:#b54;color:#f99}
 #chapMeta a{color:var(--accent2)}
 /* ---------- Pastille des couts (v1.72.0) ---------- */
 .cost-pill{margin-left:8px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);
@@ -475,7 +488,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.73.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.76.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -848,6 +861,14 @@ body.epure .aide{display:none}
     <div class="row"><button class="btn" id="btnChapRefresh">Rafraîchir</button>
       <span class="muted" id="chapState"></span></div>
   </div>
+  <div class="lib-nav" id="libNav" hidden>
+    <button class="btn sm" id="btnLibBack">← Toutes les séries</button>
+    <h3 id="libSerie"></h3>
+    <button class="btn sm" id="btnPochAni" title="pochette officielle de la série (AniList)">🖼 Pochette officielle</button>
+    <button class="btn sm" id="btnPochFile">📁 Charger une image</button>
+    <button class="btn sm danger" id="btnSerieDel">🗑 Supprimer la série</button>
+    <input type="file" id="pochFile" accept="image/png,image/jpeg,image/webp" hidden>
+  </div>
   <div id="chapList" class="chap-list"></div>
   <div class="card" id="chapDetail" hidden>
     <div class="row" style="align-items:center">
@@ -858,6 +879,12 @@ body.epure .aide{display:none}
     <ul class="chap-notes" id="chapNotes" hidden></ul>
     <div class="row" style="margin:0 0 8px"><button class="btn sm" id="btnChapVerif">🔎 Vérifier (intégrité + complétude)</button>
       <span class="muted" id="chapVerif"></span></div>
+    <div class="row" style="margin:0 0 8px">
+      <button class="btn sm" id="btnPagesSel">☑ Sélectionner des pages</button>
+      <button class="btn sm danger" id="btnPagesDel" hidden>🗑 Supprimer la sélection</button>
+      <button class="btn sm" id="btnPagePoch" hidden>🖼 Cette page comme pochette</button>
+      <button class="btn sm danger" id="btnChapDel">🗑 Supprimer le chapitre</button>
+    </div>
     <!-- NARRATION (v1.67.0) : lance scripts/narrate_chapter.py via le proxy, puis ecoute. -->
     <div class="narr-box">
       <div class="row">
@@ -865,7 +892,9 @@ body.epure .aide{display:none}
           <option value="kimi">Kimi K3 — le plus fiable, lent (~0,04 $ et ~1 min par page)</option>
           <option value="gemini">Gemini — rapide, un peu moins fiable (~0,02 $ et ~15 s par page)</option>
           <option value="pixtral">Pixtral — déconseillé : contresens fréquents</option></select></div>
-        <div class="grow"><label>Voix</label><select id="narrVoice"></select></div>
+        <div class="grow"><label>Voix</label><div class="row" style="gap:6px;flex-wrap:nowrap">
+          <select id="narrVoice" style="flex:1;min-width:0"></select>
+          <button class="btn sm" id="btnVoixApercu" title="écouter un échantillon de cette voix (7 s)">▶</button></div></div>
         <div style="width:110px"><label>Pages</label><input id="narrPages" placeholder="toutes" title="ex. 1-20 ; vide = tout le chapitre"></div>
       </div>
       <div class="row" style="margin-top:8px">
@@ -1088,7 +1117,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.73.0";
+const VERSION = "1.76.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4374,27 +4403,68 @@ let GAL_SLUG = null;
    ===================================================================== */
 const srcURL = p => CFG.base + "/manga/source_file?p=" + encodeURIComponent(p) + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
 let CHAPS = [], CHAP_OPEN = null;
+// v1.76.0 : bibliotheque rangee PAR SERIE (demande Quang 21/09). La serie ouverte est memorisee (appareil).
+let LIB_SERIE = null; try { LIB_SERIE = localStorage.getItem("manga_serie"); } catch {}
+function seriesDe(chaps){
+  const m = new Map();
+  chaps.forEach((c, i) => {
+    const s = m.get(c.slug) || { slug: c.slug, title: c.title, chaps: [], pages: 0, pochette: c.pochette, cover: c.cover };
+    s.chaps.push(i); s.pages += c.pages; s.pochette = s.pochette || c.pochette; m.set(c.slug, s);
+  });
+  return [...m.values()];
+}
+function ouvrirSerie(slug){
+  LIB_SERIE = slug || null;
+  try { slug ? localStorage.setItem("manga_serie", slug) : localStorage.removeItem("manga_serie"); } catch {}
+  if (!slug){ $("chapDetail").hidden = true; CHAP_OPEN = null; }
+  renderLib();
+}
 const SOURCE_LBL = { capture: "capture navigateur", mangadex: "MangaDex", download: "MangaDex", import: "import" };
 function srcHost(u){ try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } }
 async function refreshChaps(){
   $("chapState").textContent = "lecture de sources/…";
   const j = await api("/manga/sources");
   CHAPS = j.items || [];
-  $("chapList").innerHTML = CHAPS.map((c, i) =>
+  CHAPS_ROOT = j.root || "sources/";
+  renderLib();
+}
+let CHAPS_ROOT = "", CHAP_PAGE_LIST = [];
+function renderLib(){
+  const series = seriesDe(CHAPS);
+  const serie = series.find(s => s.slug === LIB_SERIE);
+  if (LIB_SERIE && !serie){ LIB_SERIE = null; try { localStorage.removeItem("manga_serie"); } catch {} }
+  $("libNav").hidden = !serie;
+  if (!serie){
+    $("chapList").innerHTML = series.map(s =>
+      '<button class="chap-item serie-item" data-serie="' + esc(s.slug) + '">'
+      // la pochette arrive en « chemin#date » : la date casse le cache d'un jour du proxy (pochette remplacee)
+      + '<img loading="lazy" src="' + (s.pochette ? srcURL(s.pochette.split("#")[0]) + "&v=" + (s.pochette.split("#")[1] || "")
+                                                  : srcURL(s.cover)) + '" alt="">'
+      + '<span><b>' + esc(s.title) + '</b>'
+      + '<small>' + s.chaps.length + ' chapitre' + (s.chaps.length > 1 ? "s" : "") + ' · ' + s.pages + ' pages</small>'
+      + '<small>ch. ' + s.chaps.map(i => esc(CHAPS[i].chapter)).join(", ") + '</small>'
+      + (s.pochette ? "" : '<small class="muted">pas encore de pochette</small>')
+      + '</span></button>').join("")
+      || '<p class="muted aide">Aucun chapitre dans sources/. Capture-en un ci-dessus.</p>';
+    $("chapState").textContent = series.length + " série(s), " + CHAPS.length + " chapitre(s) — " + CHAPS_ROOT;
+    return;
+  }
+  $("libSerie").textContent = serie.title;
+  $("chapList").innerHTML = serie.chaps.map(i => { const c = CHAPS[i]; return (
+    
     '<button class="chap-item' + (CHAP_OPEN === c.dir ? " sel" : "") + '" data-chap="' + i + '">'
     + '<img loading="lazy" src="' + srcURL(c.cover) + '" alt="">'
     + '<span><b>' + esc(c.title) + ' — ch. ' + esc(c.chapter) + '</b>'
     + '<small>' + c.pages + ' pages · ' + (c.bytes / 1e6).toFixed(1) + ' Mo</small>'
     + '<small>' + esc(SOURCE_LBL[c.source] || c.source || "?") + (srcHost(c.source_url) ? " · " + esc(srcHost(c.source_url)) : "") + '</small>'
     + '<small>' + (c.captured_at ? esc(c.captured_at.replace("T", " ").slice(0, 16)) : "") + (c.manifest ? "" : " · ⚠ sans manifest") + '</small>'
-    + '</span></button>').join("")
-    || '<p class="muted aide">Aucun chapitre dans sources/. Capture-en un avec manga-fetch.</p>';
-  $("chapState").textContent = CHAPS.length + " chapitre(s) — " + (j.root || "sources/");
+    + '</span></button>'); }).join("");
+  $("chapState").textContent = serie.title + " : " + serie.chaps.length + " chapitre(s)";
 }
 async function openChap(i){
   const c = CHAPS[i]; if (!c) return;
   CHAP_OPEN = c.dir;
-  document.querySelectorAll("#chapList .chap-item").forEach((b, k) => b.classList.toggle("sel", k === i));
+  document.querySelectorAll("#chapList [data-chap]").forEach(b => b.classList.toggle("sel", +b.dataset.chap === i));
   const j = await api("/manga/source_pages?d=" + encodeURIComponent(c.dir));
   $("chapTitle").textContent = c.title + " — chapitre " + c.chapter;
   const notes = (j.notes || []).length;
@@ -4408,14 +4478,83 @@ async function openChap(i){
   $("chapPages").innerHTML = j.pages.map((p, k) =>
     '<figure data-page="' + k + '"><img loading="lazy" src="' + srcURL(p.path) + '" alt="page ' + (k + 1) + '">'
     + '<figcaption>p. ' + (k + 1) + (p.w ? ' · ' + p.w + '×' + p.h : "") + '</figcaption></figure>').join("");
-  $("chapPages").onclick = e => { const f = e.target.closest("figure"); if (f) window.open(srcURL(j.pages[+f.dataset.page].path), "_blank"); };
+  CHAP_PAGE_LIST = j.pages; PAGES_SEL = null; majSel();
+  $("chapPages").onclick = e => {
+    const f = e.target.closest("figure"); if (!f) return;
+    if (PAGES_SEL){ const k = +f.dataset.page; PAGES_SEL.has(k) ? PAGES_SEL.delete(k) : PAGES_SEL.add(k); majSel(); return; }
+    window.open(srcURL(j.pages[+f.dataset.page].path), "_blank");
+  };
   $("chapDetail").hidden = false;
   CHAP_PAGES = j.pages.length; narrEstim();
   refreshNarrs().catch(err => log("narrations : " + err.message, "e"));
   $("chapDetail").scrollIntoView({ behavior: "smooth", block: "start" });
   log("chapitre ouvert : " + c.dir + " (" + j.pages.length + " pages)");
 }
-$("chapList").onclick = e => { const b = e.target.closest("[data-chap]"); if (b) openChap(+b.dataset.chap).catch(err => log("chapitre : " + err.message, "e")); };
+$("chapList").onclick = e => {
+  const sv = e.target.closest("[data-serie]");
+  if (sv){ ouvrirSerie(sv.dataset.serie); return; }
+  const b = e.target.closest("[data-chap]"); if (b) openChap(+b.dataset.chap).catch(err => log("chapitre : " + err.message, "e"));
+};
+$("btnLibBack").onclick = () => ouvrirSerie(null);
+async function poserPochette(body){
+  const r = await api("/manga/pochette", Object.assign({ slug: LIB_SERIE }, body));
+  if (r.error) throw new Error(r.error);
+  log("pochette posée : " + r.pochette + (r.trouve ? " (AniList : « " + r.trouve + " »)" : ""));
+  toast(r.trouve ? "pochette : « " + r.trouve + " »" : "pochette posée");
+  await refreshChaps();
+}
+$("btnPochAni").onclick = () => {
+  const s = seriesDe(CHAPS).find(x => x.slug === LIB_SERIE); if (!s) return;
+  const titre = prompt("Titre à chercher sur AniList (pochette officielle) :", s.title);
+  if (titre) poserPochette({ source: "anilist", titre }).catch(e => { log("pochette : " + e.message, "e"); alert(e.message); });
+};
+$("btnPochFile").onclick = () => $("pochFile").click();
+$("pochFile").onchange = e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => poserPochette({ source: "image", image: rd.result }).catch(err => { log("pochette : " + err.message, "e"); alert(err.message); });
+  rd.readAsDataURL(f);
+};
+async function supprimer(body, question){
+  if (!confirm(question + "\n\nL'élément part dans la corbeille (sources/_corbeille), récupérable à la main.")) return false;
+  const r = await api("/manga/source_delete", body);
+  if (r.error){ alert(r.error); log("suppression : " + r.error, "e"); return false; }
+  log("supprimé (" + r.quoi + ") → " + r.corbeille); toast("supprimé");
+  return true;
+}
+$("btnSerieDel").onclick = async () => {
+  const s = seriesDe(CHAPS).find(x => x.slug === LIB_SERIE); if (!s) return;
+  if (await supprimer({ slug: s.slug }, "Supprimer TOUTE la série « " + s.title + " » (" + s.chaps.length + " chapitre(s), narrations comprises) ?")){
+    ouvrirSerie(null); await refreshChaps(); }
+};
+$("btnChapDel").onclick = async () => {
+  const c = CHAPS.find(x => x.dir === CHAP_OPEN); if (!c) return;
+  if (await supprimer({ d: c.dir }, "Supprimer le chapitre " + c.chapter + " de « " + c.title + " » (pages et narrations) ?")){
+    $("chapDetail").hidden = true; CHAP_OPEN = null; await refreshChaps(); }
+};
+// Selection de pages : le clic sur une page COCHE au lieu d'ouvrir l'image
+let PAGES_SEL = null;
+function majSel(){
+  const n = PAGES_SEL ? PAGES_SEL.size : 0;
+  $("btnPagesSel").textContent = PAGES_SEL ? "✕ Terminer la sélection" : "☑ Sélectionner des pages";
+  $("btnPagesDel").hidden = !n; $("btnPagesDel").textContent = "🗑 Supprimer la sélection (" + n + ")";
+  $("btnPagePoch").hidden = n !== 1;
+  $("chapPages").classList.toggle("selmode", !!PAGES_SEL);
+  document.querySelectorAll("#chapPages figure").forEach(f => f.classList.toggle("pg-sel", !!PAGES_SEL && PAGES_SEL.has(+f.dataset.page)));
+}
+$("btnPagesSel").onclick = () => { PAGES_SEL = PAGES_SEL ? null : new Set(); majSel(); };
+$("btnPagesDel").onclick = async () => {
+  const c = CHAPS.find(x => x.dir === CHAP_OPEN); if (!c || !PAGES_SEL || !PAGES_SEL.size) return;
+  const files = [...PAGES_SEL].sort((a, b) => a - b).map(k => CHAP_PAGE_LIST[k].file);
+  if (await supprimer({ d: c.dir, pages: files }, "Supprimer " + files.length + " page(s) du chapitre " + c.chapter + " ?\n" + files.join(", "))){
+    PAGES_SEL = null; await refreshChaps(); await openChap(CHAPS.findIndex(x => x.dir === c.dir)); }
+};
+$("btnPagePoch").onclick = () => {
+  if (!PAGES_SEL || PAGES_SEL.size !== 1) return;
+  const pg = CHAP_PAGE_LIST[[...PAGES_SEL][0]];
+  poserPochette({ source: "page", page: pg.path }).then(() => { PAGES_SEL = null; majSel(); })
+    .catch(e => { log("pochette : " + e.message, "e"); alert(e.message); });
+};
 $("btnChapRefresh").onclick = () => refreshChaps().catch(err => log("chapitres : " + err.message, "e"));
 $("btnChapClose").onclick = () => { $("chapDetail").hidden = true; CHAP_OPEN = null;
   document.querySelectorAll("#chapList .chap-item").forEach(b => b.classList.remove("sel")); };
@@ -4426,6 +4565,18 @@ $("btnChapClose").onclick = () => { $("chapDetail").hidden = true; CHAP_OPEN = n
 const VOIX = [["Charon","Charon — homme, grave"],["Fenrir","Fenrir — homme"],["Orus","Orus — homme"],
   ["Puck","Puck — homme, vif"],["Algenib","Algenib — homme"],["Kore","Kore — femme"],["Aoede","Aoede — femme"],["Leda","Leda — femme"]];
 $("narrVoice").innerHTML = VOIX.map(([v, l]) => '<option value="' + v + '">' + l + "</option>").join("");
+// v1.76.0 : apercu de la voix AVANT de generer (demande Quang 21/09). Echantillons generes une fois par
+// scripts/voix_apercus.py dans sources/_apercus/ (meme synthese que la narration). Play / stop.
+const APERCU = new Audio();
+function majApercu(){ $("btnVoixApercu").textContent = APERCU.paused ? "▶" : "■"; }
+APERCU.onended = APERCU.onpause = APERCU.onplay = majApercu;
+APERCU.onerror = () => { majApercu(); toast("aperçu indisponible pour cette voix"); log("aperçu voix introuvable : " + APERCU.src, "w"); };
+function jouerApercu(){
+  APERCU.src = srcURL("_apercus/" + $("narrVoice").value + ".mp3");
+  APERCU.play().catch(e => { if (e.name !== "AbortError") log("aperçu : " + e.message, "w"); });
+}
+$("btnVoixApercu").onclick = () => APERCU.paused ? jouerApercu() : APERCU.pause();
+$("narrVoice").addEventListener("change", () => { if (!APERCU.paused) jouerApercu(); });
 let NARRS = [], NARR_POLL = null, CHAP_PAGES = 0;
 const fmtS = s => s >= 60 ? Math.floor(s / 60) + " min " + String(Math.round(s % 60)).padStart(2, "0") : Math.round(s) + " s";
 const LETTRES = "ABCDEFGH";
@@ -4444,7 +4595,7 @@ async function refreshNarrs(){
   const j = await api("/manga/narrations?d=" + encodeURIComponent(CHAP_OPEN));
   NARRS = j.items || [];
   const lbl = { fini: "✅", "en cours": "⏳", echec: "❌", vide: "…", illisible: "⚠" };
-  $("narrRuns").innerHTML = NARRS.map((n, i) => {
+  const ligne = (n, i) => {
     const st = n.stats || {}, pr = n.progress || {};
     const pct = n.etat === "en cours" && pr.total ? Math.round(100 * pr.fait / pr.total) : 0;
     const etape = { noms: "repérage des personnages", vision: "lecture des pages", verification: "vérification", recit: "écriture du récit", voix: "synthèse vocale" }[pr.etape] || pr.etape || "démarrage";
@@ -4459,7 +4610,12 @@ async function refreshNarrs(){
       + '<span class="grow muted">' + info + "</span>"
       + (n.etat === "fini" && n.audio ? '<button class="btn sm" data-ecoute="' + i + '">▶ Écouter</button>' : "")
       + "</div>";
-  }).join("") || '<p class="muted aide" style="margin:0">Aucune narration pour ce chapitre.</p>';
+  };
+  const visibles = [], essais = [];
+  NARRS.forEach((n, i) => (n.etat === "en cours" || n.audio ? visibles : essais).push(ligne(n, i)));
+  $("narrRuns").innerHTML = (visibles.join("") || (essais.length ? "" : '<p class="muted aide" style="margin:0">Aucune narration pour ce chapitre.</p>'))
+    + (essais.length ? '<details class="narr-essais"><summary>Essais techniques sans voix (' + essais.length
+      + ') — bancs de mesure, rien à écouter</summary><div class="narr-runs">' + essais.join("") + "</div></details>" : "");
   $("btnAveugle").disabled = groupeAveugle().length < 2;
   const encours = NARRS.some(n => n.etat === "en cours");
   if (encours && !NARR_POLL) NARR_POLL = setInterval(() => refreshNarrs().catch(e => log("narrations : " + e.message, "e")), 3000);

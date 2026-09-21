@@ -1,0 +1,182 @@
+# -*- coding: utf-8 -*-
+"""Patch du proxy 8190 : bibliotheque (v1.76.0, 21/09/2026) -- pochettes de serie + suppression.
+
+Rejouable : python patch_bibliotheque.py <chemin du proxy>. Ancres verifiees (1 occurrence chacune),
+sinon ARRET sans rien ecrire (le proxy est modifie par deux sessions : une ancre absente = relire).
+Idempotent : un proxy deja patche est laisse tel quel.
+"""
+import sys
+
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+if "def manga_source_delete(" in s:
+    print("deja patche")
+    sys.exit(0)
+
+
+def rep(a, b):
+    global s
+    if s.count(a) != 1:
+        raise SystemExit("ancre introuvable ou multiple (%d) : %r" % (s.count(a), a[:70]))
+    s = s.replace(a, b)
+
+
+# 1) la liste des chapitres porte la pochette de SA serie
+rep('''                        "cover": info["pages"][0]["path"]})
+    out.sort(key=lambda x: ((x["title"] or "").lower(), _chap_key(x["chapter"])))''',
+    '''                        "cover": info["pages"][0]["path"], "pochette": _pochette(slug)})
+    # (le proxy sert les fichiers de sources/ avec un cache d'un jour : l'app ajoute la date de la
+    #  pochette a son URL, sinon une pochette REMPLACEE resterait l'ancienne a l'ecran)
+    out.sort(key=lambda x: ((x["title"] or "").lower(), _chap_key(x["chapter"])))''')
+
+# 2) les fonctions, juste avant le bloc narration
+rep('''# --- Narration des chapitres (v1.67.0) -----------------------------------------------''',
+    '''# --- Bibliotheque (Manga Studio v1.76.0) : pochettes de serie + suppression ---------
+# Suppression = DEPLACEMENT dans sources/_corbeille/ (meme disque : instantane, reversible a la main ;
+# le listing ignore les dossiers en "_"). Refusee si une capture ou une narration tourne dessus.
+MANGA_CORBEILLE = os.path.join(MANGA_SOURCES, "_corbeille")
+_RE_SERIE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,80}$")
+_RE_CHAP = re.compile(r"^ch_[A-Za-z0-9._-]{1,20}$")
+
+
+def _pochette(slug):
+    sd = _manga_src_safe(slug)
+    for ext in (".jpg", ".png", ".webp"):
+        if sd and os.path.isfile(os.path.join(sd, "pochette" + ext)):
+            return slug + "/pochette" + ext + "#" + str(int(os.path.getmtime(os.path.join(sd, "pochette" + ext))))
+    return None
+
+
+def _source_occupee(base):
+    """Raison de refuser d'y toucher, ou None : capture en cours, ou narration vivante dessous."""
+    try:
+        if (manga_fetch_status() or {}).get("etat") == "en cours":
+            return "une capture est en cours"
+    except Exception:
+        pass
+    for racine, _dirs, fichiers in os.walk(base):
+        if "progress.json" in fichiers:
+            try:
+                with open(os.path.join(racine, "progress.json"), encoding="utf-8") as f:
+                    pr = json.load(f)
+                if pr.get("etape") != "fini" and time.time() - float(pr.get("t") or 0) < 180:
+                    return "une narration est en cours (%s)" % os.path.relpath(racine, MANGA_SOURCES)
+            except Exception:
+                pass
+    return None
+
+
+def manga_source_delete(data):
+    """{slug} = une serie ; {d: 'slug/ch_x'} = un chapitre ; {d, pages: [fichiers]} = des pages."""
+    slug, d = (data.get("slug") or "").strip("/"), (data.get("d") or "").strip("/")
+    pages = [str(x) for x in (data.get("pages") or [])]
+    if slug:
+        if not _RE_SERIE.match(slug):
+            return {"error": "serie invalide"}
+        cible, quoi = _manga_src_safe(slug), "serie"
+    elif d:
+        parts = d.split("/")
+        if len(parts) != 2 or not _RE_SERIE.match(parts[0]) or not _RE_CHAP.match(parts[1]):
+            return {"error": "chapitre invalide"}
+        cible, quoi = _manga_src_safe(d), ("pages" if pages else "chapitre")
+    else:
+        return {"error": "rien a supprimer"}
+    if not cible or not os.path.isdir(cible):
+        return {"error": "introuvable"}
+    occ = _source_occupee(cible)
+    if occ:
+        return {"error": "impossible pour l'instant : " + occ}
+    dest = os.path.join(MANGA_CORBEILLE, time.strftime("%Y%m%d-%H%M%S") + "_" + (slug or d).replace("/", "__"))
+    if quoi != "pages":
+        os.makedirs(MANGA_CORBEILLE, exist_ok=True)
+        shutil.move(cible, dest)
+        return {"ok": True, "quoi": quoi, "corbeille": os.path.relpath(dest, MANGA_SOURCES)}
+    mp = os.path.join(cible, "manifest.json")
+    man = {}
+    if os.path.isfile(mp):
+        with open(mp, encoding="utf-8") as f:
+            man = json.load(f)
+    presentes = {x.get("file") for x in (man.get("pages") or [])} or set(os.listdir(cible))
+    for f in pages:
+        if "/" in f or "\\\\" in f or f not in presentes or not f.lower().endswith(_IMG_EXT) \\
+                or not os.path.isfile(os.path.join(cible, f)):
+            return {"error": "page inconnue : " + f}
+    os.makedirs(dest, exist_ok=True)
+    for f in pages:
+        shutil.move(os.path.join(cible, f), os.path.join(dest, f))
+    if man.get("pages"):
+        man["pages"] = [x for x in man["pages"] if x.get("file") not in set(pages)]
+        man.setdefault("notes", []).append("%d page(s) supprimee(s) dans l'app le %s : %s"
+                                           % (len(pages), time.strftime("%d/%m %H:%M"), ", ".join(pages)))
+        tmp = mp + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(man, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, mp)
+    return {"ok": True, "quoi": "pages", "n": len(pages), "corbeille": os.path.relpath(dest, MANGA_SOURCES)}
+
+
+def _ext_image(b):
+    if b[:3] == b"\\xff\\xd8\\xff": return ".jpg"
+    if b[:8] == b"\\x89PNG\\r\\n\\x1a\\n": return ".png"
+    if b[:4] == b"RIFF" and b[8:12] == b"WEBP": return ".webp"
+    return None
+
+
+def manga_pochette(data):
+    """Pose sources/<slug>/pochette.<ext>. source = anilist (pochette officielle de la serie, par
+    titre) | page (une page d'un chapitre de la serie) | image (fichier depose, base64)."""
+    slug = (data.get("slug") or "").strip("/")
+    sd = _manga_src_safe(slug) if _RE_SERIE.match(slug) else None
+    if not sd or not os.path.isdir(sd):
+        return {"error": "serie introuvable"}
+    src, trouve = data.get("source") or "", None
+    try:
+        if src == "anilist":
+            titre = (data.get("titre") or slug.replace("-", " ")).strip()
+            q = json.dumps({"query": "query($s:String){Media(search:$s,type:MANGA){title{romaji english}"
+                                     " coverImage{extraLarge}}}", "variables": {"s": titre}}).encode()
+            req = urllib.request.Request("https://graphql.anilist.co", data=q, headers={
+                "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "manga-studio"})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                m = (json.load(r).get("data") or {}).get("Media")
+            if not m or not (m.get("coverImage") or {}).get("extraLarge"):
+                return {"error": "aucune pochette trouvee sur AniList pour : " + titre}
+            trouve = (m.get("title") or {}).get("english") or (m.get("title") or {}).get("romaji")
+            req = urllib.request.Request(m["coverImage"]["extraLarge"], headers={"User-Agent": "manga-studio"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                img = r.read(20 * 1024 * 1024)
+        elif src == "page":
+            full = _manga_src_safe(data.get("page") or "")
+            if not full or not full.startswith(sd + os.sep) or not os.path.isfile(full):
+                return {"error": "page introuvable dans cette serie"}
+            with open(full, "rb") as f:
+                img = f.read()
+        elif src == "image":
+            img = base64.b64decode((data.get("image") or "").split(",")[-1])
+        else:
+            return {"error": "source inconnue"}
+    except Exception as e:
+        return {"error": "pochette : %s" % e}
+    ext = _ext_image(img[:16])
+    if not ext or len(img) < 2000:
+        return {"error": "ce n'est pas une image (png, jpg, webp)"}
+    for e in (".jpg", ".png", ".webp"):
+        if os.path.isfile(os.path.join(sd, "pochette" + e)):
+            os.remove(os.path.join(sd, "pochette" + e))
+    with open(os.path.join(sd, "pochette" + ext), "wb") as f:
+        f.write(img)
+    return {"ok": True, "pochette": slug + "/pochette" + ext, "source": src, "trouve": trouve}
+
+
+# --- Narration des chapitres (v1.67.0) -----------------------------------------------''')
+
+# 3) les deux routes POST
+rep('''            elif self.path == "/manga/fetch_verify":''',
+    '''            elif self.path == "/manga/source_delete":          # Manga Studio v1.76.0
+                self._json(200, manga_source_delete(data))
+            elif self.path == "/manga/pochette":               # Manga Studio v1.76.0
+                self._json(200, manga_pochette(data))
+            elif self.path == "/manga/fetch_verify":''')
+
+open(p, "w", encoding="utf-8").write(s)
+print("patch bibliotheque OK")
