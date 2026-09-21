@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.1.6"
+VERSION = "0.1.7"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -249,16 +249,25 @@ def capture(args) -> int:
                     user32.GetWindowRect(h, ctypes.byref(rect))
                     dpi = user32.GetDpiForWindow(h) or 96
                     k = dpi / 96.0
+                    # MEILLEUR match par distance (position + taille), pas « premier sous
+                    # tolérance » : les fenêtres Edge s'ouvrent en CASCADE (~22 px
+                    # d'écart) — le premier-match prenait la MAUVAISE fenêtre (mesuré
+                    # 18:03 : l'onglet de la fenêtre d'avant capturé au lieu de l'actif).
+                    meilleur, dmin = None, None
                     for pg in candidats:
                         try:
                             sess = pg.context.new_cdp_session(pg)
                             b = sess.send("Browser.getWindowForTarget").get("bounds", {})
-                            if (abs(b.get("left", -99999) * k - rect.left) < 40
-                                    and abs(b.get("top", -99999) * k - rect.top) < 40
-                                    and abs(b.get("width", -1) * k - (rect.right - rect.left)) < 60):
-                                return pg
+                            d = (abs(b.get("left", -99999) * k - rect.left)
+                                 + abs(b.get("top", -99999) * k - rect.top)
+                                 + 0.5 * abs(b.get("width", -1) * k - (rect.right - rect.left))
+                                 + 0.5 * abs(b.get("height", -1) * k - (rect.bottom - rect.top)))
+                            if dmin is None or d < dmin:
+                                meilleur, dmin = pg, d
                         except Exception:
                             continue
+                    if meilleur is not None and dmin is not None and dmin < 120:
+                        return meilleur
                 return None
             except Exception:
                 return None
@@ -309,15 +318,23 @@ def capture(args) -> int:
         page.bring_to_front()  # un onglet de fond est THROTTLE par le navigateur :
         # son chargement ralentit et la capture part dans le vide (mesuré : « Loading... »)
 
-        # MangaDex pagine par URL : si l'onglet est au MILIEU du chapitre
-        # (/chapter/<uuid>/<n>), revenir à la PAGE 1 — la capture part du début
-        # (mesuré 21/09 : capture lancée page 3 → pages 1-2 perdues).
+        # MangaDex pagine par URL (/chapter/<uuid>/<n>) : si l'onglet est au MILIEU du
+        # chapitre, on capture DEPUIS CETTE PAGE — choix délibéré de l'utilisateur
+        # (sauter crédits/sommaire : « les premières images ne servent à rien », 18:03).
+        # --page-1 force le retour au début si on veut tout.
         u = page.url.split("?")[0].split("#")[0]
         base, _, num_page = u.rpartition("/")
+        note_depart = None
         if "/chapter/" in base and num_page.isdigit() and int(num_page) > 1:
-            print(f"Repositionnement à la page 1 (l'onglet était page {num_page})...")
-            page.goto(base, wait_until="domcontentloaded", timeout=45000)
-            page.bring_to_front()
+            if getattr(args, "page_1", False):
+                print(f"Retour à la page 1 (l'onglet était page {num_page})...")
+                page.goto(base, wait_until="domcontentloaded", timeout=45000)
+                page.bring_to_front()
+            else:
+                print(f"Capture depuis la page {num_page} — les pages 1 à {int(num_page) - 1} "
+                      f"ne seront pas capturées (--page-1 pour commencer au début).")
+                note_depart = (f"capture démarrée à la page {num_page} "
+                               f"(pages 1-{int(num_page) - 1} absentes volontairement)")
 
         # attendre que le lecteur ait chargé sa première page (<= 90 s)
         for _ in range(90):
@@ -335,6 +352,8 @@ def capture(args) -> int:
         dest = chap_dir(args.out, args.title, args.chapter)
         os.makedirs(dest, exist_ok=True)
         notes: list = []
+        if note_depart:
+            notes.append(note_depart)
         vues: dict = {}           # src -> {file, bytes, top, w, h} — ordre d'insertion = lecture
         vus_hashes: set = set()   # dedup par CONTENU : les pagers re-servent une page déjà
         # affichée sous un blob: neuf (mesuré : 30 images collectées pour 22 pages).
@@ -656,6 +675,8 @@ def main() -> int:
     s = sub.add_parser("capture", help="capturer le chapitre affiché dans la fenêtre dédiée")
     s.add_argument("--tab", default=None,
                    help="filtre d'URL, pour les scripts (défaut : l'onglet ACTIF de la fenêtre)")
+    s.add_argument("--page-1", action="store_true",
+                   help="revenir à la page 1 avant de capturer (défaut : depuis la page affichée)")
     s.add_argument("--title", required=True)
     s.add_argument("--chapter", required=True)
     s.add_argument("--out", default=DEFAULT_OUT)

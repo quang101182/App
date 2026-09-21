@@ -25,9 +25,11 @@ if errorlevel 1 (
 :capture
 echo ----------------------------------------------------------
 echo   Ouvre le chapitre a capturer dans la fenetre Edge dediee
-echo   ^(n'importe quel site de lecture^). Attends que la PREMIERE
-echo   PAGE s'affiche. L'onglet du chapitre doit rester l'onglet
-echo   ACTIF ^(affiche a l'ecran^) : c'est LUI que l'outil capture.
+echo   ^(n'importe quel site de lecture^). Place-toi sur la page OU
+echo   LA CAPTURE DOIT COMMENCER : page 1 pour tout le chapitre,
+echo   ou plus loin pour sauter les pages inutiles ^(credits,
+echo   sommaire^). Attends que la page s'affiche, puis reviens
+echo   ici et appuie sur une touche.
 echo   Puis reviens ici et appuie sur une touche.
 echo ----------------------------------------------------------
 pause
