@@ -22,8 +22,8 @@
    mesurée : décision par page « est-ce CELUI de la fiche : oui/non/incertain », incertain = anonyme.
    **Quang n'a pas encore choisi** entre cette piste et l'étape 4.
    manga-fetch **v0.3.0** (21/09, Quang a autorisé cette session à le modifier) : MANGA Plus vertical, canvas
-   pleine résolution, capture < 3 pages = échec. **En attente de Quang** : recapturer Claymore ch.1 (captures
-   d'écran avec barres du lecteur) SANS perdre `narration/` ni `reference_faits.json` (`--force` efface le dossier).
+   pleine résolution, capture < 3 pages = échec. Claymore ch.1 **vérifié propre** (Quang + contrôle
+   visuel 21/09 22h52 : 801×1200, AUCUNE barre — seul Boruto, en vertical, les avait) → gardé tel quel.
 2. Étape 4 — lecture case par case + bulles effacées ; 5 — vidéo MP4 (= mode hors-ligne) ;
    6 — modes Récit / **Lecture avancée** (voix par personnage, réutiliser le multi-voix de StoryVoice) ;
    7 — « Précédemment… » ; 8 — voix (changer sans relire, aperçu, voix par série) ; 9 — suivi de séries ;
