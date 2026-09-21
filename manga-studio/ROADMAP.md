@@ -1831,10 +1831,19 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
 
 | # | Étape | Pourquoi | Critère de sortie |
 |---|---|---|---|
+> 📌 **Ordre fixé par Quang le 21/09 à 19h** : (a) finir l'étape 1-bis (consensus, en cours) ; (b) **étape 3 — capture
+> DANS l'app** : « il faut absolument que tout ça soit intégré dans une application, et fonctionnel » ; (c) le reste
+> dans l'ordre du tableau. « Ne te disperse pas. »
+> 💾 **Règle de stockage (Quang, 21/09)** : **tout ce qui prend de la place va sur C:, jamais sur D:.** À faire au
+> moment opportun (pas de chantier parallèle) : `sources/` (~40 Mo/chapitre, grossit) et `output/` déplacés sur C:
+> avec une **jonction** à l'ancien chemin (zéro changement de code, manga-fetch/narration/proxy inchangés) ;
+> `scripts/*_out` (~650 Mo de bancs de juillet, régénérables) : déplacer ou supprimer → **décision Quang**.
+> ⚖️ Coût : les TESTS ne sont pas limités ; c'est la **solution finale** (coût + temps par chapitre) qui doit être sobre.
+
 | ~~1~~ | ~~Personnages par EXEMPLES visuels~~ → **ÉCHEC mesuré** (v1.69, `--portraits`) | Raki et Zaki se ressemblent | — |
-| **1-bis** | **CONSENSUS « désaccord = prudence »** : 2 relevés indépendants (K3 + Gemini, ou K3 ×2) ; là où ils ne s'accordent pas sur QUI parle/agit, le récit dit « une voix » / « un villageois » | une attribution anonyme est acceptable (mineur), une fausse ne l'est pas ; les erreurs restantes varient d'un run à l'autre, donc un 2e avis les attrape | **0 grave sur 3 runs** (juge v2 + référence) |
+| ~~1-bis~~ | ~~CONSENSUS « désaccord = prudence »~~ → **mesuré le 21/09 18h55, NON retenu** (`scripts/consensus_narration.py`, hors app) : K3 seul 1/2/1 (4) · K3+Gemini 1/0/2 (3) · Gemini×2 2/1/4 (7) · K3×2 0/1/1 (2). Aucun à 0/0/0 ; gains dans le bruit d'un si petit échantillon, et la FUSION crée ses propres erreurs (p4 « Raki près du cadavre » n'apparaît qu'après fusion). Doubler le coût (K3×2 ≈ 4,20 $/chapitre) pour ~2 erreurs de moins sur 60 pages : non. **Défaut maintenu = K3 seul** (~1 grave / 15 pages, toujours sur un cas ambigu « qui interpelle qui »). | — | — |
 | 2 | **Fiche personnages par SÉRIE** : les noms prouvés au ch.1 servent au ch.2 | moins d'erreurs, moins de votes | ch.2 de Claymore : 0 grave |
-| 3 | **Capture intégrée à l'app** : bouton « 📥 Capturer le chapitre ouvert » (titre, n°) → proxy → `manga-fetch capture` sur la fenêtre Edge dédiée → apparaît dans 📚 Chapitres | plus de `capture.bat` : tout se fait dans l'app (demande Quang) | 10 captures via l'app = 10 manifests valides |
+| **3 ⭐ PRIORITAIRE** | **Capture intégrée à l'app** (manga-fetch v0.2.1, consommé tel quel, JAMAIS modifié par Manga Studio — domaine de la session GLM) : l'app **liste les onglets** de la fenêtre dédiée (CDP 9223, `/json/list`) → Quang **choisit** l'onglet (remplace la confirmation console, cf. incident 18:47 du mauvais onglet) → titre (existants proposés) + n° → proxy lance `capture --tab <url exacte> [--force si remplacement confirmé] [--page-1]` → progression lue dans `%LOCALAPPDATA%\manga-fetch\events.log` → le chapitre apparaît dans 📚 Chapitres. + afficher les **notes** du manifeste (page étroite, départ au milieu, intercalaire) et un bouton **Vérifier** (`verify` : intégrité + complétude) | tout dans l'app, plus de console | 10 captures via l'app = 10 manifests valides ; 0 mauvais onglet |
 | 4 | **Lecture case par case** + **bulles effacées** : la caméra suit les cases (YOLO Manga109, déjà là) au rythme de la voix ; texte des bulles effacé (v1.6.2) | le dynamisme des recaps ; la narration remplace le texte | ordre des cases juste sur 20 pages ; 0 bulle lisible |
 | 5 | **Vidéo MP4 par chapitre** (ffmpeg : pan/zoom + voix + sous-titres incrustés) | simple, et c'est le **mode hors-ligne** : un fichier sur le téléphone, PC éteint | MP4 lisible sur le Fold, synchro voix/page ±0,3 s |
 | 6 | **Deux MODES** : *Récit* (l'actuel, un narrateur raconte) et *Lecture* (les répliques lues case par case, attribuées au bon personnage, voire une voix par personnage) | demandé par Quang le 21/09 ; le mode Lecture exige l'étape 1 | mode Lecture : 0 réplique mal attribuée sur 20 pages |
