@@ -25,7 +25,7 @@ Stdout : un seul objet JSON (le resume du run). Le bruit part sur stderr.
 import argparse, base64, io, json, os, re, subprocess, sys, time, urllib.request, urllib.error
 from datetime import datetime
 
-VERSION = "1.74.0"
+VERSION = "1.75.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -52,7 +52,9 @@ def appel_vision(engine, system, content, max_tokens):
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}]}
         if engine == "pixtral":
             body["temperature"] = 0.1
-        r = post(path, body)
+        # v1.75 : delai proportionnel au budget. A 32 000 tokens, K3 raisonne plus de 240 s : 5 timeouts
+        # d'affilee ont tue un run le 21/09 (22h15). ~40 tokens/s mesures -> 1 s par tranche de 40 tokens.
+        r = post(path, body, timeout=max(240, max_tokens // 40))
         return r["choices"][0]["message"].get("content"), (r.get("usage") or {})
     parts = []
     for c in content:
@@ -366,13 +368,17 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
     path, model = ENGINES[engine]
     fiche, resume, sortie, journal_fiche = {}, "", [], []
     for nom, v in (noms or {}).items():        # v2.2 : noms FIGES par la passe des noms (votes)
-        fiche[nom.lower()] = {"description": "%s, %s" % (v["age"], v["cheveux"]), "nom": nom,
+        desc = ", ".join(x for x in (v["age"], v["cheveux"], v.get("teint") and "teint " + v["teint"], v.get("tenue")) if x)
+        fiche[nom.lower()] = {"description": desc, "nom": nom,
                               "preuve": "vote %s, pages %s" % (v["votes"], v["pages"]), "fige": True}
     for i in range(0, len(pages), batch):
         lot = pages[i:i + batch]
         nums = [p["num"] for p in lot]
         content = [{"type": "text", "text": ("NOMS ETABLIS (verifies par vote, ne les change jamais, n'en ajoute "
-                                             "aucun ; identifie ces personnages par leur AGE et leurs cheveux) : "
+                                             "aucun ; identifie ces personnages par leur AGE et leurs cheveux"
+                                             + (", leur TEINT et leur TENUE ; un personnage qui differe sur un seul de ces "
+                                                "traits est un AUTRE personnage, anonyme" if NOMS_VERSION == "v3" else "")
+                                             + ") : "
                                              + json.dumps({k: v["description"] for k, v in fiche.items() if v.get("fige")},
                                                           ensure_ascii=False) + "\n" if noms else "")
                     + "FICHE : " + (_fiche_texte(fiche) if fiche else "(vide)")
@@ -395,8 +401,11 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
             content.append({"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b64}})
         t = time.time()
         j = None
-        for essai in range(2):
-            texte, u = appel_vision(engine, SYS_VISION_V2, content, 8000)
+        # v1.75 : budget DOUBLE a chaque essai. Mesure 21/09 (OPM 301, p11-12, consigne v3) : K3 passait
+        # 7 997 des 8 000 tokens a RAISONNER (finish_reason=length) et rendait un contenu vide, 4 fois sur 4
+        # -> le chapitre entier etait abandonne. (Chaque essai rate est FACTURE : ~0,12 $ de raisonnement.)
+        for essai, budget in enumerate((8000, 16000, 32000)):
+            texte, u = appel_vision(engine, SYS_VISION_V2, content, budget)
             stats["vision_tokens_in"] += u.get("prompt_tokens", 0)
             stats["vision_tokens_out"] += u.get("completion_tokens", 0)
             stats["cout_vision"] += cout(model, u)
@@ -406,7 +415,7 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
             except Exception as e:
                 log("  lot %s : JSON illisible (%s), nouvel essai" % (nums, e))
         if j is None:
-            raise RuntimeError("lot %s : JSON illisible deux fois" % nums)
+            raise RuntimeError("lot %s : JSON illisible apres 3 essais (budget jusqu'a 32 000 tokens)" % nums)
         for n in j.get("nouveaux") or []:
             if n.get("id") and n["id"] not in fiche:
                 fiche[n["id"]] = {"description": n.get("description", ""), "nom": None, "preuve": None}
@@ -496,12 +505,21 @@ Q_NOMS = ("Page de manga. 1) Liste les PRENOMS de personnages ecrits dans les bu
           "sur la page : porteur_box = [ymin, xmin, ymax, xmax] en milliemes de la page (0-1000). "
           "Aucun prenom : liste vide. JSON : {\"noms\":[{\"nom\":\"...\",\"porteur_age\":"
           "\"enfant|adolescent|adulte\",\"porteur_cheveux\":\"...\",\"dit_par\":\"...\",\"porteur_box\":[0,0,0,0]}]}")
+# v1.75 (21/09, verrou mesure sur OPM ch.301) : le vote prouvait qu'un nom est ECRIT, pas QUI le porte.
+# "M. McCoy ?" (absent, parti aux toilettes) etait fige puis colle a l'homme du fauteuil ; un heros anonyme
+# au teint sombre etait pris pour Blue (memes age et cheveux courts). v3 = on demande si le porteur est
+# DESSINE sur la page, et son teint et sa tenue, pour distinguer deux personnages qui se ressemblent.
+Q_NOMS_V3 = Q_NOMS + (" 4) porteur_visible : le porteur est-il DESSINE sur cette page ? false s'il est seulement "
+          "cite, absent, appele au telephone ou hors champ. 5) porteur_teint : clair | mat | sombre. "
+          "6) porteur_tenue : sa tenue en quelques mots (ex. hoodie dechire, costume sombre). "
+          "Ajoute ces 3 champs (porteur_visible, porteur_teint, porteur_tenue) a chaque entree du JSON.")
+NOMS_VERSION = "v2"                             # fixe par --noms
 VOTES_NOMS = 3
 
 
 def _question_noms(chap_dir, p, stats):
     img = base64.b64encode(page_jpeg(os.path.join(chap_dir, p["file"]))).decode()
-    content = [{"type": "text", "text": Q_NOMS},
+    content = [{"type": "text", "text": Q_NOMS_V3 if NOMS_VERSION == "v3" else Q_NOMS},
                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + img}}]
     txt, u = appel_vision("gemini", "Reponds uniquement en JSON.", content, 4000)
     stats["cout_noms"] = stats.get("cout_noms", 0.0) + cout("gemini-3.6-flash", u)
@@ -556,7 +574,8 @@ def fiche_serie(chap_dir):
             except Exception: noms = {}
             if noms:
                 for nom, v in noms.items():
-                    c = connus.setdefault(nom, {"age": v.get("age", "?"), "cheveux": v.get("cheveux", ""), "chapitres": []})
+                    c = connus.setdefault(nom, {"age": v.get("age", "?"), "cheveux": v.get("cheveux", ""), "chapitres": [],
+                                                "teint": v.get("teint", ""), "tenue": v.get("tenue", "")})
                     c["chapitres"].append(ch)
                 break
     return connus
@@ -576,21 +595,38 @@ def etape_noms(chap_dir, pages, stats, outdir=None, serie=None):
             for x in lot:
                 nom = x["nom"].strip().strip(".,!?").capitalize()
                 votes.setdefault(nom, []).append((p["num"], x.get("porteur_age") or "?", x.get("porteur_cheveux") or "",
-                                                  x.get("porteur_box"), p["file"]))
+                                                  x.get("porteur_box"), p["file"],
+                                                  x.get("porteur_visible") is not False,
+                                                  (x.get("porteur_teint") or "").strip(),
+                                                  (x.get("porteur_tenue") or "").strip()))
         progres("noms", p["num"], pages[-1]["num"])
     retenus = {}
     for nom, vs in votes.items():
         pages_nom = sorted({v[0] for v in vs})
-        ages = {}
-        for v in vs:
-            ages[v[1]] = ages.get(v[1], 0) + 1
-        age, n_age = max(ages.items(), key=lambda kv: kv[1])
         # un nom vu sur une SEULE page et une seule fois = lecture douteuse : on ne le fige pas
         # (v1.74 : sauf s'il est deja prouve dans un autre chapitre de la serie)
         if len(vs) < 2 and nom not in (serie or {}):
             continue
+        if NOMS_VERSION == "v3":                 # v1.75 : un nom dont le porteur n'est DESSINE nulle part = cite, pas vu
+            vus = [v for v in vs if v[5]]
+            if len(vus) * 2 < len(vs):
+                log("  nom ecarte (porteur jamais dessine) : %s (%d/%d votes le voient)" % (nom, len(vus), len(vs)))
+                stats.setdefault("noms_ecartes", []).append(nom)
+                continue
+            vs = vus                             # age, cheveux et decompte : sur les votes qui le VOIENT
+        ages = {}
+        for v in vs:
+            ages[v[1]] = ages.get(v[1], 0) + 1
+        age, n_age = max(ages.items(), key=lambda kv: kv[1])
         cheveux = max((v[2] for v in vs if v[1] == age), key=len, default="")
         retenus[nom] = {"age": age, "cheveux": cheveux, "votes": "%d/%d" % (n_age, len(vs)), "pages": pages_nom}
+        if NOMS_VERSION == "v3":
+            def plus_frequent(i):
+                c = {}
+                for v in vs:
+                    if v[i]: c[v[i]] = c.get(v[i], 0) + 1
+                return max(c.items(), key=lambda kv: kv[1])[0] if c else ""
+            retenus[nom].update(teint=plus_frequent(6), tenue=plus_frequent(7))
         if outdir:                               # portrait : le plus GRAND cadre parmi les votes majoritaires
             def aire(v):
                 try: return (float(v[3][2]) - float(v[3][0])) * (float(v[3][3]) - float(v[3][1]))
@@ -606,7 +642,8 @@ def etape_noms(chap_dir, pages, stats, outdir=None, serie=None):
     journal("noms", retenus=retenus)
     log("  noms figes : " + (", ".join("%s=%s (%s)" % (k, v["age"], v["votes"]) for k, v in retenus.items()) or "aucun"))
     if serie:                                    # v1.74 : les connus de la serie absents des votes de ce chapitre
-        ajoutes = {nom: {"age": c["age"], "cheveux": c["cheveux"], "votes": "serie " + ",".join(c["chapitres"]),
+        ajoutes = {nom: {"age": c["age"], "cheveux": c["cheveux"], "teint": c.get("teint", ""), "tenue": c.get("tenue", ""),
+                         "votes": "serie " + ",".join(c["chapitres"]),
                          "pages": []} for nom, c in serie.items() if nom not in retenus}
         stats["noms_serie"] = sorted(ajoutes)
         log("  noms de la serie ajoutes : " + (", ".join(sorted(ajoutes)) or "aucun"))
@@ -727,9 +764,13 @@ def main():
                          " contre 3/3/3 sans ; Raki et Zaki se ressemblent, l'exemple visuel les confond)")
     ap.add_argument("--verif", action="store_true", help="v2 : verification des attributions nommees (mesuree SANS gain le 21/09, en option)")
     ap.add_argument("--reuse-vision", default="", help="reprend l'etape vision d'un run existant (tag)")
+    ap.add_argument("--noms", choices=["v2", "v3"], default="v2",
+                    help="v3 (v1.75) : ecarte les noms dont le porteur n'est jamais dessine ; teint + tenue dans la fiche")
     ap.add_argument("--serie", action="store_true",
                     help="v1.74 (etape 2) : reprend les noms prouves dans les AUTRES chapitres de la serie")
     a = ap.parse_args()
+    global NOMS_VERSION
+    NOMS_VERSION = a.noms
     SECRET = _secret()
 
     chap_dir = os.path.normpath(os.path.join(SOURCES, a.chapitre))
@@ -779,7 +820,7 @@ def main():
                                 + stats.get("cout_noms", 0.0) + stats.get("cout_verif", 0.0), 4)
     # v1.72 : un run --reuse-vision recopie les stats de lecture de son run source : le suivi des couts
     # ne doit compter QUE ce que ce run a depense (recit + voix), sinon la lecture est comptee deux fois.
-    res = {"version": VERSION, "prompt": a.prompt, "reuse_vision": a.reuse_vision or None, "serie": bool(a.serie), "chapitre": a.chapitre, "title": man.get("title"), "chapter": man.get("chapter"),
+    res = {"version": VERSION, "prompt": a.prompt, "reuse_vision": a.reuse_vision or None, "serie": bool(a.serie), "noms_version": a.noms, "chapitre": a.chapitre, "title": man.get("title"), "chapter": man.get("chapter"),
            "tag": tag, "engine": a.engine, "model": ENGINES[a.engine][1], "voice": a.voice, "rate": a.rate,
            "titre": titre, "resume": resume, "personnages": persos, "created_at": datetime.now().isoformat(timespec="seconds"),
            "stats": {k: (round(v, 4) if isinstance(v, float) else v) for k, v in stats.items()},
