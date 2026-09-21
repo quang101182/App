@@ -42,6 +42,8 @@ echo toute seule et enregistrer chaque page.
 echo   --^> Ne touche a rien pendant 2 a 4 minutes. --
 echo   (ne MINIMISE pas la fenetre Edge pendant la capture ; elle peut
 echo    rester derriere d'autres fenetres, mais pas reduite dans la barre)
+echo   (si plusieurs onglets contiennent un chapitre, l'outil te demandera
+echo    lequel capturer — sinon il choisit tout seul le bon)
 echo.
 "%PY%" "%MOD%" capture --title "%TITRE%" --chapter "%CHAP%"
 set "CODE=%errorlevel%"

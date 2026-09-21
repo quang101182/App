@@ -145,7 +145,7 @@ def main() -> int:
             tab.wait_for_timeout(5000)
             print(f"  chapitre ouvert dans la fenetre dediee ({tab.title()[:40]})")
         # l'onglet reste OUVERT : la capture doit le trouver (fermeture après)
-        r = run("capture", "--tab", "mangadex.org/chapter", "--title", "BANC",
+        r = run("capture", "--tab", chap_url, "--title", "BANC",
                 "--chapter", str(num), "--out", OUT_BANC)
         cap_dir = os.path.join(OUT_BANC, "banc", f"ch_{str(num).replace('/', '-')}")
         cap_files = [f for f in os.listdir(cap_dir) if f.startswith("page_")] if os.path.isdir(cap_dir) else []

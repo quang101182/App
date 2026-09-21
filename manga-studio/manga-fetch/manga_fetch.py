@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.1.4"
+VERSION = "0.1.6"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -203,33 +203,121 @@ def capture(args) -> int:
             except Exception:
                 return False
 
+        def score_pages(pg) -> int:
+            """Nb d'images de page (hautes, portrait) dans l'onglet — -1 si injoignable."""
+            try:
+                return pg.evaluate(
+                    "() => Array.from(document.images)"
+                    ".filter(i => i.naturalHeight > 800 && i.naturalWidth > 250"
+                    " && i.naturalWidth / i.naturalHeight < 0.93).length")
+            except Exception:
+                return -1
+
+        def onglet_fenetre_active(candidats):
+            """L'onglet actif de la fenêtre Edge que l'utilisateur regarde.
+
+            CDP ne sait pas quelle fenêtre est au premier plan (chaque fenêtre Edge a
+            son onglet actif, tous 'visibility=visible'). L'OS, si : on prend les
+            fenêtres Edge dans l'ordre Z de Windows (la plus récemment active d'abord
+            — au moment de la capture, le premier plan est la console du .bat), et on
+            la matche aux fenêtres du navigateur piloté par leurs coordonnées
+            (bounds CDP en DIP, corrigés du DPI). Retourne la page ou None."""
+            try:
+                import ctypes
+                from ctypes import wintypes
+                user32 = ctypes.windll.user32
+
+                def classe(h):
+                    b = ctypes.create_unicode_buffer(64)
+                    user32.GetClassNameW(h, b, 64)
+                    return b.value
+
+                order = []
+                foreground = user32.GetForegroundWindow()
+                if foreground and classe(foreground) == "Chrome_WidgetWin_1":
+                    order.append(foreground)  # Edge est au premier plan : priorité absolue
+                @ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+                def cb(h, _):
+                    if (user32.IsWindowVisible(h) and classe(h) == "Chrome_WidgetWin_1"
+                            and h not in order):
+                        order.append(h)
+                    return True
+                user32.EnumWindows(cb, 0)
+
+                for h in order:  # Z-order décroissant = la plus récemment active d'abord
+                    rect = wintypes.RECT()
+                    user32.GetWindowRect(h, ctypes.byref(rect))
+                    dpi = user32.GetDpiForWindow(h) or 96
+                    k = dpi / 96.0
+                    for pg in candidats:
+                        try:
+                            sess = pg.context.new_cdp_session(pg)
+                            b = sess.send("Browser.getWindowForTarget").get("bounds", {})
+                            if (abs(b.get("left", -99999) * k - rect.left) < 40
+                                    and abs(b.get("top", -99999) * k - rect.top) < 40
+                                    and abs(b.get("width", -1) * k - (rect.right - rect.left)) < 60):
+                                return pg
+                        except Exception:
+                            continue
+                return None
+            except Exception:
+                return None
+
         tous = [pg for ctx in browser.contexts for pg in ctx.pages]
         if args.tab:
             candidats = [pg for pg in tous if args.tab in pg.url]
         else:
             # MODE PAR DÉFAUT : les onglets ACTIFS (affichés). ⚠ Chaque FENÊTRE Edge a
-            # son onglet actif : avec plusieurs fenêtres, plusieurs candidats 'visible'
-            # — CDP ne sait pas laquelle l'utilisateur regarde. On ne devine pas : on demande.
+            # son onglet actif : avec plusieurs fenêtres, plusieurs candidats 'visible'.
             candidats = [pg for pg in tous if est_visible(pg)]
         if not candidats:
             print(f"Aucun onglet{' contenant ' + args.tab if args.tab else ' actif'} "
                   f"dans la fenêtre dédiée (CDP {EDGE_CDP}).")
             print("Ouvre le chapitre (onglet affiché) puis relance.")
             return 1
-        if len(candidats) > 1:
-            print("Plusieurs onglets candidats :")
-            for i, pg in enumerate(candidats, 1):
-                print(f"  {i}) {pg.url[:88]}")
-            try:
-                rep = input("Lequel capturer ? (numéro, Entrée = 1) : ").strip()
-                page = candidats[int(rep) - 1] if rep.isdigit() and 1 <= int(rep) <= len(candidats) else candidats[0]
-            except (EOFError, ValueError):
-                page = candidats[0]  # mode automatisé (stdin fermé) : premier candidat
+        if len(candidats) > 1 and not args.tab:
+            # Mode interactif : la fenêtre Edge que l'utilisateur regarde (détection OS,
+            # Z-order + match des bounds). ⚠ Ne JAMAIS l'appliquer en mode --tab (script) :
+            # elle court-circuiterait le ciblage précis (régression mesurée sur le banc).
+            actif = onglet_fenetre_active(candidats)
+            if actif is not None:
+                page = actif
+                print("Onglet actif détecté (fenêtre Edge que tu regardes) :")
+                print(f"  {page.url[:88]}")
+            else:
+                # Repli : départage par le contenu — l'onglet qui contient des images
+                # de page est le chapitre ; « nouvel onglet », home, ntp n'en ont aucune.
+                gagnants = [pg for pg in candidats if score_pages(pg) > 0]
+                if len(gagnants) == 1:
+                    page = gagnants[0]
+                    print("Onglet choisi automatiquement (seul à contenir un chapitre) :")
+                    print(f"  {page.url[:88]}")
+                else:
+                    liste = gagnants if gagnants else candidats
+                    print("=" * 58)
+                    print("Plusieurs onglets candidats :")
+                    for i, pg in enumerate(liste, 1):
+                        print(f"  {i}) {pg.url[:88]}")
+                    try:
+                        rep = input("Lequel capturer ? (numéro, Entrée = 1) : ").strip()
+                        page = liste[int(rep) - 1] if rep.isdigit() and 1 <= int(rep) <= len(liste) else liste[0]
+                    except (EOFError, ValueError):
+                        page = liste[0]  # mode automatisé (stdin fermé) : premier candidat
         else:
             page = candidats[0]
         print(f"Onglet : {page.url[:80]}")
         page.bring_to_front()  # un onglet de fond est THROTTLE par le navigateur :
         # son chargement ralentit et la capture part dans le vide (mesuré : « Loading... »)
+
+        # MangaDex pagine par URL : si l'onglet est au MILIEU du chapitre
+        # (/chapter/<uuid>/<n>), revenir à la PAGE 1 — la capture part du début
+        # (mesuré 21/09 : capture lancée page 3 → pages 1-2 perdues).
+        u = page.url.split("?")[0].split("#")[0]
+        base, _, num_page = u.rpartition("/")
+        if "/chapter/" in base and num_page.isdigit() and int(num_page) > 1:
+            print(f"Repositionnement à la page 1 (l'onglet était page {num_page})...")
+            page.goto(base, wait_until="domcontentloaded", timeout=45000)
+            page.bring_to_front()
 
         # attendre que le lecteur ait chargé sa première page (<= 90 s)
         for _ in range(90):
