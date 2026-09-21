@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.81.0</title>
+<title>Manga Studio v1.82.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -503,7 +503,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.81.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.82.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1138,7 +1138,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.81.0";
+const VERSION = "1.82.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4591,7 +4591,7 @@ async function openChap(i){
     ouvrirVisionneuse(j.pages.map((pg, k) => ({ url: srcURL(pg.path), nom: "p. " + (k + 1) })), +f.dataset.page);
   };
   $("chapDetail").hidden = false;
-  CHAP_PAGES = j.pages.length; narrEstim();
+  CHAP_PAGES = j.pages.length; narrEstim(); reprendreVoix();
   refreshNarrs().catch(err => log("narrations : " + err.message, "e"));
   $("chapDetail").scrollIntoView({ behavior: "smooth", block: "start" });
   log("chapitre ouvert : " + c.dir + " (" + j.pages.length + " pages)");
@@ -4708,7 +4708,16 @@ function jouerApercu(){
   APERCU.play().catch(e => { if (e.name !== "AbortError") log("aperçu : " + e.message, "w"); });
 }
 $("btnVoixApercu").onclick = () => APERCU.paused ? jouerApercu() : APERCU.pause();
-$("narrVoice").addEventListener("change", () => { if (!APERCU.paused) jouerApercu(); });
+$("narrVoice").addEventListener("change", () => { if (!APERCU.paused) jouerApercu(); memoriserVoix(); });
+// v1.82.0 : la voix est memorisee PAR SERIE (etape 8 : « selon l'humeur et le manga ») et reprise a
+// l'ouverture de n'importe quel chapitre de cette serie.
+const serieOuverte = () => (CHAP_OPEN || "").split("/")[0];
+function memoriserVoix(){ const s = serieOuverte(); if (s) try { localStorage.setItem("manga_voix_" + s, $("narrVoice").value); } catch {} }
+function reprendreVoix(){
+  let v = null; try { v = localStorage.getItem("manga_voix_" + serieOuverte()); } catch {}
+  // sans voix memorisee : la voix PAR DEFAUT, pas celle du chapitre precedent (Fenrir passait d'OPM a Claymore)
+  $("narrVoice").value = v && VOIX.some(x => x[0] === v) ? v : VOIX[0][0];
+}
 let NARRS = [], NARR_POLL = null, CHAP_PAGES = 0;
 const fmtS = s => s >= 60 ? Math.floor(s / 60) + " min " + String(Math.round(s % 60)).padStart(2, "0") : Math.round(s) + " s";
 const LETTRES = "ABCDEFGH";
@@ -4741,6 +4750,8 @@ async function refreshNarrs(){
     return '<div class="narr-run"><b>' + (lbl[n.etat] || "") + " " + esc(n.tag) + "</b>"
       + '<span class="grow muted">' + info + "</span>"
       + (n.etat === "fini" && n.audio ? '<button class="btn sm" data-ecoute="' + i + '">▶ Écouter</button>' : "")
+      + (n.etat === "fini" && ["kimi", "gemini", "pixtral"].includes(n.engine)
+         ? '<button class="btn sm" data-revoix="' + i + '" title="même texte, lu par la voix choisie dans le menu Voix">🎙 Autre voix</button>' : "")
       + (n.etat !== "en cours" ? '<button class="btn sm danger" data-suppr-narr="' + i + '" title="supprimer cette narration">🗑</button>' : "")
       + "</div>";
   };
@@ -4755,6 +4766,20 @@ async function refreshNarrs(){
   if (!encours && NARR_POLL){ clearInterval(NARR_POLL); NARR_POLL = null; chargerCouts(); }
 }
 $("narrRuns").onclick = async e => {
+  const rv = e.target.closest("[data-revoix]");
+  if (rv){
+    const n = NARRS[+rv.dataset.revoix], voix = $("narrVoice").value; if (!n) return;
+    const nb = n.pages || CHAP_PAGES;
+    if (!confirm("Relire « " + n.tag + " » avec la voix " + voix + " ?\n\nLe texte est repris tel quel : pas de nouvelle "
+                 + "lecture des pages. Coût ≈ " + (nb * 0.011).toFixed(2) + " $ (voix seule, mesuré 0,011 $/page), ~1 min.")) return;
+    try {
+      const r = await api("/manga/narrate", { d: CHAP_OPEN, engine: n.engine, voice: voix, reuse: n.tag });
+      if (r.error) throw new Error(r.error);
+      log("autre voix : " + n.tag + " → " + r.tag + " (" + voix + ")"); memoriserVoix();
+      await refreshNarrs();
+    } catch (err){ log("autre voix : " + err.message, "e"); alert(err.message); }
+    return;
+  }
   const sup = e.target.closest("[data-suppr-narr]");
   if (sup){
     const n = NARRS[+sup.dataset.supprNarr]; if (!n) return;
@@ -4768,7 +4793,7 @@ $("narrRuns").onclick = async e => {
 $("btnNarrer").onclick = async () => {
   const body = { d: CHAP_OPEN, engine: $("narrEngine").value, voice: $("narrVoice").value, pages: $("narrPages").value.trim() };
   try {
-    const r = await api("/manga/narrate", body);
+    const r = await api("/manga/narrate", body); memoriserVoix();
     log("narration lancée : " + CHAP_OPEN + " → " + r.tag);
     await refreshNarrs();
   } catch (e){ log("narration : " + e.message, "e"); alert(e.message); }
