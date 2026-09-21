@@ -71,6 +71,22 @@ sources/<slug>/ch_<num>/
 5. La capture est **chapitre par chapitre, à la main de Quang** : pas de crawl automatique de
    séries ni de contournement de protections — c'est la ligne tenue depuis le début du chantier.
 
+## Lecteurs reconnus (v0.3.0, 21/09/2026)
+
+| Affichage | Détection | Avance | Extraction |
+|---|---|---|---|
+| **Page par page** (MangaDex) | document ≈ hauteur d'écran, aucun bloc défilant | flèche → ; si rien : **clic à droite, puis à gauche** (sens japonais, MANGA Plus) — le côté qui marche est gardé | `fetch` du blob / `requests` |
+| **Bande verticale dans la page** | document > 2,5 écrans | défilement de la fenêtre | idem |
+| **Bande verticale dans un BLOC** (MANGA Plus vertical) | plus grand élément `overflow:auto/scroll` > 2,5× sa hauteur | défilement de CE bloc | `fetch` interdit (CSP) → **canvas** = pleine résolution, sans l'écran |
+
+- Mesuré : BORUTO -TWO BLUE VORTEX- #001 (MANGA Plus vertical) **1 page → 52/52** en pleine
+  résolution ; OPM 301 (MangaDex) **19/19** et Claymore 1 (MANGA Plus) **62/62**, inchangés.
+- ⛔ **Capture de moins de 3 pages = ÉCHEC** (code 2, dossier retiré) : v0.2 déclarait
+  « terminée pages=1 » quand le lecteur n'avançait pas.
+- ⚠️ Avant v0.3.0, MANGA Plus était extrait par **capture d'écran** : taille d'affichage ET
+  **barres du lecteur incrustées** en haut et en bas des pages (vu par Quang). Le screenshot reste
+  le dernier recours, barres flottantes masquées pendant la prise. Claymore ch.1 date d'avant.
+
 ## Banc
 
 ```bash

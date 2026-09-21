@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.2.1"
+VERSION = "0.3.0"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -454,6 +454,31 @@ def capture(args) -> int:
             });
         }"""
 
+        CANVAS_JS = """(url) => {
+            const i = Array.from(document.images).find(x => x.src === url);
+            if (!i || !i.naturalWidth) return null;
+            const c = document.createElement('canvas');
+            c.width = i.naturalWidth; c.height = i.naturalHeight;
+            c.getContext('2d').drawImage(i, 0, 0);
+            return c.toDataURL('image/png').split(',')[1];
+        }"""
+        MASQUE_JS = """(masquer) => {
+            if (masquer) {
+                for (const el of document.querySelectorAll('body *')) {
+                    const pos = getComputedStyle(el).position;
+                    if ((pos === 'fixed' || pos === 'sticky') && !el.querySelector('img')) {
+                        el.setAttribute('data-mf-masque', el.style.visibility || '');
+                        el.style.visibility = 'hidden';
+                    }
+                }
+            } else {
+                for (const el of document.querySelectorAll('[data-mf-masque]')) {
+                    el.style.visibility = el.getAttribute('data-mf-masque');
+                    el.removeAttribute('data-mf-masque');
+                }
+            }
+        }"""
+
         def extraire_data(src: str) -> bytes:
             """Pleine résolution si possible (fetch page / requests), sinon SCREENSHOT de
             l'élément. Certains sites bloquent fetch(blob:) par CSP alors que l'image
@@ -463,7 +488,17 @@ def capture(args) -> int:
                 try:
                     return base64.b64decode(page.evaluate(FETCH_JS, src))
                 except Exception:
-                    pass  # CSP ou blob révoqué → screenshot
+                    pass  # CSP ou blob révoqué → canvas
+                # v0.3.0 : l'image AFFICHÉE redessinée dans un canvas = pleine résolution, sans
+                # rien de l'écran. Un blob: est de même origine, le canvas n'est pas « taché ».
+                # Avant : screenshot à la taille d'affichage (801 px au lieu de 1060) ET barres du
+                # lecteur MANGA Plus incrustées en haut et en bas de chaque page (vu par Quang 21/09).
+                try:
+                    b64 = page.evaluate(CANVAS_JS, src)
+                    if b64:
+                        return base64.b64decode(b64)
+                except Exception:
+                    pass  # canvas refusé → screenshot
             else:
                 try:
                     r = requests.get(src, headers={"User-Agent": UA, "Referer": page.url}, timeout=60)
@@ -478,7 +513,12 @@ def capture(args) -> int:
                 pass
             if el is None:
                 raise RuntimeError("élément introuvable pour le screenshot")
-            return el.screenshot()  # PNG à la taille d'affichage
+            # dernier recours : masquer les barres flottantes du lecteur le temps de la prise
+            page.evaluate(MASQUE_JS, True)
+            try:
+                return el.screenshot()  # PNG à la taille d'affichage
+            finally:
+                page.evaluate(MASQUE_JS, False)
 
         def collecter() -> None:
             """Détecte les images de page AFFICHÉES, les récupère et les ÉCRIT aussitôt."""
@@ -524,11 +564,33 @@ def capture(args) -> int:
         # (mesuré : 4 pages capturées sur 22 en scrollant dans le vide).
         h_doc = page.evaluate("() => document.documentElement.scrollHeight")
         h_ecran = page.evaluate("() => window.innerHeight")
-        mode_strip = h_doc > h_ecran * 2.5
+        # v0.3.0 : MANGA Plus en mode VERTICAL empile les 54 pages dans un BLOC qui défile,
+        # le document faisant la hauteur de l'écran (mesuré 21/09 21h, BORUTO #001 : doc=1273
+        # = écran → pris pour « page par page » → 1 seule page capturée, déclarée réussie).
+        # On cherche donc aussi le plus grand bloc défilant ; on le marque pour le faire défiler.
+        bloc = page.evaluate("""() => {
+            let best = null, bh = 0;
+            for (const el of document.querySelectorAll('*')) {
+                const oy = getComputedStyle(el).overflowY;
+                if (oy !== 'auto' && oy !== 'scroll') continue;
+                if (el.clientHeight < innerHeight * 0.5) continue;
+                if (el.scrollHeight > bh) { bh = el.scrollHeight; best = el; }
+            }
+            if (!best || best.scrollHeight <= best.clientHeight * 2.5) return null;
+            best.setAttribute('data-mf-defile', '1');
+            return [best.scrollHeight, best.clientHeight];
+        }""")
+        mode_strip = h_doc > h_ecran * 2.5 or bloc is not None
         print(f"Mode {'bande défilante' if mode_strip else 'page par page'} "
-              f"(doc {h_doc}px / écran {h_ecran}px)")
+              f"(doc {h_doc}px / écran {h_ecran}px" + (f" / bloc défilant {bloc[0]}px)" if bloc else ")"))
         log_evt("mode", "bande défilante" if mode_strip else "page par page",
-                doc=h_doc, ecran=h_ecran)
+                doc=h_doc, ecran=h_ecran, bloc=(bloc[0] if bloc else None))
+        # position et défilement : dans le bloc s'il existe, sinon dans la fenêtre
+        POS_JS = ("() => { const e = document.querySelector('[data-mf-defile]');"
+                  " return e ? [e.scrollTop, e.scrollHeight, e.clientHeight]"
+                  " : [window.scrollY, document.documentElement.scrollHeight, innerHeight]; }")
+        DEFILE_JS = ("() => { const e = document.querySelector('[data-mf-defile]');"
+                     " if (e) e.scrollBy(0, e.clientHeight * 0.7); else window.scrollBy(0, innerHeight * 0.7); }")
 
         # Fin de chapitre = l'URL change de CHAPITRE. ⚠ MangaDex pagine par URL
         # (/chapter/<id>/2, /3... — mesuré 21/09) : l'URL change à chaque PAGE.
@@ -555,25 +617,36 @@ def capture(args) -> int:
             return _chapitre_path(page.url.split("?")[0].split("#")[0]) != _chapitre_path(url_depart)
 
         if mode_strip:
-            hauteur_prec, stable = 0, 0
-            for _ in range(300):
+            pos0 = page.evaluate(POS_JS)
+            if getattr(args, "page_1", False) and pos0[0] > 0:
+                page.evaluate("() => { const e = document.querySelector('[data-mf-defile]');"
+                              " if (e) e.scrollTo(0, 0); else window.scrollTo(0, 0); }")
+                page.wait_for_timeout(1500)
+                log_evt("départ", "retour en haut du défilement (--page-1)")
+            elif pos0[0] > pos0[2] * 0.5:
+                notes.append("capture démarrée en cours de défilement (le début du chapitre "
+                             "n'est pas capturé ; --page-1 pour tout prendre)")
+                log_evt("départ", "en cours de défilement", position=pos0[0])
+            prec, stable = None, 0
+            for _ in range(400):
                 if chapitre_quitte():
                     notes.append("fin : le lecteur est passé au chapitre suivant")
                     log_evt("fin", "chapitre suivant atteint (bande défilante)")
                     break
                 collecter()
-                page.evaluate("window.scrollBy(0, window.innerHeight * 0.7)")
+                page.evaluate(DEFILE_JS)
                 page.wait_for_timeout(1200)
-                h = page.evaluate("() => document.documentElement.scrollHeight")
-                if h == hauteur_prec:
-                    stable += 1
+                pos = page.evaluate(POS_JS)
+                if prec is not None and pos[0] == prec[0] and pos[1] == prec[1]:
+                    stable += 1          # ni position ni hauteur ne bougent : bas atteint
                     if stable >= 4:
+                        collecter()
                         break
                 else:
                     stable = 0
-                    hauteur_prec = h
+                prec = pos
         else:
-            sterile, debut_pager, mode_clic = 0, time.time(), False
+            sterile, debut_pager, mode_clic, cote, cotes_essayes = 0, time.time(), False, 0.75, set()
             for _ in range(500):
                 if chapitre_quitte():
                     notes.append("fin : le lecteur est passé au chapitre suivant")
@@ -583,11 +656,20 @@ def capture(args) -> int:
                 n_avant = len(vues)
                 if not mode_clic and sterile >= 2:
                     # Les flèches ne font rien (MANGA Plus n'écoute pas le clavier,
-                    # mesuré 21/09) → navigation par CLIC à droite de l'écran.
-                    x, y = page.evaluate("() => [Math.round(innerWidth * 0.75), Math.round(innerHeight * 0.5)]")
-                    page.mouse.click(x, y)
+                    # mesuré 21/09) → navigation par CLIC.
                     mode_clic = True
                     log_evt("navigation", "bascule en clic (flèches sans effet)")
+                if mode_clic:
+                    # v0.3.0 : le sens dépend du SITE (Quang 21/09 : sur MANGA Plus, clic à
+                    # GAUCHE = avancer, sens japonais ; l'inverse de MangaDex). Droite d'abord ;
+                    # si rien ne vient, gauche. Le côté qui a donné une page est gardé.
+                    # (v0.2 ne cliquait qu'UNE fois puis revenait aux flèches.)
+                    if sterile >= 4 and 0.25 not in cotes_essayes:
+                        cote, sterile = 0.25, 2
+                        log_evt("navigation", "clic à gauche (sens de lecture japonais ?)")
+                    cotes_essayes.add(cote)
+                    x, y = page.evaluate(f"() => [Math.round(innerWidth * {cote}), Math.round(innerHeight * 0.5)]")
+                    page.mouse.click(x, y)
                 else:
                     page.keyboard.press("ArrowRight")
                 page.wait_for_timeout(1600)
@@ -628,6 +710,11 @@ def capture(args) -> int:
         # l'onglet capturé n'était pas un chapitre (page d'accueil, mauvais onglet).
         if not uniques:
             return echec_propre("ÉCHEC : aucune image détectée — le chapitre est-il affiché ?")
+        if len(uniques) < 3:
+            # v0.3.0 : BORUTO #001 (54 p.) sortait en « terminée pages=1 » — une capture
+            # tronquée ne doit jamais être présentée comme réussie.
+            return echec_propre(f"ÉCHEC : capture tronquée — {len(uniques)} page(s) seulement. "
+                                "Le lecteur n'a pas avancé : mode d'affichage non reconnu ?")
         if not any(im["h"] >= 800 for im in uniques):
             return echec_propre("ÉCHEC : aucune image de page (hauteur >= 800 px) — "
                                 "l'onglet capturé ne semble pas contenir de chapitre "
