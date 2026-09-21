@@ -1856,6 +1856,12 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
 > 21/09 22h54, rappelée par Quang) ; **(2) musique de fond DANS L'APP** (étape 13) : on/off, volume réglable à la
 > main avec une valeur par défaut ; **(3) la vidéo** (étape 5, toujours À DISCUTER avant de coder) : musique on/off
 > et sous-titres on/off choisis À LA GÉNÉRATION.
+> **(2-bis) Sous-titres KARAOKÉ** (Quang 22/09 00h08 : « on l'a déjà fait avec d'autres applications ») : le mot
+> prononcé s'allume. Déjà fait deux fois : **Lumen v2.3** (style « ✨ Karaoké TikTok », Whisper `word_timestamps`) et
+> **PromoClip** (`generateSubtitleASSFromWords` → ASS `{\k<cs>}` par mot, incrusté ffmpeg) → RÉCUPÉRER, ne pas
+> réinventer. Temps des mots : Whisper mot par mot sur le MP3 de chaque page (gateway, une fois par narration,
+> gardé dans `narration.json`) ; secours = répartition proportionnelle à la longueur des mots. Deux usages :
+> le **lecteur de l'app** (avant la vidéo) et la **vidéo** (option à la génération, comme les sous-titres simples).
 
 | ~~1~~ | ~~Personnages par EXEMPLES visuels~~ → **ÉCHEC mesuré** (v1.69, `--portraits`) | Raki et Zaki se ressemblent | — |
 | ~~1-bis~~ | ~~CONSENSUS « désaccord = prudence »~~ → **mesuré le 21/09 18h55, NON retenu** (`scripts/consensus_narration.py`, hors app) : K3 seul 1/2/1 (4) · K3+Gemini 1/0/2 (3) · Gemini×2 2/1/4 (7) · K3×2 0/1/1 (2). Aucun à 0/0/0 ; gains dans le bruit d'un si petit échantillon, et la FUSION crée ses propres erreurs (p4 « Raki près du cadavre » n'apparaît qu'après fusion). Doubler le coût (K3×2 ≈ 4,20 $/chapitre) pour ~2 erreurs de moins sur 60 pages : non. **Défaut maintenu = K3 seul** (~1 grave / 15 pages, toujours sur un cas ambigu « qui interpelle qui »). | — | — |
