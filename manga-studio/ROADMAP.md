@@ -1725,6 +1725,57 @@ détruit *et* ce qu'elle préserve (« les images déjà dessinées restent sur 
 
 ---
 
+## 4-ter. Lecture narrée — un chapitre raconté à voix haute *(21/09/2026, v1.66.0 → v1.67.0)*
+
+**Nouvel usage, demandé par Quang le 21/09** : regarder et écouter un chapitre de manga raconté comme une vidéo
+« manga recap » (pages qui défilent + voix off qui raconte), à usage personnel. Les pages viennent de
+`manga-fetch/` (capture chapitre par chapitre dans la fenêtre Edge dédiée, MangaDex, import) → `sources/`.
+
+⛔ **Assumé, ne pas rouvrir** : pas de recherche automatique multi-sites, pas de contournement de protections.
+⛔ `sources/` (pages ET narrations dérivées) est **gitignoré** : le dépôt App est public.
+
+### Chaîne (`scripts/narrate_chapter.py`, lancé par le proxy `POST /manga/narrate`)
+
+| Étape | Outil | Pourquoi celui-là (mesuré) |
+|---|---|---|
+| Vision, par lots de 4 pages + résumé glissant | **Kimi K3** (défaut) ou Pixtral | Sonde page 4 de Claymore : Pixtral lit un cadavre entouré de villageois comme « une explosion, des enfants qui fuient » ; K3 lit juste. |
+| Récit continu, page par page | DeepSeek V4 Flash | 0,003 $ par chapitre ; consigne « RACONTER, pas décrire l'écran ; paraphraser, jamais recopier une réplique » (reproche n°1 des forums aux recaps IA). |
+| Voix | Google Chirp 3 HD fr-FR (`/api/gcptts`) | 8 voix testées OK, ~1 s par page. Kokoro écarté : < 11 h de français à l'entraînement. |
+| Lecteur | `manga_studio.html` onglet 📚 Chapitres | Page plein écran + zoom lent + sous-titre + enchaînement auto, vitesse, clavier. |
+
+### Banc du 21/09 — Claymore ch.1, pages 1-20
+
+| | Kimi K3 | Pixtral |
+|---|---|---|
+| Coût | **0,363 $** (vision 0,24 · récit 0,003 · voix 0,12) | **0,077 $** (voix seule) |
+| Génération | 5 min 53 | 1 min 43 |
+| Audio produit | 3 min 53 | 2 min 27 |
+
+⇒ un chapitre complet de 62 pages ≈ **1,1 $ et ~18 min** avec K3 ; ≈ 0,25 $ et ~5 min avec Pixtral.
+Quatre narrations prêtes pour l'**écoute à l'aveugle** de Quang (même texte K3 en Charon / Kore / Fenrir,
++ Pixtral en Charon) : bouton 🎧 dans l'app, notes écrites dans `sources/<chap>/narration/notes.jsonl`.
+**🟠 Verdict qualité EN ATTENTE de son écoute (constaté v1.67.0)** — c'est lui qui tranche le moteur et la voix par défaut.
+
+### Constats du 21/09 (datés — à re-vérifier)
+
+- 🟠 **« La page 2 est une page de crédits » est FAUX pour une capture officielle** (constaté v1.67.0) :
+  sur MANGA Plus, les pages 2-3 de Claymore sont une double page couleur. La narration **reconnaît** les
+  crédits (`type`), elle n'écarte jamais une page par sa position.
+- 🟠 **Le gateway limite à 20 req/min par IP** (constaté v1.67.0) : la voix d'un chapitre (1 appel par page)
+  prenait des 429. `narrate_chapter.py` plafonne à 18/min et respecte `retry_after`. Le frein est **par
+  processus** : deux narrations en parallèle peuvent encore le dépasser (le 429 est alors absorbé, en plus lent).
+- 🟠 **Le proxy ne connaît que les narrations qu'il a lancées** : après un redémarrage, un run vivant est
+  reconnu par la fraîcheur de son `progress.json` (< 3 min), sinon il serait affiché « échec ».
+
+### Deux défauts de lecteur trouvés par le banc (corrigés v1.67.0)
+1. Deux « suivant » rapides **arrêtaient la narration** : `play()` interrompu → `AbortError` pris pour un refus.
+2. Après un changement de vitesse, le menu gardait le focus et **avalait espace / flèches**.
+
+### Reste à faire
+- Écoute à l'aveugle par Quang → moteur et voix par défaut.
+- Découpage en **cases** (YOLO, déjà en place pour l'ingestion) pour un zoom case par case au lieu d'un zoom
+  de page — seulement si l'écoute montre que le zoom de page ne suffit pas.
+
 ## 4-bis. L'essai utilisateur du 28/07 — 10 puis 12 cases, pilotées comme Quang
 
 > Demande de Quang : *« fais l'essai toi-même, en pilotant comme si tu étais moi, pour voir si au
@@ -1848,6 +1899,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 
 | Date | Événement |
 |---|---|
+| 2026-09-21 | **Lecture narrée** (v1.66.0 → v1.67.0). Onglet 📚 Chapitres (consomme `sources/` de manga-fetch), narration K3/Pixtral → récit DeepSeek → voix Chirp 3 HD, lecteur plein écran, écoute à l'aveugle. Banc live : liste 30/30, lecteur 30/30, Narrer + progression OK, aveugle 3/3, 360 px OK. Coût mesuré 20 pages : K3 0,363 $, Pixtral 0,077 $. Détail § 4-ter. |
 | 2026-07-28 (soir) | **✅ Proxy redémarré, la suppression est ACTIVE : banc 8/8.** Et une leçon payée en coupant un service : j'avais vérifié la **logique** de lecture du secret (en `python -c`, où `io` est importé) mais **jamais le démarrage réel du proxy** — qui, lui, n'importe pas `io`. `NameError: name 'io' is not defined`, proxy **down**, découvert seulement après la coupure. ⇒ **Tester l'effet, pas la formulation** : la seule vérification qui vaut pour un service, c'est de le LANCER. Corrigé (`open()` natif, aucune dépendance), démarrage vérifié **avant** de le remettre en agent. ComfyUI n'a pas bougé — il est indépendant du proxy (parents différents, vérifié avant de couper). |
 | 2026-07-28 (soir) | **Supprimer un projet supprime enfin ses images — et le disque a rendu 1 Go.** Quang : *« la base conserve les images même si je supprime des projets [...] le répertoire manga est vraiment contaminé de vieilles données, ce n'est pas du tout acceptable »*. Le comportement était **assumé dans le code** (« effacer une fiche ne doit jamais effacer des images ») ; son avis le renverse, et c'est le sien qui compte : *un projet supprimé qu'on retrouve en fouillant le disque n'est pas supprimé*. `delete_manga_project` balaie désormais les **deux** dossiers — les images rangées **et l'atelier de ComfyUI**, invisible depuis l'app et jamais nettoyé — et **rapporte** le nombre de fichiers effacés (une suppression silencieuse ne se vérifie pas). Gardes : un slug vide ou suspect n'efface **rien** (il viserait la racine), et le contrôle anti-traversée est refait à chaque dossier. État mesuré : **1051 Mo** à nettoyer — **700 Mo d'atelier**, 165 Mo de mes bancs, 187 Mo d'orphelins. `scripts/menage_sorties.py` (dry-run par défaut, projets vivants **intouchables dans les deux dossiers**) a tout rendu. Banc `test_suppression_projet.py` : le cas qui compte n'est pas « ça efface » mais **« ça n'efface QUE ça »** — le projet voisin est vérifié intact après coup. |
 | 2026-07-28 (soir) | 🔴 **Le `WORKER_SECRET` était ENCORE en dur dans le proxy** — trouvé en lisant le fichier pour tout autre chose : `SECRET = os.environ.get("WORKER_SECRET", "<la valeur>")`. **C'est LA source des trois rechutes** : la valeur vivait dans un fichier qu'on copie, qu'on sauvegarde en `.bak` et dont on versionne les diffs. Elle se lit désormais dans l'environnement ou dans `ComfyUI/.worker_secret`, et le proxy **s'arrête en le disant** si elle manque. ⚠️ **Et le diff qui la retire la contenait** — dans sa ligne *supprimée*. Même piège qu'en juillet, par l'autre bout : masquée, avec un en-tête qui prévient que le diff n'est plus applicable tel quel. |

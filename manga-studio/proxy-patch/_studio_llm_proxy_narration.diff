@@ -1,0 +1,170 @@
+--- _studio_llm_proxy.py
++++ _studio_llm_proxy.py
+@@ -7133,6 +7133,123 @@
+     return {"items": out, "root": root}
+ 
+ 
++# --- Narration des chapitres (v1.67.0) -----------------------------------------------
++# Le proxy ne reimplemente rien : il lance scripts/narrate_chapter.py (venv kohya) EN FOND,
++# et lit ce que le script ecrit sous sources/<chap>/narration/<tag>/ (progress.json puis
++# narration.json + p###.mp3). Tout reste sous sources/ : gitignore, jamais dans le depot.
++MANGA_NARRATE = os.path.join(MANGA_ROOT, "scripts", "narrate_chapter.py")
++_NARR_JOBS = {}                       # (chapitre, tag) -> Popen
++_RE_TAG = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
++
++
++def _narr_dir(d, tag=""):
++    base = _manga_src_safe(d)
++    if not base or not os.path.isfile(os.path.join(base, "manifest.json")):
++        return None
++    if tag and not _RE_TAG.match(tag):
++        return None
++    return os.path.join(base, "narration", tag) if tag else os.path.join(base, "narration")
++
++
++def _narr_job_vivant(d, tag):
++    p = _NARR_JOBS.get((d, tag))
++    return bool(p and p.poll() is None)
++
++
++def manga_narrations(d):
++    nd = _narr_dir(d)
++    if nd is None:
++        return None
++    out = []
++    if os.path.isdir(nd):
++        for tag in sorted(os.listdir(nd)):
++            td = os.path.join(nd, tag)
++            if not os.path.isdir(td) or not _RE_TAG.match(tag):
++                continue
++            it = {"tag": tag, "etat": "vide", "running": _narr_job_vivant(d, tag)}
++            pp = os.path.join(td, "progress.json")
++            if os.path.isfile(pp):
++                try:
++                    with open(pp, encoding="utf-8") as f: it["progress"] = json.load(f)
++                except Exception: pass
++            npth = os.path.join(td, "narration.json")
++            if os.path.isfile(npth):
++                try:
++                    with open(npth, encoding="utf-8") as f: n = json.load(f)
++                    it.update(etat="fini", engine=n.get("engine"), model=n.get("model"), voice=n.get("voice"),
++                              titre=n.get("titre"), created_at=n.get("created_at"), stats=n.get("stats"),
++                              pages=len(n.get("pages") or []),
++                              audio=sum(1 for p in (n.get("pages") or []) if p.get("audio")))
++                except Exception as e:
++                    it.update(etat="illisible", err=str(e)[:120])
++            # Un run lance AVANT un redemarrage du proxy n'est plus dans _NARR_JOBS : on le juge aussi
++            # vivant si sa progression a bouge il y a moins de 3 min (un lot vision K3 = ~60 s).
++            if not it["running"] and it["etat"] != "fini" and it.get("progress", {}).get("etape") != "fini":
++                it["running"] = time.time() - float(it.get("progress", {}).get("t") or 0) < 180
++            if it["running"]:
++                it["etat"] = "en cours"
++            elif it["etat"] != "fini" and "progress" in it:
++                it["etat"] = "echec"      # un progres sans resultat et sans process vivant = run mort
++                lg = os.path.join(td, "run.log")
++                if os.path.isfile(lg):
++                    with open(lg, encoding="utf-8", errors="replace") as f: it["err"] = f.read()[-400:]
++            out.append(it)
++    return {"items": out}
++
++
++def manga_narration(d, tag):
++    td = _narr_dir(d, tag)
++    if not td or not os.path.isfile(os.path.join(td, "narration.json")):
++        return None
++    with open(os.path.join(td, "narration.json"), encoding="utf-8") as f:
++        n = json.load(f)
++    n["base"] = d.strip("/") + "/narration/" + tag
++    return n
++
++
++def manga_narrate(d, engine, voice, pages="", reuse=""):
++    if engine not in ("kimi", "pixtral"):
++        return {"error": "moteur inconnu"}
++    if not re.match(r"^[A-Z][a-z]{2,15}$", voice or ""):
++        return {"error": "voix invalide"}
++    if pages and not re.match(r"^\d{1,4}(-\d{1,4})?$", pages):
++        return {"error": "plage de pages invalide"}
++    tag = "%s-%s" % (engine, voice.lower())
++    if reuse and not _RE_TAG.match(reuse):
++        return {"error": "reuse invalide"}
++    td = _narr_dir(d, tag)
++    if td is None:
++        return {"error": "chapitre introuvable"}
++    if not os.path.isfile(MANGA_PY) or not os.path.isfile(MANGA_NARRATE):
++        return {"error": "venv kohya ou narrate_chapter.py introuvable"}
++    if _narr_job_vivant(d, tag):
++        return {"error": "une narration %s tourne deja sur ce chapitre" % tag, "tag": tag}
++    os.makedirs(td, exist_ok=True)
++    for f in ("progress.json",):                 # un vieux progres ferait croire a un run en cours
++        try: os.remove(os.path.join(td, f))
++        except Exception: pass
++    cmd = [MANGA_PY, MANGA_NARRATE, d, "--engine", engine, "--voice", voice, "--tag", tag]
++    if pages: cmd += ["--pages", pages]
++    if reuse: cmd += ["--reuse-vision", reuse]
++    lg = open(os.path.join(td, "run.log"), "w", encoding="utf-8")
++    _NARR_JOBS[(d, tag)] = subprocess.Popen(cmd, stdout=lg, stderr=lg, cwd=os.path.dirname(MANGA_NARRATE),
++                                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
++    return {"ok": True, "tag": tag}
++
++
++def manga_narration_note(d, note):
++    nd = _narr_dir(d)
++    if nd is None or not isinstance(note, dict):
++        return {"error": "note invalide"}
++    ligne = json.dumps(dict(note, t=time.strftime("%Y-%m-%dT%H:%M:%S")), ensure_ascii=False)
++    if len(ligne) > 4000:
++        return {"error": "note trop longue"}
++    os.makedirs(nd, exist_ok=True)
++    with open(os.path.join(nd, "notes.jsonl"), "a", encoding="utf-8") as f:
++        f.write(ligne + "\n")
++    return {"ok": True}
++
++
+ def manga_delete(paths):
+     """Supprime des images de la galerie manga. Rien d'autre, nulle part ailleurs.
+ 
+@@ -7349,11 +7466,13 @@
+         # Sert une image du dossier du projet manga (jamais celui de Generate Studio).
+         # sources=True : une page de chapitre sous manga-studio/sources/ (v1.66.0).
+         full = _manga_src_safe(rel) if sources else _manga_safe(rel)
++        if sources and (not full or os.path.splitext(full)[1].lower() not in _IMG_EXT + (".mp3",)):
++            self._json(404, {"error": "not found"}); return      # sources/ : images et audio SEULEMENT
+         if not full or not os.path.isfile(full):
+             self._json(404, {"error": "not found"}); return
+         ext = os.path.splitext(full)[1].lower()
+         ct = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+-              ".webp": "image/webp"}.get(ext, "application/octet-stream")
++              ".webp": "image/webp", ".mp3": "audio/mpeg"}.get(ext, "application/octet-stream")
+         try:
+             with open(full, "rb") as f: data = f.read()
+             self.send_response(200); self._cors()
+@@ -7574,6 +7693,15 @@
+             _r = manga_source_pages(_d) if _d else None
+             if _r is None: self._json(404, {"error": "chapitre introuvable"})
+             else: self._json(200, _r)
++        elif self.path.split("?", 1)[0] == "/manga/narrations":
++            _r = manga_narrations((parse_qs(urlparse(self.path).query).get("d") or [""])[0])
++            if _r is None: self._json(404, {"error": "chapitre introuvable"})
++            else: self._json(200, _r)
++        elif self.path.split("?", 1)[0] == "/manga/narration":
++            _q = parse_qs(urlparse(self.path).query)
++            _r = manga_narration((_q.get("d") or [""])[0], (_q.get("tag") or [""])[0])
++            if _r is None: self._json(404, {"error": "narration introuvable"})
++            else: self._json(200, _r)
+         elif self.path.split("?", 1)[0] == "/manga/source_file":
+             self.serve_manga_file((parse_qs(urlparse(self.path).query).get("p") or [""])[0], sources=True)
+         elif self.path.split("?", 1)[0] == "/manga/file":
+@@ -7958,6 +8086,12 @@
+                     self._json(200, studiodb.upsert_manga_char(data.get("item") or data))
+             elif self.path == "/manga/files":
+                 self._json(200, manga_delete(data.get("delete")))
++            elif self.path == "/manga/narrate":
++                self._json(200, manga_narrate(data.get("d") or "", data.get("engine") or "",
++                                              data.get("voice") or "", str(data.get("pages") or ""),
++                                              data.get("reuse") or ""))
++            elif self.path == "/manga/narration_note":
++                self._json(200, manga_narration_note(data.get("d") or "", data.get("note")))
+             elif self.path == "/manga/ingest":
+                 self._json(200, manga_ingest(data.get("image") or "",
+                                              data.get("filename") or "",

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.66.0</title>
+<title>Manga Studio v1.67.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -296,6 +296,28 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .chap-item small{display:block;opacity:.75;line-height:1.35;margin-top:2px}
 .chap-pages img{aspect-ratio:2/3;object-fit:contain;background:#0003}
 #chapMeta a{color:var(--accent2)}
+/* ---------- Narration + lecteur (v1.67.0) ---------- */
+.narr-box{border:1px solid var(--line);border-radius:8px;padding:10px;margin:0 0 10px;background:var(--panel2)}
+.narr-runs{display:grid;gap:6px;margin-top:10px}
+.narr-run{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+.narr-run b{min-width:150px}.narr-run .grow{flex:1;min-width:160px}
+.narr-pbar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-top:4px}
+.narr-pbar>div{height:100%;background:var(--accent2);transition:width .4s}
+.lecteur{position:fixed;inset:0;z-index:80;background:#050608;display:flex;flex-direction:column;color:var(--txt)}
+.lecteur[hidden]{display:none}
+.lec-top{display:flex;gap:10px;align-items:center;padding:8px 12px}.lec-top b{flex:none}.lec-top .muted{flex:1}
+.lec-scene{flex:1;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.lec-scene img{max-width:100%;max-height:100%;object-fit:contain}
+.lec-scene img.kb{animation:lecKb var(--kb,8s) ease-out forwards}
+.lec-scene img.kb2{animation:lecKb2 var(--kb,8s) ease-out forwards}
+@keyframes lecKb{from{transform:scale(1)}to{transform:scale(1.07) translateY(-1.5%)}}
+@keyframes lecKb2{from{transform:scale(1.07) translateY(1.5%)}to{transform:scale(1)}}
+.lec-sous{min-height:3.2em;margin:0;padding:8px 16px;text-align:center;font-size:17px;line-height:1.45;background:#000a}
+.lec-bar{height:4px;background:#222}.lec-bar>div{height:100%;width:0;background:var(--accent)}
+.lec-ctl{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;padding:10px}
+.lec-chk{display:flex;gap:4px;align-items:center;width:auto}.lec-chk input{width:auto}
+.lec-note .btn.sel{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (max-width:640px){.lec-sous{font-size:15px}.narr-run b{min-width:0}}
 .grid-img .pick{position:absolute;top:6px;left:6px;width:26px;height:26px;margin:0;
   cursor:pointer;accent-color:var(--accent2);z-index:2}
 .etape{margin:8px 0 0;padding:8px 10px;border-radius:8px;font-size:13px;
@@ -434,7 +456,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.66.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.67.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -772,9 +794,44 @@ body.epure .aide{display:none}
       <button class="btn sm" id="btnChapClose">Fermer</button>
     </div>
     <p class="muted aide" id="chapMeta" style="margin:6px 0 8px"></p>
+    <!-- NARRATION (v1.67.0) : lance scripts/narrate_chapter.py via le proxy, puis ecoute. -->
+    <div class="narr-box">
+      <div class="row">
+        <div class="grow"><label>Moteur de lecture</label><select id="narrEngine">
+          <option value="kimi">Kimi K3 — comprend mieux (~0,02 $/page)</option>
+          <option value="pixtral">Pixtral — gratuit, se trompe plus souvent</option></select></div>
+        <div class="grow"><label>Voix</label><select id="narrVoice"></select></div>
+        <div style="width:110px"><label>Pages</label><input id="narrPages" placeholder="toutes" title="ex. 1-20 ; vide = tout le chapitre"></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn pri" id="btnNarrer">🎙 Narrer ce chapitre</button>
+        <button class="btn" id="btnAveugle" disabled title="au moins 2 narrations terminées">🎧 Écoute à l'aveugle</button>
+        <span class="muted" id="narrEstim"></span>
+      </div>
+      <div id="narrRuns" class="narr-runs"></div>
+    </div>
     <div id="chapPages" class="grid-img chap-pages"></div>
   </div>
 </section>
+
+<!-- LECTEUR DE NARRATION (v1.67.0) : plein ecran, page + voix + sous-titre -->
+<div id="lecteur" class="lecteur" hidden>
+  <div class="lec-top"><b id="lecTitre"></b><span class="muted" id="lecInfo"></span>
+    <button class="btn sm" id="lecFermer">✕ Fermer</button></div>
+  <div class="lec-scene"><img id="lecImg" alt=""></div>
+  <p class="lec-sous" id="lecSous"></p>
+  <div class="lec-bar"><div id="lecProg"></div></div>
+  <div class="lec-ctl">
+    <button class="btn" id="lecPrev" title="page précédente (←)">⏮</button>
+    <button class="btn pri" id="lecPlay" title="lecture / pause (espace)">⏸</button>
+    <button class="btn" id="lecNext" title="page suivante (→)">⏭</button>
+    <select id="lecVit" style="width:auto"><option value="1">1×</option><option value="1.15" selected>1,15×</option><option value="1.3">1,3×</option><option value="1.5">1,5×</option></select>
+    <label class="lec-chk"><input type="checkbox" id="lecSousOn" checked> sous-titres</label>
+    <span id="lecNote" class="lec-note" hidden>Ta note :
+      <button class="btn sm" data-note="1">1</button><button class="btn sm" data-note="2">2</button><button class="btn sm" data-note="3">3</button><button class="btn sm" data-note="4">4</button><button class="btn sm" data-note="5">5</button></span>
+  </div>
+  <audio id="lecAudio" preload="auto"></audio>
+</div>
 
 <!-- ============ GALERIE ============ -->
 <!-- ============ PERSONNAGES ============ -->
@@ -966,7 +1023,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.66.0";
+const VERSION = "1.67.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4282,6 +4339,8 @@ async function openChap(i){
     + '<figcaption>p. ' + (k + 1) + (p.w ? ' · ' + p.w + '×' + p.h : "") + '</figcaption></figure>').join("");
   $("chapPages").onclick = e => { const f = e.target.closest("figure"); if (f) window.open(srcURL(j.pages[+f.dataset.page].path), "_blank"); };
   $("chapDetail").hidden = false;
+  CHAP_PAGES = j.pages.length; narrEstim();
+  refreshNarrs().catch(err => log("narrations : " + err.message, "e"));
   $("chapDetail").scrollIntoView({ behavior: "smooth", block: "start" });
   log("chapitre ouvert : " + c.dir + " (" + j.pages.length + " pages)");
 }
@@ -4289,6 +4348,181 @@ $("chapList").onclick = e => { const b = e.target.closest("[data-chap]"); if (b)
 $("btnChapRefresh").onclick = () => refreshChaps().catch(err => log("chapitres : " + err.message, "e"));
 $("btnChapClose").onclick = () => { $("chapDetail").hidden = true; CHAP_OPEN = null;
   document.querySelectorAll("#chapList .chap-item").forEach(b => b.classList.remove("sel")); };
+
+/* =====================================================================
+   NARRATION (v1.67.0) -- scripts/narrate_chapter.py via le proxy + lecteur
+   ===================================================================== */
+const VOIX = [["Charon","Charon — homme, grave"],["Fenrir","Fenrir — homme"],["Orus","Orus — homme"],
+  ["Puck","Puck — homme, vif"],["Algenib","Algenib — homme"],["Kore","Kore — femme"],["Aoede","Aoede — femme"],["Leda","Leda — femme"]];
+$("narrVoice").innerHTML = VOIX.map(([v, l]) => '<option value="' + v + '">' + l + "</option>").join("");
+let NARRS = [], NARR_POLL = null, CHAP_PAGES = 0;
+const fmtS = s => s >= 60 ? Math.floor(s / 60) + " min " + String(Math.round(s % 60)).padStart(2, "0") : Math.round(s) + " s";
+const LETTRES = "ABCDEFGH";
+function narrEstim(){
+  const m = /^(\d+)(?:-(\d+))?$/.exec($("narrPages").value.trim());
+  const n = m ? (+(m[2] || m[1]) - +m[1] + 1) : CHAP_PAGES;
+  const k = $("narrEngine").value === "kimi";
+  // Estimations = MESURES du banc du 21/09 (Claymore ch.1, 20 pages, vision + recit + voix) :
+  // K3 0,363 $ en 353 s -> 0,018 $ et ~18 s par page ; Pixtral 0,077 $ en 103 s -> 0,004 $ et ~5 s.
+  $("narrEstim").textContent = n ? "≈ " + n + " pages · ~" + (n * (k ? 0.018 : 0.004)).toFixed(2) + " $"
+    + (k ? "" : " (voix seule, lecture gratuite)") + " · ~" + fmtS(n * (k ? 18 : 5)) : "";
+}
+["narrEngine", "narrPages"].forEach(id => $(id).addEventListener("input", narrEstim));
+async function refreshNarrs(){
+  if (!CHAP_OPEN) return;
+  const j = await api("/manga/narrations?d=" + encodeURIComponent(CHAP_OPEN));
+  NARRS = j.items || [];
+  const lbl = { fini: "✅", "en cours": "⏳", echec: "❌", vide: "…", illisible: "⚠" };
+  $("narrRuns").innerHTML = NARRS.map((n, i) => {
+    const st = n.stats || {}, pr = n.progress || {};
+    const pct = n.etat === "en cours" && pr.total ? Math.round(100 * pr.fait / pr.total) : 0;
+    const etape = { vision: "lecture des pages", recit: "écriture du récit", voix: "synthèse vocale" }[pr.etape] || pr.etape || "démarrage";
+    let info;
+    if (n.etat === "fini") info = n.pages + " pages · " + (st.cout_total != null ? st.cout_total.toFixed(3) + " $ · " : "")
+      + "généré en " + fmtS(st.total_s || 0) + (n.titre ? " · « " + esc(n.titre) + " »" : "");
+    else if (n.etat === "en cours") info = etape + " — " + (pr.fait || 0) + "/" + (pr.total || "?")
+      + '<div class="narr-pbar"><div style="width:' + pct + '%"></div></div>';
+    else if (n.etat === "echec") info = "échec — " + esc((n.err || "").split("\n").filter(Boolean).slice(-1)[0] || "voir run.log");
+    else info = esc(n.etat);
+    return '<div class="narr-run"><b>' + (lbl[n.etat] || "") + " " + esc(n.tag) + "</b>"
+      + '<span class="grow muted">' + info + "</span>"
+      + (n.etat === "fini" && n.audio ? '<button class="btn sm" data-ecoute="' + i + '">▶ Écouter</button>' : "")
+      + "</div>";
+  }).join("") || '<p class="muted aide" style="margin:0">Aucune narration pour ce chapitre.</p>';
+  $("btnAveugle").disabled = groupeAveugle().length < 2;
+  const encours = NARRS.some(n => n.etat === "en cours");
+  if (encours && !NARR_POLL) NARR_POLL = setInterval(() => refreshNarrs().catch(e => log("narrations : " + e.message, "e")), 3000);
+  if (!encours && NARR_POLL){ clearInterval(NARR_POLL); NARR_POLL = null; }
+}
+$("narrRuns").onclick = e => {
+  const b = e.target.closest("[data-ecoute]");
+  if (b) ouvrirLecteur([NARRS[+b.dataset.ecoute].tag]).catch(err => log("lecteur : " + err.message, "e"));
+};
+$("btnNarrer").onclick = async () => {
+  const body = { d: CHAP_OPEN, engine: $("narrEngine").value, voice: $("narrVoice").value, pages: $("narrPages").value.trim() };
+  try {
+    const r = await api("/manga/narrate", body);
+    log("narration lancée : " + CHAP_OPEN + " → " + r.tag);
+    await refreshNarrs();
+  } catch (e){ log("narration : " + e.message, "e"); alert(e.message); }
+};
+
+/* ----- Lecteur : une file de narrations (1 = ecoute normale ; N = ecoute a l'aveugle) ----- */
+const LEC = { file: [], iFile: 0, n: null, i: 0, playing: true, timer: null, aveugle: false, notes: {} };
+async function ouvrirLecteur(tags, aveugle){
+  LEC.file = tags; LEC.iFile = 0; LEC.aveugle = !!aveugle; LEC.notes = {};
+  $("lecteur").hidden = false; document.body.style.overflow = "hidden";
+  $("lecPlay").focus();                  // le clavier reste DANS le lecteur, pas sur un bouton de la page
+  await chargerNarr();
+}
+async function chargerNarr(){
+  const tag = LEC.file[LEC.iFile];
+  LEC.n = await api("/manga/narration?d=" + encodeURIComponent(CHAP_OPEN) + "&tag=" + encodeURIComponent(tag));
+  LEC.n.pages = LEC.n.pages.filter(p => p.type === "histoire" || p.audio);   // credits / pubs : sautes
+  LEC.i = 0; LEC.playing = true;
+  $("lecTitre").textContent = LEC.aveugle ? "Version " + LETTRES[LEC.iFile] + " / " + LEC.file.length : tag;
+  $("lecNote").hidden = !LEC.aveugle;
+  document.querySelectorAll("#lecNote [data-note]").forEach(b => b.classList.remove("sel"));
+  log("lecteur : " + (LEC.aveugle ? "aveugle " + LETTRES[LEC.iFile] : tag) + " (" + LEC.n.pages.length + " pages)");
+  montrerPage();
+}
+function montrerPage(){
+  clearTimeout(LEC.timer);
+  const n = LEC.n, p = n.pages[LEC.i], a = $("lecAudio"), img = $("lecImg");
+  if (!p){ finNarr(); return; }
+  img.classList.remove("kb", "kb2"); void img.offsetWidth;          // relance l'animation de zoom
+  img.src = srcURL(CHAP_OPEN + "/" + p.file);
+  img.style.setProperty("--kb", Math.max(4, (p.dur || 3) / (+$("lecVit").value) + 1) + "s");
+  img.classList.add(LEC.i % 2 ? "kb2" : "kb");
+  $("lecSous").textContent = $("lecSousOn").checked ? (p.narration || "") : "";
+  $("lecInfo").textContent = (LEC.aveugle ? "" : (n.title || "") + " ch. " + (n.chapter || "") + " · ")
+    + "page " + p.page + " (" + (LEC.i + 1) + "/" + n.pages.length + ")";
+  $("lecProg").style.width = (100 * (LEC.i + 1) / n.pages.length) + "%";
+  $("lecPlay").textContent = LEC.playing ? "⏸" : "▶";
+  const suivant = n.pages[LEC.i + 1];
+  if (suivant) (new Image()).src = srcURL(CHAP_OPEN + "/" + suivant.file);        // prechargement
+  if (p.audio){
+    a.src = srcURL(n.base + "/" + p.audio); a.playbackRate = +$("lecVit").value;
+    // Une navigation rapide change la source pendant play() : le navigateur l'annule (AbortError).
+    // Ce n'est PAS un refus de lecture -> on ne met pas en pause (bug trouve au banc v1.67.0 :
+    // deux « suivant » rapides arretaient la narration). Seul NotAllowedError (autoplay) pause.
+    if (LEC.playing) a.play().catch(err => {
+      if (err.name === "AbortError") return;
+      LEC.playing = false; $("lecPlay").textContent = "▶"; log("audio : " + err.message, "w"); });
+  } else {
+    a.removeAttribute("src");
+    if (LEC.playing) LEC.timer = setTimeout(pageSuivante, 2500);                   // page muette : 2,5 s
+  }
+}
+function pageSuivante(){ if (LEC.i < LEC.n.pages.length - 1){ LEC.i++; montrerPage(); } else finNarr(); }
+function finNarr(){
+  $("lecAudio").pause(); clearTimeout(LEC.timer);
+  const tag = LEC.file[LEC.iFile];
+  if (LEC.aveugle && !LEC.notes[tag]){
+    $("lecSous").textContent = "Fin de la version " + LETTRES[LEC.iFile] + " — note-la de 1 à 5 pour continuer.";
+    return;
+  }
+  if (LEC.aveugle && LEC.iFile < LEC.file.length - 1){
+    LEC.iFile++; chargerNarr().catch(e => log("lecteur : " + e.message, "e")); return;
+  }
+  if (LEC.aveugle){
+    $("lecSous").innerHTML = "<b>Résultat de l'écoute à l'aveugle</b><br>" + LEC.file.map((t, k) =>
+      LETTRES[k] + " = " + esc(t) + " → " + LEC.notes[t] + "/5").join("<br>");
+    return;
+  }
+  $("lecSous").textContent = "— Fin du chapitre —"; LEC.playing = false; $("lecPlay").textContent = "▶";
+}
+$("lecAudio").onended = () => { if (LEC.playing) LEC.timer = setTimeout(pageSuivante, 450); };
+$("lecPlay").onclick = () => {
+  LEC.playing = !LEC.playing; $("lecPlay").textContent = LEC.playing ? "⏸" : "▶";
+  const a = $("lecAudio");
+  if (LEC.playing){ if (a.getAttribute("src") && !a.ended) a.play().catch(() => {}); else pageSuivante(); }
+  else { a.pause(); clearTimeout(LEC.timer); }
+};
+$("lecNext").onclick = () => pageSuivante();
+$("lecPrev").onclick = () => { if (LEC.i > 0){ LEC.i--; montrerPage(); } };
+$("lecVit").onchange = () => { $("lecAudio").playbackRate = +$("lecVit").value; $("lecVit").blur(); };
+$("lecSousOn").onchange = () => {
+  const p = LEC.n && LEC.n.pages[LEC.i];
+  $("lecSous").textContent = $("lecSousOn").checked && p ? (p.narration || "") : "";
+  $("lecSousOn").blur();
+};
+$("lecFermer").onclick = () => {
+  $("lecAudio").pause(); clearTimeout(LEC.timer); $("lecteur").hidden = true; document.body.style.overflow = "";
+};
+document.addEventListener("keydown", e => {
+  // Dans le lecteur, les touches pilotent TOUJOURS la lecture : un menu (vitesse) ou une case
+  // (sous-titres) qui garde le focus ne doit pas avaler espace / fleches (constate au banc v1.67.0).
+  if ($("lecteur").hidden || e.target.tagName === "TEXTAREA"
+      || (e.target.tagName === "INPUT" && e.target.type !== "checkbox")) return;
+  if (/^(Arrow|Escape| )/.test(e.key) && e.target.tagName === "SELECT") e.target.blur();
+  if (e.key === " "){ e.preventDefault(); $("lecPlay").click(); }
+  else if (e.key === "ArrowRight"){ e.preventDefault(); $("lecNext").click(); }
+  else if (e.key === "ArrowLeft"){ e.preventDefault(); $("lecPrev").click(); }
+  else if (e.key === "Escape") $("lecFermer").click();
+});
+$("lecNote").onclick = async e => {
+  const b = e.target.closest("[data-note]"); if (!b) return;
+  const tag = LEC.file[LEC.iFile], note = +b.dataset.note;
+  const fini = /note-la/.test($("lecSous").textContent);
+  LEC.notes[tag] = note;
+  document.querySelectorAll("#lecNote [data-note]").forEach(x => x.classList.toggle("sel", x === b));
+  try { await api("/manga/narration_note", { d: CHAP_OPEN, note: { banc: "aveugle", tag, version: LETTRES[LEC.iFile], note, ordre: LEC.file } }); }
+  catch (err){ log("note : " + err.message, "e"); }
+  if (fini) finNarr();
+};
+// Une ecoute a l'aveugle ne compare que des narrations des MEMES pages : melanger un essai de
+// 3 pages avec un chapitre de 20 fausserait la note (l'une serait reconnaissable a sa longueur).
+function groupeAveugle(){
+  const ok = NARRS.filter(n => n.etat === "fini" && n.audio), par = {};
+  ok.forEach(n => (par[n.pages] = par[n.pages] || []).push(n));
+  return Object.values(par).sort((a, b) => b.length - a.length || b[0].pages - a[0].pages)[0] || [];
+}
+$("btnAveugle").onclick = () => {
+  const tags = groupeAveugle().map(n => n.tag);
+  for (let i = tags.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [tags[i], tags[j]] = [tags[j], tags[i]]; }
+  ouvrirLecteur(tags, true).catch(err => log("aveugle : " + err.message, "e"));
+};
 
 async function refreshGal(){
   if (!S.proj && !GAL_SLUG) return;
