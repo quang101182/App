@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.1.9"
+VERSION = "0.2.0"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -80,6 +80,25 @@ def slugify(titre: str) -> str:
     return s[:60] or "sans-titre"
 
 
+def cle_normale(titre: str) -> str:
+    """Clé d'identité d'un titre, INSENSIBLE aux espaces/tirets/majuscules :
+    'One Punch Man', 'One-Punch-Man', 'OnePunchMan' → 'onepunchman'
+    (demande Quang 18:39 — sinon trois dossiers pour le même manga)."""
+    return re.sub(r"[^a-z0-9]", "", (titre or "").lower())
+
+
+def resoudre_slug(out: str, titre: str) -> str:
+    """Slug du titre — RÉUTILISE un dossier existant de même clé : 'OnePunchMan'
+    retrouve le dossier 'one-punch-man' déjà créé, au lieu d'en fonder un second."""
+    racine = os.path.normpath(out)
+    if os.path.isdir(racine):
+        cle = cle_normale(titre)
+        for d in os.listdir(racine):
+            if os.path.isdir(os.path.join(racine, d)) and cle_normale(d) == cle:
+                return d
+    return slugify(titre)
+
+
 def ext_depuis_magic(data: bytes) -> str:
     if data[:3] == b"\xff\xd8\xff":
         return ".jpg"
@@ -114,7 +133,7 @@ def write_manifest(dossier: str, *, slug: str, title: str, chapter: str, source:
 
 
 def chap_dir(out: str, title: str, chapter) -> str:
-    return os.path.join(out, slugify(title), f"ch_{str(chapter).replace('/', '-')}")
+    return os.path.join(out, resoudre_slug(out, title), f"ch_{str(chapter).replace('/', '-')}")
 
 
 # --------------------------------------------------------------------------- canal 1 : MangaDex
@@ -376,6 +395,29 @@ def capture(args) -> int:
         # scroller tout puis collecter ne ramasse que ce qui reste à l'écran
         # (mesuré : 4 pages sur 22). On attrape chaque page PENDANT qu'elle vit.
         dest = chap_dir(args.out, args.title, args.chapter)
+        # anti-doublon : chapitre déjà capturé ? (demande Quang 18:39 — ne pas
+        # recharger silencieusement un manga/chapitre déjà présent)
+        mp_exist = os.path.join(dest, "manifest.json")
+        if os.path.exists(mp_exist) and not args.force:
+            try:
+                ancien = json.load(open(mp_exist, encoding="utf-8"))
+                info = (f"{len(ancien.get('pages', []))} pages, "
+                        f"capturé le {ancien.get('captured_at', '?')[:16]}")
+            except Exception:
+                info = "manifeste illisible"
+            print(f"DÉJÀ PRÉSENT : « {args.title} » ch. {args.chapter} ({info}).")
+            remplacer = ""
+            try:
+                if sys.stdin and sys.stdin.isatty():
+                    remplacer = input("Le remplacer ? (o/N) : ").strip().lower()
+            except EOFError:
+                remplacer = ""
+            if remplacer != "o":
+                print("Capture ignorée — l'existant est conservé "
+                      "(--force pour remplacer sans demander).")
+                log_evt("doublon", "capture ignorée (chapitre déjà présent)", dossier=dest)
+                return 0
+            print("Remplacement demandé.")
         os.makedirs(dest, exist_ok=True)
         notes: list = []
         if note_depart:
@@ -597,9 +639,13 @@ def capture(args) -> int:
                       for im in uniques]
         print(f"{len(uniques)} images de page capturées au fil du défilement.")
         notes = list(dict.fromkeys(notes))  # une même anomalie ne se répète pas dans le manifeste
-        write_manifest(dest, slug=slugify(args.title), title=args.title, chapter=args.chapter,
-                       source="capture", source_url=page.url, pages=pages_meta, notes=notes)
-        log_event("capture", url=page.url, title=args.title, chapter=str(args.chapter),
+        # source_url = l'URL de DÉPART (url_depart) : page.url a pu changer en fin de
+        # capture (le lecteur passe au chapitre suivant → l'URL enregistrée était
+        # parfois celle du chapitre d'APRÈS — bug découvert 18:39)
+        write_manifest(dest, slug=resoudre_slug(args.out, args.title), title=args.title,
+                       chapter=args.chapter, source="capture", source_url=url_depart,
+                       pages=pages_meta, notes=notes)
+        log_event("capture", url=url_depart, title=args.title, chapter=str(args.chapter),
                   pages=len(pages_meta), echecs=sum(1 for n in notes if "ECHEC" in n))
         log_evt("capture", "terminée", pages=len(pages_meta), notes=len(notes), dossier=dest)
         print(f"OK : {len(pages_meta)}/{len(uniques)} pages -> {dest}")
@@ -649,7 +695,8 @@ def import_src(args) -> int:
 # --------------------------------------------------------------------------- vérification
 
 def verify(dossier: str) -> int:
-    """Contrôle manifeste <-> fichiers. Sortie 0 = intègre, 1 = incohérence."""
+    """Contrôle manifeste <-> fichiers + complétude contre l'API MangaDex si applicable.
+    Sortie 0 = intègre, 1 = incohérence."""
     mp = os.path.join(dossier, "manifest.json")
     if not os.path.exists(mp):
         print(f"KO : pas de manifest.json dans {dossier}")
@@ -672,6 +719,62 @@ def verify(dossier: str) -> int:
         print(f"KO ({len(problemes)}) : " + " ; ".join(problemes[:8]))
         return 1
     print(f"OK : {len(m['pages'])} pages cohérentes avec le manifeste.")
+
+    # Complétude : contre le compte OFFICIEL MangaDex quand la source est un chapitre
+    # (demande Quang 18:39 : « le piège, c'est de vérifier si le chapitre est complet »)
+    u = (m.get("source_url") or "").split("?")[0].rstrip("/")
+    if "mangadex.org/chapter/" in u:
+        try:
+            morceaux = u.split("/chapter/")[1].split("/")
+            cid = morceaux[0] if len(morceaux) == 1 else morceaux[0]
+            r = requests.get(f"https://api.mangadex.org/chapter/{cid}",
+                             headers={"User-Agent": UA}, timeout=15)
+            r.raise_for_status()
+            officiel = r.json()["data"]["attributes"]["pages"]
+            depart = 1
+            for n in m.get("notes", []):
+                dm = re.search(r"démarrée à la page (\d+)", n)
+                if dm:
+                    depart = int(dm.group(1))
+            attendu = max(0, officiel - (depart - 1))
+            verdict = "COMPLET" if len(m["pages"]) >= attendu else f"INCOMPLET ({len(m['pages'])}/{attendu})"
+            print(f"Complétude : {len(m['pages'])} pages capturées / {attendu} attendues "
+                  f"(chapitre officiel : {officiel} pages, départ page {depart}) → {verdict}")
+        except Exception as e:
+            print(f"(complétude non vérifiée : {type(e).__name__})")
+    return 0
+
+
+def lister_sources(out: str) -> int:
+    """Vue des mangas déjà présents dans sources/ (demande Quang 18:39)."""
+    if not os.path.isdir(out):
+        print(f"Aucun dossier {out} — rien de capturé pour l'instant.")
+        return 0
+    total_ch, total_pg = 0, 0
+    for d in sorted(os.listdir(out)):
+        chemin = os.path.join(out, d)
+        if not os.path.isdir(chemin):
+            continue
+        chapitres = sorted(c for c in os.listdir(chemin) if c.startswith("ch_"))
+        if not chapitres:
+            continue
+        print(f"{d} :")
+        for c in chapitres:
+            mp = os.path.join(chemin, c, "manifest.json")
+            if os.path.exists(mp):
+                m = json.load(open(mp, encoding="utf-8"))
+                n = len(m.get("pages", []))
+                extra = f" | {len(m.get('notes', []))} note(s)" if m.get("notes") else ""
+                print(f"   ch. {c[3:]:>5} | {n:>3} pages | {m.get('captured_at', '?')[:10]} "
+                      f"| {m.get('source', '?')}{extra}")
+                total_pg += n
+            else:
+                fichiers = [f for f in os.listdir(os.path.join(chemin, c)) if f.startswith("page_")]
+                print(f"   ch. {c[3:]:>5} | {len(fichiers):>3} pages | SANS MANIFESTE "
+                      f"(capture interrompue ?)")
+                total_pg += len(fichiers)
+            total_ch += 1
+    print(f"\nTotal : {total_ch} chapitre(s), {total_pg} page(s) dans {out}")
     return 0
 
 
@@ -732,6 +835,8 @@ def main() -> int:
                    help="filtre d'URL, pour les scripts (défaut : l'onglet ACTIF de la fenêtre)")
     s.add_argument("--page-1", action="store_true",
                    help="revenir à la page 1 avant de capturer (défaut : depuis la page affichée)")
+    s.add_argument("--force", action="store_true",
+                   help="remplacer un chapitre déjà capturé sans demander")
     s.add_argument("--title", required=True)
     s.add_argument("--chapter", required=True)
     s.add_argument("--out", default=DEFAULT_OUT)
@@ -744,6 +849,8 @@ def main() -> int:
 
     s = sub.add_parser("verify", help="contrôler manifeste <-> fichiers")
     s.add_argument("dossier")
+
+    sub.add_parser("liste", help="vue des mangas déjà présents dans sources/")
 
     sub.add_parser("launch-edge", help="(re)lancer la fenêtre Edge dédiée")
 
@@ -767,6 +874,8 @@ def main() -> int:
         return import_src(args)
     if args.cmd == "verify":
         return verify(args.dossier)
+    if args.cmd == "liste":
+        return lister_sources(DEFAULT_OUT)
     if args.cmd == "launch-edge":
         return launch_edge()
     return 1
