@@ -128,6 +128,7 @@ export default {
   // Independant du PC de Quang -> protege meme app fermee / PC eteint.
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runLtxReaper(env).catch(e => console.error('[ltx-reaper] scheduled error', e)));
+    ctx.waitUntil(runCostWatch(env).catch(e => console.error('[cost-watch] scheduled error', e)));
   },
 };
 
@@ -2188,6 +2189,118 @@ async function handleLtxHeartbeat(request, env) {
   if (!/^[a-z0-9]{6,24}$/i.test(podId)) return jsonResponse({ error: 'invalid podId' }, 400);
   await env.GATEWAY_KV.put('ltx:hb', JSON.stringify({ podId, busy: !!(body && body.busy), ts: Date.now() }), { expirationTtl: 3600 });
   return jsonResponse({ ok: true });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cost watch — surveillance AUTONOME des couts OpenAI (cron)
+//
+// POURQUOI : le watcher local (cloudcli-dashboard/cost_watch.py, tache Windows 09:15)
+// ne tourne QUE si le PC de Quang est allume. Or le 28/08/2026 une cle Anthropic volee
+// a brule 97,79 $ en 17 minutes A 03H46, PC ETEINT : aucune surveillance locale n'aurait
+// pu voir passer ca. Meme raisonnement que le LTX reaper juste en dessous.
+// Ce jumeau tourne chez Cloudflare, 24/7, independamment du PC.
+//
+// Il ALERTE, il ne bloque rien (le plafond dur cote OpenAI est la digue ; ceci est le
+// detecteur). Deux motifs, comme la version locale :
+//   - seuil absolu    : une grosse journee reste une grosse journee
+//   - ANOMALIE        : >= 4x la mediane des 14 j, MEME SOUS LE SEUIL. C'est le motif
+//                       qui compte : le 17/09 etait a 1,50 $ (invisible a 5 $) mais
+//                       75x la mediane, et c'etait le premier jour de la derive.
+// ─────────────────────────────────────────────────────────────────────────────
+const COSTWATCH_SEUIL_JOUR = 5.00;   // USD / jour
+const COSTWATCH_FACTEUR    = 4.0;    // x mediane 14 j
+const COSTWATCH_PLANCHER   = 0.50;   // en dessous : bruit, on ne crie pas
+const COSTWATCH_CHAT_ID    = '5867229613';
+
+async function costWatchTelegram(env, texte) {
+  const token = await resolveKey(env, 'TELEGRAM_BOT_TOKEN');
+  if (!token) return { sent: false, reason: 'TELEGRAM_BOT_TOKEN absent' };
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: COSTWATCH_CHAT_ID, text: texte, disable_web_page_preview: true }),
+    });
+    return { sent: r.ok, status: r.status };
+  } catch (e) {
+    return { sent: false, reason: String(e).slice(0, 120) };
+  }
+}
+
+/** Coeur du cost watch. opts.force => ignore la garde "1x/jour" (pour tester). */
+async function runCostWatch(env, opts = {}) {
+  const force = !!opts.force;
+  const out = { ts: Date.now(), ran: false, alerts: [], days: {} };
+
+  // Garde : le cron tourne toutes les 2 min, on ne veut qu'UN passage par jour.
+  const auj = new Date().toISOString().slice(0, 10);
+  if (!force) {
+    const last = await env.GATEWAY_KV.get('costwatch:lastday');
+    if (last === auj) return out;
+  }
+
+  const adminKey = await resolveKey(env, 'OPENAI_ADMIN_KEY');
+  if (!adminKey) {
+    out.error = 'OPENAI_ADMIN_KEY absente (KV key:OPENAI_ADMIN_KEY ou secret)';
+    return out;   // on NE marque PAS la garde : on reessaiera au prochain cron
+  }
+
+  const debut = Math.floor(Date.now() / 1000) - 15 * 86400;
+  let data;
+  try {
+    const r = await fetch(
+      `https://api.openai.com/v1/organization/costs?start_time=${debut}&bucket_width=1d&limit=16`,
+      { headers: { Authorization: `Bearer ${adminKey}` } });
+    if (!r.ok) { out.error = `API costs HTTP ${r.status}`; return out; }
+    data = await r.json();
+  } catch (e) {
+    out.error = 'API costs injoignable: ' + String(e).slice(0, 120);
+    return out;
+  }
+
+  const jours = {};
+  for (const b of (data.data || [])) {
+    const d = new Date(b.start_time * 1000).toISOString().slice(0, 10);
+    let t = 0;
+    for (const res of (b.results || [])) t += ((res.amount || {}).value || 0);
+    jours[d] = (jours[d] || 0) + t;
+  }
+  out.days = jours;
+  if (!Object.keys(jours).length) { out.error = 'aucun jour renvoye'; return out; }
+
+  const hier = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const passes = Object.keys(jours).filter(d => d !== auj && d !== hier).map(d => jours[d]).sort((a, b) => a - b);
+  const mediane = passes.length
+    ? (passes.length % 2 ? passes[(passes.length - 1) / 2]
+                         : (passes[passes.length / 2 - 1] + passes[passes.length / 2]) / 2)
+    : 0;
+
+  for (const jour of [hier, auj]) {
+    const m = jours[jour] || 0;
+    if (m < COSTWATCH_PLANCHER) continue;
+    if (m >= COSTWATCH_SEUIL_JOUR) {
+      out.alerts.push(`[seuil] openai : ${m.toFixed(2)} USD le ${jour} (seuil ${COSTWATCH_SEUIL_JOUR.toFixed(2)})`);
+    } else if (mediane > 0 && m >= COSTWATCH_FACTEUR * mediane) {
+      out.alerts.push(`[anomalie] openai : ${m.toFixed(2)} USD le ${jour} = ${Math.round(m / mediane)}x la mediane 14 j (${mediane.toFixed(2)} USD)`);
+    }
+  }
+
+  out.ran = true;
+  out.mediane = mediane;
+  await env.GATEWAY_KV.put('costwatch:lastday', auj, { expirationTtl: 172800 });
+
+  // L'ENVOI D'ABORD, LA TRACE ENSUITE. Ecrire l'etat avant d'envoyer laisserait
+  // `telegram` absent du KV : on ne saurait jamais si l'alerte est REELLEMENT partie.
+  // Un detecteur dont on ignore s'il a alerte ne vaut rien (constate au 1er run, 21/09).
+  if (out.alerts.length) {
+    const msg = 'ALERTE COUTS API (gateway, autonome)\n\n' + out.alerts.join('\n')
+              + '\n\nDetail : python cloudcli-dashboard/cost_watch.py';
+    out.telegram = await costWatchTelegram(env, msg);
+  } else {
+    out.telegram = { sent: false, reason: 'aucune alerte a envoyer' };
+  }
+  await env.GATEWAY_KV.put('costwatch:last', JSON.stringify(out), { expirationTtl: 1209600 });
+  return out;
 }
 
 /** Coeur du reaper : liste les pods, décide, termine. opts.dryRun => ne termine pas, renvoie juste les décisions. */
