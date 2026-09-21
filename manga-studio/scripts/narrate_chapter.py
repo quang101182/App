@@ -25,7 +25,7 @@ Stdout : un seul objet JSON (le resume du run). Le bruit part sur stderr.
 import argparse, base64, io, json, os, re, subprocess, sys, time, urllib.request, urllib.error
 from datetime import datetime
 
-VERSION = "1.72.0"
+VERSION = "1.74.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -533,7 +533,36 @@ def _portrait(chap_dir, fichier, box, dest):
     return dest
 
 
-def etape_noms(chap_dir, pages, stats, outdir=None):
+# =====================================================================================
+# v1.74 (etape 2 de la feuille de route) : FICHE PERSONNAGES PAR SERIE.
+# Un nom prouve par vote dans un chapitre de la serie est connu des chapitres suivants : il n'a plus besoin
+# de 2 votes, et il est transmis a la lecture meme sur les pages ou personne ne le prononce.
+# Construite A LA VOLEE depuis les narration.json des AUTRES chapitres (rien a tenir a jour, rien de perime).
+# =====================================================================================
+def fiche_serie(chap_dir):
+    serie_dir, courant = os.path.dirname(chap_dir), os.path.basename(chap_dir)
+    connus = {}
+    for ch in sorted(os.listdir(serie_dir)):
+        nd = os.path.join(serie_dir, ch, "narration")
+        if ch == courant or not os.path.isdir(nd):
+            continue
+        runs = []
+        for tag in os.listdir(nd):
+            f = os.path.join(nd, tag, "narration.json")
+            if os.path.isfile(f):
+                runs.append((os.path.getmtime(f), f))
+        for _, f in sorted(runs, reverse=True):          # le run le plus recent qui a des noms
+            try: noms = (json.load(open(f, encoding="utf-8")).get("stats") or {}).get("noms") or {}
+            except Exception: noms = {}
+            if noms:
+                for nom, v in noms.items():
+                    c = connus.setdefault(nom, {"age": v.get("age", "?"), "cheveux": v.get("cheveux", ""), "chapitres": []})
+                    c["chapitres"].append(ch)
+                break
+    return connus
+
+
+def etape_noms(chap_dir, pages, stats, outdir=None, serie=None):
     """Rend {nom: {age, cheveux, votes, pages, portrait}} : noms PROUVES par la majorite des votes, et pour
     chacun un portrait decoupe (v1.69 : exemple visuel, pour ne plus nommer un anonyme qui lui ressemble)."""
     t = time.time()
@@ -557,7 +586,8 @@ def etape_noms(chap_dir, pages, stats, outdir=None):
             ages[v[1]] = ages.get(v[1], 0) + 1
         age, n_age = max(ages.items(), key=lambda kv: kv[1])
         # un nom vu sur une SEULE page et une seule fois = lecture douteuse : on ne le fige pas
-        if len(vs) < 2:
+        # (v1.74 : sauf s'il est deja prouve dans un autre chapitre de la serie)
+        if len(vs) < 2 and nom not in (serie or {}):
             continue
         cheveux = max((v[2] for v in vs if v[1] == age), key=len, default="")
         retenus[nom] = {"age": age, "cheveux": cheveux, "votes": "%d/%d" % (n_age, len(vs)), "pages": pages_nom}
@@ -572,9 +602,15 @@ def etape_noms(chap_dir, pages, stats, outdir=None):
                                         portrait_page=v[0])
                     break
     stats["noms_s"] = round(time.time() - t, 1)
-    stats["noms"] = retenus
+    stats["noms"] = retenus                      # ce chapitre SEUL : c'est ce qui alimente la fiche de la serie
     journal("noms", retenus=retenus)
     log("  noms figes : " + (", ".join("%s=%s (%s)" % (k, v["age"], v["votes"]) for k, v in retenus.items()) or "aucun"))
+    if serie:                                    # v1.74 : les connus de la serie absents des votes de ce chapitre
+        ajoutes = {nom: {"age": c["age"], "cheveux": c["cheveux"], "votes": "serie " + ",".join(c["chapitres"]),
+                         "pages": []} for nom, c in serie.items() if nom not in retenus}
+        stats["noms_serie"] = sorted(ajoutes)
+        log("  noms de la serie ajoutes : " + (", ".join(sorted(ajoutes)) or "aucun"))
+        return dict(retenus, **ajoutes)
     return retenus
 
 
@@ -691,6 +727,8 @@ def main():
                          " contre 3/3/3 sans ; Raki et Zaki se ressemblent, l'exemple visuel les confond)")
     ap.add_argument("--verif", action="store_true", help="v2 : verification des attributions nommees (mesuree SANS gain le 21/09, en option)")
     ap.add_argument("--reuse-vision", default="", help="reprend l'etape vision d'un run existant (tag)")
+    ap.add_argument("--serie", action="store_true",
+                    help="v1.74 (etape 2) : reprend les noms prouves dans les AUTRES chapitres de la serie")
     a = ap.parse_args()
     SECRET = _secret()
 
@@ -717,7 +755,10 @@ def main():
             stats[k] = prev["stats"][k]
     else:
         if a.prompt == "v2":
-            noms = etape_noms(chap_dir, pages, stats, outdir if a.portraits else None)
+            serie = fiche_serie(chap_dir) if a.serie else None
+            if serie is not None:
+                log("  fiche de la serie : " + (", ".join("%s (%s)" % (n, ",".join(c["chapitres"])) for n, c in serie.items()) or "vide"))
+            noms = etape_noms(chap_dir, pages, stats, outdir if a.portraits else None, serie)
             vis, resume, persos = etape_vision_v2(chap_dir, pages, a.engine, a.batch or 2, stats, noms)
         else:
             vis, resume, persos = etape_vision(chap_dir, pages, a.engine, a.batch or 4, stats)
@@ -738,7 +779,7 @@ def main():
                                 + stats.get("cout_noms", 0.0) + stats.get("cout_verif", 0.0), 4)
     # v1.72 : un run --reuse-vision recopie les stats de lecture de son run source : le suivi des couts
     # ne doit compter QUE ce que ce run a depense (recit + voix), sinon la lecture est comptee deux fois.
-    res = {"version": VERSION, "prompt": a.prompt, "reuse_vision": a.reuse_vision or None, "chapitre": a.chapitre, "title": man.get("title"), "chapter": man.get("chapter"),
+    res = {"version": VERSION, "prompt": a.prompt, "reuse_vision": a.reuse_vision or None, "serie": bool(a.serie), "chapitre": a.chapitre, "title": man.get("title"), "chapter": man.get("chapter"),
            "tag": tag, "engine": a.engine, "model": ENGINES[a.engine][1], "voice": a.voice, "rate": a.rate,
            "titre": titre, "resume": resume, "personnages": persos, "created_at": datetime.now().isoformat(timespec="seconds"),
            "stats": {k: (round(v, 4) if isinstance(v, float) else v) for k, v in stats.items()},
