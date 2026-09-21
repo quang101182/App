@@ -41,8 +41,11 @@
    ✅ **Livré ensuite (21/09, 23h20 → 23h45)** : v1.77 tomes + dates (`serie.json`), suppression de narration ;
    v1.78 visionneuse (zoom, balayage) ; v1.79 coûts visibles partout + narrations supprimées comptées + VRAM utilisée ;
    v1.80 onglet **Bibliothèque en premier**, renommer une série (titre + dossier + tout le lié), capture repliable.
-   **Reste de la trame** : 12-septies recherche intelligente → reste de l'étape 8 (voix par série) → **vidéo : À
-   DISCUTER** avant de coder → 7, 9, 10. Musique de fond (13) : **à définir avec Quang** (import, association).
+   v1.81 recherche intelligente ; v1.82 « Autre voix » (texte repris) + voix par série ; v1.83 barre de temps
+   cliquable du lecteur + recherche dans le texte des narrations (proxy : Range 206 — sans lui, pas de seek MP3).
+   **Reste de la trame (22/09 00h10)** : **vidéo : À DISCUTER avec Quang AVANT de coder** (questions posées) →
+   7 « Précédemment… », 9 suivi de séries, 10 hors-ligne. Musique de fond (13) : **à définir avec Quang**.
+   Étape 8 restante : prononciation des noms, élisions.
    ⚠ Une question de Quang (« il me semble que… ») n'est PAS un ordre : répondre, ne rien modifier.
 5. Lien mobile = l'URL du tunnel de Generate Studio (hostname dans `config-generate-agent.yml`, hors dépôt :
    ce dépôt est PUBLIC) suivie de `/manga` (le dossier github.io ne sert que le
