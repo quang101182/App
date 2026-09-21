@@ -16,16 +16,19 @@
   quand c'est nécessaire ». Tests : pas de limite de coût ; solution finale : sobre.
 
 ## RESTANT, dans l'ordre (feuille de route § 4-ter-bis)
-1. **Étape 2 — fiche personnages par SÉRIE** : il faut d'abord un **2ᵉ chapitre d'une même série**
-   (Quang le capture via l'app : premier vrai test utilisateur de la capture). Puis référence manuelle
+1. **Étape 2 — fiche personnages par SÉRIE** : il faut d'abord un **2ᵉ chapitre d'une même série** → **fait : One-Punch Man ch.301**
+   (capturé par Quang via l'app, 19 p.). Puis référence manuelle
    des faits de ce chapitre → banc `scripts/juge_narration.py`.
 2. Étape 4 — lecture case par case + bulles effacées ; 5 — vidéo MP4 (= mode hors-ligne) ;
    6 — modes Récit / **Lecture avancée** (voix par personnage, réutiliser le multi-voix de StoryVoice) ;
    7 — « Précédemment… » ; 8 — voix (changer sans relire, aperçu, voix par série) ; 9 — suivi de séries ;
    10 — hors-ligne sans PC ; 11 — **toutes langues → français** (narration + pages relettrées).
-3. **Stockage (règle Quang : tout ce qui prend de la place sur C:)** : déplacer `sources/` et `output/`
-   sur C: avec une **jonction** à l'ancien chemin (aucun code à changer) — au moment opportun.
-   `scripts/*_out` (~650 Mo, bancs de juillet) : déplacer ou supprimer = **décision de Quang, en attente**.
+3. ✅ **Stockage FAIT (21/09 19h30)** : `sources/`, `output/`, `scripts/*_out` → `C:\Users\quang\Documents\MangaStudio-donnees\`,
+   jonctions à l'ancien chemin. Tout nouveau dossier lourd : créé sur C: puis joint.
+4. **Étape 12 — bibliothèque rangée PAR MANGA** (séries d'abord, chapitres dedans) — ajoutée par Quang le 21/09.
+5. Lien mobile = l'URL du tunnel de Generate Studio (hostname dans `config-generate-agent.yml`, hors dépôt :
+   ce dépôt est PUBLIC) suivie de `/manga` (le dossier github.io ne sert que le
+   README, il n'a jamais servi l'app). v1.73.0 : l'app rouvre le dernier onglet utilisé.
 
 ## PIÈGES (payés le 21/09 — ne pas les repayer)
 - ⛔ **Proxy 8190** (`C:\Users\quang\Documents\ComfyUI\_studio_llm_proxy.py`) : le relancer UNIQUEMENT par
