@@ -85,7 +85,8 @@ sources/<slug>/ch_<num>/
   « terminée pages=1 » quand le lecteur n'avançait pas.
 - ⚠️ Avant v0.3.0, MANGA Plus était extrait par **capture d'écran** : taille d'affichage ET
   **barres du lecteur incrustées** en haut et en bas des pages (vu par Quang). Le screenshot reste
-  le dernier recours, barres flottantes masquées pendant la prise. Claymore ch.1 date d'avant.
+  le dernier recours, barres flottantes masquées pendant la prise. Claymore ch.1 (capturé avant, en
+  affichage page par page) a été vérifié : 801×1200, **aucune barre** — seul le mode vertical les incrustait.
 
 ## Banc
 
