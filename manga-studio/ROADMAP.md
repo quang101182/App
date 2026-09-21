@@ -1788,6 +1788,18 @@ le verdict fait à la main (K3 v1 : 6 graves ; Pixtral : 13). Coût d'un jugemen
 | v2.3 (+ vérification des attributions contre l'image) | Gemini | 2 / 4 / 3 | 0,30 $ | ~8 min → option `--verif`, off |
 | v2.4 (+ PORTRAITS de référence découpés, étape 1 de la feuille de route) | Gemini | 3 / **5** / 2 | 0,23 $ | ~5 min → option `--portraits`, off |
 
+| **v2.2 K3 = DÉFAUT depuis v1.70.0** (décision Quang : « généré une fois, autant que ce soit bien fait ») | K3 | **1 / 2 / 1** | 0,61-0,73 $ | 15-23 min |
+| Magi v2 local (seul, banque Raki+Zaki) | — | **7/13** répliques pièges justes | 0 $ | 1,7 s/page, **VRAM 4,35 Go**, RAM 2,2 Go |
+
+Rejugés à règles ÉGALES (juge v2, 21/09 18h40 : attribuer à « une voix » plutôt qu'au nommé = mineur ; un détail absent
+de la référence n'est grave que s'il la CONTREDIT ; référence p19-20 complétée) : **Gemini 3/3/1 = 7, K3 1/2/1 = 4**.
+Gemini commet l'erreur la plus trompeuse (réplique de figurant → Raki/Zaki, p4/p16/p18) ; **K3 jamais**. Reste chez K3 :
+p8 « Zaki ! » (qui appelle — cas dur, 3/3 runs), une invention p2 (1 run), p19 (1 run).
+Magi v2 : environnement jetable `%LOCALAPPDATA%\magi\venv` (C:, 4,8 Go) — **transformers 4.45.2 obligatoire** (la 5.x casse
+le tokenizer) + `shapely matplotlib opencv-python-headless pycocotools sentencepiece` absents de toute doc. Tourne bien sur
+la RTX 5070 Ti, mais confond aussi Raki et Zaki → non retenu comme juge des locuteurs ; utile plus tard pour le mode
+Lecture (OCR + ordre de lecture des bulles intégrés).
+
 ⛔ **Étape 1 « personnages par exemples visuels » : ÉCHEC mesuré (21/09 18h), ne pas la rejouer telle quelle.**
 Les portraits étaient JUSTES (vérifiés à l'œil : Raki p12, Zaki p6), mais dans Claymore **Raki et Zaki se ressemblent**
 (mêmes cheveux clairs en épi, même trait) : deux exemples presque identiques ont RÉINTRODUIT la confusion Raki↔Zaki
@@ -1819,7 +1831,8 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
 
 | # | Étape | Pourquoi | Critère de sortie |
 |---|---|---|---|
-| **1** | **Personnages par EXEMPLES visuels** : à la passe des noms, Gemini localise le porteur prouvé (boîte), on découpe son portrait (Raki p9, Zaki p6) et on le joint à chaque appel de relevé | la seule cause restante est visuelle (anonyme brun pris pour un blond nommé) ; c'est l'approche de Magi v2 | **0 grave sur 3 runs** de Claymore p1-20 (juge + référence) |
+| ~~1~~ | ~~Personnages par EXEMPLES visuels~~ → **ÉCHEC mesuré** (v1.69, `--portraits`) | Raki et Zaki se ressemblent | — |
+| **1-bis** | **CONSENSUS « désaccord = prudence »** : 2 relevés indépendants (K3 + Gemini, ou K3 ×2) ; là où ils ne s'accordent pas sur QUI parle/agit, le récit dit « une voix » / « un villageois » | une attribution anonyme est acceptable (mineur), une fausse ne l'est pas ; les erreurs restantes varient d'un run à l'autre, donc un 2e avis les attrape | **0 grave sur 3 runs** (juge v2 + référence) |
 | 2 | **Fiche personnages par SÉRIE** : les noms prouvés au ch.1 servent au ch.2 | moins d'erreurs, moins de votes | ch.2 de Claymore : 0 grave |
 | 3 | **Capture intégrée à l'app** : bouton « 📥 Capturer le chapitre ouvert » (titre, n°) → proxy → `manga-fetch capture` sur la fenêtre Edge dédiée → apparaît dans 📚 Chapitres | plus de `capture.bat` : tout se fait dans l'app (demande Quang) | 10 captures via l'app = 10 manifests valides |
 | 4 | **Lecture case par case** + **bulles effacées** : la caméra suit les cases (YOLO Manga109, déjà là) au rythme de la voix ; texte des bulles effacé (v1.6.2) | le dynamisme des recaps ; la narration remplace le texte | ordre des cases juste sur 20 pages ; 0 bulle lisible |
@@ -1829,6 +1842,8 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
 | 8 | **Voix** : changer de voix sans refaire la lecture (texte réutilisé), aperçu 3 s, voix mémorisée par série, prononciation des noms, contrôle des élisions | « selon l'humeur et le manga » (Quang) | changer de voix ≤ 1 min, 0 relecture vision |
 | 9 | **Suivi de séries** : file de chapitres capturés, narration la nuit | tout est prêt le matin | 5 chapitres narrés sans intervention |
 | 10 | **Hors-ligne sans PC** (option) : chapitres narrés copiés sur un stockage en ligne | écouter PC éteint (la capture et la génération restent sur le PC) | lecture PC éteint |
+| 11 | **Toutes langues → français** (demande Quang 21/09 : « j'irai chercher les sources que je trouve, n'importe quelle langue ») : (a) narration FR depuis une page JP/ES/KR… (déjà le principe, **jamais testé hors anglais**) ; (b) **pages relettrées en français** (bulles effacées + texte traduit replacé, briques de l'onglet Ingestion v1.5-1.6.2) sur un chapitre entier | Quang lit ce qu'il trouve, quelle que soit la langue | banc de fidélité PAR LANGUE (JP vertical droite→gauche, webtoon KR) : 0 grave |
+| — | **Mode Lecture avancé** (précisé par Quang 21/09) : case par case, texte masqué, chaque réplique lue par la **voix de son personnage** | réutiliser le multi-voix de StoryVoice / smart-reader (pré-casting éditable, v0.21) ; Magi fournit OCR + ordre des bulles | après l'étape 1-bis (exige des attributions sûres) |
 
 ## 4-bis. L'essai utilisateur du 28/07 — 10 puis 12 cases, pilotées comme Quang
 

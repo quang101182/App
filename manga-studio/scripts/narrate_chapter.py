@@ -25,7 +25,7 @@ Stdout : un seul objet JSON (le resume du run). Le bruit part sur stderr.
 import argparse, base64, io, json, os, re, subprocess, sys, time, urllib.request, urllib.error
 from datetime import datetime
 
-VERSION = "1.69.0"
+VERSION = "1.70.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -677,7 +677,7 @@ def main():
     global SECRET, PROGRESS
     ap = argparse.ArgumentParser()
     ap.add_argument("chapitre", help="chemin relatif sous sources/, ex. claymore/ch_1")
-    ap.add_argument("--engine", choices=sorted(ENGINES), default="gemini")   # v1.68 : banc de fidelite 21/09
+    ap.add_argument("--engine", choices=sorted(ENGINES), default="kimi")   # v1.70 : K3 v2.2 = 4 graves/60 pages vs Gemini 7 (21/09)
     ap.add_argument("--pages", default="", help="plage, ex. 1-20 (defaut : tout)")
     ap.add_argument("--batch", type=int, default=0, help="pages par appel vision (defaut : 2 en v2, 4 en v1)")
     ap.add_argument("--prompt", choices=["v1", "v2"], default="v2",

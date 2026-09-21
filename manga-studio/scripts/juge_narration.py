@@ -24,6 +24,7 @@ des personnages. Juge UNIQUEMENT la fidelite de la narration a la reference :
 - "ok" : fidele (omettre un detail secondaire n'est PAS une faute ; une narration vide pour une page sans
   action est ok).
 Sois strict sur les personnages : si la narration donne le nom d'un personnage a un autre, c'est grave.
+Mais attribuer une replique ou une action a un sujet ANONYME ("une voix", "un villageois", "quelqu'un") alors que la reference nomme le personnage est une prudence, pas un contresens : c'est "mineur". Un detail absent de la reference n'est grave que s'il CONTREDIT un fait de la reference (la reference est un resume, elle omet des details).
 Reponds UNIQUEMENT en JSON : {"verdict":"ok|mineur|grave","raison":"<une phrase>"}"""
 
 
