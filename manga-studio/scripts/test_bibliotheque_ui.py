@@ -96,11 +96,14 @@ with sync_playwright() as p:
               and "depuis le début" in pg.inner_text("#coutsCorps"))
         pg.click("#coutsFermer"); pg.wait_for_timeout(200)
         # v1.79.0 : la jauge montre la memoire UTILISEE
-        v = pg.evaluate("() => api('/vram')")
-        attendu = ("%.1f" % (v["used"] / 1024)).replace(".", ",") + " / " + "%.0f" % (v["total"] / 1024) + " Go"
-        lu = pg.inner_text("#vramTxt").strip()        # la VRAM bouge entre deux mesures : tolerance 0,3 Go
-        ok_v = lu.endswith(attendu.split(" / ")[1]) and abs(float(lu.split(" / ")[0].replace(",", ".")) - v["used"] / 1024) <= 0.3
-        check("VRAM = memoire utilisee / total", ok_v, (lu, attendu))
+        # VRAM figee par le test (4 Go utilises / 12 libres / 16) : la carte bouge d'1 Go en 0,4 s quand une autre
+        # session travaille, une comparaison en direct n'est pas fiable. La formule, elle, doit donner « 4,0 / 16 Go ».
+        pg.route("**/vram*", lambda r: r.fulfill(status=200, content_type="application/json",
+                                                 body='{"used": 4096, "free": 12288, "total": 16384}'))
+        pg.evaluate("() => majVram(true)"); pg.wait_for_timeout(500)
+        lu = pg.inner_text("#vramTxt").strip()
+        check("VRAM = memoire UTILISEE / total (4,0 / 16 Go, pas 12,0)", lu == "4,0 / 16 Go", lu)
+        pg.unroute("**/vram*")
         # v1.77.0 : supprimer une narration depuis l'interface (un essai de banc devenu inutile, -> corbeille)
         cible = pg.evaluate("() => NARRS.findIndex(n => n.tag === 'k3-noms-v3-a')")
         if cible >= 0:
