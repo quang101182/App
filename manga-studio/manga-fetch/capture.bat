@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title Capture de chapitres - manga-fetch v0.1.1
+title Capture de chapitres - manga-fetch v0.1.6
 setlocal
 
 set "PY=%LOCALAPPDATA%\manga-fetch\venv\Scripts\python.exe"
@@ -8,7 +8,7 @@ set "MOD=D:\Download\02-Apps-Web\Repo-github\App\manga-studio\manga-fetch\manga_
 set "SRC=D:\Download\02-Apps-Web\Repo-github\App\manga-studio\sources"
 
 echo ==========================================================
-echo   CAPTURE DE CHAPITRES   (manga-fetch v0.1.1)
+echo   CAPTURE DE CHAPITRES   (manga-fetch v0.1.6)
 echo ==========================================================
 echo.
 
