@@ -38,6 +38,12 @@
    format 9:16/16:9, usage perso/publication, sous-titres et musique = choix à la génération) → 7, 9, 10.
    Plus tard : case par case (4), mode Lecture (6), codex de série (wiki/AniList) pour « qui est qui ».
    Quang : « ne te perds pas, suis ta trame » — ses idées en cours de route vont dans la ROADMAP, pas dans le code.
+   ✅ **Livré ensuite (21/09, 23h20 → 23h45)** : v1.77 tomes + dates (`serie.json`), suppression de narration ;
+   v1.78 visionneuse (zoom, balayage) ; v1.79 coûts visibles partout + narrations supprimées comptées + VRAM utilisée ;
+   v1.80 onglet **Bibliothèque en premier**, renommer une série (titre + dossier + tout le lié), capture repliable.
+   **Reste de la trame** : 12-septies recherche intelligente → reste de l'étape 8 (voix par série) → **vidéo : À
+   DISCUTER** avant de coder → 7, 9, 10. Musique de fond (13) : **à définir avec Quang** (import, association).
+   ⚠ Une question de Quang (« il me semble que… ») n'est PAS un ordre : répondre, ne rien modifier.
 5. Lien mobile = l'URL du tunnel de Generate Studio (hostname dans `config-generate-agent.yml`, hors dépôt :
    ce dépôt est PUBLIC) suivie de `/manga` (le dossier github.io ne sert que le
    README, il n'a jamais servi l'app). v1.73.0 : l'app rouvre le dernier onglet utilisé.
