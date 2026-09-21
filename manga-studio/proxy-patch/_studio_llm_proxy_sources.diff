@@ -1,0 +1,122 @@
+--- _studio_llm_proxy.py
++++ _studio_llm_proxy.py
+@@ -6938,6 +6938,90 @@
+     return {"files": out}
+ 
+ 
++# --- Chapitres SOURCES (manga-fetch, v1.66.0) -------------------------------------
++# manga-fetch remplit manga-studio/sources/<slug>/ch_<num>/ (pages + manifest.json).
++# LECTURE SEULE ici : lister, decrire, servir une page. sources/ est gitignore (images
++# sous licence) : rien de ce qui est servi ici ne doit jamais etre ecrit dans le depot.
++MANGA_SOURCES = os.path.join(MANGA_ROOT, "sources")
++_IMG_EXT = (".png", ".jpg", ".jpeg", ".webp")
++
++
++def _manga_src_safe(rel):
++    """Chemin RELATIF resolu sous MANGA_SOURCES, ou None (anti '..')."""
++    rel = (rel or "").replace("\\", "/").lstrip("/")
++    full = os.path.normpath(os.path.join(MANGA_SOURCES, rel))
++    root = os.path.normpath(MANGA_SOURCES)
++    if not (full == root or full.startswith(root + os.sep)):
++        return None
++    return full
++
++
++def _chap_key(ch):
++    try:
++        return (0, float(ch), "")
++    except (TypeError, ValueError):
++        return (1, 0.0, str(ch))
++
++
++def manga_source_pages(d):
++    """Pages d'un chapitre : l'ordre du manifest s'il existe, sinon l'ordre des noms."""
++    base = _manga_src_safe(d)
++    if not base or not os.path.isdir(base):
++        return None
++    man = {}
++    mp = os.path.join(base, "manifest.json")
++    if os.path.isfile(mp):
++        try:
++            with open(mp, encoding="utf-8") as f:
++                man = json.load(f)
++        except Exception as e:
++            man = {"notes": ["manifest illisible : %s" % e]}
++    files = [p.get("file") for p in (man.get("pages") or []) if p.get("file")]
++    if not files:
++        files = sorted(f for f in os.listdir(base) if f.lower().endswith(_IMG_EXT))
++    pages = []
++    meta = {p.get("file"): p for p in (man.get("pages") or [])}
++    for f in files:
++        full = os.path.join(base, f)
++        if not os.path.isfile(full):
++            continue          # annonce par le manifest mais absente : on ne ment pas
++        m = meta.get(f) or {}
++        pages.append({"file": f, "path": d.strip("/") + "/" + f,
++                      "bytes": os.path.getsize(full), "w": m.get("w"), "h": m.get("h")})
++    return {"dir": d.strip("/"), "manifest": bool(man.get("pages")), "slug": man.get("slug"),
++            "title": man.get("title"), "chapter": man.get("chapter"),
++            "source": man.get("source"), "source_url": man.get("source_url"),
++            "captured_at": man.get("captured_at"), "notes": man.get("notes") or [],
++            "pages": pages}
++
++
++def manga_sources():
++    """Tous les chapitres disponibles sous sources/<slug>/ch_<num>/."""
++    out = []
++    root = os.path.normpath(MANGA_SOURCES)
++    if not os.path.isdir(root):
++        return {"items": [], "root": root}
++    for slug in sorted(os.listdir(root)):
++        sd = os.path.join(root, slug)
++        if not os.path.isdir(sd) or slug.startswith((".", "_")):
++            continue
++        for ch in os.listdir(sd):
++            if not os.path.isdir(os.path.join(sd, ch)) or not ch.startswith("ch_"):
++                continue
++            info = manga_source_pages(slug + "/" + ch)
++            if not info or not info["pages"]:
++                continue
++            out.append({"dir": info["dir"], "slug": info["slug"] or slug,
++                        "title": info["title"] or slug, "chapter": info["chapter"] or ch[3:],
++                        "source": info["source"], "source_url": info["source_url"],
++                        "captured_at": info["captured_at"], "manifest": info["manifest"],
++                        "notes": info["notes"], "pages": len(info["pages"]),
++                        "bytes": sum(p["bytes"] for p in info["pages"]),
++                        "cover": info["pages"][0]["path"]})
++    out.sort(key=lambda x: ((x["title"] or "").lower(), _chap_key(x["chapter"])))
++    return {"items": out, "root": root}
++
++
+ def manga_delete(paths):
+     """Supprime des images de la galerie manga. Rien d'autre, nulle part ailleurs.
+ 
+@@ -7150,9 +7234,10 @@
+         except Exception as e:
+             self._json(500, {"error": "Manga Studio introuvable (%s): %s" % (MANGA_HTML, e)})
+ 
+-    def serve_manga_file(self, rel):
++    def serve_manga_file(self, rel, sources=False):
+         # Sert une image du dossier du projet manga (jamais celui de Generate Studio).
+-        full = _manga_safe(rel)
++        # sources=True : une page de chapitre sous manga-studio/sources/ (v1.66.0).
++        full = _manga_src_safe(rel) if sources else _manga_safe(rel)
+         if not full or not os.path.isfile(full):
+             self._json(404, {"error": "not found"}); return
+         ext = os.path.splitext(full)[1].lower()
+@@ -7371,6 +7456,15 @@
+         elif self.path.split("?", 1)[0] == "/manga/files":
+             slug = (parse_qs(urlparse(self.path).query).get("slug") or [""])[0]
+             self._json(200, manga_files(slug))
++        elif self.path.split("?", 1)[0] == "/manga/sources":
++            self._json(200, manga_sources())
++        elif self.path.split("?", 1)[0] == "/manga/source_pages":
++            _d = (parse_qs(urlparse(self.path).query).get("d") or [""])[0]
++            _r = manga_source_pages(_d) if _d else None
++            if _r is None: self._json(404, {"error": "chapitre introuvable"})
++            else: self._json(200, _r)
++        elif self.path.split("?", 1)[0] == "/manga/source_file":
++            self.serve_manga_file((parse_qs(urlparse(self.path).query).get("p") or [""])[0], sources=True)
+         elif self.path.split("?", 1)[0] == "/manga/file":
+             self.serve_manga_file((parse_qs(urlparse(self.path).query).get("p") or [""])[0])
+         else:

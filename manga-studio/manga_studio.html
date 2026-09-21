@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.65.0</title>
+<title>Manga Studio v1.66.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -286,6 +286,16 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .grid-img img{width:100%;display:block;aspect-ratio:1;object-fit:cover}
 .grid-img figure{position:relative;cursor:zoom-in}
 .grid-img figure.sel{outline:2px solid var(--accent2);outline-offset:-2px}
+/* ---------- Chapitres (v1.66.0) ---------- */
+.chap-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin:0 0 12px}
+.chap-item{display:flex;gap:10px;align-items:stretch;text-align:left;padding:8px;background:var(--panel);
+  border:1px solid var(--line);border-radius:8px;cursor:pointer;color:inherit;font:inherit}
+.chap-item:hover,.chap-item.sel{border-color:var(--accent2)}
+.chap-item img{width:64px;height:96px;object-fit:cover;border-radius:4px;flex:none;background:#0003}
+.chap-item b{display:block;font-size:1.02em}
+.chap-item small{display:block;opacity:.75;line-height:1.35;margin-top:2px}
+.chap-pages img{aspect-ratio:2/3;object-fit:contain;background:#0003}
+#chapMeta a{color:var(--accent2)}
 .grid-img .pick{position:absolute;top:6px;left:6px;width:26px;height:26px;margin:0;
   cursor:pointer;accent-color:var(--accent2);z-index:2}
 .etape{margin:8px 0 0;padding:8px 10px;border-radius:8px;font-size:13px;
@@ -424,7 +434,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.65.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.66.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -456,6 +466,7 @@ body.epure .aide{display:none}
   <button data-tab="tPlate" class="sel"><i>▦</i><b>Planche</b></button>
   <button data-tab="tProj"><i>🗂</i><b>Projet</b></button>
   <button data-tab="tIng"><i>📥</i><b>Ingestion</b></button>
+  <button data-tab="tChap"><i>📚</i><b>Chapitres</b></button>
   <button data-tab="tVal"><i>✅</i><b>Validé</b></button>
   <button data-tab="tPerso"><i>👤</i><b>Personnages</b></button>
   <button data-tab="tGal"><i>🖼</i><b>Galerie</b></button>
@@ -740,6 +751,31 @@ body.epure .aide{display:none}
   <div id="valList"></div>
 </section>
 
+<!-- ============ CHAPITRES (v1.66.0) ============
+     Les chapitres deposes par manga-fetch dans manga-studio/sources/<slug>/ch_<num>/.
+     LECTURE SEULE : l'app ne capture rien, elle consomme. sources/ est gitignore
+     (images sous licence) -- rien d'ici ne doit finir dans le depot. -->
+<section id="tChap">
+  <div class="card">
+    <h3>Chapitres disponibles</h3>
+    <p class="muted aide" style="margin:0 0 8px">
+      Remplis par <code>manga-fetch</code> (capture dans la fenêtre Edge dédiée, MangaDex ou import)
+      dans <code>manga-studio/sources/</code>. Touche un chapitre pour voir ses pages.
+    </p>
+    <div class="row"><button class="btn" id="btnChapRefresh">Rafraîchir</button>
+      <span class="muted" id="chapState"></span></div>
+  </div>
+  <div id="chapList" class="chap-list"></div>
+  <div class="card" id="chapDetail" hidden>
+    <div class="row" style="align-items:center">
+      <h3 class="grow" id="chapTitle" style="margin:0"></h3>
+      <button class="btn sm" id="btnChapClose">Fermer</button>
+    </div>
+    <p class="muted aide" id="chapMeta" style="margin:6px 0 8px"></p>
+    <div id="chapPages" class="grid-img chap-pages"></div>
+  </div>
+</section>
+
 <!-- ============ GALERIE ============ -->
 <!-- ============ PERSONNAGES ============ -->
 <section id="tPerso">
@@ -930,7 +966,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.65.0";
+const VERSION = "1.66.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4209,6 +4245,51 @@ let GAL = [];
    peut consulter un autre manga sans quitter le sien (GAL_SLUG ≠ S.proj). */
 let GAL_SLUG = null;
 
+/* =====================================================================
+   CHAPITRES (v1.66.0) -- consomme manga-studio/sources/ (manga-fetch)
+   ===================================================================== */
+const srcURL = p => CFG.base + "/manga/source_file?p=" + encodeURIComponent(p) + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
+let CHAPS = [], CHAP_OPEN = null;
+const SOURCE_LBL = { capture: "capture navigateur", mangadex: "MangaDex", download: "MangaDex", import: "import" };
+function srcHost(u){ try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } }
+async function refreshChaps(){
+  $("chapState").textContent = "lecture de sources/…";
+  const j = await api("/manga/sources");
+  CHAPS = j.items || [];
+  $("chapList").innerHTML = CHAPS.map((c, i) =>
+    '<button class="chap-item' + (CHAP_OPEN === c.dir ? " sel" : "") + '" data-chap="' + i + '">'
+    + '<img loading="lazy" src="' + srcURL(c.cover) + '" alt="">'
+    + '<span><b>' + esc(c.title) + ' — ch. ' + esc(c.chapter) + '</b>'
+    + '<small>' + c.pages + ' pages · ' + (c.bytes / 1e6).toFixed(1) + ' Mo</small>'
+    + '<small>' + esc(SOURCE_LBL[c.source] || c.source || "?") + (srcHost(c.source_url) ? " · " + esc(srcHost(c.source_url)) : "") + '</small>'
+    + '<small>' + (c.captured_at ? esc(c.captured_at.replace("T", " ").slice(0, 16)) : "") + (c.manifest ? "" : " · ⚠ sans manifest") + '</small>'
+    + '</span></button>').join("")
+    || '<p class="muted aide">Aucun chapitre dans sources/. Capture-en un avec manga-fetch.</p>';
+  $("chapState").textContent = CHAPS.length + " chapitre(s) — " + (j.root || "sources/");
+}
+async function openChap(i){
+  const c = CHAPS[i]; if (!c) return;
+  CHAP_OPEN = c.dir;
+  document.querySelectorAll("#chapList .chap-item").forEach((b, k) => b.classList.toggle("sel", k === i));
+  const j = await api("/manga/source_pages?d=" + encodeURIComponent(c.dir));
+  $("chapTitle").textContent = c.title + " — chapitre " + c.chapter;
+  const notes = (j.notes || []).length;
+  $("chapMeta").innerHTML = j.pages.length + " pages · " + esc(SOURCE_LBL[j.source] || j.source || "?")
+    + (j.source_url ? ' · <a href="' + esc(j.source_url) + '" target="_blank" rel="noopener">source</a>' : "")
+    + (notes ? " · " + notes + " image(s) écartée(s) à la capture" : "");
+  $("chapPages").innerHTML = j.pages.map((p, k) =>
+    '<figure data-page="' + k + '"><img loading="lazy" src="' + srcURL(p.path) + '" alt="page ' + (k + 1) + '">'
+    + '<figcaption>p. ' + (k + 1) + (p.w ? ' · ' + p.w + '×' + p.h : "") + '</figcaption></figure>').join("");
+  $("chapPages").onclick = e => { const f = e.target.closest("figure"); if (f) window.open(srcURL(j.pages[+f.dataset.page].path), "_blank"); };
+  $("chapDetail").hidden = false;
+  $("chapDetail").scrollIntoView({ behavior: "smooth", block: "start" });
+  log("chapitre ouvert : " + c.dir + " (" + j.pages.length + " pages)");
+}
+$("chapList").onclick = e => { const b = e.target.closest("[data-chap]"); if (b) openChap(+b.dataset.chap).catch(err => log("chapitre : " + err.message, "e")); };
+$("btnChapRefresh").onclick = () => refreshChaps().catch(err => log("chapitres : " + err.message, "e"));
+$("btnChapClose").onclick = () => { $("chapDetail").hidden = true; CHAP_OPEN = null;
+  document.querySelectorAll("#chapList .chap-item").forEach(b => b.classList.remove("sel")); };
+
 async function refreshGal(){
   if (!S.proj && !GAL_SLUG) return;
   const sel = $("galProj");
@@ -5363,6 +5444,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("main section").forEach(x => x.classList.remove("sel"));
   b.classList.add("sel"); $(b.dataset.tab).classList.add("sel");
   if (b.dataset.tab === "tGal") refreshGal();
+  if (b.dataset.tab === "tChap") refreshChaps().catch(e => log("chapitres : " + e.message, "e"));
   if (b.dataset.tab === "tPerso") loadChars().catch(e => log("personnages: " + e.message, "e"));
   if (b.dataset.tab === "tVal") loadValides().catch(e => log("validé: " + e.message, "e"));
   if (b.dataset.tab === "tSet"){
