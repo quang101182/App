@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.82.0</title>
+<title>Manga Studio v1.83.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -309,6 +309,10 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .cap-box summary{cursor:pointer;list-style-position:inside}
 .cap-box:not([open]){padding-bottom:10px}
 .lib-recherche{margin:0 0 10px}.lib-recherche input{width:100%;box-sizing:border-box}
+.lib-texte{margin:0 0 12px}.lib-texte h4{margin:4px 0 6px;font-size:13px;opacity:.8}
+.lib-texte button{display:block;width:100%;text-align:left;margin:0 0 6px;padding:8px 10px;background:var(--panel);
+  border:1px solid var(--line);border-radius:8px;color:inherit;font:inherit;cursor:pointer}
+.lib-texte button:hover{border-color:var(--accent2)}.lib-texte small{display:block;opacity:.75;margin-top:3px;line-height:1.35}
 .serie-item small.trouve{color:var(--accent2);opacity:1}
 .lib-nav{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
 .lib-nav h3{margin:0;flex:1;min-width:160px}
@@ -360,7 +364,12 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 /* v1.67.1 : le lecteur est plein ecran, mais son CONTENU respecte la largeur de l'app (760 px, comme
    main et l'en-tete). Avant, sur PC, le sous-titre courait d'un bord a l'autre de l'ecran (vu par Quang). */
 .lecteur>*:not(audio){width:100%;max-width:760px;margin-left:auto;margin-right:auto;box-sizing:border-box}
-.lec-bar{height:4px;background:#222}.lec-bar>div{height:100%;width:0;background:var(--accent)}
+/* v1.83.0 : barre de TEMPS du chapitre entier, cliquable et glissable (zone de 18 px pour le doigt) */
+.lec-bar{position:relative;height:18px;cursor:pointer;touch-action:none;flex:none}
+.lec-bar::before{content:"";position:absolute;left:0;right:0;top:7px;height:4px;background:#2a2a2a}
+.lec-bar>div{position:absolute;left:0;top:7px;height:4px;width:0;background:var(--accent)}
+.lec-bar>div::after{content:"";position:absolute;right:-6px;top:-4px;width:12px;height:12px;border-radius:50%;background:var(--accent)}
+.lec-bar span{position:absolute;right:8px;top:-15px;font-size:11px;color:#aaa;pointer-events:none}
 .lec-ctl{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;padding:10px}
 .lec-chk{display:flex;gap:4px;align-items:center;width:auto}.lec-chk input{width:auto}
 .lec-note .btn.sel{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -503,7 +512,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.82.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.83.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -880,6 +889,7 @@ body.epure .aide{display:none}
   </div>
   <div class="lib-recherche" id="libRechBox"><input type="search" id="libRech" autocomplete="off"
     placeholder="🔎 Rechercher : titre, autre titre (ex. Frieren), n° de chapitre ou de tome…"></div>
+  <div id="libTexte" class="lib-texte" hidden></div>
   <div class="lib-nav" id="libNav" hidden>
     <button class="btn sm" id="btnLibBack">← Toutes les séries</button>
     <h3 id="libSerie"></h3>
@@ -935,7 +945,7 @@ body.epure .aide{display:none}
     <button class="btn sm" id="lecFermer">✕ Fermer</button></div>
   <div class="lec-scene"><img id="lecImg" alt=""></div>
   <p class="lec-sous" id="lecSous"></p>
-  <div class="lec-bar"><div id="lecProg"></div></div>
+  <div class="lec-bar" id="lecBar" title="clique ou glisse pour te déplacer dans le chapitre"><div id="lecProg"></div><span id="lecTemps"></span></div>
   <div class="lec-ctl">
     <button class="btn" id="lecPrev" title="page précédente (←)">⏮</button>
     <button class="btn pri" id="lecPlay" title="lecture / pause (espace)">⏸</button>
@@ -1138,7 +1148,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.82.0";
+const VERSION = "1.83.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4521,6 +4531,7 @@ function renderLib(){
   if (LIB_SERIE && !serie){ LIB_SERIE = null; try { localStorage.removeItem("manga_serie"); } catch {} }
   $("libNav").hidden = !serie;
   $("libRechBox").hidden = !!serie;
+  if (serie) $("libTexte").hidden = true;
   if (!serie){
     const trouvees = series.map(s => Object.assign(s, { rech: chercherSerie(s, LIB_RECH) })).filter(s => s.rech.ok);
     $("chapList").innerHTML = trouvees.map(s =>
@@ -4602,7 +4613,33 @@ $("chapList").onclick = e => {
   const b = e.target.closest("[data-chap]"); if (b) openChap(+b.dataset.chap).catch(err => log("chapitre : " + err.message, "e"));
 };
 $("btnLibBack").onclick = () => ouvrirSerie(null);
-$("libRech").addEventListener("input", e => { LIB_RECH = e.target.value; renderLib(); });
+let RECH_TXT_T = null, RECH_TXT = [];
+$("libRech").addEventListener("input", e => {
+  LIB_RECH = e.target.value; renderLib();
+  // v1.83.0 : aussi dans le TEXTE des narrations (« Blue sort de son armure »), apres une courte pause de frappe
+  clearTimeout(RECH_TXT_T);
+  const q = LIB_RECH.trim();
+  if (q.length < 3 || /^\d+$/.test(q)){ $("libTexte").hidden = true; return; }
+  RECH_TXT_T = setTimeout(async () => {
+    try {
+      const r = await api("/manga/recherche_texte?q=" + encodeURIComponent(q));
+      if (q !== LIB_RECH.trim()) return;                     // la frappe a continue entre-temps
+      RECH_TXT = r.items || [];
+      $("libTexte").innerHTML = RECH_TXT.length ? '<h4>📖 Dans les narrations (' + r.total + ')</h4>' + RECH_TXT.map((h, k) =>
+        '<button data-rtxt="' + k + '"><b>' + esc(h.title) + ' — ch. ' + esc(h.chapter) + ' · page ' + h.page + '</b>'
+        + (h.voix ? "" : ' <span class="muted">(essai sans voix)</span>') + '<small>' + esc(h.extrait) + '</small></button>').join("") : "";
+      $("libTexte").hidden = !RECH_TXT.length;
+    } catch (err){ log("recherche texte : " + err.message, "w"); }
+  }, 350);
+});
+$("libTexte").onclick = async e => {
+  const b = e.target.closest("[data-rtxt]"); if (!b) return;
+  const h = RECH_TXT[+b.dataset.rtxt]; if (!h) return;
+  $("libRech").value = ""; LIB_RECH = ""; $("libTexte").hidden = true;
+  ouvrirSerie(h.slug);
+  const i = CHAPS.findIndex(c => c.dir === h.dir);
+  if (i >= 0) await openChap(i);
+};
 // v1.80.0 : le bloc de capture garde son etat plie / deplie (Quang 21/09 : la capture est ponctuelle)
 try { if (localStorage.getItem("manga_capture_ouvert") === "0") $("capBox").open = false; } catch {}
 $("capBox").addEventListener("toggle", () => { try { localStorage.setItem("manga_capture_ouvert", $("capBox").open ? "1" : "0"); } catch {} });
@@ -4834,7 +4871,7 @@ function montrerPage(){
   $("lecSous").textContent = $("lecSousOn").checked ? (p.narration || "") : "";
   $("lecInfo").textContent = (LEC.aveugle ? "" : (n.title || "") + " ch. " + (n.chapter || "") + " · ")
     + "page " + p.page + " (" + (LEC.i + 1) + "/" + n.pages.length + ")";
-  $("lecProg").style.width = (100 * (LEC.i + 1) / n.pages.length) + "%";
+  majBarre();
   $("lecPlay").textContent = LEC.playing ? "⏸" : "▶";
   const suivant = n.pages[LEC.i + 1];
   if (suivant) (new Image()).src = srcURL(CHAP_OPEN + "/" + suivant.file);        // prechargement
@@ -4851,6 +4888,38 @@ function montrerPage(){
     if (LEC.playing) LEC.timer = setTimeout(pageSuivante, 2500);                   // page muette : 2,5 s
   }
 }
+// Le chapitre est une suite de pages : duree d'une page = son audio (mesure) ou 2,5 s si elle est muette.
+const dureePage = p => p.audio ? (p.dur || 3) : 2.5;
+const fmtT = x => Math.floor(x / 60) + ":" + String(Math.floor(x % 60)).padStart(2, "0");
+function lecAvant(i){ let t = 0; for (let k = 0; k < i; k++) t += dureePage(LEC.n.pages[k]); return t; }
+function majBarre(apercu){
+  if (!LEC.n || !LEC.n.pages.length) return;
+  const tot = lecAvant(LEC.n.pages.length), p = LEC.n.pages[LEC.i];
+  const t = apercu != null ? apercu * tot : lecAvant(LEC.i) + (p && p.audio ? ($("lecAudio").currentTime || 0) : 0);
+  $("lecProg").style.width = Math.min(100, 100 * t / tot) + "%";
+  $("lecTemps").textContent = fmtT(t) + " / " + fmtT(tot);
+}
+function allerA(frac){                                    // frac 0..1 du chapitre -> page + instant dans la page
+  const pages = LEC.n.pages;
+  let t = Math.max(0, Math.min(0.999, frac)) * lecAvant(pages.length), i = 0;
+  while (i < pages.length - 1 && t >= dureePage(pages[i])){ t -= dureePage(pages[i]); i++; }
+  const a = $("lecAudio");
+  if (i === LEC.i && pages[i].audio && a.getAttribute("src")) a.currentTime = t;
+  else {
+    LEC.i = i; montrerPage();
+    if (pages[i].audio) a.addEventListener("loadedmetadata", () => { a.currentTime = Math.min(t, Math.max(0, a.duration - 0.2)); majBarre(); }, { once: true });
+  }
+  majBarre();
+}
+$("lecAudio").addEventListener("timeupdate", () => majBarre());
+(function(){
+  const bar = $("lecBar"); let actif = false;
+  const frac = e => { const r = bar.getBoundingClientRect(); return (e.clientX - r.left) / r.width; };
+  bar.addEventListener("pointerdown", e => { if (!LEC.n) return; actif = true; bar.setPointerCapture(e.pointerId); majBarre(frac(e)); });
+  bar.addEventListener("pointermove", e => { if (actif) majBarre(Math.max(0, Math.min(1, frac(e)))); });
+  bar.addEventListener("pointerup", e => { if (!actif) return; actif = false; allerA(frac(e)); });
+  bar.addEventListener("pointercancel", () => { actif = false; majBarre(); });
+})();
 function pageSuivante(){ if (LEC.i < LEC.n.pages.length - 1){ LEC.i++; montrerPage(); } else finNarr(); }
 function finNarr(){
   $("lecAudio").pause(); clearTimeout(LEC.timer);

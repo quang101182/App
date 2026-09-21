@@ -1,0 +1,81 @@
+--- _studio_llm_proxy.py.avant
++++ _studio_llm_proxy.py
+@@ -3577,6 +3577,10 @@
+     Rend (ok, dossier|raison).
+     """
+     ly = (demande.get("lyrics") or "").strip()
++    # v7.40 (Quang, 21/09) - un INSTRUMENTAL ne chante pas : ACE-Step ignore tout drapeau et chante les paroles qu'il
++    # recoit. Vides -> "[instrumental]" plus bas, la convention d'ACE-Step.
++    if demande.get("instrumental"):
++        ly = ""
+     st = (demande.get("style") or demande.get("prompt") or "").strip()
+     # v7.35 : duree LIBRE (le defaut de l'app) = ACE-Step la choisit (son LM l'estime d'apres les paroles, comme le
+     # moteur 1). Avant : 120 s imposees -> toutes les creations faisaient 2:00 pile.
+@@ -7581,6 +7585,58 @@
+     return {"ok": True, "slug": nouveau, "ancien": slug, "titre": titre, "chapitres": n}
+ 
+ 
++# --- Recherche dans le texte des narrations (Manga Studio v1.83.0) --------------------
++def _norm_rech(t):
++    t = unicodedata.normalize("NFD", t or "")
++    t = "".join(c for c in t if unicodedata.category(c) != "Mn").lower()
++    return re.sub(r"[^0-9a-z]+", " ", t).strip()
++
++
++def manga_recherche_texte(q):
++    mots = [m for m in _norm_rech(q).split() if len(m) >= 2]
++    if not mots:
++        return {"items": []}
++    racine = os.path.normpath(MANGA_SOURCES)
++    vus, out = {}, []
++    for slug in sorted(os.listdir(racine)) if os.path.isdir(racine) else []:
++        sd = os.path.join(racine, slug)
++        if slug.startswith(("_", ".")) or not os.path.isdir(sd):
++            continue
++        for ch in sorted(os.listdir(sd)):
++            nd = os.path.join(sd, ch, "narration")
++            if not ch.startswith("ch_") or not os.path.isdir(nd):
++                continue
++            for tag in sorted(os.listdir(nd)):
++                np_ = os.path.join(nd, tag, "narration.json")
++                if not os.path.isfile(np_):
++                    continue
++                try:
++                    with open(np_, encoding="utf-8") as f:
++                        n = json.load(f)
++                except Exception:
++                    continue
++                for pg in n.get("pages") or []:
++                    txt = (pg.get("narration") or "").strip()
++                    if not txt or not all(m in _norm_rech(txt) for m in mots):
++                        continue
++                    cle = (slug + "/" + ch, pg.get("page"))
++                    avec_voix = bool(pg.get("audio"))
++                    if cle in vus and (vus[cle]["voix"] or not avec_voix):
++                        continue
++                    i = _norm_rech(txt).find(mots[0])
++                    debut = max(0, int(i * len(txt) / max(1, len(_norm_rech(txt)))) - 60)
++                    hit = {"dir": slug + "/" + ch, "slug": slug, "chapter": ch[3:], "title": n.get("title") or slug,
++                           "tag": tag, "page": pg.get("page"), "voix": avec_voix,
++                           "extrait": ("…" if debut else "") + txt[debut:debut + 180] + ("…" if len(txt) > debut + 180 else "")}
++                    if cle in vus:
++                        out[out.index(vus[cle])] = hit
++                    else:
++                        out.append(hit)
++                    vus[cle] = hit
++    out.sort(key=lambda h: not h["voix"])            # ce qui s'ECOUTE d'abord ; les essais sans voix ensuite
++    return {"items": out[:30], "total": len(out)}
++
++
+ # --- Narration des chapitres (v1.67.0) -----------------------------------------------
+ # Le proxy ne reimplemente rien : il lance scripts/narrate_chapter.py (venv kohya) EN FOND,
+ # et lit ce que le script ecrit sous sources/<chap>/narration/<tag>/ (progress.json puis
+@@ -8408,6 +8464,8 @@
+             _r = manga_narrations((parse_qs(urlparse(self.path).query).get("d") or [""])[0])
+             if _r is None: self._json(404, {"error": "chapitre introuvable"})
+             else: self._json(200, _r)
++        elif self.path.split("?", 1)[0] == "/manga/recherche_texte":      # Manga Studio v1.83.0
++            self._json(200, manga_recherche_texte((parse_qs(urlparse(self.path).query).get("q") or [""])[0]))
+         elif self.path.split("?", 1)[0] == "/manga/costs":
+             self._json(200, manga_costs())
+         elif self.path.split("?", 1)[0] == "/manga/fetch_tabs":
