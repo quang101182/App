@@ -34,7 +34,7 @@ with sync_playwright() as p:
         pg.goto("http://127.0.0.1:%d/manga#k=" % PORT + KEY); pg.wait_for_timeout(3000)
         pg.evaluate("() => { try { localStorage.removeItem('manga_mus_on'); localStorage.removeItem('manga_mus_vol'); } catch {} }")
         pg.reload(); pg.wait_for_timeout(3000)
-        check("version 1.85.0", "1.85.0" in pg.inner_text("#verBadge"))
+        check("version >= 1.85.0", pg.inner_text("#verBadge") >= "v1.85.0", pg.inner_text("#verBadge"))
         pg.click('nav button[data-tab="tChap"]'); pg.wait_for_timeout(1500)
         i = pg.evaluate("() => CHAPS.findIndex(c => c.dir === 'claymore/ch_1')")
         pg.evaluate("(i) => openChap(i)", i); pg.wait_for_timeout(3000)

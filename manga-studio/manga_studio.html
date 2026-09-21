@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.85.0</title>
+<title>Manga Studio v1.86.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -321,6 +321,9 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .chap-pages figure.pg-sel::after{content:"✓";position:absolute;top:6px;right:8px;font-weight:700;color:#fff;
   background:var(--accent);border-radius:50%;width:22px;height:22px;display:grid;place-items:center}
 .trad-box,.mus-box{margin-top:10px}
+.lec-sous .km{opacity:.5;transition:opacity .12s,color .12s}
+.lec-sous .km.dit{opacity:1}
+.lec-sous .km.on{opacity:1;color:#ffd700;text-shadow:0 0 10px rgba(255,215,0,.35)}
 .lec-vol{width:90px;accent-color:var(--acc,#e94560)}
 .narr-essais{margin-top:4px}.narr-essais summary{cursor:pointer;padding:6px 2px;opacity:.8}
 .narr-essais .narr-runs{margin-top:6px}
@@ -514,7 +517,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.85.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.86.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -978,6 +981,7 @@ body.epure .aide{display:none}
     <button class="btn" id="lecNext" title="page suivante (→)">⏭</button>
     <select id="lecVit" style="width:auto"><option value="1">1×</option><option value="1.15" selected>1,15×</option><option value="1.3">1,3×</option><option value="1.5">1,5×</option></select>
     <label class="lec-chk"><input type="checkbox" id="lecSousOn" checked> sous-titres</label>
+    <label class="lec-chk" title="le mot prononcé s'allume"><input type="checkbox" id="lecKarOn"> karaoké</label>
     <span class="lec-chk" id="lecMusBox" hidden><label class="lec-chk" title="musique de fond de la série"><input type="checkbox" id="lecMusOn"> 🎵</label>
       <input type="range" class="lec-vol" id="lecMusVol" min="0" max="100" step="1" title="volume de la musique"></span>
     <span id="lecNote" class="lec-note" hidden>Ta note :
@@ -1177,7 +1181,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.85.0";
+const VERSION = "1.86.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4972,7 +4976,8 @@ async function refreshNarrs(){
     const etape = { noms: "repérage des personnages", vision: "lecture des pages", verification: "vérification", recit: "écriture du récit", voix: "synthèse vocale" }[pr.etape] || pr.etape || "démarrage";
     let info;
     if (n.etat === "fini") info = n.pages + " pages · " + (st.cout_total != null ? st.cout_total.toFixed(3) + " $ · " : "")
-      + "généré en " + fmtS(st.total_s || 0) + (n.titre ? " · « " + esc(n.titre) + " »" : "");
+      + "généré en " + fmtS(st.total_s || 0) + (n.titre ? " · « " + esc(n.titre) + " »" : "")
+      + (n.karaoke_en_cours ? " · ⏳ karaoké en calage…" : st.karaoke ? " · 🎤 karaoké calé" : "");
     else if (n.etat === "en cours") info = etape + " — " + (pr.fait || 0) + "/" + (pr.total || "?")
       + '<div class="narr-pbar"><div style="width:' + pct + '%"></div></div>';
     else if (n.etat === "echec") info = "échec — " + esc((n.err || "").split("\n").filter(Boolean).slice(-1)[0] || "voir run.log");
@@ -4980,6 +4985,8 @@ async function refreshNarrs(){
     return '<div class="narr-run"><b>' + (lbl[n.etat] || "") + " " + esc(n.tag) + "</b>"
       + '<span class="grow muted">' + info + "</span>"
       + (n.etat === "fini" && n.audio ? '<button class="btn sm" data-ecoute="' + i + '">▶ Écouter</button>' : "")
+      + (n.etat === "fini" && n.audio && !st.karaoke && !n.karaoke_en_cours
+         ? '<button class="btn sm" data-kar="' + i + '" title="cale chaque mot sur la voix (Whisper, ~0,003 $ pour 20 pages) : le mot prononcé s\'allume dans le lecteur">🎤 Karaoké</button>' : "")
       + (n.etat === "fini" && ["kimi", "gemini", "pixtral"].includes(n.engine)
          ? '<button class="btn sm" data-revoix="' + i + '" title="même texte, lu par la voix choisie dans le menu Voix">🎙 Autre voix</button>' : "")
       + (n.etat !== "en cours" ? '<button class="btn sm danger" data-suppr-narr="' + i + '" title="supprimer cette narration">🗑</button>' : "")
@@ -4991,11 +4998,21 @@ async function refreshNarrs(){
     + (essais.length ? '<details class="narr-essais"><summary>Essais techniques sans voix (' + essais.length
       + ') — bancs de mesure, rien à écouter</summary><div class="narr-runs">' + essais.join("") + "</div></details>" : "");
   $("btnAveugle").disabled = groupeAveugle().length < 2;
-  const encours = NARRS.some(n => n.etat === "en cours");
+  const encours = NARRS.some(n => n.etat === "en cours" || n.karaoke_en_cours);
   if (encours && !NARR_POLL) NARR_POLL = setInterval(() => refreshNarrs().catch(e => log("narrations : " + e.message, "e")), 3000);
   if (!encours && NARR_POLL){ clearInterval(NARR_POLL); NARR_POLL = null; chargerCouts(); }
 }
 $("narrRuns").onclick = async e => {
+  const kb = e.target.closest("[data-kar]");
+  if (kb){
+    const n = NARRS[+kb.dataset.kar];
+    try {
+      const r = await api("/manga/karaoke", { d: CHAP_OPEN, tag: n.tag });
+      if (r.error) throw new Error(r.error);
+      log("karaoké lancé : " + n.tag); await refreshNarrs();
+    } catch (err){ log("karaoké : " + err.message, "e"); alert(err.message); }
+    return;
+  }
   const rv = e.target.closest("[data-revoix]");
   if (rv){
     const n = NARRS[+rv.dataset.revoix], voix = $("narrVoice").value; if (!n) return;
@@ -5062,7 +5079,7 @@ function montrerPage(){
   img.src = pageSrc(CHAP_OPEN + "/" + p.file);
   img.style.setProperty("--kb", Math.max(4, (p.dur || 3) / (+$("lecVit").value) + 1) + "s");
   img.classList.add(LEC.i % 2 ? "kb2" : "kb");
-  $("lecSous").textContent = $("lecSousOn").checked ? (p.narration || "") : "";
+  sousTitre(p);
   $("lecInfo").textContent = (LEC.aveugle ? "" : (n.title || "") + " ch. " + (n.chapter || "") + " · ")
     + "page " + p.page + " (" + (LEC.i + 1) + "/" + n.pages.length + ")";
   majBarre();
@@ -5144,8 +5161,45 @@ $("lecPrev").onclick = () => { if (LEC.i > 0){ LEC.i--; montrerPage(); } };
 $("lecVit").onchange = () => { $("lecAudio").playbackRate = +$("lecVit").value; $("lecVit").blur(); };
 $("lecSousOn").onchange = () => {
   const p = LEC.n && LEC.n.pages[LEC.i];
-  $("lecSous").textContent = $("lecSousOn").checked && p ? (p.narration || "") : "";
+  if (p) sousTitre(p);
   $("lecSousOn").blur();
+};
+// v1.86.0 : KARAOKE. Un <span> par mot de narration.split() ; le mot dont le debut est passe s'allume.
+// Temps : p.mots (Whisper recale, un couple par mot) ; sinon repli au prorata de la longueur des mots.
+let KAR_ON = true, KAR = { spans: [], t: [], k: -1, raf: 0 };
+try { KAR_ON = localStorage.getItem("manga_kar") !== "0"; } catch {}
+$("lecKarOn").checked = KAR_ON;
+function tempsMots(p){
+  const toks = (p.narration || "").split(/\s+/).filter(Boolean);
+  if (Array.isArray(p.mots) && p.mots.length === toks.length) return p.mots.map(m => m[0]);
+  const poids = toks.map(t => t.length + 1), tot = poids.reduce((a, b) => a + b, 0) || 1, dur = p.dur || 3;
+  let c = 0; return poids.map(w => { const t = c / tot * dur; c += w; return t; });
+}
+function sousTitre(p){
+  cancelAnimationFrame(KAR.raf); KAR.spans = []; KAR.k = -1;
+  const el = $("lecSous");
+  if (!$("lecSousOn").checked){ el.textContent = ""; return; }
+  if (!KAR_ON || !p.audio){ el.textContent = p.narration || ""; return; }
+  const toks = (p.narration || "").split(/\s+/).filter(Boolean);
+  el.innerHTML = toks.map(t => '<span class="km">' + esc(t) + "</span>").join(" ");
+  KAR.spans = [...el.querySelectorAll(".km")]; KAR.t = tempsMots(p);
+  karTick();
+}
+function karTick(){
+  if ($("lecteur").hidden || !KAR.spans.length) return;
+  const t = $("lecAudio").currentTime || 0;
+  let k = -1; while (k + 1 < KAR.t.length && KAR.t[k + 1] <= t + 0.05) k++;
+  if (k !== KAR.k){
+    KAR.spans.forEach((s, i) => { s.classList.toggle("dit", i < k); s.classList.toggle("on", i === k); });
+    KAR.k = k;
+  }
+  KAR.raf = requestAnimationFrame(karTick);
+}
+$("lecKarOn").onchange = () => {
+  KAR_ON = $("lecKarOn").checked; try { localStorage.setItem("manga_kar", KAR_ON ? "1" : "0"); } catch {}
+  const p = LEC.n && LEC.n.pages[LEC.i];
+  if (p) sousTitre(p);
+  $("lecKarOn").blur();
 };
 $("lecFermer").onclick = () => {
   $("lecAudio").pause(); clearTimeout(LEC.timer); $("lecteur").hidden = true; document.body.style.overflow = "";

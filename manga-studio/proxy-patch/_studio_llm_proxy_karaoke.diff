@@ -1,0 +1,55 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-manga186-1790031837	2026-09-22 01:03:57.664419300 +0200
++++ C:/Users/quang/AppData/Local/Temp/claude/D--Download-02-Apps-Web-Repo-github/8297ee70-7895-4120-9400-2a0b2f99d277/scratchpad/p3.py	2026-09-22 01:03:57.719111800 +0200
+@@ -7660,6 +7660,33 @@
+     return bool(p and p.poll() is None)
+ 
+ 
++# --- Karaoke d'une narration (Manga Studio v1.86.0) ------------------------------------
++MANGA_KARAOKE = os.path.join(MANGA_ROOT, "scripts", "karaoke_mots.py")
++_KAR_JOBS = {}                                   # (chapitre, tag) -> Popen
++
++
++def _kar_vivant(d, tag):
++    p = _KAR_JOBS.get((d.strip("/"), tag))
++    return bool(p and p.poll() is None)
++
++
++def manga_karaoke(d, tag):
++    td = _narr_dir(d, tag)
++    if not tag or not td or not os.path.isfile(os.path.join(td, "narration.json")):
++        return {"error": "narration introuvable"}
++    if not os.path.isfile(MANGA_PY) or not os.path.isfile(MANGA_KARAOKE):
++        return {"error": "venv kohya ou karaoke_mots.py introuvable"}
++    if _narr_job_vivant(d, tag):
++        return {"error": "la narration n'est pas finie"}
++    if _kar_vivant(d, tag):
++        return {"error": "le karaoke est deja en cours"}
++    lg = open(os.path.join(td, "karaoke.log"), "w", encoding="utf-8")
++    _KAR_JOBS[(d.strip("/"), tag)] = subprocess.Popen(
++        [MANGA_PY, MANGA_KARAOKE, d.strip("/"), tag], stdout=lg, stderr=lg,
++        cwd=os.path.dirname(MANGA_KARAOKE), creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
++    return {"ok": True}
++
++
+ # --- Musique de fond par serie (Manga Studio v1.85.0) -----------------------------------
+ _MUS_EXT = (".mp3", ".wav", ".ogg", ".m4a", ".flac")
+ 
+@@ -7837,7 +7864,8 @@
+             td = os.path.join(nd, tag)
+             if not os.path.isdir(td) or not _RE_TAG.match(tag):
+                 continue
+-            it = {"tag": tag, "etat": "vide", "running": _narr_job_vivant(d, tag)}
++            it = {"tag": tag, "etat": "vide", "running": _narr_job_vivant(d, tag),
++                  "karaoke_en_cours": _kar_vivant(d, tag)}                 # v1.86.0
+             pp = os.path.join(td, "progress.json")
+             if os.path.isfile(pp):
+                 try:
+@@ -9082,6 +9110,8 @@
+                 self._json(200, manga_source_delete(data))
+             elif self.path == "/manga/serie_infos":            # Manga Studio v1.77.0
+                 self._json(200, manga_serie_infos(data))
++            elif self.path == "/manga/karaoke":                # Manga Studio v1.86.0
++                self._json(200, manga_karaoke(data.get("d") or "", data.get("tag") or ""))
+             elif self.path == "/manga/musique_import":         # Manga Studio v1.85.0
+                 self._json(200, manga_musique_import(data))
+             elif self.path == "/manga/musique_choix":

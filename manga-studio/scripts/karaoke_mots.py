@@ -17,6 +17,7 @@ import narrate_chapter as nc          # GATEWAY, secret, frein 18/min
 VERSION = "1.86.0"
 SRC = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources"))
 MODELE = "whisper-large-v3-turbo"
+MAX_CPS = 25                          # debit maximal plausible d'une voix (caracteres/s, espaces compris)
 PRIX_HEURE = 0.04                     # $ / heure d'audio (Groq), 10 s factures au minimum par appel
 
 
@@ -65,12 +66,41 @@ def recaler(texte, mots, dur):
     toks = texte.split()
     if not toks:
         return []
+    # Whisper derive parfois d'environ 3 % : son dernier mot finit APRES la fin reelle du MP3 (mesure 22/09 :
+    # 11,20 s pour 10,85 s). On ramene alors toute son echelle de temps a la duree vraie.
+    fin_w = max([float(m["end"]) for m in mots] or [0])
+    if dur and fin_w > dur:
+        mots = [dict(m, start=float(m["start"]) * dur / fin_w, end=float(m["end"]) * dur / fin_w) for m in mots]
     a, b = [norm(t) for t in toks], [norm(m.get("word", "")) for m in mots]
     deb, fin = [None] * len(toks), [None] * len(toks)
     for bl in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks():
         for k in range(bl.size):
             if a[bl.a + k]:
                 deb[bl.a + k], fin[bl.a + k] = float(mots[bl.b + k]["start"]), float(mots[bl.b + k]["end"])
+    # Whisper SAUTE parfois un passage et etire le mot suivant pour boucher le trou (mesure 22/09, Claymore p.2 :
+    # 15 mots absents, « ombre » dure 2,7 s). Les ancres qui bordent un trou impossible a dire (> MAX_CPS
+    # caracteres/s) sont donc fausses : on les retire, le trou s'elargit, jusqu'a un debit plausible.
+    while True:
+        retire, i = False, 0
+        while i < len(toks):
+            if deb[i] is not None:
+                i += 1
+                continue
+            j = i
+            while j < len(toks) and deb[j] is None:
+                j += 1
+            t0 = fin[i - 1] if i > 0 else 0.0
+            t1 = deb[j] if j < len(toks) else max(dur, t0)
+            if sum(len(t) + 1 for t in toks[i:j]) > MAX_CPS * max(t1 - t0, 0.01):
+                for k in (i - 1, j):
+                    if 0 <= k < len(toks) and deb[k] is not None:
+                        deb[k] = fin[k] = None
+                        retire = True
+                if retire:
+                    break                   # les bornes ont bouge : on repart du debut
+            i = j
+        if not retire:
+            break
     # trous : repartis entre l'ancre d'avant et celle d'apres, au prorata de la longueur des mots
     i = 0
     while i < len(toks):
