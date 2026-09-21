@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.70.0</title>
+<title>Manga Studio v1.71.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -296,6 +296,11 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .chap-item small{display:block;opacity:.75;line-height:1.35;margin-top:2px}
 .chap-pages img{aspect-ratio:2/3;object-fit:contain;background:#0003}
 #chapMeta a{color:var(--accent2)}
+/* ---------- Capture + avertissements (v1.71.0) ---------- */
+.cap-log{max-height:9em;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;margin:8px 0 0;
+  padding:6px 8px;background:var(--panel2);border:1px solid var(--line);border-radius:6px}
+.chap-notes{margin:0 0 8px;padding-left:18px;color:#e6b450;font-size:13px}
+#capTab{max-width:100%}
 /* ---------- Narration + lecteur (v1.67.0) ---------- */
 .narr-box{border:1px solid var(--line);border-radius:8px;padding:10px;margin:0 0 10px;background:var(--panel2)}
 .narr-runs{display:grid;gap:6px;margin-top:10px}
@@ -460,7 +465,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.70.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.71.0</span></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -782,6 +787,37 @@ body.epure .aide{display:none}
      LECTURE SEULE : l'app ne capture rien, elle consomme. sources/ est gitignore
      (images sous licence) -- rien d'ici ne doit finir dans le depot. -->
 <section id="tChap">
+  <!-- CAPTURE (v1.71.0) : manga-fetch enveloppe par le proxy. On choisit l'ONGLET dans l'app (plus de
+       console, plus de devinette) ; remplacer un chapitre existant se CONFIRME. -->
+  <div class="card cap-box" id="capBox">
+    <h3>📥 Capturer un chapitre</h3>
+    <p class="muted aide" style="margin:0 0 8px">
+      1. Ouvre le chapitre dans la <b>fenêtre de capture</b> (fenêtre Edge dédiée) · 2. choisis l'onglet ci-dessous ·
+      3. donne le titre et le numéro · 4. Capturer.
+    </p>
+    <div class="row">
+      <span id="capEdge" class="muted">fenêtre de capture : …</span>
+      <button class="btn sm" id="btnCapEdge">Ouvrir la fenêtre de capture</button>
+      <button class="btn sm" id="btnCapTabs">↻ Onglets</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div class="grow"><label>Onglet à capturer</label><select id="capTab"></select></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div class="grow"><label>Titre du manga</label><input id="capTitre" list="capTitres" placeholder="ex. One Punch Man"></div>
+      <div style="width:110px"><label>Chapitre n°</label><input id="capChap" inputmode="decimal" placeholder="ex. 301"></div>
+    </div>
+    <datalist id="capTitres"></datalist>
+    <div class="row" style="margin-top:8px">
+      <label class="lec-chk"><input type="checkbox" id="capPage1"> depuis la page 1 (si l'onglet est au milieu du chapitre)</label>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn pri" id="btnCapturer">📥 Capturer</button>
+      <span class="muted" id="capEtat"></span>
+    </div>
+    <div class="narr-pbar" id="capBar" hidden><div style="width:0"></div></div>
+    <pre class="cap-log" id="capLog" hidden></pre>
+  </div>
   <div class="card">
     <h3>Chapitres disponibles</h3>
     <p class="muted aide" style="margin:0 0 8px">
@@ -798,6 +834,9 @@ body.epure .aide{display:none}
       <button class="btn sm" id="btnChapClose">Fermer</button>
     </div>
     <p class="muted aide" id="chapMeta" style="margin:6px 0 8px"></p>
+    <ul class="chap-notes" id="chapNotes" hidden></ul>
+    <div class="row" style="margin:0 0 8px"><button class="btn sm" id="btnChapVerif">🔎 Vérifier (intégrité + complétude)</button>
+      <span class="muted" id="chapVerif"></span></div>
     <!-- NARRATION (v1.67.0) : lance scripts/narrate_chapter.py via le proxy, puis ecoute. -->
     <div class="narr-box">
       <div class="row">
@@ -1028,7 +1067,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.70.0";
+const VERSION = "1.71.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4341,6 +4380,10 @@ async function openChap(i){
   $("chapMeta").innerHTML = j.pages.length + " pages · " + esc(SOURCE_LBL[j.source] || j.source || "?")
     + (j.source_url ? ' · <a href="' + esc(j.source_url) + '" target="_blank" rel="noopener">source</a>' : "")
     + (notes ? " · " + notes + " image(s) écartée(s) à la capture" : "");
+  // v1.71 : les notes du manifeste sont des AVERTISSEMENTS a lire (page etroite, depart au milieu, intercalaire)
+  $("chapNotes").innerHTML = (j.notes || []).map(n => "<li>⚠ " + esc(n) + "</li>").join("");
+  $("chapNotes").hidden = !(j.notes || []).length;
+  $("chapVerif").textContent = "";
   $("chapPages").innerHTML = j.pages.map((p, k) =>
     '<figure data-page="' + k + '"><img loading="lazy" src="' + srcURL(p.path) + '" alt="page ' + (k + 1) + '">'
     + '<figcaption>p. ' + (k + 1) + (p.w ? ' · ' + p.w + '×' + p.h : "") + '</figcaption></figure>').join("");
@@ -4530,6 +4573,94 @@ $("btnAveugle").onclick = () => {
   for (let i = tags.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [tags[i], tags[j]] = [tags[j], tags[i]]; }
   ouvrirLecteur(tags, true).catch(err => log("aveugle : " + err.message, "e"));
 };
+
+/* =====================================================================
+   CAPTURE (v1.71.0) -- manga-fetch enveloppe par le proxy, pilote depuis l'app
+   ===================================================================== */
+let CAP_POLL = null, CAP_TABS = [];
+function slugTitre(t){ return String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, ""); }
+async function refreshCapTabs(){
+  const j = await api("/manga/fetch_tabs");
+  CAP_TABS = j.tabs || [];
+  $("capEdge").textContent = j.edge ? "fenêtre de capture : ouverte (" + CAP_TABS.length + " onglet(s))" : "fenêtre de capture : fermée";
+  $("btnCapEdge").hidden = !!j.edge;
+  const avant = $("capTab").value;
+  $("capTab").innerHTML = CAP_TABS.length
+    ? CAP_TABS.map((t, i) => '<option value="' + i + '">' + esc((t.title || "(sans titre)").slice(0, 60)) + " — " + esc(srcHost(t.url)) + "</option>").join("")
+    : '<option value="">' + (j.edge ? "aucun onglet web ouvert" : "ouvre d'abord la fenêtre de capture") + "</option>";
+  const k = CAP_TABS.findIndex(t => t.url === avant);
+  if (k >= 0) $("capTab").value = String(k);
+  $("capTitres").innerHTML = [...new Set(CHAPS.map(c => c.title))].map(t => '<option value="' + esc(t) + '">').join("");
+}
+$("btnCapTabs").onclick = () => refreshCapTabs().catch(e => log("capture : " + e.message, "e"));
+$("btnCapEdge").onclick = async () => {
+  try {
+    await api("/manga/fetch_edge", {});
+    $("capEdge").textContent = "fenêtre de capture : ouverture…";
+    for (let i = 0; i < 15; i++){                       // elle met quelques secondes a exposer son port
+      await new Promise(r => setTimeout(r, 1500));
+      await refreshCapTabs();
+      if (!$("btnCapEdge").hidden) continue;
+      break;
+    }
+    log("fenêtre de capture ouverte");
+  } catch (e){ log("capture : " + e.message, "e"); }
+};
+async function suivreCapture(){
+  const s = await api("/manga/fetch_status");
+  if (s.etat === "aucune") return;
+  const bar = $("capBar"), lg = $("capLog");
+  bar.hidden = false; lg.hidden = false;
+  lg.textContent = (s.sortie || []).join("\n");
+  if (s.etat === "en cours"){
+    $("capEtat").textContent = "capture de « " + s.titre + " » ch. " + s.chapitre + " — " + s.pages + " page(s) collectée(s) · " + fmtS(s.duree_s);
+    bar.firstElementChild.style.width = Math.min(95, 5 + s.pages * 1.5) + "%";   // pas de total connu d'avance
+    return;
+  }
+  clearInterval(CAP_POLL); CAP_POLL = null;
+  $("btnCapturer").disabled = false;
+  bar.firstElementChild.style.width = "100%";
+  if (s.etat === "fini" && s.dossier){
+    $("capEtat").textContent = "✅ « " + s.titre + " » ch. " + s.chapitre + " capturé (" + fmtS(s.duree_s) + ")"
+      + (s.avertissements ? " — avec avertissements, voir la fiche du chapitre" : "");
+    log("capture terminée : " + s.dossier);
+    await refreshChaps();
+    const i = CHAPS.findIndex(c => c.dir === s.dossier);
+    if (i >= 0) openChap(i).catch(e => log("chapitre : " + e.message, "e"));
+  } else if (s.etat === "fini"){
+    $("capEtat").textContent = "ℹ️ rien de capturé : " + ((s.sortie || []).slice(-1)[0] || "voir le détail");
+  } else {
+    $("capEtat").textContent = "❌ échec de la capture (code " + s.code + ") — détail ci-dessous";
+  }
+}
+$("btnCapturer").onclick = async () => {
+  const t = CAP_TABS[+$("capTab").value];
+  const titre = $("capTitre").value.trim(), chap = $("capChap").value.trim().replace(",", ".");
+  if (!t){ alert("Choisis l'onglet à capturer (ouvre d'abord le chapitre dans la fenêtre de capture)."); return; }
+  if (!titre || !/^\d{1,5}(\.\d{1,2})?$/.test(chap)){ alert("Indique le titre et un numéro de chapitre (ex. 301)."); return; }
+  // Deja present ? (meme titre a la casse/aux espaces pres, meme numero) -> on DEMANDE avant de remplacer
+  const deja = CHAPS.find(c => slugTitre(c.title) === slugTitre(titre) && String(c.chapter) === chap);
+  let force = false;
+  if (deja){
+    if (!confirm("« " + deja.title + " » chapitre " + chap + " existe déjà (" + deja.pages + " pages).\nLe remplacer par cette nouvelle capture ?")) return;
+    force = true;
+  }
+  if (!confirm("Capturer cet onglet ?\n\n" + (t.title || "") + "\n" + t.url + "\n\n→ « " + titre + " » chapitre " + chap)) return;
+  try {
+    await api("/manga/fetch_capture", { tab: t.url, title: titre, chapter: chap, force, page1: $("capPage1").checked });
+    $("btnCapturer").disabled = true;
+    $("capEtat").textContent = "capture lancée…";
+    log("capture lancée : " + titre + " ch." + chap + " ← " + t.url.slice(0, 80));
+    if (!CAP_POLL) CAP_POLL = setInterval(() => suivreCapture().catch(e => log("capture : " + e.message, "e")), 1500);
+  } catch (e){ log("capture : " + e.message, "e"); alert(e.message); }
+};
+async function verifierChap(){
+  if (!CHAP_OPEN) return;
+  $("chapVerif").textContent = "vérification…";
+  const r = await api("/manga/fetch_verify", { d: CHAP_OPEN });
+  $("chapVerif").textContent = (r.ok ? "✅ " : "❌ ") + (r.lignes || []).join(" · ");
+}
+$("btnChapVerif").onclick = () => verifierChap().catch(e => { $("chapVerif").textContent = "❌ " + e.message; });
 
 async function refreshGal(){
   if (!S.proj && !GAL_SLUG) return;
@@ -5685,7 +5816,11 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("main section").forEach(x => x.classList.remove("sel"));
   b.classList.add("sel"); $(b.dataset.tab).classList.add("sel");
   if (b.dataset.tab === "tGal") refreshGal();
-  if (b.dataset.tab === "tChap") refreshChaps().catch(e => log("chapitres : " + e.message, "e"));
+  if (b.dataset.tab === "tChap") refreshChaps().then(() => refreshCapTabs()).then(async () => {
+    const s = await api("/manga/fetch_status");               // une capture lancee avant de recharger la page ?
+    if (s.etat === "en cours" && !CAP_POLL){ $("btnCapturer").disabled = true;
+      CAP_POLL = setInterval(() => suivreCapture().catch(e => log("capture : " + e.message, "e")), 1500); }
+  }).catch(e => log("chapitres : " + e.message, "e"));
   if (b.dataset.tab === "tPerso") loadChars().catch(e => log("personnages: " + e.message, "e"));
   if (b.dataset.tab === "tVal") loadValides().catch(e => log("validé: " + e.message, "e"));
   if (b.dataset.tab === "tSet"){

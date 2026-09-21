@@ -1,0 +1,197 @@
+--- _studio_llm_proxy.py
++++ _studio_llm_proxy.py
+@@ -7294,6 +7294,168 @@
+     return {"ok": True}
+ 
+ 
++# --- CAPTURE depuis Manga Studio (v1.71.0) --------------------------------------------
++# On ENVELOPPE manga-fetch (App/manga-studio/manga-fetch/, domaine d'une autre session) : jamais
++# modifie d'ici. Les questions console de `capture` (quel onglet ? remplacer ?) deviennent des CHOIX
++# dans l'app : l'onglet est choisi dans la liste REELLE de la fenetre dediee (CDP 9223) -> --tab <url
++# exacte> (plus de devinette : incident 18:47 du mauvais onglet) ; remplacer = --force, seulement si
++# Quang l'a confirme. Progression = lignes [page] d'events.log depuis le lancement.
++MF_PY = os.path.join(os.environ.get("LOCALAPPDATA", ""), "manga-fetch", "venv", "Scripts", "python.exe")
++MF_SCRIPT = os.path.join(MANGA_ROOT, "manga-fetch", "manga_fetch.py")
++MF_EVENTS = os.path.join(os.environ.get("LOCALAPPDATA", ""), "manga-fetch", "events.log")
++MF_CDP = "http://127.0.0.1:9223"
++MF_RUNLOG = os.path.join(os.environ.get("LOCALAPPDATA", ""), "manga-studio", "capture_run.log")
++_FETCH = {"proc": None, "debut": 0, "offset": 0, "titre": "", "chapitre": "", "backup": None, "dest": None}
++
++
++def _mf_dest(titre, chapitre):
++    """Le dossier que manga-fetch va ecrire : MEME regle que resoudre_slug + chap_dir (manga_fetch.py) --
++    un dossier existant de meme cle (insensible espaces/tirets/casse) est reutilise."""
++    cle = re.sub(r"[^a-z0-9]", "", (titre or "").lower())
++    racine = os.path.normpath(MANGA_SOURCES)
++    slug = None
++    if os.path.isdir(racine):
++        for d in os.listdir(racine):
++            if os.path.isdir(os.path.join(racine, d)) and re.sub(r"[^a-z0-9]", "", d.lower()) == cle:
++                slug = d
++                break
++    if slug is None:
++        slug = re.sub(r"[^a-z0-9]+", "-", (titre or "").lower()).strip("-")[:60] or "sans-titre"
++    return os.path.join(racine, slug, "ch_" + str(chapitre).replace("/", "-"))
++
++
++def _mf_fin_remplacement(reussi):
++    """Apres un remplacement : ancien supprime si la capture a reussi, RESTAURE sinon. Une seule fois."""
++    b, dest = _FETCH.get("backup"), _FETCH.get("dest")
++    if not b or not os.path.isdir(b):
++        _FETCH["backup"] = None
++        return None
++    try:
++        if reussi:
++            shutil.rmtree(b)
++            action = "ancien supprime"
++        else:
++            if dest and os.path.isdir(dest):
++                shutil.rmtree(dest)          # capture partielle / ratee
++            os.rename(b, dest)
++            action = "ancien RESTAURE"
++    except Exception as e:
++        action = "ERREUR (%s) -- copie gardee : %s" % (e, b)
++    _FETCH["backup"] = None
++    return action
++
++
++def manga_fetch_tabs():
++    """Onglets de la fenetre de capture dediee. edge=False si elle est fermee."""
++    try:
++        with urllib.request.urlopen(MF_CDP + "/json/list", timeout=3) as r:
++            lst = json.load(r)
++    except Exception:
++        return {"edge": False, "tabs": []}
++    tabs = [{"url": t.get("url", ""), "title": (t.get("title") or "")[:120]} for t in lst
++            if t.get("type") == "page" and (t.get("url") or "").startswith("http")]
++    return {"edge": True, "tabs": tabs}
++
++
++def manga_fetch_edge():
++    if not (os.path.isfile(MF_PY) and os.path.isfile(MF_SCRIPT)):
++        return {"error": "manga-fetch introuvable (venv ou script)"}
++    subprocess.Popen([MF_PY, MF_SCRIPT, "launch-edge"], cwd=os.path.dirname(MF_SCRIPT),
++                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
++                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
++    return {"ok": True}
++
++
++def manga_fetch_capture(tab_url, titre, chapitre, force=False, page1=False):
++    p = _FETCH["proc"]
++    if p is not None and p.poll() is None:
++        return {"error": "une capture est deja en cours (%s ch.%s)" % (_FETCH["titre"], _FETCH["chapitre"])}
++    titre = " ".join((titre or "").split())
++    if not (1 <= len(titre) <= 80) or any(ord(c) < 32 for c in titre):
++        return {"error": "titre invalide"}
++    if not re.match(r"^\d{1,5}(\.\d{1,2})?$", chapitre or ""):
++        return {"error": "numero de chapitre invalide"}
++    onglets = manga_fetch_tabs()
++    if not onglets["edge"]:
++        return {"error": "la fenetre de capture est fermee"}
++    if tab_url not in [t["url"] for t in onglets["tabs"]]:
++        return {"error": "onglet introuvable dans la fenetre de capture (rafraichis la liste)"}
++    if not (os.path.isfile(MF_PY) and os.path.isfile(MF_SCRIPT)):
++        return {"error": "manga-fetch introuvable (venv ou script)"}
++    cmd = [MF_PY, MF_SCRIPT, "capture", "--tab", tab_url, "--title", titre, "--chapter", chapitre]
++    _FETCH.update(backup=None, dest=None, remplacement=None)
++    if force:
++        cmd.append("--force")
++        dest = _mf_dest(titre, chapitre)
++        if os.path.isdir(dest):              # l'ancien chapitre est MIS DE COTE, pas ecrase en place
++            b = os.path.join(os.path.dirname(dest), "_remplace_%s_%d" % (os.path.basename(dest), int(time.time())))
++            try:
++                os.rename(dest, b)
++            except OSError as e:
++                return {"error": "impossible de mettre l'ancien chapitre de cote : %s" % e}
++            _FETCH.update(backup=b, dest=dest)
++    if page1: cmd.append("--page-1")
++    os.makedirs(os.path.dirname(MF_RUNLOG), exist_ok=True)
++    try: _FETCH["offset"] = os.path.getsize(MF_EVENTS)
++    except OSError: _FETCH["offset"] = 0
++    lg = open(MF_RUNLOG, "w", encoding="utf-8")
++    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
++    _FETCH.update(proc=subprocess.Popen(cmd, cwd=os.path.dirname(MF_SCRIPT), stdout=lg, stderr=subprocess.STDOUT,
++                                        stdin=subprocess.DEVNULL, env=env,
++                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)),
++                  debut=time.time(), titre=titre, chapitre=chapitre)
++    return {"ok": True}
++
++
++def manga_fetch_status():
++    p = _FETCH["proc"]
++    if p is None:
++        return {"etat": "aucune"}
++    code = p.poll()
++    sortie = ""
++    try:
++        with open(MF_RUNLOG, encoding="utf-8", errors="replace") as f: sortie = f.read()
++    except OSError: pass
++    pages, derniere = 0, ""
++    try:
++        with open(MF_EVENTS, "rb") as f:
++            f.seek(_FETCH["offset"])
++            for ligne in f.read().decode("utf-8", "replace").splitlines():
++                if "[page]" in ligne: pages += 1
++                if ligne.strip(): derniere = ligne.strip()[20:160]
++    except OSError: pass
++    dossier = None
++    m = re.search(r"OK : \d+(?:/\d+)? pages -> (.+)", sortie)
++    if m:
++        full = os.path.normpath(m.group(1).strip())
++        root = os.path.normpath(MANGA_SOURCES)
++        if full.startswith(root + os.sep):
++            dossier = full[len(root) + 1:].replace(os.sep, "/")
++    lignes = [l for l in sortie.splitlines() if l.strip()]
++    remplacement = None
++    if code is not None and _FETCH.get("backup"):
++        remplacement = _mf_fin_remplacement(code in (0, 3) and bool(dossier))
++        _FETCH["remplacement"] = remplacement
++    return {"etat": "en cours" if code is None else ("fini" if code in (0, 3) else "echec"), "code": code,
++            "avertissements": code == 3, "remplacement": _FETCH.get("remplacement"),     # manga-fetch : 3 = REUSSITE avec avertissements (notes)
++            "titre": _FETCH["titre"], "chapitre": _FETCH["chapitre"], "pages": pages, "derniere": derniere,
++            "dossier": dossier, "sortie": lignes[-12:], "duree_s": round(time.time() - _FETCH["debut"], 1)}
++
++
++def manga_fetch_verify(d):
++    base = _manga_src_safe(d)
++    if not base or not os.path.isfile(os.path.join(base, "manifest.json")):
++        return {"error": "chapitre introuvable"}
++    try:
++        r = subprocess.run([MF_PY, MF_SCRIPT, "verify", base], cwd=os.path.dirname(MF_SCRIPT), capture_output=True,
++                           timeout=90, env=dict(os.environ, PYTHONIOENCODING="utf-8"),
++                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
++    except subprocess.TimeoutExpired:
++        return {"error": "verification : delai depasse"}
++    out = (r.stdout or b"").decode("utf-8", "replace")
++    return {"ok": r.returncode == 0, "lignes": [l for l in out.splitlines() if l.strip()][-6:]}
++
++
+ def manga_delete(paths):
+     """Supprime des images de la galerie manga. Rien d'autre, nulle part ailleurs.
+ 
+@@ -7743,6 +7905,10 @@
+             _r = manga_narrations((parse_qs(urlparse(self.path).query).get("d") or [""])[0])
+             if _r is None: self._json(404, {"error": "chapitre introuvable"})
+             else: self._json(200, _r)
++        elif self.path.split("?", 1)[0] == "/manga/fetch_tabs":
++            self._json(200, manga_fetch_tabs())
++        elif self.path.split("?", 1)[0] == "/manga/fetch_status":
++            self._json(200, manga_fetch_status())
+         elif self.path.split("?", 1)[0] == "/manga/narration":
+             _q = parse_qs(urlparse(self.path).query)
+             _r = manga_narration((_q.get("d") or [""])[0], (_q.get("tag") or [""])[0])
+@@ -8136,6 +8302,14 @@
+                 self._json(200, manga_narrate(data.get("d") or "", data.get("engine") or "",
+                                               data.get("voice") or "", str(data.get("pages") or ""),
+                                               data.get("reuse") or ""))
++            elif self.path == "/manga/fetch_edge":
++                self._json(200, manga_fetch_edge())
++            elif self.path == "/manga/fetch_capture":
++                self._json(200, manga_fetch_capture(data.get("tab") or "", data.get("title") or "",
++                                                    str(data.get("chapter") or ""), bool(data.get("force")),
++                                                    bool(data.get("page1"))))
++            elif self.path == "/manga/fetch_verify":
++                self._json(200, manga_fetch_verify(data.get("d") or ""))
+             elif self.path == "/manga/narration_note":
+                 self._json(200, manga_narration_note(data.get("d") or "", data.get("note")))
+             elif self.path == "/manga/ingest":
