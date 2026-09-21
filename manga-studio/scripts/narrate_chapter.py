@@ -25,7 +25,7 @@ Stdout : un seul objet JSON (le resume du run). Le bruit part sur stderr.
 import argparse, base64, io, json, os, re, subprocess, sys, time, urllib.request, urllib.error
 from datetime import datetime
 
-VERSION = "1.70.0"
+VERSION = "1.72.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -736,7 +736,9 @@ def main():
     stats["total_s"] = round(time.time() - t0, 1)
     stats["cout_total"] = round(stats["cout_vision"] + stats["cout_recit"] + stats["cout_tts"]
                                 + stats.get("cout_noms", 0.0) + stats.get("cout_verif", 0.0), 4)
-    res = {"version": VERSION, "prompt": a.prompt, "chapitre": a.chapitre, "title": man.get("title"), "chapter": man.get("chapter"),
+    # v1.72 : un run --reuse-vision recopie les stats de lecture de son run source : le suivi des couts
+    # ne doit compter QUE ce que ce run a depense (recit + voix), sinon la lecture est comptee deux fois.
+    res = {"version": VERSION, "prompt": a.prompt, "reuse_vision": a.reuse_vision or None, "chapitre": a.chapitre, "title": man.get("title"), "chapter": man.get("chapter"),
            "tag": tag, "engine": a.engine, "model": ENGINES[a.engine][1], "voice": a.voice, "rate": a.rate,
            "titre": titre, "resume": resume, "personnages": persos, "created_at": datetime.now().isoformat(timespec="seconds"),
            "stats": {k: (round(v, 4) if isinstance(v, float) else v) for k, v in stats.items()},

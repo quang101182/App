@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.71.0</title>
+<title>Manga Studio v1.72.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -296,6 +296,16 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .chap-item small{display:block;opacity:.75;line-height:1.35;margin-top:2px}
 .chap-pages img{aspect-ratio:2/3;object-fit:contain;background:#0003}
 #chapMeta a{color:var(--accent2)}
+/* ---------- Pastille des couts (v1.72.0) ---------- */
+.cost-pill{margin-left:8px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);
+  color:var(--txt);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+.cost-pill:hover{border-color:var(--accent2)}
+.couts-tot{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.couts-tot div{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+.couts-tot b{display:block;font-size:18px}
+.couts-t{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px}
+.couts-t td,.couts-t th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left;overflow-wrap:anywhere}
+.couts-t td.n,.couts-t th.n{text-align:right;white-space:nowrap}
 /* ---------- Capture + avertissements (v1.71.0) ---------- */
 .cap-log{max-height:9em;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;margin:8px 0 0;
   padding:6px 8px;background:var(--panel2);border:1px solid var(--line);border-radius:6px}
@@ -465,7 +475,8 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.71.0</span></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.72.0</span>
+      <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -569,6 +580,16 @@ body.epure .aide{display:none}
        Une pop-up de MINIATURES : on choisit ce qu on refait en regardant ce
        qu on a. Les cases deja dessinees sont pre-cochees (le cas courant est
        « je veux revoir ma planche ») ; les vides sont proposees, decochees. -->
+  <!-- SUIVI & COUTS (v1.72.0), comme StoryVoice : detail de la pastille 💰 de l'en-tete -->
+  <div id="coutsModal" class="modal" hidden>
+    <div class="modal-in">
+      <div class="row" style="align-items:center"><h3 class="grow" style="margin:0">💰 Suivi & coûts</h3>
+        <button class="btn sm" id="coutsFermer">✕</button></div>
+      <p class="muted" style="margin:4px 0 10px;font-size:12px">Coûts <b>mesurés</b> de chaque narration (facturés en dollars
+        par les fournisseurs). Une narration qui réutilise une lecture ne la recompte pas.</p>
+      <div id="coutsCorps"></div>
+    </div>
+  </div>
   <div id="regen" class="modal" hidden>
     <div class="modal-in">
       <h3 style="margin:0 0 4px">Régénérer des cases</h3>
@@ -1067,7 +1088,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.71.0";
+const VERSION = "1.72.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4442,7 +4463,7 @@ async function refreshNarrs(){
   $("btnAveugle").disabled = groupeAveugle().length < 2;
   const encours = NARRS.some(n => n.etat === "en cours");
   if (encours && !NARR_POLL) NARR_POLL = setInterval(() => refreshNarrs().catch(e => log("narrations : " + e.message, "e")), 3000);
-  if (!encours && NARR_POLL){ clearInterval(NARR_POLL); NARR_POLL = null; }
+  if (!encours && NARR_POLL){ clearInterval(NARR_POLL); NARR_POLL = null; chargerCouts(); }
 }
 $("narrRuns").onclick = e => {
   const b = e.target.closest("[data-ecoute]");
@@ -4661,6 +4682,39 @@ async function verifierChap(){
   $("chapVerif").textContent = (r.ok ? "✅ " : "❌ ") + (r.lignes || []).join(" · ");
 }
 $("btnChapVerif").onclick = () => verifierChap().catch(e => { $("chapVerif").textContent = "❌ " + e.message; });
+
+/* =====================================================================
+   SUIVI DES COUTS (v1.72.0) -- pastille permanente + detail au clic (comme StoryVoice)
+   ===================================================================== */
+let COUTS = null;
+const fmtUsd = v => (v >= 0.1 || v === 0 ? v.toFixed(2) : v.toFixed(3)) + " $";
+const ETAPE_LBL = { lecture: "lecture des pages", noms: "repérage des personnages", voix: "voix", recit: "écriture du récit",
+  verification: "vérification", fusion: "consensus", juge: "bancs de fidélité" };
+async function chargerCouts(){
+  try {
+    COUTS = await api("/manga/costs");
+    $("hdrCost").textContent = "💰 auj. " + fmtUsd(COUTS.aujourdhui) + " · mois " + fmtUsd(COUTS.mois);
+  } catch (e){ $("hdrCost").textContent = "💰 ?"; log("coûts : " + e.message, "w"); }
+}
+function afficherCouts(){
+  const c = COUTS; if (!c) return;
+  const ligne = (a, b) => "<tr><td>" + a + '</td><td class="n">' + b + "</td></tr>";
+  $("coutsCorps").innerHTML =
+    '<div class="couts-tot"><div>aujourd\'hui<b>' + fmtUsd(c.aujourdhui) + "</b></div><div>ce mois<b>" + fmtUsd(c.mois)
+    + "</b></div><div>depuis le début<b>" + fmtUsd(c.total) + "</b></div></div>"
+    + '<table class="couts-t"><tr><th>Par étape</th><th class="n">coût</th></tr>'
+    + Object.entries(c.par_etape).map(([k, v]) => ligne(esc(ETAPE_LBL[k] || k), fmtUsd(v))).join("") + "</table>"
+    + '<table class="couts-t"><tr><th>Par moteur</th><th class="n">coût</th></tr>'
+    + Object.entries(c.par_moteur).map(([k, v]) => ligne(esc(k), fmtUsd(v))).join("") + "</table>"
+    + '<table class="couts-t"><tr><th>Derniers passages (' + c.n + ')</th><th class="n">coût</th></tr>'
+    + c.runs.slice(0, 15).map(r => ligne(esc(r.chap) + " · " + esc(r.tag) + '<br><span class="muted">' + esc(r.engine)
+        + " · " + esc(r.date.replace("T", " ").slice(0, 16)) + (r.reuse ? " · lecture réutilisée" : "") + "</span>",
+        fmtUsd(r.cout))).join("") + "</table>";
+}
+$("hdrCost").onclick = async () => { await chargerCouts(); afficherCouts(); $("coutsModal").hidden = false; };
+$("coutsFermer").onclick = () => { $("coutsModal").hidden = true; };
+$("coutsModal").onclick = e => { if (e.target.id === "coutsModal") $("coutsModal").hidden = true; };
+chargerCouts();
 
 async function refreshGal(){
   if (!S.proj && !GAL_SLUG) return;

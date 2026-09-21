@@ -1,0 +1,95 @@
+--- _studio_llm_proxy.py
++++ _studio_llm_proxy.py
+@@ -7523,6 +7523,83 @@
+     return {"ok": r.returncode == 0, "lignes": [l for l in out.splitlines() if l.strip()][-6:]}
+ 
+ 
++# --- Suivi des COUTS (v1.72.0), comme StoryVoice : pastille en haut + detail au clic --------------
++# Source = les stats de chaque narration.json (couts MESURES par narrate_chapter.py, pas estimes).
++# Pas de double compte : un run --reuse-vision ne paie que recit + voix (sa lecture est recopiee de son
++# run source) ; un consensus ne paie que sa fusion (ses lectures sont celles de 2 autres runs).
++def manga_costs():
++    racine = os.path.normpath(MANGA_SOURCES)
++    runs = []
++    if os.path.isdir(racine):
++        for slug in os.listdir(racine):
++            sd = os.path.join(racine, slug)
++            if not os.path.isdir(sd):
++                continue
++            for ch in os.listdir(sd):
++                nd = os.path.join(sd, ch, "narration")
++                if not ch.startswith("ch_") or not os.path.isdir(nd):
++                    continue
++                for tag in os.listdir(nd):
++                    td = os.path.join(nd, tag)
++                    np_ = os.path.join(td, "narration.json")
++                    if os.path.isfile(np_):
++                        try:
++                            with open(np_, encoding="utf-8") as f: n = json.load(f)
++                        except Exception:
++                            continue
++                        st = n.get("stats") or {}
++                        runs.append({"chap": slug + "/" + ch, "tag": tag, "engine": n.get("engine") or "?",
++                                     "date": (n.get("created_at") or time.strftime("%Y-%m-%dT%H:%M:%S",
++                                     time.localtime(os.path.getmtime(np_))))[:19], "prompt": n.get("prompt"),
++                                     "reuse": n.get("reuse_vision"), "st": st})
++                    fp = os.path.join(td, "fidelite.json")
++                    if os.path.isfile(fp):
++                        try:
++                            with open(fp, encoding="utf-8") as f: fj = json.load(f)
++                            runs.append({"chap": slug + "/" + ch, "tag": tag + " (banc)", "engine": "juge",
++                                         "date": (fj.get("date") or "")[:19], "prompt": "juge", "reuse": None,
++                                         "st": {"cout_juge": (fj.get("bilan") or {}).get("cout", 0)}})
++                        except Exception:
++                            pass
++    # anciens runs --reuse-vision (avant le marqueur v1.72) : meme lecture qu'un run PLUS ANCIEN du chapitre
++    vus = {}
++    for r in sorted(runs, key=lambda x: x["date"]):
++        cle = (r["chap"], r["st"].get("vision_tokens_in"), r["st"].get("cout_vision"))
++        if r["prompt"] not in ("juge", "consensus") and r["st"].get("cout_vision"):
++            if cle in vus and not r["reuse"]:
++                r["reuse"] = vus[cle]
++            vus.setdefault(cle, r["tag"])
++    etapes = {"noms": "cout_noms", "lecture": "cout_vision", "verification": "cout_verif", "recit": "cout_recit",
++              "voix": "cout_tts", "fusion": "cout_fusion", "juge": "cout_juge"}
++    par_etape, par_moteur, lignes = {}, {}, []
++    auj, mois = time.strftime("%Y-%m-%d"), time.strftime("%Y-%m")
++    t_auj = t_mois = t_tot = 0.0
++    for r in runs:
++        st = r["st"]
++        if r["prompt"] == "consensus":
++            garde = ("fusion",)
++        elif r["reuse"]:
++            garde = ("verification", "recit", "voix")   # tout SAUF noms + lecture, recopies du run source
++        else:
++            garde = tuple(etapes)
++        detail = {e: float(st.get(k) or 0) for e, k in etapes.items() if e in garde and st.get(k)}
++        c = round(sum(detail.values()), 4)
++        if c <= 0:
++            continue
++        for e, v in detail.items():
++            par_etape[e] = par_etape.get(e, 0.0) + v
++        par_moteur[r["engine"]] = par_moteur.get(r["engine"], 0.0) + c
++        t_tot += c
++        if r["date"].startswith(mois): t_mois += c
++        if r["date"].startswith(auj): t_auj += c
++        lignes.append({"chap": r["chap"], "tag": r["tag"], "engine": r["engine"], "date": r["date"], "cout": c,
++                       "reuse": r["reuse"], "detail": {k: round(v, 4) for k, v in detail.items()}})
++    lignes.sort(key=lambda x: x["date"], reverse=True)
++    arr = lambda d: {k: round(v, 4) for k, v in sorted(d.items(), key=lambda kv: -kv[1])}
++    return {"devise": "USD", "aujourdhui": round(t_auj, 4), "mois": round(t_mois, 4), "total": round(t_tot, 4),
++            "par_etape": arr(par_etape), "par_moteur": arr(par_moteur), "runs": lignes[:40], "n": len(lignes)}
++
++
+ def manga_delete(paths):
+     """Supprime des images de la galerie manga. Rien d'autre, nulle part ailleurs.
+ 
+@@ -7972,6 +8049,8 @@
+             _r = manga_narrations((parse_qs(urlparse(self.path).query).get("d") or [""])[0])
+             if _r is None: self._json(404, {"error": "chapitre introuvable"})
+             else: self._json(200, _r)
++        elif self.path.split("?", 1)[0] == "/manga/costs":
++            self._json(200, manga_costs())
+         elif self.path.split("?", 1)[0] == "/manga/fetch_tabs":
+             self._json(200, manga_fetch_tabs())
+         elif self.path.split("?", 1)[0] == "/manga/fetch_status":
