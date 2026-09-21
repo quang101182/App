@@ -1851,6 +1851,11 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
 > **(3)** **vidéo MP4 au niveau PAGE** (5) — page entière + voix + sous-titres, SANS caméra case par case
 > (qui viendra se greffer avec l'étape 4) — **à discuter avec Quang avant tout code** ; **(4)** « Précédemment… » (7),
 > suivi de séries (9), hors-ligne (10). **Plus tard** : 4, 6, et la piste « oui/non/incertain » du verrou qui-est-qui.
+> 📌 **Ordre précisé par Quang le 22/09 à 00h06-00h07** (le socle bibliothèque/voix/lecteur étant livré, v1.76 → v1.83) :
+> **(1) Traduction des DIALOGUES d'un chapitre entier** dans la langue choisie (étape 11 b — oubliée de l'ordre du
+> 21/09 22h54, rappelée par Quang) ; **(2) musique de fond DANS L'APP** (étape 13) : on/off, volume réglable à la
+> main avec une valeur par défaut ; **(3) la vidéo** (étape 5, toujours À DISCUTER avant de coder) : musique on/off
+> et sous-titres on/off choisis À LA GÉNÉRATION.
 
 | ~~1~~ | ~~Personnages par EXEMPLES visuels~~ → **ÉCHEC mesuré** (v1.69, `--portraits`) | Raki et Zaki se ressemblent | — |
 | ~~1-bis~~ | ~~CONSENSUS « désaccord = prudence »~~ → **mesuré le 21/09 18h55, NON retenu** (`scripts/consensus_narration.py`, hors app) : K3 seul 1/2/1 (4) · K3+Gemini 1/0/2 (3) · Gemini×2 2/1/4 (7) · K3×2 0/1/1 (2). Aucun à 0/0/0 ; gains dans le bruit d'un si petit échantillon, et la FUSION crée ses propres erreurs (p4 « Raki près du cadavre » n'apparaît qu'après fusion). Doubler le coût (K3×2 ≈ 4,20 $/chapitre) pour ~2 erreurs de moins sur 60 pages : non. **Défaut maintenu = K3 seul** (~1 grave / 15 pages, toujours sur un cas ambigu « qui interpelle qui »). | — | — |
