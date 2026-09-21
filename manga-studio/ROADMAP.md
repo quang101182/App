@@ -1771,10 +1771,55 @@ Quatre narrations prêtes pour l'**écoute à l'aveugle** de Quang (même texte 
 1. Deux « suivant » rapides **arrêtaient la narration** : `play()` interrompu → `AbortError` pris pour un refus.
 2. Après un changement de vitesse, le menu gardait le focus et **avalait espace / flèches**.
 
-### Reste à faire
-- Écoute à l'aveugle par Quang → moteur et voix par défaut.
-- Découpage en **cases** (YOLO, déjà en place pour l'ingestion) pour un zoom case par case au lieu d'un zoom
-  de page — seulement si l'écoute montre que le zoom de page ne suffit pas.
+### Banc de FIDÉLITÉ du 21/09 (v1.68.0) — exigence Quang : « une erreur, même petite, c'est grave pour l'histoire »
+
+**Outil** : `sources/claymore/ch_1/reference_faits.json` (faits des 20 pages, écrits À LA MAIN en lisant les pages ;
+gitignoré car dérivé d'un contenu sous licence) + `scripts/juge_narration.py` (DeepSeek, texte seul, T=0 : compare
+chaque page narrée à la référence → ok / mineur / grave + compteur mécanique de « style plat »). Validé : il retrouve
+le verdict fait à la main (K3 v1 : 6 graves ; Pixtral : 13). Coût d'un jugement : 0,005 $.
+
+| Version | Moteur | Graves / 20 | Coût 20 p. (sans voix) | Temps |
+|---|---|---|---|---|
+| v1 (lot de 4 + « reprends les noms connus ») | K3 | 6 | 0,24 $ | 6 min |
+| v1 | Pixtral | 13 → **abandonné** | 0 $ | 2 min |
+| v2 (faits + fiche prouvée + récit sans ajout, lots de 2) | K3 | 1 | 0,57 $ | **20 min** |
+| v2 | Gemini 3.6 Flash | 2 puis 7 (**instable**) | 0,09 $ | 2 min |
+| **v2.2 = défaut** (noms résolus à part par VOTE puis figés) | Gemini | **3 / 3 / 3** (3 runs) | 0,19 $ | ~5 min |
+| v2.3 (+ vérification des attributions contre l'image) | Gemini | 2 / 4 / 3 | 0,30 $ | ~8 min → option `--verif`, off |
+
+**Ce qu'on a appris (à ne pas repayer)** :
+- 🔴 La consigne v1 « reprends les noms déjà connus, ne les change pas » **verrouillait une erreur précoce** : Raki
+  (l'enfant) et Zaki (l'adolescent) fusionnés en « Zaki » sur 7 pages. Page isolée : « RAKI » lu 6/6.
+- 🔴 Un nom écrit dans une bulle (« Zaki ! ») : le modèle hésite entre **celui qui parle et celui qu'on appelle**.
+  Question ciblée, une page, 3 votes (Gemini) : 11/12 justes → la passe `etape_noms` fige ensuite
+  « Raki = enfant, Zaki = adolescent » (stable sur 3 runs).
+- 🟠 **Reste (constaté v1.68.0)** : 3 pages graves par run, toutes du même type — une réplique d'un anonyme brun
+  (p4, p16, p18) attribuée à Raki/Zaki (blonds). Cause VISUELLE : le modèle rattache tout garçon qui parle à un
+  nommé. La vérification texte+image ne tranche pas mieux (elle a même remplacé « Raki » par « Zaki » une fois).
+- Le style « plat » (« un gros plan montre… ») venait d'une consigne de fidélité trop sèche → consigne récit v2.1 :
+  dramatiser par le rythme et les mots, jamais par des ajouts. Mesuré : 0 tournure plate sur 3 runs.
+- Recherche web (21/09) : MangaVQA place Gemini 2.5 Flash en tête des VLM généralistes sur le manga ; Magi v2
+  (Oxford) résout précisément l'attribution des répliques par une banque de personnages à EXEMPLES visuels ;
+  Chirp 3 HD a un bug connu sur les élisions françaises (« j'ai », « qu'il ») + prononciations personnalisables.
+
+## 4-ter-bis. FEUILLE DE ROUTE — lecture narrée *(21/09, à reprendre dans cet ordre)*
+
+> Principe tenu depuis le début : **fiabilité d'abord**, puis confort. Chaque étape a un critère mesurable.
+> ⛔ Assumé, ne pas rouvrir : pas de recherche multi-sites ni de contournement de protections ; pas de redessin
+> par IA des pages d'une série existante (personnages protégés + dérive d'identité mesurée en phases 1-2).
+
+| # | Étape | Pourquoi | Critère de sortie |
+|---|---|---|---|
+| **1** | **Personnages par EXEMPLES visuels** : à la passe des noms, Gemini localise le porteur prouvé (boîte), on découpe son portrait (Raki p9, Zaki p6) et on le joint à chaque appel de relevé | la seule cause restante est visuelle (anonyme brun pris pour un blond nommé) ; c'est l'approche de Magi v2 | **0 grave sur 3 runs** de Claymore p1-20 (juge + référence) |
+| 2 | **Fiche personnages par SÉRIE** : les noms prouvés au ch.1 servent au ch.2 | moins d'erreurs, moins de votes | ch.2 de Claymore : 0 grave |
+| 3 | **Capture intégrée à l'app** : bouton « 📥 Capturer le chapitre ouvert » (titre, n°) → proxy → `manga-fetch capture` sur la fenêtre Edge dédiée → apparaît dans 📚 Chapitres | plus de `capture.bat` : tout se fait dans l'app (demande Quang) | 10 captures via l'app = 10 manifests valides |
+| 4 | **Lecture case par case** + **bulles effacées** : la caméra suit les cases (YOLO Manga109, déjà là) au rythme de la voix ; texte des bulles effacé (v1.6.2) | le dynamisme des recaps ; la narration remplace le texte | ordre des cases juste sur 20 pages ; 0 bulle lisible |
+| 5 | **Vidéo MP4 par chapitre** (ffmpeg : pan/zoom + voix + sous-titres incrustés) | simple, et c'est le **mode hors-ligne** : un fichier sur le téléphone, PC éteint | MP4 lisible sur le Fold, synchro voix/page ±0,3 s |
+| 6 | **Deux MODES** : *Récit* (l'actuel, un narrateur raconte) et *Lecture* (les répliques lues case par case, attribuées au bon personnage, voire une voix par personnage) | demandé par Quang le 21/09 ; le mode Lecture exige l'étape 1 | mode Lecture : 0 réplique mal attribuée sur 20 pages |
+| 7 | **« Précédemment… »** en ouverture + **rattrapage** (résumé de N chapitres en quelques minutes) | reprendre une série après une pause | résumé fidèle au juge |
+| 8 | **Voix** : changer de voix sans refaire la lecture (texte réutilisé), aperçu 3 s, voix mémorisée par série, prononciation des noms, contrôle des élisions | « selon l'humeur et le manga » (Quang) | changer de voix ≤ 1 min, 0 relecture vision |
+| 9 | **Suivi de séries** : file de chapitres capturés, narration la nuit | tout est prêt le matin | 5 chapitres narrés sans intervention |
+| 10 | **Hors-ligne sans PC** (option) : chapitres narrés copiés sur un stockage en ligne | écouter PC éteint (la capture et la génération restent sur le PC) | lecture PC éteint |
 
 ## 4-bis. L'essai utilisateur du 28/07 — 10 puis 12 cases, pilotées comme Quang
 
