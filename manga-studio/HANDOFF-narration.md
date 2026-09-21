@@ -30,7 +30,14 @@
    10 — hors-ligne sans PC ; 11 — **toutes langues → français** (narration + pages relettrées).
 3. ✅ **Stockage FAIT (21/09 19h30)** : `sources/`, `output/`, `scripts/*_out` → `C:\Users\quang\Documents\MangaStudio-donnees\`,
    jonctions à l'ancien chemin. Tout nouveau dossier lourd : créé sur C: puis joint.
-4. **Étape 12 — bibliothèque rangée PAR MANGA** (séries d'abord, chapitres dedans) — ajoutée par Quang le 21/09.
+4. ✅ **v1.76.0 (21/09 23h20, `32c80ad`)** : bibliothèque par série + pochettes (AniList / image / page), suppression
+   série / chapitre / pages → `sources/_corbeille/`, aperçu ▶/■ des voix, essais sans voix repliés. Proxy patché
+   (`proxy-patch/patch_bibliotheque.py`, relancé par `relance-proxy.ps1`). **ORDRE FIXÉ PAR QUANG (22h54)** — socle
+   d'abord : 12-ter saisons/tomes + années → 12-quater renommer un titre → reste de l'étape 8 (voix mémorisée par
+   série, changer de voix sans relire) → **vidéo MP4 page par page : À DISCUTER avant de coder** (questions posées :
+   format 9:16/16:9, usage perso/publication, sous-titres et musique = choix à la génération) → 7, 9, 10.
+   Plus tard : case par case (4), mode Lecture (6), codex de série (wiki/AniList) pour « qui est qui ».
+   Quang : « ne te perds pas, suis ta trame » — ses idées en cours de route vont dans la ROADMAP, pas dans le code.
 5. Lien mobile = l'URL du tunnel de Generate Studio (hostname dans `config-generate-agent.yml`, hors dépôt :
    ce dépôt est PUBLIC) suivie de `/manga` (le dossier github.io ne sert que le
    README, il n'a jamais servi l'app). v1.73.0 : l'app rouvre le dernier onglet utilisé.
