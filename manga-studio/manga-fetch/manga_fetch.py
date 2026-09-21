@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.1.0"
+VERSION = "0.1.3"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -196,18 +196,37 @@ def capture(args) -> int:
 
     with sync_playwright() as p:
         browser = p.chromium.connect_over_cdp(EDGE_CDP)
-        page = None
-        for ctx in browser.contexts:
-            for pg in ctx.pages:
-                if args.tab in pg.url:
-                    page = pg
-                    break
-            if page:
-                break
-        if page is None:
-            print(f"Aucun onglet contenant '{args.tab}' dans la fenêtre dédiée (CDP {EDGE_CDP}).")
-            print("Ouvre le chapitre dans la fenêtre dédiée (launch-edge), puis relance.")
+
+        def est_visible(pg) -> bool:
+            try:
+                return pg.evaluate("() => document.visibilityState") == "visible"
+            except Exception:
+                return False
+
+        tous = [pg for ctx in browser.contexts for pg in ctx.pages]
+        if args.tab:
+            candidats = [pg for pg in tous if args.tab in pg.url]
+        else:
+            # MODE PAR DÉFAUT : les onglets ACTIFS (affichés). ⚠ Chaque FENÊTRE Edge a
+            # son onglet actif : avec plusieurs fenêtres, plusieurs candidats 'visible'
+            # — CDP ne sait pas laquelle l'utilisateur regarde. On ne devine pas : on demande.
+            candidats = [pg for pg in tous if est_visible(pg)]
+        if not candidats:
+            print(f"Aucun onglet{' contenant ' + args.tab if args.tab else ' actif'} "
+                  f"dans la fenêtre dédiée (CDP {EDGE_CDP}).")
+            print("Ouvre le chapitre (onglet affiché) puis relance.")
             return 1
+        if len(candidats) > 1:
+            print("Plusieurs onglets candidats :")
+            for i, pg in enumerate(candidats, 1):
+                print(f"  {i}) {pg.url[:88]}")
+            try:
+                rep = input("Lequel capturer ? (numéro, Entrée = 1) : ").strip()
+                page = candidats[int(rep) - 1] if rep.isdigit() and 1 <= int(rep) <= len(candidats) else candidats[0]
+            except (EOFError, ValueError):
+                page = candidats[0]  # mode automatisé (stdin fermé) : premier candidat
+        else:
+            page = candidats[0]
         print(f"Onglet : {page.url[:80]}")
         page.bring_to_front()  # un onglet de fond est THROTTLE par le navigateur :
         # son chargement ralentit et la capture part dans le vide (mesuré : « Loading... »)
@@ -230,22 +249,41 @@ def capture(args) -> int:
         vus_hashes: set = set()   # dedup par CONTENU : les pagers re-servent une page déjà
         # affichée sous un blob: neuf (mesuré : 30 images collectées pour 22 pages)
 
+        FETCH_JS = """async (url) => {
+            const r = await fetch(url);
+            const b = await r.blob();
+            return await new Promise(res => {
+                const fr = new FileReader();
+                fr.onload = () => res(fr.result.split(',')[1]);
+                fr.readAsDataURL(b);
+            });
+        }"""
+
         def extraire_data(src: str) -> bytes:
+            """Pleine résolution si possible (fetch page / requests), sinon SCREENSHOT de
+            l'élément. Certains sites bloquent fetch(blob:) par CSP alors que l'image
+            s'affiche parfaitement (MANGA Plus, mesuré 21/09) : le screenshot est la
+            parade universelle — qualité = affichage, ce qui suffit à la narration."""
             if src.startswith(("blob:", "data:")):
-                b64 = page.evaluate(
-                    """async (url) => {
-                        const r = await fetch(url);
-                        const b = await r.blob();
-                        return await new Promise(res => {
-                            const fr = new FileReader();
-                            fr.onload = () => res(fr.result.split(',')[1]);
-                            fr.readAsDataURL(b);
-                        });
-                    }""", src)
-                return base64.b64decode(b64)
-            r = requests.get(src, headers={"User-Agent": UA, "Referer": page.url}, timeout=60)
-            r.raise_for_status()
-            return r.content
+                try:
+                    return base64.b64decode(page.evaluate(FETCH_JS, src))
+                except Exception:
+                    pass  # CSP ou blob révoqué → screenshot
+            else:
+                try:
+                    r = requests.get(src, headers={"User-Agent": UA, "Referer": page.url}, timeout=60)
+                    r.raise_for_status()
+                    return r.content
+                except Exception:
+                    pass
+            el = None
+            try:
+                el = page.query_selector(f'img[src="{src}"]')
+            except Exception:
+                pass
+            if el is None:
+                raise RuntimeError("élément introuvable pour le screenshot")
+            return el.screenshot()  # PNG à la taille d'affichage
 
         def collecter() -> None:
             """Détecte les images de page visibles/chargées et récupère leur contenu."""
@@ -296,12 +334,19 @@ def capture(args) -> int:
                     stable = 0
                     hauteur_prec = h
         else:
-            sterile, debut_pager = 0, time.time()
-            for _ in range(400):
+            sterile, debut_pager, mode_clic = 0, time.time(), False
+            for _ in range(500):
                 collecter()
                 n_avant = len(vues)
-                page.keyboard.press("ArrowRight")
-                page.wait_for_timeout(1500)
+                if not mode_clic and sterile >= 2:
+                    # Les flèches ne font rien (MANGA Plus n'écoute pas le clavier,
+                    # mesuré 21/09) → navigation par CLIC à droite de l'écran.
+                    x, y = page.evaluate("() => [Math.round(innerWidth * 0.75), Math.round(innerHeight * 0.5)]")
+                    page.mouse.click(x, y)
+                    mode_clic = True
+                else:
+                    page.keyboard.press("ArrowRight")
+                page.wait_for_timeout(1600)
                 collecter()
                 if len(vues) == n_avant:
                     sterile += 1
@@ -319,6 +364,14 @@ def capture(args) -> int:
 
         # ordre de lecture : position verticale en bande défilante, ordre de découverte en pager
         uniques = sorted(vues.values(), key=lambda x: x["top"] if mode_strip else x["ordre"])
+
+        # Garde-fou : une page de manga fait plus de 800 px de haut. Si RIEN ne dépasse,
+        # l'onglet capturé n'était pas un chapitre (page d'accueil, mauvais onglet).
+        if not any(im["h"] >= 800 for im in uniques):
+            print("ÉCHEC : aucune image de page (hauteur >= 800 px) détectée.")
+            print("L'onglet capturé ne semble pas contenir de chapitre "
+                  "(page d'accueil ? mauvais onglet ?). Aucun dossier écrit.")
+            return 2
 
         # Cohérence des largeurs : les vraies pages d'un chapitre sont homogènes ; les
         # artefacts du site (bannières, cartes de fin) sont plus ÉTROITS. On écarte ce qui
@@ -470,7 +523,8 @@ def main() -> int:
     s.add_argument("--force", action="store_true")
 
     s = sub.add_parser("capture", help="capturer le chapitre affiché dans la fenêtre dédiée")
-    s.add_argument("--tab", default="mangadex", help="fragment d'URL de l'onglet à capturer")
+    s.add_argument("--tab", default=None,
+                   help="filtre d'URL, pour les scripts (défaut : l'onglet ACTIF de la fenêtre)")
     s.add_argument("--title", required=True)
     s.add_argument("--chapter", required=True)
     s.add_argument("--out", default=DEFAULT_OUT)
