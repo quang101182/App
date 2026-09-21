@@ -49,6 +49,20 @@ with sync_playwright() as p:
         pg.wait_for_timeout(1500)
         poch = pg.eval_on_selector('#chapList [data-serie="claymore"] img', "i => [i.naturalWidth, i.src.includes('pochette')]")
         check("pochette officielle affichee (claymore)", poch[0] > 0 and poch[1], poch)
+        # v1.81.0 : recherche intelligente (frappe reelle au clavier)
+        def cherche(q):
+            pg.fill("#libRech", ""); pg.type("#libRech", q, delay=15); pg.wait_for_timeout(250)
+            return pg.eval_on_selector_all("#chapList [data-serie]", "els => els.map(e => e.dataset.serie)")
+        for q, attendu in (("frieren", ["demo-frieren"]), ("sousou", ["demo-frieren"]), ("freiren", ["demo-frieren"]),
+                           ("lord of destruction", ["noritaka"]), ("wanpanman", ["one-punch-man"]),
+                           ("クレイモア", ["claymore"]), ("301", ["one-punch-man"]), ("one punch 300", ["one-punch-man"]),
+                           ("BORUTO", ["boruto-tow-blue-vortex"]), ("zzzzqq", []), ("claymore 5", [])):
+            r = cherche(q)
+            check("recherche « %s » -> %s" % (q, attendu or "rien"), r == attendu, r)
+        pg.fill("#libRech", ""); pg.type("#libRech", "sousou"); pg.wait_for_timeout(250)
+        check("la raison est affichee (autre titre)", "autre titre" in pg.inner_text("#chapList"))
+        pg.fill("#libRech", ""); pg.dispatch_event("#libRech", "input"); pg.wait_for_timeout(250)
+        check("recherche videe = toutes les series", len(pg.eval_on_selector_all("#chapList [data-serie]", "e => e")) == len(series))
         # v1.77.0 : annees sur la carte, chapitres ranges par tome
         carte = pg.inner_text('#chapList [data-serie="claymore"]')
         check("carte Claymore : 2001–2014 · terminé · 27 tomes", "2001–2014" in carte and "terminé" in carte and "27 tomes" in carte, carte.replace("\n", " | "))

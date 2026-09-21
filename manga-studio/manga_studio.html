@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.80.0</title>
+<title>Manga Studio v1.81.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -308,6 +308,8 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .serie-item img{width:92px;height:132px}
 .cap-box summary{cursor:pointer;list-style-position:inside}
 .cap-box:not([open]){padding-bottom:10px}
+.lib-recherche{margin:0 0 10px}.lib-recherche input{width:100%;box-sizing:border-box}
+.serie-item small.trouve{color:var(--accent2);opacity:1}
 .lib-nav{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
 .lib-nav h3{margin:0;flex:1;min-width:160px}
 .chap-pages.selmode figure{cursor:pointer}
@@ -501,7 +503,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.80.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.81.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -876,6 +878,8 @@ body.epure .aide{display:none}
     <div class="row"><button class="btn" id="btnChapRefresh">Rafraîchir</button>
       <span class="muted" id="chapState"></span></div>
   </div>
+  <div class="lib-recherche" id="libRechBox"><input type="search" id="libRech" autocomplete="off"
+    placeholder="🔎 Rechercher : titre, autre titre (ex. Frieren), n° de chapitre ou de tome…"></div>
   <div class="lib-nav" id="libNav" hidden>
     <button class="btn sm" id="btnLibBack">← Toutes les séries</button>
     <h3 id="libSerie"></h3>
@@ -1134,7 +1138,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.80.0";
+const VERSION = "1.81.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4430,6 +4434,58 @@ function seriesDe(chaps){
   });
   return [...m.values()];
 }
+/* v1.81.0 : RECHERCHE INTELLIGENTE (Quang 21/09 : « il risque d'y avoir beaucoup de mangas »).
+   Sans accents / casse / ponctuation ; 1 faute toleree (2 sur les mots de 8 lettres et plus) ; cherche dans le
+   titre, les TITRES ALTERNATIFS (MangaDex : « Frieren » -> « Sousou no Frieren »), les n° de chapitre et de tome.
+   Chaque mot tape doit trouver sa place : « frieren 143 » = la bonne serie ET le bon chapitre. */
+const normRech = t => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+  .replace(/[^a-z0-9\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\u0400-\u04ff]+/g, " ").trim();
+function distance(a, b, max){
+  // Damerau (OSA), borne : deux lettres voisines INVERSEES = 1 faute (« freiren » -> « frieren » : la faute de
+  // frappe la plus courante, que Levenshtein comptait double -- trouve par le banc).
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let pp = null, prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++){
+    const cur = [i]; let min = i;
+    for (let j = 1; j <= b.length; j++){
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (pp && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) cur[j] = Math.min(cur[j], pp[j - 2] + 1);
+      min = Math.min(min, cur[j]);
+    }
+    if (min > max) return max + 1;
+    pp = prev; prev = cur;
+  }
+  return prev[b.length];
+}
+function motTrouve(mot, texte){                          // texte deja normalise
+  if (texte.includes(mot)) return true;
+  if (mot.length < 4) return false;
+  const tol = mot.length >= 8 ? 2 : 1;
+  return texte.split(" ").some(w => distance(mot, w, tol) <= tol
+                                  || (w.length > mot.length && distance(mot, w.slice(0, mot.length), tol) <= tol));
+}
+function chercherSerie(s, q){
+  const mots = normRech(q).split(" ").filter(Boolean);
+  if (!mots.length) return { ok: true };
+  const titres = [s.title].concat((s.info && s.info.titres_alt) || []);
+  const chaps = s.chaps.map(i => CHAPS[i]);
+  let raison = "";
+  for (const m of mots){
+    if (/^\d+(\.\d+)?$/.test(m)){                        // un nombre : chapitre ou tome
+      const c = chaps.find(x => String(x.chapter) === m);
+      const t = chaps.find(x => String(x.tome || "") === m);
+      if (c){ raison = raison || "ch. " + m; continue; }
+      if (t){ raison = raison || "tome " + m; continue; }
+      return { ok: false };
+    }
+    if (m === "ch" || m === "chapitre" || m === "tome") continue;
+    const t = titres.find(x => motTrouve(m, normRech(x)));
+    if (!t) return { ok: false };
+    if (t !== s.title && !raison) raison = "autre titre : " + t;
+  }
+  return { ok: true, raison };
+}
+let LIB_RECH = "";
 const STATUT_LBL = { completed: "terminé", ongoing: "en cours", hiatus: "en pause", cancelled: "arrêté" };
 const TOMES_DEMANDES = new Set();
 function infoSerie(i){
@@ -4464,8 +4520,10 @@ function renderLib(){
   const serie = series.find(s => s.slug === LIB_SERIE);
   if (LIB_SERIE && !serie){ LIB_SERIE = null; try { localStorage.removeItem("manga_serie"); } catch {} }
   $("libNav").hidden = !serie;
+  $("libRechBox").hidden = !!serie;
   if (!serie){
-    $("chapList").innerHTML = series.map(s =>
+    const trouvees = series.map(s => Object.assign(s, { rech: chercherSerie(s, LIB_RECH) })).filter(s => s.rech.ok);
+    $("chapList").innerHTML = trouvees.map(s =>
       '<button class="chap-item serie-item" data-serie="' + esc(s.slug) + '">'
       // la pochette arrive en « chemin#date » : la date casse le cache d'un jour du proxy (pochette remplacee)
       + '<img loading="lazy" src="' + (s.pochette ? srcURL(s.pochette.split("#")[0]) + "&v=" + (s.pochette.split("#")[1] || "")
@@ -4475,9 +4533,12 @@ function renderLib(){
       + (s.info ? '<small>' + esc(infoSerie(s.info)) + '</small>' : "")
       + '<small>ch. ' + s.chaps.map(i => esc(CHAPS[i].chapter)).join(", ") + '</small>'
       + (s.pochette ? "" : '<small class="muted">pas encore de pochette</small>')
+      + (LIB_RECH && s.rech.raison ? '<small class="trouve">trouvé : ' + esc(s.rech.raison) + '</small>' : "")
       + '</span></button>').join("")
-      || '<p class="muted aide">Aucun chapitre dans sources/. Capture-en un ci-dessus.</p>';
-    $("chapState").textContent = series.length + " série(s), " + CHAPS.length + " chapitre(s) — " + CHAPS_ROOT;
+      || (LIB_RECH ? '<p class="muted aide">Aucune série ne correspond à « ' + esc(LIB_RECH) + ' ».</p>'
+                   : '<p class="muted aide">Aucun chapitre dans sources/. Capture-en un ci-dessus.</p>');
+    $("chapState").textContent = (LIB_RECH ? trouvees.length + " / " : "") + series.length + " série(s), "
+      + CHAPS.length + " chapitre(s) — " + CHAPS_ROOT;
     return;
   }
   $("libSerie").textContent = serie.title + (serie.info ? " — " + infoSerie(serie.info) : "");
@@ -4541,6 +4602,7 @@ $("chapList").onclick = e => {
   const b = e.target.closest("[data-chap]"); if (b) openChap(+b.dataset.chap).catch(err => log("chapitre : " + err.message, "e"));
 };
 $("btnLibBack").onclick = () => ouvrirSerie(null);
+$("libRech").addEventListener("input", e => { LIB_RECH = e.target.value; renderLib(); });
 // v1.80.0 : le bloc de capture garde son etat plie / deplie (Quang 21/09 : la capture est ponctuelle)
 try { if (localStorage.getItem("manga_capture_ouvert") === "0") $("capBox").open = false; } catch {}
 $("capBox").addEventListener("toggle", () => { try { localStorage.setItem("manga_capture_ouvert", $("capBox").open ? "1" : "0"); } catch {} });
