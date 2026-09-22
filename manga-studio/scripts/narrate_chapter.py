@@ -25,7 +25,7 @@ Stdout : un seul objet JSON (le resume du run). Le bruit part sur stderr.
 import argparse, base64, io, json, os, re, subprocess, sys, time, urllib.request, urllib.error
 from datetime import datetime
 
-VERSION = "1.98.3"
+VERSION = "1.99.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -128,7 +128,13 @@ MAX_PAR_MIN = 18
 _APPELS = []
 
 
-def _frein():
+# v1.99.0 : le frein est COMMUN a tous les programmes (narration, traduction, karaoke, Precedemment, suivi de nuit).
+# Chacun se freinait seul a 18/min : a deux, ils depassaient les 20/min du gateway (limite PAR IP = tout le PC) et se
+# faisaient refuser. Un compteur partage sur disque, sous verrou (msvcrt, Windows).
+FREIN_F = os.path.join(os.path.dirname(LOGF), "frein_gateway.json")
+
+
+def _frein_local():
     while True:
         now = time.time()
         while _APPELS and now - _APPELS[0] > 60:
@@ -139,14 +145,49 @@ def _frein():
         time.sleep(60 - (now - _APPELS[0]) + 0.5)
 
 
+def _frein():
+    try:
+        import msvcrt
+        os.makedirs(os.path.dirname(FREIN_F), exist_ok=True)
+    except Exception:
+        return _frein_local()
+    while True:
+        attente = 0.0
+        try:
+            with open(FREIN_F, "a+", encoding="utf-8") as f:
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)          # un seul programme a la fois dans ce bloc
+                try:
+                    f.seek(0)
+                    try:
+                        l = [t for t in json.loads(f.read() or "[]") if isinstance(t, (int, float))]
+                    except ValueError:
+                        l = []
+                    now = time.time()
+                    l = [t for t in l if now - t < 60]
+                    if len(l) < MAX_PAR_MIN:
+                        l.append(now)
+                        f.seek(0); f.truncate(); f.write(json.dumps(l)); f.flush()
+                        return
+                    attente = 60 - (now - min(l)) + 0.3
+                finally:
+                    f.seek(0)
+                    msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        except OSError:
+            attente = 0.5                                          # verrou pris trop longtemps : on repasse
+        time.sleep(max(0.2, attente))
+
+
 def post(path, body, timeout=240):
     req = urllib.request.Request(GATEWAY + path, data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json", "Authorization": "Bearer " + SECRET,
                                           "User-Agent": "manga-studio/" + VERSION})
     last = None
-    for essai in range(5):
+    essai, refus = 0, 0
+    while essai < 5:
         _frein()
         attente = 4 * (essai + 1)
+        essai += 1
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 return json.load(r)
@@ -160,14 +201,19 @@ def post(path, body, timeout=240):
                     attente = float(json.loads(brut).get("retry_after") or 60) + 1
                 except Exception:
                     attente = 61
-                journal("429", path=path, attente=attente)
+                # v1.99.0 : « attends » n'est pas un echec -> ne consomme pas d'essai (5 refus d'affilee faisaient
+                # echouer une narration entiere sans aucune panne) ; borne : 15 refus (~15 min) par appel
+                refus += 1
+                if refus <= 15:
+                    essai -= 1
+                journal("429", path=path, attente=attente, refus=refus)
                 log("  429 sur %s : pause %.0f s" % (path, attente))
         except Exception as e:          # timeout reseau, coupure
             last = str(e)
             # v1.98.3 : un delai depasse ne laissait AUCUNE trace (22/09 : K3 a 6-17 min par lot sur Frieren, sans
             # qu'on puisse dire s'il reflechissait ou si l'appel etait coupe a 240 s puis relance -- et refacture)
-            journal("reseau", path=path, essai=essai + 1, timeout=timeout, err=str(e)[:160])
-            log("  %s : %s (essai %d, delai %d s)" % (path, str(e)[:120], essai + 1, timeout))
+            journal("reseau", path=path, essai=essai, timeout=timeout, err=str(e)[:160])
+            log("  %s : %s (essai %d, delai %d s)" % (path, str(e)[:120], essai, timeout))
         time.sleep(attente)
     raise RuntimeError(path + " : " + str(last))
 
