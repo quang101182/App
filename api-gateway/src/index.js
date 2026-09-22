@@ -44,7 +44,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
-const VERSION = '1.59';
+const VERSION = '1.60';
 // v1.59 (21/09/2026) — runSoldeWatch : sondes de SOLDE pour deepseek, moonshot-kimi, runpod, piapi
 // (les 4 fournisseurs rechargeables, jusque-la angles morts du cost watch). Voir la fonction.
 
@@ -98,6 +98,10 @@ const KNOWN_KEYS = ['GEMINI_KEY', 'GROQ_KEY', 'OPENAI_KEY', 'DEEPL_KEY', 'ASSEMB
 
 /** Rate limit: max requests per minute window */
 const RL_API_MAX   = 20;
+// v1.60 (22/09/2026) : Manga Studio a SON compteur, a 60/min. Au partage des 20/min avec tout le PC, le reperage des
+// personnages d'un chapitre de 49 pages (~150 appels Gemini, deja authentifies) prenait 17 min. Les autres apps
+// (DictoKey & co) gardent le compteur commun et ses 20/min, inchanges. Le client se freine lui-meme a 54/min.
+const RL_MANGA_MAX = 60;
 const RL_ADMIN_MAX = 10;
 const RL_TTL_SEC   = 70; // KV TTL for rate-limit counters (slightly longer than 60s window)
 
@@ -282,7 +286,8 @@ async function handleFetch(request, env, ctx) {
 
         // Rate limit (fire-and-forget counter update)
         const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
-        const rlErr = await checkRateLimit(env, ctx, 'api', ip, RL_API_MAX);
+        const manga = (request.headers.get('User-Agent') || '').startsWith('manga-studio/');     // v1.60
+        const rlErr = await checkRateLimit(env, ctx, manga ? 'mgs' : 'api', ip, manga ? RL_MANGA_MAX : RL_API_MAX);
         if (rlErr) return rlErr;
 
         // Dispatch to the right upstream

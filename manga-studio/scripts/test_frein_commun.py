@@ -21,6 +21,7 @@ import sys, time, json
 sys.path.insert(0, %r)
 import narrate_chapter as nc
 nc.FREIN_F = sys.argv[1]
+nc.MAX_PAR_MIN = 18          # le MECANISME est teste a 18, quelle que soit la valeur de production
 if sys.argv[3] == "local": nc._frein = nc._frein_local
 t = []
 for _ in range(12):

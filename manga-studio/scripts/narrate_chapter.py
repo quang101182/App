@@ -22,10 +22,11 @@ Usage (depuis le venv kohya, qui a Pillow) :
     python narrate_chapter.py claymore/ch_1 --engine pixtral --no-tts
 Stdout : un seul objet JSON (le resume du run). Le bruit part sur stderr.
 """
-import argparse, base64, io, json, os, re, subprocess, sys, time, urllib.request, urllib.error
+import argparse, base64, io, json, os, re, subprocess, sys, threading, time, urllib.request, urllib.error
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-VERSION = "1.99.0"
+VERSION = "1.99.2"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -124,7 +125,10 @@ SECRET = None
 # Le gateway limite a 20 requetes/min PAR IP, fenetre fixe alignee sur la minute, compteur KV
 # "fire-and-forget" (App/api-gateway/src/index.js) -> on vise 18, pas 20. Sans ce frein, la voix
 # d'un chapitre de 62 pages (62 appels a ~1 s) prenait des 429 : constate au banc du 21/09.
-MAX_PAR_MIN = 18
+# v1.99.1 (22/09) : le gateway v1.60 donne a Manga Studio (User-Agent « manga-studio/ ») SON compteur a 60/min -> 54 ici
+# (marge : compteur KV « fire-and-forget »). Avant : 18 sur 20 partages avec tout le PC -> 17 min de reperage des noms
+# pour un chapitre de 49 pages.
+MAX_PAR_MIN = 54
 _APPELS = []
 
 
@@ -603,12 +607,33 @@ NOMS_VERSION = "v2"                             # fixe par --noms
 VOTES_NOMS = 3
 
 
+_VERROU_STATS = threading.Lock()
+
+
+def fusion_accents(votes):
+    """v1.99.2 : « Fräse » et « Fràse » = UN personnage (la page ecrit « Frāse » ; mesure 22/09, Frieren ch.143, 3 runs).
+    Deux orthographes a un accent pres faisaient deux personnages pour le recit. On regroupe par la forme sans accents ;
+    l'orthographe la plus votee l'emporte (a egalite, la premiere vue)."""
+    import unicodedata
+    cle = lambda n: unicodedata.normalize("NFKD", n).encode("ascii", "ignore").decode().lower()
+    groupes = {}
+    for nom, vs in votes.items():
+        groupes.setdefault(cle(nom), []).append((nom, vs))
+    out = {}
+    for membres in groupes.values():
+        nom = max(membres, key=lambda m: len(m[1]))[0]
+        out[nom] = [v for _n, vs in membres for v in vs]
+    return out
+PAGES_NOMS_EN_PARALLELE = 4                      # v1.99.2 : x (1 + votes) appels en vol ; le frein commun garde le rythme
+
+
 def _question_noms(chap_dir, p, stats):
     img = base64.b64encode(page_jpeg(os.path.join(chap_dir, p["file"]))).decode()
     content = [{"type": "text", "text": Q_NOMS_V3 if NOMS_VERSION == "v3" else Q_NOMS},
                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + img}}]
     txt, u = appel_vision("gemini", "Reponds uniquement en JSON.", content, 4000)
-    stats["cout_noms"] = stats.get("cout_noms", 0.0) + cout("gemini-3.6-flash", u)
+    with _VERROU_STATS:                          # v1.99.2 : appele depuis plusieurs fils a la fois
+        stats["cout_noms"] = stats.get("cout_noms", 0.0) + cout("gemini-3.6-flash", u)
     try:
         return [x for x in (parse_json(txt).get("noms") or []) if (x.get("nom") or "").strip()]
     except Exception:
@@ -672,11 +697,25 @@ def etape_noms(chap_dir, pages, stats, outdir=None, serie=None):
     chacun un portrait decoupe (v1.69 : exemple visuel, pour ne plus nommer un anonyme qui lui ressemble)."""
     t = time.time()
     votes = {}                                   # nom -> liste de (page, age, cheveux, box, fichier)
-    for p in pages:
+    # v1.99.2 : les pages sont INDEPENDANTES (les votes ne sont regroupes qu'ensuite) -> on les interroge en parallele.
+    # Mesure 22/09 : une question = ~6 s ; posees une par une, Frieren 19 p. = 364 s et Boruto 49 p. = 17 min, sans AUCUN
+    # refus du gateway (ce n'etait pas le plafond, c'etait l'attente). Le regroupement reste fait dans l'ordre des pages.
+    faites = [0]
+
+    def une_page(p):
         premiers = _question_noms(chap_dir, p, stats)
         lus = [premiers]
-        if premiers:                             # un prenom lu : 2 votes de plus sur CETTE page
-            lus += [_question_noms(chap_dir, p, stats) for _ in range(VOTES_NOMS - 1)]
+        if premiers:                             # un prenom lu : 2 votes de plus sur CETTE page (en meme temps)
+            with ThreadPoolExecutor(max_workers=max(1, VOTES_NOMS - 1)) as ex:
+                lus += list(ex.map(lambda _: _question_noms(chap_dir, p, stats), range(VOTES_NOMS - 1)))
+        with _VERROU_STATS:
+            faites[0] += 1
+            progres("noms", faites[0], len(pages))
+        return lus
+
+    with ThreadPoolExecutor(max_workers=PAGES_NOMS_EN_PARALLELE) as ex:
+        resultats = list(ex.map(une_page, pages))
+    for p, lus in zip(pages, resultats):
         for lot in lus:
             for x in lot:
                 nom = x["nom"].strip().strip(".,!?").capitalize()
@@ -685,7 +724,7 @@ def etape_noms(chap_dir, pages, stats, outdir=None, serie=None):
                                                   x.get("porteur_visible") is not False,
                                                   (x.get("porteur_teint") or "").strip(),
                                                   (x.get("porteur_tenue") or "").strip()))
-        progres("noms", p["num"], pages[-1]["num"])
+    votes = fusion_accents(votes)
     retenus = {}
     for nom, vs in votes.items():
         pages_nom = sorted({v[0] for v in vs})
