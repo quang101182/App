@@ -840,4 +840,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BaseException as e:          # v1.98.0 : la CAUSE d'un echec reste dans le journal persistant (le run.log
+        if not isinstance(e, SystemExit) or e.code not in (0, None):     # d'un nouvel essai l'ecrasait)
+            journal("echec", err=(type(e).__name__ + " : " + str(e))[:400])
+        raise

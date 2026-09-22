@@ -125,7 +125,15 @@ def empreinte(chap, tag, reglages):
         "reglages": h({k: reglages.get(k) for k in ("vitesse", "sous", "karaoke", "musique", "volume", "musique_noms", "pages")}),
     }
     if reglages.get("precedemment"):          # v1.95.0 : SEULEMENT si demande -> les videos d'avant ne passent pas « a refaire »
-        out["precedemment"] = h(st(os.path.join(cd, "precedemment", "ouverture.json")))
+        # le CONTENU (texte, voix, date de fabrication), pas la date du fichier : une copie a l'identique ne rend
+        # pas la video « a refaire » (banc du 22/09 : restaurer ouverture.json suffisait a la faire passer 🟠)
+        oj = os.path.join(cd, "precedemment", "ouverture.json")
+        try:
+            o = json.load(open(oj, encoding="utf-8"))
+            out["precedemment"] = h([o.get("created_at"), o.get("voice"), [(x.get("narration"), x.get("audio"), x.get("dur"), x.get("img"))
+                                                                          for x in o.get("items") or []]])
+        except Exception:
+            out["precedemment"] = h(None)
     return out
 
 

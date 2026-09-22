@@ -135,7 +135,8 @@ def ouverture_a_faire(c):
 def lancer(cmd, log, etat, etape):
     etat["en_cours"] = dict(etat.get("en_cours") or {}, etape=etape, depuis=time.time())
     ecrire_etat(etat)
-    with open(log, "w", encoding="utf-8") as lg:
+    with open(log, "a", encoding="utf-8") as lg:          # AJOUT : un 2e essai n'efface plus la cause du 1er
+        lg.write("\n===== %s · %s (suivi) =====\n" % (datetime.now().isoformat(timespec="seconds"), etape)); lg.flush()
         p = subprocess.Popen(cmd, stdout=lg, stderr=lg, cwd=HERE, creationflags=CREATE,
                              env=dict(os.environ, PYTHONIOENCODING="utf-8"))
         etat["en_cours"]["pid"] = p.pid; ecrire_etat(etat)
@@ -199,7 +200,13 @@ def main():
                     rc = lancer([PY, os.path.join(HERE, "narrate_chapter.py"), c["d"], "--engine", moteur, "--voice", voix, "--tag", tag],
                                 os.path.join(td, "run.log"), etat, "narration")
                     ok = rc == 0 and os.path.isfile(os.path.join(td, "narration.json"))
-                    journal("narration", d=c["d"], tag=tag, essai=essai, rc=rc, ok=ok, s=round(time.time() - t0))
+                    err = ""
+                    if not ok:                                   # la derniere ligne utile du log = la cause
+                        try:
+                            err = [x for x in open(os.path.join(td, "run.log"), encoding="utf-8", errors="replace").read().splitlines() if x.strip()][-1][:300]
+                        except Exception:
+                            pass
+                    journal("narration", d=c["d"], tag=tag, essai=essai, rc=rc, ok=ok, s=round(time.time() - t0), err=err)
                     if ok:
                         break
                 if not ok:

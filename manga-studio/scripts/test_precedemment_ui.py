@@ -28,7 +28,7 @@ ETAT = """() => { const p = LEC.n && LEC.n.pages[LEC.i], a = document.getElement
 
 assert os.path.isfile(OUV), "il faut d'abord fabriquer l'ouverture de one-punch-man/ch_301"
 sauve = OUV + ".banc"
-shutil.copy(OUV, sauve)
+shutil.copy2(OUV, sauve)
 try:
     # --- « a refaire » : une source qui change (cote proxy)
     import urllib.request
@@ -44,7 +44,7 @@ try:
     json.dump(d, open(OUV, "w", encoding="utf-8"), ensure_ascii=False)
     j = get("/manga/precedemment?d=one-punch-man/ch_301")["modes"]["ouverture"]
     check("proxy : narration source refaite -> 🟠 + raison", j["perime"] and "refaite" in " ".join(j["raisons"]), j.get("raisons"))
-    shutil.copy(sauve, OUV)
+    shutil.copy2(sauve, OUV)
     check("proxy : Claymore ch.1 -> impossible", get("/manga/precedemment?d=claymore/ch_1")["possible"] is False)
 
     with sync_playwright() as p:
@@ -110,7 +110,7 @@ try:
             c.close()
         b.close()
 finally:
-    shutil.copy(sauve, OUV); os.remove(sauve)
+    shutil.copy2(sauve, OUV); os.remove(sauve)
 
 print("\n%d OK / %d KO" % (len(OK), len(KO)))
 sys.exit(1 if KO else 0)
