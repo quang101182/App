@@ -86,6 +86,7 @@ Après chaque chapitre, `chapitre_suivant()` amène **le même onglet** au suiva
 |---|---|---|
 | **MangaDex** | ✅ OPM 302→304 (19/19/18 p.), 305→308, 310→311 | API publique `/manga/<id>/aggregate`, **dans la langue du chapitre lu** (le lecteur passe aussi seul au suivant, mais on ne s'y fie pas) |
 | **MANGA Plus** | ✅ Claymore #002→#003 (39+39 p., contenus distincts) | aucun passage automatique, et le bouton « To Chapter #00x » ne réagit pas à un clic scripté → page de la série `/titles/<id>`, clic sur le chapitre, puis réouverture de son adresse (le lecteur se recharge juste après le clic) |
+| **Sites à adresses `…/chapter-N/`** (WordPress « Madara » : raijin-scans.fr…) | ✅ Solo Leveling: Ragnarok VF ch.1→2 (v0.5.1) | les liens « chapter-N / chapitre-N » de la SÉRIE présents sur la page du chapitre (liste des chapitres) |
 | autre | ❌ arrêt « non pris en charge » | — |
 
 - Suivant = le plus petit numéro > au courant. **Un trou arrête la série** (« le chapitre 5 n'est pas
@@ -110,6 +111,10 @@ pixels et coupait À TRAVERS des encadrés), gouttière la plus proche de 1,5× 
 Mesuré : 26 bandes → **129 pages** en 13 s, 5 coupes hors gouttière, **aucune dans du texte** (contrôle visuel des coupes) ;
 narration Gemini de 12 pages : récit fidèle aux encadrés, 0,26 $. ⚠ **Traduction** : les encadrés de webtoon sont en
 TEXTE BLANC SUR FOND NOIR → le relettrage (fait pour texte noir sur bulle blanche) les laisse en VO (ROADMAP § 28).
+v0.5.1 : **avatars des commentaires** exclus (raijin-scans : 5 « pages » = avatars 736×1288 affichés en 50 px) — une page
+est AFFICHÉE ≥ 180 px de large et hors zone de commentaires ; test « le bloc défile-t-il » fait dans les DEUX sens (un
+onglet resté tout en bas faisait écarter le vrai bloc → « aucune image »). Raijin ch.2 : 12 coupes hors gouttière,
+toutes dans du dessin (contrôle visuel).
 v0.4.2 : le lecteur MangaDex en bande marquait `<body>` comme « bloc défilant » (overflow:auto) alors que c'est la fenêtre
 qui défile → 2 pages sur 26 ; body/html ignorés et un bloc n'est retenu que s'il défile VRAIMENT.
 ⚠ Deux onglets sur la MÊME adresse : `--tab` prend le premier (ici celui de Quang, figé) — viser une adresse distincte.

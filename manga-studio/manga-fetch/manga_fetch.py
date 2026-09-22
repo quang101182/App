@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -342,7 +342,30 @@ def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: boo
                 return None, (f"MANGA Plus : le chapitre #{brut} est listé mais n'affiche aucune page "
                               "sur le web (réservé à l'application ou à un abonnement ?)")
         return None, f"MANGA Plus : le clic sur le chapitre #{brut} n'a pas ouvert le lecteur"
-    return None, "enchaînement des chapitres non pris en charge sur ce site (MangaDex et MANGA Plus seulement)"
+    # v0.5.1 : GENERIQUE -- les sites de scans (WordPress « Madara » et cie : raijin-scans.fr, 22/09) listent sur la page
+    # du chapitre les liens de TOUS les chapitres de la serie, a adresse reguliere .../chapter-12/ ou .../chapitre-12-5/.
+    m = re.match(r"(https?://[^?#]+?/)(chapter|chapitre|ch)[-_](\d+(?:[.-]\d+)?)/?(?:[?#].*)?$", url_chapitre, re.I)
+    if m:
+        base, mot = m.group(1), m.group(2).lower()
+        if page.url.split("?")[0].split("#")[0].rstrip("/") != url_chapitre.split("?")[0].split("#")[0].rstrip("/"):
+            page.goto(url_chapitre, wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(3000)
+        liens = page.evaluate("(base) => Array.from(document.querySelectorAll('a[href]')).map(a => a.href)"
+                              ".filter(h => h.startsWith(base))", base)
+        dispo = {}
+        motif = re.compile(re.escape(base) + mot + r"[-_](\d+(?:[.-]\d+)?)/?(?:[?#].*)?$", re.I)
+        for h in liens:
+            mm = motif.match(h)
+            if mm:
+                dispo.setdefault(_format_num(float(mm.group(1).replace("-", "."))), h.split("#")[0])
+        if not dispo:
+            return None, "aucun lien vers d'autres chapitres sur la page (site non pris en charge)"
+        n, url, raison = _choisir_suivant(dispo, courant, jusqua, entiers)
+        if n is None:
+            return None, raison + " (liens de la page)"
+        page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        return n, None
+    return None, "enchaînement des chapitres non pris en charge sur ce site (MangaDex, MANGA Plus, sites à adresses « chapter-N »)"
 
 
 
@@ -803,6 +826,10 @@ def capture(args) -> int:
                             || i.naturalWidth / i.naturalHeight > 1.15))
                     .filter(i => { const r = i.getBoundingClientRect();
                                    return r.bottom > 80 && r.top < window.innerHeight - 80; })
+                    // v0.5.1 : une page est AFFICHEE en grand ; les avatars des commentaires (raijin-scans 22/09 :
+                    // 5 « pages » = avatars de 736x1288 montres en 50 px) ne le sont pas, et vivent dans les commentaires
+                    .filter(i => i.getBoundingClientRect().width >= 180
+                        && !i.closest('#comments, .comments, .comments-list-wrapper, .comment, [id^="comment"], .disqus, #disqus_thread'))
                     .map(i => ({src: i.src, top: Math.round(i.getBoundingClientRect().top + window.scrollY),
                                 w: i.naturalWidth, h: i.naturalHeight}))""")
                 for im in nouvelles:
@@ -849,7 +876,9 @@ def capture(args) -> int:
                     if (el === document.body || el === document.documentElement) continue;
                     if (el.scrollHeight <= bh) continue;
                     const avant = el.scrollTop; el.scrollTop = avant + 5;       // defile-t-il VRAIMENT ?
-                    const bouge = el.scrollTop !== avant; el.scrollTop = avant;
+                    let bouge = el.scrollTop !== avant;
+                    if (!bouge) { el.scrollTop = avant - 5; bouge = el.scrollTop !== avant; }   // deja tout en bas (22/09)
+                    el.scrollTop = avant;
                     if (bouge) { bh = el.scrollHeight; best = el; }
                 }
                 if (!best || best.scrollHeight <= best.clientHeight * 2.5) return null;
