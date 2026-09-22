@@ -14,7 +14,7 @@ import difflib, json, os, re, sys, time, unicodedata, urllib.error, urllib.reque
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import narrate_chapter as nc          # GATEWAY, secret, frein 18/min
 
-VERSION = "1.88.0"
+VERSION = "1.89.0"
 SRC = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources"))
 MODELE = "whisper-large-v3-turbo"
 MAX_CPS = 25                          # debit maximal plausible d'une voix (caracteres/s, espaces compris)
@@ -26,10 +26,10 @@ def norm(w):
     return re.sub(r"[^a-z0-9]", "", w)
 
 
-def whisper(mp3, prompt):
+def whisper(mp3, prompt, langue="fr"):
     """POST multipart -> {words:[{word,start,end}], duration}. Reessaie les 429 / 52x comme nc.post."""
     bnd = "----manga" + uuid.uuid4().hex
-    champs = [("model", MODELE), ("response_format", "verbose_json"), ("language", "fr"),
+    champs = [("model", MODELE), ("response_format", "verbose_json"), ("language", langue),
               ("timestamp_granularities[]", "word"), ("prompt", prompt[:800])]
     corps = b"".join(("--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n" % (bnd, k, v)).encode()
                      for k, v in champs)
@@ -143,7 +143,7 @@ def main():
 
     progres()
     for p in a_faire:
-        r = whisper(os.path.join(nd, p["audio"]), p["narration"])
+        r = whisper(os.path.join(nd, p["audio"]), p["narration"], n.get("langue") or "fr")   # v1.89.0 : narration en anglais
         mots = r.get("words") or []
         dur = float(p.get("dur") or r.get("duration") or 0)
         p["mots"] = recaler(p["narration"], mots, dur)

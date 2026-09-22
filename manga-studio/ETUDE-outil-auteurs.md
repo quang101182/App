@@ -172,3 +172,12 @@ Déclencheur de reprise : la réponse de Quang à ces 2 points. Q5 (prix/marge) 
 - Séquence retenue (proposition Claude) : la phase de PROSPECTION reste « on fait la vidéo pour lui » (vidéo gratuite,
   moteur local actuel, zéro reconstruction) = test de demande à bas coût. L'OUTIL en ligne ne se construit que si le
   seuil est atteint — et ce qu'on apprend en faisant les vidéos dit ce que l'outil doit contenir.
+
+## Capacité ajoutée pour tenir la promesse « vidéo gratuite » (22/09 20h40)
+
+Narration en ANGLAIS : `narrate_chapter.py --langue en` (v2.0.0 ; faits relevés en français, récit DeepSeek en anglais,
+voix Chirp 3 HD en-US) + karaoké qui suit la langue (`karaoke_mots.py` v1.89.0). Vérifié en réel sur 6 pages de webtoon
+(copie jetable, supprimée) : narration anglaise orale correcte, Whisper reconnaît 99 % des mots, vidéo 9:16 karaoké de
+54 s fabriquée en 26 s, coût 0,06 $ les 6 pages. Français par défaut inchangé (vérifié).
+Chaîne pour un prospect : sources/<serie>/ch_N (capture) → narrate_chapter --langue en → karaoke_mots → video_chapitre.
+RESTE, à faire SEULEMENT si un auteur l'accepte : montage sur SA piste audio continue (NatM_, Parapsych, Kimchi222).

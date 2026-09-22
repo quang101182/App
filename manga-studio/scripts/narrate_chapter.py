@@ -15,7 +15,7 @@ Trois etapes, chacune mesuree (duree, tokens, cout) dans narration.json :
                 page (la segmentation reste celle des pages : c'est elle que le
                 lecteur synchronise). Consigne centrale, tiree des forums : RACONTER,
                 ne pas decrire l'ecran ; paraphraser, ne pas recopier les repliques.
-  3. VOIX     : Google Chirp 3 HD fr-FR, une piste MP3 par page + sa duree.
+  3. VOIX     : Google Chirp 3 HD fr-FR (en-US avec --langue en, v2.0.0), une piste MP3 par page + sa duree.
 
 Usage (depuis le venv kohya, qui a Pillow) :
     python narrate_chapter.py claymore/ch_1 --engine kimi --pages 1-20 --voice Charon
@@ -26,7 +26,7 @@ import argparse, base64, io, json, os, re, subprocess, sys, threading, time, url
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-VERSION = "1.99.2"
+VERSION = "2.0.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -441,6 +441,20 @@ Reponds UNIQUEMENT en JSON : {"titre":"accroche courte","pages":[{"page":N,"narr
 avec EXACTEMENT les memes numeros de page que l'entree, dans le meme ordre."""
 
 
+# v2.0.0 (22/09/2026, etude « outil auteurs ») : narration dans une AUTRE langue que le francais. Les faits restent
+# releves en francais (consignes eprouvees, mesurees) ; seul le RECIT change de langue, puis la voix suit.
+LANGUE = "fr"                                    # fixe par --langue
+LANGUES_NARR = {"fr": ("francais", "fr-FR"), "en": ("anglais", "en-US")}
+CONSIGNE_LANGUE = """
+LANGUE DE SORTIE : ecris le titre et TOUTE la narration en %s naturel et oral (le style des chaines "recap"
+anglophones pour l'anglais), meme si les faits fournis sont en francais. Les memes interdits valent dans cette
+langue (en anglais : "we see", "close-up", "shows", "the panel", "this page", "the image", "appears", "is depicted")."""
+
+
+def _consigne_langue():
+    return "" if LANGUE == "fr" else CONSIGNE_LANGUE % LANGUES_NARR[LANGUE][0]
+
+
 def _fiche_texte(fiche):
     return json.dumps([dict(id=k, **v) for k, v in fiche.items()], ensure_ascii=False)
 
@@ -545,7 +559,7 @@ def etape_recit_v2(pages, resume, persos, stats):
         return "", pages
     body = {"model": "deepseek-v4-flash", "max_tokens": 8000, "temperature": 0.6,
             "thinking": {"type": "disabled"},
-            "messages": [{"role": "system", "content": SYS_RECIT_V2},
+            "messages": [{"role": "system", "content": SYS_RECIT_V2 + _consigne_langue()},
                          {"role": "user", "content": "Fiche des personnages : " + json.dumps(persos, ensure_ascii=False)
                           + "\nPages :\n" + json.dumps(entree, ensure_ascii=False)}]}
     t = time.time()
@@ -846,7 +860,8 @@ def etape_voix(pages, outdir, voice, rate, stats):
         txt = (p.get("narration") or "").strip()
         if not txt:
             continue
-        body = {"input": {"text": txt}, "voice": {"languageCode": "fr-FR", "name": "fr-FR-Chirp3-HD-" + voice},
+        loc = LANGUES_NARR[LANGUE][1]
+        body = {"input": {"text": txt}, "voice": {"languageCode": loc, "name": loc + "-Chirp3-HD-" + voice},
                 "audioConfig": {"audioEncoding": "MP3", "speakingRate": rate}}
         t = time.time()
         r = post("/api/gcptts/v1/text:synthesize", body, timeout=90)
@@ -880,7 +895,9 @@ def main():
     ap.add_argument("--batch", type=int, default=0, help="pages par appel vision (defaut : 2 en v2, 4 en v1)")
     ap.add_argument("--prompt", choices=["v1", "v2"], default="v2",
                     help="v2 = faits + fiche des personnages prouvee + recit sans invention (defaut, 21/09)")
-    ap.add_argument("--voice", default="Charon", help="voix Chirp 3 HD fr-FR (Charon, Fenrir, Orus, Kore...)")
+    ap.add_argument("--voice", default="Charon", help="voix Chirp 3 HD (Charon, Fenrir, Orus, Kore...), dans la langue de --langue")
+    ap.add_argument("--langue", choices=sorted(LANGUES_NARR), default="fr",
+                    help="v2.0.0 : langue de la narration et de la voix (defaut fr ; en = anglais, prompt v2 seulement)")
     ap.add_argument("--rate", type=float, default=1.05)
     ap.add_argument("--tag", default="", help="nom du run (defaut : <engine>-<voix>)")
     ap.add_argument("--no-tts", action="store_true")
@@ -894,14 +911,17 @@ def main():
     ap.add_argument("--serie", action="store_true",
                     help="v1.74 (etape 2) : reprend les noms prouves dans les AUTRES chapitres de la serie")
     a = ap.parse_args()
-    global NOMS_VERSION
+    global NOMS_VERSION, LANGUE
     NOMS_VERSION = a.noms
+    LANGUE = a.langue
+    if LANGUE != "fr" and a.prompt != "v2":
+        raise SystemExit("--langue %s : seulement avec --prompt v2 (le v1 ecrit sa narration des la lecture)" % LANGUE)
     SECRET = _secret()
 
     chap_dir = os.path.normpath(os.path.join(SOURCES, a.chapitre))
     if not chap_dir.startswith(SOURCES + os.sep) or not os.path.isfile(os.path.join(chap_dir, "manifest.json")):
         raise SystemExit("chapitre introuvable sous sources/ : " + a.chapitre)
-    tag = a.tag or "%s-%s" % (a.engine, a.voice.lower())
+    tag = a.tag or "%s-%s" % (a.engine, a.voice.lower()) + ("" if a.langue == "fr" else "-" + a.langue)
     outdir = os.path.join(chap_dir, "narration", tag)
     os.makedirs(outdir, exist_ok=True)
     PROGRESS = os.path.join(outdir, "progress.json")
@@ -947,7 +967,7 @@ def main():
     # v1.72 : un run --reuse-vision recopie les stats de lecture de son run source : le suivi des couts
     # ne doit compter QUE ce que ce run a depense (recit + voix), sinon la lecture est comptee deux fois.
     res = {"version": VERSION, "prompt": a.prompt, "reuse_vision": a.reuse_vision or None, "serie": bool(a.serie), "noms_version": a.noms, "chapitre": a.chapitre, "title": man.get("title"), "chapter": man.get("chapter"),
-           "tag": tag, "engine": a.engine, "model": ENGINES[a.engine][1], "voice": a.voice, "rate": a.rate,
+           "tag": tag, "engine": a.engine, "model": ENGINES[a.engine][1], "voice": a.voice, "rate": a.rate, "langue": a.langue,
            "titre": titre, "resume": resume, "personnages": persos, "created_at": datetime.now().isoformat(timespec="seconds"),
            "stats": {k: (round(v, 4) if isinstance(v, float) else v) for k, v in stats.items()},
            "pages": vis}
