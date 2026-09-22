@@ -1,0 +1,32 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260922-manga-v200b	2026-09-22 10:45:12.396372400 +0200
++++ /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py	2026-09-22 10:45:12.431082300 +0200
+@@ -7950,6 +7950,9 @@
+     return _SUIVI_MOD["m"]
+ 
+ 
++_SUIVI_TARIF = {"kimi": (0.04, 1.0), "gemini": (0.017, 0.25)}     # $ et minutes par page (mesures du 21/09)
++
++
+ def manga_suivi(serie):
+     sd = _manga_src_safe(serie) if _RE_SERIE.match(serie or "") else None
+     if not sd or not os.path.isdir(sd):
+@@ -7977,7 +7980,8 @@
+                     jr.append(x)
+     except Exception:
+         pass
+-    return {"config": cfg, "file": file, "estimation": {"cout": round(pages * 0.04, 2), "minutes": pages},
++    prix, minutes = _SUIVI_TARIF.get(cfg.get("moteur") or "kimi", _SUIVI_TARIF["kimi"])
++    return {"config": cfg, "file": file, "estimation": {"cout": round(pages * prix, 2), "minutes": round(pages * minutes)},
+             "passage": etat, "journal": jr[-30:]}
+ 
+ 
+@@ -7990,7 +7994,8 @@
+     if not re.match(r"^[A-Z][a-z]{2,15}$", voix):
+         return {"error": "voix invalide"}
+     rv = data.get("reglages_video") or {}
+-    cfg = {"actif": bool(data.get("actif")), "voix": voix, "moteur": "kimi", "karaoke": bool(data.get("karaoke", True)),
++    cfg = {"actif": bool(data.get("actif")), "voix": voix, "moteur": data.get("moteur") if data.get("moteur") in _SUIVI_TARIF else "kimi",
++           "karaoke": bool(data.get("karaoke", True)),
+            "precedemment": bool(data.get("precedemment", True)), "video": bool(data.get("video")),
+            "reglages_video": {k: rv.get(k) for k in ("vitesse", "sous", "karaoke", "musique", "volume", "pages", "precedemment")},
+            "maj": time.strftime("%Y-%m-%dT%H:%M:%S")}

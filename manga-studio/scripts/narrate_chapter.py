@@ -25,7 +25,7 @@ Stdout : un seul objet JSON (le resume du run). Le bruit part sur stderr.
 import argparse, base64, io, json, os, re, subprocess, sys, time, urllib.request, urllib.error
 from datetime import datetime
 
-VERSION = "1.98.2"
+VERSION = "1.98.3"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -164,6 +164,10 @@ def post(path, body, timeout=240):
                 log("  429 sur %s : pause %.0f s" % (path, attente))
         except Exception as e:          # timeout reseau, coupure
             last = str(e)
+            # v1.98.3 : un delai depasse ne laissait AUCUNE trace (22/09 : K3 a 6-17 min par lot sur Frieren, sans
+            # qu'on puisse dire s'il reflechissait ou si l'appel etait coupe a 240 s puis relance -- et refacture)
+            journal("reseau", path=path, essai=essai + 1, timeout=timeout, err=str(e)[:160])
+            log("  %s : %s (essai %d, delai %d s)" % (path, str(e)[:120], essai + 1, timeout))
         time.sleep(attente)
     raise RuntimeError(path + " : " + str(last))
 

@@ -35,6 +35,8 @@ On le comble ici plutôt que de le signaler une deuxième fois.
 | `_studio_llm_proxy_video_prec.diff` | v1.95.1 (`patch_video_prec.py`) : réglage vidéo `precedemment` (liste blanche + raison « à refaire »), `_video_nom()` = nom lisible du fichier téléchargé (`filename*` UTF-8 + repli ASCII). |
 | `_studio_llm_proxy_videos_zip.diff` | v1.97.0 (`patch_videos_zip.py`) : `GET /manga/videos_zip?serie=&d=ch_1,ch_2` = les vidéos choisies en UNE archive .zip en flux (MP4 stockés, zip64). |
 | `_studio_llm_proxy_suivi.diff` | v1.98.0 (`patch_suivi.py`) : `GET/POST /manga/suivi` (réglage `sources/<série>/suivi.json`, file, estimation, dernier passage) et `POST /manga/suivi_lancer` (`scripts/suivi_nuit.py` en fond). |
+| `_studio_llm_proxy_pilote.diff` | v2.0.0 (`patch_pilote.py`) : télécommande de la fenêtre de capture — `GET /manga/pilote_onglets`, `GET /manga/pilote_ecran?id=` (JPEG), `POST /manga/pilote` (clic, molette, touche, texte, url, retour, avant, recharger, activer, fermer, nouvel) ; client CDP `scripts/cdp_mini.py`. |
+| `_studio_llm_proxy_suivi_moteur.diff` | v2.0.0 (`patch_suivi_moteur.py`) : le suivi choisit son moteur (kimi | gemini), estimation selon le moteur. |
 
 **Ce sont des ajouts purs.** Aucune ligne existante de Generate Studio n'est modifiée : les diffs ne
 contiennent que des `+`, à l'exception de la ligne `SCHEMA_VERSION = 2` → `3` et de l'ajout de `shutil`

@@ -1,4 +1,4 @@
-# HANDOFF — Manga Studio, volet LECTURE NARRÉE (maj 22/09/2026, 09h55)
+# HANDOFF — Manga Studio, volet LECTURE NARRÉE (maj 22/09/2026, 10h50)
 
 > Autosuffisant. « Fait » = `git log` (version courante : v1.85.0). Ce fichier ne porte
 > que le RESTANT, les pièges et le pourquoi. Le détail des mesures est dans `ROADMAP.md` § 4-ter et 4-ter-bis.
@@ -65,6 +65,8 @@
    téléchargement. Détail : ROADMAP ligne « 5 — VIDÉO FAITE ». Ensuite : 7 « Précédemment… », 9 suivi de séries, 10 hors-ligne ;
    plus tard 4 (caméra case par case). ⚠ Les vidéos (scans protégés) vivent sous sources/ : jamais dans le dépôt (public).
    ⚠ Une question de Quang (« il me semble que… ») n'est PAS un ordre : répondre, ne rien modifier.
+   ✅ **v2.0.0** capture depuis le téléphone (🕹 télécommande, 🔗 lien, Partager → Manga Studio) + moteur du suivi (Gemini pour les tests).
+   SUITE : 18 (capture de plusieurs chapitres, vérifier les sites d'abord). Frieren ch.143 relancé en Gemini 10h46.
    ✅ **v1.95.1** vidéo : 📜 en tête, choix de la voix, nom de fichier lisible ; pastille des coûts à droite. SUITE : ✅ 16 fait (v1.96.0,
    chapitre précédent/suivant), ✅ 15 fait (v1.97.0, archive .zip), ✅ 9 suivi (v1.98.0, tâche MangaStudioSuiviNuit 01:30 ;
    1er passage réel Demo Frieren lancé 09:36 → `python scripts/test_suivi_ui.py verifier` à passer), ✅ 10 hors-ligne (v1.99.0).

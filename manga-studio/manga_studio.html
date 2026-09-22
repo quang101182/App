@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.99.0</title>
+<title>Manga Studio v2.0.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -468,6 +468,15 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .narr-run .narr-pbar{grid-column:1 / -1}
 /* traduction : etiquettes EN LIGNE, deux petites rangees au lieu d'une colonne de blocs */
 .trad-ligne{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pil-box{margin:8px 0;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
+.pil-onglets{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px}
+.pil-onglets .btn{flex:none;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pil-onglets .btn.on{border-color:var(--accent2);color:var(--txt)}
+.pil-nav{display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap}
+.pil-nav input{flex:1;min-width:0}
+.pil-ecran{position:relative;touch-action:none;user-select:none}
+.pil-ecran img{display:block;width:100%;border-radius:6px;background:#000;min-height:120px;cursor:pointer}
+.pil-ecran span{position:absolute;right:6px;bottom:6px;font-size:11px;background:#000a;padding:2px 6px;border-radius:6px}
 .prec-box{margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
 .prec-etat{font-size:12px;color:var(--dim);flex:1;min-width:0}
 .trad-ligne+.trad-ligne{margin-top:6px}
@@ -652,7 +661,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.99.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.0.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1009,7 +1018,40 @@ body.epure .aide{display:none}
       <span id="capEdge" class="muted">fenêtre de capture : …</span>
       <button class="btn sm" id="btnCapEdge">Ouvrir la fenêtre de capture</button>
       <button class="btn sm" id="btnCapTabs">↻ Onglets</button>
+      <button class="btn sm" id="btnPilote" title="voir et piloter la fenêtre de capture depuis ici (téléphone compris)">🕹 Piloter la fenêtre</button>
     </div>
+    <!-- v2.0.0 : TELECOMMANDE de la fenetre de capture (CDP 9223 relaye par le proxy) -->
+    <div class="pil-box" id="pilBox" hidden>
+      <div class="pil-onglets" id="pilOnglets"></div>
+      <div class="pil-nav">
+        <button class="btn sm" data-pil="retour" title="page précédente">◀</button>
+        <button class="btn sm" data-pil="avant" title="page suivante">▶</button>
+        <button class="btn sm" data-pil="recharger" title="recharger">⟳</button>
+        <input id="pilUrl" inputmode="url" placeholder="adresse ou recherche">
+        <button class="btn sm" id="pilAller">Aller</button>
+      </div>
+      <div class="pil-ecran"><img id="pilEcran" alt="écran de la fenêtre de capture"><span id="pilEtat" class="muted"></span></div>
+      <div class="pil-nav">
+        <button class="btn sm" data-pil-mol="-700" title="remonter">⬆</button>
+        <button class="btn sm" data-pil-mol="700" title="descendre">⬇</button>
+        <button class="btn sm" data-pil-t="gauche" title="flèche gauche (page précédente d'un lecteur)">←</button>
+        <button class="btn sm" data-pil-t="droite" title="flèche droite (page suivante d'un lecteur)">→</button>
+        <button class="btn sm" data-pil-t="pagebas" title="Page suivante">Page ⬇</button>
+        <button class="btn sm" data-pil-t="entree" title="Entrée">⏎</button>
+      </div>
+      <div class="pil-nav">
+        <input id="pilTexte" placeholder="texte à taper dans la page (après avoir touché un champ)">
+        <button class="btn sm" id="pilEnvoyer">Taper</button>
+        <button class="btn sm pri" id="pilChoisir" title="sélectionner cet onglet pour la capture ci-dessous">✔ Capturer cet onglet</button>
+      </div>
+    </div>
+    <!-- v2.0.0 : a partir d'un LIEN (colle, ou « Partager -> Manga Studio » depuis le navigateur du telephone) -->
+    <div class="row" style="margin-top:8px">
+      <div class="grow"><label>🔗 Lien du chapitre <span class="muted">(ou, dans le navigateur du téléphone : Partager → Manga Studio)</span></label>
+        <input id="capLien" inputmode="url" placeholder="colle ici le lien de la page où commencer"></div>
+      <button class="btn" id="btnCapLien" style="align-self:flex-end">Ouvrir sur le PC</button>
+    </div>
+    <p class="muted" id="capLienEtat" style="margin:4px 0 0;font-size:12px"></p>
     <div class="row" style="margin-top:8px">
       <div class="grow"><label>Onglet à capturer</label><select id="capTab"></select></div>
     </div>
@@ -1056,6 +1098,7 @@ body.epure .aide{display:none}
     <div class="vid-tete"><b>🌙 Suivi de la série</b><button class="btn sm" id="suiviFermer">✕</button></div>
     <label class="suivi-l"><input type="checkbox" id="suiviActif"> Narrer automatiquement <b>la nuit (1 h 30)</b> les chapitres capturés et pas encore narrés</label>
     <div class="suivi-opts">
+      <label>Moteur <select id="suiviMoteur"><option value="kimi">Kimi K3 — le plus fiable</option><option value="gemini">Gemini — rapide, moins cher</option></select></label>
       <label>Voix <select id="suiviVoix"></select></label>
       <label><input type="checkbox" id="suiviKar" checked> karaoké</label>
       <label><input type="checkbox" id="suiviPrec" checked> « Précédemment… »</label>
@@ -1397,7 +1440,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.99.0";
+const VERSION = "2.0.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -5543,11 +5586,11 @@ function suiviRendre(){
   $("suiviVoix").innerHTML = VOIX.map(v => '<option value="' + v[0] + '">' + esc(v[1]) + "</option>").join("");
   let v = c.voix; if (!v) try { v = localStorage.getItem("manga_voix_" + LIB_SERIE); } catch {}
   $("suiviVoix").value = VOIX.some(x => x[0] === v) ? v : VOIX[0][0];
-  $("suiviActif").checked = !!c.actif; $("suiviKar").checked = c.karaoke !== false;
+  $("suiviActif").checked = !!c.actif; $("suiviKar").checked = c.karaoke !== false; $("suiviMoteur").value = c.moteur === "gemini" ? "gemini" : "kimi";
   $("suiviPrec").checked = c.precedemment !== false; $("suiviVid").checked = !!c.video;
   $("suiviFile").textContent = f.length
     ? f.length + " chapitre(s) à narrer : ch. " + f.map(x => x.num).join(", ") + " — ≈ " + fmtUsd(j.estimation.cout)
-      + " et ≈ " + fmtS(j.estimation.minutes * 60) + " (Kimi K3, sans plafond)"
+      + " et ≈ " + fmtS(j.estimation.minutes * 60) + " (" + (c.moteur === "gemini" ? "Gemini" : "Kimi K3") + ", sans plafond)"
     : "Rien à narrer : tous les chapitres capturés ont une narration avec voix.";
   const en = ps.en_cours;
   const ETP = { narration: "narration", karaoke: "karaoké", precedemment: "« Précédemment… »" };
@@ -5564,12 +5607,12 @@ function suiviRendre(){
 }
 async function suiviCharger(){ if (!LIB_SERIE) return; SUIVI = await api("/manga/suivi?serie=" + encodeURIComponent(LIB_SERIE)); suiviRendre(); }
 async function suiviSauver(){
-  const r = await api("/manga/suivi", { serie: LIB_SERIE, actif: $("suiviActif").checked, voix: $("suiviVoix").value,
+  const r = await api("/manga/suivi", { serie: LIB_SERIE, actif: $("suiviActif").checked, voix: $("suiviVoix").value, moteur: $("suiviMoteur").value,
     karaoke: $("suiviKar").checked, precedemment: $("suiviPrec").checked, video: $("suiviVid").checked, reglages_video: reglagesLecteur() });
   if (r.error) throw new Error(r.error);
   toast($("suiviActif").checked ? "🌙 suivi activé : narration la nuit" : "suivi désactivé"); await suiviCharger();
 }
-["suiviActif", "suiviVoix", "suiviKar", "suiviPrec", "suiviVid"].forEach(id => $(id).onchange = () => suiviSauver().catch(e => alert(e.message)));
+["suiviActif", "suiviMoteur", "suiviVoix", "suiviKar", "suiviPrec", "suiviVid"].forEach(id => $(id).onchange = () => suiviSauver().catch(e => alert(e.message)));
 $("btnSuivi").onclick = () => { $("suiviBox").hidden = !$("suiviBox").hidden; if (!$("suiviBox").hidden) suiviCharger().catch(e => log("suivi : " + e.message, "e")); };
 $("suiviFermer").onclick = () => { $("suiviBox").hidden = true; clearTimeout(SUIVI_POLL); };
 $("suiviLancer").onclick = async () => {
@@ -6129,6 +6172,145 @@ $("btnAveugle").onclick = () => {
 /* =====================================================================
    CAPTURE (v1.71.0) -- manga-fetch enveloppe par le proxy, pilote depuis l'app
    ===================================================================== */
+
+/* ----- v2.0.0 : capturer a partir d'un LIEN (colle ou partage) ----- */
+const lienDe = t => { const m = /(https?:\/\/[^\s"'<>]+)/.exec(t || ""); return m ? m[1] : ""; };
+function devinerTitre(titrePage){
+  // « One Punch-Man - Chapter 301 - MangaDex » -> titre connu de la bibliotheque si on le retrouve, et le numero
+  const t = titrePage || "", num = (/(?:chap(?:ter|itre)?|ch\.?|#)\s*(\d+(?:[.,]\d+)?)/i.exec(t) || [])[1] || "";
+  const connus = [...new Set(CHAPS.map(c => c.title))].sort((a, b) => b.length - a.length);
+  const connu = connus.find(x => slugTitre(t).includes(slugTitre(x)));
+  const brut = t.split(/\s[-|–—]\s|\bchap(?:ter|itre)?\b|\bch\.?\s*\d/i)[0].trim();
+  return { titre: connu || brut, num: num.replace(",", ".") };
+}
+async function capOuvrirLien(texte){
+  const u = lienDe(texte) || (/^[\w-]+(\.[\w-]+)+\//.test((texte || "").trim()) ? "https://" + texte.trim() : "");
+  if (!u){ $("capLienEtat").textContent = "⚠ pas de lien reconnu"; return; }
+  $("capLien").value = u;
+  const et = m => { $("capLienEtat").textContent = m; };
+  let o = await api("/manga/pilote_onglets");
+  if (!o.edge){
+    et("ouverture de la fenêtre de capture sur le PC…"); await api("/manga/fetch_edge", {});
+    for (let k = 0; k < 20 && !o.edge; k++){ await new Promise(r => setTimeout(r, 1000)); o = await api("/manga/pilote_onglets"); }
+    if (!o.edge){ et("⚠ la fenêtre de capture ne s'ouvre pas"); return; }
+  }
+  if (o.capture){ et("⚠ une capture est déjà en cours"); return; }
+  et("ouverture du lien dans la fenêtre de capture…");
+  const r = await api("/manga/pilote", { action: "nouvel", url: u }); if (r.error) throw new Error(r.error);
+  let tab = null;
+  for (let k = 0; k < 20; k++){                          // la page charge (et peut rediriger) : on attend son titre
+    await new Promise(res => setTimeout(res, 1000));
+    tab = ((await api("/manga/pilote_onglets")).onglets || []).find(x => x.id === r.id);
+    if (tab && tab.titre && !/^https?:/.test(tab.titre) && tab.url.startsWith("http")) break;
+  }
+  if (!tab){ et("⚠ l'onglet s'est fermé"); return; }
+  await refreshCapTabs();
+  const i = CAP_TABS.findIndex(t => t.url === tab.url);
+  if (i >= 0){ $("capTab").value = String(i); $("capTab").dispatchEvent(new Event("change")); }
+  const g = devinerTitre(tab.titre);
+  if (!$("capTitre").value.trim() && g.titre) $("capTitre").value = g.titre;
+  if (!$("capChap").value.trim() && g.num) $("capChap").value = g.num;
+  PIL.id = r.id;
+  et("✅ ouvert sur le PC et choisi : « " + tab.titre.slice(0, 70) + " » — vérifie le titre et le n°, puis Capturer"
+     + " (🕹 Piloter la fenêtre pour te placer autrement)");
+  $("capTitre").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+$("btnCapLien").onclick = () => capOuvrirLien($("capLien").value).catch(e => { $("capLienEtat").textContent = "⚠ " + e.message; });
+$("capLien").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); $("btnCapLien").click(); } });
+// « Partager -> Manga Studio » (manifest share_target) : /manga/?lien=…&texte=…&titre=…
+function partageEntrant(){
+  const q = new URLSearchParams(location.search), t = [q.get("lien"), q.get("texte"), q.get("titre")].filter(Boolean).join(" ");
+  if (!t) return;
+  history.replaceState(null, "", location.pathname);
+  const b = document.querySelector('nav button[data-tab="tChap"]'); if (b) b.click();
+  $("capBox").open = true;
+  log("partage reçu : " + t.slice(0, 120));
+  setTimeout(() => capOuvrirLien(t).catch(e => { $("capLienEtat").textContent = "⚠ " + e.message; }), 800);
+}
+/* ----- v2.0.0 : TELECOMMANDE de la fenetre de capture ----- */
+const PIL = { id: null, onglets: [], timer: 0, url: "", enCours: false, objet: null };
+async function pilOnglets(){
+  const j = await api("/manga/pilote_onglets");
+  PIL.onglets = j.onglets || [];
+  if (!j.edge){ $("pilOnglets").innerHTML = '<span class="muted">fenêtre de capture fermée — « Ouvrir la fenêtre de capture »</span>'; PIL.id = null; return; }
+  if (!PIL.onglets.some(o => o.id === PIL.id)) PIL.id = (PIL.onglets.find(o => o.actif) || PIL.onglets[0] || {}).id || null;
+  $("pilOnglets").innerHTML = PIL.onglets.map(o => '<button class="btn sm' + (o.id === PIL.id ? " on" : "") + '" data-pil-onglet="' + esc(o.id)
+      + '" title="' + esc(o.titre + " — " + o.url) + '">' + esc((o.titre || o.url).slice(0, 40)) + "</button>").join("")
+    + '<button class="btn sm" data-pil-nouvel title="nouvel onglet">＋</button>'
+    + (PIL.id ? '<button class="btn sm danger" data-pil-fermer title="fermer cet onglet">✕</button>' : "");
+  if (j.capture) $("pilEtat").textContent = "capture en cours : pilotage suspendu";
+}
+async function pilEcran(){
+  if ($("pilBox").hidden || !PIL.id || PIL.enCours || document.hidden) return;
+  PIL.enCours = true;
+  try {
+    const r = await fetch(CFG.base + "/manga/pilote_ecran?id=" + encodeURIComponent(PIL.id), { headers: CFG.key ? { Authorization: "Bearer " + CFG.key } : {} });
+    if (!r.ok){ $("pilEtat").textContent = "écran indisponible (" + r.status + ")"; if (r.status === 404) await pilOnglets(); return; }
+    const u = decodeURIComponent(r.headers.get("X-Url") || "");
+    const b = await r.blob(), url = URL.createObjectURL(b);
+    $("pilEcran").src = url; if (PIL.objet) URL.revokeObjectURL(PIL.objet); PIL.objet = url;
+    $("pilEcran").dataset.h = r.headers.get("X-Hauteur") || "1000";          // glisser = defiler d'autant (px CSS)
+    if (u !== PIL.url){ PIL.url = u; if (document.activeElement !== $("pilUrl")) $("pilUrl").value = u; }
+    $("pilEtat").textContent = decodeURIComponent(r.headers.get("X-Titre") || "").slice(0, 50);
+  } catch (e){ $("pilEtat").textContent = "écran : " + e.message; }
+  finally { PIL.enCours = false; }
+}
+function pilBoucle(){ clearInterval(PIL.timer); PIL.timer = setInterval(pilEcran, 2000); }
+async function pilAction(action, extra){
+  if (!PIL.id && action !== "nouvel") return;
+  const r = await api("/manga/pilote", Object.assign({ id: PIL.id, action }, extra || {}));
+  if (r.error) throw new Error(r.error);
+  if (r.id) PIL.id = r.id;
+  if (["nouvel", "fermer", "activer", "url", "retour", "avant"].includes(action)) setTimeout(() => pilOnglets().catch(() => {}), 900);
+  setTimeout(pilEcran, 250); setTimeout(pilEcran, 1200);
+}
+const pilErr = e => { $("pilEtat").textContent = "⚠ " + e.message; log("pilotage : " + e.message, "w"); };
+$("btnPilote").onclick = async () => {
+  $("pilBox").hidden = !$("pilBox").hidden;
+  if ($("pilBox").hidden){ clearInterval(PIL.timer); return; }
+  try { await pilOnglets(); await pilEcran(); pilBoucle(); } catch (e){ pilErr(e); }
+};
+$("pilOnglets").onclick = e => {
+  const b = e.target.closest("[data-pil-onglet],[data-pil-nouvel],[data-pil-fermer]"); if (!b) return;
+  if (b.dataset.pilOnglet){ PIL.id = b.dataset.pilOnglet; pilAction("activer").catch(pilErr); pilOnglets().catch(() => {}); }
+  else if (b.dataset.pilNouvel != null) pilAction("nouvel", { url: "about:blank" }).then(() => $("pilUrl").focus()).catch(pilErr);
+  else if (confirm("Fermer cet onglet de la fenêtre de capture ?")) pilAction("fermer").then(() => { PIL.id = null; }).catch(pilErr);
+};
+document.querySelectorAll("[data-pil]").forEach(b => b.onclick = () => pilAction(b.dataset.pil).catch(pilErr));
+document.querySelectorAll("[data-pil-mol]").forEach(b => b.onclick = () => pilAction("molette", { x: 0.5, y: 0.5, dy: +b.dataset.pilMol }).catch(pilErr));
+document.querySelectorAll("[data-pil-t]").forEach(b => b.onclick = () => pilAction("touche", { touche: b.dataset.pilT }).catch(pilErr));
+function pilAller(){
+  let u = $("pilUrl").value.trim(); if (!u) return;
+  if (!/^https?:\/\//.test(u) && !/^[\w-]+(\.[\w-]+)+(\/|$)/.test(u)) u = "https://www.google.com/search?q=" + encodeURIComponent(u);   // une recherche
+  $("pilUrl").blur(); pilAction("url", { url: u }).catch(pilErr);
+}
+$("pilAller").onclick = pilAller;
+$("pilUrl").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); pilAller(); } });
+$("pilEnvoyer").onclick = () => { const t = $("pilTexte").value; if (!t) return; pilAction("texte", { texte: t }).then(() => { $("pilTexte").value = ""; }).catch(pilErr); };
+// ecran : toucher = cliquer a cet endroit ; glisser verticalement = defiler (le geste d'un telephone)
+(function(){
+  const im = $("pilEcran"); let d = null;
+  im.addEventListener("pointerdown", e => { d = { x: e.clientX, y: e.clientY, t: Date.now() }; im.setPointerCapture(e.pointerId); });
+  im.addEventListener("pointerup", e => {
+    if (!d) return; const r = im.getBoundingClientRect(), dy = e.clientY - d.y, dx = e.clientX - d.x; const a = d; d = null;
+    if (Math.abs(dy) > 25 && Math.abs(dy) > Math.abs(dx)){
+      pilAction("molette", { x: (a.x - r.left) / r.width, y: (a.y - r.top) / r.height, dy: Math.round(-dy / r.height * (+im.dataset.h || 1000) * 1.5) }).catch(pilErr);
+    } else if (Math.abs(dx) < 12 && Math.abs(dy) < 12){
+      pilAction("clic", { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }).catch(pilErr);
+    }
+  });
+  im.addEventListener("pointercancel", () => { d = null; });
+})();
+$("pilChoisir").onclick = async () => {
+  const o = PIL.onglets.find(x => x.id === PIL.id); if (!o) return;
+  await refreshCapTabs();
+  const i = CAP_TABS.findIndex(t => t.url === (PIL.url || o.url));
+  if (i < 0){ alert("Cet onglet n'est pas une page capturable (adresse http/https)."); return; }
+  $("capTab").value = String(i); $("capTab").dispatchEvent(new Event("change"));
+  toast("✔ onglet choisi pour la capture"); $("capTitre").scrollIntoView({ behavior: "smooth", block: "center" });
+};
+
+
 let CAP_POLL = null, CAP_TABS = [];
 function slugTitre(t){ return String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, ""); }
 async function refreshCapTabs(){
@@ -8932,7 +9114,7 @@ async function boot(){
     loadLoras();
   } catch(e){ log("démarrage: " + e.message, "e"); toast("échec de connexion — voir Réglages"); }
 }
-boot();
+boot().then(partageEntrant, partageEntrant);          // v2.0.0 : un lien partage depuis le telephone
 </script>
 </body>
 </html>
