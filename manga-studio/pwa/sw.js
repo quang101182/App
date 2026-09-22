@@ -1,4 +1,6 @@
-// Manga Studio — service worker v1.99.0 (etape 10 : ecouter PC eteint, decision Quang 22/09 : DANS le telephone).
+// Manga Studio — service worker v2.4.6 (etape 10 : ecouter PC eteint, decision Quang 22/09 : DANS le telephone).
+// v2.4.6 : les pages et MP3 du lecteur sont REVALIDES a chaque fois (cache: no-cache -> ETag -> 304). Un chapitre
+// supprime puis recapture reprend les MEMES noms de pages : le cache HTTP ressortait les anciennes (Claymore, 22/09).
 // Regle : le RESEAU d'abord, toujours (l'app reste a jour). Le stockage ne sert QUE si le PC ne repond pas
 // (erreur reseau, ou 5xx du tunnel quand le PC est eteint). N'intercepte que la page de l'app et ce que le LECTEUR
 // lit : /manga/narration, /manga/precedemment, /manga/source_file (images, MP3). Tout le reste (videos, zip,
@@ -44,7 +46,7 @@ async function page(req){
 
 async function reseauSinonHL(req, garderCoquille){
   let r = null;
-  try { r = await fetch(req); } catch (e) {}
+  try { r = await fetch(garderCoquille ? req : new Request(req, { cache: "no-cache" })); } catch (e) {}
   if (!panne(r)){
     if (garderCoquille && r.ok) (await caches.open(SHELL)).put(cle(req.url), r.clone());
     return r;
