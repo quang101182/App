@@ -21,8 +21,10 @@ En attendant la réponse, commencer par le moteur vidéo (étapes 1-2 ci-dessous
 
 **Exigences Quang (22/09 23h58)** : l'actuel est CONSERVÉ, case par case est un mode EN PLUS ; choix **mémorisé** ; **mode par défaut**
 réglable ; appliqué aux **nouveaux chapitres / nouvelles séries**, à **tous les chapitres**, au **lot** (« Tout traiter », suivi de nuit).
-**Défaut proposé par Claude = « Automatique »** (case par case si manga, actuel si webtoon) ; Quang a répondu par le GO sans objection
-→ le retenir, et le dire en une ligne dans le compte rendu final.
+~~Défaut « Automatique » (cases si manga, page si webtoon)~~ → **ANNULÉ par Quang le 23/09 à 00h08** : « finalement, je me ravise même
+pour les webtoons : c'est quand même plus immersif, le deuxième mode ». ⇒ **DÉFAUT = CASE PAR CASE pour TOUS les formats** ; le mode
+« page entière » reste au choix (par série, ou en défaut général). Le mode cases ADAPTE sa caméra au format (manga : de case en case ;
+webtoon : pleine largeur + défilement).
 
 ## Ce qui existe déjà (ne pas refaire)
 
@@ -45,7 +47,7 @@ réglable ; appliqué aux **nouveaux chapitres / nouvelles séries**, à **tous 
    Manga : YOLO `frame` (ordre : rangées haut→bas, droite→gauche ; double page W>H = moitié droite puis gauche ; 1 seule case ≈ page
    = pas de caméra). Webtoon : `bandes()`. **Format** : webtoon si le chapitre porte `manifest.decoupe` (manga-fetch) OU médiane
    h/w des pages ≥ 2,5 ; sinon manga.
-2. **Moteur vidéo** `scripts/video_chapitre.py` : nouveau réglage **`camera` = "auto" | "page" | "cases"** (défaut "auto").
+2. **Moteur vidéo** `scripts/video_chapitre.py` : nouveau réglage **`camera` = "page" | "cases"** (défaut **"cases"**, décision Quang 23/09 00h08 ; l'adaptation manga/webtoon est INTERNE au mode cases).
    GARDER le pipeline actuel (ASS pour les sous-titres/karaoké = taille auto sur texte long, mixage audio, NVENC) : seul
    `clip_page()` change pour une page en mode cases → clip rendu image par image (PIL `Image.transform(EXTENT)` comme la démo, ou
    filtre ffmpeg `crop` animé). La DURÉE d'une page ne change pas (voix/vitesse + 0,45 s, muette 2,5 s) → audio et karaoké identiques.
@@ -56,7 +58,7 @@ réglable ; appliqué aux **nouveaux chapitres / nouvelles séries**, à **tous 
    <copie>`) PUIS 8190 via `powershell -File C:/Users/quang/Documents/ComfyUI/relance-proxy.ps1 -Qui manga-studio -Pourquoi "..."`.
    ⚠ Le proxy est partagé avec Generate Studio : relire le fichier juste avant de patcher, `.bak` d'abord.
 4. **suivi_nuit.py** : `camera` dans `reglages_video` (3 niveaux) + `reglages_video_voulus` / `video_a_faire` (comparaison des clés).
-5. **App** `manga_studio.html` (v2.5.0) : sélecteur « Caméra : Automatique / Page entière / Case par case » partout où les réglages
+5. **App** `manga_studio.html` (v2.5.0) : sélecteur « Caméra : Case par case / Page entière » partout où les réglages
    vidéo se choisissent (fabrication d'une vidéo, profil de série, défaut général ⭐) ; + le LECTEUR si Quang dit oui (question en tête).
    `node --check` sur le JS après édition (règle : une apostrophe = tous les boutons morts). Version bumpée aux 3 endroits
    (`<title>`, `#verBadge`, `const VERSION`).
@@ -65,7 +67,7 @@ réglable ; appliqué aux **nouveaux chapitres / nouvelles séries**, à **tous 
 
 - Vidéo réelle en mode cases sur un chapitre manga ET un webtoon, contrôlée à l'œil (images extraites, réduites ≤ 1800 px avant lecture).
 - Vidéo en mode "page" **identique** à avant (même empreinte → pas « à refaire ») — mutation : casser la condition, exiger du rouge.
-- Défaut « Automatique » + forçage par série + défaut général : mémorisés après relance du proxy ; « Tout traiter » et le suivi de
+- Défaut « case par case » + forçage par série + défaut général : mémorisés après relance du proxy ; « Tout traiter » et le suivi de
   nuit respectent le mode (banc sur une série de TEST cachée `sources/_essai-.../`, jamais la bibliothèque de Quang).
 - Bancs existants toujours verts (`scripts/test_video_ui.py <port>`, `test_profil_ui.py`, `test_chaine.py`…).
 - ⛔ **Bibliothèque de Quang intouchable** (demande explicite 22/09) : tout essai dans un dossier `sources/_xxx` (ignoré par l'app,
