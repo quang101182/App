@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.3.2</title>
+<title>Manga Studio v2.3.3</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -358,6 +358,11 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .narr-box.bloc-vid{border-left:4px solid #e8a84a}.narr-box.bloc-narr{border-left:4px solid #e84a5f}
 .narr-box.bloc-trad{border-left:4px solid #4a9ee8}.narr-box.bloc-mus{border-left:4px solid #9b6ae8}
 #chapVid:empty{display:none}
+/* v2.3.3 (etape 19) : sites valides pour la capture -- liste lue dans manga-fetch/sites.json */
+.cap-sites{margin:8px 0 4px}.cap-sites summary{cursor:pointer;font-size:13px;color:var(--dim)}
+.cap-site{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:8px 0;border-top:1px solid var(--line)}
+.cap-site:first-child{border-top:0}.cap-site a{font-weight:700;color:var(--accent2)}
+.cap-site .etats{font-size:12px}.cap-site .note{flex-basis:100%;font-size:12px;color:var(--dim)}
 /* v1.93.0 : videos — une ligne = zones FIXES (case, chapitre, etat, puis ▶ ⬇ ↻ 🗑 toujours au meme endroit) */
 .vid-box{margin:0 0 12px}.vid-tete{display:flex;align-items:center;gap:8px}.vid-tete b{flex:1}
 .vid-reg{font-size:12px;margin:4px 0 8px}
@@ -673,7 +678,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.3.2</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.3.3</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1027,13 +1032,15 @@ body.epure .aide{display:none}
       <b>Ouvre la page où commencer la capture</b>
       <div class="seg cap-mode" id="capMode">
         <button data-mode="lien">📱 Lien du téléphone</button><button data-mode="pilote">🕹 Piloter la fenêtre</button><button data-mode="pc">🖥 Sur le PC</button></div>
+      <details class="cap-sites" id="capSites"><summary>🌐 Sites validés <span id="capSitesN"></span></summary>
+        <div id="capSitesListe" class="muted">chargement…</div></details>
       <div id="capModeLien" class="cap-mode-z">
         <p class="muted aide">Dans le navigateur de ton téléphone, sur la page du chapitre : <b>Partager → Manga Studio</b>. Ou colle le lien ici :</p>
         <div class="row"><input id="capLien" class="grow" inputmode="url" placeholder="lien de la page du chapitre">
           <button class="btn pri" id="btnCapLien">Ouvrir sur le PC</button></div>
       </div>
       <div id="capModePilote" class="cap-mode-z" hidden>
-        <p class="muted aide">Tu vois la fenêtre de capture du PC : touche pour cliquer, glisse pour défiler, puis « ✔ Capturer cet onglet ».</p>
+        <p class="muted aide">Tu vois la fenêtre de capture du PC : touche pour cliquer, glisse pour défiler, puis « ✔ Choisir cet onglet » et, plus bas, le nom, le n° et « Capturer ».</p>
     <!-- v2.0.0 : TELECOMMANDE de la fenetre de capture (CDP 9223 relaye par le proxy) -->
     <div class="pil-box" id="pilBox">
       <div class="pil-onglets" id="pilOnglets"></div>
@@ -1056,7 +1063,7 @@ body.epure .aide{display:none}
       <div class="pil-nav">
         <input id="pilTexte" placeholder="texte à taper dans la page (après avoir touché un champ)">
         <button class="btn sm" id="pilEnvoyer">Taper</button>
-        <button class="btn sm pri" id="pilChoisir" title="sélectionner cet onglet pour la capture ci-dessous">✔ Capturer cet onglet</button>
+        <button class="btn sm pri" id="pilChoisir" title="sélectionner cet onglet pour la capture ci-dessous (étape 2)">✔ Choisir cet onglet</button>
       </div>
     </div>
       </div>
@@ -1477,7 +1484,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.3.2";
+const VERSION = "2.3.3";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -6395,6 +6402,24 @@ function capModeMaj(){
 $("capMode").onclick = e => { const b = e.target.closest("[data-mode]"); if (!b) return;
   CAP_MODE = b.dataset.mode; try { localStorage.setItem("manga_cap_mode", CAP_MODE); } catch {} capModeMaj(); };
 $("capBox").addEventListener("toggle", capModeMaj);
+// v2.3.3 (etape 19) : SITES VALIDES -- un toucher ouvre le site (navigateur du telephone), puis Partager -> Manga Studio
+const SITE_ETAT = { ok: "✅", partiel: "🟠", casse: "❌", non: "—" };
+let SITES_LUS = false;
+async function chargerSites(){
+  if (SITES_LUS) return;
+  try {
+    const j = await api("/manga/sites"), l = j.sites || [];
+    SITES_LUS = true;
+    $("capSitesN").textContent = "(" + l.length + ")";
+    $("capSitesListe").classList.remove("muted");
+    $("capSitesListe").innerHTML = l.map(x => '<div class="cap-site"><a href="' + esc(x.url) + '" target="_blank" rel="noopener">' + esc(x.nom) + "</a>"
+      + '<span class="etats">capture ' + (SITE_ETAT[x.capture] || "?") + " · plusieurs chapitres " + (SITE_ETAT[x.enchainement] || "?") + "</span>"
+      + '<span class="note">' + esc(x.note || "") + (x.controle ? " — vérifié le " + esc(x.controle) : "") + "</span></div>").join("")
+      + '<p class="muted aide" style="margin:6px 0 0">Touche un site : il s\'ouvre dans ton navigateur ; va sur le chapitre, puis <b>Partager → Manga Studio</b>.'
+      + " Un nouveau site n'entre dans la liste qu'après une vraie capture.</p>";
+  } catch (e){ $("capSitesListe").textContent = "liste indisponible : " + e.message; }
+}
+$("capSites").addEventListener("toggle", () => { if ($("capSites").open) chargerSites(); });
 capModeMaj();
 $("btnPilote").onclick = async () => {
   $("pilBox").hidden = !$("pilBox").hidden;
