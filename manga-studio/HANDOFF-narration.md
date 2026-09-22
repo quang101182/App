@@ -1,4 +1,4 @@
-# HANDOFF — Manga Studio, volet LECTURE NARRÉE (maj 22/09/2026, 09h35)
+# HANDOFF — Manga Studio, volet LECTURE NARRÉE (maj 22/09/2026, 09h55)
 
 > Autosuffisant. « Fait » = `git log` (version courante : v1.85.0). Ce fichier ne porte
 > que le RESTANT, les pièges et le pourquoi. Le détail des mesures est dans `ROADMAP.md` § 4-ter et 4-ter-bis.
@@ -66,7 +66,8 @@
    plus tard 4 (caméra case par case). ⚠ Les vidéos (scans protégés) vivent sous sources/ : jamais dans le dépôt (public).
    ⚠ Une question de Quang (« il me semble que… ») n'est PAS un ordre : répondre, ne rien modifier.
    ✅ **v1.95.1** vidéo : 📜 en tête, choix de la voix, nom de fichier lisible ; pastille des coûts à droite. SUITE : ✅ 16 fait (v1.96.0,
-   chapitre précédent/suivant), ✅ 15 fait (v1.97.0, archive .zip), puis 9 (suivi, SANS plafond — décision Quang 09h00), 10 (hors-ligne DANS le téléphone).
+   chapitre précédent/suivant), ✅ 15 fait (v1.97.0, archive .zip), ✅ 9 suivi (v1.98.0, tâche MangaStudioSuiviNuit 01:30 ;
+   1er passage réel Demo Frieren lancé 09:36 → `python scripts/test_suivi_ui.py verifier` à passer), ✅ 10 hors-ligne (v1.99.0).
    ✅ **v1.95.0 app INSTALLABLE** (09h00, WebAPK vérifié sur le Samsung ; détail ROADMAP « 14 »).
    ✅ **v1.94.0 « Précédemment… » + rattrapage** (08h55) — détail ROADMAP ligne « 7 — FAIT ». ENSUITE : **14 — app INSTALLABLE
    sur le téléphone** (demande Quang 08h36, PWA : manifeste + icônes LIBRES sans cookie), puis 9, 10. Question ouverte : 

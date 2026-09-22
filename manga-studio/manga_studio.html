@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.97.0</title>
+<title>Manga Studio v1.99.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -367,6 +367,10 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .vid-it i{display:block}
 .vid-it .narr-pbar{grid-column:2 / -1}
 .vid-selbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0}
+.suivi-l{display:flex;gap:8px;align-items:flex-start;margin:8px 0;font-size:13px}.suivi-l input{margin-top:3px}
+.suivi-opts{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12px;color:var(--dim)}
+.suivi-opts label{display:inline-flex;gap:5px;align-items:center}.suivi-opts select{width:auto;font-size:12px;padding:3px 6px}
+.suivi-file{font-size:12px;margin:8px 0}#suiviJournal{font-size:11px;color:var(--dim);max-height:180px;overflow:auto;white-space:pre-wrap}
 .vid-plage{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)}
 .vid-plage input{width:52px;padding:3px 6px;font-size:12px}
 #vidCompte{font-size:12px}
@@ -455,7 +459,10 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .narr-run .nr-tag{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .narr-run .nr-info{grid-column:1 / -1;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .narr-run .nr-titre{grid-column:1 / -1;font-size:12px;color:var(--dim);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.narr-run .nr-act{grid-column:2;grid-row:1;display:grid;grid-template-columns:repeat(4,34px);gap:4px}
+.narr-run .nr-act{grid-column:2;grid-row:1;display:grid;grid-template-columns:repeat(5,34px);gap:4px}
+.hl-box{margin:0 0 12px}.hl-it{display:grid;grid-template-columns:minmax(0,1fr) 32px 32px;gap:4px 6px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
+.hl-it .hl-nom{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hl-it small{grid-column:1 / -1;color:var(--dim);font-size:11px}
+.hl-it .btn.sm{width:32px;height:30px;padding:0;justify-content:center}
 .narr-run .nr-act .btn.sm{width:34px;height:30px;padding:0;justify-content:center}
 .narr-run .nr-act i{display:block}
 .narr-run .narr-pbar{grid-column:1 / -1}
@@ -645,7 +652,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.97.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.99.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1039,10 +1046,25 @@ body.epure .aide{display:none}
     <button class="btn sm" id="btnPochAni" title="pochette officielle de la série (AniList)">🖼 Pochette officielle</button>
     <button class="btn sm" id="btnPochFile">📁 Charger une image</button>
     <button class="btn sm" id="btnVideos" title="les vidéos des chapitres de cette série">🎬 Vidéos</button>
+    <button class="btn sm" id="btnSuivi" title="narrer automatiquement, la nuit, les chapitres capturés">🌙 Suivi</button>
     <button class="btn sm danger" id="btnSerieDel">🗑 Supprimer la série</button>
     <input type="file" id="pochFile" accept="image/png,image/jpeg,image/webp" hidden>
   </div>
   <!-- v1.93.0 : VIDEOS de la serie (9:16, le lecteur avec ses reglages du moment) -->
+  <!-- v1.98.0 : SUIVI de la serie (scripts/suivi_nuit.py, tache planifiee 01:30) -->
+  <div class="card vid-box" id="suiviBox" hidden>
+    <div class="vid-tete"><b>🌙 Suivi de la série</b><button class="btn sm" id="suiviFermer">✕</button></div>
+    <label class="suivi-l"><input type="checkbox" id="suiviActif"> Narrer automatiquement <b>la nuit (1 h 30)</b> les chapitres capturés et pas encore narrés</label>
+    <div class="suivi-opts">
+      <label>Voix <select id="suiviVoix"></select></label>
+      <label><input type="checkbox" id="suiviKar" checked> karaoké</label>
+      <label><input type="checkbox" id="suiviPrec" checked> « Précédemment… »</label>
+      <label title="avec les réglages ACTUELS du lecteur (vitesse, sous-titres, musique, 📜)"><input type="checkbox" id="suiviVid"> vidéo</label>
+    </div>
+    <p class="muted suivi-file" id="suiviFile"></p>
+    <div class="vid-actions"><button class="btn sm pri" id="suiviLancer">▶ Lancer maintenant</button><span class="muted" id="suiviPassage"></span></div>
+    <details class="suivi-jr"><summary>Journal des passages</summary><div id="suiviJournal"></div></details>
+  </div>
   <div class="card vid-box" id="vidBox" hidden>
     <div class="vid-tete"><b>🎬 Vidéos de la série</b><button class="btn sm" id="vidFermer">✕</button></div>
     <p class="muted vid-reg" id="vidReg"></p>
@@ -1063,6 +1085,12 @@ body.epure .aide{display:none}
       <button class="btn sm pri" id="vidZip" title="toutes les vidéos cochées dans UN fichier .zip (recommandé au-delà de 3)">⬇ En une archive .zip</button>
     </div>
     <div id="vidListe" class="vid-liste"></div>
+  </div>
+  <!-- v1.99.0 : narrations gardees DANS ce telephone (lecture PC eteint) -->
+  <div class="card hl-box" id="hlBox" hidden>
+    <div class="vid-tete"><b id="hlTitre">📥 Gardés sur ce téléphone</b></div>
+    <p class="muted aide" style="margin:4px 0 6px">Se lisent même PC éteint, sans réseau. Pages en VO, sans musique.</p>
+    <div id="hlListe" class="vid-liste"></div>
   </div>
   <div id="chapList" class="chap-list"></div>
   <div class="card" id="chapDetail" hidden>
@@ -1369,7 +1397,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.97.0";
+const VERSION = "1.99.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -5506,6 +5534,54 @@ async function vidClic(e){
 }
 $("vidListe").onclick = vidClic; $("chapVid").onclick = vidClic;
 $("vidListe").onchange = vidVoixChange; $("chapVid").onchange = vidVoixChange;
+// ---------- v1.98.0 : SUIVI ----------
+let SUIVI = null, SUIVI_POLL = null;
+const SUIVI_EV = { debut: "début du passage", narration: "narration", karaoke: "karaoké", precedemment: "« Précédemment… »",
+                   video: "vidéo demandée", fin: "fin du passage", refus: "refusé", echec: "échec" };
+function suiviRendre(){
+  const j = SUIVI, c = j.config || {}, f = j.file || [], ps = j.passage || {};
+  $("suiviVoix").innerHTML = VOIX.map(v => '<option value="' + v[0] + '">' + esc(v[1]) + "</option>").join("");
+  let v = c.voix; if (!v) try { v = localStorage.getItem("manga_voix_" + LIB_SERIE); } catch {}
+  $("suiviVoix").value = VOIX.some(x => x[0] === v) ? v : VOIX[0][0];
+  $("suiviActif").checked = !!c.actif; $("suiviKar").checked = c.karaoke !== false;
+  $("suiviPrec").checked = c.precedemment !== false; $("suiviVid").checked = !!c.video;
+  $("suiviFile").textContent = f.length
+    ? f.length + " chapitre(s) à narrer : ch. " + f.map(x => x.num).join(", ") + " — ≈ " + fmtUsd(j.estimation.cout)
+      + " et ≈ " + fmtS(j.estimation.minutes * 60) + " (Kimi K3, sans plafond)"
+    : "Rien à narrer : tous les chapitres capturés ont une narration avec voix.";
+  const en = ps.en_cours;
+  const ETP = { narration: "narration", karaoke: "karaoké", precedemment: "« Précédemment… »" };
+  $("suiviPassage").textContent = ps.vivant ? "⏳ en cours" + (en ? " — ch. " + (en.num || en.d) + " · " + (ETP[en.etape] || en.etape || "") : "")
+    : ps.etat === "fini" ? "dernier passage : ✅ " + new Date(ps.fin * 1000).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })
+      + " · " + (ps.fait || []).length + " narré(s)" + ((ps.erreurs || []).length ? " · ❌ " + ps.erreurs.length : "")
+    : ps.etat === "interrompu" ? "⚠ dernier passage interrompu" : ps.etat === "echec" ? "❌ " + (ps.err || "échec") : "jamais lancé";
+  $("suiviLancer").disabled = !!ps.vivant || !f.length;
+  $("suiviJournal").textContent = (j.journal || []).slice().reverse().map(x => x.t.replace("T", " ").slice(5, 16) + "  "
+    + (SUIVI_EV[x.ev] || x.ev) + (x.d ? " · " + x.d.split("/").pop().replace("ch_", "ch. ") : "")
+    + (x.ok === false || (x.rc != null && x.rc !== 0) ? " ❌" : x.ok || x.rc === 0 ? " ✅" : "") + (x.s ? " (" + fmtS(x.s) + ")" : "")).join("\n") || "—";
+  clearTimeout(SUIVI_POLL);
+  if (ps.vivant && !$("suiviBox").hidden) SUIVI_POLL = setTimeout(() => suiviCharger().catch(() => {}), 5000);
+}
+async function suiviCharger(){ if (!LIB_SERIE) return; SUIVI = await api("/manga/suivi?serie=" + encodeURIComponent(LIB_SERIE)); suiviRendre(); }
+async function suiviSauver(){
+  const r = await api("/manga/suivi", { serie: LIB_SERIE, actif: $("suiviActif").checked, voix: $("suiviVoix").value,
+    karaoke: $("suiviKar").checked, precedemment: $("suiviPrec").checked, video: $("suiviVid").checked, reglages_video: reglagesLecteur() });
+  if (r.error) throw new Error(r.error);
+  toast($("suiviActif").checked ? "🌙 suivi activé : narration la nuit" : "suivi désactivé"); await suiviCharger();
+}
+["suiviActif", "suiviVoix", "suiviKar", "suiviPrec", "suiviVid"].forEach(id => $(id).onchange = () => suiviSauver().catch(e => alert(e.message)));
+$("btnSuivi").onclick = () => { $("suiviBox").hidden = !$("suiviBox").hidden; if (!$("suiviBox").hidden) suiviCharger().catch(e => log("suivi : " + e.message, "e")); };
+$("suiviFermer").onclick = () => { $("suiviBox").hidden = true; clearTimeout(SUIVI_POLL); };
+$("suiviLancer").onclick = async () => {
+  const j = SUIVI || {}, f = j.file || [];
+  if (!confirm("Narrer maintenant " + f.length + " chapitre(s) (≈ " + fmtUsd((j.estimation || {}).cout || 0) + ", ≈ "
+               + fmtS(((j.estimation || {}).minutes || 0) * 60) + ") avec la voix " + $("suiviVoix").value + " ?")) return;
+  try {
+    await suiviSauver();
+    const r = await api("/manga/suivi_lancer", { serie: LIB_SERIE }); if (r.error) throw new Error(r.error);
+    log("suivi lancé : " + LIB_SERIE); setTimeout(() => { suiviCharger().catch(() => {}); actRafraichir(); }, 2500);
+  } catch (e){ alert(e.message); }
+};
 $("btnVideos").onclick = () => { $("vidBox").hidden = !$("vidBox").hidden; if (!$("vidBox").hidden) vidCharger(LIB_SERIE).catch(e => log("vidéos : " + e.message, "e")); };
 $("vidFermer").onclick = () => { $("vidBox").hidden = true; };
 $("vidManquantes").onclick = () => vidDemander(VIDS.chapitres.filter(c => vidEtat(c).cle === "aucune"), false).catch(e => alert(e.message));
@@ -5571,6 +5647,8 @@ async function refreshNarrs(){
          ? '<button class="btn sm" data-kar="' + i + '" title="caler le karaoké : chaque mot sur la voix (Whisper, ~0,003 $ pour 20 pages)">🎤</button>' : vide)
       + (fini && ["kimi", "gemini", "pixtral"].includes(n.engine)
          ? '<button class="btn sm" data-revoix="' + i + '" title="autre voix : même texte, lu par la voix choisie dans le menu Voix">🎙</button>' : vide)
+      + (fini && n.audio ? '<button class="btn sm" data-hl="' + i + '" title="' + (hlGarde(CHAP_OPEN, n.tag) ? "gardé sur ce téléphone — toucher pour le retirer"
+           : "garder sur ce téléphone : se lit PC éteint (~" + Math.round((n.pages || 20) * 2.2) + " Mo)") + '">' + (hlGarde(CHAP_OPEN, n.tag) ? "✅" : "📥") + "</button>" : vide)
       + (n.etat !== "en cours" ? '<button class="btn sm danger" data-suppr-narr="' + i + '" title="supprimer cette narration">🗑</button>' : vide)
       + "</div>"
       + '<span class="nr-info" title="' + esc(info.replace(/<[^>]+>/g, "")) + '">' + info + "</span>"
@@ -5588,6 +5666,15 @@ async function refreshNarrs(){
   if (!encours && NARR_POLL){ clearInterval(NARR_POLL); NARR_POLL = null; chargerCouts(); }
 }
 $("narrRuns").onclick = async e => {
+  const hb = e.target.closest("[data-hl]");
+  if (hb){
+    const n = NARRS[+hb.dataset.hl]; if (!n) return;
+    try {
+      if (hlGarde(CHAP_OPEN, n.tag)){ if (confirm("Retirer « " + n.tag + " » de ce téléphone ?")) await hlRetirer(CHAP_OPEN, n.tag); }
+      else { hb.disabled = true; hb.textContent = "⏳"; await hlGarder(CHAP_OPEN, n.tag); }
+    } catch (err){ log("hors-ligne : " + err.message, "e"); alert(err.message); }
+    await refreshNarrs().catch(() => {}); return;
+  }
   const kb = e.target.closest("[data-kar]");
   if (kb){
     const n = NARRS[+kb.dataset.kar];
@@ -5746,6 +5833,92 @@ $("lecPrecOn").onchange = () => {
   PREC_ON = $("lecPrecOn").checked; try { localStorage.setItem("manga_prec", PREC_ON ? "1" : "0"); } catch {}
   $("lecPrecOn").blur();
 };
+
+/* ----- v1.99.0 : HORS-LIGNE (dans ce telephone) ----- */
+const HL_CACHE = "manga-horsligne-v1";
+const hlCle = u => { const x = new URL(u, location.href); x.searchParams.delete("_k"); return x.toString(); };
+// L'index vit DANS le cache, avec les fichiers : localStorage n'est ecrit sur disque qu'avec retard sur Android
+// (mesure sur le Samsung le 22/09 : app fermee juste apres « garder » -> 36 fichiers gardes, index PERDU).
+const HL_IDX_CLE = () => hlCle(location.origin + "/manga/__index_horsligne.json");
+let HL_IDX = (() => { try { return JSON.parse(localStorage.getItem("manga_hl") || "[]"); } catch { return []; } })();
+const hlIndex = () => HL_IDX.slice();
+async function hlSauveIndex(l){
+  HL_IDX = l.slice();
+  try { localStorage.setItem("manga_hl", JSON.stringify(l)); } catch {}
+  try { await (await caches.open(HL_CACHE)).put(HL_IDX_CLE(), new Response(JSON.stringify(l), { headers: { "Content-Type": "application/json" } })); } catch {}
+}
+async function hlChargerIndex(){
+  try {
+    const r = await (await caches.open(HL_CACHE)).match(HL_IDX_CLE());
+    if (r){ HL_IDX = await r.json(); try { localStorage.setItem("manga_hl", JSON.stringify(HL_IDX)); } catch {} }
+    else if (HL_IDX.length) await hlSauveIndex(HL_IDX);       // ancien index (localStorage seul) : recopie
+  } catch {}
+  hlRendre();
+}
+const hlGarde = (d, tag) => hlIndex().some(x => x.d === d && x.tag === tag);
+async function hlGarder(d, tag){
+  if (!("caches" in window)) throw new Error("ce navigateur ne sait pas garder de fichiers");
+  try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch {}
+  const n = await api("/manga/narration?d=" + encodeURIComponent(d) + "&tag=" + encodeURIComponent(tag));
+  const urls = [CFG.base + "/manga/narration?d=" + encodeURIComponent(d) + "&tag=" + encodeURIComponent(tag)];
+  (n.pages || []).filter(p => p.type === "histoire" || p.audio).forEach(p => {
+    if (p.file) urls.push(srcURL(d + "/" + p.file));
+    if (p.audio) urls.push(srcURL(n.base + "/" + p.audio));
+  });
+  let prec = null;
+  try { prec = await api("/manga/precedemment?d=" + encodeURIComponent(d)); } catch {}
+  if (prec){
+    urls.push(CFG.base + "/manga/precedemment?d=" + encodeURIComponent(d));
+    Object.values(prec.modes || {}).filter(m => m.etat === "fini").forEach(m => (m.data.items || []).forEach(x => {
+      if (x.img) urls.push(srcURL(x.img)); if (x.audio) urls.push(srcURL(m.base + "/" + x.audio)); }));
+  }
+  const c = await caches.open(HL_CACHE), o = { headers: CFG.key ? { Authorization: "Bearer " + CFG.key } : {} };
+  let octets = 0, k = 0;
+  for (const u of urls){
+    const r = await fetch(u, o);
+    if (!r.ok) throw new Error("HTTP " + r.status + " en gardant " + u.split("?")[0].split("/").pop());
+    const b = await r.blob(); octets += b.size;
+    await c.put(hlCle(u), new Response(b, { headers: { "Content-Type": r.headers.get("Content-Type") || "application/octet-stream" } }));
+    if (++k % 5 === 0) toast("📥 " + k + "/" + urls.length);
+  }
+  const c0 = CHAPS.find(x => x.dir === d) || {};
+  const l = hlIndex().filter(x => !(x.d === d && x.tag === tag));
+  l.push({ d, tag, titre: n.title || c0.title || d.split("/")[0], chapitre: String(n.chapter || c0.chapter || ""), voix: n.voice || "",
+           pages: (n.pages || []).length, octets, urls: urls.map(hlCle), quand: new Date().toLocaleString("sv-SE").slice(0, 16) });   // heure LOCALE (toISOString = UTC)
+  await hlSauveIndex(l); hlRendre();
+  log("hors-ligne : " + d + " · " + tag + " gardé (" + urls.length + " fichiers, " + fmtGo(octets) + ")");
+  toast("📥 gardé sur ce téléphone : " + fmtGo(octets));
+}
+async function hlRetirer(d, tag){
+  const e = hlIndex().find(x => x.d === d && x.tag === tag); if (!e) return;
+  const autres = new Set(hlIndex().filter(x => x !== e && !(x.d === d && x.tag === tag)).flatMap(x => x.urls || []));
+  const c = await caches.open(HL_CACHE);
+  for (const u of e.urls || []) if (!autres.has(u)) await c.delete(u);     // un « Precedemment » partage reste
+  await hlSauveIndex(hlIndex().filter(x => !(x.d === d && x.tag === tag))); hlRendre();
+  log("hors-ligne : " + d + " · " + tag + " retiré");
+}
+function hlRendre(){
+  const l = hlIndex().sort((a, b) => (a.titre + a.chapitre.padStart(5, "0")).localeCompare(b.titre + b.chapitre.padStart(5, "0")));
+  $("hlBox").hidden = !l.length;
+  $("hlTitre").textContent = "📥 Gardés sur ce téléphone (" + l.length + " · " + fmtGo(l.reduce((a, x) => a + (x.octets || 0), 0)) + ")";
+  $("hlListe").innerHTML = l.map((x, i) => '<div class="hl-it"><span class="hl-nom">' + esc(x.titre) + " — ch. " + esc(x.chapitre) + "</span>"
+    + '<button class="btn sm" data-hl-lire="' + i + '" title="lire (même PC éteint)">▶</button>'
+    + '<button class="btn sm danger" data-hl-suppr="' + i + '" title="retirer de ce téléphone">🗑</button>'
+    + "<small>" + esc(x.voix || x.tag) + " · " + x.pages + " p. · " + fmtGo(x.octets || 0) + " · gardé le " + esc(x.quand.replace("T", " ")) + "</small></div>").join("");
+  $("hlListe").onclick = async ev => {
+    const b = ev.target.closest("[data-hl-lire],[data-hl-suppr]"); if (!b) return;
+    const x = l[+(b.dataset.hlLire ?? b.dataset.hlSuppr)]; if (!x) return;
+    if (b.dataset.hlSuppr != null){ if (confirm("Retirer « " + x.titre + " ch. " + x.chapitre + " » de ce téléphone ?")) await hlRetirer(x.d, x.tag); return; }
+    hlLire(x).catch(err => { log("hors-ligne : " + err.message, "e"); alert(err.message); });
+  };
+}
+// Lecture d'une narration gardee : le lecteur ordinaire, ses requetes servies par le service worker si le PC dort.
+async function hlLire(x){
+  CHAP_OPEN = x.d; CHAP_PAGE_LIST = []; TRADS = []; MUS.effectif = [];
+  try { PREC = await api("/manga/precedemment?d=" + encodeURIComponent(x.d)); } catch { PREC = null; }
+  await ouvrirLecteur([x.tag]);
+}
+hlRendre(); hlChargerIndex();
 
 /* ----- Lecteur : une file de narrations (1 = ecoute normale ; N = ecoute a l'aveugle) ----- */
 const LEC = { file: [], iFile: 0, n: null, i: 0, playing: true, timer: null, aveugle: false, notes: {} };

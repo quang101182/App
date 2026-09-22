@@ -1,0 +1,115 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260922-manga-v198	2026-09-22 09:35:51.338120200 +0200
++++ /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py	2026-09-22 09:35:51.376164000 +0200
+@@ -7933,6 +7933,90 @@
+     return {"ok": True}
+ 
+ 
++# --- Suivi de series : la nuit, tout ce qui a ete capture est narre (Manga Studio v1.98.0) --
++MANGA_SUIVI = os.path.join(MANGA_ROOT, "scripts", "suivi_nuit.py")
++_SUIVI_MOD = {"m": None, "t": 0}
++
++
++def _suivi_mod():
++    t = os.path.getmtime(MANGA_SUIVI)
++    if _SUIVI_MOD["m"] is None or _SUIVI_MOD["t"] != t:
++        import importlib.util
++        sys.path.insert(0, os.path.dirname(MANGA_SUIVI))
++        sp = importlib.util.spec_from_file_location("manga_suivi_nuit", MANGA_SUIVI)
++        m = importlib.util.module_from_spec(sp)
++        sp.loader.exec_module(m)
++        _SUIVI_MOD.update(m=m, t=t)
++    return _SUIVI_MOD["m"]
++
++
++def manga_suivi(serie):
++    sd = _manga_src_safe(serie) if _RE_SERIE.match(serie or "") else None
++    if not sd or not os.path.isdir(sd):
++        return None
++    m = _suivi_mod()
++    try:
++        with open(os.path.join(sd, "suivi.json"), encoding="utf-8") as f: cfg = json.load(f)
++    except Exception:
++        cfg = {}
++    file = [{"d": c["d"], "num": c["num"], "pages": c["pages"]} for c in m.a_narrer(serie)]
++    pages = sum(c["pages"] for c in file)
++    etat = m.lire_etat()
++    etat["vivant"] = etat.get("etat") == "en cours" and m.pid_vivant(etat.get("pid"))
++    if etat.get("etat") == "en cours" and not etat["vivant"]:
++        etat["etat"] = "interrompu"
++    jr = []
++    try:
++        with open(m.JOURNAL, encoding="utf-8") as f:
++            for ligne in f.readlines()[-400:]:
++                try:
++                    x = json.loads(ligne)
++                except Exception:
++                    continue
++                if not x.get("d") or x["d"].split("/")[0] == serie or x.get("ev") in ("debut", "fin"):
++                    jr.append(x)
++    except Exception:
++        pass
++    return {"config": cfg, "file": file, "estimation": {"cout": round(pages * 0.04, 2), "minutes": pages},
++            "passage": etat, "journal": jr[-30:]}
++
++
++def manga_suivi_regle(data):
++    serie = data.get("serie") or ""
++    sd = _manga_src_safe(serie) if _RE_SERIE.match(serie) else None
++    if not sd or not os.path.isdir(sd):
++        return {"error": "serie introuvable"}
++    voix = data.get("voix") or "Charon"
++    if not re.match(r"^[A-Z][a-z]{2,15}$", voix):
++        return {"error": "voix invalide"}
++    rv = data.get("reglages_video") or {}
++    cfg = {"actif": bool(data.get("actif")), "voix": voix, "moteur": "kimi", "karaoke": bool(data.get("karaoke", True)),
++           "precedemment": bool(data.get("precedemment", True)), "video": bool(data.get("video")),
++           "reglages_video": {k: rv.get(k) for k in ("vitesse", "sous", "karaoke", "musique", "volume", "pages", "precedemment")},
++           "maj": time.strftime("%Y-%m-%dT%H:%M:%S")}
++    tmp = os.path.join(sd, "suivi.json.tmp")
++    with open(tmp, "w", encoding="utf-8") as f:
++        json.dump(cfg, f, ensure_ascii=False, indent=1)
++    os.replace(tmp, os.path.join(sd, "suivi.json"))
++    return {"ok": True, "config": cfg}
++
++
++def manga_suivi_lancer(data):
++    serie = data.get("serie") or ""
++    if serie and not _RE_SERIE.match(serie):
++        return {"error": "serie invalide"}
++    m = _suivi_mod()
++    e = m.lire_etat()
++    if e.get("etat") == "en cours" and m.pid_vivant(e.get("pid")):
++        return {"error": "un passage tourne deja"}
++    os.makedirs(m.DIR, exist_ok=True)
++    lg = open(os.path.join(m.DIR, "runner.log"), "a", encoding="utf-8")
++    cmd = [MANGA_PY, MANGA_SUIVI, "--declencheur", "bouton"] + (["--serie", serie] if serie else [])
++    subprocess.Popen(cmd, stdout=lg, stderr=lg, cwd=os.path.dirname(MANGA_SUIVI),
++                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), env=dict(os.environ, PYTHONIOENCODING="utf-8"))
++    return {"ok": True}
++
++
+ # --- « Precedemment... » et rattrapage (Manga Studio v1.94.0) ---------------------------
+ MANGA_PREC = os.path.join(MANGA_ROOT, "scripts", "precedemment.py")
+ MANGA_PWA = {"/manga/" + n: n for n in ("manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png",
+@@ -9441,6 +9525,10 @@
+         elif self.path.split("?", 1)[0] == "/manga/video_file":
+             _q = parse_qs(urlparse(self.path).query)
+             self.serve_manga_video((_q.get("p") or [""])[0], (_q.get("dl") or [""])[0] == "1")
++        elif self.path.split("?", 1)[0] == "/manga/suivi":                 # Manga Studio v1.98.0
++            _r = manga_suivi((parse_qs(urlparse(self.path).query).get("serie") or [""])[0])
++            if _r is None: self._json(404, {"error": "serie introuvable"})
++            else: self._json(200, _r)
+         elif self.path.split("?", 1)[0] == "/manga/precedemment":          # Manga Studio v1.94.0
+             _r = manga_precedemment((parse_qs(urlparse(self.path).query).get("d") or [""])[0])
+             if _r is None: self._json(404, {"error": "chapitre introuvable"})
+@@ -9893,6 +9981,10 @@
+                 self._json(200, manga_video_suppr(data))
+             elif self.path == "/manga/video_annule":
+                 self._json(200, manga_video_annule(data))
++            elif self.path == "/manga/suivi":                  # Manga Studio v1.98.0
++                self._json(200, manga_suivi_regle(data))
++            elif self.path == "/manga/suivi_lancer":
++                self._json(200, manga_suivi_lancer(data))
+             elif self.path == "/manga/precedemment":           # Manga Studio v1.94.0
+                 self._json(200, manga_precedemment_lance(data))
+             elif self.path == "/manga/karaoke":                # Manga Studio v1.86.0
