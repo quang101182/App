@@ -1,9 +1,9 @@
-# HANDOFF — Manga Studio, volet LECTURE NARRÉE (maj 22/09/2026, 01h10)
+# HANDOFF — Manga Studio, volet LECTURE NARRÉE (maj 22/09/2026, 06h20)
 
 > Autosuffisant. « Fait » = `git log` (version courante : v1.85.0). Ce fichier ne porte
 > que le RESTANT, les pièges et le pourquoi. Le détail des mesures est dans `ROADMAP.md` § 4-ter et 4-ter-bis.
 
-## Où on en est (v1.72.0 — voir « RESTANT » pour la suite, jusqu'à v1.86.0)
+## Où on en est (v1.72.0 — voir « RESTANT » pour la suite, jusqu'à v1.92.0)
 - Onglet 📚 **Chapitres** : liste des chapitres de `sources/`, **capture DANS l'app** (manga-fetch enveloppé),
   avertissements du manifeste + bouton Vérifier, **Narrer** (moteur/voix/pages), lecteur plein écran,
   écoute à l'aveugle, **pastille des coûts** en en-tête (détail au clic).
@@ -58,6 +58,9 @@
    avant la méthode v2.2) disaient « Zaki » pour Raki : c'est la raison de cette relance.
    ✅ **v1.88.0 cellule d'activité** (05h25) — route `/manga/activite` écrite, proxy à relancer avec le reste. ENSUITE (Quang 05h15) :
    ergonomie bibliothèque/chapitres (zones fixes, bloc Rafraîchir discret) + boutons de la visionneuse remontés sur téléphone.
+   ✅ **v1.89 → v1.92** (06h20) : visionneuse remontée (téléphone), musique série/chapitre (5 morceaux, noms numérotés), coûts complets +
+   temps restant + tâche vivante = PID, ergonomie bibliothèque/chapitre (zones fixes). Détail : ROADMAP, ligne « v1.90 → v1.92 ».
+   Narration Claymore K3 `kimi-charon` FAITE (Raki correct). ⚠ Si une série est renommée, ses morceaux gardent l'ancien titre.
    Ensuite (3) vidéo = **À DISCUTER avec Quang avant tout code**.
    ⚠ Une question de Quang (« il me semble que… ») n'est PAS un ordre : répondre, ne rien modifier.
 5. Lien mobile = l'URL du tunnel de Generate Studio (hostname dans `config-generate-agent.yml`, hors dépôt :
