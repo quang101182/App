@@ -38,7 +38,7 @@ with sync_playwright() as p:
         pg.goto("http://127.0.0.1:%d/manga/#k=" % PORT + KEY); pg.wait_for_timeout(2500)
         pg.click('nav button[data-tab="tChap"]'); pg.wait_for_timeout(800)
         pg.evaluate("() => { document.getElementById('capBox').open = true; }")
-        pg.click("#btnPilote"); pg.wait_for_timeout(2500)
+        pg.click('#capMode [data-mode="pilote"]'); pg.wait_for_timeout(2500)      # v2.1.1 : un choix parmi trois
         n = pg.evaluate("() => document.querySelectorAll('#pilOnglets [data-pil-onglet]').length")
         check("onglets de la fenêtre listés", n == len(avant), (n, len(avant)))
         ecran = lambda: pg.evaluate("() => { const i = document.getElementById('pilEcran'); return [i.naturalWidth, i.src]; }")
