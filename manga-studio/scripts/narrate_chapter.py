@@ -25,7 +25,7 @@ Stdout : un seul objet JSON (le resume du run). Le bruit part sur stderr.
 import argparse, base64, io, json, os, re, subprocess, sys, time, urllib.request, urllib.error
 from datetime import datetime
 
-VERSION = "1.91.0"
+VERSION = "1.98.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -175,6 +175,25 @@ def parse_json(txt):
     if a < 0 or b <= a:
         raise ValueError("pas de JSON dans la reponse : " + t[:200])
     return json.loads(t[a:b + 1])
+
+
+def reparer_json(texte, stats, cle="cout_vision"):
+    """v1.98.1 : un JSON MAL FORME (virgule oubliee, guillemet de dialogue non echappe) se REPARE, il ne se redemande
+    pas. Mesure 22/09 (Frieren ch.143, lot 1-2) : K3 rendait « Expecting ',' delimiter » ; relire les images avec un
+    budget double 3 fois = 27 min et le chapitre abandonne. Ici : un appel TEXTE a DeepSeek (~0,001 $, quelques s),
+    consigne stricte de ne rien changer au contenu. Rend l'objet, ou None."""
+    try:
+        r = post("/api/deepseek", {"model": "deepseek-v4-flash", "max_tokens": 8000, "temperature": 0,
+                                   "thinking": {"type": "disabled"}, "response_format": {"type": "json_object"},
+                                   "messages": [{"role": "system", "content": "Tu repares du JSON invalide. Rends EXACTEMENT le meme contenu "
+                                                 "(memes cles, memes valeurs, meme texte mot pour mot), seulement rendu valide : virgules, "
+                                                 "guillemets internes echappes, accolades. Rien d'autre que le JSON."},
+                                                {"role": "user", "content": texte or ""}]}, timeout=120)
+        stats[cle] = stats.get(cle, 0.0) + cout("deepseek-v4-flash", r.get("usage") or {})
+        return parse_json(r["choices"][0]["message"].get("content"))
+    except Exception as e:
+        log("  reparation du JSON impossible : %s" % e)
+        return None
 
 
 def cout(model, usage):
@@ -418,6 +437,12 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
                 j = parse_json(texte)
                 break
             except Exception as e:
+                if (texte or "").strip():                     # mal forme (pas vide) : on REPARE avant de relire
+                    j = reparer_json(texte, stats)
+                    journal("json_repare", pages=nums, ok=j is not None, err=str(e)[:120])
+                    if j is not None:
+                        log("  lot %s : JSON mal forme (%s) -> repare" % (nums, e))
+                        break
                 log("  lot %s : JSON illisible (%s), nouvel essai" % (nums, e))
         if j is None:
             raise RuntimeError("lot %s : JSON illisible apres 3 essais (budget jusqu'a 32 000 tokens)" % nums)
