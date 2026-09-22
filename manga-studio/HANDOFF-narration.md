@@ -3,7 +3,17 @@
 > Autosuffisant. « Fait » = `git log` (version courante : v1.85.0). Ce fichier ne porte
 > que le RESTANT, les pièges et le pourquoi. Le détail des mesures est dans `ROADMAP.md` § 4-ter et 4-ter-bis.
 
-## ⭐ ÉTAT AU 22/09 15h40 — v2.4.0 : ÉTAPE 27 FAITE (profil de série + « Tout traiter », ROADMAP § 27). Chaîne = `scripts/suivi_nuit.py`
+## ⭐ ÉTAT AU 22/09 16h55 — v2.4.3 + manga-fetch v0.5.1 (lire d'abord)
+- Depuis 15h40 : v2.4.1 musique dans le profil · v2.4.2 ⏮/⏭ dans le lecteur VIDÉO · v2.4.3 boutons ⏮/⏭ = VRAIS numéros voisins,
+  sauts signalés partout (orange + « ⚠ saut : ch. 297 sans narration / pas dans la bibliothèque ») · proxy : renommer = dossier
+  D'ABORD + réessais (WinError 5 vu par Quang ; état incohérent « a » réparé à la main → corbeille).
+- manga-fetch v0.5.0/0.5.1 : WEBTOONS découpés en pages (ROADMAP § 28), Raijin Scans (VF) validé (sites.json), enchaînement
+  générique « chapter-N », avatars des commentaires exclus. Reste § 28 : traduction encadrés texte clair sur fond sombre,
+  deux onglets sur la même adresse.
+- Lot OPM de Quang (Gemini, trad fr) : 295→301 FAITS, 0 erreur (16h49). Bibliothèque : « banc raijin » = Solo Leveling VF ch.1-2
+  (à renommer par Quang). Bancs du jour : test_chaine, test_profil(_ui), test_profil_musique_ui, test_video_nav_ui,
+  test_nav_sauts_ui, test_renommer, test_capture_serie(_ui), test_sites_ui.
+## (ancien) ÉTAT AU 22/09 15h40 — v2.4.0 : ÉTAPE 27 FAITE (profil de série + « Tout traiter », ROADMAP § 27). Chaîne = `scripts/suivi_nuit.py`
 ##    (nuit ET bouton), défaut général `sources/_profil_defaut.json`, profil `sources/<serie>/suivi.json`. Bancs : test_chaine / test_profil / test_profil_ui.
 ## (ancien) ÉTAT AU 22/09 14h20 — v2.3.0 (lire d'abord ; le reste du fichier = historique)
 - Livré ce jour (détail + mesures : ROADMAP étapes 5-bis, 7, 9, 10, 14 à 24) : Précédemment/rattrapage, app installable (PWA, WebAPK),
