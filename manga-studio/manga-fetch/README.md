@@ -67,6 +67,9 @@ sources/<slug>/ch_<num>/
    dans `%LOCALAPPDATA%\manga-fetch\`, jamais ici.
 3. **La fenêtre dédiée** (`%LOCALAPPDATA%\manga-fetch-edge`, port 9223) est séparée du navigateur
    de Quang. On la tue par user-data-dir, **jamais** en masse (`taskkill /IM msedge.exe` interdit).
+3-bis. **La fenêtre dédiée doit rester AFFICHÉE** (même derrière d'autres fenêtres), jamais réduite : mesuré le 22/09,
+   réduite la capture réussit mais la fenêtre RÉAPPARAÎT (l'onglet est mis au premier plan, sinon Edge le freine) et
+   l'écran du pilotage met 1 à 2 min. Quang : solution fiable ou rien — pas de fenêtre hors écran ni autre bricolage.
 4. **Journal** : chaque action s'ajoute à `%LOCALAPPDATA%\manga-fetch\fetch.log` (jsonl, horodaté).
 5. ~~La capture est **chapitre par chapitre, à la main de Quang** : pas de crawl automatique de
    séries ni de contournement de protections — c'est la ligne tenue depuis le début du chantier.~~

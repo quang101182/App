@@ -15,12 +15,12 @@ from datetime import datetime
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
 RE_MDX = re.compile(r"mangadex\.org/chapter/([0-9a-f-]{36})")
 SYS = ("Tu regardes des pages de manga. Dans quelle langue est ecrit le texte des BULLES (pas les onomatopees dessinees, "
        "pas un logo) ? Reponds en JSON : {\"langue\": \"code ISO 639-1 en minuscules (fr, en, vi, es, ja, zh, ko...)\", "
-       "\"confiance\": 0.0 a 1.0}")
+       "\"confiance\": 0.0 a 1.0} -- UN SEUL objet pour toutes les pages, rien d'autre.")
 
 
 def lire(d):
@@ -54,7 +54,9 @@ def par_images(cd, man):
         content.append({"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,"
                                                           + base64.b64encode(nc.page_jpeg(os.path.join(cd, f), 900)).decode()}})
     stats = {}
-    texte, u = nc.appel_vision("gemini", SYS, content, 400)
+    # v2.2.1 : 400 tokens ne suffisaient pas -- Gemini en passait 396 a REFLECHIR et la reponse sortait coupee
+    # (Boruto ch.2, 22/09 : 28 caracteres, « langue illisible »). 2000 = marge, cout < 0,01 $.
+    texte, u = nc.appel_vision("gemini", SYS, content, 2000)
     # Gemini rend parfois UN objet par page (mesure 22/09 : « Extra data ») : on les lit tous, la langue majoritaire gagne
     votes = []
     for bloc in re.findall(r"\{[^{}]*\}", texte or ""):
