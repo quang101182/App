@@ -14,7 +14,7 @@ import difflib, json, os, re, sys, time, unicodedata, urllib.error, urllib.reque
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import narrate_chapter as nc          # GATEWAY, secret, frein 18/min
 
-VERSION = "1.86.0"
+VERSION = "1.88.0"
 SRC = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources"))
 MODELE = "whisper-large-v3-turbo"
 MAX_CPS = 25                          # debit maximal plausible d'une voix (caracteres/s, espaces compris)
@@ -135,11 +135,14 @@ def main():
     n = json.load(open(fj, encoding="utf-8"))
     nc.SECRET = nc._secret()
     t0, secs, faits, ancres, total = time.time(), 0.0, 0, 0, 0
-    for p in n["pages"]:
-        if not p.get("audio") or not (p.get("narration") or "").strip():
-            continue
-        if p.get("mots") and not force:
-            continue
+    a_faire = [p for p in n["pages"] if p.get("audio") and (p.get("narration") or "").strip() and (force or not p.get("mots"))]
+    fp = os.path.join(nd, "karaoke_progress.json")
+
+    def progres(fini=False):                     # v1.88.0 : lu par le proxy (cellule d'activite, survit a un redemarrage)
+        json.dump({"fait": faits, "total": len(a_faire), "t": time.time(), "fini": fini}, open(fp, "w", encoding="utf-8"))
+
+    progres()
+    for p in a_faire:
         r = whisper(os.path.join(nd, p["audio"]), p["narration"])
         mots = r.get("words") or []
         dur = float(p.get("dur") or r.get("duration") or 0)
@@ -151,6 +154,7 @@ def main():
         ancres += sum(bl.size for bl in m.get_matching_blocks())
         total += len(a)
         print("  page %s : %d mots, %d reconnus par Whisper" % (p["page"], len(a), sum(bl.size for bl in m.get_matching_blocks())), flush=True)
+        progres()
     st = n.setdefault("stats", {})
     k = st.get("karaoke") or {}
     k.update(modele=MODELE, pages=faits + (k.get("pages", 0) if not force else 0),
@@ -160,6 +164,7 @@ def main():
     tmp = fj + ".tmp"
     json.dump(n, open(tmp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     os.replace(tmp, fj)
+    progres(fini=True)
     print("OK : %d page(s) calee(s), %.0f %% des mots reconnus, %.4f $, %.0f s"
           % (faits, 100.0 * ancres / total if total else 0, secs / 3600 * PRIX_HEURE, time.time() - t0))
 

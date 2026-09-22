@@ -56,6 +56,8 @@
    relancé (narration K3 `kimi-charon` de Claymore en cours, lancée 05h06, ~1 h) → relancer par relance-proxy.ps1 APRÈS, puis rejouer
    `test_musique_gs_ui.py` sur 8190 et caler le karaoké de `kimi-charon`. Les anciennes narrations audibles de Claymore (v1.66,
    avant la méthode v2.2) disaient « Zaki » pour Raki : c'est la raison de cette relance.
+   ✅ **v1.88.0 cellule d'activité** (05h25) — route `/manga/activite` écrite, proxy à relancer avec le reste. ENSUITE (Quang 05h15) :
+   ergonomie bibliothèque/chapitres (zones fixes, bloc Rafraîchir discret) + boutons de la visionneuse remontés sur téléphone.
    Ensuite (3) vidéo = **À DISCUTER avec Quang avant tout code**.
    ⚠ Une question de Quang (« il me semble que… ») n'est PAS un ordre : répondre, ne rien modifier.
 5. Lien mobile = l'URL du tunnel de Generate Studio (hostname dans `config-generate-agent.yml`, hors dépôt :

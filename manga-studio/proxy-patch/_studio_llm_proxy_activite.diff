@@ -1,0 +1,84 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-manga188-1790046894	2026-09-22 05:14:54.244398800 +0200
++++ C:/Users/quang/AppData/Local/Temp/claude/D--Download-02-Apps-Web-Repo-github/8297ee70-7895-4120-9400-2a0b2f99d277/scratchpad/p5.py	2026-09-22 05:14:54.295760700 +0200
+@@ -7667,7 +7667,71 @@
+ 
+ def _kar_vivant(d, tag):
+     p = _KAR_JOBS.get((d.strip("/"), tag))
+-    return bool(p and p.poll() is None)
++    if p is not None:
++        return p.poll() is None
++    # v1.88.0 : lance avant un redemarrage du proxy -> on lit sa progression (vivante si < 3 min)
++    td = _narr_dir(d, tag)
++    try:
++        with open(os.path.join(td, "karaoke_progress.json"), encoding="utf-8") as f:
++            pr = json.load(f)
++        return not pr.get("fini") and time.time() - float(pr.get("t") or 0) < 180
++    except Exception:
++        return False
++
++
++def _kar_progress(d, tag):
++    try:
++        with open(os.path.join(_narr_dir(d, tag), "karaoke_progress.json"), encoding="utf-8") as f:
++            return json.load(f)
++    except Exception:
++        return {}
++
++
++def manga_activite():
++    """Tout ce qui travaille en ce moment, tous chapitres confondus (Manga Studio v1.88.0)."""
++    out = []
++    try:
++        series = sorted(x for x in os.listdir(MANGA_SOURCES) if not x.startswith("_"))
++    except OSError:
++        series = []
++    for se in series:
++        sd = os.path.join(MANGA_SOURCES, se)
++        if not os.path.isdir(sd):
++            continue
++        for ch in sorted(os.listdir(sd)):
++            man = os.path.join(sd, ch, "manifest.json")
++            if not os.path.isfile(man):
++                continue
++            d = se + "/" + ch
++            nd, td = os.path.join(sd, ch, "narration"), os.path.join(sd, ch, "traduction")
++            if not os.path.isdir(nd) and not os.path.isdir(td):
++                continue
++            try:
++                with open(man, encoding="utf-8") as f:
++                    m = json.load(f)
++            except Exception:
++                m = {}
++            base = {"d": d, "titre": m.get("title") or se, "chapitre": str(m.get("chapter") or ch)}
++            for it in ((manga_narrations(d) or {}).get("items") or []) if os.path.isdir(nd) else []:
++                pr = it.get("progress") or {}
++                if it.get("etat") == "en cours":
++                    out.append(dict(base, type="narration", tag=it.get("tag"), etape=pr.get("etape"),
++                                    fait=pr.get("fait"), total=pr.get("total")))
++                if it.get("karaoke_en_cours"):
++                    kp = _kar_progress(d, it.get("tag"))
++                    out.append(dict(base, type="karaoke", tag=it.get("tag"), fait=kp.get("fait"), total=kp.get("total")))
++            for it in ((manga_traductions(d) or {}).get("items") or []) if os.path.isdir(td) else []:
++                if it.get("etat") == "en cours":
++                    pr = it.get("progress") or {}
++                    out.append(dict(base, type="traduction", langue=it.get("langue"), fait=pr.get("fait"), total=pr.get("total")))
++    try:
++        fs = manga_fetch_status()
++        if fs.get("etat") == "en cours":
++            out.append({"type": "capture", "titre": fs.get("titre"), "chapitre": str(fs.get("chapitre") or ""),
++                        "fait": fs.get("pages"), "total": None, "d": None})
++    except Exception:
++        pass
++    return {"items": out, "t": time.time()}
+ 
+ 
+ def manga_karaoke(d, tag):
+@@ -8689,6 +8753,8 @@
+             _r = manga_source_pages(_d) if _d else None
+             if _r is None: self._json(404, {"error": "chapitre introuvable"})
+             else: self._json(200, _r)
++        elif self.path.split("?", 1)[0] == "/manga/activite":              # Manga Studio v1.88.0
++            self._json(200, manga_activite())
+         elif self.path.split("?", 1)[0] == "/manga/musiques":              # Manga Studio v1.85.0
+             _r = manga_musiques((parse_qs(urlparse(self.path).query).get("serie") or [""])[0])
+             if _r is None: self._json(404, {"error": "serie introuvable"})
