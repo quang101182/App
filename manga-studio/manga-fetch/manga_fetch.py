@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -280,6 +280,13 @@ def md_chapitres_serie(chapter_uuid: str):
     return dispo, lang
 
 
+def _url_chapitre(u: str) -> str:
+    """Adresse d'un chapitre sans la page ni l'ancre. v0.5.2 : sur webtoons.com, le chapitre EST dans la requete
+    (viewer?title_no=T&episode_no=N) -- la couper rendait l'enchainement impossible et source_url inutilisable."""
+    u = u.split("#")[0]
+    return u if "webtoons.com/" in u else u.split("?")[0]
+
+
 def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: bool = False):
     """Amène l'onglet au chapitre qui suit `courant`. Retourne (numéro, None) ou (None, raison)."""
     m = re.search(r"mangadex\.org/chapter/([0-9a-f-]{36})", url_chapitre)
@@ -342,6 +349,22 @@ def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: boo
                 return None, (f"MANGA Plus : le chapitre #{brut} est listé mais n'affiche aucune page "
                               "sur le web (réservé à l'application ou à un abonnement ?)")
         return None, f"MANGA Plus : le clic sur le chapitre #{brut} n'a pas ouvert le lecteur"
+    # v0.5.2 : webtoons.com (Originals et Canvas) -- .../viewer?title_no=T&episode_no=N. ⚠ episode_no est un numero
+    # INTERNE, avec des trous : ImpTown (22/09) passe de episode_no=1 a 3, affiche comme 2e episode (le 2 a ete retire).
+    # La seule verite est le bouton « episode suivant » du lecteur (a._nextEpisode) ; on numerote dans CET ordre.
+    if "webtoons.com/" in url_chapitre and "title_no=" in url_chapitre:
+        if page.url.split("#")[0] != url_chapitre:
+            page.goto(url_chapitre, wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(3000)
+        suiv = page.evaluate("() => { const a = document.querySelector('a._nextEpisode, a.pg_next._nextEpisode');"
+                             " return a && /episode_no=/.test(a.href) ? a.href.split('#')[0] : null; }")
+        if not suiv:
+            return None, "WEBTOON : pas d'épisode suivant (dernier épisode publié)"
+        n = _format_num(int(_num(courant)) + 1)
+        if jusqua is not None and _num(n) > jusqua:
+            return None, f"WEBTOON : l'épisode suivant ({n}) dépasse la borne demandée ({_format_num(jusqua)})"
+        page.goto(suiv, wait_until="domcontentloaded", timeout=45000)
+        return n, None
     # v0.5.1 : GENERIQUE -- les sites de scans (WordPress « Madara » et cie : raijin-scans.fr, 22/09) listent sur la page
     # du chapitre les liens de TOUS les chapitres de la serie, a adresse reguliere .../chapter-12/ ou .../chapitre-12-5/.
     m = re.match(r"(https?://[^?#]+?/)(chapter|chapitre|ch)[-_](\d+(?:[.-]\d+)?)/?(?:[?#].*)?$", url_chapitre, re.I)
@@ -383,6 +406,10 @@ def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: boo
 # Les bandes d'origine sont gardees dans <chapitre>/originaux/ (rien n'est perdu).
 DECOUPE_RATIO = 3.0            # une image plus de 3 fois plus haute que large = une bande
 DECOUPE_TOL = 24
+# v0.5.2 (22/09) : webtoons.com sert un episode en MORCEAUX de 800 x 1280 px (ratio 1,6 < 3), coupes a hauteur fixe
+# AU MILIEU des cases (ImpTown ep.1 : 11 raccords sur 16 traversent une case). Sur ces sites, TOUT le chapitre est
+# un ruban : recolle puis recoupe aux gouttieres, comme une bande.
+RUBAN_SITES = ("webtoons.com",)
 
 
 def _coupes_webtoon(ptp, occ, largeur):
@@ -432,6 +459,8 @@ def decouper_bandes(dossier: str) -> dict | None:
         with Image.open(os.path.join(dossier, pg["file"])) as im:
             dims.append(im.size)
     est_bande = [h / w > DECOUPE_RATIO for w, h in dims]
+    if any(s in (man.get("source_url") or "") for s in RUBAN_SITES):
+        est_bande = [True] * len(dims)
     if not any(est_bande) or man.get("decoupe"):
         return None
     import numpy as np
@@ -644,7 +673,7 @@ def capture(args) -> int:
         DERNIER: dict = {}
 
         def un_chapitre(args) -> int:
-            DERNIER["url"] = page.url.split("?")[0].split("#")[0]
+            DERNIER["url"] = _url_chapitre(page.url)
             print(f"Onglet : {page.url[:80]}")
             log_evt("capture", "démarrage", titre=args.title, chapitre=str(args.chapter),
                     methode_onglet=methode_choix, onglet=page.url[:100])
@@ -903,6 +932,7 @@ def capture(args) -> int:
             # Incident déclencheur : MangaDex charge le chapitre SUIVANT tout seul au scroll/
             # flèche (ch.1→ch.7 du 21/09 : la boucle d'images nouvelles ne s'arrêtait jamais).
             url_depart = page.url.split("?")[0].split("#")[0]
+            url_source = _url_chapitre(page.url)      # v0.5.2 : webtoons.com garde title_no / episode_no
 
             def _chapitre_path(u: str) -> str:
                 """Path réduit à l'identifiant de CHAPITRE (sans le numéro de PAGE final).
@@ -1050,7 +1080,7 @@ def capture(args) -> int:
             # capture (le lecteur passe au chapitre suivant → l'URL enregistrée était
             # parfois celle du chapitre d'APRÈS — bug découvert 18:39)
             write_manifest(dest, slug=resoudre_slug(args.out, args.title), title=args.title,
-                           chapter=args.chapter, source="capture", source_url=url_depart,
+                           chapter=args.chapter, source="capture", source_url=url_source,
                            pages=pages_meta, notes=notes)
             log_event("capture", url=url_depart, title=args.title, chapter=str(args.chapter),
                       pages=len(pages_meta), echecs=sum(1 for n in notes if "ECHEC" in n))
