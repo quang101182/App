@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.95.1</title>
+<title>Manga Studio v1.96.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -466,7 +466,9 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .narr-pbar>div{height:100%;background:var(--accent2);transition:width .4s}
 .lecteur{position:fixed;inset:0;z-index:80;background:#050608;display:flex;flex-direction:column;color:var(--txt)}
 .lecteur[hidden]{display:none}
-.lec-top{display:flex;gap:10px;align-items:center;padding:8px 12px}.lec-top b{flex:none}.lec-top .muted{flex:1}
+.lec-top{display:flex;gap:10px;align-items:center;padding:8px 12px}
+.ch-nav{white-space:nowrap;flex:none}.ch-nav:disabled{opacity:.35}
+.lec-fin-suiv{margin-top:10px}.lec-top b{flex:none}.lec-top .muted{flex:1}
 .lec-scene{flex:1;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center}
 .lec-scene img{max-width:100%;max-height:100%;object-fit:contain}
 .lec-scene img.kb{animation:lecKb var(--kb,8s) ease-out forwards}
@@ -639,7 +641,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.95.1</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.96.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1051,7 +1053,9 @@ body.epure .aide{display:none}
   <div id="chapList" class="chap-list"></div>
   <div class="card" id="chapDetail" hidden>
     <div class="row" style="align-items:center">
+      <button class="btn sm ch-nav" id="chapPrev" hidden></button>
       <h3 class="grow" id="chapTitle" style="margin:0"></h3>
+      <button class="btn sm ch-nav" id="chapNext" hidden></button>
       <button class="btn sm" id="btnChapClose">Fermer</button>
     </div>
     <p class="muted aide" id="chapMeta" style="margin:6px 0 8px"></p>
@@ -1134,6 +1138,8 @@ body.epure .aide{display:none}
 <!-- LECTEUR DE NARRATION (v1.67.0) : plein ecran, page + voix + sous-titre -->
 <div id="lecteur" class="lecteur" hidden>
   <div class="lec-top"><b id="lecTitre"></b><span class="muted" id="lecInfo"></span>
+    <button class="btn sm ch-nav" id="lecChPrev" title="chapitre précédent">⏮ ch.</button>
+    <button class="btn sm ch-nav" id="lecChNext" title="chapitre suivant">ch. ⏭</button>
     <button class="btn sm" id="lecFermer">✕ Fermer</button></div>
   <div class="lec-scene"><img id="lecImg" alt=""></div>
   <p class="lec-sous" id="lecSous"></p>
@@ -1349,7 +1355,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.95.1";
+const VERSION = "1.96.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4796,6 +4802,7 @@ async function openChap(i){
   document.querySelectorAll("#chapList [data-chap]").forEach(b => b.classList.toggle("sel", +b.dataset.chap === i));
   const j = await api("/manga/source_pages?d=" + encodeURIComponent(c.dir));
   $("chapTitle").textContent = c.title + " — chapitre " + c.chapter;
+  chapNavMaj();
   const notes = (j.notes || []).length;
   $("chapMeta").innerHTML = j.pages.length + " pages · " + esc(SOURCE_LBL[j.source] || j.source || "?")
     + (j.source_url ? ' · <a href="' + esc(j.source_url) + '" target="_blank" rel="noopener">source</a>' : "")
@@ -5569,6 +5576,56 @@ $("btnNarrer").onclick = async () => {
   } catch (e){ log("narration : " + e.message, "e"); alert(e.message); }
 };
 
+/* ----- v1.96.0 : chapitre precedent / suivant (meme serie, ordre des numeros) ----- */
+const chapNum = c => { const x = parseFloat(c.chapter); return isNaN(x) ? Infinity : x; };
+function chapVoisin(dir, delta){
+  const l = CHAPS.map((c, i) => ({ c, i })).filter(x => serieDe(x.c.dir) === serieDe(dir))
+    .sort((a, b) => chapNum(a.c) - chapNum(b.c) || String(a.c.chapter).localeCompare(String(b.c.chapter)));
+  const k = l.findIndex(x => x.c.dir === dir);
+  return k < 0 || k + delta < 0 || k + delta >= l.length ? -1 : l[k + delta].i;
+}
+async function narrAvecVoix(dir){
+  const j = await api("/manga/narrations?d=" + encodeURIComponent(dir));
+  return (j.items || []).filter(n => n.etat === "fini" && n.audio)
+    .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0] || null;
+}
+function chapNavMaj(){
+  [["chapPrev", -1, "⏮ "], ["chapNext", 1, " ⏭"]].forEach(([id, d, f]) => {
+    const i = chapVoisin(CHAP_OPEN, d), b = $(id);
+    b.hidden = i < 0; if (i < 0) return;
+    b.textContent = d < 0 ? f + "ch. " + CHAPS[i].chapter : "ch. " + CHAPS[i].chapter + f;
+    b.title = (d < 0 ? "chapitre précédent : " : "chapitre suivant : ") + CHAPS[i].chapter;
+    b.onclick = () => openChap(i).catch(e => log("chapitre : " + e.message, "e"));
+  });
+}
+// Lecteur : l'etat des deux boutons (un voisin sans narration avec voix ne peut pas etre lu)
+async function lecNavMaj(){
+  for (const [id, d] of [["lecChPrev", -1], ["lecChNext", 1]]){
+    const i = chapVoisin(CHAP_OPEN, d), b = $(id);
+    b.hidden = LEC.aveugle || i < 0; b.disabled = true;
+    if (b.hidden) continue;
+    b.title = "ch. " + CHAPS[i].chapter + " …";
+    try {
+      const n = await narrAvecVoix(CHAPS[i].dir);
+      b.disabled = !n;
+      b.title = (d < 0 ? "chapitre précédent" : "chapitre suivant") + " : ch. " + CHAPS[i].chapter
+        + (n ? " (" + (n.voice || n.tag) + ")" : " — pas encore de narration avec voix");
+    } catch { b.title = "ch. " + CHAPS[i].chapter + " — narrations illisibles"; }
+  }
+}
+async function lecChapitre(delta){
+  const i = chapVoisin(CHAP_OPEN, delta); if (i < 0) return;
+  const n = await narrAvecVoix(CHAPS[i].dir);
+  if (!n){ toast("ch. " + CHAPS[i].chapter + " : pas encore de narration avec voix"); return; }
+  $("lecAudio").pause(); clearTimeout(LEC.timer);
+  await openChap(i);
+  await Promise.all([refreshPrec().catch(() => {}), refreshMus().catch(() => {})]);
+  log("lecteur : chapitre " + (delta < 0 ? "précédent" : "suivant") + " → " + CHAPS[i].dir + " (" + n.tag + ")");
+  await ouvrirLecteur([n.tag]);
+}
+$("lecChPrev").onclick = () => lecChapitre(-1).catch(e => log("lecteur : " + e.message, "e"));
+$("lecChNext").onclick = () => lecChapitre(1).catch(e => log("lecteur : " + e.message, "e"));
+
 /* ----- v1.94.0 : « Precedemment... » + rattrapage ----- */
 let PREC = null, PREC_POLL = null;
 const precDur = it => ((it.data || {}).items || []).reduce((a, x) => a + (x.dur || 0), 0);
@@ -5641,6 +5698,7 @@ async function ouvrirLecteur(tags, aveugle, avant){
   LEC.file = tags; LEC.iFile = 0; LEC.aveugle = !!aveugle; LEC.notes = {};
   LEC.avant = aveugle ? null : (avant || (PREC_ON ? "ouverture" : null));      // v1.94.0 : resume en tete
   $("lecPrecBox").hidden = !!aveugle || !(PREC && PREC.modes.ouverture && PREC.modes.ouverture.etat === "fini");
+  lecNavMaj().catch(() => {});
   $("lecteur").hidden = false; document.body.style.overflow = "hidden";
   $("lecPlay").focus();                  // le clavier reste DANS le lecteur, pas sur un bouton de la page
   MUS_APERCU.pause(); musDemarrer();
@@ -5743,6 +5801,12 @@ function finNarr(){
     return;
   }
   $("lecSous").textContent = "— Fin du chapitre —"; LEC.playing = false; $("lecPlay").textContent = "▶";
+  if (!$("lecChNext").hidden && !$("lecChNext").disabled){                // v1.96.0 : enchainer
+    const b = document.createElement("button"); b.className = "btn pri lec-fin-suiv";
+    b.textContent = "▶ Chapitre suivant (" + $("lecChNext").title.replace(/^chapitre suivant : /, "") + ")";
+    b.onclick = () => lecChapitre(1).catch(e => log("lecteur : " + e.message, "e"));
+    $("lecSous").appendChild(document.createElement("br")); $("lecSous").appendChild(b);
+  }
 }
 $("lecAudio").onended = () => { if (LEC.playing) LEC.timer = setTimeout(pageSuivante, 450); };
 $("lecPlay").onclick = () => {
