@@ -64,7 +64,8 @@ else:
     ps = j["passage"]
     check("passage fini", ps.get("etat") == "fini" and not ps.get("vivant"), ps.get("etat"))
     check("1 chapitre narré, 0 erreur", len(ps.get("fait") or []) == 1 and not ps.get("erreurs"), (ps.get("fait"), ps.get("erreurs")))
-    n = json.load(open(os.path.join(SRC, D, "narration", "kimi-charon", "narration.json"), encoding="utf-8"))
+    tag = (ps.get("fait") or [{}])[0].get("tag") or "kimi-charon"          # le moteur choisi dans le suivi
+    n = json.load(open(os.path.join(SRC, D, "narration", tag, "narration.json"), encoding="utf-8"))
     avec = [x for x in n["pages"] if x.get("audio")]
     check("narration AVEC voix", len(avec) >= 10, len(avec))
     check("karaoké calé", bool((n.get("stats") or {}).get("karaoke")), (n.get("stats") or {}).get("karaoke"))
