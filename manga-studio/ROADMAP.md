@@ -2112,7 +2112,17 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 | 2026-07-26 | **Phase 4 franchie — l'app existe.** `manga_studio.html` v1.0.1 (single-file, servie par le proxy sur `/manga`), tables SQLite dédiées `manga_projects/pages/panels` (schéma v3), routes `/manga/*`. Planche de 6 cases de bout en bout : 6/6, 0 erreur JS sur PC **et** Samsung réel, 12/12 responsive. **Exigence Quang du jour : les sorties ne se mélangent plus à celles de Generate Studio** (851→851 fichiers à la racine, 0 résidu) ; 62 fichiers d'exploration rapatriés. Un défaut invisible à l'œil trouvé par le banc : créer un projet ne le sélectionnait pas → cases rangées chez un voisin. Arbitrage Quang : l'app **avant** le LoRA v2, stockage en **table dédiée**. |
 | 2026-07-26 | **Phase 2 franchie, 6/6.** Fond maître + ControlNet depth @ 0,55. Témoin sans ControlNet = 0/4 ⇒ répéter le décor dans le prompt est inopérant. Découverte structurante : décor figé et identité fine sont **incompatibles dans une même case** ⇒ règle des deux types de cases. Prochaine étape : **phase 3, ingestion des scans**. |
 
-### 27 — PROFIL DE SÉRIE + « TOUT TRAITER » (cadrage 22/09 15h10, demande Quang 15h00-15h03) — ⏳ À VALIDER AVANT CODE
+### 27 — PROFIL DE SÉRIE + « TOUT TRAITER » — ✅ FAIT v2.4.0 (22/09 15h40 ; cadrage 15h10, feu vert Quang 15h12 « go non stop »)
+
+**Livré** (P1 `d318722`, P2+P3 ce commit) : `suivi_nuit.py` v2.4.0 = la chaîne ; `patch_profil.py` (proxy) ; panneau
+« ⚙ Profil et traitement » (remplace « 🌙 Suivi »). **Bancs** : `test_chaine.py` **18/18** (lot RÉEL 2 chapitres jusqu'aux
+2 vidéos, pages traduites ; relance = rien à faire ; mutation « même langue » rouge) · `test_profil.py` **19/19** (8191
+puis 8190 : défaut d'une série neuve, ⭐/↺, normalisation, lots invalides refusés, lot réel suivi dans l'activité) ·
+`test_profil_ui.py` **17/17** (8191 puis 8190 : 360 px sans débordement, puces, sélection, « Lancer » refusé = rien
+d'envoyé, ⭐, VRAI lot depuis le bouton → ✅ + puces en couleur). Défauts trouvés en route : clé « t » en double dans le
+journal (crash après le 1er chapitre) ; cases à cocher pleine largeur (styles globaux) ; « dernier passage » d'une AUTRE
+série affiché (l'état est commun → filtré par série). **Décision prise seul** : le défaut général ne copie PAS « la nuit »
+(une série neuve ne dépense rien toute seule) ; moteur/voix PAR CHAPITRE = plus tard si besoin.
 
 **Demande** : régler une fois (moteur, voix, langue de traduction, musique, karaoké, « Précédemment », vidéo), l'appliquer
 à toute la série, puis lancer d'un geste la chaîne complète — sur toute la série ou une sélection — jusqu'à la vidéo de

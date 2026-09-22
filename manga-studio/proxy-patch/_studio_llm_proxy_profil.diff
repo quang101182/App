@@ -1,0 +1,127 @@
+--- C:/Users/quang/AppData/Local/Temp/claude/D--Download-02-Apps-Web-Repo-github/5f77da88-81ed-4e03-8b50-78866891b210/scratchpad/proxy_avant_profil.py	2026-09-22 15:21:22.196363500 +0200
++++ C:/Users/quang/AppData/Local/Temp/claude/D--Download-02-Apps-Web-Repo-github/5f77da88-81ed-4e03-8b50-78866891b210/scratchpad/proxy_profil.py	2026-09-22 15:23:49.593437700 +0200
+@@ -7980,8 +7980,19 @@
+                     jr.append(x)
+     except Exception:
+         pass
+-    prix, minutes = _SUIVI_TARIF.get(cfg.get("moteur") or "kimi", _SUIVI_TARIF["kimi"])
+-    return {"config": cfg, "file": file, "estimation": {"cout": round(pages * prix, 2), "minutes": round(pages * minutes)},
++    # v2.4.0 : le PROFIL effectif (defaut general si la serie n'a pas le sien) et le PLAN de chaque chapitre
++    try:
++        profil, a_profil = m.profil(serie)
++        plan = m.plan_serie(serie, cfg=profil)
++        plan_refaire = m.plan_serie(serie, cfg=profil, refaire=True)     # l'estimation quand « refaire » est coche
++        defaut = m.profil_defaut()
++    except Exception as e:
++        return {"error": "profil illisible : %s" % str(e)[:200]}
++    afaire = [x for x in plan if x["a_faire"]]
++    return {"config": profil, "a_profil": a_profil, "defaut": defaut, "file": file, "plan": plan,
++            "refaire": {x["d"]: {"cout": x["cout"], "minutes": x["minutes"]} for x in plan_refaire},
++            "estimation": {"cout": round(sum(x["cout"] for x in afaire), 2), "minutes": round(sum(x["minutes"] for x in afaire)),
++                           "chapitres": len(afaire)},
+             "passage": etat, "journal": jr[-30:]}
+ 
+ 
+@@ -7993,12 +8004,8 @@
+     voix = data.get("voix") or "Charon"
+     if not re.match(r"^[A-Z][a-z]{2,15}$", voix):
+         return {"error": "voix invalide"}
+-    rv = data.get("reglages_video") or {}
+-    cfg = {"actif": bool(data.get("actif")), "voix": voix, "moteur": data.get("moteur") if data.get("moteur") in _SUIVI_TARIF else "kimi",
+-           "karaoke": bool(data.get("karaoke", True)),
+-           "precedemment": bool(data.get("precedemment", True)), "video": bool(data.get("video")),
+-           "reglages_video": {k: rv.get(k) for k in ("vitesse", "sous", "karaoke", "musique", "volume", "pages", "precedemment")},
+-           "maj": time.strftime("%Y-%m-%dT%H:%M:%S")}
++    cfg = _suivi_mod().normaliser(dict(data, voix=voix))          # v2.4.0 : + « traduction », valeurs bornees
++    cfg["maj"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+     tmp = os.path.join(sd, "suivi.json.tmp")
+     with open(tmp, "w", encoding="utf-8") as f:
+         json.dump(cfg, f, ensure_ascii=False, indent=1)
+@@ -8006,6 +8013,32 @@
+     return {"ok": True, "config": cfg}
+ 
+ 
++def manga_profil_defaut(data=None):
++    """v2.4.0 : les reglages par defaut de toute NOUVELLE serie (sources/_profil_defaut.json)."""
++    m = _suivi_mod()
++    if not data:
++        return {"defaut": m.profil_defaut()}
++    serie, action = data.get("serie") or "", data.get("action") or ""
++    sd = _manga_src_safe(serie) if _RE_SERIE.match(serie) else None
++    if not sd or not os.path.isdir(sd):
++        return {"error": "serie introuvable"}
++    if action == "depuis_serie":
++        d = dict(m.profil(serie)[0], actif=False)                    # la nuit se regle serie par serie
++        d["maj"], d["depuis"] = time.strftime("%Y-%m-%dT%H:%M:%S"), serie
++        f = m.DEFAUT_F
++    elif action == "vers_serie":
++        d = dict(m.profil_defaut(), actif=m.profil(serie)[0].get("actif", False))
++        d["maj"] = time.strftime("%Y-%m-%dT%H:%M:%S")
++        f = os.path.join(sd, "suivi.json")
++    else:
++        return {"error": "action inconnue"}
++    tmp = f + ".tmp"
++    with open(tmp, "w", encoding="utf-8") as h:
++        json.dump(d, h, ensure_ascii=False, indent=1)
++    os.replace(tmp, f)
++    return {"ok": True, "defaut": m.profil_defaut(), "config": m.profil(serie)[0]}
++
++
+ def manga_suivi_lancer(data):
+     serie = data.get("serie") or ""
+     if serie and not _RE_SERIE.match(serie):
+@@ -8017,6 +8050,18 @@
+     os.makedirs(m.DIR, exist_ok=True)
+     lg = open(os.path.join(m.DIR, "runner.log"), "a", encoding="utf-8")
+     cmd = [MANGA_PY, MANGA_SUIVI, "--declencheur", "bouton"] + (["--serie", serie] if serie else [])
++    if data.get("lot"):                                           # v2.4.0 : « Tout traiter » (serie ou selection)
++        if not serie:
++            return {"error": "serie obligatoire pour un lot"}
++        ch = data.get("chapitres") or []
++        if not isinstance(ch, list) or any(not isinstance(x, str) or not x.startswith(serie + "/ch_") or "," in x
++                                           or ".." in x for x in ch):
++            return {"error": "selection de chapitres invalide"}
++        cmd = [MANGA_PY, MANGA_SUIVI, "--declencheur", "lot", "--serie", serie]
++        if ch:
++            cmd += ["--chapitres", ",".join(ch)]
++        if data.get("refaire"):
++            cmd.append("--refaire")
+     subprocess.Popen(cmd, stdout=lg, stderr=lg, cwd=os.path.dirname(MANGA_SUIVI),
+                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+     return {"ok": True}
+@@ -8254,6 +8299,17 @@
+                 if it.get("etat") == "en cours":
+                     pr = it.get("progress") or {}
+                     out.append(dict(base, type="traduction", langue=it.get("langue"), fait=pr.get("fait"), total=pr.get("total")))
++    try:                                                     # v2.4.0 : la chaine (lot ou nuit) en cours
++        _m = _suivi_mod(); _e = _m.lire_etat()
++        if _e.get("etat") == "en cours" and _m.pid_vivant(_e.get("pid")):
++            _ec = _e.get("en_cours") or {}
++            _d = _ec.get("d") or ""
++            out.insert(0, {"type": "lot", "d": _d, "titre": (_d.split("/")[0] if _d else (_e.get("serie") or "")),
++                           "chapitre": _ec.get("num") or "", "etape": _ec.get("etape"),
++                           "fait": len(_e.get("fait") or []) + len(_e.get("erreurs") or []), "total": len(_e.get("file") or []),
++                           "declencheur": _e.get("declencheur")})
++    except Exception:
++        pass
+     for (pd_, pm_), _pp in list(_PREC_JOBS.items()):          # v1.94.0 : les resumes en cours
+         if _pp.poll() is None:
+             out.append({"type": "precedemment", "d": pd_, "tag": pm_, "titre": pd_.split("/")[0],
+@@ -9748,6 +9804,8 @@
+         elif self.path.split("?", 1)[0] == "/manga/video_file":
+             _q = parse_qs(urlparse(self.path).query)
+             self.serve_manga_video((_q.get("p") or [""])[0], (_q.get("dl") or [""])[0] == "1")
++        elif self.path.split("?", 1)[0] == "/manga/profil_defaut":         # Manga Studio v2.4.0
++            self._json(200, manga_profil_defaut())
+         elif self.path.split("?", 1)[0] == "/manga/suivi":                 # Manga Studio v1.98.0
+             _r = manga_suivi((parse_qs(urlparse(self.path).query).get("serie") or [""])[0])
+             if _r is None: self._json(404, {"error": "serie introuvable"})
+@@ -10235,6 +10293,8 @@
+                 self._json(200, manga_video_annule(data))
+             elif self.path == "/manga/suivi":                  # Manga Studio v1.98.0
+                 self._json(200, manga_suivi_regle(data))
++            elif self.path == "/manga/profil_defaut":          # Manga Studio v2.4.0
++                self._json(200, manga_profil_defaut(data))
+             elif self.path == "/manga/suivi_lancer":
+                 self._json(200, manga_suivi_lancer(data))
+             elif self.path == "/manga/precedemment":           # Manga Studio v1.94.0

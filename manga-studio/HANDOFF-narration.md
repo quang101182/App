@@ -3,7 +3,9 @@
 > Autosuffisant. « Fait » = `git log` (version courante : v1.85.0). Ce fichier ne porte
 > que le RESTANT, les pièges et le pourquoi. Le détail des mesures est dans `ROADMAP.md` § 4-ter et 4-ter-bis.
 
-## ⭐ ÉTAT AU 22/09 14h20 — v2.3.0 (lire d'abord ; le reste du fichier = historique)
+## ⭐ ÉTAT AU 22/09 15h40 — v2.4.0 : ÉTAPE 27 FAITE (profil de série + « Tout traiter », ROADMAP § 27). Chaîne = `scripts/suivi_nuit.py`
+##    (nuit ET bouton), défaut général `sources/_profil_defaut.json`, profil `sources/<serie>/suivi.json`. Bancs : test_chaine / test_profil / test_profil_ui.
+## (ancien) ÉTAT AU 22/09 14h20 — v2.3.0 (lire d'abord ; le reste du fichier = historique)
 - Livré ce jour (détail + mesures : ROADMAP étapes 5-bis, 7, 9, 10, 14 à 24) : Précédemment/rattrapage, app installable (PWA, WebAPK),
   vidéo (📜, voix, nom de fichier, groupe .zip), chapitre préc./suiv., suivi de nuit (tâche `MangaStudioSuiviNuit` 01:30, moteur au choix),
   hors-ligne dans le téléphone, capture depuis le téléphone (Partager → Manga Studio, lien, 🕹 télécommande CDP) en 4 étapes, résumé

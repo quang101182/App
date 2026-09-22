@@ -41,6 +41,7 @@ On le comble ici plutôt que de le signaler une deuxième fois.
 | `_studio_llm_proxy_langue.diff` | v2.2.0 (`patch_langue.py`) : `GET /manga/langue?d=` (détection MangaDex / pages, `scripts/langue_chapitre.py`), langue dans `/manga/resume`, `/manga/traduire` refuse la langue d'origine sans `force`. |
 | `_studio_llm_proxy_capture_serie.diff` | v2.3.0 (`patch_capture_serie.py`) : `POST /manga/fetch_capture` relaie `suite` (0-50) / `jusqua` à manga-fetch v0.4.0 ; `GET /manga/fetch_status` suit la série (`chapitre` = celui EN COURS, `chapitre_depart`, `dossiers`, `serie` = bilan). « Remplacer » ne vaut que pour le 1er chapitre. Testé sur 8191 (`scripts/proxy_8191.py <copie>`) puis 8190. |
 | `_studio_llm_proxy_capture_entiers.diff` | v2.3.2 (`patch_capture_entiers.py`) : `entiers` (bool) sur `POST /manga/fetch_capture` → `--sans-intermediaires` (manga-fetch v0.4.1), seulement en série. |
+| `_studio_llm_proxy_profil.diff` | v2.4.0 (`patch_profil.py`) : `GET /manga/suivi` + profil effectif / plan / estimation (+ « refaire »), `POST /manga/suivi` normalisé (traduction), `GET/POST /manga/profil_defaut` (⭐ / ↺), `POST /manga/suivi_lancer {lot, chapitres, refaire}`, item « lot » dans `/manga/activite`. La logique vit dans `scripts/suivi_nuit.py` (rechargé à chaud). |
 | `_studio_llm_proxy_sites.diff` | v2.3.3 (`patch_sites.py`) : `GET /manga/sites` = `manga-fetch/sites.json` (liste versionnée des sites validés pour la capture). Lecture seule. |
 
 **Ce sont des ajouts purs.** Aucune ligne existante de Generate Studio n'est modifiée : les diffs ne
