@@ -181,3 +181,14 @@ voix Chirp 3 HD en-US) + karaoké qui suit la langue (`karaoke_mots.py` v1.89.0)
 54 s fabriquée en 26 s, coût 0,06 $ les 6 pages. Français par défaut inchangé (vérifié).
 Chaîne pour un prospect : sources/<serie>/ch_N (capture) → narrate_chapter --langue en → karaoke_mots → video_chapitre.
 RESTE, à faire SEULEMENT si un auteur l'accepte : montage sur SA piste audio continue (NatM_, Parapsych, Kimchi222).
+
+## Prospection — état au 22/09 21h56
+
+- **9 messages privés Instagram envoyés** (compte se7en.ai.fr, 20:52 → 21:55, un par auteur, espacés de 3 à 8 min,
+  chacun vérifié dans la messagerie après rechargement). 1 échec : compte Instagram de l'auteur inexistant (bascule sur X).
+- Détail nominatif et réponses : `MESSAGES-prets.md` (local, hors dépôt). Outil d'envoi : Edge automation port 9241,
+  profil `EdgeAuto`, Instagram + TikTok connectés par Quang.
+- RESTE (reprise : prochaine session de Quang) : 8 messages Instagram (#11, 12, 14, 16, 17, 21, 24, 25) ; X (#8, 10, 13) ;
+  Reddit (#9, 18, 23, 27, 28, 30, +) si Quang connecte son compte ; email #26 depuis quangapps.dev.
+  Puis lire les réponses (onglet « Demandes » d'Instagram compris) et compter pour le seuil (30 contactés → ≥ 8 réponses,
+  ≥ 4 acceptent, ≥ 2 redemandent).
