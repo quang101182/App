@@ -39,6 +39,7 @@ On le comble ici plutôt que de le signaler une deuxième fois.
 | `_studio_llm_proxy_suivi_moteur.diff` | v2.0.0 (`patch_suivi_moteur.py`) : le suivi choisit son moteur (kimi | gemini), estimation selon le moteur. |
 | `_studio_llm_proxy_resume.diff` | v2.1.0 (`patch_resume.py`) : `GET /manga/resume` = ce que chaque chapitre (narrations avec voix, voix, karaoké, vidéo, traductions, Précédemment) et chaque série (musique, suivi) possède. |
 | `_studio_llm_proxy_langue.diff` | v2.2.0 (`patch_langue.py`) : `GET /manga/langue?d=` (détection MangaDex / pages, `scripts/langue_chapitre.py`), langue dans `/manga/resume`, `/manga/traduire` refuse la langue d'origine sans `force`. |
+| `_studio_llm_proxy_capture_serie.diff` | v2.3.0 (`patch_capture_serie.py`) : `POST /manga/fetch_capture` relaie `suite` (0-50) / `jusqua` à manga-fetch v0.4.0 ; `GET /manga/fetch_status` suit la série (`chapitre` = celui EN COURS, `chapitre_depart`, `dossiers`, `serie` = bilan). « Remplacer » ne vaut que pour le 1er chapitre. Testé sur 8191 (`scripts/proxy_8191.py <copie>`) puis 8190. |
 
 **Ce sont des ajouts purs.** Aucune ligne existante de Generate Studio n'est modifiée : les diffs ne
 contiennent que des `+`, à l'exception de la ligne `SCHEMA_VERSION = 2` → `3` et de l'ajout de `shutil`

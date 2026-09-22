@@ -3,13 +3,16 @@
 > Autosuffisant. « Fait » = `git log` (version courante : v1.85.0). Ce fichier ne porte
 > que le RESTANT, les pièges et le pourquoi. Le détail des mesures est dans `ROADMAP.md` § 4-ter et 4-ter-bis.
 
-## ⭐ ÉTAT AU 22/09 13h30 — v2.2.1 (lire d'abord ; le reste du fichier = historique)
+## ⭐ ÉTAT AU 22/09 14h20 — v2.3.0 (lire d'abord ; le reste du fichier = historique)
 - Livré ce jour (détail + mesures : ROADMAP étapes 5-bis, 7, 9, 10, 14 à 24) : Précédemment/rattrapage, app installable (PWA, WebAPK),
   vidéo (📜, voix, nom de fichier, groupe .zip), chapitre préc./suiv., suivi de nuit (tâche `MangaStudioSuiviNuit` 01:30, moteur au choix),
   hors-ligne dans le téléphone, capture depuis le téléphone (Partager → Manga Studio, lien, 🕹 télécommande CDP) en 4 étapes, résumé
   de la bibliothèque, langue d'origine (MangaDex/pages) + refus fr→fr, frein commun + gateway v1.60 (compteur Manga Studio 60/min),
   repérage des noms parallèle (3,8×), coûts en direct, volume général, moteur mémorisé.
-- RESTE (ROADMAP) : **18** capture de plusieurs chapitres + **19** liste des sites validés (vérifier l'enchaînement site par site d'abord) ;
+- ✅ **18 FAIT (v2.3.0, manga-fetch v0.4.0)** : « puis N suivants / jusqu'au ch. Y » ; MangaDex (API, même langue) et MANGA Plus
+  (page de la série) vérifiés en réel. Règle 5 de manga-fetch (« pas de crawl ») LEVÉE par Quang (usage privé) : ne pas la rouvrir.
+  Instance de test : `python scripts/proxy_8191.py <copie patchée>` (ComfyUI venv) ; tuée → supprimer `_studio_llm_proxy_8191.py`.
+- RESTE (ROADMAP) : **19** liste des sites validés — les mesures du 22/09 sont prêtes dans le README manga-fetch § « plusieurs chapitres » ;
   plus tard : 4 (case par case), 6 (Lecture avancée), « qui est qui ». K3 anormalement lent le 22/09 (journal `reseau` désormais).
 - Tests : Gemini pour déboguer, K3 quand c'est sûr (Quang 10h36). Bancs : `scripts/test_*_ui.py <port>` (8190 réel / 8191 copie).
 - ⚠ Autre session (Generate Studio) modifie ET relance le proxy : relire avant d'écrire, diff = mes patchs seuls.

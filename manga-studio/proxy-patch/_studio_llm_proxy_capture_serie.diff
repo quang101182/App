@@ -1,0 +1,101 @@
+--- C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-manga-suite-20260922-1344	2026-09-22 13:44:44.427131100 +0200
++++ C:/Users/quang/AppData/Local/Temp/claude/D--Download-02-Apps-Web-Repo-github/5f77da88-81ed-4e03-8b50-78866891b210/scratchpad/proxy_copie.py	2026-09-22 13:59:49.709921600 +0200
+@@ -8885,7 +8885,7 @@
+     return {"ok": True}
+ 
+ 
+-def manga_fetch_capture(tab_url, titre, chapitre, force=False, page1=False):
++def manga_fetch_capture(tab_url, titre, chapitre, force=False, page1=False, suite=0, jusqua=""):
+     p = _FETCH["proc"]
+     if p is not None and p.poll() is None:
+         return {"error": "une capture est deja en cours (%s ch.%s)" % (_FETCH["titre"], _FETCH["chapitre"])}
+@@ -8894,6 +8894,17 @@
+         return {"error": "titre invalide"}
+     if not re.match(r"^\d{1,5}(\.\d{1,2})?$", chapitre or ""):
+         return {"error": "numero de chapitre invalide"}
++    try:
++        suite = int(suite or 0)
++    except (TypeError, ValueError):
++        return {"error": "nombre de chapitres suivants invalide"}
++    if not 0 <= suite <= 50:
++        return {"error": "chapitres suivants : entre 0 et 50"}
++    jusqua = str(jusqua or "").strip().replace(",", ".")
++    if jusqua and not re.match(r"^\d{1,5}(\.\d{1,2})?$", jusqua):
++        return {"error": "« jusqu'au chapitre » invalide"}
++    if jusqua and float(jusqua) <= float(chapitre):
++        return {"error": "« jusqu'au chapitre » doit etre apres le chapitre de depart"}
+     onglets = manga_fetch_tabs()
+     if not onglets["edge"]:
+         return {"error": "la fenetre de capture est fermee"}
+@@ -8914,6 +8925,8 @@
+                 return {"error": "impossible de mettre l'ancien chapitre de cote : %s" % e}
+             _FETCH.update(backup=b, dest=dest)
+     if page1: cmd.append("--page-1")
++    if jusqua: cmd += ["--jusqua", jusqua]                  # Manga Studio v2.3.0 : plusieurs chapitres
++    elif suite: cmd += ["--suite", str(suite)]
+     os.makedirs(os.path.dirname(MF_RUNLOG), exist_ok=True)
+     try: _FETCH["offset"] = os.path.getsize(MF_EVENTS)
+     except OSError: _FETCH["offset"] = 0
+@@ -8922,7 +8935,7 @@
+     _FETCH.update(proc=subprocess.Popen(cmd, cwd=os.path.dirname(MF_SCRIPT), stdout=lg, stderr=subprocess.STDOUT,
+                                         stdin=subprocess.DEVNULL, env=env,
+                                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)),
+-                  debut=time.time(), titre=titre, chapitre=chapitre)
++                  debut=time.time(), titre=titre, chapitre=chapitre, suite=suite, jusqua=jusqua)
+     return {"ok": True}
+ 
+ 
+@@ -8940,25 +8953,35 @@
+         with open(MF_EVENTS, "rb") as f:
+             f.seek(_FETCH["offset"])
+             for ligne in f.read().decode("utf-8", "replace").splitlines():
++                if "[capture] d" in ligne and "marrage" in ligne: pages = 0   # v2.3.0 : pages du chapitre EN COURS
+                 if "[page]" in ligne: pages += 1
+                 if ligne.strip(): derniere = ligne.strip()[20:160]
+     except OSError: pass
+-    dossier = None
+-    m = re.search(r"OK : \d+(?:/\d+)? pages -> (.+)", sortie)
+-    if m:
++    dossiers = []
++    root = os.path.normpath(MANGA_SOURCES)
++    for m in re.finditer(r"OK : \d+(?:/\d+)? pages -> (.+)", sortie):
+         full = os.path.normpath(m.group(1).strip())
+-        root = os.path.normpath(MANGA_SOURCES)
+         if full.startswith(root + os.sep):
+-            dossier = full[len(root) + 1:].replace(os.sep, "/")
++            dossiers.append(full[len(root) + 1:].replace(os.sep, "/"))
++    dossier = dossiers[-1] if dossiers else None
++    chap_cours = _FETCH["chapitre"]
++    for m in re.finditer(r"=== Chapitre suivant : (\S+) ===", sortie):
++        chap_cours = m.group(1)
++    m = re.search(r"^S\S+RIE : .*$", sortie, re.M)
++    serie = m.group(0).strip() if m else None
+     lignes = [l for l in sortie.splitlines() if l.strip()]
+     remplacement = None
+     if code is not None and _FETCH.get("backup"):
+-        remplacement = _mf_fin_remplacement(code in (0, 3) and bool(dossier))
++        dest1 = _FETCH.get("dest")
++        remplacement = _mf_fin_remplacement(code in (0, 3) and bool(dest1)
++                                            and os.path.isfile(os.path.join(dest1, "manifest.json")))
+         _FETCH["remplacement"] = remplacement
+     return {"etat": "en cours" if code is None else ("fini" if code in (0, 3) else "echec"), "code": code,
+             "avertissements": code == 3, "remplacement": _FETCH.get("remplacement"),     # manga-fetch : 3 = REUSSITE avec avertissements (notes)
+-            "titre": _FETCH["titre"], "chapitre": _FETCH["chapitre"], "pages": pages, "derniere": derniere,
+-            "dossier": dossier, "sortie": lignes[-12:], "duree_s": round(time.time() - _FETCH["debut"], 1)}
++            "titre": _FETCH["titre"], "chapitre": chap_cours, "chapitre_depart": _FETCH["chapitre"],
++            "pages": pages, "derniere": derniere, "dossier": dossier, "dossiers": dossiers, "serie": serie,
++            "suite": _FETCH.get("suite") or 0, "jusqua": _FETCH.get("jusqua") or "",
++            "sortie": lignes[-12:], "duree_s": round(time.time() - _FETCH["debut"], 1)}
+ 
+ 
+ def manga_fetch_verify(d):
+@@ -10186,7 +10209,8 @@
+             elif self.path == "/manga/fetch_capture":
+                 self._json(200, manga_fetch_capture(data.get("tab") or "", data.get("title") or "",
+                                                     str(data.get("chapter") or ""), bool(data.get("force")),
+-                                                    bool(data.get("page1"))))
++                                                    bool(data.get("page1")), data.get("suite") or 0,
++                                                    str(data.get("jusqua") or "")))
+             elif self.path == "/manga/source_delete":          # Manga Studio v1.76.0
+                 self._json(200, manga_source_delete(data))
+             elif self.path == "/manga/serie_infos":            # Manga Studio v1.77.0

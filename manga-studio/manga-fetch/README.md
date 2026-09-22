@@ -68,8 +68,33 @@ sources/<slug>/ch_<num>/
 3. **La fenêtre dédiée** (`%LOCALAPPDATA%\manga-fetch-edge`, port 9223) est séparée du navigateur
    de Quang. On la tue par user-data-dir, **jamais** en masse (`taskkill /IM msedge.exe` interdit).
 4. **Journal** : chaque action s'ajoute à `%LOCALAPPDATA%\manga-fetch\fetch.log` (jsonl, horodaté).
-5. La capture est **chapitre par chapitre, à la main de Quang** : pas de crawl automatique de
-   séries ni de contournement de protections — c'est la ligne tenue depuis le début du chantier.
+5. ~~La capture est **chapitre par chapitre, à la main de Quang** : pas de crawl automatique de
+   séries ni de contournement de protections — c'est la ligne tenue depuis le début du chantier.~~
+   → **levée par Quang le 22/09/2026** (*« elle a sauté depuis longtemps […] je l'utilise à titre
+   privé, c'est mon problème »*) : v0.4.0 capture plusieurs chapitres d'affilée (§ ci-dessous).
+   Usage privé : ne pas la réintroduire, ne pas rouvrir la question.
+
+## Capture de plusieurs chapitres (v0.4.0, 22/09/2026)
+
+`capture ... --chapter N --suite K` (les K suivants, 50 max) ou `--jusqua Y` (jusqu'au ch. Y inclus).
+Après chaque chapitre, `chapitre_suivant()` amène **le même onglet** au suivant, site par site :
+
+| Site | Enchaînement (vérifié en réel le 22/09) | Comment |
+|---|---|---|
+| **MangaDex** | ✅ OPM 302→304 (19/19/18 p.), 305→308, 310→311 | API publique `/manga/<id>/aggregate`, **dans la langue du chapitre lu** (le lecteur passe aussi seul au suivant, mais on ne s'y fie pas) |
+| **MANGA Plus** | ✅ Claymore #002→#003 (39+39 p., contenus distincts) | aucun passage automatique, et le bouton « To Chapter #00x » ne réagit pas à un clic scripté → page de la série `/titles/<id>`, clic sur le chapitre, puis réouverture de son adresse (le lecteur se recharge juste après le clic) |
+| autre | ❌ arrêt « non pris en charge » | — |
+
+- Suivant = le plus petit numéro > au courant. **Un trou arrête la série** (« le chapitre 5 n'est pas
+  disponible sur ce site ») sauf si `--jusqua` le couvre ; la borne dépassée arrête aussi, en le disant.
+- ⚠ **MANGA Plus liste des chapitres qui ne s'ouvrent pas sur le web** : Claymore #004 est affiché
+  gratuit mais son lecteur reste à « 1 / 0 » (API 200, zéro page ; #002 → 42). Détecté en 30 s à
+  l'ouverture → arrêt avec la raison, au lieu d'un échec au bout de 2 min 30.
+- Seul le 1er chapitre peut être remplacé (`--force`) ; un suivant déjà présent est **gardé** et la série continue.
+- Bilan en fin de sortie : `SÉRIE : 3 chapitre(s) : 302, 303, 304 — arrêt : <raison>` ; code 3 si la
+  demande n'a pas été tenue jusqu'au bout.
+- Bancs : `scripts/test_capture_serie.py [port]` **27/27** (mutation « saute un chapitre » → 14/20 rouge),
+  `scripts/test_capture_serie_ui.py [port]` **13/13** ; non-régression `test_manga_fetch.py` **9/9**.
 
 ## Lecteurs reconnus (v0.3.0, 21/09/2026)
 
