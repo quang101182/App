@@ -72,3 +72,44 @@ en ligne (comptes, stockage, file de rendu, paiement), donc une reconstruction, 
 - Confondre « beaucoup d'auteurs » et « beaucoup d'auteurs qui paient ».
 - Oublier que YouTube démonétise le contenu produit en masse : nos clients doivent publier de l'ORIGINAL (le leur).
 - Sous-estimer le travail de service en ligne (comptes, paiement, support) par rapport au moteur, déjà fait.
+
+---
+
+# RÉSULTATS (session du 22/09/2026, 19h25 →)
+
+## Q1 — WEBTOON Cuts : ❌ ne couvre PAS le besoin → on continue (vérifié 22/09 19h35)
+
+Sources : sous-agent web-researcher + vérification directe des pages clés.
+- **Corée uniquement** : lancé le 01/09/2025 « in Korea » (communiqué officiel https://about.webtoon.com/press-release/198,
+  04/09/2025). L'annonce « Unified International CANVAS » (26/03/2026) ne le mentionne pas → pas accessible à un auteur
+  Canvas EN/FR à ce jour (ESTIMATION par absence, à re-vérifier si Cuts s'internationalise).
+- **Diffusion fermée** : vidéos < 2 min visibles DANS l'app WEBTOON ; aucun export TikTok/Shorts documenté.
+- **Autre produit** : UGC/fans (mèmes, « Webtoon MV » = planches en clip musical, app Cuts Make 25/06/2026, Corée,
+  Android). Aucune voix off narrée, aucun sous-titre karaoké, aucune traduction documentés.
+- Récompenses 70 000 $/mois : pilote de 3 mois (11/2025 → 01/2026), reconduction non trouvée.
+
+⚠ **Le vrai concurrent n'est pas Cuts** :
+- **ComicInk** (https://www.comicink.ai/video, lu le 22/09) : narration IA scène par scène, sous-titres incrustés,
+  musique, 720p. MAIS ~150 crédits/seconde → **Basic 9,99 $ = ~10 s de vidéo/mois, Plus 19,99 $ = ~30 s/mois**
+  (≈ 0,67 $/s). Vise les BD créées DANS ComicInk (générateur de BD IA), pas un auteur qui arrive avec ses planches.
+- **WTN Suite** (https://www.wtn-suite.com/, lu le 22/09) : logiciel de bureau, 14,99-129,99 $/mois, détection de cases
+  YOLO, narration Gemini/OpenAI, TTS Edge/Kokoro, 4K. Livré avec « WT-Downloader » + « Script Rewriter » → vise les
+  **chaînes de recap d'œuvres des autres** (le segment écarté pour raison de droits), pas les auteurs.
+- FlexClip, LlamaGen, Elser AI, Frameo, Anijam : cités, NON VÉRIFIÉS.
+
+## Signaux de terrain r/WebtoonCanvas (forums.py, lus le 22/09)
+
+- **Demande payée réelle** : 13/11/2025, un auteur Canvas (« relatively big readership », 40 épisodes déjà doublés par
+  un comédien) cherche un monteur pour TikTok/Insta/Shorts à **50 $ la vidéo**, collaboration longue.
+  https://www.reddit.com/r/WebtoonCanvas/comments/1ovwjue/
+- **Le besoin de promo est criant** : 17/09/2026, 43 pts / 78 comm., « 1 an de promo, < 100 abonnés » ; « promouvoir
+  m'épuise plus que faire la BD » ; la vidéo courte citée comme la piste à essayer (« je n'ai pas encore compris comment »).
+  https://www.reddit.com/r/WebtoonCanvas/comments/1wifqxo/
+- **Bandes-annonces maison fréquentes** (≥ 8 entre le 23/08 et le 16/09/2026), presque toutes à 2-3 pts : les auteurs
+  en font, elles ne percent pas.
+- 🔴 **RISQUE NON PRÉVU PAR LE CADRAGE : l'hostilité à l'IA.** « Why is AI content allowed in this subreddit? » (13/09/2026),
+  « Ai in WEBTOON is insulting » (19/08/2026), une excuse publique d'un auteur ayant publié un manga IA (08/08/2026),
+  des auteurs qui s'excusent d'une simple musique Suno dans leur promo (07/2025), un projet voix+musique qui précise
+  « Strictly NO Gen-AI » (20/06/2026), et une offre de trailers IA gratuits à 0 pt (29/07/2026).
+  ⇒ Une **voix off IA** sur une œuvre dessinée à la main peut être rejetée par les auteurs ET leurs lecteurs. À
+  instruire en Q3 : c'est peut-être le vrai frein, plus que la concurrence.
