@@ -43,6 +43,7 @@ On le comble ici plutôt que de le signaler une deuxième fois.
 | `_studio_llm_proxy_capture_entiers.diff` | v2.3.2 (`patch_capture_entiers.py`) : `entiers` (bool) sur `POST /manga/fetch_capture` → `--sans-intermediaires` (manga-fetch v0.4.1), seulement en série. |
 | `_studio_llm_proxy_profil.diff` | v2.4.0 (`patch_profil.py`) : `GET /manga/suivi` + profil effectif / plan / estimation (+ « refaire »), `POST /manga/suivi` normalisé (traduction), `GET/POST /manga/profil_defaut` (⭐ / ↺), `POST /manga/suivi_lancer {lot, chapitres, refaire}`, item « lot » dans `/manga/activite`. La logique vit dans `scripts/suivi_nuit.py` (rechargé à chaud). |
 | `_studio_llm_proxy_sites.diff` | v2.3.3 (`patch_sites.py`) : `GET /manga/sites` = `manga-fetch/sites.json` (liste versionnée des sites validés pour la capture). Lecture seule. |
+| `_studio_llm_proxy_renommer_reessai.diff` | v2.4.2 (`patch_renommer_reessai.py`) : renommer une série réessaie 12 fois sur 6 s quand Windows refuse (fichier ouvert : miniatures servies, antivirus) — WinError 5 vu par Quang le 22/09 ; sinon message clair (le titre est déjà enregistré, refaire le renommage le termine). |
 
 **Ce sont des ajouts purs.** Aucune ligne existante de Generate Studio n'est modifiée : les diffs ne
 contiennent que des `+`, à l'exception de la ligne `SCHEMA_VERSION = 2` → `3` et de l'ajout de `shutil`
