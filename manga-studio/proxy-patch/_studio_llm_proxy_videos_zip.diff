@@ -1,0 +1,68 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260922-manga-v197	2026-09-22 09:27:32.874559100 +0200
++++ /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py	2026-09-22 09:27:32.911554000 +0200
+@@ -9059,6 +9059,55 @@
+         except Exception as e:
+             self._json(500, {"error": "Manga Studio introuvable (%s): %s" % (MANGA_HTML, e)})
+ 
++    def serve_manga_videos_zip(self, serie, ds):
++        """v1.97.0 : les videos choisies d'une serie en UNE archive, en flux (MP4 stockes, zip64)."""
++        import zipfile
++        info = manga_videos(serie)
++        if info is None:
++            self._json(404, {"error": "serie introuvable"}); return
++        voulus = {x.strip() for x in (ds or "").split(",") if x.strip()}
++        items = []
++        for c in info.get("chapitres") or []:
++            if c["d"].split("/")[-1] in voulus and c.get("videos"):
++                rel = c["videos"][0]["fichier"]
++                full = _manga_src_safe(rel)
++                if full and os.path.isfile(full):
++                    items.append((rel, full, c))
++        if not items:
++            self._json(404, {"error": "aucune video parmi les chapitres demandes"}); return
++        titre = items[0][2].get("titre") or serie
++        num = lambda c: str(c.get("chapitre") or "").zfill(3) if str(c.get("chapitre") or "").isdigit() else str(c.get("chapitre") or "")
++        nom = "%s - vidéos ch%s à ch%s (%d) - %s.zip" % (titre, num(items[0][2]), num(items[-1][2]), len(items),
++                                                          time.strftime("%Y-%m-%d %Hh%M"))
++        nom = re.sub(r'[\/:*?"<>|]+', " ", nom)
++        ascii_ = unicodedata.normalize("NFKD", nom).encode("ascii", "ignore").decode() or "videos.zip"
++        self.send_response(200); self._cors()
++        self.send_header("Content-Type", "application/zip")
++        self.send_header("Content-Disposition", "attachment; filename=\"%s\"; filename*=UTF-8''%s"
++                         % (ascii_.replace('"', ""), quote(nom, safe="")))
++        self.send_header("Cache-Control", "no-store")
++        self.send_header("Connection", "close")
++        self.end_headers()
++        self.close_connection = True
++        try:
++            with zipfile.ZipFile(self.wfile, "w", zipfile.ZIP_STORED, allowZip64=True) as z:
++                vus = set()
++                for rel, full, _c in items:
++                    n = _video_nom(rel, full)
++                    while n in vus:
++                        n = n[:-4] + " (bis).mp4"
++                    vus.add(n)
++                    zi = zipfile.ZipInfo(n, date_time=time.localtime(os.path.getmtime(full))[:6])
++                    zi.compress_type = zipfile.ZIP_STORED
++                    with open(full, "rb") as f, z.open(zi, "w", force_zip64=True) as out:
++                        while True:
++                            bloc = f.read(1 << 20)
++                            if not bloc:
++                                break
++                            out.write(bloc)
++        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
++            pass                                                # telechargement annule : rien a faire
++
+     def serve_manga_video(self, rel, telecharger=False):
+         """v1.93.0 : une video EN FLUX depuis le disque (Range) — serve_manga_file lit tout en memoire,
+         intenable pour 160 Mo a chaque saut de lecture. dl=1 : « enregistrer sous » (PC et telephone)."""
+@@ -9360,6 +9409,9 @@
+             _r = manga_videos((parse_qs(urlparse(self.path).query).get("serie") or [""])[0])
+             if _r is None: self._json(404, {"error": "serie introuvable"})
+             else: self._json(200, _r)
++        elif self.path.split("?", 1)[0] == "/manga/videos_zip":            # Manga Studio v1.97.0
++            _q = parse_qs(urlparse(self.path).query)
++            self.serve_manga_videos_zip((_q.get("serie") or [""])[0], (_q.get("d") or [""])[0])
+         elif self.path.split("?", 1)[0] == "/manga/video_file":
+             _q = parse_qs(urlparse(self.path).query)
+             self.serve_manga_video((_q.get("p") or [""])[0], (_q.get("dl") or [""])[0] == "1")

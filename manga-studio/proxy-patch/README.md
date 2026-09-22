@@ -33,6 +33,7 @@ On le comble ici plutôt que de le signaler une deuxième fois.
 | `_studio_llm_proxy_precedemment.diff` | v1.94.0 (`patch_precedemment.py`) : `GET/POST /manga/precedemment` (« Précédemment… » et rattrapage, `scripts/precedemment.py` en fond), poste de coût `precedemment` (corbeille comprise), cellule d'activité. |
 | `_studio_llm_proxy_pwa.diff` | v1.95.0 (`patch_pwa.py`) : `/manga/manifest.webmanifest`, `/manga/sw.js`, `/manga/icon-*.png` PUBLICS (liste fermée, fichiers de `pwa/`, aucun secret), `/manga` → 302 `/manga/` (portée de la PWA). |
 | `_studio_llm_proxy_video_prec.diff` | v1.95.1 (`patch_video_prec.py`) : réglage vidéo `precedemment` (liste blanche + raison « à refaire »), `_video_nom()` = nom lisible du fichier téléchargé (`filename*` UTF-8 + repli ASCII). |
+| `_studio_llm_proxy_videos_zip.diff` | v1.97.0 (`patch_videos_zip.py`) : `GET /manga/videos_zip?serie=&d=ch_1,ch_2` = les vidéos choisies en UNE archive .zip en flux (MP4 stockés, zip64). |
 
 **Ce sont des ajouts purs.** Aucune ligne existante de Generate Studio n'est modifiée : les diffs ne
 contiennent que des `+`, à l'exception de la ligne `SCHEMA_VERSION = 2` → `3` et de l'ajout de `shutil`

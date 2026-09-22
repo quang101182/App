@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.96.0</title>
+<title>Manga Studio v1.97.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -366,6 +366,10 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .vid-it .btn.sm{width:32px;height:30px;padding:0;justify-content:center}
 .vid-it i{display:block}
 .vid-it .narr-pbar{grid-column:2 / -1}
+.vid-selbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0}
+.vid-plage{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)}
+.vid-plage input{width:52px;padding:3px 6px;font-size:12px}
+#vidCompte{font-size:12px}
 /* v1.95.1 : choix de la voix quand le chapitre a plusieurs narrations avec voix (Quang 22/09 09h09) */
 .vid-it .vi-voix{grid-column:2 / -1;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);min-width:0}
 .vid-it .vi-voix select{flex:1;min-width:0;width:auto;font-size:12px;padding:3px 6px}
@@ -641,7 +645,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.96.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.97.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1046,7 +1050,17 @@ body.epure .aide{display:none}
       <button class="btn sm" id="vidManquantes" title="toutes les vidéos qui n'existent pas encore">Générer les manquantes</button>
       <button class="btn sm" id="vidPerimees" title="refaire les vidéos 🟠 (quelque chose a changé depuis)">Refaire les périmées</button>
       <button class="btn sm" id="vidSel" title="générer (ou refaire) les chapitres cochés">Générer la sélection</button>
-      <button class="btn sm" id="vidDl" title="télécharger les vidéos cochées, une par une">⬇ Télécharger la sélection</button>
+    </div>
+    <!-- v1.97.0 : selection gardee, tout coche par defaut, telechargement en groupe -->
+    <div class="vid-selbar">
+      <button class="btn sm" id="vidTout">☑ Tout</button><button class="btn sm" id="vidRien">☐ Rien</button>
+      <span class="vid-plage">ch. <input id="vidDe" inputmode="decimal" placeholder="1"> à <input id="vidA" inputmode="decimal" placeholder="…">
+        <button class="btn sm" id="vidPlage" title="ne cocher que ces chapitres">Cocher</button></span>
+      <span class="muted" id="vidCompte"></span>
+    </div>
+    <div class="vid-actions">
+      <button class="btn sm" id="vidDl" title="télécharger les vidéos cochées, une par une (le téléphone peut en bloquer au-delà de quelques-unes)">⬇ Une par une</button>
+      <button class="btn sm pri" id="vidZip" title="toutes les vidéos cochées dans UN fichier .zip (recommandé au-delà de 3)">⬇ En une archive .zip</button>
     </div>
     <div id="vidListe" class="vid-liste"></div>
   </div>
@@ -1355,7 +1369,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.96.0";
+const VERSION = "1.97.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -5376,7 +5390,8 @@ function vidEtat(c){
 function vidLigne(c, i, avecCase){
   const e = vidEtat(c), v = e.v, vide = "<i></i>";
   return '<div class="vid-it" data-vd="' + i + '">'
-    + (avecCase ? '<input type="checkbox" data-vid-coche="' + i + '"' + (e.cle === "sansvoix" ? " disabled" : "") + ">" : vide)
+    + (avecCase ? '<input type="checkbox" data-vid-coche="' + i + '"' + (e.cle === "sansvoix" ? " disabled" : "")
+       + (vidSel().has(c.d) ? " checked" : "") + ">" : vide)
     + '<span class="vi-nom" title="' + esc(c.titre) + '">Chapitre ' + esc(c.chapitre) + "</span>"      // la serie est deja le contexte : le N° d'abord
     + (v ? '<button class="btn sm" data-vid-voir="' + i + '" title="regarder">▶</button>' : vide)
     + (v ? '<button class="btn sm" data-vid-dl="' + i + '" title="télécharger">⬇</button>' : vide)
@@ -5400,6 +5415,8 @@ function vidTag(c){
   return tags[0] || "";
 }
 function vidVoixChange(e){
+  const cb = e.target.closest("[data-vid-coche]");
+  if (cb){ const c = VIDS.chapitres[+cb.dataset.vidCoche]; if (c){ cb.checked ? vidSel().add(c.d) : vidSel().delete(c.d); vidCompte(); } return; }
   const sel = e.target.closest("[data-vid-voix]"); if (!sel) return;
   const c = VIDS.chapitres[+sel.dataset.vidVoix]; if (!c) return;
   VID_VOIX[c.d] = sel.value; try { localStorage.setItem("manga_vid_voix", JSON.stringify(VID_VOIX)); } catch {}
@@ -5415,6 +5432,7 @@ async function vidCharger(serie){
 function vidRendre(){
   $("vidReg").textContent = "Réglages utilisés = ceux du lecteur maintenant : " + vidRegTxt(reglagesLecteur()) + ". Format 9:16.";
   $("vidListe").innerHTML = VIDS.chapitres.map((c, i) => vidLigne(c, i, true)).join("") || '<p class="muted aide" style="margin:0">Aucun chapitre.</p>';
+  vidCompte();
   const ci = VIDS.chapitres.findIndex(c => c.d === CHAP_OPEN);
   $("chapVid").innerHTML = ci >= 0 ? vidLigne(VIDS.chapitres[ci], ci, false) : "";
   document.querySelectorAll("#chapList [data-chap]").forEach(b => {         // badge sur les cartes de chapitre
@@ -5443,7 +5461,24 @@ function vidTelecharger(c){
   a.href = CFG.base + "/manga/video_file?p=" + encodeURIComponent(v.fichier) + "&dl=1&v=" + v.v + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
   a.download = ""; document.body.appendChild(a); a.click(); a.remove();
 }
-const vidCoches = () => [...document.querySelectorAll("#vidListe [data-vid-coche]:checked")].map(x => VIDS.chapitres[+x.dataset.vidCoche]);
+// v1.97.0 : la selection est un ETAT (par serie), plus la lecture des cases : un rafraichissement ne la perd plus.
+// Par defaut TOUT est coche (Quang 09h17). Les chapitres ajoutes ensuite a la serie arrivent coches aussi.
+const VID_SEL = {};
+function vidSel(){
+  const k = VIDS.serie || "";
+  if (!VID_SEL[k]) VID_SEL[k] = { set: new Set(), vus: new Set() };
+  const e = VID_SEL[k];
+  VIDS.chapitres.forEach(c => { if (!e.vus.has(c.d)){ e.vus.add(c.d); e.set.add(c.d); } });
+  return e.set;
+}
+const vidCoches = () => VIDS.chapitres.filter(c => vidSel().has(c.d));
+const fmtGo = o => o >= 1e9 ? (o / 1e9).toFixed(2).replace(".", ",") + " Go" : Math.round(o / 1e6) + " Mo";
+function vidCompte(){
+  const l = vidCoches(), av = l.filter(c => (c.videos || []).length);
+  const o = av.reduce((a, c) => a + (c.videos[0].taille || 0), 0);
+  $("vidCompte").textContent = l.length + " coché(s) · " + av.length + " vidéo(s) prête(s) · " + fmtGo(o);
+  $("vidDl").disabled = $("vidZip").disabled = !av.length;
+}
 async function vidClic(e){
   const b = e.target.closest("[data-vid-voir],[data-vid-dl],[data-vid-gen],[data-vid-suppr],[data-vid-annule]"); if (!b) return;
   const c = VIDS.chapitres[+(b.dataset.vidVoir ?? b.dataset.vidDl ?? b.dataset.vidGen ?? b.dataset.vidSuppr ?? b.dataset.vidAnnule)];
@@ -5482,6 +5517,26 @@ $("vidPerimees").onclick = () => {
 $("vidSel").onclick = () => { const l = vidCoches().filter(c => vidEtat(c).cle !== "cours" && vidEtat(c).cle !== "attente");
   if (l.some(c => (c.videos || []).length) && !confirm("Certaines vidéos cochées existent déjà : les refaire (les anciennes partent à la corbeille) ?")) return;
   vidDemander(l, true).catch(e => alert(e.message)); };
+$("vidTout").onclick = () => { VIDS.chapitres.forEach(c => vidSel().add(c.d)); vidRendre(); };
+$("vidRien").onclick = () => { vidSel().clear(); vidRendre(); };
+$("vidPlage").onclick = () => {
+  const de = parseFloat(($("vidDe").value || "").replace(",", ".")), a = parseFloat(($("vidA").value || "").replace(",", "."));
+  const lo = isNaN(de) ? -Infinity : de, hi = isNaN(a) ? Infinity : a;
+  vidSel().clear();
+  VIDS.chapitres.forEach(c => { const n = parseFloat(c.chapitre); if (!isNaN(n) && n >= lo && n <= hi) vidSel().add(c.d); });
+  vidRendre(); toast(vidCoches().length + " chapitre(s) coché(s)");
+};
+$("vidZip").onclick = () => {
+  const l = vidCoches().filter(c => (c.videos || []).length);
+  if (!l.length){ toast("aucune vidéo prête parmi les chapitres cochés"); return; }
+  const o = l.reduce((a, c) => a + (c.videos[0].taille || 0), 0);
+  if (o > 2e9 && !confirm("L'archive fera " + fmtGo(o) + " (" + l.length + " vidéos). La télécharger ?")) return;
+  const a = document.createElement("a");
+  a.href = CFG.base + "/manga/videos_zip?serie=" + encodeURIComponent(VIDS.serie) + "&d=" + encodeURIComponent(l.map(c => c.d.split("/").pop()).join(","))
+    + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
+  a.download = ""; document.body.appendChild(a); a.click(); a.remove();
+  log("archive demandée : " + l.length + " vidéo(s), " + fmtGo(o));
+};
 $("vidDl").onclick = async () => {                     // une par une, 1,5 s d'ecart : PC et telephone acceptent
   const l = vidCoches().filter(c => (c.videos || []).length);
   if (!l.length){ toast("coche des chapitres qui ont une vidéo"); return; }
