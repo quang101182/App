@@ -161,3 +161,14 @@ l'intéresse-t-elle davantage ? ⇒ Seul un contact réel avec des auteurs répo
 **BLOQUÉ SUR 2 DÉCISIONS DE QUANG** : (1) son seuil chiffré (Q7) ; (2) son accord pour contacter des auteurs
 (action publique sous son nom : post Reddit/Discord ou messages privés — rien n'est envoyé sans lui).
 Déclencheur de reprise : la réponse de Quang à ces 2 points. Q5 (prix/marge) et Q6 (acquisition) se font ensuite.
+
+## Décision de cadrage Quang (22/09 19h50) : OUTIL, pas agence
+
+> Quang : « nous proposons un outil ; après, ce qu'ils en font, c'est leur problème. Soit on crée un outil et on leur
+> permet de l'utiliser, soit on est créateur de contenu pour eux. »
+
+- Modèle OUTIL : l'auteur choisit lui-même la voix (synthèse ou la sienne) dans l'interface → il sait ce qu'il publie
+  par construction ; étiqueter ou non sur TikTok/YouTube relève de lui. La question « faut-il lui dire » disparaît.
+- Séquence retenue (proposition Claude) : la phase de PROSPECTION reste « on fait la vidéo pour lui » (vidéo gratuite,
+  moteur local actuel, zéro reconstruction) = test de demande à bas coût. L'OUTIL en ligne ne se construit que si le
+  seuil est atteint — et ce qu'on apprend en faisant les vidéos dit ce que l'outil doit contenir.
