@@ -3,7 +3,14 @@
 > Autosuffisant. « Fait » = `git log` (version courante : v1.85.0). Ce fichier ne porte
 > que le RESTANT, les pièges et le pourquoi. Le détail des mesures est dans `ROADMAP.md` § 4-ter et 4-ter-bis.
 
-## ⭐ ÉTAT AU 22/09 16h55 — v2.4.3 + manga-fetch v0.5.1 (lire d'abord)
+## ⭐ ÉTAT AU 22/09 19h00 — v2.4.5 + manga-fetch v0.5.1 (lire d'abord)
+- 18h26-18h35 : Solo Leveling (serie solo-levelng-ragnarok, VF Raijin) : ses 2 videos de lot ont la musique a 0 % (mesure :
+  135 silences dans la bande son ; OPM a 5 % = 0). Le profil a ete enregistre a 0 au clic « Lancer » de 17h33 ; Quang
+  affirme ne pas l'avoir mis a 0 -> CAUSE NON PROUVEE. Corrige : v2.4.4 « musique des vidéos » chiffre + « 0 % — coupée »,
+  v2.4.5 curseurs de volume chiffres et IDENTIQUES (lecteur 151 px a cause de « .lec-chk input{width:auto} » vs profil 90 px).
+  Son profil est TOUJOURS a 0 (decision de Quang) ; relancer « Tout traiter » apres l'avoir remonte refait les 2 videos.
+- Question Quang « que font les gens avec les recaps » : recherche sourcee faite (web-researcher), rien a coder.
+## (ancien) ÉTAT AU 22/09 16h55 — v2.4.3 + manga-fetch v0.5.1
 - Depuis 15h40 : v2.4.1 musique dans le profil · v2.4.2 ⏮/⏭ dans le lecteur VIDÉO · v2.4.3 boutons ⏮/⏭ = VRAIS numéros voisins,
   sauts signalés partout (orange + « ⚠ saut : ch. 297 sans narration / pas dans la bibliothèque ») · proxy : renommer = dossier
   D'ABORD + réessais (WinError 5 vu par Quang ; état incohérent « a » réparé à la main → corbeille).
