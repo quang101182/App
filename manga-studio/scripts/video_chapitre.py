@@ -18,7 +18,7 @@ Ecrit sources/<chap>/video/<tag>.mp4 + <tag>.json (reglages, empreinte, duree) ;
 import argparse, hashlib, json, os, random, shutil, subprocess, sys, tempfile, time
 # numpy n'est importe QUE pour fabriquer (pcm, mixer) : le proxy importe ce module pour empreinte() sans en dependre
 
-VERSION = "1.93.0"
+VERSION = "1.94.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
 W, H, FPS, SR = 1080, 1920, 30, 44100
@@ -226,7 +226,7 @@ def mixer(pages, reglages, total, sortie):
                 mus[i0:i1] += x[: i1 - i0] * env[: i1 - i0, None]
             t += max(1.0, d - FONDU); k += 1
         # gain : musTick rejoue a 10 Hz (baisse 0,02 / pas ; remonte max(0.004, cible*0.04) / pas ; 0 a la fin)
-        base = float(reglages.get("volume") or 25) / 100 * GAIN_MAX
+        base = float(25 if reglages.get("volume") is None else reglages["volume"]) / 100 * GAIN_MAX   # v1.94 : 0 % restait 25 %
         g, gains = 0.0, []
         for s in range(int((total + 1.2) * 10) + 1):
             cible = 0.0 if s / 10 >= total else base * (DUCK if s < len(parle) and parle[s] else 1)
