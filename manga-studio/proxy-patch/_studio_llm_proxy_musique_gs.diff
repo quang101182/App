@@ -1,0 +1,36 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-manga187-1790046367	2026-09-22 05:06:07.473436800 +0200
++++ C:/Users/quang/AppData/Local/Temp/claude/D--Download-02-Apps-Web-Repo-github/8297ee70-7895-4120-9400-2a0b2f99d277/scratchpad/p4.py	2026-09-22 05:06:07.526134200 +0200
+@@ -7789,6 +7789,24 @@
+     return {"ok": True, "corbeille": os.path.relpath(dest, MANGA_SOURCES)}
+ 
+ 
++def manga_musique_depuis_gs(data):                # Manga Studio v1.87.0
++    rel = str(data.get("chemin") or "").replace("\\", "/").strip("/")
++    if not rel.lower().startswith("gs/audio/") or "/_" in rel:
++        return {"error": "ce n'est pas un morceau de la playlist"}
++    root = os.path.normpath(OUT_ROOT)
++    full = os.path.normpath(os.path.join(root, rel))
++    if not full.startswith(root + os.sep) or not os.path.isfile(full):
++        return {"error": "morceau introuvable"}
++    try:
++        mp3 = mp3_depuis(full)
++    except Exception as e:
++        return {"error": "conversion MP3 impossible : %s" % str(e)[:160]}
++    with open(mp3, "rb") as f:
++        b = f.read()
++    nom = data.get("nom") or os.path.basename(os.path.dirname(full))
++    return manga_musique_import({"serie": data.get("serie"), "nom": nom, "data": base64.b64encode(b).decode("ascii")})
++
++
+ # --- Traduction des dialogues d'un chapitre (Manga Studio v1.84.0) ---------------------
+ MANGA_TRADUIRE = os.path.join(MANGA_ROOT, "scripts", "traduire_chapitre.py")
+ _TRAD_JOBS = {}                                  # (chapitre, langue) -> Popen
+@@ -9112,6 +9130,8 @@
+                 self._json(200, manga_serie_infos(data))
+             elif self.path == "/manga/karaoke":                # Manga Studio v1.86.0
+                 self._json(200, manga_karaoke(data.get("d") or "", data.get("tag") or ""))
++            elif self.path == "/manga/musique_depuis_gs":      # Manga Studio v1.87.0
++                self._json(200, manga_musique_depuis_gs(data))
+             elif self.path == "/manga/musique_import":         # Manga Studio v1.85.0
+                 self._json(200, manga_musique_import(data))
+             elif self.path == "/manga/musique_choix":

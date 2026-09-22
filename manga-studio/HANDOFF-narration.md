@@ -52,6 +52,10 @@
    Détail + chiffres : ROADMAP lignes 11 b et 13. Limites : répliques non détectées par YOLO restées en VO (piste écrite).
    ✅ **v1.86.0 karaoké dans le lecteur** (22/09 01h10) : `scripts/karaoke_mots.py` + bouton « 🎤 Karaoké » + case dans le lecteur
    (détail et pièges Whisper : ROADMAP, paragraphe (2-bis)).
+   ✅ **v1.87.0 « Prendre dans Generate Studio »** (05h10). ⚠ Route `/manga/musique_depuis_gs` écrite dans le proxy mais proxy PAS encore
+   relancé (narration K3 `kimi-charon` de Claymore en cours, lancée 05h06, ~1 h) → relancer par relance-proxy.ps1 APRÈS, puis rejouer
+   `test_musique_gs_ui.py` sur 8190 et caler le karaoké de `kimi-charon`. Les anciennes narrations audibles de Claymore (v1.66,
+   avant la méthode v2.2) disaient « Zaki » pour Raki : c'est la raison de cette relance.
    Ensuite (3) vidéo = **À DISCUTER avec Quang avant tout code**.
    ⚠ Une question de Quang (« il me semble que… ») n'est PAS un ordre : répondre, ne rien modifier.
 5. Lien mobile = l'URL du tunnel de Generate Studio (hostname dans `config-generate-agent.yml`, hors dépôt :
