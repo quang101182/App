@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Banc v2.3.0 (etape 18) : CAPTURER PLUSIEURS CHAPITRES depuis l'app, comme Quang.
+"""Banc v2.3.2 (etape 18) : CAPTURER PLUSIEURS CHAPITRES depuis l'app, comme Quang.
 
-360 px : la ligne « puis N chapitre(s) suivant(s), ou jusqu'au ch. » tient sans debordement ; « jusqu'au » avant le
-depart -> alerte et RIEN n'est envoye.
-1280 px : vraie capture OPM (MangaDex) ch.310 + 1 suivant, depuis l'interface (onglet choisi dans la liste, titre, n°,
-« 1 » suivant, confirmation acceptee) -> l'etat suit le ch. 311 en cours, bilan « ✅ 2 chapitre(s) … ch. 310, 311 »,
-les 2 chapitres apparaissent dans la bibliotheque. Titre « banc serie ui » -> sources/banc-serie-ui/, efface a la fin,
-comme l'onglet jetable ouvert dans la fenetre de capture.
+360 px : la ligne « Chapitres : [selecteur] » tient sans debordement ; le selecteur vaut « jusqu'au ch. » par defaut
+et n'affiche que le champ utile ; « jusqu'au » avant le depart -> alerte et RIEN n'est envoye.
+1280 px : vraie capture OPM (MangaDex, vi) du ch.296 jusqu'au 298, « ignorer les chapitres intermediaires » coche
+-> 296, 297, 298 (le 296.5 qui existe est saute), l'etat suit le chapitre en cours, les 3 chapitres arrivent dans la
+bibliotheque. Titre « banc serie ui » -> sources/banc-serie-ui/, efface a la fin, comme l'onglet jetable.
 Usage : python test_capture_serie_ui.py [port]
 """
 import json, os, shutil, sys, time, urllib.request
@@ -50,8 +49,8 @@ def prepare(pg):
 
 
 shutil.rmtree(BANC, ignore_errors=True)
-url310 = "https://mangadex.org/chapter/" + uuid_chapitre(310)
-with urllib.request.urlopen(urllib.request.Request(CDP + "/json/new?" + url310, method="PUT"), timeout=10) as r:
+url296 = "https://mangadex.org/chapter/" + uuid_chapitre(296)   # v2.3.2 : 296 -> 298, un 296.5 existe (vi)
+with urllib.request.urlopen(urllib.request.Request(CDP + "/json/new?" + url296, method="PUT"), timeout=10) as r:
     onglet = json.load(r)["id"]
 time.sleep(8)
 try:
@@ -71,11 +70,19 @@ try:
                     interne: Array.from(r.querySelectorAll('*')).filter(e => e.getBoundingClientRect().right > innerWidth + 1).length}; }""")
         check("360 px : la page ne déborde pas", m["page"] <= 0, m)
         check("360 px : la ligne « suivants / jusqu'au » tient dans l'écran", m["droite"] <= m["vw"] and m["interne"] == 0, m)
-        k = pg.evaluate("(u) => CAP_TABS.findIndex(t => t.url === u)", url310)
+        k = pg.evaluate("(u) => CAP_TABS.findIndex(t => t.url === u)", url296)
         pg.select_option("#capTab", str(k))
-        pg.fill("#capTitre", "banc serie ui"); pg.fill("#capChap", "310"); pg.fill("#capJusqua", "309")
+        sel = pg.evaluate("() => [document.getElementById('capSerieMode').value, !document.getElementById('capJusqua').hidden, document.getElementById('capSuite').hidden, document.getElementById('capEntiers').checked]")
+        check("sélecteur : « jusqu'au ch. » par défaut, seul son champ visible, x.5 ignorés cochés", sel == ["jusqua", True, True, True], sel)
+        pg.select_option("#capSerieMode", "suite")
+        sel = pg.evaluate("() => [document.getElementById('capJusqua').hidden, !document.getElementById('capSuite').hidden]")
+        check("sélecteur « + suivants » : l'autre champ", sel == [True, True], sel)
+        pg.select_option("#capSerieMode", "seul")
+        check("sélecteur « ce chapitre seul » : aucun champ", pg.evaluate("() => document.getElementById('capJusqua').hidden && document.getElementById('capSuite').hidden && document.getElementById('capEntiersL').hidden"))
+        pg.select_option("#capSerieMode", "jusqua")
+        pg.fill("#capTitre", "banc serie ui"); pg.fill("#capChap", "296"); pg.fill("#capJusqua", "295")
         pg.click("#btnCapturer"); pg.wait_for_timeout(1000)
-        check("« jusqu'au 309 » depuis 310 : alerte", any("plus grand que 310" in d for d in dialogues), dialogues)
+        check("« jusqu'au 295 » depuis 296 : alerte", any("plus grand que 296" in d for d in dialogues), dialogues)
         check("… et RIEN n'est envoyé", not envois, envois)
         check("360 px : aucune erreur JS", not errs, errs)
         pg.close()
@@ -87,14 +94,14 @@ try:
         pg.on("dialog", lambda dl: (dialogues.append(dl.message), dl.accept()))
         pg.on("request", lambda rq: envois.append(rq.post_data) if "/manga/fetch_capture" in rq.url else None)
         prepare(pg)
-        k = pg.evaluate("(u) => CAP_TABS.findIndex(t => t.url === u)", url310)
+        k = pg.evaluate("(u) => CAP_TABS.findIndex(t => t.url === u)", url296)
         check("l'onglet jetable est dans la liste", k >= 0, k)
         pg.select_option("#capTab", str(k))
-        pg.fill("#capTitre", "banc serie ui"); pg.fill("#capChap", "310"); pg.fill("#capSuite", "1"); pg.fill("#capJusqua", "")
+        pg.fill("#capTitre", "banc serie ui"); pg.fill("#capChap", "296"); pg.fill("#capJusqua", "298")
         pg.click("#btnCapturer"); pg.wait_for_timeout(1500)
-        check("la confirmation annonce la série", any("puis les 1 chapitre(s) suivant(s)" in d for d in dialogues), dialogues)
+        check("la confirmation annonce la série sans x.5", any("jusqu'au chapitre 298 (sans les chapitres intermédiaires)" in d for d in dialogues), dialogues)
         corps = json.loads(envois[0]) if envois else {}
-        check("envoi : suite = 1", corps.get("suite") == 1 and corps.get("chapter") == "310", corps)
+        check("envoi : jusqu'au 298, entiers", corps.get("jusqua") == "298" and corps.get("entiers") is True and corps.get("chapter") == "296", corps)
         etats, t0 = [], time.time()
         while time.time() - t0 < 600:
             e = pg.evaluate("() => document.getElementById('capEtat').textContent")
@@ -104,14 +111,14 @@ try:
                 break
             pg.wait_for_timeout(2000)
         fin = etats[-1] if etats else ""
-        check("pendant : « ch. 311 (2 sur 2) … 1 chapitre(s) déjà faits »",
-              any("ch. 311 (2 sur 2)" in e and "1 chapitre(s) déjà faits" in e for e in etats),
-              [e for e in etats if "311" in e][:1])
-        check("bilan : ✅ 2 chapitres, ch. 310, 311", fin.startswith("✅ 2 chapitre(s)") and "ch. 310, 311" in fin, fin)
+        check("pendant : « ch. 297 (jusqu'au ch. 298) … 1 chapitre(s) déjà faits »",
+              any("ch. 297 (jusqu'au ch. 298)" in e and "1 chapitre(s) déjà faits" in e for e in etats),
+              [e for e in etats if "297" in e][:1])
+        check("bilan : ✅ 3 chapitres, ch. 296, 297, 298 (pas de 296.5)", fin.startswith("✅ 3 chapitre(s)") and "ch. 296, 297, 298 " in fin, fin)
         pg.wait_for_timeout(2000)
         dirs = pg.evaluate("() => CHAPS.map(c => c.dir).filter(d => d.startsWith('banc-serie-ui/'))")
-        check("bibliothèque : les 2 chapitres", sorted(dirs) == ["banc-serie-ui/ch_310", "banc-serie-ui/ch_311"], dirs)
-        check("le 1er chapitre de la série est ouvert", pg.evaluate("() => CHAP_OPEN") == "banc-serie-ui/ch_310",
+        check("bibliothèque : les 3 chapitres", sorted(dirs) == ["banc-serie-ui/ch_296", "banc-serie-ui/ch_297", "banc-serie-ui/ch_298"], dirs)
+        check("le 1er chapitre de la série est ouvert", pg.evaluate("() => CHAP_OPEN") == "banc-serie-ui/ch_296",
               pg.evaluate("() => CHAP_OPEN"))
         check("1280 px : aucune erreur JS", not errs, errs)
         pg.close()

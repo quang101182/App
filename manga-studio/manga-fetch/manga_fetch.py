@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -250,10 +250,11 @@ def _format_num(x: float) -> str:
     return str(int(x)) if float(x).is_integer() else str(x)
 
 
-def _choisir_suivant(dispo: dict, courant: str, jusqua):
+def _choisir_suivant(dispo: dict, courant: str, jusqua, entiers: bool = False):
     """dispo = {numéro (str) : cible}. Retourne (numéro, cible, None) ou (None, None, raison)."""
     c = _num(courant)
-    apres = sorted((n for n in dispo if _num(n) > c), key=_num)
+    # v0.4.1 : « ignorer les chapitres intermédiaires » (Quang 22/09 14h47 : pas de 298.5 entre 298 et 299)
+    apres = sorted((n for n in dispo if _num(n) > c and (not entiers or _num(n).is_integer())), key=_num)
     if not apres:
         return None, None, f"aucun chapitre après le {courant} sur ce site"
     n = apres[0]
@@ -279,12 +280,12 @@ def md_chapitres_serie(chapter_uuid: str):
     return dispo, lang
 
 
-def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua):
+def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: bool = False):
     """Amène l'onglet au chapitre qui suit `courant`. Retourne (numéro, None) ou (None, raison)."""
     m = re.search(r"mangadex\.org/chapter/([0-9a-f-]{36})", url_chapitre)
     if m:
         dispo, lang = md_chapitres_serie(m.group(1))
-        n, cid, raison = _choisir_suivant(dispo, courant, jusqua)
+        n, cid, raison = _choisir_suivant(dispo, courant, jusqua, entiers)
         if n is None:
             return None, f"MangaDex : {raison} (langue {lang})"
         page.goto(f"https://mangadex.org/chapter/{cid}", wait_until="domcontentloaded", timeout=45000)
@@ -312,7 +313,7 @@ def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua):
             if items:
                 break
         dispo = {str(int(x)): x for x in items}
-        n, brut, raison = _choisir_suivant(dispo, courant, jusqua)
+        n, brut, raison = _choisir_suivant(dispo, courant, jusqua, entiers)
         if n is None:
             return None, "MANGA Plus : " + raison + " (seuls les chapitres gratuits y sont listés)"
         avant = page.url
@@ -895,7 +896,8 @@ def capture(args) -> int:
         limite = 50 if jusqua is not None else suite
         while len(faits) - 1 < limite:
             try:
-                num, raison = chapitre_suivant(page, DERNIER.get("url", page.url), chap, jusqua)
+                num, raison = chapitre_suivant(page, DERNIER.get("url", page.url), chap, jusqua,
+                                              bool(getattr(args, "sans_intermediaires", False)))
             except Exception as e:
                 num, raison = None, f"passage au chapitre suivant impossible ({type(e).__name__}: {str(e)[:120]})"
             if num is None:
@@ -1112,6 +1114,8 @@ def main() -> int:
                    help="remplacer un chapitre déjà capturé sans demander")
     s.add_argument("--suite", type=int, default=0,
                    help="v0.4.0 : capturer AUSSI les N chapitres suivants (MangaDex, MANGA Plus)")
+    s.add_argument("--sans-intermediaires", action="store_true",
+                   help="v0.4.1 : sauter les chapitres à décimale (298.5...) pendant l'enchaînement")
     s.add_argument("--jusqua", default=None,
                    help="v0.4.0 : enchaîner jusqu'au chapitre Y inclus (les trous sont sautés)")
     s.add_argument("--title", required=True)
