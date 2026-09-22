@@ -24,7 +24,7 @@ sys.path.insert(0, HERE)
 import narrate_chapter as nc          # appel_vision (Gemini natif / K3), frein 18/min, couts, journal
 import ingest_page as ip              # load_page, detect, clean_bubbles
 
-VERSION = "1.84.0"
+VERSION = "1.91.0"
 FONT_BOLD = os.path.join(HERE, "fonts", "ComicNeue-Bold.ttf")
 LANGUES = {"fr": "français", "en": "anglais", "es": "espagnol", "de": "allemand", "it": "italien",
            "pt": "portugais", "vi": "vietnamien"}
@@ -35,7 +35,7 @@ def progres(fait, total, **kw):
     if PROGRESS:
         try:
             with open(PROGRESS, "w", encoding="utf-8") as f:
-                json.dump(dict(etape="traduction", fait=fait, total=total, t=time.time(), **kw), f)
+                json.dump(dict(etape="traduction", fait=fait, total=total, t=time.time(), pid=os.getpid(), **kw), f)
         except Exception:
             pass
 
@@ -209,7 +209,7 @@ def main():
     t0 = time.time()
     nc.journal("traduction_start", chapitre=a.chapitre, langue=a.langue, pages=len(pages))
     for n, p in enumerate(pages, 1):
-        progres(n - 1, len(pages))
+        progres(n - 1, len(pages), cout=round(stats["cout"], 5))       # v1.91.0 : depense cumulee, lue par la pastille des couts
         im = ip.load_page(os.path.join(chap, p["file"]))
         _, texts = ip.detect(im, a.conf)
         texts = sans_chevauchement(texts)

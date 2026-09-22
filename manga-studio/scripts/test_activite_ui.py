@@ -24,7 +24,7 @@ def check(nom, cond, detail=""):
 reel = json.load(urllib.request.urlopen(urllib.request.Request(
     "http://127.0.0.1:%d/manga/activite" % PORT, headers={"Authorization": "Bearer " + KEY}), timeout=30))
 print("activite reelle :", [(x["type"], x.get("titre"), x.get("fait"), x.get("total")) for x in reel["items"]])
-N1 = {"type": "narration", "d": "claymore/ch_1", "titre": "Claymore", "chapitre": "1", "tag": "kimi-charon", "etape": "vision", "fait": 12, "total": 62}
+N1 = {"type": "narration", "d": "claymore/ch_1", "titre": "Claymore", "chapitre": "1", "tag": "kimi-charon", "etape": "vision", "fait": 12, "total": 62, "reste_s": 480}
 T1 = {"type": "traduction", "d": "one-punch-man/ch_301", "titre": "One Punch Man", "chapitre": "301", "langue": "fr", "fait": 3, "total": 19}
 HAUT = "() => document.querySelector('header').getBoundingClientRect().height"
 
@@ -65,6 +65,9 @@ with sync_playwright() as p:
         pg.click("#hdrAct"); pg.wait_for_timeout(500)
         n = pg.locator("#actListe .act-it").count()
         check("clic : panneau avec les 2 taches et leurs barres", n == 2 and pg.locator("#actListe .act-bar").count() == 2, n)
+        lst = pg.inner_text("#actListe")
+        check("temps restant : « ~8 min » (cellule + detail), « calcul… » quand inconnu",
+              "~8 min" in pg.inner_text("#actTxt") and "reste ~8 min pour cette étape" in lst and "calcul du temps restant" in lst, lst.replace(chr(10), " | ")[:160])
         check("panneau superpose : la hauteur ne bouge pas", pg.evaluate(HAUT) == h0)
         pp = pg.locator("#actPanel").bounding_box()
         check("panneau entierement dans l'ecran", pp["x"] >= 0 and pp["x"] + pp["width"] <= w, pp)

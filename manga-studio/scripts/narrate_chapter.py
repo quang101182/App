@@ -25,7 +25,7 @@ Stdout : un seul objet JSON (le resume du run). Le bruit part sur stderr.
 import argparse, base64, io, json, os, re, subprocess, sys, time, urllib.request, urllib.error
 from datetime import datetime
 
-VERSION = "1.75.0"
+VERSION = "1.91.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -88,15 +88,20 @@ def journal(ev, **kw):
 
 
 PROGRESS = None
+STATS = None                  # v1.91.0 : les stats du run en cours -> la depense cumulee part dans progress.json
 
 
 def progres(etape, fait, total, **kw):
-    """progress.json a cote du resultat : ce que l'app lit pour sa barre de progression."""
+    """progress.json a cote du resultat : ce que l'app lit pour sa barre de progression.
+    v1.91.0 : porte aussi `couts` (depense cumulee par poste) : la pastille des couts compte un run EN COURS,
+    au lieu de le decouvrir a la fin (Quang, 22/09 : « le cout n'a pas ete calcule et affiche »)."""
     if not PROGRESS:
         return
+    if STATS is not None and "couts" not in kw:
+        kw["couts"] = {k: round(v, 5) for k, v in STATS.items() if k.startswith("cout_") and k != "cout_total" and v}
     try:
         with open(PROGRESS, "w", encoding="utf-8") as f:
-            json.dump(dict(etape=etape, fait=fait, total=total, t=time.time(), **kw), f, ensure_ascii=False)
+            json.dump(dict(etape=etape, fait=fait, total=total, t=time.time(), pid=os.getpid(), **kw), f, ensure_ascii=False)
     except Exception:
         pass
 
@@ -747,7 +752,7 @@ def pages_du_chapitre(chap_dir, plage):
 
 
 def main():
-    global SECRET, PROGRESS
+    global SECRET, PROGRESS, STATS
     ap = argparse.ArgumentParser()
     ap.add_argument("chapitre", help="chemin relatif sous sources/, ex. claymore/ch_1")
     ap.add_argument("--engine", choices=sorted(ENGINES), default="kimi")   # v1.70 : K3 v2.2 = 4 graves/60 pages vs Gemini 7 (21/09)
@@ -783,6 +788,7 @@ def main():
     man, pages = pages_du_chapitre(chap_dir, a.pages)
     stats = dict(vision_tokens_in=0, vision_tokens_out=0, cout_vision=0.0, cout_recit=0.0, cout_tts=0.0,
                  tts_chars=0, vision_s=0.0, recit_s=0.0, tts_s=0.0)
+    STATS = stats
     journal("start", chapitre=a.chapitre, engine=a.engine, pages=len(pages), tag=tag)
     t0 = time.time()
 

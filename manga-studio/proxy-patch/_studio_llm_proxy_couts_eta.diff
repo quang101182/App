@@ -1,0 +1,95 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-manga191-1790048940	2026-09-22 05:49:00.890315900 +0200
++++ C:/Users/quang/AppData/Local/Temp/claude/D--Download-02-Apps-Web-Repo-github/8297ee70-7895-4120-9400-2a0b2f99d277/scratchpad/p7.py	2026-09-22 05:49:01.177081700 +0200
+@@ -7687,6 +7687,9 @@
+         return {}
+ 
+ 
++_ACT_VIT = {}                                    # v1.91.0 : (tache, etape) -> (1re fois vue, unites faites alors)
++
++
+ def manga_activite():
+     """Tout ce qui travaille en ce moment, tous chapitres confondus (Manga Studio v1.88.0)."""
+     out = []
+@@ -7731,7 +7734,18 @@
+                         "fait": fs.get("pages"), "total": None, "d": None})
+     except Exception:
+         pass
+-    return {"items": out, "t": time.time()}
++    maintenant = time.time()                     # v1.91.0 : temps restant, a la vitesse MESUREE de l'etape
++    for it in out:
++        cle = (it["type"], it.get("d"), it.get("tag") or it.get("langue"), it.get("etape"))
++        fait, total = it.get("fait"), it.get("total")
++        if not isinstance(fait, (int, float)) or not total:
++            continue
++        t0, f0 = _ACT_VIT.setdefault(cle, (maintenant, fait))
++        if fait < f0:                            # l'etape a redemarre : on repart de zero
++            _ACT_VIT[cle] = (maintenant, fait); continue
++        if fait - f0 >= 2 and maintenant - t0 >= 20:
++            it["reste_s"] = round((total - fait) * (maintenant - t0) / (fait - f0))
++    return {"items": out, "t": maintenant}
+ 
+ 
+ def manga_karaoke(d, tag):
+@@ -8301,11 +8315,39 @@
+                 continue
+             for ch in os.listdir(sd):
+                 nd = os.path.join(sd, ch, "narration")
++                # v1.91.0 : les TRADUCTIONS sont des depenses aussi (finies ET en cours)
++                trd = os.path.join(sd, ch, "traduction")
++                for lg in (os.listdir(trd) if ch.startswith("ch_") and os.path.isdir(trd) else []):
++                    tj, tp = os.path.join(trd, lg, "traduction.json"), os.path.join(trd, lg, "progress.json")
++                    try:
++                        if os.path.isfile(tj):
++                            with open(tj, encoding="utf-8") as f: t = json.load(f)
++                            runs.append({"chap": slug + "/" + ch, "tag": "traduction " + lg, "engine": t.get("engine") or "?",
++                                         "date": (t.get("created_at") or "")[:19], "prompt": "traduction", "reuse": None,
++                                         "st": {"cout_traduction": (t.get("stats") or {}).get("cout", 0)}})
++                        if os.path.isfile(tp):
++                            with open(tp, encoding="utf-8") as f: pr = json.load(f)
++                            if not pr.get("fini") and pr.get("cout"):
++                                runs.append({"chap": slug + "/" + ch, "tag": "traduction " + lg + " (en cours)", "engine": "gemini",
++                                             "date": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(float(pr.get("t") or 0))),
++                                             "prompt": "traduction", "reuse": None, "st": {"cout_traduction": pr["cout"]}})
++                    except Exception:
++                        pass
+                 if not ch.startswith("ch_") or not os.path.isdir(nd):
+                     continue
+                 for tag in os.listdir(nd):
+                     td = os.path.join(nd, tag)
+                     np_ = os.path.join(td, "narration.json")
++                    pp_ = os.path.join(td, "progress.json")
++                    if not os.path.isfile(np_) and os.path.isfile(pp_):     # v1.91.0 : narration EN COURS
++                        try:
++                            with open(pp_, encoding="utf-8") as f: pr = json.load(f)
++                            if pr.get("etape") != "fini" and pr.get("couts"):
++                                runs.append({"chap": slug + "/" + ch, "tag": tag + " (en cours)", "engine": tag.split("-")[0],
++                                             "date": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(float(pr.get("t") or 0))),
++                                             "prompt": None, "reuse": None, "st": dict(pr["couts"])})
++                        except Exception:
++                            pass
+                     if os.path.isfile(np_):
+                         try:
+                             with open(np_, encoding="utf-8") as f: n = json.load(f)
+@@ -8316,6 +8358,12 @@
+                                      "date": (n.get("created_at") or time.strftime("%Y-%m-%dT%H:%M:%S",
+                                      time.localtime(os.path.getmtime(np_))))[:19], "prompt": n.get("prompt"),
+                                      "reuse": n.get("reuse_vision"), "st": st})
++                        ka = st.get("karaoke") or {}                          # v1.91.0 : le karaoke, a sa date
++                        if ka.get("cout"):
++                            runs.append({"chap": slug + "/" + ch, "tag": tag + " (karaoke)", "engine": "whisper",
++                                         "date": (ka.get("quand") or time.strftime("%Y-%m-%dT%H:%M:%S",
++                                                  time.localtime(os.path.getmtime(np_))))[:19],
++                                         "prompt": "karaoke", "reuse": None, "st": {"cout_karaoke": ka["cout"]}})
+                     fp = os.path.join(td, "fidelite.json")
+                     if os.path.isfile(fp):
+                         try:
+@@ -8356,7 +8404,8 @@
+                 r["reuse"] = vus[cle]
+             vus.setdefault(cle, r["tag"])
+     etapes = {"noms": "cout_noms", "lecture": "cout_vision", "verification": "cout_verif", "recit": "cout_recit",
+-              "voix": "cout_tts", "fusion": "cout_fusion", "juge": "cout_juge"}
++              "voix": "cout_tts", "fusion": "cout_fusion", "juge": "cout_juge",
++              "traduction": "cout_traduction", "karaoke": "cout_karaoke"}                  # v1.91.0
+     par_etape, par_moteur, lignes = {}, {}, []
+     auj, mois = time.strftime("%Y-%m-%d"), time.strftime("%Y-%m")
+     t_auj = t_mois = t_tot = 0.0

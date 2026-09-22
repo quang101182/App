@@ -1,0 +1,55 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-manga191b-1790049020	2026-09-22 05:50:20.374147700 +0200
++++ C:/Users/quang/AppData/Local/Temp/claude/D--Download-02-Apps-Web-Repo-github/8297ee70-7895-4120-9400-2a0b2f99d277/scratchpad/p9.py	2026-09-22 05:50:59.449220000 +0200
+@@ -7172,6 +7172,16 @@
+ _IMG_EXT = (".png", ".jpg", ".jpeg", ".webp")
+ 
+ 
++def _run_vivant(pr):
++    """Une tache (narration, traduction, karaoke) tourne-t-elle encore ? pr = son progress.json. (v1.91.0)"""
++    if not pr or pr.get("fini") or pr.get("etape") == "fini":
++        return False
++    age = time.time() - float(pr.get("t") or 0)
++    if pr.get("pid"):
++        return age < 3600 and _pid_vivant(pr["pid"])
++    return age < 600                                         # run lance avant v1.91 (sans PID) : 10 min de repli
++
++
+ def _manga_src_safe(rel):
+     """Chemin RELATIF resolu sous MANGA_SOURCES, ou None (anti '..')."""
+     rel = (rel or "").replace("\\", "/").lstrip("/")
+@@ -7280,7 +7290,7 @@
+             try:
+                 with open(os.path.join(racine, "progress.json"), encoding="utf-8") as f:
+                     pr = json.load(f)
+-                if pr.get("etape") != "fini" and time.time() - float(pr.get("t") or 0) < 180:
++                if _run_vivant(pr):
+                     return "une narration est en cours (%s)" % os.path.relpath(racine, MANGA_SOURCES)
+             except Exception:
+                 pass
+@@ -7674,7 +7684,7 @@
+     try:
+         with open(os.path.join(td, "karaoke_progress.json"), encoding="utf-8") as f:
+             pr = json.load(f)
+-        return not pr.get("fini") and time.time() - float(pr.get("t") or 0) < 180
++        return _run_vivant(pr)
+     except Exception:
+         return False
+ 
+@@ -8023,7 +8033,7 @@
+             pass
+         job = _TRAD_JOBS.get((d.strip("/"), lg))
+         vivant = (job and job.poll() is None) or (
+-            it.get("progress") and not it["progress"].get("fini") and time.time() - float(it["progress"].get("t") or 0) < 180)
++            _run_vivant(it.get("progress")))
+         tj = os.path.join(td, "traduction.json")
+         if vivant:
+             it["etat"] = "en cours"
+@@ -8074,7 +8084,7 @@
+             # Un run lance AVANT un redemarrage du proxy n'est plus dans _NARR_JOBS : on le juge aussi
+             # vivant si sa progression a bouge il y a moins de 3 min (un lot vision K3 = ~60 s).
+             if not it["running"] and it["etat"] != "fini" and it.get("progress", {}).get("etape") != "fini":
+-                it["running"] = time.time() - float(it.get("progress", {}).get("t") or 0) < 180
++                it["running"] = _run_vivant(it.get("progress"))
+             if it["running"]:
+                 it["etat"] = "en cours"
+             elif it["etat"] != "fini" and "progress" in it:

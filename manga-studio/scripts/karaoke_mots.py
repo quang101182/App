@@ -139,7 +139,7 @@ def main():
     fp = os.path.join(nd, "karaoke_progress.json")
 
     def progres(fini=False):                     # v1.88.0 : lu par le proxy (cellule d'activite, survit a un redemarrage)
-        json.dump({"fait": faits, "total": len(a_faire), "t": time.time(), "fini": fini}, open(fp, "w", encoding="utf-8"))
+        json.dump({"fait": faits, "total": len(a_faire), "t": time.time(), "fini": fini, "pid": os.getpid()}, open(fp, "w", encoding="utf-8"))
 
     progres()
     for p in a_faire:
@@ -159,7 +159,8 @@ def main():
     k = st.get("karaoke") or {}
     k.update(modele=MODELE, pages=faits + (k.get("pages", 0) if not force else 0),
              cout=round((k.get("cout", 0) if not force else 0) + secs / 3600 * PRIX_HEURE, 5),
-             ancres=round(ancres / total, 3) if total else None, s=round(time.time() - t0, 1), version=VERSION)
+             ancres=round(ancres / total, 3) if total else None, s=round(time.time() - t0, 1), version=VERSION,
+             quand=time.strftime("%Y-%m-%dT%H:%M:%S"))                  # v1.91.0 : date de la depense (pastille des couts)
     st["karaoke"] = k
     tmp = fj + ".tmp"
     json.dump(n, open(tmp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
