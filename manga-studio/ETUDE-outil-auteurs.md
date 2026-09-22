@@ -113,3 +113,51 @@ Sources : sous-agent web-researcher + vérification directe des pages clés.
   « Strictly NO Gen-AI » (20/06/2026), et une offre de trailers IA gratuits à 0 pt (29/07/2026).
   ⇒ Une **voix off IA** sur une œuvre dessinée à la main peut être rejetée par les auteurs ET leurs lecteurs. À
   instruire en Q3 : c'est peut-être le vrai frein, plus que la concurrence.
+
+## Q2 — Le marché : 🟠 NICHE (vérifié 22/09 19h35)
+
+- **WEBTOON : ~400 000 créateurs de BD** au 31/12/2025 (10-K FY2025, recoupé ; les « 27 M » du même document sont des
+  créateurs de ROMANS web, pas de BD — erreur du sous-agent corrigée). Le 10-K : « la grande majorité sont des amateurs ».
+  https://www.sec.gov/Archives/edgar/data/1997859/000199785926000028/wbtn-20251231.htm
+- Partage pub CANVAS : > 40 000 pages vues US/mois ET > 1 000 abonnés, 50 % du net, versement via Patreon dès 100 $.
+  https://www.webtoons.com/en/notice/detail?noticeNo=825
+- **Nombre de créateurs CANVAS réellement payés : INTROUVABLE** (aucune source primaire). Le sous-agent avance
+  8 000-20 000 (2-5 % des 400 000) : **HYPOTHÈSE NON SOURCÉE**, à ne pas citer comme un fait.
+- CANVAS international unifié (printemps 2026, 7 langues dont FR), 47 M$ créateurs en 2026, 2,7 Md$ versés 2021-2025.
+  https://ir.webtoon.com/news-releases/news-release-details/webtoon-entertainment-announces-unified-international-canvas
+- **Tapas : fermeture ANNONCÉE PAR LA PRESSE le 22/09/2026** (Kakao consolide sur KakaoPage), 80 000 créateurs cumulés
+  Tapas+Kakao Webtoon. ⚠ Encore un « report » de sources coréennes ; annonce officielle attendue le **29/09/2026**.
+  https://www.comicsbeat.com/report-kakao-is-shutting-down-tapas-webtoon-platform/ → Tapas retiré du marché visé.
+- GlobalComix, indépendants : pas chiffrables (données 2022, ou rien).
+
+## Q3 — La volonté de payer : 🟠 PLAUSIBLE, NON PROUVÉE ; le frein n°1 est l'IA, pas le prix
+
+- Outils déjà payés par un auteur actif (prix vérifiés) : Clip Studio EX ~77 $/an, Canva Pro 12-18 $/mois, CapCut Pro
+  15-20 $/mois, ElevenLabs Creator 22 $/mois → une dépense de 10-20 $/mois pour un outil est NORMALE dans ce milieu.
+- Prix du service humain : un gig Fiverr « promouvoir votre webtoon » à 60 $ (vérifié) ; l'offre r/WebtoonCanvas à 50 $
+  la vidéo montée (Q1). Grille Fiverr complète non lisible (403).
+- **Hostilité à l'IA : FAIT, répété, documenté** — Knight King redessiné après repérage de fonds IA (Korea Times 06/11/2025),
+  concours WEBTOON 2025 interdit à l'IA, loi coréenne d'étiquetage IA (01/2026), étude CHI 2026, + les fils Reddit de Q1.
+  ⚠ Tout ça vise l'IA **sur le dessin**. Aucun incident trouvé sur une **voix off IA** dans une promo : la distinction
+  « outil marketing ≠ œuvre » est une DÉDUCTION, pas un fait. Seul indice direct : « je ne veux pas que l'IA touche mon
+  art… ça tue ma réputation » (réponse la mieux notée à une offre de trailers IA gratuits, 29/07/2026).
+
+## Q4 — Concurrence directe : voir Q1 (ComicInk hors de prix à la seconde, WTN Suite = recaps de piratage). Le vrai
+concurrent est le **fait maison** (CapCut + voix humaine ou ElevenLabs) et le **monteur à ~50-60 $**.
+
+## Piste à instruire, NON décidée (22/09 19h40)
+
+L'auteur qui payait 50 $/vidéo avait DÉJÀ une voix humaine (comédien) : il achetait le **montage**, pas la voix.
+⇒ Variante « sans IA générative visible » : l'auteur apporte SES planches + SA voix (ou celle d'un comédien) ; l'outil
+découpe les bandes, cale les cases sur l'audio, pose le karaoké, la musique, le 9:16. Réutilise notre moteur
+(découpage manga-fetch, karaoké, file vidéo) et esquive le rejet de l'IA. La voix IA resterait une OPTION.
+Demande à vérifier comme le reste : aucune preuve pour l'instant qu'elle soit plus vendable.
+
+## Bilan provisoire au 22/09 19h40 — PAS de GO/NO-GO possible depuis le bureau
+
+Ce que la recherche documentaire a pu trancher est tranché (Q1 à Q4). Ce qui décide vraiment ne se trouve PAS en
+ligne : (a) un auteur paie-t-il ? (b) une voix IA le fait-elle fuir ? (c) la variante « ta voix, notre montage »
+l'intéresse-t-elle davantage ? ⇒ Seul un contact réel avec des auteurs répond (méthode imposée : 5-10 échanges).
+**BLOQUÉ SUR 2 DÉCISIONS DE QUANG** : (1) son seuil chiffré (Q7) ; (2) son accord pour contacter des auteurs
+(action publique sous son nom : post Reddit/Discord ou messages privés — rien n'est envoyé sans lui).
+Déclencheur de reprise : la réponse de Quang à ces 2 points. Q5 (prix/marge) et Q6 (acquisition) se font ensuite.
