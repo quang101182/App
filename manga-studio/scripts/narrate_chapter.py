@@ -25,7 +25,7 @@ Stdout : un seul objet JSON (le resume du run). Le bruit part sur stderr.
 import argparse, base64, io, json, os, re, subprocess, sys, time, urllib.request, urllib.error
 from datetime import datetime
 
-VERSION = "1.98.1"
+VERSION = "1.98.2"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -248,6 +248,9 @@ avec EXACTEMENT les memes numeros de page que l'entree, dans le meme ordre."""
 def etape_vision(chap_dir, pages, engine, batch, stats):
     path, model = ENGINES[engine]
     resume, persos, sortie = "", [], []
+    # v1.98.2 : l'etape s'annonce DES son debut. Sinon l'app affichait l'etape precedente terminee (« noms 19/19,
+    # < 1 min ») pendant tout le 1er lot, plusieurs minutes chez K3 (Quang, 22/09 10h26 : « bloquee a une minute »).
+    progres("vision", 0, len(pages))
     for i in range(0, len(pages), batch):
         lot = pages[i:i + batch]
         nums = [p["num"] for p in lot]
@@ -395,6 +398,9 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
         desc = ", ".join(x for x in (v["age"], v["cheveux"], v.get("teint") and "teint " + v["teint"], v.get("tenue")) if x)
         fiche[nom.lower()] = {"description": desc, "nom": nom,
                               "preuve": "vote %s, pages %s" % (v["votes"], v["pages"]), "fige": True}
+    # v1.98.2 : l'etape s'annonce DES son debut. Sinon l'app affichait l'etape precedente terminee (« noms 19/19,
+    # < 1 min ») pendant tout le 1er lot, plusieurs minutes chez K3 (Quang, 22/09 10h26 : « bloquee a une minute »).
+    progres("vision", 0, len(pages))
     for i in range(0, len(pages), batch):
         lot = pages[i:i + batch]
         nums = [p["num"] for p in lot]
