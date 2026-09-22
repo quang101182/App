@@ -2111,3 +2111,60 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 | 2026-07-26 | **Phase 5 franchie — bulles et lettrage** (v1.2.0). Calque SVG unique (écran = export par construction), 5 formes, queue orientable, police Comic Neue embarquée, export PNG **et** PDF écrit à la main. Trois défauts trouvés par la mesure, dont **le voile de génération qui recouvrait chaque case depuis la v1.0.1** — invisible dans les chiffres, évident à l'écran ⇒ le banc prend désormais une **capture**. Reste : le relettrage d'une page traduite, qui attend un écran d'**ingestion** dans l'app. |
 | 2026-07-26 | **Phase 4 franchie — l'app existe.** `manga_studio.html` v1.0.1 (single-file, servie par le proxy sur `/manga`), tables SQLite dédiées `manga_projects/pages/panels` (schéma v3), routes `/manga/*`. Planche de 6 cases de bout en bout : 6/6, 0 erreur JS sur PC **et** Samsung réel, 12/12 responsive. **Exigence Quang du jour : les sorties ne se mélangent plus à celles de Generate Studio** (851→851 fichiers à la racine, 0 résidu) ; 62 fichiers d'exploration rapatriés. Un défaut invisible à l'œil trouvé par le banc : créer un projet ne le sélectionnait pas → cases rangées chez un voisin. Arbitrage Quang : l'app **avant** le LoRA v2, stockage en **table dédiée**. |
 | 2026-07-26 | **Phase 2 franchie, 6/6.** Fond maître + ControlNet depth @ 0,55. Témoin sans ControlNet = 0/4 ⇒ répéter le décor dans le prompt est inopérant. Découverte structurante : décor figé et identité fine sont **incompatibles dans une même case** ⇒ règle des deux types de cases. Prochaine étape : **phase 3, ingestion des scans**. |
+
+### 27 — PROFIL DE SÉRIE + « TOUT TRAITER » (cadrage 22/09 15h10, demande Quang 15h00-15h03) — ⏳ À VALIDER AVANT CODE
+
+**Demande** : régler une fois (moteur, voix, langue de traduction, musique, karaoké, « Précédemment », vidéo), l'appliquer
+à toute la série, puis lancer d'un geste la chaîne complète — sur toute la série ou une sélection — jusqu'à la vidéo de
+chaque chapitre. + un bouton « ces réglages = mes réglages par défaut » pour toute NOUVELLE série. « Pratique,
+ergonomique et joli. » Quang (15h03) : « je te laisse prendre les meilleures décisions ».
+
+**Constat qui fixe l'architecture (vérifié dans le code 22/09)** : `scripts/suivi_nuit.py` EST déjà cette chaîne
+(narration → karaoké → « Précédemment » → vidéo, réglages par série dans `sources/<serie>/suivi.json`, verrou « un seul
+passage », journal). ⇒ **on l'étend, on n'en écrit pas une 2ᵉ.** Il lui manque : la traduction, une sélection de
+chapitres à la demande, le « refaire », et des réglages par défaut.
+
+**Trois niveaux de réglages**
+| Niveau | Fichier | Rôle |
+|---|---|---|
+| Défaut général | `sources/_profil_defaut.json` (NOUVEAU) | ce que reçoit une série qui n'a pas encore de profil ; ⭐ « En faire mes réglages par défaut » y copie le profil affiché |
+| Profil de la série | `sources/<serie>/suivi.json` (EXISTANT, étendu) | moteur, voix, `traduction` (NOUVEAU : "" = aucune, sinon fr/en/…), karaoké, précédemment, vidéo + `reglages_video`, `actif` (nuit) ; ↺ « Reprendre mes défauts » |
+| Chapitre | `musique.json` (EXISTANT) | seule exception par chapitre en v1 : la musique « propre au chapitre ». Moteur/voix par chapitre = plus tard si le besoin apparaît (la narration « Autre voix » reste possible à la main) |
+La musique de la série reste `musique/choix.json` (existant) : le profil l'AFFICHE et renvoie à son bloc, il ne la duplique pas.
+
+**Décisions (croisements)**
+1. Ordre, par chapitre : narration → karaoké → traduction → « Précédemment » → vidéo. **Chapitre par chapitre** (le 1er
+   est regardable pendant que les suivants se font).
+2. Déjà fait = sauté : narration `<moteur>-<voix>` finie, karaoké présent, traduction `<lg>` finie, ouverture à jour,
+   vidéo « à jour ». Case « refaire » (lot uniquement) : force narration + étapes en aval.
+3. Traduction vers la langue d'origine du chapitre : sautée (la protection fr→fr existe déjà).
+4. Pages de la vidéo : traduites si la traduction existe, sinon VO (le proxy le fait déjà).
+5. Un chapitre qui échoue n'arrête pas le lot : essai suivant, bilan « N faits / M échecs (raison) ».
+6. Estimation coût + durée AVANT (celle du suivi, étendue à la traduction), confirmation ; pas de plafond auto.
+7. La nuit (01:30) = la même chaîne sur les nouveaux chapitres des séries « actif ».
+8. Un seul lot à la fois (verrou existant) ; capture et narration manuelle restent possibles en parallèle (frein commun).
+9. Progression visible dans la cellule d'activité : « ⚙ lot One Punch-Man — ch. 297 (3/5) · narration ».
+
+**Écran** (remplace le panneau « 🌙 Suivi », même langage visuel que la fiche : titres à icône + liserés)
+```
+⚙ Profil de la série — One Punch-Man                          [✕]
+│🎙 Narration   moteur [Kimi K3 ▾]   voix [Charon ▾] [▶]
+│🌐 Traduction  [aucune ▾]     (VO vietnamien)
+│🎵 Musique     2 morceaux de la série  → régler
+│✨ Extras      [✓] karaoké   [✓] « Précédemment… »
+│🎬 Vidéo       [✓] fabriquer   vitesse 1,15 · sous-titres · musique 25 %
+│🌙 La nuit     [✓] traiter tout seul les nouveaux chapitres (01:30)
+ ⭐ En faire mes réglages par défaut     ↺ Reprendre mes défauts
+ ─────────────────────────────────────────────────────────────
+ ▶ Tout traiter…
+   (•) chapitres pas terminés   ( ) toute la série   ( ) ma sélection
+   [295 🎙🎤🌐🎬] [296 🎙· · ·] [297 · · · ·] …   (puce = état par étape)
+   [ ] refaire même ce qui est déjà fait
+   ≈ 5 chapitres · ~4,20 $ · ~2 h 10          [Lancer]
+```
+
+**Phases** (un commit + banc chiffré chacune)
+- P1 moteur : `suivi_nuit.py` → `--chapitres`, `--refaire`, étape traduction, défaut général ; bancs à sec (`--dry`) + un vrai lot 2 chapitres Gemini.
+- P2 proxy : `GET/POST /manga/profil_defaut`, profil étendu, `POST /manga/suivi_lancer {serie, chapitres, refaire}`, estimation + traduction, item « lot » dans `/manga/activite`.
+- P3 app : le panneau ci-dessus (1280 + 360 px, captures), bilan du lot.
+- DoD : un lot réel de 2-3 chapitres lancé depuis l'app, de la capture brute à la vidéo, sans intervention ; défaut appliqué à une série neuve ; nuit à sec (`--dry`) cohérente.
