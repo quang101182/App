@@ -32,6 +32,7 @@ On le comble ici plutôt que de le signaler une deuxième fois.
 | `_studio_llm_proxy_couts.diff` | v1.72.0 : `GET /manga/costs` = suivi des couts (somme des stats MESUREES des narration.json + bancs de fidelite ; reutilisation de lecture = tout sauf noms+lecture ; consensus = fusion seule ; date = created_at sinon mtime). Recoupe a l'identique par un calcul independant (5,332 $ le 21/09). |
 | `_studio_llm_proxy_precedemment.diff` | v1.94.0 (`patch_precedemment.py`) : `GET/POST /manga/precedemment` (« Précédemment… » et rattrapage, `scripts/precedemment.py` en fond), poste de coût `precedemment` (corbeille comprise), cellule d'activité. |
 | `_studio_llm_proxy_pwa.diff` | v1.95.0 (`patch_pwa.py`) : `/manga/manifest.webmanifest`, `/manga/sw.js`, `/manga/icon-*.png` PUBLICS (liste fermée, fichiers de `pwa/`, aucun secret), `/manga` → 302 `/manga/` (portée de la PWA). |
+| `_studio_llm_proxy_video_prec.diff` | v1.95.1 (`patch_video_prec.py`) : réglage vidéo `precedemment` (liste blanche + raison « à refaire »), `_video_nom()` = nom lisible du fichier téléchargé (`filename*` UTF-8 + repli ASCII). |
 
 **Ce sont des ajouts purs.** Aucune ligne existante de Generate Studio n'est modifiée : les diffs ne
 contiennent que des `+`, à l'exception de la ligne `SCHEMA_VERSION = 2` → `3` et de l'ajout de `shutil`

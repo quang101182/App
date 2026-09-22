@@ -12,13 +12,13 @@ le lecteur (montrerPage / musTick / karTick de manga_studio.html) au lieu d'inve
 Format 9:16 (1080 x 1920) : titre en haut, scene, bandeau de sous-titres en bas. Encodage NVENC, 0 $.
 
 Usage : python video_chapitre.py <serie/ch_N> <tag> --reglages '<json>' [--pages 1-3] [--sortie x.mp4]
-reglages = {vitesse, sous, karaoke, musique, volume, musique_noms: [...], pages: "" | "fr", graine}
+reglages = {vitesse, sous, karaoke, musique, volume, musique_noms: [...], pages: "" | "fr", graine, precedemment}
 Ecrit sources/<chap>/video/<tag>.mp4 + <tag>.json (reglages, empreinte, duree) ; progression dans <tag>.progress.json.
 """
 import argparse, hashlib, json, os, random, shutil, subprocess, sys, tempfile, time
 # numpy n'est importe QUE pour fabriquer (pcm, mixer) : le proxy importe ce module pour empreinte() sans en dependre
 
-VERSION = "1.94.0"
+VERSION = "1.95.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
 W, H, FPS, SR = 1080, 1920, 30, 44100
@@ -73,11 +73,24 @@ def charger(chap, tag, reglages, plage=None):
         tj = os.path.join(cd, "traduction", lg, "traduction.json")
         if os.path.isfile(tj):
             trad = {x["source"]: os.path.join(cd, "traduction", lg, x["file"]) for x in json.load(open(tj, encoding="utf-8")).get("pages") or []}
+    # v1.95.0 : « Precedemment... » en tete, comme le lecteur quand la case 📜 est cochee (decision Quang 22/09)
+    oj = os.path.join(cd, "precedemment", "ouverture.json")
+    pre = []
+    if reglages.get("precedemment") and not plage and os.path.isfile(oj):
+        for x in json.load(open(oj, encoding="utf-8")).get("items") or []:
+            if x.get("audio") and os.path.isfile(os.path.join(cd, "precedemment", x["audio"])):
+                pre.append({"page": "résumé", "type": "histoire", "narration": x.get("narration"), "audio": x["audio"],
+                            "dur": x.get("dur"), "_prec": True, "_src_img": os.path.join(SRC, x["img"]) if x.get("img") else None,
+                            "_src_audio": os.path.join(cd, "precedemment", x["audio"])})
+    pages = [p for p in pre if p["_src_img"] and os.path.isfile(p["_src_img"])] + pages
     v = float(reglages.get("vitesse") or 1)
     t = 0.0
     for i, p in enumerate(pages):
-        p["_img"] = trad.get(p["file"]) or os.path.join(cd, p["file"])
-        p["_audio"] = os.path.join(nd, p["audio"]) if p.get("audio") else None
+        if p.get("_prec"):
+            p["_img"], p["_audio"] = p["_src_img"], p["_src_audio"]
+        else:
+            p["_img"] = trad.get(p["file"]) or os.path.join(cd, p["file"])
+            p["_audio"] = os.path.join(nd, p["audio"]) if p.get("audio") else None
         p["_voix"] = (p.get("dur") or 3) / v if p["_audio"] else 0.0
         p["_duree"] = p["_voix"] + GAP if p["_audio"] else MUETTE
         p["_anim"] = max(4.0, (p.get("dur") or 3) / v + 1)      # --kb du lecteur
@@ -102,7 +115,7 @@ def empreinte(chap, tag, reglages):
     for nom in reglages.get("musique_noms") or []:
         f = [x for x in (os.listdir(md) if os.path.isdir(md) else []) if os.path.splitext(x)[0] == nom]
         mus.append(st(os.path.join(md, f[0])) if f else [nom, None])
-    return {
+    out = {
         "narration": h([(p.get("page"), p.get("file"), p.get("narration"), p.get("audio"), p.get("dur")) for p in n["pages"]]),
         "karaoke": h([p.get("mots") for p in n["pages"]]),
         "voix": h([st(os.path.join(nd, p["audio"])) for p in n["pages"] if p.get("audio")]),
@@ -111,6 +124,9 @@ def empreinte(chap, tag, reglages):
         "musique": h(mus),
         "reglages": h({k: reglages.get(k) for k in ("vitesse", "sous", "karaoke", "musique", "volume", "musique_noms", "pages")}),
     }
+    if reglages.get("precedemment"):          # v1.95.0 : SEULEMENT si demande -> les videos d'avant ne passent pas « a refaire »
+        out["precedemment"] = h(st(os.path.join(cd, "precedemment", "ouverture.json")))
+    return out
 
 
 # ---------------------------------------------------------------- image
@@ -157,12 +173,17 @@ def ecrire_ass(path, n, pages, reglages, total):
     v = float(reglages.get("vitesse") or 1)
     for i, p in enumerate(pages):
         a, b = p["_t0"], p["_t0"] + p["_duree"]
-        ev(a, b, "Titre", ass_txt("%s ch. %s · page %s (%d/%d)" % (n.get("title") or "", n.get("chapter") or "", p["page"], i + 1, len(pages))))
+        ev(a, b, "Titre", ass_txt(("Précédemment… (%d/%d)" % (i + 1, len(pages))) if p.get("_prec") else
+                                  "%s ch. %s · page %s (%d/%d)" % (n.get("title") or "", n.get("chapter") or "", p["page"], i + 1, len(pages))))
         texte = (p.get("narration") or "").strip()
         if not reglages.get("sous") or not texte:
             continue
+        # v1.95.0 : un texte long (le « Precedemment... » fait ~430 caracteres) debordait du bandeau de 360 px en 46 px :
+        # la taille baisse avec la longueur (surface ~ fs^2), plancher 30 px
+        fs = 46 if len(texte) <= 220 else max(30, int(46 * (220.0 / len(texte)) ** 0.5))
+        fz = "" if fs == 46 else "{\\fs%d}" % fs
         if not (kar and p["_audio"]):
-            ev(a, b, "Sous", ass_txt(texte))
+            ev(a, b, "Sous", fz + ass_txt(texte))
             continue
         toks = texte.split()
         if isinstance(p.get("mots"), list) and len(p["mots"]) == len(toks):
@@ -174,7 +195,7 @@ def ecrire_ass(path, n, pages, reglages, total):
         # karTick : le mot k est « en cours » des que deb[k] <= t + 0.05 (t = temps du MP3) -> temps video = /vitesse
         bornes = [a] + [a + max(0.0, d - 0.05) / v for d in deb[1:]] + [b]
         debut_k0 = a + max(0.0, deb[0] - 0.05) / v
-        ev(a, max(a, debut_k0), "Sous", "".join("{\\alpha&H80&}" + ass_txt(x) + " " for x in toks).strip())
+        ev(a, max(a, debut_k0), "Sous", fz + "".join("{\\alpha&H80&}" + ass_txt(x) + " " for x in toks).strip())
         for k in range(len(toks)):
             t1, t2 = max(bornes[k], debut_k0) if k == 0 else bornes[k], bornes[k + 1]
             if t2 <= t1:
@@ -188,7 +209,7 @@ def ecrire_ass(path, n, pages, reglages, total):
                 else:
                     txt += "{\\alpha&H80&\\c&HEDEDED&}"
                 txt += ass_txt(x) + " "
-            ev(t1, t2, "Sous", txt.strip())
+            ev(t1, t2, "Sous", fz + txt.strip())
     open(path, "w", encoding="utf-8").write("\n".join(lignes) + "\n")
 
 

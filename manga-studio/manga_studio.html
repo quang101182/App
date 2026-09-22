@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.95.0</title>
+<title>Manga Studio v1.95.1</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -366,6 +366,9 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .vid-it .btn.sm{width:32px;height:30px;padding:0;justify-content:center}
 .vid-it i{display:block}
 .vid-it .narr-pbar{grid-column:2 / -1}
+/* v1.95.1 : choix de la voix quand le chapitre a plusieurs narrations avec voix (Quang 22/09 09h09) */
+.vid-it .vi-voix{grid-column:2 / -1;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);min-width:0}
+.vid-it .vi-voix select{flex:1;min-width:0;width:auto;font-size:12px;padding:3px 6px}
 .vid-badge{font-size:11px;margin-left:4px}
 .vid-lecteur{position:fixed;inset:0;z-index:95;background:#000;display:flex;flex-direction:column;align-items:center}
 .vid-lecteur[hidden]{display:none}
@@ -408,6 +411,13 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .cost-pill{margin-left:8px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);
   color:var(--txt);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
 .cost-pill:hover{border-color:var(--accent2)}
+/* v1.95.1 : sur telephone, la pastille des couts tombait SOUS la camera (poinçon en haut au centre, app installee
+   en plein ecran -- Quang, Fold 8). La ligne du titre prend toute la largeur, la pastille part tout a droite. */
+@media (display-mode: fullscreen), (display-mode: standalone), (max-width:700px){
+  .brand{flex:1 1 100%}
+  .brand .cost-pill{margin-left:auto}
+}
+@media (max-width:700px){ .cost-pill .cp-l{display:none} }
 .couts-tot{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
 .couts-tot div{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
 .couts-tot b{display:block;font-size:18px}
@@ -629,7 +639,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.95.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.95.1</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1339,7 +1349,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.95.0";
+const VERSION = "1.95.1";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -5322,10 +5332,12 @@ setTimeout(actRafraichir, 1500);
 // ---------- v1.93.0 : VIDEOS ----------
 // La video = le lecteur avec SES reglages du moment : on les envoie tels quels, la video les garde (tracabilite).
 function reglagesLecteur(){
-  return { vitesse: +$("lecVit").value, sous: $("lecSousOn").checked, karaoke: KAR_ON, musique: MUS_ON, volume: MUS_VOL, pages: TRAD_VUE || "" };
+  return { vitesse: +$("lecVit").value, sous: $("lecSousOn").checked, karaoke: KAR_ON, musique: MUS_ON, volume: MUS_VOL, pages: TRAD_VUE || "",
+           precedemment: (() => { try { return PREC_ON; } catch { return true; } })() };   // PREC_ON est declare plus bas                          // v1.95.1 : la video suit la case 📜 (decision Quang 22/09)
 }
 const vidRegTxt = r => [String(r.vitesse).replace(".", ",") + "×", r.sous ? (r.karaoke ? "sous-titres karaoké" : "sous-titres") : "sans sous-titres",
-  r.musique ? "musique " + r.volume + " %" : "sans musique", r.pages ? "pages " + r.pages : "pages VO"].join(" · ");
+  r.musique ? "musique " + r.volume + " %" : "sans musique", r.pages ? "pages " + r.pages : "pages VO"]
+  .concat(r.precedemment ? ["📜 précédemment"] : []).join(" · ");
 let VIDS = { serie: null, chapitres: [] }, VID_POLL = null;
 // en plus des raisons du proxy (fichiers) : les reglages du lecteur ont-ils change depuis la video ?
 function vidReglagesDiff(v){
@@ -5334,6 +5346,7 @@ function vidReglagesDiff(v){
   if (!!r.sous !== !!cur.sous || (cur.sous && !!r.karaoke !== !!cur.karaoke)) d.push("sous-titres");
   if (!!r.musique !== !!cur.musique || (cur.musique && +r.volume !== +cur.volume)) d.push("musique");
   if ((r.pages || "") !== (cur.pages || "") && !(r.pages === "" && cur.pages)) d.push("pages VO / traduites");
+  if (!!r.precedemment !== !!cur.precedemment) d.push("« Précédemment… »");
   return d.length ? ["réglages du lecteur différents (" + d.join(", ") + ")"] : [];
 }
 function vidEtat(c){
@@ -5364,7 +5377,28 @@ function vidLigne(c, i, avecCase){
        : e.cle !== "sansvoix" && e.cle !== "cours" ? '<button class="btn sm" data-vid-gen="' + i + '" title="' + (v ? "régénérer (l'ancienne part à la corbeille)" : "générer la vidéo") + '">' + (v ? "↻" : "🎬") + "</button>" : vide)
     + (v ? '<button class="btn sm danger" data-vid-suppr="' + i + '" title="supprimer la vidéo (corbeille)">🗑</button>' : vide)
     + '<span class="vi-etat' + (e.ko ? " ko" : "") + '" title="' + esc(e.txt) + '">' + esc(e.txt) + "</span>"
-    + (e.cle === "cours" ? '<div class="narr-pbar"><div style="width:' + e.pct + '%"></div></div>' : "") + "</div>";
+    + (e.cle === "cours" ? '<div class="narr-pbar"><div style="width:' + e.pct + '%"></div></div>' : "")
+    + ((c.narrations || []).length > 1 ? '<label class="vi-voix">Voix de la vidéo <select data-vid-voix="' + i + '">'
+       + c.narrations.map(n => '<option value="' + esc(n.tag) + '"' + (n.tag === vidTag(c) ? " selected" : "") + ">"
+         + esc((n.voice || "?") + " — " + n.tag + (n.created_at ? " (" + n.created_at.slice(8, 10) + "/" + n.created_at.slice(5, 7) + ")" : "")) + "</option>").join("")
+       + "</select></label>" : "") + "</div>";
+}
+// v1.95.1 : la narration (donc la voix) utilisee pour la video. Choix memorise par chapitre ; sinon celle de la
+// video existante ; sinon la plus recente (= le defaut du proxy).
+let VID_VOIX = {}; try { VID_VOIX = JSON.parse(localStorage.getItem("manga_vid_voix") || "{}"); } catch {}
+function vidTag(c){
+  const tags = (c.narrations || []).map(n => n.tag), v = (c.videos || [])[0];
+  if (tags.includes(VID_VOIX[c.d])) return VID_VOIX[c.d];
+  if (v && tags.includes(v.tag)) return v.tag;
+  return tags[0] || "";
+}
+function vidVoixChange(e){
+  const sel = e.target.closest("[data-vid-voix]"); if (!sel) return;
+  const c = VIDS.chapitres[+sel.dataset.vidVoix]; if (!c) return;
+  VID_VOIX[c.d] = sel.value; try { localStorage.setItem("manga_vid_voix", JSON.stringify(VID_VOIX)); } catch {}
+  const v = (c.videos || [])[0];
+  if (v && v.tag !== sel.value) toast("voix choisie : touche ↻ pour refaire la vidéo avec elle");
+  vidRendre();
 }
 async function vidCharger(serie){
   if (!serie) return;
@@ -5390,7 +5424,7 @@ function vidRendre(){
 async function vidDemander(liste, refaire){
   if (!liste.length){ toast("rien à générer"); return; }
   for (const c of liste) if (refaire && (c.videos || [])[0]) await api("/manga/video_suppr", { d: c.d, tag: c.videos[0].tag });
-  const r = await api("/manga/video", { entrees: liste.map(c => ({ d: c.d })), reglages: reglagesLecteur() });
+  const r = await api("/manga/video", { entrees: liste.map(c => ({ d: c.d, tag: vidTag(c) })), reglages: reglagesLecteur() });
   if (r.error) throw new Error(r.error);
   toast("🎬 " + r.ajoutees.length + " vidéo(s) en file" + (r.refusees.length ? " · " + r.refusees.length + " refusée(s)" : ""));
   if (r.refusees.length) log("vidéos refusées : " + r.refusees.map(x => x.d + " (" + x.raison + ")").join(", "), "w");
@@ -5429,6 +5463,7 @@ async function vidClic(e){
   } catch (err){ log("vidéo : " + err.message, "e"); alert(err.message); }
 }
 $("vidListe").onclick = vidClic; $("chapVid").onclick = vidClic;
+$("vidListe").onchange = vidVoixChange; $("chapVid").onchange = vidVoixChange;
 $("btnVideos").onclick = () => { $("vidBox").hidden = !$("vidBox").hidden; if (!$("vidBox").hidden) vidCharger(LIB_SERIE).catch(e => log("vidéos : " + e.message, "e")); };
 $("vidFermer").onclick = () => { $("vidBox").hidden = true; };
 $("vidManquantes").onclick = () => vidDemander(VIDS.chapitres.filter(c => vidEtat(c).cle === "aucune"), false).catch(e => alert(e.message));
@@ -5897,7 +5932,9 @@ const ETAPE_LBL = { lecture: "lecture des pages", noms: "repérage des personnag
 async function chargerCouts(){
   try {
     COUTS = await api("/manga/costs");
-    $("hdrCost").textContent = "💰 auj. " + fmtUsd(COUTS.aujourdhui) + " · mois " + fmtUsd(COUTS.mois);
+    // v1.95.1 : libelles masques sur telephone (pastille plus courte, loin de la camera) ; le detail reste au survol
+    $("hdrCost").innerHTML = '💰 <span class="cp-l">auj. </span>' + esc(fmtUsd(COUTS.aujourdhui)) + ' · <span class="cp-l">mois </span>' + esc(fmtUsd(COUTS.mois));
+    $("hdrCost").title = "Coûts : aujourd'hui " + fmtUsd(COUTS.aujourdhui) + " · ce mois " + fmtUsd(COUTS.mois) + " — touche pour le détail";
   } catch (e){ $("hdrCost").textContent = "💰 ?"; log("coûts : " + e.message, "w"); }
 }
 function afficherCouts(){

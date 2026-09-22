@@ -60,7 +60,7 @@ try:
             pg.evaluate("() => { try { localStorage.removeItem('manga_prec'); localStorage.setItem('manga_mus_on', '0'); } catch {} }")
             pg.reload(); pg.wait_for_timeout(2500)
             pg.click('nav button[data-tab="tChap"]'); pg.wait_for_timeout(1500)
-            check("version 1.94.0", pg.inner_text("#verBadge") == "v1.94.0", pg.inner_text("#verBadge"))
+            check("version >= 1.94.0", tuple(map(int, pg.inner_text("#verBadge")[1:].split("."))) >= (1, 94, 0), pg.inner_text("#verBadge"))
             i = pg.evaluate("() => CHAPS.findIndex(c => c.dir === 'claymore/ch_1')")
             pg.evaluate("(i) => openChap(i)", i); pg.wait_for_timeout(2500)
             check("Claymore ch.1 : pas de ligne Précédemment", not pg.is_visible("#precBox"))

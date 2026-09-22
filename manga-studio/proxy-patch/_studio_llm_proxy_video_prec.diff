@@ -1,0 +1,77 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260922-manga-v1951	2026-09-22 09:08:57.460248200 +0200
++++ /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py	2026-09-22 09:11:35.673058900 +0200
+@@ -7677,7 +7677,8 @@
+ _VIDEO_MOD = {"m": None, "t": 0}
+ _VIDEO_LBL = {"narration": "la narration a été refaite", "karaoke": "le karaoké a été recalé",
+               "voix": "la voix a changé", "pages": "des pages ont changé (ajout, suppression)",
+-              "traduction": "la traduction a été refaite", "musique": "un morceau de musique a changé"}
++              "traduction": "la traduction a été refaite", "musique": "un morceau de musique a changé",
++              "precedemment": "le « Précédemment… » a été refait"}                     # v1.95.1
+ 
+ 
+ def _video_mod():
+@@ -7737,6 +7738,40 @@
+     return sorted(n, key=lambda x: x.get("created_at") or "", reverse=True)
+ 
+ 
++def _video_nom(rel, full):
++    """v1.95.1 : « Claymore - ch001 - Charon - FR - karaoke - musique 25 % - precedemment - 1,15x - 2026-09-22 09h12.mp4 »."""
++    parts = rel.replace("\\", "/").strip("/").split("/")
++    serie, ch, tag = parts[0], (parts[1] if len(parts) > 1 else "")[3:], os.path.splitext(parts[-1])[0]
++    info, man, voix = {}, {}, ""
++    try:
++        with open(full[:-4] + ".json", encoding="utf-8") as f: info = json.load(f)
++    except Exception:
++        pass
++    try:
++        with open(os.path.join(MANGA_SOURCES, parts[0], parts[1], "manifest.json"), encoding="utf-8") as f: man = json.load(f)
++    except Exception:
++        pass
++    try:
++        with open(os.path.join(MANGA_SOURCES, parts[0], parts[1], "narration", tag, "narration.json"), encoding="utf-8") as f:
++            voix = json.load(f).get("voice") or ""
++    except Exception:
++        pass
++    r = info.get("reglages") or {}
++    num = str(man.get("chapter") or ch)
++    num = num.zfill(3) if num.isdigit() else num
++    morceaux = [man.get("title") or serie, "ch" + num, voix or tag, (r.get("pages") or "VO").upper()]
++    morceaux.append(("karaoké" if r.get("karaoke") else "sous-titres") if r.get("sous") else "sans sous-titres")
++    morceaux.append("musique %d %%" % int(r.get("volume") or 0) if r.get("musique") else "sans musique")
++    if r.get("precedemment"):
++        morceaux.append("précédemment")
++    if r.get("vitesse"):
++        morceaux.append(("%g" % float(r["vitesse"])).replace(".", ",") + "x")
++    quand = (info.get("created_at") or time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(os.path.getmtime(full))))
++    morceaux.append(quand[:10] + " " + quand[11:13] + "h" + quand[14:16])
++    nom = " - ".join(str(x) for x in morceaux if x)
++    return re.sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", nom).strip()[:180] + ".mp4"
++
++
+ def manga_videos(serie):
+     sd = _manga_src_safe(serie) if _RE_SERIE.match(serie or "") else None
+     if not sd or not os.path.isdir(sd):
+@@ -7795,7 +7830,8 @@
+         vit = 1.0
+     propre = {"vitesse": vit, "sous": bool(reg.get("sous")), "karaoke": bool(reg.get("karaoke")),
+               "musique": bool(reg.get("musique")), "volume": max(0, min(100, int(reg.get("volume") or 0))),
+-              "pages": reg.get("pages") if re.match(r"^[a-z]{2}$", reg.get("pages") or "") else ""}
++              "pages": reg.get("pages") if re.match(r"^[a-z]{2}$", reg.get("pages") or "") else "",
++              "precedemment": bool(reg.get("precedemment"))}                         # v1.95.1
+     dem = [e for e in _video_demandes() if e.get("etat") in ("attente", "en cours")]
+     os.makedirs(MANGA_VIDEO_FILE, exist_ok=True)
+     ok, refus = [], []
+@@ -9049,9 +9085,10 @@
+             self.send_header("Accept-Ranges", "bytes")
+             self.send_header("Cache-Control", "no-cache")        # une video se REFAIT sous le meme nom
+             if telecharger:
+-                parts = rel.replace("\\", "/").strip("/").split("/")
+-                nom = re.sub(r"[^A-Za-z0-9._-]+", "-", "%s-%s-%s" % (parts[0], parts[1] if len(parts) > 1 else "", parts[-1]))
+-                self.send_header("Content-Disposition", 'attachment; filename="%s"' % nom)
++                nom = _video_nom(rel, full)
++                ascii_ = unicodedata.normalize("NFKD", nom).encode("ascii", "ignore").decode() or "video.mp4"
++                self.send_header("Content-Disposition", "attachment; filename=\"%s\"; filename*=UTF-8''%s"
++                                 % (ascii_.replace('"', ""), quote(nom, safe="")))
+             self.send_header("Content-Length", str(fin - debut + 1)); self.end_headers()
+             with open(full, "rb") as f:
+                 f.seek(debut)
