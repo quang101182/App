@@ -12,13 +12,15 @@ le lecteur (montrerPage / musTick / karTick de manga_studio.html) au lieu d'inve
 Format 9:16 (1080 x 1920) : titre en haut, scene, bandeau de sous-titres en bas. Encodage NVENC, 0 $.
 
 Usage : python video_chapitre.py <serie/ch_N> <tag> --reglages '<json>' [--pages 1-3] [--sortie x.mp4]
-reglages = {vitesse, sous, karaoke, musique, volume, musique_noms: [...], pages: "" | "fr", graine, precedemment}
+reglages = {vitesse, sous, karaoke, musique, volume, musique_noms: [...], pages: "" | "fr", graine, precedemment, camera}
+v1.96.0 (23/09) : camera = "page" (le zoom lent historique) | "cases" (defaut, decision Quang : la camera parcourt les
+cases -- regle dans cases_video.py, que le lecteur de l'app rejoue a l'identique). Absent = "page" (videos d'avant).
 Ecrit sources/<chap>/video/<tag>.mp4 + <tag>.json (reglages, empreinte, duree) ; progression dans <tag>.progress.json.
 """
 import argparse, hashlib, json, os, random, shutil, subprocess, sys, tempfile, time
 # numpy n'est importe QUE pour fabriquer (pcm, mixer) : le proxy importe ce module pour empreinte() sans en dependre
 
-VERSION = "1.95.0"
+VERSION = "1.96.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
 W, H, FPS, SR = 1080, 1920, 30, 44100
@@ -124,6 +126,8 @@ def empreinte(chap, tag, reglages):
         "musique": h(mus),
         "reglages": h({k: reglages.get(k) for k in ("vitesse", "sous", "karaoke", "musique", "volume", "musique_noms", "pages")}),
     }
+    if camera(reglages) != "page":            # v1.96.0 : comme precedemment -> une video « page » d'avant garde son empreinte
+        out["reglages"] = h([out["reglages"], camera(reglages)])
     if reglages.get("precedemment"):          # v1.95.0 : SEULEMENT si demande -> les videos d'avant ne passent pas « a refaire »
         # le CONTENU (texte, voix, date de fabrication), pas la date du fichier : une copie a l'identique ne rend
         # pas la video « a refaire » (banc du 22/09 : restaurer ouverture.json suffisait a la faire passer 🟠)
@@ -137,7 +141,101 @@ def empreinte(chap, tag, reglages):
     return out
 
 
+def camera(reglages):
+    return "cases" if reglages.get("camera") == "cases" else "page"
+
+
 # ---------------------------------------------------------------- image
+def preparer_cases(chap, pages):
+    """v1.96.0 : le trajet de camera de chaque page (cases_video.plan). Le « Precedemment... » garde le zoom lent."""
+    sys.path.insert(0, HERE)
+    import cases_video as cv
+    c = cv.cases_chapitre(chap, journal=lambda m: print(m, flush=True))
+    A = W / float(SCENE_H)
+    for p in pages:
+        e = (c["pages"] or {}).get(p.get("file")) if not p.get("_prec") else None
+        if not e:
+            continue
+        from PIL import Image
+        with Image.open(p["_img"]) as im:
+            iw, ih = im.size
+        if (iw, ih) != (e["W"], e["H"]):                       # page traduite : meme dessin, autre taille
+            sx, sy = iw / float(e["W"]), ih / float(e["H"])
+            e = {"W": iw, "H": ih, "cases": [[b[0] * sx, b[1] * sy, b[2] * sx, b[3] * sy] for b in e["cases"]]}
+        p["_plan"] = cv.plan(e, c["format"], A, p["_duree"])
+        p["_format"] = c["format"]
+    return cv
+
+
+class Camera:
+    """v1.96.0 : les images d'UNE page en mode cases (meme scene que clip_page : 1080 x SCENE_H sous le titre)."""
+
+    def __init__(self, p, cv):
+        from PIL import Image
+        self.p, self.cv = p, cv
+        self.fond = tuple(int(FOND[2:][k:k + 2], 16) for k in (0, 2, 4))
+        img = Image.open(p["_img"]).convert("RGB")
+        # Echantillonnage BILINEAIRE (2,6x plus rapide que bicubique, mesure 23/09) sur une image agrandie UNE fois en
+        # Lanczos (au moins 2x la scene : le gros plan reste net) puis reduite par 2, 4... (pas de moire sur les trames)
+        self.s = max(1.0, 2.0 * SCENE_H / img.size[1], 2.0 * W / img.size[0] if img.size[0] > img.size[1] else 0)
+        if self.s > 1.0:
+            img = img.resize((round(img.size[0] * self.s), round(img.size[1] * self.s)), Image.LANCZOS)
+        self.niveaux = [(1, img)]
+        while min(self.niveaux[-1][1].size) > 1200:
+            f, im = self.niveaux[-1]
+            self.niveaux.append((f * 2, im.reduce(2)))
+        self.voile_plein = Image.new("RGB", (W, SCENE_H), self.fond)
+
+    def image(self, t):
+        from PIL import Image, ImageDraw
+        cam, case, a = self.cv.pose(self.p["_plan"], t)
+        s = self.s
+        f, im = self.niveaux[0]
+        for f2, im2 in self.niveaux[1:]:
+            if (cam[2] - cam[0]) * s / W >= f2 * 1.2:
+                f, im = f2, im2
+        scene = im.transform((W, SCENE_H), Image.EXTENT, tuple(x * s / f for x in cam), Image.BILINEAR, fillcolor=self.fond)
+        if case is not None and a > 0:
+            sx, sy = W / (cam[2] - cam[0]), SCENE_H / (cam[3] - cam[1])
+            bx = [round((case[0] - cam[0]) * sx), round((case[1] - cam[1]) * sy),
+                  round((case[2] - cam[0]) * sx) - 1, round((case[3] - cam[1]) * sy) - 1]
+            m = Image.new("L", (W, SCENE_H), round(255 * self.cv.VOILE * a))
+            ImageDraw.Draw(m).rectangle(bx, fill=0)
+            scene = Image.composite(self.voile_plein, scene, m)
+        return scene
+
+
+def clip_cases(p, tmp, i, enc, cv, avant=None):
+    """v1.96.0 : une page en mode cases, image par image. avant = la page precedente si elle est aussi en mode cases :
+    webtoon -> fondu de 0,3 s depuis sa derniere image (comme la demo validee par Quang). Independant des autres
+    pages (la derniere image d'avant est recalculee ici) -> les pages se fabriquent en parallele."""
+    from PIL import Image
+    n = max(1, round(p["_duree"] * FPS))
+    cam = Camera(p, cv)
+    fin_avant = None
+    if avant is not None and p.get("_format") == "webtoon":
+        fin_avant = Camera(avant, cv).image((max(1, round(avant["_duree"] * FPS)) - 1) / float(FPS))
+    out = os.path.join(tmp, "p%04d.mp4" % i)
+    pr = subprocess.Popen(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
+                           "-s", "%dx%d" % (W, SCENE_H), "-r", str(FPS), "-i", "-",
+                           "-vf", "pad=%d:%d:0:%d:color=%s,format=yuv420p" % (W, H, HAUT_TITRE, FOND), "-frames:v", str(n)]
+                          + enc + [out], stdin=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=CREATE)
+    try:
+        for k in range(n):
+            t = k / float(FPS)
+            scene = cam.image(t)
+            if fin_avant is not None and t < 0.3:
+                scene = Image.blend(fin_avant, scene, t / 0.3)
+            pr.stdin.write(scene.tobytes())
+        pr.stdin.close()
+    except (BrokenPipeError, OSError):
+        pass
+    err = pr.stderr.read().decode("utf-8", "replace")
+    if pr.wait():
+        raise RuntimeError("ffmpeg (cases) : " + err[-600:])
+    return out
+
+
 def clip_page(p, tmp, i, enc):
     """La scene du lecteur : page « contain » sur fond sombre, zoom kb/kb2 sur TOUTE la scene, ease-out."""
     n = max(1, round(p["_duree"] * FPS))
@@ -303,10 +401,24 @@ def main():
     if a.maxrate:
         enc[-2:-2] = ["-maxrate", a.maxrate, "-bufsize", str(2 * int(a.maxrate.rstrip("Mk"))) + a.maxrate[-1]]
     try:
-        clips = []
-        for i, p in enumerate(pages):
-            progres("images", i, len(pages))
-            clips.append(clip_page(p, tmp, i, enc))
+        cv = None
+        if camera(reglages) == "cases":
+            progres("cases", 0, len(pages))
+            cv = preparer_cases(chap, pages)
+        # v1.96.0 : 3 pages a la fois (le rendu image par image du mode cases occupe le processeur ; 3 sessions NVENC)
+        from concurrent.futures import ThreadPoolExecutor
+        fait = [0]
+
+        def une(i):
+            p = pages[i]
+            prec = pages[i - 1] if i and pages[i - 1].get("_plan") else None
+            c = clip_cases(p, tmp, i, enc, cv, prec) if p.get("_plan") else clip_page(p, tmp, i, enc)
+            fait[0] += 1
+            progres("images", fait[0], len(pages))
+            return c
+        progres("images", 0, len(pages))
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            clips = list(ex.map(une, range(len(pages))))
         progres("son", len(pages), len(pages))
         wav = os.path.join(tmp, "son.wav")
         mixer(pages, reglages, total, wav)

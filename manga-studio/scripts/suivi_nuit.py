@@ -47,8 +47,10 @@ DEFAUT_INTEGRE = {
     "actif": False, "moteur": "kimi", "voix": "Charon", "traduction": "",
     "karaoke": True, "precedemment": True, "video": True,
     "reglages_video": {"vitesse": 1.0, "sous": True, "karaoke": True, "musique": True, "volume": 25,
-                       "pages": "", "precedemment": True},
+                       "pages": "", "precedemment": True, "camera": "cases"},
 }
+# v2.5.0 (23/09) : camera « cases » par defaut pour TOUS les formats (decision Quang 00h08) ; « page » = zoom lent d'avant.
+CAMERAS = ("cases", "page")
 # Couts et durees PAR PAGE, mesures (21-22/09) : narration (suivi v1.98), traduction Claymore ch.1 (0,54 $, 459 s, 62 p.).
 TARIF_NARRATION = {"kimi": (0.04, 1.0), "gemini": (0.017, 0.25)}          # ($, minutes) par page
 TARIF_TRADUCTION = (0.009, 0.125)
@@ -99,6 +101,8 @@ def normaliser(cfg):
     """Un profil propre et complet, quoi qu'il y ait dans le fichier (valeurs inconnues -> celles par defaut)."""
     d, cfg = DEFAUT_INTEGRE, dict(cfg or {})
     rv = dict(d["reglages_video"]); rv.update({k: v for k, v in (cfg.get("reglages_video") or {}).items() if k in rv})
+    if rv.get("camera") not in CAMERAS:
+        rv["camera"] = d["reglages_video"]["camera"]
     voix = cfg.get("voix") if isinstance(cfg.get("voix"), str) and cfg.get("voix", "")[:1].isupper() else d["voix"]
     return {"actif": bool(cfg.get("actif", d["actif"])),
             "moteur": cfg.get("moteur") if cfg.get("moteur") in MOTEURS else d["moteur"],
@@ -257,6 +261,8 @@ def video_a_faire(c, tag, cfg):
     for k in ("vitesse", "sous", "karaoke", "musique", "volume", "pages", "precedemment"):
         if (voulu.get(k) or "") != (fait.get(k) or ""):
             return "réglage changé (%s)" % k
+    if (voulu.get("camera") or "page") != (fait.get("camera") or "page"):      # v2.5.0 : une video d'avant = « page »
+        return "réglage changé (caméra : %s)" % ("case par case" if voulu.get("camera") == "cases" else "page entière")
     if voulu.get("musique") and musique_effective(c) != (fait.get("musique_noms") or []):
         return "la sélection de musique a changé"
     try:

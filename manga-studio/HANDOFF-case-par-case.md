@@ -1,5 +1,10 @@
 # HANDOFF — Mode vidéo « CASE PAR CASE » (écrit le 23/09/2026 à 00h10, session précédente à ~50 % de contexte)
 
+> ✅ **LIVRÉ le 23/09/2026 vers 01h — Manga Studio v2.5.0.** Ce dossier est désormais une ARCHIVE (« fait » = `git log`).
+> Réponse de Quang à la question ci-dessous : **oui, le lecteur passe aussi en case par case** (fait). Détail et verdicts : `ROADMAP.md` ligne 4-quater.
+> Reste hors chantier, signalé à Quang : 4 pages traduites en FR quasi blanches (OPM ch.296 p.14 et p.18, ch.300 p.5, ch.301 p.16 — dessin perdu à la traduction, ou page de crédits) ; le banc
+> `test_profil_ui.py` supprime sa série de test pendant que sa vidéo se fabrique (demande laissée en échec dans `_videos_file`) ; 3 bancs anciens dépendent de données disparues (Claymore ch.1 recapturé le 22/09, OPM ch.301).
+
 > Autosuffisant. « Fait » = `git log`. Version de l'app au départ : **v2.4.6** (`manga_studio.html`).
 > **GO de Quang donné le 23/09 à 00h06** : « tu peux attaquer les travaux jusqu'au bout […] je te laisse travailler de manière
 > autonome jusqu'au bout ». Pas de rapport à chaque palier : enchaîner jusqu'à la livraison vérifiée.
