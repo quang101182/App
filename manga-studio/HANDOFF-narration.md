@@ -1,4 +1,4 @@
-# HANDOFF — Manga Studio, volet LECTURE NARRÉE (maj 22/09/2026, 08h55)
+# HANDOFF — Manga Studio, volet LECTURE NARRÉE (maj 22/09/2026, 09h00)
 
 > Autosuffisant. « Fait » = `git log` (version courante : v1.85.0). Ce fichier ne porte
 > que le RESTANT, les pièges et le pourquoi. Le détail des mesures est dans `ROADMAP.md` § 4-ter et 4-ter-bis.
@@ -65,6 +65,7 @@
    téléchargement. Détail : ROADMAP ligne « 5 — VIDÉO FAITE ». Ensuite : 7 « Précédemment… », 9 suivi de séries, 10 hors-ligne ;
    plus tard 4 (caméra case par case). ⚠ Les vidéos (scans protégés) vivent sous sources/ : jamais dans le dépôt (public).
    ⚠ Une question de Quang (« il me semble que… ») n'est PAS un ordre : répondre, ne rien modifier.
+   ✅ **v1.95.0 app INSTALLABLE** (09h00, WebAPK vérifié sur le Samsung ; détail ROADMAP « 14 »).
    ✅ **v1.94.0 « Précédemment… » + rattrapage** (08h55) — détail ROADMAP ligne « 7 — FAIT ». ENSUITE : **14 — app INSTALLABLE
    sur le téléphone** (demande Quang 08h36, PWA : manifeste + icônes LIBRES sans cookie), puis 9, 10. Question ouverte : 
    le « Précédemment… » dans la vidéo ? Claymore 1 et 2 (musique) mis à la corbeille à 08h41 (pas par moi) → vidéo Claymore 🟠, normal.

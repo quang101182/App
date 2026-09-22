@@ -1,0 +1,51 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260922-manga-v195	2026-09-22 08:57:29.643657100 +0200
++++ /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py	2026-09-22 08:57:29.680177300 +0200
+@@ -7873,6 +7873,8 @@
+ 
+ # --- « Precedemment... » et rattrapage (Manga Studio v1.94.0) ---------------------------
+ MANGA_PREC = os.path.join(MANGA_ROOT, "scripts", "precedemment.py")
++MANGA_PWA = {"/manga/" + n: n for n in ("manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png",
++                                         "icon-maskable-512.png")}                      # v1.95.0
+ _PREC_JOBS = {}                                  # (chapitre, mode) -> Popen
+ _PREC_MOD = {"m": None, "t": 0}
+ _PREC_MODES = ("ouverture", "rattrapage")
+@@ -8990,6 +8992,24 @@
+             self.wfile.write(data)
+         except Exception as e:
+             self._json(500, {"error": "HTML introuvable: " + str(e)})
++    def serve_manga_pwa(self, nom):
++        """v1.95.0 : manifeste, service worker, icones (App/manga-studio/pwa/). Aucun secret dedans."""
++        f = os.path.join(MANGA_ROOT, "pwa", nom)
++        if not os.path.isfile(f):
++            self._json(404, {"error": "not found"}); return
++        with open(f, "rb") as fh: data = fh.read()
++        ct = {".webmanifest": "application/manifest+json", ".js": "text/javascript; charset=utf-8",
++              ".png": "image/png"}[os.path.splitext(nom)[1]]
++        self.send_response(200); self._cors()
++        self.send_header("Content-Type", ct)
++        if nom == "sw.js":
++            self.send_header("Service-Worker-Allowed", "/manga/")
++            self.send_header("Cache-Control", "no-cache")
++        else:
++            self.send_header("Cache-Control", "public, max-age=3600")
++        self.send_header("Content-Length", str(len(data))); self.end_headers()
++        self.wfile.write(data)
++
+     def serve_manga_html(self):
+         # Sert l'app Manga Studio (elle vit dans son depot, App/manga-studio/).
+         try:
+@@ -9141,8 +9161,14 @@
+             self.serve_html(); return
+         # L'app Manga est servie comme celle de GS : coquille PUBLIQUE (aucun secret dedans),
+         # pour qu'on puisse la charger depuis le tunnel/mobile PUIS y saisir la cle.
++        if self.path.split("?", 1)[0] in ("/manga", "/manga.html"):     # v1.95.0 : HORS de la portee PWA
++            self.send_response(302); self._cors()                              # (/manga/) -> Chrome n'y proposait
++            self.send_header("Location", "/manga/" + (("?" + self.path.split("?", 1)[1]) if "?" in self.path else ""))
++            self.send_header("Content-Length", "0"); self.end_headers(); return  # pas l'installation
+         if self.path.split("?", 1)[0] in ("/manga", "/manga/", "/manga.html"):
+             self.serve_manga_html(); return
++        if self.path.split("?", 1)[0] in MANGA_PWA:                        # Manga Studio v1.95.0 : PWA, PUBLIC
++            self.serve_manga_pwa(MANGA_PWA[self.path.split("?", 1)[0]]); return
+         if self.path == "/favicon.ico":
+             self.send_response(204); self._cors(); self.end_headers(); return
+         if not self._authorized(): self._deny(); return
