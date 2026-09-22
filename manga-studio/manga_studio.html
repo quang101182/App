@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v1.89.0</title>
+<title>Manga Studio v1.90.0</title>
 <style>
 /* Comic Neue (OFL, Google Fonts) EMBARQUEE en base64.
    Pourquoi embarquer plutot que declarer une pile de polices systeme :
@@ -343,6 +343,20 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .chap-pages figure.pg-sel::after{content:"✓";position:absolute;top:6px;right:8px;font-weight:700;color:#fff;
   background:var(--accent);border-radius:50%;width:22px;height:22px;display:grid;place-items:center}
 .trad-box,.mus-box{margin-top:10px}
+/* v1.90.0 : musique en colonnes FIXES — la case, le nom (coupe s'il est long), la duree, ▶, 🗑 toujours au meme endroit */
+.mus-tete{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}.mus-tete b{flex:1 1 auto;font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:none;border:0;color:var(--dim);font:inherit;font-size:12px;padding:5px 10px;cursor:pointer}
+.seg button.on{background:color-mix(in srgb, var(--accent2) 22%, transparent);color:var(--txt)}
+.mus-liste{display:flex;flex-direction:column;gap:3px}
+.mus-it{display:grid;grid-template-columns:22px minmax(0,1fr) 44px 32px 32px;align-items:center;gap:6px;
+  padding:4px 6px;border-radius:7px;background:rgba(255,255,255,.03)}
+.mus-it input{width:16px;height:16px;margin:0;accent-color:var(--accent2)}
+.mus-it .nom{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.mus-it .dur{font-size:12px;color:var(--dim);text-align:right;font-variant-numeric:tabular-nums}
+.mus-it .btn.sm{padding:3px 0;width:32px;justify-content:center}
+.mus-it.off .nom{color:var(--dim)}
+.mus-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .gs-box{margin-top:8px;padding:8px;border:1px solid var(--line,#2a2f3a);border-radius:10px}
 .gs-liste{display:flex;flex-direction:column;gap:6px;margin-top:8px;max-height:420px;overflow:auto}
 .gs-it{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.03)}
@@ -558,7 +572,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.89.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v1.90.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1005,16 +1019,18 @@ body.epure .aide{display:none}
     </div>
     <!-- MUSIQUE DE FOND DE LA SERIE (v1.85.0, etape 13) : sources/<serie>/musique/ -->
     <div class="narr-box mus-box">
-      <div class="row" style="align-items:flex-end">
-        <div style="width:240px"><label>🎵 Musique de la série (sous la voix)</label><select id="musChoix">
-          <option value="">aucune</option></select></div>
-        <button class="btn" id="musEcoute" title="écouter ce morceau seul">▶</button>
-        <button class="btn" id="musGs" title="un morceau de ta playlist Generate Studio (génère-le là-bas : mode intelligent + Instrumental)">🎛 Prendre dans Generate Studio</button>
-        <button class="btn" id="musImport" title="un fichier audio de ton PC ou de ton téléphone (mp3, wav, ogg, m4a, flac)">Importer un morceau…</button>
-        <button class="btn sm danger" id="musSuppr" title="mettre ce morceau à la corbeille">🗑</button>
+      <div class="mus-tete">
+        <b>🎵 Musique sous la voix</b>
+        <div class="seg" id="musMode" title="ce chapitre suit la sélection de la série, ou a la sienne">
+          <button data-mode="serie">Celle de la série</button><button data-mode="propre">Propre au chapitre</button></div>
+      </div>
+      <div id="musListe" class="mus-liste"></div>
+      <p class="muted aide" id="musEtat" style="margin:6px 0 0"></p>
+      <div class="mus-actions">
+        <button class="btn sm" id="musGs" title="un morceau de ta playlist Generate Studio (génère-le là-bas : mode intelligent + Instrumental)">🎛 Prendre dans Generate Studio</button>
+        <button class="btn sm" id="musImport" title="un fichier audio de ton PC ou de ton téléphone (mp3, wav, ogg, m4a, flac)">Importer un fichier…</button>
         <input type="file" id="musFichier" accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac" hidden>
       </div>
-      <p class="muted aide" id="musEtat" style="margin:6px 0 0"></p>
       <div id="gsBox" class="gs-box" hidden>
         <div class="row" style="align-items:center;gap:8px">
           <b class="grow">Playlist Generate Studio</b>
@@ -1242,7 +1258,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "1.89.0";
+const VERSION = "1.90.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -4919,39 +4935,75 @@ $("btnTraduire").onclick = async () => {
 // le morceau qui joue est memorise par serie (proxy : musique/choix.json).
 // Niveau : les morceaux de Generate Studio sont mixes pour etre ecoutes SEULS (-11,4 LUFS mesures) ->
 // defaut 25 % = gain 0,1 (-20 dB), et encore -7 dB quand la voix parle (ducking), remonte entre les pages.
-let MUS = { items: [], choix: "" }, MUS_ON = true, MUS_VOL = 25;
+let MUS = { items: [], serie_sel: [], effectif: [], chapitre: { mode: "serie", noms: [] }, max: 5 }, MUS_ON = true, MUS_VOL = 25;
 try { MUS_ON = localStorage.getItem("manga_mus_on") !== "0";
       const v = localStorage.getItem("manga_mus_vol"); if (v !== null && !isNaN(+v)) MUS_VOL = +v; } catch {}
 const serieDe = d => (d || "").split("/")[0];
 const MUS_GAIN_MAX = 0.4, MUS_DUCK = 0.45, MUS_FONDU = 3;
-const musURL = () => { const it = MUS.items.find(x => x.nom === MUS.choix); return it ? srcURL(it.fichier) : ""; };
+const musMode = () => (MUS.chapitre || {}).mode === "propre" ? "propre" : "serie";
+const musCoches = () => musMode() === "propre" ? (MUS.chapitre.noms || []) : (MUS.serie_sel || []);
 async function refreshMus(){
   if (!CHAP_OPEN) return;
-  MUS = await api("/manga/musiques?serie=" + encodeURIComponent(serieDe(CHAP_OPEN)));
-  $("musChoix").innerHTML = '<option value="">aucune</option>'
-    + MUS.items.map(x => '<option value="' + esc(x.nom) + '">' + esc(x.nom) + '</option>').join("");
-  $("musChoix").value = MUS.choix || "";
-  $("musEcoute").disabled = $("musSuppr").disabled = !MUS.choix;
-  $("musEtat").textContent = !MUS.items.length
-    ? "Aucun morceau pour cette série. Importe un morceau instrumental : il jouera doucement sous la voix, en boucle."
-    : MUS.choix ? "Joue sous la voix de tous les chapitres de la série. Volume et 🎵 on/off : dans le lecteur."
-    : "Aucune musique sous la voix pour cette série.";
+  MUS = await api("/manga/musiques?serie=" + encodeURIComponent(serieDe(CHAP_OPEN)) + "&d=" + encodeURIComponent(CHAP_OPEN));
+  musRendre();
 }
-$("musChoix").onchange = async () => {
-  try {
-    const r = await api("/manga/musique_choix", { serie: serieDe(CHAP_OPEN), nom: $("musChoix").value });
-    if (r.error) throw new Error(r.error);
-    MUS_APERCU.pause(); await refreshMus();
-  } catch (e){ log("musique : " + e.message, "e"); alert(e.message); }
-  $("musChoix").blur();
+function musRendre(){
+  const mode = musMode(), coches = musCoches(), plein = coches.length >= (MUS.max || 5);
+  document.querySelectorAll("#musMode [data-mode]").forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
+  $("musMode").hidden = !MUS.items.length;
+  $("musListe").innerHTML = MUS.items.map(x => {
+    const on = coches.includes(x.nom);
+    return '<div class="mus-it' + (on ? "" : " off") + '"><input type="checkbox" data-mus-coche="' + esc(x.nom) + '"'
+      + (on ? " checked" : "") + (!on && plein ? " disabled" : "") + ' title="' + (on ? "décocher = retirer d'ici (le morceau reste dans la série)" : "cocher = jouer sous la voix") + '">'
+      + '<span class="nom" title="' + esc(x.nom) + '">' + esc(x.nom) + '</span><span class="dur">' + (x.dur ? fmtT(x.dur) : "") + "</span>"
+      + '<button class="btn sm" data-mus-ecoute="' + esc(x.nom) + '" title="écouter seul">' + (MUS_APERCU.dataset.nom === x.nom && !MUS_APERCU.paused ? "■" : "▶") + "</button>"
+      + '<button class="btn sm danger" data-mus-suppr="' + esc(x.nom) + '" title="supprimer de la série et de tous les chapitres (corbeille)">🗑</button></div>';
+  }).join("");
+  $("musEtat").textContent = !MUS.items.length
+    ? "Aucun morceau pour cette série. Prends-en un dans Generate Studio (instrumental) ou importe un fichier."
+    : (mode === "propre" ? "Ce chapitre a sa propre sélection. " : "Sélection de la série : elle vaut pour tous les chapitres qui la suivent. ")
+      + (coches.length ? coches.length + " morceau(x) coché(s) : joués au hasard, enchaînés en fondu (" + (MUS.max || 5) + " au plus)."
+                       : "Rien de coché : pas de musique ici.");
+}
+async function musEnvoyer(mode, noms){
+  const body = { serie: serieDe(CHAP_OPEN), noms };
+  if (mode === "propre" || musMode() === "propre" || mode === "serie-chapitre") Object.assign(body, { d: CHAP_OPEN, mode: mode === "serie-chapitre" ? "serie" : "propre" });
+  const r = await api("/manga/musique_selection", body);
+  if (r.error) throw new Error(r.error);
+  MUS = r; musRendre();
+}
+$("musMode").onclick = e => {
+  const b = e.target.closest("[data-mode]"); if (!b || b.dataset.mode === musMode()) return;
+  // passer en « propre » part de la selection de la serie : on ajuste au lieu de tout recocher
+  (b.dataset.mode === "propre" ? musEnvoyer("propre", (MUS.serie_sel || []).slice()) : musEnvoyer("serie-chapitre", []))
+    .catch(err => { log("musique : " + err.message, "e"); alert(err.message); });
+};
+$("musListe").onchange = e => {
+  const c = e.target.closest("[data-mus-coche]"); if (!c) return;
+  const nom = c.dataset.musCoche, cur = musCoches().filter(n => n !== nom);
+  if (c.checked) cur.push(nom);
+  musEnvoyer(musMode() === "propre" ? "propre" : "serie", cur).catch(err => { log("musique : " + err.message, "e"); alert(err.message); refreshMus(); });
 };
 const MUS_APERCU = new Audio();
-const majMusEcoute = () => { $("musEcoute").textContent = MUS_APERCU.paused ? "▶" : "■"; };
-MUS_APERCU.onplay = MUS_APERCU.onpause = MUS_APERCU.onended = majMusEcoute;
-$("musEcoute").onclick = () => {
-  if (!MUS_APERCU.paused){ MUS_APERCU.pause(); return; }
-  MUS_APERCU.src = musURL(); MUS_APERCU.volume = 0.6;
-  MUS_APERCU.play().catch(e => { if (e.name !== "AbortError") log("musique : " + e.message, "w"); });
+MUS_APERCU.onplay = MUS_APERCU.onpause = MUS_APERCU.onended = () => { if (!$("musListe").hidden) musRendre(); };
+$("musListe").onclick = async e => {
+  const ec = e.target.closest("[data-mus-ecoute]"), su = e.target.closest("[data-mus-suppr]");
+  if (ec){
+    const it = MUS.items.find(x => x.nom === ec.dataset.musEcoute);
+    if (!MUS_APERCU.paused && MUS_APERCU.dataset.nom === it.nom){ MUS_APERCU.pause(); return; }
+    MUS_APERCU.dataset.nom = it.nom; MUS_APERCU.src = srcURL(it.fichier); MUS_APERCU.volume = 0.6;
+    MUS_APERCU.play().catch(err => { if (err.name !== "AbortError") log("musique : " + err.message, "w"); });
+    return;
+  }
+  if (!su) return;
+  const nom = su.dataset.musSuppr;
+  if (!confirm("Supprimer « " + nom + " » de la série ?\n\nIl quitte aussi TOUS les chapitres qui l'avaient choisi. Il part à la corbeille (récupérable à la main).\n\nPour l'enlever seulement de ce chapitre : décoche-le.")) return;
+  try {
+    const r = await api("/manga/musique_suppr", { serie: serieDe(CHAP_OPEN), nom });
+    if (r.error) throw new Error(r.error);
+    if (MUS_APERCU.dataset.nom === nom) MUS_APERCU.pause();
+    log("musique supprimée de la série : " + nom); await refreshMus();
+  } catch (err){ log("musique : " + err.message, "e"); alert(err.message); }
 };
 $("musImport").onclick = () => $("musFichier").click();
 $("musFichier").onchange = () => {
@@ -4970,16 +5022,6 @@ $("musFichier").onchange = () => {
   };
   rd.readAsDataURL(f);
 };
-$("musSuppr").onclick = async () => {
-  const nom = $("musChoix").value; if (!nom) return;
-  if (!confirm("Mettre « " + nom + " » à la corbeille ?")) return;
-  try {
-    const r = await api("/manga/musique_suppr", { serie: serieDe(CHAP_OPEN), nom });
-    if (r.error) throw new Error(r.error);
-    MUS_APERCU.pause(); log("musique à la corbeille : " + nom); await refreshMus();
-  } catch (e){ log("musique : " + e.message, "e"); alert(e.message); }
-};
-
 // v1.87.0 : PRENDRE DANS GENERATE STUDIO. La playlist de Generate Studio = le dossier output/gs/audio/ ; on la
 // lit par SES routes (/outputs_list, /audio_meta), sans rien dupliquer. Les 8 plus recentes, ou tout (+ recherche).
 const GS = { tous: [], meta: {}, tout: false, N: 8 };
@@ -5046,7 +5088,18 @@ $("gsListe").onclick = async e => {
 };
 
 // --- lecture sous la narration : deux lecteurs pour boucler en fondu enchaine, volume suivi toutes les 100 ms
-const MP = { els: [$("lecMus1"), $("lecMus2")], cur: 0, g: 0, url: "", timer: null };
+const MP = { els: [$("lecMus1"), $("lecMus2")], cur: 0, g: 0, url: "", timer: null, liste: [], seq: [], k: 0 };
+// suite des morceaux : des tours melanges, sans rejouer a la suite le meme morceau d'un tour a l'autre
+function musIdx(k){
+  const n = MP.liste.length;
+  while (MP.seq.length <= k){
+    const t = [...Array(n).keys()].sort(() => Math.random() - 0.5);
+    if (n > 1 && MP.seq.length && t[0] === MP.seq[MP.seq.length - 1]) t.push(t.shift());
+    MP.seq.push(...t);
+  }
+  return MP.seq[k];
+}
+function musCharge(el, k){ el.src = MP.liste[musIdx(k)]; el.dataset.k = k; }
 function musCible(){
   if (!MP.url || !MUS_ON || $("lecteur").hidden || !LEC.playing) return 0;
   const a = $("lecAudio"), voix = a.getAttribute("src") && !a.paused && !a.ended;
@@ -5066,20 +5119,26 @@ function musTick(){
   if (MP.g <= 0.001 && cible === 0){ MP.els.forEach(x => { if (!x.paused) x.pause(); }); return; }
   if (a.paused) a.play().catch(() => {});
   // fin du passage en cours -> le 2e lecteur repart du debut, les deux se croisent pendant MUS_FONDU s
+  // fin du morceau en cours -> le 2e lecteur (deja charge avec le SUIVANT) part, les deux se croisent MUS_FONDU s
   if (a.duration && a.currentTime > a.duration - MUS_FONDU && b.paused){
-    b.currentTime = 0; b.play().catch(() => {}); MP.cur = 1 - MP.cur;
+    if (+b.dataset.k !== MP.k + 1) musCharge(b, MP.k + 1);
+    b.currentTime = 0; b.play().catch(() => {}); MP.cur = 1 - MP.cur; MP.k++;
   }
+  // l'ancien, une fois tu, se prepare pour le morceau d'apres
+  if (b.paused && b !== MP.els[MP.cur] && +b.dataset.k !== MP.k + 1 && (b.ended || b.currentTime === 0 || b.currentTime > 1)) musCharge(b, MP.k + 1);
   MP.els.forEach(x => { x.volume = x.paused ? 0 : Math.min(1, MP.g * musEnveloppe(x)); });
 }
 function musDemarrer(){
-  const url = musURL();
-  $("lecMusBox").hidden = !url;
+  const liste = (MUS.effectif || []).map(n => MUS.items.find(x => x.nom === n)).filter(Boolean).map(x => srcURL(x.fichier));
+  const cle = liste.join("|");
+  $("lecMusBox").hidden = !liste.length;
   $("lecMusOn").checked = MUS_ON; $("lecMusVol").value = MUS_VOL;
-  if (url !== MP.url){
-    MP.els.forEach(x => { x.pause(); if (url) x.src = url; else x.removeAttribute("src"); });
-    MP.url = url; MP.cur = 0; MP.g = 0;
+  if (cle !== MP.url){
+    MP.els.forEach(x => { x.pause(); x.removeAttribute("src"); delete x.dataset.k; });
+    MP.url = cle; MP.liste = liste; MP.seq = []; MP.k = 0; MP.cur = 0; MP.g = 0;
+    if (liste.length){ musCharge(MP.els[0], 0); musCharge(MP.els[1], 1); }
   }
-  clearInterval(MP.timer); MP.timer = url ? setInterval(musTick, 100) : null;
+  clearInterval(MP.timer); MP.timer = liste.length ? setInterval(musTick, 100) : null;
 }
 function musArreter(){ clearInterval(MP.timer); MP.timer = null; MP.g = 0; MP.els.forEach(x => x.pause()); }
 $("lecMusOn").onchange = () => {

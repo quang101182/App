@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Banc des routes MUSIQUE du proxy (v1.85.0) sur une serie JETABLE sources/banc-mus/ (effacee a la fin,
-ainsi que ce que le banc a mis a la corbeille). Ne touche a aucune vraie serie.
+"""Banc des routes MUSIQUE du proxy (v1.90.0) sur une serie JETABLE sources/banc-mus/ (effacee a la fin, ainsi que
+ce que le banc a mis a la corbeille). Ne touche a aucune vraie serie.
+v1.90 : noms « Titre N » (jamais un numero supprime reutilise), selection de la serie (5 max), selection propre
+d'un chapitre, « enlever d'un chapitre » != « supprimer de la base ».
 Usage : python test_musique.py <fichier audio> [port]   (8191 = copie patchee de test, 8190 = proxy reel)
 """
 import base64, json, os, shutil, sys, urllib.error, urllib.request
@@ -30,33 +32,66 @@ def check(nom, cond, detail=""):
     print(("  [OK] " if cond else "  [KO] ") + nom + (" -- " + str(detail) if detail else ""))
 
 
+def importe():
+    return api("/manga/musique_import", {"serie": "banc-mus", "nom": "n'importe quoi [moteur1].mp3", "data": b64})[1]
+
+
 shutil.rmtree(BANC, ignore_errors=True)
-os.makedirs(os.path.join(BANC, "ch_1"))
+for ch in ("ch_1", "ch_2"):
+    os.makedirs(os.path.join(BANC, ch))
+    json.dump({"slug": "banc-mus", "title": "Banc Mus", "chapter": ch[3:], "pages": []},
+              open(os.path.join(BANC, ch, "manifest.json"), "w", encoding="utf-8"))
 corb_avant = set(os.listdir(os.path.join(SRC, "_corbeille"))) if os.path.isdir(os.path.join(SRC, "_corbeille")) else set()
 b64 = base64.b64encode(open(AUDIO, "rb").read()).decode()
 try:
     s, r = api("/manga/musiques?serie=banc-mus")
-    check("serie sans musique -> liste vide", s == 200 and r == {"items": [], "choix": ""}, r)
-    s, r = api("/manga/musique_import", {"serie": "banc-mus", "nom": "Thème [moteur1].mp3", "data": b64})
-    check("import -> nom nettoye (accents, crochets)", r.get("nom") == "Theme moteur1", r)
-    s, r = api("/manga/musique_import", {"serie": "banc-mus", "nom": "Thème [moteur1].mp3", "data": b64})
-    check("import du meme nom -> suffixe (2), rien d'ecrase", r.get("nom") == "Theme moteur1 (2)", r)
-    s, r = api("/manga/musiques?serie=banc-mus")
-    check("2 morceaux listes", len(r.get("items", [])) == 2, [x["nom"] for x in r.get("items", [])])
-    check("le 1er importe est celui qui joue", r.get("choix") == "Theme moteur1", r.get("choix"))
+    check("serie sans musique -> vide", s == 200 and r["items"] == [] and r["effectif"] == [], r)
+    n1, n2 = importe().get("nom"), importe().get("nom")
+    check("import -> nom du MANGA numerote (le nom du fichier est ignore)", (n1, n2) == ("Banc Mus 1", "Banc Mus 2"), (n1, n2))
+    s, r = api("/manga/musiques?serie=banc-mus&d=banc-mus/ch_1")
+    check("les importes rejoignent la selection de la serie", r["serie_sel"] == ["Banc Mus 1", "Banc Mus 2"], r["serie_sel"])
+    check("un chapitre suit la serie par defaut", r["chapitre"]["mode"] == "serie" and r["effectif"] == r["serie_sel"], r.get("chapitre"))
+    check("duree mesuree", r["items"][0]["dur"] > 10, r["items"][0]["dur"])
     f = r["items"][0]["fichier"]
     s, bb = api("/manga/source_file?p=" + urllib.request.quote(f), raw=True, headers={"Range": "bytes=1000-1999"})
-    check("fichier servi avec Range (206, 1000 octets)", s == 206 and len(bb) == 1000, (s, len(bb)))
-    s, r = api("/manga/musique_choix", {"serie": "banc-mus", "nom": "Theme moteur1 (2)"})
+    check("fichier servi avec Range (206)", s == 206 and len(bb) == 1000, (s, len(bb)))
+    # numerotation : supprimer le PLUS GRAND numero ne le fait pas renaitre
+    api("/manga/musique_suppr", {"serie": "banc-mus", "nom": "Banc Mus 2"})
+    n3 = importe().get("nom")
+    check("« Banc Mus 2 » supprime -> le suivant est 3, jamais un 2 reutilise", n3 == "Banc Mus 3", n3)
+    for _ in range(4):
+        importe()
     s, r = api("/manga/musiques?serie=banc-mus")
-    check("choix change", r.get("choix") == "Theme moteur1 (2)", r.get("choix"))
-    s, r = api("/manga/musique_choix", {"serie": "banc-mus", "nom": "inexistant"})
-    check("choix d'un morceau inexistant refuse", r.get("error") == "morceau introuvable", r)
-    s, r = api("/manga/musique_suppr", {"serie": "banc-mus", "nom": "Theme moteur1 (2)"})
-    check("suppression -> corbeille", r.get("ok") and "_corbeille" in r.get("corbeille", "").replace("\\", "/")
-          or r.get("ok") and os.path.isfile(os.path.join(SRC, r.get("corbeille", ""))), r)
+    check("la selection de la serie s'arrete a 5", len(r["serie_sel"]) == 5 and len(r["items"]) == 6, (r["serie_sel"], len(r["items"])))
+    s, r = api("/manga/musique_selection", {"serie": "banc-mus", "noms": [x["nom"] for x in r["items"]]})
+    check("6 morceaux dans une selection -> refuse", "au plus" in (r.get("error") or ""), r)
+    # chapitre 2 : sa propre selection
+    s, r = api("/manga/musique_selection", {"serie": "banc-mus", "d": "banc-mus/ch_2", "mode": "propre", "noms": ["Banc Mus 3", "Banc Mus 1"]})
+    check("chapitre 2 : selection propre", r.get("effectif") == ["Banc Mus 3", "Banc Mus 1"] and r["chapitre"]["mode"] == "propre", r.get("effectif"))
+    s, r = api("/manga/musiques?serie=banc-mus&d=banc-mus/ch_1")
+    check("chapitre 1 n'est pas touche (suit toujours la serie)", r["chapitre"]["mode"] == "serie" and r["effectif"] == r["serie_sel"], r["effectif"])
+    # ENLEVER d'un chapitre (decocher) : le fichier reste dans la base
+    s, r = api("/manga/musique_selection", {"serie": "banc-mus", "d": "banc-mus/ch_2", "mode": "propre", "noms": ["Banc Mus 1"]})
+    s, r = api("/manga/musiques?serie=banc-mus&d=banc-mus/ch_2")
+    check("enlever du chapitre : retire de SA selection, le fichier reste", r["effectif"] == ["Banc Mus 1"]
+          and any(x["nom"] == "Banc Mus 3" for x in r["items"]), r["effectif"])
+    # SUPPRIMER de la base : partout
+    api("/manga/musique_selection", {"serie": "banc-mus", "d": "banc-mus/ch_2", "mode": "propre", "noms": ["Banc Mus 1", "Banc Mus 3"]})
+    s, r = api("/manga/musique_suppr", {"serie": "banc-mus", "nom": "Banc Mus 1"})
+    check("supprimer de la base -> corbeille", r.get("ok") and os.path.isfile(os.path.join(SRC, r.get("corbeille", ""))), r)
+    s, r2 = api("/manga/musiques?serie=banc-mus&d=banc-mus/ch_2")
+    check("... retire de la serie ET des chapitres", "Banc Mus 1" not in r2["serie_sel"] and r2["effectif"] == ["Banc Mus 3"]
+          and all(x["nom"] != "Banc Mus 1" for x in r2["items"]), (r2["serie_sel"], r2["effectif"]))
+    # retour a la serie
+    s, r = api("/manga/musique_selection", {"serie": "banc-mus", "d": "banc-mus/ch_2", "mode": "serie", "noms": []})
+    check("chapitre 2 revient a « celle de la serie »", r["effectif"] == r["serie_sel"], r["effectif"])
+    # l'ancien format (v1.85) est relu
+    json.dump({"nom": "Banc Mus 3"}, open(os.path.join(BANC, "musique", "choix.json"), "w", encoding="utf-8"))
     s, r = api("/manga/musiques?serie=banc-mus")
-    check("supprime celui qui jouait -> plus aucun choix", r.get("choix") == "" and len(r["items"]) == 1, r)
+    check("ancien choix.json {nom} relu comme selection", r["serie_sel"] == ["Banc Mus 3"], r["serie_sel"])
+    check("... et le numero suivant reste au-dela des existants", importe().get("nom") == "Banc Mus 8")
+    s, r = api("/manga/musique_selection", {"serie": "banc-mus", "d": "claymore/ch_1", "noms": []})
+    check("chapitre d'une AUTRE serie refuse", r.get("error") == "chapitre introuvable", r)
     s, r = api("/manga/musique_import", {"serie": "banc-mus", "nom": "faux.mp3", "data": base64.b64encode(b"x" * 20000).decode()})
     check("un faux fichier est refuse", "audio" in (r.get("error") or ""), r)
     s, r = api("/manga/musique_import", {"serie": "../banc-mus", "nom": "a.mp3", "data": b64})
@@ -68,7 +103,7 @@ finally:
     cb = os.path.join(SRC, "_corbeille")
     for x in (set(os.listdir(cb)) - corb_avant) if os.path.isdir(cb) else ():
         if "banc-mus" in x:
-            p = os.path.join(cb, x)
-            shutil.rmtree(p) if os.path.isdir(p) else os.remove(p)
+            pth = os.path.join(cb, x)
+            shutil.rmtree(pth) if os.path.isdir(pth) else os.remove(pth)
 print("\n=== VERDICT : %d/%d" % (len(OK), len(OK) + len(KO)) + ("" if not KO else "  ECHECS : " + ", ".join(KO)))
 sys.exit(1 if KO else 0)

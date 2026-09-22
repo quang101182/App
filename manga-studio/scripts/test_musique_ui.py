@@ -5,12 +5,25 @@ lecteurs de musique : niveau sous la voix, remontee entre les pages, pause, inte
 fondu enchaine, fermeture. PC 1280 px puis telephone 360 px. Remet le volume / l'interrupteur par defaut.
 Usage : python test_musique_ui.py
 """
-import os, sys
+import json, os, sys, urllib.request
 from playwright.sync_api import sync_playwright
 
 KEY = open(os.path.expanduser(r"~\Documents\ComfyUI\.studio_secret"), encoding="utf-8").read().strip()
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8190
 OK, KO = [], []
+
+
+def api(path, body=None):
+    req = urllib.request.Request("http://127.0.0.1:%d%s" % (PORT, path), data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"Authorization": "Bearer " + KEY, "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.load(r)
+
+
+# v1.90 : on joue 2 morceaux (selection PROPRE au chapitre, le temps du banc), puis on remet tout comme avant
+AVANT = api("/manga/musiques?serie=claymore&d=claymore/ch_1")
+DEUX = [x["nom"] for x in AVANT["items"]][:2]
+api("/manga/musique_selection", {"serie": "claymore", "d": "claymore/ch_1", "mode": "propre", "noms": DEUX})
 
 
 def check(nom, cond, detail=""):
@@ -34,17 +47,19 @@ with sync_playwright() as p:
         pg.goto("http://127.0.0.1:%d/manga#k=" % PORT + KEY); pg.wait_for_timeout(3000)
         pg.evaluate("() => { try { localStorage.removeItem('manga_mus_on'); localStorage.removeItem('manga_mus_vol'); } catch {} }")
         pg.reload(); pg.wait_for_timeout(3000)
-        check("version >= 1.85.0", pg.inner_text("#verBadge") >= "v1.85.0", pg.inner_text("#verBadge"))
+        check("version >= 1.90.0", pg.inner_text("#verBadge") >= "v1.90.0", pg.inner_text("#verBadge"))
         pg.click('nav button[data-tab="tChap"]'); pg.wait_for_timeout(1500)
         i = pg.evaluate("() => CHAPS.findIndex(c => c.dir === 'claymore/ch_1')")
         pg.evaluate("(i) => openChap(i)", i); pg.wait_for_timeout(3000)
-        opts = pg.evaluate("() => [...$('musChoix').options].map(o => o.value).filter(Boolean)")
-        check("bloc musique : morceaux de la serie listes", len(opts) >= 1, opts)
-        check("un morceau est choisi", pg.evaluate("() => $('musChoix').value") != "")
-        # ecoute seule
-        pg.click("#musEcoute"); pg.wait_for_timeout(1500)
-        check("▶ ecoute le morceau seul", pg.inner_text("#musEcoute") == "■")
-        pg.click("#musEcoute"); pg.wait_for_timeout(300)
+        n = pg.locator("#musListe .mus-it").count()
+        check("liste des morceaux de la serie (colonnes fixes)", n >= 2, n)
+        xs = pg.evaluate("() => [...document.querySelectorAll('#musListe .mus-it [data-mus-suppr]')].map(b => Math.round(b.getBoundingClientRect().x))")
+        check("🗑 aligne sur toutes les lignes", len(set(xs)) == 1, xs)
+        check("« propre au chapitre » actif, 2 coches", pg.evaluate("() => $('musMode').querySelector('.on').dataset.mode") == "propre"
+              and pg.locator("#musListe input:checked").count() == 2)
+        pg.click("#musListe [data-mus-ecoute] >> nth=0"); pg.wait_for_timeout(1500)
+        check("▶ ecoute le morceau seul", pg.inner_text("#musListe [data-mus-ecoute] >> nth=0") == "■")
+        pg.click("#musListe [data-mus-ecoute] >> nth=0"); pg.wait_for_timeout(300)
         # lecteur
         k = pg.evaluate("() => NARRS.findIndex(n => n.tag === 'banc-k3-charon')")
         pg.evaluate("(k) => ouvrirLecteur([NARRS[k].tag])", k)
@@ -81,13 +96,14 @@ with sync_playwright() as p:
         # boucle : on saute a 4 s de la fin du morceau
         pg.evaluate("() => { const a = MP.els[MP.cur]; a.currentTime = a.duration - 4; }")
         cur0 = pg.evaluate("() => MP.cur")
+        src0 = pg.evaluate("() => MP.els[MP.cur].src")
         pg.wait_for_timeout(2200)
         e = pg.evaluate(ETAT)
         check("fin du morceau -> les deux lecteurs se croisent", not e["p"][0] and not e["p"][1] and e["cur"] != cur0, e)
         pg.wait_for_timeout(3500)
         e = pg.evaluate(ETAT)
-        check("apres le fondu : le morceau est reparti du debut, l'autre s'est tu",
-              e["p"][cur0] and not e["p"][e["cur"]] and e["t"][e["cur"]] < 8, e)
+        check("apres le fondu : un AUTRE morceau joue depuis le debut, l'ancien s'est tu",
+              e["p"][cur0] and not e["p"][e["cur"]] and e["t"][e["cur"]] < 8 and pg.evaluate("() => MP.els[MP.cur].src") != src0, e)
         # memorise par appareil
         check("volume memorise", pg.evaluate("() => localStorage.getItem('manga_mus_vol')") == "100")
         dep = pg.evaluate("() => document.documentElement.scrollWidth - innerWidth")
@@ -101,5 +117,9 @@ with sync_playwright() as p:
         check("aucune erreur JS", not errs, errs[:2])
         c.close()
     b.close()
+prop = AVANT.get("chapitre") or {"mode": "serie", "noms": []}
+api("/manga/musique_selection", {"serie": "claymore", "d": "claymore/ch_1", "mode": prop["mode"], "noms": prop["noms"]})
+fin = api("/manga/musiques?serie=claymore&d=claymore/ch_1")
+check("Claymore remise comme avant", fin["chapitre"] == prop and fin["serie_sel"] == AVANT["serie_sel"], (fin["chapitre"], fin["serie_sel"]))
 print("\n=== VERDICT : %d/%d" % (len(OK), len(OK) + len(KO)) + ("" if not KO else "  ECHECS : " + ", ".join(KO)))
 sys.exit(1 if KO else 0)

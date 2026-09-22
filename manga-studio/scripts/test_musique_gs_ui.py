@@ -27,6 +27,8 @@ def api(path, body=None):
 
 
 avant = api("/manga/musiques?serie=claymore")
+CHOIX = os.path.join(SRC, "claymore", "musique", "choix.json")        # compteur de numerotation compris
+choix_avant = open(CHOIX, "rb").read() if os.path.isfile(CHOIX) else None
 noms_avant = {x["nom"] for x in avant["items"]}
 corb = os.path.join(SRC, "_corbeille")
 corb_avant = set(os.listdir(corb)) if os.path.isdir(corb) else set()
@@ -88,7 +90,8 @@ try:
                     pris.extend(x["nom"] for x in neufs)
                     check("« Prendre » : le morceau arrive dans la serie, en MP3", len(neufs) == 1 and neufs[0]["fichier"].endswith(".mp3"),
                           [(x["nom"], x["taille"]) for x in neufs])
-                    check("il apparait dans le menu de la serie", pg.evaluate("(n) => [...$('musChoix').options].some(o => o.value === n)", neufs[0]["nom"] if neufs else ""))
+                    check("il apparait dans la liste de la serie, nomme d'apres le manga", pg.locator('#musListe [data-mus-coche="%s"]' % (neufs[0]["nom"] if neufs else "")).count() == 1
+                          and bool(neufs) and neufs[0]["nom"].startswith("Claymore "), neufs[0]["nom"] if neufs else None)
                     check("bouton passe a « ✓ prise »", "prise" in pg.inner_text('#gsListe [data-gs-prendre="%s"]' % ci))
             dep = pg.evaluate("() => document.documentElement.scrollWidth - innerWidth")
             check("pas de debordement horizontal", dep <= 0, dep)
@@ -99,12 +102,14 @@ try:
 finally:
     for nom in pris:                                  # remettre la serie comme avant
         api("/manga/musique_suppr", {"serie": "claymore", "nom": nom})
-    if avant.get("choix"):
-        api("/manga/musique_choix", {"serie": "claymore", "nom": avant["choix"]})
+    api("/manga/musique_selection", {"serie": "claymore", "noms": avant.get("serie_sel", [])})
+    if choix_avant is not None:                      # remet AUSSI le compteur : le banc ne doit pas trouer la numerotation
+        open(CHOIX, "wb").write(choix_avant)
     for x in (set(os.listdir(corb)) - corb_avant) if os.path.isdir(corb) else ():
         if "claymore__musique__" in x:
             os.remove(os.path.join(corb, x))
     fin = api("/manga/musiques?serie=claymore")
-    check("serie remise comme avant", {x["nom"] for x in fin["items"]} == noms_avant and fin["choix"] == avant["choix"], fin["choix"])
+    check("serie remise comme avant (compteur compris)", {x["nom"] for x in fin["items"]} == noms_avant and fin["serie_sel"] == avant["serie_sel"]
+          and (choix_avant is None or open(CHOIX, "rb").read() == choix_avant), fin["serie_sel"])
 print("\n=== VERDICT : %d/%d" % (len(OK), len(OK) + len(KO)) + ("" if not KO else "  ECHECS : " + ", ".join(KO)))
 sys.exit(1 if KO else 0)
