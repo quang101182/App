@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.4.1"
+VERSION = "0.5.0"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -343,6 +343,150 @@ def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: boo
                               "sur le web (réservé à l'application ou à un abonnement ?)")
         return None, f"MANGA Plus : le clic sur le chapitre #{brut} n'a pas ouvert le lecteur"
     return None, "enchaînement des chapitres non pris en charge sur ce site (MangaDex et MANGA Plus seulement)"
+
+
+
+# --------------------------------------------------------------------------- webtoons (v0.5.0)
+# Un webtoon (manhwa) arrive en BANDES de 800 x ~10 000 px (Solo Leveling: Ragnarok ch.1, MangaDex, mesure 22/09) :
+# un modele de lecture reduit une telle image a ~160 px de large (bulles illisibles), la detection des bulles et la
+# video 9:16 aussi. On les DECOUPE en pages, UNE FOIS, a la capture : toute la suite (narration, traduction, video,
+# visionneuse) retrouve des pages normales sans rien changer. Regles, mesurees sur les 26 bandes de ce chapitre :
+#  - les bandes sont d'abord RECOLLEES bout a bout : l'editeur les coupe n'importe ou, parfois au milieu d'une case ;
+#  - on coupe dans une ligne STRICTEMENT unie (ecart <= 24 niveaux sur toute la largeur) : un contour de bulle de
+#    2 px suffit a la rendre « occupee » (v1 ignorait 2 % des pixels -> coupes A TRAVERS des encadres de texte) ;
+#  - la gouttiere la plus proche de 1,5 x la largeur, les longues etant preferees ; sinon (rare : 5 coupes sur 128)
+#    la ligne la moins occupee, jamais dans le texte d'apres le controle visuel ;
+#  - pas de page de moins de 0,45 x la cible en fin de chapitre.
+# Les bandes d'origine sont gardees dans <chapitre>/originaux/ (rien n'est perdu).
+DECOUPE_RATIO = 3.0            # une image plus de 3 fois plus haute que large = une bande
+DECOUPE_TOL = 24
+
+
+def _coupes_webtoon(ptp, occ, largeur):
+    import numpy as np
+    h, H = len(ptp), int(largeur * 1.5)
+    calme = ptp <= DECOUPE_TOL
+    runs, i = [], 0
+    while i < h:
+        if calme[i]:
+            j = i
+            while j < h and calme[j]:
+                j += 1
+            if j - i >= 4:
+                runs.append((i, j))
+            i = j
+        else:
+            i += 1
+    centres = np.array([(a + b) / 2 for a, b in runs]) if runs else np.zeros(0)
+    longs = np.array([b - a for a, b in runs]) if runs else np.zeros(0)
+    cuts, forcees, y = [], [], 0
+    while h - y > int(H * 1.5):
+        fin, choix = h - int(H * 0.45), None
+        for borne in (2.2, 3.2):
+            m = (centres >= y + H * 0.5) & (centres <= min(y + H * borne, fin))
+            if m.any():
+                idx = np.where(m)[0]
+                sc = np.abs(centres[idx] - (y + H)) - 0.6 * np.minimum(longs[idx], 250)
+                choix = int(centres[idx[int(np.argmin(sc))]])
+                break
+        if choix is None:
+            a, b = y + int(H * 0.8), min(fin, y + int(H * 2.2))
+            choix = a + int(np.argmin(occ[a:b]))
+            forcees.append(choix)
+        cuts.append(choix)
+        y = choix
+    return cuts, forcees
+
+
+def decouper_bandes(dossier: str) -> dict | None:
+    """Decoupe les bandes webtoon d'un chapitre (sur place). None si rien a faire."""
+    mp = os.path.join(dossier, "manifest.json")
+    man = json.load(open(mp, encoding="utf-8"))
+    pages = man.get("pages") or []
+    from PIL import Image
+    dims = []
+    for pg in pages:
+        with Image.open(os.path.join(dossier, pg["file"])) as im:
+            dims.append(im.size)
+    est_bande = [h / w > DECOUPE_RATIO for w, h in dims]
+    if not any(est_bande) or man.get("decoupe"):
+        return None
+    import numpy as np
+    # les bandes CONSECUTIVES forment un seul ruban (une page normale au milieu le coupe en deux rubans)
+    groupes, cur = [], []
+    for k, b in enumerate(est_bande):
+        if b:
+            cur.append(k)
+        elif cur:
+            groupes.append(cur); cur = []
+    if cur:
+        groupes.append(cur)
+    orig = os.path.join(dossier, "originaux")
+    os.makedirs(orig, exist_ok=True)
+    nouvelles, n_forcees, par_page = [], 0, {}
+    for g in groupes:
+        largeur = dims[g[0]][0]
+        ptp, occ, bornes, y = [], [], [], 0
+        for k in g:
+            with Image.open(os.path.join(dossier, pages[k]["file"])) as im:
+                im = im.convert("L")
+                if im.width != largeur:                       # largeurs melangees : on aligne sur la 1re
+                    im = im.resize((largeur, round(im.height * largeur / im.width)))
+                a = np.asarray(im, dtype=np.int16)
+            med = np.median(a, axis=1, keepdims=True)
+            ptp.append(a.max(axis=1) - a.min(axis=1))
+            occ.append((np.abs(a - med) > DECOUPE_TOL).sum(axis=1))
+            bornes.append((y, y + a.shape[0], k)); y += a.shape[0]
+        cuts, forcees = _coupes_webtoon(np.concatenate(ptp), np.concatenate(occ), largeur)
+        n_forcees += len(forcees)
+        tr = [0] + cuts + [y]
+        tranches = []
+        for a0, b0 in zip(tr, tr[1:]):
+            morceau = Image.new("RGB", (largeur, b0 - a0), "white")
+            for a, b, k in bornes:
+                lo, hi = max(a, a0), min(b, b0)
+                if lo < hi:
+                    with Image.open(os.path.join(dossier, pages[k]["file"])) as im:
+                        im = im.convert("RGB")
+                        if im.width != largeur:
+                            im = im.resize((largeur, round(im.height * largeur / im.width)))
+                        morceau.paste(im.crop((0, lo - a, largeur, hi - a)), (0, lo - a0))
+            tranches.append(morceau)
+        par_page[g[0]] = tranches
+        for k in g[1:]:
+            par_page[k] = []
+    # nouvelle sequence : pages normales telles quelles, rubans remplaces par leurs tranches
+    tmp = os.path.join(dossier, "_decoupe_tmp")
+    shutil.rmtree(tmp, ignore_errors=True); os.makedirs(tmp)
+    for k, pg in enumerate(pages):
+        src = os.path.join(dossier, pg["file"])
+        if k in par_page:
+            for t in par_page[k]:
+                nom = "page_%03d.jpg" % (len(nouvelles) + 1)
+                t.save(os.path.join(tmp, nom), "JPEG", quality=92)
+                nouvelles.append({"file": nom, "bytes": os.path.getsize(os.path.join(tmp, nom)), "w": t.width, "h": t.height,
+                                  "de": pg["file"]})
+        else:
+            nom = "page_%03d%s" % (len(nouvelles) + 1, os.path.splitext(pg["file"])[1])
+            shutil.copy2(src, os.path.join(tmp, nom))
+            nouvelles.append(dict(pg, file=nom))
+    for pg in pages:                                            # originaux de cote, puis les nouvelles pages
+        os.replace(os.path.join(dossier, pg["file"]), os.path.join(orig, pg["file"]))
+    for nv in nouvelles:
+        os.replace(os.path.join(tmp, nv["file"]), os.path.join(dossier, nv["file"]))
+    shutil.rmtree(tmp, ignore_errors=True)
+    nb = sum(est_bande)
+    info = {"bandes": nb, "pages": sum(len(v) for v in par_page.values()), "coupes_hors_gouttiere": n_forcees,
+            "version": VERSION, "originaux": "originaux/" + " (manifeste d'origine : originaux/manifest.json)"}
+    json.dump(man, open(os.path.join(orig, "manifest.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    man["pages"] = nouvelles
+    man["decoupe"] = info
+    man.setdefault("notes", []).append("webtoon : %d bandes découpées en %d pages (%d coupe(s) hors gouttière) — originaux/ gardés"
+                                       % (nb, info["pages"], n_forcees))
+    json.dump(man, open(mp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    log_evt("webtoon", "bandes découpées", bandes=nb, pages=info["pages"], forcees=n_forcees, dossier=dossier)
+    print("Webtoon : %d bandes découpées en %d pages (%d coupe(s) hors gouttière), originaux gardés." % (nb, info["pages"], n_forcees))
+    return info
 
 
 def capture(args) -> int:
@@ -700,7 +844,13 @@ def capture(args) -> int:
                     const oy = getComputedStyle(el).overflowY;
                     if (oy !== 'auto' && oy !== 'scroll') continue;
                     if (el.clientHeight < innerHeight * 0.5) continue;
-                    if (el.scrollHeight > bh) { bh = el.scrollHeight; best = el; }
+                    // v0.4.2 : BODY/HTML annoncent souvent « overflow:auto » mais c'est la FENETRE qui defile
+                    // (webtoon MangaDex 22/09 : body marque, body.scrollBy sans effet -> 2 pages sur 26).
+                    if (el === document.body || el === document.documentElement) continue;
+                    if (el.scrollHeight <= bh) continue;
+                    const avant = el.scrollTop; el.scrollTop = avant + 5;       // defile-t-il VRAIMENT ?
+                    const bouge = el.scrollTop !== avant; el.scrollTop = avant;
+                    if (bouge) { bh = el.scrollHeight; best = el; }
                 }
                 if (!best || best.scrollHeight <= best.clientHeight * 2.5) return null;
                 best.setAttribute('data-mf-defile', '1');
@@ -877,6 +1027,11 @@ def capture(args) -> int:
                       pages=len(pages_meta), echecs=sum(1 for n in notes if "ECHEC" in n))
             log_evt("capture", "terminée", pages=len(pages_meta), notes=len(notes), dossier=dest)
             print(f"OK : {len(pages_meta)}/{len(uniques)} pages -> {dest}")
+            try:
+                decouper_bandes(dest)                          # v0.5.0 : webtoon -> pages
+            except Exception as e:
+                notes.append(f"découpage webtoon impossible : {type(e).__name__} {str(e)[:80]}")
+                log_evt("webtoon", f"découpage impossible {type(e).__name__}", err=str(e)[:120])
             if notes:
                 print("Notes : " + " ; ".join(notes[:5]))
             return 0 if not notes else 3  # 3 = réussite avec avertissements
@@ -1128,6 +1283,9 @@ def main() -> int:
     s.add_argument("--chapter", required=True)
     s.add_argument("--out", default=DEFAULT_OUT)
 
+    s = sub.add_parser("decouper", help="v0.5.0 : découper les bandes webtoon d'un chapitre en pages")
+    s.add_argument("dossier")
+
     s = sub.add_parser("verify", help="contrôler manifeste <-> fichiers")
     s.add_argument("dossier")
 
@@ -1154,6 +1312,11 @@ def main() -> int:
         return capture(args)
     if args.cmd == "import":
         return import_src(args)
+    if args.cmd == "decouper":
+        r = decouper_bandes(args.dossier)
+        if r is None:
+            print("Rien à découper (pas de bande, ou déjà découpé).")
+        return 0
     if args.cmd == "verify":
         return verify(args.dossier)
     if args.cmd == "liste":

@@ -2178,3 +2178,15 @@ La musique de la série reste `musique/choix.json` (existant) : le profil l'AFFI
 - P2 proxy : `GET/POST /manga/profil_defaut`, profil étendu, `POST /manga/suivi_lancer {serie, chapitres, refaire}`, estimation + traduction, item « lot » dans `/manga/activite`.
 - P3 app : le panneau ci-dessus (1280 + 360 px, captures), bilan du lot.
 - DoD : un lot réel de 2-3 chapitres lancé depuis l'app, de la capture brute à la vidéo, sans intervention ; défaut appliqué à une série neuve ; nuit à sec (`--dry`) cohérente.
+
+### 28 — WEBTOONS (manhwa) — ✅ capture + découpage + narration (22/09 16h10) ; 🟠 traduction des encadrés sombres
+
+Question Quang 15h47 (lien *Solo Leveling: Ragnarok* ch.1, MangaDex, VO coréenne, traduction ITALIENNE). Mesuré : 26 bandes
+de 800 × ~9 500 px. **Fait** (manga-fetch v0.4.2 + v0.5.0, détail README manga-fetch § Webtoons) : capture en bande
+réparée (body ≠ bloc défilant) ; découpage automatique après capture (26 bandes → 129 pages, aucune coupe dans du texte) ;
+narration Gemini 12 pages = récit fidèle (0,26 $). Chapitre de test gardé : `sources/banc-webtoon/ch_1` (à renommer ou
+supprimer par Quang).
+**Reste — déclencheur : prochaine session Manga Studio, avant tout autre chantier de traduction** :
+(a) 🟠 traduction : encadrés TEXTE CLAIR SUR FOND SOMBRE non effacés (6 bulles vues sur 6 pages, texte resté en italien) →
+détecter la polarité de l'encadré, remplir de SA couleur de fond, écrire en clair ; mesurer aussi la détection YOLO sur
+ces encadrés rectangulaires. (b) 🟠 capture : deux onglets sur la même adresse → la capture prend le 1er (constaté 22/09).

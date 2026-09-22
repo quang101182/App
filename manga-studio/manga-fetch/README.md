@@ -99,6 +99,21 @@ Après chaque chapitre, `chapitre_suivant()` amène **le même onglet** au suiva
 - Bancs : `scripts/test_capture_serie.py [port]` **27/27** (mutation « saute un chapitre » → 14/20 rouge),
   `scripts/test_capture_serie_ui.py [port]` **13/13** ; non-régression `test_manga_fetch.py` **9/9**.
 
+## Webtoons (manhwa) : découpage automatique des bandes (v0.5.0, 22/09/2026)
+
+Un webtoon arrive en BANDES de 800 × ~10 000 px (*Solo Leveling: Ragnarok* ch.1, MangaDex, 26 bandes). Telles
+quelles, elles sont inexploitables en aval : un modèle de lecture les réduit à ~160 px de large, la détection des
+bulles et la vidéo 9:16 aussi. ⇒ après chaque capture, `decouper_bandes()` coupe toute image > 3× plus haute que large
+(`python manga_fetch.py decouper <dossier>` pour un chapitre déjà là ; idempotent). Bandes **recollées** d'abord (l'éditeur
+coupe n'importe où), coupe dans une ligne **strictement** unie (écart ≤ 24 sur toute la largeur — la v1 ignorait 2 % des
+pixels et coupait À TRAVERS des encadrés), gouttière la plus proche de 1,5× la largeur. Originaux dans `originaux/`.
+Mesuré : 26 bandes → **129 pages** en 13 s, 5 coupes hors gouttière, **aucune dans du texte** (contrôle visuel des coupes) ;
+narration Gemini de 12 pages : récit fidèle aux encadrés, 0,26 $. ⚠ **Traduction** : les encadrés de webtoon sont en
+TEXTE BLANC SUR FOND NOIR → le relettrage (fait pour texte noir sur bulle blanche) les laisse en VO (ROADMAP § 28).
+v0.4.2 : le lecteur MangaDex en bande marquait `<body>` comme « bloc défilant » (overflow:auto) alors que c'est la fenêtre
+qui défile → 2 pages sur 26 ; body/html ignorés et un bloc n'est retenu que s'il défile VRAIMENT.
+⚠ Deux onglets sur la MÊME adresse : `--tab` prend le premier (ici celui de Quang, figé) — viser une adresse distincte.
+
 ## Lecteurs reconnus (v0.3.0, 21/09/2026)
 
 | Affichage | Détection | Avance | Extraction |
