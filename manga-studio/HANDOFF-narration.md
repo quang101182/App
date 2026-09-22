@@ -1,9 +1,9 @@
-# HANDOFF — Manga Studio, volet LECTURE NARRÉE (maj 22/09/2026, 06h20)
+# HANDOFF — Manga Studio, volet LECTURE NARRÉE (maj 22/09/2026, 06h50)
 
 > Autosuffisant. « Fait » = `git log` (version courante : v1.85.0). Ce fichier ne porte
 > que le RESTANT, les pièges et le pourquoi. Le détail des mesures est dans `ROADMAP.md` § 4-ter et 4-ter-bis.
 
-## Où on en est (v1.72.0 — voir « RESTANT » pour la suite, jusqu'à v1.92.0)
+## Où on en est (v1.72.0 — voir « RESTANT » pour la suite, jusqu'à v1.93.0)
 - Onglet 📚 **Chapitres** : liste des chapitres de `sources/`, **capture DANS l'app** (manga-fetch enveloppé),
   avertissements du manifeste + bouton Vérifier, **Narrer** (moteur/voix/pages), lecteur plein écran,
   écoute à l'aveugle, **pastille des coûts** en en-tête (détail au clic).
@@ -61,7 +61,9 @@
    ✅ **v1.89 → v1.92** (06h20) : visionneuse remontée (téléphone), musique série/chapitre (5 morceaux, noms numérotés), coûts complets +
    temps restant + tâche vivante = PID, ergonomie bibliothèque/chapitre (zones fixes). Détail : ROADMAP, ligne « v1.90 → v1.92 ».
    Narration Claymore K3 `kimi-charon` FAITE (Raki correct). ⚠ Si une série est renommée, ses morceaux gardent l'ancien titre.
-   Ensuite (3) vidéo = **À DISCUTER avec Quang avant tout code**.
+   ✅ **v1.93.0 VIDÉO** (06h50) : 9:16, le lecteur rejoué, mode série, tag « à refaire » par empreinte, file de fabrication, flux +
+   téléchargement. Détail : ROADMAP ligne « 5 — VIDÉO FAITE ». Ensuite : 7 « Précédemment… », 9 suivi de séries, 10 hors-ligne ;
+   plus tard 4 (caméra case par case). ⚠ Les vidéos (scans protégés) vivent sous sources/ : jamais dans le dépôt (public).
    ⚠ Une question de Quang (« il me semble que… ») n'est PAS un ordre : répondre, ne rien modifier.
 5. Lien mobile = l'URL du tunnel de Generate Studio (hostname dans `config-generate-agent.yml`, hors dépôt :
    ce dépôt est PUBLIC) suivie de `/manga` (le dossier github.io ne sert que le
