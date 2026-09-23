@@ -26,6 +26,8 @@ def api(path, body):
 ap = argparse.ArgumentParser()
 ap.add_argument("serie"); ap.add_argument("chapitres"); ap.add_argument("--langue", default="fr")
 ap.add_argument("--sans-videos", action="store_true")
+ap.add_argument("--rerendu", action="store_true", help="v1.97.0 : effacement + pose refaits depuis traduction.json, 0 appel")
+ap.add_argument("--version-min", default="1.96.0")
 a = ap.parse_args()
 lo, _, hi = a.chapitres.partition("-")
 chs = sorted((d for d in os.listdir(os.path.join(SRC, a.serie)) if d.startswith("ch_") and float(lo) <= float(d[3:]) <= float(hi or lo)),
@@ -34,16 +36,16 @@ bilan, cout = {}, 0.0
 for ch in chs:
     d = a.serie + "/" + ch
     td = os.path.join(SRC, a.serie, ch, "traduction", a.langue)
-    marque = d.replace("/", "__") + "__traduction__" + a.langue + "-avant-v196"
+    marque = d.replace("/", "__") + "__traduction__" + a.langue + ("-avant-v197" if a.rerendu else "-avant-v196")
     if os.path.isdir(td) and not any(marque in x for x in os.listdir(os.path.join(SRC, "_corbeille"))):
         shutil.copytree(td, os.path.join(SRC, "_corbeille", time.strftime("%Y%m%d-%H%M%S") + "_" + marque))
     t0 = time.time()
-    r = subprocess.run([PY, os.path.join(HERE, "traduire_chapitre.py"), d, "--langue", a.langue, "--engine", "gemini"],
+    r = subprocess.run([PY, os.path.join(HERE, "traduire_chapitre.py"), d, "--langue", a.langue, "--engine", "gemini"] + (["--rerendu"] if a.rerendu else []),
                        capture_output=True, text=True, encoding="utf-8", errors="replace", env=ENV)
     t = json.load(open(os.path.join(td, "traduction.json"), encoding="utf-8"))
     st = t.get("stats") or {}
     cout += st.get("cout", 0)
-    ok = r.returncode == 0 and t.get("version", "") >= "1.96.0"
+    ok = r.returncode == 0 and t.get("version", "") >= a.version_min
     bilan[d] = ok
     print("%s : code %d, v%s, %d pages, %d traduites, hors zones %d, pages prudentes %d, %.0f s, %.3f $" % (
         d, r.returncode, t.get("version"), len(t["pages"]), st.get("traduites", 0), st.get("hors_zones", 0),

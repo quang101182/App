@@ -128,7 +128,7 @@ def detect(im, conf):
     return panels, texts
 
 
-def clean_bubbles(im, texts, marge=0.30, ratio_max=None, couverture_min=None):
+def clean_bubbles(im, texts, marge=0.30, ratio_max=None, couverture_min=None, trous_dans_texte=False, boite_max=None):
     """Efface le TEXTE des bulles d'origine en preservant leur CONTOUR.
 
     Sans ca, on ne relettre pas : on empile une bulle francaise sur une bulle
@@ -149,6 +149,15 @@ def clean_bubbles(im, texts, marge=0.30, ratio_max=None, couverture_min=None):
     cette part de la boite du texte a RATE (bulle en etoile pleine de grosses lettres : seule une poche blanche est
     atteinte ; texte pose sur le dessin : rien n'est atteint, « vide ») -> on efface la boite du texte entiere.
     Vu sur OPM ch.2 p.10 et ch.5 p.2 (remontee Video Studio). Ingestion : None = comportement inchange.
+
+    trous_dans_texte (v1.97.0 de la traduction, 24/09/2026) : si vrai, on ne rebouche QUE la partie des trous situee
+    dans la boite du texte (elargie de 25 %) -- les lettres. Un trou hors du texte est un DESSIN entoure de fond clair (personnage sur
+    ciel blanc, monstre, poing) : le reboucher effacait des cases entieres (remontee Video Studio 24/09, 5 pages
+    signalees, 14 trouvees). Ingestion : False = comportement inchange.
+
+    boite_max (v1.97.0 de la traduction) : si fourni, un effacement en BOITE ENTIERE plus grand que cette part de la page
+    n'est pas fait (etat « trop grande -> non effacee ») : Black Jack ch.2 p.14, texte pose sur une photo de ville,
+    boite de 87 % de la page -> page blanche. Mieux vaut un texte non traduit qu'une page detruite.
 
     Renvoie (image nettoyee, statistiques par bulle).
     """
@@ -197,10 +206,25 @@ def clean_bubbles(im, texts, marge=0.30, ratio_max=None, couverture_min=None):
             # Les lettres sont des trous dans l'aplat : on les rebouche pour les
             # effacer aussi, puis on recule de 2 px pour ne pas manger le trait.
             comp = (comp > 0).astype(np.uint8)
-            m2 = np.zeros((H + 2, W + 2), np.uint8)
-            hors = comp.copy()
-            cv2.floodFill(hors, m2, (0, 0), 1)
-            comp = cv2.bitwise_or(comp, (hors == 0).astype(np.uint8))
+            if trous_dans_texte:
+                # l'exterieur se remplit depuis un CADRE ajoute autour de la page : depuis le pixel (0, 0), une zone
+                # claire qui coupe la page en deux faisait passer toute l'autre moitie pour un « trou »
+                hors = np.pad(comp, 1)
+                cv2.floodFill(hors, np.zeros((H + 4, W + 4), np.uint8), (0, 0), 1)
+                trous = (hors[1:H + 1, 1:W + 1] == 0).astype(np.uint8)
+            else:
+                m2 = np.zeros((H + 2, W + 2), np.uint8)
+                hors = comp.copy()
+                cv2.floodFill(hors, m2, (0, 0), 1)
+                trous = (hors == 0).astype(np.uint8)
+            if trous_dans_texte:
+                # on ne rebouche que la partie des trous situee dans la boite du texte elargie : les lettres qui
+                # touchent le dessin forment un seul « trou » avec lui -- le trier en bloc laissait le texte d'origine
+                ex, ey = int(bw * 0.25) + 4, int(bh * 0.25) + 4
+                dedans = np.zeros((H, W), np.uint8)
+                dedans[max(0, by1 - ey):by2 + ey, max(0, bx1 - ex):bx2 + ex] = 1
+                trous = trous & dedans
+            comp = cv2.bitwise_or(comp, trous)
             comp = cv2.erode(comp, np.ones((3, 3), np.uint8), iterations=2)
             etat = "bulle"
             if ratio_max:
@@ -214,10 +238,17 @@ def clean_bubbles(im, texts, marge=0.30, ratio_max=None, couverture_min=None):
                 comp[by1:by2, bx1:bx2] = 1
                 etat = "bulle incomplete -> boite seule"
 
+        if boite_max and etat != "bulle" and (bx2 - bx1) * (by2 - by1) > boite_max * H * W:
+            stats.append({"id": t.get("id"), "etat": "trop grande -> non effacee"}); continue
         sel = comp > 0
         if not sel.any():
             stats.append({"id": t.get("id"), "etat": "vide"}); continue
         avant = float((gris[sel] < 90).mean())
+        # Trait noir efface HORS du texte (boite elargie de 25 %) : ~0 dans une vraie bulle ; eleve quand le
+        # rebouchage des « trous » a pris un personnage pour une lettre (remontee Video Studio 24/09).
+        mx, my = int(bw * 0.25) + 4, int(bh * 0.25) + 4
+        hors_txt = sel.copy(); hors_txt[max(0, by1 - my):by2 + my, max(0, bx1 - mx):bx2 + mx] = False
+        trait_hors = int((gris[hors_txt] < 120).sum())
         img[sel] = 255
         gris[sel] = 255
         # La boite REELLE de la bulle videe. C'est elle qui compte : le texte
@@ -229,7 +260,9 @@ def clean_bubbles(im, texts, marge=0.30, ratio_max=None, couverture_min=None):
                       "w": float(xs.max() - xs.min() + 1) / W,
                       "h": float(ys.max() - ys.min() + 1) / H,
                       "ok": etat == "bulle"}
-        stats.append({"id": t.get("id"), "etat": etat, "pixels": int(sel.sum()),
+        stats.append({"id": t.get("id"), "etat": etat, "pixels": int(sel.sum()), "trait_hors": trait_hors,
+                      "trait_hors_pct": round(100.0 * trait_hors / (H * W), 3),
+                      "trait_hors_part": round(trait_hors / max(1, int(sel.sum())), 4),
                       "sombres_avant": round(avant, 4), "sombres_apres": 0.0})
 
     return Image.fromarray(img), stats

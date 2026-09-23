@@ -30,12 +30,18 @@ sys.path.insert(0, HERE)
 import narrate_chapter as nc          # appel_vision (Gemini natif / K3), frein 18/min, couts, journal
 import ingest_page as ip              # load_page, detect, clean_bubbles
 
-VERSION = "1.96.0"
+VERSION = "1.97.0"
+# v1.97.0 (24/09, remontee Video Studio : cases entieres effacees, dessin compris) : l'effacement ne rebouche plus que
+# les trous situes DANS la boite du texte (les lettres) -- hors du texte, un « trou » est un personnage sur fond clair.
+# Et une zone de COMPLEMENT qui ne peut etre effacee qu'en boite entiere est ecartee si elle couvre > 5 % de la page
+# (ch.3 p.7 : zone de 32 % de la page, toute la case du bas peinte en blanc).
 # v1.96.0 (23/09, T1-bis) : le seuil « 6x » s'appliquait a TOUTES les pages et abimait les vraies bulles a texte vertical
 # etroit (Black Jack : 28 bulles, texte pose en taille 8). Mesure : pages devenues blanches = >= 22,5 % du dessin blanchi ;
 # pages saines (OPM, Black Jack, Noritaka) <= 13,6 %. => effacement d'avant, et SEULEMENT si > 18 % de la page a ete
 # blanchie, la page est refaite avec la regle du fond (ratio 6).
 SEUIL_BLANCHI = 18.0
+BOITE_MAX = 0.25                      # v1.97.0 : jamais un effacement en boite entiere sur plus du quart de la page
+COMPLEMENT_BOITE_MAX = 0.05           # v1.97.0 : zone de complement effacee en boite entiere > 5 % de la page = ecartee
 COUVERTURE_MIN = 0.5                  # v1.95.0 : effacement qui couvre < 50 % du texte = rate -> boite entiere
 # v1.93.0 (23/09/2026, remontee Video Studio : 20 pages OPM traduites devenues BLANCHES) : le seuil « bulle 6x plus
 # grande que son texte = fond de case » s'applique desormais A L'EFFACEMENT (ingest_page.clean_bubbles), plus seulement
@@ -158,10 +164,10 @@ def blanchiment(im, rendu, texts):
 
 def nettoyer(im, texts, stats=None):
     """Effacement v1.96.0 : comme avant ; si la page est anormalement blanchie (> SEUIL_BLANCHI), refait en prudent."""
-    r, net = ip.clean_bubbles(im, texts, couverture_min=COUVERTURE_MIN)
+    r, net = ip.clean_bubbles(im, texts, couverture_min=COUVERTURE_MIN, trous_dans_texte=True, boite_max=BOITE_MAX)
     b = blanchiment(im, r, texts)
     if b > SEUIL_BLANCHI:
-        r, net = ip.clean_bubbles(im, texts, ratio_max=RATIO_FOND, couverture_min=COUVERTURE_MIN)
+        r, net = ip.clean_bubbles(im, texts, ratio_max=RATIO_FOND, couverture_min=COUVERTURE_MIN, trous_dans_texte=True, boite_max=BOITE_MAX)
         if stats is not None:
             stats["pages_prudentes"] = stats.get("pages_prudentes", 0) + 1
         nc.log("  effacement prudent : %.0f %% de la page aurait ete blanchie" % b)
@@ -294,6 +300,8 @@ def main():
     ap.add_argument("--conf", type=float, default=0.25)
     ap.add_argument("--conf-complement", type=float, default=CONF_COMPLEMENT,
                     help="v1.92.0 : zones faibles ajoutees si elles ne touchent aucune bulle (0 = desactive)")
+    ap.add_argument("--rerendu", action="store_true",
+                    help="v1.97.0 : refait effacement + pose depuis traduction.json (memes zones, memes textes, 0 appel)")
     a = ap.parse_args()
     if not re.match(r"^[a-z]{2}$", a.langue):
         raise SystemExit("langue invalide")
@@ -305,6 +313,11 @@ def main():
     os.makedirs(out, exist_ok=True)
     PROGRESS = os.path.join(out, "progress.json")
     man, pages = nc.pages_du_chapitre(chap, a.pages)
+    avant = {}
+    if a.rerendu:                                  # v1.97.0 : zones et traductions deja payees, deja relues
+        if a.pages:
+            raise SystemExit("--rerendu refait le chapitre entier (--pages reecrirait traduction.json incomplet)")
+        avant = {x["page"]: x for x in json.load(open(os.path.join(out, "traduction.json"), encoding="utf-8"))["pages"]}
     stats = dict(tokens_in=0, tokens_out=0, cout=0.0, bulles=0, traduites=0, onomatopees=0, vides=0,
                  effacees_bulle=0, effacees_boite=0, non_effacees=0, ne_tient_pas=0, s=0.0)
     res = {"version": VERSION, "chapitre": a.chapitre, "langue": a.langue, "engine": a.engine,
@@ -314,17 +327,23 @@ def main():
     for n, p in enumerate(pages, 1):
         progres(n - 1, len(pages), cout=round(stats["cout"], 5))       # v1.91.0 : depense cumulee, lue par la pastille des couts
         im = ip.load_page(os.path.join(chap, p["file"]))
-        texts = zones_texte(im, a.conf, a.conf_complement)                 # v1.92.0 : + complement
+        if a.rerendu:
+            anc = (avant.get(p["num"]) or {}).get("bulles") or []
+            texts = [dict(b["box"], id=b["id"], complement=b.get("complement", False), conf=b.get("conf"),
+                          **({"hors_zone": True} if b.get("hors_zone") else {})) for b in anc]
+            tr0 = {b["id"]: {"type": b.get("type"), "texte": b.get("texte"), "trad": b.get("trad")} for b in anc}
+        else:
+            texts = zones_texte(im, a.conf, a.conf_complement)             # v1.92.0 : + complement
         stats["bulles"] += len(texts)
         lignes, rendu = [], im
         if texts:
             HORS_ZONES[:] = []
             try:
-                tr = traduire_page(im, texts, a.engine, a.langue, stats)
+                tr = tr0 if a.rerendu else traduire_page(im, texts, a.engine, a.langue, stats)
             except Exception as e:
                 nc.log("  page %d : traduction en echec (%s) -> page laissee en VO" % (p["num"], e))
                 tr = {}
-            hors = zones_hors(HORS_ZONES, texts)                              # v1.94.0 (T2)
+            hors = [] if a.rerendu else zones_hors(HORS_ZONES, texts)      # v1.94.0 (T2)
             for z in hors:
                 tr[z["id"]] = z.pop("_h")
             stats["hors_zones"] = stats.get("hors_zones", 0) + len(hors)
@@ -363,6 +382,8 @@ def main():
                     etat, c = e0.get(t["id"]), t.get("clean")
                     if etat != "bulle" and not (etat and "boite" in etat):
                         continue                                  # non effacee : deja ecartee plus bas
+                    if etat != "bulle" and t["w"] * t["h"] > COMPLEMENT_BOITE_MAX:
+                        douteux.append((t, lig, "zone trop grande pour une boite entiere")); continue
                     if etat == "bulle" and c and c["w"] * c["h"] > 6 * t["w"] * t["h"]:
                         etat, c = "case", None
                     boite = c if etat == "bulle" and c else lig["box"]

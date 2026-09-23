@@ -74,5 +74,35 @@ check("boite" in sD[0]["etat"], "avec couverture_min : %s (sans : %s)" % (sD[0][
 check(blanchi(e, rD, (300, 300, 360, 520)) > 0.95, "le texte est efface (plus rien de pose sur du chinois)")
 rB6, _ = ip.clean_bubbles(b, [dict(tB)], ratio_max=6, couverture_min=0.5)
 check(np.array_equal(np.array(rB6), np.array(rBok)), "vraie bulle : resultat IDENTIQUE avec couverture_min")
+
+print("E. personnage sur un fond clair, a cote du texte -- v1.97.0 (remontee Video Studio 24/09 : cases effacees)")
+f = Image.new("RGB", (W, H), (40, 40, 40))
+d = ImageDraw.Draw(f)
+d.rectangle([60, 60, 60 + 300, 60 + 360], fill=(245, 245, 245))          # case claire : 11 % de la page (< 18 %)
+d.rectangle([90, 90, 130, 200], fill=(20, 20, 20))                       # texte vertical sombre
+d.ellipse([200, 250, 320, 400], fill=(30, 30, 30))                       # « personnage » entoure de fond clair
+tE = {"id": 5, "x": 85 / W, "y": 85 / H, "w": 50 / W, "h": 120 / H}
+rE, sE = ip.clean_bubbles(f, [dict(tE)], couverture_min=0.5, trous_dans_texte=True)
+rE0, _ = ip.clean_bubbles(f, [dict(tE)], couverture_min=0.5)
+perso = (215, 265, 305, 385)
+check(blanchi(f, rE, perso) < 0.01, "le personnage reste intact (%.0f %% blanchi)" % (100 * blanchi(f, rE, perso)))
+check(blanchi(f, rE, (90, 90, 130, 200)) > 0.95, "le texte, lui, est efface (%s)" % sE[0]["etat"])
+check(blanchi(f, rE0, perso) > 0.9, "sans trous_dans_texte (Ingestion) : comportement d'avant garde")
+rBt, _ = ip.clean_bubbles(b, [dict(tB)], couverture_min=0.5, trous_dans_texte=True)
+check(np.array_equal(np.array(rBt), np.array(rBok)), "vraie bulle : resultat IDENTIQUE avec trous_dans_texte")
+
+print("F. boite entiere geante (texte sur une photo, boite de 81 % de la page) -- v1.97.0")
+g = Image.new("RGB", (W, H), (200, 200, 200))
+d = ImageDraw.Draw(g)
+for i in range(0, W, 16):
+    d.line([(i, 0), (i, H)], fill=(20, 20, 20), width=3)                 # « photo » : ville claire rayee de noir
+tF = {"id": 6, "x": 0.05, "y": 0.05, "w": 0.9, "h": 0.9}
+rF, sF = ip.clean_bubbles(g, [dict(tF)], couverture_min=0.5, trous_dans_texte=True, boite_max=0.25)
+_, sF0 = ip.clean_bubbles(g, [dict(tF)], couverture_min=0.5, trous_dans_texte=True)
+check(sF[0]["etat"] == "trop grande -> non effacee" and np.array_equal(np.array(rF), np.array(g)),
+      "boite_max=0.25 : rien n'est efface (%s ; sans : %s)" % (sF[0]["etat"], sF0[0]["etat"]))
+rD2, _ = ip.clean_bubbles(e, [dict(tD)], ratio_max=6, couverture_min=0.5, trous_dans_texte=True, boite_max=0.25)
+check(np.array_equal(np.array(rD2), np.array(rD)), "petite boite entiere (cas D) : inchangee par boite_max")
+
 print("\n%d/%d" % (OK, OK + KO))
 sys.exit(1 if KO else 0)
