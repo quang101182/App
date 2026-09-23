@@ -2040,6 +2040,14 @@ avec Generate Studio (relance UNIQUEMENT par `relance-proxy.ps1`, `.bak` avant p
 > v1.92.0. **Règle Quang** ([[feedback_systeme_fonctionne_sans_moi]]) : corriger le SYSTÈME (tous les chapitres, les
 > suivants aussi), jamais « la page N » à la main.
 > **Ordre** : T (traductions, urgent, date) → S (site manga-scantrad) → clôture. Une étape = un commit qui la nomme.
+>
+> 📍 **ÉTAT au 23/09 23h50 (pour une reprise)** : ✅ T0, T1→T1-bis, T2+T2-bis (traduire_chapitre **v1.96.0**, `875e7b7`) ·
+> ✅ NR (Black Jack fr/en, Noritaka : 0 blanche, minuscules inchangés) · ✅ S1 manga-scantrad (manga-fetch **v0.6.0**,
+> `e4fb681`) · ✅ A1 compteur d'activité (app **v2.8.1**, `da7e355`) · ⏳ **T4 en cours** : `scripts/refaire_traductions.py
+> one-punch-man 1-10` (journal `%TEMP%/t4.txt`) — retraduit ch.1-10 puis, si le contrôle est vert, met les 10 vidéos
+> « pages fr » à la corbeille et les redemande avec leurs réglages (T5, file du proxy, ~1 h). **Reste** : vérifier T4/T5
+> (controle_traduction.py one-punch-man 1-10 = 0 page blanche ; file vidéo vide), puis le texte de retour pour Vidéo Studio
+> (étape C) et la mémoire. Anciennes traductions : `sources/_corbeille/*traduction__fr-avant-v196`.
 
 ### Constats (mesurés le 23/09 21h55, v1.92.0 — à re-vérifier si le code bouge)
 
