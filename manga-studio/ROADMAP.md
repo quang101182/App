@@ -1947,6 +1947,13 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
 > (`scripts/banc_outils.py`). ⚠️ `test_bibliotheque_ui.py` (v1.81) : 76/92 AVANT comme APRÈS ce chantier — données
 > périmées (série de démo « Frieren » disparue, OPM passé de 2 à 17 chapitres) ; déclencheur : le réécrire au prochain
 > chantier bibliothèque.
+> ✅ **Retouches de Quang, même après-midi** : **v2.6.1** (13h43) la ligne « pas encore de pochette » quitte les cartes
+> (au survol de l'image) + « Pochette officielle » essaie tous les titres connus (AniList répondait 404 sur la faute
+> « Solo Levelng » ; `patch_pochette_titres.py`) · **v2.6.2** (13h52) les séries masquées derrière un bouton
+> **« 👁 Masquées (N) »** à droite de « Filtres » (plus de section en bas de liste). Banc perso 40/40.
+> **Reste ouvert (rien d'engagé)** : réécrire `test_bibliotheque_ui.py` (v1.81, données périmées) au prochain chantier
+> bibliothèque ; filtres par genre pour les séries hors MangaDex (Pepper&Carrot) = pas de source, rien à faire tant que
+> Quang ne le demande pas ; webtoon libre de droits (§ « Hors de ce chantier », déclencheur écrit).
 
 ### Constats (lus dans le code et mesurés le 23/09 — à re-vérifier si le code a bougé)
 

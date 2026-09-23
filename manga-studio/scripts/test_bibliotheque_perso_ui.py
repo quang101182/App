@@ -43,7 +43,7 @@ def etiq(s):
 
 
 avant = open(BIBF, encoding="utf-8").read() if os.path.isfile(BIBF) else None
-CIBLE = "pepper-carrot"
+CIBLE = "claymore"   # une serie VISIBLE chez Quang : le banc la masque puis la re-affiche
 try:
     with sync_playwright() as p:
         b = p.chromium.launch(channel="msedge", headless=True)
@@ -59,7 +59,11 @@ try:
                 pg.click("#btnLibBack"); pg.wait_for_timeout(500)
             check("version affichee = celle du fichier", pg.inner_text("#verBadge") == "v" + bo.version_app())
             affiche = lambda: pg.evaluate("() => [...document.querySelectorAll('#chapList > .serie-item')].map(b => b.dataset.serie)")
-            masquees_aff = lambda: pg.evaluate("() => [...document.querySelectorAll('#libMasquees [data-serie]')].map(b => b.dataset.serie)")
+            def masquees_aff():
+                pg.click("#libMasqueesBtn"); pg.wait_for_timeout(300)
+                r = pg.evaluate("() => [...document.querySelectorAll('#chapList .masquee-ligne [data-serie]')].map(b => b.dataset.serie)")
+                pg.click("#libMasqueesBtn"); pg.wait_for_timeout(300)
+                return r
             SER = series(); masq = set(api("/manga/bibliotheque")["masquees"])
             vis = [s for s in SER.values() if s["slug"] not in masq]
             # --- tri par defaut : recemment ajoutee
@@ -75,15 +79,17 @@ try:
                 check("barre de la série : bouton « 🙈 Masquer »", "Masquer" in pg.inner_text("#btnMasquer"))
                 pg.click("#btnMasquer"); pg.wait_for_timeout(1500)
                 check("masquée -> retour à la liste, elle n'y est plus", not pg.is_visible("#btnLibBack") and CIBLE not in affiche(), affiche()[:3])
-                check("... elle est dans « Séries masquées » (replié)", CIBLE in masquees_aff() and not pg.evaluate("() => $('libMasquees').open"))
+                check("... bouton « 👁 Masquées (1+) » à côté de Filtres, et elle y est", pg.is_visible("#libMasqueesBtn") and "Masquées" in pg.inner_text("#libMasqueesBtn") and CIBLE in masquees_aff())
                 check("... la ligne d'état compte les masquées", "masquée" in pg.inner_text("#chapState"), pg.inner_text("#chapState"))
                 check("... enregistré côté PC (commun aux appareils)", CIBLE in api("/manga/bibliotheque")["masquees"])
                 pg.fill("#libRech", "pepper carrot"); pg.wait_for_timeout(700)
                 txt = pg.inner_text("#chapList")
                 check("recherche : les masquées ne sont pas mêlées, mais signalées", CIBLE not in affiche() and "masquées" in txt, txt[:120].replace("\n", " | "))
                 pg.fill("#libRech", ""); pg.wait_for_timeout(500)
-                pg.evaluate("() => { $('libMasquees').open = true; }"); pg.wait_for_timeout(200)
-                pg.click('#libMasquees [data-afficher="%s"]' % CIBLE); pg.wait_for_timeout(1500)
+                pg.click("#libMasqueesBtn"); pg.wait_for_timeout(300)
+                pg.click('#chapList [data-afficher="%s"]' % CIBLE); pg.wait_for_timeout(1500)
+                if pg.is_visible("#libMasqueesBtn") and "bibliothèque" in pg.inner_text("#libMasqueesBtn"):
+                    pg.click("#libMasqueesBtn"); pg.wait_for_timeout(300)
                 check("« Ré-afficher » -> de retour dans la liste", CIBLE in affiche() and CIBLE not in api("/manga/bibliotheque")["masquees"])
             # --- récemment ouverte
             dernier = [s for s in affiche()][-1]
