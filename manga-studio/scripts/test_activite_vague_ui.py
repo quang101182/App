@@ -49,6 +49,20 @@ with sync_playwright() as p:
         check("5 : tout est fini -> compteur et bilan effaces (remise a zero)", n == "" and v == "", (n, v))
         n, v, t = etape([A])
         check("6 : nouvelle vague -> repart de 0 (« 0 / 1 », pas de « x/y » dans la pastille pour 1 seule tache)", n == "" and v.startswith("0 / 1"), (n, v))
+        etape([])
+        # v2.8.1 : un BATCH « Tout traiter » de 27 chapitres = 27 taches (pas 1), sans compter en double l'etape en cours
+        LOT = {"type": "lot", "d": "x/ch_1", "titre": "x", "chapitre": "1", "etape": "narration", "fait": 0, "total": 27}
+        N1 = {"type": "narration", "d": "x/ch_1", "titre": "Essai", "chapitre": "1", "tag": "t", "etape": "voix", "reste_s": 300}
+        n, v, t = etape([LOT, N1])
+        check("L1 : batch de 27 chapitres -> « 0/27 » (la narration du chapitre en cours n'est pas une tache de plus)", n == "0/27", n)
+        check("L1 : « au moins » tant qu'aucun chapitre du batch n'est mesure", "au moins" in v, v)
+        LOT2 = dict(LOT, d="x/ch_2", chapitre="2", fait=1)
+        N2 = dict(N1, d="x/ch_2", chapitre="2")
+        V1 = {"type": "video", "d": "x/ch_1", "titre": "Essai", "chapitre": "1", "tag": "t", "etape": "attente"}
+        n, v, t = etape([LOT2, N2, V1], attente=1500)
+        check("L2 : 1er chapitre fait + sa video en file -> « 1/28 »", n == "1/28", n)
+        check("L2 : duree d'un chapitre mesuree -> plus de « au moins » pour le batch (la video, elle, pas encore mesuree)", "reste" in v, v)
+        etape([])
         check("pas de défilement horizontal", pg.evaluate("() => document.documentElement.scrollWidth <= innerWidth + 1"))
         etape([A, B])
         pg.locator("#actPanel").screenshot(path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "act_vague_%d.png" % w))
