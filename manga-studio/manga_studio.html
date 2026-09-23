@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.6.2</title>
+<title>Manga Studio v2.7.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -745,7 +745,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.6.2</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.7.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1601,7 +1601,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.6.2";
+const VERSION = "2.7.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1753,8 +1753,38 @@ const CFG = {
   key:  localStorage.getItem("manga_key") || localStorage.getItem("generateStudio_key") || ""
 };
 // v1.95.0 : service worker = condition d'installation. Il ne met RIEN en cache (cf pwa/sw.js).
+// v2.7.0 : URL VERSIONNEE + anciennes inscriptions retirees = installation NEUVE du worker. Chrome ne demande
+// l'acces au reseau local (chemin direct Wi-Fi) qu'a un worker installe neuf avec sa regle de routage (constate sur
+// Telegramme Video le 13/09 : un worker mis a jour en place ne suffisait pas). Le cache hors-ligne n'est PAS touche.
+const SW_URL = "/manga/sw.js?v=2.7.0";
 if ("serviceWorker" in navigator && location.protocol.startsWith("http"))
-  navigator.serviceWorker.register("/manga/sw.js", { scope: "/manga/" }).catch(e => console.warn("sw : " + e.message));
+  navigator.serviceWorker.getRegistrations()
+    .then(rs => Promise.all(rs.filter(r => r.scope.endsWith("/manga/") && !((r.active || r.waiting || r.installing || {}).scriptURL || "").endsWith(SW_URL))
+                              .map(r => r.unregister())))
+    .catch(() => {})
+    .then(() => navigator.serviceWorker.register(SW_URL, { scope: "/manga/" }))
+    .catch(e => console.warn("sw : " + e.message));
+
+/* v2.7.0 : CHEMIN DIRECT Wi-Fi (recette Telegramme Video v0.96.0). A la maison, les videos se telechargent par
+   https://manga-wifi.crushrank.xyz:8723 (Caddy sur le PC, adresse Wi-Fi) : ~25 Mo/s mesures sur le Fold contre ~6 par
+   le tunnel Cloudflare. Ailleurs, la sonde echoue en < 1,5 s et tout passe par le tunnel, sans rien demander.
+   Chrome demande UNE fois « acceder aux appareils du reseau local » : repondre Autoriser. */
+const DIRECT = { base: "https://manga-wifi.crushrank.xyz:8723", ok: null, t: 0 };
+async function directSonder(){
+  if (location.protocol !== "https:") return false;              // PC en local : deja direct
+  let ok = false;
+  try { ok = (await fetch(DIRECT.base + "/manga/manifest.webmanifest", { cache: "no-store", signal: AbortSignal.timeout(1500) })).ok; }
+  catch (e) {}
+  if (ok !== DIRECT.ok) log("chemin direct Wi-Fi : " + (ok ? "joignable ⚡" : "injoignable, Cloudflare ☁"));
+  DIRECT.ok = ok; DIRECT.t = Date.now();
+  return ok;
+}
+async function baseTelechargement(){
+  if (Date.now() - DIRECT.t > 15000) await directSonder();
+  return DIRECT.ok ? DIRECT.base : CFG.base;
+}
+const parQuel = b => b === DIRECT.base ? "par le Wi-Fi ⚡" : "par Cloudflare ☁";
+setTimeout(() => directSonder(), 1500);
 // Meme convention que Generate Studio : #k=<secret> depose la cle puis disparait de l'URL.
 (function(){
   const m = /[#&]k=([^&]+)/.exec(location.hash || "");
@@ -5940,10 +5970,12 @@ async function vidDemander(liste, refaire){
   if (r.refusees.length) log("vidéos refusées : " + r.refusees.map(x => x.d + " (" + x.raison + ")").join(", "), "w");
   await vidCharger(VIDS.serie); actRafraichir();
 }
-function vidTelecharger(c){
+async function vidTelecharger(c){
   const v = (c.videos || [])[0]; if (!v) return;
+  const base = await baseTelechargement();                        // v2.7.0 : Wi-Fi de la maison si joignable
+  log("⬇ " + c.d + " " + parQuel(base));
   const a = document.createElement("a");
-  a.href = CFG.base + "/manga/video_file?p=" + encodeURIComponent(v.fichier) + "&dl=1&v=" + v.v + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
+  a.href = base + "/manga/video_file?p=" + encodeURIComponent(v.fichier) + "&dl=1&v=" + v.v + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
   a.download = ""; document.body.appendChild(a); a.click(); a.remove();
 }
 // v1.97.0 : la selection est un ETAT (par serie), plus la lecture des cases : un rafraichissement ne la perd plus.
@@ -6281,16 +6313,17 @@ $("vidPlage").onclick = () => {
   VIDS.chapitres.forEach(c => { const n = parseFloat(c.chapitre); if (!isNaN(n) && n >= lo && n <= hi) vidSel().add(c.d); });
   vidRendre(); toast(vidCoches().length + " chapitre(s) coché(s)");
 };
-$("vidZip").onclick = () => {
+$("vidZip").onclick = async () => {
   const l = vidCoches().filter(c => (c.videos || []).length);
   if (!l.length){ toast("aucune vidéo prête parmi les chapitres cochés"); return; }
   const o = l.reduce((a, c) => a + (c.videos[0].taille || 0), 0);
   if (o > 2e9 && !confirm("L'archive fera " + fmtGo(o) + " (" + l.length + " vidéos). La télécharger ?")) return;
+  const base = await baseTelechargement();                        // v2.7.0
   const a = document.createElement("a");
-  a.href = CFG.base + "/manga/videos_zip?serie=" + encodeURIComponent(VIDS.serie) + "&d=" + encodeURIComponent(l.map(c => c.d.split("/").pop()).join(","))
+  a.href = base + "/manga/videos_zip?serie=" + encodeURIComponent(VIDS.serie) + "&d=" + encodeURIComponent(l.map(c => c.d.split("/").pop()).join(","))
     + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
   a.download = ""; document.body.appendChild(a); a.click(); a.remove();
-  log("archive demandée : " + l.length + " vidéo(s), " + fmtGo(o));
+  log("archive demandée : " + l.length + " vidéo(s), " + fmtGo(o) + " " + parQuel(base));
 };
 $("vidDl").onclick = async () => {                     // une par une, 1,5 s d'ecart : PC et telephone acceptent
   const l = vidCoches().filter(c => (c.videos || []).length);

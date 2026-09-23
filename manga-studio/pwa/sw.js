@@ -1,4 +1,7 @@
-// Manga Studio — service worker v2.4.6 (etape 10 : ecouter PC eteint, decision Quang 22/09 : DANS le telephone).
+// Manga Studio — service worker v2.7.0
+// v2.7.0 : le chemin direct Wi-Fi (manga-wifi.crushrank.xyz:8723) CONTOURNE le worker par une regle de routage
+// posee a l'installation : sinon Chrome n'affiche pas l'invite « reseau local » et la requete echoue en silence
+// (recette Telegramme Video, 13/09/2026). Service worker v2.4.6 (etape 10 : ecouter PC eteint, decision Quang 22/09 : DANS le telephone).
 // v2.4.6 : les pages et MP3 du lecteur sont REVALIDES a chaque fois (cache: no-cache -> ETag -> 304). Un chapitre
 // supprime puis recapture reprend les MEMES noms de pages : le cache HTTP ressortait les anciennes (Claymore, 22/09).
 // Regle : le RESEAU d'abord, toujours (l'app reste a jour). Le stockage ne sert QUE si le PC ne repond pas
@@ -13,6 +16,10 @@ const COQUILLE = /^\/manga\/(manifest\.webmanifest|icon-[a-z0-9-]+\.png)$/;
 // la coquille est gardee DES l'installation : sinon elle ne l'etait qu'a la 2e ouverture de l'app
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(SHELL).then(c => c.addAll(
   ["/manga/", "/manga/manifest.webmanifest", "/manga/icon-192.png", "/manga/icon-512.png", "/manga/icon-maskable-512.png"])).catch(() => {})); });
+self.addEventListener("install", e => {
+  if (e.addRoutes) e.waitUntil(e.addRoutes([{ condition: { urlPattern: { hostname: "manga-wifi.crushrank.xyz" } }, source: "network" }])
+                                .catch(() => {}));
+});
 self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
 
 const cle = u => { const x = new URL(u); x.searchParams.delete("_k"); return x.toString(); };

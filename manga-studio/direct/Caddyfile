@@ -1,0 +1,38 @@
+# Manga Studio — CHEMIN DIRECT Wi-Fi (v2.7.0, 23/09/2026)
+#
+# Recette reprise de Télégramme Vidéo (v0.96.0, telegram-video/direct/) — instance SÉPARÉE : relancer l'une ne
+# coupe jamais l'autre. Sert le proxy Manga Studio (127.0.0.1:8190) en HTTPS avec un VRAI certificat Let's Encrypt
+# (DNS-01, jeton Cloudflare en variable d'environnement, jamais ici), renouvelé par Caddy tout seul.
+#   manga-wifi.crushrank.xyz → 192.168.1.141 (Wi-Fi de la maison), A public NON proxié (direct/dns_direct.py)
+# But : les téléchargements de vidéos à ~25 Mo/s au lieu de ~6 par le tunnel Cloudflare (mesuré sur Télégramme Vidéo).
+# ⚠️ N'écoute QUE sur l'adresse Wi-Fi : jamais sur l'interface publique. Pas de Tailscale ici (non demandé).
+{
+	admin off
+	auto_https disable_redirects
+}
+
+manga-wifi.crushrank.xyz:8723 {
+	bind 192.168.1.141
+	tls {
+		dns cloudflare {env.CF_API_TOKEN}
+		resolvers 1.1.1.1
+	}
+	# Chrome refuse qu'une page PUBLIQUE (servie par le tunnel) parle à une adresse PRIVÉE sans ce feu vert au
+	# préflight ; s'y ajoute une permission demandée une fois (« accéder aux appareils du réseau local »).
+	header Access-Control-Allow-Private-Network true
+	reverse_proxy 127.0.0.1:8190 {
+		flush_interval -1
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+	log {
+		output file logs/direct.log {
+			roll_size 2MiB
+			roll_keep 2
+		}
+		format console
+		level WARN
+	}
+}
