@@ -26,7 +26,7 @@ import argparse, base64, io, json, os, re, subprocess, sys, threading, time, url
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -853,10 +853,35 @@ def duree_mp3(path):
         return None
 
 
+# v2.1.0 (23/09, etape N2 de la ROADMAP) : aucun caractere japonais / chinois / coreen ne va a la voix. Remontee de
+# Video Studio : « un nom en kanji fait derailler la voix francaise » (vu avec Kimi). Non reproduit dans les textes LUS de
+# la bibliotheque (les kanji ne sont que dans les notes de lecture), mais rien ne l'empechait. On nettoie le TEXTE de la
+# page (pas seulement ce qu'on envoie a la voix) : sous-titres et karaoke restent alignes mot pour mot sur ce qui est dit.
+_RE_CJK = r"[　-〿぀-ヿㇰ-ㇿ㐀-䶿一-鿿가-힯豈-﫿＀-￯]"
+
+
+def sans_cjk(txt):
+    """(texte nettoye, nombre de caracteres retires). « Saito (研修医) arrive » -> « Saito arrive »."""
+    if not re.search(_RE_CJK, txt or ""):
+        return txt, 0
+    n = len(re.findall(_RE_CJK, txt))
+    t = re.sub(r"\s*[(\[（【「『«“\"]\s*(?:%s|\s|[・、。,.])+\s*[)\]）】」』»”\"]" % _RE_CJK, "", txt)
+    t = re.sub(_RE_CJK + "+", "", t)
+    t = re.sub(r"\s+([,.…])", r"\1", t)                 # le francais garde son espace avant ! ? ; :
+    t = re.sub(r"([,;:])(\s*[,;:])+", r"\1", t)
+    t = re.sub(r"\s{2,}", " ", t).strip()
+    return t, n
+
+
 def etape_voix(pages, outdir, voice, rate, stats):
     os.makedirs(outdir, exist_ok=True)
     for p in pages:
         p["audio"], p["dur"] = None, 0.0
+        propre, retires = sans_cjk((p.get("narration") or "").strip())
+        if retires:
+            log("  page %s : %d caractere(s) japonais/chinois/coreen retire(s) avant la voix" % (p.get("page"), retires))
+            p["narration"], p["cjk_retires"] = propre, retires
+            stats["cjk_retires"] = stats.get("cjk_retires", 0) + retires
         txt = (p.get("narration") or "").strip()
         if not txt:
             continue

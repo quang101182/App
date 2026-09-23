@@ -1286,6 +1286,8 @@ body.epure .aide{display:none}
         <div class="grow"><label>Voix</label><div class="row" style="gap:6px;flex-wrap:nowrap">
           <select id="narrVoice" style="flex:1;min-width:0"></select>
           <button class="btn sm" id="btnVoixApercu" title="écouter un échantillon de cette voix (7 s)">▶</button></div></div>
+        <div style="width:118px"><label>Langue</label><select id="narrLangue" title="langue de la narration (le texte ET la voix)">
+          <option value="fr">Français</option><option value="en">Anglais</option></select></div>
         <div style="width:110px"><label>Pages</label><input id="narrPages" placeholder="toutes" title="ex. 1-20 ; vide = tout le chapitre"></div>
       </div>
       <div class="row" style="margin-top:8px">
@@ -6200,7 +6202,7 @@ $("narrRuns").onclick = async e => {
     if (!confirm("Relire « " + n.tag + " » avec la voix " + voix + " ?\n\nLe texte est repris tel quel : pas de nouvelle "
                  + "lecture des pages. Coût ≈ " + (nb * 0.011).toFixed(2) + " $ (voix seule, mesuré 0,011 $/page), ~1 min.")) return;
     try {
-      const r = await api("/manga/narrate", { d: CHAP_OPEN, engine: n.engine, voice: voix, reuse: n.tag });
+      const r = await api("/manga/narrate", { d: CHAP_OPEN, engine: n.engine, voice: voix, reuse: n.tag, langue: n.langue || "fr" });
       if (r.error) throw new Error(r.error);
       log("autre voix : " + n.tag + " → " + r.tag + " (" + voix + ")"); memoriserVoix();
       await refreshNarrs();
@@ -6218,13 +6220,18 @@ $("narrRuns").onclick = async e => {
   if (b) ouvrirLecteur([NARRS[+b.dataset.ecoute].tag]).catch(err => log("lecteur : " + err.message, "e"));
 };
 $("btnNarrer").onclick = async () => {
-  const body = { d: CHAP_OPEN, engine: $("narrEngine").value, voice: $("narrVoice").value, pages: $("narrPages").value.trim() };
+  const body = { d: CHAP_OPEN, engine: $("narrEngine").value, voice: $("narrVoice").value, pages: $("narrPages").value.trim(),
+                 langue: $("narrLangue").value };                                          // v2.6.0 (N1)
   try {
     const r = await api("/manga/narrate", body); memoriserVoix();
     log("narration lancée : " + CHAP_OPEN + " → " + r.tag);
     await refreshNarrs();
   } catch (e){ log("narration : " + e.message, "e"); alert(e.message); }
 };
+
+// v2.6.0 (N1) : la langue de narration choisie est gardee sur cet appareil
+try { const l = localStorage.getItem("manga_narr_langue"); if (l === "fr" || l === "en") $("narrLangue").value = l; } catch {}
+$("narrLangue").onchange = () => { try { localStorage.setItem("manga_narr_langue", $("narrLangue").value); } catch {} };
 
 /* ----- v1.96.0 : chapitre precedent / suivant (meme serie, ordre des numeros) ----- */
 const chapNum = c => { const x = parseFloat(c.chapter); return isNaN(x) ? Infinity : x; };
