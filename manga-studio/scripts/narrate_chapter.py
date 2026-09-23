@@ -26,7 +26,7 @@ import argparse, base64, io, json, os, re, subprocess, sys, threading, time, url
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -414,6 +414,9 @@ si la page le PROUVE : quelqu'un l'appelle par ce nom, ou le texte le nomme. Don
 personnages d'ages differents ne sont JAMAIS le meme id. Si une page contredit la fiche (le nom etait
 attache au mauvais personnage), signale-le dans "corrections".
 
+ALPHABET : ecris tout en francais et en alphabet latin. Un nom ecrit en caracteres chinois, japonais ou coreens
+prend sa forme latine d'usage (edition francaise ou anglaise) ; une replique dans ces ecritures se traduit.
+
 Reponds UNIQUEMENT en JSON :
 {"pages":[{"page":N,"type":"...","faits":"...","presents":["p1"]}],
  "nouveaux":[{"id":"p3","description":"...","nom":null}],
@@ -666,7 +669,10 @@ Q_NOMS = ("Page de manga. 1) Liste les PRENOMS de personnages ecrits dans les bu
           "prononce la bulle. 3) Donne le cadre du VISAGE + epaules du porteur, le plus grand ou il est visible "
           "sur la page : porteur_box = [ymin, xmin, ymax, xmax] en milliemes de la page (0-1000). "
           "Aucun prenom : liste vide. JSON : {\"noms\":[{\"nom\":\"...\",\"porteur_age\":"
-          "\"enfant|adolescent|adulte\",\"porteur_cheveux\":\"...\",\"dit_par\":\"...\",\"porteur_box\":[0,0,0,0]}]}")
+          "\"enfant|adolescent|adulte\",\"porteur_cheveux\":\"...\",\"dit_par\":\"...\",\"porteur_box\":[0,0,0,0]}]} "
+          # v2.3.0 : un scan chinois (OPM ch.5-8, zh-hk) faisait figer « 傑諾斯 » au lieu de Genos
+          "Ecris chaque prenom en ALPHABET LATIN, sous sa forme d'usage dans l'edition francaise ou anglaise de la serie "
+          "(jamais de caracteres chinois, japonais ou coreens).")
 # v1.75 (21/09, verrou mesure sur OPM ch.301) : le vote prouvait qu'un nom est ECRIT, pas QUI le porte.
 # "M. McCoy ?" (absent, parti aux toilettes) etait fige puis colle a l'homme du fauteuil ; un heros anonyme
 # au teint sombre etait pris pour Blue (memes age et cheveux courts). v3 = on demande si le porteur est
@@ -918,6 +924,72 @@ def duree_mp3(path):
 _RE_CJK = r"[　-〿぀-ヿㇰ-ㇿ㐀-䶿一-鿿가-힯豈-﫿＀-￯]"
 
 
+# v2.3.0 (23/09/2026, remontee Video Studio) : OPM ch.5-8 captures en chinois de Hong Kong (MangaDex zh-hk) -> les noms
+# lus dans les bulles etaient figes en chinois (傑諾斯 = Genos, 埼玉 = Saitama, 土龍 = Taupe), le recit les recopiait et
+# sans_cjk() les effacait : « En bas, lève sa main mécanique » (ch.6 p.2), 39 pages amputees EN SILENCE. Regle de Quang
+# (feedback_affichage_alphabet_latin) : ce qu'il lit ou entend est en alphabet latin, et une consigne ne suffit pas.
+# => Avant le recit, tout mot CJK restant (fiche, faits, presents, resume) est converti en UN appel texte (DeepSeek,
+#    ~0,001 $), redemande une fois, journalise. Idempotent : rien a faire si le texte est deja latin (0 appel).
+Q_LATIN = ("Manga : %s. Voici des mots en caracteres chinois, japonais ou coreens releves dans ses pages (noms de "
+           "personnages, repliques, mots isoles). Rends pour CHACUN sa forme francaise en alphabet latin : un NOM de "
+           "personnage -> son nom d'usage dans l'edition francaise ou anglaise de la serie (ex. 埼玉 -> Saitama) ; sinon "
+           "une traduction francaise courte. Aucun caractere non latin dans les valeurs. "
+           "JSON uniquement : {\"<mot>\": \"<forme latine>\"}.\nMots : %s")
+
+
+def _mots_cjk(*textes):
+    return sorted({m for t in textes for m in re.findall(_RE_CJK + "+", t or "")}, key=len, reverse=True)
+
+
+def latiniser(vis, resume, persos, noms, titre, stats):
+    """(vis, resume, persos, noms, table) -- memes structures, mots CJK remplaces par leur forme latine."""
+    mots = _mots_cjk(resume, json.dumps(persos, ensure_ascii=False), " ".join(noms or {}),
+                     *[(p.get("faits") or "") + " " + (p.get("narration") or "") + " " + " ".join(map(str, p.get("presents") or []))
+                       for p in vis])
+    if not mots:
+        return vis, resume, persos, noms, {}
+    table = {}
+    for _ in (1, 2):                                      # redemande UNE fois ce qui manque ou revient non latin
+        manq = [m for m in mots if m not in table]
+        if not manq:
+            break
+        try:
+            r = post("/api/deepseek", {"model": "deepseek-v4-flash", "max_tokens": 3000, "temperature": 0,
+                                       "thinking": {"type": "disabled"}, "response_format": {"type": "json_object"},
+                                       "messages": [{"role": "user", "content": Q_LATIN % (titre or "?", json.dumps(manq, ensure_ascii=False))}]},
+                     timeout=120)
+            stats["cout_recit"] = stats.get("cout_recit", 0.0) + cout("deepseek-v4-flash", r.get("usage") or {})
+            j = parse_json(r["choices"][0]["message"].get("content"))
+        except Exception as e:
+            log("  latin : appel en echec (%s)" % str(e)[:120]); j = {}
+        for m in manq:
+            v = str(j.get(m) or "").strip()
+            if v and not re.search(_RE_CJK, v):
+                table[m] = v
+    reste = [m for m in mots if m not in table]
+    log("  latin : %d mot(s) converti(s) %s%s" % (len(table), ", ".join("%s=%s" % kv for kv in list(table.items())[:8]),
+                                                  (" ; NON convertis : %s" % reste) if reste else ""))
+    journal("latin", table=table, reste=reste)
+
+    def lat(t):
+        if not isinstance(t, str):
+            return t
+        for m in mots:                                    # les plus longs d'abord : « 傑諾斯 » avant « 傑 »
+            if m in table:
+                t = t.replace(m, table[m])
+        return t
+    for p in vis:
+        for k in ("faits", "narration", "faits_avant_verif", "narration_vision"):
+            if isinstance(p.get(k), str):
+                p[k] = lat(p[k])
+        if isinstance(p.get("presents"), list):
+            p["presents"] = [lat(x) for x in p["presents"]]
+    persos = json.loads(lat(json.dumps(persos, ensure_ascii=False)))
+    noms = {lat(k): v for k, v in (noms or {}).items()}
+    stats["latin"] = table
+    return vis, lat(resume), persos, noms, table
+
+
 def sans_cjk(txt):
     """(texte nettoye, nombre de caracteres retires). « Saito (研修医) arrive » -> « Saito arrive »."""
     if not re.search(_RE_CJK, txt or ""):
@@ -1055,6 +1127,10 @@ def main():
         raise SystemExit(3)
 
     titre = ""
+    if a.prompt == "v2":                # v2.3.0 : alphabet latin AVANT le recit (fiche, faits, presents, resume)
+        vis, resume, persos, noms, _ = latiniser(vis, resume, persos, noms, man.get("title"), stats)
+        if stats.get("noms") is not None:
+            stats["noms"] = noms
     if not a.reuse_vision:              # v2.2.0 : l'analyse payee survit a un echec de la suite
         with open(os.path.join(outdir, "vision.json"), "w", encoding="utf-8") as f:
             json.dump(_resultat(vis), f, ensure_ascii=False, indent=1)
@@ -1077,6 +1153,10 @@ def main():
                % (len(vides), len(histoire), ",".join(map(str, vides[:12])) + ("..." if len(vides) > 12 else "")))
     if vides:
         log("  %d page(s) d'histoire restee(s) muette(s) : %s" % (len(vides), vides))
+    cjk = [p["page"] for p in vis if re.search(_RE_CJK, p.get("narration") or "")]
+    if cjk:                             # v2.3.0 : jamais de phrase amputee en silence (« En bas, lève sa main mécanique »)
+        _echec("caracteres chinois/japonais/coreens dans la narration des pages %s (ex. %s) -- analyse gardee, un nouvel essai la reprend"
+               % (",".join(map(str, cjk[:12])), (next(p for p in vis if p["page"] == cjk[0]).get("narration") or "")[:80]))
     if not a.no_tts:
         etape_voix(vis, outdir, a.voice, a.rate, stats)
         sans_voix = [p["page"] for p in vis if (p.get("narration") or "").strip() and not p.get("audio")]
