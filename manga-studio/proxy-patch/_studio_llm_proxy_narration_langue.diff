@@ -1,0 +1,51 @@
+--- _studio_llm_proxy.py.bak-20260923-n1	2026-09-23 13:18:02.288032400 +0200
++++ _studio_llm_proxy.py	2026-09-23 13:18:02.397757700 +0200
+@@ -8798,6 +8798,7 @@
+                 try:
+                     with open(npth, encoding="utf-8") as f: n = json.load(f)
+                     it.update(etat="fini", engine=n.get("engine"), model=n.get("model"), voice=n.get("voice"),
++                              langue=n.get("langue") or "fr",
+                               titre=n.get("titre"), created_at=n.get("created_at"), stats=n.get("stats"),
+                               pages=len(n.get("pages") or []),
+                               audio=sum(1 for p in (n.get("pages") or []) if p.get("audio")))
+@@ -8828,14 +8829,21 @@
+     return n
+ 
+ 
+-def manga_narrate(d, engine, voice, pages="", reuse=""):
++_NARR_LANGUES = ("fr", "en")                     # v2.6.0 : langue de narration = LANGUES_NARR de narrate_chapter.py
++
++
++def manga_narrate(d, engine, voice, pages="", reuse="", langue="fr"):
+     if engine not in ("gemini", "kimi", "pixtral"):     # v1.68 : gemini = defaut (banc de fidelite 21/09)
+         return {"error": "moteur inconnu"}
+     if not re.match(r"^[A-Z][a-z]{2,15}$", voice or ""):
+         return {"error": "voix invalide"}
+     if pages and not re.match(r"^\d{1,4}(-\d{1,4})?$", pages):
+         return {"error": "plage de pages invalide"}
+-    tag = "%s-%s" % (engine, voice.lower())
++    langue = langue or "fr"
++    if langue not in _NARR_LANGUES:
++        return {"error": "langue de narration inconnue"}
++    # v2.6.0 : langue de narration -- hors francais, l'etiquette porte la langue (sinon l'anglais ECRASAIT le francais)
++    tag = "%s-%s" % (engine, voice.lower()) + ("" if langue == "fr" else "-" + langue)
+     if reuse and not _RE_TAG.match(reuse):
+         return {"error": "reuse invalide"}
+     td = _narr_dir(d, tag)
+@@ -8852,6 +8860,7 @@
+     cmd = [MANGA_PY, MANGA_NARRATE, d, "--engine", engine, "--voice", voice, "--tag", tag]
+     if pages: cmd += ["--pages", pages]
+     if reuse: cmd += ["--reuse-vision", reuse]
++    if langue != "fr": cmd += ["--langue", langue]
+     lg = open(os.path.join(td, "run.log"), "w", encoding="utf-8")
+     _NARR_JOBS[(d, tag)] = subprocess.Popen(cmd, stdout=lg, stderr=lg, cwd=os.path.dirname(MANGA_NARRATE),
+                                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+@@ -10366,7 +10375,7 @@
+             elif self.path == "/manga/narrate":
+                 self._json(200, manga_narrate(data.get("d") or "", data.get("engine") or "",
+                                               data.get("voice") or "", str(data.get("pages") or ""),
+-                                              data.get("reuse") or ""))
++                                              data.get("reuse") or "", data.get("langue") or "fr"))
+             elif self.path == "/manga/fetch_edge":
+                 self._json(200, manga_fetch_edge())
+             elif self.path == "/manga/pilote":                 # Manga Studio v2.0.0

@@ -45,6 +45,9 @@ def attendre_cases(d, s=120):
     return api("/manga/cases?d=" + d)
 
 
+import banc_outils as bo
+bo.copier_serie("one-punch-man", "zz-essai-cases", ["ch_300"])
+bo.copier_serie("solo-levelng-ragnarok", "zz-essai-webtoon", ["ch_1"])
 SUIVI = os.path.join(SRC, "zz-essai-cases", "suivi.json")
 avant = open(SUIVI, encoding="utf-8").read() if os.path.isfile(SUIVI) else None
 try:
@@ -57,7 +60,7 @@ try:
             errs = []
             pg.on("pageerror", lambda e: errs.append(str(e)))
             pg.goto("http://127.0.0.1:%d/manga#k=%s" % (PORT, KEY)); pg.wait_for_timeout(2500)
-            check("version 2.5.0 affichee", pg.inner_text("#verBadge") == "v2.5.0", pg.inner_text("#verBadge"))
+            check("version affichee = celle du fichier", pg.inner_text("#verBadge") == "v" + bo.version_app(), pg.inner_text("#verBadge"))
             # --- 1. lecteur (le lecteur ordinaire, ouvert comme une narration gardee : hlLire)
             pg.evaluate("() => hlLire({d: '%s', tag: 'k3-serie-ref'})" % M); pg.wait_for_timeout(2000)
             if w == 1280:
@@ -127,6 +130,7 @@ try:
             c.close()
         b.close()
 finally:
+    bo.supprimer_serie("zz-essai-cases"); bo.supprimer_serie("zz-essai-webtoon")
     if avant is None:
         if os.path.isfile(SUIVI):
             os.remove(SUIVI)
