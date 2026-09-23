@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.7.2</title>
+<title>Manga Studio v2.7.3</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -762,7 +762,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.7.2</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.7.3</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1267,6 +1267,13 @@ body.epure .aide{display:none}
     <div class="prof-lot">
       <div class="prof-lot-t"><b>▶ Tout traiter</b>
         <span class="seg" id="lotPortee"><button data-p="restant">pas terminés</button><button data-p="tout">toute la série</button><button data-p="sel">ma sélection</button></span></div>
+      <!-- v2.7.3 : tout / rien / une plage (Quang 23/09 19h41 : « il manque des boutons tout selectionner et tout deselectionner ») -->
+      <div class="vid-selbar" id="lotSelbar">
+        <button class="btn sm" id="lotTout" title="sélectionner tous les chapitres">☑ Tout</button><button class="btn sm" id="lotRien" title="tout désélectionner">☐ Rien</button>
+        <span class="vid-plage">ch. <input id="lotDe" inputmode="decimal" placeholder="1"> à <input id="lotA" inputmode="decimal" placeholder="…">
+          <button class="btn sm" id="lotPlage" title="ne sélectionner que ces chapitres">Sélectionner</button></span>
+        <span class="muted" id="lotCompte"></span>
+      </div>
       <div class="lot-puces" id="lotPuces"></div>
       <p class="lot-legende">🎙 narration · 🎤 karaoké · 🌐 traduction · 📜 « Précédemment » · 🎬 vidéo — <b>en couleur</b> = fait, en gris = à faire. Touche un chapitre pour le (dé)sélectionner.</p>
       <div class="lot-bas">
@@ -1620,7 +1627,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.7.2";
+const VERSION = "2.7.3";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -6147,6 +6154,7 @@ function lotPuces(){
       + '" data-d="' + esc(x.d) + '"><b>ch. ' + esc(x.num) + '</b><span class="et">' + et + "</span></button>";
   }).join("") || '<span class="muted">Aucun chapitre capturé.</span>';
   document.querySelectorAll("#lotPortee [data-p]").forEach(b => b.classList.toggle("on", b.dataset.p === LOT_PORTEE));
+  $("lotCompte").textContent = plan.length ? plan.filter(x => ch.has(x.d)).length + " / " + plan.length + " sélectionné(s)" : "";   // v2.7.3
   lotEstimer();
 }
 function profRegler(c){
@@ -6298,6 +6306,16 @@ $("lotPuces").onclick = e => { const b = e.target.closest("[data-d]"); if (!b) r
   if (LOT_PORTEE !== "sel"){ LOT_SEL = new Set(lotChoisis()); LOT_PORTEE = "sel"; }
   LOT_SEL.has(b.dataset.d) ? LOT_SEL.delete(b.dataset.d) : LOT_SEL.add(b.dataset.d); lotPuces(); };
 $("lotRefaire").onchange = lotEstimer;
+// v2.7.3 : memes gestes que la liste des videos -- ils passent en « ma selection », que l'on ajuste ensuite au doigt
+const lotSelMettre = ds => { LOT_SEL = new Set(ds); LOT_PORTEE = "sel"; lotPuces(); };
+$("lotTout").onclick = () => lotSelMettre(((SUIVI && SUIVI.plan) || []).map(x => x.d));
+$("lotRien").onclick = () => lotSelMettre([]);
+$("lotPlage").onclick = () => {
+  const de = parseFloat(($("lotDe").value || "").replace(",", ".")), a = parseFloat(($("lotA").value || "").replace(",", "."));
+  const lo = isNaN(de) ? -Infinity : de, hi = isNaN(a) ? Infinity : a;
+  lotSelMettre(((SUIVI && SUIVI.plan) || []).filter(x => { const n = parseFloat(x.num); return !isNaN(n) && n >= lo && n <= hi; }).map(x => x.d));
+  toast(LOT_SEL.size + " chapitre(s) sélectionné(s)");
+};
 $("btnSuivi").onclick = () => { $("suiviBox").hidden = !$("suiviBox").hidden; if (!$("suiviBox").hidden) suiviCharger().catch(e => log("profil : " + e.message, "e")); };
 $("suiviFermer").onclick = () => { $("suiviBox").hidden = true; clearTimeout(SUIVI_POLL); };
 $("suiviLancer").onclick = async () => {
