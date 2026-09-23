@@ -30,7 +30,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import precedemment as prec                                # chapitres_precedents(), chap_key()
 
-VERSION = "2.4.0"
+VERSION = "2.4.1"
 SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
 DIR = os.path.join(SRC, "_suivi")
 ETAT, JOURNAL = os.path.join(DIR, "etat.json"), os.path.join(DIR, "journal.jsonl")
@@ -393,6 +393,17 @@ def demander_video(d, tag, reglages):
         return {"error": str(e)[:200]}
 
 
+def vision_reprenable(td, cd):
+    """v2.4.1 : l'analyse des pages (vision.json, ~90 % du cout d'une narration) d'un run precedent est reprise
+    si elle est posterieure a la capture (manifest.json) : 23/09, Claymore ch.1 = 1,74 $ d'analyse perdus par un
+    echec du recit, et le 2e essai l'aurait RE-payee."""
+    v, m = os.path.join(td, "vision.json"), os.path.join(cd, "manifest.json")
+    try:
+        return os.path.getmtime(v) >= os.path.getmtime(m) and bool((_lire_json(v) or {}).get("pages"))
+    except OSError:
+        return False
+
+
 def traiter_chapitre(c, cfg, refaire, etat, avant_narres):
     """La chaine d'UN chapitre. Retourne (ok, {etape: resultat})."""
     p = plan_chapitre(c, cfg, refaire, avant_narres, detecter_langue=True)
@@ -408,12 +419,15 @@ def traiter_chapitre(c, cfg, refaire, etat, avant_narres):
             try: os.remove(os.path.join(td, "progress.json"))
             except OSError: pass
             t0 = time.time()
-            rc = lancer([PY, os.path.join(HERE, "narrate_chapter.py"), c["d"], "--engine", cfg["moteur"], "--voice", cfg["voix"], "--tag", tag],
+            reprise = (essai > 1 or not refaire) and vision_reprenable(td, c["cd"])
+            rc = lancer([PY, os.path.join(HERE, "narrate_chapter.py"), c["d"], "--engine", cfg["moteur"], "--voice", cfg["voix"], "--tag", tag]
+                        + (["--reuse-vision", tag] if reprise else []),
                         os.path.join(td, "run.log"), etat, "narration")
             n = _lire_json(os.path.join(td, "narration.json"))
             ok = rc == 0 and bool(n) and (not refaire or os.path.getmtime(os.path.join(td, "narration.json")) >= t0 - 1)
             err = "" if ok else derniere_ligne(os.path.join(td, "run.log"))
-            journal("narration", d=c["d"], tag=tag, essai=essai, rc=rc, ok=ok, s=round(time.time() - t0), err=err)
+            journal("narration", d=c["d"], tag=tag, essai=essai, rc=rc, ok=ok, s=round(time.time() - t0), err=err,
+                    analyse_reprise=reprise)
             if ok:
                 break
         res["narration"] = "ok" if ok else "echec : " + err

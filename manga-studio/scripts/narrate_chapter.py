@@ -26,7 +26,7 @@ import argparse, base64, io, json, os, re, subprocess, sys, threading, time, url
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -553,46 +553,104 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
     return sortie, resume, persos
 
 
-def etape_recit_v2(pages, resume, persos, stats):
-    entree = [{"page": p["page"], "type": p["type"], "faits": p["faits"]} for p in pages if p["type"] == "histoire"]
-    if not entree:
-        return "", pages
+# v2.2.0 (23/09/2026) : le recit se demande PAR LOTS. Claymore ch.1 recapture en tome (180 pages) partait en UN
+# appel plafonne a 8 000 tokens : reponse illisible (« Expecting ',' delimiter », char 26 885), 180 pages SANS
+# texte, 0 voix -- et le run se disait « ok ». 40 pages = ~2 500 tokens de sortie, large marge.
+RECIT_LOT = 40
+
+
+class _RecitTronque(Exception):
+    pass
+
+
+def _appel_recit_v2(lot, persos, stats, contexte):
     body = {"model": "deepseek-v4-flash", "max_tokens": 8000, "temperature": 0.6,
             "thinking": {"type": "disabled"},
             "messages": [{"role": "system", "content": SYS_RECIT_V2 + _consigne_langue()},
                          {"role": "user", "content": "Fiche des personnages : " + json.dumps(persos, ensure_ascii=False)
-                          + "\nPages :\n" + json.dumps(entree, ensure_ascii=False)}]}
-    t = time.time()
+                          + contexte + "\nPages :\n" + json.dumps(lot, ensure_ascii=False)}]}
     r = post("/api/deepseek", body)
     stats["cout_recit"] += cout("deepseek-v4-flash", r.get("usage") or {})
-    stats["recit_s"] += time.time() - t
-    j = parse_json(r["choices"][0]["message"].get("content"))
-    neuf = {}
+    ch = r["choices"][0]
+    txt = ch["message"].get("content")
+    if ch.get("finish_reason") == "length":
+        raise _RecitTronque("reponse tronquee (%d pages demandees)" % len(lot))
+    try:
+        return parse_json(txt)
+    except ValueError as e:                  # JSONDecodeError en herite
+        log("  recit : JSON mal forme (%s) -> reparation" % str(e)[:80])
+        j = reparer_json(txt, stats, "cout_recit")
+        if j is None:
+            raise
+        return j
+
+
+def _suite(fin):
+    return ("\nLe recit deja ecrit juste avant se termine ainsi : " + json.dumps(fin, ensure_ascii=False)
+            + " -- CONTINUE-le sans le repeter ni re-presenter les personnages.") if fin else ""
+
+
+def _contexte_lot(k, n, fin):
+    if n == 1:
+        return ""
+    return ("\nCHAPITRE LONG raconte en %d parties : voici la partie %d/%d. " % (n, k + 1, n)
+            + ("La chute de fin de chapitre est pour CETTE partie." if k == n - 1
+               else "PAS de chute ni de conclusion ici : le recit continue dans la partie suivante.")
+            + _suite(fin))
+
+
+def _recit_lot(lot, persos, stats, contexte):
+    """Un lot ; tronque ou illisible -> coupe en deux (le 2e demi-lot recoit la fin du 1er)."""
+    try:
+        return _appel_recit_v2(lot, persos, stats, contexte)
+    except (_RecitTronque, ValueError) as e:
+        if len(lot) <= 4:
+            raise
+        m = len(lot) // 2
+        log("  recit : %s -> lot coupe en %d + %d pages" % (str(e)[:80], m, len(lot) - m))
+        j1 = _recit_lot(lot[:m], persos, stats, contexte)
+        fin = [x.get("narration", "") for x in (j1.get("pages") or []) if (x.get("narration") or "").strip()][-2:]
+        j2 = _recit_lot(lot[m:], persos, stats, contexte + _suite(fin))
+        return {"titre": j1.get("titre", ""), "pages": (j1.get("pages") or []) + (j2.get("pages") or [])}
+
+
+def _lire_pages_recit(j, neuf, seulement=None):
     for x in j.get("pages") or []:
-        try: neuf[int(x["page"])] = x.get("narration", "")
-        except (KeyError, TypeError, ValueError): pass
+        try:
+            n = int(x["page"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if seulement is None or (n in seulement and (x.get("narration") or "").strip()):
+            neuf[n] = x.get("narration", "")
+
+
+def etape_recit_v2(pages, resume, persos, stats):
+    entree = [{"page": p["page"], "type": p["type"], "faits": p["faits"]} for p in pages if p["type"] == "histoire"]
+    if not entree:
+        return "", pages
+    lots = [entree[i:i + RECIT_LOT] for i in range(0, len(entree), RECIT_LOT)]
+    t = time.time()
+    neuf, titre = {}, ""
+    for k, lot in enumerate(lots):
+        fin = [neuf[x["page"]] for x in entree[:k * RECIT_LOT] if (neuf.get(x["page"]) or "").strip()][-2:]
+        ctx = _contexte_lot(k, len(lots), fin)
+        j = _recit_lot(lot, persos, stats, ctx)
+        titre = titre or j.get("titre", "")
+        _lire_pages_recit(j, neuf)
+        manq = [x["page"] for x in lot if not (neuf.get(x["page"]) or "").strip()]
+        if manq:                              # K3 v2 : la p20 (essentielle) est sortie VIDE -> on redemande
+            log("  recit : pages rendues vides %s -> nouvelle demande" % manq)
+            j2 = _recit_lot(lot, persos, stats, ctx + "\nATTENTION : ecris OBLIGATOIREMENT une narration non vide "
+                            "pour les pages " + ", ".join(map(str, manq)) + ".")
+            _lire_pages_recit(j2, neuf, set(manq))
+        progres("recit", k + 1, len(lots))
+    stats["recit_s"] += time.time() - t
     for p in pages:
         p["narration_vision"] = ""
         p["narration"] = neuf.get(p["page"], "") if p["type"] == "histoire" else ""
-    manq = [p["page"] for p in entree if p["page"] not in neuf or not (neuf[p["page"]] or "").strip()]
-    if manq:                                  # K3 v2 : la p20 (essentielle) est sortie VIDE -> on redemande
-        log("  recit : pages rendues vides %s -> nouvelle demande" % manq)
-        body["messages"][1]["content"] += ("\nATTENTION : ecris OBLIGATOIREMENT une narration non vide pour les pages "
-                                           + ", ".join(map(str, manq)) + ".")
-        r = post("/api/deepseek", body)
-        stats["cout_recit"] += cout("deepseek-v4-flash", r.get("usage") or {})
-        for x in (parse_json(r["choices"][0]["message"].get("content")).get("pages") or []):
-            try:
-                if int(x["page"]) in manq and (x.get("narration") or "").strip():
-                    neuf[int(x["page"])] = x["narration"]
-            except (KeyError, TypeError, ValueError):
-                pass
-        for p in pages:
-            if p["page"] in manq and p["type"] == "histoire":
-                p["narration"] = neuf.get(p["page"], "")
-        manq = [m for m in manq if not (neuf.get(m) or "").strip()]
-    journal("recit_v2", s=round(stats["recit_s"], 1), manquantes=manq)
-    return j.get("titre", ""), pages
+    manq = [x["page"] for x in entree if not (neuf.get(x["page"]) or "").strip()]
+    journal("recit_v2", s=round(stats["recit_s"], 1), lots=len(lots), manquantes=manq)
+    return titre, pages
 
 
 # =====================================================================================
@@ -958,7 +1016,12 @@ def main():
     t0 = time.time()
 
     if a.reuse_vision:
-        prev = json.load(open(os.path.join(chap_dir, "narration", a.reuse_vision, "narration.json"), encoding="utf-8"))
+        # v2.2.0 : vision.json = l'analyse des pages, gardee MEME si la suite echoue (~90 % du cout d'un run)
+        src = os.path.join(chap_dir, "narration", a.reuse_vision)
+        src = next((os.path.join(src, f) for f in ("narration.json", "vision.json") if os.path.isfile(os.path.join(src, f))),
+                   os.path.join(src, "narration.json"))
+        log("  analyse des pages reprise de " + os.path.relpath(src, SOURCES))
+        prev = json.load(open(src, encoding="utf-8"))
         vis = [dict(page=p["page"], file=p["file"], type=p["type"], faits=p.get("faits_avant_verif") or p["faits"],
                     narration=p.get("narration_vision", p["narration"])) for p in prev["pages"]]
         resume, persos = prev.get("resume", ""), prev.get("personnages", [])
@@ -974,28 +1037,57 @@ def main():
             vis, resume, persos = etape_vision_v2(chap_dir, pages, a.engine, a.batch or 2, stats, noms)
         else:
             vis, resume, persos = etape_vision(chap_dir, pages, a.engine, a.batch or 4, stats)
+    def _resultat(pages_):
+        return {"version": VERSION, "prompt": a.prompt, "reuse_vision": a.reuse_vision or None, "serie": bool(a.serie), "noms_version": a.noms, "chapitre": a.chapitre, "title": man.get("title"), "chapter": man.get("chapter"),
+                "tag": tag, "engine": a.engine, "model": ENGINES[a.engine][1], "voice": a.voice, "rate": a.rate, "langue": a.langue,
+                "titre": titre, "resume": resume, "personnages": persos, "created_at": datetime.now().isoformat(timespec="seconds"),
+                "stats": {k: (round(v, 4) if isinstance(v, float) else v) for k, v in stats.items()},
+                "pages": pages_}
+
+    def _echec(msg):
+        """v2.2.0 : un run qui n'a rien produit d'ecoutable ECHOUE (code 3), il ne se dit plus « ok »."""
+        log("  ECHEC : " + msg)
+        journal("echec_resultat", err=msg)
+        depense = round(sum(v for k, v in stats.items() if k.startswith("cout_") and isinstance(v, float)), 4)
+        progres("echec", 0, 1, erreur=msg, cout=depense)
+        print(json.dumps({"ok": False, "error": msg, "dir": os.path.relpath(outdir, SOURCES).replace("\\", "/")},
+                         ensure_ascii=False))
+        raise SystemExit(3)
+
+    titre = ""
+    if not a.reuse_vision:              # v2.2.0 : l'analyse payee survit a un echec de la suite
+        with open(os.path.join(outdir, "vision.json"), "w", encoding="utf-8") as f:
+            json.dump(_resultat(vis), f, ensure_ascii=False, indent=1)
     if a.prompt == "v2" and a.verif:
         vis = etape_verif(chap_dir, vis, noms if a.prompt == "v2" else {}, stats)
         stats["noms"] = noms
     progres("recit", 0, 1)
     try:
         titre, vis = (etape_recit_v2 if a.prompt == "v2" else etape_recit)(vis, resume, persos, stats)
-    except Exception as e:              # le recit est un polissage : sans lui, la narration vision reste lisible
-        log("  recit en echec (%s) : narration vision conservee" % e)
+    except Exception as e:              # v1 : la narration de la lecture reste ; v2 : il n'y en a PAS (garde-fou ci-dessous)
+        log("  recit en echec (%s)%s" % (e, " : narration vision conservee" if a.prompt == "v1" else ""))
         journal("recit_echec", err=str(e)[:200])
         titre = ""
+    histoire = [p for p in vis if p.get("type") == "histoire"]
+    vides = [p["page"] for p in histoire if not (p.get("narration") or "").strip()]
+    if not histoire:
+        _echec("aucune page d'histoire reconnue")
+    if len(vides) > max(2, len(histoire) // 10):
+        _echec("narration vide sur %d page(s) d'histoire sur %d (%s) -- analyse des pages gardee, un nouvel essai la reprend"
+               % (len(vides), len(histoire), ",".join(map(str, vides[:12])) + ("..." if len(vides) > 12 else "")))
+    if vides:
+        log("  %d page(s) d'histoire restee(s) muette(s) : %s" % (len(vides), vides))
     if not a.no_tts:
         etape_voix(vis, outdir, a.voice, a.rate, stats)
+        sans_voix = [p["page"] for p in vis if (p.get("narration") or "").strip() and not p.get("audio")]
+        if sans_voix or not any(p.get("audio") for p in vis):
+            _echec("voix manquante sur %d page(s) narree(s) (%s)" % (len(sans_voix), ",".join(map(str, sans_voix[:12]))))
     stats["total_s"] = round(time.time() - t0, 1)
     stats["cout_total"] = round(stats["cout_vision"] + stats["cout_recit"] + stats["cout_tts"]
                                 + stats.get("cout_noms", 0.0) + stats.get("cout_verif", 0.0), 4)
     # v1.72 : un run --reuse-vision recopie les stats de lecture de son run source : le suivi des couts
     # ne doit compter QUE ce que ce run a depense (recit + voix), sinon la lecture est comptee deux fois.
-    res = {"version": VERSION, "prompt": a.prompt, "reuse_vision": a.reuse_vision or None, "serie": bool(a.serie), "noms_version": a.noms, "chapitre": a.chapitre, "title": man.get("title"), "chapter": man.get("chapter"),
-           "tag": tag, "engine": a.engine, "model": ENGINES[a.engine][1], "voice": a.voice, "rate": a.rate, "langue": a.langue,
-           "titre": titre, "resume": resume, "personnages": persos, "created_at": datetime.now().isoformat(timespec="seconds"),
-           "stats": {k: (round(v, 4) if isinstance(v, float) else v) for k, v in stats.items()},
-           "pages": vis}
+    res = _resultat(vis)
     with open(os.path.join(outdir, "narration.json"), "w", encoding="utf-8") as f:
         json.dump(res, f, ensure_ascii=False, indent=1)
     progres("fini", 1, 1, cout=stats["cout_total"])
