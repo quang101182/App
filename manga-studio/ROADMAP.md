@@ -1961,7 +1961,7 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
 |---|---|
 | `sources/<serie>/serie.json` porte `mangadex_id`, titres, années, statut, tomes (5 séries sur 6 ; pas Black Jack). | Les genres viennent de **MangaDex** (gratuit, sans compte) : `GET /manga/<id>` → `attributes.tags[]` (groupes `genre` 25, `theme` 38, `format`, `content`) + `publicationDemographic` (shounen, seinen…). Vérifié sur Claymore : Action, Aventure, Fantasy, Horreur, Tragédie + thèmes Démons, Monstres, Surnaturel ; shounen. |
 | `manga_serie_infos` (proxy) **réécrit `serie.json` en entier** à chaque rafraîchissement. | ⛔ Un choix « masquée » NE va PAS dans `serie.json` (il serait effacé) → fichier dédié `sources/_bibliotheque.json`. |
-| `manga_serie_infos` retrouve la série **par le 1ᵉʳ résultat** de la recherche MangaDex par titre, et ne réutilise pas un `mangadex_id` déjà connu. | 🔴 Mesuré : « Black Jack ni Yoroshiku » → 1ᵉʳ résultat = une AUTRE série (« Kurokami Seiso… ») ; la bonne (« Give My Regards to Black Jack », `9fca3c19…`) est 3ᵉ, et la suite exclue de la licence (« Shin-Black Jack ») 2ᵉ. ⇒ (a) réutiliser l'id déjà connu ; (b) choisir le résultat dont un titre ou titre alternatif correspond **exactement** (normalisé), sinon ne rien écrire et le dire. |
+| `manga_serie_infos` retrouve la série **par le 1ᵉʳ résultat** de la recherche MangaDex par titre, et ne réutilise pas un `mangadex_id` déjà connu. | ~~🔴 Mesuré~~ → ✅ **couvert par v2.6.0 (B1)** : id connu réutilisé, sinon titre exact, sinon rien n'est écrit. Constat d'origine : « Black Jack ni Yoroshiku » → 1ᵉʳ résultat = une AUTRE série (« Kurokami Seiso… ») ; la bonne (« Give My Regards to Black Jack », `9fca3c19…`) est 3ᵉ, et la suite exclue de la licence (« Shin-Black Jack ») 2ᵉ. ⇒ (a) réutiliser l'id déjà connu ; (b) choisir le résultat dont un titre ou titre alternatif correspond **exactement** (normalisé), sinon ne rien écrire et le dire. |
 | `/manga/sources` renvoie déjà `serie_info` (tout `serie.json` sauf `chapitres`) avec chaque chapitre. | Les genres arrivent dans l'app **sans nouvelle route** dès qu'ils sont dans `serie.json`. |
 | La liste des séries (`renderLib`) suit l'ordre des chapitres renvoyés par le proxy ; recherche intelligente existante (`chercherSerie`, titres alternatifs, 1 faute tolérée). | Le tri et les filtres se posent **à côté** de la recherche, et se combinent avec elle. |
 | Préférences d'affichage déjà mémorisées par appareil (`localStorage` : série ouverte, vue traduction…). | Tri + filtres = **par appareil** (c'est une vue). Masquage = **commun à tous les appareils** (c'est « ma bibliothèque »). |
@@ -1970,8 +1970,9 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
 
 1. **Masquer ≠ supprimer.** Une série masquée disparaît de la page principale, de la recherche et des filtres ; elle reste
    intacte et utilisable par tout le reste (vidéos, lot, nuit, autre session). Bouton **« 🙈 Masquer »** dans la barre de
-   la série ouverte ; en bas de la liste, une ligne discrète **« 👁 Séries masquées (N) »** qui les déplie, grisées, chacune
-   avec **« Ré-afficher »**. Pas de confirmation pour masquer (réversible en un geste) ; un toast le dit.
+   la série ouverte ; ~~en bas de la liste, une ligne discrète **« 👁 Séries masquées (N) »** qui les déplie~~ → **décision
+   Quang 23/09 (v2.6.2)** : bouton **« 👁 Masquées (N) »** à droite de « Filtres », qui bascule la liste sur les séries
+   masquées (retour par « ← Ma bibliothèque »), chacune avec **« Ré-afficher »**. Pas de confirmation pour masquer (réversible en un geste) ; un toast le dit.
    Une recherche qui ne trouve rien parmi les visibles mais trouve une masquée l'indique (« 1 résultat dans les séries masquées »).
 2. **Trier** : un menu compact **« Trier : Récemment ajoutée · Récemment ouverte · A → Z »**. Défaut = récemment ajoutée
    (date de capture du chapitre le plus récent). « Récemment ouverte » = mémorisée côté PC (commune aux appareils).
