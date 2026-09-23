@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.7.1</title>
+<title>Manga Studio v2.7.2</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -360,6 +360,23 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .lib-masquees{margin-top:12px}.lib-masquees>summary{cursor:pointer;color:var(--dim);font-size:13px;padding:6px 0}
 .masquee-ligne{display:flex;gap:6px;align-items:stretch}.masquee-ligne>.chap-item{flex:1;min-width:0;opacity:.6}
 .masquee-ligne>.btn{flex:none;align-self:center}
+/* v2.7.2 : choix du nom du manga (capture, etape 3) -- « Mes series » puis « Masquees » repliees, hauteur bornee */
+.cap-titre-box{position:relative}
+.cap-titre-box>input{padding-right:36px}
+.cap-titre-fl{position:absolute;right:3px;top:50%;transform:translateY(-50%);width:32px;height:32px;border:0;background:none;
+  color:var(--dim);font-size:15px;cursor:pointer;border-radius:6px}
+.cap-sugg{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;max-height:min(340px,52vh);overflow:auto;
+  overscroll-behavior:contain;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px;
+  box-shadow:0 10px 28px rgba(0,0,0,.45)}
+.cap-sugg[hidden]{display:none}
+.cap-sugg-t{font-size:11px;color:var(--dim);padding:7px 10px 3px;text-transform:uppercase;letter-spacing:.04em}
+.cap-sugg-i{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;border:0;background:none;color:var(--txt);
+  font:inherit;font-size:14px;padding:9px 10px;min-height:40px;border-radius:7px;cursor:pointer;align-items:center}
+.cap-sugg-i:hover,.cap-sugg-i.sel{background:var(--panel2)}
+.cap-sugg-i small{color:var(--dim);font-size:12px;flex:none}
+.cap-sugg-i.masq{opacity:.62}
+.cap-sugg-m{display:block;width:100%;margin-top:4px;border:1px dashed var(--line);background:none;color:var(--dim);
+  font:inherit;font-size:13px;padding:9px;min-height:38px;border-radius:7px;cursor:pointer}
 .serie-item small.serie-genres{color:var(--dim)}
 .serie-item small.ch-plages,.serie-item small.serie-genres{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .serie-item>span{min-width:0}
@@ -745,7 +762,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.7.1</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.7.2</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1152,10 +1169,12 @@ body.epure .aide{display:none}
     <div class="cap-etape"><div class="cap-num">3</div><div class="cap-corps">
       <b>Nom du manga et n° du chapitre</b> <span class="muted">— proposés d'après la page à l'étape 1 : vérifie-les</span>
       <div class="row">
-        <div class="grow"><input id="capTitre" list="capTitres" placeholder="nom du manga (ex. One Punch-Man)"></div>
+        <div class="grow cap-titre-box"><input id="capTitre" autocomplete="off" role="combobox" aria-autocomplete="list"
+          aria-expanded="false" aria-controls="capSugg" placeholder="nom du manga (ex. One Punch-Man)">
+          <button type="button" class="cap-titre-fl" id="capTitreFl" tabindex="-1" aria-label="choisir une de mes séries">▾</button>
+          <div class="cap-sugg" id="capSugg" role="listbox" hidden></div></div>
         <div style="width:110px"><input id="capChap" inputmode="decimal" placeholder="n° (ex. 301)"></div>
       </div>
-      <datalist id="capTitres"></datalist>
       <label class="lec-chk"><input type="checkbox" id="capPage1"> depuis la page 1 (si l'onglet est au milieu du chapitre)</label>
       <!-- v2.3.0 (etape 18) : plusieurs chapitres d'un geste -- manga-fetch v0.4.0 ouvre lui-meme le suivant -->
       <!-- v2.3.2 : un SELECTEUR (Quang 14h46 : « l'un ou l'autre » n'etait pas clair) ; defaut « jusqu'au ch. » -->
@@ -1601,7 +1620,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.7.1";
+const VERSION = "2.7.2";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -7217,8 +7236,73 @@ async function refreshCapTabs(){
     : '<option value="">' + (j.edge ? "aucun onglet web ouvert" : "ouvre d'abord la fenêtre de capture") + "</option>";
   const k = CAP_TABS.findIndex(t => t.url === avant);
   if (k >= 0) $("capTab").value = String(k);
-  $("capTitres").innerHTML = [...new Set(CHAPS.map(c => c.title))].map(t => '<option value="' + esc(t) + '">').join("");
+  if (!$("capSugg").hidden) capSuggRendre();                     // v2.7.2 : plus de <datalist> (toutes les series, en vrac)
 }
+/* v2.7.2 : CHOIX DU NOM DU MANGA (Quang, 23/09 19h20 : « la liste va s'allonger […] deux categories : ce qui est
+   masque et ce qui ne l'est pas […] un bouton pour les afficher »). Remplace le <datalist> natif, qui melangeait tout,
+   sans ordre ni hauteur bornee. « Mes series » d'abord (recemment ouvertes, puis ajoutees), les masquees repliees
+   derriere un bouton ; la recherche est celle de la bibliotheque (titres alternatifs, 1 faute toleree). Un nom qui
+   n'existe pas reste libre : c'est une nouvelle serie. */
+let CAP_SUGG_Q = "", CAP_SUGG_MASQ = false;
+function capSuggListes(){
+  const masq = new Set(BIB.masquees || []), ouv = BIB.ouvertes || {};
+  const ordre = (a, b) => (ouv[b.slug] || 0) - (ouv[a.slug] || 0) || dateAjout(b) - dateAjout(a)
+                       || a.title.localeCompare(b.title, "fr", { sensitivity: "base", numeric: true });
+  const l = seriesDe(CHAPS).filter(x => chercherSerie(x, CAP_SUGG_Q).ok).sort(ordre);
+  return { vis: l.filter(x => !masq.has(x.slug)), cach: l.filter(x => masq.has(x.slug)) };
+}
+function capSuggRendre(){
+  const { vis, cach } = capSuggListes();
+  const voir = CAP_SUGG_MASQ || (!!CAP_SUGG_Q && !vis.length && cach.length > 0);   // seule reponse = une masquee : on la montre
+  const it = (x, m) => '<button type="button" class="cap-sugg-i' + (m ? " masq" : "") + '" role="option" data-titre="' + esc(x.title)
+    + '">' + esc(x.title) + '<small>' + x.chaps.length + " ch." + (m ? " · masquée" : "") + "</small></button>";
+  let h = vis.length ? '<div class="cap-sugg-t">Mes séries (' + vis.length + ")</div>" + vis.map(x => it(x)).join("")
+                     : '<div class="cap-sugg-t">' + (CAP_SUGG_Q ? "aucune de tes séries — ce nom créera une nouvelle série" : "aucune série") + "</div>";
+  if (cach.length) h += voir
+    ? '<div class="cap-sugg-t">Masquées (' + cach.length + ")</div>" + cach.map(x => it(x, true)).join("")
+      + (CAP_SUGG_MASQ ? '<button type="button" class="cap-sugg-m" data-masq="0">Replier les masquées</button>' : "")
+    : '<button type="button" class="cap-sugg-m" data-masq="1">👁 Afficher les masquées (' + cach.length + ")</button>";
+  $("capSugg").innerHTML = h;
+}
+function capSuggOuvrir(tout){
+  if (tout) CAP_SUGG_Q = "";
+  capSuggRendre(); $("capSugg").hidden = false; $("capTitre").setAttribute("aria-expanded", "true");
+  // telephone (mesure 360 px) : le champ ne fait que ~165 px (le n° est a cote) -> titres coupes sur 2 lignes. La liste
+  // prend au moins 320 px (ou l'ecran moins 16), decalee vers la gauche si elle deborde ; et elle doit TENIR sous le champ.
+  const r = $("capTitre").getBoundingClientRect(), W = Math.min(Math.max(r.width, 320), innerWidth - 16);
+  Object.assign($("capSugg").style, { width: W + "px", right: "auto", left: Math.min(0, innerWidth - 8 - (r.left + W)) + "px" });
+  // la barre d'onglets reste collee en haut : le champ doit rester VISIBLE au-dessus de la liste (vu sur 360 px)
+  const collee = Math.max(0, ...[...document.querySelectorAll("header, nav, .topbar")].map(e => {
+    const p = getComputedStyle(e).position; return p === "sticky" || p === "fixed" ? e.getBoundingClientRect().bottom : 0; }));
+  if (r.bottom + Math.min(340, innerHeight * 0.52) > innerHeight || r.top < collee) window.scrollBy({ top: r.top - collee - 12 });
+}
+function capSuggFermer(){ $("capSugg").hidden = true; $("capTitre").setAttribute("aria-expanded", "false"); CAP_SUGG_MASQ = false; }
+$("capTitre").addEventListener("focus", () => capSuggOuvrir(true));
+$("capTitre").addEventListener("input", () => { CAP_SUGG_Q = $("capTitre").value.trim(); capSuggOuvrir(false); });
+$("capTitre").addEventListener("keydown", e => {
+  let l = [...$("capSugg").querySelectorAll(".cap-sugg-i")], i = l.findIndex(b => b.classList.contains("sel"));
+  if (e.key === "Escape"){ capSuggFermer(); return; }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+    e.preventDefault();
+    if ($("capSugg").hidden){ capSuggOuvrir(false); l = [...$("capSugg").querySelectorAll(".cap-sugg-i")]; i = -1; }   // re-rendu : nouveaux boutons
+    if (!l.length) return;
+    const j = e.key === "ArrowDown" ? Math.min(l.length - 1, i + 1) : Math.max(0, i - 1);
+    l.forEach((b, k) => b.classList.toggle("sel", k === j)); l[j].scrollIntoView({ block: "nearest" });
+  } else if (e.key === "Enter" && i >= 0 && !$("capSugg").hidden){ e.preventDefault(); l[i].click(); }
+});
+$("capTitreFl").addEventListener("pointerdown", e => e.preventDefault());       // garder le focus (et le clavier) sur le champ
+$("capTitreFl").onclick = () => { if ($("capSugg").hidden) { capSuggOuvrir(true); $("capTitre").focus(); } else capSuggFermer(); };
+$("capSugg").addEventListener("pointerdown", e => e.preventDefault());
+$("capSugg").onclick = e => {
+  const m = e.target.closest("[data-masq]");
+  if (m){ CAP_SUGG_MASQ = m.dataset.masq === "1"; capSuggRendre(); return; }
+  const b = e.target.closest("[data-titre]");
+  if (b){ $("capTitre").value = b.dataset.titre; capSuggFermer(); log("capture : série choisie « " + b.dataset.titre + " »"); }
+};
+document.addEventListener("pointerdown", e => { if (!$("capSugg").hidden && !e.target.closest(".cap-titre-box")) capSuggFermer(); });
+$("capTitre").addEventListener("blur", () => setTimeout(() => {
+  if (!document.activeElement || !document.activeElement.closest || !document.activeElement.closest(".cap-titre-box")) capSuggFermer(); }, 150));
+
 $("btnCapTabs").onclick = () => refreshCapTabs().catch(e => log("capture : " + e.message, "e"));
 $("btnCapEdge").onclick = async () => {
   try {
