@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.5.2"
+VERSION = "0.6.0"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -287,6 +287,39 @@ def _url_chapitre(u: str) -> str:
     return u if "webtoons.com/" in u else u.split("?")[0]
 
 
+# v0.6.0 (23/09/2026, manga-scantrad.io, decision Quang 23h27) : une serie y melange des VOLUMES ENTIERS (.../vol-1/ :
+# 193 bandes) et des CHAPITRES (.../vol-16-chapitre-179-5/). Numerotation : un volume entier = « ch. N » (N = son numero),
+# un chapitre garde SON numero (179.5). L'enchainement suit l'ordre du site : vol-0 ... vol-15, puis 179.5 ... 200.
+RE_VOL = re.compile(r"^vol-(\d+)(?:-(?:chapitre|chapter|ch)-(\d+)(?:-(\d+))?)?$", re.I)
+
+
+def _vol_cle(slug: str):
+    """slug -> (cle de tri, numero affiche) ; None si le slug n'est pas de cette forme."""
+    m = RE_VOL.match(slug)
+    if not m:
+        return None
+    vol = int(m.group(1))
+    if m.group(2) is None:
+        return (vol, -1.0), _format_num(vol)                         # volume entier : avant ses chapitres
+    n = float(m.group(2) + ("." + m.group(3) if m.group(3) else ""))
+    return (vol, n), _format_num(n)
+
+
+def vol_suivant(slugs, courant_slug: str, jusqua=None, entiers: bool = False):
+    """Parmi les slugs du site (ordre quelconque), le suivant de courant_slug -> (numero, slug, None) ou (None, None, raison)."""
+    connus = sorted({s for s in slugs if _vol_cle(s)}, key=lambda s: _vol_cle(s)[0])
+    if courant_slug not in connus:
+        return None, None, "chapitre courant introuvable dans la liste du site (%s)" % courant_slug
+    for s in connus[connus.index(courant_slug) + 1:]:
+        num = _vol_cle(s)[1]
+        if entiers and not _num(num).is_integer():
+            continue
+        if jusqua is not None and _num(num) > jusqua:
+            return None, None, "le chapitre suivant (%s) dépasse la borne demandée (%s)" % (num, _format_num(jusqua))
+        return num, s, None
+    return None, None, "aucun volume ni chapitre après « %s » sur ce site" % courant_slug
+
+
 def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: bool = False):
     """Amène l'onglet au chapitre qui suit `courant`. Retourne (numéro, None) ou (None, raison)."""
     m = re.search(r"mangadex\.org/chapter/([0-9a-f-]{36})", url_chapitre)
@@ -364,6 +397,21 @@ def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: boo
         if jusqua is not None and _num(n) > jusqua:
             return None, f"WEBTOON : l'épisode suivant ({n}) dépasse la borne demandée ({_format_num(jusqua)})"
         page.goto(suiv, wait_until="domcontentloaded", timeout=45000)
+        return n, None
+    # v0.6.0 : volumes entiers + chapitres « vol-N-chapitre-M » (manga-scantrad.io)
+    mv = re.match(r"(https?://[^?#]+?/)(vol-\d+(?:-(?:chapitre|chapter|ch)-\d+(?:-\d+)?)?)/?(?:[?#].*)?$", url_chapitre, re.I)
+    if mv:
+        base, slug = mv.group(1), mv.group(2).lower()
+        if page.url.split("?")[0].split("#")[0].rstrip("/") != url_chapitre.split("?")[0].split("#")[0].rstrip("/"):
+            page.goto(url_chapitre, wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(3000)
+        slugs = page.evaluate("(base) => [...document.querySelectorAll('select option')].map(o => o.value)"
+                              ".concat([...document.querySelectorAll('a[href]')].map(a => a.href)"
+                              ".filter(h => h.startsWith(base)).map(h => h.slice(base.length).split(/[/?#]/)[0]))", base)
+        n, s2, raison = vol_suivant([x.lower() for x in slugs], slug, jusqua, entiers)
+        if n is None:
+            return None, raison
+        page.goto(base + s2 + "/", wait_until="domcontentloaded", timeout=45000)
         return n, None
     # v0.5.1 : GENERIQUE -- les sites de scans (WordPress « Madara » et cie : raijin-scans.fr, 22/09) listent sur la page
     # du chapitre les liens de TOUS les chapitres de la serie, a adresse reguliere .../chapter-12/ ou .../chapitre-12-5/.
