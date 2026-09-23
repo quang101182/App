@@ -1924,6 +1924,66 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
 | 11 (rappel) | **Traduction des textes selon la langue choisie** (Quang 21/09 23h00) : déjà l'étape 11 (b) — pages relettrées dans la langue définie (ex. Claymore, en anglais → français). | | |
 | — | **Mode Lecture avancé** (précisé par Quang 21/09) : case par case, texte masqué, chaque réplique lue par la **voix de son personnage** | réutiliser le multi-voix de StoryVoice / smart-reader (pré-casting éditable, v0.21) ; Magi fournit OCR + ordre des bulles | après l'étape 1-bis (exige des attributions sûres) |
 
+## 4-quinquies. FEUILLE DE ROUTE — BIBLIOTHÈQUE : masquer, trier, filtrer *(23/09/2026, cible v2.6.0)*
+
+> Demande Quang (23/09, 12h42-12h44) : *« un système de filtres dans la bibliothèque en page principale, filtré par genre
+> ou autre chose, tout affiché bien sûr ? […] un système de rangement aussi personnalisé ? Si j'ai envie d'exclure certains
+> mangas […] l'autre session travaille sur d'autres choses, cela permet de ne pas créer et supprimer à chaque fois. Ainsi,
+> je garde ma bibliothèque propre à moi. »* — puis *« je vais en ajouter des mangas, c'est sûr »* (donc les filtres par
+> genre MAINTENANT, pas « à 20 séries ») — puis *« prends le temps de bien regarder tous les détails […] l'ergonomie
+> également, et tu traces une feuille de route bien détaillée […] et tu suis »*.
+> ⏸ **Contrainte du moment (12h44)** : *« on ne déplace rien parce que l'autre session est en train de finir »* (Vidéo
+> Studio, série `black-jack-ni-yoroshiku`). ⇒ **Aucune écriture sur `sources/`, aucune relance du proxy, aucune
+> modification de `manga_studio.html` servi, tant que Quang n'a pas dit que c'est libre.** Déclencheur de reprise : son feu vert.
+
+### Constats (lus dans le code et mesurés le 23/09 — à re-vérifier si le code a bougé)
+
+| Constat | Conséquence pour le design |
+|---|---|
+| `sources/<serie>/serie.json` porte `mangadex_id`, titres, années, statut, tomes (5 séries sur 6 ; pas Black Jack). | Les genres viennent de **MangaDex** (gratuit, sans compte) : `GET /manga/<id>` → `attributes.tags[]` (groupes `genre` 25, `theme` 38, `format`, `content`) + `publicationDemographic` (shounen, seinen…). Vérifié sur Claymore : Action, Aventure, Fantasy, Horreur, Tragédie + thèmes Démons, Monstres, Surnaturel ; shounen. |
+| `manga_serie_infos` (proxy) **réécrit `serie.json` en entier** à chaque rafraîchissement. | ⛔ Un choix « masquée » NE va PAS dans `serie.json` (il serait effacé) → fichier dédié `sources/_bibliotheque.json`. |
+| `manga_serie_infos` retrouve la série **par le 1ᵉʳ résultat** de la recherche MangaDex par titre, et ne réutilise pas un `mangadex_id` déjà connu. | 🔴 Mesuré : « Black Jack ni Yoroshiku » → 1ᵉʳ résultat = une AUTRE série (« Kurokami Seiso… ») ; la bonne (« Give My Regards to Black Jack », `9fca3c19…`) est 3ᵉ, et la suite exclue de la licence (« Shin-Black Jack ») 2ᵉ. ⇒ (a) réutiliser l'id déjà connu ; (b) choisir le résultat dont un titre ou titre alternatif correspond **exactement** (normalisé), sinon ne rien écrire et le dire. |
+| `/manga/sources` renvoie déjà `serie_info` (tout `serie.json` sauf `chapitres`) avec chaque chapitre. | Les genres arrivent dans l'app **sans nouvelle route** dès qu'ils sont dans `serie.json`. |
+| La liste des séries (`renderLib`) suit l'ordre des chapitres renvoyés par le proxy ; recherche intelligente existante (`chercherSerie`, titres alternatifs, 1 faute tolérée). | Le tri et les filtres se posent **à côté** de la recherche, et se combinent avec elle. |
+| Préférences d'affichage déjà mémorisées par appareil (`localStorage` : série ouverte, vue traduction…). | Tri + filtres = **par appareil** (c'est une vue). Masquage = **commun à tous les appareils** (c'est « ma bibliothèque »). |
+
+### Décisions d'ergonomie (proposées par Claude, cadre posé par Quang)
+
+1. **Masquer ≠ supprimer.** Une série masquée disparaît de la page principale, de la recherche et des filtres ; elle reste
+   intacte et utilisable par tout le reste (vidéos, lot, nuit, autre session). Bouton **« 🙈 Masquer »** dans la barre de
+   la série ouverte ; en bas de la liste, une ligne discrète **« 👁 Séries masquées (N) »** qui les déplie, grisées, chacune
+   avec **« Ré-afficher »**. Pas de confirmation pour masquer (réversible en un geste) ; un toast le dit.
+   Une recherche qui ne trouve rien parmi les visibles mais trouve une masquée l'indique (« 1 résultat dans les séries masquées »).
+2. **Trier** : un menu compact **« Trier : Récemment ajoutée · Récemment ouverte · A → Z »**. Défaut = récemment ajoutée
+   (date de capture du chapitre le plus récent). « Récemment ouverte » = mémorisée côté PC (commune aux appareils).
+   Pas de rangement à la main (glisser-déposer) : lourd à faire et à entretenir — **déclencheur pour y revenir** : Quang le redemande.
+3. **Filtrer** : un bouton **« Filtres (n) »** à côté du tri ouvre un panneau de pastilles :
+   **Genres** (MangaDex, traduits en français) · **Public** (shōnen, seinen, shōjo, josei) · **Statut** (en cours, terminé) ·
+   **Thèmes** (repliés sous « + thèmes », ils sont nombreux). Plusieurs pastilles = la série doit les avoir **toutes**
+   (on resserre, comme la recherche où chaque mot doit trouver sa place). Seules les pastilles **présentes dans la
+   bibliothèque** sont proposées, avec leur nombre (« Action 4 ») : jamais un filtre qui ne mène à rien.
+   Les filtres actifs restent visibles sous la barre (pastilles avec ✕ + « Tout effacer ») ; la ligne d'état dit
+   « 3 / 7 séries ». Une série sans genres connus reste visible tant qu'aucun filtre de genre n'est actif.
+4. **Téléphone d'abord** (360-480 px) : barre sur une ligne (recherche) + une ligne (Trier · Filtres) ; le panneau de
+   pastilles s'ouvre sous la barre, pastilles qui passent à la ligne, cibles ≥ 36 px ; aucun débordement horizontal.
+
+### Étapes (dans cet ordre ; une étape = un commit qui la nomme)
+
+| # | Étape | Définition de « fini » |
+|---|---|---|
+| B1 | **Proxy — fiche de série fiable** (`patch_bibliotheque_genres.py`) : `manga_serie_infos` réutilise le `mangadex_id` connu ; sinon choisit le résultat au titre exact (normalisé, titres alternatifs compris), sinon ne touche à rien et renvoie l'erreur ; ajoute `genres`, `themes`, `public`. | Banc : les 5 séries existantes gardent leur id ; Black Jack → « Give My Regards to Black Jack » (`9fca3c19…`), jamais « Shin- » ; une série introuvable → erreur, `serie.json` intact. `.bak` de chaque `serie.json` avant. |
+| B2 | **Proxy — `_bibliotheque.json`** : `GET /manga/bibliotheque` → `{masquees:[slug], ouvertes:{slug:ts}}` ; `POST {action: masquer|afficher|ouverte, slug}` (slug validé, écriture atomique `.tmp` + `os.replace`). | Banc API : masquer / afficher / ouverte, relecture après relance du proxy ; slug invalide refusé ; fichier absent = tout visible. |
+| B3 | **Remplissage des genres des séries existantes** : à l'ouverture de la bibliothèque, une série avec `serie_info` mais sans `genres` est rafraîchie UNE fois (même mécanisme que les tomes). | Les séries ont leurs genres ; tomes, couvertures, dates inchangés (diff des `serie.json` : seules les clés ajoutées). |
+| B4 | **App — masquer** (barre de la série + section « Séries masquées » + recherche qui le signale). | Banc UI : masquer → disparaît, compteur juste, ré-afficher → revient ; commun PC/téléphone (2 contextes de navigateur) ; la série masquée reste ouvrable (lien d'activité, lecteur). |
+| B5 | **App — trier** (3 ordres, mémorisé par appareil ; « récemment ouverte » alimentée par `ouverte`). | Banc : les 3 ordres donnent l'ordre attendu, calculé indépendamment dans le banc ; survit au rechargement. |
+| B6 | **App — filtres** (pastilles FR avec comptes, ET, pastilles actives, « Tout effacer », combinaison recherche + filtres + masquées). | Banc : pour chaque pastille, la liste affichée == le calcul du banc sur les données ; 2 pastilles = intersection ; 360 px sans débordement ; capture relue à l'œil. |
+| B7 | **Clôture** : version **v2.6.0** aux 3 endroits, `node --check`, bancs existants (bibliothèque, recherche, profil, vidéos fraîches, caméra) verts, feuille de route + journal mis à jour, commit + push. | Tout vert, captures PC + téléphone contrôlées, rien d'écrit dans la bibliothèque de Quang hors `serie.json` (genres) et `_bibliotheque.json`. |
+
+⚠️ **Pièges à ne pas repayer** : `serie.json` réécrit en entier (ne rien y stocker d'autre que MangaDex) · recherche
+MangaDex par pertinence ≠ bon titre · `hidden` écrasé par un `display` CSS (piège payé 3 fois, cf. § 6 du 28/07) ·
+une apostrophe dans une chaîne JS = tous les boutons morts (`node --check` après chaque édition) · le proxy est partagé
+avec Generate Studio (relance UNIQUEMENT par `relance-proxy.ps1`, `.bak` avant patch).
+
 ## 4-bis. L'essai utilisateur du 28/07 — 10 puis 12 cases, pilotées comme Quang
 
 > Demande de Quang : *« fais l'essai toi-même, en pilotant comme si tu étais moi, pour voir si au
