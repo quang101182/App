@@ -76,6 +76,13 @@ with sync_playwright() as p:
         check("V3 : 2e chapitre fini, 2e video en file -> « 2/54 »", n == "2/54", n)
         ETAT["video"] = False
         etape([])
+        # v2.8.4 : on ROUVRE l'app pendant la vague ; la narration s'est finie pendant que l'app etait fermee
+        etape([A, B]); ETAT["items"] = [B]
+        pg.reload(); pg.wait_for_timeout(3500)
+        rr = pg.evaluate("() => [document.getElementById('actN').hidden ? '' : document.getElementById('actN').textContent, ACT.finis.length]")
+        check("R : app rouverte, une tache finie entre-temps -> « 1/2 » (et non « 0/1 »)", rr[0] == "1/2", rr)
+        pg.click("#hdrAct"); pg.wait_for_timeout(300)                           # le rechargement a ferme le panneau
+        etape([])
         n0, v0, t0 = etape([dict(B, etape="images"), C])                                 # v2.8.3 : rien de mesure
         check("0 : rien de mesure (videos sans estimation) -> « estimation en cours… »", "estimation en cours" in v0, v0)
         etape([])
