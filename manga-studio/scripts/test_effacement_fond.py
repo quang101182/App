@@ -58,5 +58,21 @@ r0, s0 = ip.clean_bubbles(b, [dict(tB)])
 check(s6[0]["etat"] == "bulle" and s0[0]["etat"] == "bulle", "effacee comme une bulle, avec ou sans ratio_max (%s / %s)" % (s6[0]["etat"], s0[0]["etat"]))
 check(blanchi(b, r6, (500, 680, 600, 720)) > 0.95, "le texte de la bulle est efface")
 check(np.array_equal(np.array(r6), np.array(r0)), "resultat IDENTIQUE avec ou sans ratio_max")
+rBok = r6
+
+# (cas « bulle pleine de grosses lettres » : prouve sur la VRAIE page OPM ch.2 p.10, essai_t2_nr.py -- une image
+# fabriquee ne reproduisait pas la poche isolee)
+print("D. texte pose sur le dessin (effacement « vide ») -- T2-bis")
+e = Image.new("RGB", (W, H), (150, 150, 150))
+d = ImageDraw.Draw(e)
+d.rectangle([300, 300, 360, 520], fill=(20, 20, 20))                                      # texte vertical sombre
+d.rectangle([330, 400, 332, 402], fill=(255, 255, 255))                                   # un point blanc isole
+tD = {"id": 4, "x": 295 / W, "y": 295 / H, "w": 70 / W, "h": 230 / H}
+rD, sD = ip.clean_bubbles(e, [dict(tD)], ratio_max=6, couverture_min=0.5)
+_, sD0 = ip.clean_bubbles(e, [dict(tD)], ratio_max=6)
+check("boite" in sD[0]["etat"], "avec couverture_min : %s (sans : %s)" % (sD[0]["etat"], sD0[0]["etat"]))
+check(blanchi(e, rD, (300, 300, 360, 520)) > 0.95, "le texte est efface (plus rien de pose sur du chinois)")
+rB6, _ = ip.clean_bubbles(b, [dict(tB)], ratio_max=6, couverture_min=0.5)
+check(np.array_equal(np.array(rB6), np.array(rBok)), "vraie bulle : resultat IDENTIQUE avec couverture_min")
 print("\n%d/%d" % (OK, OK + KO))
 sys.exit(1 if KO else 0)

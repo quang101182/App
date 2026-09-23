@@ -30,7 +30,13 @@ sys.path.insert(0, HERE)
 import narrate_chapter as nc          # appel_vision (Gemini natif / K3), frein 18/min, couts, journal
 import ingest_page as ip              # load_page, detect, clean_bubbles
 
-VERSION = "1.93.0"
+VERSION = "1.96.0"
+# v1.96.0 (23/09, T1-bis) : le seuil « 6x » s'appliquait a TOUTES les pages et abimait les vraies bulles a texte vertical
+# etroit (Black Jack : 28 bulles, texte pose en taille 8). Mesure : pages devenues blanches = >= 22,5 % du dessin blanchi ;
+# pages saines (OPM, Black Jack, Noritaka) <= 13,6 %. => effacement d'avant, et SEULEMENT si > 18 % de la page a ete
+# blanchie, la page est refaite avec la regle du fond (ratio 6).
+SEUIL_BLANCHI = 18.0
+COUVERTURE_MIN = 0.5                  # v1.95.0 : effacement qui couvre < 50 % du texte = rate -> boite entiere
 # v1.93.0 (23/09/2026, remontee Video Studio : 20 pages OPM traduites devenues BLANCHES) : le seuil « bulle 6x plus
 # grande que son texte = fond de case » s'applique desormais A L'EFFACEMENT (ingest_page.clean_bubbles), plus seulement
 # a l'endroit ou l'on ecrit : avant, tout le fond clair etait deja peint en blanc.
@@ -58,8 +64,14 @@ scene) puis des BULLES decoupees et numerotees de cette page. Pour CHAQUE bulle 
 - "trad" : traduction NATURELLE en {langue}, au registre de l'original (crie, chuchote, familier...), fidele,
   sans rien ajouter ; en MAJUSCULES si l'original est en majuscules. Pour une onomatopee ou une bulle vide :
   "trad" = "". Jamais de markdown, jamais d'asterisques, jamais de guillemets autour de la traduction.
-Reponds UNIQUEMENT en JSON : {{"bulles":[{{"id":1,"texte":"...","type":"dialogue","trad":"..."}}]}}
-avec EXACTEMENT les numeros recus."""
+ENSUITE, regarde la PAGE ENTIERE : liste dans "hors_zones" chaque texte lisible qui N'EST DANS AUCUNE des bulles
+numerotees (encadre ou cartouche de narration, pensee, texte vertical, cri ecrit, panneau). PAS les onomatopees
+dessinees (effets sonores integres au dessin). Pour chacun : "texte", "type" ("dialogue" | "narration"), "trad"
+(memes regles), et "box" = [ymin, xmin, ymax, xmax] du texte en milliemes de la page (0-1000), au plus juste.
+Rien hors des bulles : "hors_zones" = [].
+Reponds UNIQUEMENT en JSON : {{"bulles":[{{"id":1,"texte":"...","type":"dialogue","trad":"..."}}],
+"hors_zones":[{{"texte":"...","type":"narration","trad":"...","box":[0,0,0,0]}}]}}
+avec EXACTEMENT les numeros recus pour les bulles."""
 
 
 def jpeg_b64(im, largeur=None):
@@ -97,10 +109,63 @@ def traduire_page(im, texts, engine, langue, stats):
         stats["tokens_in"] += u.get("prompt_tokens", 0); stats["tokens_out"] += u.get("completion_tokens", 0)
         stats["cout"] += nc.cout(model, u)
         try:
-            return {int(b["id"]): b for b in nc.parse_json(texte).get("bulles") or [] if str(b.get("id", "")).isdigit()}
+            j = nc.parse_json(texte)
+            HORS_ZONES[:] = [h for h in (j.get("hors_zones") or []) if isinstance(h, dict)]      # v1.94.0
+            return {int(b["id"]): b for b in j.get("bulles") or [] if str(b.get("id", "")).isdigit()}
         except Exception as e:
             nc.log("  JSON illisible (%s), nouvel essai" % e)
     raise RuntimeError("traduction illisible apres 3 essais")
+
+
+# v1.94.0 (T2, remontee Video Studio 23/09) : encadres a texte vertical, cartouches et cris que YOLO ne detecte pas
+# restaient en chinois (ch.2 p.10, ch.5 p.2/3/14...). Gemini voit deja la page entiere : il rend aussi ces textes-la,
+# avec une boite approximative ; ils deviennent des zones de COMPLEMENT (memes garde-fous : 2 lettres au moins,
+# traduction qui tient, aucun chevauchement avec une bulle detectee).
+HORS_ZONES = []
+
+
+def zones_hors(hors, texts, marge=0.08):
+    """Les textes « hors zones » de Gemini -> zones (x, y, w, h en fractions), sans celles qui touchent une zone detectee."""
+    out, prochain = [], max([t["id"] for t in texts] or [0]) + 100
+    for h in hors:
+        b = h.get("box") or []
+        if len(b) != 4 or not all(isinstance(v, (int, float)) for v in b) or not (h.get("trad") or "").strip():
+            continue
+        if (h.get("type") or "") not in ("dialogue", "narration"):
+            continue
+        y1, x1, y2, x2 = (max(0.0, min(1.0, v / 1000.0)) for v in b)
+        if x2 - x1 < 0.01 or y2 - y1 < 0.01:
+            continue
+        mx, my = marge * (x2 - x1), marge * (y2 - y1)
+        z = {"id": prochain, "x": max(0.0, x1 - mx), "y": max(0.0, y1 - my), "w": min(1.0, x2 + mx) - max(0.0, x1 - mx),
+             "h": min(1.0, y2 + my) - max(0.0, y1 - my), "complement": True, "hors_zone": True, "conf": None, "_h": h}
+        if any(min(z["x"] + z["w"], t["x"] + t["w"]) > max(z["x"], t["x"]) and min(z["y"] + z["h"], t["y"] + t["h"]) > max(z["y"], t["y"])
+               for t in texts + out):
+            continue
+        out.append(z); prochain += 1
+    return out
+
+
+def blanchiment(im, rendu, texts):
+    """% de la page BLANCHIE par l'effacement : pixels non blancs devenus blancs, hors boites de texte (v1.96.0)."""
+    import numpy as np
+    A = np.array(im.convert("L")); B = np.array(rendu.convert("L")); H, W = A.shape
+    m = (B >= 250) & (A < 250)
+    for t in texts:
+        m[int(t["y"] * H):int((t["y"] + t["h"]) * H) + 1, int(t["x"] * W):int((t["x"] + t["w"]) * W) + 1] = False
+    return 100.0 * float(m.mean())
+
+
+def nettoyer(im, texts, stats=None):
+    """Effacement v1.96.0 : comme avant ; si la page est anormalement blanchie (> SEUIL_BLANCHI), refait en prudent."""
+    r, net = ip.clean_bubbles(im, texts, couverture_min=COUVERTURE_MIN)
+    b = blanchiment(im, r, texts)
+    if b > SEUIL_BLANCHI:
+        r, net = ip.clean_bubbles(im, texts, ratio_max=RATIO_FOND, couverture_min=COUVERTURE_MIN)
+        if stats is not None:
+            stats["pages_prudentes"] = stats.get("pages_prudentes", 0) + 1
+        nc.log("  effacement prudent : %.0f %% de la page aurait ete blanchie" % b)
+    return r, net
 
 
 def sans_chevauchement(texts, seuil=0.3):
@@ -253,11 +318,17 @@ def main():
         stats["bulles"] += len(texts)
         lignes, rendu = [], im
         if texts:
+            HORS_ZONES[:] = []
             try:
                 tr = traduire_page(im, texts, a.engine, a.langue, stats)
             except Exception as e:
                 nc.log("  page %d : traduction en echec (%s) -> page laissee en VO" % (p["num"], e))
                 tr = {}
+            hors = zones_hors(HORS_ZONES, texts)                              # v1.94.0 (T2)
+            for z in hors:
+                tr[z["id"]] = z.pop("_h")
+            stats["hors_zones"] = stats.get("hors_zones", 0) + len(hors)
+            texts = texts + hors
             a_poser = []
             for t in texts:
                 b = tr.get(t["id"]) or {}
@@ -267,6 +338,8 @@ def main():
                        "type": typ, "texte": b.get("texte") or "", "trad": trad}
                 if t.get("complement"):                                   # v1.92.0 : tracable (zone faible rattrapee)
                     lig["complement"], lig["conf"] = True, t.get("conf")
+                    if t.get("hors_zone"):
+                        lig["hors_zone"] = True                           # v1.94.0 : vu par Gemini, pas par YOLO
                     stats["complements"] = stats.get("complements", 0) + 1
                 if trad and typ in ("dialogue", "narration", "?"):
                     a_poser.append((t, lig))
@@ -282,7 +355,7 @@ def main():
                 if t.get("complement") and not re.search(r"\w\w", lig["texte"] or ""):
                     douteux.append((t, lig, "moins de 2 lettres"))
             if any(t.get("complement") for t, _ in a_poser):
-                essai, net0 = ip.clean_bubbles(im, [t for t, _ in a_poser], ratio_max=RATIO_FOND)
+                essai, net0 = nettoyer(im, [t for t, _ in a_poser])
                 e0 = {x.get("id"): x.get("etat") for x in net0}
                 for t, lig in a_poser:
                     if not t.get("complement") or any(t is d[0] for d in douteux):
@@ -300,7 +373,7 @@ def main():
                 stats["complements_ecartes"] = stats.get("complements_ecartes", 0) + 1
             a_poser = [(t, lig) for t, lig in a_poser if not any(t is d[0] for d in douteux)]
             if a_poser:
-                rendu, net = ip.clean_bubbles(im, [t for t, _ in a_poser], ratio_max=RATIO_FOND)
+                rendu, net = nettoyer(im, [t for t, _ in a_poser], stats)
                 etats = {s.get("id"): s.get("etat") for s in net}
                 a_dessiner = []
                 for t, lig in a_poser:

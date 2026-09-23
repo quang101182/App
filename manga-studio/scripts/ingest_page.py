@@ -128,7 +128,7 @@ def detect(im, conf):
     return panels, texts
 
 
-def clean_bubbles(im, texts, marge=0.30, ratio_max=None):
+def clean_bubbles(im, texts, marge=0.30, ratio_max=None, couverture_min=None):
     """Efface le TEXTE des bulles d'origine en preservant leur CONTOUR.
 
     Sans ca, on ne relettre pas : on empile une bulle francaise sur une bulle
@@ -144,6 +144,11 @@ def clean_bubbles(im, texts, marge=0.30, ratio_max=None):
     la boite du texte n'est PAS une bulle mais le fond d'une case ou de la page (ciel, decor clair, titre colle au
     bord) : on n'efface que la boite du texte. Sans ca, 20 pages OPM traduites sont devenues BLANCHES (remontee
     Video Studio). Ingestion : None = comportement inchange.
+
+    couverture_min (v1.95.0 de la traduction, 23/09/2026) : si fourni, une « bulle » dont l'effacement couvre moins de
+    cette part de la boite du texte a RATE (bulle en etoile pleine de grosses lettres : seule une poche blanche est
+    atteinte ; texte pose sur le dessin : rien n'est atteint, « vide ») -> on efface la boite du texte entiere.
+    Vu sur OPM ch.2 p.10 et ch.5 p.2 (remontee Video Studio). Ingestion : None = comportement inchange.
 
     Renvoie (image nettoyee, statistiques par bulle).
     """
@@ -204,6 +209,10 @@ def clean_bubbles(im, texts, marge=0.30, ratio_max=None):
                     comp = np.zeros((H, W), np.uint8)
                     comp[by1:by2, bx1:bx2] = 1
                     etat = "fond de case -> boite seule"
+            if couverture_min is not None and etat == "bulle" and float(comp[by1:by2, bx1:bx2].mean()) < couverture_min:
+                comp = np.zeros((H, W), np.uint8)
+                comp[by1:by2, bx1:bx2] = 1
+                etat = "bulle incomplete -> boite seule"
 
         sel = comp > 0
         if not sel.any():
