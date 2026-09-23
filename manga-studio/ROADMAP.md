@@ -2024,8 +2024,9 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
   - 🟠 **CDC « Preparedness 101: Zombie Pandemic »** (2011) : domaine public (œuvre fédérale US, « Public Domain Mark
     1.0 » sur archive.org), vraie histoire en anglais, one-shot, pages classiques → empilement.
   - ❌ Webcomics « CC » grand public : tous NC ou ND (xkcd, Sandra and Woo, Diesel Sweeties… vérifiés par le sous-agent).
-  **Rien d'importé** : décision à Quang (quelle œuvre, quels épisodes, et si Vidéo Studio met à jour son `STOCK.md`,
-  qui affirme encore « KOGL = texte seulement »).
+  **Rien d'importé ici** — tranché le 23/09 14h16 : la production (import, narration, vidéo, **masquage** dans la
+  bibliothèque) revient à **Vidéo Studio** (Quang : « je préfère que ce soit VideoStudio qui gère tout ça ») ; la
+  trouvaille est écrite dans son `manga-demo/STOCK.md` (commit `16bc58f`). Manga Studio n'intervient que si l'app bloque.
 
 ⚠️ **Pièges à ne pas repayer** : `serie.json` réécrit en entier (ne rien y stocker d'autre que MangaDex) · recherche
 MangaDex par pertinence ≠ bon titre · `hidden` écrasé par un `display` CSS (piège payé 3 fois, cf. § 6 du 28/07) ·
