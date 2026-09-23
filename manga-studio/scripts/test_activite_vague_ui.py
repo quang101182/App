@@ -23,6 +23,8 @@ with sync_playwright() as p:
         c = b.new_context(viewport={"width": w, "height": h}, is_mobile=w < 400, has_touch=w < 400); pg = c.new_page(); errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
         pg.route("**/manga/activite*", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(ETAT)))
+        pg.route("**/manga/suivi?serie=*", lambda r: r.fulfill(status=200, content_type="application/json",
+                                                              body=json.dumps({"config": {"video": ETAT.get("video", False)}})))
         pg.goto("http://127.0.0.1:8190/manga#k=" + KEY); pg.wait_for_timeout(2500)
         check("version = fichier", pg.inner_text("#verBadge") == "v" + bo.version_app())
         def etape(items, attente=0):
@@ -62,6 +64,17 @@ with sync_playwright() as p:
         n, v, t = etape([LOT2, N2, V1], attente=1500)
         check("L2 : 1er chapitre fait + sa video en file -> « 1/28 »", n == "1/28", n)
         check("L2 : duree d'un chapitre mesuree -> plus de « au moins » pour le batch (la video, elle, pas encore mesuree)", "reste" in v, v)
+        etape([])
+        # v2.8.2 : batch AVEC videos : 27 chapitres + 27 videos a venir -> total 54, qui ne bouge plus
+        ETAT["video"] = True
+        etape([LOT, N1]); n, v, t = etape([LOT, N1])                    # 2e tour : l'option video du profil est lue
+        check("V1 : batch de 27 chapitres AVEC videos -> « 0/54 » des le depart", n == "0/54", n)
+        n, v, t = etape([LOT2, N2, V1], attente=1200)
+        check("V2 : 1er chapitre fini, sa video en file -> « 1/54 » (le total NE BOUGE PAS)", n == "1/54", n)
+        n, v, t = etape([dict(LOT2, d="x/ch_3", chapitre="3", fait=2), dict(N2, d="x/ch_3"), dict(V1, etape="images", fait=2, total=20, reste_s=60),
+                         dict(V1, d="x/ch_2", chapitre="2")], attente=1200)
+        check("V3 : 2e chapitre fini, 2e video en file -> « 2/54 »", n == "2/54", n)
+        ETAT["video"] = False
         etape([])
         check("pas de défilement horizontal", pg.evaluate("() => document.documentElement.scrollWidth <= innerWidth + 1"))
         etape([A, B])
