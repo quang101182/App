@@ -76,6 +76,9 @@ with sync_playwright() as p:
         check("V3 : 2e chapitre fini, 2e video en file -> « 2/54 »", n == "2/54", n)
         ETAT["video"] = False
         etape([])
+        n0, v0, t0 = etape([dict(B, etape="images"), C])                                 # v2.8.3 : rien de mesure
+        check("0 : rien de mesure (videos sans estimation) -> « estimation en cours… »", "estimation en cours" in v0, v0)
+        etape([])
         check("pas de défilement horizontal", pg.evaluate("() => document.documentElement.scrollWidth <= innerWidth + 1"))
         etape([A, B])
         pg.locator("#actPanel").screenshot(path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "act_vague_%d.png" % w))
