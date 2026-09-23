@@ -30,7 +30,11 @@ sys.path.insert(0, HERE)
 import narrate_chapter as nc          # appel_vision (Gemini natif / K3), frein 18/min, couts, journal
 import ingest_page as ip              # load_page, detect, clean_bubbles
 
-VERSION = "1.92.0"
+VERSION = "1.93.0"
+# v1.93.0 (23/09/2026, remontee Video Studio : 20 pages OPM traduites devenues BLANCHES) : le seuil « bulle 6x plus
+# grande que son texte = fond de case » s'applique desormais A L'EFFACEMENT (ingest_page.clean_bubbles), plus seulement
+# a l'endroit ou l'on ecrit : avant, tout le fond clair etait deja peint en blanc.
+RATIO_FOND = 6
 FONT_BOLD = os.path.join(HERE, "fonts", "ComicNeue-Bold.ttf")
 LANGUES = {"fr": "français", "en": "anglais", "es": "espagnol", "de": "allemand", "it": "italien",
            "pt": "portugais", "vi": "vietnamien"}
@@ -278,7 +282,7 @@ def main():
                 if t.get("complement") and not re.search(r"\w\w", lig["texte"] or ""):
                     douteux.append((t, lig, "moins de 2 lettres"))
             if any(t.get("complement") for t, _ in a_poser):
-                essai, net0 = ip.clean_bubbles(im, [t for t, _ in a_poser])
+                essai, net0 = ip.clean_bubbles(im, [t for t, _ in a_poser], ratio_max=RATIO_FOND)
                 e0 = {x.get("id"): x.get("etat") for x in net0}
                 for t, lig in a_poser:
                     if not t.get("complement") or any(t is d[0] for d in douteux):
@@ -296,7 +300,7 @@ def main():
                 stats["complements_ecartes"] = stats.get("complements_ecartes", 0) + 1
             a_poser = [(t, lig) for t, lig in a_poser if not any(t is d[0] for d in douteux)]
             if a_poser:
-                rendu, net = ip.clean_bubbles(im, [t for t, _ in a_poser])
+                rendu, net = ip.clean_bubbles(im, [t for t, _ in a_poser], ratio_max=RATIO_FOND)
                 etats = {s.get("id"): s.get("etat") for s in net}
                 a_dessiner = []
                 for t, lig in a_poser:

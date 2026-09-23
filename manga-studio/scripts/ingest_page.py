@@ -128,7 +128,7 @@ def detect(im, conf):
     return panels, texts
 
 
-def clean_bubbles(im, texts, marge=0.30):
+def clean_bubbles(im, texts, marge=0.30, ratio_max=None):
     """Efface le TEXTE des bulles d'origine en preservant leur CONTOUR.
 
     Sans ca, on ne relettre pas : on empile une bulle francaise sur une bulle
@@ -139,6 +139,11 @@ def clean_bubbles(im, texts, marge=0.30):
     par un trait noir. On isole donc la composante claire qui contient le texte,
     on bouche ses trous (les trous, ce sont les lettres), et on la peint en blanc.
     Deterministe, instantane, et ca ne peut pas halluciner un dessin.
+
+    ratio_max (v1.93.0 de la traduction, 23/09/2026) : si fourni, une « bulle » dont la boite depasse ratio_max x
+    la boite du texte n'est PAS une bulle mais le fond d'une case ou de la page (ciel, decor clair, titre colle au
+    bord) : on n'efface que la boite du texte. Sans ca, 20 pages OPM traduites sont devenues BLANCHES (remontee
+    Video Studio). Ingestion : None = comportement inchange.
 
     Renvoie (image nettoyee, statistiques par bulle).
     """
@@ -193,6 +198,12 @@ def clean_bubbles(im, texts, marge=0.30):
             comp = cv2.bitwise_or(comp, (hors == 0).astype(np.uint8))
             comp = cv2.erode(comp, np.ones((3, 3), np.uint8), iterations=2)
             etat = "bulle"
+            if ratio_max:
+                ys_, xs_ = np.where(comp > 0)
+                if len(xs_) and (xs_.max() - xs_.min() + 1) * (ys_.max() - ys_.min() + 1) > ratio_max * bw * bh:
+                    comp = np.zeros((H, W), np.uint8)
+                    comp[by1:by2, bx1:bx2] = 1
+                    etat = "fond de case -> boite seule"
 
         sel = comp > 0
         if not sel.any():
