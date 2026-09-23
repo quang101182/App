@@ -31,17 +31,20 @@ for d in CHAPS:
     if os.path.isfile(vj):
         reglages[d] = json.load(open(vj, encoding="utf-8")).get("reglages") or {}
     dest = os.path.join(SRC, "_corbeille", time.strftime("%Y%m%d-%H%M%S") + "_" + d.replace("/", "__") + "__narration__" + TAG + "-avant-latin")
-    shutil.copytree(nd, dest)
+    marque = d.replace("/", "__") + "__narration__" + TAG + "-avant-latin"
+    if not any(marque in x for x in os.listdir(os.path.join(SRC, "_corbeille"))):
+        shutil.copytree(nd, dest)                         # une seule copie de l'ETAT D'ORIGINE, meme si on relance
     t0 = time.time()
     p = subprocess.run([PY, os.path.join(HERE, "narrate_chapter.py"), d, "--engine", "gemini", "--voice", "Charon",
-                        "--tag", TAG, "--reuse-vision", TAG], capture_output=True, text=True, encoding="utf-8", errors="replace")
+                        "--tag", TAG, "--reuse-vision", TAG], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       env=dict(os.environ, PYTHONIOENCODING="utf-8"))           # comme le lot et le proxy
     open(os.path.join(nd, "run.log"), "a", encoding="utf-8").write("\n===== %s · reprise alphabet latin =====\n%s%s"
                                                                    % (time.strftime("%Y-%m-%dT%H:%M:%S"), p.stderr, p.stdout))
     if p.returncode != 0:
         bilan[d] = "ECHEC narration (code %d) : %s" % (p.returncode, (p.stdout or p.stderr).strip().splitlines()[-1][:200])
         print(d, bilan[d], flush=True); continue
     k = subprocess.run([PY, os.path.join(HERE, "karaoke_mots.py"), d, TAG, "--force"], capture_output=True, text=True,
-                       encoding="utf-8", errors="replace")
+                       encoding="utf-8", errors="replace", env=dict(os.environ, PYTHONIOENCODING="utf-8"))
     n = json.load(open(os.path.join(nd, "narration.json"), encoding="utf-8"))
     pages = n["pages"]
     narrees = [x for x in pages if (x.get("narration") or "").strip()]

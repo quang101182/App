@@ -74,7 +74,12 @@ def appel_vision(engine, system, content, max_tokens):
 
 
 def log(*a):
-    print(*a, file=sys.stderr, flush=True)
+    # v2.3.0 : un journal ne fait JAMAIS planter une narration (23/09 : « 傑諾斯=Genos » vers une console cp1252 -> code 1)
+    try:
+        print(*a, file=sys.stderr, flush=True)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stderr, "encoding", None) or "ascii"
+        print(*(str(x).encode(enc, "replace").decode(enc) for x in a), file=sys.stderr, flush=True)
 
 
 def journal(ev, **kw):
@@ -1041,8 +1046,20 @@ def pages_du_chapitre(chap_dir, plage):
     return man, pages
 
 
+def _sorties_utf8():
+    """v2.3.0 : stdout/stderr en UTF-8 quoi qu'il arrive. Lance par le proxy (bouton de l'app), la sortie part dans un
+    FICHIER encode cp1252 : le 23/09, le json final (table « 傑諾斯 -> Genos ») plantait APRES avoir tout ecrit et paye -> code 1,
+    lu comme un echec, voix refaite et payee une 2e fois (OPM ch.5-10, ~0,8 $)."""
+    for f in (sys.stdout, sys.stderr):
+        try:
+            f.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main():
     global SECRET, PROGRESS, STATS
+    _sorties_utf8()
     ap = argparse.ArgumentParser()
     ap.add_argument("chapitre", help="chemin relatif sous sources/, ex. claymore/ch_1")
     ap.add_argument("--engine", choices=sorted(ENGINES), default="kimi")   # v1.70 : K3 v2.2 = 4 graves/60 pages vs Gemini 7 (21/09)
