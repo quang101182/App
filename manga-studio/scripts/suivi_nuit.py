@@ -274,7 +274,7 @@ def video_a_faire(c, tag, cfg):
         if k == "reglages" or (k == "karaoke" and not (fait.get("sous") and fait.get("karaoke"))):
             continue
         if old.get(k) != v:
-            return "%s a changé" % k
+            return "le moteur vidéo a été amélioré" if k == "moteur" else "%s a changé" % k      # v1.97.0
     return None
 
 

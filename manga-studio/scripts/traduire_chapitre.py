@@ -10,6 +10,12 @@ Pour chaque page de sources/<chap>/ :
   4. pose du texte traduit (Pillow, Comic Neue gras, OFL) a la plus grande taille qui tient ;
   5. sources/<chap>/traduction/<langue>/page_NNN.png + traduction.json (+ progress.json pour l'app).
 
+v1.92.0 (23/09) : les bulles VUES sous le seuil sont rattrapees EN COMPLEMENT (zones_texte). Etat des lieux sur les
+203 pages traduites (8 chapitres) : 206 zones sous 0,25 jamais traitees, dont 53 vraies repliques des 0,10. Baisser le
+seuil tout court REMPLACAIT 10 bonnes bulles par un fragment plus petit (sans_chevauchement garde la plus petite) ->
+on garde le traitement a 0,25 A L'IDENTIQUE et on n'y ajoute que les zones faibles qui ne touchent AUCUNE bulle forte.
+Une zone sans texte (dessin, logo) n'est jamais effacee : on n'efface que ce que le modele lit comme dialogue.
+
 Pixtral etait le moteur de l'onglet Ingestion : mesure du 22/09 sur Claymore p.5 -> 2 bulles / 7 non
 traduites, du markdown (« **...** ») colle au texte, une faute. D'ou Gemini, comme pour la narration.
 
@@ -24,7 +30,7 @@ sys.path.insert(0, HERE)
 import narrate_chapter as nc          # appel_vision (Gemini natif / K3), frein 18/min, couts, journal
 import ingest_page as ip              # load_page, detect, clean_bubbles
 
-VERSION = "1.91.0"
+VERSION = "1.92.0"
 FONT_BOLD = os.path.join(HERE, "fonts", "ComicNeue-Bold.ttf")
 LANGUES = {"fr": "français", "en": "anglais", "es": "espagnol", "de": "allemand", "it": "italien",
            "pt": "portugais", "vi": "vietnamien"}
@@ -109,6 +115,32 @@ def sans_chevauchement(texts, seuil=0.3):
     return sorted(garde, key=lambda q: q["id"])
 
 
+CONF_COMPLEMENT = 0.10
+
+
+def zones_texte(im, conf, conf_complement=CONF_COMPLEMENT):
+    """v1.92.0 : les bulles de la page. 1) celles d'avant, A L'IDENTIQUE : detection >= conf, sans_chevauchement ;
+    2) EN PLUS, les zones faibles (conf_complement <= confiance < conf) qui ne touchent AUCUNE zone forte -- jamais a
+    leur place (baisser le seuil tout court remplacait des bonnes bulles par un fragment, mesure 23/09)."""
+    bas = min(conf, conf_complement) if conf_complement else conf
+    _, tous = ip.detect(im, bas)
+    fortes = [t for t in tous if t["conf"] >= conf]
+    garde = sans_chevauchement(fortes)
+    if not conf_complement or conf_complement >= conf:
+        return garde
+
+    def touche(t, g, marge=0.15):
+        # marge = 15 % de la taille de la zone faible : collee a une bulle forte = un MORCEAU de la meme bulle
+        # (Black Jack p.2 : deux traductions superposees dans une seule grande bulle, essai du 23/09)
+        mx, my = marge * t["w"], marge * t["h"]
+        return (min(t["x"] + t["w"] + mx, g["x"] + g["w"]) > max(t["x"] - mx, g["x"])
+                and min(t["y"] + t["h"] + my, g["y"] + g["h"]) > max(t["y"] - my, g["y"]))
+    faibles = sans_chevauchement([t for t in tous if t["conf"] < conf and not any(touche(t, g) for g in fortes)])
+    for t in faibles:
+        t["complement"] = True
+    return sorted(garde + faibles, key=lambda q: q["id"])
+
+
 def nettoie(trad):
     # sauts de ligne -> espace : Pillow refuse de mesurer un texte multiligne (essai 20 pages du 22/09 : plantage)
     # Gemini suit la typo francaise : espace FINE insecable U+202F avant ? ! (absente de Comic Neue = carres)
@@ -191,6 +223,8 @@ def main():
     ap.add_argument("--engine", choices=["gemini", "kimi"], default="gemini")
     ap.add_argument("--pages", default="", help="plage, ex. 1-20 (defaut : tout)")
     ap.add_argument("--conf", type=float, default=0.25)
+    ap.add_argument("--conf-complement", type=float, default=CONF_COMPLEMENT,
+                    help="v1.92.0 : zones faibles ajoutees si elles ne touchent aucune bulle (0 = desactive)")
     a = ap.parse_args()
     if not re.match(r"^[a-z]{2}$", a.langue):
         raise SystemExit("langue invalide")
@@ -211,8 +245,7 @@ def main():
     for n, p in enumerate(pages, 1):
         progres(n - 1, len(pages), cout=round(stats["cout"], 5))       # v1.91.0 : depense cumulee, lue par la pastille des couts
         im = ip.load_page(os.path.join(chap, p["file"]))
-        _, texts = ip.detect(im, a.conf)
-        texts = sans_chevauchement(texts)
+        texts = zones_texte(im, a.conf, a.conf_complement)                 # v1.92.0 : + complement
         stats["bulles"] += len(texts)
         lignes, rendu = [], im
         if texts:
@@ -228,9 +261,40 @@ def main():
                 stats["onomatopees"] += typ == "onomatopee"; stats["vides"] += typ == "vide"
                 lig = {"id": t["id"], "box": {k: round(t[k], 4) for k in ("x", "y", "w", "h")},
                        "type": typ, "texte": b.get("texte") or "", "trad": trad}
+                if t.get("complement"):                                   # v1.92.0 : tracable (zone faible rattrapee)
+                    lig["complement"], lig["conf"] = True, t.get("conf")
+                    stats["complements"] = stats.get("complements", 0) + 1
                 if trad and typ in ("dialogue", "narration", "?"):
                     a_poser.append((t, lig))
                 lignes.append(lig)
+            # v1.92.0 : une zone de COMPLEMENT (incertaine par nature) n'est posee que si c'est franc :
+            # du texte (pas seulement « ... » / « ! ») et une traduction qui TIENT dans la zone effacee (essai a
+            # blanc). Essai du 23/09 : les ratés (anglais visible sous le francais, « CADRE » sur un ideogramme)
+            # etaient tous « ne tient pas » ou de la ponctuation seule.
+            douteux = []
+            for t, lig in a_poser:
+                # au moins 2 lettres : « ... », « ! », un ideogramme isole, ou le logo « Đ » d'un groupe de scan (lu
+                # « D », efface puis remplace par un « D » -- 5 fois sur OPM 297-301, essai du 23/09) sont laisses
+                if t.get("complement") and not re.search(r"\w\w", lig["texte"] or ""):
+                    douteux.append((t, lig, "moins de 2 lettres"))
+            if any(t.get("complement") for t, _ in a_poser):
+                essai, net0 = ip.clean_bubbles(im, [t for t, _ in a_poser])
+                e0 = {x.get("id"): x.get("etat") for x in net0}
+                for t, lig in a_poser:
+                    if not t.get("complement") or any(t is d[0] for d in douteux):
+                        continue
+                    etat, c = e0.get(t["id"]), t.get("clean")
+                    if etat != "bulle" and not (etat and "boite" in etat):
+                        continue                                  # non effacee : deja ecartee plus bas
+                    if etat == "bulle" and c and c["w"] * c["h"] > 6 * t["w"] * t["h"]:
+                        etat, c = "case", None
+                    boite = c if etat == "bulle" and c else lig["box"]
+                    if not poser_texte(essai, boite, lig["trad"], etat == "bulle", dessiner=False)["tient"]:
+                        douteux.append((t, lig, "ne tiendrait pas"))
+            for t, lig, pourquoi in douteux:
+                lig["ecarte"] = pourquoi
+                stats["complements_ecartes"] = stats.get("complements_ecartes", 0) + 1
+            a_poser = [(t, lig) for t, lig in a_poser if not any(t is d[0] for d in douteux)]
             if a_poser:
                 rendu, net = ip.clean_bubbles(im, [t for t, _ in a_poser])
                 etats = {s.get("id"): s.get("etat") for s in net}

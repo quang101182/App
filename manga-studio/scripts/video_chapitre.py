@@ -20,7 +20,12 @@ Ecrit sources/<chap>/video/<tag>.mp4 + <tag>.json (reglages, empreinte, duree) ;
 import argparse, hashlib, json, os, random, shutil, subprocess, sys, tempfile, time
 # numpy n'est importe QUE pour fabriquer (pcm, mixer) : le proxy importe ce module pour empreinte() sans en dependre
 
-VERSION = "1.96.0"
+VERSION = "1.97.0"
+# v1.97.0 (23/09) : VERSION DU RENDU. A monter A LA MAIN, et seulement pour une vraie amelioration visible du moteur
+# (pas pour une retouche) : toutes les videos plus anciennes passent alors « a refaire : le moteur video a ete
+# ameliore », et « Tout traiter » / « perimees » les reprennent. Quang 23/09 : « tout regenerer lors de mises a jour
+# de ce genre » -- sans bouton de plus. Tant que RENDU vaut 1, rien ne change (cle absente de l'empreinte).
+RENDU = 1
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
 W, H, FPS, SR = 1080, 1920, 30, 44100
@@ -126,6 +131,8 @@ def empreinte(chap, tag, reglages):
         "musique": h(mus),
         "reglages": h({k: reglages.get(k) for k in ("vitesse", "sous", "karaoke", "musique", "volume", "musique_noms", "pages")}),
     }
+    if RENDU > 1:                             # v1.97.0 : une video d'un rendu plus ancien n'a pas cette valeur
+        out["moteur"] = RENDU
     if camera(reglages) != "page":            # v1.96.0 : comme precedemment -> une video « page » d'avant garde son empreinte
         out["reglages"] = h([out["reglages"], camera(reglages)])
     if reglages.get("precedemment"):          # v1.95.0 : SEULEMENT si demande -> les videos d'avant ne passent pas « a refaire »
