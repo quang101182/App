@@ -1,0 +1,43 @@
+--- _studio_llm_proxy.py.bak-20260923-pochette	2026-09-23 13:47:45.814146000 +0200
++++ _studio_llm_proxy.py	2026-09-23 13:47:45.936804000 +0200
+@@ -7401,15 +7401,32 @@
+     src, trouve = data.get("source") or "", None
+     try:
+         if src == "anilist":
++            # v2.6.1 : pochette, tous les titres -- AniList repond 404 si rien ne correspond (titre a faute de frappe)
+             titre = (data.get("titre") or slug.replace("-", " ")).strip()
+-            q = json.dumps({"query": "query($s:String){Media(search:$s,type:MANGA){title{romaji english}"
+-                                     " coverImage{extraLarge}}}", "variables": {"s": titre}}).encode()
+-            req = urllib.request.Request("https://graphql.anilist.co", data=q, headers={
+-                "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "manga-studio"})
+-            with urllib.request.urlopen(req, timeout=20) as r:
+-                m = (json.load(r).get("data") or {}).get("Media")
+-            if not m or not (m.get("coverImage") or {}).get("extraLarge"):
+-                return {"error": "aucune pochette trouvee sur AniList pour : " + titre}
++            si = _serie_json(slug)
++            essais = []
++            for t in [titre, si.get("titre_mangadex")] + sorted(si.get("titres_alt") or [], key=lambda x: not str(x).isascii()):
++                t = (t or "").strip()
++                if t and t not in essais:
++                    essais.append(t)
++            m = None
++            for t in essais[:8]:
++                q = json.dumps({"query": "query($s:String){Media(search:$s,type:MANGA){title{romaji english}"
++                                         " coverImage{extraLarge}}}", "variables": {"s": t}}).encode()
++                req = urllib.request.Request("https://graphql.anilist.co", data=q, headers={
++                    "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "manga-studio"})
++                try:
++                    with urllib.request.urlopen(req, timeout=20) as r:
++                        m = (json.load(r).get("data") or {}).get("Media")
++                except urllib.error.HTTPError as e:
++                    if e.code != 404:
++                        raise
++                    m = None
++                if m and (m.get("coverImage") or {}).get("extraLarge"):
++                    break
++                m = None
++            if not m:
++                return {"error": "aucune pochette trouvee sur AniList (titres essayes : " + " ; ".join(essais[:8]) + ")"}
+             trouve = (m.get("title") or {}).get("english") or (m.get("title") or {}).get("romaji")
+             req = urllib.request.Request(m["coverImage"]["extraLarge"], headers={"User-Agent": "manga-studio"})
+             with urllib.request.urlopen(req, timeout=30) as r:

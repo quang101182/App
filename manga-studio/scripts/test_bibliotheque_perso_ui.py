@@ -6,6 +6,8 @@ commun). Remet _bibliotheque.json exactement comme avant. Usage : python test_bi
 """
 import json, os, sys, time, urllib.request
 from playwright.sync_api import sync_playwright
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import banc_outils as bo
 
 KEY = open(os.path.expanduser(r"~\Documents\ComfyUI\.studio_secret"), encoding="utf-8").read().strip()
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8190
@@ -55,7 +57,7 @@ try:
             pg.click('nav button[data-tab="tChap"]'); pg.wait_for_timeout(1500)
             if pg.is_visible("#btnLibBack"):
                 pg.click("#btnLibBack"); pg.wait_for_timeout(500)
-            check("version 2.6.0", pg.inner_text("#verBadge") == "v2.6.0")
+            check("version affichee = celle du fichier", pg.inner_text("#verBadge") == "v" + bo.version_app())
             affiche = lambda: pg.evaluate("() => [...document.querySelectorAll('#chapList > .serie-item')].map(b => b.dataset.serie)")
             masquees_aff = lambda: pg.evaluate("() => [...document.querySelectorAll('#libMasquees [data-serie]')].map(b => b.dataset.serie)")
             SER = series(); masq = set(api("/manga/bibliotheque")["masquees"])
