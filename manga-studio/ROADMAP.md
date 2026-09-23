@@ -2033,6 +2033,37 @@ MangaDex par pertinence ≠ bon titre · `hidden` écrasé par un `display` CSS 
 une apostrophe dans une chaîne JS = tous les boutons morts (`node --check` après chaque édition) · le proxy est partagé
 avec Generate Studio (relance UNIQUEMENT par `relance-proxy.ps1`, `.bak` avant patch).
 
+## 4-sexies. FEUILLE DE ROUTE — TRADUCTIONS OPM + SITE manga-scantrad *(23/09/2026 21h55, demandée par Quang : « trace une feuille de route détaillée […] suis les étapes une à une »)*
+
+> **Pourquoi** : remontée Vidéo Studio 21h50 — le stock One Punch-Man est BLOQUÉ (rien ne part), 1re publication
+> prévue le **27/09**. Les 10 chapitres OPM sont en source **zh-hk** et traduits en français par `traduire_chapitre.py`
+> v1.92.0. **Règle Quang** ([[feedback_systeme_fonctionne_sans_moi]]) : corriger le SYSTÈME (tous les chapitres, les
+> suivants aussi), jamais « la page N » à la main.
+> **Ordre** : T (traductions, urgent, date) → S (site manga-scantrad) → clôture. Une étape = un commit qui la nomme.
+
+### Constats (mesurés le 23/09 21h55, v1.92.0 — à re-vérifier si le code bouge)
+
+| Constat | Preuve |
+|---|---|
+| 🔴 **Défaut 1 — pages devenues blanches** : **20 pages** (ch.1 p.12/18/22 · ch.2 p.9 · ch.3 p.1/7 · ch.4 p.11/16/23 · ch.6 p.1/11 · ch.7 p.1/6 · ch.8 p.1/11 · ch.9 p.7/10/11/18 · ch.10 p.22 ; ch.5 : 0). | Mesure maison (luminosité page traduite > 235 ET ≥ original + 15). La remontée oubliait le ch.3. |
+| **Cause du défaut 1** (lue dans le code) : `ingest_page.clean_bubbles` remplit par diffusion depuis le pixel le plus clair du texte ; tant que la surface atteinte reste ≤ **18 % de la page**, c'est « une bulle » et TOUT est peint en blanc. Un petit texte posé sur un fond clair (titre collé au bord, ciel, décor blanc) blanchit donc un morceau de page — plusieurs par page = page blanche. Le garde-fou de `traduire_chapitre` (« bulle 6× plus grande que son texte = fond de case ») ne change que l'endroit où l'on ÉCRIT : l'effacement a DÉJÀ eu lieu. | ch.1 p.12, bulle 2 : « 一拳超人 » (titre), boîte 5,9 % × 1,9 %, `effacement: fond de case -> zone detectee`. |
+| 🟠 **Défaut 2 — textes restés en chinois** : encadrés rectangulaires à texte vertical (pensées, narration) et cris ; bulles rondes mieux traitées. | Remontée (ch.2 p.10, ch.3 p.13, ch.4 p.11/16/22, ch.5 p.2/3/14) ; déjà noté v1.84 (« des répliques que YOLO NE DÉTECTE PAS restent en VO »). |
+| 🟠 **Annexe** : effacement incomplet (restes chinois sous le français, ch.5 p.2 « l'épo ue ») ; textes réduits jusqu'à l'illisible (ch.1 p.12). | Remontée ; à mesurer en T3. |
+| Ingestion (Studio) utilise AUSSI `clean_bubbles` : son comportement ne doit PAS changer. | `ingest_page.py` partagé. |
+
+### Étapes
+
+| # | Étape | Définition de « fini » (mesurée) |
+|---|---|---|
+| T0 | **Banc de contrôle** `scripts/controle_traduction.py <serie> [chapitres]` : (a) pages blanches (règle ci-dessus) ; (b) lettres CJK restantes dans la page traduite — relecture Gemini d'UNE question par page (« reste-t-il du texte chinois/japonais/coréen hors onomatopées dessinées ? où ? »), coût noté ; (c) sortie chiffrée par chapitre. | Sur l'état actuel : (a) = les 20 pages ci-dessus, exactement. (b) trouve les exemples de la remontée. |
+| T1 | **Défaut 1** : `clean_bubbles(..., ratio_max=None)` — si fourni et que la surface « bulle » dépasse `ratio_max` × la boîte du texte, on n'efface QUE la boîte (« fond ouvert → boîte seule »). `traduire_chapitre` passe `ratio_max=6` (le seuil qu'il utilisait déjà, trop tard). Ingestion : défaut `None` = inchangée. | Banc hors ligne (image synthétique : petit texte sur grand fond clair → seule la boîte blanchit ; vraie bulle fermée → bulle effacée comme avant) + mutation rouge ; les 20 pages retraduites → **0 page blanche** (T0-a). |
+| T2 | **Défaut 2** : l'appel Gemini de chaque page (qui voit déjà la page entière) renvoie AUSSI les textes HORS des zones numérotées (`hors_zones` : texte, boîte approximative, type) ; ils sont effacés en « boîte » et traduits comme les autres, onomatopées dessinées gardées. | Sur les pages citées : les textes listés sont traduits ; T0-b en nette baisse, chiffrée avant / après. |
+| T3 | **Annexe** : effacement « boîte » élargi (marge) pour le texte vertical dense ; taille minimale lisible (sinon « ne tient pas » + texte posé plus petit mais ≥ seuil, signalé). | ch.5 p.2 et ch.1 p.12 contrôlés à l'œil (captures relues). |
+| T4 | **Retraduire OPM ch.1-10** (≈ 224 pages × 0,009 $ ≈ 2 $) par le vrai chemin (script), anciennes traductions à la corbeille. | T0 : 0 page blanche, CJK restant chiffré et justifié (onomatopées), captures de 3 pages relues. |
+| T5 | **Vidéos** : les vidéos qui montrent les pages traduites deviennent « à refaire » (empreinte traduction) → les refaire par la file. Prévenir Vidéo Studio (texte à transmettre par Quang). | File vide, vidéos à jour (badge ✅), 0 écran blanc (1 image / 10 s relue sur 2 vidéos). |
+| S1 | **manga-scantrad.io** : capture VÉRIFIÉE le 23/09 (ch.200 : 13 bandes → 97 pages, dossier temporaire). Reste l'ENCHAÎNEMENT : adresses `vol-N` (volume entier : vol-1 = 193 bandes) et `vol-N-chapitre-M(-5)`. ❓ **Question à Quang** : numérotation d'un volume entier dans l'app (proposé : « ch. N » = volume N, noté « volume entier »). | Capture + suivant réels (dans un dossier temporaire, sur des chapitres que Quang n'a pas) ; `sites.json` mis à jour (règle du fichier). |
+| C | **Clôture** : bancs verts, feuille de route + journal, mémoire, commit + push ; texte de retour pour Vidéo Studio. | — |
+
 ## 4-bis. L'essai utilisateur du 28/07 — 10 puis 12 cases, pilotées comme Quang
 
 > Demande de Quang : *« fais l'essai toi-même, en pilotant comme si tu étais moi, pour voir si au
