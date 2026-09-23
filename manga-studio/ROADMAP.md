@@ -1935,6 +1935,7 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
 > ⏸ **Contrainte du moment (12h44)** : *« on ne déplace rien parce que l'autre session est en train de finir »* (Vidéo
 > Studio, série `black-jack-ni-yoroshiku`). ⇒ **Aucune écriture sur `sources/`, aucune relance du proxy, aucune
 > modification de `manga_studio.html` servi, tant que Quang n'a pas dit que c'est libre.** Déclencheur de reprise : son feu vert.
+> ✅ **Feu vert donné le 23/09 à 13h10** (« l'autre session a fini »).
 
 ### Constats (lus dans le code et mesurés le 23/09 — à re-vérifier si le code a bougé)
 
@@ -1971,6 +1972,8 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
 
 | # | Étape | Définition de « fini » |
 |---|---|---|
+| N1 | **Narration en anglais depuis l'app** (remontée Vidéo Studio 23/09, **confirmée dans le code**) : `manga_narrate` (proxy) impose l'étiquette `moteur-voix` et ne transmet jamais `--langue` → impossible de narrer en anglais depuis l'app, et ajouter la langue sans changer l'étiquette ÉCRASERAIT la narration française. Le proxy accepte `langue` (liste blanche = celle du script) et nomme `moteur-voix-<langue>` hors français (comme `narrate_chapter.py`) ; l'app propose la langue de la narration. | Banc : narration EN lancée depuis l'app → dossier `…-en` créé, la FR intacte (octets identiques) ; FR inchangée sans le paramètre. |
+| N2 | **Garde-fou avant la voix** (remontée Vidéo Studio : « un nom en kanji fait dérailler la voix française », vu avec Kimi) : **non reproduit** le 23/09 (0 caractère japonais dans les textes LUS de toute la bibliothèque ; les kanji ne sont que dans les notes internes de lecture) — mais rien ne l'empêche. Juste avant la synthèse vocale : tout caractère CJK du texte à lire est retiré (entre parenthèses compris), la page le note dans le journal. 0 $. | Banc : un texte avec « Saitô (研修医) » → lu sans le kanji ; un texte sans CJK → strictement identique ; mutation rouge. |
 | B1 | **Proxy — fiche de série fiable** (`patch_bibliotheque_genres.py`) : `manga_serie_infos` réutilise le `mangadex_id` connu ; sinon choisit le résultat au titre exact (normalisé, titres alternatifs compris), sinon ne touche à rien et renvoie l'erreur ; ajoute `genres`, `themes`, `public`. | Banc : les 5 séries existantes gardent leur id ; Black Jack → « Give My Regards to Black Jack » (`9fca3c19…`), jamais « Shin- » ; une série introuvable → erreur, `serie.json` intact. `.bak` de chaque `serie.json` avant. |
 | B2 | **Proxy — `_bibliotheque.json`** : `GET /manga/bibliotheque` → `{masquees:[slug], ouvertes:{slug:ts}}` ; `POST {action: masquer|afficher|ouverte, slug}` (slug validé, écriture atomique `.tmp` + `os.replace`). | Banc API : masquer / afficher / ouverte, relecture après relance du proxy ; slug invalide refusé ; fichier absent = tout visible. |
 | B3 | **Remplissage des genres des séries existantes** : à l'ouverture de la bibliothèque, une série avec `serie_info` mais sans `genres` est rafraîchie UNE fois (même mécanisme que les tomes). | Les séries ont leurs genres ; tomes, couvertures, dates inchangés (diff des `serie.json` : seules les clés ajoutées). |
@@ -1978,6 +1981,15 @@ ou accepter ~3 pages / 20 où une réplique de figurant est prêtée à un nomm�
 | B5 | **App — trier** (3 ordres, mémorisé par appareil ; « récemment ouverte » alimentée par `ouverte`). | Banc : les 3 ordres donnent l'ordre attendu, calculé indépendamment dans le banc ; survit au rechargement. |
 | B6 | **App — filtres** (pastilles FR avec comptes, ET, pastilles actives, « Tout effacer », combinaison recherche + filtres + masquées). | Banc : pour chaque pastille, la liste affichée == le calcul du banc sur les données ; 2 pastilles = intersection ; 360 px sans débordement ; capture relue à l'œil. |
 | B7 | **Clôture** : version **v2.6.0** aux 3 endroits, `node --check`, bancs existants (bibliothèque, recherche, profil, vidéos fraîches, caméra) verts, feuille de route + journal mis à jour, commit + push. | Tout vert, captures PC + téléphone contrôlées, rien d'écrit dans la bibliothèque de Quang hors `serie.json` (genres) et `_bibliotheque.json`. |
+
+### Hors de ce chantier, mais à ne pas perdre
+
+- 🟠 **Webtoon vertical libre de droits : introuvable** (Vidéo Studio, 23/09). Vérifié par elle : les webcomics sous
+  Creative Commons interdisent tous l'usage commercial ; la licence publique coréenne ne couvre que le texte, pas les
+  dessins. Seule autre voie évoquée : **créer un webtoon original avec le moteur de génération** — gros chantier, sujet à
+  part (Quang : « ce n'est pas aussi simple que ça »). **Déclencheur de reprise** : Quang le relance, ou Vidéo Studio a
+  de nouveau besoin d'une démo webtoon. À ce moment : rechercher d'autres licences (domaine public coréen, auteurs
+  prêts à autoriser — cf. `ETUDE-outil-auteurs.md`) AVANT d'envisager la génération.
 
 ⚠️ **Pièges à ne pas repayer** : `serie.json` réécrit en entier (ne rien y stocker d'autre que MangaDex) · recherche
 MangaDex par pertinence ≠ bon titre · `hidden` écrasé par un `display` CSS (piège payé 3 fois, cf. § 6 du 28/07) ·
