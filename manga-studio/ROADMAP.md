@@ -2215,6 +2215,20 @@ sur la capture du banc, corrigé).
    si Gemini refuse vraiment.
 5. **Dépôt `App` PUBLIC** : le code oui, **jamais un titre ni un chemin de série secrète** dans la feuille de route, le
    journal ou un commit. Limite posée par Claude : personnages adultes uniquement.
+6. **Paravent à l'ouverture** (Quang 16h06) : quand la fenêtre Edge SECRÈTE s'ouvre sur le PC par le déclencheur de
+   l'app (Quang devant le PC ou à distance), la fenêtre de l'app NORMALE est ramenée au premier plan, DÉPLIÉE (pas
+   réduite), par-dessus — lancée d'abord si elle n'existe pas. **Au moment de l'ouverture seulement** ; ensuite, les
+   gestes manuels sont ceux de Quang. ⚠ Verrou de premier plan de Windows (SetForegroundWindow refusé à un processus
+   non actif) : la méthode se choisit en le TESTANT à l'écran (compter les fenêtres visibles, ordre Z), pas en supposant.
+7. **Bouton « remettre en place »** (Quang 16h07) : depuis l'app, PC ou téléphone, à tout moment : la fenêtre normale
+   repasse devant la secrète. **Taille** (question Quang) : passer devant ne dépend pas de la taille, mais CACHER exige
+   de RECOUVRIR → le paravent (ouverture + bouton) **cale la fenêtre normale sur le rectangle exact de la secrète**
+   (position + taille), recouvrement garanti quelle que soit la taille choisie ; aucune des deux réduite.
+**Propositions Claude (Quang 16h06 : « ouvert à toutes les recommandations ») — à trancher au moment de construire** :
+titre + icône de la fenêtre secrète IDENTIQUES à l'app normale (barre des tâches / Alt+Tab ne distinguent rien) ·
+contenu FLOUTÉ dès que la fenêtre perd le focus (aperçus Alt+Tab / barre des tâches illisibles) · bouton PANIQUE
+(ex. Échap ×2 → app normale) · retour automatique à l'app normale après N min d'inactivité · aucun titre secret dans
+Telegram, notifications ou journaux · un déclenchement depuis le TÉLÉPHONE n'ouvre RIEN sur le PC.
 **Déclencheur** : fin des chantiers en cours (4-terdecies : traduction) → construire, puis Quang fournit 1-2 chapitres.
 
 ## 4-terdecies. COÛTS — LA « RÉFLEXION » DE GEMINI *(24/09/2026 14h40, question Quang sur les 4,43 $ du repérage)*
@@ -2235,6 +2249,12 @@ noms 4,00 $** · récit 0,15 $.
 | Fidélité vs référence écrite à la main (recalée +2, cf. piège) | 9 et 9 graves | 9 et 8 | 9 et 9 |
 | OPM ch.2, 2 juges À L'AVEUGLE qui VOIENT les pages (Gemini / Kimi K3) | — | défaut préféré 7-2 (Gemini) · **égalité 4-4** (Kimi) · 0 grave | défaut préféré **10-2 et 7-3**, 1 grave chacun |
 | Noms trouvés (4 passages) | 5 noms, **2 oubliés 1 fois sur 2** | les 5 à chaque fois | les 5 à chaque fois |
+**Traduction** (banc `banc_reflexion_trad.py`, OPM ch.3, 56 bulles, 2 juges à l'aveugle) : défaut 0,168 $ ·
+« low » 0,101 $ (−40 %) · « minimal » 0,099 $. DeepSeek : défaut 100 % / low 98 % / minimal 98 % ; Kimi : défaut 86 % vs
+low **90 %**, défaut 92 % vs minimal 85 %. Défauts visibles : low « LE **LE** ROI DES BICEPS » (guillemets perdus),
+minimal ajoute des gloses « Fugao (visage renfrogné) ». ⇒ **traduction INCHANGÉE** (défaut Google) ; « low » en réserve
+(`MANGA_GEMINI_REFLEXION=low`). **Déclencheur** : un 2ᵉ banc sur un autre chapitre sans défaut visible, ou Quang qui
+choisit l'économie (~6 $/mois au rythme de septembre).
 ⇒ **Décision (Claude, feu vert Quang « fais-le »)** : réflexion **minimale pour le seul repérage des noms** (il ne
 fixe que des noms ; le texte du récit vient de l'analyse, qui garde sa réflexion complète). Confirmé sur la référence :
 **9 et 6 graves** (vs 9 et 9), coût analyse+noms **0,10-0,11 $ au lieu de 0,19-0,20 $ (−48 %)**. Supprimer la réflexion
