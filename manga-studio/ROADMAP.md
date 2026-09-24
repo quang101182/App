@@ -2368,6 +2368,15 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   onglets passe à l'étape 2. (3) Narration : DEUX champs « de la page / à la page » ; narrate_chapter 2.9.0 applique
   enfin la plage à une analyse reprise (elle était ignorée). ⏸ **Maquette de la capture repensée** à valider par Quang :
   `maquette_capture_v1.html` (4 étapes colorées, une question chacune ; étape 1 = 3 cartes ; un seul bouton final).
+- **24/09 22h10 — manga-fetch 0.7.1 + site AnimoFlix (scans VF)** ajouté aux sites validés de la PRINCIPALE (la secondaire
+  le voit, étiqueté) : Claymore vol. 4 (166 p.), 5 → 6 enchaînés (175 / 174 p.). Deux défauts trouvés et corrigés : la
+  mode était jugé AVANT que la page soit construite (attente d'une hauteur stable, 12 s max) ; la page d'un volume est un
+  ACCUEIL avec « Lire Volume N » → clic auto, seulement s'il n'y a aucune image de page. Constat Quang : ces volumes sont
+  de longues bandes → découpe dans les blancs (jamais dans une case), mais une « page » de l'app peut mêler la fin d'une
+  page du livre et le début de la suivante — sans effet sur la narration ; amélioration possible (couper aux vrais
+  blancs de page) NON demandée. Captures simultanées principale + secondaire : constatées OK en réel (21h41-21h43).
+  ⚠ `/manga/liens` (✕ des sites) actif sur la principale ; la SECONDAIRE sera relancée quand elle sera au repos (lot de
+  Quang en cours à 22h07) — déclencheur : prochaine relance, vérifier `/manga/activite` vide avant.
 - **Voix de l'application secondaire (Quang 19h18)** : 1-2 voix FÉMININES, expression adaptée au thème → à faire à S7
   avec ce qu'on a (Chatterbox local : clonage + intensité d'expression, pas de modération ; Chirp 3 HD). Pistes
   notées, non obligatoires : StoryVoice utilise OpenAI `gpt-4o-mini-tts` avec consigne de ton par personnage.

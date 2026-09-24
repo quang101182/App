@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -1031,6 +1031,28 @@ def capture(args) -> int:
             # Mode de lecture : bande défilante (scroll) ou page par page (pager).
             # MangaDex web est un PAGER par défaut : scrollBy n'y avance rien
             # (mesuré : 4 pages capturées sur 22 en scrollant dans le vide).
+            # v0.7.1 (24/09) : attendre que la page ait FINI de se construire avant de juger le mode. Enchainee, une page
+            # est capturee a la seconde ou elle s'ouvre : volume 5 lu a 1 337 px (au lieu de ~25 000) -> « page par
+            # page » a tort -> 1 page puis echec. Hauteur stable 3 lectures de suite (0,5 s), 12 s au plus.
+            def _stabiliser():
+                _h, _stable, _t0 = -1, 0, time.time()
+                while _stable < 3 and time.time() - _t0 < 12:
+                    page.wait_for_timeout(500)
+                    _hh = page.evaluate("() => document.documentElement.scrollHeight")
+                    _stable = _stable + 1 if _hh == _h else 0
+                    _h = _hh
+            _stabiliser()
+            # v0.7.1 (24/09, animoflix) : la page d'un volume est d'abord un ACCUEIL (couverture + « Lire Volume 5 ») ; les
+            # scans n'apparaissent qu'apres ce clic. Seulement s'il n'y a AUCUNE image de page a l'ecran : ailleurs, rien ne change.
+            if not page.evaluate("() => [...document.images].some(i => i.naturalHeight >= 800 && i.getBoundingClientRect().width >= 180)"):
+                _clic = page.evaluate(r"""() => { const b = [...document.querySelectorAll('button, a, [role=button]')].find(x =>
+                    /^(lire|read|commencer la lecture|start reading)\b/i.test((x.innerText || '').trim()) && x.getBoundingClientRect().width > 0);
+                    if (!b) return null; b.click(); return (b.innerText || '').trim().slice(0, 40); }""")
+                if _clic:
+                    print("Page d'accueil : clic sur « %s »" % _clic)
+                    log_evt("navigation", "bouton de lecture clique", bouton=_clic)
+                    page.wait_for_timeout(1500)
+                    _stabiliser()
             h_doc = page.evaluate("() => document.documentElement.scrollHeight")
             h_ecran = page.evaluate("() => window.innerHeight")
             # v0.3.0 : MANGA Plus en mode VERTICAL empile les 54 pages dans un BLOC qui défile,
