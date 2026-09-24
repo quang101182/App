@@ -2265,6 +2265,20 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   déjà pris par le banc `scripts/proxy_8191.py`, constaté 24/09). Tâche planifiée au démarrage
   de session comme le proxy. **Fini quand** : `http://127.0.0.1:8191/manga/` sert l'app, bibliothèque VIDE, et une capture
   de test faite par 8191 n'apparaît PAS sur 8190 (et inversement).
+  ✅ **FAIT 24/09 17h45** : `scripts/espace_prive.py` v1.0.0 (port **8192**, 127.0.0.1, données
+  `C:/Users/quang/Documents/MangaStudio-donnees/prive` — sur C:, refus s'il pointe dans le dépôt, refus si le proxy
+  ne lit pas la variable ; journal de capture à part `capture_run_prive.log`). Vérifié : importer le proxy ne lance
+  AUCUN fil (tout est sous `__main__`). L'app ouverte sur 8192 parle à 8192 (`location.origin`, stockage local propre
+  à l'origine). Tâche planifiée **`MangaStudioInstance2`** (nom neutre ; ouverture de session + toutes les 10 min,
+  `lancer_espace_prive.vbs` → `.ps1`, relance seulement si 8192 muet ; journal `%LOCALAPPDATA%/manga-studio/
+  espace_prive.log(.vie)`) : coupée → relancée, 2ᵉ déclenchement → pas de doublon. Banc `test_espace_prive.py`
+  **15/15** (même app servie ; import réel de chaque côté, invisible de l'autre dans les deux sens ; une écriture du
+  serveur privé — bibliothèque — reste dans le dossier privé, la normale inchangée à l'octet). Mutation (instance
+  qui ignore la variable) → rouge et **arrêt avant toute écriture** ; bibliothèque normale intacte (empreinte).
+  🟠 **Constaté 24/09, pour S3** : la fenêtre Edge de capture (CDP 9223, profil `manga-fetch-edge`) et
+  `%LOCALAPPDATA%/manga-fetch/events.log` restent COMMUNS → deux captures simultanées se marcheraient dessus.
+  ⚠ Pièges : l'instance = **2 PID** (lanceur du venv + enfant) ; l'ancien `ComfyUI/stop-secret-studio.ps1`
+  (Generate Studio, juin) tue tout Python du venv ComfyUI, donc le proxy 8190 ET l'instance 8192.
 - **S2 — L'app sait dans quel espace elle est** : `/manga/espace` → `{"espace": "normal"|"prive"}` ; titre et icône
   IDENTIQUES dans les deux (barre des tâches / Alt+Tab muets) ; une discrète marque visible seulement DANS l'espace
   secret (Quang doit savoir où il est). **Appui long sur 📚 Bibliothèque** (≥ 1,2 s, pas de clic simple) → ouvre l'autre
@@ -2694,6 +2708,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 |---|---|
 | 2026-09-24 (17h20) | 🎧 **Voix locale validée à l'oreille** sur un chapitre complet (OPM ch.1, `gemini-charon-local.mp4`) — Quang : « c'est bien ». Rappel du partage : ☁ = tout en ligne (seul changement du jour : repérage des noms sans réflexion, dans les deux modes) ; 🖥 = voix + effacement sur la carte, le reste en ligne. |
 | 2026-09-24 (17h15) | 💰 **Chantier « réflexion Gemini » CLOS** : repérage des noms sans réflexion (gardé, −48 % analyse+noms) ; analyse et traduction gardent la réflexion complète (« low » : vraies fautes sur Black Jack — mot inventé, contresens, anglais ; « medium » : pas d'économie). Économie réelle attendue ≈ −4 $/mois en ligne, + la voix (≈ −6 $/mois) quand Quang narre en 🖥. § 4-terdecies. |
+| 2026-09-24 (17h45) | ✅ **Compartiment secret S1 — la 2ᵉ instance** (`espace_prive.py`, port 8192, données sur C: hors dépôt, tâche `MangaStudioInstance2`). Ce qui est créé d'un côté n'apparaît pas de l'autre, dans les deux sens (`test_espace_prive.py` 15/15, mutation rouge sans écriture). Prochaine étape : S2 (l'app sait dans quel espace elle est + appui long sur 📚). |
 | 2026-09-24 (17h35) | ✅ **Compartiment secret S0 — racine des données réglable** (`MANGA_SOURCES_DIR`, 18 scripts + manga-fetch + 1 ligne du proxy). Sans la variable, rien ne change (6 bancs verts + plan de lot identique) ; avec, tout atterrit dans le dossier donné et nulle part ailleurs (`test_racine.py` 47/47, mutation rouge). Prochaine étape : S1 (2ᵉ instance sur **8192**). |
 | 2026-09-24 (16h45) | ✅ **v2.14.1 — « ✕ Fermer la fenêtre »** (Quang 16h29) : ferme la fenêtre de capture à distance, et elle seule (Browser.close sur son navigateur dédié, jamais l'Edge de Quang), question à l'écran avant. Banc `test_fenetre_fermer.py` 4/4 (Edge jetable ; la vraie fenêtre n'est pas fermée : ses onglets seraient perdus). La fenêtre secrète aura le sien, indépendant (§ 4-quaterdecies). |
 | 2026-09-24 (16h45) | ✅ **v2.14.0 + manga-fetch 0.6.4 — la fenêtre de capture à la main de Quang** (demandes 16h07-16h22). Mesuré : sous ~576 × 774 px intérieurs, MangaDex n'affiche plus la page (capture « aucune image ») → minimum **700 × 950** avec marge. La place choisie par Quang (~93 % sous l'écran) capture normalement (MangaDex 18/18, webtoon 7/7). La fenêtre s'ouvre à cette place ; « ↘ Ranger sur le côté », « ⤢ Taille sûre », « 📌 Retenir cette place » dans l'étape 1 ; contrôle avant chaque capture (question à l'écran + correction en un bouton). Rien ne bouge sans clic, sauf à l'ouverture. Banc `test_fenetre_ui.py` 10/10 (fenêtre et réglage restaurés). ⇒ Le PARAVENT du compartiment secret (§ 4-quaterdecies, point 6) est remplacé par ce principe (Quang 16h13 : « pas besoin de cacher la fenêtre avec la fenêtre principale »). ~~🟠 Raijin Scans fermé (renvoie vers Discord) : à retirer des sites validés.~~ → ✅ retiré de `sites.json` le 24/09 16h50. |
