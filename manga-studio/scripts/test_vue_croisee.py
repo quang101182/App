@@ -70,6 +70,11 @@ try:
             check("temoin : le sien + « 🔒 1 » pour l'autre", "🔒 1" in txt and "Titre principal banc" in txt, txt)
             pg.evaluate("() => $('hdrAct').click()"); pg.wait_for_timeout(600)
             check("le titre de la secondaire n'apparait NULLE PART dans la page", SECRET not in pg.content() and SECRET not in pg.evaluate("() => document.body.innerText"))
+            ligne = pg.evaluate("() => { const e = document.querySelector('#actListe .act-autre'); return e ? [e.innerText, !!e.querySelector('.act-bar i')] : null; }")
+            check("detail : une ligne « 🔒 autre application » avec sa jauge", ligne and "🔒" in ligne[0] and ligne[1] and "3/12" in ligne[0], ligne)
+            pg.evaluate("chargerCouts()"); pg.wait_for_timeout(1500)
+            c = pg.evaluate("() => [COUTS.aujourdhui, COUTS.propre && COUTS.propre.aujourdhui, COUTS.autre && COUTS.autre.aujourdhui]")
+            check("pastille des couts = principale + secondaire", c[1] is not None and abs(c[0] - (c[1] + c[2])) < 1e-6, c)
             check("la page ne deborde pas", not pg.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1"))
             vues = []
             pg.on("request", lambda r: vues.append(r.url) if "/manga/narrate" in r.url else None)

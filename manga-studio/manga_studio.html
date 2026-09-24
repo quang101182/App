@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.21.0</title>
+<title>Manga Studio v2.22.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -812,7 +812,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.21.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.22.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button>
       <button class="mode-pill" id="hdrMode" title="Où tournent la voix et l’effacement du texte : en ligne (payant) ou sur ta carte graphique (0 $). Touche pour changer.">☁ En ligne</button></div>
     <div class="engs">
@@ -1712,7 +1712,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.21.0";
+const VERSION = "2.22.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -6377,6 +6377,16 @@ function actRendre(){
     return '<button class="act-it" data-act="' + i + '"><b>' + esc(ACT_LBL[x.type] || x.type) + "</b> — " + esc(actNom(x))
       + '<br><span class="muted">' + esc(detail) + "</span>"
       + (x.total ? '<div class="act-bar"><i style="width:' + pct + '%"></i></div>' : "") + "</button>";
+  }).join("") + ACT.autre.map(x => {
+    // v2.22.0 (Quang 20h33) : l'AUTRE application dans le detail -- jauge, etape, avancement, temps restant. Dans la
+    // principale, aucun texte qui appartienne a la secondaire : « 🔒 » a la place du titre (le serveur ne l'envoie pas).
+    const pct = x.total ? Math.round(100 * (x.fait || 0) / x.total) : 0;
+    const detail = [ACT_ETAPE[x.etape] || x.etape || "", actProg(x), x.reste_s != null ? "reste " + actReste(x.reste_s) : ""]
+                   .filter(Boolean).join(" · ");
+    const qui = ESPACE.nom === "prive" ? "↔ principale" + (x.titre ? " — " + esc(actNom(x)) : "") : "🔒 autre application";
+    return '<div class="act-it act-autre"><b>' + esc(ACT_LBL[x.type] || x.type) + "</b> — " + qui
+      + '<br><span class="muted">' + esc(detail) + "</span>"
+      + (x.total ? '<div class="act-bar"><i style="width:' + pct + '%"></i></div>' : "") + "</div>";
   }).join("") || '<p class="muted aide" style="margin:0">Rien ne travaille en ce moment.</p>';
   $("actFinis").innerHTML = ACT.finis.length ? '<div class="act-finis-t">Terminé pendant cette session</div>'
     + ACT.finis.slice(0, 8).map((x, i) => '<button class="act-it" data-fini="' + i + '">✅ ' + esc(ACT_LBL[x.type] || x.type) + " — "
@@ -8126,6 +8136,10 @@ const ETAPE_LBL = { lecture: "lecture des pages", noms: "repérage des personnag
 async function chargerCouts(){
   try {
     COUTS = await api("/manga/costs");
+    // v2.22.0 (S5) : la pastille additionne les DEUX applications (seulement leurs totaux ; le detail reste celui d'ici)
+    try { const a = await api("/manga/costs_autre"); COUTS.autre = a.joignable ? a : null; } catch (e) { COUTS.autre = null; }
+    if (COUTS.autre){ COUTS.propre = { aujourdhui: COUTS.aujourdhui, mois: COUTS.mois, total: COUTS.total };
+      ["aujourdhui", "mois", "total"].forEach(k => COUTS[k] = (COUTS[k] || 0) + (COUTS.autre[k] || 0)); }
     // v1.95.1 : libelles masques sur telephone (pastille plus courte, loin de la camera) ; le detail reste au survol
     $("hdrCost").innerHTML = '💰 <span class="cp-l">auj. </span>' + esc(fmtUsd(COUTS.aujourdhui)) + ' · <span class="cp-l">mois </span>' + esc(fmtUsd(COUTS.mois));
     $("hdrCost").title = "Coûts : aujourd'hui " + fmtUsd(COUTS.aujourdhui) + " · ce mois " + fmtUsd(COUTS.mois) + " — touche pour le détail";
@@ -8137,6 +8151,9 @@ function afficherCouts(){
   $("coutsCorps").innerHTML =
     '<div class="couts-tot"><div>aujourd\'hui<b>' + fmtUsd(c.aujourdhui) + "</b></div><div>ce mois<b>" + fmtUsd(c.mois)
     + "</b></div><div>depuis le début<b>" + fmtUsd(c.total) + "</b></div></div>"
+    + (c.autre ? '<p class="muted aide" style="margin:4px 0 8px">Totaux des deux applications — dont '
+       + (ESPACE.nom === "prive" ? "la principale" : "🔒 l'autre") + " : " + fmtUsd(c.autre.aujourdhui) + " aujourd'hui · "
+       + fmtUsd(c.autre.mois) + " ce mois. Le détail ci-dessous est celui d'ici.</p>" : "")
     + '<table class="couts-t"><tr><th>Par étape</th><th class="n">coût</th></tr>'
     + Object.entries(c.par_etape).map(([k, v]) => ligne(esc(ETAPE_LBL[k] || k), fmtUsd(v))).join("") + "</table>"
     + '<table class="couts-t"><tr><th>Par moteur</th><th class="n">coût</th></tr>'

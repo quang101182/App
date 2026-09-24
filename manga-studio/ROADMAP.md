@@ -2378,7 +2378,10 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   **21/21** (traitements FACTICES : PID d'un processus qui dort, rien généré ni payé ; 1280 + 360 px ; titre secret
   absent de toute la page ET de la question). Non-régression : vram 10/10, alertes 18/18, interruption 18/18,
   estimation verte, espace 15/15, espace UI 37/37.
-  ⬜ **Reste de S5, à faire avant S8 (recette)** : (1) pastille des coûts = total des deux applications ; (2) § 3-bis —
+  ⬜ **Reste de S5, à faire avant S8 (recette)** : ~~(1) pastille des coûts = total des deux applications~~ → v2.22.0 (route
+  `/manga/costs_autre` : les 3 totaux de l'autre, jamais ses passages ; pastille = somme, détail = celui d'ici + « dont l'autre ») ;
+  + (Quang 20h33) le DÉTAIL du témoin montre aussi l'autre application — jauge, étape, avancement, temps restant (`reste_s`
+  ajouté aux champs anonymes) ; dans la principale « 🔒 autre application » à la place du titre. Banc S5 **25/25** ; (2) § 3-bis —
   essais (`--sortie`, `_banc_reflexion/`) et scripts lancés hors app visibles (🧪) dans le témoin.
 - **S6 — Discrétion** : contenu FLOUTÉ quand la fenêtre secrète perd le focus ; bouton PANIQUE (Échap ×2 → espace
   normal) ; retour auto à l'espace normal après N min d'inactivité (N à fixer avec Quang) ; aucun titre secret dans
