@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.6.1"
+VERSION = "0.6.2"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -42,7 +42,8 @@ EDGE_CDP = "http://localhost:9223"
 EDGE_PROFILE = os.path.join(os.environ.get("LOCALAPPDATA", "."), "manga-fetch-edge")
 DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA", "."), "manga-fetch")
 LOG_FILE = os.path.join(DATA_DIR, "fetch.log")
-LOG_EVT = os.path.join(DATA_DIR, "events.log")  # journal DÉTAILLÉ (demande Quang 18/18)
+LOG_EVT = os.path.join(DATA_DIR, "events.log")
+PLAFOND_PAS_ABSOLU = 6000   # v0.6.2 : ~5,3 millions de px a 1273 px d'ecran (~2 h) -- garde-fou, jamais la regle  # journal DÉTAILLÉ (demande Quang 18/18)
 DEFAULT_OUT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources"))
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif"}
 
@@ -1018,24 +1019,38 @@ def capture(args) -> int:
                     notes.append("capture démarrée en cours de défilement (le début du chapitre "
                                  "n'est pas capturé ; --page-1 pour tout prendre)")
                     log_evt("départ", "en cours de défilement", position=pos0[0])
-                prec, stable = None, 0
-                for _ in range(400):
+                # v0.6.2 (24/09, Solo Leveling vol.1) : le plafond FIXE de 400 pas (x 70 % d'ecran ~ 356 000 px)
+                # arretait un volume webtoon de 903 000 px a 39 %, EN SILENCE (« terminée », 0 note). Le plafond
+                # suit maintenant la hauteur reelle (relue a chaque pas : elle grandit au chargement) ; s'il est
+                # atteint quand meme, c'est ecrit en toutes lettres.
+                prec, stable, pas, fini = None, 0, 0, False
+                while True:
                     if chapitre_quitte():
                         notes.append("fin : le lecteur est passé au chapitre suivant")
                         log_evt("fin", "chapitre suivant atteint (bande défilante)")
+                        fini = True
                         break
                     collecter()
                     page.evaluate(DEFILE_JS)
                     page.wait_for_timeout(1200)
                     pos = page.evaluate(POS_JS)
+                    pas += 1
                     if prec is not None and pos[0] == prec[0] and pos[1] == prec[1]:
                         stable += 1          # ni position ni hauteur ne bougent : bas atteint
                         if stable >= 4:
                             collecter()
+                            fini = True
                             break
                     else:
                         stable = 0
                     prec = pos
+                    plafond = min(PLAFOND_PAS_ABSOLU, max(400, int(pos[1] / max(1, pos[2] * 0.7) * 1.5) + 50))
+                    if pas >= plafond:
+                        break
+                if not fini:
+                    notes.append("ECHEC : capture ARRÊTÉE avant la fin (%d pas, position %d sur %d px) -- "
+                                 "relancer avec --force" % (pas, pos[0], pos[1]))
+                    log_evt("fin", "PLAFOND DE DEFILEMENT atteint avant le bas", pas=pas, position=pos[0], hauteur=pos[1])
             else:
                 sterile, debut_pager, mode_clic, cote, cotes_essayes = 0, time.time(), False, 0.75, set()
                 for _ in range(500):
