@@ -2377,6 +2377,24 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   blancs de page) NON demandée. Captures simultanées principale + secondaire : constatées OK en réel (21h41-21h43).
   ⚠ `/manga/liens` (✕ des sites) actif sur la principale ; la SECONDAIRE sera relancée quand elle sera au repos (lot de
   Quang en cours à 22h07) — déclencheur : prochaine relance, vérifier `/manga/activite` vide avant.
+- **24/09 22h15 — v2.28.0 : CAPTURE REPENSÉE** (maquette `maquette_capture_v1.html` validée par Quang 22h09) : 4 étapes de
+  couleurs différentes (une question chacune) ; étape 1 = 3 cartes (🔁 Reprendre / 📱 Lien du téléphone / 🖥 Déjà ouvert sur
+  le PC) + lien discret « 🕹 piloter à distance » ; étape 4 = 3 boutons (le sélecteur caché reste la source de vérité,
+  grisés quand le site n'enchaîne pas) ; résumé en direct ; UN bouton vert final ; outils de fenêtre derrière le voyant
+  « ● fenêtre ouverte ▾ » ; sites validés repliés en bas. Blocs DÉPLACÉS tels quels : les 49 identifiants d'avant présents
+  une seule fois (contrôle automatique). Piège payé : `<section>` = onglet pour l'app (`main section{display:none}`) →
+  étapes en `<div>`. Vérifié 360 + 1280 px : zones, boutons, résumé, 0 débordement, 0 erreur ; enchaînement UI 7/8
+  (le KO = pas d'onglet « non » ouvert, connu).
+- ⬜ **PROCHAINE SESSION — demandes Quang 22h11-22h14, dans cet ordre** :
+  1. **En-tête d'une série** (capture Quang : « ça fait un peu fouiller ») : « ← Toutes les séries » d'une couleur
+     légèrement différente et mieux placé (surtout sur PC) ; le bouton ↻ de la bibliothèque, isolé tout seul, à
+     regrouper ; la rangée de boutons (Masquer, Renommer, Site, Tomes, Pochette, Charger, Vidéos, Profil, Supprimer) à
+     organiser. **Maquette d'abord (PC + téléphone), validation Quang, puis code.**
+  2. **Tomes automatiques** : un chapitre ajouté arrive « hors tome » ; Quang demande que le rangement par tome se
+     fasse seul à la fin de la capture. À examiner : la fiche MangaDex/AniList (`serie_infos`, « 📅 Tomes et dates »)
+     est-elle relancée après une capture ? Un volume capturé comme « ch. N » (AnimoFlix) = tome N.
+  3. Relancer la SECONDAIRE (8192) quand elle est au repos, pour activer `/manga/liens` (✕ des sites) — vérifier
+     `/manga/activite` vide avant.
 - **Voix de l'application secondaire (Quang 19h18)** : 1-2 voix FÉMININES, expression adaptée au thème → à faire à S7
   avec ce qu'on a (Chatterbox local : clonage + intensité d'expression, pas de modération ; Chirp 3 HD). Pistes
   notées, non obligatoires : StoryVoice utilise OpenAI `gpt-4o-mini-tts` avec consigne de ton par personnage.
