@@ -1,0 +1,41 @@
+--- _studio_llm_proxy.py.bak-20260924-s5	2026-09-24 19:30:35.795410600 +0200
++++ _studio_llm_proxy.py	2026-09-24 19:30:35.897755200 +0200
+@@ -8724,6 +8724,29 @@
+     return {"chapitres": chaps, "series": series}
+ 
+ 
++# Manga Studio v2.19.0 (S5 compartiment) : ce qui travaille dans L'AUTRE application (autre instance, meme machine,
++# MANGA_AUTRE_PORT). L'application principale n'en recoit qu'une version ANONYME (type, etape, avancement : ni titre,
++# ni chapitre, ni dossier) ; la secondaire voit tout de la principale. Injoignable = rien (jamais une erreur a l'ecran).
++_ACT_ANONYME = ("type", "etape", "fait", "total")
++
++
++def manga_activite_autre():
++    port = os.environ.get("MANGA_AUTRE_PORT") or ""
++    if not port.isdigit():
++        return {"joignable": False, "items": []}
++    try:
++        req = urllib.request.Request("http://127.0.0.1:%s/manga/activite" % port,
++                                     headers={"Authorization": "Bearer " + STUDIO_SECRET} if STUDIO_SECRET else {})
++        with urllib.request.urlopen(req, timeout=3) as r:
++            items = json.load(r).get("items") or []
++    except Exception:
++        return {"joignable": False, "items": []}
++    anonyme = (os.environ.get("MANGA_ESPACE") or "normal") != "prive"
++    if anonyme:
++        items = [{k: x.get(k) for k in _ACT_ANONYME if x.get(k) is not None} for x in items]
++    return {"joignable": True, "anonyme": anonyme, "items": items}
++
++
+ def manga_activite():
+     """Tout ce qui travaille en ce moment, tous chapitres confondus (Manga Studio v1.88.0)."""
+     out = []
+@@ -10611,6 +10634,8 @@
+             self._json(200, manga_resume())
+         elif self.path.split("?", 1)[0] == "/manga/activite":              # Manga Studio v1.88.0
+             self._json(200, manga_activite())
++        elif self.path.split("?", 1)[0] == "/manga/activite_autre":        # Manga Studio v2.19.0 : S5 vue croisee
++            self._json(200, manga_activite_autre())
+         elif self.path.split("?", 1)[0] == "/manga/reglages":              # Manga Studio v2.11.0
+             self._json(200, manga_reglages())
+         elif self.path.split("?", 1)[0] == "/manga/alertes":               # Manga Studio v2.11.0

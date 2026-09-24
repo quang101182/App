@@ -20,7 +20,7 @@ import os
 import sys
 from http.server import ThreadingHTTPServer
 
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 COMFY = os.path.expanduser(r"~\Documents\ComfyUI")
 PROXY = os.path.join(COMFY, "_studio_llm_proxy.py")
 DONNEES = os.environ.get("MANGA_SOURCES_DIR") or os.path.expanduser(r"~\Documents\MangaStudio-donnees\prive")
@@ -46,6 +46,9 @@ LA = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
 os.environ["MANGA_CAPTURE_PORT"] = os.environ.get("MANGA_CAPTURE_PORT") or "9224"
 os.environ["MANGA_CAPTURE_DONNEES"] = os.path.join(LA, "manga-fetch-2")
 os.environ["MANGA_CAPTURE_PROFIL"] = os.path.join(LA, "manga-fetch-edge-2")
+# S5 (v1.6.0) : vue croisee -- l'autre instance (activite) et ses declarations GPU (jauge VRAM commune)
+os.environ["MANGA_AUTRE_PORT"] = "8190"
+os.environ["MANGA_GPU_AUTRE"] = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sources", "_gpu")
 os.environ["MANGA_SITES_FILE"] = os.path.join(DONNEES, "_sites.json")   # v1.4.0 : sa liste de sites valides, hors depot
 os.environ["MANGA_CAPTURE_SANS_SYNCHRO"] = "1"         # v1.3.0 : jamais de compte Microsoft ni de synchro (manga_fetch >= 0.6.6)
 if os.environ["MANGA_CAPTURE_PORT"] == "9223":

@@ -2366,6 +2366,20 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   reste ~X min » SANS titre ; côté secret, tout. Au lancement, si l'autre espace travaille : question à l'écran (lancer
   quand même / annuler). **Profite-en pour § 3-bis** : les essais (`--sortie`) et scripts hors app visibles aussi (🧪).
   Coûts : pastille = total des deux, détail des titres seulement chez leur propriétaire.
+  ✅ **FAIT 24/09 19h45 — v2.19.0** (principe retenu : pas de registre commun à tenir à jour par chaque script, chaque
+  serveur INTERROGE l'autre) : route `/manga/activite_autre` (proxy, diff `proxy-patch/_studio_llm_proxy_vue_croisee_s5.diff`)
+  lit `/manga/activite` de l'autre instance (`MANGA_AUTRE_PORT`, clé commune, 3 s max, injoignable = rien) ; la
+  principale n'en reçoit que `type/etape/fait/total` (ni titre, ni chapitre, ni dossier). Témoin : « 🔒 N traitement(s)
+  en cours · Narration · voix 3/12 » (principale au repos) ou « … · 🔒 N » après le sien ; la secondaire voit « ↔
+  principale : … — titre ». Question avant tout lancement lourd (narration, traduction, lot, vidéo, karaoké, résumé,
+  ingestion) posée dans `api()` — un seul point de passage ; refuser = rien n'est envoyé. Jauge VRAM : `vram_parts` 1.2.0
+  lit aussi les déclarations GPU de l'autre application (`MANGA_GPU_AUTRE` ; elles ne portent que moteur/taille/PID).
+  Variables posées par `espace_prive.py` 1.6.0 et par `launch-generate-agent.ps1` (principale). Banc `test_vue_croisee.py`
+  **21/21** (traitements FACTICES : PID d'un processus qui dort, rien généré ni payé ; 1280 + 360 px ; titre secret
+  absent de toute la page ET de la question). Non-régression : vram 10/10, alertes 18/18, interruption 18/18,
+  estimation verte, espace 15/15, espace UI 37/37.
+  ⬜ **Reste de S5, à faire avant S8 (recette)** : (1) pastille des coûts = total des deux applications ; (2) § 3-bis —
+  essais (`--sortie`, `_banc_reflexion/`) et scripts lancés hors app visibles (🧪) dans le témoin.
 - **S6 — Discrétion** : contenu FLOUTÉ quand la fenêtre secrète perd le focus ; bouton PANIQUE (Échap ×2 → espace
   normal) ; retour auto à l'espace normal après N min d'inactivité (N à fixer avec Quang) ; aucun titre secret dans
   Telegram / notifications / journaux / commits (dépôt `App` PUBLIC).

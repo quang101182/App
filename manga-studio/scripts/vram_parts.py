@@ -16,9 +16,12 @@ Cache 4 s (l'app interroge souvent). Charge a chaud par le proxy (GET /manga/vra
 """
 import glob, json, os, subprocess, time, urllib.request
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 GPU_DIR = os.path.join(os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources")), "_gpu")
+# v1.2.0 (S5, 24/09) : la carte est UNE ; les moteurs de l'AUTRE application la prennent aussi. Ses declarations ne
+# portent que le moteur, la taille et le PID (aucun titre) : elles comptent ici sous le meme nom de moteur.
+GPU_DIRS = [GPU_DIR] + [d for d in [os.environ.get("MANGA_GPU_AUTRE") or ""] if d and os.path.normcase(d) != os.path.normcase(GPU_DIR)]
 CREATE = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 FRAIS_S = 15
 # v1.1.0 (Quang 24/09 15h39, « ton processus devrait afficher une couleur ») : un moteur PyTorch ne compte que sa memoire
@@ -79,7 +82,7 @@ def mesurer():
             parts["ollama"] = mo
             r["detail"] += [{"cle": "ollama", "quoi": m.get("name"), "mo": int(m.get("size_vram") or 0) // (1024 * 1024)}
                             for m in o.get("models") or []]
-    for f in glob.glob(os.path.join(GPU_DIR, "*.json")):
+    for f in [g for dd in GPU_DIRS for g in glob.glob(os.path.join(dd, "*.json"))]:
         try:
             with open(f, encoding="utf-8") as h:
                 x = json.load(h)
