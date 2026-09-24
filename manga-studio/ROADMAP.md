@@ -2095,7 +2095,7 @@ avec Generate Studio (relance UNIQUEMENT par `relance-proxy.ps1`, `.bak` avant p
 
 **Limites ACCEPTÉES (décision Claude, 24/09)** : 10 répliques ne sont plus posées — ch.3 p.7 la légende « 我只是想成為世界最強的男人… » (zone mal détectée, 32 % de la page) et 9 **grands cris calligraphiés** (ch.4 p.1/p.17, ch.6 p.8/p.23, ch.7 p.5, ch.8 p.17, ch.10 p.12/p.29) : ils restent en chinois, comme les onomatopées dessinées, au lieu d'un rectangle blanc qui mangeait la case. La narration porte le sens. 🟠 (constaté v1.97.0) Les traductions Noritaka ch.1 (v1.91) et Black Jack ch.1-2 (v1.91/1.92) sont **antérieures** aux corrections v1.96-v1.97 (Noritaka p.54 et Black Jack ch.2 p.2 sont des pages blanches) : à refaire le jour où ces séries servent (`refaire_traductions.py <serie> <ch> --rerendu --version-min 1.97.0`).
 
-## 4-undecies. DOUBLE ESTIMATION « ☁ EN LIGNE / 🖥 SUR MON PC » PARTOUT *(24/09/2026 14h13, demande Quang — À FAIRE)*
+## 4-undecies. DOUBLE ESTIMATION « ☁ EN LIGNE / 🖥 SUR MON PC » PARTOUT *(24/09/2026 14h13, demande Quang — ✅ LIVRÉ v2.12.0, 24/09 14h50)*
 
 > Quang : *« dans les estimations de coût, au-delà du switch PC ou cloud, partout tu m'affiches les deux estimations de
 > coût avant de générer quoi que ce soit […] ainsi que le temps de traitement […] dynamique selon le switch […] deux
@@ -2118,8 +2118,12 @@ avec Generate Studio (relance UNIQUEMENT par `relance-proxy.ps1`, `.bak` avant p
 > d'alerte, et c'est moi qui décide si je veux interrompre ou non […] gérer les effets collatéraux si je décide
 > d'interrompre. Il faut que je sache exactement où j'en suis. »*
 - Constat (code, 24/09) : le mode est lu **au lancement** de chaque traitement (narrate reçoit `--tts`, traduire
-  `--effacement`, la nuit relit `reglages.py` à CHAQUE chapitre) → ce qui tourne finit dans son mode ; seuls les
+  `--effacement`, ~~la nuit relit `reglages.py` à CHAQUE chapitre~~) → ce qui tourne finit dans son mode ; seuls les
   chapitres SUIVANTS d'un lot / de la nuit changeraient.
+  → 🔴 **FAUX pour la voix, relu dans le code le 24/09 14h35 (v2.11.0)** : le lot et la nuit lisaient le profil UNE fois
+  au démarrage (`voix_moteur` figé), seule la traduction relisait l'interrupteur à chaque chapitre. Basculer en plein lot
+  aurait donné des chapitres « voix en ligne + effacement local ». ✅ **couvert par suivi_nuit v2.5.0** : le mode est
+  relu au début de CHAQUE chapitre, pour la voix comme pour l'effacement (banc `test_interruption.py`, point D).
 - À faire : clic sur la pastille pendant une activité (`/manga/activite` non vide) → fenêtre : ce qui tourne (chapitre,
   étape), « le traitement en cours finit en ☁/🖥 », « N chapitre(s) restants du lot passeraient en 🖥/☁ » ; choix :
   **Basculer pour la suite** / **Annuler** / **Interrompre**. Interrompre = arrêt propre (tuer le process du chapitre en
@@ -2129,6 +2133,50 @@ avec Generate Studio (relance UNIQUEMENT par `relance-proxy.ps1`, `.bak` avant p
 - Mémoriser dans chaque passage le mode avec lequel il a tourné (narration.json `tts`, traduction.json `effacement` :
   déjà écrits) → le bilan peut le dire.
 
+### Livré — v2.12.0 (24/09 14h50) *(suivi_nuit 2.5.0 · estimation 1.0.0 · interruption 1.0.0 · reglages 1.1.0)*
+**Double estimation.** `scripts/estimation.py` recalcule les chiffres sur les **passages réels** (médianes par page :
+21 narrations Gemini, 3 Kimi, 12 traductions, 1 voix locale ; cache 1 h `sources/_etalonnage.json`, repli sur les mesures
+du 24/09 sous 3 échantillons). Mesuré : Gemini ≈ 0,0100 $ d'analyse + 0,0066 $ de voix par page, 9,2 + 2,1 s ; Kimi
+≈ 0,040 $ + 0,0069 $, 76 s ; traduction 0,0089 $ et 9,7 s par page ; voix sur le PC 0,078 s par caractère (≈ 17 s par
+page). Les anciennes constantes surestimaient la durée Gemini (15 s/page annoncées). L'étalonnage part avec
+`GET /manga/reglages` ; l'app calcule avec `estimChap()`, **miroir** de `estimation.chapitre()`.
+Affiché : ☁ et 🖥 sur **une ligne compacte** (proposition de la session précédente, pour tenir à 360 px), mode actif
+plein, l'autre estompé, 🖥 dit « carte ~X min » ; **Narrer**, **Traduire**, **Tout traiter** (lot du profil) et les
+**confirmations** Traduire / Lancer (mode actif en premier). Un clic sur la pastille du haut : tout suit, sans recharger.
+Le plan du lot côté serveur porte `estim: {cloud, pc}` ; `cout` / `minutes` = le mode actif.
+**Protection.** Clic sur la pastille pendant une narration, une traduction ou un lot : question à l'écran (pas de boîte
+native) avec ce qui tourne (le lot compté une seule fois), « ce qui tourne FINIT en ☁/🖥 », « N chapitre(s) restant(s)
+passeraient en … », karaoké / vidéos / « Précédemment » non concernés. Trois choix : **Basculer pour la suite** ·
+**Annuler** (Échap) · **Interrompre et basculer** → `POST /manga/interrompre` (proxy, diff
+`proxy-patch/_studio_llm_proxy_interrompre_v2120.diff`, relancé par `relance-proxy.ps1`) → `scripts/interruption.py` :
+l'étape puis le lot tués (arbre de processus), `progress.json` marqués « interrompu », état « interrompu » + journal,
+**bilan** : ✅ finis · ❌ en échec · ✂ coupé à l'étape X (+ « analyse des pages gardée ») · ⏸ pas commencés. Bouton
+**▶ Reprendre** : relance le lot sur (coupé + pas commencés) ; le chapitre coupé **relit son analyse dans son dossier
+d'origine** même si le mode a changé (dossier `-local`) et même en « refaire » ; une narration lancée seule est relancée
+avec `reuse` si son analyse était finie. Une tâche coupée n'apparaît plus comme « ✓ finie » dans l'activité (défaut vu
+sur la capture du banc, corrigé).
+**Bancs** : `test_estimation.py` VERT (320 cas app = serveur ; 2 mutations rouges) · `test_estimation_ui.py` 19/19
+(1280 + 360 px, 0 appel payant) · `test_interruption.py` 17/17 (isolé, vrais processus factices ; 2 mutations rouges) ·
+`test_interruption_ui.py` 18/18 (faux lot dans l'app réelle, état + journal + interrupteur restaurés à l'identique,
+« Reprendre » intercepté ; mutation « coupé ≠ fini » rouge) · non-régression `test_alertes_ui` 18/18, `test_moderation`
+21/21 · plan à blanc Claymore ch.2-3 (358 p.) : ☁ ≈ 6 $ / ~2 h ; 🖥 ≈ 3,58 $ / ~3 h 15.
+| Avantages | Limites (connues) |
+|---|---|
+| Les deux prix et les deux durées avant chaque lancement, sur tes chiffres réels | Voix locale étalonnée sur **1 seul** passage (OPM ch.1) : le chiffre 🖥 s'affinera à chaque narration locale |
+| Basculer en plein lot ne mélange plus voix et effacement | Karaoké / « Précédemment » / vidéo : valeurs fixes (pas encore mesurées sur les passages) |
+| Interrompre ne jette rien de payé ; bilan exact + reprise en un clic | Narration seule reprise sur **tout** le chapitre (une plage de pages demandée n'est pas mémorisée) ; traduction coupée : à relancer à la main |
+| | « Précédemment », karaoké, vidéo : pas encore de double estimation à l'écran (identiques dans les deux modes, sauf la vidéo qui est toujours sur le PC) |
+
+### Propositions critiques ouvertes (Claude, 24/09) — décision de Quang attendue
+1. **Repérage des personnages = 4,43 $ du mois** (presque autant que l'analyse, 5,04 $) : chaque page passe plusieurs fois
+   pour un vote. Mesurer 1 passage au lieu de N, ou seulement sur les pages avec un visage (fidélité des noms avant/après,
+   même banc que le 21/09). Gain estimé 2-3 $/mois. **Déclencheur** : Quang dit « go » ; sinon au prochain lot > 5 $.
+2. **Reprendre l'analyse d'une narration EN LIGNE quand on refait le même chapitre EN LOCAL** (aujourd'hui seulement
+   pour un chapitre coupé) : l'analyse est identique dans les deux modes → refaire OPM en 🖥 coûterait ~0 $ au lieu de
+   ~0,01 $/page. **Déclencheur** : première demande « refais ce chapitre sur le PC ».
+3. **Essai de modération RÉEL** (bancs = refus simulés, § 4-decies) sur les pages les plus dures de Claymore — toujours
+   ouvert. **Déclencheur** : prochain chantier modération ou premier refus réel constaté au journal.
+
 ### État du chantier moteurs locaux / modération à la coupure (24/09 14h15) — « fait » = `git log`
 - ✅ v2.10.0 voix locale · v2.11.0 alertes de modération (bouton d'activité, onglet « À traiter ») + interrupteur global
   (`scripts/reglages.py`, `sources/_reglages.json`) · traduire 1.99.0 (effacement local, refus → VO + alerte) · narrate 2.7.0
@@ -2137,7 +2185,7 @@ avec Generate Studio (relance UNIQUEMENT par `relance-proxy.ps1`, `.bak` avant p
 - Bancs : test_moderation 21/21 · test_alertes_ui 18/18 · non-régression verte (série vide, musiques, capture, profil musique).
 - 🟠 Non testé en réel : un VRAI refus de Gemini (bancs = refus simulés) → essai prévu sur les pages les plus dures de
   Claymore ; le traitement « Autre moteur / Pages voisines / Local » depuis l'app (route testée seulement pour « Ignorer »).
-- ⬜ Reste : 4-undecies (cette section) ; bouton « Effacement local » n'est plus nécessaire (l'interrupteur le pilote) ;
+- ~~⬜ Reste : 4-undecies (cette section)~~ → ✅ v2.12.0 ; bouton « Effacement local » n'est plus nécessaire (l'interrupteur le pilote) ;
   refaire les pages OPM avec l'effacement local si Quang le veut (`--rerendu --effacement local`, 0 $).
 
 ## 4-decies. MODÉRATION — CONTINUER, PRÉVENIR, LAISSER QUANG TRAITER *(24/09/2026 13h52, spécification de Quang)*
@@ -2449,6 +2497,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 
 | Date | Événement |
 |---|---|
+| 2026-09-24 (14h50) | ✅ **v2.12.0 — chantier 4-undecies.** Double estimation ☁ / 🖥 recalculée sur les passages réels (Narrer, Traduire, Tout traiter, confirmations), protection du changement de mode pendant un traitement (question à l'écran, Basculer / Annuler / Interrompre, bilan exact + Reprendre sans repayer l'analyse). Trouvé en route : le lot figeait la voix au lancement pendant que l'effacement suivait l'interrupteur (corrigé, suivi_nuit 2.5.0) ; une tâche coupée s'affichait « ✓ finie ». Bancs 320 cas + 19 + 17 + 18 verts, 5 mutations rouges, non-régression verte. 0 $ dépensé. Détail § 4-undecies. |
 | 2026-09-24 (10h15) | ✅ **v2.9.1 → v2.9.2 + manga-fetch v0.6.2 → v0.6.3.** (1) Étiquette « aussi dans » passée sous le nom (débordait la poubelle hors écran sur smartphone ; banc 22/22 à 380 px, mutation 19/22). (2) **Capture Solo Leveling vol.1 coupée à 39 % EN SILENCE** : plafond fixe de 400 pas (~356 000 px sur 903 000) → plafond proportionnel à la hauteur, et tout arrêt avant la fin = note « ECHEC » ; même traitement pour le mode page par page (500 p. / 12 min). L'app affiche « ⛔ capture incomplète ». (3) **Règle de Quang : une série = un DOSSIER**, visible à 0 chapitre (bibliothèque + menu de capture) ; supprimer un chapitre ≠ supprimer le manga (banc `test_serie_vide_ui` 11/11, mutation 4 KO). ~~🟠 (constaté v2.9.2) Solo Leveling vol.1 est à RECAPTURER~~ → ✅ recapturé 24/09 10h40 avec manga-fetch 0.6.3 : 193 bandes (982 218 px cumulés pour une page de 903 320 px), 755 pages, dernière = page de crédits D&C Webtoon, arrêt « bas atteint », 0 ECHEC (avant : 79 bandes, 39 %). |
 | 2026-09-24 (09h30) | ✅ **v2.8.5 → v2.9.0** (demandes Quang pendant la capture de Solo Leveling). **Titre tapé affiché dès le début de la capture** (manga-fetch v0.6.1 écrit `sources/<slug>/titre.json` ; le manifeste, qui marque « chapitre capturé », n'arrive qu'en fin de capture). **Tomes/dates relancés** quand un chapitre est capturé après la dernière recherche, **pochette AniList** cherchée seule — jamais pendant une capture (banc `test_auto_tomes_pochette_ui` 10/10). **« 🎵 Depuis un autre manga »** dans le chapitre ET le profil (batch) : musiques des autres séries, une par contenu (sha1), copiées sous le nom de la série, étiquette « ↔ aussi dans » (banc `test_musiques_app_ui` 18/18). 🟠 (constaté v2.9.0) `test_musique_ui.py` casse sur des données disparues (narration `banc-k3-charon` de Claymore ch.1), pas sur le code. |
 | 2026-09-24 (01h15) | ✅ **Chantier 4-septies** (remontée Vidéo Studio 24/09 0h40, cases entières effacées). traduire_chapitre **v1.97.0** : trous rebouchés seulement dans la boîte du texte, cadre autour de la page, plafond des boîtes entières. OPM ch.1-10 re-rendus **sans appel (0 $, textes identiques)**, 0 page à cases effacées > 20 % (5 avant), 10 vidéos redemandées. 14 pages OPM étaient touchées, pas 5 (dont ch.1 p.24). Leçon : un garde-fou à l'échelle de la PAGE (18 %) laisse passer une CASE détruite — la mesure juste compte le dessin perdu, pas le blanc gagné. |

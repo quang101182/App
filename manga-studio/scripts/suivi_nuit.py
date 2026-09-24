@@ -29,8 +29,9 @@ from datetime import datetime
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import precedemment as prec                                # chapitres_precedents(), chap_key()
+import estimation                                          # v2.5.0 : double estimation ☁ / 🖥
 
-VERSION = "2.4.1"
+VERSION = "2.5.0"
 SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
 DIR = os.path.join(SRC, "_suivi")
 ETAT, JOURNAL = os.path.join(DIR, "etat.json"), os.path.join(DIR, "journal.jsonl")
@@ -52,10 +53,7 @@ DEFAUT_INTEGRE = {
 # v2.5.0 (23/09) : camera « cases » par defaut pour TOUS les formats (decision Quang 00h08) ; « page » = zoom lent d'avant.
 CAMERAS = ("cases", "page")
 # Couts et durees PAR PAGE, mesures (21-22/09) : narration (suivi v1.98), traduction Claymore ch.1 (0,54 $, 459 s, 62 p.).
-TARIF_NARRATION = {"kimi": (0.04, 1.0), "gemini": (0.017, 0.25)}          # ($, minutes) par page
-TARIF_TRADUCTION = (0.009, 0.125)
-TARIF_KARAOKE, TARIF_PREC = (0.003, 1.0), (0.013, 1.0)                   # par chapitre
-TARIF_VIDEO_MIN = 0.1                                                     # minutes par page (file du proxy, 0 $)
+# v2.5.0 : les tarifs fixes (TARIF_*) sont remplaces par estimation.py, recalcule sur les passages reels.
 
 
 def journal(ev, **kw):
@@ -334,19 +332,13 @@ def plan_chapitre(c, cfg, refaire=False, avant_narres=False, detecter_langue=Fal
         if r:
             pourquoi["video"] = r
     n = c["pages"]
-    cout = minutes = 0.0
-    if et["narration"] == "faire":
-        p, m = TARIF_NARRATION[cfg["moteur"]]; cout += n * p; minutes += n * m
-    if et["karaoke"] == "faire":
-        cout += TARIF_KARAOKE[0]; minutes += TARIF_KARAOKE[1]
-    if et["traduction"] == "faire":
-        cout += n * TARIF_TRADUCTION[0]; minutes += n * TARIF_TRADUCTION[1]
-    if et["precedemment"] == "faire":
-        cout += TARIF_PREC[0]; minutes += TARIF_PREC[1]
-    if et["video"] == "faire":
-        minutes += n * TARIF_VIDEO_MIN
+    # v2.5.0 (4-undecies) : les DEUX estimations (☁ en ligne / 🖥 sur le PC), recalculees sur les passages reels
+    # (estimation.py) ; « cout » / « minutes » = celles du mode actif, comme avant pour qui ne lit que celles-la.
+    estim = estimation.chapitre(n, {k for k, v in et.items() if v == "faire"}, cfg["moteur"])
+    actif = estim["pc" if cfg.get("voix_moteur") == "local" else "cloud"]
     return {"d": c["d"], "num": c["num"], "pages": n, "tag": tag_final, "etapes": et, "pourquoi": pourquoi,
-            "a_faire": any(v == "faire" for v in et.values()), "cout": round(cout, 3), "minutes": round(minutes, 1)}
+            "a_faire": any(v == "faire" for v in et.values()), "cout": round(actif["usd"], 3), "minutes": actif["min"],
+            "estim": estim}
 
 
 def plan_serie(serie, chapitres_voulus=None, refaire=False, cfg=None, detecter_langue=False):
@@ -406,11 +398,23 @@ def vision_reprenable(td, cd):
         return False
 
 
-def traiter_chapitre(c, cfg, refaire, etat, avant_narres):
+def _vision_depuis(td, t):
+    try:
+        return bool(t) and os.path.getmtime(os.path.join(td, "vision.json")) >= float(t)
+    except OSError:
+        return False
+
+
+def traiter_chapitre(c, cfg, refaire, etat, avant_narres, reprise_de=None):
     """La chaine d'UN chapitre. Retourne (ok, {etape: resultat})."""
+    # v2.5.0 (4-undecies) : le mode « ☁ / 🖥 » est RELU a chaque chapitre, pour la voix comme pour l'effacement. Avant,
+    # la voix restait celle du LANCEMENT du lot (profil lu une fois) pendant que l'effacement suivait l'interrupteur :
+    # basculer en plein lot aurait melange voix en ligne + effacement local. Ce qui tourne finit dans son mode ; les
+    # chapitres suivants prennent le nouveau.
+    cfg = dict(cfg, voix_moteur="local" if __import__("reglages").sur_pc() else "cloud")
     p = plan_chapitre(c, cfg, refaire, avant_narres, detecter_langue=True)
     et, res = p["etapes"], {}
-    etat["en_cours"] = {"d": c["d"], "num": c["num"], "pages": c["pages"], "etapes": et}
+    etat["en_cours"] = {"d": c["d"], "num": c["num"], "pages": c["pages"], "etapes": et, "mode": "pc" if cfg["voix_moteur"] == "local" else "cloud"}
     tag = p["tag"]
     td = os.path.join(c["cd"], "narration", tag)
     # 1. narration
@@ -421,10 +425,15 @@ def traiter_chapitre(c, cfg, refaire, etat, avant_narres):
             try: os.remove(os.path.join(td, "progress.json"))
             except OSError: pass
             t0 = time.time()
-            reprise = (essai > 1 or not refaire) and vision_reprenable(td, c["cd"])
+            # v2.5.0 : un chapitre COUPE par une interruption reprend son analyse deja payee, meme en « refaire » et meme
+            # si le mode a change entre-temps (l'analyse est la meme en ☁ et en 🖥 ; seul le dossier -local differe)
+            src = (reprise_de or {}).get("tag") if (reprise_de or {}).get("d") == c["d"] else None
+            sd = os.path.join(c["cd"], "narration", src) if src else td
+            coupe_ici = bool(src) and _vision_depuis(sd, reprise_de.get("debut")) and vision_reprenable(sd, c["cd"])
+            reprise = coupe_ici or ((essai > 1 or not refaire) and vision_reprenable(td, c["cd"]))
             rc = lancer([PY, os.path.join(HERE, "narrate_chapter.py"), c["d"], "--engine", cfg["moteur"], "--voice", cfg["voix"], "--tag", tag,
                          "--tts", cfg.get("voix_moteur") or "cloud"]
-                        + (["--reuse-vision", tag] if reprise else []),
+                        + (["--reuse-vision", src if coupe_ici else tag] if reprise else []),
                         os.path.join(td, "run.log"), etat, "narration")
             n = _lire_json(os.path.join(td, "narration.json"))
             ok = rc == 0 and bool(n) and (not refaire or os.path.getmtime(os.path.join(td, "narration.json")) >= t0 - 1)
@@ -518,6 +527,8 @@ def main():
         journal("rien", declencheur=a.declencheur, series=[s for s, _c, _p in plan])
         print("rien a faire")
         return 0
+    # v2.5.0 : reprise apres une interruption (interruption.py) -> le chapitre coupe ne repaie pas son analyse
+    reprise_de = dict((old.get("interruption") or {}).get("coupe") or {}, debut=old.get("debut")) if old.get("etat") == "interrompu" else None
     etat = {"version": VERSION, "etat": "en cours", "pid": os.getpid(), "debut": time.time(), "declencheur": a.declencheur,
             "serie": a.serie or None, "refaire": a.refaire, "fait": [], "erreurs": [], "en_cours": None,
             "file": [p["d"] for _s, _c, pl in plan for p in pl],
@@ -534,7 +545,7 @@ def main():
                 if not c or narration_en_cours(c["cd"]):
                     continue
                 t0 = time.time()
-                ok, res = traiter_chapitre(c, cfg, a.refaire, etat, narre_avant)
+                ok, res = traiter_chapitre(c, cfg, a.refaire, etat, narre_avant, reprise_de)
                 narre_avant = narre_avant or res.get("narration") == "ok"
                 ligne = {"d": c["d"], "num": c["num"], "res": res, "s": round(time.time() - t0), "t": time.time()}
                 (etat["fait"] if ok else etat["erreurs"]).append(ligne)
