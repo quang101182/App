@@ -131,9 +131,11 @@ def ecran(ws_url, qualite=55, largeur_max=900):
 # ~774 de haut suffisent, 492 de large ou 674 de haut ECHOUENT (MangaDex n'affiche plus la page). Marge ~20 % (Quang :
 # « mets-toi une marge ») -> MINIMUM 700 x 950 interieur. La PLACE par defaut = celle choisie par Quang le 24/09 16h22,
 # validee en reel (MangaDex 18/18 en 33 s, webtoon 7/7 en 28 s) alors que la fenetre depasse a ~93 % sous l'ecran.
-FENETRE_CONF = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "manga-fetch", "fenetre.json")
+# S3 (24/09) : memes variables que manga_fetch v0.6.5 -- l'espace prive a sa fenetre de capture, sa place, son port.
+FENETRE_CONF = os.path.join(os.environ.get("MANGA_CAPTURE_DONNEES") or os.path.join(
+    os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "manga-fetch"), "fenetre.json")
 FENETRE_DEFAUT = {"place": {"left": 2389, "top": 1344, "width": 1052, "height": 1360}, "min_interieur": [700, 950]}
-CDP_NAV = "http://127.0.0.1:9223"
+CDP_NAV = "http://127.0.0.1:%d" % int(os.environ.get("MANGA_CAPTURE_PORT") or 9223)
 
 
 def fenetre_conf():

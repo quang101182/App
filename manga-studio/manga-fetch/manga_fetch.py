@@ -33,14 +33,17 @@ import zipfile
 
 import requests
 
-VERSION = "0.6.4"
+VERSION = "0.6.5"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
 MDX_API = "https://api.mangadex.org"
-EDGE_CDP = "http://localhost:9223"
-EDGE_PROFILE = os.path.join(os.environ.get("LOCALAPPDATA", "."), "manga-fetch-edge")
-DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA", "."), "manga-fetch")
+# v0.6.5 (24/09, compartiment secret S3) : l'espace prive a SA fenetre (port, profil, journaux, place) ; sans ces
+# variables, rien ne change pour l'espace normal.
+EDGE_PORT = int(os.environ.get("MANGA_CAPTURE_PORT") or 9223)
+EDGE_CDP = "http://localhost:%d" % EDGE_PORT
+EDGE_PROFILE = os.environ.get("MANGA_CAPTURE_PROFIL") or os.path.join(os.environ.get("LOCALAPPDATA", "."), "manga-fetch-edge")
+DATA_DIR = os.environ.get("MANGA_CAPTURE_DONNEES") or os.path.join(os.environ.get("LOCALAPPDATA", "."), "manga-fetch")
 LOG_FILE = os.path.join(DATA_DIR, "fetch.log")
 LOG_EVT = os.path.join(DATA_DIR, "events.log")
 PLAFOND_TOURS_PAGER, PLAFOND_S_PAGER = 3000, 3600   # v0.6.3 : garde-fous page par page (~1000 pages, 1 h)
@@ -1367,13 +1370,13 @@ def launch_edge() -> int:
     # (scripts/cdp_mini.py). Ensuite, plus rien ne bouge sans un clic de Quang.
     place = {"left": 2389, "top": 1344, "width": 1052, "height": 1360}
     try:
-        with open(os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "manga-fetch", "fenetre.json"),
+        with open(os.path.join(DATA_DIR, "fenetre.json"),
                   encoding="utf-8") as f:
             place.update(json.load(f).get("place") or {})
     except Exception:
         pass
     import subprocess
-    subprocess.Popen([cible, "--remote-debugging-port=9223",
+    subprocess.Popen([cible, "--remote-debugging-port=%d" % EDGE_PORT,
                       # anti-occlusion : une fenêtre COUVERTE par d'autres continue
                       # d'être rendue (sinon Edge la throttle et la capture casse)
                       "--disable-features=CalculateNativeWinOcclusion",
@@ -1382,7 +1385,7 @@ def launch_edge() -> int:
                       "--window-size=%d,%d" % (place["width"], place["height"]),
                       "--window-position=%d,%d" % (place["left"], place["top"]),
                       "https://mangadex.org/"])
-    print("Fenêtre dédiée lancée (CDP port 9223, profil persistant).")
+    print("Fenêtre dédiée lancée (CDP port %d, profil persistant)." % EDGE_PORT)
     return 0
 
 

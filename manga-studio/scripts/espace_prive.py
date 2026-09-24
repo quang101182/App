@@ -7,7 +7,8 @@ Son __main__ n'est donc jamais joue : ni watchdog des pods, ni notifications Tel
 
 Donnees : MANGA_SOURCES_DIR (S0), par defaut C:/Users/quang/Documents/MangaStudio-donnees/prive -- sur C:, hors du
 depot et hors de sources/. Le journal de capture de cette instance est a part lui aussi. v1.1.0 (S2) : sa base (Planche, Projet, Personnages)
-et sa galerie (output) sont a part aussi ; /manga/espace repond « prive ».
+et sa galerie (output) sont a part aussi ; /manga/espace repond « prive ». v1.2.0 (S3) : sa fenetre de capture (CDP 9224,
+profil Edge, journaux et place a part).
 L'app ouverte sur ce port parle a ce port (location.origin) et son stockage local est celui de CETTE origine.
 
 Usage : python espace_prive.py            (port 8192, 127.0.0.1 seulement ; 8191 = banc proxy_8191.py)
@@ -18,7 +19,7 @@ import os
 import sys
 from http.server import ThreadingHTTPServer
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 COMFY = os.path.expanduser(r"~\Documents\ComfyUI")
 PROXY = os.path.join(COMFY, "_studio_llm_proxy.py")
 DONNEES = os.environ.get("MANGA_SOURCES_DIR") or os.path.expanduser(r"~\Documents\MangaStudio-donnees\prive")
@@ -37,6 +38,17 @@ os.environ["STUDIO_SECRET"] = open(os.path.join(COMFY, ".studio_secret"), encodi
 if not os.environ["STUDIO_SECRET"]:
     raise SystemExit("refus : cle vide (.studio_secret)")
 
+# S3 : SA fenetre de capture (manga_fetch >= 0.6.5 et cdp_mini lisent ces variables ; heritees par les scripts lances).
+# Profil Edge, journaux et place a part, sur C: : l'historique des sites de l'espace prive ne va jamais dans le
+# profil de capture normal, et deux captures (une par espace) ne se marchent plus dessus.
+LA = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+os.environ["MANGA_CAPTURE_PORT"] = os.environ.get("MANGA_CAPTURE_PORT") or "9224"
+os.environ["MANGA_CAPTURE_DONNEES"] = os.path.join(LA, "manga-fetch-2")
+os.environ["MANGA_CAPTURE_PROFIL"] = os.path.join(LA, "manga-fetch-edge-2")
+if os.environ["MANGA_CAPTURE_PORT"] == "9223":
+    raise SystemExit("refus : 9223 est la fenetre de capture de l'espace normal")
+os.makedirs(os.environ["MANGA_CAPTURE_DONNEES"], exist_ok=True)
+
 sys.path.insert(0, COMFY)                               # _studio_db et consorts
 spec = importlib.util.spec_from_file_location("proxy_espace_prive", PROXY)
 mod = importlib.util.module_from_spec(spec)
@@ -51,6 +63,8 @@ if os.path.normcase(mod.studiodb.DB_PATH) != os.path.normcase(os.environ["STUDIO
 if mod.STUDIO_SECRET != os.environ["STUDIO_SECRET"]:
     raise SystemExit("refus : le proxy n'a pas pris la cle")
 mod.MF_RUNLOG = os.path.join(os.environ.get("LOCALAPPDATA", ""), "manga-studio", "capture_run_prive.log")
+mod.MF_CDP = "http://127.0.0.1:%s" % os.environ["MANGA_CAPTURE_PORT"]          # S3
+mod.MF_EVENTS = os.path.join(os.environ["MANGA_CAPTURE_DONNEES"], "events.log")   # S3 : ecrit par manga_fetch (DATA_DIR)
 
 print("espace prive v%s -> http://127.0.0.1:%d/manga/ (PID %d) -- gestionnaire HTTP seul" % (VERSION, PORT, os.getpid()),
       flush=True)
