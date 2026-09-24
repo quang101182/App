@@ -36,7 +36,7 @@ with sync_playwright() as p:
         pg.evaluate("() => { try { localStorage.removeItem('manga_serie'); localStorage.setItem('manga_onglet','tChap'); } catch {} }")
         pg.reload(); pg.wait_for_timeout(3000)
         ver = pg.inner_text("#verBadge")
-        check("version affichee v2.29.0", ver.strip() == "v2.29.0", ver)
+        check("version affichee = VERSION du code", ver.strip() == "v" + pg.evaluate("() => VERSION"), ver)
         # la serie la plus fournie (pochette + fiche si possible)
         pg.click("#chapList .serie-item"); pg.wait_for_timeout(1200)
         check("en-tete visible", pg.is_visible("#libNav"))
