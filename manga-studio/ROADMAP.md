@@ -2383,6 +2383,15 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
 - **S6 — Discrétion** : contenu FLOUTÉ quand la fenêtre secrète perd le focus ; bouton PANIQUE (Échap ×2 → espace
   normal) ; retour auto à l'espace normal après N min d'inactivité (N à fixer avec Quang) ; aucun titre secret dans
   Telegram / notifications / journaux / commits (dépôt `App` PUBLIC).
+  ✅ **FAIT 24/09 20h00 — v2.20.0** (actif SEULEMENT dans la secondaire, `espDiscretion()`) : flou (`filter: blur`) dès
+  que la fenêtre perd le focus ou passe en arrière-plan ; PANIQUE = Échap ×2 en < 0,6 s → même geste que l'appui long
+  (PC : la fenêtre dédiée se ferme ; sinon l'adresse principale) ; retour automatique après **15 min** sans geste
+  (❓ **N à confirmer par Quang** — réglable par `localStorage esp_inactif_min`), **jamais pendant qu'un son/une vidéo
+  joue** (sinon une narration écoutée sans toucher fermait la fenêtre). Vérifié : aucun script n'envoie de Telegram
+  ni de notification (la boucle Telegram du proxy = musique GS, non lancée dans la secondaire) ; journaux de la
+  secondaire à part (`espace_prive.log`, `manga-fetch-2/`, `capture_run_prive.log`) ; dépôt : 0 titre/site/adresse
+  (grep à chaque commit). Banc `test_discretion_ui.py` **12/12** (principale jamais floutée ni touchée par Échap ;
+  flou/net ; Échap ×1 et ×2 lents = rien ; panique avec et sans fenêtre dédiée ; inactivité 3 s avec et sans son).
 - **S7 — Chaîne sans modération (profil de l'espace secret)** : voix 🖥 locale, traduction locale (Qwen3-30B, § 4-nonies
   étape 4), analyse = à mesurer sur les 1-2 chapitres d'essai de Quang (Gemini refuse-t-il vraiment ? sinon qwen3-vl
   local, moins fidèle) ; sonde : `scripts/sonde_moderation.py`. Limite posée : personnages adultes uniquement.
