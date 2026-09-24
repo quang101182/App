@@ -12,7 +12,7 @@ Avant de charger le modele : attend que la carte soit LIBRE (memoire et file Com
 """
 import argparse, json, os, re, subprocess, sys, time, urllib.request
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 APERCUS = os.path.join(SRC, "_apercus")
@@ -74,6 +74,11 @@ def main():
     ap.add_argument("--debit", type=float, default=17.4,
                     help="v1.1.0 : debit vise en caracteres/s (17,4 = voix en ligne Charon mesuree sur OPM ch.1) ; 0 = naturel")
     a = ap.parse_args()
+    # v1.4.0 (S7) : « Voix@1.0 » = timbre de Voix + ton (expression) 1.0 ; --expression explicite l'emporte
+    if "@" in a.voix:
+        a.voix, ton = a.voix.split("@", 1)
+        if a.expression is None:
+            a.expression = float(ton)
     ref = os.path.join(APERCUS, a.voix + ".mp3")
     if not re.match(r"^[A-Z][a-z]{2,15}$", a.voix) or not os.path.isfile(ref):
         dit(erreur="voix locale inconnue : %s (extraits disponibles : %s)" % (a.voix, ", ".join(

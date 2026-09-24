@@ -2385,9 +2385,8 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   Telegram / notifications / journaux / commits (dépôt `App` PUBLIC).
   ✅ **FAIT 24/09 20h00 — v2.20.0** (actif SEULEMENT dans la secondaire, `espDiscretion()`) : flou (`filter: blur`) dès
   que la fenêtre perd le focus ou passe en arrière-plan ; PANIQUE = Échap ×2 en < 0,6 s → même geste que l'appui long
-  (PC : la fenêtre dédiée se ferme ; sinon l'adresse principale) ; retour automatique après **15 min** sans geste
-  (❓ **N à confirmer par Quang** — réglable par `localStorage esp_inactif_min`), **jamais pendant qu'un son/une vidéo
-  joue** (sinon une narration écoutée sans toucher fermait la fenêtre). Vérifié : aucun script n'envoie de Telegram
+  (PC : la fenêtre dédiée se ferme ; sinon l'adresse principale) ; ~~retour automatique après 15 min sans geste~~ →
+  **RETIRÉ en v2.21.0** (Quang 20h08 : « je ne veux pas de retour automatique, c'est moi qui gère »). Vérifié : aucun script n'envoie de Telegram
   ni de notification (la boucle Telegram du proxy = musique GS, non lancée dans la secondaire) ; journaux de la
   secondaire à part (`espace_prive.log`, `manga-fetch-2/`, `capture_run_prive.log`) ; dépôt : 0 titre/site/adresse
   (grep à chaque commit). Banc `test_discretion_ui.py` **12/12** (principale jamais floutée ni touchée par Échap ;
@@ -2407,6 +2406,17 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   les voix et le ton ») : `prive/_echantillons_voix/` = mêmes 3 phrases × 8 voix féminines EN LIGNE (Chirp 3 HD) +
   3 timbres LOCAUX × 2 tons (expression 0,5 / 1,0). 🟠 `local_Kore_ton-appuye` = 23,5 s au lieu de 12,6 s (répétition
   probable). Ensuite : appliquer la ou les voix retenues comme défaut du profil de la secondaire.
+  ✅ **Voix validées par Quang (20h08)** — en ligne : Aoede, Despina, Leda, Sulafat ; locales : Aoede ton appuyé, Leda
+  ton appuyé, Kore ton normal, Leda ton normal. **v2.21.0** : la secondaire propose CES voix, selon le mode (☁ / 🖥) ;
+  la principale garde les 8 d'avant. Ton local = « Voix@1.0 » (tts_local 1.4.0 en tire l'intensité d'expression,
+  la voix en ligne l'ignore) ; tag « gemini-leda-ton10-local » (sans point : `_RE_TAG` refusait « ton1.0 » et le
+  serveur répondait À TORT « chapitre introuvable » — constaté puis corrigé, proxy + narrate_chapter + suivi_nuit).
+  Aperçus Despina/Sulafat générés dans la secondaire (`voix_apercus.py` : `MANGA_VOIX`). **Vitesses séparées** (Quang
+  20h08, les DEUX applications) : une mémoire « en ligne » (défaut 1,15) et une « sur le PC » (défaut 1), reprise à
+  l'ouverture de chaque narration selon SA voix ; option 1,1× ajoutée. **Retour automatique RETIRÉ** (Quang 20h08 :
+  « c'est moi qui gère ») — flou et panique Échap ×2 restent. Banc `test_voix_vitesses_ui.py` **13/13**.
+  🟠 Constaté (préexistant, non corrigé) : avec `reuse` (analyse réutilisée), `pages` est ignoré — une narration
+  « pages 1-2 » a traité les 40 pages.
 - **S8 — Recette réelle** : les deux espaces ouverts en même temps (PC + téléphone), un lot de chaque côté, vue croisée,
   paravent/fermeture à distance, 360 px, cycle couper→relancer ; bancs chiffrés + mutation.
 **Pièges connus pour ce chantier** : écrire un fichier en Python texte sous Windows convertit LF→CRLF (proxy entier en

@@ -15,6 +15,7 @@ import narrate_chapter as nc
 PHRASE = ("Le village retient son souffle. La guerrière aux yeux d'argent dégaine son épée : "
           "cette fois, le monstre n'a plus nulle part où se cacher.")
 VOIX = ["Charon", "Fenrir", "Orus", "Puck", "Algenib", "Kore", "Aoede", "Leda"]   # = la liste VOIX de l'app
+VOIX = [v for v in os.environ.get("MANGA_VOIX", "").split(",") if v.strip()] or VOIX   # S7 : voix de l'application secondaire
 RATE = 1.05                                                                      # = defaut de narrate_chapter
 
 

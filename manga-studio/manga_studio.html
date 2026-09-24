@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.20.0</title>
+<title>Manga Studio v2.21.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -812,7 +812,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.20.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.21.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button>
       <button class="mode-pill" id="hdrMode" title="Où tournent la voix et l’effacement du texte : en ligne (payant) ou sur ta carte graphique (0 $). Touche pour changer.">☁ En ligne</button></div>
     <div class="engs">
@@ -1490,7 +1490,7 @@ body.epure .aide{display:none}
     <button class="btn pri" id="lecPlay" title="lecture / pause (espace)">⏸</button>
     <button class="btn" id="lecNext" title="page suivante (→)">⏭</button>
     <label class="lec-chk" title="volume général (voix + musique) — sur téléphone, s'ajoute aux touches de volume">🔊 <input type="range" class="lec-vol" id="lecVolG" min="0" max="100" step="1"><span class="curseur-val" data-pour="lecVolG"></span></label>
-    <select id="lecVit" style="width:auto"><option value="1">1×</option><option value="1.15" selected>1,15×</option><option value="1.3">1,3×</option><option value="1.5">1,5×</option></select>
+    <select id="lecVit" style="width:auto"><option value="1">1×</option><option value="1.1">1,1×</option><option value="1.15" selected>1,15×</option><option value="1.3">1,3×</option><option value="1.5">1,5×</option></select>
     <label class="lec-chk"><input type="checkbox" id="lecSousOn" checked> sous-titres</label>
     <label class="lec-chk" title="le mot prononcé s'allume"><input type="checkbox" id="lecKarOn"> karaoké</label>
     <label class="lec-chk" title="la caméra passe de case en case (sinon : la page entière). Mémorisé pour la série : lecteur ET vidéos"><input type="checkbox" id="lecCamOn" checked> 🎥 cases</label>
@@ -1712,7 +1712,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.20.0";
+const VERSION = "2.21.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -1890,13 +1890,13 @@ async function espaceCharger(){
   document.body.classList.toggle("esp-p", ESPACE.nom === "prive");
   const carte = $("espFenCarte");                                   // v2.16.0 : absente du DOM de l'espace normal
   if (carte){ if (ESPACE.nom === "prive") carte.hidden = false; else carte.remove(); }
-  if (ESPACE.nom === "prive"){ DIRECT.ok = false; espDiscretion(); }
+  if (ESPACE.nom === "prive"){ DIRECT.ok = false; espDiscretion(); voixRemplir(); }
 }
 /* v2.20.0 (S6, propositions validees 24/09) -- SEULEMENT dans l'application secondaire : (1) flou quand la fenetre perd
    le focus ou passe en arriere-plan ; (2) PANIQUE = Echap deux fois en moins de 0,6 s -> retour a la principale (meme
    geste que l'appui long : sur le PC la fenetre dediee se ferme, sur le telephone on revient a l'adresse principale) ;
-   (3) retour automatique apres ESP_INACTIF_MIN minutes sans aucun geste (15 par defaut, a fixer avec Quang). */
-const ESP_INACTIF_MIN = (() => { try { return +localStorage.getItem("esp_inactif_min") || 15; } catch { return 15; } })();
+   ~~(3) retour automatique apres inactivite~~ RETIRE en v2.21.0 (Quang 24/09 20h08 : « je ne veux pas de retour
+   automatique, c'est moi qui gere »). */
 let ESP_DISCRETION = false;
 function espDiscretion(){
   if (ESP_DISCRETION) return; ESP_DISCRETION = true;
@@ -1910,13 +1910,6 @@ function espDiscretion(){
     if (e.key !== "Escape") return;
     const t = Date.now(); if (t - echap < 600){ echap = 0; espaceBasculer(); } else echap = t;
   }, true);
-  let minuteur = null;
-  // une narration ou une video qui JOUE n'est pas de l'inactivite (on ecoute sans toucher) : on reattend
-  const joue = () => [...document.querySelectorAll("audio, video")].some(m => !m.paused && !m.ended);
-  const rearmer = () => { clearTimeout(minuteur);
-    minuteur = setTimeout(() => joue() ? rearmer() : espaceBasculer(), ESP_INACTIF_MIN * 60000); };
-  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(ev => document.addEventListener(ev, rearmer, { passive: true, capture: true }));
-  rearmer();
 }
 // v2.16.0 (S3) : sur le PC, l'espace prive vit dans SA fenetre (profil Edge a part) : l'appui long l'ouvre depuis
 // l'espace normal, et la FERME depuis l'espace prive. Ailleurs (telephone) : l'adresse de l'autre espace (S4).
@@ -5633,6 +5626,18 @@ $("btnChapClose").onclick = () => { $("chapDetail").hidden = true; CHAP_OPEN = n
    ===================================================================== */
 const VOIX = [["Charon","Charon — homme, grave"],["Fenrir","Fenrir — homme"],["Orus","Orus — homme"],
   ["Puck","Puck — homme, vif"],["Algenib","Algenib — homme"],["Kore","Kore — femme"],["Aoede","Aoede — femme"],["Leda","Leda — femme"]];
+/* v2.21.0 (S7) : voix de l'application SECONDAIRE, validees a l'oreille par Quang (24/09 20h08). Elles suivent le mode :
+   en ligne (Chirp 3 HD) / sur le PC (Chatterbox, « Voix@ton » = timbre + intensite d'expression). La principale garde VOIX. */
+const VOIX_SEC = {
+  cloud: [["Aoede", "Aoede — femme"], ["Despina", "Despina — femme"], ["Leda", "Leda — femme"], ["Sulafat", "Sulafat — femme"]],
+  local: [["Aoede@1.0", "Aoede — femme, ton appuyé"], ["Leda@1.0", "Leda — femme, ton appuyé"],
+          ["Kore@0.5", "Kore — femme, ton normal"], ["Leda@0.5", "Leda — femme, ton normal"]] };
+function voixListe(){ return typeof ESPACE === "object" && ESPACE.nom === "prive" ? VOIX_SEC[MODE === "pc" ? "local" : "cloud"] : VOIX; }
+function voixRemplir(){
+  ["narrVoice", "suiviVoix"].forEach(id => { const s = $(id); if (!s) return; const v = s.value, l = voixListe();
+    s.innerHTML = l.map(([x, lb]) => '<option value="' + x + '">' + esc(lb) + "</option>").join("");
+    s.value = l.some(x => x[0] === v) ? v : l[0][0]; });
+}
 $("narrVoice").innerHTML = VOIX.map(([v, l]) => '<option value="' + v + '">' + l + "</option>").join("");
 // v1.76.0 : apercu de la voix AVANT de generer (demande Quang 21/09). Echantillons generes une fois par
 // scripts/voix_apercus.py dans sources/_apercus/ (meme synthese que la narration). Play / stop.
@@ -5641,7 +5646,7 @@ function majApercu(){ $("btnVoixApercu").textContent = APERCU.paused ? "▶" : "
 APERCU.onended = APERCU.onpause = APERCU.onplay = majApercu;
 APERCU.onerror = () => { majApercu(); toast("aperçu indisponible pour cette voix"); log("aperçu voix introuvable : " + APERCU.src, "w"); };
 function jouerApercu(){
-  APERCU.src = srcURL("_apercus/" + $("narrVoice").value + ".mp3");
+  APERCU.src = srcURL("_apercus/" + $("narrVoice").value.split("@")[0] + ".mp3");         // v2.21.0 : « Voix@ton »
   APERCU.play().catch(e => { if (e.name !== "AbortError") log("aperçu : " + e.message, "w"); });
 }
 $("btnVoixApercu").onclick = () => APERCU.paused ? jouerApercu() : APERCU.pause();
@@ -5653,7 +5658,7 @@ function memoriserVoix(){ const s = serieOuverte(); if (s) try { localStorage.se
 function reprendreVoix(){
   let v = null; try { v = localStorage.getItem("manga_voix_" + serieOuverte()); } catch {}
   // sans voix memorisee : la voix PAR DEFAUT, pas celle du chapitre precedent (Fenrir passait d'OPM a Claymore)
-  $("narrVoice").value = v && VOIX.some(x => x[0] === v) ? v : VOIX[0][0];
+  $("narrVoice").value = v && voixListe().some(x => x[0] === v) ? v : voixListe()[0][0];
 }
 let NARRS = [], NARR_POLL = null, CHAP_PAGES = 0;
 const fmtS = s => s >= 60 ? Math.floor(s / 60) + " min " + String(Math.round(s % 60)).padStart(2, "0") : Math.round(s) + " s";
@@ -6182,6 +6187,7 @@ function modeMaj(){
     x.title = (pc ? "sur ta carte graphique (voix + effacement, 0 $)" : "en ligne") + " — change en haut, pastille " + (pc ? "🖥" : "☁"); });
   if ($("narrTts")) $("narrTts").value = pc ? "local" : "cloud";
   if ($("suiviTts")) $("suiviTts").value = pc ? "local" : "cloud";
+  voixRemplir();                                                              // v2.21.0 : la secondaire suit le mode
   estimRafraichir();                                                           // v2.12.0 : les estimations suivent
 }
 async function modeCharger(){
@@ -6726,8 +6732,8 @@ function lotPuces(){
   lotEstimer();
 }
 function profRegler(c){
-  $("suiviVoix").innerHTML = VOIX.map(v => '<option value="' + v[0] + '">' + esc(v[1]) + "</option>").join("");
-  $("suiviVoix").value = VOIX.some(x => x[0] === c.voix) ? c.voix : VOIX[0][0];
+  $("suiviVoix").innerHTML = voixListe().map(v => '<option value="' + v[0] + '">' + esc(v[1]) + "</option>").join("");
+  $("suiviVoix").value = voixListe().some(x => x[0] === c.voix) ? c.voix : voixListe()[0][0];
   $("suiviMoteur").value = c.moteur === "gemini" ? "gemini" : "kimi";
   $("suiviTts").value = c.voix_moteur === "local" ? "local" : "cloud"; gpuAfficher("suiviTts", "profGpu");
   $("profTrad").value = c.traduction || "";
@@ -7337,6 +7343,7 @@ async function chargerNarr(){
   const presentes = new Set(CHAP_PAGE_LIST.map(x => x.file)), avant = LEC.n.pages.length;
   if (presentes.size) LEC.n.pages = LEC.n.pages.filter(p => presentes.has(p.file));
   if (LEC.n.pages.length < avant) log("lecteur : " + (avant - LEC.n.pages.length) + " page(s) supprimée(s) depuis la narration, sautée(s)");
+  vitAppliquer();                                                                  // v2.21.0
   const pre = LEC.iFile === 0 && LEC.avant ? precPages(LEC.avant) : [];
   if (pre.length){ LEC.n.pages = pre.concat(LEC.n.pages); log("lecteur : " + LEC.avant + " en tête (" + pre.length + " page(s) de résumé)"); }
   LEC.i = 0; LEC.playing = true;
@@ -7453,7 +7460,18 @@ $("lecVolG").oninput = () => {
   try { localStorage.setItem("manga_vol_g", String(VOL_G)); } catch {}
 };
 $("lecVolG").onchange = () => $("lecVolG").blur();
-$("lecVit").onchange = () => { $("lecAudio").playbackRate = +$("lecVit").value; $("lecVit").blur(); };
+/* v2.21.0 (Quang 24/09 20h08 : « les voix cloud je les mets a 1,10-1,15, les locales a 1 […] que les deux curseurs soient
+   separes ») : UNE vitesse memorisee par sorte de voix -- en ligne / sur le PC -- reprise a l'ouverture de chaque
+   narration selon SA voix. Memoire locale a l'appareil et a l'application (principale et secondaire separees). */
+const vitSorte = () => (LEC.n && LEC.n.tts === "local") ? "local" : "cloud";
+function vitAppliquer(){
+  let v = null; try { v = localStorage.getItem("manga_vit_" + vitSorte()); } catch {}
+  v = v || (vitSorte() === "local" ? "1" : "1.15");
+  if ([...$("lecVit").options].some(o => o.value === v)) $("lecVit").value = v;
+  $("lecAudio").playbackRate = +$("lecVit").value;
+}
+$("lecVit").onchange = () => { $("lecAudio").playbackRate = +$("lecVit").value; $("lecVit").blur();
+  try { localStorage.setItem("manga_vit_" + vitSorte(), $("lecVit").value); } catch {} };
 $("lecSousOn").onchange = () => {
   const p = LEC.n && LEC.n.pages[LEC.i];
   if (p) sousTitre(p);

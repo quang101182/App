@@ -4,7 +4,7 @@
 Principale (8190) : RIEN ne change (jamais floutee ; Echap x2 sans effet).
 Secondaire (8192) : floutee quand elle perd le focus, nette quand elle le reprend ; Echap x1 = rien ; Echap x2 (< 0,6 s)
 = retour a la principale (sur le PC : la fenetre dediee se FERME ; sans fenetre dediee : l'adresse principale) ;
-retour automatique apres l'inactivite (reglee a 3 s pour le banc), SAUF si un son joue.
+(v2.21.0 : plus de retour automatique -- verifie qu il ne se produit plus).
 Fin : la fenetre dediee de Quang est rouverte a sa place.
 """
 import json, os, sys, urllib.request
@@ -64,15 +64,9 @@ try:
         check("PANIQUE Echap x2 : la fenetre dediee se ferme", not fen("etat").get("ouverte"))
         ps.keyboard.press("Escape"); ps.wait_for_timeout(150); ps.keyboard.press("Escape"); ps.wait_for_timeout(4000)
         check("PANIQUE sans fenetre dediee : retour a l'adresse principale", ps.url.startswith(N), ps.url)
-        print("retour automatique (inactivite reglee a 3 s)")
+        print("plus de retour automatique (v2.21.0)")
         pa = ctx.new_page(); pa.goto(P + "#k=" + KEY); pa.wait_for_timeout(1500)
-        pa.evaluate("() => localStorage.setItem('esp_inactif_min', '0.05')"); pa.reload(); pa.wait_for_timeout(1500)
-        r = pa.evaluate(SON)
-        pa.wait_for_timeout(6000)
-        check("un son joue : PAS de retour automatique", pa.url.startswith(P) and r is True, (r, pa.url))
-        pa.evaluate("() => document.getElementById('bancSon').pause()"); pa.wait_for_timeout(5000)
-        check("plus de son : retour automatique a la principale", pa.url.startswith(N), pa.url)
-        pa.goto(P); pa.wait_for_timeout(800); pa.evaluate("() => localStorage.removeItem('esp_inactif_min')")
+        check("aucun minuteur d'inactivite dans la secondaire", pa.evaluate("() => typeof ESP_INACTIF_MIN === 'undefined'"))
         nav.close()
 finally:
     fen("ouvrir")                                          # la fenetre dediee de Quang, a sa place

@@ -185,7 +185,7 @@ def a_narrer(serie):
 
 
 def tag_profil(cfg):
-    return "%s-%s" % (cfg["moteur"], cfg["voix"].lower()) + ("-local" if cfg.get("voix_moteur") == "local" else "")
+    return "%s-%s" % (cfg["moteur"], cfg["voix"].lower().replace("@", "-ton").replace(".", "")) + ("-local" if cfg.get("voix_moteur") == "local" else "")   # S7
 
 
 def tag_retenu(cd, cfg):

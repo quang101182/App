@@ -1105,7 +1105,7 @@ def etape_voix(pages, outdir, voice, rate, stats):
         if not txt:
             continue
         loc = LANGUES_NARR[LANGUE][1]
-        body = {"input": {"text": txt}, "voice": {"languageCode": loc, "name": loc + "-Chirp3-HD-" + voice},
+        body = {"input": {"text": txt}, "voice": {"languageCode": loc, "name": loc + "-Chirp3-HD-" + voice.split("@")[0]},
                 "audioConfig": {"audioEncoding": "MP3", "speakingRate": rate}}
         t = time.time()
         r = post("/api/gcptts/v1/text:synthesize", body, timeout=90)
@@ -1261,7 +1261,8 @@ def main():
     if not chap_dir.startswith(SOURCES + os.sep) or not os.path.isfile(os.path.join(chap_dir, "manifest.json")):
         raise SystemExit("chapitre introuvable sous sources/ : " + a.chapitre)
     # v2.4.0 : la voix locale ne remplace jamais l'en-ligne (etiquette distincte)
-    tag = a.tag or "%s-%s" % (a.engine, a.voice.lower()) + ("" if a.langue == "fr" else "-" + a.langue) + ("-local" if a.tts == "local" else "")
+    # S7 (24/09) : « Voix@1.0 » = voix LOCALE avec son ton (intensite d'expression) ; le tag l'ecrit « voix-ton10 » (sans point : les tags n'en acceptent pas)
+    tag = a.tag or "%s-%s" % (a.engine, a.voice.lower().replace("@", "-ton").replace(".", "")) + ("" if a.langue == "fr" else "-" + a.langue) + ("-local" if a.tts == "local" else "")
     outdir = os.path.join(chap_dir, "narration", tag)
     os.makedirs(outdir, exist_ok=True)
     PROGRESS = os.path.join(outdir, "progress.json")
