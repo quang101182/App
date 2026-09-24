@@ -49,7 +49,9 @@ try:
     json.dump({"nom": "cases", "mo": 400, "pid": faux.pid, "t": time.time()}, open(ffaux, "w"))
     v = api("/manga/vram")
     parts = {x["cle"]: x["mo"] for x in v.get("parts") or []}
-    check("le serveur voit « voix » 1536 Mo et « cases » 400 Mo", parts.get("voix") == 1536 and parts.get("cases") == 400, v.get("parts"))
+    ctx = v.get("contexte_mo", 0)                         # v2.13.1 : chaque moteur PyTorch compte son contexte CUDA estime
+    check("le serveur voit « voix » 1536 Mo et « cases » 400 Mo (+ contexte %d Mo chacun)" % ctx,
+          ctx > 0 and parts.get("voix") == 1536 + ctx and parts.get("cases") == 400 + ctx, v.get("parts"))
     check("gris = utilisé - parts", v["systeme"] == v["used"] - sum(parts.values()), (v["used"], v["systeme"]))
     with sync_playwright() as p:
         b = p.chromium.launch(channel="msedge", headless=True)
@@ -62,15 +64,17 @@ try:
                                    parseFloat(i.style.width)])""")
         coul = [c for c, _w in segs]
         check("version affichée = celle du fichier", pg.inner_text("#verBadge") == "v" + __import__("banc_outils").version_app())
-        check("segments : orange (voix), jaune (cases), GRIS en dernier",
-              coul[:2] == ["rgb(232, 145, 45)", "rgb(250, 204, 21)"] and coul[-1] == "rgb(107, 114, 128)", coul)
+        ORANGE, JAUNE, GRIS = "rgb(232, 145, 45)", "rgb(250, 204, 21)", "rgb(107, 114, 128)"
+        # un VRAI moteur de l'app peut tourner en meme temps (il a son segment) : on compare a ce que dit le serveur
+        check("segments : orange (voix) et jaune (cases) présents, un segment par part, GRIS en dernier",
+              ORANGE in coul and JAUNE in coul and coul[-1] == GRIS and len(coul) == len(pg.evaluate("() => VRAM.parts")) + 1, coul)
         vv = pg.evaluate("() => VRAM")
         attendu = [round(x["mo"] * 100 / vv["total"], 2) for x in vv["parts"]] + [round(vv["systeme"] * 100 / vv["total"], 2)]
         check("largeurs = parts / total", [round(w, 2) for _c, w in segs] == attendu, (segs, attendu))
         pg.click(".vram"); pg.wait_for_timeout(500)
         leg = pg.inner_text("#vramPanel") if pg.is_visible("#vramPanel") else ""
         check("toucher la jauge -> légende : Voix locale, Découpage des cases, Système, Libre",
-              all(k in leg for k in ("Voix locale", "1,5 Go", "Découpage des cases", "Système et autres applis", "Libre")), leg[:200])
+              all(k in leg for k in ("Voix locale", "1,7 Go", "Découpage des cases", "de contexte", "Système et autres applis", "Libre")), leg[:200])
         pg.screenshot(path=os.path.join(HERE, "vram_1280.png"), clip={"x": 640, "y": 0, "width": 640, "height": 330})
         pg.mouse.click(200, 500); pg.wait_for_timeout(400)
         check("toucher ailleurs -> légende fermée", pg.is_hidden("#vramPanel"))
@@ -85,7 +89,7 @@ try:
         time.sleep(6)
         pg.evaluate("() => majVram(true)"); pg.wait_for_timeout(2500)
         coul2 = pg.evaluate("() => [...document.querySelectorAll('#vramBar i')].map(i => getComputedStyle(i).backgroundColor)")
-        check("moteurs arrêtés -> seul le gris reste", coul2 == ["rgb(107, 114, 128)"], coul2)
+        check("moteurs du banc arrêtés -> ni orange ni jaune, gris en dernier", ORANGE not in coul2 and JAUNE not in coul2 and coul2[-1] == GRIS, coul2)
         check("aucune erreur JS", not errs, errs[:2])
         b.close()
 finally:

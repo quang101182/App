@@ -16,11 +16,16 @@ Cache 4 s (l'app interroge souvent). Charge a chaud par le proxy (GET /manga/vra
 """
 import glob, json, os, subprocess, time, urllib.request
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 GPU_DIR = os.path.normpath(os.path.join(HERE, "..", "sources", "_gpu"))
 CREATE = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 FRAIS_S = 15
+# v1.1.0 (Quang 24/09 15h39, « ton processus devrait afficher une couleur ») : un moteur PyTorch ne compte que sa memoire
+# PyTorch ; son CONTEXTE CUDA (mesure 24/09 : +190 Mo pour la detection de la traduction qui en declarait 30, +275 Mo pour
+# un essai de 1,5 Go) tombait dans le gris -> la detection n'etait qu'un filet de 30 Mo. On l'ajoute a chaque moteur
+# PyTorch vivant (pas a Ollama : son size_vram le compte deja). C'est une ESTIMATION, dite comme telle dans la legende.
+CONTEXTE_MO = 230
 # cle -> libelle ; l'ordre est celui des segments dans la barre (les couleurs sont dans l'app)
 MOTEURS = [("comfyui", "ComfyUI (dessin)"), ("voix", "Voix locale"), ("traduction", "Traduction · effacement"),
            ("cases", "Découpage des cases"), ("ollama", "Analyse locale (Ollama)"), ("musique", "Musique (Generate Studio)"),
@@ -46,7 +51,7 @@ def _pid_vivant(pid):
 
 
 def mesurer():
-    r = {"version": VERSION, "total": None, "used": None, "parts": {}, "detail": [], "t": time.time()}
+    r = {"version": VERSION, "contexte_mo": CONTEXTE_MO, "total": None, "used": None, "parts": {}, "detail": [], "t": time.time()}
     try:
         o = subprocess.run(["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
                            capture_output=True, text=True, timeout=8, creationflags=CREATE).stdout
@@ -65,9 +70,9 @@ def mesurer():
         d = (s.get("devices") or [{}])[0]
         mo = max(0, int(d.get("torch_vram_total", 0)) - int(d.get("torch_vram_free", 0))) // (1024 * 1024)
         if mo:
-            parts["comfyui"] = mo
+            parts["comfyui"] = mo + CONTEXTE_MO
     if y and y.get("torch_reserved_mo"):
-        parts["musique"] = int(y["torch_reserved_mo"])
+        parts["musique"] = int(y["torch_reserved_mo"]) + CONTEXTE_MO
     if o:
         mo = sum(int(m.get("size_vram") or 0) for m in o.get("models") or []) // (1024 * 1024)
         if mo:
@@ -87,8 +92,8 @@ def mesurer():
             continue                                   # battement perime ou processus mort : il ne compte plus
         cle = x.get("nom") if x.get("nom") in dict(MOTEURS) else "autre"
         if int(x.get("mo") or 0):
-            parts[cle] = parts.get(cle, 0) + int(x["mo"])
-            r["detail"].append({"cle": cle, "quoi": "PID %s" % x.get("pid"), "mo": int(x["mo"])})
+            parts[cle] = parts.get(cle, 0) + int(x["mo"]) + CONTEXTE_MO
+            r["detail"].append({"cle": cle, "quoi": "PID %s" % x.get("pid"), "mo": int(x["mo"]) + CONTEXTE_MO})
     somme = sum(parts.values())
     if somme > r["used"]:                               # des declarations plus grosses que la carte : on les ramene
         k = r["used"] / float(somme)

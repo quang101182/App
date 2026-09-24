@@ -2211,8 +2211,11 @@ chiffre ; un toucher sur la jauge = légende en Go (+ « Libre »), toucher aill
 barre si le proxy n'a pas la route.
 **Banc** `test_vram_ui.py` 10/10 (vrai processus CUDA 1,5 Go déclaré « voix » + déclaration « cases » ; couleurs, largeurs =
 parts/total, légende, 360 px, retour au seul gris quand tout s'arrête) ; non-régression 19/19, 18/18, 18/18, 320 cas.
-**Limite connue** : chaque moteur a ~0,3 Go de contexte CUDA qu'il ne déclare pas → compté dans le gris (dit dans la
-légende). Les moteurs de Generate Studio autres que la musique (ComfyUI est partagé) apparaissent sous « ComfyUI ».
+~~**Limite connue** : chaque moteur a ~0,3 Go de contexte CUDA qu'il ne déclare pas → compté dans le gris~~ → **v2.13.1
+(Quang 15h39 : « ton processus devrait afficher une couleur »)** : vu en réel, la détection de la traduction ne
+déclarait que 30 Mo (filet invisible) pendant que le gris prenait +190 Mo. Chaque moteur PyTorch compte désormais
+**+230 Mo de contexte estimé** (mesuré 190-275 Mo ; Ollama exclu, son chiffre l'inclut) — dit « estimation » dans la
+légende. Vérifié en direct : traduction 324 Mo, gris revenu à 2,9 Go (son niveau avant le lancement). Les moteurs de Generate Studio autres que la musique (ComfyUI est partagé) apparaissent sous « ComfyUI ».
 
 ## 4-decies. MODÉRATION — CONTINUER, PRÉVENIR, LAISSER QUANG TRAITER *(24/09/2026 13h52, spécification de Quang)*
 
