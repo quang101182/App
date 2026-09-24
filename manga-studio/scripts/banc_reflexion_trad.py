@@ -62,20 +62,32 @@ def noter(juge, lignes, graine):
 
 
 def _noter(juge, lignes, graine):
+    """Chaque bulle porte son NUMERO dans la reponse ({"0": [a, b], ...}) : un juge qui en saute une ne decale plus tout
+    (DeepSeek en sautait 1 sur 18-20, meme au 2e essai) ; seules les bulles manquantes sont redemandees."""
     rnd = random.Random(graine)
     ordre = [rnd.random() < 0.5 for _ in lignes]
-    txt = "\n".join("%d. ORIGINAL: %s\n   A: %s\n   B: %s" % (i, l["texte"], *((l["x"], l["ref"]) if o else (l["ref"], l["x"])))
-                    for i, (l, o) in enumerate(zip(lignes, ordre)))
-    q = ("Tu es relecteur de traductions de manga -> francais. Pour chaque bulle, note A et B : 2 = juste et naturel, "
-         "1 = sens correct mais maladroit, 0 = contresens / oubli / pas du francais. Reponds UNIQUEMENT en JSON "
-         "{\"notes\": [[noteA, noteB], ...]} dans l'ordre, une paire par bulle.\n\n" + txt)
-    out = subprocess.run([sys.executable, LLM, juge, q, "--max-tokens", "16000"], capture_output=True, text=True,
-                         encoding="utf-8", errors="replace", timeout=900).stdout
-    m = re.search(r"\{.*\}", out, re.S)
-    notes = json.loads(m.group(0))["notes"] if m else []
+    notes = {}
+    for essai in range(3):
+        manque = [i for i in range(len(lignes)) if i not in notes]
+        if not manque:
+            break
+        txt = "\n".join("%d. ORIGINAL: %s\n   A: %s\n   B: %s" % (i, lignes[i]["texte"], *((lignes[i]["x"], lignes[i]["ref"]) if ordre[i]
+                        else (lignes[i]["ref"], lignes[i]["x"]))) for i in manque)
+        q = ("Tu es relecteur de traductions de manga -> francais. Pour chaque bulle numerotee, note A et B : 2 = juste et "
+             "naturel, 1 = sens correct mais maladroit, 0 = contresens / oubli / pas du francais. Reponds UNIQUEMENT en JSON "
+             "{\"<numero>\": [noteA, noteB], ...} avec TOUS les numeros ci-dessous.\n\n" + txt)
+        out = subprocess.run([sys.executable, LLM, juge, q, "--max-tokens", "16000"], capture_output=True, text=True,
+                             encoding="utf-8", errors="replace", timeout=900).stdout
+        m = re.search(r"\{.*\}", out, re.S)
+        try:
+            for k, v in json.loads(m.group(0)).items():
+                if str(k).isdigit() and int(k) in manque and isinstance(v, list) and len(v) == 2:
+                    notes[int(k)] = v
+        except Exception:
+            pass
     if len(notes) != len(lignes):
-        raise SystemExit("juge %s : %d notes pour %d bulles -- %s" % (juge, len(notes), len(lignes), out[-300:]))
-    return [(n[1], n[0]) if o else (n[0], n[1]) for n, o in zip(notes, ordre)]          # -> (ref, x)
+        raise SystemExit("juge %s : %d notes pour %d bulles apres 3 essais" % (juge, len(notes), len(lignes)))
+    return [(notes[i][1], notes[i][0]) if ordre[i] else (notes[i][0], notes[i][1]) for i in range(len(lignes))]   # -> (ref, x)
 
 
 def juger(chap, juges):
@@ -101,5 +113,7 @@ def juger(chap, juges):
 
 if __name__ == "__main__":
     act, chap = sys.argv[1], sys.argv[2]
+    if "--niveaux" in sys.argv:                  # ex. --niveaux defaut,medium,low (defaut toujours en premier : la reference)
+        NIVEAUX[:] = sys.argv[sys.argv.index("--niveaux") + 1].split(",")
     juges = (sys.argv[sys.argv.index("--juges") + 1] if "--juges" in sys.argv else "deepseek,kimi").split(",")
     lancer(chap) if act == "lancer" else juger(chap, juges)

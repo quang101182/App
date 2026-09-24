@@ -2210,6 +2210,10 @@ sur la capture du banc, corrigé).
    (« 🔒 1 traitement en cours · étape · reste ~X min ») ; au lancement, si l'autre espace travaille, la même question à
    l'écran que pour le changement de mode (lancer quand même / annuler) ; la jauge VRAM montre les moteurs quel que soit
    l'espace ; pastille des coûts = total des deux, détail des titres seulement dans l'espace qui les possède.
+3-bis. **Tout ce qui tourne est visible** (Quang 16h53 : « je ne vois pas de témoin d'activité ») : aujourd'hui le témoin
+   ne voit que `traduction/<langue>/` et `narration/<tag>/` ; les essais (`--sortie`, `_banc_reflexion/`) et les scripts
+   lancés hors de l'app tournent sans témoin (la jauge VRAM, elle, les voit). À faire avec la vue croisée : un registre
+   commun des traitements vivants (même principe que `sources/_gpu/`), étiquette « 🧪 essai », quel que soit l'espace.
 4. **Chaîne sans modération** (§ 4-decies « contenu adulte ») à bâtir sur les chapitres d'essai de Quang : voix locale,
    traduction locale (Qwen3-30B, 90 % vs 94 %), analyse = le point dur (locale 16/30 vs Gemini 21/30) — mesurer d'abord
    si Gemini refuse vraiment.
@@ -2255,8 +2259,13 @@ noms 4,00 $** · récit 0,15 $.
 « low » 0,101 $ (−40 %) · « minimal » 0,099 $. DeepSeek : défaut 100 % / low 98 % / minimal 98 % ; Kimi : défaut 86 % vs
 low **90 %**, défaut 92 % vs minimal 85 %. Défauts visibles : low « LE **LE** ROI DES BICEPS » (guillemets perdus),
 minimal ajoute des gloses « Fugao (visage renfrogné) ». ⇒ **traduction INCHANGÉE** (défaut Google) ; « low » en réserve
-(`MANGA_GEMINI_REFLEXION=low`). **Déclencheur** : un 2ᵉ banc sur un autre chapitre sans défaut visible, ou Quang qui
-choisit l'économie (~6 $/mois au rythme de septembre).
+(`MANGA_GEMINI_REFLEXION=low`). ~~**Déclencheur** : un 2ᵉ banc sur un autre chapitre sans défaut visible, ou Quang qui
+choisit l'économie (~6 $/mois au rythme de septembre).~~ → **2ᵉ banc FAIT (24/09 17h10), décision CLOSE : traduction =
+réflexion complète.** Black Jack ch.1 (ja→fr, 83 bulles) : défaut 0,224 $ / low 0,131 $ (−41 %) ; DeepSeek 92 % vs 88 %,
+Kimi 87 % vs 89 %, mais les fautes de « low » sont de vraies fautes : mot inventé (« rontonnes »), contresens (« EIDAI,
+BOUGE ! »), anglais dans une bulle (« Sigh... »), vouvoiement perdu, sens changé (« touché à la poitrine »). Règle Quang :
+une erreur même petite est grave. « **medium** » mesuré aussi : −7 % (Black Jack) / 0 % (OPM) en traduction, et PLUS cher
+que le défaut en analyse (0,079 vs 0,070 $) → sans intérêt. **Déclencheur de réouverture** : un nouveau modèle Gemini.
 ⇒ **Décision (Claude, feu vert Quang « fais-le »)** : réflexion **minimale pour le seul repérage des noms** (il ne
 fixe que des noms ; le texte du récit vient de l'analyse, qui garde sa réflexion complète). Confirmé sur la référence :
 **9 et 6 graves** (vs 9 et 9), coût analyse+noms **0,10-0,11 $ au lieu de 0,19-0,20 $ (−48 %)**. Supprimer la réflexion
@@ -2621,6 +2630,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 
 | Date | Événement |
 |---|---|
+| 2026-09-24 (17h15) | 💰 **Chantier « réflexion Gemini » CLOS** : repérage des noms sans réflexion (gardé, −48 % analyse+noms) ; analyse et traduction gardent la réflexion complète (« low » : vraies fautes sur Black Jack — mot inventé, contresens, anglais ; « medium » : pas d'économie). Économie réelle attendue ≈ −4 $/mois en ligne, + la voix (≈ −6 $/mois) quand Quang narre en 🖥. § 4-terdecies. |
 | 2026-09-24 (16h45) | ✅ **v2.14.1 — « ✕ Fermer la fenêtre »** (Quang 16h29) : ferme la fenêtre de capture à distance, et elle seule (Browser.close sur son navigateur dédié, jamais l'Edge de Quang), question à l'écran avant. Banc `test_fenetre_fermer.py` 4/4 (Edge jetable ; la vraie fenêtre n'est pas fermée : ses onglets seraient perdus). La fenêtre secrète aura le sien, indépendant (§ 4-quaterdecies). |
 | 2026-09-24 (16h45) | ✅ **v2.14.0 + manga-fetch 0.6.4 — la fenêtre de capture à la main de Quang** (demandes 16h07-16h22). Mesuré : sous ~576 × 774 px intérieurs, MangaDex n'affiche plus la page (capture « aucune image ») → minimum **700 × 950** avec marge. La place choisie par Quang (~93 % sous l'écran) capture normalement (MangaDex 18/18, webtoon 7/7). La fenêtre s'ouvre à cette place ; « ↘ Ranger sur le côté », « ⤢ Taille sûre », « 📌 Retenir cette place » dans l'étape 1 ; contrôle avant chaque capture (question à l'écran + correction en un bouton). Rien ne bouge sans clic, sauf à l'ouverture. Banc `test_fenetre_ui.py` 10/10 (fenêtre et réglage restaurés). ⇒ Le PARAVENT du compartiment secret (§ 4-quaterdecies, point 6) est remplacé par ce principe (Quang 16h13 : « pas besoin de cacher la fenêtre avec la fenêtre principale »). ~~🟠 Raijin Scans fermé (renvoie vers Discord) : à retirer des sites validés.~~ → ✅ retiré de `sites.json` le 24/09 16h50. |
 | 2026-09-24 (16h10) | ✅ **v2.13.2 — coûts dynamiques** (Quang 16h02 : « j'ai dû rafraîchir l'application pour voir les nouveaux coûts ») : la pastille ne suivait que les tâches vues par l'app → rechargée toutes les 30 s (page visible). Et les outils d'essai (sonde, juges, essai de réflexion) payaient **hors registre** : ils s'y inscrivent (type `essai`, poste « essais et bancs », proxy corrigé), 1,53 $ du jour rattrapés. |
