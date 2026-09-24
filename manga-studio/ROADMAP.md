@@ -2530,7 +2530,7 @@ libre, sinon en ligne) — ou rester comme aujourd'hui. Décision de Quang, écr
 | Étape | État | Décision |
 |---|---|---|
 | 0 Socle | ✅ v2.10.0 (24/09) : menu « Moteur de voix » (chapitre + profil/batch/nuit), état de la carte (`/manga/gpu`), attente d'une carte libre dans `tts_local.py`, journal | — |
-| 1 Voix locale | ✅ codée + testée de bout en bout (24/09) | ✅ **Quang 24/09 13h53 : en OPTION** |
+| 1 Voix locale | ✅ codée + testée de bout en bout (24/09) ; **chapitre complet ÉCOUTÉ et validé par Quang (24/09 17h17 : « c'est bien »)** | ✅ **Quang 24/09 13h53 : en OPTION** |
 | 2 Effacement local | ✅ codé, variante PRUDENTE (24/09) | ✅ **Quang 24/09 13h53 : en OPTION** |
 | 3 Analyse locale | ✅ mesurée (24/09) | ❌ **ne rien faire** — validé Quang 24/09 13h53 |
 | 4 Traduction locale | ⏸ en réserve | ne pas intégrer (mesuré 24/09) |
@@ -2673,6 +2673,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 
 | Date | Événement |
 |---|---|
+| 2026-09-24 (17h20) | 🎧 **Voix locale validée à l'oreille** sur un chapitre complet (OPM ch.1, `gemini-charon-local.mp4`) — Quang : « c'est bien ». Rappel du partage : ☁ = tout en ligne (seul changement du jour : repérage des noms sans réflexion, dans les deux modes) ; 🖥 = voix + effacement sur la carte, le reste en ligne. |
 | 2026-09-24 (17h15) | 💰 **Chantier « réflexion Gemini » CLOS** : repérage des noms sans réflexion (gardé, −48 % analyse+noms) ; analyse et traduction gardent la réflexion complète (« low » : vraies fautes sur Black Jack — mot inventé, contresens, anglais ; « medium » : pas d'économie). Économie réelle attendue ≈ −4 $/mois en ligne, + la voix (≈ −6 $/mois) quand Quang narre en 🖥. § 4-terdecies. |
 | 2026-09-24 (16h45) | ✅ **v2.14.1 — « ✕ Fermer la fenêtre »** (Quang 16h29) : ferme la fenêtre de capture à distance, et elle seule (Browser.close sur son navigateur dédié, jamais l'Edge de Quang), question à l'écran avant. Banc `test_fenetre_fermer.py` 4/4 (Edge jetable ; la vraie fenêtre n'est pas fermée : ses onglets seraient perdus). La fenêtre secrète aura le sien, indépendant (§ 4-quaterdecies). |
 | 2026-09-24 (16h45) | ✅ **v2.14.0 + manga-fetch 0.6.4 — la fenêtre de capture à la main de Quang** (demandes 16h07-16h22). Mesuré : sous ~576 × 774 px intérieurs, MangaDex n'affiche plus la page (capture « aucune image ») → minimum **700 × 950** avec marge. La place choisie par Quang (~93 % sous l'écran) capture normalement (MangaDex 18/18, webtoon 7/7). La fenêtre s'ouvre à cette place ; « ↘ Ranger sur le côté », « ⤢ Taille sûre », « 📌 Retenir cette place » dans l'étape 1 ; contrôle avant chaque capture (question à l'écran + correction en un bouton). Rien ne bouge sans clic, sauf à l'ouverture. Banc `test_fenetre_ui.py` 10/10 (fenêtre et réglage restaurés). ⇒ Le PARAVENT du compartiment secret (§ 4-quaterdecies, point 6) est remplacé par ce principe (Quang 16h13 : « pas besoin de cacher la fenêtre avec la fenêtre principale »). ~~🟠 Raijin Scans fermé (renvoie vers Discord) : à retirer des sites validés.~~ → ✅ retiré de `sites.json` le 24/09 16h50. |
