@@ -2421,6 +2421,8 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   l'adresse (`/claymore/1/`) ne le dit pas → ils restent « Tome 1 » (table MangaDex). Le nombre de pages n'est PAS un signal
   sûr (un chapitre webtoon en fait 141). ⏸ **Question posée à Quang** (déclencheur : sa réponse) : marquer ces 3-là à la
   main comme volumes, ou laisser.
+- **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
+  `MangaStudioInstance2` : `/manga/liens` répond (✕ des sites ACTIF), banc `test_page_principale.py 8192` 55/55.
   1. **En-tête d'une série** (capture Quang : « ça fait un peu fouiller ») : « ← Toutes les séries » d'une couleur
      légèrement différente et mieux placé (surtout sur PC) ; le bouton ↻ de la bibliothèque, isolé tout seul, à
      regrouper ; la rangée de boutons (Masquer, Renommer, Site, Tomes, Pochette, Charger, Vidéos, Profil, Supprimer) à
