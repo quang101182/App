@@ -26,7 +26,7 @@ import argparse, base64, io, json, os, re, subprocess, sys, threading, time, url
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-VERSION = "2.4.0"
+VERSION = "2.5.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -42,12 +42,35 @@ PRIX_TTS_CHAR = 30.0 / 1e6        # Chirp 3 HD, ~30 $/M caracteres (valeur deja 
 ENGINES = {"pixtral": ("/api/mistral", "pixtral-12b-latest"), "kimi": ("/api/kimi", "kimi-k3"),
            # Gemini passe par son API NATIVE : l'interface compatible OpenAI exige la cle dans l'en-tete
            # Authorization, que le gateway occupe deja (HTTP 400 mesure le 21/09).
-           "gemini": ("/api/gemini/v1beta/models/gemini-3.6-flash:generateContent", "gemini-3.6-flash")}
+           "gemini": ("/api/gemini/v1beta/models/gemini-3.6-flash:generateContent", "gemini-3.6-flash"),
+           # v2.5.0 (feuille de route 4-nonies, etape 3 -- ESSAI) : analyse des pages en LOCAL (Ollama, carte graphique, 0 $)
+           "local": ("http://127.0.0.1:11434/api/chat", "qwen3-vl:8b-instruct")}
 
 
 def appel_vision(engine, system, content, max_tokens):
     """Un appel vision, quel que soit le moteur. Rend (texte, usage au format OpenAI)."""
     path, model = ENGINES[engine]
+    if engine == "local":                      # v2.5.0 : API native d'Ollama (contexte elargi, images dans l'ordre)
+        textes, images = [], []
+        for c in content:
+            if c["type"] == "text":
+                textes.append(c["text"])
+            else:
+                images.append(c["image_url"]["url"].split(";base64,", 1)[1])
+                textes.append("[image %d ci-jointe]" % len(images))
+        body = {"model": model, "stream": False, "format": "json", "keep_alive": "15m",
+                "options": {"num_ctx": 32768, "temperature": 0.2, "num_predict": max_tokens},
+                "messages": [{"role": "system", "content": system},
+                             {"role": "user", "content": " ".join(textes), "images": images}]}
+        try:
+            req = urllib.request.Request(path, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+            r = json.load(urllib.request.urlopen(req, timeout=max(600, max_tokens // 10)))
+        except urllib.error.HTTPError as e:    # banc 24/09 : 500 d'Ollama sur 1 lot sur 8 en JSON impose -> sans contrainte
+            log("  analyse locale : HTTP %s, nouvel essai sans format JSON impose" % e.code)
+            body.pop("format", None)
+            req = urllib.request.Request(path, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+            r = json.load(urllib.request.urlopen(req, timeout=max(600, max_tokens // 10)))
+        return r["message"]["content"], {"prompt_tokens": r.get("prompt_eval_count", 0), "completion_tokens": r.get("eval_count", 0)}
     if engine != "gemini":
         body = {"model": model, "max_tokens": max_tokens,
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}]}

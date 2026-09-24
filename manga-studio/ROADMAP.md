@@ -2183,6 +2183,19 @@ Piste non retenue (à rouvrir seulement si besoin) : distinguer texte / onomatop
   de lecture, le ton) ; un 8B risque de raconter à côté. Temps de calcul par page à mesurer.
 - **Décision** : intégrer / réserve / rien.
 
+### Bilan mesuré — étape 3 (analyse locale des pages), 24/09/2026
+`narrate_chapter --engine local` (qwen3-vl 8B instruct via Ollama, 0 $) sur OPM ch.2 (16 p.), récit comparé à celui de
+Gemini **par 2 juges à l'aveugle** : **DeepSeek local 16/30 vs Gemini 21/30 · Kimi local 10/30 vs Gemini 30/30**.
+Lecture : contresens (p.3 : qui menace qui ; p.5 : le « mêmes yeux vides » disparaît), pages vidées de sens (p.8 :
+« les mêmes mots tournent… comme un écho »). ~5 min pour 16 pages ; 1 lot sur 8 → HTTP 500 d'Ollama (repris sans
+JSON imposé). Et ce n'est pas entièrement local : la passe des noms et la latinisation restent en ligne (0,09 $).
+| Avantages | Inconvénients |
+|---|---|
+| −40 % de facture possible (analyse 0,0041 $/page) | Récit **nettement moins fidèle** — c'est le cœur de la vidéo |
+| | Plus lent, carte graphique occupée, erreurs Ollama à gérer |
+**Proposition : ne rien faire** (garder le code `--engine local` en réserve). **Déclencheur de reprise** : un modèle
+vision local ≥ 30 B tenant en 16 Go, ou Gemini/Kimi indisponibles ; banc à rejouer : même chapitre, mêmes 2 juges.
+
 ### Étape 4 — Traduction locale : EN RÉSERVE (déjà mesurée)
 Qwen3-30B-A3B : 90 % vs Gemini 94 % (DeepSeek), 77 % vs 93 % (Kimi), 87 bulles à l'aveugle → **on ne l'intègre pas**.
 **Déclencheur de reprise** : Gemini indisponible durablement, OU prix de la traduction ×3, OU un nouveau modèle local
@@ -2199,7 +2212,7 @@ libre, sinon en ligne) — ou rester comme aujourd'hui. Décision de Quang, écr
 | 0 Socle | ✅ v2.10.0 (24/09) : menu « Moteur de voix » (chapitre + profil/batch/nuit), état de la carte (`/manga/gpu`), attente d'une carte libre dans `tts_local.py`, journal | — |
 | 1 Voix locale | ✅ codée + testée de bout en bout (24/09) — **décision Quang attendue** | voir bilan 1 ci-dessous |
 | 2 Effacement local | ✅ codé, variante PRUDENTE (24/09) — **décision Quang attendue** | voir bilan 2 ci-dessous |
-| 3 Analyse locale | ⬜ à faire | — |
+| 3 Analyse locale | ✅ mesurée (24/09) | ❌ **ne rien faire** (proposé) : récit nettement moins fidèle |
 | 4 Traduction locale | ⏸ en réserve | ne pas intégrer (mesuré 24/09) |
 | 5 Stratégie | ⬜ après 1-3 | — |
 
