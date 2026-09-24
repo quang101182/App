@@ -2188,6 +2188,37 @@ sur la capture du banc, corrigé).
 - ~~⬜ Reste : 4-undecies (cette section)~~ → ✅ v2.12.0 ; bouton « Effacement local » n'est plus nécessaire (l'interrupteur le pilote) ;
   refaire les pages OPM avec l'effacement local si Quang le veut (`--rerendu --effacement local`, 0 $).
 
+## 4-terdecies. COÛTS — LA « RÉFLEXION » DE GEMINI *(24/09/2026 14h40, question Quang sur les 4,43 $ du repérage)*
+
+> Quang : *« si c'est pour économiser la moitié, par exemple 15 $ sur 30 $ d'utilisation actuelle, ça vaut le coup […]
+> si tu penses que ça peut marcher, que tu peux optimiser, fais-le. »*
+
+**Où va l'argent (registre, septembre, 46,36 $)** : narration 30,42 $ · traduction 15,76 $ · karaoké 0,13 $ ·
+« Précédemment » 0,05 $. Dans la narration (postes connus) : voix 5,92 $ · analyse des pages 4,89 $ · **repérage des
+noms 4,00 $** · récit 0,15 $.
+**Trouvé dans le code** : aucun appel Gemini ne bornait sa « réflexion » (facturée au prix de la sortie, 3,75 $/M).
+`narrate_chapter` **2.8.0** : `MANGA_GEMINI_REFLEXION` (analyse + traduction, vide = défaut Google, inchangé) et
+`MANGA_GEMINI_REFLEXION_NOMS` (repérage des noms, **défaut « minimal »**).
+**Mesures** (0 $ de régression possible sans elles) :
+| Banc | Réflexion par défaut | « low » | « minimal » |
+|---|---|---|---|
+| Coût analyse + noms, OPM ch.301 (17 p.) | 0,19-0,20 $ | 0,10-0,11 $ | 0,063 $ |
+| Fidélité vs référence écrite à la main (recalée +2, cf. piège) | 9 et 9 graves | 9 et 8 | 9 et 9 |
+| OPM ch.2, 2 juges À L'AVEUGLE qui VOIENT les pages (Gemini / Kimi K3) | — | défaut préféré 7-2 (Gemini) · **égalité 4-4** (Kimi) · 0 grave | défaut préféré **10-2 et 7-3**, 1 grave chacun |
+| Noms trouvés (4 passages) | 5 noms, **2 oubliés 1 fois sur 2** | les 5 à chaque fois | les 5 à chaque fois |
+⇒ **Décision (Claude, feu vert Quang « fais-le »)** : réflexion **minimale pour le seul repérage des noms** (il ne
+fixe que des noms ; le texte du récit vient de l'analyse, qui garde sa réflexion complète). Confirmé sur la référence :
+**9 et 6 graves** (vs 9 et 9), coût analyse+noms **0,10-0,11 $ au lieu de 0,19-0,20 $ (−48 %)**. Supprimer la réflexion
+de l'ANALYSE est **refusé** (dégrade, 2 juges d'accord) ; « low » sur l'analyse = **en réserve** (0 grave, mais 1 juge
+sur 2 préfère le défaut) — décision de Quang s'il veut −40 % de plus sur l'analyse.
+**Piège payé** : `sources/one-punch-man/ch_301/reference_faits.json` décrit la capture d'ORIGINE (19 p., dont 2 de
+crédits) ; la capture actuelle en a 17 → page n = référence n+2. Sans recalage, tout était « grave » (faux banc).
+La référence de Claymore ch.1 a disparu à la recapture du 23/09.
+**Modération réelle (§ 4-decies, essai demandé)** : 669 pages analysées + 521 traduites depuis le 21/09 → **0 refus
+réel** (les 14 du journal = mes bancs simulés). Sonde `scripts/sonde_moderation.py` sur **Claymore ch.2** (le plus
+violent) : **Gemini 178/178 acceptées** (0,20 $), **Kimi K3 20/20** (échantillon, 0,29 $). ⇒ La violence ne déclenche
+rien ; un refus réel viendra du contenu sexuel (cf. « contenu adulte à venir »), qu'on ne teste pas sans série réelle.
+
 ## 4-duodecies. JAUGE VRAM VENTILÉE PAR MOTEUR *(24/09/2026 15h11, demande Quang — ✅ LIVRÉ v2.13.0, 15h30)*
 
 > Quang : *« je crois qu'on l'a fait sur Generate Studio d'une certaine manière, mais fais-le à ta façon […] des
@@ -2539,6 +2570,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 
 | Date | Événement |
 |---|---|
+| 2026-09-24 (16h05) | 💰 **narrate_chapter 2.8.0 — repérage des noms sans réflexion Gemini** : analyse+noms −48 % (0,19 → 0,10 $ pour 17 p.), fidélité inchangée (référence recalée : 9/6 graves vs 9/9 ; noms plus stables). Réflexion de l'analyse gardée (la couper dégrade : 2 juges à l'aveugle). Modération réelle : Claymore ch.2 = 178/178 Gemini, 20/20 Kimi, 0 refus. § 4-terdecies. |
 | 2026-09-24 (15h30) | ✅ **v2.13.0 — jauge VRAM ventilée par moteur** (demande Quang 15h11). Windows ne ventile pas la VRAM par processus (mesuré) → chaque moteur déclare sa part ; gris = le reste. Banc 10/10. Détail § 4-duodecies. |
 | 2026-09-24 (14h50) | ✅ **v2.12.0 — chantier 4-undecies.** Double estimation ☁ / 🖥 recalculée sur les passages réels (Narrer, Traduire, Tout traiter, confirmations), protection du changement de mode pendant un traitement (question à l'écran, Basculer / Annuler / Interrompre, bilan exact + Reprendre sans repayer l'analyse). Trouvé en route : le lot figeait la voix au lancement pendant que l'effacement suivait l'interrupteur (corrigé, suivi_nuit 2.5.0) ; une tâche coupée s'affichait « ✓ finie ». Bancs 320 cas + 19 + 17 + 18 verts, 5 mutations rouges, non-régression verte. 0 $ dépensé. Détail § 4-undecies. |
 | 2026-09-24 (10h15) | ✅ **v2.9.1 → v2.9.2 + manga-fetch v0.6.2 → v0.6.3.** (1) Étiquette « aussi dans » passée sous le nom (débordait la poubelle hors écran sur smartphone ; banc 22/22 à 380 px, mutation 19/22). (2) **Capture Solo Leveling vol.1 coupée à 39 % EN SILENCE** : plafond fixe de 400 pas (~356 000 px sur 903 000) → plafond proportionnel à la hauteur, et tout arrêt avant la fin = note « ECHEC » ; même traitement pour le mode page par page (500 p. / 12 min). L'app affiche « ⛔ capture incomplète ». (3) **Règle de Quang : une série = un DOSSIER**, visible à 0 chapitre (bibliothèque + menu de capture) ; supprimer un chapitre ≠ supprimer le manga (banc `test_serie_vide_ui` 11/11, mutation 4 KO). ~~🟠 (constaté v2.9.2) Solo Leveling vol.1 est à RECAPTURER~~ → ✅ recapturé 24/09 10h40 avec manga-fetch 0.6.3 : 193 bandes (982 218 px cumulés pour une page de 903 320 px), 755 pages, dernière = page de crédits D&C Webtoon, arrêt « bas atteint », 0 ECHEC (avant : 79 bandes, 39 %). |

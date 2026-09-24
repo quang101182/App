@@ -29,7 +29,7 @@ import moderation as mod             # v2.6.0 : refus reconnus, alertes persista
 import depenses as dep               # v2.6.0 : registre des depenses en ajout seul
 from datetime import datetime
 
-VERSION = "2.7.0"
+VERSION = "2.8.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -50,7 +50,18 @@ ENGINES = {"pixtral": ("/api/mistral", "pixtral-12b-latest"), "kimi": ("/api/kim
            "local": ("http://127.0.0.1:11434/api/chat", "qwen3-vl:8b-instruct")}
 
 
-def appel_vision(engine, system, content, max_tokens):
+# v2.8.0 (24/09) : la REFLEXION de Gemini 3.6 Flash est facturee au prix de la sortie et n'etait jamais bornee.
+# Mesure sur la question des noms (Claymore ch.1, 12 p.) : defaut 6 700 jetons de reflexion = 2/3 du cout ; « minimal » 0.
+# Vide = defaut de Google (inchange) ; sinon minimal | low | medium | high. Vaut pour noms, analyse ET traduction.
+REFLEXION_GEMINI = os.environ.get("MANGA_GEMINI_REFLEXION", "").strip()
+# Le REPERAGE DES NOMS (question courte : quels prenons, qui les porte) passe en « minimal » par defaut : banc du 24/09,
+# OPM ch.301, 4 passages -> les MEMES 5 noms a chaque fois (la reflexion par defaut en oubliait 2 une fois sur deux),
+# 0,03 $ au lieu de 0,12-0,13 $. L'analyse des pages (d'ou vient le recit) garde sa reflexion : la couper la degrade
+# (2 juges a l'aveugle voyant les pages, OPM ch.2 : 10-2 et 7-3 pour la reflexion complete). Vide = defaut de Google.
+REFLEXION_NOMS = os.environ.get("MANGA_GEMINI_REFLEXION_NOMS", "minimal").strip()
+
+
+def appel_vision(engine, system, content, max_tokens, reflexion=None):
     """Un appel vision, quel que soit le moteur. Rend (texte, usage au format OpenAI)."""
     path, model = ENGINES[engine]
     if engine == "local":                      # v2.5.0 : API native d'Ollama (contexte elargi, images dans l'ordre)
@@ -99,7 +110,8 @@ def appel_vision(engine, system, content, max_tokens):
             parts.append({"inline_data": {"mime_type": mime, "data": data}})
     r = post(path, {"systemInstruction": {"parts": [{"text": system}]},
                     "contents": [{"role": "user", "parts": parts}],
-                    "generationConfig": {"maxOutputTokens": max_tokens, "responseMimeType": "application/json"}})
+                    "generationConfig": dict({"maxOutputTokens": max_tokens, "responseMimeType": "application/json"},
+                                             **({"thinkingConfig": {"thinkingLevel": niv}} if (niv := REFLEXION_GEMINI if reflexion is None else reflexion) else {}))})
     motif = mod.refus_gemini(r)                    # v2.6.0 : avant, lu comme « JSON illisible » -> 3 essais PAYES
     if motif:
         raise mod.Refus("gemini", motif)
@@ -783,7 +795,7 @@ def _question_noms(chap_dir, p, stats):
     content = [{"type": "text", "text": Q_NOMS_V3 if NOMS_VERSION == "v3" else Q_NOMS},
                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + img}}]
     try:
-        txt, u = appel_vision("gemini", "Reponds uniquement en JSON.", content, 4000)
+        txt, u = appel_vision("gemini", "Reponds uniquement en JSON.", content, 4000, reflexion=REFLEXION_NOMS)
     except mod.Refus as e:                       # v2.6.0 : page refusee -> aucun nom tire d'elle, on continue
         journal("moderation", etape="noms", page=p.get("num"), motif=e.motif[:200])
         return []
