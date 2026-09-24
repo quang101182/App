@@ -2300,6 +2300,30 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   Retenir / **Fermer à distance**), jamais d'ouverture sur le PC quand le déclenchement vient du téléphone.
   ⛔ **Exigence Quang (24/09 17h28)** : à sa 1ʳᵉ ouverture, **STOP** — Quang place lui-même la fenêtre, de façon
   discrète, et la retient ; Claude ne s'en sert (capture, banc) **qu'après**.
+  ✅ **FAIT 24/09 18h55 — v2.16.0 → v2.17.0** (vocabulaire Quang 18h41 : **application principale** / **application
+  secondaire**). (1) Fenêtre de CAPTURE de la secondaire : CDP **9224**, profil `manga-fetch-edge-2`, journaux et place
+  `%LOCALAPPDATA%/manga-fetch-2/` (manga-fetch 0.6.5 + `cdp_mini` lisent `MANGA_CAPTURE_PORT/_DONNEES/_PROFIL`) ; placée
+  par Quang puis retenue (les DEUX fenêtres de capture, chacune dans son fichier). Banc `test_fenetre_espace.py` 10/10.
+  (2) Fenêtre de l'APP secondaire sur le PC : `fenetre_espace.py` + route `/manga/espace_fenetre` (CDP 9225, profil
+  `EdgeApps/MangaStudio-2`) ; l'appui long l'ouvre depuis la principale et la ferme depuis la secondaire ; carte « Cette
+  fenêtre » (Ranger / Retenir / Fermer) seulement dans la secondaire ; **jamais d'ouverture pour une demande relayée**
+  (tunnel / Caddy), fermer à distance oui. (3) 🔴 **Constaté** : Edge connectait d'office chaque nouveau profil au compte
+  Microsoft avec synchro COMPLÈTE (historique vers tous les appareils) → profils de la secondaire recréés sans connexion
+  ni synchro (préférences forcées + `--disable-sync`, manga-fetch 0.6.6) ; vérifié dans Edge : « Pas en cours de
+  synchronisation ». 🟠 **Le profil de capture de la PRINCIPALE synchronise toujours** (état antérieur, non touché —
+  question posée à Quang). (4) Liste de sites validés PROPRE à la secondaire, hors dépôt (`MANGA_SITES_FILE` →
+  `prive/_sites.json`) : 2 sites testés (capture + enchaînement). (5) Captures réelles dans la secondaire : un webtoon
+  en longues bandes (20 → 141 pages, 2/2) et un site `chapter-N` (ch.1 → ch.2 enchaînés) ; la principale n'a pas bougé.
+  Deux défauts de manga-fetch trouvés et corrigés (0.6.7, profitent aux deux applications) : un bloc intérieur plus
+  COURT que la page était pris pour le lecteur ; la marque `data-mf-defile` d'une capture précédente restait dans
+  l'onglet et faisait défiler le mauvais élément. (6) **Indicateur d'enchaînement** (Quang 18h48, les deux
+  applications) : l'onglet choisi dit « 🔗 enchaînement possible : <type> » ou « ⛔ un chapitre à la fois », et dans ce
+  cas le sélecteur « Chapitres » est fermé sur « ce chapitre seul ». Même règle côté app (`capEnchainement`) et outil
+  (`enchainement_possible`, manga-fetch 0.6.8) : `test_enchainement.py` 14/14 (mutation rouge),
+  `test_enchainement_ui.py` 12/12 sur 8190 ET 8192 (vrais onglets, 1280 + 360 px).
+  ℹ Limites de capture (question Quang 18h49, lu dans le code) : pas / tours / chrono sont remis à zéro À CHAQUE
+  chapitre ; limite PAR LANCEMENT = 50 chapitres (`suite` ≤ 50, `jusqua` ≤ 50 passages).
+  ⬜ Proposé, non fait : enchaîner sur les sites à adresse à identifiant interne (suivre le lien « chapitre suivant »).
 - **Après S4 (Quang, 24/09 17h28)** : l'espace secret devra aussi capturer du **manga classique** (pages), pas
   seulement du webtoon. Le site d'essai (webtoon) fourni par Quang est noté **hors dépôt** (dépôt public) :
   `C:/Users/quang/Documents/MangaStudio-donnees/prive/_NOTES-essai.txt`.
@@ -2720,6 +2744,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 |---|---|
 | 2026-09-24 (17h20) | 🎧 **Voix locale validée à l'oreille** sur un chapitre complet (OPM ch.1, `gemini-charon-local.mp4`) — Quang : « c'est bien ». Rappel du partage : ☁ = tout en ligne (seul changement du jour : repérage des noms sans réflexion, dans les deux modes) ; 🖥 = voix + effacement sur la carte, le reste en ligne. |
 | 2026-09-24 (17h15) | 💰 **Chantier « réflexion Gemini » CLOS** : repérage des noms sans réflexion (gardé, −48 % analyse+noms) ; analyse et traduction gardent la réflexion complète (« low » : vraies fautes sur Black Jack — mot inventé, contresens, anglais ; « medium » : pas d'économie). Économie réelle attendue ≈ −4 $/mois en ligne, + la voix (≈ −6 $/mois) quand Quang narre en 🖥. § 4-terdecies. |
+| 2026-09-24 (18h55) | ✅ **v2.16.0 → v2.17.0 — compartiment secret S3 + indicateur d'enchaînement** : fenêtres de capture et d'app propres à l'application secondaire (profils sans compte ni synchro, placées par Quang), sa liste de sites hors dépôt, captures réelles OK ; manga-fetch 0.6.5 → 0.6.8 (2 défauts de défilement corrigés, indicateur « ce site enchaîne-t-il ? » dans les deux applications). Bancs 10/10, 14/14, 12/12 ×2. Prochaine étape : S4. |
 | 2026-09-24 (17h58) | ✅ **v2.15.0 — compartiment secret S2** : l'app sait dans quel espace elle est (`/manga/espace`), appui long 1,2 s sur 📚 = l'autre espace (PC ; téléphone à S4), titre/icône identiques, marque discrète seulement dedans ; l'espace privé a aussi sa base, sa galerie et la même exigence de clé que 8190. `test_espace_ui.py` 29/29. |
 | 2026-09-24 (17h45) | ✅ **Compartiment secret S1 — la 2ᵉ instance** (`espace_prive.py`, port 8192, données sur C: hors dépôt, tâche `MangaStudioInstance2`). Ce qui est créé d'un côté n'apparaît pas de l'autre, dans les deux sens (`test_espace_prive.py` 15/15, mutation rouge sans écriture). Prochaine étape : S2 (l'app sait dans quel espace elle est + appui long sur 📚). |
 | 2026-09-24 (17h35) | ✅ **Compartiment secret S0 — racine des données réglable** (`MANGA_SOURCES_DIR`, 18 scripts + manga-fetch + 1 ligne du proxy). Sans la variable, rien ne change (6 bancs verts + plan de lot identique) ; avec, tout atterrit dans le dossier donné et nulle part ailleurs (`test_racine.py` 47/47, mutation rouge). Prochaine étape : S1 (2ᵉ instance sur **8192**). |

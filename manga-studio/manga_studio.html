@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.16.0</title>
+<title>Manga Studio v2.17.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -810,7 +810,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.16.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.17.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button>
       <button class="mode-pill" id="hdrMode" title="Où tournent la voix et l’effacement du texte : en ligne (payant) ou sur ta carte graphique (0 $). Touche pour changer.">☁ En ligne</button></div>
     <div class="engs">
@@ -1251,8 +1251,10 @@ body.epure .aide{display:none}
         <input id="capSuite" type="number" min="1" max="50" step="1" inputmode="numeric" value="1" style="width:70px" hidden>
       </div>
       <label class="lec-chk" id="capEntiersL"><input type="checkbox" id="capEntiers" checked> ignorer les chapitres intermédiaires (298.5…)</label>
-      <p class="muted" style="margin:2px 0 0;font-size:12px">Enchaînement vérifié : MangaDex (même langue) et MANGA Plus
-        (chapitres gratuits). La série s'arrête, en le disant, si un chapitre manque. Un chapitre déjà présent est gardé tel quel.</p>
+      <!-- v2.17.0 (Quang 24/09 18h48) : le SITE de l'onglet choisi dit si l'on peut enchainer ; sinon, les champs se ferment -->
+      <p class="muted" id="capEnch" style="margin:2px 0 0;font-size:12px"></p>
+      <p class="muted" style="margin:2px 0 0;font-size:12px">La série s'arrête, en le disant, si un chapitre manque
+        (50 chapitres au plus par lancement). Un chapitre déjà présent est gardé tel quel.</p>
     </div></div>
     <div class="cap-etape"><div class="cap-num">4</div><div class="cap-corps">
       <div class="row"><button class="btn pri" id="btnCapturer">📥 Capturer</button><span class="muted" id="capEtat"></span></div>
@@ -1708,7 +1710,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.16.0";
+const VERSION = "2.17.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -7835,6 +7837,7 @@ async function refreshCapTabs(){
   const k = CAP_TABS.findIndex(t => t.url === avant);
   if (k >= 0) $("capTab").value = String(k);
   if (!$("capSugg").hidden) capSuggRendre();                     // v2.7.2 : plus de <datalist> (toutes les series, en vrac)
+  capEnchMaj();                                                  // v2.17.0
 }
 /* v2.7.2 : CHOIX DU NOM DU MANGA (Quang, 23/09 19h20 : « la liste va s'allonger […] deux categories : ce qui est
    masque et ce qui ne l'est pas […] un bouton pour les afficher »). Remplace le <datalist> natif, qui melangeait tout,
@@ -7963,6 +7966,28 @@ async function suivreCapture(){
 function capSerieMaj(){ const m = $("capSerieMode").value; $("capJusqua").hidden = m !== "jusqua"; $("capSuite").hidden = m !== "suite";
   $("capEntiersL").hidden = m === "seul"; }
 $("capSerieMode").onchange = capSerieMaj;
+/* v2.17.0 (Quang 24/09 18h48 : « je ne me fais pas surprendre en remplissant ces champs lorsque cela ne fonctionne pas »).
+   MIROIR EXACT des formats que manga_fetch.chapitre_suivant() sait suivre (enchainement_possible() cote Python) ;
+   scripts/test_enchainement.py verifie que les deux repondent pareil sur une liste d'adresses. */
+function capEnchainement(url){
+  url = url || "";
+  if (/mangadex\.org\/chapter\/[0-9a-f-]{36}/.test(url)) return [true, "MangaDex (même langue)"];
+  if (/mangaplus\.shueisha\.co\.jp\/viewer\//.test(url)) return [true, "MANGA Plus (chapitres gratuits)"];
+  if (/webtoons\.com\//.test(url) && /title_no=/.test(url)) return [true, "WEBTOON"];
+  if (/^https?:\/\/[^?#]+?\/vol-\d+(?:-(?:chapitre|chapter|ch)-\d+(?:-\d+)?)?\/?(?:[?#].*)?$/i.test(url)) return [true, "volumes « vol-N »"];
+  if (/^https?:\/\/[^?#]+?\/(?:chapter|chapitre|ch)[-_]\d+(?:[.-]\d+)?\/?(?:[?#].*)?$/i.test(url)) return [true, "adresses « chapter-N »"];
+  return [false, ""];
+}
+function capEnchMaj(){
+  const t = CAP_TABS[+$("capTab").value];
+  if (!t){ $("capEnch").textContent = ""; $("capSerieMode").disabled = false; return; }
+  const [ok, quoi] = capEnchainement(t.url);
+  $("capSerieMode").disabled = !ok; $("capJusqua").disabled = !ok; $("capSuite").disabled = !ok;
+  if (!ok){ $("capSerieMode").value = "seul"; capSerieMaj(); }
+  $("capEnch").textContent = ok ? "🔗 Enchaînement possible sur ce site : " + quoi + "."
+                               : "⛔ Ce site ne permet pas d'enchaîner : un chapitre à la fois.";
+}
+$("capTab").addEventListener("change", capEnchMaj);
 $("btnCapturer").onclick = async () => {
   const t = CAP_TABS[+$("capTab").value];
   const titre = $("capTitre").value.trim(), chap = $("capChap").value.trim().replace(",", ".");
@@ -7972,7 +7997,7 @@ $("btnCapturer").onclick = async () => {
   const deja = CHAPS.find(c => slugTitre(c.title) === slugTitre(titre) && String(c.chapter) === chap);
   // v2.3.2 : plusieurs chapitres selon le SELECTEUR -- « jusqu'au ch. Y » (defaut, vide = ce chapitre seul),
   // « + N chapitres suivants », ou « ce chapitre seul »
-  const modeSerie = $("capSerieMode").value;
+  const modeSerie = capEnchainement(t.url)[0] ? $("capSerieMode").value : "seul";   // v2.17.0 : jamais de serie la ou le site ne suit pas
   const suite = modeSerie === "suite" ? Math.max(0, Math.min(50, Math.floor(+$("capSuite").value || 0))) : 0;
   const jusqua = modeSerie === "jusqua" ? $("capJusqua").value.trim().replace(",", ".") : "";
   if (jusqua && (!/^\d{1,5}(\.\d{1,2})?$/.test(jusqua) || +jusqua <= +chap)){

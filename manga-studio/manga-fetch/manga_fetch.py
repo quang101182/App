@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.6.6"
+VERSION = "0.6.8"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -323,6 +323,21 @@ def vol_suivant(slugs, courant_slug: str, jusqua=None, entiers: bool = False):
             return None, None, "le chapitre suivant (%s) dépasse la borne demandée (%s)" % (num, _format_num(jusqua))
         return num, s, None
     return None, None, "aucun volume ni chapitre après « %s » sur ce site" % courant_slug
+
+
+def enchainement_possible(url: str):
+    """v0.6.8 (24/09) : ce site permet-il d'enchainer les chapitres ? Memes formats que chapitre_suivant() ci-dessous,
+    et meme reponse que capEnchainement() dans manga_studio.html (banc scripts/test_enchainement.py).
+    « chapter-N » = possible si la page liste les autres chapitres (verifie au moment du passage)."""
+    url = url or ""
+    if re.search(r"mangadex\.org/chapter/[0-9a-f-]{36}", url): return True, "MangaDex (même langue)"
+    if "mangaplus.shueisha.co.jp/viewer/" in url: return True, "MANGA Plus (chapitres gratuits)"
+    if "webtoons.com/" in url and "title_no=" in url: return True, "WEBTOON"
+    if re.match(r"(https?://[^?#]+?/)(vol-\d+(?:-(?:chapitre|chapter|ch)-\d+(?:-\d+)?)?)/?(?:[?#].*)?$", url, re.I):
+        return True, "volumes « vol-N »"
+    if re.match(r"(https?://[^?#]+?/)(chapter|chapitre|ch)[-_](\d+(?:[.-]\d+)?)/?(?:[?#].*)?$", url, re.I):
+        return True, "adresses « chapter-N »"
+    return False, ""
 
 
 def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: bool = False):
@@ -956,6 +971,9 @@ def capture(args) -> int:
             # = écran → pris pour « page par page » → 1 seule page capturée, déclarée réussie).
             # On cherche donc aussi le plus grand bloc défilant ; on le marque pour le faire défiler.
             bloc = page.evaluate("""() => {
+                // v0.6.7 : effacer la marque d'une capture PRECEDENTE sur le meme onglet (sinon le defilement vise
+                // encore l'ancien bloc : 2e essai du 24/09, bloc refuse mais toujours marque -> page immobile).
+                document.querySelectorAll('[data-mf-defile]').forEach(e => e.removeAttribute('data-mf-defile'));
                 let best = null, bh = 0;
                 for (const el of document.querySelectorAll('*')) {
                     const oy = getComputedStyle(el).overflowY;
@@ -972,6 +990,10 @@ def capture(args) -> int:
                     if (bouge) { bh = el.scrollHeight; best = el; }
                 }
                 if (!best || best.scrollHeight <= best.clientHeight * 2.5) return null;
+                // v0.6.7 (24/09) : un bloc plus COURT que la page n'est pas le lecteur (panneau, commentaires) : c'est
+                // la fenetre qui defile (webtoon de 232 747 px, bloc de 3 036 px -> 1 page capturee puis arret).
+                // MANGA Plus reste couvert : sa page a la hauteur de l'ecran, son bloc tout le chapitre.
+                if (best.scrollHeight < document.documentElement.scrollHeight) return null;
                 best.setAttribute('data-mf-defile', '1');
                 return [best.scrollHeight, best.clientHeight];
             }""")
