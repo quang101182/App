@@ -2095,6 +2095,35 @@ avec Generate Studio (relance UNIQUEMENT par `relance-proxy.ps1`, `.bak` avant p
 
 **Limites ACCEPTÉES (décision Claude, 24/09)** : 10 répliques ne sont plus posées — ch.3 p.7 la légende « 我只是想成為世界最強的男人… » (zone mal détectée, 32 % de la page) et 9 **grands cris calligraphiés** (ch.4 p.1/p.17, ch.6 p.8/p.23, ch.7 p.5, ch.8 p.17, ch.10 p.12/p.29) : ils restent en chinois, comme les onomatopées dessinées, au lieu d'un rectangle blanc qui mangeait la case. La narration porte le sens. 🟠 (constaté v1.97.0) Les traductions Noritaka ch.1 (v1.91) et Black Jack ch.1-2 (v1.91/1.92) sont **antérieures** aux corrections v1.96-v1.97 (Noritaka p.54 et Black Jack ch.2 p.2 sont des pages blanches) : à refaire le jour où ces séries servent (`refaire_traductions.py <serie> <ch> --rerendu --version-min 1.97.0`).
 
+## 4-undecies. DOUBLE ESTIMATION « ☁ EN LIGNE / 🖥 SUR MON PC » PARTOUT *(24/09/2026 14h13, demande Quang — À FAIRE)*
+
+> Quang : *« dans les estimations de coût, au-delà du switch PC ou cloud, partout tu m'affiches les deux estimations de
+> coût avant de générer quoi que ce soit […] ainsi que le temps de traitement […] dynamique selon le switch […] deux
+> visus avec les mêmes couleurs, partout où je suis, même dans les chapitres ou dans les batchs […] j'ai juste à appuyer
+> sur le bouton en haut à droite pour switcher. »*
+
+### Spécification
+- Avant CHAQUE lancement (narrer un chapitre, traduire, lot/batch du profil, vidéos) : **deux cartouches côte à côte**,
+  aux couleurs de la pastille : **bleu ☁ En ligne** (coût $ + durée) et **orange 🖥 Sur mon PC** (coût $ + durée +
+  « carte graphique occupée ~X min »). Le cartouche du **mode actif** est plein/encadré, l'autre estompé ; un clic sur la
+  pastille en haut bascule, les cartouches suivent **immédiatement**.
+- Chiffres = mesures réelles, pas des devinettes : coût par page mesuré (§ 4-nonies : analyse 0,0041 $, récit 0,0001 $,
+  voix 0,0058 $ ; traduction ~0,006-0,012 $/page) ; voix locale ~1× temps réel (≈ 14 s d'audio par page OPM) ;
+  effacement local 1-3 s/page. Idéalement recalculés depuis le REGISTRE des dépenses (sources/_depenses.jsonl) et les
+  durées du journal, pour suivre la réalité.
+- Point de départ dans le code : `lotEstimer()` (estimation du lot, profil) — l'étendre plutôt que dupliquer.
+
+### État du chantier moteurs locaux / modération à la coupure (24/09 14h15) — « fait » = `git log`
+- ✅ v2.10.0 voix locale · v2.11.0 alertes de modération (bouton d'activité, onglet « À traiter ») + interrupteur global
+  (`scripts/reglages.py`, `sources/_reglages.json`) · traduire 1.99.0 (effacement local, refus → VO + alerte) · narrate 2.7.0
+  (refus → page mise de côté, `--reprendre-moderation`) · video_chapitre 1.98.0 (alerte ouverte → code 4, « attente
+  modération ») · registre des dépenses `sources/_depenses.jsonl` (compteur réparé : mois ≈ 46,5 $).
+- Bancs : test_moderation 21/21 · test_alertes_ui 18/18 · non-régression verte (série vide, musiques, capture, profil musique).
+- 🟠 Non testé en réel : un VRAI refus de Gemini (bancs = refus simulés) → essai prévu sur les pages les plus dures de
+  Claymore ; le traitement « Autre moteur / Pages voisines / Local » depuis l'app (route testée seulement pour « Ignorer »).
+- ⬜ Reste : 4-undecies (cette section) ; bouton « Effacement local » n'est plus nécessaire (l'interrupteur le pilote) ;
+  refaire les pages OPM avec l'effacement local si Quang le veut (`--rerendu --effacement local`, 0 $).
+
 ## 4-decies. MODÉRATION — CONTINUER, PRÉVENIR, LAISSER QUANG TRAITER *(24/09/2026 13h52, spécification de Quang)*
 
 > Quang : *« un système qui permet de continuer même si des pages ou autre chose sont refusées par modération […] une
@@ -2117,9 +2146,12 @@ Aucun refus n'est reconnu : Gemini « SAFETY » = réponse vide → lue comme «
    narration, marquée `moderation`), le chapitre continue. En traduction : la page refusée garde sa VO, le chapitre continue.
 3. **Registre persistant** `sources/_alertes.json` : une entrée par page ou chapitre touché (série, chapitre, page(s),
    étape, moteur, motif, date, solution proposée, état : ouverte / traitée / ignorée). Survit aux redémarrages.
-4. **Fenêtre d'alertes** dans l'app : une pastille repliée, colorée, qui **clignote doucement** tant qu'il reste des
-   alertes ouvertes ; ouverte = la liste par chapitre, motif en clair (« refusé par la modération de Gemini »), solution
-   proposée, cases à cocher, **« Traiter la sélection »** ; historique conservé (traitées / ignorées).
+4. **Fenêtre d'alertes = DANS le bouton d'activité existant** (Quang 24/09 13h54 : *« le bouton du haut qui donne les
+   événements d'activité […] je clique dedans, ça ouvre comme aujourd'hui, puis j'ai encore un autre menu qui me permet
+   de voir tout ce qui n'a pas marché »*) : le bouton garde son rôle ; s'il y a des alertes ouvertes, il porte en plus un
+   **badge orange « ⚠ N » qui pulse doucement** (seul ce badge clignote : l'activité normale ne clignote pas). Dans le
+   panneau, un 2e onglet **« ⚠ À traiter (N) »** : liste par chapitre, motif en clair (« refusé par la modération de
+   Gemini »), solution proposée, cases à cocher, **« Traiter la sélection »** ; historique (traitées / ignorées).
 5. **Solutions proposées** (Quang choisit, rien d'automatique) : réessayer avec l'autre moteur en ligne (Kimi ↔ Gemini) ;
    narrer la page par DeepSeek à partir des pages voisines (sans image) ; relire en LOCAL (carte graphique, **seulement
    sur clic**, avec la garde « carte libre ») ; ignorer.
