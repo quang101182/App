@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -804,6 +804,14 @@ def capture(args) -> int:
                     return 0
                 print("Remplacement demandé.")
             os.makedirs(dest, exist_ok=True)
+            # v0.6.1 (24/09, demande Quang) : le titre TAPE est connu des le depart -- le manifeste (qui le porte)
+            # n'est ecrit qu'en fin de capture, et l'app affichait le nom du dossier (« solo-leveling ») d'ici la.
+            # Fichier a part : le manifeste signifie « chapitre capture » (anti-doublon ci-dessus).
+            try:
+                with open(os.path.join(os.path.dirname(dest), "titre.json"), "w", encoding="utf-8") as f:
+                    json.dump({"titre": args.title}, f, ensure_ascii=False)
+            except OSError:
+                pass
             notes: list = []
             if note_depart:
                 notes.append(note_depart)
