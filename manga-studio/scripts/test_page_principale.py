@@ -38,9 +38,12 @@ with sync_playwright() as p:
         avant = pg.evaluate("() => [localStorage.getItem('manga_onglet'), localStorage.getItem('manga_lot_vu'), localStorage.getItem('manga_serie')]")
         pg.evaluate("() => { localStorage.setItem('manga_onglet','tChap'); localStorage.removeItem('manga_serie'); }")
         pg.reload(); pg.wait_for_timeout(3500)
-        check("version v2.30.0", pg.inner_text("#verBadge").strip() == "v2.30.0")
+        check("version = VERSION du code", pg.inner_text("#verBadge").strip() == "v" + pg.evaluate("() => VERSION"))
         for sel, nom in (("#hdrMode", "mode ☁/🖥"), ("#hdrAct", "activite"), ("#engComfy", "Local"), (".vram", "VRAM"), ("#hdrPlus", "⋯")):
             check(nom + " visible en permanence", vis(pg, sel))
+        if w < 400:                                           # Quang 22h52 : poinçon de la caméra en haut au centre
+            mp_, pl_ = (pg.eval_on_selector(x, "e => { const r = e.getBoundingClientRect(); return [r.left, r.right, r.top]; }") for x in ("#hdrMode", "#hdrPlus"))
+            check("tel : pastille du mode calée à droite, contre ⋯ (loin du poinçon)", mp_[0] > w / 2 + 20 and pl_[0] - mp_[1] < 16 and abs(mp_[2] - pl_[2]) < 12, (mp_, pl_))
         check("couts et ℹ️ caches (dans ⋯)", not vis(pg, "#hdrCost") and not vis(pg, "#btnAide"))
         hh = pg.eval_on_selector("header", "e => e.getBoundingClientRect().height")
         check("en-tete compact (PC 1 ligne < 56 px ; tel 2 lignes < 96 px)", hh < (56 if w > 400 else 96), round(hh))
