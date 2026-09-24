@@ -2413,6 +2413,14 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   `test_bibliotheque_ui` 76/92 = IDENTIQUE à v2.28 (16 échecs de DONNÉES périmées : « demo-frieren », OPM = 27 ch.).
 - ~~⬜ **PROCHAINE SESSION — demandes Quang 22h11-22h14, dans cet ordre**~~ → 1 ✅ v2.29.0 · 2 ✅ v2.37.0 (voir plus bas)
   · 3 ✅ v2.30.0 · 4 voir plus bas :
+- **24/09 23h30 — v2.37.0 : TOMES AUTOMATIQUES** : un chapitre capturé depuis une page de VOLUME (l'adresse le dit :
+  `volume-4`, `vol_3`, `tome-07`, `tomo 5`) EST le tome N, dès sa capture, sans relance de serveur (`tomeDuLien`, côté app,
+  principale et secondaire). Prime sur la table MangaDex (qui ne connaît que les vrais chapitres). Claymore : ch. 4/5/6
+  AnimoFlix → Tome 4/5/6, plus de « Hors tome ». Banc `test_tomes_volume.py` 6/6 (12 adresses dont 6 pièges), mutation
+  rouge. 🟠 (constaté v2.37.0) **Raijin-scans ch. 1-3 de Claymore** : 180 pages chacun = sans doute les VOLUMES 1-3, mais
+  l'adresse (`/claymore/1/`) ne le dit pas → ils restent « Tome 1 » (table MangaDex). Le nombre de pages n'est PAS un signal
+  sûr (un chapitre webtoon en fait 141). ⏸ **Question posée à Quang** (déclencheur : sa réponse) : marquer ces 3-là à la
+  main comme volumes, ou laisser.
   1. **En-tête d'une série** (capture Quang : « ça fait un peu fouiller ») : « ← Toutes les séries » d'une couleur
      légèrement différente et mieux placé (surtout sur PC) ; le bouton ↻ de la bibliothèque, isolé tout seul, à
      regrouper ; la rangée de boutons (Masquer, Renommer, Site, Tomes, Pochette, Charger, Vidéos, Profil, Supprimer) à
