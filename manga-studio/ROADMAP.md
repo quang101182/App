@@ -2095,6 +2095,87 @@ avec Generate Studio (relance UNIQUEMENT par `relance-proxy.ps1`, `.bak` avant p
 
 **Limites ACCEPTÉES (décision Claude, 24/09)** : 10 répliques ne sont plus posées — ch.3 p.7 la légende « 我只是想成為世界最強的男人… » (zone mal détectée, 32 % de la page) et 9 **grands cris calligraphiés** (ch.4 p.1/p.17, ch.6 p.8/p.23, ch.7 p.5, ch.8 p.17, ch.10 p.12/p.29) : ils restent en chinois, comme les onomatopées dessinées, au lieu d'un rectangle blanc qui mangeait la case. La narration porte le sens. 🟠 (constaté v1.97.0) Les traductions Noritaka ch.1 (v1.91) et Black Jack ch.1-2 (v1.91/1.92) sont **antérieures** aux corrections v1.96-v1.97 (Noritaka p.54 et Black Jack ch.2 p.2 sont des pages blanches) : à refaire le jour où ces séries servent (`refaire_traductions.py <serie> <ch> --rerendu --version-min 1.97.0`).
 
+## 4-nonies. FEUILLE DE ROUTE — MOTEURS LOCAUX EN OPTION *(24/09/2026 12h50, demandée par Quang : « trace une feuille de route bien détaillée, puis on travaille étape par étape »)*
+
+### Les règles du chantier (décision Quang, non négociables)
+1. **Rien n'est débranché.** Gemini / Kimi restent le fonctionnement par défaut. Le local est une **OPTION** que Quang
+   choisit « selon ce que je fais sur mon PC » (carte graphique libre ou non).
+2. **Chaque étape se termine par un tableau AVANTAGES / INCONVÉNIENTS MESURÉS** (coût, temps, qualité, confort,
+   risques) **et une décision écrite** : intégrer / garder en réserve / **ne rien faire**. « Ne rien faire » est un
+   résultat valable, pas un échec.
+3. **Mesurer avant de croire** : bancs chiffrés, juges à l'aveugle (≥ 2) pour la qualité de langue, **écoute de Quang**
+   pour les voix, non-régression sur TOUTES les séries (OPM + Black Jack + Noritaka + Solo Leveling).
+4. **Tout le lourd sur C:** (`Documents/MangaStudio-donnees/modeles`, `~/.ollama`, cache HF, venv `AppData/Local/manga-tts`).
+5. Une étape = un commit qui la nomme ; chaque report a un **déclencheur de reprise**.
+
+### Point de départ (mesuré le 24/09, § 4-octies)
+Coût réel par page (OPM ch.1-10, 228 p.) : analyse des pages 0,0041 $ · récit 0,0001 $ · **voix 0,0058 $ (57 %)** ·
+traduction ~0,006-0,012 $ si VO. Solo Leveling vol.1 (755 p., déjà en français) ≈ **7,60 $** aujourd'hui ;
+≈ 3,20 $ avec la voix locale ; ≈ 0,10 $ si l'analyse devenait locale aussi (**non testé**).
+
+### Étape 0 — Le socle commun (avant toute intégration)
+- **0a. Sélecteur de moteur** dans le profil de série (réglages du batch) ET à la demande sur un chapitre :
+  « ☁ En ligne (défaut) » / « 🖥 Local ». Par étape : voix, effacement, analyse. Mémorisé par série.
+- **0b. État de la carte graphique** affiché avant de lancer en local : mémoire libre, et ComfyUI / Generate Studio
+  occupé ou non. En local, un traitement qui trouverait la carte prise **attend**, il ne se bat pas avec elle.
+- **0c. Journal** : chaque passage local écrit ce qu'il a fait (moteur, durée, mémoire GPU, erreurs) dans le journal
+  existant + inscription au registre des logs.
+- **Fini quand** : le sélecteur existe, choisir « Local » sans moteur installé dit clairement pourquoi c'est impossible,
+  et le choix « En ligne » produit EXACTEMENT le même résultat qu'avant (banc de non-régression).
+
+### Étape 1 — Voix locale (Chatterbox, 4 voix retenues par Quang : Algenib, Aoede, Charon, Leda)
+- **1a. Banc chapitre entier** (OPM ch.1, 24 p.), méthode stable (phrase par phrase, graine fixe, timbre cloné) :
+  temps de calcul, débit par page (homogène ?), silences, mots avalés, **timbre identique d'une page à l'autre**.
+- **1b. Karaoké** : `karaoke_mots.py` aligne-t-il les mots sur ces voix comme sur Gemini ? (mesure : mots alignés / total)
+- **1c. Écoute de Quang** sur le chapitre complet, les 4 voix.
+- **1d. Intégration** comme moteur de voix « local » dans `narrate_chapter` (mêmes fichiers de sortie, même karaoké,
+  même vidéo), 0 $ facturé, durée affichée honnêtement.
+- **Avantages attendus (à confirmer)** : −57 % de la facture, voix illimitées, hors ligne, pas de quota.
+- **Inconvénients attendus (à mesurer)** : ~1× temps réel (≈ 3 h pour Solo Leveling vol.1), carte graphique occupée,
+  qualité validée sur 3 pages seulement, un environnement Python de plus à maintenir.
+- **Décision** : intégrer / réserve / rien.
+
+### Étape 2 — Effacement local du texte posé sur le dessin (masque des lettres + LaMa manga)
+- **2a. Banc complet** : toutes les pages OPM ch.1-10 + Black Jack + Noritaka. Mesures : cases blanchies (critère
+  Vidéo Studio), texte d'origine restant (contrôle CJK), « ! » isolés, bavures (échantillon regardé à l'œil).
+- **2b. Corrections** des défauts connus : fragments éloignés de la boîte (« ! »), lisibilité du français sur dessin chargé.
+- **2c. Intégration** en option dans `traduire_chapitre` (vraies bulles : effacement actuel inchangé ; texte sur le
+  dessin : local) + re-rendu SANS appel (`--rerendu`) pour refaire les pages existantes.
+- **Avantages attendus** : cris/légendes enfin traduits sans abîmer la case, 0 $, 1-3 s/page.
+- **Inconvénients attendus** : bavures quand LaMa invente beaucoup, 2 modèles de plus (≈ 300 Mo), code GPL-3.0
+  (manga-image-translator / comic-text-detector) — sans conséquence pour un usage perso, à savoir si l'app était un jour
+  distribuée.
+- **Décision** : intégrer / réserve / rien.
+
+### Étape 3 — Analyse locale des pages (ce qui nourrit le récit) — l'inconnue
+- **3a. Banc** : qwen3-vl 8B instruct (et ce qui tient en 16 Go) produit la fiche de chaque page (faits, personnages
+  présents, type de page) ; comparaison à Gemini **par 2 juges à l'aveugle** sur la fidélité, puis sur le RÉCIT final.
+- **3b. Si prometteur** : essai sur un chapitre entier + écoute/lecture de Quang.
+- **Avantages possibles** : −40 % de la facture en plus (≈ 0,10 $ le volume au total).
+- **Risques** : c'est ce que Gemini fait de plus difficile (reconnaître les personnages d'une page à l'autre, l'ordre
+  de lecture, le ton) ; un 8B risque de raconter à côté. Temps de calcul par page à mesurer.
+- **Décision** : intégrer / réserve / rien.
+
+### Étape 4 — Traduction locale : EN RÉSERVE (déjà mesurée)
+Qwen3-30B-A3B : 90 % vs Gemini 94 % (DeepSeek), 77 % vs 93 % (Kimi), 87 bulles à l'aveugle → **on ne l'intègre pas**.
+**Déclencheur de reprise** : Gemini indisponible durablement, OU prix de la traduction ×3, OU un nouveau modèle local
+annoncé meilleur en zh/ja→fr (à rejouer avec `essai_trad_local.py`, même banc, mêmes juges).
+
+### Étape 5 — La stratégie finale (après 1, 2, 3)
+Tableau de synthèse : pour chaque bloc, en ligne vs local, coût / temps / qualité / confort. Choix proposés à Quang :
+**« Qualité »** (tout en ligne), **« Économie »** (local partout où c'est validé), **« Auto »** (local si la carte est
+libre, sinon en ligne) — ou rester comme aujourd'hui. Décision de Quang, écrite ici.
+
+### Suivi
+| Étape | État | Décision |
+|---|---|---|
+| 0 Socle | ⬜ à faire | — |
+| 1 Voix locale | ⬜ à faire (essais du 24/09 : 3 pages validées à l'oreille) | — |
+| 2 Effacement local | ⬜ à faire (essai 7 pages du 24/09 concluant) | — |
+| 3 Analyse locale | ⬜ à faire | — |
+| 4 Traduction locale | ⏸ en réserve | ne pas intégrer (mesuré 24/09) |
+| 5 Stratégie | ⬜ après 1-3 | — |
+
 ## 4-octies. EXPLORATION IA LOCALE (24/09/2026, demandée par Quang : « explorer à fond, puis on tranche »)
 
 Matériel : RTX 5070 Ti 16 Go. Tout le lourd sur **C:** (`Documents/MangaStudio-donnees/modeles`, `~/.ollama`, cache HF,
