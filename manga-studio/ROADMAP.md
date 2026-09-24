@@ -2357,6 +2357,9 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   sorte : il reste rouge quand la fenêtre n'a que des sites qui enchaînent (constaté v2.18.0 sur la principale).
   🟠 Le contrôle « principale inchangée » des essais de capture compare les dates des entrées de `sources/` : Quang
   qui ouvre une série dans la principale le fait passer au rouge (fausse alerte du 24/09 19h24, vérifiée).
+- **24/09 20h55** : manga CLASSIQUE (pages) capturé dans la secondaire (MangaDex, 35 pages, mode page par page) ✅.
+  **v2.24.0** (Quang) : la secondaire affiche AUSSI les sites de la principale, étiquetés « principale » ; la principale ne
+  voit jamais ceux de la secondaire (proxy `manga_sites`, sens unique). 8190 : 4 sites ; 8192 : 2 + 4 « principale ».
 - **Voix de l'application secondaire (Quang 19h18)** : 1-2 voix FÉMININES, expression adaptée au thème → à faire à S7
   avec ce qu'on a (Chatterbox local : clonage + intensité d'expression, pas de modération ; Chirp 3 HD). Pistes
   notées, non obligatoires : StoryVoice utilise OpenAI `gpt-4o-mini-tts` avec consigne de ton par personnage.
