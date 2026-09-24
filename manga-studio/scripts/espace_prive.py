@@ -15,11 +15,12 @@ Usage : python espace_prive.py            (port 8192, 127.0.0.1 seulement ; 8191
         MANGA_PRIVE_PORT=... pour un autre port. Arret : Ctrl+C ou tuer le PID affiche (jamais le 8190).
 """
 import importlib.util
+import json
 import os
 import sys
 from http.server import ThreadingHTTPServer
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 COMFY = os.path.expanduser(r"~\Documents\ComfyUI")
 PROXY = os.path.join(COMFY, "_studio_llm_proxy.py")
 DONNEES = os.environ.get("MANGA_SOURCES_DIR") or os.path.expanduser(r"~\Documents\MangaStudio-donnees\prive")
@@ -68,7 +69,40 @@ mod.MF_RUNLOG = os.path.join(os.environ.get("LOCALAPPDATA", ""), "manga-studio",
 mod.MF_CDP = "http://127.0.0.1:%s" % os.environ["MANGA_CAPTURE_PORT"]          # S3
 mod.MF_EVENTS = os.path.join(os.environ["MANGA_CAPTURE_DONNEES"], "events.log")   # S3 : ecrit par manga_fetch (DATA_DIR)
 
+# S4 (v1.5.0) : acces TELEPHONE par une adresse derriere Cloudflare Access. Une requete arrivee par elle porte le jeton
+# signe par Cloudflare (Cf-Access-Jwt-Assertion) : s'il est VALIDE (signature, audience, emetteur, expiration) et que
+# l'e-mail est celui de Quang, la cle n'est pas exigee -- rien a saisir sur le telephone (regle apps perso).
+# Reglage HORS DEPOT : <donnees>/_acces.json {"equipe": "<x>.cloudflareaccess.com", "aud": "...", "email": "...",
+# "principale_url": "https://.../manga/"}. Sans ce fichier : inactif (seule la cle compte, comme sur 8190).
+try:
+    ACCES = json.load(open(os.path.join(DONNEES, "_acces.json"), encoding="utf-8"))
+except (OSError, ValueError):
+    ACCES = None
+if ACCES and ACCES.get("principale_url"):
+    os.environ["MANGA_AUTRE_URL"] = ACCES["principale_url"]      # l'appui long, cote telephone, ramene a la principale
+_JWKS = {}
+
+
+def jeton_access_valide(jeton):
+    if not (ACCES and jeton):
+        return False
+    try:
+        import jwt
+        if "c" not in _JWKS:
+            _JWKS["c"] = jwt.PyJWKClient("https://%s/cdn-cgi/access/certs" % ACCES["equipe"], cache_keys=True)
+        cle = _JWKS["c"].get_signing_key_from_jwt(jeton).key
+        p = jwt.decode(jeton, cle, algorithms=["RS256"], audience=ACCES["aud"], issuer="https://" + ACCES["equipe"])
+        return (p.get("email") or "").lower() == ACCES["email"].lower()
+    except Exception:
+        return False
+
+
+class H(mod.H):
+    def _authorized(self):
+        return mod.H._authorized(self) or jeton_access_valide(self.headers.get("Cf-Access-Jwt-Assertion") or "")
+
+
 print("espace prive v%s -> http://127.0.0.1:%d/manga/ (PID %d) -- gestionnaire HTTP seul" % (VERSION, PORT, os.getpid()),
       flush=True)
 ThreadingHTTPServer.request_queue_size = 128
-ThreadingHTTPServer(("127.0.0.1", PORT), mod.H).serve_forever()
+ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()
