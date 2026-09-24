@@ -10,7 +10,7 @@ App reelle (8190 normal, 8192 prive), Edge sans fenetre. Verifie :
 - 360 px : aucun debordement horizontal, dans les deux espaces ; aucune erreur JavaScript.
 Captures : scripts/espace_normal_360.png, espace_prive_360.png. N'ecrit rien cote serveur.
 """
-import json, os, sys, urllib.error, urllib.request
+import json, os, sys, time, urllib.error, urllib.request
 from playwright.sync_api import sync_playwright
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -31,6 +31,12 @@ def espace(base, cle=True):
         return json.load(urllib.request.urlopen(r, timeout=10))
     except urllib.error.HTTPError as e:
         return e.code
+
+
+def fen(action):
+    r = urllib.request.Request(N + "/manga/espace_fenetre", data=json.dumps({"action": action}).encode(),
+                               headers={"Authorization": "Bearer " + KEY, "Content-Type": "application/json"})
+    return json.load(urllib.request.urlopen(r, timeout=40))
 
 
 def etat(pg):
@@ -76,22 +82,29 @@ with sync_playwright() as pw:
         check("clic simple sur 📚 : onglet Bibliotheque, meme adresse", c["onglet"] == "tChap" and c["url"].startswith(N), c)
         appui(pg, 800); pg.wait_for_timeout(1200)
         check("appui de 0,8 s : rien ne change", etat(pg)["url"].startswith(N))
-        appui(pg, 1400); pg.wait_for_url(P + "/manga/**", timeout=8000); pg.wait_for_timeout(3000)
-        p = etat(pg)
-        check("appui de 1,4 s : l'espace prive s'ouvre", p["url"].startswith(P) and p["nom"] == "prive", p["url"])
-        check("la cle a suivi et a quitte l'adresse", p["cle"] and "#k=" not in p["url"], p["url"])
+        # v2.16.0 : sur le PC, l'appui long OUVRE la fenetre dediee (profil a part) -- la page, elle, ne change pas
+        fen("fermer"); time.sleep(2)
+        appui(pg, 1400); time.sleep(4)
+        check("appui de 1,4 s (principale) : la fenetre dediee s'ouvre", fen("etat").get("ouverte"), fen("etat"))
+        check("... et la page principale reste la principale", etat(pg)["url"].startswith(N) and not etat(pg)["prive"])
+        pp = ctx.new_page(); pp.goto(P + "/manga/#k=" + KEY); pp.wait_for_timeout(3000)
+        p = etat(pp)
+        check("secondaire : ESPACE.nom = prive", p["nom"] == "prive", p["nom"])
+        check("la cle a quitte l'adresse", p["cle"] and "#k=" not in p["url"], p["url"])
         check("titre identique", p["titre"] == n["titre"], (p["titre"], n["titre"]))
         check("icone + manifeste identiques", p["icone"] == n["icone"] and n["icone"], (p["icone"], n["icone"]))
-        check("prive : la marque discrete est la (pointille + point)", p["prive"] and p["bord"] == "dashed" and "·" in p["point"], p)
-        check("prive : bibliotheque chargee sans refus (aucun 401)", not [u for u in refus if u.startswith(P)], refus[:3])
+        check("secondaire : la marque discrete est la (pointille + point)", p["prive"] and p["bord"] == "dashed" and "·" in p["point"], p)
+        check("secondaire : bibliotheque chargee sans refus (aucun 401)", not [u for u in refus if u.startswith(P)], refus[:3])
+        check("carte « Cette fenetre » presente dans la secondaire", pp.evaluate("!!document.getElementById('espFenCarte')"))
+        check("... et ABSENTE du DOM de la principale", not pg.evaluate("!!document.getElementById('espFenCarte')"))
         if largeur == 360:
-            check("prive 360 px : aucun debordement", not p["deborde"]); pg.screenshot(path=os.path.join(HERE, "espace_prive_360.png"))
-        pg.locator('nav button[data-tab="tPlate"]').click(); pg.wait_for_timeout(300)
-        appui(pg, 1400); pg.wait_for_url(N + "/manga/**", timeout=8000); pg.wait_for_timeout(2500)
-        r = etat(pg)
-        check("retour par le meme geste : espace normal, sans marque", r["url"].startswith(N) and not r["prive"] and r["nom"] == "normal", r)
+            check("secondaire 360 px : aucun debordement", not p["deborde"]); pp.screenshot(path=os.path.join(HERE, "espace_prive_360.png"))
+        appui(pp, 1400); time.sleep(4)
+        check("appui de 1,4 s (secondaire) : la fenetre dediee se ferme", not fen("etat").get("ouverte"), fen("etat"))
+        pp.close()
         check("aucune erreur JavaScript", not errs, errs[:3])
         ctx.close()
     nav.close()
+fen("ouvrir")                                          # fin : la fenetre dediee de Quang rouverte a sa place
 print("\n%d/%d" % (len(OK), len(OK) + len(KO)))
 sys.exit(1 if KO else 0)
