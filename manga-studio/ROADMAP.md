@@ -2381,8 +2381,13 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   ⬜ **Reste de S5, à faire avant S8 (recette)** : ~~(1) pastille des coûts = total des deux applications~~ → v2.22.0 (route
   `/manga/costs_autre` : les 3 totaux de l'autre, jamais ses passages ; pastille = somme, détail = celui d'ici + « dont l'autre ») ;
   + (Quang 20h33) le DÉTAIL du témoin montre aussi l'autre application — jauge, étape, avancement, temps restant (`reste_s`
-  ajouté aux champs anonymes) ; dans la principale « 🔒 autre application » à la place du titre. Banc S5 **25/25** ; (2) § 3-bis —
-  essais (`--sortie`, `_banc_reflexion/`) et scripts lancés hors app visibles (🧪) dans le témoin.
+  ajouté aux champs anonymes) ; dans la principale « 🔒 autre application » à la place du titre. Banc S5 **25/25** ;
+  ~~(2) § 3-bis —
+  essais (`--sortie`, `_banc_reflexion/`) et scripts lancés hors app visibles (🧪) dans le témoin.~~
+  → ✅ **v2.23.0** : un ESSAI = un script Python de manga-studio qui ne descend d'AUCUN serveur (psutil, ~0,04 s) ; rattaché
+  à l'application dont il lit les données (`MANGA_SOURCES_DIR` de son environnement) ; « 🧪 Essai · <nom du script> », jamais
+  ses arguments ; lanceur du venv + enfant = une ligne. Banc `test_essais_visibles.py` **7/7**. 🟠 Constaté (préexistant) :
+  `test_suivi_ui.py` vise la série `demo-frieren`, qui n'existe plus → banc PÉRIMÉ (à repointer lors du prochain chantier suivi).
 - **S6 — Discrétion** : contenu FLOUTÉ quand la fenêtre secrète perd le focus ; bouton PANIQUE (Échap ×2 → espace
   normal) ; retour auto à l'espace normal après N min d'inactivité (N à fixer avec Quang) ; aucun titre secret dans
   Telegram / notifications / journaux / commits (dépôt `App` PUBLIC).

@@ -1,0 +1,56 @@
+--- _studio_llm_proxy.py.bak-20260924-essais	2026-09-24 20:40:57.249136900 +0200
++++ _studio_llm_proxy.py	2026-09-24 20:41:06.008170300 +0200
+@@ -8763,6 +8763,45 @@
+     return {"joignable": True, **{k: float(c.get(k) or 0) for k in ("aujourdhui", "mois", "total")}}
+ 
+ 
++# Manga Studio v2.23.0 (§ 3-bis, Quang 24/09 16h53 : « je ne vois pas de temoin d'activite ») : un ESSAI = un script
++# Python de manga-studio qui tourne SANS descendre d'un des deux serveurs (banc, sonde, essai de voix lance a la main).
++# Il appartient a l'application dont il lit les donnees (MANGA_SOURCES_DIR de SON environnement). Nom du script
++# seulement, jamais d'argument (un argument peut porter un titre). psutil : ~0,04 s pour tout parcourir (mesure 24/09).
++_ESSAIS_PARENTS = ("_studio_llm_proxy", "espace_prive.py", "proxy_8191.py")
++
++
++def _manga_essais():
++    try:
++        import psutil
++    except Exception:
++        return []
++    mien = os.path.normcase(os.path.normpath(MANGA_SOURCES))
++    racine_ms = os.path.normcase(MANGA_ROOT)
++    out = []
++    for p in psutil.process_iter(["pid", "name", "cmdline", "create_time"]):
++        try:
++            if "python" not in (p.info["name"] or "").lower():
++                continue
++            cmd = p.info["cmdline"] or []
++            script = next((c for c in cmd[1:] if c.lower().endswith(".py")), "")
++            if not script or racine_ms not in os.path.normcase(os.path.abspath(script)):
++                continue
++            if any(any(x in " ".join(a.cmdline() or []) for x in _ESSAIS_PARENTS) or a.pid == os.getpid()
++                   for a in p.parents()) or any(x in script for x in _ESSAIS_PARENTS):
++                continue                                         # lance par un serveur : deja dans son activite
++            nom = os.path.splitext(os.path.basename(script))[0]
++            racine = os.path.normcase(os.path.normpath(p.environ().get("MANGA_SOURCES_DIR")
++                                                       or os.path.join(MANGA_ROOT, "sources")))
++            pa = p.parent()
++            if racine != mien or (pa and script in (pa.cmdline() or [])):   # lanceur du venv + enfant : une seule ligne
++                continue
++            out.append({"type": "essai", "etape": nom, "titre": "🧪 essai", "d": "", "pid": p.info["pid"],
++                        "depuis_s": round(time.time() - (p.info["create_time"] or time.time()))})
++        except Exception:
++            continue
++    return out
++
++
+ def manga_activite():
+     """Tout ce qui travaille en ce moment, tous chapitres confondus (Manga Studio v1.88.0)."""
+     out = []
+@@ -8845,6 +8884,7 @@
+                         "fait": fs.get("pages"), "total": None, "d": None})
+     except Exception:
+         pass
++    out += _manga_essais()                       # v2.23.0 (§ 3-bis) : les scripts lances HORS de l'app, visibles aussi
+     maintenant = time.time()                     # v1.91.0 : temps restant, a la vitesse MESUREE de l'etape
+     for it in out:
+         cle = (it["type"], it.get("d"), it.get("tag") or it.get("langue"), it.get("etape"))
