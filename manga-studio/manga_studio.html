@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.9.0</title>
+<title>Manga Studio v2.9.1</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -484,6 +484,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .mus-it .dur{font-size:12px;color:var(--dim);text-align:right;font-variant-numeric:tabular-nums}
 .mus-it .btn.sm{padding:3px 0;width:32px;justify-content:center}
 .mus-it.off .nom{color:var(--dim)}
+.mus-aussi{display:block;font-size:11px;color:#8fe0a8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mus-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .gs-box{margin-top:8px;padding:8px;border:1px solid var(--line,#2a2f3a);border-radius:10px}
 .gs-liste{display:flex;flex-direction:column;gap:6px;margin-top:8px;max-height:420px;overflow:auto}
@@ -765,7 +766,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.9.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.9.1</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1632,7 +1633,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.9.0";
+const VERSION = "2.9.1";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -5611,7 +5612,7 @@ function musRendre(){
     const on = coches.includes(x.nom);
     return '<div class="mus-it' + (on ? "" : " off") + '"><input type="checkbox" data-mus-coche="' + esc(x.nom) + '"'
       + (on ? " checked" : "") + (!on && plein ? " disabled" : "") + ' title="' + (on ? "décocher = retirer d'ici (le morceau reste dans la série)" : "cocher = jouer sous la voix") + '">'
-      + '<span class="nom" title="' + esc(x.nom) + '">' + esc(x.nom) + '</span>' + musAussi(x) + '<span class="dur">' + (x.dur ? fmtT(x.dur) : "") + "</span>"
+      + '<span class="nom" title="' + esc(x.nom) + '">' + esc(x.nom) + musAussi(x) + '</span><span class="dur">' + (x.dur ? fmtT(x.dur) : "") + "</span>"
       + '<button class="btn sm" data-mus-ecoute="' + esc(x.nom) + '" title="écouter seul">' + (MUS_APERCU.dataset.nom === x.nom && !MUS_APERCU.paused ? "■" : "▶") + "</button>"
       + '<button class="btn sm danger" data-mus-suppr="' + esc(x.nom) + '" title="supprimer de la série et de tous les chapitres (corbeille)">🗑</button></div>';
   }).join("");
@@ -5688,8 +5689,10 @@ $("musFichier").onchange = () => {
 // lit par SES routes (/outputs_list, /audio_meta), sans rien dupliquer. Les 8 plus recentes, ou tout (+ recherche).
 const GS = { tous: [], meta: {}, tout: false, N: 8, src: "gs", app: [] };
 // v2.9.0 (Quang 24/09) : la meme boite sert aussi les musiques DEJA dans l'app (autres mangas), copiees ici
+// v2.9.1 (Quang 24/09 : « ça fait déborder la poubelle sur mon smartphone ») : 2e ligne DANS la cellule du nom, jamais une
+// colonne de plus (la ligne du chapitre est une grille a 5 colonnes fixes)
 const musAussi = x => (x.aussi || []).length
-  ? '<span class="gs-badge instr" title="le même morceau (même fichier) est aussi dans : ' + esc(x.aussi.join(", ")) + '">↔ aussi dans ' + esc(x.aussi.join(", ")) + "</span>" : "";
+  ? '<small class="mus-aussi" title="le même morceau (même fichier) est aussi dans : ' + esc(x.aussi.join(", ")) + '">↔ aussi dans ' + esc(x.aussi.join(", ")) + "</small>" : "";
 const gsTitre = it => it.titre || it.dossier.replace(/-\d{6}(-\d{6})?$/, "").replace(/-/g, " ");
 const gsURL = ch => CFG.base + "/output_file?name=" + encodeURIComponent(ch) + "&mp3=1" + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
 async function gsCharger(){
@@ -6390,7 +6393,7 @@ function profMusRendre(){
   $("profMusListe").innerHTML = (m.items || []).map(x => {
     const on = sel.includes(x.nom);
     return '<div class="prof-mus-it' + (on ? "" : " off") + '"><input type="checkbox" data-pm-coche="' + esc(x.nom) + '"' + (on ? " checked" : "")
-      + (!on && plein ? " disabled" : "") + '><span class="nom" title="' + esc(x.nom) + '">' + esc(x.nom) + "</span>" + musAussi(x)
+      + (!on && plein ? " disabled" : "") + '><span class="nom" title="' + esc(x.nom) + '">' + esc(x.nom) + musAussi(x) + "</span>"
       + '<span class="muted">' + (x.dur ? fmtT(x.dur) : "") + '</span><button class="btn sm" data-pm-ecoute="' + esc(x.nom) + '" title="écouter seul">'
       + (MUS_APERCU.dataset.nom === x.nom && !MUS_APERCU.paused ? "■" : "▶") + "</button>"
       // v2.7.4 (Quang 23/09 21h46) : la poubelle aussi ici, comme dans le chapitre -- meme route, meme corbeille

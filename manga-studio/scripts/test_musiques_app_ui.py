@@ -91,6 +91,23 @@ try:
             pg.locator("[data-app-prendre]").first.click(); pg.wait_for_timeout(4000)
             check("2e reprise = « Essai Musique 2 »", os.path.isfile(os.path.join(md, "Essai Musique 2.mp3")), sorted(os.listdir(md)))
             check("etiquette dans le chapitre", "aussi dans" in pg.inner_text("#musListe"), pg.inner_text("#musListe")[:120])
+        print("2-bis. smartphone (380 px) : l'etiquette ne pousse rien hors de l'ecran (remarque Quang 24/09, v2.9.1)")
+        pg.set_viewport_size({"width": 380, "height": 800}); pg.wait_for_timeout(800)
+        pg.click("#gsFermer"); pg.wait_for_timeout(300)
+        mesure = ("(sel) => [...document.querySelectorAll(sel)].filter(b => b.offsetParent).map(b => "
+                  "Math.round(b.getBoundingClientRect().right))")
+        for zone, sel in (("chapitre", "#musListe [data-mus-suppr]"), ("profil", "#profMusListe [data-pm-suppr]")):
+            xs = pg.evaluate(mesure, sel)
+            check("%s : poubelles dans l'ecran et alignees" % zone, xs and max(xs) <= 380 and len(set(xs)) == 1, xs)
+        meme_ligne = pg.evaluate("() => [...document.querySelectorAll('#musListe .mus-it')].map(r => { const n = r.querySelector('.nom')"
+                                 ".getBoundingClientRect(), t = r.querySelector('[data-mus-suppr]').getBoundingClientRect();"
+                                 " return t.top < n.bottom && t.bottom > n.top; })")
+        check("chapitre : poubelle sur la meme ligne que le nom", meme_ligne and all(meme_ligne), meme_ligne)
+        pg.locator("#musListe").screenshot(path=os.path.join(os.environ.get("TEMP", "."), "mus_380.png"))
+        check("etiquette sur sa propre ligne, sous le nom",
+              pg.evaluate("() => { const a = document.querySelector('#musListe .mus-aussi'), n = a && a.parentNode;"
+                          " return !!a && n.classList.contains('nom') && getComputedStyle(a).display === 'block'; }"))
+        pg.set_viewport_size({"width": 1280, "height": 900}); pg.wait_for_timeout(500)
         print("3. bascule de source dans la meme boite")
         pg.click("#musGs"); pg.wait_for_timeout(3000)
         check("« Prendre dans Generate Studio » reaffiche la playlist", "Generate Studio" in pg.inner_text("#gsBoxTitre") and pg.is_visible("#gsBox"))
