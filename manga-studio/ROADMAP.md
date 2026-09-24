@@ -2236,6 +2236,19 @@ Qwen3-30B-A3B : 90 % vs Gemini 94 % (DeepSeek), 77 % vs 93 % (Kimi), 87 bulles �
 **Déclencheur de reprise** : Gemini indisponible durablement, OU prix de la traduction ×3, OU un nouveau modèle local
 annoncé meilleur en zh/ja→fr (à rejouer avec `essai_trad_local.py`, même banc, mêmes juges).
 
+### Étape 4-bis — UN interrupteur global « ☁ Cloud / 🖥 Local » (Quang 24/09 13h53)
+> *« un menu simple, ergonomique et très clair, pour que je repère rapidement visuellement si je vais lancer quelque
+> chose en local ou en cloud […] mets ça en persistance mémoire […] à toi de voir si c'est par chapitre, par manga ou
+> global ; je préfère te laisser réfléchir. »*
+**Choix (Claude)** : **GLOBAL à l'app**, mémorisé CÔTÉ SERVEUR (`sources/_reglages.json`, le même sur le PC et le
+téléphone, lu par la nuit/batch). Raison : ce qui décide « local ou cloud », c'est **ce que Quang fait sur son PC à ce
+moment-là**, pas le manga ; un réglage par série/chapitre obligerait à le changer à dix endroits et se ferait oublier.
+- Un **gros bouton-bascule coloré dans l'en-tête**, visible depuis tous les onglets : bleu « ☁ CLOUD » / orange
+  « 🖥 LOCAL · carte graphique » (+ mémoire libre de la carte en petit).
+- **Chaque bouton qui lance quelque chose** (narrer, traduire, lot, vidéo) **porte l'icône** ☁ ou 🖥 du mode actif.
+- LOCAL = voix locale + effacement local ; l'analyse des pages et le récit restent en ligne dans les deux modes.
+- Les menus « Moteur de voix » par chapitre/série (v2.10.0) sont remplacés par cet interrupteur unique.
+
 ### Étape 5 — La stratégie finale (après 1, 2, 3)
 Tableau de synthèse : pour chaque bloc, en ligne vs local, coût / temps / qualité / confort. Choix proposés à Quang :
 **« Qualité »** (tout en ligne), **« Économie »** (local partout où c'est validé), **« Auto »** (local si la carte est
@@ -2245,9 +2258,9 @@ libre, sinon en ligne) — ou rester comme aujourd'hui. Décision de Quang, écr
 | Étape | État | Décision |
 |---|---|---|
 | 0 Socle | ✅ v2.10.0 (24/09) : menu « Moteur de voix » (chapitre + profil/batch/nuit), état de la carte (`/manga/gpu`), attente d'une carte libre dans `tts_local.py`, journal | — |
-| 1 Voix locale | ✅ codée + testée de bout en bout (24/09) — **décision Quang attendue** | voir bilan 1 ci-dessous |
-| 2 Effacement local | ✅ codé, variante PRUDENTE (24/09) — **décision Quang attendue** | voir bilan 2 ci-dessous |
-| 3 Analyse locale | ✅ mesurée (24/09) | ❌ **ne rien faire** (proposé) : récit nettement moins fidèle |
+| 1 Voix locale | ✅ codée + testée de bout en bout (24/09) | ✅ **Quang 24/09 13h53 : en OPTION** |
+| 2 Effacement local | ✅ codé, variante PRUDENTE (24/09) | ✅ **Quang 24/09 13h53 : en OPTION** |
+| 3 Analyse locale | ✅ mesurée (24/09) | ❌ **ne rien faire** — validé Quang 24/09 13h53 |
 | 4 Traduction locale | ⏸ en réserve | ne pas intégrer (mesuré 24/09) |
 | 5 Stratégie | ⬜ après 1-3 | — |
 
