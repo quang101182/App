@@ -69,14 +69,13 @@ with sync_playwright() as p:
         carte = pg.inner_text('#chapList [data-serie="claymore"]')
         check("carte Claymore : 2001–2014 · terminé · 27 tomes", "2001–2014" in carte and "terminé" in carte and "27 tomes" in carte, carte.replace("\n", " | "))
         pg.click('#chapList [data-serie="claymore"]'); pg.wait_for_timeout(1200)
-        tete = pg.query_selector("#chapList .tome-tete")
-        check("Claymore : chapitre range sous « Tome 1 » avec sa couverture",
-              tete is not None and "Tome 1" in tete.inner_text()
-              and pg.eval_on_selector("#chapList .tome-tete img", "i => i.naturalWidth") > 0)
+        # v2.38.0 (Quang 23h35) : plus d'intertitres de tome, les chapitres suffisent
+        check("Claymore : chapitres sans intertitre de tome", pg.query_selector("#chapList .tome-tete") is None
+              and pg.eval_on_selector_all("#chapList [data-chap]", "e => e.length") > 0)
         pg.click("#btnLibBack"); pg.wait_for_timeout(300)
         pg.click('#chapList [data-serie="one-punch-man"]')
         pg.wait_for_timeout(500)
-        check("OPM : chapitres « Hors tome »", "Hors tome" in pg.inner_text("#chapList"))
+        check("OPM : pas de « Hors tome » affiché", "Hors tome" not in pg.inner_text("#chapList"))
         pg.once("dialog", lambda d: d.dismiss())             # Renommer -> Annuler : rien ne change
         pg.click(".lib-actions .plus"); pg.wait_for_timeout(150)          # v2.29.0 : Renommer est dans « ⋯ »
         pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#btnRenommer"); pg.click("#btnRenommer"); pg.wait_for_timeout(500)

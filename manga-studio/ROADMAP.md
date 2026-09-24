@@ -2419,8 +2419,11 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   AnimoFlix → Tome 4/5/6, plus de « Hors tome ». Banc `test_tomes_volume.py` 6/6 (12 adresses dont 6 pièges), mutation
   rouge. 🟠 (constaté v2.37.0) **Raijin-scans ch. 1-3 de Claymore** : 180 pages chacun = sans doute les VOLUMES 1-3, mais
   l'adresse (`/claymore/1/`) ne le dit pas → ils restent « Tome 1 » (table MangaDex). Le nombre de pages n'est PAS un signal
-  sûr (un chapitre webtoon en fait 141). ⏸ **Question posée à Quang** (déclencheur : sa réponse) : marquer ces 3-là à la
-  main comme volumes, ou laisser.
+  sûr (un chapitre webtoon en fait 141). ~~⏸ Question posée à Quang : marquer ces 3-là à la main comme volumes~~ → ✅
+  tranché v2.38.0 : Quang ne veut PAS de rangement manuel (« automatiquement pour les prochains ») et plus d'intertitres
+  de tome du tout (23h35 : « le chapitre me suffit, c'est plus compact et plus propre ») → la vue d'une série = les
+  chapitres dans l'ordre, grille 2 colonnes PC / 1 téléphone ; le tome reste connu pour la recherche « tome N »
+  (banc `test_tomes_volume.py` 7/7, `test_bibliotheque_ui` 76/92 = référence).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
   `MangaStudioInstance2` : `/manga/liens` répond (✕ des sites ACTIF), banc `test_page_principale.py 8192` 55/55.
   1. **En-tête d'une série** (capture Quang : « ça fait un peu fouiller ») : « ← Toutes les séries » d'une couleur

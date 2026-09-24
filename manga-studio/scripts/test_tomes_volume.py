@@ -38,8 +38,12 @@ with sync_playwright() as p:
     cl = pg.evaluate("() => CHAPS.filter(c => c.dir.startsWith('claymore/')).map(c => [c.chapter, String(c.tome || ''), !!c.volume])")
     vol = {c[0]: c[1] for c in cl if c[2]}
     check("Claymore ch. 4 / 5 / 6 (volumes AnimoFlix) -> tomes 4 / 5 / 6", vol == {"4": "4", "5": "5", "6": "6"}, cl)
-    groupes = pg.eval_on_selector_all("#chapList .tome-tete b", "e => e.map(x => x.innerText.trim())")
-    check("plus aucun « Hors tome » dans Claymore", "Hors tome" not in groupes and {"Tome 4", "Tome 5", "Tome 6"} <= set(groupes), groupes)
+    # v2.38.0 (Quang 23h35) : les tomes ne sont plus AFFICHES -- les chapitres dans l'ordre, sans intertitre
+    groupes = pg.eval_on_selector_all("#chapList .tome-tete", "e => e.length")
+    ordre = pg.eval_on_selector_all("#chapList [data-chap] b", "e => e.map(x => (x.innerText.split('ch. ').pop().match(/[\d.]+/) || ['0'])[0])")
+    check("aucun intertitre de tome, chapitres dans l'ordre", groupes == 0 and ordre == sorted(ordre, key=float), (groupes, ordre))
+    cols = pg.eval_on_selector_all("#chapList [data-chap]", "e => [...new Set(e.map(x => Math.round(x.getBoundingClientRect().left)))].length")
+    check("PC : chapitres sur 2 colonnes", cols == 2, cols)
     check("Claymore ch. 1-3 (sans adresse de volume) : table MangaDex inchangée", all(c[1] == "1" and not c[2] for c in cl if c[0] in ("1", "2", "3")), cl[:3])
     opm = pg.evaluate("() => CHAPS.filter(c => c.dir.startsWith('one-punch-man/')).map(c => !!c.volume)")
     check("One Punch-Man : aucune adresse de volume, rien de changé", opm and not any(opm), len(opm))
