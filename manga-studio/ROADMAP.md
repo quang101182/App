@@ -2188,7 +2188,7 @@ sur la capture du banc, corrigé).
 - ~~⬜ Reste : 4-undecies (cette section)~~ → ✅ v2.12.0 ; bouton « Effacement local » n'est plus nécessaire (l'interrupteur le pilote) ;
   refaire les pages OPM avec l'effacement local si Quang le veut (`--rerendu --effacement local`, 0 $).
 
-## 4-quaterdecies. COMPARTIMENT SECRET *(24/09/2026 16h01-16h04, demande Quang — ⬜ À FAIRE après les chantiers en cours)*
+## 4-quaterdecies. COMPARTIMENT SECRET *(24/09/2026 16h01-16h04, demande Quang — ⬜ PROCHAINE SESSION : S0 → S8, découpage ci-dessous)*
 
 > Quang : *« un compartiment secret qui aura exactement la même fonction que l'application actuelle, mais caché sous un
 > déclencheur, par exemple rester appuyé sur le bouton de la bibliothèque […] avec des mangas plus sensibles […] sa
@@ -2235,7 +2235,50 @@ titre + icône de la fenêtre secrète IDENTIQUES à l'app normale (barre des t�
 contenu FLOUTÉ dès que la fenêtre perd le focus (aperçus Alt+Tab / barre des tâches illisibles) · bouton PANIQUE
 (ex. Échap ×2 → app normale) · retour automatique à l'app normale après N min d'inactivité · aucun titre secret dans
 Telegram, notifications ou journaux · un déclenchement depuis le TÉLÉPHONE n'ouvre RIEN sur le PC.
-**Déclencheur** : fin des chantiers en cours (4-terdecies : traduction) → construire, puis Quang fournit 1-2 chapitres.
+**Déclencheur** : ~~fin des chantiers en cours~~ → chantier coûts CLOS le 24/09 17h15 ; **Quang : « on fait le découpage et la
+feuille de route » (17h16) → la PROCHAINE SESSION construit, étape par étape, dans cet ordre.**
+
+### Découpage (24/09 17h20) — une étape = un commit qui la nomme ; « fait » = `git log`
+Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../sources` en dur ; le proxy y fait **29 références**
+(`MANGA_SOURCES = MANGA_ROOT/sources`, ligne ~7475) ; il sert tout par une classe `H` (`ThreadingHTTPServer((host, port), H)`).
+- **S0 — Une seule racine de données, réglable** : `scripts/racine.py` (`SOURCES = os.environ.get("MANGA_SOURCES_DIR") or
+  ../sources`) importé par les 22 scripts + manga-fetch ; proxy : `MANGA_SOURCES` lu depuis la même variable (1 ligne,
+  diff versionné). **Fini quand** : sans la variable, TOUT est identique (non-régression : `test_estimation`,
+  `test_interruption`, `test_alertes_ui`, `test_moderation`, `test_vram_ui`, un lot à blanc `suivi_nuit --dry`) ; avec
+  la variable pointée sur un dossier jetable, un chapitre importé y atterrit et nulle part ailleurs (banc dédié).
+- **S1 — La 2ᵉ instance** : `espace_prive.py` = n'importe QUE la classe `H` du proxy (⚠ jamais une 2ᵉ instance COMPLÈTE :
+  elle relancerait pod watchdog + notifs Telegram), `MANGA_SOURCES_DIR` = dossier secret **hors du dépôt et hors de
+  `sources/`** (ex. `C:/Users/quang/Documents/MangaStudio-donnees/prive`), port dédié (8191). Tâche planifiée au démarrage
+  de session comme le proxy. **Fini quand** : `http://127.0.0.1:8191/manga/` sert l'app, bibliothèque VIDE, et une capture
+  de test faite par 8191 n'apparaît PAS sur 8190 (et inversement).
+- **S2 — L'app sait dans quel espace elle est** : `/manga/espace` → `{"espace": "normal"|"prive"}` ; titre et icône
+  IDENTIQUES dans les deux (barre des tâches / Alt+Tab muets) ; une discrète marque visible seulement DANS l'espace
+  secret (Quang doit savoir où il est). **Appui long sur 📚 Bibliothèque** (≥ 1,2 s, pas de clic simple) → ouvre l'autre
+  espace ; rien d'autre ne le trahit (pas de menu, pas d'aide qui en parle dans l'espace normal).
+- **S3 — Fenêtre Edge dédiée à l'espace secret (PC)** : profil Edge séparé (historique/cache isolés), ouverte à SA place
+  discrète (même mécanique que la fenêtre de capture v2.14 : `fenetre.json` propre, boutons Ranger / Taille sûre /
+  Retenir / **Fermer à distance**), jamais d'ouverture sur le PC quand le déclenchement vient du téléphone.
+- **S4 — Téléphone** : sous-domaine dédié → tunnel → 8191, **derrière Cloudflare Access** (règle
+  `.claude/rules/apps-perso-zero-secret.md` : même origine app+API, policy = email de Quang). ⚠ `CF_API_TOKEN` n'a pas la
+  permission Zero Trust (liste VIDE au lieu d'une erreur) → API interne du dashboard depuis une page loguée ; PWA :
+  bypass Access sur `/manifest.json` + `/icon-*` ET `estPublic()` (règle PWA derrière Access). Vérifier SANS cookie :
+  manifeste 200, page 302.
+- **S5 — Vue croisée discrète** : chaque instance publie ses traitements vivants dans un registre COMMUN (même principe
+  que `sources/_gpu/`, mais hors des deux racines) ; témoin d'activité : côté normal « 🔒 1 traitement en cours · étape ·
+  reste ~X min » SANS titre ; côté secret, tout. Au lancement, si l'autre espace travaille : question à l'écran (lancer
+  quand même / annuler). **Profite-en pour § 3-bis** : les essais (`--sortie`) et scripts hors app visibles aussi (🧪).
+  Coûts : pastille = total des deux, détail des titres seulement chez leur propriétaire.
+- **S6 — Discrétion** : contenu FLOUTÉ quand la fenêtre secrète perd le focus ; bouton PANIQUE (Échap ×2 → espace
+  normal) ; retour auto à l'espace normal après N min d'inactivité (N à fixer avec Quang) ; aucun titre secret dans
+  Telegram / notifications / journaux / commits (dépôt `App` PUBLIC).
+- **S7 — Chaîne sans modération (profil de l'espace secret)** : voix 🖥 locale, traduction locale (Qwen3-30B, § 4-nonies
+  étape 4), analyse = à mesurer sur les 1-2 chapitres d'essai de Quang (Gemini refuse-t-il vraiment ? sinon qwen3-vl
+  local, moins fidèle) ; sonde : `scripts/sonde_moderation.py`. Limite posée : personnages adultes uniquement.
+- **S8 — Recette réelle** : les deux espaces ouverts en même temps (PC + téléphone), un lot de chaque côté, vue croisée,
+  paravent/fermeture à distance, 360 px, cycle couper→relancer ; bancs chiffrés + mutation.
+**Pièges connus pour ce chantier** : écrire un fichier en Python texte sous Windows convertit LF→CRLF (proxy entier en
+diff → `newline=""`) ; toute relance du proxy par `relance-proxy.ps1 -Qui manga-studio` (jamais Stop-Process) ; un script
+qui lit un secret au démarrage doit être relancé après rotation.
 
 ## 4-terdecies. COÛTS — LA « RÉFLEXION » DE GEMINI *(24/09/2026 14h40, question Quang sur les 4,43 $ du repérage)*
 
