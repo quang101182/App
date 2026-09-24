@@ -2188,7 +2188,7 @@ sur la capture du banc, corrigé).
 - ~~⬜ Reste : 4-undecies (cette section)~~ → ✅ v2.12.0 ; bouton « Effacement local » n'est plus nécessaire (l'interrupteur le pilote) ;
   refaire les pages OPM avec l'effacement local si Quang le veut (`--rerendu --effacement local`, 0 $).
 
-## 4-quaterdecies. COMPARTIMENT SECRET *(24/09/2026 16h01-16h04, demande Quang — ⬜ PROCHAINE SESSION : S0 → S8, découpage ci-dessous)*
+## 4-quaterdecies. COMPARTIMENT SECRET *(24/09/2026 16h01-16h04, demande Quang — ✅ S0 → S8 LIVRÉS le 24/09 17h20-21h20, v2.15.0 → v2.25.0)*
 
 > Quang : *« un compartiment secret qui aura exactement la même fonction que l'application actuelle, mais caché sous un
 > déclencheur, par exemple rester appuyé sur le bouton de la bibliothèque […] avec des mangas plus sensibles […] sa
@@ -2430,6 +2430,14 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   « pages 1-2 » a traité les 40 pages.
 - **S8 — Recette réelle** : les deux espaces ouverts en même temps (PC + téléphone), un lot de chaque côté, vue croisée,
   paravent/fermeture à distance, 360 px, cycle couper→relancer ; bancs chiffrés + mutation.
+  ✅ **RECETTE RÉELLE 24/09 21h20** : secondaire installée sur le Fold comme application à part (sinon Chrome l'affiche dans
+  son bandeau — autre adresse que la principale ; décision Quang : 2ᵉ icône, « pas gênant ») ; v2.25.0 bandeau VIOLET
+  foncé dans la secondaire (+ barre d'état). Deux narrations EN MÊME TEMPS : Quang depuis le Fold (secondaire, 35 p.,
+  voix en ligne) + Claude sur le PC (principale, 24 p., voix locale) → les deux complètes, 0 page d'histoire sans voix,
+  0 alerte ; principale voit « narration · noms 26/35 · reste » SANS titre, secondaire voit la principale avec son titre ;
+  jauge VRAM = la voix locale (~3,9 Go) pendant que les deux tournaient. Coût secondaire 0,59 $, principale 0 $.
+  Narrations d'essai de Claude rangées dans `sources/_corbeille/essai-s8-20260924/`. Bancs chiffrés de chaque étape :
+  S0 47/47 · S1 15/15 · S2 37/37 · S3 10/10 · S5 25/25 · essais 7/7 · S6 11/11 · voix 13/13 (mutations rouges sur S0, S1, enchaînement).
 **Pièges connus pour ce chantier** : écrire un fichier en Python texte sous Windows convertit LF→CRLF (proxy entier en
 diff → `newline=""`) ; toute relance du proxy par `relance-proxy.ps1 -Qui manga-studio` (jamais Stop-Process) ; un script
 qui lit un secret au démarrage doit être relancé après rotation.
