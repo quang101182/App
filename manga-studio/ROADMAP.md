@@ -2283,6 +2283,18 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   IDENTIQUES dans les deux (barre des tâches / Alt+Tab muets) ; une discrète marque visible seulement DANS l'espace
   secret (Quang doit savoir où il est). **Appui long sur 📚 Bibliothèque** (≥ 1,2 s, pas de clic simple) → ouvre l'autre
   espace ; rien d'autre ne le trahit (pas de menu, pas d'aide qui en parle dans l'espace normal).
+  ✅ **FAIT 24/09 17h58 — v2.15.0** : proxy `/manga/espace` → `{espace, autre}` (`MANGA_ESPACE`, `MANGA_AUTRE_URL` ;
+  diff `proxy-patch/_studio_llm_proxy_espace_s2.diff`) ; `espace_prive.py` v1.1.0 : `MANGA_ESPACE=prive`, **sa propre
+  base** (`STUDIO_DB_PATH` → `prive/_studio_content.db` : Planche/Projet/Personnages étaient COMMUNS via SQLite,
+  constaté 24/09), **sa propre galerie** (`MANGA_OUT` → `prive/_output`), et **la clé exigée comme sur 8190**
+  (`STUDIO_SECRET` : sans elle le loopback serait ouvert à tout le futur tunnel de S4 — constaté : 8192 répondait sans
+  clé). App : marque = badge de version en pointillé + « · », seulement dans l'espace privé ; appui long 1,2 s sur 📚
+  → l'autre espace (PC : l'autre port, la clé suit en `#k=` puis quitte l'URL ; téléphone : `autre` fourni par le
+  serveur, **vide jusqu'à S4 → le geste ne fait rien**) ; clic simple inchangé ; le chemin direct Wi-Fi (Caddy →
+  8190) est **coupé dans l'espace privé** (il enverrait des requêtes de l'espace privé au serveur normal). Banc
+  `test_espace_ui.py` **29/29** (1280 et 360 px). 🟠 Reste commun (hors usage de l'espace privé) : `dataset_*` sous
+  `MANGA_ROOT` (entraînement LoRA). 🟠 Quang 17h57 : « sur mon PC ça ne fait rien » — à confirmer : page non
+  rechargée (v2.14.1) ou ouverte par l'adresse du tunnel (geste inactif jusqu'à S4).
 - **S3 — Fenêtre Edge dédiée à l'espace secret (PC)** : profil Edge séparé (historique/cache isolés), ouverte à SA place
   discrète (même mécanique que la fenêtre de capture v2.14 : `fenetre.json` propre, boutons Ranger / Taille sûre /
   Retenir / **Fermer à distance**), jamais d'ouverture sur le PC quand le déclenchement vient du téléphone.
@@ -2708,6 +2720,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 |---|---|
 | 2026-09-24 (17h20) | 🎧 **Voix locale validée à l'oreille** sur un chapitre complet (OPM ch.1, `gemini-charon-local.mp4`) — Quang : « c'est bien ». Rappel du partage : ☁ = tout en ligne (seul changement du jour : repérage des noms sans réflexion, dans les deux modes) ; 🖥 = voix + effacement sur la carte, le reste en ligne. |
 | 2026-09-24 (17h15) | 💰 **Chantier « réflexion Gemini » CLOS** : repérage des noms sans réflexion (gardé, −48 % analyse+noms) ; analyse et traduction gardent la réflexion complète (« low » : vraies fautes sur Black Jack — mot inventé, contresens, anglais ; « medium » : pas d'économie). Économie réelle attendue ≈ −4 $/mois en ligne, + la voix (≈ −6 $/mois) quand Quang narre en 🖥. § 4-terdecies. |
+| 2026-09-24 (17h58) | ✅ **v2.15.0 — compartiment secret S2** : l'app sait dans quel espace elle est (`/manga/espace`), appui long 1,2 s sur 📚 = l'autre espace (PC ; téléphone à S4), titre/icône identiques, marque discrète seulement dedans ; l'espace privé a aussi sa base, sa galerie et la même exigence de clé que 8190. `test_espace_ui.py` 29/29. |
 | 2026-09-24 (17h45) | ✅ **Compartiment secret S1 — la 2ᵉ instance** (`espace_prive.py`, port 8192, données sur C: hors dépôt, tâche `MangaStudioInstance2`). Ce qui est créé d'un côté n'apparaît pas de l'autre, dans les deux sens (`test_espace_prive.py` 15/15, mutation rouge sans écriture). Prochaine étape : S2 (l'app sait dans quel espace elle est + appui long sur 📚). |
 | 2026-09-24 (17h35) | ✅ **Compartiment secret S0 — racine des données réglable** (`MANGA_SOURCES_DIR`, 18 scripts + manga-fetch + 1 ligne du proxy). Sans la variable, rien ne change (6 bancs verts + plan de lot identique) ; avec, tout atterrit dans le dossier donné et nulle part ailleurs (`test_racine.py` 47/47, mutation rouge). Prochaine étape : S1 (2ᵉ instance sur **8192**). |
 | 2026-09-24 (16h45) | ✅ **v2.14.1 — « ✕ Fermer la fenêtre »** (Quang 16h29) : ferme la fenêtre de capture à distance, et elle seule (Browser.close sur son navigateur dédié, jamais l'Edge de Quang), question à l'écran avant. Banc `test_fenetre_fermer.py` 4/4 (Edge jetable ; la vraie fenêtre n'est pas fermée : ses onglets seraient perdus). La fenêtre secrète aura le sien, indépendant (§ 4-quaterdecies). |
