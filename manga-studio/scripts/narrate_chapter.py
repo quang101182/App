@@ -29,7 +29,7 @@ import moderation as mod             # v2.6.0 : refus reconnus, alertes persista
 import depenses as dep               # v2.6.0 : registre des depenses en ajout seul
 from datetime import datetime
 
-VERSION = "2.8.0"
+VERSION = "2.9.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -1282,6 +1282,9 @@ def main():
         prev = json.load(open(src, encoding="utf-8"))
         vis = [dict(page=p["page"], file=p["file"], type=p["type"], faits=p.get("faits_avant_verif") or p["faits"],
                     narration=p.get("narration_vision", p["narration"])) for p in prev["pages"]]
+        if a.pages:            # v2.9.0 (24/09) : la PLAGE s'applique aussi a une analyse reprise (ignoree avant : 40 p. au lieu de 2)
+            voulues = {p["file"] for p in pages}
+            vis = [v for v in vis if v["file"] in voulues]
         resume, persos = prev.get("resume", ""), prev.get("personnages", [])
         noms = (prev.get("stats") or {}).get("noms") or {}
         for k in ("vision_tokens_in", "vision_tokens_out", "cout_vision", "vision_s"):

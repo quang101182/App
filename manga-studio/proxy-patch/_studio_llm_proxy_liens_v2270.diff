@@ -1,0 +1,55 @@
+--- _studio_llm_proxy.py.bak-20260924-liens	2026-09-24 21:32:29.855477900 +0200
++++ _studio_llm_proxy.py	2026-09-24 21:32:29.895398000 +0200
+@@ -8802,6 +8802,34 @@
+     return out
+ 
+ 
++# Manga Studio v2.26.0 (Quang 24/09 21h31) : « reprendre un manga » liste, par serie, chaque SITE d'ou viennent ses
++# chapitres (manifest.source_url). Quang retire lui-meme un site devenu obsolete (✕) : sa liste est gardee ici, par
++# application (<racine>/_liens_retires.json = {serie: [hote, ...]}), commune au PC et au telephone. Rien n'est efface.
++_RE_HOTE = re.compile(r"^[a-z0-9][a-z0-9.-]{1,120}$")
++
++
++def manga_liens(data=None):
++    f = os.path.join(MANGA_SOURCES, "_liens_retires.json")
++    try:
++        with open(f, encoding="utf-8") as h:
++            d = json.load(h)
++    except (OSError, ValueError):
++        d = {}
++    if data is None:
++        return {"retires": d}
++    serie, hote, act = data.get("serie") or "", (data.get("hote") or "").lower(), data.get("action") or ""
++    if not _RE_SERIE.match(serie) or not _RE_HOTE.match(hote) or act not in ("retirer", "retablir"):
++        return {"error": "demande invalide"}
++    l = [x for x in d.get(serie) or [] if x != hote] + ([hote] if act == "retirer" else [])
++    if l: d[serie] = l
++    else: d.pop(serie, None)
++    tmp = f + ".tmp"
++    with open(tmp, "w", encoding="utf-8") as h:
++        json.dump(d, h, ensure_ascii=False, indent=1)
++    os.replace(tmp, f)
++    return {"ok": True, "retires": d}
++
++
+ def manga_activite():
+     """Tout ce qui travaille en ce moment, tous chapitres confondus (Manga Studio v1.88.0)."""
+     out = []
+@@ -10680,6 +10708,8 @@
+             _r = manga_cases((parse_qs(urlparse(self.path).query).get("d") or [""])[0])
+             if _r is None: self._json(404, {"error": "chapitre introuvable"})
+             else: self._json(200, _r)
++        elif self.path.split("?", 1)[0] == "/manga/liens":                 # Manga Studio v2.26.0 : sites retires
++            self._json(200, manga_liens())
+         elif self.path.split("?", 1)[0] == "/manga/bibliotheque":          # Manga Studio v2.6.0
+             self._json(200, manga_bibliotheque())
+         elif self.path.split("?", 1)[0] == "/manga/profil_defaut":         # Manga Studio v2.4.0
+@@ -11192,6 +11222,8 @@
+                 self._json(200, manga_suivi_regle(data))
+             elif self.path == "/manga/camera":                 # Manga Studio v2.5.0
+                 self._json(200, manga_camera(data))
++            elif self.path == "/manga/liens":                  # Manga Studio v2.26.0
++                self._json(200, manga_liens(data))
+             elif self.path == "/manga/bibliotheque":           # Manga Studio v2.6.0
+                 self._json(200, manga_bibliotheque(data))
+             elif self.path == "/manga/profil_defaut":          # Manga Studio v2.4.0

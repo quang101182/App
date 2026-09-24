@@ -2360,6 +2360,14 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
 - **24/09 20h55** : manga CLASSIQUE (pages) capturé dans la secondaire (MangaDex, 35 pages, mode page par page) ✅.
   **v2.24.0** (Quang) : la secondaire affiche AUSSI les sites de la principale, étiquetés « principale » ; la principale ne
   voit jamais ceux de la secondaire (proxy `manga_sites`, sens unique). 8190 : 4 sites ; 8192 : 2 + 4 « principale ».
+- **24/09 21h30 — v2.26.0 → v2.27.0 (demandes Quang)** : (1) **Reprendre un manga** (étape 1 de la capture) : le lien de
+  chaque chapitre était DÉJÀ enregistré (`manifest.source_url`) → une ligne PAR SITE avec son chapitre le plus avancé ;
+  🔗 l'ouvre dans la fenêtre de capture (PC) ou le navigateur (téléphone), SANS avance automatique (l'ordre dépend trop
+  du site — Quang) ; ✕ rouge = retirer un site obsolète, ↺ = le remettre (route `/manga/liens`, `<racine>/_liens_retires.json`,
+  ⚠ active après la prochaine relance du proxy) ; « 🔗 Site » aussi dans l'en-tête de la série. (2) « ↻ Actualiser » les
+  onglets passe à l'étape 2. (3) Narration : DEUX champs « de la page / à la page » ; narrate_chapter 2.9.0 applique
+  enfin la plage à une analyse reprise (elle était ignorée). ⏸ **Maquette de la capture repensée** à valider par Quang :
+  `maquette_capture_v1.html` (4 étapes colorées, une question chacune ; étape 1 = 3 cartes ; un seul bouton final).
 - **Voix de l'application secondaire (Quang 19h18)** : 1-2 voix FÉMININES, expression adaptée au thème → à faire à S7
   avec ce qu'on a (Chatterbox local : clonage + intensité d'expression, pas de modération ; Chirp 3 HD). Pistes
   notées, non obligatoires : StoryVoice utilise OpenAI `gpt-4o-mini-tts` avec consigne de ton par personnage.
