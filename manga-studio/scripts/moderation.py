@@ -9,7 +9,7 @@ import json, os, re, time, uuid
 
 VERSION = "1.0.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
+SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 ALERTES = os.environ.get("MANGA_ALERTES") or os.path.join(SRC, "_alertes.json")   # bancs : fichier jetable
 
 _GEMINI_BLOC = {"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "IMAGE_SAFETY", "IMAGE_PROHIBITED_CONTENT",

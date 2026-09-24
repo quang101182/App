@@ -22,7 +22,7 @@ from PIL import Image, ImageStat      # noqa: E402
 from mesure_cases_effacees import cases_effacees   # noqa: E402
 SEUIL_CASES = 20.0
 
-SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
+SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 Q_CJK = ("Page de manga TRADUITE en francais. Reste-t-il du texte en caracteres chinois, japonais ou coreens ? "
          "Ignore les onomatopees DESSINEES (effets sonores stylises integres au dessin) : ne les compte pas. "
          "Compte tout le reste : bulles, encadres de narration ou de pensee, cris, panneaux, titres. "

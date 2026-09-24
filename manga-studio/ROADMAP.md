@@ -2246,9 +2246,23 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   diff versionné). **Fini quand** : sans la variable, TOUT est identique (non-régression : `test_estimation`,
   `test_interruption`, `test_alertes_ui`, `test_moderation`, `test_vram_ui`, un lot à blanc `suivi_nuit --dry`) ; avec
   la variable pointée sur un dossier jetable, un chapitre importé y atterrit et nulle part ailleurs (banc dédié).
+  ✅ **FAIT 24/09 17h35** : 18 scripts + manga-fetch + proxy (1 ligne, `proxy-patch/_studio_llm_proxy_racine_s0.diff`)
+  lisent `MANGA_SOURCES_DIR`, repli sur `../sources`. Pas de `racine.py` importé : le proxy charge `video_chapitre.py`
+  par `spec_from_file_location` sans `scripts/` dans le chemin → un `import racine` y casserait ; la même expression est
+  donc écrite dans chaque ligne. Le proxy transmet son environnement à tous les scripts qu'il lance (`dict(os.environ…)`
+  partout, vérifié). Banc `test_racine.py` **47/47** (20 lignes × sans/avec + import réel, alerte et dépense dans un
+  dossier jetable, vrai `sources/` inchangé) ; mutation → rouge, partie B **sautée** si A échoue (sinon elle écrirait
+  dans les vraies données). Non-régression : `test_estimation` 320 cas 0 écart, `test_interruption` 17/17,
+  `test_moderation` 21/21, `test_alertes_ui` 18/18, `test_vram_ui` 10/10, `test_bibliotheque_api` 16/16, plan de lot
+  `suivi_nuit --dry` identique avant/après ; proxy relancé par `relance-proxy.ps1`.
+  🟠 **Hors racine, à traiter plus loin (constaté 24/09)** : les journaux de manga-fetch (`%LOCALAPPDATA%/manga-fetch/
+  fetch.log`, `events.log`) et `%LOCALAPPDATA%/manga-studio/capture_run.log` sont COMMUNS aux deux espaces et portent
+  des titres → S6 ; le profil Edge de capture aussi → S3 ; `dataset_*` et `output/` restent sous `MANGA_ROOT` (hors
+  périmètre : l'espace secret n'ingère pas de dataset).
 - **S1 — La 2ᵉ instance** : `espace_prive.py` = n'importe QUE la classe `H` du proxy (⚠ jamais une 2ᵉ instance COMPLÈTE :
   elle relancerait pod watchdog + notifs Telegram), `MANGA_SOURCES_DIR` = dossier secret **hors du dépôt et hors de
-  `sources/`** (ex. `C:/Users/quang/Documents/MangaStudio-donnees/prive`), port dédié (8191). Tâche planifiée au démarrage
+  `sources/`** (ex. `C:/Users/quang/Documents/MangaStudio-donnees/prive`), port dédié (~~8191~~ → **8192** : 8191 est
+  déjà pris par le banc `scripts/proxy_8191.py`, constaté 24/09). Tâche planifiée au démarrage
   de session comme le proxy. **Fini quand** : `http://127.0.0.1:8191/manga/` sert l'app, bibliothèque VIDE, et une capture
   de test faite par 8191 n'apparaît PAS sur 8190 (et inversement).
 - **S2 — L'app sait dans quel espace elle est** : `/manga/espace` → `{"espace": "normal"|"prive"}` ; titre et icône
@@ -2258,6 +2272,11 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
 - **S3 — Fenêtre Edge dédiée à l'espace secret (PC)** : profil Edge séparé (historique/cache isolés), ouverte à SA place
   discrète (même mécanique que la fenêtre de capture v2.14 : `fenetre.json` propre, boutons Ranger / Taille sûre /
   Retenir / **Fermer à distance**), jamais d'ouverture sur le PC quand le déclenchement vient du téléphone.
+  ⛔ **Exigence Quang (24/09 17h28)** : à sa 1ʳᵉ ouverture, **STOP** — Quang place lui-même la fenêtre, de façon
+  discrète, et la retient ; Claude ne s'en sert (capture, banc) **qu'après**.
+- **Après S4 (Quang, 24/09 17h28)** : l'espace secret devra aussi capturer du **manga classique** (pages), pas
+  seulement du webtoon. Le site d'essai (webtoon) fourni par Quang est noté **hors dépôt** (dépôt public) :
+  `C:/Users/quang/Documents/MangaStudio-donnees/prive/_NOTES-essai.txt`.
 - **S4 — Téléphone** : sous-domaine dédié → tunnel → 8191, **derrière Cloudflare Access** (règle
   `.claude/rules/apps-perso-zero-secret.md` : même origine app+API, policy = email de Quang). ⚠ `CF_API_TOKEN` n'a pas la
   permission Zero Trust (liste VIDE au lieu d'une erreur) → API interne du dashboard depuis une page loguée ; PWA :
@@ -2675,6 +2694,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 |---|---|
 | 2026-09-24 (17h20) | 🎧 **Voix locale validée à l'oreille** sur un chapitre complet (OPM ch.1, `gemini-charon-local.mp4`) — Quang : « c'est bien ». Rappel du partage : ☁ = tout en ligne (seul changement du jour : repérage des noms sans réflexion, dans les deux modes) ; 🖥 = voix + effacement sur la carte, le reste en ligne. |
 | 2026-09-24 (17h15) | 💰 **Chantier « réflexion Gemini » CLOS** : repérage des noms sans réflexion (gardé, −48 % analyse+noms) ; analyse et traduction gardent la réflexion complète (« low » : vraies fautes sur Black Jack — mot inventé, contresens, anglais ; « medium » : pas d'économie). Économie réelle attendue ≈ −4 $/mois en ligne, + la voix (≈ −6 $/mois) quand Quang narre en 🖥. § 4-terdecies. |
+| 2026-09-24 (17h35) | ✅ **Compartiment secret S0 — racine des données réglable** (`MANGA_SOURCES_DIR`, 18 scripts + manga-fetch + 1 ligne du proxy). Sans la variable, rien ne change (6 bancs verts + plan de lot identique) ; avec, tout atterrit dans le dossier donné et nulle part ailleurs (`test_racine.py` 47/47, mutation rouge). Prochaine étape : S1 (2ᵉ instance sur **8192**). |
 | 2026-09-24 (16h45) | ✅ **v2.14.1 — « ✕ Fermer la fenêtre »** (Quang 16h29) : ferme la fenêtre de capture à distance, et elle seule (Browser.close sur son navigateur dédié, jamais l'Edge de Quang), question à l'écran avant. Banc `test_fenetre_fermer.py` 4/4 (Edge jetable ; la vraie fenêtre n'est pas fermée : ses onglets seraient perdus). La fenêtre secrète aura le sien, indépendant (§ 4-quaterdecies). |
 | 2026-09-24 (16h45) | ✅ **v2.14.0 + manga-fetch 0.6.4 — la fenêtre de capture à la main de Quang** (demandes 16h07-16h22). Mesuré : sous ~576 × 774 px intérieurs, MangaDex n'affiche plus la page (capture « aucune image ») → minimum **700 × 950** avec marge. La place choisie par Quang (~93 % sous l'écran) capture normalement (MangaDex 18/18, webtoon 7/7). La fenêtre s'ouvre à cette place ; « ↘ Ranger sur le côté », « ⤢ Taille sûre », « 📌 Retenir cette place » dans l'étape 1 ; contrôle avant chaque capture (question à l'écran + correction en un bouton). Rien ne bouge sans clic, sauf à l'ouverture. Banc `test_fenetre_ui.py` 10/10 (fenêtre et réglage restaurés). ⇒ Le PARAVENT du compartiment secret (§ 4-quaterdecies, point 6) est remplacé par ce principe (Quang 16h13 : « pas besoin de cacher la fenêtre avec la fenêtre principale »). ~~🟠 Raijin Scans fermé (renvoie vers Discord) : à retirer des sites validés.~~ → ✅ retiré de `sites.json` le 24/09 16h50. |
 | 2026-09-24 (16h10) | ✅ **v2.13.2 — coûts dynamiques** (Quang 16h02 : « j'ai dû rafraîchir l'application pour voir les nouveaux coûts ») : la pastille ne suivait que les tâches vues par l'app → rechargée toutes les 30 s (page visible). Et les outils d'essai (sonde, juges, essai de réflexion) payaient **hors registre** : ils s'y inscrivent (type `essai`, poste « essais et bancs », proxy corrigé), 1,53 $ du jour rattrapés. |

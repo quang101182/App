@@ -19,7 +19,7 @@ import json, math, os, sys, time
 
 VERSION = "1.0.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
+SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 MODELE = os.path.join(HERE, "models", "manga_panel_detector_fp32.pt")
 CACHE = "cases.json"
 ALGO = 1                       # a monter si la DETECTION change : tout le cache est alors refait

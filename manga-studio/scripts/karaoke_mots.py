@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import narrate_chapter as nc          # GATEWAY, secret, frein 18/min
 
 VERSION = "1.89.0"
-SRC = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources"))
+SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources"))
 MODELE = "whisper-large-v3-turbo"
 MAX_CPS = 25                          # debit maximal plausible d'une voix (caracteres/s, espaces compris)
 PRIX_HEURE = 0.04                     # $ / heure d'audio (Groq), 10 s factures au minimum par appel

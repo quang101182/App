@@ -8,7 +8,7 @@ nouvelles demandees avec EXACTEMENT les reglages des anciennes.  Usage : python 
 import json, os, re, shutil, subprocess, sys, time, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
+SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 PY = r"D:\Download\02-Apps-Web\kohya-trainer\.venv\Scripts\python.exe"
 KEY = open(os.path.expanduser(r"~\Documents\ComfyUI\.studio_secret"), encoding="utf-8").read().strip()
 TAG = "gemini-charon"

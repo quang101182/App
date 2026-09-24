@@ -14,7 +14,7 @@ import argparse, json, os, re, subprocess, sys, time, urllib.request
 
 VERSION = "1.2.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
+SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 APERCUS = os.path.join(SRC, "_apercus")
 MEMOIRE_MIN_MO = 5000          # Chatterbox multilingue : ~4 Go mesures en generation
 COMFY = "http://127.0.0.1:8188/queue"

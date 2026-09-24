@@ -32,7 +32,7 @@ import precedemment as prec                                # chapitres_precedent
 import estimation                                          # v2.5.0 : double estimation ☁ / 🖥
 
 VERSION = "2.5.0"
-SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
+SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 DIR = os.path.join(SRC, "_suivi")
 ETAT, JOURNAL = os.path.join(DIR, "etat.json"), os.path.join(DIR, "journal.jsonl")
 DEFAUT_F = os.path.join(SRC, "_profil_defaut.json")

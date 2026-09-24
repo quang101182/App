@@ -10,7 +10,7 @@ Survit a une relance du proxy (processus independant, PID dans _runner.json).
 import json, os, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FILE = os.path.normpath(os.path.join(HERE, "..", "sources", "_videos_file"))
+FILE = os.path.join(os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources")), "_videos_file")
 SCRIPT = os.path.join(HERE, "video_chapitre.py")
 CREATE = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 

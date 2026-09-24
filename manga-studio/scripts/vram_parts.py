@@ -18,7 +18,7 @@ import glob, json, os, subprocess, time, urllib.request
 
 VERSION = "1.1.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
-GPU_DIR = os.path.normpath(os.path.join(HERE, "..", "sources", "_gpu"))
+GPU_DIR = os.path.join(os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources")), "_gpu")
 CREATE = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 FRAIS_S = 15
 # v1.1.0 (Quang 24/09 15h39, « ton processus devrait afficher une couleur ») : un moteur PyTorch ne compte que sa memoire

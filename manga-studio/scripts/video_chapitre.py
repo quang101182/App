@@ -27,7 +27,7 @@ VERSION = "1.98.0"
 # de ce genre » -- sans bouton de plus. Tant que RENDU vaut 1, rien ne change (cle absente de l'empreinte).
 RENDU = 1
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
+SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 W, H, FPS, SR = 1080, 1920, 30, 44100
 HAUT_TITRE, HAUT_SOUS = 96, 360                   # bandeau titre / bandeau sous-titres ; la scene prend le reste
 SCENE_H = H - HAUT_TITRE - HAUT_SOUS

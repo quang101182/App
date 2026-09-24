@@ -31,7 +31,7 @@ from datetime import datetime
 
 VERSION = "2.8.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
-SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
+SOURCES = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
 LOGF = os.path.join(os.environ.get("LOCALAPPDATA", HERE), "manga-studio", "narration.log")
 

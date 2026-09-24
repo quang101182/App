@@ -17,7 +17,7 @@ import glob, json, os, subprocess, sys, time
 
 VERSION = "1.0.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
+SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 sys.path.insert(0, HERE)
 CREATE = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 

@@ -15,7 +15,7 @@ par le lecteur (vram_parts.py) des qu'il a plus de 15 s.
 import atexit, json, os, sys, threading, time
 
 VERSION = "1.0.0"
-DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources", "_gpu"))
+DIR = os.path.join(os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources")), "_gpu")
 PERIODE = 3.0
 
 

@@ -45,7 +45,7 @@ LOG_FILE = os.path.join(DATA_DIR, "fetch.log")
 LOG_EVT = os.path.join(DATA_DIR, "events.log")
 PLAFOND_TOURS_PAGER, PLAFOND_S_PAGER = 3000, 3600   # v0.6.3 : garde-fous page par page (~1000 pages, 1 h)
 PLAFOND_PAS_ABSOLU = 6000   # v0.6.2 : ~5,3 millions de px a 1273 px d'ecran (~2 h) -- garde-fou, jamais la regle  # journal DÉTAILLÉ (demande Quang 18/18)
-DEFAULT_OUT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources"))
+DEFAULT_OUT = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources"))
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif"}
 
 

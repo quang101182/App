@@ -10,7 +10,7 @@ Usage : python refaire_traductions.py one-punch-man 1-10 [--langue fr] [--sans-v
 import argparse, json, os, shutil, subprocess, sys, time, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
+SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 PY = r"D:\Download\02-Apps-Web\kohya-trainer\.venv\Scripts\python.exe"
 KEY = open(os.path.expanduser(r"~\Documents\ComfyUI\.studio_secret"), encoding="utf-8").read().strip()
 ENV = dict(os.environ, PYTHONIOENCODING="utf-8")

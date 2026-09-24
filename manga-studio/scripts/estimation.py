@@ -17,7 +17,7 @@ import glob, json, os, re, statistics, time
 
 VERSION = "1.0.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
+SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 CACHE = os.path.join(SRC, "_etalonnage.json")
 TTL = 3600
 MIN_ECH = 3
