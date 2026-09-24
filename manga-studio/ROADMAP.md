@@ -2332,6 +2332,20 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   permission Zero Trust (liste VIDE au lieu d'une erreur) → API interne du dashboard depuis une page loguée ; PWA :
   bypass Access sur `/manifest.json` + `/icon-*` ET `estPublic()` (règle PWA derrière Access). Vérifier SANS cookie :
   manifeste 200, page 302.
+  ✅ **FAIT 24/09 19h20** (adresse NON écrite ici : dépôt public — elle est dans `prive/_acces.json`). Ordre suivi pour
+  qu'elle ne soit jamais exposée : (1) 3 Access Applications créées AVANT le DNS (API du dashboard, session `EdgeAuto-cf`
+  reconnectée par Quang via passkey) — nom neutre, **invisible du lanceur d'apps**, policy « Allow Quang » (e-mail
+  seul, relu après création), session 730 h, OTP ; + 2 bypass PWA (`/manga/manifest.webmanifest`, `/manga/icon-*`) ;
+  (2) CNAME proxifié vers le tunnel existant `generate-agent` ; (3) une entrée d'ingress → 127.0.0.1:8192 (validée par
+  `cloudflared ingress validate/rule`), seul le cloudflared de ce tunnel relancé. Pas de worker ni de `estPublic()` :
+  le proxy sert déjà manifeste et icônes sans clé. **Clé jamais saisie sur le téléphone** : `espace_prive.py` 1.5.0
+  accepte le jeton `Cf-Access-Jwt-Assertion` VÉRIFIÉ (signature JWKS, audience, émetteur, e-mail) ; faux jeton → 401.
+  `launch-generate-agent.ps1` donne à la principale l'adresse de la secondaire (`MANGA_AUTRE_URL`, lue hors dépôt).
+  Vérifié SANS cookie : page, API, `sw.js`, racine → **302** ; manifeste + 2 icônes → **200** ; principale inchangée.
+  Bout en bout (navigateur neuf, format téléphone, code OTP lu dans Gmail) **7/7** : connexion → app secondaire, se sait
+  secondaire, AUCUNE clé stockée, bibliothèque chargée, chemin Wi-Fi coupé, 0 erreur. Appui long depuis la principale
+  ouverte par le tunnel → la secondaire, et **rien ne s'ouvre sur le PC**. Sauvegardes (avant/création, diffs tunnel et
+  lanceur) : `prive/_acces-sauvegardes/`. ⚠ Session Access = 1 mois max (WARP pour aller au-delà, règle apps perso).
 - **S5 — Vue croisée discrète** : chaque instance publie ses traitements vivants dans un registre COMMUN (même principe
   que `sources/_gpu/`, mais hors des deux racines) ; témoin d'activité : côté normal « 🔒 1 traitement en cours · étape ·
   reste ~X min » SANS titre ; côté secret, tout. Au lancement, si l'autre espace travaille : question à l'écran (lancer
@@ -2744,6 +2758,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 |---|---|
 | 2026-09-24 (17h20) | 🎧 **Voix locale validée à l'oreille** sur un chapitre complet (OPM ch.1, `gemini-charon-local.mp4`) — Quang : « c'est bien ». Rappel du partage : ☁ = tout en ligne (seul changement du jour : repérage des noms sans réflexion, dans les deux modes) ; 🖥 = voix + effacement sur la carte, le reste en ligne. |
 | 2026-09-24 (17h15) | 💰 **Chantier « réflexion Gemini » CLOS** : repérage des noms sans réflexion (gardé, −48 % analyse+noms) ; analyse et traduction gardent la réflexion complète (« low » : vraies fautes sur Black Jack — mot inventé, contresens, anglais ; « medium » : pas d'économie). Économie réelle attendue ≈ −4 $/mois en ligne, + la voix (≈ −6 $/mois) quand Quang narre en 🖥. § 4-terdecies. |
+| 2026-09-24 (19h20) | ✅ **Compartiment S4 — accès téléphone** : adresse dédiée derrière Cloudflare Access (créé avant le DNS), jeton Access vérifié = aucune clé à saisir, appui long principale ↔ secondaire sur le téléphone, rien ne s'ouvre sur le PC. Sans cookie : 302 partout sauf manifeste/icônes (200). Bout en bout 7/7. Ensuite (demandes Quang 19h10) : fenêtre de capture PRINCIPALE sans synchro ; enchaînement par lien « chapitre suivant » (sites tagués après test réel) ; puis S5. |
 | 2026-09-24 (18h55) | ✅ **v2.16.0 → v2.17.0 — compartiment secret S3 + indicateur d'enchaînement** : fenêtres de capture et d'app propres à l'application secondaire (profils sans compte ni synchro, placées par Quang), sa liste de sites hors dépôt, captures réelles OK ; manga-fetch 0.6.5 → 0.6.8 (2 défauts de défilement corrigés, indicateur « ce site enchaîne-t-il ? » dans les deux applications). Bancs 10/10, 14/14, 12/12 ×2. Prochaine étape : S4. |
 | 2026-09-24 (17h58) | ✅ **v2.15.0 — compartiment secret S2** : l'app sait dans quel espace elle est (`/manga/espace`), appui long 1,2 s sur 📚 = l'autre espace (PC ; téléphone à S4), titre/icône identiques, marque discrète seulement dedans ; l'espace privé a aussi sa base, sa galerie et la même exigence de clé que 8190. `test_espace_ui.py` 29/29. |
 | 2026-09-24 (17h45) | ✅ **Compartiment secret S1 — la 2ᵉ instance** (`espace_prive.py`, port 8192, données sur C: hors dépôt, tâche `MangaStudioInstance2`). Ce qui est créé d'un côté n'apparaît pas de l'autre, dans les deux sens (`test_espace_prive.py` 15/15, mutation rouge sans écriture). Prochaine étape : S2 (l'app sait dans quel espace elle est + appui long sur 📚). |
