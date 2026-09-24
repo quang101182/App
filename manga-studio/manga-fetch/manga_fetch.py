@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.6.8"
+VERSION = "0.6.9"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -1405,7 +1405,9 @@ def launch_edge() -> int:
         print("Edge introuvable.")
         return 1
     os.makedirs(EDGE_PROFILE, exist_ok=True)
-    sans_synchro = os.environ.get("MANGA_CAPTURE_SANS_SYNCHRO") == "1"      # v0.6.6 : espace prive
+    # v0.6.9 (Quang 24/09 19h10) : TOUTE fenetre de capture, principale comprise (elle synchronisait tout sur le compte
+    # Microsoft). MANGA_CAPTURE_SANS_SYNCHRO=0 pour revenir a l'ancien comportement.
+    sans_synchro = os.environ.get("MANGA_CAPTURE_SANS_SYNCHRO", "1") != "0"
     if sans_synchro:
         profil_sans_synchro(EDGE_PROFILE)
     # v0.6.4 (Quang 24/09) : la fenetre s'OUVRE a la place choisie par Quang (sur le cote, en partie hors de l'ecran,
