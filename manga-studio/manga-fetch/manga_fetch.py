@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.6.5"
+VERSION = "0.6.6"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -1356,6 +1356,24 @@ def lister_sources(out: str, titres_seuls: bool = False) -> int:
 
 # --------------------------------------------------------------------------- fenêtre dédiée
 
+
+def profil_sans_synchro(profil):
+    """S3 (24/09) : un profil Edge qui ne se connecte PAS au compte Microsoft et ne synchronise RIEN (sinon son
+    historique remonterait sur les autres appareils de Quang : constate, Edge le proposait d'office). A appeler
+    navigateur ferme ; complete par --disable-sync. Verifie le 24/09 : edge://settings/profiles/sync -> « Pas en
+    cours de synchronisation »."""
+    f = os.path.join(profil, "Default", "Preferences")
+    os.makedirs(os.path.dirname(f), exist_ok=True)
+    try:
+        p = json.load(open(f, encoding="utf-8"))
+    except Exception:
+        p = {}
+    p.setdefault("signin", {}).update(allowed=False, allowed_on_next_startup=False)
+    p.setdefault("sync", {}).update(requested=False)
+    p["sync"].pop("has_setup_completed", None); p["sync"].pop("keep_everything_synced", None)
+    json.dump(p, open(f, "w", encoding="utf-8"))
+
+
 def launch_edge() -> int:
     for cible in (r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
                   r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"):
@@ -1365,6 +1383,9 @@ def launch_edge() -> int:
         print("Edge introuvable.")
         return 1
     os.makedirs(EDGE_PROFILE, exist_ok=True)
+    sans_synchro = os.environ.get("MANGA_CAPTURE_SANS_SYNCHRO") == "1"      # v0.6.6 : espace prive
+    if sans_synchro:
+        profil_sans_synchro(EDGE_PROFILE)
     # v0.6.4 (Quang 24/09) : la fenetre s'OUVRE a la place choisie par Quang (sur le cote, en partie hors de l'ecran,
     # assez grande pour capturer : mesure 24/09). Meme fichier que les boutons « Ranger » / « Memoriser » de l'app
     # (scripts/cdp_mini.py). Ensuite, plus rien ne bouge sans un clic de Quang.
@@ -1381,6 +1402,7 @@ def launch_edge() -> int:
                       # d'être rendue (sinon Edge la throttle et la capture casse)
                       "--disable-features=CalculateNativeWinOcclusion",
                       f"--user-data-dir={EDGE_PROFILE}",
+                      *(["--disable-sync"] if sans_synchro else []),
                       "--no-first-run", "--no-default-browser-check",
                       "--window-size=%d,%d" % (place["width"], place["height"]),
                       "--window-position=%d,%d" % (place["left"], place["top"]),
