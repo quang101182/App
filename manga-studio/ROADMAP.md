@@ -2113,6 +2113,22 @@ avec Generate Studio (relance UNIQUEMENT par `relance-proxy.ps1`, `.bak` avant p
   durées du journal, pour suivre la réalité.
 - Point de départ dans le code : `lotEstimer()` (estimation du lot, profil) — l'étendre plutôt que dupliquer.
 
+### Protection : basculer pendant qu'un traitement tourne (Quang 24/09 14h14)
+> *« si quelque chose tourne, que je ne switch pas en plein milieu […] pas une sécurité qui empêche, mais une pop-up
+> d'alerte, et c'est moi qui décide si je veux interrompre ou non […] gérer les effets collatéraux si je décide
+> d'interrompre. Il faut que je sache exactement où j'en suis. »*
+- Constat (code, 24/09) : le mode est lu **au lancement** de chaque traitement (narrate reçoit `--tts`, traduire
+  `--effacement`, la nuit relit `reglages.py` à CHAQUE chapitre) → ce qui tourne finit dans son mode ; seuls les
+  chapitres SUIVANTS d'un lot / de la nuit changeraient.
+- À faire : clic sur la pastille pendant une activité (`/manga/activite` non vide) → fenêtre : ce qui tourne (chapitre,
+  étape), « le traitement en cours finit en ☁/🖥 », « N chapitre(s) restants du lot passeraient en 🖥/☁ » ; choix :
+  **Basculer pour la suite** / **Annuler** / **Interrompre**. Interrompre = arrêt propre (tuer le process du chapitre en
+  cours, retirer le reste de la file) puis **bilan exact** : chapitres finis, chapitre coupé + étape atteinte (l'analyse
+  payée est gardée : `--reuse-vision` la reprend sans repayer), chapitres non commencés ; tout ce qui a été payé est
+  déjà au registre des dépenses. Bouton « Reprendre » qui repart de là.
+- Mémoriser dans chaque passage le mode avec lequel il a tourné (narration.json `tts`, traduction.json `effacement` :
+  déjà écrits) → le bilan peut le dire.
+
 ### État du chantier moteurs locaux / modération à la coupure (24/09 14h15) — « fait » = `git log`
 - ✅ v2.10.0 voix locale · v2.11.0 alertes de modération (bouton d'activité, onglet « À traiter ») + interrupteur global
   (`scripts/reglages.py`, `sources/_reglages.json`) · traduire 1.99.0 (effacement local, refus → VO + alerte) · narrate 2.7.0
