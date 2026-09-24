@@ -2095,6 +2095,41 @@ avec Generate Studio (relance UNIQUEMENT par `relance-proxy.ps1`, `.bak` avant p
 
 **Limites ACCEPTÉES (décision Claude, 24/09)** : 10 répliques ne sont plus posées — ch.3 p.7 la légende « 我只是想成為世界最強的男人… » (zone mal détectée, 32 % de la page) et 9 **grands cris calligraphiés** (ch.4 p.1/p.17, ch.6 p.8/p.23, ch.7 p.5, ch.8 p.17, ch.10 p.12/p.29) : ils restent en chinois, comme les onomatopées dessinées, au lieu d'un rectangle blanc qui mangeait la case. La narration porte le sens. 🟠 (constaté v1.97.0) Les traductions Noritaka ch.1 (v1.91) et Black Jack ch.1-2 (v1.91/1.92) sont **antérieures** aux corrections v1.96-v1.97 (Noritaka p.54 et Black Jack ch.2 p.2 sont des pages blanches) : à refaire le jour où ces séries servent (`refaire_traductions.py <serie> <ch> --rerendu --version-min 1.97.0`).
 
+## 4-decies. MODÉRATION — CONTINUER, PRÉVENIR, LAISSER QUANG TRAITER *(24/09/2026 13h52, spécification de Quang)*
+
+> Quang : *« un système qui permet de continuer même si des pages ou autre chose sont refusées par modération […] une
+> fenêtre […] qui ne prend pas trop de place, qui est repliée, en couleur et qui clignote un peu […] si je l'ouvre, tous
+> les chapitres ou toutes les pages concernées […] expliquent clairement que c'est lié à la modération, avec une
+> proposition de solution. Il suffit de cliquer, et je peux sélectionner ce que je veux traiter […] une notification
+> historique persistante que je peux traiter moi-même à tout moment […] si j'ai lancé la génération d'une vidéo ou d'un
+> batch et qu'il y a des erreurs sur un chapitre, il faut peut-être ne pas générer la vidéo. »*
+> Et avant : *« si je lance une génération dans le cloud, à tout moment le local pourrait prendre la main […] si j'étais
+> sur le PC en train de faire des choses, cela pourrait créer des effets »* ⇒ **le local ne prend JAMAIS la main tout seul.**
+
+### Constat (lu dans le code, 24/09)
+Aucun refus n'est reconnu : Gemini « SAFETY » = réponse vide → lue comme « JSON illisible » → **3 essais PAYÉS** →
+**le chapitre entier abandonné**. Une seule page sensible fait tomber tout un lot. (Récit = DeepSeek, déjà permissif.)
+
+### Ce qu'on construit
+1. **Reconnaître un refus** (Gemini `finishReason`/`blockReason` de sécurité, refus Kimi/DeepSeek « risque »/content
+   filter, réponse de refus en toutes lettres) → **pas de nouvel essai payant**, une ligne au journal.
+2. **Continuer** : en analyse, le lot refusé est découpé page par page ; seule la page refusée est mise de côté (pas de
+   narration, marquée `moderation`), le chapitre continue. En traduction : la page refusée garde sa VO, le chapitre continue.
+3. **Registre persistant** `sources/_alertes.json` : une entrée par page ou chapitre touché (série, chapitre, page(s),
+   étape, moteur, motif, date, solution proposée, état : ouverte / traitée / ignorée). Survit aux redémarrages.
+4. **Fenêtre d'alertes** dans l'app : une pastille repliée, colorée, qui **clignote doucement** tant qu'il reste des
+   alertes ouvertes ; ouverte = la liste par chapitre, motif en clair (« refusé par la modération de Gemini »), solution
+   proposée, cases à cocher, **« Traiter la sélection »** ; historique conservé (traitées / ignorées).
+5. **Solutions proposées** (Quang choisit, rien d'automatique) : réessayer avec l'autre moteur en ligne (Kimi ↔ Gemini) ;
+   narrer la page par DeepSeek à partir des pages voisines (sans image) ; relire en LOCAL (carte graphique, **seulement
+   sur clic**, avec la garde « carte libre ») ; ignorer.
+6. **Vidéo** : un chapitre avec une alerte OUVERTE n'est **pas mis en vidéo** (batch, nuit, demande) ; l'alerte le dit
+   (« vidéo en attente ») ; une fois l'alerte traitée ou ignorée, la vidéo peut repartir. Option « générer quand même ».
+
+### Tester
+Banc sans réseau (réponses de refus simulées Gemini / Kimi / DeepSeek → reconnues, chapitre continue, alerte écrite,
+vidéo bloquée) + mutation ; puis pages réellement dures déjà présentes (Claymore) ; non-régression narration/vidéo.
+
 ## 4-nonies. FEUILLE DE ROUTE — MOTEURS LOCAUX EN OPTION *(24/09/2026 12h50, demandée par Quang : « trace une feuille de route bien détaillée, puis on travaille étape par étape »)*
 
 ### Les règles du chantier (décision Quang, non négociables)
