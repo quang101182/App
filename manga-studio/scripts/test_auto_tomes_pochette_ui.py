@@ -26,10 +26,12 @@ def check(nom, cond, detail=""):
 
 def chapitre(ch, num, manifeste):
     d = os.path.join(SRC, S, ch); os.makedirs(d, exist_ok=True)
-    m = json.load(open(os.path.join(SRC, "solo-leveling", "ch_1", "manifest.json"), encoding="utf-8"))
-    m.update(slug=S, chapter=str(num), pages=m["pages"][:3], captured_at=time.strftime("%Y-%m-%dT%H:%M:%S"))
+    # pages prises dans claymore/ch_1 (serie stable) ; le TITRE reste « Solo Leveling » : c'est lui que MangaDex/AniList cherchent
+    m = json.load(open(os.path.join(SRC, "claymore", "ch_1", "manifest.json"), encoding="utf-8"))
+    m.update(slug=S, title="Solo Leveling", chapter=str(num), pages=m["pages"][:3], captured_at=time.strftime("%Y-%m-%dT%H:%M:%S"),
+             source_url="", notes=[])
     for p in m["pages"]:
-        shutil.copy2(os.path.join(SRC, "solo-leveling", "ch_1", p["file"]), os.path.join(d, p["file"]))
+        shutil.copy2(os.path.join(SRC, "claymore", "ch_1", p["file"]), os.path.join(d, p["file"]))
     if manifeste:
         json.dump(m, open(os.path.join(d, "manifest.json"), "w", encoding="utf-8"), ensure_ascii=False)
     return m

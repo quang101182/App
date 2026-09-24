@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.6.2"
+VERSION = "0.6.3"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -43,6 +43,7 @@ EDGE_PROFILE = os.path.join(os.environ.get("LOCALAPPDATA", "."), "manga-fetch-ed
 DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA", "."), "manga-fetch")
 LOG_FILE = os.path.join(DATA_DIR, "fetch.log")
 LOG_EVT = os.path.join(DATA_DIR, "events.log")
+PLAFOND_TOURS_PAGER, PLAFOND_S_PAGER = 3000, 3600   # v0.6.3 : garde-fous page par page (~1000 pages, 1 h)
 PLAFOND_PAS_ABSOLU = 6000   # v0.6.2 : ~5,3 millions de px a 1273 px d'ecran (~2 h) -- garde-fou, jamais la regle  # journal DÉTAILLÉ (demande Quang 18/18)
 DEFAULT_OUT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources"))
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif"}
@@ -1052,11 +1053,17 @@ def capture(args) -> int:
                                  "relancer avec --force" % (pas, pos[0], pos[1]))
                     log_evt("fin", "PLAFOND DE DEFILEMENT atteint avant le bas", pas=pas, position=pos[0], hauteur=pos[1])
             else:
+                # v0.6.3 (24/09) : comme la bande defilante, la fin normale = plus rien de nouveau ou chapitre
+                # suivant. Les anciennes limites (500 pages, 12 min) coupaient un gros tome EN SILENCE (« terminée ») :
+                # elles deviennent des garde-fous larges, et les atteindre = ECHEC ecrit.
                 sterile, debut_pager, mode_clic, cote, cotes_essayes = 0, time.time(), False, 0.75, set()
-                for _ in range(500):
+                fini, tours = False, 0
+                while True:
+                    tours += 1
                     if chapitre_quitte():
                         notes.append("fin : le lecteur est passé au chapitre suivant")
                         log_evt("fin", "chapitre suivant atteint (page par page)")
+                        fini = True
                         break
                     collecter()
                     n_avant = len(vues)
@@ -1082,11 +1089,13 @@ def capture(args) -> int:
                     if chapitre_quitte():
                         notes.append("fin : le lecteur est passé au chapitre suivant")
                         log_evt("fin", "chapitre suivant atteint (après pression)")
+                        fini = True
                         break
                     collecter()
                     if len(vues) == n_avant:
                         sterile += 1
                         if sterile >= 5 and len(vues) > 0:
+                            fini = True
                             break  # plus rien de nouveau ET on a des pages : fin de chapitre
                         if sterile >= 20 and len(vues) == 0:
                             print("Abandon : le lecteur ne charge aucune page "
@@ -1097,9 +1106,13 @@ def capture(args) -> int:
                             return 2
                     else:
                         sterile = 0
-                    if time.time() - debut_pager > 720:  # garde-fou global : 12 min
-                        notes.append("arrêt sur timeout global (12 min)")
+                    if tours >= PLAFOND_TOURS_PAGER or time.time() - debut_pager > PLAFOND_S_PAGER:
                         break
+                if not fini:
+                    notes.append("ECHEC : capture ARRÊTÉE avant la fin (%d pages en %d tours, %d min) -- relancer avec --force"
+                                 % (len(vues), tours, (time.time() - debut_pager) // 60))
+                    log_evt("fin", "GARDE-FOU page par page atteint avant la fin", pages=len(vues), tours=tours,
+                            s=int(time.time() - debut_pager))
 
             # ordre d'insertion du dict = ordre de découverte = ordre de lecture
             # (pager : page par page ; strip : au fil du scroll vers le bas)

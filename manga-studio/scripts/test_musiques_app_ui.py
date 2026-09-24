@@ -42,10 +42,10 @@ print("serie source (lecture seule) :", source, list(avant))
 
 bo.supprimer_serie(S)
 d = os.path.join(SRC, S, "ch_1"); os.makedirs(d)
-m = json.load(open(os.path.join(SRC, "solo-leveling", "ch_1", "manifest.json"), encoding="utf-8"))
+m = json.load(open(os.path.join(SRC, "claymore", "ch_1", "manifest.json"), encoding="utf-8"))   # serie stable
 m.update(slug=S, title="Essai Musique", pages=m["pages"][:3])
 for p in m["pages"]:
-    shutil.copy2(os.path.join(SRC, "solo-leveling", "ch_1", p["file"]), os.path.join(d, p["file"]))
+    shutil.copy2(os.path.join(SRC, "claymore", "ch_1", p["file"]), os.path.join(d, p["file"]))
 json.dump(m, open(os.path.join(d, "manifest.json"), "w", encoding="utf-8"), ensure_ascii=False)
 open(os.path.join(SRC, S, "pochette.jpg"), "wb").write(open(os.path.join(d, m["pages"][0]["file"]), "rb").read())   # pas d'appel AniList
 md = os.path.join(SRC, S, "musique")
