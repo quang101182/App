@@ -2168,9 +2168,9 @@ sur la capture du banc, corrigé).
 | | « Précédemment », karaoké, vidéo : pas encore de double estimation à l'écran (identiques dans les deux modes, sauf la vidéo qui est toujours sur le PC) |
 
 ### Propositions critiques ouvertes (Claude, 24/09) — décision de Quang attendue
-1. **Repérage des personnages = 4,43 $ du mois** (presque autant que l'analyse, 5,04 $) : chaque page passe plusieurs fois
+1. ✅ **FAIT le 24/09 (§ 4-terdecies)** : réflexion minimale sur le repérage, −48 % sur analyse+noms, fidélité inchangée. Ancien texte : ~~**Repérage des personnages = 4,43 $ du mois** (presque autant que l'analyse, 5,04 $) : chaque page passe plusieurs fois
    pour un vote. Mesurer 1 passage au lieu de N, ou seulement sur les pages avec un visage (fidélité des noms avant/après,
-   même banc que le 21/09). Gain estimé 2-3 $/mois. **Déclencheur** : Quang dit « go » ; sinon au prochain lot > 5 $.
+   même banc que le 21/09). Gain estimé 2-3 $/mois. **Déclencheur** : Quang dit « go » ; sinon au prochain lot > 5 $.~~
 2. **Reprendre l'analyse d'une narration EN LIGNE quand on refait le même chapitre EN LOCAL** (aujourd'hui seulement
    pour un chapitre coupé) : l'analyse est identique dans les deux modes → refaire OPM en 🖥 coûterait ~0 $ au lieu de
    ~0,01 $/page. **Déclencheur** : première demande « refais ce chapitre sur le PC ».
