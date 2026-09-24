@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.6.9"
+VERSION = "0.7.0"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -340,6 +340,70 @@ def enchainement_possible(url: str):
     return False, ""
 
 
+def _suivant_par_page(page, url_chapitre: str, courant: str, jusqua, entiers: bool = False):
+    """v0.7.0 (Quang 24/09 19h10 : « si tu es sur de pouvoir de maniere fiable leur apprendre a suivre »). DERNIER
+    recours, pour les sites dont l'adresse ne se devine pas (identifiant interne). Deux reperes lus DANS la page :
+      1. une LISTE DEROULANTE des chapitres -- retenue seulement si elle CONTIENT le chapitre en cours (sinon ce n'est
+         pas elle) ; le suivant est choisi comme partout (_choisir_suivant : borne, intermediaires) ;
+      2. sinon un lien « chapitre suivant » (rel=next ou texte explicite) vers une AUTRE page du meme site ;
+         numero = courant + 1.
+    Le passage ne compte que si l'adresse a VRAIMENT change. Retourne (numero, None), (None, raison) ou None (rien)."""
+    if page.url.split("#")[0] != url_chapitre.split("#")[0]:
+        page.goto(url_chapitre, wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(3000)
+    avant = page.url.split("#")[0]
+    listes = page.evaluate(r"""() => [...document.querySelectorAll('select')].map((s, i) => {
+        const o = [...s.options].map(x => [((x.text || '').match(/(\d+(?:[.,]\d+)?)/) || [])[1] || null, x.value]);
+        return {i, o: o.filter(x => x[0] !== null && x[1]), n: s.options.length}; })
+        .filter(s => s.n >= 3 && s.o.length >= s.n * 0.8)""")
+    for s in listes:
+        dispo = {}
+        for num, val in s["o"]:
+            dispo.setdefault(_format_num(float(num.replace(",", "."))), val)
+        if _format_num(_num(courant)) not in dispo:
+            continue
+        n, val, raison = _choisir_suivant(dispo, courant, jusqua, entiers)
+        if n is None:
+            return None, raison + " (liste des chapitres de la page)"
+        # 1-a (24/09) : l'option du chapitre EN COURS porte l'identifiant qui figure dans l'adresse (liste cachee pilotee
+        # par un widget : changer sa valeur ne declenche rien, constate). On remplace cet identifiant -- et le numero
+        # « Chapitre-N » s'il y est -- par ceux du suivant ; valide seulement si la page d'arrivee porte le nouvel id.
+        v_cour = dispo[_format_num(_num(courant))]
+        if len(str(v_cour)) >= 4 and str(v_cour) in avant:
+            cible = avant.replace(str(v_cour), str(val))
+            cible = re.sub(r"(?i)(chapitre|chapter|ch)([-_])" + re.escape(_format_num(_num(courant))) + r"(?=\D)",
+                           lambda m: m.group(1) + m.group(2) + n, cible, count=1)
+            page.goto(cible, wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(2500)
+            if str(val) in page.url and page.url.split("#")[0] != avant:
+                return n, None
+            return None, "l'adresse du chapitre %s (construite depuis la liste de la page) ne mène pas au bon chapitre" % n
+        page.evaluate("([i, v]) => { const s = document.querySelectorAll('select')[i]; s.value = v;"
+                      " s.dispatchEvent(new Event('input', {bubbles: true})); s.dispatchEvent(new Event('change', {bubbles: true})); }",
+                      [s["i"], val])
+        for _ in range(30):
+            page.wait_for_timeout(500)
+            if page.url.split("#")[0] != avant:
+                page.wait_for_load_state("domcontentloaded")
+                page.wait_for_timeout(2000)
+                return n, None
+        return None, "la liste des chapitres de la page n'a pas ouvert le chapitre %s" % n
+    lien = page.evaluate(r"""(avant) => { const h = location.host;
+        const ok = a => a && a.href && new URL(a.href).host === h && a.href.split('#')[0] !== avant;
+        const r = document.querySelector('a[rel~=next]'); if (ok(r)) return r.href;
+        const a = [...document.querySelectorAll('a[href]')].find(x => ok(x) &&
+            /^(chapitre suivant|chap(\.|itre)? suiv(\.|ant)|next chapter|next ch(\.|apter)?)\b/i.test((x.innerText || x.title || '').trim()));
+        return a ? a.href : null; }""", avant)
+    if not lien:
+        return None
+    n = _format_num(int(_num(courant)) + 1)
+    if jusqua is not None and _num(n) > jusqua:
+        return None, f"le chapitre suivant ({n}) dépasse la borne demandée ({_format_num(jusqua)})"
+    page.goto(lien, wait_until="domcontentloaded", timeout=45000)
+    page.wait_for_timeout(2000)
+    return (n, None) if page.url.split("#")[0] != avant else (None, "le lien « chapitre suivant » n'a mené nulle part")
+
+
 def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: bool = False):
     """Amène l'onglet au chapitre qui suit `courant`. Retourne (numéro, None) ou (None, raison)."""
     m = re.search(r"mangadex\.org/chapter/([0-9a-f-]{36})", url_chapitre)
@@ -456,7 +520,10 @@ def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: boo
             return None, raison + " (liens de la page)"
         page.goto(url, wait_until="domcontentloaded", timeout=45000)
         return n, None
-    return None, "enchaînement des chapitres non pris en charge sur ce site (MangaDex, MANGA Plus, sites à adresses « chapter-N »)"
+    r = _suivant_par_page(page, url_chapitre, courant, jusqua, entiers)     # v0.7.0 : liste de la page / lien « suivant »
+    if r is not None:
+        return r
+    return None, "enchaînement impossible sur ce site : ni format d'adresse connu, ni liste des chapitres, ni lien « chapitre suivant »"
 
 
 

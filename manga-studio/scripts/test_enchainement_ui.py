@@ -19,7 +19,8 @@ with sync_playwright() as pw:
         pg.goto("http://127.0.0.1:%d/manga/#k=%s" % (PORT, KEY)); pg.wait_for_timeout(2500)
         pg.locator('nav button[data-tab="tChap"]').click(); pg.wait_for_timeout(2500)
         pg.evaluate("refreshCapTabs()"); pg.wait_for_timeout(1500)
-        tabs = pg.evaluate("CAP_TABS.map(t => [t.url, capEnchainement(t.url)[0]])")
+        pg.evaluate("chargerSites()"); pg.wait_for_timeout(800)
+        tabs = pg.evaluate("CAP_TABS.map(t => [t.url, capEnchSite(t.url)[0]])")
         oui = [i for i, (_u, e) in enumerate(tabs) if e]; non = [i for i, (_u, e) in enumerate(tabs) if not e]
         print("%d px : %d onglet(s), %d qui enchainent, %d non" % (larg, len(tabs), len(oui), len(non)))
         def choisir(i):
