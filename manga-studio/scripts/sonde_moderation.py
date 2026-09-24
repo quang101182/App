@@ -16,6 +16,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("chapitre"); ap.add_argument("--moteur", default="gemini", choices=["gemini", "kimi"])
     ap.add_argument("--pages", default=""); ap.add_argument("--echantillon", type=int, default=0)
+    ap.add_argument("--sortie", default="", help="rapport ailleurs que scripts/ (application secondaire : ses donnees)")
     a = ap.parse_args()
     if a.moteur == "gemini":
         os.environ["MANGA_GEMINI_REFLEXION"] = "minimal"
@@ -47,7 +48,7 @@ def main():
     r = {"chapitre": a.chapitre, "moteur": a.moteur, "pages": len(nums), "ok": ok, "refus": refus, "erreurs": erreurs,
          "cout": round(cout, 4), "s": round(time.time() - t0), "quand": time.strftime("%Y-%m-%dT%H:%M:%S")}
     __import__("depenses").noter("essai", a.chapitre, "sonde-moderation", a.moteur, cout)     # une depense reste une depense
-    json.dump(r, open(os.path.join(HERE, "sonde_moderation_%s.json" % a.moteur), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    json.dump(r, open(a.sortie or os.path.join(HERE, "sonde_moderation_%s.json" % a.moteur), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print("%s %s : %d pages · %d acceptees · %d REFUS · %d erreurs · %.3f $ · %d s"
           % (a.moteur, a.chapitre, len(nums), ok, len(refus), len(erreurs), cout, r["s"]))
 

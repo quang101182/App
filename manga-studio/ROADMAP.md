@@ -2395,6 +2395,18 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
 - **S7 — Chaîne sans modération (profil de l'espace secret)** : voix 🖥 locale, traduction locale (Qwen3-30B, § 4-nonies
   étape 4), analyse = à mesurer sur les 1-2 chapitres d'essai de Quang (Gemini refuse-t-il vraiment ? sinon qwen3-vl
   local, moins fidèle) ; sonde : `scripts/sonde_moderation.py`. Limite posée : personnages adultes uniquement.
+  🟡 **EN COURS 24/09 20h05** — MESURÉ : (1) sonde Gemini (question des noms, réflexion minimale) sur 2 chapitres d'essai
+  × 20 pages : **0 refus / 40**, 0,04 $ (rapports hors dépôt, `prive/_essais/`, nouvelle option `--sortie`) ; (2) une VRAIE
+  narration dans la secondaire (40 pages, analyse Gemini, voix en ligne) : **40/40 pages narrées, 0 page vide, 0 alerte
+  de modération**, 8 min 32 d'audio, **0,52 $**, 6 min 30 ⇒ sur ces chapitres, la chaîne EN LIGNE suffit ; la chaîne
+  locale reste la solution de repli si un chapitre est refusé. Corrigé : la voix locale n'avait pas ses extraits de
+  référence dans la secondaire (`_apercus/` copié, fichiers génériques) ; `tts_local.py` 1.3.0 : `--expression`
+  (Chatterbox `exaggeration`, défaut du modèle inchangé). Gemini 3.8 TTS : évalué par une autre session, **écarté pour
+  l'instant** (trop récent, plus cher, incomplet — Quang 19h44).
+  ⏸ **ATTENTE QUANG — choix des voix** (sa demande 19h54 : « me faire écouter sur des courtes phrases, puis je valide
+  les voix et le ton ») : `prive/_echantillons_voix/` = mêmes 3 phrases × 8 voix féminines EN LIGNE (Chirp 3 HD) +
+  3 timbres LOCAUX × 2 tons (expression 0,5 / 1,0). 🟠 `local_Kore_ton-appuye` = 23,5 s au lieu de 12,6 s (répétition
+  probable). Ensuite : appliquer la ou les voix retenues comme défaut du profil de la secondaire.
 - **S8 — Recette réelle** : les deux espaces ouverts en même temps (PC + téléphone), un lot de chaque côté, vue croisée,
   paravent/fermeture à distance, 360 px, cycle couper→relancer ; bancs chiffrés + mutation.
 **Pièges connus pour ce chantier** : écrire un fichier en Python texte sous Windows convertit LF→CRLF (proxy entier en

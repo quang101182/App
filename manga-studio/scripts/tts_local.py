@@ -12,7 +12,7 @@ Avant de charger le modele : attend que la carte soit LIBRE (memoire et file Com
 """
 import argparse, json, os, re, subprocess, sys, time, urllib.request
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 APERCUS = os.path.join(SRC, "_apercus")
@@ -67,6 +67,9 @@ def main():
     ap.add_argument("--jobs", required=True); ap.add_argument("--voix", required=True); ap.add_argument("--out", required=True)
     ap.add_argument("--attente-max", type=int, default=1800, help="secondes d'attente d'une carte libre (defaut 30 min)")
     ap.add_argument("--temperature", type=float, default=0.6)
+    # v1.3.0 (S7, 24/09) : intensite de l'EXPRESSION (Chatterbox « exaggeration », 0.25 = neutre ... 2 = tres appuye).
+    # Absente = defaut du modele (inchange pour l'application principale).
+    ap.add_argument("--expression", type=float, default=None)
     ap.add_argument("--langue", default="fr")
     ap.add_argument("--debit", type=float, default=17.4,
                     help="v1.1.0 : debit vise en caracteres/s (17,4 = voix en ligne Charon mesuree sur OPM ch.1) ; 0 = naturel")
@@ -90,7 +93,8 @@ def main():
         t = time.time(); morceaux = []
         for i, ph in enumerate(phrases(j["texte"])):
             torch.manual_seed(1234 + i)
-            w = m.generate(ph, language_id=a.langue, audio_prompt_path=ref, temperature=a.temperature)
+            w = m.generate(ph, language_id=a.langue, audio_prompt_path=ref, temperature=a.temperature,
+                           **({"exaggeration": a.expression} if a.expression is not None else {}))
             morceaux += [w.squeeze().float().cpu().numpy(), np.zeros(int(0.25 * m.sr), np.float32)]
         if not morceaux:
             continue
