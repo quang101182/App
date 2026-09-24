@@ -87,7 +87,7 @@ def _ecrire(doc):
     os.replace(tmp, ALERTES)
 
 
-def ajouter_alerte(d, etape, pages, moteur, motif, detail=""):
+def ajouter_alerte(d, etape, pages, moteur, motif, detail="", tag=""):
     """Une alerte OUVERTE par (chapitre, etape) : les pages s'y ajoutent. -> id de l'alerte."""
     doc = _lire()
     for a in doc["alertes"]:
@@ -98,7 +98,7 @@ def ajouter_alerte(d, etape, pages, moteur, motif, detail=""):
             _ecrire(doc)
             return a["id"]
     a = {"id": uuid.uuid4().hex[:10], "d": d, "serie": d.split("/")[0], "etape": etape, "pages": sorted(set(pages)),
-         "moteur": moteur, "motifs": [motif], "detail": detail, "etat": "ouverte",
+         "moteur": moteur, "motifs": [motif], "detail": detail, "tag": tag, "etat": "ouverte",
          "cree": time.strftime("%Y-%m-%dT%H:%M:%S"), "maj": time.strftime("%Y-%m-%dT%H:%M:%S")}
     doc["alertes"].append(a)
     _ecrire(doc)
@@ -112,6 +112,41 @@ def alertes(etat=None):
 def ouvertes_pour(d):
     """Alertes OUVERTES d'un chapitre (la video attend qu'elles soient traitees ou ignorees)."""
     return [a for a in alertes("ouverte") if a["d"] == d]
+
+
+def clore(d, etape, note="traitee"):
+    """Toutes les alertes OUVERTES d'un chapitre pour une etape -> traitee ; puis les videos de ce chapitre repartent."""
+    ids = [a["id"] for a in ouvertes_pour(d) if a["etape"] == etape]
+    if ids:
+        changer_etat(ids, "traitee", note)
+    liberer_videos(d)
+    return len(ids)
+
+
+def liberer_videos(d):
+    """Plus aucune alerte ouverte sur le chapitre -> ses videos « attente moderation » repartent dans la file."""
+    if ouvertes_pour(d):
+        return 0
+    fd = os.path.join(SRC, "_videos_file")
+    n = 0
+    for f in (os.listdir(fd) if os.path.isdir(fd) else []):
+        if not f.endswith(".json") or f.startswith("_"):
+            continue
+        p = os.path.join(fd, f)
+        try:
+            e = json.load(open(p, encoding="utf-8"))
+        except Exception:
+            continue
+        if e.get("d") == d and e.get("etat") == "attente moderation":
+            e.update(etat="attente", code=None)
+            json.dump(e, open(p, "w", encoding="utf-8"), ensure_ascii=False)
+            n += 1
+    if n:                                     # la file ne tourne peut-etre plus : on la relance (verrou : une seule)
+        import subprocess, sys
+        subprocess.Popen([sys.executable, os.path.join(HERE, "video_lot.py")], cwd=HERE,
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
+    return n
 
 
 def changer_etat(ids, etat, note=""):

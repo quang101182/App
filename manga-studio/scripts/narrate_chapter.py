@@ -29,7 +29,7 @@ import moderation as mod             # v2.6.0 : refus reconnus, alertes persista
 import depenses as dep               # v2.6.0 : registre des depenses en ajout seul
 from datetime import datetime
 
-VERSION = "2.6.0"
+VERSION = "2.7.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -1164,6 +1164,27 @@ def etape_voix_locale(pages, outdir, voice, stats):
     journal("voix_locale_fin", pages=len(jobs), s=round(time.time() - t, 1))
 
 
+VOISINES = ("(Page NON analysee : refusee par la moderation. Ecris seulement une TRANSITION breve et neutre entre la page "
+            "precedente et la suivante, sans inventer d'evenement ni decrire de contenu.)")
+
+
+def reprendre_moderation(chap_dir, vis, mode, stats, noms):
+    """v2.7.0 (feuille de route 4-decies) : SEULES les pages refusees sont reprises, sur choix de Quang dans l'app."""
+    cible = [p for p in vis if p.get("type") == "moderation"]
+    log("  reprise moderation (%s) : pages %s" % (mode, [p["page"] for p in cible]))
+    if not cible:
+        return vis
+    if mode == "voisines":
+        for p in cible:
+            p.update(type="histoire", faits=VOISINES)
+        return vis
+    stats.pop("moderation", None)
+    nouv, _r, _p = etape_vision_v2(chap_dir, [{"num": p["page"], "file": p["file"]} for p in cible], mode, 1, stats, noms)
+    par = {x["page"]: x for x in nouv}
+    return [dict(p, **{k: par[p["page"]][k] for k in ("type", "faits", "presents") if k in par[p["page"]]})
+            if p["page"] in par else p for p in vis]
+
+
 def pages_du_chapitre(chap_dir, plage):
     man = json.load(open(os.path.join(chap_dir, "manifest.json"), encoding="utf-8"))
     files = [p["file"] for p in man.get("pages", []) if os.path.isfile(os.path.join(chap_dir, p["file"]))]
@@ -1209,6 +1230,9 @@ def main():
                          " contre 3/3/3 sans ; Raki et Zaki se ressemblent, l'exemple visuel les confond)")
     ap.add_argument("--verif", action="store_true", help="v2 : verification des attributions nommees (mesuree SANS gain le 21/09, en option)")
     ap.add_argument("--reuse-vision", default="", help="reprend l'etape vision d'un run existant (tag)")
+    ap.add_argument("--reprendre-moderation", choices=["", "gemini", "kimi", "local", "voisines"], default="",
+                    help="v2.7.0 (avec --reuse-vision) : ne relit QUE les pages refusees par la moderation -- avec un autre "
+                         "moteur, en local (carte graphique), ou « voisines » (recit de transition depuis les pages voisines)")
     ap.add_argument("--noms", choices=["v2", "v3"], default="v2",
                     help="v3 (v1.75) : ecarte les noms dont le porteur n'est jamais dessine ; teint + tenue dans la fiche")
     ap.add_argument("--serie", action="store_true",
@@ -1249,6 +1273,9 @@ def main():
         noms = (prev.get("stats") or {}).get("noms") or {}
         for k in ("vision_tokens_in", "vision_tokens_out", "cout_vision", "vision_s"):
             stats[k] = prev["stats"][k]
+        stats["cout_vision_recopie"] = stats.get("cout_vision", 0)          # v2.7.0 : pour le registre des depenses
+        if a.reprendre_moderation:
+            vis = reprendre_moderation(chap_dir, vis, a.reprendre_moderation, stats, noms)
     else:
         if a.prompt == "v2":
             serie = fiche_serie(chap_dir) if a.serie else None
@@ -1303,7 +1330,7 @@ def main():
             if p["page"] in {x["page"] for x in lst}:
                 p["moderation"] = lst[0]["motif"]
         mod.ajouter_alerte(a.chapitre, "narration", [x["page"] for x in lst], lst[0]["moteur"], lst[0]["motif"],
-                           detail="%s (etape %s)" % (tag, etape_))
+                           detail="etape %s" % etape_, tag=tag)
         log("  ALERTE moderation : %d page(s) refusee(s) a l'etape %s -> a traiter dans l'app" % (len(lst), etape_))
     histoire = [p for p in vis if p.get("type") == "histoire" and not p.get("moderation")]
     vides = [p["page"] for p in histoire if not (p.get("narration") or "").strip()]
@@ -1336,9 +1363,12 @@ def main():
         json.dump(res, f, ensure_ascii=False, indent=1)
     progres("fini", 1, 1, cout=stats["cout_total"])
     journal("done", tag=tag, cout=stats["cout_total"], s=stats["total_s"])
+    if a.reprendre_moderation and not stats.get("moderation"):      # v2.7.0 : plus rien de refuse -> alerte close
+        n_ = mod.clore(a.chapitre, "narration", note="traitee : " + a.reprendre_moderation)
+        log("  moderation : %d alerte(s) close(s), videos du chapitre relancees" % n_)
     # v2.6.0 : registre des depenses en AJOUT SEUL (ce qui a ete paye ICI : jamais l'analyse recopiee d'un autre run)
     dep.noter("narration", a.chapitre, tag, a.engine,
-              stats["cout_total"] - (stats.get("cout_vision", 0) if a.reuse_vision else 0),
+              stats["cout_total"] - (stats.get("cout_vision_recopie", 0) if a.reuse_vision else 0),
               reuse=a.reuse_vision or None, voix=a.tts)
     print(json.dumps({"ok": True, "dir": os.path.relpath(outdir, SOURCES).replace("\\", "/"),
                       "pages": len(vis), "stats": res["stats"]}, ensure_ascii=False))

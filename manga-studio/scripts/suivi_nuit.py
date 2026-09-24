@@ -107,7 +107,8 @@ def normaliser(cfg):
     return {"actif": bool(cfg.get("actif", d["actif"])),
             "moteur": cfg.get("moteur") if cfg.get("moteur") in MOTEURS else d["moteur"],
             "voix": voix,
-            "voix_moteur": "local" if cfg.get("voix_moteur") == "local" else "cloud",   # v2.10.0 : voix locale en option
+            # v2.11.0 : plus de reglage par serie -- l'interrupteur GLOBAL « En ligne / Sur mon PC » (reglages.py) decide
+            "voix_moteur": "local" if __import__("reglages").sur_pc() else "cloud",
             "traduction": cfg.get("traduction") if cfg.get("traduction") in LANGUES else "",
             "karaoke": bool(cfg.get("karaoke", d["karaoke"])),
             "precedemment": bool(cfg.get("precedemment", d["precedemment"])),
@@ -448,7 +449,8 @@ def traiter_chapitre(c, cfg, refaire, etat, avant_narres):
         ok = False
         for essai in (1, 2):
             t0 = time.time()
-            rc = lancer([PY, os.path.join(HERE, "traduire_chapitre.py"), c["d"], "--langue", lg, "--engine", "gemini"],
+            rc = lancer([PY, os.path.join(HERE, "traduire_chapitre.py"), c["d"], "--langue", lg, "--engine", "gemini"]
+                        + (["--effacement", "local"] if __import__("reglages").sur_pc() else []),
                         os.path.join(tdir, "run.log"), etat, "traduction")
             ok = rc == 0 and traduction_faite(c["cd"], lg)
             journal("traduction", d=c["d"], langue=lg, essai=essai, rc=rc, ok=ok, s=round(time.time() - t0))

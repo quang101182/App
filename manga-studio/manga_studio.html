@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.10.0</title>
+<title>Manga Studio v2.11.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -90,6 +90,22 @@ button.eng:active{transform:scale(.97)}
   max-height:70vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;
   box-shadow:0 10px 30px #000b;padding:10px}
 .act-panel[hidden]{display:none}
+/* v2.11.0 : interrupteur GLOBAL, reconnaissable d'un coup d'oeil (bleu = en ligne, orange = sur le PC) */
+.mode-pill{margin-left:6px;padding:2px 9px;border-radius:12px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;
+  border:1px solid #3a8dde;background:rgba(58,141,222,.16);color:#8cc4ff;white-space:nowrap}
+.mode-pill.pc{border-color:#e8912d;background:rgba(232,145,45,.2);color:#ffb35c}
+.btn .mode-ico{margin-right:4px}
+@media (max-width:480px){ .mode-pill .lg{display:none} .mode-pill{padding:2px 7px;margin-left:4px} .brand{flex-wrap:wrap;row-gap:4px} }
+/* v2.11.0 (4-decies, Quang 24/09) : SEUL ce badge clignote -- l'activite normale ne clignote pas */
+.act .act-alerte{flex:none;font-weight:700;font-size:11px;padding:0 6px;border-radius:9px;background:#e8912d;color:#1a1000;
+  animation:alertePulse 1.6s ease-in-out infinite}
+@keyframes alertePulse{0%,100%{opacity:1}50%{opacity:.45}}
+.act-onglets{display:flex;gap:6px;margin:0 0 8px}.act-onglets button{flex:1;padding:5px;border-radius:8px;border:1px solid var(--line);
+  background:transparent;color:var(--dim);font:inherit;font-size:12px;cursor:pointer}
+.act-onglets button.on{background:var(--line);color:var(--txt)}.act-onglets button.alerte{border-color:#e8912d;color:#ffb35c}
+.al-it{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-radius:8px;background:rgba(232,145,45,.08);margin-bottom:6px}
+.al-it input{margin-top:3px}.al-it .al-t{font-size:13px}.al-it .al-m{font-size:12px;color:var(--dim)}.al-it .al-s{font-size:12px;color:#ffb35c}
+.al-act{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.al-hist{font-size:12px;color:var(--dim)}
 .act-h{display:flex;align-items:center;gap:8px;margin-bottom:8px}.act-h b{flex:1}
 /* v2.8.0 (A1) : bilan de la vague a droite d'« Activite » */
 .act-vague{font-size:12px;color:var(--dim);white-space:nowrap}.act-vague b{color:var(--txt);font-weight:700}
@@ -767,8 +783,9 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.10.0</span>
-      <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.11.0</span>
+      <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button>
+      <button class="mode-pill" id="hdrMode" title="Où tournent la voix et l’effacement du texte : en ligne (payant) ou sur ta carte graphique (0 $). Touche pour changer.">☁ En ligne</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
            du tout). Un temoin permanent qui est vert 100 % du temps n'informe
@@ -790,6 +807,7 @@ body.epure .aide{display:none}
     <!-- v1.88.0 : cellule d'ACTIVITE, TOUJOURS la (grise au repos) : aucune hauteur ne bouge jamais -->
     <button class="act" id="hdrAct" title="Ce qui travaille en ce moment (narrations, traductions, karaoké, capture)">
       <span class="act-dot"></span><span class="act-txt" id="actTxt">Rien en cours</span><span class="act-n" id="actN" hidden></span>
+      <span class="act-alerte" id="actAlerte" hidden title="des pages ont été refusées par la modération : à traiter">⚠ 0</span>
     </button>
     <div class="vram" title="Mémoire utilisée sur la carte graphique">
       <span>VRAM</span>
@@ -802,8 +820,10 @@ body.epure .aide{display:none}
 
 <div id="actPanel" class="act-panel" hidden>
   <div class="act-h"><b>Activité</b><span class="act-vague" id="actVague" hidden></span><span class="muted aide" id="actMaj"></span><button class="btn sm" id="actFermer">✕</button></div>
-  <div id="actListe"></div>
-  <div id="actFinis"></div>
+  <div class="act-onglets"><button class="on" data-ong="act">Activité</button><button data-ong="alertes" id="ongAlertes">⚠ À traiter</button></div>
+  <div id="actVueAct"><div id="actListe"></div>
+  <div id="actFinis"></div></div>
+  <div id="actVueAlertes" hidden></div>
 </div>
 
 <nav>
@@ -1638,7 +1658,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.10.0";
+const VERSION = "2.11.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -5961,6 +5981,104 @@ const actReste = s => s == null ? "" : s < 60 ? "< 1 min" : s < 3600 ? "~" + Mat
   : "~" + Math.floor(s / 3600) + " h " + String(Math.round(s % 3600 / 60)).padStart(2, "0");
 const actFini = it => it.type === "karaoke" ? " fini" : " finie";
 const actProg = it => it.total ? it.fait + "/" + it.total : (it.fait != null ? it.fait + " p." : "");
+/* v2.11.0 (feuille de route 4-decies) : ALERTES DE MODERATION. Les pages refusees ne font plus tomber un chapitre : elles
+   sont mises de cote et listees ici. Rien ne se traite tout seul : Quang coche, choisit, clique. Le LOCAL (carte graphique)
+   ne part QUE sur son clic. Un chapitre avec une alerte ouverte n'est pas mis en video. */
+const ALERTES = { ouvertes: [], historique: [], ong: "act", sel: new Set() };
+/* v2.11.0 (etape 4-bis) : UN interrupteur global « ☁ En ligne / 🖥 Sur mon PC », memorise COTE SERVEUR (le meme sur le PC,
+   le telephone et la nuit). Chaque bouton qui lance quelque chose porte l'icone du mode actif. */
+let MODE = "cloud";
+const MODE_BTNS = ["btnNarrer", "btnTraduire", "suiviLancer"];
+function modeMaj(){
+  const pc = MODE === "pc", b = $("hdrMode");
+  b.classList.toggle("pc", pc);
+  b.innerHTML = pc ? '🖥<span class="lg"> Sur mon PC</span>' : '☁<span class="lg"> En ligne</span>';   // telephone : l'icone seule
+  MODE_BTNS.forEach(id => { const x = $(id); if (!x) return;
+    let i = x.querySelector(".mode-ico"); if (!i){ i = document.createElement("span"); i.className = "mode-ico"; x.prepend(i); }
+    i.textContent = pc ? "🖥" : "☁";
+    x.title = (pc ? "sur ta carte graphique (voix + effacement, 0 $)" : "en ligne") + " — change en haut, pastille " + (pc ? "🖥" : "☁"); });
+  if ($("narrTts")) $("narrTts").value = pc ? "local" : "cloud";
+  if ($("suiviTts")) $("suiviTts").value = pc ? "local" : "cloud";
+}
+async function modeCharger(){
+  // les menus « Moteur de voix » de la v2.10.0 (chapitre, profil) sont REMPLACES par l'interrupteur global : caches
+  if ($("narrTts")) $("narrTts").parentNode.hidden = true;
+  ["suiviTts", "profGpu"].forEach(id => { if ($(id)) $(id).hidden = true; });
+  try { MODE = (await api("/manga/reglages")).mode || "cloud"; } catch {} modeMaj();
+}
+$("hdrMode").onclick = async () => {
+  const vers = MODE === "pc" ? "cloud" : "pc";
+  try { const r = await api("/manga/reglages", { mode: vers }); if (r.error) throw new Error(r.error); MODE = r.mode; modeMaj();
+        toast(MODE === "pc" ? "🖥 Sur mon PC : voix et effacement sur ta carte graphique (0 $)" : "☁ En ligne : tout passe par les services (payant)");
+        if (MODE === "pc"){ try { const g = await api("/manga/gpu");
+          toast("🖥 Sur mon PC — carte graphique : " + (g.memoire_libre_mo != null ? (g.memoire_libre_mo / 1024).toFixed(1).replace(".", ",") + " Go libres" : "état inconnu")
+                + (g.comfyui === "occupe" ? " · ComfyUI travaille : la voix attendra" : "")); } catch {} } }
+  catch (e){ alert(e.message); }
+};
+modeCharger();
+const ETAPE_AL = { narration: "narration", traduction: "traduction" };
+async function alertesCharger(){
+  try { const j = await api("/manga/alertes"); ALERTES.ouvertes = j.ouvertes || []; ALERTES.historique = j.historique || []; }
+  catch (e){ return; }
+  const n = ALERTES.ouvertes.length;
+  $("actAlerte").hidden = !n; $("actAlerte").textContent = "⚠ " + n;
+  $("ongAlertes").textContent = "⚠ À traiter" + (n ? " (" + n + ")" : ""); $("ongAlertes").classList.toggle("alerte", n > 0);
+  ALERTES.sel.forEach(id => { if (!ALERTES.ouvertes.some(a => a.id === id)) ALERTES.sel.delete(id); });
+  if (!$("actPanel").hidden && ALERTES.ong === "alertes") alertesRendre();
+}
+const alMoteur = m => ({ gemini: "Gemini", kimi: "Kimi", deepseek: "DeepSeek", local: "le moteur local" })[m] || m || "un fournisseur";
+const alAutre = m => m === "kimi" ? "gemini" : "kimi";
+function alSolution(a){
+  return a.etape === "traduction"
+    ? "💡 Proposé : retraduire le chapitre avec " + alMoteur(alAutre(a.moteur)) + " (autre modération, tout le chapitre). Sinon : garder la VO sur ces pages (ignorer)."
+    : "💡 Proposé : relire ces pages avec " + alMoteur(alAutre(a.moteur)) + " (autre modération, quelques centimes). Sinon : raconter une courte transition depuis les pages voisines, relire en local 🖥 (carte graphique), ou ignorer.";
+}
+function alertesRendre(){
+  const o = ALERTES.ouvertes;
+  const it = a => '<label class="al-it"><input type="checkbox" data-al="' + esc(a.id) + '"' + (ALERTES.sel.has(a.id) ? " checked" : "") + '><div>'
+    + '<div class="al-t"><b>' + esc(a.d.replace("/ch_", " — ch. ")) + "</b> · " + esc(ETAPE_AL[a.etape] || a.etape)
+    + (a.pages.length ? " · page" + (a.pages.length > 1 ? "s " : " ") + esc(a.pages.join(", ")) : "") + "</div>"
+    + '<div class="al-m">🛡 Refusé par la modération de ' + esc(alMoteur(a.moteur)) + " — " + esc((a.motifs || []).slice(-1)[0] || "")
+    + (a.etape === "narration" ? " · 🎬 vidéo en attente" : "") + (a.note && a.note.startsWith("en cours") ? " · ⏳ " + esc(a.note) : "") + "</div>"
+    + '<div class="al-s">' + esc(alSolution(a)) + "</div></div></label>";
+  const n = ALERTES.sel.size, narr = o.some(a => ALERTES.sel.has(a.id) && a.etape === "narration");
+  $("actVueAlertes").innerHTML = (o.length
+      ? '<p class="muted aide" style="margin:0 0 6px">Ces chapitres ont continué sans les pages refusées. Coche ce que tu veux traiter, maintenant ou plus tard : rien ne part tout seul.</p>'
+        + o.map(it).join("")
+        + '<div class="al-act"><button class="btn sm" data-al-tout>' + (n === o.length ? "Tout décocher" : "Tout cocher") + "</button>"
+        + '<button class="btn sm pri" data-al-action="autre"' + (n ? "" : " disabled") + '>☁ Autre moteur en ligne (' + n + ")</button>"
+        + '<button class="btn sm" data-al-action="voisines"' + (narr ? "" : " disabled") + ' title="narration seulement : une transition neutre, sans décrire la page">↔ Pages voisines</button>'
+        + '<button class="btn sm" data-al-action="local"' + (narr ? "" : " disabled") + ' title="narration seulement : utilise la carte graphique, attend qu’elle soit libre">🖥 Relire en local</button>'
+        + '<button class="btn sm" data-al-action="ignorer"' + (n ? "" : " disabled") + ' title="garder tel quel ; la vidéo pourra se faire">Ignorer</button></div>'
+      : '<p class="muted aide" style="margin:0">✔ Rien à traiter : aucune page refusée par la modération.</p>')
+    + (ALERTES.historique.length ? '<details class="al-hist"><summary>Historique (' + ALERTES.historique.length + ")</summary>"
+      + ALERTES.historique.map(a => "<div>" + (a.etat === "ignoree" ? "➖" : "✅") + " " + esc(a.d) + " · " + esc(a.etape) + " · p. " + esc(a.pages.join(", "))
+        + " · " + esc(a.note || a.etat) + " · " + esc((a.maj || "").replace("T", " ").slice(5, 16)) + "</div>").join("") + "</details>" : "");
+}
+async function alertesTraiter(action){
+  const choisies = ALERTES.ouvertes.filter(a => ALERTES.sel.has(a.id));
+  if (!choisies.length) return;
+  if (action === "local" && !confirm("Relire en LOCAL utilise ta carte graphique (≈ 7 Go, quelques minutes). Elle attendra qu’elle soit libre si ComfyUI travaille. Lancer ?")) return;
+  const groupes = {};
+  choisies.forEach(a => {
+    if ((action === "voisines" || action === "local") && a.etape !== "narration") return;
+    const act = action === "autre" ? alAutre(a.moteur) : action;
+    (groupes[act] = groupes[act] || []).push(a.id);
+  });
+  for (const [act, ids] of Object.entries(groupes)){
+    const r = await api("/manga/alertes_traiter", { ids, action: act });
+    if (r.erreurs && r.erreurs.length) alert(r.erreurs.join(" · "));
+    log("modération : " + (r.lances || []).length + " alerte(s) → " + act);
+  }
+  ALERTES.sel.clear(); toast(action === "ignorer" ? "✔ ignoré : les vidéos peuvent repartir" : "⏳ traitement lancé (visible dans Activité)");
+  await alertesCharger(); actRafraichir();
+}
+function actOnglet(o){
+  ALERTES.ong = o;
+  document.querySelectorAll(".act-onglets [data-ong]").forEach(b => b.classList.toggle("on", b.dataset.ong === o));
+  $("actVueAct").hidden = o !== "act"; $("actVueAlertes").hidden = o !== "alertes";
+  if (o === "alertes") alertesRendre();
+}
 function actRendre(){
   const n = ACT.items.length, b = $("hdrAct");
   b.classList.toggle("on", n > 0);
@@ -6030,6 +6148,7 @@ async function actRafraichir(){
     ACT.restaure = false; actMemoriser();                                              // v2.8.4
   } catch (e){ /* proxy injoignable : le temoin dedie le dit deja, la cellule garde son dernier etat */ }
   actRendre();
+  alertesCharger();                                                                  // v2.11.0 : le badge ⚠ suit
   clearTimeout(ACT.timer);
   ACT.timer = setTimeout(actRafraichir, ACT.items.length ? 4000 : 15000);   // vif quand ca travaille, calme sinon
 }
@@ -6047,9 +6166,15 @@ $("hdrAct").onclick = () => {
   // juste SOUS l'en-tete, quelle que soit sa hauteur (1 ligne sur PC, 3 sur un telephone de 360 px)
   $("actPanel").style.top = Math.round(document.querySelector("header").getBoundingClientRect().bottom + 6) + "px";
   $("actPanel").hidden = !$("actPanel").hidden; actRendre(); if (!$("actPanel").hidden) actRafraichir();
+  if (!$("actPanel").hidden) actOnglet(ALERTES.ouvertes.length && !ACT.items.length ? "alertes" : ALERTES.ong);   // v2.11.0
 };
 $("actFermer").onclick = () => { $("actPanel").hidden = true; };
 $("actPanel").onclick = e => {
+  const og = e.target.closest("[data-ong]"); if (og){ actOnglet(og.dataset.ong); return; }                 // v2.11.0
+  const al = e.target.closest("[data-al]"); if (al){ al.checked ? ALERTES.sel.add(al.dataset.al) : ALERTES.sel.delete(al.dataset.al); alertesRendre(); return; }
+  if (e.target.closest("[data-al-tout]")){ const tout = ALERTES.sel.size === ALERTES.ouvertes.length;
+    ALERTES.sel = new Set(tout ? [] : ALERTES.ouvertes.map(a => a.id)); alertesRendre(); return; }
+  const aa = e.target.closest("[data-al-action]"); if (aa){ alertesTraiter(aa.dataset.alAction).catch(err => alert(err.message)); return; }
   const a = e.target.closest("[data-act]"), f = e.target.closest("[data-fini]");
   if (a) actOuvrirChapitre(ACT.items[+a.dataset.act].d).catch(err => log("activité : " + err.message, "e"));
   if (f) actOuvrirChapitre(ACT.finis[+f.dataset.fini].d).catch(err => log("activité : " + err.message, "e"));

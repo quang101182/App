@@ -509,6 +509,8 @@ def main():
     progres(len(pages), len(pages), fini=True, cout=stats["cout"])
     nc.journal("traduction_done", chapitre=a.chapitre, langue=a.langue, **{k: v for k, v in stats.items()})
     nc.dep.noter("traduction", a.chapitre, "traduction " + a.langue, a.engine, stats.get("cout", 0))    # v1.99.0
+    if not a.rerendu and not a.sortie and not stats.get("moderation"):                   # v1.99.0 : refaite sans refus
+        nc.mod.clore(a.chapitre, "traduction", note="traitee : retraduit avec " + a.engine)
     try:
         rel = os.path.relpath(out, nc.SOURCES).replace("\\", "/")
     except ValueError:                                # --sortie sur un autre disque (bancs)
