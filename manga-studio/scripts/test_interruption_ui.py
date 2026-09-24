@@ -69,7 +69,7 @@ try:
         pg.route("**/manga/suivi_lancer", lambda r: (relance.append(json.loads(r.request.post_data or "{}")),
                                                    r.fulfill(status=200, content_type="application/json", body='{"ok": true}')))
         pg.goto(URL); pg.wait_for_timeout(3500)
-        check("version v2.12.0", pg.inner_text("#verBadge") == "v2.12.0")
+        check("version affichée = celle du fichier", pg.inner_text("#verBadge") == "v" + __import__("banc_outils").version_app())
         # 1. la question
         pg.click("#hdrMode"); pg.wait_for_timeout(2500)
         vis = pg.is_visible("#ask"); txt = pg.inner_text("#askX") if vis else ""

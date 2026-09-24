@@ -2188,6 +2188,32 @@ sur la capture du banc, corrigé).
 - ~~⬜ Reste : 4-undecies (cette section)~~ → ✅ v2.12.0 ; bouton « Effacement local » n'est plus nécessaire (l'interrupteur le pilote) ;
   refaire les pages OPM avec l'effacement local si Quang le veut (`--rerendu --effacement local`, 0 $).
 
+## 4-duodecies. JAUGE VRAM VENTILÉE PAR MOTEUR *(24/09/2026 15h11, demande Quang — ✅ LIVRÉ v2.13.0, 15h30)*
+
+> Quang : *« je crois qu'on l'a fait sur Generate Studio d'une certaine manière, mais fais-le à ta façon […] des
+> couleurs afin de distinguer quel moteur occupe quelle quantité de RAM. Le gris représente le système, et les couleurs
+> l'application. »*
+
+**Mesuré avant de construire** (sinon on aurait bâti sur du faux) : sous Windows (pilote en mode WDDM), **aucune source
+externe ne ventile la VRAM par processus** — `nvidia-smi --query-compute-apps` rend `[N/A]` pour tous, et un processus
+CUDA de 1,5 Go est **invisible** dans les compteurs « GPU Process Memory » (alors que nvidia-smi voit bien +1,7 Go) ;
+`dwm.exe` y annonce 14,5 Go pour 2,9 Go réellement utilisés. ⇒ Comme Generate Studio, **chaque moteur déclare sa part** :
+- ComfyUI (:8188 `/system_stats`), musique Generate Studio (:8388 `/vram`), **Ollama** (:11434 `/api/ps`, `size_vram`) ;
+- **nos scripts** (voix locale `tts_local` 1.2.0, traduction/effacement `traduire_chapitre` 1.99.1, cases `cases_video`
+  1.0.1) : `scripts/declaration_gpu.py` écrit toutes les 3 s `sources/_gpu/<pid>.json` = `torch.cuda.memory_reserved()`
+  (n'initialise jamais CUDA lui-même) ; un battement > 15 s ou un PID mort ne compte plus, un orphelin > 60 s est rangé.
+- `scripts/vram_parts.py` (à chaud, `GET /manga/vram`, diff `proxy-patch/_studio_llm_proxy_vram_v2130.diff`) : total =
+  nvidia-smi ; **gris = total − parts déclarées** (calculé, jamais deviné) ; les 3 moteurs interrogés en parallèle
+  (un port fermé coûte ~1 s sous Windows) ; cache 4 s.
+**App** : barre en segments (ComfyUI violet · voix orange · traduction turquoise · cases jaune · Ollama rose · musique
+vert · gris = système et autres applis) ; le niveau de mémoire LIBRE (seuils SDXL 8 / 4 Go) passe sur la couleur du
+chiffre ; un toucher sur la jauge = légende en Go (+ « Libre »), toucher ailleurs / Échap = fermée. Repli sur l'ancienne
+barre si le proxy n'a pas la route.
+**Banc** `test_vram_ui.py` 10/10 (vrai processus CUDA 1,5 Go déclaré « voix » + déclaration « cases » ; couleurs, largeurs =
+parts/total, légende, 360 px, retour au seul gris quand tout s'arrête) ; non-régression 19/19, 18/18, 18/18, 320 cas.
+**Limite connue** : chaque moteur a ~0,3 Go de contexte CUDA qu'il ne déclare pas → compté dans le gris (dit dans la
+légende). Les moteurs de Generate Studio autres que la musique (ComfyUI est partagé) apparaissent sous « ComfyUI ».
+
 ## 4-decies. MODÉRATION — CONTINUER, PRÉVENIR, LAISSER QUANG TRAITER *(24/09/2026 13h52, spécification de Quang)*
 
 > Quang : *« un système qui permet de continuer même si des pages ou autre chose sont refusées par modération […] une
@@ -2221,6 +2247,19 @@ Aucun refus n'est reconnu : Gemini « SAFETY » = réponse vide → lue comme «
    sur clic**, avec la garde « carte libre ») ; ignorer.
 6. **Vidéo** : un chapitre avec une alerte OUVERTE n'est **pas mis en vidéo** (batch, nuit, demande) ; l'alerte le dit
    (« vidéo en attente ») ; une fois l'alerte traitée ou ignorée, la vidéo peut repartir. Option « générer quand même ».
+
+### 🔞 Contenu adulte à venir *(Quang 24/09 14h40)*
+> *« c'est possible que plus tard je tombe sur des mangas pour adultes de plus de 18 ans ; à ce moment-là on fera une
+> catégorie un peu secrète […] mais à ce moment-là l'absence de modération sera importante. »*
+- Conséquence : pour ces séries, un refus ne sera plus une exception à traiter page par page mais la **règle** — il
+  faudra une chaîne **qui marche sans modération** de bout en bout, pas seulement des alertes.
+- Ce qu'on sait déjà (mesuré) : récit = DeepSeek (permissif) ; analyse des pages = Gemini / Kimi (modérés) ; analyse
+  **locale** (qwen3-vl 8B, § 4-nonies étape 3) = aucune modération mais **récit nettement moins fidèle** (16/30 vs 21/30) ;
+  voix : Google TTS (modérée ?) ou **voix locale** (aucune) ; traduction : Gemini (modéré) ou Qwen3-30B local (90 % vs 94 %).
+- À concevoir le moment venu : catégorie **cachée** dans la bibliothèque (hors vue par défaut, accès volontaire) +
+  **profil « sans modération »** par série (analyse / traduction / voix routées vers ce qui ne refuse pas).
+- **Déclencheur** : la 1ʳᵉ série adulte capturée par Quang. **Préalable utile dès maintenant** : l'essai de refus RÉEL
+  (Claymore) dira quels moteurs refusent quoi — c'est la carte dont ce chantier aura besoin.
 
 ### Tester
 Banc sans réseau (réponses de refus simulées Gemini / Kimi / DeepSeek → reconnues, chapitre continue, alerte écrite,
@@ -2497,6 +2536,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 
 | Date | Événement |
 |---|---|
+| 2026-09-24 (15h30) | ✅ **v2.13.0 — jauge VRAM ventilée par moteur** (demande Quang 15h11). Windows ne ventile pas la VRAM par processus (mesuré) → chaque moteur déclare sa part ; gris = le reste. Banc 10/10. Détail § 4-duodecies. |
 | 2026-09-24 (14h50) | ✅ **v2.12.0 — chantier 4-undecies.** Double estimation ☁ / 🖥 recalculée sur les passages réels (Narrer, Traduire, Tout traiter, confirmations), protection du changement de mode pendant un traitement (question à l'écran, Basculer / Annuler / Interrompre, bilan exact + Reprendre sans repayer l'analyse). Trouvé en route : le lot figeait la voix au lancement pendant que l'effacement suivait l'interrupteur (corrigé, suivi_nuit 2.5.0) ; une tâche coupée s'affichait « ✓ finie ». Bancs 320 cas + 19 + 17 + 18 verts, 5 mutations rouges, non-régression verte. 0 $ dépensé. Détail § 4-undecies. |
 | 2026-09-24 (10h15) | ✅ **v2.9.1 → v2.9.2 + manga-fetch v0.6.2 → v0.6.3.** (1) Étiquette « aussi dans » passée sous le nom (débordait la poubelle hors écran sur smartphone ; banc 22/22 à 380 px, mutation 19/22). (2) **Capture Solo Leveling vol.1 coupée à 39 % EN SILENCE** : plafond fixe de 400 pas (~356 000 px sur 903 000) → plafond proportionnel à la hauteur, et tout arrêt avant la fin = note « ECHEC » ; même traitement pour le mode page par page (500 p. / 12 min). L'app affiche « ⛔ capture incomplète ». (3) **Règle de Quang : une série = un DOSSIER**, visible à 0 chapitre (bibliothèque + menu de capture) ; supprimer un chapitre ≠ supprimer le manga (banc `test_serie_vide_ui` 11/11, mutation 4 KO). ~~🟠 (constaté v2.9.2) Solo Leveling vol.1 est à RECAPTURER~~ → ✅ recapturé 24/09 10h40 avec manga-fetch 0.6.3 : 193 bandes (982 218 px cumulés pour une page de 903 320 px), 755 pages, dernière = page de crédits D&C Webtoon, arrêt « bas atteint », 0 ECHEC (avant : 79 bandes, 39 %). |
 | 2026-09-24 (09h30) | ✅ **v2.8.5 → v2.9.0** (demandes Quang pendant la capture de Solo Leveling). **Titre tapé affiché dès le début de la capture** (manga-fetch v0.6.1 écrit `sources/<slug>/titre.json` ; le manifeste, qui marque « chapitre capturé », n'arrive qu'en fin de capture). **Tomes/dates relancés** quand un chapitre est capturé après la dernière recherche, **pochette AniList** cherchée seule — jamais pendant une capture (banc `test_auto_tomes_pochette_ui` 10/10). **« 🎵 Depuis un autre manga »** dans le chapitre ET le profil (batch) : musiques des autres séries, une par contenu (sha1), copiées sous le nom de la série, étiquette « ↔ aussi dans » (banc `test_musiques_app_ui` 18/18). 🟠 (constaté v2.9.0) `test_musique_ui.py` casse sur des données disparues (narration `banc-k3-charon` de Claymore ch.1), pas sur le code. |

@@ -17,7 +17,7 @@ Usage : python cases_video.py <serie/ch_N> [--forcer]   (ecrit le cache, affiche
 """
 import json, math, os, sys, time
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
 MODELE = os.path.join(HERE, "models", "manga_panel_detector_fp32.pt")
@@ -298,6 +298,8 @@ def pose(pl, t):
 
 
 def main():
+    try: __import__("declaration_gpu").declarer("cases")      # v2.13.0 : sa part de la VRAM, pour la jauge ventilee
+    except Exception: pass
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     if not args:
         raise SystemExit(__doc__)

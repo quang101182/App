@@ -66,7 +66,7 @@ try:
         pg.on("pageerror", lambda e: errs.append(str(e)))
         pg.on("dialog", lambda d: (dial.append(d.message), d.dismiss()))
         ouvrir_chapitre(pg)
-        check("version affichée v2.12.0", pg.inner_text("#verBadge") == "v2.12.0")
+        check("version affichée = celle du fichier", pg.inner_text("#verBadge") == "v" + __import__("banc_outils").version_app())
         check("l'étalonnage est arrivé avec le réglage", pg.evaluate("() => !!(ETAL && ETAL.narration && ETAL.narration.gemini)"))
         eng = pg.evaluate("() => $('narrEngine').value")
         att = estimation.chapitre(3, {"narration"}, eng, et)

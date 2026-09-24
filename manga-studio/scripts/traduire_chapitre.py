@@ -31,7 +31,7 @@ import narrate_chapter as nc          # appel_vision (Gemini natif / K3), frein 
 import ingest_page as ip              # load_page, detect, clean_bubbles
 import effacement_local as el         # v1.98.0 : masque des lettres + LaMa (option --effacement local)
 
-VERSION = "1.99.0"
+VERSION = "1.99.1"
 # v1.98.0 (24/09, feuille de route 4-nonies etape 2) : --effacement local = le texte pose sur le DESSIN est efface par
 # masque des lettres (comic-text-detector) + LaMa manga (effacement_local.py) au lieu d'un rectangle blanc ; les vraies
 # bulles restent videes comme avant. Option : sans elle, rien ne change.
@@ -341,6 +341,8 @@ def poser_texte(im, boite, texte, est_bulle, taille_max=None, dessiner=True):
 
 def main():
     global PROGRESS
+    try: __import__("declaration_gpu").declarer("traduction")      # v2.13.0 : sa part de la VRAM, pour la jauge ventilee
+    except Exception: pass
     ap = argparse.ArgumentParser()
     ap.add_argument("chapitre", help="sous sources/, ex. claymore/ch_1")
     ap.add_argument("--langue", default="fr", help="code langue cible : " + ", ".join(LANGUES))

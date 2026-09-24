@@ -12,7 +12,7 @@ Avant de charger le modele : attend que la carte soit LIBRE (memoire et file Com
 """
 import argparse, json, os, re, subprocess, sys, time, urllib.request
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
 APERCUS = os.path.join(SRC, "_apercus")
@@ -61,6 +61,8 @@ def phrases(txt):
 
 
 def main():
+    try: __import__("declaration_gpu").declarer("voix")      # v2.13.0 : sa part de la VRAM, pour la jauge ventilee
+    except Exception: pass
     ap = argparse.ArgumentParser()
     ap.add_argument("--jobs", required=True); ap.add_argument("--voix", required=True); ap.add_argument("--out", required=True)
     ap.add_argument("--attente-max", type=int, default=1800, help="secondes d'attente d'une carte libre (defaut 30 min)")
