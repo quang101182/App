@@ -1,0 +1,138 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260924-musapp	2026-09-24 09:18:47.094962100 +0200
++++ /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py	2026-09-24 09:18:47.202822600 +0200
+@@ -8865,7 +8865,8 @@
+                 return _mus_nom(t) or serie
+         except Exception:
+             continue
+-    return serie
++    t = _titre_saisi(serie)                      # v2.8.5 : capture en cours -> le titre tape, pas le dossier
++    return (_mus_nom(t) or serie) if t else serie
+ 
+ 
+ def _mus_etat(md):
+@@ -8905,6 +8906,37 @@
+         return {"mode": "serie", "noms": []}
+ 
+ 
++_MUS_HASH = {}                                   # v2.9.0 : (chemin, taille, mtime) -> sha1 du contenu
++
++
++def _mus_hash(full):
++    st = os.stat(full)
++    cle = (full, st.st_size, int(st.st_mtime))
++    if cle not in _MUS_HASH:
++        h = hashlib.sha1()
++        with open(full, "rb") as f:
++            for b in iter(lambda: f.read(1 << 20), b""):
++                h.update(b)
++        _MUS_HASH[cle] = h.hexdigest()
++    return _MUS_HASH[cle]
++
++
++def _mus_toutes():
++    """v2.9.0 : toutes les musiques de l'app -> [{serie, nom, fichier, full, hash}] (series visibles ou masquees)."""
++    root = os.path.normpath(MANGA_SOURCES)
++    out = []
++    for slug in sorted(os.listdir(root)) if os.path.isdir(root) else []:
++        md = os.path.join(root, slug, "musique")
++        if slug.startswith((".", "_")) or not os.path.isdir(md):
++            continue
++        for f in sorted(os.listdir(md), key=str.lower):
++            full = os.path.join(md, f)
++            if f.lower().endswith(_MUS_EXT) and os.path.isfile(full):
++                out.append({"serie": slug, "nom": os.path.splitext(f)[0], "fichier": slug + "/musique/" + f,
++                            "full": full, "hash": _mus_hash(full)})
++    return out
++
++
+ def manga_musiques(serie, d=""):
+     sd, md = _mus_dir(serie)
+     if not sd:
+@@ -8920,6 +8952,14 @@
+                     _MUS_DUR[cle] = _duree_s(full)
+                 items.append({"nom": os.path.splitext(f)[0], "fichier": serie.strip("/") + "/musique/" + f,
+                               "taille": st.st_size, "dur": round(_MUS_DUR[cle] or 0, 1)})
++    if items:                                    # v2.9.0 : « aussi dans » = meme CONTENU dans une autre serie
++        autres = {}
++        for x in _mus_toutes():
++            if x["serie"] != serie.strip("/"):
++                autres.setdefault(x["hash"], set()).add(x["serie"])
++        for x in items:
++            h = _mus_hash(os.path.join(md, os.path.basename(x["fichier"])))
++            x["aussi"] = sorted(_mus_titre(a) for a in autres.get(h, ()))
+     noms = {x["nom"] for x in items}
+     sel = [n for n in _mus_etat(md)["serie"] if n in noms][:MUS_MAX]
+     r = {"items": items, "serie_sel": sel, "max": MUS_MAX}
+@@ -9021,6 +9061,52 @@
+     return {"ok": True, "corbeille": os.path.relpath(dest, MANGA_SOURCES)}
+ 
+ 
++def manga_musiques_app(serie):
++    """v2.9.0 (Quang 24/09) : les musiques DEJA dans l'app, prises dans les autres series. Une par contenu (la meme
++    musique dans 3 series n'apparait qu'une fois) ; celles deja dans `serie` (meme contenu) ne sont pas proposees."""
++    sd, _ = _mus_dir(serie)
++    if not sd:
++        return None
++    toutes = _mus_toutes()
++    ici = {x["hash"] for x in toutes if x["serie"] == serie.strip("/")}
++    vus, items = {}, []
++    for x in toutes:
++        if x["hash"] in ici:
++            continue
++        if x["hash"] in vus:
++            vus[x["hash"]]["series"].append(_mus_titre(x["serie"]))
++            continue
++        st = os.stat(x["full"])
++        cle = (x["full"], st.st_size, int(st.st_mtime))
++        if cle not in _MUS_DUR:
++            _MUS_DUR[cle] = _duree_s(x["full"])
++        it = {"nom": x["nom"], "fichier": x["fichier"], "serie": x["serie"], "series": [_mus_titre(x["serie"])],
++              "dur": round(_MUS_DUR[cle] or 0, 1)}
++        vus[x["hash"]] = it
++        items.append(it)
++    return {"items": items}
++
++
++def manga_musique_depuis_serie(data):             # Manga Studio v2.9.0
++    """Copie une musique d'une autre serie : elle prend le nom de la serie cible (« Titre N »), comme tout import."""
++    rel = str(data.get("fichier") or "").replace("\\", "/").strip("/")
++    if not re.match(r"^[^/._][^/]*/musique/[^/]+$", rel) or not rel.lower().endswith(_MUS_EXT):
++        return {"error": "ce n'est pas une musique de l'app"}
++    full = _manga_src_safe(rel)
++    if not full or not os.path.isfile(full):
++        return {"error": "morceau introuvable"}
++    sd, md = _mus_dir(data.get("serie"))
++    if not sd:
++        return {"error": "serie introuvable"}
++    h = _mus_hash(full)
++    deja = [x["nom"] for x in _mus_toutes() if x["serie"] == data["serie"].strip("/") and x["hash"] == h]
++    if deja:
++        return {"error": "deja dans cette serie : « %s »" % deja[0]}
++    with open(full, "rb") as f:
++        b = f.read()
++    return manga_musique_import({"serie": data.get("serie"), "data": base64.b64encode(b).decode("ascii")})
++
++
+ def manga_musique_depuis_gs(data):                # Manga Studio v1.87.0
+     rel = str(data.get("chemin") or "").replace("\\", "/").strip("/")
+     if not rel.lower().startswith("gs/audio/") or "/_" in rel:
+@@ -10303,6 +10389,10 @@
+             self._json(200, manga_resume())
+         elif self.path.split("?", 1)[0] == "/manga/activite":              # Manga Studio v1.88.0
+             self._json(200, manga_activite())
++        elif self.path.split("?", 1)[0] == "/manga/musiques_app":          # Manga Studio v2.9.0
++            _r = manga_musiques_app((parse_qs(urlparse(self.path).query).get("serie") or [""])[0])
++            if _r is None: self._json(404, {"error": "serie introuvable"})
++            else: self._json(200, _r)
+         elif self.path.split("?", 1)[0] == "/manga/musiques":              # Manga Studio v1.85.0
+             _q = parse_qs(urlparse(self.path).query)
+             _r = manga_musiques((_q.get("serie") or [""])[0], (_q.get("d") or [""])[0])
+@@ -10785,6 +10875,8 @@
+                 self._json(200, manga_precedemment_lance(data))
+             elif self.path == "/manga/karaoke":                # Manga Studio v1.86.0
+                 self._json(200, manga_karaoke(data.get("d") or "", data.get("tag") or ""))
++            elif self.path == "/manga/musique_depuis_serie":   # Manga Studio v2.9.0
++                self._json(200, manga_musique_depuis_serie(data))
+             elif self.path == "/manga/musique_depuis_gs":      # Manga Studio v1.87.0
+                 self._json(200, manga_musique_depuis_gs(data))
+             elif self.path == "/manga/musique_import":         # Manga Studio v1.85.0
