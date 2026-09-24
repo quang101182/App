@@ -47,6 +47,7 @@ On le comble ici plutôt que de le signaler une deuxième fois.
 | `_studio_llm_proxy_cache_pages.diff` | v2.4.6 (`patch_cache_pages.py`) : `serve_manga_file` (pages, MP3) n'est plus « immuable par nom » : ETag (date + taille), `Cache-Control: no-cache`, 304 si inchangé. Incident Claymore 22/09 : chapitre supprimé puis recapturé = mêmes noms de pages → le navigateur montrait les 62 anciennes pages anglaises pendant 24 h. Le service worker v2.4.6 force aussi la revalidation (`cache: "no-cache"`). |
 | `_studio_llm_proxy_interrompre_v2120.diff` | v2.12.0 (feuille de route 4-undecies) : `POST /manga/interrompre` -> `manga_interrompre()` charge `scripts/interruption.py` a chaud (arret propre du lot / des narrations / des traductions + bilan). Sans lui, « Interrompre et basculer » repond une erreur et le mode ne change PAS (l'app le dit). |
 | `_studio_llm_proxy_vram_v2130.diff` | v2.13.0 : `GET /manga/vram` -> `manga_vram()` charge `scripts/vram_parts.py` a chaud (VRAM ventilee par moteur). Sans lui, l'app retombe sur l'ancienne barre d'une seule couleur (`/vram`). |
+| `_studio_llm_proxy_couts_essais_v2132.diff` | v2.13.2 : `manga_costs()` compte le type `essai` du registre (bancs, sondes, juges lances hors de l'app), poste « essais et bancs ». Sans lui, ces depenses reelles manquent a la pastille. |
 
 **Ce sont des ajouts purs.** Aucune ligne existante de Generate Studio n'est modifiée : les diffs ne
 contiennent que des `+`, à l'exception de la ligne `SCHEMA_VERSION = 2` → `3` et de l'ajout de `shutil`

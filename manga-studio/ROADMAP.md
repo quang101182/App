@@ -2188,6 +2188,35 @@ sur la capture du banc, corrigé).
 - ~~⬜ Reste : 4-undecies (cette section)~~ → ✅ v2.12.0 ; bouton « Effacement local » n'est plus nécessaire (l'interrupteur le pilote) ;
   refaire les pages OPM avec l'effacement local si Quang le veut (`--rerendu --effacement local`, 0 $).
 
+## 4-quaterdecies. COMPARTIMENT SECRET *(24/09/2026 16h01-16h04, demande Quang — ⬜ À FAIRE après les chantiers en cours)*
+
+> Quang : *« un compartiment secret qui aura exactement la même fonction que l'application actuelle, mais caché sous un
+> déclencheur, par exemple rester appuyé sur le bouton de la bibliothèque […] avec des mangas plus sensibles […] sa
+> propre fenêtre Edge […] je pourrais te donner un ou deux chapitres d'essai […] après que tu aies fini tout ce que tu
+> es en train de faire et créé un compartiment secret fonctionnel. »* Puis (16h04) : *« une gestion intelligente pour
+> éviter que je lance des processus des deux côtés […] que j'aie la vue quand même, même si je ne suis pas dedans. »*
+
+**Décisions de Quang (24/09 16h03)** : accessible **PC ET téléphone** ; entrée par **appui long seul** (pas de code).
+**Conception proposée (Claude)** :
+1. **Séparation PHYSIQUE, même code** : un dossier de données à part (hors `sources/`), une **2ᵉ instance du serveur**
+   qui ne voit que lui (port dédié), la même `manga_studio.html`. Rien de l'espace secret ne peut fuir dans l'app
+   normale (activité, coûts, alertes, vidéos, « récemment ouvertes », nuit, cache hors ligne) puisqu'elle ne le voit pas.
+   ⚠ Précédent connu : une 2ᵉ instance COMPLÈTE du proxy relancerait pod watchdog + notifs Telegram → n'importer que le
+   gestionnaire HTTP. Tous les scripts doivent lire la racine des données par variable d'environnement (aujourd'hui
+   `../sources` en dur).
+2. **Accès** : PC = fenêtre Edge dédiée (profil séparé : historique et cache isolés) ; téléphone = **sous-domaine dédié
+   derrière Cloudflare Access** (règle apps perso), même politique que l'app. L'appui long sur 📚 ouvre l'autre adresse.
+3. **Vue croisée, discrète** (16h04) : chaque espace voit que l'autre travaille — côté normal **sans aucun titre**
+   (« 🔒 1 traitement en cours · étape · reste ~X min ») ; au lancement, si l'autre espace travaille, la même question à
+   l'écran que pour le changement de mode (lancer quand même / annuler) ; la jauge VRAM montre les moteurs quel que soit
+   l'espace ; pastille des coûts = total des deux, détail des titres seulement dans l'espace qui les possède.
+4. **Chaîne sans modération** (§ 4-decies « contenu adulte ») à bâtir sur les chapitres d'essai de Quang : voix locale,
+   traduction locale (Qwen3-30B, 90 % vs 94 %), analyse = le point dur (locale 16/30 vs Gemini 21/30) — mesurer d'abord
+   si Gemini refuse vraiment.
+5. **Dépôt `App` PUBLIC** : le code oui, **jamais un titre ni un chemin de série secrète** dans la feuille de route, le
+   journal ou un commit. Limite posée par Claude : personnages adultes uniquement.
+**Déclencheur** : fin des chantiers en cours (4-terdecies : traduction) → construire, puis Quang fournit 1-2 chapitres.
+
 ## 4-terdecies. COÛTS — LA « RÉFLEXION » DE GEMINI *(24/09/2026 14h40, question Quang sur les 4,43 $ du repérage)*
 
 > Quang : *« si c'est pour économiser la moitié, par exemple 15 $ sur 30 $ d'utilisation actuelle, ça vaut le coup […]
@@ -2570,6 +2599,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 
 | Date | Événement |
 |---|---|
+| 2026-09-24 (16h10) | ✅ **v2.13.2 — coûts dynamiques** (Quang 16h02 : « j'ai dû rafraîchir l'application pour voir les nouveaux coûts ») : la pastille ne suivait que les tâches vues par l'app → rechargée toutes les 30 s (page visible). Et les outils d'essai (sonde, juges, essai de réflexion) payaient **hors registre** : ils s'y inscrivent (type `essai`, poste « essais et bancs », proxy corrigé), 1,53 $ du jour rattrapés. |
 | 2026-09-24 (16h05) | 💰 **narrate_chapter 2.8.0 — repérage des noms sans réflexion Gemini** : analyse+noms −48 % (0,19 → 0,10 $ pour 17 p.), fidélité inchangée (référence recalée : 9/6 graves vs 9/9 ; noms plus stables). Réflexion de l'analyse gardée (la couper dégrade : 2 juges à l'aveugle). Modération réelle : Claymore ch.2 = 178/178 Gemini, 20/20 Kimi, 0 refus. § 4-terdecies. |
 | 2026-09-24 (15h30) | ✅ **v2.13.0 — jauge VRAM ventilée par moteur** (demande Quang 15h11). Windows ne ventile pas la VRAM par processus (mesuré) → chaque moteur déclare sa part ; gris = le reste. Banc 10/10. Détail § 4-duodecies. |
 | 2026-09-24 (14h50) | ✅ **v2.12.0 — chantier 4-undecies.** Double estimation ☁ / 🖥 recalculée sur les passages réels (Narrer, Traduire, Tout traiter, confirmations), protection du changement de mode pendant un traitement (question à l'écran, Basculer / Annuler / Interrompre, bilan exact + Reprendre sans repayer l'analyse). Trouvé en route : le lot figeait la voix au lancement pendant que l'effacement suivait l'interrupteur (corrigé, suivi_nuit 2.5.0) ; une tâche coupée s'affichait « ✓ finie ». Bancs 320 cas + 19 + 17 + 18 verts, 5 mutations rouges, non-régression verte. 0 $ dépensé. Détail § 4-undecies. |

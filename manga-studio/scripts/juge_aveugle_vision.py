@@ -61,6 +61,7 @@ def main():
                 tot[t1 if g == "1" else t2]["gagne"] += 1
             else:
                 tot["egal"] += 1
+        __import__("depenses").noter("essai", chap, "juge-aveugle " + ta + " vs " + tb, juge, cout)   # une depense reste une depense
         print("\nJUGE %s (%d pages, %.3f $)" % (juge, len(paires), cout))
         for t in (ta, tb):
             print("  %-22s graves %2d · mineures %2d · aucune %2d · plus fidele sur %2d page(s)"

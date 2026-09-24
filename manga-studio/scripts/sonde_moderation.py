@@ -46,6 +46,7 @@ def main():
             print("  ... p.%d (%d ok, %d refus)" % (n, ok, len(refus)), flush=True)
     r = {"chapitre": a.chapitre, "moteur": a.moteur, "pages": len(nums), "ok": ok, "refus": refus, "erreurs": erreurs,
          "cout": round(cout, 4), "s": round(time.time() - t0), "quand": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    __import__("depenses").noter("essai", a.chapitre, "sonde-moderation", a.moteur, cout)     # une depense reste une depense
     json.dump(r, open(os.path.join(HERE, "sonde_moderation_%s.json" % a.moteur), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print("%s %s : %d pages · %d acceptees · %d REFUS · %d erreurs · %.3f $ · %d s"
           % (a.moteur, a.chapitre, len(nums), ok, len(refus), len(erreurs), cout, r["s"]))

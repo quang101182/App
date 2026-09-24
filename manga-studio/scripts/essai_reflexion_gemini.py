@@ -45,6 +45,7 @@ for niv in niveaux:
         except Exception:
             tot["noms"][num] = ["ILLISIBLE"]
     res[niv] = tot
+    __import__("depenses").noter("essai", chap, "essai-reflexion " + niv, "gemini", tot["usd"])
     print("%-8s in=%6d out=%5d reflexion=%6d  %.4f $  %.0f s" % (niv, tot["in"], tot["out"], tot["think"], tot["usd"], tot["s"]), flush=True)
 print("\nNoms par page :")
 for num in pages:
