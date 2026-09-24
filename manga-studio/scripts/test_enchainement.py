@@ -20,6 +20,8 @@ CAS = [("https://mangadex.org/chapter/0c5b1f7e-3b52-4a9f-9d0b-12a3b4c5d6e7", Tru
        ("https://exemple-scan.fr/manga/serie/chapter-12/", True),
        ("https://exemple-scan.fr/manga/serie/chapitre-12-5/", True),
        ("https://exemple.com/manhwa/serie/chapter-001/", True),
+       ("https://divascans.org/series/comic/playing-with-karma/chapter/1", True),      # v0.7.2 / v2.40.0
+       ("https://divascans.org/series/comic/playing-with-karma", False),
        ("https://www.exemple.com/lecture-en-ligne/Serie-Chapitre-1-FR_356798.html", False),
        ("https://www.exemple.com/TOP-54.html", False),
        ("https://mangadex.org/", False), ("", False)]

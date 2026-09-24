@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -335,8 +335,8 @@ def enchainement_possible(url: str):
     if "webtoons.com/" in url and "title_no=" in url: return True, "WEBTOON"
     if re.match(r"(https?://[^?#]+?/)(vol-\d+(?:-(?:chapitre|chapter|ch)-\d+(?:-\d+)?)?)/?(?:[?#].*)?$", url, re.I):
         return True, "volumes « vol-N »"
-    if re.match(r"(https?://[^?#]+?/)(chapter|chapitre|ch)[-_](\d+(?:[.-]\d+)?)/?(?:[?#].*)?$", url, re.I):
-        return True, "adresses « chapter-N »"
+    if re.match(r"(https?://[^?#]+?/)(chapter|chapitre|ch)[-_/](\d+(?:[.-]\d+)?)/?(?:[?#].*)?$", url, re.I):
+        return True, "adresses « chapter-N »"          # v0.7.2 : aussi « chapter/N » (divascans.org)
     return False, ""
 
 
@@ -395,13 +395,52 @@ def _suivant_par_page(page, url_chapitre: str, courant: str, jusqua, entiers: bo
             /^(chapitre suivant|chap(\.|itre)? suiv(\.|ant)|next chapter|next ch(\.|apter)?)\b/i.test((x.innerText || x.title || '').trim()));
         return a ? a.href : null; }""", avant)
     if not lien:
-        return None
+        return _suivant_par_bouton(page, avant, courant, jusqua, entiers)       # v0.7.2
     n = _format_num(int(_num(courant)) + 1)
     if jusqua is not None and _num(n) > jusqua:
         return None, f"le chapitre suivant ({n}) dépasse la borne demandée ({_format_num(jusqua)})"
     page.goto(lien, wait_until="domcontentloaded", timeout=45000)
     page.wait_for_timeout(2000)
     return (n, None) if page.url.split("#")[0] != avant else (None, "le lien « chapitre suivant » n'a mené nulle part")
+
+
+def _suivant_par_bouton(page, avant: str, courant: str, jusqua, entiers: bool = False):
+    """v0.7.2 (divascans.org, 25/09) : un BOUTON (ou lien sans adresse) « NEXT Ch. 2 » / « Suivant chap. 2 ». On ne le
+    touche que s'il ANNONCE un numero ; on clique, on attend une autre adresse, et on VERIFIE que l'arrivee porte ce
+    numero (adresse ou titre). Chapitres intermediaires (2.5) sautes si « entiers ». Aucun repere : None (le dire)."""
+    for _ in range(5):                                  # au plus 5 intermediaires sautes d'affilee
+        cible = page.evaluate(r"""() => {
+            const txt = e => (e.innerText || e.getAttribute('aria-label') || e.title || '').replace(/\s+/g, ' ').trim();
+            const re = /^(next|suivant|chapitre suivant|next chapter)\b.*?\b(?:ch(?:ap(?:ter|itre)?)?\.?|chapitre|chapter|#)\s*(\d+(?:[.,]\d+)?)/i;
+            const e = [...document.querySelectorAll('button, a, [role=button]')].find(x => re.test(txt(x)) && !x.disabled
+                && x.getAttribute('aria-disabled') !== 'true');
+            if (!e) return null;
+            e.setAttribute('data-mf-suivant', '1');
+            return txt(e).match(re)[2].replace(',', '.'); }""")
+        if not cible:
+            return None
+        n = _format_num(float(cible))
+        if _num(n) <= _num(courant):
+            return None, "le bouton « suivant » annonce le chapitre %s, pas après le %s" % (n, courant)
+        if jusqua is not None and _num(n) > jusqua:
+            return None, f"le chapitre suivant ({n}) dépasse la borne demandée ({_format_num(jusqua)})"
+        page.click("[data-mf-suivant]")
+        for _ in range(40):
+            page.wait_for_timeout(500)
+            if page.url.split("#")[0] != avant:
+                break
+        else:
+            return None, "le bouton « suivant » (ch. %s) n'a ouvert aucune autre page" % n
+        page.wait_for_load_state("domcontentloaded"); page.wait_for_timeout(2500)
+        num = re.escape(n)
+        if not (re.search(r"(?:chapter|chapitre|ch|episode)[-_/ ]?0*" + num + r"(?:\D|$)", page.url, re.I)
+                or re.search(r"(?:chapter|chapitre|ch\.?|episode|#)\s*0*" + num + r"(?:\D|$)", page.title() or "", re.I)):
+            return None, "le bouton « suivant » a mené à une page qui ne porte pas le chapitre %s (%s)" % (n, page.url)
+        if entiers and float(n) != int(float(n)):
+            courant, avant = n, page.url.split("#")[0]            # intermediaire : on passe au suivant
+            continue
+        return n, None
+    return None, "trop de chapitres intermédiaires d'affilée"
 
 
 def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: bool = False):
@@ -499,25 +538,29 @@ def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: boo
         return n, None
     # v0.5.1 : GENERIQUE -- les sites de scans (WordPress « Madara » et cie : raijin-scans.fr, 22/09) listent sur la page
     # du chapitre les liens de TOUS les chapitres de la serie, a adresse reguliere .../chapter-12/ ou .../chapitre-12-5/.
-    m = re.match(r"(https?://[^?#]+?/)(chapter|chapitre|ch)[-_](\d+(?:[.-]\d+)?)/?(?:[?#].*)?$", url_chapitre, re.I)
+    m = re.match(r"(https?://[^?#]+?/)(chapter|chapitre|ch)([-_/])(\d+(?:[.-]\d+)?)/?(?:[?#].*)?$", url_chapitre, re.I)
     if m:
-        base, mot = m.group(1), m.group(2).lower()
+        base, mot, sep = m.group(1), m.group(2).lower(), m.group(3)
         if page.url.split("?")[0].split("#")[0].rstrip("/") != url_chapitre.split("?")[0].split("#")[0].rstrip("/"):
             page.goto(url_chapitre, wait_until="domcontentloaded", timeout=45000)
             page.wait_for_timeout(3000)
         liens = page.evaluate("(base) => Array.from(document.querySelectorAll('a[href]')).map(a => a.href)"
                               ".filter(h => h.startsWith(base))", base)
         dispo = {}
-        motif = re.compile(re.escape(base) + mot + r"[-_](\d+(?:[.-]\d+)?)/?(?:[?#].*)?$", re.I)
+        motif = re.compile(re.escape(base) + mot + re.escape(sep) + r"(\d+(?:[.-]\d+)?)/?(?:[?#].*)?$", re.I)
         for h in liens:
             mm = motif.match(h)
             if mm:
                 dispo.setdefault(_format_num(float(mm.group(1).replace("-", "."))), h.split("#")[0])
         if not dispo:
-            return None, "aucun lien vers d'autres chapitres sur la page (site non pris en charge)"
+            r = _suivant_par_page(page, url_chapitre, courant, jusqua, entiers)   # v0.7.2 : bouton « NEXT Ch. N »
+            return r if r is not None else (None, "aucun lien vers d'autres chapitres sur la page (site non pris en charge)")
         n, url, raison = _choisir_suivant(dispo, courant, jusqua, entiers)
         if n is None:
-            return None, raison + " (liens de la page)"
+            # v0.7.2 (divascans, ch.2) : les « liens de la page » peuvent n'etre que le chapitre COURANT (lien
+            # d'accessibilite « #main-content ») -> avant de conclure, le bouton « suivant » de la page
+            r = _suivant_par_page(page, url_chapitre, courant, jusqua, entiers)
+            return r if r is not None and r[0] is not None else (None, raison + " (liens de la page)")
         page.goto(url, wait_until="domcontentloaded", timeout=45000)
         return n, None
     r = _suivant_par_page(page, url_chapitre, courant, jusqua, entiers)     # v0.7.0 : liste de la page / lien « suivant »

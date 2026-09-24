@@ -2431,6 +2431,14 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   enrichis (chapitre 42/42 avec mutation rouge, reste 42/42). 🟠 (constaté v2.39.0, antérieurs à ce soir, non traités) :
   listes « Moteur de lecture » / « Voix » du chapitre coupées à 360 px ; console bruitée de 502 `/comfy/*` quand le
   moteur local est éteint. Déclencheur : prochaine passe sur le bloc Narration d'un chapitre.
+- **25/09 00h30 — site DivaScans ajouté à la SECONDAIRE** (Quang 00h10) — manga-fetch **0.7.2** + app **v2.40.0** :
+  adresses « chapter/N » (barre oblique) reconnues ; la page ne liste PAS les autres chapitres, seul un `<button>`
+  « NEXT Ch. N » (sans href) mène au suivant → nouveau recours `_suivant_par_bouton` : on ne touche qu'un bouton qui
+  ANNONCE un numéro, on clique, puis on VÉRIFIE que l'arrivée porte ce numéro (adresse ou titre) ; intermédiaires sautés
+  si « entiers ». Piège payé : le lien d'accessibilité `…/chapter/2#main-content` passait pour une « liste de
+  chapitres » ne contenant que le courant → quand cette liste ne propose rien après, le bouton est essayé avant de
+  conclure. Contrôle réel (fenêtre de la secondaire) : ch.1 83 p., ch.2 76 p., ch.3 → ch.4 enchaînés d'un lancement ;
+  pages vérifiées à l'œil (manhwa EN). `test_enchainement.py` 16/16. Entrée ajoutée à `prive/_sites.json` (hors dépôt).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
   `MangaStudioInstance2` : `/manga/liens` répond (✕ des sites ACTIF), banc `test_page_principale.py 8192` 55/55.
   1. **En-tête d'une série** (capture Quang : « ça fait un peu fouiller ») : « ← Toutes les séries » d'une couleur
