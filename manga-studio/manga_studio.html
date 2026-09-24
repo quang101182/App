@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.9.2</title>
+<title>Manga Studio v2.10.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -484,7 +484,7 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .mus-it .dur{font-size:12px;color:var(--dim);text-align:right;font-variant-numeric:tabular-nums}
 .mus-it .btn.sm{padding:3px 0;width:32px;justify-content:center}
 .mus-it.off .nom{color:var(--dim)}
-.cap-ko{color:#ff7a8a}.serie-sans-img{display:flex;align-items:center;justify-content:center;font-size:28px;opacity:.5}
+.cap-ko{color:#ff7a8a}.gpu-etat{display:block;font-size:11px;margin-top:2px}.serie-sans-img{display:flex;align-items:center;justify-content:center;font-size:28px;opacity:.5}
 .mus-aussi{display:block;font-size:11px;color:#8fe0a8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mus-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .gs-box{margin-top:8px;padding:8px;border:1px solid var(--line,#2a2f3a);border-radius:10px}
@@ -767,7 +767,7 @@ body.epure .aide{display:none}
 <div class="topbar">
 <header>
   <div class="hdrin">
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.9.2</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.10.0</span>
       <button class="cost-pill" id="hdrCost" title="Suivi des coûts d'utilisation">💰 …</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1241,7 +1241,9 @@ body.epure .aide{display:none}
       <button class="btn sm" id="suiviFermer">✕</button></div>
     <div class="prof-l bloc-narr"><span class="prof-t">🎙 Narration</span><div class="prof-c">
       <select id="suiviMoteur"><option value="kimi">Kimi K3 — le plus fiable</option><option value="gemini">Gemini — rapide, moins cher</option></select>
-      <select id="suiviVoix"></select><button class="btn sm" id="profEcoute" title="écouter cette voix (7 s)">▶</button></div></div>
+      <select id="suiviVoix"></select><button class="btn sm" id="profEcoute" title="écouter cette voix (7 s)">▶</button>
+      <select id="suiviTts" style="width:auto" title="en ligne = voix Google facturée ; locale = carte graphique, 0 $"><option value="cloud">☁ En ligne (Google)</option><option value="local">🖥 Locale (carte graphique, 0 $)</option></select>
+      <small class="muted gpu-etat" id="profGpu"></small></div></div>
     <div class="prof-l bloc-trad"><span class="prof-t">🌐 Traduction</span><div class="prof-c">
       <select id="profTrad"><option value="">aucune</option><option value="fr">en français</option><option value="en">en anglais</option>
         <option value="es">en espagnol</option><option value="de">en allemand</option><option value="it">en italien</option>
@@ -1349,6 +1351,8 @@ body.epure .aide{display:none}
         <div class="grow"><label>Voix</label><div class="row" style="gap:6px;flex-wrap:nowrap">
           <select id="narrVoice" style="flex:1;min-width:0"></select>
           <button class="btn sm" id="btnVoixApercu" title="écouter un échantillon de cette voix (7 s)">▶</button></div></div>
+        <div style="width:190px"><label>Moteur de voix</label><select id="narrTts" title="en ligne = voix Google facturée ; locale = voix fabriquée sur ta carte graphique, 0 $, ~1× le temps réel"><option value="cloud">☁ En ligne (Google)</option><option value="local">🖥 Locale (carte graphique, 0 $)</option></select>
+          <small class="muted gpu-etat" id="narrGpu"></small></div>
         <div style="width:118px"><label>Langue</label><select id="narrLangue" title="langue de la narration (le texte ET la voix)">
           <option value="fr">Français</option><option value="en">Anglais</option></select></div>
         <div style="width:110px"><label>Pages</label><input id="narrPages" placeholder="toutes" title="ex. 1-20 ; vide = tout le chapitre"></div>
@@ -1634,7 +1638,7 @@ body.epure .aide{display:none}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.9.2";
+const VERSION = "2.10.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -6324,6 +6328,7 @@ function profRegler(c){
   $("suiviVoix").innerHTML = VOIX.map(v => '<option value="' + v[0] + '">' + esc(v[1]) + "</option>").join("");
   $("suiviVoix").value = VOIX.some(x => x[0] === c.voix) ? c.voix : VOIX[0][0];
   $("suiviMoteur").value = c.moteur === "gemini" ? "gemini" : "kimi";
+  $("suiviTts").value = c.voix_moteur === "local" ? "local" : "cloud"; gpuAfficher("suiviTts", "profGpu");
   $("profTrad").value = c.traduction || "";
   $("suiviKar").checked = c.karaoke !== false; $("suiviPrec").checked = c.precedemment !== false;
   const rv = c.reglages_video || {};
@@ -6379,7 +6384,7 @@ async function suiviCharger(){
   profMusCharger().catch(e => { $("profMusListe").textContent = "—"; log("musique : " + e.message, "w"); });
 }
 function profLire(){
-  return { serie: LIB_SERIE, actif: $("suiviActif").checked, voix: $("suiviVoix").value, moteur: $("suiviMoteur").value,
+  return { serie: LIB_SERIE, actif: $("suiviActif").checked, voix: $("suiviVoix").value, voix_moteur: $("suiviTts").value, moteur: $("suiviMoteur").value,
            traduction: $("profTrad").value, karaoke: $("suiviKar").checked, precedemment: $("suiviPrec").checked, video: $("suiviVid").checked,
            reglages_video: { vitesse: +$("profVit").value, sous: $("profSous").checked, karaoke: $("suiviKar").checked,
                              musique: $("profMusOn").checked, volume: +$("profVol").value, pages: "", precedemment: $("suiviPrec").checked,
@@ -6391,7 +6396,7 @@ async function suiviSauver(msg){
   try { localStorage.setItem("manga_voix_" + LIB_SERIE, $("suiviVoix").value); } catch {}
   toast(msg || "✔ profil de la série enregistré"); SUIVI._rendu = false; await suiviCharger();
 }
-["suiviMoteur", "suiviVoix", "profTrad", "suiviKar", "suiviPrec", "suiviVid", "profVit", "profSous", "profMusOn", "profVol", "profCam"]
+["suiviMoteur", "suiviVoix", "suiviTts", "profTrad", "suiviKar", "suiviPrec", "suiviVid", "profVit", "profSous", "profMusOn", "profVol", "profCam"]
   .forEach(id => $(id).onchange = () => suiviSauver().catch(e => alert(e.message)));
 $("suiviActif").onchange = () => suiviSauver($("suiviActif").checked ? "🌙 la nuit, les nouveaux chapitres seront traités" : "nuit désactivée pour cette série")
   .catch(e => alert(e.message));
@@ -6645,9 +6650,25 @@ $("narrRuns").onclick = async e => {
   const b = e.target.closest("[data-ecoute]");
   if (b) ouvrirLecteur([NARRS[+b.dataset.ecoute].tag]).catch(err => log("lecteur : " + err.message, "e"));
 };
+/* v2.10.0 (feuille de route 4-nonies, etape 0b) : etat de la carte graphique, affiche quand un moteur LOCAL est choisi.
+   Rien n'est lance : le moteur local ATTEND lui-meme une carte libre (tts_local.py), il ne se bat pas avec ComfyUI. */
+async function gpuAfficher(selId, outId){
+  const o = $(outId); if (!o) return;
+  if ($(selId).value !== "local"){ o.textContent = ""; return; }
+  o.textContent = "⏳ carte graphique…";
+  try {
+    const g = await api("/manga/gpu");
+    const go = g.memoire_libre_mo != null ? (g.memoire_libre_mo / 1024).toFixed(1).replace(".", ",") + " Go libres" : "état inconnu";
+    const cf = g.comfyui === "occupe" ? " · ComfyUI travaille : la voix attendra qu’il ait fini" : g.comfyui === "libre" ? " · ComfyUI au repos" : "";
+    o.textContent = (g.pret ? "✔ " : "⏳ ") + go + cf;
+  } catch (e){ o.textContent = "état de la carte indisponible (" + e.message + ")"; }
+}
+$("narrTts").addEventListener("change", () => { gpuAfficher("narrTts", "narrGpu"); try { localStorage.setItem("manga_tts", $("narrTts").value); } catch {} });
+$("suiviTts").addEventListener("change", () => gpuAfficher("suiviTts", "profGpu"));
+try { const t = localStorage.getItem("manga_tts"); if (t === "local" || t === "cloud") $("narrTts").value = t; } catch {}
 $("btnNarrer").onclick = async () => {
   const body = { d: CHAP_OPEN, engine: $("narrEngine").value, voice: $("narrVoice").value, pages: $("narrPages").value.trim(),
-                 langue: $("narrLangue").value };                                          // v2.6.0 (N1)
+                 langue: $("narrLangue").value, tts: $("narrTts").value };                        // v2.10.0 : voix locale en option                                          // v2.6.0 (N1)
   try {
     const r = await api("/manga/narrate", body); memoriserVoix();
     log("narration lancée : " + CHAP_OPEN + " → " + r.tag);

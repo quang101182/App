@@ -1,0 +1,68 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260924-ttslocal	2026-09-24 12:57:38.497572100 +0200
++++ /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py	2026-09-24 12:57:46.868364800 +0200
+@@ -9296,7 +9296,27 @@
+ _NARR_LANGUES = ("fr", "en")                     # v2.6.0 : langue de narration = LANGUES_NARR de narrate_chapter.py
+ 
+ 
+-def manga_narrate(d, engine, voice, pages="", reuse="", langue="fr"):
++def manga_gpu():
++    """Manga Studio v2.10.0 (etape 0b) : la carte graphique est-elle libre pour un moteur LOCAL ?
++    Memoire libre (nvidia-smi) + file ComfyUI (Generate Studio). Rien n'est lance ici : c'est un etat."""
++    r = {"memoire_libre_mo": None, "memoire_totale_mo": None, "comfyui": None}
++    try:
++        o = subprocess.run(["nvidia-smi", "--query-gpu=memory.free,memory.total,name", "--format=csv,noheader,nounits"],
++                           capture_output=True, text=True, timeout=10, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
++        libre, tot, nom = [x.strip() for x in o.splitlines()[0].split(",")]
++        r.update(memoire_libre_mo=int(libre), memoire_totale_mo=int(tot), nom=nom)
++    except Exception as e:
++        r["erreur"] = "nvidia-smi : %s" % str(e)[:80]
++    try:
++        q = _get_json("http://127.0.0.1:8188/queue", timeout=3)
++        r["comfyui"] = "occupe" if (q.get("queue_running") or q.get("queue_pending")) else "libre"
++    except Exception:
++        r["comfyui"] = "eteint"
++    r["pret"] = bool(r["memoire_libre_mo"] and r["memoire_libre_mo"] >= 5000 and r["comfyui"] != "occupe")
++    return r
++
++
++def manga_narrate(d, engine, voice, pages="", reuse="", langue="fr", tts="cloud"):
+     if engine not in ("gemini", "kimi", "pixtral"):     # v1.68 : gemini = defaut (banc de fidelite 21/09)
+         return {"error": "moteur inconnu"}
+     if not re.match(r"^[A-Z][a-z]{2,15}$", voice or ""):
+@@ -9307,7 +9327,8 @@
+     if langue not in _NARR_LANGUES:
+         return {"error": "langue de narration inconnue"}
+     # v2.6.0 : langue de narration -- hors francais, l'etiquette porte la langue (sinon l'anglais ECRASAIT le francais)
+-    tag = "%s-%s" % (engine, voice.lower()) + ("" if langue == "fr" else "-" + langue)
++    tts = "local" if tts == "local" else "cloud"                 # v2.10.0 : voix locale en option
++    tag = "%s-%s" % (engine, voice.lower()) + ("" if langue == "fr" else "-" + langue) + ("-local" if tts == "local" else "")
+     if reuse and not _RE_TAG.match(reuse):
+         return {"error": "reuse invalide"}
+     td = _narr_dir(d, tag)
+@@ -9325,6 +9346,7 @@
+     if pages: cmd += ["--pages", pages]
+     if reuse: cmd += ["--reuse-vision", reuse]
+     if langue != "fr": cmd += ["--langue", langue]
++    if tts == "local": cmd += ["--tts", "local"]
+     lg = open(os.path.join(td, "run.log"), "w", encoding="utf-8")
+     _NARR_JOBS[(d, tag)] = subprocess.Popen(cmd, stdout=lg, stderr=lg, cwd=os.path.dirname(MANGA_NARRATE),
+                                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+@@ -10401,6 +10423,8 @@
+             self._json(200, manga_resume())
+         elif self.path.split("?", 1)[0] == "/manga/activite":              # Manga Studio v1.88.0
+             self._json(200, manga_activite())
++        elif self.path.split("?", 1)[0] == "/manga/gpu":                   # Manga Studio v2.10.0
++            self._json(200, manga_gpu())
+         elif self.path.split("?", 1)[0] == "/manga/musiques_app":          # Manga Studio v2.9.0
+             _r = manga_musiques_app((parse_qs(urlparse(self.path).query).get("serie") or [""])[0])
+             if _r is None: self._json(404, {"error": "serie introuvable"})
+@@ -10853,7 +10877,8 @@
+             elif self.path == "/manga/narrate":
+                 self._json(200, manga_narrate(data.get("d") or "", data.get("engine") or "",
+                                               data.get("voice") or "", str(data.get("pages") or ""),
+-                                              data.get("reuse") or "", data.get("langue") or "fr"))
++                                              data.get("reuse") or "", data.get("langue") or "fr",
++                                              data.get("tts") or "cloud"))
+             elif self.path == "/manga/fetch_edge":
+                 self._json(200, manga_fetch_edge())
+             elif self.path == "/manga/pilote":                 # Manga Studio v2.0.0

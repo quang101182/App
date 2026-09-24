@@ -44,7 +44,7 @@ LANGUES = ("fr", "en", "es", "de", "it", "pt", "vi")
 
 # Reglages de depart si rien n'a jamais ete choisi (repris du suivi v1.98 + du lecteur).
 DEFAUT_INTEGRE = {
-    "actif": False, "moteur": "kimi", "voix": "Charon", "traduction": "",
+    "actif": False, "moteur": "kimi", "voix": "Charon", "voix_moteur": "cloud", "traduction": "",
     "karaoke": True, "precedemment": True, "video": True,
     "reglages_video": {"vitesse": 1.0, "sous": True, "karaoke": True, "musique": True, "volume": 25,
                        "pages": "", "precedemment": True, "camera": "cases"},
@@ -107,6 +107,7 @@ def normaliser(cfg):
     return {"actif": bool(cfg.get("actif", d["actif"])),
             "moteur": cfg.get("moteur") if cfg.get("moteur") in MOTEURS else d["moteur"],
             "voix": voix,
+            "voix_moteur": "local" if cfg.get("voix_moteur") == "local" else "cloud",   # v2.10.0 : voix locale en option
             "traduction": cfg.get("traduction") if cfg.get("traduction") in LANGUES else "",
             "karaoke": bool(cfg.get("karaoke", d["karaoke"])),
             "precedemment": bool(cfg.get("precedemment", d["precedemment"])),
@@ -185,7 +186,7 @@ def a_narrer(serie):
 
 
 def tag_profil(cfg):
-    return "%s-%s" % (cfg["moteur"], cfg["voix"].lower())
+    return "%s-%s" % (cfg["moteur"], cfg["voix"].lower()) + ("-local" if cfg.get("voix_moteur") == "local" else "")
 
 
 def tag_retenu(cd, cfg):
@@ -420,7 +421,8 @@ def traiter_chapitre(c, cfg, refaire, etat, avant_narres):
             except OSError: pass
             t0 = time.time()
             reprise = (essai > 1 or not refaire) and vision_reprenable(td, c["cd"])
-            rc = lancer([PY, os.path.join(HERE, "narrate_chapter.py"), c["d"], "--engine", cfg["moteur"], "--voice", cfg["voix"], "--tag", tag]
+            rc = lancer([PY, os.path.join(HERE, "narrate_chapter.py"), c["d"], "--engine", cfg["moteur"], "--voice", cfg["voix"], "--tag", tag,
+                         "--tts", cfg.get("voix_moteur") or "cloud"]
                         + (["--reuse-vision", tag] if reprise else []),
                         os.path.join(td, "run.log"), etat, "narration")
             n = _lire_json(os.path.join(td, "narration.json"))

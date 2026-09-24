@@ -26,7 +26,7 @@ import argparse, base64, io, json, os, re, subprocess, sys, threading, time, url
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-VERSION = "2.3.0"
+VERSION = "2.4.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -1035,6 +1035,63 @@ def etape_voix(pages, outdir, voice, rate, stats):
     stats["cout_tts"] = stats["tts_chars"] * PRIX_TTS_CHAR
 
 
+TTS_LOCAL_PY = r"C:/Users/quang/AppData/Local/manga-tts/venv/Scripts/python.exe"   # venv voix, sur C: (24/09)
+TTS_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tts_local.py")
+
+
+def etape_voix_locale(pages, outdir, voice, stats):
+    """v2.4.0 (feuille de route 4-nonies, etape 1) : voix LOCALE (Chatterbox, carte graphique), meme nettoyage du texte
+    et memes fichiers pNNN.mp3 que la voix en ligne ; 0 $. Attend une carte libre (tts_local.py), sinon echoue net."""
+    os.makedirs(outdir, exist_ok=True)
+    jobs = []
+    for p in pages:
+        p["audio"], p["dur"] = None, 0.0
+        propre, retires = sans_cjk((p.get("narration") or "").strip())
+        if retires:
+            log("  page %s : %d caractere(s) japonais/chinois/coreen retire(s) avant la voix" % (p.get("page"), retires))
+            p["narration"], p["cjk_retires"] = propre, retires
+            stats["cjk_retires"] = stats.get("cjk_retires", 0) + retires
+        txt = (p.get("narration") or "").strip()
+        if txt:
+            jobs.append({"id": "p%03d" % p["page"], "texte": txt})
+    if not jobs:
+        return
+    if not os.path.isfile(TTS_LOCAL_PY):
+        raise SystemExit("voix locale : environnement introuvable (%s)" % TTS_LOCAL_PY)
+    jf = os.path.join(outdir, "tts_local_jobs.json")
+    json.dump(jobs, open(jf, "w", encoding="utf-8"), ensure_ascii=False)
+    t = time.time()
+    proc = subprocess.Popen([TTS_LOCAL_PY, TTS_LOCAL, "--jobs", jf, "--voix", voice, "--out", outdir, "--langue", LANGUE],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+                            errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    faits, ids = 0, {j["id"] for j in jobs}
+    for ligne in proc.stdout:
+        try:
+            ev = json.loads(ligne)
+        except Exception:
+            continue
+        if ev.get("id") in ids:
+            faits += 1
+            progres("voix", faits, len(jobs), moteur="local")
+        elif ev.get("gpu") in ("attente", "occupee") or ev.get("erreur") or ev.get("modele"):
+            log("  voix locale : %s" % json.dumps(ev, ensure_ascii=False))
+            journal("voix_locale", **ev)
+    rc = proc.wait()
+    if rc == 3:
+        raise SystemExit("voix locale : carte graphique occupee trop longtemps (ComfyUI ?) -- relancer plus tard ou choisir la voix en ligne")
+    if rc != 0:
+        raise SystemExit("voix locale : echec (code %d)" % rc)
+    for p in pages:
+        f = "p%03d.mp3" % p["page"]
+        if "p%03d" % p["page"] in ids and os.path.isfile(os.path.join(outdir, f)):
+            p["audio"], p["dur"] = f, duree_mp3(os.path.join(outdir, f)) or 0.0
+            stats["tts_chars"] += len(p["narration"].strip())
+    stats["tts_s"] += time.time() - t
+    stats["cout_tts"] = 0.0
+    stats["tts_moteur"] = "local"
+    journal("voix_locale_fin", pages=len(jobs), s=round(time.time() - t, 1))
+
+
 def pages_du_chapitre(chap_dir, plage):
     man = json.load(open(os.path.join(chap_dir, "manifest.json"), encoding="utf-8"))
     files = [p["file"] for p in man.get("pages", []) if os.path.isfile(os.path.join(chap_dir, p["file"]))]
@@ -1071,6 +1128,8 @@ def main():
     ap.add_argument("--langue", choices=sorted(LANGUES_NARR), default="fr",
                     help="v2.0.0 : langue de la narration et de la voix (defaut fr ; en = anglais, prompt v2 seulement)")
     ap.add_argument("--rate", type=float, default=1.05)
+    ap.add_argument("--tts", choices=["cloud", "local"], default="cloud",
+                    help="v2.4.0 : voix en ligne (Chirp 3 HD, defaut) ou LOCALE (Chatterbox, carte graphique, 0 $)")
     ap.add_argument("--tag", default="", help="nom du run (defaut : <engine>-<voix>)")
     ap.add_argument("--no-tts", action="store_true")
     ap.add_argument("--portraits", action="store_true",
@@ -1093,7 +1152,8 @@ def main():
     chap_dir = os.path.normpath(os.path.join(SOURCES, a.chapitre))
     if not chap_dir.startswith(SOURCES + os.sep) or not os.path.isfile(os.path.join(chap_dir, "manifest.json")):
         raise SystemExit("chapitre introuvable sous sources/ : " + a.chapitre)
-    tag = a.tag or "%s-%s" % (a.engine, a.voice.lower()) + ("" if a.langue == "fr" else "-" + a.langue)
+    # v2.4.0 : la voix locale ne remplace jamais l'en-ligne (etiquette distincte)
+    tag = a.tag or "%s-%s" % (a.engine, a.voice.lower()) + ("" if a.langue == "fr" else "-" + a.langue) + ("-local" if a.tts == "local" else "")
     outdir = os.path.join(chap_dir, "narration", tag)
     os.makedirs(outdir, exist_ok=True)
     PROGRESS = os.path.join(outdir, "progress.json")
@@ -1128,7 +1188,7 @@ def main():
             vis, resume, persos = etape_vision(chap_dir, pages, a.engine, a.batch or 4, stats)
     def _resultat(pages_):
         return {"version": VERSION, "prompt": a.prompt, "reuse_vision": a.reuse_vision or None, "serie": bool(a.serie), "noms_version": a.noms, "chapitre": a.chapitre, "title": man.get("title"), "chapter": man.get("chapter"),
-                "tag": tag, "engine": a.engine, "model": ENGINES[a.engine][1], "voice": a.voice, "rate": a.rate, "langue": a.langue,
+                "tag": tag, "engine": a.engine, "model": ENGINES[a.engine][1], "voice": a.voice, "rate": a.rate, "langue": a.langue, "tts": a.tts,
                 "titre": titre, "resume": resume, "personnages": persos, "created_at": datetime.now().isoformat(timespec="seconds"),
                 "stats": {k: (round(v, 4) if isinstance(v, float) else v) for k, v in stats.items()},
                 "pages": pages_}
@@ -1175,7 +1235,10 @@ def main():
         _echec("caracteres chinois/japonais/coreens dans la narration des pages %s (ex. %s) -- analyse gardee, un nouvel essai la reprend"
                % (",".join(map(str, cjk[:12])), (next(p for p in vis if p["page"] == cjk[0]).get("narration") or "")[:80]))
     if not a.no_tts:
-        etape_voix(vis, outdir, a.voice, a.rate, stats)
+        if a.tts == "local":
+            etape_voix_locale(vis, outdir, a.voice, stats)
+        else:
+            etape_voix(vis, outdir, a.voice, a.rate, stats)
         sans_voix = [p["page"] for p in vis if (p.get("narration") or "").strip() and not p.get("audio")]
         if sans_voix or not any(p.get("audio") for p in vis):
             _echec("voix manquante sur %d page(s) narree(s) (%s)" % (len(sans_voix), ",".join(map(str, sans_voix[:12]))))
