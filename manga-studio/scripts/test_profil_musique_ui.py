@@ -55,7 +55,7 @@ def main():
                 if w == 1280:
                     check("série sans musique : invitation à en ajouter", "Aucun morceau" in vide, vide)
                     with pg.expect_file_chooser() as fc:
-                        pg.click("#profMusImport")
+                        pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#profMusImport"); pg.click("#profMusImport")
                     fc.value.set_files(ECH); pg.wait_for_timeout(4000)
                     items = pg.evaluate("() => Array.from(document.querySelectorAll('#profMusListe [data-pm-coche]')).map(c => [c.dataset.pmCoche, c.checked])")
                     check("import depuis le profil : le morceau apparaît", len(items) == 1, items)
@@ -64,7 +64,7 @@ def main():
                     choix = json.load(open(os.path.join(BANC, "musique", "choix.json"), encoding="utf-8")) if os.path.isfile(os.path.join(BANC, "musique", "choix.json")) else {}
                     check("coché = sélection de la série (choix.json)", len(choix.get("serie") or []) == 1, choix)
                     check("état : « 1 coché(s) »", "1 coché" in pg.evaluate("() => document.getElementById('profMusEtat').textContent"))
-                pg.click("#profMusGs"); pg.wait_for_timeout(3500)
+                pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#profMusGs"); pg.click("#profMusGs"); pg.wait_for_timeout(3500)
                 gs = pg.evaluate("() => [document.getElementById('gsBox').parentNode.id, !document.getElementById('gsBox').hidden, document.querySelectorAll('#gsListe .gs-it').length]")
                 check("Generate Studio s'ouvre DANS le profil", gs[0] == "profGsPlace" and gs[1], gs)
                 m = pg.evaluate("""() => ({page: document.documentElement.scrollWidth - document.documentElement.clientWidth,

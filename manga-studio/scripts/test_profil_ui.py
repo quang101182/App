@@ -56,7 +56,7 @@ def ouvre(pg):
     pg.click('nav button[data-tab="tChap"]'); pg.wait_for_timeout(1200)
     pg.evaluate("() => { refreshChaps && refreshChaps(); }"); pg.wait_for_timeout(1500)
     pg.evaluate("() => ouvrirSerie('banc-profil-ui')"); pg.wait_for_timeout(1500)
-    pg.click("#btnSuivi"); pg.wait_for_timeout(2500)
+    pg.click("#btnSuivi"); pg.wait_for_timeout(800); pg.evaluate("() => document.querySelectorAll('#suiviBox details.prof-l').forEach(d => d.open = true)")   # v2.31.0 : lignes repliees; pg.wait_for_timeout(2500)
 
 
 def main():
@@ -99,7 +99,7 @@ def main():
             pg.click("#suiviLancer"); pg.wait_for_timeout(800)
             check("« Lancer » refusé : rien d'envoyé", not envois and dialogues and "ch. 1" in dialogues[-1], (envois, dialogues[-1:]))
             reponse["v"] = True
-            pg.click("#profDefSet"); pg.wait_for_timeout(2500)
+            pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#profDefSet"); pg.click("#profDefSet"); pg.wait_for_timeout(2500)
             d = json.load(open(DEF, encoding="utf-8")) if os.path.isfile(DEF) else {}
             check("⭐ réglages par défaut = ce profil (sans « actif »)", d.get("traduction") == "fr" and d.get("moteur") == "gemini" and d.get("actif") is False, d)
             pg.query_selector("#suiviBox").screenshot(path=os.path.join(CAP, "profil_1280.png"))

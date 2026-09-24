@@ -188,10 +188,10 @@ def main():
         # --- 5. exports --------------------------------------------------
         print("[5] exports")
         with pg.expect_download(timeout=90000) as d1:
-            pg.click("#btnExport")
+            pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#btnExport"); pg.click("#btnExport")
         d1.value.save_as(png_path)
         with pg.expect_download(timeout=90000) as d2:
-            pg.click("#btnExportPdf")
+            pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#btnExportPdf"); pg.click("#btnExportPdf")
         d2.value.save_as(pdf_path)
         print("    PNG %d octets · PDF %d octets"
               % (os.path.getsize(png_path), os.path.getsize(pdf_path)))

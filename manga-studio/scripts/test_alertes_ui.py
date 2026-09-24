@@ -60,7 +60,8 @@ try:
         check("les boutons de lancement portent l'icône 🖥", pg.evaluate("() => $('btnNarrer').querySelector('.mode-ico').textContent") == "🖥")
         pg.goto(url); pg.wait_for_timeout(3000)
         check("rechargé : toujours « Sur mon PC » (persistance)", pg.evaluate("() => $('hdrMode').textContent") == "🖥 Sur mon PC")
-        check("380 px : pastille réduite à l'icône", pg.inner_text("#hdrMode").strip() == "🖥")
+        # v2.30.0 (Quang 22h33 : « que je voie en permanence de maniere claire ») : le MOT reste affiche sur telephone
+        check("380 px : pastille lisible (icône + « Sur mon PC »)", pg.inner_text("#hdrMode").strip() == "🖥 Sur mon PC")
         check("380 px : la page ne déborde pas", pg.evaluate("() => document.documentElement.scrollWidth <= document.documentElement.clientWidth"),
               pg.evaluate("() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]"))
         check("anciens menus « Moteur de voix » masqués", pg.evaluate("() => $('narrTts').parentNode.hidden && $('suiviTts').hidden"))

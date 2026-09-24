@@ -134,7 +134,7 @@ def main():
         export_png = os.path.join(PROJ_DIR, "output", "_demo", "8_page_relettree.png")
         try:
             with pg.expect_download(timeout=120000) as dl:
-                pg.click("#btnExport")
+                pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#btnExport"); pg.click("#btnExport")
             dl.value.save_as(export_png)
         except Exception as ex:
             print("    ECHEC export : %s" % ex)

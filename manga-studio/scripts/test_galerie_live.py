@@ -60,7 +60,9 @@ def main():
         # On CLIQUE l'onglet, on ne se contente pas d'appeler refreshGal() : sinon
         # la section reste masquee et rien n'est cliquable. Un banc qui remplit un
         # DOM invisible teste des donnees, pas une interface.
-        pg.click('button[data-tab="tGal"]')
+        # v2.30.0 : sur telephone, Galerie est rangee dans « ⋯ Plus » des onglets
+        if pg.is_visible('button[data-tab="tGal"]'): pg.click('button[data-tab="tGal"]')
+        else: pg.click(".nav-plus .plus"); pg.click('.nav-plus [data-go="tGal"]')
         pg.wait_for_timeout(1500)
 
         res["vignettes"] = pg.evaluate("() => document.querySelectorAll('#gal figure').length")
@@ -104,6 +106,9 @@ def main():
         # 3. suppression (la boite de confirmation est acceptee, comme le ferait Quang)
         pg.on("dialog", lambda d: d.accept())
         pg.click("#btnGalDel")
+        # v2.36 : la confirmation est la fenetre de l'app (demander -> #ask), plus un dialogue natif
+        pg.wait_for_timeout(300)
+        if pg.is_visible("#askYes"): pg.click("#askYes")
         pg.wait_for_timeout(1800)
         res["restantes_ui"] = pg.evaluate("() => document.querySelectorAll('#gal figure').length")
         br.close()

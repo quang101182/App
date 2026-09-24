@@ -61,7 +61,7 @@ try:
 
         print("1. profil de la serie (reglages du batch)")
         pg.click("#btnSuivi"); pg.wait_for_timeout(2500)          # le profil (reglages du batch)
-        pg.click("#profMusApp"); pg.wait_for_timeout(4000)
+        pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#profMusApp"); pg.click("#profMusApp"); pg.wait_for_timeout(4000)
         check("la boite s'ouvre sous le profil", pg.evaluate("() => $('gsBox').parentNode.id") == "profGsPlace")
         check("titre de la boite", "déjà dans l" in pg.inner_text("#gsBoxTitre"), pg.inner_text("#gsBoxTitre"))
         n1 = pg.locator("[data-app-prendre]").count()
@@ -83,7 +83,7 @@ try:
 
         print("2. fiche du chapitre")
         pg.evaluate("async () => { await openChap(CHAPS.findIndex(c => c.dir === '%s/ch_1')); }" % S); pg.wait_for_timeout(2500)
-        pg.click("#musApp"); pg.wait_for_timeout(4000)
+        pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#musApp"); pg.click("#musApp"); pg.wait_for_timeout(4000)
         check("la boite s'ouvre dans le chapitre", pg.evaluate("() => $('gsBox').parentNode.id") != "profGsPlace" and pg.is_visible("#gsBox"))
         n2 = pg.locator("[data-app-prendre]").count()
         check("meme liste (moins celle deja prise)", n2 == n1 - 1, (n1, n2))
@@ -109,7 +109,7 @@ try:
                           " return !!a && n.classList.contains('nom') && getComputedStyle(a).display === 'block'; }"))
         pg.set_viewport_size({"width": 1280, "height": 900}); pg.wait_for_timeout(500)
         print("3. bascule de source dans la meme boite")
-        pg.click("#musGs"); pg.wait_for_timeout(3000)
+        pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#musGs"); pg.click("#musGs"); pg.wait_for_timeout(3000)
         check("« Prendre dans Generate Studio » reaffiche la playlist", "Generate Studio" in pg.inner_text("#gsBoxTitre") and pg.is_visible("#gsBox"))
         check("aucune erreur JS", not errs, errs[:2])
         b.close()

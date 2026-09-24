@@ -52,14 +52,14 @@ with sync_playwright() as p:
         coches = lambda: pg.evaluate("() => [...document.querySelectorAll('#vidListe [data-vid-coche]')].map(x => x.checked)")
         check("tout coché par défaut", coches() and all(coches()), coches())
         check("compte : 2 cochés, 2 prêtes, poids", pg.inner_text("#vidCompte").startswith("2 coché(s) · 2 vidéo(s) prête(s) ·"), pg.inner_text("#vidCompte"))
-        pg.click("#vidRien"); pg.wait_for_timeout(300)
+        pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#vidRien"); pg.click("#vidRien"); pg.wait_for_timeout(300)
         check("Rien : 0 coché, boutons de téléchargement inactifs", not any(coches()) and pg.is_disabled("#vidZip") and pg.is_disabled("#vidDl"))
-        pg.click("#vidTout"); pg.wait_for_timeout(300)
-        pg.fill("#vidDe", "301"); pg.fill("#vidA", "301"); pg.click("#vidPlage"); pg.wait_for_timeout(300)
+        pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#vidTout"); pg.click("#vidTout"); pg.wait_for_timeout(300)
+        pg.evaluate("() => { const m = document.querySelector('#vidDe').closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }"); pg.fill("#vidDe", "301"); pg.fill("#vidA", "301"); pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#vidPlage"); pg.click("#vidPlage"); pg.wait_for_timeout(300)
         check("plage 301 → 301 : seul le ch.301", coches() == [False, True], coches())
         pg.evaluate("() => vidCharger(VIDS.serie)"); pg.wait_for_timeout(1500)
         check("la sélection survit au rafraîchissement du panneau", coches() == [False, True], coches())
-        pg.click("#vidTout"); pg.wait_for_timeout(300)
+        pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#vidTout"); pg.click("#vidTout"); pg.wait_for_timeout(300)
         dep = pg.evaluate("() => document.documentElement.scrollWidth - innerWidth")
         check("aucun débordement", dep <= 0, dep)
         # --- archive
@@ -79,9 +79,9 @@ with sync_playwright() as p:
             noms = []
             for _ in range(2):
                 pass
-            pg.fill("#vidDe", "300"); pg.fill("#vidA", "300"); pg.click("#vidPlage"); pg.wait_for_timeout(300)
+            pg.evaluate("() => { const m = document.querySelector('#vidDe').closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }"); pg.fill("#vidDe", "300"); pg.fill("#vidA", "300"); pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#vidPlage"); pg.click("#vidPlage"); pg.wait_for_timeout(300)
             with pg.expect_download(timeout=60000) as dl:
-                pg.click("#vidDl")
+                pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#vidDl"); pg.click("#vidDl")
             check("une par une : le MP4 avec son nom lisible", dl.value.suggested_filename.startswith("One Punch-Man - ch300 - "), dl.value.suggested_filename)
             dl.value.cancel()
         check("0 erreur JS", not errs, errs[:3])

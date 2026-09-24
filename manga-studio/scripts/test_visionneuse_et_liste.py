@@ -191,12 +191,12 @@ def main():
                              " return i && i.naturalWidth > 0 && i.getBoundingClientRect().width > 10; }",
                              timeout=8000)
         av = pg.eval_on_selector("#lbImg", RECT)
-        pg.click("#lbZoomP")
+        pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#lbZoomP"); pg.click("#lbZoomP")
         pg.wait_for_timeout(400)
         ap_ = pg.eval_on_selector("#lbImg", RECT)
         verifie("zoomer AGRANDIT vraiment l'image",
                 ap_["w"] > av["w"] * 1.3, "%.0f px -> %.0f px" % (av["w"], ap_["w"]))
-        pg.click("#lbZoom")          # retour 1:1
+        pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#lbZoom"); pg.click("#lbZoom")          # retour 1:1
         pg.wait_for_timeout(400)
         r0 = pg.eval_on_selector("#lbImg", RECT)
         verifie("« 1:1 » redonne la taille d'origine",

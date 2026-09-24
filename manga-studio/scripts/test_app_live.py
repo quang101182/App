@@ -167,7 +167,7 @@ def main():
         # --- 6. export ---------------------------------------------------
         print("[6] export de la planche")
         with pg.expect_download(timeout=60000) as dl:
-            pg.click("#btnExport")
+            pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#btnExport"); pg.click("#btnExport")
         d = dl.value
         exp = os.path.join(PROJ_DIR, "output", slug, "_planche_export.png")
         d.save_as(exp)

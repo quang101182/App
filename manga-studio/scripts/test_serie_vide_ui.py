@@ -53,9 +53,10 @@ try:
         pg.evaluate("() => ouvrirSerie('%s')" % S); pg.wait_for_timeout(2000)
         check("serie ouverte : titre", pg.inner_text("#libSerie").startswith("Essai Vide"), pg.inner_text("#libSerie"))
         pg.click("#btnSuivi"); pg.wait_for_timeout(2500)
+        pg.evaluate("() => document.querySelectorAll('#suiviBox details.prof-l').forEach(d => d.open = true)")   # v2.31.0 : lignes repliees
         check("profil : la musique est listee", "Essai Vide 1" in pg.inner_text("#profMusListe"), pg.inner_text("#profMusListe")[:80])
         # suppression de la serie ENTIERE
-        pg.click("#btnSerieDel"); pg.wait_for_timeout(2500)
+        pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#btnSerieDel"); pg.click("#btnSerieDel"); pg.wait_for_timeout(2500)
         check("confirmation : « TOUTE la série »", any("TOUTE la série" in d for d in dialogues), dialogues[-1:])
         check("dossier retire (corbeille)", not os.path.isdir(os.path.join(SRC, S)))
         pg.wait_for_timeout(800)

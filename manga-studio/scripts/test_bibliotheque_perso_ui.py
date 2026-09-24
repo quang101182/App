@@ -77,7 +77,7 @@ try:
             if CIBLE not in masq:
                 pg.evaluate("(s) => ouvrirSerie(s)", CIBLE); pg.wait_for_timeout(1200)
                 check("barre de la série : bouton « 🙈 Masquer »", "Masquer" in pg.inner_text("#btnMasquer"))
-                pg.click("#btnMasquer"); pg.wait_for_timeout(1500)
+                pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#btnMasquer"); pg.click("#btnMasquer"); pg.wait_for_timeout(1500)
                 check("masquée -> retour à la liste, elle n'y est plus", not pg.is_visible("#btnLibBack") and CIBLE not in affiche(), affiche()[:3])
                 check("... bouton « 👁 Masquées (1+) » à côté de Filtres, et elle y est", pg.is_visible("#libMasqueesBtn") and "Masquées" in pg.inner_text("#libMasqueesBtn") and CIBLE in masquees_aff())
                 check("... la ligne d'état compte les masquées", "masquée" in pg.inner_text("#chapState"), pg.inner_text("#chapState"))

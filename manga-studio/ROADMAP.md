@@ -2393,7 +2393,26 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   donc AUCUNE relance nécessaire. Vérifié : relance réelle du lot par `/manga/suivi_lancer` sur 8192 → narration gardée (0 $),
   vidéo acceptée par 8192. 🟠 (constaté 2.5.1) d'autres scripts MANUELS ont 8190 en dur (`refaire_*`, `check_version`,
   `samsung`, bancs) : sans effet sur la secondaire tant qu'on ne les lance pas contre elle.
-- ⬜ **PROCHAINE SESSION — demandes Quang 22h11-22h14, dans cet ordre** :
+- **24/09 22h21 → 23h15 — MAQUETTE D'ENSEMBLE appliquée à toute l'app** (`maquette_entete_serie_v1.html` variante A puis
+  `maquette_ensemble_v1.html`, validées par Quang 22h21 et 22h31 « je te laisse gérer de manière autonome jusqu'au bout »).
+  Charte : retour BLEU en haut à gauche qui dit où il ramène ; ≤ 4 actions en vue, le reste dans « ⋯ » ; Supprimer en
+  ROUGE, en dernier ; un seul gros bouton vert par écran ; téléphone = grille icône + mot court ; un réglage = une ligne.
+  Menu « ⋯ » générique (`.menu-plus` / `menusFermer`, se ferme au clic ailleurs / après un choix / Échap, reste ouvert
+  quand on tape dans un champ du menu). Lots, chacun avec son banc sur l'app RÉELLE à 1280 + 360 px :
+  v2.29.0 en-tête de série (44/44) · v2.30.0 page principale (55/55) · v2.31.0 Profil et traitement (57/57) ·
+  v2.32.0 Vidéos (36/36) · v2.33.0 un chapitre (40/40) · v2.34.0 lecteur (28/28 + ancien 13/13) · v2.35.0-v2.36.0 le
+  reste (40/40). **Demandes Quang en cours de route, appliquées** : VRAM (22h32) ET mode ☁/🖥 (22h33) VISIBLES EN
+  PERMANENCE (seuls coûts et ℹ️ dans ⋯) ; sur téléphone la pastille du mode calée À DROITE contre ⋯ (22h52 : poinçon de
+  la caméra au centre) ; le mode est GLOBAL côté serveur (`sources/_reglages.json`, un par application) et une page
+  ouverte se recale seule (retour dans l'app + tour d'activité) (22h53) ; 🔗 de « Reprendre » / « Site » : TOUJOURS la
+  fenêtre Edge dédiée de CETTE application, téléphone compris, ouverte si fermée (23h05). Alerte de fin de traitement :
+  bandeau en tête de Bibliothèque + pastille ❌ sur l'activité (jusqu'à « Voir » / ✕), bilan du Profil en bandeau
+  rouge + « Refaire ». **Écart assumé** : les CASES de la planche et leur « ⚙ Affiner » ne bougent pas (déjà repensées le
+  27/07 selon le même principe ; `.panel{overflow:hidden}` couperait un menu) — seule « 🗑 Bulle » passe en rouge à droite.
+  Anciens bancs : 13 adaptés (ouvrir le ⋯ / la ligne avant de cliquer, `scripts/…bak-20260924-menus`) ;
+  `test_bibliotheque_ui` 76/92 = IDENTIQUE à v2.28 (16 échecs de DONNÉES périmées : « demo-frieren », OPM = 27 ch.).
+- ~~⬜ **PROCHAINE SESSION — demandes Quang 22h11-22h14, dans cet ordre**~~ → 1 ✅ v2.29.0 · 2 ✅ v2.37.0 (voir plus bas)
+  · 3 ✅ v2.30.0 · 4 voir plus bas :
   1. **En-tête d'une série** (capture Quang : « ça fait un peu fouiller ») : « ← Toutes les séries » d'une couleur
      légèrement différente et mieux placé (surtout sur PC) ; le bouton ↻ de la bibliothèque, isolé tout seul, à
      regrouper ; la rangée de boutons (Masquer, Renommer, Site, Tomes, Pochette, Charger, Vidéos, Profil, Supprimer) à

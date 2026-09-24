@@ -79,7 +79,7 @@ with sync_playwright() as p:
         check("OPM : chapitres « Hors tome »", "Hors tome" in pg.inner_text("#chapList"))
         pg.once("dialog", lambda d: d.dismiss())             # Renommer -> Annuler : rien ne change
         pg.click(".lib-actions .plus"); pg.wait_for_timeout(150)          # v2.29.0 : Renommer est dans « ⋯ »
-        pg.click("#btnRenommer"); pg.wait_for_timeout(500)
+        pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#btnRenommer"); pg.click("#btnRenommer"); pg.wait_for_timeout(500)
         check("Renommer puis Annuler ne change rien", "One Punch-Man" in pg.inner_text("#libSerie"))
         chaps = pg.eval_on_selector_all("#chapList [data-chap]", "e => e.length")
         check("la serie montre SES chapitres (OPM = 2)", chaps == 2 and pg.is_visible("#libNav"), chaps)
@@ -94,7 +94,7 @@ with sync_playwright() as p:
         check("titre du chapitre = 301", "301" in pg.inner_text("#chapTitle"), pg.inner_text("#chapTitle"))
         # v1.79.0 : la pastille des couts s'ouvre DEPUIS Chapitres (la fenetre vivait dans l'onglet Planche)
         pg.click("#hdrPlus"); pg.wait_for_timeout(150)                     # v2.30.0 : les couts sont dans « ⋯ »
-        pg.click("#hdrCost"); pg.wait_for_timeout(1500)
+        pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#hdrCost"); pg.click("#hdrCost"); pg.wait_for_timeout(1500)
         check("couts : fenetre VISIBLE depuis l'onglet Chapitres", pg.evaluate(
             "() => !!document.elementFromPoint(innerWidth / 2, innerHeight / 2).closest('#coutsModal')")
               and "depuis le début" in pg.inner_text("#coutsCorps"))

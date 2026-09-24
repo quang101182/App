@@ -48,7 +48,7 @@ try:
             pg.click('nav button[data-tab="tChap"]'); pg.wait_for_timeout(1500)
             i = pg.evaluate("() => CHAPS.findIndex(c => c.dir === 'claymore/ch_1')")
             pg.evaluate("(i) => openChap(i)", i); pg.wait_for_timeout(3000)
-            pg.click("#musGs"); pg.wait_for_timeout(4000)
+            pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#musGs"); pg.click("#musGs"); pg.wait_for_timeout(4000)
             n8 = pg.locator("#gsListe .gs-it").count()
             tot = pg.evaluate("() => GS.tous.length")
             check("par defaut : les 8 plus recentes", n8 == 8 and tot > 8, (n8, tot))
