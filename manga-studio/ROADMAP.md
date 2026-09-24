@@ -2346,6 +2346,21 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   secondaire, AUCUNE clé stockée, bibliothèque chargée, chemin Wi-Fi coupé, 0 erreur. Appui long depuis la principale
   ouverte par le tunnel → la secondaire, et **rien ne s'ouvre sur le PC**. Sauvegardes (avant/création, diffs tunnel et
   lanceur) : `prive/_acces-sauvegardes/`. ⚠ Session Access = 1 mois max (WARP pour aller au-delà, règle apps perso).
+- **Entre S4 et S5 — fait le 24/09 19h30** (demandes Quang 19h10) : (a) ✅ fenêtre de capture PRINCIPALE sans compte
+  Microsoft ni synchro (manga-fetch 0.6.9, défaut pour toute fenêtre de capture ; rouverte à sa place, onglets rétablis ;
+  ⚠ ce qui a été synchronisé AVANT reste dans le compte Microsoft de Quang). (b) ✅ enchaînement « par la page » pour
+  les sites à identifiant interne (manga-fetch 0.7.0) : liste des chapitres de la page (identifiant de l'option →
+  adresse du suivant, validée à l'arrivée ; changer la valeur d'une liste CACHÉE pilotée par un widget ne déclenche
+  rien — constaté), sinon lien « chapitre suivant ». Vérifié sur un site qui échouait : ch.1 → ch.2. (c) ✅ sites
+  TAGUÉS : l'indicateur de l'app (v2.18.0) lit d'abord la liste des sites validés de SON application (« non » =
+  fermé, « ok » = ouvert), puis les formats d'adresse. 🟠 Le banc `test_enchainement_ui.py` exige un onglet de chaque
+  sorte : il reste rouge quand la fenêtre n'a que des sites qui enchaînent (constaté v2.18.0 sur la principale).
+  🟠 Le contrôle « principale inchangée » des essais de capture compare les dates des entrées de `sources/` : Quang
+  qui ouvre une série dans la principale le fait passer au rouge (fausse alerte du 24/09 19h24, vérifiée).
+- **Voix de l'application secondaire (Quang 19h18)** : 1-2 voix FÉMININES, expression adaptée au thème → à faire à S7
+  avec ce qu'on a (Chatterbox local : clonage + intensité d'expression, pas de modération ; Chirp 3 HD). Pistes
+  notées, non obligatoires : StoryVoice utilise OpenAI `gpt-4o-mini-tts` avec consigne de ton par personnage.
+  Gemini 3.8 TTS : évalué par une AUTRE session de Quang — attendre son verdict, ne pas le refaire ici.
 - **S5 — Vue croisée discrète** : chaque instance publie ses traitements vivants dans un registre COMMUN (même principe
   que `sources/_gpu/`, mais hors des deux racines) ; témoin d'activité : côté normal « 🔒 1 traitement en cours · étape ·
   reste ~X min » SANS titre ; côté secret, tout. Au lancement, si l'autre espace travaille : question à l'écran (lancer
@@ -2758,6 +2773,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 |---|---|
 | 2026-09-24 (17h20) | 🎧 **Voix locale validée à l'oreille** sur un chapitre complet (OPM ch.1, `gemini-charon-local.mp4`) — Quang : « c'est bien ». Rappel du partage : ☁ = tout en ligne (seul changement du jour : repérage des noms sans réflexion, dans les deux modes) ; 🖥 = voix + effacement sur la carte, le reste en ligne. |
 | 2026-09-24 (17h15) | 💰 **Chantier « réflexion Gemini » CLOS** : repérage des noms sans réflexion (gardé, −48 % analyse+noms) ; analyse et traduction gardent la réflexion complète (« low » : vraies fautes sur Black Jack — mot inventé, contresens, anglais ; « medium » : pas d'économie). Économie réelle attendue ≈ −4 $/mois en ligne, + la voix (≈ −6 $/mois) quand Quang narre en 🖥. § 4-terdecies. |
+| 2026-09-24 (19h30) | ✅ **v2.18.0 + manga-fetch 0.6.9 → 0.7.0** : capture principale sans synchro ; enchaînement par la liste des chapitres de la page (site à identifiant interne : ch.1 → ch.2) ; indicateur d'enchaînement qui lit les sites tagués de chaque application. Prochaine étape : S5 (vue croisée). |
 | 2026-09-24 (19h20) | ✅ **Compartiment S4 — accès téléphone** : adresse dédiée derrière Cloudflare Access (créé avant le DNS), jeton Access vérifié = aucune clé à saisir, appui long principale ↔ secondaire sur le téléphone, rien ne s'ouvre sur le PC. Sans cookie : 302 partout sauf manifeste/icônes (200). Bout en bout 7/7. Ensuite (demandes Quang 19h10) : fenêtre de capture PRINCIPALE sans synchro ; enchaînement par lien « chapitre suivant » (sites tagués après test réel) ; puis S5. |
 | 2026-09-24 (18h55) | ✅ **v2.16.0 → v2.17.0 — compartiment secret S3 + indicateur d'enchaînement** : fenêtres de capture et d'app propres à l'application secondaire (profils sans compte ni synchro, placées par Quang), sa liste de sites hors dépôt, captures réelles OK ; manga-fetch 0.6.5 → 0.6.8 (2 défauts de défilement corrigés, indicateur « ce site enchaîne-t-il ? » dans les deux applications). Bancs 10/10, 14/14, 12/12 ×2. Prochaine étape : S4. |
 | 2026-09-24 (17h58) | ✅ **v2.15.0 — compartiment secret S2** : l'app sait dans quel espace elle est (`/manga/espace`), appui long 1,2 s sur 📚 = l'autre espace (PC ; téléphone à S4), titre/icône identiques, marque discrète seulement dedans ; l'espace privé a aussi sa base, sa galerie et la même exigence de clé que 8190. `test_espace_ui.py` 29/29. |
