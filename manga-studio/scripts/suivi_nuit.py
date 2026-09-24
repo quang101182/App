@@ -31,14 +31,17 @@ sys.path.insert(0, HERE)
 import precedemment as prec                                # chapitres_precedents(), chap_key()
 import estimation                                          # v2.5.0 : double estimation ☁ / 🖥
 
-VERSION = "2.5.0"
+VERSION = "2.5.1"
 SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 DIR = os.path.join(SRC, "_suivi")
 ETAT, JOURNAL = os.path.join(DIR, "etat.json"), os.path.join(DIR, "journal.jsonl")
 DEFAUT_F = os.path.join(SRC, "_profil_defaut.json")
 PY = sys.executable.replace("pythonw.exe", "python.exe")
 CREATE = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-PROXY = "http://127.0.0.1:8190"
+# v2.5.1 (24/09, lot de Quang dans la SECONDAIRE : « video : chapitre introuvable ») : l'adresse etait en dur sur la
+# principale -> la secondaire lui demandait la video d'un chapitre prive qu'elle ne voit pas. On parle a SON serveur.
+PROXY = os.environ.get("MANGA_PROXY") or ("http://127.0.0.1:" + os.environ.get("MANGA_PRIVE_PORT", "8192")
+                                          if os.environ.get("MANGA_ESPACE") == "prive" else "http://127.0.0.1:8190")
 ETAPES = ("narration", "karaoke", "traduction", "precedemment", "video")
 MOTEURS = ("kimi", "gemini")
 LANGUES = ("fr", "en", "es", "de", "it", "pt", "vi")

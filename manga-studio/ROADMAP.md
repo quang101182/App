@@ -2385,6 +2385,14 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   une seule fois (contrôle automatique). Piège payé : `<section>` = onglet pour l'app (`main section{display:none}`) →
   étapes en `<div>`. Vérifié 360 + 1280 px : zones, boutons, résumé, 0 débordement, 0 erreur ; enchaînement UI 7/8
   (le KO = pas d'onglet « non » ouvert, connu).
+- **24/09 22h25 — suivi_nuit 2.5.1 : la vidéo d'un lot de la SECONDAIRE échouait** (Quang : « une erreur, mais aucune
+  alerte »). Log `prive/_suivi/journal.jsonl` : narration ✅ (875 s), karaoké ✅, puis `video : chapitre introuvable`. Cause :
+  `PROXY = "http://127.0.0.1:8190"` EN DUR → la secondaire demandait la vidéo d'un chapitre privé à la PRINCIPALE. Le serveur
+  8192 n'a PAS été coupé (les `WinError 10053` de `espace_prive.log.err` = onglets fermés côté client, du bruit). Fix : l'adresse
+  suit l'espace (`MANGA_PROXY`, sinon 8192 si `MANGA_ESPACE=prive`, sinon 8190) — le proxy transmet déjà son environnement,
+  donc AUCUNE relance nécessaire. Vérifié : relance réelle du lot par `/manga/suivi_lancer` sur 8192 → narration gardée (0 $),
+  vidéo acceptée par 8192. 🟠 (constaté 2.5.1) d'autres scripts MANUELS ont 8190 en dur (`refaire_*`, `check_version`,
+  `samsung`, bancs) : sans effet sur la secondaire tant qu'on ne les lance pas contre elle.
 - ⬜ **PROCHAINE SESSION — demandes Quang 22h11-22h14, dans cet ordre** :
   1. **En-tête d'une série** (capture Quang : « ça fait un peu fouiller ») : « ← Toutes les séries » d'une couleur
      légèrement différente et mieux placé (surtout sur PC) ; le bouton ↻ de la bibliothèque, isolé tout seul, à
@@ -2393,7 +2401,10 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   2. **Tomes automatiques** : un chapitre ajouté arrive « hors tome » ; Quang demande que le rangement par tome se
      fasse seul à la fin de la capture. À examiner : la fiche MangaDex/AniList (`serie_infos`, « 📅 Tomes et dates »)
      est-elle relancée après une capture ? Un volume capturé comme « ch. N » (AnimoFlix) = tome N.
-  3. Relancer la SECONDAIRE (8192) quand elle est au repos, pour activer `/manga/liens` (✕ des sites) — vérifier
+  3. **Alerte de fin de traitement** (Quang 22h17 : « aucune alerte ») : un lot fini en échec n'est signalé QUE dans le
+     panneau ⚙ Profil (ligne « Dernier passage … ❌ »), qu'il faut rouvrir. À proposer : un avertissement visible sans rien
+     ouvrir (pastille du témoin / bandeau) quand un passage finit avec des erreurs. Maquette d'abord.
+  4. Relancer la SECONDAIRE (8192) quand elle est au repos, pour activer `/manga/liens` (✕ des sites) — vérifier
      `/manga/activite` vide avant.
 - **Voix de l'application secondaire (Quang 19h18)** : 1-2 voix FÉMININES, expression adaptée au thème → à faire à S7
   avec ce qu'on a (Chatterbox local : clonage + intensité d'expression, pas de modération ; Chirp 3 HD). Pistes
