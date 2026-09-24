@@ -20,7 +20,7 @@ Ecrit sources/<chap>/video/<tag>.mp4 + <tag>.json (reglages, empreinte, duree) ;
 import argparse, hashlib, json, os, random, shutil, subprocess, sys, tempfile, time
 # numpy n'est importe QUE pour fabriquer (pcm, mixer) : le proxy importe ce module pour empreinte() sans en dependre
 
-VERSION = "1.97.0"
+VERSION = "1.98.0"
 # v1.97.0 (23/09) : VERSION DU RENDU. A monter A LA MAIN, et seulement pour une vraie amelioration visible du moteur
 # (pas pour une retouche) : toutes les videos plus anciennes passent alors « a refaire : le moteur video a ete
 # ameliore », et « Tout traiter » / « perimees » les reprennent. Quang 23/09 : « tout regenerer lors de mises a jour
@@ -384,10 +384,21 @@ def main():
     # compression : banc du 22/09 sur Claymore p.5-12 -> CQ 25 = 5,3 Mbit/s, CQ 28/3M = 3,0, CQ 30/2M = 2,1 ; a l'oeil,
     # identiques en gros plan 1:1 -> CQ 30 / 2 Mbit/s (~16 Mo la minute au lieu de 40 : telechargeable sur le telephone)
     ap.add_argument("--cq", default="30"); ap.add_argument("--maxrate", default="2M")
+    ap.add_argument("--malgre-alertes", action="store_true",
+                    help="v1.98.0 : faire la video meme si le chapitre a une alerte de moderation OUVERTE")
     a = ap.parse_args()
     reglages = json.loads(a.reglages)
     reglages.setdefault("graine", random.randrange(1, 10 ** 6))
     chap = a.chap.strip("/")
+    # v1.98.0 (feuille de route 4-decies, Quang 24/09) : un chapitre avec des pages refusees par la moderation n'est PAS mis
+    # en video tant que l'alerte est ouverte -- code 4, la file la garde « en attente de moderation », rien n'est gache
+    sys.path.insert(0, HERE)
+    import moderation as mod
+    ouv = [] if a.malgre_alertes else mod.ouvertes_pour(chap)
+    if ouv:
+        print("VIDEO EN ATTENTE : %d alerte(s) de moderation ouverte(s) sur %s (pages %s) -- a traiter dans l'app (onglet "
+              "« A traiter »), ou --malgre-alertes" % (len(ouv), chap, sorted({p for x in ouv for p in x["pages"]})), flush=True)
+        sys.exit(4)
     vd = os.path.join(SRC, chap, "video")
     os.makedirs(vd, exist_ok=True)
     sortie = a.sortie or os.path.join(vd, a.tag + ".mp4")

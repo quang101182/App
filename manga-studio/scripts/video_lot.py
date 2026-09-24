@@ -153,7 +153,8 @@ def traiter():
                     pass
             continue
         e = lire(f) or e
-        e.update(etat="echec", fin=time.time(), code=code)
+        # 4 = chapitre avec une alerte de moderation ouverte (video_chapitre 1.98.0) : pas un echec, une ATTENTE
+        e.update(etat="attente moderation" if code == 4 else "echec", fin=time.time(), code=code)
         try:
             e["err"] = open(log, encoding="utf-8", errors="replace").read()[-500:]
         except Exception:

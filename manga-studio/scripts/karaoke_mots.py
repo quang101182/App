@@ -166,6 +166,7 @@ def main():
     json.dump(n, open(tmp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     os.replace(tmp, fj)
     progres(fini=True)
+    nc.dep.noter("karaoke", chap, tag, "whisper", secs / 3600 * PRIX_HEURE)     # v1.90.0 : registre des depenses
     print("OK : %d page(s) calee(s), %.0f %% des mots reconnus, %.4f $, %.0f s"
           % (faits, 100.0 * ancres / total if total else 0, secs / 3600 * PRIX_HEURE, time.time() - t0))
 

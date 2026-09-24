@@ -193,6 +193,7 @@ def main():
         json.dump(res, f, ensure_ascii=False, indent=1)
     nc.progres("fini", 1, 1, cout=stats["cout_total"])
     nc.journal("precedemment", chapitre=a.chapitre, mode=a.mode, cout=stats["cout_total"], s=stats["total_s"])
+    nc.dep.noter("precedemment", a.chapitre, a.mode, "deepseek", stats["cout_total"])
     print(json.dumps({"ok": True, "mode": a.mode, "items": len(items), "stats": res["stats"]}, ensure_ascii=False))
 
 

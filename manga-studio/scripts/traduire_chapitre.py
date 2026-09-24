@@ -31,7 +31,7 @@ import narrate_chapter as nc          # appel_vision (Gemini natif / K3), frein 
 import ingest_page as ip              # load_page, detect, clean_bubbles
 import effacement_local as el         # v1.98.0 : masque des lettres + LaMa (option --effacement local)
 
-VERSION = "1.98.0"
+VERSION = "1.99.0"
 # v1.98.0 (24/09, feuille de route 4-nonies etape 2) : --effacement local = le texte pose sur le DESSIN est efface par
 # masque des lettres (comic-text-detector) + LaMa manga (effacement_local.py) au lieu d'un rectangle blanc ; les vraies
 # bulles restent videes comme avant. Option : sans elle, rien ne change.
@@ -395,6 +395,11 @@ def main():
             HORS_ZONES[:] = []
             try:
                 tr = tr0 if a.rerendu else traduire_page(im, texts, a.engine, a.langue, stats)
+            except nc.mod.Refus as e:              # v1.99.0 (4-decies) : refus de moderation -> VO + ALERTE, on continue
+                nc.log("  page %d : traduction REFUSEE par la moderation (%s) -> page laissee en VO, alerte" % (p["num"], e.motif[:80]))
+                nc.mod.ajouter_alerte(a.chapitre, "traduction", [p["num"]], e.moteur, e.motif, detail="langue " + a.langue)
+                stats.setdefault("moderation", []).append({"page": p["num"], "moteur": e.moteur, "motif": e.motif})
+                tr = {}
             except Exception as e:
                 nc.log("  page %d : traduction en echec (%s) -> page laissee en VO" % (p["num"], e))
                 tr = {}
@@ -503,6 +508,7 @@ def main():
         json.dump(res, fh, ensure_ascii=False, indent=1)
     progres(len(pages), len(pages), fini=True, cout=stats["cout"])
     nc.journal("traduction_done", chapitre=a.chapitre, langue=a.langue, **{k: v for k, v in stats.items()})
+    nc.dep.noter("traduction", a.chapitre, "traduction " + a.langue, a.engine, stats.get("cout", 0))    # v1.99.0
     try:
         rel = os.path.relpath(out, nc.SOURCES).replace("\\", "/")
     except ValueError:                                # --sortie sur un autre disque (bancs)

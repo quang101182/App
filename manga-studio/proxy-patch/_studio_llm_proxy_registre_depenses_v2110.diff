@@ -1,0 +1,48 @@
+--- /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260924-depenses	2026-09-24 14:02:50.387544300 +0200
++++ /c/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py	2026-09-24 14:03:22.015885600 +0200
+@@ -9756,6 +9756,35 @@
+                              "st": {"cout_juge": (fj.get("bilan") or {}).get("cout", 0)}})
+             except Exception:
+                 pass
++    # Manga Studio v2.11.0 (24/09, Quang : « ce matin j'etais a plus de 30 $, ca a saute a 18,71 $ ») : additionner les
++    # fichiers PRESENTS perdait toute depense dont le fichier avait ete ecrase (traduction refaite) ou supprime (corbeille
++    # videe). Le registre en AJOUT SEUL (sources/_depenses.jsonl) fait foi ; on ne garde du parcours que ce qu'il ne
++    # couvre pas (bancs de fidelite, fusions, traductions EN COURS).
++    reg = os.path.join(racine, "_depenses.jsonl")
++    if os.path.isfile(reg):
++        cles = {"narration": None, "traduction": "cout_traduction", "karaoke": "cout_karaoke", "precedemment": "cout_precedemment"}
++        runs = [r for r in runs if r["prompt"] in ("juge", "consensus") or "(en cours)" in r["tag"]]
++        with open(reg, encoding="utf-8") as f:
++            for l in f:
++                try:
++                    e = json.loads(l)
++                except ValueError:
++                    continue
++                ty = e.get("type")
++                if ty not in cles:
++                    continue
++                if ty == "narration":
++                    st = {k: v for k, v in (e.get("detail") or {}).items() if k.startswith("cout_")} or {"cout_narration": e.get("paye", 0)}
++                else:
++                    st = {cles[ty]: e.get("paye", 0)}
++                mot = e.get("moteur") or "?"
++                if mot == "?":
++                    t_ = e.get("tag") or ""
++                    mot = next((m for m, cle in (("gemini", "gemini"), ("kimi", "kimi"), ("kimi", "k3"), ("local", "local"),
++                                                 ("pixtral", "pixtral")) if cle in t_), "gemini" if ty == "traduction" else "?")
++                runs.append({"chap": e.get("d") or "?", "tag": (e.get("tag") or "") + (" (supprimé)" if e.get("source") == "journal" else "")
++                             + (" (estimé)" if e.get("estime") else ""), "engine": mot, "date": (e.get("t") or "")[:19],
++                             "prompt": "registre", "reuse": None, "st": st})
+     # anciens runs --reuse-vision (avant le marqueur v1.72) : meme lecture qu'un run PLUS ANCIEN du chapitre
+     vus = {}
+     for r in sorted(runs, key=lambda x: x["date"]):
+@@ -9767,7 +9796,8 @@
+     etapes = {"noms": "cout_noms", "lecture": "cout_vision", "verification": "cout_verif", "recit": "cout_recit",
+               "voix": "cout_tts", "fusion": "cout_fusion", "juge": "cout_juge",
+               "traduction": "cout_traduction", "karaoke": "cout_karaoke",                  # v1.91.0
+-              "precedemment": "cout_precedemment"}                                         # v1.94.0
++              "precedemment": "cout_precedemment",                                         # v1.94.0
++              "narration (détail perdu)": "cout_narration"}                                # v2.11.0 : registre
+     par_etape, par_moteur, lignes = {}, {}, []
+     auj, mois = time.strftime("%Y-%m-%d"), time.strftime("%Y-%m")
+     t_auj = t_mois = t_tot = 0.0

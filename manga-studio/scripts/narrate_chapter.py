@@ -24,9 +24,12 @@ Stdout : un seul objet JSON (le resume du run). Le bruit part sur stderr.
 """
 import argparse, base64, io, json, os, re, subprocess, sys, threading, time, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import moderation as mod             # v2.6.0 : refus reconnus, alertes persistantes
+import depenses as dep               # v2.6.0 : registre des depenses en ajout seul
 from datetime import datetime
 
-VERSION = "2.5.0"
+VERSION = "2.6.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -79,7 +82,14 @@ def appel_vision(engine, system, content, max_tokens):
         # v1.75 : delai proportionnel au budget. A 32 000 tokens, K3 raisonne plus de 240 s : 5 timeouts
         # d'affilee ont tue un run le 21/09 (22h15). ~40 tokens/s mesures -> 1 s par tranche de 40 tokens.
         r = post(path, body, timeout=max(240, max_tokens // 40))
-        return r["choices"][0]["message"].get("content"), (r.get("usage") or {})
+        motif = mod.refus_openai(r)
+        if motif:
+            raise mod.Refus(engine, motif)
+        texte = r["choices"][0]["message"].get("content")
+        motif = mod.refus_texte(texte)
+        if motif:
+            raise mod.Refus(engine, motif)
+        return texte, (r.get("usage") or {})
     parts = []
     for c in content:
         if c["type"] == "text":
@@ -90,6 +100,9 @@ def appel_vision(engine, system, content, max_tokens):
     r = post(path, {"systemInstruction": {"parts": [{"text": system}]},
                     "contents": [{"role": "user", "parts": parts}],
                     "generationConfig": {"maxOutputTokens": max_tokens, "responseMimeType": "application/json"}})
+    motif = mod.refus_gemini(r)                    # v2.6.0 : avant, lu comme « JSON illisible » -> 3 essais PAYES
+    if motif:
+        raise mod.Refus("gemini", motif)
     um = r.get("usageMetadata") or {}
     texte = "".join(p.get("text", "") for p in ((r.get("candidates") or [{}])[0].get("content") or {}).get("parts", []))
     return texte, {"prompt_tokens": um.get("promptTokenCount", 0),
@@ -226,6 +239,10 @@ def post(path, body, timeout=240):
         except urllib.error.HTTPError as e:
             brut = e.read()[:300].decode("utf-8", "replace")
             last = "HTTP %d %s" % (e.code, brut[:200])
+            motif = mod.refus_http(e.code, brut)              # v2.6.0 : refus de moderation = JAMAIS un nouvel essai
+            if motif:
+                journal("moderation", path=path, code=e.code, motif=motif[:200])
+                raise mod.Refus(path.split("/")[2] if path.count("/") >= 2 else path, motif)
             if e.code not in (429, 500, 502, 503, 504, 520, 521, 522, 523, 524):   # 52x = Cloudflare, passager
                 break
             if e.code == 429:           # le gateway dit combien attendre : on l'ecoute (60 s en pratique)
@@ -500,8 +517,10 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
     # v1.98.2 : l'etape s'annonce DES son debut. Sinon l'app affichait l'etape precedente terminee (« noms 19/19,
     # < 1 min ») pendant tout le 1er lot, plusieurs minutes chez K3 (Quang, 22/09 10h26 : « bloquee a une minute »).
     progres("vision", 0, len(pages))
-    for i in range(0, len(pages), batch):
-        lot = pages[i:i + batch]
+    file_lots = [pages[i:i + batch] for i in range(0, len(pages), batch)]
+    faites = 0
+    while file_lots:                          # v2.6.0 : une FILE -- un lot refuse y revient page par page
+        lot = file_lots.pop(0)
         nums = [p["num"] for p in lot]
         content = [{"type": "text", "text": ("NOMS ETABLIS (verifies par vote, ne les change jamais, n'en ajoute "
                                              "aucun ; identifie ces personnages par leur AGE et leurs cheveux"
@@ -533,22 +552,38 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
         # v1.75 : budget DOUBLE a chaque essai. Mesure 21/09 (OPM 301, p11-12, consigne v3) : K3 passait
         # 7 997 des 8 000 tokens a RAISONNER (finish_reason=length) et rendait un contenu vide, 4 fois sur 4
         # -> le chapitre entier etait abandonne. (Chaque essai rate est FACTURE : ~0,12 $ de raisonnement.)
-        for essai, budget in enumerate((8000, 16000, 32000)):
-            texte, u = appel_vision(engine, SYS_VISION_V2, content, budget)
-            stats["vision_tokens_in"] += u.get("prompt_tokens", 0)
-            stats["vision_tokens_out"] += u.get("completion_tokens", 0)
-            stats["cout_vision"] += cout(model, u)
-            try:
-                j = parse_json(texte)
-                break
-            except Exception as e:
-                if (texte or "").strip():                     # mal forme (pas vide) : on REPARE avant de relire
-                    j = reparer_json(texte, stats)
-                    journal("json_repare", pages=nums, ok=j is not None, err=str(e)[:120])
-                    if j is not None:
-                        log("  lot %s : JSON mal forme (%s) -> repare" % (nums, e))
-                        break
-                log("  lot %s : JSON illisible (%s), nouvel essai" % (nums, e))
+        try:
+            for essai, budget in enumerate((8000, 16000, 32000)):
+                texte, u = appel_vision(engine, SYS_VISION_V2, content, budget)
+                stats["vision_tokens_in"] += u.get("prompt_tokens", 0)
+                stats["vision_tokens_out"] += u.get("completion_tokens", 0)
+                stats["cout_vision"] += cout(model, u)
+                try:
+                    j = parse_json(texte)
+                    break
+                except Exception as e:
+                    if (texte or "").strip():                     # mal forme (pas vide) : on REPARE avant de relire
+                        j = reparer_json(texte, stats)
+                        journal("json_repare", pages=nums, ok=j is not None, err=str(e)[:120])
+                        if j is not None:
+                            log("  lot %s : JSON mal forme (%s) -> repare" % (nums, e))
+                            break
+                    log("  lot %s : JSON illisible (%s), nouvel essai" % (nums, e))
+        except mod.Refus as e:
+            if len(lot) > 1:
+                log("  lot %s REFUSE par la moderation (%s) -> repris page par page" % (nums, e.motif[:80]))
+                journal("moderation", etape="analyse", pages=nums, moteur=e.moteur, motif=e.motif[:200])
+                file_lots[0:0] = [[q] for q in lot]
+                continue
+            q = lot[0]
+            log("  page %d REFUSEE par la moderation de %s (%s) -> mise de cote, le chapitre continue" % (q["num"], e.moteur, e.motif[:80]))
+            journal("moderation", etape="analyse", pages=nums, moteur=e.moteur, motif=e.motif[:200])
+            stats.setdefault("moderation", []).append({"page": q["num"], "etape": "analyse", "moteur": e.moteur, "motif": e.motif})
+            sortie.append({"page": q["num"], "file": q["file"], "type": "moderation", "faits": "", "presents": [],
+                           "narration": "", "moderation": e.motif})
+            faites += 1
+            progres("vision", faites, len(pages))
+            continue
         if j is None:
             raise RuntimeError("lot %s : JSON illisible apres 3 essais (budget jusqu'a 32 000 tokens)" % nums)
         for n in j.get("nouveaux") or []:
@@ -575,7 +610,8 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
         resume = j.get("resume") or resume
         dt = time.time() - t
         stats["vision_s"] += dt
-        progres("vision", min(i + batch, len(pages)), len(pages))
+        faites += len(lot)
+        progres("vision", faites, len(pages))
         journal("vision_lot_v2", engine=engine, pages=nums, s=round(dt, 1), fiche=len(fiche))
         log("  vision v2 %s pages %s : %.1fs (fiche : %s)" % (engine, nums, dt,
             ", ".join("%s=%s" % (k, v["nom"] or "?") for k, v in fiche.items())))
@@ -634,6 +670,15 @@ def _recit_lot(lot, persos, stats, contexte):
     """Un lot ; tronque ou illisible -> coupe en deux (le 2e demi-lot recoit la fin du 1er)."""
     try:
         return _appel_recit_v2(lot, persos, stats, contexte)
+    except mod.Refus as e:                      # v2.6.0 : refus du recit -> on isole la ou les pages en cause
+        if len(lot) == 1:
+            stats.setdefault("moderation", []).append({"page": lot[0]["page"], "etape": "recit", "moteur": e.moteur, "motif": e.motif})
+            log("  recit : page %s REFUSEE par la moderation (%s) -> sans narration, alerte" % (lot[0]["page"], e.motif[:80]))
+            return {"titre": "", "pages": [{"page": lot[0]["page"], "narration": ""}]}
+        m = len(lot) // 2
+        j1 = _recit_lot(lot[:m], persos, stats, contexte)
+        j2 = _recit_lot(lot[m:], persos, stats, contexte)
+        return {"titre": j1.get("titre", "") or j2.get("titre", ""), "pages": (j1.get("pages") or []) + (j2.get("pages") or [])}
     except (_RecitTronque, ValueError) as e:
         if len(lot) <= 4:
             raise
@@ -737,7 +782,11 @@ def _question_noms(chap_dir, p, stats):
     img = base64.b64encode(page_jpeg(os.path.join(chap_dir, p["file"]))).decode()
     content = [{"type": "text", "text": Q_NOMS_V3 if NOMS_VERSION == "v3" else Q_NOMS},
                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + img}}]
-    txt, u = appel_vision("gemini", "Reponds uniquement en JSON.", content, 4000)
+    try:
+        txt, u = appel_vision("gemini", "Reponds uniquement en JSON.", content, 4000)
+    except mod.Refus as e:                       # v2.6.0 : page refusee -> aucun nom tire d'elle, on continue
+        journal("moderation", etape="noms", page=p.get("num"), motif=e.motif[:200])
+        return []
     with _VERROU_STATS:                          # v1.99.2 : appele depuis plusieurs fils a la fois
         stats["cout_noms"] = stats.get("cout_noms", 0.0) + cout("gemini-3.6-flash", u)
     try:
@@ -1244,7 +1293,19 @@ def main():
         log("  recit en echec (%s)%s" % (e, " : narration vision conservee" if a.prompt == "v1" else ""))
         journal("recit_echec", err=str(e)[:200])
         titre = ""
-    histoire = [p for p in vis if p.get("type") == "histoire"]
+    # v2.6.0 (feuille de route 4-decies) : les pages REFUSEES par la moderation sont mises de cote, le chapitre continue,
+    # et une alerte persistante les signale a Quang (bouton d'activite, onglet « A traiter »)
+    refusees = {}
+    for m_ in stats.get("moderation") or []:
+        refusees.setdefault(m_["etape"], []).append(m_)
+    for etape_, lst in refusees.items():
+        for p in vis:
+            if p["page"] in {x["page"] for x in lst}:
+                p["moderation"] = lst[0]["motif"]
+        mod.ajouter_alerte(a.chapitre, "narration", [x["page"] for x in lst], lst[0]["moteur"], lst[0]["motif"],
+                           detail="%s (etape %s)" % (tag, etape_))
+        log("  ALERTE moderation : %d page(s) refusee(s) a l'etape %s -> a traiter dans l'app" % (len(lst), etape_))
+    histoire = [p for p in vis if p.get("type") == "histoire" and not p.get("moderation")]
     vides = [p["page"] for p in histoire if not (p.get("narration") or "").strip()]
     if not histoire:
         _echec("aucune page d'histoire reconnue")
@@ -1275,6 +1336,10 @@ def main():
         json.dump(res, f, ensure_ascii=False, indent=1)
     progres("fini", 1, 1, cout=stats["cout_total"])
     journal("done", tag=tag, cout=stats["cout_total"], s=stats["total_s"])
+    # v2.6.0 : registre des depenses en AJOUT SEUL (ce qui a ete paye ICI : jamais l'analyse recopiee d'un autre run)
+    dep.noter("narration", a.chapitre, tag, a.engine,
+              stats["cout_total"] - (stats.get("cout_vision", 0) if a.reuse_vision else 0),
+              reuse=a.reuse_vision or None, voix=a.tts)
     print(json.dumps({"ok": True, "dir": os.path.relpath(outdir, SOURCES).replace("\\", "/"),
                       "pages": len(vis), "stats": res["stats"]}, ensure_ascii=False))
 
