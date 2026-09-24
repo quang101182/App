@@ -156,6 +156,10 @@ def fenetre(ws_url, action, **a):
     """etat | ranger | taille | memoriser. Rien ne bouge sans action explicite (sauf l'ouverture, cf. manga_fetch)."""
     cible = ws_url.rstrip("/").split("/")[-1]                  # .../devtools/page/<targetId>
     conf = fenetre_conf()
+    if action == "fermer":                                      # v2.14.1 (Quang 16h29) : fermer A DISTANCE -- ce navigateur
+        with _navigateur() as n:                               # dedie (port 9223, son profil) et lui seul, jamais l'Edge de Quang
+            n.cmd("Browser.close")
+        return {"ok": True, "ferme": True}
     with Onglet(ws_url) as o:
         vp = json.loads(o.cmd("Runtime.evaluate", expression="JSON.stringify([innerWidth, innerHeight])",
                               returnByValue=True)["result"]["value"])
