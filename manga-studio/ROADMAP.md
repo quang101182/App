@@ -2095,6 +2095,20 @@ avec Generate Studio (relance UNIQUEMENT par `relance-proxy.ps1`, `.bak` avant p
 
 **Limites ACCEPTÉES (décision Claude, 24/09)** : 10 répliques ne sont plus posées — ch.3 p.7 la légende « 我只是想成為世界最強的男人… » (zone mal détectée, 32 % de la page) et 9 **grands cris calligraphiés** (ch.4 p.1/p.17, ch.6 p.8/p.23, ch.7 p.5, ch.8 p.17, ch.10 p.12/p.29) : ils restent en chinois, comme les onomatopées dessinées, au lieu d'un rectangle blanc qui mangeait la case. La narration porte le sens. 🟠 (constaté v1.97.0) Les traductions Noritaka ch.1 (v1.91) et Black Jack ch.1-2 (v1.91/1.92) sont **antérieures** aux corrections v1.96-v1.97 (Noritaka p.54 et Black Jack ch.2 p.2 sont des pages blanches) : à refaire le jour où ces séries servent (`refaire_traductions.py <serie> <ch> --rerendu --version-min 1.97.0`).
 
+## 4-octies. EXPLORATION IA LOCALE (24/09/2026, demandée par Quang : « explorer à fond, puis on tranche »)
+
+Matériel : RTX 5070 Ti 16 Go. Tout le lourd sur **C:** (`Documents/MangaStudio-donnees/modeles`, `~/.ollama`, cache HF,
+venv voix `AppData/Local/manga-tts`). Scripts `scripts/essai_*.py` (l'app n'est pas modifiée).
+
+| Bloc | Essai | Verdict (mesuré) |
+|---|---|---|
+| **Effacer le texte posé sur le dessin** | comic-text-detector (ONNX via OpenCV, masque des LETTRES au pixel ; morceaux qui touchent la boîte, gardés entiers) + LaMa par zone (généraliste `big-lama.pt` / manga `lama_large_512px.ckpt`) | ✅ **Vrai plus.** Cris et légende ch.3 p.7 effacés sans abîmer la case, puis traduits ; 1-3 s/page. Reste : « ! » isolés loin de la boîte, bavures quand LaMa invente beaucoup. Boîtes seules (v1 de l'essai) = RATÉ : le goulot était la localisation. |
+| Lire les bulles | qwen2.5vl 7B / qwen3-vl 8B **instruct** (Ollama) | Lecture médiane 100 %, ~1 s/bulle. ⚠ `qwen3-vl:8b` = variante « thinking » : réponse VIDE (tout part en réflexion) → prendre `-instruct`. |
+| Traduire | Qwen3-30B-A3B instruct q4 (Ollama, 18 Go) à partir du texte lu | ❌ **Gemini reste meilleur** : 87 bulles, 2 juges à l'aveugle — 90 % vs 94 % (DeepSeek), 77 % vs 93 % (Kimi). Un 1er essai à 26 bulles disait l'inverse (88 vs 86) : échantillon trop petit. |
+| Voix | Chatterbox multilingue (venv C:, torch cu128 forcé par-dessus sa dépendance CPU) | ✅ **Validé à l'oreille par Quang** en version « stable » : phrase par phrase, graine fixe, timbre cloné sur `p009_local_defaut.wav`. Sans ça, même paramètres = timbre qui change et débit jusqu'à 21,6 car/s (p024 « horrible »). ~1× temps réel. |
+
+**Suite proposée (à valider par Quang)** : (1) intégrer l'effacement local dans `traduire_chapitre` pour les zones hors bulle (banc de non-régression sur OPM + Black Jack + Noritaka) ; (2) moteur de voix « local » en option de narration.
+
 ## 4-bis. L'essai utilisateur du 28/07 — 10 puis 12 cases, pilotées comme Quang
 
 > Demande de Quang : *« fais l'essai toi-même, en pilotant comme si tu étais moi, pour voir si au
