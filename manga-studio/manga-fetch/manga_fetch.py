@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.6.3"
+VERSION = "0.6.4"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -1362,6 +1362,16 @@ def launch_edge() -> int:
         print("Edge introuvable.")
         return 1
     os.makedirs(EDGE_PROFILE, exist_ok=True)
+    # v0.6.4 (Quang 24/09) : la fenetre s'OUVRE a la place choisie par Quang (sur le cote, en partie hors de l'ecran,
+    # assez grande pour capturer : mesure 24/09). Meme fichier que les boutons « Ranger » / « Memoriser » de l'app
+    # (scripts/cdp_mini.py). Ensuite, plus rien ne bouge sans un clic de Quang.
+    place = {"left": 2389, "top": 1344, "width": 1052, "height": 1360}
+    try:
+        with open(os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "manga-fetch", "fenetre.json"),
+                  encoding="utf-8") as f:
+            place.update(json.load(f).get("place") or {})
+    except Exception:
+        pass
     import subprocess
     subprocess.Popen([cible, "--remote-debugging-port=9223",
                       # anti-occlusion : une fenêtre COUVERTE par d'autres continue
@@ -1369,7 +1379,8 @@ def launch_edge() -> int:
                       "--disable-features=CalculateNativeWinOcclusion",
                       f"--user-data-dir={EDGE_PROFILE}",
                       "--no-first-run", "--no-default-browser-check",
-                      "--window-size=1100,1500", "--window-position=60,40",
+                      "--window-size=%d,%d" % (place["width"], place["height"]),
+                      "--window-position=%d,%d" % (place["left"], place["top"]),
                       "https://mangadex.org/"])
     print("Fenêtre dédiée lancée (CDP port 9223, profil persistant).")
     return 0

@@ -123,8 +123,74 @@ def ecran(ws_url, qualite=55, largeur_max=900):
         return base64.b64decode(r["data"]), w, h, url, titre
 
 
+# ---------------------------------------------------------------- v2.14.0 : LA FENETRE de capture (Quang 24/09 16h15-16h22)
+# « un bouton pour deplacer la fenetre a un endroit discret […] pas que tout se replace automatiquement, c'est moi qui
+# declenche ces boutons, sauf a l'ouverture » + « une securite au moment ou je lance une capture : si la fenetre est trop
+# petite, un message […] ou un bouton qui la remet a la bonne taille ».
+# MESURE 24/09 (manga-fetch/banc_taille_fenetre.py, OPM ch.301 MangaDex en page par page) : interieur 576 px de large et
+# ~774 de haut suffisent, 492 de large ou 674 de haut ECHOUENT (MangaDex n'affiche plus la page). Marge ~20 % (Quang :
+# « mets-toi une marge ») -> MINIMUM 700 x 950 interieur. La PLACE par defaut = celle choisie par Quang le 24/09 16h22,
+# validee en reel (MangaDex 18/18 en 33 s, webtoon 7/7 en 28 s) alors que la fenetre depasse a ~93 % sous l'ecran.
+FENETRE_CONF = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "manga-fetch", "fenetre.json")
+FENETRE_DEFAUT = {"place": {"left": 2389, "top": 1344, "width": 1052, "height": 1360}, "min_interieur": [700, 950]}
+CDP_NAV = "http://127.0.0.1:9223"
+
+
+def fenetre_conf():
+    try:
+        with open(FENETRE_CONF, encoding="utf-8") as f:
+            c = json.load(f)
+        return {"place": dict(FENETRE_DEFAUT["place"], **(c.get("place") or {})),
+                "min_interieur": c.get("min_interieur") or FENETRE_DEFAUT["min_interieur"]}
+    except Exception:
+        return json.loads(json.dumps(FENETRE_DEFAUT))
+
+
+def _navigateur():
+    import urllib.request
+    with urllib.request.urlopen(CDP_NAV + "/json/version", timeout=5) as r:
+        return Onglet(json.load(r)["webSocketDebuggerUrl"])
+
+
+def fenetre(ws_url, action, **a):
+    """etat | ranger | taille | memoriser. Rien ne bouge sans action explicite (sauf l'ouverture, cf. manga_fetch)."""
+    cible = ws_url.rstrip("/").split("/")[-1]                  # .../devtools/page/<targetId>
+    conf = fenetre_conf()
+    with Onglet(ws_url) as o:
+        vp = json.loads(o.cmd("Runtime.evaluate", expression="JSON.stringify([innerWidth, innerHeight])",
+                              returnByValue=True)["result"]["value"])
+    with _navigateur() as n:
+        wid = n.cmd("Browser.getWindowForTarget", targetId=cible)["windowId"]
+        b = n.cmd("Browser.getWindowBounds", windowId=wid)["bounds"]
+        if action in ("ranger", "taille"):
+            if b.get("windowState") != "normal":
+                n.cmd("Browser.setWindowBounds", windowId=wid, bounds={"windowState": "normal"})
+            if action == "ranger":
+                nb = dict(conf["place"])
+            else:                                               # garde la position, grandit juste ce qu'il faut
+                bw, bh = b["width"] - vp[0], b["height"] - vp[1]   # bords + barres d'Edge
+                nb = {"left": b["left"], "top": b["top"], "width": max(b["width"], conf["min_interieur"][0] + bw),
+                      "height": max(b["height"], conf["min_interieur"][1] + bh)}
+            n.cmd("Browser.setWindowBounds", windowId=wid, bounds=nb)
+            b = n.cmd("Browser.getWindowBounds", windowId=wid)["bounds"]
+        elif action == "memoriser":
+            conf["place"] = {k: b[k] for k in ("left", "top", "width", "height")}
+            os.makedirs(os.path.dirname(FENETRE_CONF), exist_ok=True)
+            with open(FENETRE_CONF, "w", encoding="utf-8") as f:
+                json.dump(conf, f, ensure_ascii=False, indent=1)
+    if action in ("ranger", "taille"):
+        with Onglet(ws_url) as o:
+            vp = json.loads(o.cmd("Runtime.evaluate", expression="JSON.stringify([innerWidth, innerHeight])",
+                                  returnByValue=True)["result"]["value"])
+    mw, mh = conf["min_interieur"]
+    return {"ok": True, "bounds": b, "interieur": vp, "min": [mw, mh], "place": conf["place"],
+            "assez_grande": vp[0] >= mw and vp[1] >= mh, "reduite": b.get("windowState") == "minimized"}
+
+
 def piloter(ws_url, action, **a):
     """Une action de l'utilisateur sur l'onglet. x, y = fractions 0..1 de la zone visible."""
+    if action.startswith("fenetre_"):                          # v2.14.0 : AVANT bringToFront (qui pourrait la sortir)
+        return fenetre(ws_url, action[8:], **a)
     with Onglet(ws_url) as o:
         o.cmd("Page.bringToFront")
         if action in ("clic", "molette"):
