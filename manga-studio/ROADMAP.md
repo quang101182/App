@@ -2424,6 +2424,13 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   de tome du tout (23h35 : « le chapitre me suffit, c'est plus compact et plus propre ») → la vue d'une série = les
   chapitres dans l'ordre, grille 2 colonnes PC / 1 téléphone ; le tome reste connu pour la recherche « tome N »
   (banc `test_tomes_volume.py` 7/7, `test_bibliotheque_ui` 76/92 = référence).
+- **24/09 23h50 — v2.39.0 : passe QA (sous-agent, les 2 applications, 360 + 1280 px, POST bloqués)** → corrigés :
+  (1) ouvrir un chapitre le faisait défiler SOUS la barre collée (retour bleu et actions cachés) → `scroll-margin-top`
+  = hauteur réelle de la barre (`--haut-colle`, suivie en direct) ; (2) le ⋯ de la Planche sortait à gauche à 360 px →
+  tout menu ouvert est recalé dans l'écran (`menuRecaler`) ; (3) ⚙ du lecteur : « ← Lecture » bleu à gauche. Bancs
+  enrichis (chapitre 42/42 avec mutation rouge, reste 42/42). 🟠 (constaté v2.39.0, antérieurs à ce soir, non traités) :
+  listes « Moteur de lecture » / « Voix » du chapitre coupées à 360 px ; console bruitée de 502 `/comfy/*` quand le
+  moteur local est éteint. Déclencheur : prochaine passe sur le bloc Narration d'un chapitre.
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
   `MangaStudioInstance2` : `/manga/liens` répond (✕ des sites ACTIF), banc `test_page_principale.py 8192` 55/55.
   1. **En-tête d'une série** (capture Quang : « ça fait un peu fouiller ») : « ← Toutes les séries » d'une couleur

@@ -40,6 +40,10 @@ with sync_playwright() as p:
         pg.evaluate("s => { localStorage.setItem('manga_onglet','tChap'); localStorage.setItem('manga_serie', s); }", SERIE)
         pg.reload(); pg.wait_for_timeout(3500)
         pg.click("#chapList [data-chap] >> nth=1"); pg.wait_for_selector("#chapDetail:not([hidden])", timeout=15000); pg.wait_for_timeout(2500)
+        # v2.39.0 (QA) : a l'ouverture, le retour et les actions ne sont PAS caches sous la barre collee du haut
+        bas_barre = pg.eval_on_selector(".topbar", "e => e.getBoundingClientRect().bottom")
+        haut_ret = pg.eval_on_selector("#btnChapClose", "e => e.getBoundingClientRect().top")
+        check("ouverture : le retour est visible sous la barre collée", haut_ret >= bas_barre - 1, (haut_ret, bas_barre))
         rt = pg.inner_text("#btnChapClose")
         check("retour bleu « ← <serie> »", rt.startswith("←") and len(rt) > 3 and "retour" in pg.get_attribute("#btnChapClose", "class"), rt)
         rb, db = (pg.eval_on_selector(x, "e => e.getBoundingClientRect().left") for x in ("#btnChapClose", "#chapDetail"))
