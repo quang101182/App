@@ -29,8 +29,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import narrate_chapter as nc          # appel_vision (Gemini natif / K3), frein 18/min, couts, journal
 import ingest_page as ip              # load_page, detect, clean_bubbles
+import effacement_local as el         # v1.98.0 : masque des lettres + LaMa (option --effacement local)
 
-VERSION = "1.97.0"
+VERSION = "1.98.0"
+# v1.98.0 (24/09, feuille de route 4-nonies etape 2) : --effacement local = le texte pose sur le DESSIN est efface par
+# masque des lettres (comic-text-detector) + LaMa manga (effacement_local.py) au lieu d'un rectangle blanc ; les vraies
+# bulles restent videes comme avant. Option : sans elle, rien ne change.
 # v1.97.0 (24/09, remontee Video Studio : cases entieres effacees, dessin compris) : l'effacement ne rebouche plus que
 # les trous situes DANS la boite du texte (les lettres) -- hors du texte, un « trou » est un personnage sur fond clair.
 # Et une zone de COMPLEMENT qui ne peut etre effacee qu'en boite entiere est ecartee si elle couvre > 5 % de la page
@@ -174,6 +178,51 @@ def nettoyer(im, texts, stats=None):
     return r, net
 
 
+def effacer_local(im, a_poser, etats, stats):
+    """v1.98.0 : vraies bulles videes comme avant ; tout le reste (boite entiere, fond de case, zone trop grande, non
+    effacee) -> lettres trouvees par comic-text-detector puis dessin reconstitue par LaMa. Une zone ou aucune lettre
+    n'est trouvee garde l'effacement d'avant. -> (rendu, {id: boite reelle des lettres})."""
+    import numpy as np
+    from PIL import Image
+    W, H = im.size
+    # v1.98.0 (banc OPM ch.3, 3 essais) : le detecteur voit AUSSI les onomatopees DESSINEES -- applique a tout le texte
+    # hors bulle, il en abimait (p.9 « ズゴゴゴ ») et gonflait des zones deja correctes. Variante PRUDENTE retenue : le
+    # local ne traite QUE les zones que le mode standard laisse en VO (cris, legendes geantes) ; le reste = inchange.
+    def laissee_en_vo(t):
+        e = etats.get(t["id"]) or ""
+        return e == "trop grande -> non effacee" or (t.get("complement") and e != "bulle"
+                                                      and t["w"] * t["h"] > COMPLEMENT_BOITE_MAX)
+    dessin = [t for t, _ in a_poser if laissee_en_vo(t)]
+    locaux, m = {}, None
+    if dessin:
+        proba = el.proba_lettres(im)
+        m = np.zeros((H, W), np.uint8)
+        for t in dessin:
+            mz, reel = el.zone_lettres(proba, t, W, H)
+            if mz is not None:
+                m |= mz
+                locaux[t["id"]] = reel
+    # deux zones de lettres qui se chevauchent : chacune reprend SA boite pour la pose (sinon textes superposes)
+    ids = list(locaux)
+    for i, a_ in enumerate(ids):
+        for b_ in ids[i + 1:]:
+            if el.chevauche(locaux[a_], locaux[b_]):
+                for k in (a_, b_):
+                    t = next(t for t, _ in a_poser if t["id"] == k)
+                    locaux[k] = {c: t[c] for c in ("x", "y", "w", "h")}
+    garde = [dict(t) for t, _ in a_poser if t["id"] not in locaux]           # bulles + zones sans lettres trouvees
+    rendu, _ = ip.clean_bubbles(im, garde, couverture_min=COUVERTURE_MIN, trous_dans_texte=True, boite_max=BOITE_MAX)
+    for t, _ in a_poser:                                                      # « clean » (boite videe) pour la pose
+        g = next((x for x in garde if x.get("id") == t["id"]), None)
+        if g is not None and g.get("clean"):
+            t["clean"] = g["clean"]
+    if locaux:
+        t0 = time.time()
+        rendu = Image.fromarray(el.reconstituer(np.array(rendu.convert("RGB")), m))
+        stats["local_s"] = round(stats.get("local_s", 0) + time.time() - t0, 1)
+    return rendu, locaux
+
+
 def sans_chevauchement(texts, seuil=0.3):
     """Deux zones de texte qui se chevauchent (> 30 % de la plus petite) : on garde la plus PETITE. Page 9 de
     Claymore (22/09) : une 2e zone detectee sur une bulle a recu la meme replique, posee en travers de la page."""
@@ -300,6 +349,9 @@ def main():
     ap.add_argument("--conf", type=float, default=0.25)
     ap.add_argument("--conf-complement", type=float, default=CONF_COMPLEMENT,
                     help="v1.92.0 : zones faibles ajoutees si elles ne touchent aucune bulle (0 = desactive)")
+    ap.add_argument("--sortie", default="", help="v1.98.0 (bancs) : dossier de sortie a la place de traduction/<langue>")
+    ap.add_argument("--effacement", choices=["standard", "local"], default="standard",
+                    help="v1.98.0 : local = texte sur le dessin efface par masque des lettres + LaMa (carte graphique)")
     ap.add_argument("--rerendu", action="store_true",
                     help="v1.97.0 : refait effacement + pose depuis traduction.json (memes zones, memes textes, 0 appel)")
     a = ap.parse_args()
@@ -310,6 +362,9 @@ def main():
     if not chap.startswith(nc.SOURCES + os.sep) or not os.path.isfile(os.path.join(chap, "manifest.json")):
         raise SystemExit("chapitre introuvable : " + a.chapitre)
     out = os.path.join(chap, "traduction", a.langue)
+    lu = out                                          # --rerendu lit TOUJOURS la traduction de l'app
+    if a.sortie:
+        out = os.path.abspath(a.sortie)
     os.makedirs(out, exist_ok=True)
     PROGRESS = os.path.join(out, "progress.json")
     man, pages = nc.pages_du_chapitre(chap, a.pages)
@@ -317,10 +372,10 @@ def main():
     if a.rerendu:                                  # v1.97.0 : zones et traductions deja payees, deja relues
         if a.pages:
             raise SystemExit("--rerendu refait le chapitre entier (--pages reecrirait traduction.json incomplet)")
-        avant = {x["page"]: x for x in json.load(open(os.path.join(out, "traduction.json"), encoding="utf-8"))["pages"]}
+        avant = {x["page"]: x for x in json.load(open(os.path.join(lu, "traduction.json"), encoding="utf-8"))["pages"]}
     stats = dict(tokens_in=0, tokens_out=0, cout=0.0, bulles=0, traduites=0, onomatopees=0, vides=0,
                  effacees_bulle=0, effacees_boite=0, non_effacees=0, ne_tient_pas=0, s=0.0)
-    res = {"version": VERSION, "chapitre": a.chapitre, "langue": a.langue, "engine": a.engine,
+    res = {"version": VERSION, "chapitre": a.chapitre, "langue": a.langue, "engine": a.engine, "effacement": a.effacement,
            "created_at": datetime.now().isoformat(timespec="seconds"), "pages": []}
     t0 = time.time()
     nc.journal("traduction_start", chapitre=a.chapitre, langue=a.langue, pages=len(pages))
@@ -382,7 +437,7 @@ def main():
                     etat, c = e0.get(t["id"]), t.get("clean")
                     if etat != "bulle" and not (etat and "boite" in etat):
                         continue                                  # non effacee : deja ecartee plus bas
-                    if etat != "bulle" and t["w"] * t["h"] > COMPLEMENT_BOITE_MAX:
+                    if etat != "bulle" and t["w"] * t["h"] > COMPLEMENT_BOITE_MAX and a.effacement != "local":
                         douteux.append((t, lig, "zone trop grande pour une boite entiere")); continue
                     if etat == "bulle" and c and c["w"] * c["h"] > 6 * t["w"] * t["h"]:
                         etat, c = "case", None
@@ -396,10 +451,19 @@ def main():
             if a_poser:
                 rendu, net = nettoyer(im, [t for t, _ in a_poser], stats)
                 etats = {s.get("id"): s.get("etat") for s in net}
+                locaux = {}                                   # id -> boite reelle des lettres (effacement local)
+                if a.effacement == "local":
+                    rendu, locaux = effacer_local(im, a_poser, etats, stats)
                 a_dessiner = []
                 for t, lig in a_poser:
                     etat = etats.get(t["id"])
                     lig["effacement"] = etat
+                    if t["id"] in locaux:                     # v1.98.0 : lettres effacees, dessin reconstitue
+                        lig["effacement"] = "local (lettres + LaMa)"
+                        stats["effacees_local"] = stats.get("effacees_local", 0) + 1
+                        a_dessiner.append((locaux[t["id"]], lig, "halo",
+                                           poser_texte(rendu, locaux[t["id"]], lig["trad"], False, dessiner=False)["taille"]))
+                        continue
                     if etat == "bulle":
                         stats["effacees_bulle"] += 1
                     elif etat and "boite" in etat:
@@ -421,7 +485,10 @@ def main():
                 tailles = sorted(x[3] for x in a_dessiner)
                 commune = tailles[len(tailles) // 2] if tailles else None
                 for boite, lig, est_bulle, _ in a_dessiner:
-                    r = poser_texte(rendu, boite, lig["trad"], est_bulle, taille_max=commune)
+                    if est_bulle == "halo":
+                        rendu, r = el.poser_avec_halo(rendu, boite, lig["trad"], commune, poser_texte)
+                    else:
+                        r = poser_texte(rendu, boite, lig["trad"], est_bulle, taille_max=commune)
                     lig.update(r)
                     stats["traduites"] += 1
                     stats["ne_tient_pas"] += not r["tient"]
@@ -436,7 +503,11 @@ def main():
         json.dump(res, fh, ensure_ascii=False, indent=1)
     progres(len(pages), len(pages), fini=True, cout=stats["cout"])
     nc.journal("traduction_done", chapitre=a.chapitre, langue=a.langue, **{k: v for k, v in stats.items()})
-    print(json.dumps({"ok": True, "dir": os.path.relpath(out, nc.SOURCES).replace("\\", "/"), "stats": stats}, ensure_ascii=False))
+    try:
+        rel = os.path.relpath(out, nc.SOURCES).replace("\\", "/")
+    except ValueError:                                # --sortie sur un autre disque (bancs)
+        rel = out
+    print(json.dumps({"ok": True, "dir": rel, "stats": stats}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

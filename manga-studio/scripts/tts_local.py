@@ -12,7 +12,7 @@ Avant de charger le modele : attend que la carte soit LIBRE (memoire et file Com
 """
 import argparse, json, os, re, subprocess, sys, time, urllib.request
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, "..", "sources"))
 APERCUS = os.path.join(SRC, "_apercus")
@@ -66,6 +66,8 @@ def main():
     ap.add_argument("--attente-max", type=int, default=1800, help="secondes d'attente d'une carte libre (defaut 30 min)")
     ap.add_argument("--temperature", type=float, default=0.6)
     ap.add_argument("--langue", default="fr")
+    ap.add_argument("--debit", type=float, default=17.4,
+                    help="v1.1.0 : debit vise en caracteres/s (17,4 = voix en ligne Charon mesuree sur OPM ch.1) ; 0 = naturel")
     a = ap.parse_args()
     ref = os.path.join(APERCUS, a.voix + ".mp3")
     if not re.match(r"^[A-Z][a-z]{2,15}$", a.voix) or not os.path.isfile(ref):
@@ -93,12 +95,19 @@ def main():
         wav = os.path.join(a.out, j["id"] + ".wav")
         sf.write(wav, np.concatenate(morceaux[:-1]), m.sr)
         mp3 = os.path.join(a.out, j["id"] + ".mp3")
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", wav, "-b:a", "128k", mp3], check=True)
+        dur0 = sum(len(x) for x in morceaux[:-1]) / m.sr
+        # v1.1.0 (Quang 24/09 : « j'aime bien regler la voix a 1,15 ») : la voix locale parle ~20 % plus lentement que
+        # l'en-ligne -> tempo ramene au MEME debit (sans changer la hauteur), borne 0,9-1,35 ; le 1,15x de la video
+        # donne alors le meme rythme qu'avec la voix en ligne
+        k = 1.0 if not a.debit else min(1.35, max(0.9, a.debit / (len(j["texte"]) / max(dur0, 0.1))))
+        filtre = ["-filter:a", "atempo=%.3f" % k] if abs(k - 1) > 0.02 else []
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", wav] + filtre + ["-b:a", "128k", mp3], check=True)
         os.remove(wav)
-        dur = sum(len(x) for x in morceaux[:-1]) / m.sr
+        dur = dur0 / k if filtre else dur0
         dt = time.time() - t
         total_s += dt; total_dur += dur
-        dit(id=j["id"], dur=round(dur, 2), s=round(dt, 1), car=len(j["texte"]), car_s=round(len(j["texte"]) / max(dur, 0.1), 1))
+        dit(id=j["id"], dur=round(dur, 2), s=round(dt, 1), car=len(j["texte"]), car_s=round(len(j["texte"]) / max(dur, 0.1), 1),
+            tempo=round(k, 3))
     dit(fin=True, morceaux=len(jobs), audio_s=round(total_dur, 1), calcul_s=round(total_s, 1),
         temps_reel=round(total_dur / max(total_s, 0.1), 2))
     return 0

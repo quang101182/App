@@ -2147,7 +2147,34 @@ traduction ~0,006-0,012 $ si VO. Solo Leveling vol.1 (755 p., déjà en françai
   distribuée.
 - **Décision** : intégrer / réserve / rien.
 
-### Étape 3 — Analyse locale des pages (ce qui nourrit le récit) — l'inconnue
+### Bilan mesuré — étape 1 (voix locale), 24/09/2026
+Banc OPM ch.1 (17 pages) puis **chaîne réelle via l'API** : narration `--tts local` (analyse reprise, 0 appel payant) →
+karaoké → vidéo avec les réglages de Quang (1,15x, sous-titres, karaoké, musique 20 %, caméra case par case).
+| Avantages (mesurés) | Inconvénients (mesurés) |
+|---|---|
+| Voix **0 $** (57 % de la facture ; Solo Leveling vol.1 ≈ 7,60 → 3,20 $) | **~0,9-1× temps réel** : 3 min de voix = ~3,5 min de carte graphique (+14 s de chargement) |
+| Débit recalé sur l'en-ligne (atempo) : **16,9 car/s** vs 17,4 — le 1,15x de Quang garde son rythme | Carte graphique occupée pendant ce temps (attend ComfyUI s'il travaille) |
+| Karaoké **17/17 pages, 95 % des mots reconnus** par Whisper | Timbre = une IMITATION de la voix Google (extraits `_apercus`) : validé à l'oreille sur 3 pages + palette ; le chapitre complet n'a pas encore été ÉCOUTÉ par Quang |
+| Voix illimitées (clonage), hors ligne, pas de quota | Un environnement Python de plus (sur C:, torch cu128 forcé par-dessus la dépendance CPU de Chatterbox) |
+| L'en-ligne n'est jamais écrasé (étiquette `-local`) | « Précédemment… » reste en voix en ligne (courte) |
+À écouter : `sources/one-punch-man/ch_1/video/gemini-charon-local.mp4` (à côté de `gemini-charon.mp4`).
+
+### Bilan mesuré — étape 2 (effacement local), 24/09/2026
+3 essais sur OPM ch.3 : appliqué à TOUT le texte hors bulle, le détecteur de lettres attrape aussi les **onomatopées
+DESSINÉES** (p.9 « ズゴゴゴ » abîmée, textes superposés p.4, zone gonflée) → **variante PRUDENTE retenue** : le local ne
+traite QUE les zones que le mode standard laisse en VO (cris, légendes géantes, titres). Banc OPM ch.3 + 4 + 10
+(77 pages) : **5 pages changent, toutes des gains** (ch.3 p.7 légende, ch.4 p.1 titre « 4E COUP : LES SOUTERRAINS
+TÉNÉBREUX », ch.4 p.17 + ch.10 p.12 cris, ch.10 p.29 « …UN SIGNAL DE DANGER ABSOLU ! ») ; **les 72 autres identiques
+à l'octet** ; mode standard = identique à l'octet (non-régression).
+| Avantages | Inconvénients |
+|---|---|
+| Les textes laissés en VO sont traduits sans abîmer la case | Gain PETIT en volume : ~1 page sur 15 sur OPM |
+| Aucune régression possible ailleurs (pages identiques) | Restes : « ! » isolés, onomatopée voisine parfois touchée (ch.3 p.7) |
+| 0 $, 3-6 s par chapitre | 2 modèles (≈ 300 Mo sur C:), code d'origine GPL-3.0 (usage perso : sans effet) |
+| Option : `--effacement local` (+ `--rerendu` pour refaire sans appel) | Pas encore de bouton dans l'app (option en ligne de commande) |
+Piste non retenue (à rouvrir seulement si besoin) : distinguer texte / onomatopée dessinée (détecteur `comic-text-and-bubble-detector`, classes `text_bubble` / `text_free`).
+
+### Étape 3 — Analyse locale des pages### Étape 3 — Analyse locale des pages (ce qui nourrit le récit) — l'inconnue
 - **3a. Banc** : qwen3-vl 8B instruct (et ce qui tient en 16 Go) produit la fiche de chaque page (faits, personnages
   présents, type de page) ; comparaison à Gemini **par 2 juges à l'aveugle** sur la fidélité, puis sur le RÉCIT final.
 - **3b. Si prometteur** : essai sur un chapitre entier + écoute/lecture de Quang.
@@ -2169,9 +2196,9 @@ libre, sinon en ligne) — ou rester comme aujourd'hui. Décision de Quang, écr
 ### Suivi
 | Étape | État | Décision |
 |---|---|---|
-| 0 Socle | ⬜ à faire | — |
-| 1 Voix locale | ⬜ à faire (essais du 24/09 : 3 pages validées à l'oreille) | — |
-| 2 Effacement local | ⬜ à faire (essai 7 pages du 24/09 concluant) | — |
+| 0 Socle | ✅ v2.10.0 (24/09) : menu « Moteur de voix » (chapitre + profil/batch/nuit), état de la carte (`/manga/gpu`), attente d'une carte libre dans `tts_local.py`, journal | — |
+| 1 Voix locale | ✅ codée + testée de bout en bout (24/09) — **décision Quang attendue** | voir bilan 1 ci-dessous |
+| 2 Effacement local | ✅ codé, variante PRUDENTE (24/09) — **décision Quang attendue** | voir bilan 2 ci-dessous |
 | 3 Analyse locale | ⬜ à faire | — |
 | 4 Traduction locale | ⏸ en réserve | ne pas intégrer (mesuré 24/09) |
 | 5 Stratégie | ⬜ après 1-3 | — |
