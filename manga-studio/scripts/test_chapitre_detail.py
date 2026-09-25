@@ -63,6 +63,17 @@ with sync_playwright() as p:
         y0 = pg.evaluate("() => scrollY")
         pg.click("#chapAllerNarr"); pg.wait_for_timeout(900)
         check("raccourci Narration : descend jusqu'au bloc", pg.evaluate("() => scrollY") > y0 + 50, (y0, pg.evaluate("() => scrollY")))
+        if w >= 1000:   # v2.49.0 (QA 25/09) : sur PC aussi, « Kimi K3 — le plus fiabl… » (193 px) -> largeur de base 300 px
+            lg = pg.evaluate("() => ['narrEngine', 'narrVoice'].map(i => Math.round($(i).getBoundingClientRect().width))")
+            check("Narration PC : moteur et voix assez larges pour être lus (≥ 250 px)", min(lg) >= 250, lg)
+            # v2.49.0 (QA 25/09) : un menu ⋯ qui sortirait par le BAS s'ouvre vers le HAUT
+            pg.evaluate("() => { const b = document.querySelector('#chapDetail .bloc-mus .menu-plus > .plus');"
+                        " scrollBy(0, b.getBoundingClientRect().bottom - innerHeight + 12); }"); pg.wait_for_timeout(300)
+            pg.click("#chapDetail .bloc-mus .menu-plus > .plus"); pg.wait_for_timeout(250)
+            bas = pg.evaluate("() => { const p = document.querySelector('#chapDetail .bloc-mus .menu-pan'); const r = p.getBoundingClientRect();"
+                              " return [Math.round(r.top), Math.round(r.bottom), innerHeight, !p.hidden]; }")
+            check("menu ⋯ en bas d'écran : ouvert vers le haut, entièrement visible", bas[3] and bas[0] >= 0 and bas[1] <= bas[2], bas)
+            pg.keyboard.press("Escape"); pg.wait_for_timeout(150)
         if w < 400:   # v2.45.0 : Moteur de lecture et Voix ne se partagent plus une ligne (« Kimi K3 — le pl », « Charon — »)
             me, vo = (pg.eval_on_selector(x, "e => { const r = e.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.width)]; }") for x in ("#narrEngine", "#narrVoice"))
             check("Narration 360 px : moteur et voix sur deux lignes, lisibles", me[0] != vo[0] and me[1] >= 250 and vo[1] >= 220, (me, vo))

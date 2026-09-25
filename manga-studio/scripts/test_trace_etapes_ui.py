@@ -44,6 +44,14 @@ with sync_playwright() as p:
         pg.evaluate("() => document.querySelector('#narrRuns [data-ecoute]').click()"); pg.wait_for_timeout(2500)
         check("lecteur ouvert sur une vraie narration", pg.evaluate("() => !!(LEC && LEC.n && LEC.n.pages.length)"))
         num = pg.evaluate("() => LEC.n.pages[LEC.i].page")
+        # v2.49.0 (QA 25/09) : le compteur « page N (i/n) » reste ENTIER et visible, meme avec un titre tres long
+        for titre in (None, "Un titre de série vraiment très long, comme ceux de l'application secondaire, qui déborde"):
+            vu = pg.evaluate("""t => { const sv = LEC.n.title; if (t) LEC.n.title = t; montrerPage();
+                const p = document.querySelector('#lecInfo .li-p'), r = p.getBoundingClientRect(), c = document.querySelector('.lec-top .lec-t').getBoundingClientRect();
+                const out = [p.textContent, p.scrollWidth <= p.clientWidth + 1, Math.round(r.right), Math.round(c.right)];
+                LEC.n.title = sv; montrerPage(); return out; }""", titre)
+            check("compteur de page entier et visible%s" % (" (titre très long)" if titre else ""), vu[1] and vu[2] <= vu[3] + 1
+                  and vu[0].startswith("page "), vu)
         R = {"lu_par": "kimi", "refuse_par": [{"moteur": "deepseek"}], "comment": "relais automatique"}
         t, lg, iw = pg.evaluate(INFO, {"trace": None, "recit": R})
         check("récit relayé : « ✍ récit par Kimi (refusé par DeepSeek) »", "✍ récit par Kimi (refusé par DeepSeek)" in t, t)

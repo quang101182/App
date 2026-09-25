@@ -2502,6 +2502,16 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   sous-processus `video_chapitre.py` n'héritait pas de la racine du banc) → `MANGA_SOURCES_DIR` = dossier du banc ; dossier
   fuité supprimé (vide), 21/21. 🟠 (constaté v2.48.0) `ouvertes` garde 5 slugs de bancs anciens qui n'existent plus
   (`zz-serie`, `banc-profil-ui`, `banc-prof-mus`, `zz-essai-mus`, `zz-essai-vide`) : sans effet visible, laissés.
+- **25/09 11h20 — v2.49.0 : passe QA (sous-agent, 2 applications × 1280/360 px, POST bloqués)** → corrigés : (1) lecteur
+  à 360 px : le compteur « page N (i/n) » était COUPÉ (« Claymore ch. 1 · page … » ; rien de la page avec un titre long) →
+  3 parts, l'étiquette et le titre rétrécissent, le compteur jamais ; (2) Narration sur PC : « Kimi K3 — le plus fiabl… »
+  (193 px) → largeur de base 300 px (335 / 297 px) ; (3) un menu ⋯ en bas d'écran s'ouvrait HORS de la fenêtre (906-1058
+  px pour 900) → `menuRecaler` l'ouvre vers le haut s'il y a la place. Bancs : `test_chapitre_detail` 45/45,
+  `test_trace_etapes_ui` 28/28 (titre très long compris), mutation v2.48 rouge ; lecteur 13/13, reste 42/42, vitesses
+  22/22 + 13/13, moteur éteint 23/23. Non retenus : tolérance aux fautes < 4 lettres (voulu), liste de page de la Planche
+  tronquée à 360 px (liste déroulante). ⏸ **Question à Quang** : dans la secondaire, fermer 2 menus par Échap en < 0,6 s
+  déclenche la PANIQUE (mesuré par le QA) — geste peu probable à la main ; faut-il qu'un Échap qui ferme un menu ne compte
+  pas ? (plus sûr contre les faux départs, mais une panique menu ouvert demanderait 3 appuis).
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
