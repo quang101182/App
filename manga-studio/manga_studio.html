@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.57.0</title>
+<title>Manga Studio v2.58.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -1061,7 +1061,7 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
   <div class="hdrin">
     <!-- v2.30.0 (maquette_ensemble_v1, Quang 22h31-22h33) : en permanence le MODE, l'ACTIVITE, le moteur local et la VRAM ;
          les couts et ℹ️ passent dans « ⋯ ». Telephone : 2 lignes (titre + mode + ⋯, puis activite + Local + VRAM). -->
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.57.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.58.0</span>
       <button class="mode-pill" id="hdrMode" title="Où tournent la voix et l’effacement du texte : en ligne (payant) ou sur ta carte graphique (0 $). Touche pour changer.">☁ En ligne</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -2089,7 +2089,7 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.57.0";
+const VERSION = "2.58.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -5671,6 +5671,9 @@ function ouvrirSerie(slug){
     if (!navigator.webdriver) api("/manga/bibliotheque", { action: "ouverte", slug }).catch(() => {}); }
   try { slug ? localStorage.setItem("manga_serie", slug) : localStorage.removeItem("manga_serie"); } catch {}
   if (!slug){ $("chapDetail").hidden = true; CHAP_OPEN = null; }
+  // v2.58.0 : les panneaux d'une serie (Profil et traitement, Videos) se referment quand on la quitte ou en change
+  if (!$("suiviBox").hidden) $("suiviFermer").click();
+  if (!$("vidBox").hidden) $("vidFermer").click();
   renderLib();
 }
 const SOURCE_LBL = { capture: "capture navigateur", mangadex: "MangaDex", download: "MangaDex", import: "import" };
@@ -5934,7 +5937,8 @@ function nfMaj(){
   if (!montrer) return;
   const c = nfCtx(), large = innerWidth > 480; NF.ctx = c;
   const serie = (CHAPS.find(x => x.dir === CHAP_OPEN) || {}).title || "";
-  const sansRet = c === "biblio" || c === "autre";
+  const pan = nfPanneau();                                            // v2.58.0 : un panneau deplie -> « ← Fermer »
+  const sansRet = !pan && (c === "biblio" || c === "autre");
   $("nfRet").disabled = sansRet;
   $("nfRet").textContent = sansRet ? "←" : c === "chapitre" ? "← " + (large ? serie || "Série" : "Série") : "← Séries";
   $("nfRet").title = sansRet ? "rien à quitter ici" : c === "chapitre" ? "revenir à la série" : "revenir à toutes les séries";
@@ -5946,6 +5950,7 @@ function nfMaj(){
              : c === "serie" ? ((CHAPS.find(x => (x.slug || x.dir.split("/")[0]) === LIB_SERIE) || {}).title || LIB_SERIE)
              : c === "biblio" ? "Bibliothèque" : onglet.trim();
   if (c === "chapitre" && large) $("nfRet").textContent = "← Série";
+  if (pan){ $("nfRet").textContent = "← Fermer"; $("nfRet").title = "replier « " + pan.nom + " »"; }
   nfInfoMaj(info);
   [["nfPrev", "chapPrev", -1], ["nfSuiv", "chapNext", 1]].forEach(([id, src, d]) => {
     const v = c === "chapitre" ? nfVoisin(src) : null, b = $(id);
@@ -5967,7 +5972,18 @@ function nfInfoMaj(txt){
     b.classList.toggle("defile", defile);
   }
 }
+/* v2.58.0 (Quang 13h16 : « des fenetres qui se deplient […] je dois cliquer dessus pour les refermer, et je n'ai plus de
+   retour ») : comme le bouton retour d'un telephone, ← REFERME D'ABORD ce qui est deplie, puis reprend son role. */
+function nfPanneau(){
+  if (nfOngletActif() !== "tChap") return null;
+  if (!$("vidBox").hidden) return { nom: "Vidéos", fermer: () => $("vidFermer").click() };
+  if (!$("suiviBox").hidden) return { nom: "Profil et traitement", fermer: () => $("suiviFermer").click() };
+  if ($("capBox").open) return { nom: "Capturer un chapitre", fermer: () => { $("capBox").open = false; } };
+  return null;
+}
 function nfAller(sens){                                  // sens : -1 precedent, +1 suivant, "retour"
+  const pan = sens === "retour" ? nfPanneau() : null;
+  if (pan){ pan.fermer(); nfMaj(); return; }
   if (sens === "retour"){ (NF.ctx === "chapitre" ? $("btnChapClose") : $("btnLibBack")).click(); return; }
   const v = nfVoisin(sens < 0 ? "chapPrev" : "chapNext"); if (v) v.click();
 }
@@ -6044,6 +6060,12 @@ async function nfTraiter(){
   b.addEventListener("pointermove", e => { if (t && Math.hypot(e.clientX - x0, e.clientY - y0) > 10) stop(); });
   ["pointerup", "pointercancel", "pointerleave"].forEach(ev => b.addEventListener(ev, stop));
 })();
+document.addEventListener("keydown", e => {                                            // v2.58.0
+  if (e.key !== "Escape" || e.defaultPrevented) return;
+  if (document.querySelector(".menu-pan:not([hidden])") || nfCouvert()) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || "")) return;
+  const pan = nfPanneau(); if (pan){ pan.fermer(); nfMaj(); }
+}, true);
 addEventListener("scroll", () => { if (!NF.raf) NF.raf = requestAnimationFrame(() => { NF.raf = 0; nfMaj(); }); }, { passive: true });
 addEventListener("resize", nfMaj);
 setInterval(nfMaj, 700);                                  // un lecteur / une fenetre qui s'ouvre sans defilement

@@ -2589,6 +2589,12 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   (> 10 px = glissement, annulé), la bulle se remplit pendant l'appui, vibration au déclenchement, pas de menu de sélection
   Android. Banc `test_appui_long_ui.py` **18/18** (1280 souris + 360 tactile, TOUT POST bloqué et compté : 0), mutation rouge ;
   barre 46/46.
+- **25/09 13h25 — v2.58.0 : REPLIER vite ce qui s'est déplié** (Quang 13h16, capture : « Profil et traitement » resté OUVERT
+  sur la bibliothèque, et plus de retour : la flèche ← y était grisée). (1) Quitter / changer de série referme SES panneaux
+  (Profil, Vidéos) — c'était le défaut de la capture. (2) Comme le retour d'un téléphone : ← de la barre devient « ← Fermer »
+  tant qu'un panneau est déplié (Profil, Vidéos, Capturer un chapitre) et le replie d'abord, puis reprend son rôle. (3) Échap
+  (PC) fait pareil — mais avec un menu ⋯ ouvert, il ferme le MENU (comme avant). Pas d'usine à gaz : ni historique, ni
+  nouveau bouton. Banc `test_replier_ui.py` **26/26** (1280 + 360, POST bloqués), mutation rouge ; barre 46/46, appui long 18/18.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
