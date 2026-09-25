@@ -91,10 +91,22 @@ with sync_playwright() as p:
             # DETECTION d'apres l'onglet (idee Quang 17h40) : faux onglets, la vraie fenetre de capture n'est pas touchee
             ONG = """(l) => { CAP_TABS = l; $('capTab').innerHTML = l.map((t, i) => '<option value="' + i + '">' + t.title + '</option>').join(''); }"""
             CHOISIR = "(i) => { $('capTab').value = String(i); $('capTab').dispatchEvent(new Event('change')); return $('capTitre').value; }"
-            pg.evaluate(ONG, [{"url": "https://site.org/manga/one-punch-man/chapter-302", "title": "Read Chapter 302 online"},
+            pg.evaluate(ONG, [{"url": "https://site.org/manga/one-punch-man/chapter-302", "title": "Read manga online free"},
                               {"url": "https://site.org/solo-leveling-season-2/ch-5", "title": "Solo Leveling Season 2 Ch 5"},
                               {"url": "https://site.org/read/fantasy-theater-deluxe/1", "title": "Fantasy Theater Deluxe Chapter 1"},
-                              {"url": "https://unsite.org/", "title": "UnSite - Read Manhwa Online Free"}])
+                              {"url": "https://unsite.org/", "title": "UnSite - Read Manhwa Online Free"},
+                              {"url": "https://mangadex.org/chapter/3f9b2c1e-1111-2222-3333-444455556666/1", "title": "1 | Chapter 143 - Sousou no Frieren - MangaDex"},
+                              {"url": "https://site.org/manhwa/serie-x/chapter-1-ch265736", "title": "Serie X - Chapter 1 - Site"}])
+            NUM = "(i) => { $('capTab').value = String(i); $('capTab').dispatchEvent(new Event('change')); return [$('capChap').value, $('capChap').classList.contains('auto')]; }"
+            pg.evaluate("() => { CAP_CHAP_AUTO = true; }")
+            n = [pg.evaluate(NUM, i) for i in (0, 1, 2, 3, 4, 5)]
+            check("n° d'après l'ADRESSE (chapter-302, ch-5), sinon le titre (Chapter 1), en doré ; accueil = vide",
+                  n[0] == ["302", True] and n[1] == ["5", True] and n[2] == ["1", True] and n[3] == ["", False], n[:4])
+            check("pièges : MangaDex /chapter/<identifiant>/1 → 143 (titre), « chapter-1-ch265736 » → 1", n[4] == ["143", True] and n[5] == ["1", True], n[4:])
+            pg.evaluate("() => { $('capChap').value = ''; }"); pg.tap("#capChap"); pg.keyboard.type("77", delay=30)
+            v = pg.evaluate(NUM, 0)
+            check("un n° TAPÉ n'est jamais écrasé (ni doré)", v == ["77", False], v)
+            pg.evaluate("() => { CAP_CHAP_AUTO = true; $('capChap').value = ''; }")
             pg.evaluate("() => { CAP_TITRE_AUTO = true; }")        # plus haut, un nom a ete CHOISI a la main : on repart d'un nom propose
             v = pg.evaluate(CHOISIR, 0)
             check("détection par l'ADRESSE : « one-punch-man » → le nom EXACT « One Punch-Man »", v == "One Punch-Man", v)

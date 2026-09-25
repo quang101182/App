@@ -2620,6 +2620,13 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   parasite après un glissement est ignoré. (3) LECTEUR de narration : le même glissement sur sa barre (⏮ ⏸ ⏭), curseur de
   volume exclu. La VIDÉO (lecteur natif, barre de temps) n'est pas touchée : un glissement y entrerait en conflit.
   Banc `test_retour_visionneuse_ui.py` **24/24**, mutation rouge ; lecteur 13/13, barre 50/50, appui long 18/18, compact 31/31.
+- **25/09 20h50 — v2.64.0 : NUMÉRO DE CHAPITRE suggéré d'après l'ADRESSE de la page** (idée Quang 20h34) : `chapDeLaPage` lit
+  l'adresse (« …/chapter-37 », « …/chapter/4 », « ?episode_no= »), sinon le titre (« Chap 3 », « Chapter 143 », « #004 ») ;
+  affiché en DORÉ tant qu'il est suggéré ; un n° tapé n'est jamais écrasé (`CAP_CHAP_AUTO`) ; accueil / recherche = vide.
+  Pièges couverts : « chapter-1-ch265736 » (identifiant du site) → 1 ; MangaDex `/chapter/<uuid>/1` → le titre (143, pas le
+  3 du début de l'uuid) ; « chapter-12-5 » → 12.5 ; « 012 » → 12. Vrais onglets (principale + secondaire) : 3/3 chapitres
+  justes, 6 accueils/recherches vides. Banc `test_choix_manga_ui` **127/127**, 3 mutations rouges ; titres 46/46, lien 12/12,
+  série vide 11/11.
 - **25/09 18h55 — v2.63.1 : témoin d'activité VIVANT pendant une capture en série** (Quang 18h24-18h46) : il restait figé ~5 min
   par chapitre (« ch.4 1/28 ») alors que le serveur envoyait déjà les pages → « ch.8 p. 105 · 5/28 · ~1 h 56 ». Mesuré en direct
   sur une vraie capture (secondaire) : p. 105 → 112 en 18 s. Capture d'un seul chapitre / narration inchangées (« 42 p. », « 3/10 »).
