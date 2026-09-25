@@ -44,12 +44,16 @@ def attendu():
 
 VIS, CACH = attendu()
 print("attendu : %d visibles, %d masquees ; 1re = %s" % (len(VIS), len(CACH), VIS[:1]))
-items = "() => [...document.querySelectorAll('#capSugg .cap-sugg-i')].map(b => b.dataset.titre)"
+# v2.63.0 : le groupe « Détecté sur la page » (d'apres l'onglet de capture) passe EN TETE ; « Mes séries » = le reste
+items = "() => [...document.querySelectorAll('#capSugg .cap-sugg-i:not(.det)')].map(b => b.dataset.titre)"
+dets = "() => [...document.querySelectorAll('#capSugg .cap-sugg-i.det')].map(b => b.dataset.titre)"
 with sync_playwright() as p:
     b = p.chromium.launch(channel="msedge", headless=True)
-    for w, h in ((1280, 900), (360, 780)):
+    # v2.63.0 : sur telephone / tactile, la liste sous le champ est remplacee par l'ecran de choix (test_choix_manga_ui) ;
+    # ce banc garde la liste SOURIS, au large et a l'etroit (700 px)
+    for w, h in ((1280, 900), (700, 900)):
         print("=== %d px" % w)
-        c = b.new_context(viewport={"width": w, "height": h}, is_mobile=w < 400, has_touch=w < 400)
+        c = b.new_context(viewport={"width": w, "height": h}, is_mobile=False, has_touch=False)
         pg = c.new_page(); errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
         pg.goto("http://127.0.0.1:%d/manga#k=%s" % (PORT, KEY)); pg.wait_for_timeout(2500)
@@ -96,11 +100,12 @@ with sync_playwright() as p:
         check("nom inconnu : « créera une nouvelle série »", "NOUVELLE SÉRIE" in pg.inner_text("#capSugg").upper())
         # choisir au clavier puis au doigt
         pg.fill("#capTitre", ""); pg.keyboard.press("Escape"); pg.wait_for_timeout(150)      # liste FERMEE : ↓ doit l'ouvrir ET choisir
+        tete = pg.evaluate(dets) + VIS                          # detectees d'abord, puis mes series
         pg.keyboard.press("ArrowDown"); pg.keyboard.press("Enter"); pg.wait_for_timeout(200)
-        check("clavier ↓ + Entrée choisit la 1re série", pg.input_value("#capTitre") == VIS[0] and not pg.is_visible("#capSugg"))
+        check("clavier ↓ + Entrée choisit la 1re ligne (%s)" % tete[0], pg.input_value("#capTitre") == tete[0] and not pg.is_visible("#capSugg"))
         pg.fill("#capTitre", ""); pg.click("#capTitre"); pg.wait_for_timeout(250)
         pg.click("#capSugg .cap-sugg-i >> nth=1"); pg.wait_for_timeout(200)
-        check("toucher une série la choisit et ferme la liste", pg.input_value("#capTitre") == VIS[1] and not pg.is_visible("#capSugg"))
+        check("toucher une série la choisit et ferme la liste", pg.input_value("#capTitre") == tete[1] and not pg.is_visible("#capSugg"))
         pg.click("#capTitre"); pg.wait_for_timeout(200)
         pg.mouse.click(5, 5); pg.wait_for_timeout(250)
         check("toucher ailleurs ferme la liste", not pg.is_visible("#capSugg"))

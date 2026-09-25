@@ -80,7 +80,8 @@ try:
         pg.select_option("#capSerieMode", "seul")
         check("sélecteur « ce chapitre seul » : aucun champ", pg.evaluate("() => document.getElementById('capJusqua').hidden && document.getElementById('capSuite').hidden && document.getElementById('capEntiersL').hidden"))
         pg.select_option("#capSerieMode", "jusqua")
-        pg.fill("#capTitre", "banc serie ui"); pg.fill("#capChap", "296"); pg.fill("#capJusqua", "295")
+        pg.evaluate("() => { $('capTitre').value = 'banc serie ui'; }");   # v2.63.0 : bouton en lecture seule sur telephone
+        pg.fill("#capChap", "296"); pg.fill("#capJusqua", "295")
         pg.click("#btnCapturer"); pg.wait_for_timeout(1000)
         check("« jusqu'au 295 » depuis 296 : alerte", any("plus grand que 296" in d for d in dialogues), dialogues)
         check("… et RIEN n'est envoyé", not envois, envois)
@@ -97,7 +98,8 @@ try:
         k = pg.evaluate("(u) => CAP_TABS.findIndex(t => t.url === u)", url296)
         check("l'onglet jetable est dans la liste", k >= 0, k)
         pg.select_option("#capTab", str(k))
-        pg.fill("#capTitre", "banc serie ui"); pg.fill("#capChap", "296"); pg.fill("#capJusqua", "298")
+        pg.evaluate("() => { $('capTitre').value = 'banc serie ui'; }");   # v2.63.0 : bouton en lecture seule sur telephone
+        pg.fill("#capChap", "296"); pg.fill("#capJusqua", "298")
         pg.click("#btnCapturer"); pg.wait_for_timeout(1500)
         check("la confirmation annonce la série sans x.5", any("jusqu'au chapitre 298 (sans les chapitres intermédiaires)" in d for d in dialogues), dialogues)
         corps = json.loads(envois[0]) if envois else {}

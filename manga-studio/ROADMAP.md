@@ -2620,6 +2620,23 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   parasite après un glissement est ignoré. (3) LECTEUR de narration : le même glissement sur sa barre (⏮ ⏸ ⏭), curseur de
   volume exclu. La VIDÉO (lecteur natif, barre de temps) n'est pas touchée : un glissement y entrerait en conflit.
   Banc `test_retour_visionneuse_ui.py` **24/24**, mutation rouge ; lecteur 13/13, barre 50/50, appui long 18/18, compact 31/31.
+- **25/09 18h00 — v2.63.0 : CHOISIR LE MANGA À LA CAPTURE, fiable sur téléphone + DÉTECTION d'après la page** (retours Quang
+  17h10-17h40 ; maquette `maquette_choix_manga_v1.html` validée 17h13). Constaté dans l'app réelle : (1) la liste sous le champ
+  était cachée par le clavier et se fermait au moindre toucher à côté ; (2) CAUSE du champ qui plongeait derrière le clavier : le
+  calcul des barres « collées en haut » comptait la barre de navigation du BAS (fixe depuis v2.53) → à CHAQUE lettre la page
+  remontait de ~880 px ; (3) le champ déjà rempli : on tapait à la suite du nom proposé ; (4) « cl » trouvait « exclusive ».
+  Livré : sur tactile le champ est un BOUTON → écran de choix plein écran (`choixOuvrir`, réutilisable), sans clavier tant qu'on
+  ne touche pas la recherche, recherche fixée en haut, hauteur = partie visible (`visualViewport`), récentes puis A→Z avec barre
+  de lettres (≥ 40 séries), dessin par paquets de 60 (3 000 séries : recherche < 150 ms), « ➕ Nouvelle série », retour Android
+  = fermer. Classement `rangTitres` (début du titre > début de mot > contenu > faute tolérée ; 1-2 lettres = débuts de mots),
+  aussi dans la liste souris (PC), qui ne recale plus la page pendant la frappe. DÉTECTION (idée Quang 17h40) : titre ET adresse
+  de l'onglet comparés à mes séries (titres alternatifs compris) : correspondance entière → le champ prend le nom EXACT ;
+  partielle → « Détecté sur la page » en tête de liste, mots reconnus en DORÉ ; jamais par-dessus un nom choisi / tapé ; page
+  d'accueil d'un site → champ vide. Contrôle réel (secondaire, vrais onglets) : 4/4 séries reconnues, 2 accueils vides.
+  Banc `test_choix_manga_ui.py` **115/115** (360, 476, 704, 933×700 tactile + 1280 souris), 7 mutations rouges ; adaptés :
+  `test_cap_titres_ui` 46/46 (souris 1280 + 700), `test_lien_ui` 12/12 ; `test_serie_vide_ui` 11/11, barre 50/50, reprendre
+  112/112, appui long 18/18, replier 26/26. ⬜ `test_capture_serie_ui` était DÉJÀ périmé (il cherche `#capSerieMode`, remplacé
+  par les boutons « Combien de chapitres ? ») — déclencheur : la prochaine modification de l'étape 4.
 - **25/09 16h20 — manga-fetch 0.7.3 : deux sites testés pour la SECONDAIRE** (demande Quang 15h19 ; noms et résultats dans sa
   liste de sites, hors dépôt). Le premier passe tel quel. Le second n'avait capturé que 26 pages par chapitre avant l'arrêt :
   (1) son serveur d'images renvoie 403 à tout client hors navigateur, sans CORS → repli sur la capture d'écran de l'élément,

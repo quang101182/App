@@ -46,7 +46,7 @@ with sync_playwright() as p:
     check("titre reconnu dans la bibliothèque", pg.input_value("#capTitre") == "One Punch-Man", pg.input_value("#capTitre"))
     check("aucune capture lancée", "capture" not in (pg.inner_text("#capEtat") or "").lower() or "cours" not in pg.inner_text("#capEtat"), pg.inner_text("#capEtat"))
     # 2. lien colle
-    pg.fill("#capTitre", ""); pg.fill("#capLien", "en.wikipedia.org/wiki/Claymore_(manga)"); pg.click("#btnCapLien")
+    pg.evaluate("() => { $('capTitre').value = ''; }"); pg.fill("#capLien", "en.wikipedia.org/wiki/Claymore_(manga)"); pg.click("#btnCapLien")
     pg.wait_for_function("() => /✅|⚠/.test(document.getElementById('capLienEtat').textContent) && !document.getElementById('capLienEtat').textContent.includes('One-Punch')", timeout=40000)
     check("lien collé (sans https) : ouvert et choisi", pg.inner_text("#capLienEtat").startswith("✅"), pg.inner_text("#capLienEtat")[:90])
     check("titre reconnu : Claymore", pg.input_value("#capTitre") == "Claymore", pg.input_value("#capTitre"))

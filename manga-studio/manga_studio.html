@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.62.1</title>
+<title>Manga Studio v2.63.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -454,6 +454,37 @@ textarea{min-height:70px;resize:vertical;font-size:14px}
 .cap-sugg-i.masq{opacity:.62}
 .cap-sugg-m{display:block;width:100%;margin-top:4px;border:1px dashed var(--line);background:none;color:var(--dim);
   font:inherit;font-size:13px;padding:9px;min-height:38px;border-radius:7px;cursor:pointer}
+/* v2.63.0 (maquette_choix_manga_v1, validee 25/09 17h13) : ECRAN DE CHOIX plein ecran sur telephone / tactile -- le clavier
+   cachait la liste sous le champ, chaque lettre faisait defiler la page. Hauteur = la partie VISIBLE (visualViewport) :
+   clavier ouvert, la liste se raccourcit au-dessus de lui. Recherche fixee en haut : rien ne defile quand on tape. */
+.choix{position:fixed;left:0;right:0;top:var(--choix-top,0px);height:var(--choix-h,100dvh);z-index:60;display:flex;flex-direction:column;
+  background:var(--panel);overscroll-behavior:contain}
+.choix[hidden]{display:none}
+.choix-tete{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);flex:none}
+.choix-tete b{font-size:16px}
+.choix-tete .nf-b{height:34px;min-width:0;font-size:14px}
+.choix>input{margin:10px 12px;height:44px;flex:none;font-size:16px;border-radius:10px}   /* 16 px : pas de zoom auto (iOS) */
+.choix-corps{flex:1;min-height:0;position:relative;display:flex}
+.choix-liste{flex:1;min-width:0;overflow-y:auto;padding:0 8px 8px;overscroll-behavior:contain}
+.choix-liste.lettres-vis{padding-right:26px}
+.choix-g{font-size:11px;color:var(--dim);padding:10px 8px 4px;text-transform:uppercase;letter-spacing:.04em}
+.choix-i{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;min-height:46px;padding:6px 10px;border:0;
+  border-radius:8px;background:none;color:var(--txt);font:inherit;font-size:15px;text-align:left;cursor:pointer}
+.choix-i>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.choix-i small{color:var(--dim);font-size:12px;flex:none}
+.choix-i.sel{background:var(--panel2)}.choix-i.masq{opacity:.62}
+.choix-i.nouv{margin:6px 0;border:1px dashed #2bb3a3;color:#9ff0e3}
+.choix-lettres{position:absolute;right:2px;top:4px;bottom:4px;width:22px;display:flex;flex-direction:column;justify-content:space-between;
+  align-items:center;touch-action:none;user-select:none;-webkit-user-select:none}
+.choix-lettres[hidden]{display:none}
+.choix-lettres span{font-size:10px;font-weight:700;color:#4a9ee8;line-height:1;padding:1px 4px;cursor:pointer}
+.choix-pied{flex:none;padding:6px 12px 10px;border-top:1px solid var(--line)}
+.choix-pied:empty{display:none}
+.choix-pied button{width:100%;min-height:40px;border:1px dashed var(--line);background:none;color:var(--dim);font:inherit;font-size:13px;border-radius:8px}
+.cap-titre-box>input[readonly]{cursor:pointer}
+/* v2.63.0 (idee Quang 17h40) : ce qui a ete DETECTE sur la page, en jaune dore */
+mark.detecte{background:rgba(255,196,60,.2);color:#ffd257;font-weight:700;border-radius:3px;padding:0 1px}
+.choix-g.det,.cap-sugg-t.det{color:#ffd257}
 .serie-item small.serie-genres{color:var(--dim)}
 .serie-item small.ch-plages,.serie-item small.serie-genres{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .serie-item>span{min-width:0}
@@ -1114,7 +1145,7 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
   <div class="hdrin">
     <!-- v2.30.0 (maquette_ensemble_v1, Quang 22h31-22h33) : en permanence le MODE, l'ACTIVITE, le moteur local et la VRAM ;
          les couts et ℹ️ passent dans « ⋯ ». Telephone : 2 lignes (titre + mode + ⋯, puis activite + Local + VRAM). -->
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.62.1</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.63.0</span>
       <button class="mode-pill" id="hdrMode" title="Où tournent la voix et l’effacement du texte : en ligne (payant) ou sur ta carte graphique (0 $). Touche pour changer.">☁ En ligne</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -2066,6 +2097,12 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
   <div class="rep-t">🕘 Reprendre <button class="nf-b nf-ret" id="repFermer">← Fermer</button></div>
   <div class="rep-liste" id="repListe"></div>
 </div>
+<div class="choix" id="choix" hidden role="dialog" aria-labelledby="choixTitre">
+  <div class="choix-tete"><button class="nf-b nf-ret" id="choixFermer">← Fermer</button><b id="choixTitre">Quel manga ?</b></div>
+  <input id="choixRech" type="search" autocomplete="off" enterkeyhint="search" placeholder="🔎 chercher (titre, autre titre, 1 faute tolérée)">
+  <div class="choix-corps"><div class="choix-liste" id="choixListe" role="listbox"></div><div class="choix-lettres" id="choixLettres" hidden></div></div>
+  <div class="choix-pied" id="choixPied"></div>
+</div>
 <!-- v2.53.0 (maquette_navigation_v2, A validee par Quang 25/09 12h22) : retour / precedent / rafraichir / suivant / haut, TOUJOURS
      a portee quand on est descendu ; glisser la barre a droite / a gauche = suivant / precedent, dans le sens des boutons (v2.54.0 ; LIMITE a elle) -->
 <nav class="nav-flot" id="navFlot" hidden aria-label="navigation rapide">
@@ -2148,7 +2185,7 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.62.1";
+const VERSION = "2.63.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -5983,7 +6020,7 @@ $("btnLibBack").onclick = () => ouvrirSerie(null);
 const NF = { ctx: "", x0: null, y0: null, dx: 0, glisse: false };
 function nfOngletActif(){ const b = document.querySelector("nav button[data-tab].sel"); return b ? b.dataset.tab : ""; }
 function nfCouvert(){                                    // un plein ecran / une fenetre ouverte : la barre se retire
-  return ["lecteur", "lightbox", "ask"].some(id => $(id) && !$(id).hidden)
+  return ["lecteur", "lightbox", "ask", "choix"].some(id => $(id) && !$(id).hidden)
     || !!document.querySelector(".vid-lecteur:not([hidden]), .modal:not([hidden]):not(.cache)")
     || ($("pagesSelBarre") && !$("pagesSelBarre").hidden);
 }
@@ -9177,6 +9214,7 @@ async function refreshCapTabs(){
   if (k >= 0) $("capTab").value = String(k);
   if (!$("capSugg").hidden) capSuggRendre();                     // v2.7.2 : plus de <datalist> (toutes les series, en vrac)
   capEnchMaj(); capChipsMaj(); capResumeMaj();                   // v2.17.0 / v2.28.0
+  capAutoTitre();                                                // v2.63.0 : nom detecte d'apres la page
   liensCharger().then(capRepRemplir);                            // v2.26.0
 }
 /* v2.7.2 : CHOIX DU NOM DU MANGA (Quang, 23/09 19h20 : « la liste va s'allonger […] deux categories : ce qui est
@@ -9191,7 +9229,10 @@ function capSuggListes(){
                        || a.title.localeCompare(b.title, "fr", { sensitivity: "base", numeric: true });
   // v2.9.2 (Quang 24/09) : un manga dont le dossier existe est propose MEME sans chapitre -- sinon une lettre de
   // travers fonde un 2e dossier et laisse le 1er (musiques, pochette, tomes) orphelin
-  const l = mesSeries().filter(x => chercherSerie(x, CAP_SUGG_Q).ok).sort(ordre);
+  // v2.63.0 : classement de l'ecran de choix (debut du titre d'abord ; 1-2 lettres = debuts de mots seulement)
+  const l = CAP_SUGG_Q ? mesSeries().map(x => [x, rangTitres(CAP_SUGG_Q, [x.title].concat((x.info && x.info.titres_alt) || []))])
+      .filter(a => a[1] > 0).sort((a, b) => b[1] - a[1] || ordre(a[0], b[0])).map(a => a[0])
+    : mesSeries().sort(ordre);
   return { vis: l.filter(x => !masq.has(x.slug)), cach: l.filter(x => masq.has(x.slug)) };
 }
 function capSuggRendre(){
@@ -9199,15 +9240,20 @@ function capSuggRendre(){
   const voir = CAP_SUGG_MASQ || (!!CAP_SUGG_Q && !vis.length && cach.length > 0);   // seule reponse = une masquee : on la montre
   const it = (x, m) => '<button type="button" class="cap-sugg-i' + (m ? " masq" : "") + '" role="option" data-titre="' + esc(x.title)
     + '">' + esc(x.title) + '<small>' + x.chaps.length + " ch." + (m ? " · masquée" : "") + "</small></button>";
-  let h = vis.length ? '<div class="cap-sugg-t">Mes séries (' + vis.length + ")</div>" + vis.map(x => it(x)).join("")
+  let h = vis.length ? '<div class="cap-sugg-t">Mes séries (' + vis.length + ")</div>" + vis.slice(0, 150).map(x => it(x)).join("")
+      + (vis.length > 150 ? '<div class="cap-sugg-t">… ' + (vis.length - 150) + " autres : tape le début du nom</div>" : "")
                      : '<div class="cap-sugg-t">' + (CAP_SUGG_Q ? "aucune de tes séries — ce nom créera une nouvelle série" : "aucune série") + "</div>";
   if (cach.length) h += voir
     ? '<div class="cap-sugg-t">Masquées (' + cach.length + ")</div>" + cach.map(x => it(x, true)).join("")
       + (CAP_SUGG_MASQ ? '<button type="button" class="cap-sugg-m" data-masq="0">Replier les masquées</button>' : "")
     : '<button type="button" class="cap-sugg-m" data-masq="1">👁 Afficher les masquées (' + cach.length + ")</button>";
+  const det = CAP_SUGG_Q ? [] : capDetecter();                                   // v2.63.0 : detecte, en dore, en tete
+  if (det.length) h = '<div class="cap-sugg-t det">Détecté sur la page</div>' + det.map(d => '<button type="button" class="cap-sugg-i det"'
+    + ' role="option" data-titre="' + esc(d.s.title) + '"><span>' + surligneDetecte(d.s.title, d.mots) + "</span><small>" + d.s.chaps.length
+    + " ch." + (d.alt ? " · via « " + esc(d.titre) + " »" : "") + "</small></button>").join("") + h;
   $("capSugg").innerHTML = h;
 }
-function capSuggOuvrir(tout){
+function capSuggOuvrir(tout, sansDefiler){
   if (tout) CAP_SUGG_Q = "";
   capSuggRendre(); $("capSugg").hidden = false; $("capTitre").setAttribute("aria-expanded", "true");
   // telephone (mesure 360 px) : le champ ne fait que ~165 px (le n° est a cote) -> titres coupes sur 2 lignes. La liste
@@ -9215,13 +9261,17 @@ function capSuggOuvrir(tout){
   const r = $("capTitre").getBoundingClientRect(), W = Math.min(Math.max(r.width, 320), innerWidth - 16);
   Object.assign($("capSugg").style, { width: W + "px", right: "auto", left: Math.min(0, innerWidth - 8 - (r.left + W)) + "px" });
   // la barre d'onglets reste collee en haut : le champ doit rester VISIBLE au-dessus de la liste (vu sur 360 px)
+  // v2.63.0 : seulement les barres collees EN HAUT -- la barre de navigation du BAS (fixe, v2.53) comptait : « collee » valait
+  // ~888 px, la page remontait a chaque lettre et le champ plongeait derriere le clavier (retour Quang 25/09 17h13)
   const collee = Math.max(0, ...[...document.querySelectorAll("header, nav, .topbar")].map(e => {
-    const p = getComputedStyle(e).position; return p === "sticky" || p === "fixed" ? e.getBoundingClientRect().bottom : 0; }));
-  if (r.bottom + Math.min(340, innerHeight * 0.52) > innerHeight || r.top < collee) window.scrollBy({ top: r.top - collee - 12 });
+    const p = getComputedStyle(e).position, r2 = e.getBoundingClientRect();
+    return (p === "sticky" || p === "fixed") && r2.top < innerHeight / 3 ? r2.bottom : 0; }));
+  if (!sansDefiler && (r.bottom + Math.min(340, innerHeight * 0.52) > innerHeight || r.top < collee)) window.scrollBy({ top: r.top - collee - 12 });
 }
 function capSuggFermer(){ $("capSugg").hidden = true; $("capTitre").setAttribute("aria-expanded", "false"); CAP_SUGG_MASQ = false; }
-$("capTitre").addEventListener("focus", () => capSuggOuvrir(true));
-$("capTitre").addEventListener("input", () => { CAP_SUGG_Q = $("capTitre").value.trim(); capSuggOuvrir(false); });
+$("capTitre").addEventListener("focus", () => { if (!tactile()) capSuggOuvrir(true); });            // v2.63.0 : tactile = ecran de choix
+// v2.63.0 : PAS de recalage de la page a chaque lettre (le champ passait sous le clavier) -- seulement a l'ouverture
+$("capTitre").addEventListener("input", () => { CAP_SUGG_Q = $("capTitre").value.trim(); capSuggOuvrir(false, true); });
 $("capTitre").addEventListener("keydown", e => {
   let l = [...$("capSugg").querySelectorAll(".cap-sugg-i")], i = l.findIndex(b => b.classList.contains("sel"));
   if (e.key === "Escape"){ capSuggFermer(); return; }
@@ -9234,17 +9284,206 @@ $("capTitre").addEventListener("keydown", e => {
   } else if (e.key === "Enter" && i >= 0 && !$("capSugg").hidden){ e.preventDefault(); l[i].click(); }
 });
 $("capTitreFl").addEventListener("pointerdown", e => e.preventDefault());       // garder le focus (et le clavier) sur le champ
-$("capTitreFl").onclick = () => { if ($("capSugg").hidden) { capSuggOuvrir(true); $("capTitre").focus(); } else capSuggFermer(); };
+$("capTitreFl").onclick = () => { if (tactile()){ capChoisir().catch(e => log("choix : " + e.message, "e")); return; }
+  if ($("capSugg").hidden) { capSuggOuvrir(true); $("capTitre").focus(); } else capSuggFermer(); };
 $("capSugg").addEventListener("pointerdown", e => e.preventDefault());
 $("capSugg").onclick = e => {
   const m = e.target.closest("[data-masq]");
   if (m){ CAP_SUGG_MASQ = m.dataset.masq === "1"; capSuggRendre(); return; }
   const b = e.target.closest("[data-titre]");
-  if (b){ $("capTitre").value = b.dataset.titre; capSuggFermer(); log("capture : série choisie « " + b.dataset.titre + " »"); }
+  if (b){ $("capTitre").value = b.dataset.titre; CAP_TITRE_AUTO = false; capSuggFermer(); log("capture : série choisie « " + b.dataset.titre + " »"); }
 };
 document.addEventListener("pointerdown", e => { if (!$("capSugg").hidden && !e.target.closest(".cap-titre-box")) capSuggFermer(); });
 $("capTitre").addEventListener("blur", () => setTimeout(() => {
   if (!document.activeElement || !document.activeElement.closest || !document.activeElement.closest(".cap-titre-box")) capSuggFermer(); }, 150));
+
+/* v2.63.0 : DETECTION de la serie d'apres l'onglet choisi (idee Quang 25/09 17h40). Titre de la page ET adresse
+   (« …/the-delinquent-girl/chapter-1 ») compares a MES series (titres alternatifs compris). Correspondance ENTIERE -> le
+   champ prend le nom EXACT de la serie (plus de doublon « the delinquent girl » a cote de « The Delinquent Girl ») ;
+   partielle (autre saison…) -> seulement proposee, mots reconnus en DORE, en tete de la liste. Jamais par-dessus un nom
+   choisi ou tape par Quang (CAP_TITRE_AUTO). */
+let CAP_TITRE_AUTO = true;
+function capPageTexte(t){
+  let u = ""; try { u = decodeURIComponent(new URL(t.url).pathname); } catch {}
+  return { mots: " " + normRech((t.title || "") + " " + u.replace(/[-_/.+]+/g, " ")) + " ",
+           compact: slugTitre(t.title || "") + " " + slugTitre(u.replace(/[/]+/g, " ")) };
+}
+function capDetecter(){
+  const t = CAP_TABS[+$("capTab").value]; if (!t) return [];
+  const p = capPageTexte(t), masq = new Set(BIB.masquees || []);
+  return mesSeries().map(s => {
+    let best = null;
+    [s.title].concat((s.info && s.info.titres_alt) || []).forEach((ti, k) => {
+      const tout = normRech(ti).split(" ").filter(Boolean); if (!tout.length) return;
+      const sig = tout.filter(m => m.length >= 3), mots = sig.length ? sig : tout;
+      const c = slugTitre(ti), plein = c.length >= 4 && p.compact.includes(c);
+      const vus = plein ? tout : mots.filter(m => p.mots.includes(" " + m + " "));
+      const part = plein ? 1 : vus.length / mots.length - 0.001;          // le « plein » gagne toujours
+      if (!best || part > best.part || (part === best.part && !k)) best = { part, titre: ti, alt: k > 0, mots: new Set(vus) };
+    });
+    return best && best.part >= 0.5 && best.mots.size ? Object.assign(best, { s, masq: masq.has(s.slug) }) : null;
+  }).filter(Boolean).sort((a, b) => b.part - a.part || b.mots.size - a.mots.size).slice(0, 5);
+}
+function capAutoTitre(){
+  const t = CAP_TABS[+$("capTab").value]; if (!t) return;
+  if (!CAP_TITRE_AUTO && $("capTitre").value.trim()) return;             // Quang a choisi / tape : on n'y touche plus
+  const plein = capDetecter().find(x => x.part === 1);
+  // sans serie reconnue, le nom devine n'est propose que sur une page de CHAPITRE (un numero) : la page d'accueil d'un site
+  // donnait « DivaScans » comme nom de manga (constate sur les vrais onglets de la secondaire) -> champ vide
+  const g = devinerTitre(t.title || ""), num = g.num || (/(?:chap(?:ter|itre)?|ch|episode|ep)[-_ ]?\d/i.test(t.url) ? "1" : "");
+  const v = plein ? plein.s.title : num ? g.titre : "";
+  if (v !== $("capTitre").value){ $("capTitre").value = v; CAP_TITRE_AUTO = true; capResumeMaj(); if (!v) return;
+                                        log("capture : nom " + (plein ? "détecté « " + v + " » (série existante)" : "proposé d'après la page « " + v + " »")); }
+}
+// un mot reconnu (normalise) -> surligne en dore dans le titre affiche
+function surligneDetecte(titre, mots){
+  return titre.split(/(\s+)/).map(tok => {
+    const n = normRech(tok).split(" ").filter(Boolean);
+    return n.length && n.some(m => mots.has(m)) ? '<mark class="detecte">' + esc(tok) + "</mark>" : esc(tok);
+  }).join("");
+}
+$("capTab").addEventListener("change", capAutoTitre);
+$("capTitre").addEventListener("input", e => { if (e.isTrusted) CAP_TITRE_AUTO = false; });
+
+/* ============ v2.63.0 : ECRAN DE CHOIX (maquette_choix_manga_v1, validee par Quang 25/09 17h13) ============
+   Sur telephone / ecran tactile, la liste sous le champ etait cachee par le clavier, se fermait au moindre toucher a cote,
+   et chaque lettre tapee faisait defiler la page (le champ passait derriere le clavier). -> un ecran PLEIN ECRAN, sans
+   clavier tant qu'on ne touche pas la recherche ; recherche fixee en haut (rien ne defile quand on tape) ; hauteur = la
+   partie visible (le clavier la raccourcit). Liste enorme : dessinee par paquets de 60 au fil du defilement, barre de
+   lettres des 40 elements. Reutilisable : choixOuvrir({ titre, items, courant, libre }) -> Promise(item | {libre} | null). */
+const tactile = () => matchMedia("(pointer:coarse)").matches || innerWidth <= 640;
+// classement (0 = pas trouve) : le titre COMMENCE par la recherche > chaque mot tape commence un mot du titre > contenu
+// > faute toleree ; un autre titre (alternatif) passe apres le titre principal. 1-2 lettres : seulement des debuts de mots.
+function rangTitres(q, titres){
+  const qn = normRech(q); if (!qn) return 1;
+  const mots = qn.split(" ").filter(Boolean), court = qn.replace(/ /g, "").length < 3;
+  let best = 0;
+  titres.forEach((t, k) => {
+    const tn = normRech(t), tw = tn.split(" "), debut = m => tw.some(w => w.startsWith(m));
+    const sc = tn.startsWith(qn) ? 100 : mots.every(debut) ? 80 : court ? 0 : tn.includes(qn) ? 60
+             : mots.every(m => debut(m) || motTrouve(m, tn)) ? 30 : 0;
+    if (sc) best = Math.max(best, sc - (k ? 10 : 0));
+  });
+  return best;
+}
+const CH = { opts: null, lignes: [], rendu: 0, fin: null, masq: false, histo: false };
+const CH_PAQUET = 60;
+const choixLettre = t => { const c = normRech(t).charAt(0).toUpperCase(); return /[A-Z]/.test(c) ? c : "#"; };
+const choixAZ = (a, b) => a.t.localeCompare(b.t, "fr", { sensitivity: "base", numeric: true });
+function choixConstruire(){
+  const o = CH.opts, q = $("choixRech").value.trim(), L = [];
+  const tous = o.items.filter(x => !x.masq).sort(choixAZ), masq = o.items.filter(x => x.masq).sort(choixAZ);
+  if (!q){
+    if ((o.detecte || []).length){ L.push({ g: "Détecté sur la page", det: 1 });
+      o.detecte.forEach(d => L.push({ it: d.it, hl: d.mots, via: d.alt ? d.titre : "" })); }
+    const rec = tous.filter(x => x.recent).sort((a, b) => b.recent - a.recent).slice(0, 8);
+    if (rec.length){ L.push({ g: "Récemment ouvertes" }); rec.forEach(it => L.push({ it })); }
+    L.push({ g: tous.length ? "Toutes de A à Z (" + tous.length + ")" : "Aucune série pour l'instant" });
+    tous.forEach(it => L.push({ it, az: choixLettre(it.t) }));
+    if (CH.masq && masq.length){ L.push({ g: "Masquées (" + masq.length + ")" }); masq.forEach(it => L.push({ it })); }
+  } else {
+    const r = o.items.map(it => [it, rangTitres(q, [it.t].concat(it.alt || []))]).filter(a => a[1] > 0)
+      .sort((a, b) => b[1] - a[1] || (a[0].masq - b[0].masq) || (b[0].recent || 0) - (a[0].recent || 0) || choixAZ(a[0], b[0]));
+    const exact = o.items.some(x => normRech(x.t) === normRech(q));
+    L.push({ g: r.length ? r.length + " résultat" + (r.length > 1 ? "s" : "") : "aucune de tes séries" });
+    if (o.libre && !exact && !r.length) L.push({ nouv: q });
+    r.forEach(a => L.push({ it: a[0] }));
+    if (o.libre && !exact && r.length) L.push({ nouv: q });
+  }
+  CH.lignes = L; CH.rendu = 0; $("choixListe").innerHTML = ""; $("choixListe").scrollTop = 0;
+  choixRendre(CH_PAQUET);
+  const lettres = !q && tous.length >= 40 ? [...new Set(tous.map(x => choixLettre(x.t)))] : [];
+  $("choixLettres").hidden = !lettres.length; $("choixListe").classList.toggle("lettres-vis", !!lettres.length);
+  $("choixLettres").innerHTML = lettres.map(c => '<span data-lettre="' + c + '">' + c + "</span>").join("");
+  $("choixPied").innerHTML = !q && masq.length ? '<button type="button" id="choixMasq">' + (CH.masq ? "Replier les masquées"
+    : "👁 Afficher les masquées (" + masq.length + ")") + "</button>" : "";
+}
+function choixRendre(jusqua){
+  const n = Math.min(CH.lignes.length, jusqua); if (n <= CH.rendu) return;
+  const cour = normRech(CH.opts.courant || "");
+  $("choixListe").insertAdjacentHTML("beforeend", CH.lignes.slice(CH.rendu, n).map((l, k) => { const i = CH.rendu + k;
+    if (l.g) return '<div class="choix-g' + (l.det ? " det" : "") + '">' + esc(l.g) + "</div>";
+    if (l.nouv !== undefined) return '<button type="button" class="choix-i nouv" data-i="' + i + '"><span>➕ Nouvelle série : « ' + esc(l.nouv) + " »</span></button>";
+    const sel = cour && normRech(l.it.t) === cour;
+    return '<button type="button" class="choix-i' + (sel ? " sel" : "") + (l.it.masq ? " masq" : "") + '" role="option" data-i="' + i + '"'
+      + (l.az ? ' data-az="' + l.az + '"' : "") + "><span>" + (l.hl ? surligneDetecte(l.it.t, l.hl) : esc(l.it.t))
+      + (l.via ? ' <small>via « ' + esc(l.via) + " »</small>" : "") + "</span><small>" + esc(l.it.sub || "")
+      + (l.it.masq ? " · masquée" : "") + (sel ? " ✓" : "") + "</small></button>";
+  }).join(""));
+  CH.rendu = n;
+}
+function choixVV(){                                          // la partie VISIBLE de l'ecran (clavier deduit)
+  const v = window.visualViewport, e = $("choix");
+  e.style.setProperty("--choix-h", Math.round(v ? v.height : innerHeight) + "px");
+  e.style.setProperty("--choix-top", Math.round(v ? v.offsetTop : 0) + "px");
+}
+function choixOuvrir(opts){
+  if (CH.fin) choixFermer(null);
+  CH.opts = opts; CH.masq = false;
+  $("choixTitre").textContent = opts.titre || "Choisir"; $("choixRech").value = "";          // la recherche part VIDE
+  $("choixRech").placeholder = opts.aide || "🔎 chercher";
+  choixConstruire(); choixVV(); $("choix").hidden = false; nfMaj();
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();  // aucun clavier a l'ouverture
+  try { history.pushState({ choix: 1 }, ""); CH.histo = true; } catch {}                    // retour Android = fermer
+  return new Promise(res => { CH.fin = res; });
+}
+function choixFermer(r){
+  if ($("choix").hidden && !CH.fin) return;
+  $("choix").hidden = true; $("choixRech").blur();
+  const fin = CH.fin; CH.fin = null;
+  if (CH.histo){ CH.histo = false; try { history.back(); } catch {} }
+  nfMaj(); if (fin) fin(r);
+}
+$("choixFermer").onclick = () => choixFermer(null);
+addEventListener("popstate", () => { if (!$("choix").hidden){ CH.histo = false; choixFermer(null); } });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !$("choix").hidden){ e.preventDefault(); e.stopPropagation(); choixFermer(null); }
+}, true);
+if (window.visualViewport){ visualViewport.addEventListener("resize", () => { if (!$("choix").hidden) choixVV(); });
+                            visualViewport.addEventListener("scroll", () => { if (!$("choix").hidden) choixVV(); }); }
+addEventListener("resize", () => { if (!$("choix").hidden) choixVV(); });
+$("choixRech").addEventListener("input", choixConstruire);
+$("choixRech").addEventListener("keydown", e => {             // Entree : le 1er resultat (ou la nouvelle serie)
+  if (e.key !== "Enter") return; e.preventDefault();
+  const b = $("choixListe").querySelector(".choix-i:not(.nouv)") || $("choixListe").querySelector(".choix-i.nouv"); if (b) b.click();
+});
+$("choixListe").addEventListener("scroll", () => {
+  const l = $("choixListe"); if (l.scrollTop + l.clientHeight > l.scrollHeight - 500) choixRendre(CH.rendu + CH_PAQUET);
+}, { passive: true });
+$("choixListe").addEventListener("touchmove", () => { if (document.activeElement === $("choixRech")) $("choixRech").blur(); }, { passive: true });
+$("choixListe").addEventListener("click", e => {
+  const b = e.target.closest("[data-i]"); if (!b) return;
+  const l = CH.lignes[+b.dataset.i]; if (!l) return;
+  choixFermer(l.nouv !== undefined ? { libre: l.nouv } : l.it);
+});
+$("choixPied").addEventListener("click", e => { if (e.target.closest("#choixMasq")){ CH.masq = !CH.masq; choixConstruire(); } });
+function choixSauter(c){                                     // barre de lettres : au 1er element de cette lettre (A-Z)
+  const i = CH.lignes.findIndex(l => l.az === c); if (i < 0) return;
+  choixRendre(i + CH_PAQUET);
+  const el = $("choixListe").querySelector('[data-i="' + i + '"]'); if (el) $("choixListe").scrollTop = el.offsetTop - 4;
+}
+(function choixLettresGeste(){
+  const bar = $("choixLettres"); let actif = false;
+  const viser = e => { const t = document.elementFromPoint(e.clientX, e.clientY); if (t && t.dataset && t.dataset.lettre) choixSauter(t.dataset.lettre); };
+  bar.addEventListener("pointerdown", e => { actif = true; e.preventDefault(); try { bar.setPointerCapture(e.pointerId); } catch {} viser(e); });
+  bar.addEventListener("pointermove", e => { if (actif) viser(e); });
+  ["pointerup", "pointercancel"].forEach(ev => bar.addEventListener(ev, () => { actif = false; }));
+})();
+// le champ « Quel manga ? » de la capture : sur tactile, un BOUTON qui ouvre l'ecran de choix (plus de clavier sur le champ)
+async function capChoisir(){
+  const masq = new Set(BIB.masquees || []), ouv = BIB.ouvertes || {};
+  const items = mesSeries().map(s => ({ val: s.title, t: s.title, sub: s.chaps.length + " ch.", alt: (s.info && s.info.titres_alt) || [],
+                                        recent: ouv[s.slug] || 0, masq: masq.has(s.slug) }));
+  const det = capDetecter().map(d => ({ it: items.find(x => x.val === d.s.title), mots: d.mots, alt: d.alt, titre: d.titre })).filter(d => d.it);
+  const r = await choixOuvrir({ titre: "Quel manga ?", items, courant: $("capTitre").value, libre: true, detecte: det,
+                                aide: "🔎 chercher (titre, autre titre, 1 faute tolérée)" });
+  if (!r) return;
+  $("capTitre").value = r.libre !== undefined ? r.libre : r.val; CAP_TITRE_AUTO = false;
+  log("capture : série choisie « " + $("capTitre").value + " »" + (r.libre !== undefined ? " (nouvelle)" : ""));
+}
+function capTitreMode(){ const t = tactile(); $("capTitre").readOnly = t; $("capTitre").inputMode = t ? "none" : ""; }
+capTitreMode(); addEventListener("resize", capTitreMode);
+$("capTitre").addEventListener("click", () => { if (tactile()) capChoisir().catch(e => log("choix : " + e.message, "e")); });
 
 $("btnCapTabs").onclick = () => refreshCapTabs().catch(e => log("capture : " + e.message, "e"));
 $("btnCapEdge").onclick = async () => {
