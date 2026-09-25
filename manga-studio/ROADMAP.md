@@ -2529,6 +2529,15 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   rien. Bancs : `test_capture_bilan.py` **16/16** hors ligne (8 fins de capture), `test_capture_alerte_ui.py` **36/36**
   (1280 + 360, routes interceptées, mutation « vérification ignorée » rouge) ; vrai bandeau vérifié dans la secondaire.
   🟠 (constaté v2.50.0) une relance du SERVEUR pendant une capture tue le veilleur → pas de bilan pour celle-là.
+- **25/09 12h00 — v2.51.0 + reglages 1.3.0 : le FLOU de la secondaire devient OPTIONNEL** (Quang 11h19 : « le rendre plutôt
+  optionnel, en persistance, dans les trois petits points »). Interrupteur « 🌫 Flouter hors de la fenêtre » dans ⋯ (secondaire
+  seulement ; la principale n'a pas de flou), réglage `flou_discretion` côté SERVEUR par application (vaut sur tous les
+  appareils), ACTIF par défaut (comportement d'avant). Proxy : `proxy-patch/patch_flou.py` + `.diff` (la route ne transmettait
+  que mode + relais). ⚠ **Incident payé pendant ce chantier** : le gestionnaire `$("hdrFlou").onchange` placé AVANT
+  `const $` (ligne 2427) → zone morte → TOUT le script mort, les DEUX applications inertes ~5 min (≈ 11h55-12h00) ;
+  `node --check` ne le voit pas (erreur d'exécution, pas de syntaxe) — c'est le banc réel qui l'a attrapé. Banc
+  `test_flou_option_ui.py` **28/28** (1280 + 360, clic réel, persistance au rechargement, valeur du serveur restaurée),
+  mutation rouge ; relais 51/51, alerte capture 36/36, relais UI verts.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche

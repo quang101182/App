@@ -10,12 +10,13 @@ L'analyse des pages et le recit restent en ligne dans les deux modes (analyse lo
 """
 import json, os, sys
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 FICHIER = os.environ.get("MANGA_REGLAGES") or os.path.join(SRC, "_reglages.json")
-DEFAUT = {"mode": "cloud", "relais_moderation": False}   # v1.2.0 : relais auto vers l'autre moteur en ligne
+DEFAUT = {"mode": "cloud", "relais_moderation": False,   # v1.2.0 : relais auto vers l'autre moteur en ligne
+          "flou_discretion": True}                       # v1.3.0 : flou de la secondaire hors focus (Quang 25/09 : optionnel)
 
 
 def _brut():
@@ -27,6 +28,7 @@ def _brut():
     if r["mode"] not in ("cloud", "pc"):
         r["mode"] = "cloud"
     r["relais_moderation"] = r.get("relais_moderation") is True
+    r["flou_discretion"] = r.get("flou_discretion") is not False       # v1.3.0 : absent = OUI (comportement d'avant)
     return r
 
 
@@ -50,6 +52,8 @@ def ecrire(**kw):
         raise ValueError("mode inconnu")
     if not isinstance(r.get("relais_moderation"), bool):
         raise ValueError("relais_moderation : vrai ou faux")
+    if not isinstance(r.get("flou_discretion"), bool):
+        raise ValueError("flou_discretion : vrai ou faux")
     tmp = FICHIER + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(r, f, ensure_ascii=False)
