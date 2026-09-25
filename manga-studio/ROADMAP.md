@@ -2511,7 +2511,7 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   22/22 + 13/13, moteur éteint 23/23. Non retenus : tolérance aux fautes < 4 lettres (voulu), liste de page de la Planche
   tronquée à 360 px (liste déroulante). ⏸ **Question à Quang** : dans la secondaire, fermer 2 menus par Échap en < 0,6 s
   déclenche la PANIQUE (mesuré par le QA) — geste peu probable à la main ; faut-il qu'un Échap qui ferme un menu ne compte
-  pas ? (plus sûr contre les faux départs, mais une panique menu ouvert demanderait 3 appuis).
+  pas ? (plus sûr contre les faux départs, mais une panique menu ouvert demanderait 3 appuis). → ✅ **Tranché par Quang (25/09 11h54) : on le laisse TEL QUEL** (« ça ne m'a jamais dérangé ») — ne pas reproposer.
 - **25/09 11h34 — v2.50.0 : une capture ARRÊTÉE AVANT SON BUT se signale, et se REPREND en un clic** (Quang 11h19-11h24 :
   « 40 chapitres programmés, arrêté à 22 […] à aucun moment je n'ai eu de notification » ; puis « un bouton pour reprendre
   exactement là où ça s'est arrêté » ; puis « une erreur peut arriver même au milieu d'un chapitre »). Journal lu d'abord :
