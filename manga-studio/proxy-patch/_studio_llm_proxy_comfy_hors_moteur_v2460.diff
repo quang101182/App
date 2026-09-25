@@ -1,0 +1,52 @@
+diff --git a/C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260925-v2460 b/C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py
+index b81d124..6cfcc61 100644
+--- a/C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260925-v2460
++++ b/C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py
+@@ -10132,6 +10132,33 @@ class H(BaseHTTPRequestHandler):
+         self.send_header("Access-Control-Allow-Origin", "*")
+         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-GS-Vue")
++    def serve_comfy_file(self, q):
++        """Manga Studio v2.46.0 : un fichier de ComfyUI (input / output / temp) lu SUR LE DISQUE, moteur allume ou non.
++        Confinement : la cible normalisee doit retomber SOUS le dossier du type (couvre les .. et les chemins absolus)."""
++        typ = (q.get("type") or ["output"])[0]
++        racines = {"input": COMFY_INPUT_DIR, "output": OUT_ROOT, "temp": os.path.join(os.path.dirname(OUT_ROOT), "temp")}
++        if typ not in racines:
++            self._json(400, {"error": "type inconnu"}); return
++        root = os.path.normpath(racines[typ])
++        nom = (q.get("filename") or [""])[0].replace("\\", "/")
++        sous = (q.get("subfolder") or [""])[0].replace("\\", "/").strip("/")
++        if not nom or "/" in nom:
++            self._json(400, {"error": "nom invalide"}); return
++        target = os.path.normpath(os.path.join(root, sous, nom))
++        if not target.startswith(root + os.sep):
++            self._json(403, {"error": "chemin hors du dossier"}); return
++        if not os.path.isfile(target):
++            self._json(404, {"error": "not found"}); return
++        ctype = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
++                 ".gif": "image/gif"}.get(os.path.splitext(target)[1].lower())
++        if not ctype:
++            self._json(415, {"error": "type de fichier non servi"}); return
++        with open(target, "rb") as f:
++            data = f.read()
++        self.send_response(200); self._cors()
++        self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(data)))
++        self.send_header("Cache-Control", "no-cache"); self.end_headers()
++        self.wfile.write(data)
+     def serve_output_file(self, rel):
+         """v5.69 — Sert un fichier de output/ SANS passer par un moteur ComfyUI.
+ 
+@@ -10741,6 +10768,13 @@ class H(BaseHTTPRequestHandler):
+             self._json(200, manga_alertes())
+         elif self.path.split("?", 1)[0] == "/manga/vram":                  # Manga Studio v2.13.0 : jauge ventilee
+             self._json(200, manga_vram())
++        elif self.path.split("?", 1)[0] == "/manga/comfy_file":            # Manga Studio v2.46.0 : disque, sans moteur
++            self.serve_comfy_file(parse_qs(urlparse(self.path).query))
++        elif self.path.split("?", 1)[0] == "/manga/comfy_up":              # Manga Studio v2.46.0 : sonde sans 502
++            try:
++                self._json(200, {"up": True, "stats": _get_json(COMFY + "/system_stats", timeout=3)})
++            except Exception:
++                self._json(200, {"up": False})
+         elif self.path.split("?", 1)[0] == "/manga/gpu":                   # Manga Studio v2.10.0
+             self._json(200, manga_gpu())
+         elif self.path.split("?", 1)[0] == "/manga/musiques_app":          # Manga Studio v2.9.0
