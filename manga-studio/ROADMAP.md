@@ -2442,7 +2442,7 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   repos par sa tâche. App : images par la route disque, sonde sans 502, listes LoRA/checkpoints chargées à l'allumage.
   Mesuré 1 min chapitre ouvert : 10 erreurs → 0. Banc `test_moteur_eteint.py` 23/23 (1280 + 360 px, 10 références
   affichées, 7 évasions de dossier refusées), mutation rouge ; moteur allumé vérifié à la main (8 ckpt, 173 LoRA, 0 erreur). Déclencheur : prochaine passe sur le bloc Narration d'un chapitre.
-- **25/09 00h30 — site DivaScans ajouté à la SECONDAIRE** (Quang 00h10) — manga-fetch **0.7.2** + app **v2.40.0** :
+- **25/09 00h30 — un site ajouté à la SECONDAIRE (nom hors dépôt)** (Quang 00h10) — manga-fetch **0.7.2** + app **v2.40.0** :
   adresses « chapter/N » (barre oblique) reconnues ; la page ne liste PAS les autres chapitres, seul un `<button>`
   « NEXT Ch. N » (sans href) mène au suivant → nouveau recours `_suivant_par_bouton` : on ne touche qu'un bouton qui
   ANNONCE un numéro, on clique, puis on VÉRIFIE que l'arrivée porte ce numéro (adresse ou titre) ; intermédiaires sautés

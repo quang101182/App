@@ -336,7 +336,7 @@ def enchainement_possible(url: str):
     if re.match(r"(https?://[^?#]+?/)(vol-\d+(?:-(?:chapitre|chapter|ch)-\d+(?:-\d+)?)?)/?(?:[?#].*)?$", url, re.I):
         return True, "volumes « vol-N »"
     if re.match(r"(https?://[^?#]+?/)(chapter|chapitre|ch)[-_/](\d+(?:[.-]\d+)?)/?(?:[?#].*)?$", url, re.I):
-        return True, "adresses « chapter-N »"          # v0.7.2 : aussi « chapter/N » (divascans.org)
+        return True, "adresses « chapter-N »"          # v0.7.2 : aussi « chapter/N » (site de la secondaire, 25/09)
     return False, ""
 
 
@@ -405,7 +405,7 @@ def _suivant_par_page(page, url_chapitre: str, courant: str, jusqua, entiers: bo
 
 
 def _suivant_par_bouton(page, avant: str, courant: str, jusqua, entiers: bool = False):
-    """v0.7.2 (divascans.org, 25/09) : un BOUTON (ou lien sans adresse) « NEXT Ch. 2 » / « Suivant chap. 2 ». On ne le
+    """v0.7.2 (un site de la secondaire, 25/09) : un BOUTON (ou lien sans adresse) « NEXT Ch. 2 » / « Suivant chap. 2 ». On ne le
     touche que s'il ANNONCE un numero ; on clique, on attend une autre adresse, et on VERIFIE que l'arrivee porte ce
     numero (adresse ou titre). Chapitres intermediaires (2.5) sautes si « entiers ». Aucun repere : None (le dire)."""
     for _ in range(5):                                  # au plus 5 intermediaires sautes d'affilee
@@ -557,7 +557,7 @@ def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: boo
             return r if r is not None else (None, "aucun lien vers d'autres chapitres sur la page (site non pris en charge)")
         n, url, raison = _choisir_suivant(dispo, courant, jusqua, entiers)
         if n is None:
-            # v0.7.2 (divascans, ch.2) : les « liens de la page » peuvent n'etre que le chapitre COURANT (lien
+            # v0.7.2 (site de la secondaire, ch.2) : les « liens de la page » peuvent n'etre que le chapitre COURANT (lien
             # d'accessibilite « #main-content ») -> avant de conclure, le bouton « suivant » de la page
             r = _suivant_par_page(page, url_chapitre, courant, jusqua, entiers)
             return r if r is not None and r[0] is not None else (None, raison + " (liens de la page)")
