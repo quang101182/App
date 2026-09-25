@@ -2653,9 +2653,14 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   capture « ⏹ … à ta demande », jamais « ❌ échec ». Proxy : `patch_arret.py` + `.diff` (route `/manga/fetch_arret`), deux
   applications relancées au repos. Banc RÉEL `test_arret_capture.py` **14/14** (vraie capture WEBTOON ep. 1-3 sur la
   principale : après / maintenant / annuler + écran ; nettoyage complet), mutation (drapeau ignoré) 9 KO. Voisins : vue croisée
-  25/25, barre 50/50, reprendre 112/112, activité 53/64 (= score antérieur). ⬜ NARRATION / VIDÉO / LOT : pas encore —
-  voir ci-dessous.
-- ⬜ **À FAIRE — bouton PAUSE / ARRÊT d'un traitement** (question Quang 25/09 21h05 : « utile ? fonctionnel sans risque de bug ni
+  25/25, barre 50/50, reprendre 112/112, activité 53/64 (= score antérieur).
+- **25/09 23h35 — v2.66.0 : « ✖ Arrêter » une NARRATION / TRADUCTION / un LOT** depuis le détail de l'activité = l'interruption
+  PROPRE qui existait pour la bascule ☁/🖥 (v2.12.0, `/manga/interrompre`), mais SANS changer de mode : confirmation qui liste
+  ce qui s'arrête (tout ensemble), bilan exact (fini / coupé + analyse gardée / pas commencé), « ▶ Reprendre » du bon lot.
+  Banc réel `test_arret_traitement_ui.py` **11/11** (faux lot à vrais processus, tout restauré), mutation (mode changé) rouge ;
+  bascule d'origine `test_interruption_ui` 18/18. ⬜ VIDÉO : pas de bouton (hors de l'interruption, et une vidéo en cours
+  n'a pas de reprise) — déclencheur : si Quang en a besoin.
+- ~~À FAIRE — bouton PAUSE / ARRÊT d'un traitement~~ → ✅ v2.65.0 (captures) + v2.66.0 (narration / traduction / lot) (question Quang 25/09 21h05 : « utile ? fonctionnel sans risque de bug ni
   de régression ? » — à traiter SEUL, pas en même temps qu'autre chose). Constat du code (21h10) : seules l'annulation d'une
   vidéo en attente (`/manga/video_annule`) et l'arrêt du moteur local existent ; rien pour une capture, une narration, un lot.
   Analyse : utile surtout pour une capture en SÉRIE (jusqu'à ~2 h) et un lot. Le risque n'est pas le bouton, c'est l'ÉTAT

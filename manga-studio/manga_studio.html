@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.65.0</title>
+<title>Manga Studio v2.66.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -1154,7 +1154,7 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
   <div class="hdrin">
     <!-- v2.30.0 (maquette_ensemble_v1, Quang 22h31-22h33) : en permanence le MODE, l'ACTIVITE, le moteur local et la VRAM ;
          les couts et ℹ️ passent dans « ⋯ ». Telephone : 2 lignes (titre + mode + ⋯, puis activite + Local + VRAM). -->
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.65.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.66.0</span>
       <button class="mode-pill" id="hdrMode" title="Où tournent la voix et l’effacement du texte : en ligne (payant) ou sur ta carte graphique (0 $). Touche pour changer.">☁ En ligne</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -2194,7 +2194,7 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.65.0";
+const VERSION = "2.66.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -7359,7 +7359,7 @@ async function modeInterrompre(vers){
   try { b = await api("/manga/interrompre", {}); if (b.error) throw new Error(b.error); }
   catch (e){ log("interruption : " + e.message, "e"); alert("Interruption impossible : " + e.message + "\nLe mode n'a PAS changé."); return; }
   log("interruption : " + JSON.stringify(b), b.non_arretes && b.non_arretes.length ? "w" : "");
-  await modeBasculer(vers);
+  if (vers) await modeBasculer(vers);                                  // v2.66.0 : « ✖ Arrêter » = sans changer de mode
   const L = [], lot = b.lot, rep = [];
   if (lot){
     L.push("⚙ Lot " + (lot.serie || "") + " :");
@@ -7523,6 +7523,10 @@ function actRendre(){
 // v2.65.0 : les boutons d'arret d'une capture. En SERIE : « ⏹ Apres ce chapitre » (sur : lu ENTRE deux chapitres) ou, une fois
 // demande, une puce annulable ; toujours « ✖ Maintenant » (confirmation). Un seul chapitre : « ✖ Arreter ».
 function actArretHtml(x){
+  // v2.66.0 : narration / traduction / lot -> « ✖ Arreter » = l'INTERRUPTION PROPRE qui existe (v2.12.0, bascule de mode),
+  // sans changer de mode : bilan exact (fini / coupe / pas commence) et « ▶ Reprendre ». Les videos ne sont pas concernees.
+  if (MODE_SENSIBLE.includes(x.type) && x.etape !== "attente")
+    return '<div class="act-arret"><button class="ko" data-arret="interrompre">✖ Arrêter</button></div>';
   if (x.type !== "capture") return "";
   const serie = !!x.total;
   return '<div class="act-arret">'
@@ -7532,6 +7536,17 @@ function actArretHtml(x){
     + '<button class="ko" data-arret="maintenant">✖ ' + (serie ? "Maintenant" : "Arrêter") + "</button></div>";
 }
 async function actArreter(quand){
+  if (quand === "interrompre"){                                                                    // v2.66.0
+    let act = [];
+    try { act = ((await api("/manga/activite")).items || []).filter(x => MODE_SENSIBLE.includes(x.type) && x.etape !== "attente"); } catch {}
+    const lot = act.find(x => x.type === "lot"); if (lot) act = act.filter(x => x.type === "lot" || x.d !== lot.d);
+    if (!act.length){ toast("plus rien à arrêter"); actRafraichir(); return; }
+    if (!confirm("✖ Arrêter ?\n\n" + act.map(modeLigneAct).join("\n") + "\n\nArrêt propre : ce qui est fini est gardé, ce qui a été payé "
+        + "n'est pas perdu (l'analyse déjà faite est reprise sans la repayer). Tu auras le bilan et un bouton « Reprendre »."
+        + (act.length > 1 ? "\n\n⚠ Tout ce qui est listé s'arrête ensemble." : ""))) return;
+    await modeInterrompre(null);
+    return;
+  }
   const x = ACT.items.find(i => i.type === "capture"); if (!x) return;
   if (quand === "maintenant"){
     const faits = x.total ? (x.fait || 0) : 0;
