@@ -29,7 +29,7 @@ import moderation as mod             # v2.6.0 : refus reconnus, alertes persista
 import depenses as dep               # v2.6.0 : registre des depenses en ajout seul
 from datetime import datetime
 
-VERSION = "2.10.0"
+VERSION = "2.11.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -93,13 +93,12 @@ def appel_vision(engine, system, content, max_tokens, reflexion=None):
         # v1.75 : delai proportionnel au budget. A 32 000 tokens, K3 raisonne plus de 240 s : 5 timeouts
         # d'affilee ont tue un run le 21/09 (22h15). ~40 tokens/s mesures -> 1 s par tranche de 40 tokens.
         r = post(path, body, timeout=max(240, max_tokens // 40))
-        motif = mod.refus_openai(r)
+        motif = mod.refus_openai(r) or mod.refus_texte(((r.get("choices") or [{}])[0].get("message") or {}).get("content"))
         if motif:
-            raise mod.Refus(engine, motif)
+            e_ = mod.Refus(engine, motif)
+            e_.usage = r.get("usage") or {}       # v2.11.0 : un refus est FACTURE (image lue) -> le cout le compte
+            raise e_
         texte = r["choices"][0]["message"].get("content")
-        motif = mod.refus_texte(texte)
-        if motif:
-            raise mod.Refus(engine, motif)
         return texte, (r.get("usage") or {})
     parts = []
     for c in content:
@@ -113,9 +112,14 @@ def appel_vision(engine, system, content, max_tokens, reflexion=None):
                     "generationConfig": dict({"maxOutputTokens": max_tokens, "responseMimeType": "application/json"},
                                              **({"thinkingConfig": {"thinkingLevel": niv}} if (niv := REFLEXION_GEMINI if reflexion is None else reflexion) else {}))})
     motif = mod.refus_gemini(r)                    # v2.6.0 : avant, lu comme « JSON illisible » -> 3 essais PAYES
-    if motif:
-        raise mod.Refus("gemini", motif)
     um = r.get("usageMetadata") or {}
+    if motif:
+        e_ = mod.Refus("gemini", motif)
+        # v2.11.0 (Quang 25/09 : « le calcul des couts reste juste ») : Gemini FACTURE la lecture d'une demande refusee ;
+        # avant, ces jetons etaient perdus avec l'exception -> les refus n'etaient jamais comptes.
+        e_.usage = {"prompt_tokens": um.get("promptTokenCount", 0),
+                    "completion_tokens": um.get("candidatesTokenCount", 0) + um.get("thoughtsTokenCount", 0)}
+        raise e_
     texte = "".join(p.get("text", "") for p in ((r.get("candidates") or [{}])[0].get("content") or {}).get("parts", []))
     return texte, {"prompt_tokens": um.get("promptTokenCount", 0),
                    "completion_tokens": um.get("candidatesTokenCount", 0) + um.get("thoughtsTokenCount", 0)}
@@ -520,12 +524,17 @@ def _fiche_texte(fiche):
 
 
 RELAIS = False          # v2.10.0 : relais auto de moderation (reglages, lu dans main) -- jamais en reprise de moderation
-RELAIS_VERS = {"gemini": "kimi", "kimi": "gemini", "pixtral": "gemini"}
+# v2.11.0 (Quang 25/09 09h59) : PIXTRAL en DERNIER recours -- il n'a pas refuse la page explicite (mesure juillet), mais il
+# comprend moins bien : il ne sert QU'AU relais (retire des choix de moteur de l'app). 0 $ (offre gratuite Mistral).
+RELAIS_CHAINE = {"gemini": ["kimi", "pixtral"], "kimi": ["gemini", "pixtral"], "pixtral": ["gemini", "kimi"]}
 
 
 def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
     path, model = ENGINES[engine]
     relais_pour = {}        # v2.10.0 : page -> moteur de relais (la page refusee revient en tete de file, MEME contexte)
+    essais = {}             # v2.11.0 : page -> moteurs deja essayes (la chaine avance, jamais deux fois le meme)
+    refus = {}              # v2.11.0 : TRACE -- page -> [{moteur, motif, t}] (qui a refuse, pourquoi, quand)
+    maintenant = lambda: datetime.now().isoformat(timespec="seconds")
     fiche, resume, sortie, journal_fiche = {}, "", [], []
     for nom, v in (noms or {}).items():        # v2.2 : noms FIGES par la passe des noms (votes)
         desc = ", ".join(x for x in (v["age"], v["cheveux"], v.get("teint") and "teint " + v["teint"], v.get("tenue")) if x)
@@ -589,14 +598,22 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
                             break
                     log("  lot %s : JSON illisible (%s), nouvel essai" % (nums, e))
         except mod.Refus as e:
+            u_ = getattr(e, "usage", None) or {}                                   # v2.11.0 : le refus est facture
+            stats["vision_tokens_in"] += u_.get("prompt_tokens", 0)
+            stats["vision_tokens_out"] += u_.get("completion_tokens", 0)
+            stats["cout_vision"] += cout(model_eng, u_)
             if len(lot) > 1:
                 log("  lot %s REFUSE par la moderation (%s) -> repris page par page" % (nums, e.motif[:80]))
                 journal("moderation", etape="analyse", pages=nums, moteur=e.moteur, motif=e.motif[:200])
                 file_lots[0:0] = [[q] for q in lot]
                 continue
             q = lot[0]
-            autre = RELAIS_VERS.get(eng)
-            if RELAIS and autre and q["num"] not in relais_pour:                    # v2.10.0 : relais automatique
+            refus.setdefault(q["num"], []).append({"moteur": e.moteur, "motif": e.motif[:200], "t": maintenant()})
+            deja = essais.setdefault(q["num"], [])
+            if eng not in deja:
+                deja.append(eng)
+            autre = next((m for m in RELAIS_CHAINE.get(engine, []) if m not in deja and m != engine), None)
+            if RELAIS and autre:                                                        # v2.10.0 / v2.11.0 : relais automatique
                 relais_pour[q["num"]] = autre
                 log("  page %d REFUSEE par %s (%s) -> RELAIS automatique vers %s" % (q["num"], e.moteur, e.motif[:80], autre))
                 journal("moderation_relais", etape="analyse", pages=nums, moteur=e.moteur, vers=autre, motif=e.motif[:200])
@@ -607,7 +624,9 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
             journal("moderation", etape="analyse", pages=nums, moteur=e.moteur, motif=e.motif[:200])
             stats.setdefault("moderation", []).append({"page": q["num"], "etape": "analyse", "moteur": e.moteur, "motif": e.motif})
             sortie.append({"page": q["num"], "file": q["file"], "type": "moderation", "faits": "", "presents": [],
-                           "narration": "", "moderation": e.motif})
+                           "narration": "", "moderation": e.motif,
+                           "trace": {"refuse_par": refus.get(q["num"], []), "lu_par": None,
+                                     "comment": "mise de côté (alerte)", "t": maintenant()}})
             faites += 1
             progres("vision", faites, len(pages))
             continue
@@ -634,6 +653,9 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
                 journal_fiche.append({"lot": nums, "page_absente": p["num"]})
             sortie.append({"page": p["num"], "file": p["file"], "type": x.get("type", "histoire"),
                            "faits": x.get("faits", ""), "presents": x.get("presents") or [], "narration": ""})
+            if p["num"] in refus:                                               # v2.11.0 : trace du relais reussi
+                sortie[-1]["trace"] = {"refuse_par": refus[p["num"]], "lu_par": eng, "comment": "relais automatique",
+                                       "t": maintenant()}
         resume = j.get("resume") or resume
         dt = time.time() - t
         stats["vision_s"] += dt
@@ -1195,20 +1217,25 @@ VOISINES = ("(Page NON analysee : refusee par la moderation. Ecris seulement une
             "precedente et la suivante, sans inventer d'evenement ni decrire de contenu.)")
 
 
-def reprendre_moderation(chap_dir, vis, mode, stats, noms):
+def reprendre_moderation(chap_dir, vis, mode, stats, noms, moteur_initial="?"):
     """v2.7.0 (feuille de route 4-decies) : SEULES les pages refusees sont reprises, sur choix de Quang dans l'app."""
     cible = [p for p in vis if p.get("type") == "moderation"]
     log("  reprise moderation (%s) : pages %s" % (mode, [p["page"] for p in cible]))
     if not cible:
         return vis
+    def tracer(p, lu_par):                                                      # v2.11.0 : la trace se complete
+        t = dict(p.get("trace") or {"refuse_par": [{"moteur": moteur_initial, "motif": (p.get("moderation") or "")[:200], "t": None}]})
+        t.update(lu_par=lu_par, comment="reprise choisie dans « À traiter »", t=datetime.now().isoformat(timespec="seconds"))
+        return t
     if mode == "voisines":
         for p in cible:
-            p.update(type="histoire", faits=VOISINES)
+            p.update(type="histoire", faits=VOISINES, trace=tracer(p, "transition neutre (pages voisines)"))
         return vis
     stats.pop("moderation", None)
     nouv, _r, _p = etape_vision_v2(chap_dir, [{"num": p["page"], "file": p["file"]} for p in cible], mode, 1, stats, noms)
     par = {x["page"]: x for x in nouv}
-    return [dict(p, **{k: par[p["page"]][k] for k in ("type", "faits", "presents") if k in par[p["page"]]})
+    return [dict(p, **{k: par[p["page"]][k] for k in ("type", "faits", "presents") if k in par[p["page"]]},
+                 trace=tracer(p, mode if par[p["page"]].get("type") != "moderation" else None))
             if p["page"] in par else p for p in vis]
 
 
@@ -1314,7 +1341,7 @@ def main():
             stats[k] = prev["stats"][k]
         stats["cout_vision_recopie"] = stats.get("cout_vision", 0)          # v2.7.0 : pour le registre des depenses
         if a.reprendre_moderation:
-            vis = reprendre_moderation(chap_dir, vis, a.reprendre_moderation, stats, noms)   # (RELAIS reste faux ici)
+            vis = reprendre_moderation(chap_dir, vis, a.reprendre_moderation, stats, noms, a.engine)   # (RELAIS reste faux ici)
     else:
         if a.prompt == "v2":
             serie = fiche_serie(chap_dir) if a.serie else None

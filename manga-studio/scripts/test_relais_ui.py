@@ -31,3 +31,17 @@ with sync_playwright() as p:
     b.close()
 for n,v in ok: print(("[OK] " if v else "[KO] ")+n)
 print("serveur apres :", srv().get("relais_moderation"))
+
+# v2.44.0 : Pixtral hors des choix de moteur ; la TRACE d'une page s'affiche dans le lecteur
+with sync_playwright() as p:
+    b = p.chromium.launch(channel="msedge", headless=True); pg = b.new_page()
+    pg.goto("http://127.0.0.1:" + PORT + "/manga#k=" + KEY); pg.wait_for_timeout(3000)
+    opts = pg.evaluate("() => [...$('narrEngine').options].map(o => o.value)")
+    print(("[OK] " if "pixtral" not in opts else "[KO] ") + "Pixtral retiré des choix de moteur " + str(opts))
+    t1 = pg.evaluate("() => traceTxt({ trace: { lu_par: 'kimi', refuse_par: [{ moteur: 'gemini' }], comment: 'relais automatique' } })")
+    t2 = pg.evaluate("() => traceTxt({ trace: { lu_par: null, refuse_par: [{ moteur: 'gemini' }, { moteur: 'kimi' }, { moteur: 'pixtral' }], comment: 'mise de côté (alerte)' } })")
+    t3 = pg.evaluate("() => traceTxt({})")
+    print(("[OK] " if "lue par Kimi" in t1 and "Gemini" in t1 else "[KO] ") + "trace relais : " + t1)
+    print(("[OK] " if "non lue" in t2 and "Pixtral" in t2 and "alerte" in t2 else "[KO] ") + "trace mise de côté : " + t2)
+    print(("[OK] " if t3 == "" else "[KO] ") + "page sans trace : rien d'affiché")
+    b.close()

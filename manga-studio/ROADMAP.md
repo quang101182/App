@@ -2459,6 +2459,16 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   facturé au tarif du moteur qui RÉPOND (`cout(model_eng)`), vérifié au chiffre près + mutation rouge
   (`test_relais_moderation.py` 18/18 hors ligne) ; interrupteur `test_relais_ui.py` 14/14 (écrasé à 0 px sur téléphone
   au 1er jet, vu par Quang, corrigé). ⚠ Non couvert : un refus au RÉCIT (DeepSeek) n'est pas relayé.
+- **25/09 10h15 — v2.44.0 + narrate_chapter 2.11.0 : PIXTRAL en dernier recours + TRAÇABILITÉ + coût des refus**
+  (Quang 09h59-10h00). Chaîne de relais gemini → kimi → pixtral (kimi → gemini → pixtral) ; Pixtral RETIRÉ des choix de
+  moteur (« il ne servira qu'à ça »). Chaque page touchée porte dans `narration.json` un champ `trace`
+  {refuse_par: [{moteur, motif, t}], lu_par, comment : relais automatique | mise de côté (alerte) | reprise choisie
+  dans « À traiter »} ; le lecteur l'affiche sur la page (« 🔁 lue par Kimi (refusée par Gemini) »). **Coût** : un REFUS
+  était perdu avec l'exception (jetons jamais comptés, défaut antérieur au relais) → désormais facturé au tarif du
+  moteur qui refuse, d'après les jetons qu'il déclare ; Pixtral = 0 $ (offre gratuite Mistral). Banc
+  `test_relais_moderation.py` 25/25 hors ligne (mutation du coût des refus → rouge), `test_relais_ui.py` + affichage.
+  🟠 (constaté v2.44.0) refus aux étapes RÉCIT / NOMS / TRADUCTION : ni relayés ni comptés — même traitement à porter
+  si Quang en rencontre (déclencheur : 1re alerte « récit » ou « traduction »).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
   `MangaStudioInstance2` : `/manga/liens` répond (✕ des sites ACTIF), banc `test_page_principale.py 8192` 55/55.
   1. **En-tête d'une série** (capture Quang : « ça fait un peu fouiller ») : « ← Toutes les séries » d'une couleur
