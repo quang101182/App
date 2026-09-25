@@ -2582,6 +2582,13 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   site », code 3 (réussite) — le ch. 40 n'est PAS PARU. Le bandeau l'aurait annoncé en « capture arrêtée » orange : c'est une
   INFORMATION → bleue, sans ❌ ni reprise (« le site s'arrête au ch. 39 — tout ce qui existe a été capturé »). Secondaire relancée
   à 13h01 par le veilleur (fin de capture détectée) → avancement en chapitres actif. Banc `test_capture_alerte_ui.py` **47/47**.
+- **25/09 13h15 — v2.57.0 : APPUI LONG sur la bulle verte = « ▶ Tout traiter » prêt** (idée Quang 13h01). Dans un chapitre :
+  CE chapitre coché ; dans une série : « pas terminés » (jamais « toute la série », qui referait / repaierait le fait) ; ailleurs :
+  un message. Le panneau s'ouvre et se centre sur « ▶ Lancer » — RIEN ne part sans ce clic (estimation visible). **Pas de
+  toucher simple** (Quang 13h09 : « pour éviter les appuis par erreur, le bouton retour est juste à côté »). 0,6 s immobile
+  (> 10 px = glissement, annulé), la bulle se remplit pendant l'appui, vibration au déclenchement, pas de menu de sélection
+  Android. Banc `test_appui_long_ui.py` **18/18** (1280 souris + 360 tactile, TOUT POST bloqué et compté : 0), mutation rouge ;
+  barre 46/46.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
