@@ -2450,6 +2450,15 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   la création de narration, les vitesses n'apparaissent pas »). Champ « Vitesse d'écoute » ☁ / 🖥 = les MÊMES mémoires
   que le lecteur et les vidéos (un changement ici vaut partout, le lecteur ouvert suit) ; celle du mode actuel
   (pastille ☁/🖥 de l'en-tête) est encadrée. Banc `test_vitesses_video.py` 22/22 (1280 + 360 px).
+- **25/09 10h00 — v2.43.0 : RELAIS AUTOMATIQUE de modération, sur interrupteur persistant** (Quang 09h50) —
+  reglages 1.2.0 (`relais_moderation`, par application, défaut NON), narrate_chapter 2.10.0, patch serveur
+  `proxy-patch/patch_relais.py` (la route ne transmettait QUE `mode` → « mode inconnu » vu par Quang ; principale relancée
+  par `relance-proxy.ps1`, secondaire à relancer après sa narration en cours). Une page refusée à l'ANALYSE est reprise
+  DANS LA MÊME BOUCLE par l'autre moteur en ligne (gemini ↔ kimi, pixtral → gemini) avec le MÊME contexte ; refusée par
+  les deux → alerte comme avant ; jamais en « reprise de modération », jamais le local. COÛT : l'appel de relais est
+  facturé au tarif du moteur qui RÉPOND (`cout(model_eng)`), vérifié au chiffre près + mutation rouge
+  (`test_relais_moderation.py` 18/18 hors ligne) ; interrupteur `test_relais_ui.py` 14/14 (écrasé à 0 px sur téléphone
+  au 1er jet, vu par Quang, corrigé). ⚠ Non couvert : un refus au RÉCIT (DeepSeek) n'est pas relayé.
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
   `MangaStudioInstance2` : `/manga/liens` répond (✕ des sites ACTIF), banc `test_page_principale.py 8192` 55/55.
   1. **En-tête d'une série** (capture Quang : « ça fait un peu fouiller ») : « ← Toutes les séries » d'une couleur

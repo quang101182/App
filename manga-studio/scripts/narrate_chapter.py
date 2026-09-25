@@ -29,7 +29,7 @@ import moderation as mod             # v2.6.0 : refus reconnus, alertes persista
 import depenses as dep               # v2.6.0 : registre des depenses en ajout seul
 from datetime import datetime
 
-VERSION = "2.9.0"
+VERSION = "2.10.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -519,8 +519,13 @@ def _fiche_texte(fiche):
     return json.dumps([dict(id=k, **v) for k, v in fiche.items()], ensure_ascii=False)
 
 
+RELAIS = False          # v2.10.0 : relais auto de moderation (reglages, lu dans main) -- jamais en reprise de moderation
+RELAIS_VERS = {"gemini": "kimi", "kimi": "gemini", "pixtral": "gemini"}
+
+
 def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
     path, model = ENGINES[engine]
+    relais_pour = {}        # v2.10.0 : page -> moteur de relais (la page refusee revient en tete de file, MEME contexte)
     fiche, resume, sortie, journal_fiche = {}, "", [], []
     for nom, v in (noms or {}).items():        # v2.2 : noms FIGES par la passe des noms (votes)
         desc = ", ".join(x for x in (v["age"], v["cheveux"], v.get("teint") and "teint " + v["teint"], v.get("tenue")) if x)
@@ -534,6 +539,8 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
     while file_lots:                          # v2.6.0 : une FILE -- un lot refuse y revient page par page
         lot = file_lots.pop(0)
         nums = [p["num"] for p in lot]
+        eng = relais_pour.get(nums[0], engine) if len(lot) == 1 else engine         # v2.10.0
+        model_eng = ENGINES[eng][1]
         content = [{"type": "text", "text": ("NOMS ETABLIS (verifies par vote, ne les change jamais, n'en ajoute "
                                              "aucun ; identifie ces personnages par leur AGE et leurs cheveux"
                                              + (", leur TEINT et leur TENUE ; un personnage qui differe sur un seul de ces "
@@ -566,10 +573,10 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
         # -> le chapitre entier etait abandonne. (Chaque essai rate est FACTURE : ~0,12 $ de raisonnement.)
         try:
             for essai, budget in enumerate((8000, 16000, 32000)):
-                texte, u = appel_vision(engine, SYS_VISION_V2, content, budget)
+                texte, u = appel_vision(eng, SYS_VISION_V2, content, budget)
                 stats["vision_tokens_in"] += u.get("prompt_tokens", 0)
                 stats["vision_tokens_out"] += u.get("completion_tokens", 0)
-                stats["cout_vision"] += cout(model, u)
+                stats["cout_vision"] += cout(model_eng, u)
                 try:
                     j = parse_json(texte)
                     break
@@ -588,6 +595,14 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
                 file_lots[0:0] = [[q] for q in lot]
                 continue
             q = lot[0]
+            autre = RELAIS_VERS.get(eng)
+            if RELAIS and autre and q["num"] not in relais_pour:                    # v2.10.0 : relais automatique
+                relais_pour[q["num"]] = autre
+                log("  page %d REFUSEE par %s (%s) -> RELAIS automatique vers %s" % (q["num"], e.moteur, e.motif[:80], autre))
+                journal("moderation_relais", etape="analyse", pages=nums, moteur=e.moteur, vers=autre, motif=e.motif[:200])
+                stats.setdefault("relais", []).append({"page": q["num"], "de": e.moteur, "vers": autre})
+                file_lots.insert(0, [q])
+                continue
             log("  page %d REFUSEE par la moderation de %s (%s) -> mise de cote, le chapitre continue" % (q["num"], e.moteur, e.motif[:80]))
             journal("moderation", etape="analyse", pages=nums, moteur=e.moteur, motif=e.motif[:200])
             stats.setdefault("moderation", []).append({"page": q["num"], "etape": "analyse", "moteur": e.moteur, "motif": e.motif})
@@ -624,8 +639,8 @@ def etape_vision_v2(chap_dir, pages, engine, batch, stats, noms=None):
         stats["vision_s"] += dt
         faites += len(lot)
         progres("vision", faites, len(pages))
-        journal("vision_lot_v2", engine=engine, pages=nums, s=round(dt, 1), fiche=len(fiche))
-        log("  vision v2 %s pages %s : %.1fs (fiche : %s)" % (engine, nums, dt,
+        journal("vision_lot_v2", engine=eng, pages=nums, s=round(dt, 1), fiche=len(fiche))
+        log("  vision v2 %s pages %s : %.1fs (fiche : %s)" % (eng + (" (relais)" if eng != engine else ""), nums, dt,
             ", ".join("%s=%s" % (k, v["nom"] or "?") for k, v in fiche.items())))
     persos = [{"id": k, "nom": v["nom"] or "", "qui": v["description"], "preuve": v["preuve"]} for k, v in fiche.items()]
     stats["fiche_journal"] = journal_fiche
@@ -1220,7 +1235,7 @@ def _sorties_utf8():
 
 
 def main():
-    global SECRET, PROGRESS, STATS
+    global SECRET, PROGRESS, STATS, RELAIS
     _sorties_utf8()
     ap = argparse.ArgumentParser()
     ap.add_argument("chapitre", help="chemin relatif sous sources/, ex. claymore/ch_1")
@@ -1242,6 +1257,7 @@ def main():
                          " contre 3/3/3 sans ; Raki et Zaki se ressemblent, l'exemple visuel les confond)")
     ap.add_argument("--verif", action="store_true", help="v2 : verification des attributions nommees (mesuree SANS gain le 21/09, en option)")
     ap.add_argument("--reuse-vision", default="", help="reprend l'etape vision d'un run existant (tag)")
+    ap.add_argument("--sans-relais", action="store_true", help="v2.10.0 : ignorer le relais automatique de moderation")
     ap.add_argument("--reprendre-moderation", choices=["", "gemini", "kimi", "local", "voisines"], default="",
                     help="v2.7.0 (avec --reuse-vision) : ne relit QUE les pages refusees par la moderation -- avec un autre "
                          "moteur, en local (carte graphique), ou « voisines » (recit de transition depuis les pages voisines)")
@@ -1250,6 +1266,13 @@ def main():
     ap.add_argument("--serie", action="store_true",
                     help="v1.74 (etape 2) : reprend les noms prouves dans les AUTRES chapitres de la serie")
     a = ap.parse_args()
+    try:                                                    # v2.10.0 : relais auto (reglage global de CETTE application)
+        import reglages
+        RELAIS = bool(reglages.relais_moderation()) and not a.reprendre_moderation and not a.sans_relais
+    except Exception:
+        RELAIS = False
+    if RELAIS:
+        log("relais automatique de moderation : ACTIF (page refusee -> l'autre moteur en ligne)")
     global NOMS_VERSION, LANGUE
     NOMS_VERSION = a.noms
     LANGUE = a.langue
@@ -1291,7 +1314,7 @@ def main():
             stats[k] = prev["stats"][k]
         stats["cout_vision_recopie"] = stats.get("cout_vision", 0)          # v2.7.0 : pour le registre des depenses
         if a.reprendre_moderation:
-            vis = reprendre_moderation(chap_dir, vis, a.reprendre_moderation, stats, noms)
+            vis = reprendre_moderation(chap_dir, vis, a.reprendre_moderation, stats, noms)   # (RELAIS reste faux ici)
     else:
         if a.prompt == "v2":
             serie = fiche_serie(chap_dir) if a.serie else None

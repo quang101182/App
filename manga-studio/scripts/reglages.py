@@ -10,12 +10,12 @@ L'analyse des pages et le recit restent en ligne dans les deux modes (analyse lo
 """
 import json, os, sys
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 FICHIER = os.environ.get("MANGA_REGLAGES") or os.path.join(SRC, "_reglages.json")
-DEFAUT = {"mode": "cloud"}
+DEFAUT = {"mode": "cloud", "relais_moderation": False}   # v1.2.0 : relais auto vers l'autre moteur en ligne
 
 
 def _brut():
@@ -26,6 +26,7 @@ def _brut():
         r = dict(DEFAUT)
     if r["mode"] not in ("cloud", "pc"):
         r["mode"] = "cloud"
+    r["relais_moderation"] = r.get("relais_moderation") is True
     return r
 
 
@@ -47,6 +48,8 @@ def ecrire(**kw):
     r.update({k: v for k, v in kw.items() if k in DEFAUT})
     if r["mode"] not in ("cloud", "pc"):
         raise ValueError("mode inconnu")
+    if not isinstance(r.get("relais_moderation"), bool):
+        raise ValueError("relais_moderation : vrai ou faux")
     tmp = FICHIER + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(r, f, ensure_ascii=False)
@@ -56,3 +59,8 @@ def ecrire(**kw):
 
 def sur_pc():
     return _brut()["mode"] == "pc"
+
+
+def relais_moderation():
+    """v1.2.0 : une page refusee par la moderation est-elle reprise TOUTE SEULE par l'autre moteur en ligne ?"""
+    return _brut()["relais_moderation"]
