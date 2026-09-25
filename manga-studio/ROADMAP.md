@@ -2634,6 +2634,8 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   Banc `test_reprendre_ui.py` **112/112** aux 5 largeurs (360, 476, 704, 933×700, 1280), mutations rouges (chapitre d'avant,
   fusion) ; serveur vérifié en réel puis fichier de Quang restauré à l'octet ; barre 50/50 (banc adapté : `#nfRep` exclu),
   appui long 18/18, replier 26/26, compact 31/31, visionneuse 24/24. Les bancs n'écrivent rien (`navigator.webdriver`).
+  **v2.62.1** : « sur le Fold » — Chrome Android RÉDUIT l'user-agent (« Android 10; K »), le modèle exact (SM-F971B) est lu par
+  `navigator.userAgentData.getHighEntropyValues` (contexte sécurisé seulement ; sinon « téléphone »). Banc 112/112.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
