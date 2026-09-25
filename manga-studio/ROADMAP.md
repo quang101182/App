@@ -2480,7 +2480,7 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   `test_relais_moderation.py` 25/25 hors ligne (mutation du coût des refus → rouge), `test_relais_ui.py` + affichage.
   ~~🟠 (constaté v2.44.0) refus aux étapes RÉCIT / NOMS / TRADUCTION : ni relayés ni comptés — même traitement à porter
   si Quang en rencontre (déclencheur : 1re alerte « récit » ou « traduction »).~~ → ✅ couvert par **v2.47.0 +
-  narrate_chapter 2.12.0 + traduire_chapitre 2.0.0** (25/09 11h15, carte blanche Quang 10h19) : même interrupteur,
+  narrate_chapter 2.12.0 + traduire_chapitre 2.0.0** (25/09 10h50, carte blanche Quang 10h19) : même interrupteur,
   mêmes règles qu'à l'analyse. NOMS : gemini → kimi (budget 16 000, K3 raisonne) → pixtral. RÉCIT (texte seul, même
   consigne, même contexte) : la page est d'abord ISOLÉE par DeepSeek (coupes du lot), puis kimi → gemini ; un refus EN
   TOUTES LETTRES (réponse 200 « I'm sorry… ») est désormais reconnu comme refus (avant : « JSON illisible »).
@@ -2494,7 +2494,7 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   lecteur, 1280 + 360 px, mutation rouge) ; non-régression moderation 21/21, recit_lots 16/16, latin 11/11, hors_zones
   5/5, frein 6/6, sans_cjk, complement_bulles verts. Passage RÉEL court (Claymore ch.1, analyse reprise, p. 5-6, sans
   voix) : 2 pages, 0,0006 $ — rangé dans `sources/_corbeille/essai-v2120-20260925/`.
-- **25/09 11h40 — v2.48.0 : les BANCS ne dérangent plus les données de Quang** (carte blanche, passe « bancs périmés »).
+- **25/09 11h03 — v2.48.0 : les BANCS ne dérangent plus les données de Quang** (carte blanche, passe « bancs périmés »).
   (1) Un navigateur piloté (`navigator.webdriver`, Playwright) n'écrit plus « ouverte » dans `_bibliotheque.json` : les
   bancs réordonnaient le tri « récemment ouverte » (constaté : Claymore et OPM datés 10h54 par un banc — leurs dates
   d'avant sont PERDUES, irrécupérables). Mesuré : `ouvertes` identique avant/après 2 bancs ; mutation (garde retirée) →
@@ -2512,7 +2512,7 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   tronquée à 360 px (liste déroulante). ⏸ **Question à Quang** : dans la secondaire, fermer 2 menus par Échap en < 0,6 s
   déclenche la PANIQUE (mesuré par le QA) — geste peu probable à la main ; faut-il qu'un Échap qui ferme un menu ne compte
   pas ? (plus sûr contre les faux départs, mais une panique menu ouvert demanderait 3 appuis).
-- **25/09 11h50 — v2.50.0 : une capture ARRÊTÉE AVANT SON BUT se signale, et se REPREND en un clic** (Quang 11h19-11h24 :
+- **25/09 11h34 — v2.50.0 : une capture ARRÊTÉE AVANT SON BUT se signale, et se REPREND en un clic** (Quang 11h19-11h24 :
   « 40 chapitres programmés, arrêté à 22 […] à aucun moment je n'ai eu de notification » ; puis « un bouton pour reprendre
   exactement là où ça s'est arrêté » ; puis « une erreur peut arriver même au milieu d'un chapitre »). Journal lu d'abord :
   à 02h57 (secondaire) l'adresse du ch. 23 portait le jeton du contrôle Cloudflare (`__cf_chl_rt_tk`) → 1 page capturée
@@ -2529,16 +2529,16 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   rien. Bancs : `test_capture_bilan.py` **16/16** hors ligne (8 fins de capture), `test_capture_alerte_ui.py` **36/36**
   (1280 + 360, routes interceptées, mutation « vérification ignorée » rouge) ; vrai bandeau vérifié dans la secondaire.
   🟠 (constaté v2.50.0) une relance du SERVEUR pendant une capture tue le veilleur → pas de bilan pour celle-là.
-- **25/09 12h00 — v2.51.0 + reglages 1.3.0 : le FLOU de la secondaire devient OPTIONNEL** (Quang 11h19 : « le rendre plutôt
+- **25/09 11h40 — v2.51.0 + reglages 1.3.0 : le FLOU de la secondaire devient OPTIONNEL** (Quang 11h19 : « le rendre plutôt
   optionnel, en persistance, dans les trois petits points »). Interrupteur « 🌫 Flouter hors de la fenêtre » dans ⋯ (secondaire
   seulement ; la principale n'a pas de flou), réglage `flou_discretion` côté SERVEUR par application (vaut sur tous les
   appareils), ACTIF par défaut (comportement d'avant). Proxy : `proxy-patch/patch_flou.py` + `.diff` (la route ne transmettait
   que mode + relais). ⚠ **Incident payé pendant ce chantier** : le gestionnaire `$("hdrFlou").onchange` placé AVANT
-  `const $` (ligne 2427) → zone morte → TOUT le script mort, les DEUX applications inertes ~5 min (≈ 11h55-12h00) ;
+  `const $` (ligne 2427) → zone morte → TOUT le script mort, les DEUX applications inertes quelques minutes (≈ 11h36-11h39) ;
   `node --check` ne le voit pas (erreur d'exécution, pas de syntaxe) — c'est le banc réel qui l'a attrapé. Banc
   `test_flou_option_ui.py` **28/28** (1280 + 360, clic réel, persistance au rechargement, valeur du serveur restaurée),
   mutation rouge ; relais 51/51, alerte capture 36/36, relais UI verts.
-- **25/09 12h10 — v2.52.0 : à la REPRISE, la fenêtre de capture se range et se dimensionne SEULE** (Quang 11h38 : « par
+- **25/09 11h42 — v2.52.0 : à la REPRISE, la fenêtre de capture se range et se dimensionne SEULE** (Quang 11h38 : « par
   sécurité, redimensionnée à la taille sûre et surtout rangée sur le côté. Automatiquement, c'est le seul moment où ça doit
   être automatique »). « ▶ Reprendre » enchaîne `fenetre_ranger` (place retenue) puis `fenetre_taille` (juste assez, sans
   déplacer) — plus de question « taille sûre ? » ; fenêtre restée trop petite → reprise bloquée avec message. Le bouton
