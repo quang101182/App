@@ -63,6 +63,9 @@ with sync_playwright() as p:
         y0 = pg.evaluate("() => scrollY")
         pg.click("#chapAllerNarr"); pg.wait_for_timeout(900)
         check("raccourci Narration : descend jusqu'au bloc", pg.evaluate("() => scrollY") > y0 + 50, (y0, pg.evaluate("() => scrollY")))
+        if w < 400:   # v2.45.0 : Moteur de lecture et Voix ne se partagent plus une ligne (« Kimi K3 — le pl », « Charon — »)
+            me, vo = (pg.eval_on_selector(x, "e => { const r = e.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.width)]; }") for x in ("#narrEngine", "#narrVoice"))
+            check("Narration 360 px : moteur et voix sur deux lignes, lisibles", me[0] != vo[0] and me[1] >= 250 and vo[1] >= 220, (me, vo))
         pg.evaluate("() => scrollTo(0, 0)"); pg.wait_for_timeout(200)
         # selection de pages
         check("barre de sélection cachée hors sélection", not vis(pg, "#pagesSelBarre"))
