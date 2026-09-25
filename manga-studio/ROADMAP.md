@@ -2620,6 +2620,9 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   parasite après un glissement est ignoré. (3) LECTEUR de narration : le même glissement sur sa barre (⏮ ⏸ ⏭), curseur de
   volume exclu. La VIDÉO (lecteur natif, barre de temps) n'est pas touchée : un glissement y entrerait en conflit.
   Banc `test_retour_visionneuse_ui.py` **24/24**, mutation rouge ; lecteur 13/13, barre 50/50, appui long 18/18, compact 31/31.
+- ⬜ **PROCHAINE SESSION — « ▶ Reprendre » + historique de lecture** (idée Quang 25/09 14h37, décisions 14h41 : page retenue en
+  silence, historique COMMUN PC + téléphone côté serveur, séparé principale / secondaire). Maquette `maquette_reprendre_v1.html`.
+  Tout le détail (où brancher, pièges, méthode) : **`HANDOFF-reprendre.md`** (autosuffisant). Déclencheur : la prochaine session.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
