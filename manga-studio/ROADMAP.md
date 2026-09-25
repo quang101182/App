@@ -2834,6 +2834,62 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
 diff → `newline=""`) ; toute relance du proxy par `relance-proxy.ps1 -Qui manga-studio` (jamais Stop-Process) ; un script
 qui lit un secret au démarrage doit être relancé après rotation.
 
+## 4-quindecies. FEUILLE DE ROUTE — « JUSQU'AU DERNIER PARU » + CHAPITRES DÉJÀ PRÉSENTS *(25/09/2026 23h38-23h44, demandes Quang : « trace une feuille de route bien détaillée et suis-la […] ne te disperse pas »)*
+
+**Demandes (Quang, 25/09)** : (a) 23h38 — un bouton « jusqu'au bout » au lieu de taper le dernier n° ; « final » induit en
+erreur (série pas finie). (b) 23h42 — « une vraie sécurité pour que le script ne reste pas bloqué, que l'on ne spamme pas la
+fenêtre et le site » ; plafond de 50 levé SEULEMENT avec cette sécurité ; décisions déléguées (plafond, sites partiels).
+(c) 23h43 — demander 1 → 10 en ayant déjà 2-5 : sauter ce qui est là, compléter le reste, « sans recommencer le travail ».
+Maquette : `maquette_dernier_paru_v1.html` (v1, **à valider par Quang avant tout code**).
+
+### Constat (lu dans le code, 25/09 23h40 — re-vérifier avant de coder)
+- Le site décide déjà si l'on enchaîne (`capEnchSite`, v2.17/v2.18) : la nouvelle puce suit la même règle, rien à inventer.
+- Fin de site (« aucun chapitre après ») et « série terminée » (marque Final, 0.7.5) : déjà reconnues par manga-fetch.
+- Plafond : `limite = 50 if jusqua is not None else suite` (`manga_fetch.py` boucle série) ; aucune décision écrite derrière
+  (borne de prudence v0.4, relevée le 24/09 18h49). Taper 9999 aujourd'hui = faux message « le ch. 9999 n'est pas encore paru ».
+- Déjà présent : en série, `un_chapitre` saute un chapitre au manifeste présent (`return 0`, aucune image), un chapitre à
+  moitié (sans manifeste) est refait. **Trou 1** : si le 1ᵉʳ chapitre existe, l'app ne propose que « le remplacer ? » — non =
+  toute la série annulée. **Trou 2** : le bilan compte les sautés dans « faits ». Le saut attend quand même le lecteur (≤ 90 s).
+- Le proxy dérive total, « objectif tenu » et reprise de `jusqua` (`_studio_llm_proxy.py` ~8857, ~9873, ~9909, ~9970) :
+  le nouveau mode le traverse → patch proxy obligatoire.
+
+### Décisions (déléguées par Quang 23h42, prises par Claude)
+- Nom : **« Jusqu'au dernier paru »** (vrai que la série soit finie ou non).
+- Plafond 50 → **supprimé pour ce mode**, remplacé par les sécurités ci-dessous + un **filet de 300** chapitres par lancement.
+  Les modes « jusqu'au ch. » et « + N » gardent leur comportement (50) — scope minimal.
+- Sites **partiels 🟠** : puce ouverte (au pire un arrêt orange avec « ▶ Reprendre », jamais de boucle ni de perte).
+
+### Étapes (dans l'ordre, une à la fois ; chacune = banc réel + sabotage rouge + commit)
+- [ ] **E0 — Validation de la maquette** par Quang. Rien d'autre avant.
+- [ ] **E1 — manga-fetch 0.8.0, mode `--jusqua-fin`** : pas de borne ; fin de site → arrêt « à jour : le ch. N est le dernier
+      paru » (texte DISTINCT de « dépasse la borne » et de « série terminée ») ; code retour 0 (demande tenue).
+      Vérifier le cas « chapitre suivant manquant » (trou de numérotation) : sans borne, `_choisir_suivant` exige c+1 → à
+      aligner sur le mode `jusqua` (sauts tolérés), la sécurité E2 prenant le relais au-delà de 10.
+- [ ] **E2 — Sécurités (tous modes de série, sauf mention)** :
+      (1) progression strictement croissante — existe, ajouter un test ; (2) **empreinte** : pages du chapitre identiques
+      à celles du précédent → arrêt ; (3) **saut > 10 numéros** → arrêt avec reprise (mode dernier-paru) ; (4) **pause 3 s**
+      entre deux chapitres, sautés compris ; (5) **filet 300** (mode dernier-paru) ; (6) chaque arrêt de sécurité journalisé
+      (`events.log`, catégorie `sécurité`) avec la raison lisible.
+- [ ] **E3 — Déjà présents** : bilan manga-fetch sépare `captures` et `deja_la` (ligne SÉRIE + `log_evt`) ; proxy les
+      transmet ; app : bilan « N capturés (…), M déjà là (…) » ; 1ᵉʳ chapitre présent en série → dialogue « ⏭ Le garder et
+      continuer » (défaut) / « ♻ Le refaire » / Annuler (dialogue actuel inchangé pour un chapitre seul).
+- [ ] **E4 — Proxy (`proxy-patch/patch_dernier_paru.py` + `.diff`)** : accepter `fin: true`, passer `--jusqua-fin`, total
+      inconnu (« N faits », pas « N sur ? »), « tenu » = arrêt « à jour » ou « série terminée », reprise qui garde le mode.
+      Testé sur une COPIE, relance AU REPOS (principale puis secondaire, procédure du HANDOFF-reprise § 3.7).
+- [ ] **E5 — App v2.67.0** : 4ᵉ puce `data-serie="fin"` (option du `<select>` caché aussi), résumé « puis tous les suivants,
+      jusqu'au dernier paru », grisée comme les autres, ligne d'activité « N chapitre(s) fait(s) · jusqu'au dernier paru »,
+      bilans vert « à jour » / orange « arrêtée par sécurité » + reprise. Version aux 3 endroits.
+- [ ] **E6 — Bancs** : vraie capture « dernier paru » sur un site de test court de la principale (fin atteinte, bilan vert) ;
+      1 → N avec des chapitres déjà présents (aucun recapturé : dates des manifestes inchangées) ; chaque sécurité sabotée →
+      rouge ; bancs voisins (`test_arret_capture`, `test_reprendre_ui`, `test_enchainement_ui`) ; largeurs 360/476/704/933/1280 ;
+      les DEUX applications. `test_capture_serie_ui.py` périmé : le réparer ici (il touche l'étape 4).
+- [ ] **E7 — Clôture** : ROADMAP (entrée datée, constats barrés), HANDOFF-reprise à jour, commit + push. Aucun nom de la
+      secondaire nulle part (dépôt PUBLIC).
+
+### Hors périmètre (noté, non fait)
+- Le bouton d'arrêt pour une vidéo, la fausse alerte au redimensionnement : inchangés (déclencheurs dans HANDOFF-reprise § 2).
+
+
 ## 4-terdecies. COÛTS — LA « RÉFLEXION » DE GEMINI *(24/09/2026 14h40, question Quang sur les 4,43 $ du repérage)*
 
 > Quang : *« si c'est pour économiser la moitié, par exemple 15 $ sur 30 $ d'utilisation actuelle, ça vaut le coup […]
