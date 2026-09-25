@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.7.4"
+VERSION = "0.7.5"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -253,6 +253,30 @@ def _num(s) -> float:
 
 def _format_num(x: float) -> str:
     return str(int(x)) if float(x).is_integer() else str(x)
+
+
+RE_FINAL = re.compile(r"(?<![a-z])(final(?:e)?|the end|end|fin|completed?|termin[ée]e?)(?![a-z])", re.I)
+RE_FIN_SAISON = re.compile(r"(season|saison|part|partie|arc|vol(?:ume)?|tome)[\s_.-]*\d*[\s_.-]*(final(?:e)?|end|fin)", re.I)
+
+
+def marque_final(page) -> str:
+    """v0.7.5 : le dernier chapitre porte-t-il « Final » / « End » / « Fin » (titre de l'onglet, adresse) ? Une fin de SAISON,
+    de partie ou de tome ne compte pas (« chapter-40-season-1-finale »). Rend le mot trouve, ou ""."""
+    try:
+        brut = [page.title() or "", re.sub(r"[-_/]+", " ", page.url or "")]
+    except Exception:
+        return ""
+    # seulement ce qui SUIT le numero du chapitre (« Chap 54 - Final ») : un NOM de serie « The End of Days » ne compte pas
+    suites = []
+    for t in brut:
+        m = re.search(r"(?<![a-z])(chap(?:ter|itre)?|ch|ep(?:isode)?)\.?\s*\d+(?:[.,]\d+)?", t, re.I)
+        if m:
+            suites.append(t[m.end():])
+    texte = " ".join(suites)
+    if RE_FIN_SAISON.search(texte):
+        return ""
+    m = RE_FINAL.search(texte)
+    return m.group(1) if m else ""
 
 
 def _choisir_suivant(dispo: dict, courant: str, jusqua, entiers: bool = False):
@@ -1425,6 +1449,12 @@ def capture(args) -> int:
         faits, chap, arret = [str(args.chapter)], str(args.chapter), None
         limite = 50 if jusqua is not None else suite
         while len(faits) - 1 < limite:
+            # v0.7.5 (Quang 25/09 22h01) : l'objectif ATTEINT s'arrete ICI. Avant, on cherchait quand meme le suivant : au
+            # dernier chapitre paru (objectif 54, rien apres) le bilan disait « aucun chapitre apres le 54 » -> « objectif non
+            # tenu » et une notification « le ch. 54 n'est pas encore paru » alors qu'il venait d'etre capture.
+            if jusqua is not None and _num(chap) >= jusqua:
+                arret = f"jusqu'au ch. {_format_num(jusqua)} : fait"
+                break
             try:
                 num, raison = chapitre_suivant(page, DERNIER.get("url", page.url), chap, jusqua,
                                               bool(getattr(args, "sans_intermediaires", False)))
@@ -1432,6 +1462,11 @@ def capture(args) -> int:
                 num, raison = None, f"passage au chapitre suivant impossible ({type(e).__name__}: {str(e)[:120]})"
             if num is None:
                 arret = raison
+                if raison and raison.startswith("aucun chapitre après"):
+                    fin = marque_final(page)                     # v0.7.5 : « Final » sur la page du dernier chapitre ?
+                    if fin:
+                        arret += f" — le ch. {chap} est marqué « {fin} » (série terminée)"
+                        log_evt("série", "chapitre FINAL reconnu", chapitre=chap, marque=fin)
                 break
             print(f"=== Chapitre suivant : {num} ===")
             log_evt("série", f"chapitre suivant {num}", onglet=page.url[:100])

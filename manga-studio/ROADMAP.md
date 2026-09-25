@@ -2634,12 +2634,17 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   pas atteint à 99 %, les pas raccourcissent) — DÉJÀ le cas avec l'ancienne méthode ; déclencheur : si ça arrive en vrai.
   ⚠ Non expliqué : 1 capture de RÉFÉRENCE (sans mode rapide ni déplacement) a échoué une fois sans message, la relance a
   réussi — à surveiller.
-- ⬜ **À FAIRE — série TERMINÉE reconnue en fin de capture** (Quang 25/09 22h01, 2e fois constaté) : capture « jusqu'au ch. 54 »
-  d'un manga CLÔTURÉ dont le dernier chapitre publié est marqué « Final » (ou « End », « Fin », « [END] ») → le bilan dit « le
-  site s'arrête au ch. N (pas encore paru) » alors que TOUT ce qui existe est capturé. Attendu : reconnaître le chapitre final
-  (titre de la page / de l'onglet, ou statut « terminé » de la fiche MangaDex/AniList `serie_infos`) et dire « ✅ série
-  terminée — tous les chapitres parus sont capturés ». Code concerné : le bilan d'arrêt « le site s'arrête avant l'objectif »
-  (v2.56.0, `_capture_derniere.json`) et l'enchaînement de manga-fetch. Déclencheur : prochaine session Manga Studio.
+- **25/09 22h50 — manga-fetch 0.7.5 + v2.64.1 : fin de série bien dite** (Quang 22h01). CAUSE réelle (bilan lu) : objectif
+  « jusqu'au 54 », 54 capturé, mais manga-fetch cherchait QUAND MÊME le 55 → « aucun chapitre après le 54 » → le serveur
+  concluait « objectif non tenu » (il n'accepte que « : fait » / « dépasse la borne ») → notification « le ch. 54 n'est pas
+  encore paru ». Correctif à la source : objectif atteint = arrêt « jusqu'au ch. 54 : fait » (serveur inchangé, tenu = vrai).
+  En plus : site sans suite ET dernier chapitre marqué « Final / End / Fin » (APRÈS le n° dans le titre ou l'adresse ; une fin
+  de SAISON / partie / tome ne compte pas, un NOM de série « The End of … » non plus — 12/12 cas) → bilan « (série
+  terminée) » → l'app : « ✅ série terminée : le ch. N est le dernier ». Vrai test (fenêtre secondaire, dossier temporaire) :
+  53 → objectif 54 = « jusqu'au ch. 54 : fait » ; 54 → objectif 60 = « aucun chapitre après le 54 » (pas marqué final).
+  Au passage (22h30) : `test_vue_croisee` 25/25 au repos ; ⬜ `test_activite_ui` 53/64 = MÊME score sur v2.61.0 (antérieur à
+  ce jour : en-tête et « +1 » changés depuis) — déclencheur : prochaine modification du témoin d'activité.
+- ~~À FAIRE — série TERMINÉE reconnue en fin de capture~~ → ✅ ci-dessus (manga-fetch 0.7.5)
 - ⬜ **À FAIRE — bouton PAUSE / ARRÊT d'un traitement** (question Quang 25/09 21h05 : « utile ? fonctionnel sans risque de bug ni
   de régression ? » — à traiter SEUL, pas en même temps qu'autre chose). Constat du code (21h10) : seules l'annulation d'une
   vidéo en attente (`/manga/video_annule`) et l'arrêt du moteur local existent ; rien pour une capture, une narration, un lot.
