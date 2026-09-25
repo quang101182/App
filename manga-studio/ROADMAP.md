@@ -2645,6 +2645,16 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   Au passage (22h30) : `test_vue_croisee` 25/25 au repos ; ⬜ `test_activite_ui` 53/64 = MÊME score sur v2.61.0 (antérieur à
   ce jour : en-tête et « +1 » changés depuis) — déclencheur : prochaine modification du témoin d'activité.
 - ~~À FAIRE — série TERMINÉE reconnue en fin de capture~~ → ✅ ci-dessus (manga-fetch 0.7.5)
+- **25/09 23h10 — v2.65.0 + manga-fetch 0.7.6 + proxy : ARRÊTER UNE CAPTURE** (maquette `maquette_arret_v1.html` validée par
+  Quang 22h48). Dans le détail de l'activité, sous la capture : en série « ⏹ Après ce chapitre » (drapeau `arret_demande.json`
+  à côté du journal de manga-fetch, lu ENTRE deux chapitres ; manga-fetch repère le suivant + son adresse) → puce annulable ;
+  « ✖ Maintenant » (confirmation) = fin du processus (arbre), chapitre à moitié → CORBEILLE (un remplacement est restauré comme
+  après un échec). Bilan « arrêtée à ta demande » (champ `demande`) → bandeau BLEU + la reprise v2.50 telle quelle ; panneau de
+  capture « ⏹ … à ta demande », jamais « ❌ échec ». Proxy : `patch_arret.py` + `.diff` (route `/manga/fetch_arret`), deux
+  applications relancées au repos. Banc RÉEL `test_arret_capture.py` **14/14** (vraie capture WEBTOON ep. 1-3 sur la
+  principale : après / maintenant / annuler + écran ; nettoyage complet), mutation (drapeau ignoré) 9 KO. Voisins : vue croisée
+  25/25, barre 50/50, reprendre 112/112, activité 53/64 (= score antérieur). ⬜ NARRATION / VIDÉO / LOT : pas encore —
+  voir ci-dessous.
 - ⬜ **À FAIRE — bouton PAUSE / ARRÊT d'un traitement** (question Quang 25/09 21h05 : « utile ? fonctionnel sans risque de bug ni
   de régression ? » — à traiter SEUL, pas en même temps qu'autre chose). Constat du code (21h10) : seules l'annulation d'une
   vidéo en attente (`/manga/video_annule`) et l'arrêt du moteur local existent ; rien pour une capture, une narration, un lot.

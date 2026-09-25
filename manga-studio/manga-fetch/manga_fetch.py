@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.7.5"
+VERSION = "0.7.6"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -46,6 +46,7 @@ EDGE_PROFILE = os.environ.get("MANGA_CAPTURE_PROFIL") or os.path.join(os.environ
 DATA_DIR = os.environ.get("MANGA_CAPTURE_DONNEES") or os.path.join(os.environ.get("LOCALAPPDATA", "."), "manga-fetch")
 LOG_FILE = os.path.join(DATA_DIR, "fetch.log")
 LOG_EVT = os.path.join(DATA_DIR, "events.log")
+ARRET_FICHIER = os.path.join(DATA_DIR, "arret_demande.json")   # v0.7.6 : « ⏹ Arrêter après ce chapitre » (pose par l'app)
 PLAFOND_TOURS_PAGER, PLAFOND_S_PAGER = 3000, 3600   # v0.6.3 : garde-fous page par page (~1000 pages, 1 h)
 PLAFOND_PAS_ABSOLU = 6000   # v0.6.2 : ~5,3 millions de px a 1273 px d'ecran (~2 h) -- garde-fou, jamais la regle  # journal DÉTAILLÉ (demande Quang 18/18)
 DEFAULT_OUT = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources"))
@@ -1454,6 +1455,23 @@ def capture(args) -> int:
             # tenu » et une notification « le ch. 54 n'est pas encore paru » alors qu'il venait d'etre capture.
             if jusqua is not None and _num(chap) >= jusqua:
                 arret = f"jusqu'au ch. {_format_num(jusqua)} : fait"
+                break
+            # v0.7.6 (maquette_arret_v1, validee 25/09) : « ⏹ Arrêter après ce chapitre » -- lu ENTRE deux chapitres, jamais au
+            # milieu. On repere quand meme le SUIVANT (numero + adresse) : c'est lui que la reprise existante rouvrira.
+            if os.path.exists(ARRET_FICHIER):
+                try: os.remove(ARRET_FICHIER)
+                except OSError: pass
+                try:
+                    num, raison = chapitre_suivant(page, DERNIER.get("url", page.url), chap, jusqua,
+                                                  bool(getattr(args, "sans_intermediaires", False)))
+                except Exception as e:
+                    num, raison = None, f"chapitre suivant introuvable ({type(e).__name__})"
+                if num is not None:
+                    log_evt("série", f"chapitre suivant {num}", onglet=page.url)
+                    arret = f"arrêtée à ta demande après le ch. {chap} — reprise au ch. {num}"
+                else:
+                    arret = f"arrêtée à ta demande après le ch. {chap} — {raison}"
+                log_evt("série", "arrêt demandé", apres=chap)
                 break
             try:
                 num, raison = chapitre_suivant(page, DERNIER.get("url", page.url), chap, jusqua,

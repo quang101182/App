@@ -1,0 +1,75 @@
+8863a8864
+>         it["arret"] = "apres" if os.path.exists(_mf_drapeau()) else None      # v2.65.0
+9673a9675,9708
+> def _mf_drapeau():                                   # v2.65.0 : arret -- a cote du journal de manga-fetch (DATA_DIR)
+>     return os.path.join(os.path.dirname(MF_EVENTS), "arret_demande.json")
+> 
+> 
+> def manga_fetch_arret(data):
+>     """v2.65.0 : arret d'une capture -- « apres » (ce chapitre), « maintenant », « annuler »."""
+>     quand = (data or {}).get("quand") or ""
+>     p, f = _FETCH["proc"], _mf_drapeau()
+>     en_cours = p is not None and p.poll() is None
+>     if quand == "annuler":
+>         try: os.remove(f)
+>         except OSError: pass
+>         return {"ok": True, "arret": None}
+>     if not en_cours:
+>         return {"error": "aucune capture en cours"}
+>     if quand == "apres":
+>         if not (_FETCH.get("suite") or _FETCH.get("jusqua")):
+>             return {"error": "capture d'un seul chapitre : utilise « Arrêter maintenant »"}
+>         with open(f, "w", encoding="utf-8") as fh:
+>             json.dump({"quand": "apres", "t": time.time()}, fh)
+>         return {"ok": True, "arret": "apres"}
+>     if quand == "maintenant":
+>         st = manga_fetch_status()
+>         _FETCH["arret_maintenant"] = str(st.get("chapitre") or _FETCH["chapitre"])
+>         try: os.remove(f)
+>         except OSError: pass
+>         subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True,
+>                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+>         try: p.wait(timeout=20)
+>         except Exception: pass
+>         return {"ok": True, "arret": "maintenant", "chapitre": _FETCH["arret_maintenant"]}
+>     return {"error": "quand : apres | maintenant | annuler"}
+> 
+> 
+9846a9882,9900
+>         demande = "arrêtée à ta demande" in arret                          # v2.65.0 : « ⏹ apres ce chapitre »
+>         m5 = re.search(r"arrêtée à ta demande après le ch\. \S+ — reprise au ch\. (\S+)", arret)
+>         if m5: echec = m5.group(1)
+>         am = _FETCH.get("arret_maintenant") if _FETCH.get("proc") is p else None
+>         if am:                                                             # « ✖ maintenant » : le processus a ete arrete
+>             demande = True
+>             commences = [meta["chapitre"]] + re.findall(r"=== Chapitre suivant : (\S+) ===", sortie)
+>             faits = commences[:commences.index(am)] if am in commences else commences[:-1]
+>             arret = "arrêtée à ta demande pendant le ch. %s — reprise au ch. %s" % (am, am)
+>             tenu, echec = False, am
+>             part = _mf_dest(meta["titre"], am)
+>             if (os.path.isdir(part) and not os.path.isfile(os.path.join(part, "manifest.json"))
+>                     and os.path.normpath(part) != os.path.normpath(_FETCH.get("dest") or "")):
+>                 try:
+>                     os.makedirs(MANGA_CORBEILLE, exist_ok=True)
+>                     shutil.move(part, os.path.join(MANGA_CORBEILLE, time.strftime("%Y%m%d-%H%M%S") + "_"
+>                                                    + os.path.relpath(part, MANGA_SOURCES).replace(os.sep, "__") + "__arret"))
+>                 except OSError:
+>                     pass
+9860c9914
+<                "faits": faits, "tenu": tenu, "reprise": reprise, "derniere_ligne": (sortie.strip().splitlines() or [""])[-1][:200]}
+---
+>                "faits": faits, "tenu": tenu, "reprise": reprise, "demande": bool(demande), "derniere_ligne": (sortie.strip().splitlines() or [""])[-1][:200]}
+9902c9956,9958
+<     _FETCH.update(backup=None, dest=None, remplacement=None)
+---
+>     _FETCH.update(backup=None, dest=None, remplacement=None, arret_maintenant=None)   # v2.65.0 : arret
+>     try: os.remove(_mf_drapeau())
+>     except OSError: pass
+9996c10052,10053
+<             "sortie": lignes[-12:], "duree_s": round(time.time() - _FETCH["debut"], 1)}
+---
+>             "sortie": lignes[-12:], "duree_s": round(time.time() - _FETCH["debut"], 1),
+>             "arret_demande": _FETCH.get("arret_maintenant")}                          # v2.65.0
+11337a11395,11396
+>             elif self.path == "/manga/fetch_arret":            # Manga Studio v2.65.0
+>                 self._json(200, manga_fetch_arret(data))
