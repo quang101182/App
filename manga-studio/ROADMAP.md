@@ -2620,6 +2620,11 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   parasite après un glissement est ignoré. (3) LECTEUR de narration : le même glissement sur sa barre (⏮ ⏸ ⏭), curseur de
   volume exclu. La VIDÉO (lecteur natif, barre de temps) n'est pas touchée : un glissement y entrerait en conflit.
   Banc `test_retour_visionneuse_ui.py` **24/24**, mutation rouge ; lecteur 13/13, barre 50/50, appui long 18/18, compact 31/31.
+- **25/09 18h55 — v2.63.1 : témoin d'activité VIVANT pendant une capture en série** (Quang 18h24-18h46) : il restait figé ~5 min
+  par chapitre (« ch.4 1/28 ») alors que le serveur envoyait déjà les pages → « ch.8 p. 105 · 5/28 · ~1 h 56 ». Mesuré en direct
+  sur une vraie capture (secondaire) : p. 105 → 112 en 18 s. Capture d'un seul chapitre / narration inchangées (« 42 p. », « 3/10 »).
+  `test_activite_ui` 49/64 et `test_vue_croisee` 21/25 = MÊMES scores sur v2.63.0 dans les mêmes conditions (ils exigent une app
+  au repos, une vraie capture tournait) → ⬜ les rejouer au repos (déclencheur : prochaine session Manga Studio).
 - **25/09 18h00 — v2.63.0 : CHOISIR LE MANGA À LA CAPTURE, fiable sur téléphone + DÉTECTION d'après la page** (retours Quang
   17h10-17h40 ; maquette `maquette_choix_manga_v1.html` validée 17h13). Constaté dans l'app réelle : (1) la liste sous le champ
   était cachée par le clavier et se fermait au moindre toucher à côté ; (2) CAUSE du champ qui plongeait derrière le clavier : le
