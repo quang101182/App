@@ -2512,6 +2512,23 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   tronquée à 360 px (liste déroulante). ⏸ **Question à Quang** : dans la secondaire, fermer 2 menus par Échap en < 0,6 s
   déclenche la PANIQUE (mesuré par le QA) — geste peu probable à la main ; faut-il qu'un Échap qui ferme un menu ne compte
   pas ? (plus sûr contre les faux départs, mais une panique menu ouvert demanderait 3 appuis).
+- **25/09 11h50 — v2.50.0 : une capture ARRÊTÉE AVANT SON BUT se signale, et se REPREND en un clic** (Quang 11h19-11h24 :
+  « 40 chapitres programmés, arrêté à 22 […] à aucun moment je n'ai eu de notification » ; puis « un bouton pour reprendre
+  exactement là où ça s'est arrêté » ; puis « une erreur peut arriver même au milieu d'un chapitre »). Journal lu d'abord :
+  à 02h57 (secondaire) l'adresse du ch. 23 portait le jeton du contrôle Cloudflare (`__cf_chl_rt_tk`) → 1 page capturée
+  (la page de contrôle) → « capture tronquée », dossier partiel RETIRÉ par manga-fetch, série arrêtée « le chapitre 23 a
+  échoué ». Le signal manquait parce que le bilan ne vivait qu'en MÉMOIRE du serveur (`_FETCH`, effacé par une relance) et
+  dans le panneau de capture s'il était ouvert. **Serveur** (`proxy-patch/patch_capture_bilan.py` + `.diff`) : un veilleur
+  attend la fin de chaque capture et écrit `<sources>/_capture_derniere.json` (tenu ou non, faits, arrêt, reprise : chapitre
+  en échec, objectif ou nombre restant, options, adresse SANS jeton) ; `GET /manga/capture_derniere`. **App** : bandeau 🟠 +
+  pastille ❌ (relu au chargement, à la fin d'une capture suivie, et toutes les ~60 s), « 🔗 Ouvrir le ch. N » (onglet dans la
+  fenêtre de capture), « ▶ Reprendre au ch. N » : REFUSE tant que l'onglet affiche la vérification (titre « Just a moment… »),
+  repart TOUJOURS de la 1re page du chapitre (`page1` forcé), objectif d'origine gardé, chapitre partiel mis de côté (`force`).
+  Rien ne part tout seul : un contrôle Cloudflare se valide à la main (réessayer seul risquerait un blocage de l'IP).
+  Bilan de la nuit RECONSTITUÉ par le code du veilleur dans la secondaire (reprise ch. 23 → 40) ; la principale n'en voit
+  rien. Bancs : `test_capture_bilan.py` **16/16** hors ligne (8 fins de capture), `test_capture_alerte_ui.py` **36/36**
+  (1280 + 360, routes interceptées, mutation « vérification ignorée » rouge) ; vrai bandeau vérifié dans la secondaire.
+  🟠 (constaté v2.50.0) une relance du SERVEUR pendant une capture tue le veilleur → pas de bilan pour celle-là.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
