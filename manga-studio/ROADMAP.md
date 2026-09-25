@@ -2645,7 +2645,8 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   Au passage (22h30) : `test_vue_croisee` 25/25 au repos ; `test_activite_ui` 53/64 = MÊME score sur v2.61.0 → ✅ réparé 23h50
   (déclencheur atteint : boutons d'arrêt v2.65) : son interception `**/manga/activite*` captait AUSSI `/activite_autre` (v2.19)
   → tâches simulées en double ; « +1 » remplacé par la vague « 0/2 » (v2.8) ; hauteurs recalées sur la charte validée (v2.29-2.42).
-  **64/64**, mutation (compteur caché) rouge.
+  **64/64**. ⚠ Correction (23h55) : le 1er commit (`9dcb0cd`) annonçait « mutation rouge » à TORT — le compteur caché passait
+  encore (le texte d'un élément caché reste lisible). Contrôle durci (`is_visible`) → mutation 60/64 rouge, sain 64/64.
 - ~~À FAIRE — série TERMINÉE reconnue en fin de capture~~ → ✅ ci-dessus (manga-fetch 0.7.5)
 - **25/09 23h10 — v2.65.0 + manga-fetch 0.7.6 + proxy : ARRÊTER UNE CAPTURE** (maquette `maquette_arret_v1.html` validée par
   Quang 22h48). Dans le détail de l'activité, sous la capture : en série « ⏹ Après ce chapitre » (drapeau `arret_demande.json`

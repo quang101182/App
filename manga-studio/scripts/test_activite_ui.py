@@ -64,7 +64,7 @@ with sync_playwright() as p:
         pg.evaluate("() => actRafraichir()"); pg.wait_for_timeout(400)
         h1 = pg.evaluate(HAUT)
         # v2.8.0 (A1) : le « +1 » est devenu le compteur de la vague « faites / total » (« 0/2 »)
-        check("2 taches : allumee, 1re nommee + « 0/2 »", "Claymore" in pg.inner_text("#actTxt") and pg.inner_text("#actN") == "0/2", pg.inner_text("#hdrAct"))
+        check("2 taches : allumee, 1re nommee + « 0/2 »", "Claymore" in pg.inner_text("#actTxt") and pg.is_visible("#actN") and pg.inner_text("#actN") == "0/2", pg.inner_text("#hdrAct"))
         check("la hauteur ne bouge pas quand ca travaille", h1 == h0, (h0, h1))
         bb = pg.locator("#hdrAct").bounding_box()
         check("cellule dans l'ecran, pas de debordement", bb["x"] >= 0 and bb["x"] + bb["width"] <= w
