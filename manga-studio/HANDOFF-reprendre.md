@@ -21,8 +21,9 @@
 - **Historique COMMUN au PC et au téléphone** (stocké côté SERVEUR), mais **séparé entre l'application principale et la
   secondaire** (compartiment secret : la principale ne doit rien voir de la secondaire — `MANGA_SOURCES_DIR` de chaque
   instance, cf. ROADMAP § 4-quaterdecies).
-- Maquette validée sur le principe : **`maquette_reprendre_v1.html`** (dans ce dossier). ⚠ Point à confirmer avec Quang avant
-  de coder : dans un chapitre DÉJÀ ouvert, « ▶ » montre-t-il le chapitre d'avant (retour d'un geste) ou reste-t-il sur celui-ci ?
+- ✅ **Maquette VALIDÉE par Quang le 25/09 14h43 (« je valide la maquette, c'est parfait »)** : **`maquette_reprendre_v1.html`**
+  (dans ce dossier) = la source de vérité visuelle. Y compris sa proposition : dans un chapitre DÉJÀ ouvert, « ▶ » montre le
+  chapitre d'AVANT (celui ouvert juste avant, dans ce manga) → revenir en arrière d'un geste. Ne pas reposer la question.
 
 ## 2. Où brancher (lu dans le code le 25/09, v2.61.0 — re-vérifier)
 
