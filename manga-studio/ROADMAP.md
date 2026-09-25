@@ -2410,7 +2410,10 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   rouge + « Refaire ». **Écart assumé** : les CASES de la planche et leur « ⚙ Affiner » ne bougent pas (déjà repensées le
   27/07 selon le même principe ; `.panel{overflow:hidden}` couperait un menu) — seule « 🗑 Bulle » passe en rouge à droite.
   Anciens bancs : 13 adaptés (ouvrir le ⋯ / la ligne avant de cliquer, `scripts/…bak-20260924-menus`) ;
-  `test_bibliotheque_ui` 76/92 = IDENTIQUE à v2.28 (16 échecs de DONNÉES périmées : « demo-frieren », OPM = 27 ch.).
+  ~~`test_bibliotheque_ui` 76/92 = IDENTIQUE à v2.28 (16 échecs de DONNÉES périmées : « demo-frieren », OPM = 27 ch.).~~
+  → ✅ repointé le 25/09 (v2.48.0) : **95/95** — autre titre réel (Solo Leveling « level up alone »), série MASQUÉE absente
+  de la recherche (Black Jack), « claymore 5 » trouve Claymore (le ch.5 existe), nombre de chapitres d'OPM lu sur le DISQUE,
+  ch.301 ouvert par son nom ; + contrôle : le banc ne touche plus le tri « récemment ouverte ».
 - ~~⬜ **PROCHAINE SESSION — demandes Quang 22h11-22h14, dans cet ordre**~~ → 1 ✅ v2.29.0 · 2 ✅ v2.37.0 (voir plus bas)
   · 3 ✅ v2.30.0 · 4 voir plus bas :
 - **24/09 23h30 — v2.37.0 : TOMES AUTOMATIQUES** : un chapitre capturé depuis une page de VOLUME (l'adresse le dit :
@@ -2491,6 +2494,14 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   lecteur, 1280 + 360 px, mutation rouge) ; non-régression moderation 21/21, recit_lots 16/16, latin 11/11, hors_zones
   5/5, frein 6/6, sans_cjk, complement_bulles verts. Passage RÉEL court (Claymore ch.1, analyse reprise, p. 5-6, sans
   voix) : 2 pages, 0,0006 $ — rangé dans `sources/_corbeille/essai-v2120-20260925/`.
+- **25/09 11h40 — v2.48.0 : les BANCS ne dérangent plus les données de Quang** (carte blanche, passe « bancs périmés »).
+  (1) Un navigateur piloté (`navigator.webdriver`, Playwright) n'écrit plus « ouverte » dans `_bibliotheque.json` : les
+  bancs réordonnaient le tri « récemment ouverte » (constaté : Claymore et OPM datés 10h54 par un banc — leurs dates
+  d'avant sont PERDUES, irrécupérables). Mesuré : `ouvertes` identique avant/après 2 bancs ; mutation (garde retirée) →
+  fichier modifié. (2) `test_moderation.py` créait `sources/zz-serie/ch_1/video` (vide) dans les VRAIES données (son
+  sous-processus `video_chapitre.py` n'héritait pas de la racine du banc) → `MANGA_SOURCES_DIR` = dossier du banc ; dossier
+  fuité supprimé (vide), 21/21. 🟠 (constaté v2.48.0) `ouvertes` garde 5 slugs de bancs anciens qui n'existent plus
+  (`zz-serie`, `banc-profil-ui`, `banc-prof-mus`, `zz-essai-mus`, `zz-essai-vide`) : sans effet visible, laissés.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
@@ -2537,7 +2548,9 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   → ✅ **v2.23.0** : un ESSAI = un script Python de manga-studio qui ne descend d'AUCUN serveur (psutil, ~0,04 s) ; rattaché
   à l'application dont il lit les données (`MANGA_SOURCES_DIR` de son environnement) ; « 🧪 Essai · <nom du script> », jamais
   ses arguments ; lanceur du venv + enfant = une ligne. Banc `test_essais_visibles.py` **7/7**. 🟠 Constaté (préexistant) :
-  `test_suivi_ui.py` vise la série `demo-frieren`, qui n'existe plus → banc PÉRIMÉ (à repointer lors du prochain chantier suivi).
+  ~~`test_suivi_ui.py` vise la série `demo-frieren`, qui n'existe plus → banc PÉRIMÉ (à repointer lors du prochain chantier suivi).~~
+  → ✅ 25/09 : la cible se DONNE en argument (`lancer|verifier [port] serie/ch_N`, un chapitre sans narration) ; absente →
+  refus clair (code 2) au lieu d'échecs silencieux. Banc PAYANT (~0,76 $) : non relancé sans chantier suivi.
 - **S6 — Discrétion** : contenu FLOUTÉ quand la fenêtre secrète perd le focus ; bouton PANIQUE (Échap ×2 → espace
   normal) ; retour auto à l'espace normal après N min d'inactivité (N à fixer avec Quang) ; aucun titre secret dans
   Telegram / notifications / journaux / commits (dépôt `App` PUBLIC).

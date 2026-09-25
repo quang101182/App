@@ -3,7 +3,9 @@
 Temps 1 (`lancer`) : panneau 🌙 (file + estimation), le reglage s'ecrit dans suivi.json, « Lancer maintenant » part
 depuis l'app (confirmation), le passage est VIVANT, la cellule d'activite montre la narration, un 2e lancement est refuse.
 Temps 2 (`verifier`) : passage fini, narration AVEC voix, karaoke cale, journal complet, file vide ensuite.
-Usage : python test_suivi_ui.py lancer|verifier [port]
+Usage : python test_suivi_ui.py lancer|verifier [port] [serie/ch_N]
+25/09 : « demo-frieren » n'existe plus -> la cible se DONNE (un chapitre SANS narration, sinon rien a faire) ; le banc
+refuse de demarrer (code 2) si elle est absente, au lieu d'echouer en silence. PAYANT : ne pas le lancer sans raison.
 """
 import json, os, sys, time, urllib.request
 from playwright.sync_api import sync_playwright
@@ -12,7 +14,11 @@ KEY = open(os.path.expanduser(r"~\Documents\ComfyUI\.studio_secret"), encoding="
 TEMPS = sys.argv[1] if len(sys.argv) > 1 else "lancer"
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 8190
 SRC = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources"))
-SERIE, D = "demo-frieren", "demo-frieren/ch_143"
+D = sys.argv[3] if len(sys.argv) > 3 else "demo-frieren/ch_143"
+SERIE = D.split("/")[0]
+if not os.path.isfile(os.path.join(SRC, D, "manifest.json")):
+    print("CIBLE ABSENTE : %s -- donne un chapitre existant SANS narration : python test_suivi_ui.py %s %d serie/ch_N"
+          % (D, TEMPS, PORT)); sys.exit(2)
 OK, KO = [], []
 
 

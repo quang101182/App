@@ -91,7 +91,8 @@ check("autre etape = autre alerte", len(mod.ouvertes_pour("zz-serie/ch_1")) == 2
 check("le vrai registre n'est pas touche", mod.ALERTES.startswith(TMP))
 
 print("5. la video attend (code 4)")
-env = dict(os.environ, PYTHONIOENCODING="utf-8")
+# 25/09 : le sous-processus ecrivait dans les VRAIES donnees (sources/zz-serie/ch_1/video, vide) -> racine du banc
+env = dict(os.environ, PYTHONIOENCODING="utf-8", MANGA_SOURCES_DIR=os.path.join(TMP, "sources"))
 r = subprocess.run([sys.executable, os.path.join(HERE, "video_chapitre.py"), "zz-serie/ch_1", "tagx"], capture_output=True,
                    text=True, env=env, encoding="utf-8", errors="replace")
 check("video refusee : code 4 + message", r.returncode == 4 and "VIDEO EN ATTENTE" in r.stdout, (r.returncode, r.stdout[-120:]))

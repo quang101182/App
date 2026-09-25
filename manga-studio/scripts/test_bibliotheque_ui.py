@@ -5,7 +5,7 @@ Series + pochettes, ouverture d'une serie, memoire apres rechargement, essais de
 apercu de voix (lecture puis arret), selection de pages (sans RIEN supprimer), retour, debordement.
 Usage : python test_bibliotheque_ui.py      Verdict chiffre en sortie.
 """
-import os, sys
+import json, os, sys
 from playwright.sync_api import sync_playwright
 
 KEY = open(os.path.expanduser(r"~\Documents\ComfyUI\.studio_secret"), encoding="utf-8").read().strip()
@@ -17,6 +17,11 @@ def check(nom, cond, detail=""):
     (OK if cond else KO).append(nom)
     print(("  [OK] " if cond else "  [KO] ") + nom + (" -- " + str(detail) if detail else ""))
 
+
+# v2.48.0 : le banc ne doit PAS reordonner le tri « recemment ouverte » de Quang (fichier partage)
+BIBF = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources", "_bibliotheque.json")
+_ouv = lambda: json.load(open(BIBF, encoding="utf-8")).get("ouvertes")
+OUV_AVANT = _ouv()
 
 with sync_playwright() as p:
     b = p.chromium.launch(channel="msedge", headless=True)
@@ -55,13 +60,15 @@ with sync_playwright() as p:
         def cherche(q):
             pg.fill("#libRech", ""); pg.type("#libRech", q, delay=15); pg.wait_for_timeout(250)
             return pg.eval_on_selector_all("#chapList [data-serie]", "els => els.map(e => e.dataset.serie)")
-        for q, attendu in (("frieren", ["demo-frieren"]), ("sousou", ["demo-frieren"]), ("freiren", ["demo-frieren"]),
+        # 25/09 : « demo-frieren » n'existe plus -> un autre titre REEL (Solo Leveling), et une serie MASQUEE ne ressort pas
+        for q, attendu in (("level up alone", ["solo-leveling"]), ("opm", ["one-punch-man"]), ("regards", []),
                            ("lord of destruction", ["noritaka"]), ("wanpanman", ["one-punch-man"]),
                            ("クレイモア", ["claymore"]), ("301", ["one-punch-man"]), ("one punch 300", ["one-punch-man"]),
-                           ("BORUTO", ["boruto-tow-blue-vortex"]), ("zzzzqq", []), ("claymore 5", [])):
+                           ("BORUTO", ["boruto-tow-blue-vortex"]), ("zzzzqq", []), ("claymore 5", ["claymore"]),   # ch.5 existe desormais
+                           ("claymore 999", [])):
             r = cherche(q)
             check("recherche « %s » -> %s" % (q, attendu or "rien"), r == attendu, r)
-        pg.fill("#libRech", ""); pg.type("#libRech", "sousou"); pg.wait_for_timeout(250)
+        pg.fill("#libRech", ""); pg.type("#libRech", "level up alone"); pg.wait_for_timeout(250)
         check("la raison est affichee (autre titre)", "autre titre" in pg.inner_text("#chapList"))
         pg.fill("#libRech", ""); pg.dispatch_event("#libRech", "input"); pg.wait_for_timeout(250)
         check("recherche videe = toutes les series", len(pg.eval_on_selector_all("#chapList [data-serie]", "e => e")) == len(series))
@@ -81,11 +88,15 @@ with sync_playwright() as p:
         pg.evaluate("s => { const e = document.querySelector(s); if (!e) return; const d = e.closest('details'); if (d && !d.open) d.open = true; const m = e.closest('.menu-plus'); if (m && m.querySelector('.menu-pan').hidden) m.querySelector('.plus').click(); }", "#btnRenommer"); pg.click("#btnRenommer"); pg.wait_for_timeout(500)
         check("Renommer puis Annuler ne change rien", "One Punch-Man" in pg.inner_text("#libSerie"))
         chaps = pg.eval_on_selector_all("#chapList [data-chap]", "e => e.length")
-        check("la serie montre SES chapitres (OPM = 2)", chaps == 2 and pg.is_visible("#libNav"), chaps)
+        # 25/09 : le nombre vient du DISQUE (OPM avait 2 chapitres au 1er banc, 27 aujourd'hui)
+        opm = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources", "one-punch-man")
+        N_OPM = sum(1 for d in os.listdir(opm) if d.startswith("ch_") and os.path.isfile(os.path.join(opm, d, "manifest.json")))
+        check("la serie montre SES chapitres (OPM = %d sur le disque)" % N_OPM, chaps == N_OPM and pg.is_visible("#libNav"), chaps)
         pg.reload(); pg.wait_for_timeout(3500)
         check("serie ouverte memorisee apres rechargement",
-              pg.eval_on_selector_all("#chapList [data-chap]", "e => e.length") == 2 and pg.is_visible("#libNav"))
-        pg.click("#chapList [data-chap] >> nth=1")         # ch_301 (tri par numero)
+              pg.eval_on_selector_all("#chapList [data-chap]", "e => e.length") == N_OPM and pg.is_visible("#libNav"))
+        i301 = pg.evaluate("() => CHAPS.findIndex(c => c.dir === 'one-punch-man/ch_301')")     # par son nom, pas sa place
+        pg.click('#chapList [data-chap="%d"]' % i301)
         pg.wait_for_selector("#chapDetail:not([hidden])", timeout=15000)
         pg.wait_for_timeout(2500)
         essais = pg.query_selector("#narrRuns details.narr-essais")
@@ -195,5 +206,6 @@ with sync_playwright() as p:
         pg.evaluate("() => { try { localStorage.removeItem('manga_serie'); } catch {} }")
         c.close()
     b.close()
+check("les ouvertures du banc ne touchent pas le tri « récemment ouverte » (fichier partagé)", _ouv() == OUV_AVANT)
 print("\n=== VERDICT : %d/%d" % (len(OK), len(OK) + len(KO)) + ("" if not KO else "  ECHECS : " + ", ".join(KO)))
 sys.exit(1 if KO else 0)
