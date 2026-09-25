@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙</text></svg>">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>SubWhisper v9.62</title>
+<title>SubWhisper v9.63</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1143,7 +1143,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 <header>
   <div class="logo">
     <div class="logo-text"><span class="logo-sub">Sub</span><span class="logo-whisper">Whisper</span></div>
-    <span class="ver-badge">v9.62</span>
+    <span class="ver-badge">v9.63</span>
     <button class="pwa-install" id="pwaInstall" onclick="installPWA()" title="Installer l'app sur l'ecran d'accueil">&#8615; Install</button>
   </div>
   <div class="hdr-r">
@@ -1486,7 +1486,7 @@ body.light .wt.cur{background:rgba(91,71,232,.2);box-shadow:0 0 0 1px rgba(91,71
 </div>
 
 <footer>
-  <span class="ft">SubWhisper v9.62 &middot; AssemblyAI &middot; Azure Translator</span>
+  <span class="ft">SubWhisper v9.63 &middot; AssemblyAI &middot; Azure Translator</span>
   <span class="ft">Universal-3-pro &middot; 99 langues</span>
 </footer>
 
@@ -4551,7 +4551,7 @@ async function exportDiag() {
   var engine = getAIEngine();
   var diag = {
     type: 'DIAG',
-    version: 'v9.62',
+    version: 'v9.63',
     date: new Date().toISOString(),
     file: origName || 'unknown',
     lang_source: src,
@@ -5453,6 +5453,21 @@ function autoFormatSRT() {
     merged.push(b);
     i++;
   }
+  // Étape 3 (v9.63) : temps de lecture minimal — un sous-titre court restait souvent
+  // affiché < 1 s (mesuré 25/09 sur 1758 blocs réels : ~640 sous la seconde).
+  // On ne touche JAMAIS au début (synchro intacte) : on prolonge seulement la FIN,
+  // jusqu'à max(2 s, texte à 15 car/s), sans jamais mordre sur le bloc suivant.
+  var MIN_READ_MS = 2000, READ_CPS = 15, READ_GAP = 80;
+  merged.forEach(function(bl, idx) {
+    var p3 = bl.timestamp.split(' --> ');
+    var s3 = tsToMs(p3[0]), e3 = tsToMs(p3[1]);
+    var cible = Math.max(MIN_READ_MS, Math.round(bl.text.replace(/\n/g, ' ').trim().length * 1000 / READ_CPS));
+    if (e3 - s3 >= cible) return;
+    var fin = s3 + cible;
+    if (idx + 1 < merged.length) fin = Math.min(fin, tsToMs(merged[idx + 1].timestamp.split(' --> ')[0]) - READ_GAP);
+    if (fin > e3) { bl.timestamp = p3[0] + ' --> ' + msToTs(fin); modified++; }
+  });
+
   // Renuméroter
   merged = merged.map(function(bl, idx) { return { id: String(idx + 1), timestamp: bl.timestamp, text: bl.text }; });
 
