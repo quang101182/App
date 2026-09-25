@@ -2570,6 +2570,14 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   « One Punch-Man · ch. 301 » (PC, le retour devient « ← Série »), le nom du manga dans une série, « Bibliothèque » ou
   l'onglet ailleurs ; trop longue → elle DÉFILE (aller-retour ; figée avec « … » si le téléphone réduit les animations).
   Banc `test_nav_flot_ui.py` **46/46** (1280 + 360), mutations rouges (bulle, sens).
+- **25/09 12h55 — v2.55.0 : « la notification est fausse » (Quang 12h43)** — journaux lus d'abord : la reprise (lancée à 11h54
+  par « ▶ Reprendre », ch. 23 → 40 depuis la page 1) TOURNAIT normalement (ch. 35 fini 12h44:05, ch. 36 démarré 12h44:42 ;
+  ~30 s de découpage webtoon entre deux chapitres). Le faux signal : le bandeau « capture arrêtée — Reprendre au ch. 23 »
+  n'était fermé QUE sur l'appareil où l'on avait cliqué (mémoire locale) → ailleurs il affirmait un arrêt pendant la reprise.
+  Correctif : une capture EN COURS rend le bilan d'avant caduc → pas de bandeau ni de ❌ tant qu'elle tourne ; le bilan de la
+  NOUVELLE capture (écrit à sa fin) prend le relais. Vérifié dans la vraie secondaire pendant la capture. Banc
+  `test_capture_alerte_ui.py` **46/46**. Piège de diagnostic évité : une « 2ᵉ capture » vue à 12h47 était ma propre commande
+  de recherche de processus (sa ligne de commande contenait « manga_fetch.py capture ») — vérifier le PARENT avant de conclure.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche

@@ -32,12 +32,14 @@ with sync_playwright() as p:
         print("=== %d px" % w)
         c = b.new_context(viewport={"width": w, "height": h}, is_mobile=w < 400, has_touch=w < 400)
         pg = c.new_page()
-        E = {"bilan": dict(BILAN), "titre_onglet": "Just a moment...", "pilote": [], "capture": [], "autres": [], "dialogs": [], "fen": [], "grande": True}
+        E = {"bilan": dict(BILAN), "titre_onglet": "Just a moment...", "pilote": [], "capture": [], "autres": [], "dialogs": [], "fen": [], "grande": True, "encours": False}
         errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
 
         def route(rt):
             u, m = rt.request.url, rt.request.method
+            if "/manga/fetch_status" in u and m == "GET":                   # v2.55.0 : une capture tourne-t-elle ?
+                return rt.fulfill(status=200, content_type="application/json", body=json.dumps({"etat": "en cours" if E["encours"] else "aucune"}))
             if "/manga/capture_derniere" in u:
                 return rt.fulfill(status=200, content_type="application/json", body=json.dumps(E["bilan"]))
             if "/manga/pilote_onglets" in u:
@@ -107,6 +109,13 @@ with sync_playwright() as p:
         check("✕ → bandeau et pastille disparaissent", not vis("#capAlerte") and not vis("#actErr"))
         pg.reload(); pg.wait_for_timeout(5000)
         check("… et ne reviennent pas au rechargement (même bilan)", not vis("#capAlerte"))
+        # v2.55.0 : une capture EN COURS (reprise lancee d'un autre appareil) -> le bilan d'avant est caduc, pas de bandeau
+        E["bilan"] = dict(BILAN, fin=1790301111.0); E["encours"] = True
+        pg.evaluate("() => capAlerteVerifier()"); pg.wait_for_timeout(600)
+        check("capture EN COURS → pas de bandeau « arrêtée » (bilan d'avant caduc)", not vis("#capAlerte") and not vis("#actErr"))
+        E["encours"] = False
+        pg.evaluate("() => capAlerteVerifier()"); pg.wait_for_timeout(600)
+        check("… et il revient si plus rien ne tourne (bilan non tenu, pas encore vu)", vis("#capAlerte"))
         # 2. tenu -> rien
         E["bilan"] = dict(BILAN, fin=1790300999.0, tenu=True, reprise=None)
         pg.evaluate("() => capAlerteVerifier()"); pg.wait_for_timeout(600)
