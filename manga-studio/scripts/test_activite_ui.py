@@ -12,7 +12,9 @@ from playwright.sync_api import sync_playwright
 
 KEY = open(os.path.expanduser(r"~\Documents\ComfyUI\.studio_secret"), encoding="utf-8").read().strip()
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8190
-REF = {1280: 43, 412: 75.5, 360: 94.5, 320: 94.5}
+# 25/09/2026 : references recalees sur la charte d'interface VALIDEE (v2.29 -> v2.42) -- l'en-tete v1.87 n'existe plus.
+# 360 px (plancher de conception) inchange ; 320 px est sous le plancher (l'en-tete passe sur 3 lignes).
+REF = {1280: 46, 412: 78.5, 360: 94.5, 320: 124.5}
 OK, KO = [], []
 
 
@@ -46,18 +48,23 @@ with sync_playwright() as p:
         else:
             check("reel : rien en cours -> gris « Rien en cours »", txt == "Rien en cours", txt)
         # --- simulation des transitions
-        pg.route("**/manga/activite*", lambda r: r.fulfill(status=200, content_type="application/json",
+        # 25/09/2026 : « **/manga/activite* » captait AUSSI /manga/activite_autre (v2.19.0) -> les taches simulees apparaissaient
+        # en double (« 🔒 2 », 4 lignes). La simulation ne vise que CETTE application ; l'autre est au repos.
+        pg.route(lambda u: u.split("?")[0].endswith("/manga/activite"), lambda r: r.fulfill(status=200, content_type="application/json",
                                                            body=json.dumps({"items": etat["items"], "t": 0})))
+        pg.route(lambda u: u.split("?")[0].endswith("/manga/activite_autre"), lambda r: r.fulfill(status=200, content_type="application/json",
+                                                           body=json.dumps({"items": [], "t": 0})))
         etat["items"] = []
         pg.evaluate("() => { ACT.items = []; ACT.finis = []; }")       # on repart d'un etat propre (le reel ne doit pas « finir » ici)
         pg.evaluate("() => actRafraichir()"); pg.wait_for_timeout(400)
         h0 = pg.evaluate(HAUT)
         check("repos : gris, « Rien en cours »", pg.inner_text("#actTxt") == "Rien en cours" and not pg.evaluate("() => $('hdrAct').classList.contains('on')"))
-        check("hauteur de l'en-tete <= v1.87 (%s px)" % REF[w], h0 <= REF[w] + 0.5, h0)
+        check("hauteur de l'en-tete <= reference (%s px)" % REF[w], h0 <= REF[w] + 0.5, h0)
         etat["items"] = [N1, T1]
         pg.evaluate("() => actRafraichir()"); pg.wait_for_timeout(400)
         h1 = pg.evaluate(HAUT)
-        check("2 taches : allumee, 1re nommee + « +1 »", "Claymore" in pg.inner_text("#actTxt") and pg.inner_text("#actN") == "+1", pg.inner_text("#hdrAct"))
+        # v2.8.0 (A1) : le « +1 » est devenu le compteur de la vague « faites / total » (« 0/2 »)
+        check("2 taches : allumee, 1re nommee + « 0/2 »", "Claymore" in pg.inner_text("#actTxt") and pg.inner_text("#actN") == "0/2", pg.inner_text("#hdrAct"))
         check("la hauteur ne bouge pas quand ca travaille", h1 == h0, (h0, h1))
         bb = pg.locator("#hdrAct").bounding_box()
         check("cellule dans l'ecran, pas de debordement", bb["x"] >= 0 and bb["x"] + bb["width"] <= w
