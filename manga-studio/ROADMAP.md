@@ -2431,8 +2431,14 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   enrichis (chapitre 42/42 avec mutation rouge, reste 42/42). 🟠 (constaté v2.39.0, antérieurs à ce soir, non traités) :
   ~~listes « Moteur de lecture » / « Voix » du chapitre coupées à 360 px~~ → ✅ couvert par v2.45.0 (25/09 10h30 :
   mesuré 142 px « Kimi K3 — le pl » + 104 px « Charon — » sur une ligne ; sous 640 px chacune a sa ligne → 291 / 254 px ;
-  PC inchangé ; banc `test_chapitre_detail.py` 43/43, mutation rouge) ; console bruitée de 502 `/comfy/*` quand le
-  moteur local est éteint. Déclencheur : prochaine passe sur le bloc Narration d'un chapitre.
+  PC inchangé ; banc `test_chapitre_detail.py` 43/43, mutation rouge) ; ~~console bruitée de 502 `/comfy/*` quand le
+  moteur local est éteint~~ → ✅ couvert par v2.46.0 (25/09 10h55) : c'était PLUS qu'un bruit — les références des
+  personnages (fichiers de `ComfyUI/input`) étaient demandées au MOTEUR (`/comfy/view`) → moteur éteint = références
+  INVISIBLES. Proxy : `GET /manga/comfy_file` (lecture disque, confinée, clé exigée) + `GET /manga/comfy_up` (toujours
+  200) — `proxy-patch/patch_comfy_hors_moteur.py` + `.diff`, principale relancée par `relance-proxy.ps1`, secondaire au
+  repos par sa tâche. App : images par la route disque, sonde sans 502, listes LoRA/checkpoints chargées à l'allumage.
+  Mesuré 1 min chapitre ouvert : 10 erreurs → 0. Banc `test_moteur_eteint.py` 23/23 (1280 + 360 px, 10 références
+  affichées, 7 évasions de dossier refusées), mutation rouge ; moteur allumé vérifié à la main (8 ckpt, 173 LoRA, 0 erreur). Déclencheur : prochaine passe sur le bloc Narration d'un chapitre.
 - **25/09 00h30 — site DivaScans ajouté à la SECONDAIRE** (Quang 00h10) — manga-fetch **0.7.2** + app **v2.40.0** :
   adresses « chapter/N » (barre oblique) reconnues ; la page ne liste PAS les autres chapitres, seul un `<button>`
   « NEXT Ch. N » (sans href) mène au suivant → nouveau recours `_suivant_par_bouton` : on ne touche qu'un bouton qui
