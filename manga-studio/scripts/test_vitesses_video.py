@@ -65,6 +65,27 @@ with sync_playwright() as p:
     check("profil : « vitesse ☁ » et « 🖥 » présents", pg.is_visible("#profVit") and pg.is_visible("#profVitLoc"))
     lv = pg.inner_text('#suiviBox [data-v="vid"]')
     check("profil : la ligne Vidéo résume ☁ et 🖥", ("☁" in lv and "🖥" in lv) or lv == "pas de vidéo", lv)
+    # 5. v2.42.0 : les deux vitesses dans le bloc Narration d'un chapitre, a 1280 puis 360 px
+    pg.click("#suiviFermer")
+    for w in (1280, 360):
+        pg.set_viewport_size({"width": w, "height": 900 if w > 400 else 780})
+        pg.click("#chapList [data-chap] >> nth=0"); pg.wait_for_selector("#chapDetail:not([hidden])"); pg.wait_for_timeout(2500)
+        vis = pg.evaluate("() => ['narrVitCloud','narrVitLocal'].map(i => $(i).checkVisibility() && $(i).getBoundingClientRect().width > 0)")
+        check("%d px : ☁ et 🖥 visibles dans le bloc Narration" % w, all(vis), vis)
+        vals = pg.evaluate("() => [$('narrVitCloud').value, $('narrVitLocal').value]")
+        check("%d px : valeurs = mémoires du lecteur (1.15 / 1)" % w, vals == ["1.15", "1"], vals)
+        act = pg.evaluate("() => [MODE, $('narrVitCloudL').classList.contains('actif'), $('narrVitLocalL').classList.contains('actif')]")
+        check("%d px : la vitesse du mode actuel est mise en évidence" % w, act[1] == (act[0] != "pc") and act[2] == (act[0] == "pc"), act)
+        r = pg.eval_on_selector("#narrVitLocal", "e => e.closest('.narr-vit-z').getBoundingClientRect().right")
+        check("%d px : le champ tient dans l'écran" % w, r <= w, r)
+        pg.click("#btnChapClose"); pg.wait_for_timeout(300)
+    pg.set_viewport_size({"width": 1280, "height": 900})
+    pg.click("#chapList [data-chap] >> nth=0"); pg.wait_for_timeout(2500)
+    pg.select_option("#narrVitLocal", "1.1"); pg.wait_for_timeout(300)
+    check("changer 🖥 ici = mémoire du lecteur et des vidéos", pg.evaluate("() => localStorage.getItem('manga_vit_local')") == "1.1"
+          and pg.evaluate("() => vitDe('local')") == 1.1)
+    dbd = pg.evaluate("() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
+    check("aucun débordement horizontal", dbd <= 0, dbd)
     check("aucun réglage enregistré", not ecrit, ecrit[:2])
     check("aucune erreur JS", not errs, errs[:2])
     pg.evaluate("a => { ['manga_onglet','manga_serie','manga_vit_cloud','manga_vit_local'].forEach((k, i) =>"

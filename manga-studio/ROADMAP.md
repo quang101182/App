@@ -2446,6 +2446,10 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   (`reglages_video.vitesse_local`, défaut 1×, retiré avant l'envoi à la vidéo). Banc `test_vitesses_video.py` 12/12
   (mutation rouge), `test_voix_vitesses_ui` 13/13. ⚠ Conséquence ASSUMÉE : une vidéo LOCALE déjà faite à une autre
   vitesse que la nouvelle vitesse 🖥 est vue « périmée (vitesse) » → refaite au prochain lot / à la nuit (sans coût : GPU).
+- **25/09 09h35 — v2.42.0 : les deux vitesses VISIBLES dans le bloc Narration de chaque chapitre** (Quang 09h27 : « dans
+  la création de narration, les vitesses n'apparaissent pas »). Champ « Vitesse d'écoute » ☁ / 🖥 = les MÊMES mémoires
+  que le lecteur et les vidéos (un changement ici vaut partout, le lecteur ouvert suit) ; celle du mode actuel
+  (pastille ☁/🖥 de l'en-tête) est encadrée. Banc `test_vitesses_video.py` 22/22 (1280 + 360 px).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
   `MangaStudioInstance2` : `/manga/liens` répond (✕ des sites ACTIF), banc `test_page_principale.py 8192` 55/55.
   1. **En-tête d'une série** (capture Quang : « ça fait un peu fouiller ») : « ← Toutes les séries » d'une couleur
