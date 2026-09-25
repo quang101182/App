@@ -2595,6 +2595,11 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   tant qu'un panneau est déplié (Profil, Vidéos, Capturer un chapitre) et le replie d'abord, puis reprend son rôle. (3) Échap
   (PC) fait pareil — mais avec un menu ⋯ ouvert, il ferme le MENU (comme avant). Pas d'usine à gaz : ni historique, ni
   nouveau bouton. Banc `test_replier_ui.py` **26/26** (1280 + 360, POST bloqués), mutation rouge ; barre 46/46, appui long 18/18.
+- **25/09 13h35 — v2.59.0 : Fold 8 DÉPLIÉ → la barre du bas passait sur DEUX lignes** (Quang 13h25, portrait ET paysage).
+  Reproduit à 704 / 933 px (pas à 360 / 476). Cause : la barre est un `<nav>` → elle héritait du `nav{flex-wrap:wrap}` des onglets
+  du haut (rattrapé par une règle téléphone seulement), et centrée par left:50 %, sa largeur était plafonnée à la moitié de
+  l'écran. → `flex-wrap:nowrap;width:max-content`. Contrôle des 8 onglets à 704 et 933 px : aucun débordement. Banc
+  `test_nav_flot_ui.py` **49/49** (+ 476 / 704 / 933 px), mutation rouge. ⚠ Leçon : tester AUSSI les largeurs du Fold déplié.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche

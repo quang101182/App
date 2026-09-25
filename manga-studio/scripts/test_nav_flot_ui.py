@@ -126,6 +126,19 @@ with sync_playwright() as p:
         check("aucune écriture", not ecrit, ecrit[:3])
         pg.evaluate("() => localStorage.removeItem('manga_serie')")
         c.close()
+    # v2.59.0 (Quang : Fold 8 DÉPLIÉ → « les boutons sur deux lignes ») : fermé 476, déplié portrait 704, paysage 933
+    for w, h in ((476, 900), (704, 900), (933, 700)):
+        c = b.new_context(viewport={"width": w, "height": h}, is_mobile=True, has_touch=True); pg = c.new_page()
+        pg.route("**/*", lambda r: r.abort() if r.request.method == "POST" else r.continue_())
+        pg.goto("http://127.0.0.1:%s/manga#k=%s" % (PORT, KEY)); pg.wait_for_timeout(2500)
+        pg.evaluate("() => { localStorage.setItem('manga_onglet','tChap'); localStorage.setItem('manga_serie','one-punch-man'); }")
+        pg.reload(); pg.wait_for_timeout(4000)
+        i = pg.evaluate("() => CHAPS.findIndex(c => c.dir === 'one-punch-man/ch_301')")
+        pg.evaluate("i => document.querySelector('#chapList [data-chap=\"' + i + '\"]').click()", i); pg.wait_for_timeout(3000)
+        r = pg.evaluate("() => { const bs = [...$('navFlot').children].filter(e => !e.hidden && e.id !== 'nfIndic'); const n = $('navFlot').getBoundingClientRect();"
+                        " return [new Set(bs.map(e => Math.round(e.getBoundingClientRect().top))).size, Math.round(n.left) >= 0 && Math.round(n.right) <= innerWidth]; }")
+        check("Fold %d px : barre sur UNE ligne, dans l'écran" % w, r == [1, True], r)
+        pg.evaluate("() => localStorage.removeItem('manga_serie')"); c.close()
     b.close()
 
 print("\nVERDICT : %d OK / %d KO" % (len(OK), len(KO)))
