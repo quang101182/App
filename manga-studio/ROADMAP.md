@@ -2469,6 +2469,8 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   `test_relais_moderation.py` 25/25 hors ligne (mutation du coût des refus → rouge), `test_relais_ui.py` + affichage.
   🟠 (constaté v2.44.0) refus aux étapes RÉCIT / NOMS / TRADUCTION : ni relayés ni comptés — même traitement à porter
   si Quang en rencontre (déclencheur : 1re alerte « récit » ou « traduction »).
+  ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
+  (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
   `MangaStudioInstance2` : `/manga/liens` répond (✕ des sites ACTIF), banc `test_page_principale.py 8192` 55/55.
   1. **En-tête d'une série** (capture Quang : « ça fait un peu fouiller ») : « ← Toutes les séries » d'une couleur
