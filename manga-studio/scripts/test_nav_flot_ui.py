@@ -103,6 +103,9 @@ with sync_playwright() as p:
             pg.evaluate("() => scrollTo(0, document.documentElement.scrollHeight)"); pg.wait_for_timeout(600)
             pg.evaluate(GLISSE, [-140]); pg.wait_for_timeout(3000)
             check("glissement à GAUCHE sur la barre : chapitre PRÉCÉDENT (302) — le sens du bouton ‹", pg.evaluate("() => CHAP_OPEN") == "one-punch-man/ch_302", pg.evaluate("() => CHAP_OPEN"))
+            # v2.60.0 : la barre qui suivait le doigt debordait -> le navigateur agrandissait l'affichage, la barre partait SOUS l'ecran
+            r = pg.evaluate("() => [innerWidth, innerHeight, Math.round($('navFlot').getBoundingClientRect().bottom)]")
+            check("après les glissements : affichage intact, barre DANS l'écran", r[0] == 360 and r[1] == 780 and r[2] <= 780, r)
         pg.evaluate("() => scrollTo(0, document.documentElement.scrollHeight)"); pg.wait_for_timeout(500)
         pg.click("#nfRet"); pg.wait_for_timeout(1500)
         check("← (chapitre) : retour à la série", pg.evaluate("() => !CHAP_OPEN && LIB_SERIE === 'one-punch-man'"))

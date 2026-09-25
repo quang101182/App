@@ -81,6 +81,7 @@ with sync_playwright() as p:
         if pg.is_visible("#btnLibBack"): pg.click("#btnLibBack"); pg.wait_for_timeout(300)
         pg.fill("#libRech", ""); pg.type("#libRech", "armure blue", delay=20); pg.wait_for_timeout(1500)
         pg.click("#libTexte [data-rtxt] >> nth=0"); pg.wait_for_timeout(3000)
+        pg.evaluate("() => clOuvrir('narr')"); pg.wait_for_timeout(300)   # v2.60.0 : blocs replies par defaut
         li = "#narrRuns .narr-run:has([data-ecoute])"
         check("narration : ▶ et 📥 en vue", vis(pg, li + " [data-ecoute]") and vis(pg, li + " [data-hl]"))
         check("narration : 🗑 rangé", not vis(pg, li + " [data-suppr-narr]"))

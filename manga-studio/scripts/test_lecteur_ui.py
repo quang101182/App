@@ -35,6 +35,7 @@ with sync_playwright() as p:
         pg.click("#libTexte [data-rtxt] >> nth=0"); pg.wait_for_timeout(3000)
         check("clic sur le resultat -> le chapitre 301 s'ouvre", pg.is_visible("#chapDetail") and "301" in pg.inner_text("#chapTitle"))
         # --- lecteur : barre de temps
+        pg.evaluate("() => clOuvrir('narr')"); pg.wait_for_timeout(300)   # v2.60.0 : blocs replies par defaut
         i = pg.evaluate("() => NARRS.findIndex(n => n.tag === 'kimi-fenrir')")
         pg.click('#narrRuns [data-ecoute="%d"]' % i); pg.wait_for_timeout(2500)
         tot = pg.inner_text("#lecTemps")

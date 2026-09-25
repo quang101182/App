@@ -2600,6 +2600,18 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   du haut (rattrapé par une règle téléphone seulement), et centrée par left:50 %, sa largeur était plafonnée à la moitié de
   l'écran. → `flex-wrap:nowrap;width:max-content`. Contrôle des 8 onglets à 704 et 933 px : aucun débordement. Banc
   `test_nav_flot_ui.py` **49/49** (+ 476 / 704 / 933 px), mutation rouge. ⚠ Leçon : tester AUSSI les largeurs du Fold déplié.
+- **25/09 14h05 — v2.60.0 : UN CHAPITRE EN COMPACT** (Quang 13h37 : « ce bloc est trop énorme en hauteur […] afficher l'essentiel,
+  le reste comme pour le reste de l'application », PC et téléphone). Maquette `maquette_chapitre_compact_v1.html` validée 13h41.
+  Chaque bloc (Narration → Vidéo → Traduction → Musique, l'ordre du travail) = UNE LIGNE repliée : icône, titre, état en une
+  phrase, ACTION principale (🎙 Narrer + ☁/🖥, ▶ Écouter, ▶ Voir / 🎬 Faire la vidéo, 🌐 Traduire) qui clique le bouton
+  d'ORIGINE (mêmes confirmations). Toucher la ligne = tous les réglages d'avant (rien retiré) ; une seule ouverte ; mémorisé
+  sur l'appareil ; « ← Fermer » la replie ; les raccourcis Narration / Vidéo du haut déplient leur bloc. 246 px au lieu de
+  ~850 (PC et téléphone ; état ≤ 2 lignes sur téléphone). ⚠ Défaut GRAVE trouvé par le banc en route : la barre du bas qui
+  suivait le doigt (40 px) débordait un instant → en mode téléphone le navigateur AGRANDISSAIT la zone d'affichage sans
+  retour → la barre partait SOUS l'écran (et une page captait le toucher de « ← ») → `html,body{overflow-x:clip}` + 20 px.
+  Bancs : `test_chapitre_compact_ui.py` **31/31** (mutation rouge), barre 50/50, et 7 anciens bancs adaptés (ils ouvrent le
+  bloc avant d'en toucher les réglages) : chapitre 45/45, vitesses 22/22, reste 42/42, lecteur 13/13, relais UI 18, trace 28/28,
+  appui long 18/18, replier 26/26.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche

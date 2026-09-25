@@ -70,6 +70,7 @@ with sync_playwright() as p:
     for w in (1280, 360):
         pg.set_viewport_size({"width": w, "height": 900 if w > 400 else 780})
         pg.click("#chapList [data-chap] >> nth=0"); pg.wait_for_selector("#chapDetail:not([hidden])"); pg.wait_for_timeout(2500)
+        pg.evaluate("() => clOuvrir('narr')"); pg.wait_for_timeout(300)   # v2.60.0 : blocs replies par defaut
         vis = pg.evaluate("() => ['narrVitCloud','narrVitLocal'].map(i => $(i).checkVisibility() && $(i).getBoundingClientRect().width > 0)")
         check("%d px : ☁ et 🖥 visibles dans le bloc Narration" % w, all(vis), vis)
         vals = pg.evaluate("() => [$('narrVitCloud').value, $('narrVitLocal').value]")
