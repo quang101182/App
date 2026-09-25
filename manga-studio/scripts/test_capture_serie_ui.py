@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Banc v2.3.2 (etape 18) : CAPTURER PLUSIEURS CHAPITRES depuis l'app, comme Quang.
+"""Banc v2.3.2 (etape 18) -- repare v2.67.0 (puces de l'etape 4 au lieu du selecteur cache ; + puce « dernier paru ») : CAPTURER PLUSIEURS CHAPITRES depuis l'app, comme Quang.
 
 360 px : la ligne « Chapitres : [selecteur] » tient sans debordement ; le selecteur vaut « jusqu'au ch. » par defaut
 et n'affiche que le champ utile ; « jusqu'au » avant le depart -> alerte et RIEN n'est envoye.
@@ -74,12 +74,15 @@ try:
         pg.select_option("#capTab", str(k))
         sel = pg.evaluate("() => [document.getElementById('capSerieMode').value, !document.getElementById('capJusqua').hidden, document.getElementById('capSuite').hidden, document.getElementById('capEntiers').checked]")
         check("sélecteur : « jusqu'au ch. » par défaut, seul son champ visible, x.5 ignorés cochés", sel == ["jusqua", True, True, True], sel)
-        pg.select_option("#capSerieMode", "suite")
+        pg.click("#capChips [data-serie=suite]")          # v2.67.0 : les PUCES de l'etape 4 (le selecteur est cache depuis v2.28)
         sel = pg.evaluate("() => [document.getElementById('capJusqua').hidden, !document.getElementById('capSuite').hidden]")
         check("sélecteur « + suivants » : l'autre champ", sel == [True, True], sel)
-        pg.select_option("#capSerieMode", "seul")
+        pg.click("#capChips [data-serie=seul]")
         check("sélecteur « ce chapitre seul » : aucun champ", pg.evaluate("() => document.getElementById('capJusqua').hidden && document.getElementById('capSuite').hidden && document.getElementById('capEntiersL').hidden"))
-        pg.select_option("#capSerieMode", "jusqua")
+        pg.click("#capChips [data-serie=dernier]")
+        sel = pg.evaluate("() => [document.getElementById('capSerieMode').value, document.getElementById('capJusqua').hidden, document.getElementById('capSuite').hidden, !document.getElementById('capEntiersL').hidden]")
+        check("puce « Jusqu'au dernier paru » (v2.67.0) : aucun champ à remplir, x.5 proposés", sel == ["dernier", True, True, True], sel)
+        pg.click("#capChips [data-serie=jusqua]")
         pg.evaluate("() => { $('capTitre').value = 'banc serie ui'; }");   # v2.63.0 : bouton en lecture seule sur telephone
         pg.fill("#capChap", "296"); pg.fill("#capJusqua", "295")
         pg.click("#btnCapturer"); pg.wait_for_timeout(1000)

@@ -91,7 +91,7 @@ def main():
         # 1) saisies refusees
         u305 = "https://mangadex.org/chapter/" + uuid_chapitre(305)
         onglets.append(ouvre_onglet(u305))
-        for nom, opt in (("suite 51 refusee", {"suite": 51}), ("suite -1 refusee", {"suite": -1}),
+        for nom, opt in (("suite 301 refusee", {"suite": 301}), ("suite -1 refusee", {"suite": -1}),
                          ("jusqu'au 305 depuis 305 refuse", {"jusqua": "305"}),
                          ("jusqu'au 'abc' refuse", {"jusqua": "abc"})):
             r = api("/manga/fetch_capture", dict({"tab": u305, "title": "banc serie", "chapter": "305"}, **opt))
@@ -115,7 +115,7 @@ def main():
         verifie("jusqu'au 308 : finie", s and s.get("etat") == "fini", s and s.get("etat"))
         verifie("jusqu'au 308 : 307 et 308", s and s.get("dossiers") == ["banc-serie/ch_307", "banc-serie/ch_308"],
                 s and s.get("dossiers"))
-        verifie("jusqu'au 308 : arret a la borne", s and "dépasse la borne" in (s.get("serie") or ""), s and s.get("serie"))
+        verifie("jusqu'au 308 : arret a la borne", s and "jusqu'au ch. 308 : fait" in (s.get("serie") or ""), s and s.get("serie"))   # texte de manga-fetch 0.7.5
 
         # contenus : 4 chapitres distincts, numeros confirmes par MangaDex
         empreintes = {}

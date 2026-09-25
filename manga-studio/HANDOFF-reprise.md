@@ -7,7 +7,8 @@
 
 ## 1. État au 25/09/2026 23h35
 
-- App `manga_studio.html` **v2.66.0** · manga-fetch **0.7.6** · proxy patché (`proxy-patch/patch_lectures.py`, `patch_arret.py`).
+- App `manga_studio.html` **v2.67.0** · manga-fetch **0.8.0** · proxy patché (… `patch_arret.py`, `patch_dernier_paru.py`).
+- **26/09 00h40** : « Jusqu'au dernier paru » + sécurités de série + chapitres déjà là (ROADMAP § 4-quindecies, tout coché).
 - Livré ce jour (détail + preuves : ROADMAP, entrées du 25/09) :
   - v2.62 « ▶ Reprendre » + historique de lecture (serveur, commun PC + Fold, séparé principale / secondaire) ;
   - v2.63 choix du manga sur téléphone (écran plein, `choixOuvrir()` réutilisable) + détection de la série d'après l'onglet ;
@@ -24,7 +25,8 @@
 | Une capture de référence a échoué UNE fois sans message (relance OK) | à surveiller : si ça se reproduit, lire `%LOCALAPPDATA%\manga-fetch\events.log` |
 | Pas de bouton d'arrêt pour une VIDÉO (pas de reprise possible) | si Quang en a besoin |
 | `scripts/test_capture_serie_ui.py` périmé (cherche `#capSerieMode`, remplacé par les boutons de l'étape 4) | prochaine modification de l'étape 4 |
-| Historique git du dépôt PUBLIC contient encore d'anciens noms de la secondaire (les fichiers actuels sont propres) | seulement sur accord EXPLICITE de Quang (réécriture d'historique) |
+| 🔴 Webtoon en bandes presque carrées (720×700) → 1 page capturée, ÉCHEC (ROADMAP § 4-quindecies « Hors périmètre ») | accord de Quang sur le remède (amorcer la largeur de colonne sur le document) |
+| Historique git du dépôt PUBLIC contient encore d'anciens noms de la secondaire (les fichiers actuels sont propres ~~(faux au 25/09)~~ → **vrai depuis le 26/09** : 4 fichiers en contenaient encore — app, manga_fetch, maquette_arret_v1, test_choix_manga_ui — neutralisés ; contrôle = `git grep -i -F -f <termes tirés de prive/_sites.json + dossiers de prive/>`) | seulement sur accord EXPLICITE de Quang (réécriture d'historique) |
 
 ## 3. Règles et pièges (ne pas les repayer)
 
@@ -54,7 +56,9 @@
   temporaires, verdict octet pour octet. Ports : principale 9223, secondaire 9224.
 - `test_deplacer_fenetre.py <port> <adresse> <n°> [position|taille]` : capture pendant qu'on déplace / redimensionne la fenêtre.
 - `mesure_chargement_bande.py` : temps de chargement réel par pas (cache coupé).
-- Bancs du jour : `test_reprendre_ui` 112/112, `test_choix_manga_ui` 127/127, `test_arret_capture` 14/14 (vraie capture, nettoie
+- Bancs du 26/09 : `test_dernier_paru` 19/19 (vraies captures MangaDex 141-143 ; `--mutation-app`), `test_serie_securites` 16/16.
+  ⚠ `test_capture_serie.py` vise **8191** par défaut (copie de test, éteinte) : passer **8190**.
+- Bancs du 25/09 : `test_reprendre_ui` 112/112, `test_choix_manga_ui` 127/127, `test_arret_capture` 14/14 (vraie capture, nettoie
   tout), `test_arret_traitement_ui` 11/11, `test_activite_ui` 64/64.
 
 ## 5. Méthode (celle de toute la session)

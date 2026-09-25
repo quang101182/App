@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.66.0</title>
+<title>Manga Studio v2.67.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -604,7 +604,7 @@ input.bascule:checked{background:var(--ok)}input.bascule:checked::after{left:21p
   padding:8px 10px;margin:0 0 10px;font-size:13px}
 .lot-alerte>span{flex:1;min-width:0}
 .cap-alerte{flex-wrap:wrap}.cap-alerte>span{flex-basis:100%}
-.cap-alerte.info{border-color:#2f5d8a;background:#12202e;color:#cfe6ff}      /* v2.56.0 : le site s'arrete avant l'objectif */                                        /* v2.50.0 : 3 boutons */
+.cap-alerte.info{border-color:#2f5d8a;background:#12202e;color:#cfe6ff}.cap-alerte.ok{border-color:#2f7a4f;background:#132619;color:#d6ffe6}   /* v2.67.0 : dernier paru -> a jour */      /* v2.56.0 : le site s'arrete avant l'objectif */                                        /* v2.50.0 : 3 boutons */
 .lot-alerte.interrompu{border-color:#6a5220;background:#241c0c;color:#f3dca4}
 #capBox:not([open]){padding:0;border:0;background:none}
 #capBox:not([open])>summary{list-style:none;display:flex;justify-content:center;align-items:center;gap:8px;min-height:48px;
@@ -1154,7 +1154,7 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
   <div class="hdrin">
     <!-- v2.30.0 (maquette_ensemble_v1, Quang 22h31-22h33) : en permanence le MODE, l'ACTIVITE, le moteur local et la VRAM ;
          les couts et ℹ️ passent dans « ⋯ ». Telephone : 2 lignes (titre + mode + ⋯, puis activite + Local + VRAM). -->
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.66.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.67.0</span>
       <button class="mode-pill" id="hdrMode" title="Où tournent la voix et l’effacement du texte : en ligne (payant) ou sur ta carte graphique (0 $). Touche pour changer.">☁ En ligne</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -1635,15 +1635,17 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
         <button class="cap-chip" data-serie="seul">Ce chapitre seul</button>
         <button class="cap-chip" data-serie="jusqua">Jusqu'au ch. …</button>
         <button class="cap-chip" data-serie="suite">+ N suivants</button>
+        <button class="cap-chip" data-serie="dernier" title="tous les chapitres suivants, jusqu'au dernier paru sur ce site (s'arrête seul)">Jusqu'au dernier paru</button>
       </div>
       <div class="row cap-serie">
         <span class="muted">Chapitres :</span>
         <select id="capSerieMode" style="width:auto">
           <option value="jusqua" selected>jusqu'au ch.</option>
           <option value="suite">+ chapitres suivants</option>
-          <option value="seul">ce chapitre seul</option></select>
+          <option value="seul">ce chapitre seul</option>
+          <option value="dernier">jusqu'au dernier paru</option></select>
         <input id="capJusqua" inputmode="decimal" placeholder="vide = ce chapitre seul" style="width:170px">
-        <input id="capSuite" type="number" min="1" max="50" step="1" inputmode="numeric" value="1" style="width:70px" hidden>
+        <input id="capSuite" type="number" min="1" max="300" step="1" inputmode="numeric" value="1" style="width:70px" hidden>
       </div>
       <label class="lec-chk" id="capEntiersL"><input type="checkbox" id="capEntiers" checked> ignorer les chapitres intermédiaires (298.5…)</label>
       <!-- v2.17.0 (Quang 24/09 18h48) : le SITE de l'onglet choisi dit si l'on peut enchainer ; sinon, les champs se ferment -->
@@ -2194,7 +2196,7 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.66.0";
+const VERSION = "2.67.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -6601,7 +6603,8 @@ async function capAlerteVerifier(){
   // v2.55.0 (Quang 12h43 : « la notification est fausse ») : la reprise avait ete lancee d'un AUTRE appareil -> ici le bandeau
   // disait toujours « arretee avant la fin » pendant qu'elle tournait. Une capture EN COURS rend le bilan d'avant caduc.
   let enCours = false; try { enCours = (await api("/manga/fetch_status")).etat === "en cours"; } catch {}
-  CAP_ALERTE = j && j.fin && j.tenu === false && String(j.fin) !== vu && !enCours ? j : null;
+  // v2.67.0 : « jusqu'au dernier paru » TENU -> bandeau vert « a jour » (maquette ③) ; les autres modes tenus : rien, comme avant
+  CAP_ALERTE = j && j.fin && (j.tenu === false || (j.dernier_paru && j.tenu)) && String(j.fin) !== vu && !enCours ? j : null;
   capAlerteRendre();
 }
 function capAlerteRendre(){
@@ -6611,7 +6614,9 @@ function capAlerteRendre(){
   const finSite = !!a && !a.reprise && /aucun chapitre après le \S+ sur ce site/.test(a.arret || "");
   const demande = !!a && (a.demande || /arrêtée à ta demande/.test(a.arret || ""));               // v2.65.0 : pas une panne
   $("capAlerte").hidden = !a; $("actErr").hidden = !((a && !finSite && !demande) || LOT_ALERTE);
-  $("capAlerte").classList.toggle("info", finSite || demande);
+  const aJour = !!a && !!a.dernier_paru && !!a.tenu;                                               // v2.67.0 : dernier paru
+  $("capAlerte").classList.toggle("info", (finSite || demande) && !aJour);
+  $("capAlerte").classList.toggle("ok", aJour);
   if (!a) return;
   if (demande){
     const m = (a.arret || "").match(/arrêtée à ta demande (après|pendant) le ch\. (\S+)/) || [];
@@ -6627,20 +6632,36 @@ function capAlerteRendre(){
     // v2.64.1 (Quang 22h01) : dernier chapitre marque « Final » (manga-fetch 0.7.5) -> la serie est TERMINEE, pas « pas encore paru »
     const fin = (a.arret.match(/est marqué « ([^»]+) » \(série terminée\)/) || [])[1];
     $("capAlerteTxt").innerHTML = fin
-      ? "✅ Capture de <b>" + esc(a.titre) + "</b> : " + (a.faits || []).length + " chapitre(s) — <b>série terminée</b> : le ch. "
+      ? "✅ Capture de <b>" + esc(a.titre) + "</b> : " + esc(capCompte(a)) + " — <b>série terminée</b> : le ch. "
         + esc(dernier) + " est le dernier (marqué « " + esc(fin) + " »). Tout a été capturé."
-      : "ℹ️ Capture de <b>" + esc(a.titre) + "</b> : " + (a.faits || []).length + " chapitre(s) — le site s'arrête au ch. "
+      : aJour ? "✅ Capture de <b>" + esc(a.titre) + "</b> : " + esc(capCompte(a)) + " — <b>à jour</b> : le ch. " + esc(dernier)
+        + " est le dernier paru sur ce site."
+      : "ℹ️ Capture de <b>" + esc(a.titre) + "</b> : " + esc(capCompte(a)) + " — le site s'arrête au ch. "
         + esc(dernier) + (a.jusqua ? " (le ch. " + esc(a.jusqua) + " n'est pas encore paru)" : "") + ". Tout ce qui existe a été capturé.";
     $("capAlerteOuvrir").hidden = $("capAlerteReprendre").hidden = true; return;
   }
   const quand = new Date(a.fin * 1000).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
-  const but = a.jusqua ? " (objectif : ch. " + a.jusqua + ")" : (a.suite ? " sur " + (+a.suite + 1) + " demandés" : "");
+  const but = a.jusqua ? " (objectif : ch. " + a.jusqua + ")" : (a.suite ? " sur " + (+a.suite + 1) + " demandés"
+            : a.dernier_paru ? " (jusqu'au dernier paru)" : "");
   const pourquoi = a.arret || a.derniere_ligne || "";
   $("capAlerteTxt").innerHTML = "🟠 Capture de <b>" + esc(a.titre) + "</b> arrêtée avant la fin : " + (a.faits || []).length
     + " chapitre(s) fait(s)" + esc(but) + (pourquoi ? " — " + esc(pourquoi) : "") + " — " + esc(quand);
   const r = a.reprise;
   $("capAlerteOuvrir").hidden = !(r && r.url); $("capAlerteReprendre").hidden = !r;
   if (r){ $("capAlerteOuvrir").textContent = "🔗 Ouvrir le ch. " + r.chapitre; $("capAlerteReprendre").textContent = "▶ Reprendre au ch. " + r.chapitre; }
+}
+/* v2.67.0 (Quang 23h43) : « 6 capturés (1, 6 à 10), 4 déjà là (2 à 5, gardés tels quels) » -- avant, les chapitres SAUTES
+   (deja presents) etaient comptes comme captures. Les suites de numeros se resument en « a a b ». */
+function capPlages(l){
+  const n = l.map(Number), out = []; let i = 0;
+  while (i < l.length){ let j = i; while (j + 1 < l.length && n[j + 1] === n[j] + 1) j++;
+    out.push(j - i >= 2 ? l[i] + " à " + l[j] : l.slice(i, j + 1).join(", ")); i = j + 1; }
+  return out.join(", ");
+}
+function capCompte(a){
+  const d = a.deja_la || [], f = (a.faits || []).filter(x => !d.includes(x));
+  if (!d.length) return f.length + " chapitre(s)";
+  return f.length + " capturé(s)" + (f.length ? " (" + capPlages(f) + ")" : "") + ", " + d.length + " déjà là (" + capPlages(d) + ", gardés tels quels)";
 }
 function capAlerteVue(){ if (CAP_ALERTE){ try { localStorage.setItem("manga_cap_vu", String(CAP_ALERTE.fin)); } catch {} } CAP_ALERTE = null; capAlerteRendre(); }
 $("capAlerteOk").onclick = capAlerteVue;
@@ -6673,7 +6694,8 @@ $("capAlerteReprendre").onclick = async () => {
     if (!t){ alert("Ouvre d'abord le ch. " + r.chapitre + " (« 🔗 Ouvrir ») : aucun onglet de la fenêtre de capture n'y est."); return; }
     if (RE_VERIF_SITE.test(t.titre || "")){
       alert("Le site affiche encore sa vérification (« " + t.titre + " »).\nValide-la dans la fenêtre de capture (ou par la 📱 télécommande), puis réessaie."); return; }
-    const but = r.jusqua ? "jusqu'au chapitre " + r.jusqua : (r.suite ? "puis les " + r.suite + " chapitre(s) suivant(s)" : "ce chapitre seul");
+    const but = r.jusqua ? "jusqu'au chapitre " + r.jusqua : (r.suite ? "puis les " + r.suite + " chapitre(s) suivant(s)"
+              : r.dernier_paru ? "puis jusqu'au dernier paru" : "ce chapitre seul");
     if (!confirm("Reprendre la capture de « " + a.titre + " » au chapitre " + r.chapitre + " (depuis sa première page), " + but + " ?")) return;
     // v2.52.0 (Quang 25/09 11h38) : a la reprise -- et SEULEMENT la -- la fenetre de capture se range SEULE sur le cote puis
     // prend la taille sure (« par securite ; c'est le seul moment ou ca doit etre automatique »). Aucune question.
@@ -6683,7 +6705,8 @@ $("capAlerteReprendre").onclick = async () => {
     log("reprise : fenêtre rangée, " + fz.interieur.join(" × ") + " px");
     const force = CHAPS.some(c => slugTitre(c.title) === slugTitre(a.titre) && String(c.chapter) === String(r.chapitre));   // partiel -> mis de cote
     const res = await api("/manga/fetch_capture", { tab: t.url, title: a.titre, chapter: String(r.chapitre), force, page1: true,     /* toujours depuis la 1re page */
-                                                   suite: r.jusqua ? 0 : (r.suite || 0), jusqua: r.jusqua || "", entiers: !!r.entiers });
+                                                   suite: r.jusqua ? 0 : (r.suite || 0), jusqua: r.jusqua || "", entiers: !!r.entiers,
+                                                   dernier_paru: !!r.dernier_paru });
     if (res && res.error) throw new Error(res.error);
     capAlerteVue();
     $("btnCapturer").disabled = true; $("capEtat").textContent = "reprise lancée…";
@@ -7256,7 +7279,10 @@ const actReste = s => s == null ? "" : s < 60 ? "< 1 min" : s < 3600 ? "~" + Mat
 const actFini = it => it.type === "karaoke" ? " fini" : " finie";
 // v2.63.1 (Quang 18h46) : une capture en SERIE montre aussi les pages du chapitre en cours (« p. 76 ») -- sinon le temoin
 // restait fige ~5 min par chapitre. Une capture d'UN chapitre les montrait deja (« 76 p. », sans total).
-const actProg = it => { const p = it.type === "capture" && it.total && it.pages != null ? "p. " + it.pages : "";
+const actProg = it => {
+  if (it.type === "capture" && it.dernier_paru)                                                     // v2.67.0 : total inconnu
+    return [it.pages != null ? "p. " + it.pages : "", (it.fait || 0) + " ch. fait(s)", "jusqu'au dernier paru"].filter(Boolean).join(" · ");
+  const p = it.type === "capture" && it.total && it.pages != null ? "p. " + it.pages : "";
   return [p, it.total ? it.fait + "/" + it.total : (it.fait != null ? it.fait + " p." : "")].filter(Boolean).join(" · "); };
 /* v2.11.0 (feuille de route 4-decies) : ALERTES DE MODERATION. Les pages refusees ne font plus tomber un chapitre : elles
    sont mises de cote et listees ici. Rien ne se traite tout seul : Quang coche, choisit, clique. Le LOCAL (carte graphique)
@@ -7528,7 +7554,7 @@ function actArretHtml(x){
   if (MODE_SENSIBLE.includes(x.type) && x.etape !== "attente")
     return '<div class="act-arret"><button class="ko" data-arret="interrompre">✖ Arrêter</button></div>';
   if (x.type !== "capture") return "";
-  const serie = !!x.total;
+  const serie = !!x.total || !!x.dernier_paru;                                                     // v2.67.0 : dernier paru
   return '<div class="act-arret">'
     + (serie ? (x.arret === "apres"
         ? '<span class="puce">⏹ s\'arrêtera à la fin du ch. ' + esc(x.chapitre || "?") + '<button data-arret="annuler">annuler</button></span>'
@@ -9368,8 +9394,8 @@ $("capTitre").addEventListener("blur", () => setTimeout(() => {
   if (!document.activeElement || !document.activeElement.closest || !document.activeElement.closest(".cap-titre-box")) capSuggFermer(); }, 150));
 
 /* v2.63.0 : DETECTION de la serie d'apres l'onglet choisi (idee Quang 25/09 17h40). Titre de la page ET adresse
-   (« …/the-delinquent-girl/chapter-1 ») compares a MES series (titres alternatifs compris). Correspondance ENTIERE -> le
-   champ prend le nom EXACT de la serie (plus de doublon « the delinquent girl » a cote de « The Delinquent Girl ») ;
+   (« …/mon-titre/chapter-1 ») compares a MES series (titres alternatifs compris). Correspondance ENTIERE -> le
+   champ prend le nom EXACT de la serie (plus de doublon « mon titre » a cote de « mon titre ») ;
    partielle (autre saison…) -> seulement proposee, mots reconnus en DORE, en tete de la liste. Jamais par-dessus un nom
    choisi ou tape par Quang (CAP_TITRE_AUTO). */
 let CAP_TITRE_AUTO = true;
@@ -9399,7 +9425,7 @@ function capAutoTitre(){
   if (!CAP_TITRE_AUTO && $("capTitre").value.trim()) return;             // Quang a choisi / tape : on n'y touche plus
   const plein = capDetecter().find(x => x.part === 1);
   // sans serie reconnue, le nom devine n'est propose que sur une page de CHAPITRE (un numero) : la page d'accueil d'un site
-  // donnait « DivaScans » comme nom de manga (constate sur les vrais onglets de la secondaire) -> champ vide
+  // donnait « <nom du site> » comme nom de manga (constate sur les vrais onglets de la secondaire) -> champ vide
   const g = devinerTitre(t.title || ""), num = g.num || (/(?:chap(?:ter|itre)?|ch|episode|ep)[-_ ]?\d/i.test(t.url) ? "1" : "");
   const v = plein ? plein.s.title : num ? g.titre : "";
   if (v !== $("capTitre").value){ $("capTitre").value = v; CAP_TITRE_AUTO = true; capResumeMaj(); if (!v) return;
@@ -9602,9 +9628,10 @@ async function suivreCapture(){
   bar.hidden = false; lg.hidden = false;
   lg.textContent = (s.sortie || []).join("\n");
   // v2.3.0 : une SERIE de chapitres (suite / jusqu'au) -- le statut donne le chapitre EN COURS et ceux deja faits
-  const enSerie = +s.suite > 0 || !!s.jusqua, faits = (s.dossiers || []).length;
+  const enSerie = +s.suite > 0 || !!s.jusqua || !!s.dernier_paru, faits = (s.dossiers || []).length;
   if (s.etat === "en cours"){
-    const cible = s.jusqua ? " (jusqu'au ch. " + s.jusqua + ")" : (+s.suite > 0 ? " (" + (faits + 1) + " sur " + (+s.suite + 1) + ")" : "");
+    const cible = s.jusqua ? " (jusqu'au ch. " + s.jusqua + ")" : (+s.suite > 0 ? " (" + (faits + 1) + " sur " + (+s.suite + 1) + ")"
+                : s.dernier_paru ? " (jusqu'au dernier paru)" : "");
     $("capEtat").textContent = "capture de « " + s.titre + " » ch. " + s.chapitre + cible + " — " + s.pages + " page(s) collectée(s)"
       + (enSerie && faits ? " · " + faits + " chapitre(s) déjà faits" : "") + " · " + fmtS(s.duree_s);
     bar.firstElementChild.style.width = Math.min(95, 5 + s.pages * 1.5) + "%";   // pas de total connu d'avance
@@ -9618,9 +9645,14 @@ async function suivreCapture(){
     // « SÉRIE : 3 chapitre(s) : 302, 303, 304 — arrêt : ... » (bilan écrit par manga-fetch)
     const m = /^SÉRIE : (\d+) chapitre\(s\) : ([^—]+?)(?: — arrêt : (.*))?$/.exec(s.serie);
     const nb = m ? +m[1] : faits, liste = m ? m[2].trim() : "", arret = m && m[3] ? m[3] : "";
-    const tenu = /: fait$/.test(arret) || (!!s.jusqua && /dépasse la borne/.test(arret));
-    $("capEtat").textContent = (tenu ? "✅ " : /arrêtée à ta demande/.test(arret) ? "⏹ " : "🟠 ") + nb + " chapitre(s) de « " + s.titre + " » : ch. " + liste
-      + " (" + fmtS(s.duree_s) + ")" + (arret && !/: fait$/.test(arret) ? " — arrêt : " + arret : "");
+    const tenu = /: fait$/.test(arret) || (!!s.jusqua && /dépasse la borne/.test(arret))
+      || (!!s.dernier_paru && /aucun chapitre après/.test(arret));                                  // v2.67.0
+    const dl = ((s.sortie || []).map(l => /^DEJA LA : (.+)$/.exec(l)).find(Boolean) || [])[1];      // v2.67.0 : deja la
+    const compte = dl ? capCompte({ faits: liste.split(",").map(x => x.trim()), deja_la: dl.split(",").map(x => x.trim()) })
+                      : nb + " chapitre(s)";
+    $("capEtat").textContent = (tenu ? "✅ " : /arrêtée à ta demande/.test(arret) ? "⏹ " : "🟠 ") + compte + " de « " + s.titre + " »"
+      + (dl ? "" : " : ch. " + liste) + " (" + fmtS(s.duree_s) + ")"
+      + (s.dernier_paru && tenu ? " — à jour" : (arret && !/: fait$/.test(arret) ? " — arrêt : " + arret : ""));
     log("capture en série terminée : " + s.serie);
     await refreshChaps();
     const i = CHAPS.findIndex(c => c.dir === (s.dossiers || [])[0]);
@@ -9652,7 +9684,8 @@ function capResumeMaj(){
   const t = CAP_TABS[+$("capTab").value], titre = $("capTitre").value.trim(), n = $("capChap").value.trim(), m = $("capSerieMode").value;
   const manque = [!t && "l'onglet (étape 2)", !titre && "le nom (étape 3)", !n && "le numéro (étape 3)"].filter(Boolean);
   const combien = m === "jusqua" && $("capJusqua").value.trim() ? " puis jusqu'au ch. " + $("capJusqua").value.trim()
-               : m === "suite" ? " puis les " + (+$("capSuite").value || 1) + " suivant(s)" : " — ce chapitre seul";
+               : m === "suite" ? " puis les " + (+$("capSuite").value || 1) + " suivant(s)"
+               : m === "dernier" ? " puis tous les suivants, jusqu'au dernier paru" : " — ce chapitre seul";   // v2.67.0 : dernier paru
   $("capResume").innerHTML = manque.length ? "Il manque " + esc(manque.join(", ")) + "."
     : "📥 <b>" + esc(titre) + "</b>, chapitre <b>" + esc(n) + "</b>, depuis <b>" + esc(srcHost(t.url)) + "</b>" + esc(combien) + ".";
 }
@@ -9705,16 +9738,30 @@ $("btnCapturer").onclick = async () => {
   // v2.3.2 : plusieurs chapitres selon le SELECTEUR -- « jusqu'au ch. Y » (defaut, vide = ce chapitre seul),
   // « + N chapitres suivants », ou « ce chapitre seul »
   const modeSerie = capEnchSite(t.url)[0] ? $("capSerieMode").value : "seul";   // v2.17.0 : jamais de serie la ou le site ne suit pas
-  const suite = modeSerie === "suite" ? Math.max(0, Math.min(50, Math.floor(+$("capSuite").value || 0))) : 0;
+  // v2.67.0 : 300 partout (Quang 25/09 23h51) -- « + N » <= 300, « jusqu'au ch. » a 300 chapitres d'ecart au plus
+  const suite = modeSerie === "suite" ? Math.max(0, Math.min(300, Math.floor(+$("capSuite").value || 0))) : 0;
   const jusqua = modeSerie === "jusqua" ? $("capJusqua").value.trim().replace(",", ".") : "";
+  const dernier = modeSerie === "dernier";                                      // v2.67.0 : dernier paru
   if (jusqua && (!/^\d{1,5}(\.\d{1,2})?$/.test(jusqua) || +jusqua <= +chap)){
     alert("« jusqu'au ch. » doit être un numéro plus grand que " + chap + "."); return;
   }
+  if (jusqua && +jusqua - +chap > 300){
+    alert("« jusqu'au ch. » : 300 chapitres d'écart au plus par capture (ici " + (+jusqua - +chap) + ").\nCapture en deux fois, ou choisis « Jusqu'au dernier paru »."); return;
+  }
   const serieTxt = (jusqua ? "\npuis les suivants jusqu'au chapitre " + jusqua
-    : (suite ? "\npuis les " + suite + " chapitre(s) suivant(s)" : ""))
-    + ((jusqua || suite) && $("capEntiers").checked ? " (sans les chapitres intermédiaires)" : "");
+    : (suite ? "\npuis les " + suite + " chapitre(s) suivant(s)" : (dernier ? "\npuis tous les suivants, jusqu'au dernier paru" : "")))
+    + ((jusqua || suite || dernier) && $("capEntiers").checked ? " (sans les chapitres intermédiaires)" : "");
   let force = false;
-  if (deja){
+  if (deja && (jusqua || suite || dernier)){
+    // v2.67.0 (Quang 23h43 : « sans recommencer le travail ») : en SERIE, un 1er chapitre deja la se GARDE par defaut ;
+    // avant, « non » a « le remplacer ? » annulait toute la serie. Les suivants deja la sont sautes par manga-fetch.
+    const r = await demander({ titre: "Le ch. " + chap + " existe déjà (" + deja.pages + " pages)",
+      texte: "Tu demandes aussi les suivants" + (jusqua ? " jusqu'au ch. " + jusqua : dernier ? ", jusqu'au dernier paru" : "")
+        + ". Les chapitres déjà là sont gardés tels quels, jamais recapturés.",
+      oui: "⏭ Le garder et continuer", autre: "♻ Le refaire", non: "Annuler" });
+    if (!r) return;
+    force = r === "autre";
+  } else if (deja){
     if (!confirm("« " + deja.title + " » chapitre " + chap + " existe déjà (" + deja.pages + " pages).\nLe remplacer par cette nouvelle capture ?")) return;
     force = true;
   }
@@ -9722,7 +9769,8 @@ $("btnCapturer").onclick = async () => {
   if (!(await fenVerifier())) return;                                            // v2.14.0
   try {
     await api("/manga/fetch_capture", { tab: t.url, title: titre, chapter: chap, force, page1: $("capPage1").checked,
-                                      suite: jusqua ? 0 : suite, jusqua, entiers: $("capEntiers").checked });
+                                      suite: jusqua ? 0 : suite, jusqua, entiers: $("capEntiers").checked,
+                                      dernier_paru: dernier });
     $("btnCapturer").disabled = true;
     $("capEtat").textContent = "capture lancée…";
     log("capture lancée : " + titre + " ch." + chap + serieTxt.replace("\n", " ") + " ← " + t.url.slice(0, 80));

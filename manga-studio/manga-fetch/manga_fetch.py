@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.7.6"
+VERSION = "0.8.0"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -46,6 +46,9 @@ EDGE_PROFILE = os.environ.get("MANGA_CAPTURE_PROFIL") or os.path.join(os.environ
 DATA_DIR = os.environ.get("MANGA_CAPTURE_DONNEES") or os.path.join(os.environ.get("LOCALAPPDATA", "."), "manga-fetch")
 LOG_FILE = os.path.join(DATA_DIR, "fetch.log")
 LOG_EVT = os.path.join(DATA_DIR, "events.log")
+SERIE_FILET = 300        # v0.8.0 : dernier filet par lancement, tous modes (remplace le plafond de 50 ; Quang 25/09 23h51)
+SERIE_SAUT_MAX = 10      # v0.8.0 : un « suivant » qui saute plus loin = lien suspect -> arret de securite
+SERIE_PAUSE_MS = 3000    # v0.8.0 : politesse entre deux chapitres (Quang 25/09 23h42 : « ne pas spammer le site »)
 ARRET_FICHIER = os.path.join(DATA_DIR, "arret_demande.json")   # v0.7.6 : « ⏹ Arrêter après ce chapitre » (pose par l'app)
 PLAFOND_TOURS_PAGER, PLAFOND_S_PAGER = 3000, 3600   # v0.6.3 : garde-fous page par page (~1000 pages, 1 h)
 PLAFOND_PAS_ABSOLU = 6000   # v0.6.2 : ~5,3 millions de px a 1273 px d'ecran (~2 h) -- garde-fou, jamais la regle  # journal DÉTAILLÉ (demande Quang 18/18)
@@ -278,6 +281,42 @@ def marque_final(page) -> str:
         return ""
     m = RE_FINAL.search(texte)
     return m.group(1) if m else ""
+
+
+def _empreintes(dossier: str) -> set:
+    """v0.8.0 : empreintes (sha1) des images d'un chapitre."""
+    e = set()
+    try:
+        for f in os.listdir(dossier):
+            if os.path.splitext(f)[1].lower() in IMG_EXTS:
+                with open(os.path.join(dossier, f), "rb") as fh:
+                    e.add(hashlib.sha1(fh.read()).hexdigest())
+    except OSError:
+        pass
+    return e
+
+
+def _meme_contenu(out: str, title: str, precedent: str, courant: str):
+    """v0.8.0 : le chapitre `courant` reprend-il les images du `precedent` (site qui ressert la meme page) ?
+    Retourne une explication courte, ou None. Seuil : >= 80 % des images du courant deja dans le precedent."""
+    a = _empreintes(chap_dir(out, title, courant))
+    if len(a) < 2:
+        return None
+    b = _empreintes(chap_dir(out, title, precedent))
+    communes = len(a & b)
+    return f"{communes}/{len(a)} images identiques" if communes >= 0.8 * len(a) else None
+
+
+def _mettre_de_cote(dossier: str, pourquoi: str):
+    """v0.8.0 : un chapitre faux est RENOMME a cote (« _<pourquoi>_<nom>_<t> »), jamais efface. Nom du dossier, ou None."""
+    if not os.path.isdir(dossier):
+        return None
+    cible = os.path.join(os.path.dirname(dossier), f"_{pourquoi}_{os.path.basename(dossier)}_{int(time.time())}")
+    try:
+        os.rename(dossier, cible)
+        return os.path.basename(cible)
+    except OSError:
+        return None
 
 
 def _choisir_suivant(dispo: dict, courant: str, jusqua, entiers: bool = False):
@@ -877,6 +916,7 @@ def capture(args) -> int:
 
         def un_chapitre(args) -> int:
             DERNIER["url"] = _url_chapitre(page.url)
+            DERNIER["deja_la"] = False
             print(f"Onglet : {page.url[:80]}")
             log_evt("capture", "démarrage", titre=args.title, chapitre=str(args.chapter),
                     methode_onglet=methode_choix, onglet=page.url[:100])
@@ -956,6 +996,7 @@ def capture(args) -> int:
                     print("Capture ignorée — l'existant est conservé "
                           "(--force pour remplacer sans demander).")
                     log_evt("doublon", "capture ignorée (chapitre déjà présent)", dossier=dest)
+                    DERNIER["deja_la"] = True                  # v0.8.0 : le bilan de serie le distingue d'une capture
                     return 0
                 print("Remplacement demandé.")
             os.makedirs(dest, exist_ok=True)
@@ -1235,7 +1276,7 @@ def capture(args) -> int:
                 # suit maintenant la hauteur reelle (relue a chaque pas : elle grandit au chargement) ; s'il est
                 # atteint quand meme, c'est ecrit en toutes lettres.
                 # v0.7.4 (25/09, Quang : « gagner du temps, mais sur a 100 % ») : MODE RAPIDE, automatique et prudent.
-                # Si TOUTES les images de la page sont DEJA chargees au depart (mesure : topmanhua 145/145, manga-scantrad
+                # Si TOUTES les images de la page sont DEJA chargees au depart (mesure : un site de la secondaire 145/145, manga-scantrad
                 # 14/14 ; ni AnimoFlix ni MANGA Plus), l'attente fixe de 1,2 s par pas devient 0,4 s -- et elle remonte
                 # jusqu'a 1,2 s (comme avant) des qu'une image a l'ecran n'est pas prete ou que la page change de hauteur
                 # (connexion lente). Jamais plus lent qu'avant. A la fin : toute image de la largeur des pages non prise
@@ -1436,24 +1477,27 @@ def capture(args) -> int:
                 print("Notes : " + " ; ".join(notes[:5]))
             return 0 if not notes else 3  # 3 = réussite avec avertissements
         code = un_chapitre(args)
-        suite = max(0, min(50, int(getattr(args, "suite", 0) or 0)))
+        suite = max(0, min(SERIE_FILET, int(getattr(args, "suite", 0) or 0)))   # v0.8.0 : 50 -> 300
         jusqua = getattr(args, "jusqua", None)
         try:
             jusqua = float(jusqua) if jusqua not in (None, "") else None
         except ValueError:
             jusqua = None
+        fin = bool(getattr(args, "jusqua_fin", False))      # v0.8.0 : « jusqu'au dernier paru »
+        if fin:
+            jusqua = float("inf")                            # aucune borne : les trous de numerotation sont toleres (comme --jusqua)
         if not suite and jusqua is None:
             return code
         if code not in (0, 3):
             print("SÉRIE : arrêt — le premier chapitre a échoué.")
             return code
         faits, chap, arret = [str(args.chapter)], str(args.chapter), None
-        limite = 50 if jusqua is not None else suite
-        while len(faits) - 1 < limite:
+        deja_la = [str(args.chapter)] if DERNIER.get("deja_la") else []
+        while jusqua is not None or len(faits) - 1 < suite:   # v0.8.0 : plus de plafond de 50 ; filet commun ci-dessous
             # v0.7.5 (Quang 25/09 22h01) : l'objectif ATTEINT s'arrete ICI. Avant, on cherchait quand meme le suivant : au
             # dernier chapitre paru (objectif 54, rien apres) le bilan disait « aucun chapitre apres le 54 » -> « objectif non
             # tenu » et une notification « le ch. 54 n'est pas encore paru » alors qu'il venait d'etre capture.
-            if jusqua is not None and _num(chap) >= jusqua:
+            if not fin and jusqua is not None and _num(chap) >= jusqua:
                 arret = f"jusqu'au ch. {_format_num(jusqua)} : fait"
                 break
             # v0.7.6 (maquette_arret_v1, validee 25/09) : « ⏹ Arrêter après ce chapitre » -- lu ENTRE deux chapitres, jamais au
@@ -1473,6 +1517,7 @@ def capture(args) -> int:
                     arret = f"arrêtée à ta demande après le ch. {chap} — {raison}"
                 log_evt("série", "arrêt demandé", apres=chap)
                 break
+            page.wait_for_timeout(SERIE_PAUSE_MS)              # v0.8.0 : politesse, chapitres sautes compris
             try:
                 num, raison = chapitre_suivant(page, DERNIER.get("url", page.url), chap, jusqua,
                                               bool(getattr(args, "sans_intermediaires", False)))
@@ -1480,11 +1525,26 @@ def capture(args) -> int:
                 num, raison = None, f"passage au chapitre suivant impossible ({type(e).__name__}: {str(e)[:120]})"
             if num is None:
                 arret = raison
-                if raison and raison.startswith("aucun chapitre après"):
+                if raison and "aucun chapitre après" in raison:        # v0.8.0 : MangaDex prefixe « MangaDex : »
                     fin = marque_final(page)                     # v0.7.5 : « Final » sur la page du dernier chapitre ?
                     if fin:
                         arret += f" — le ch. {chap} est marqué « {fin} » (série terminée)"
                         log_evt("série", "chapitre FINAL reconnu", chapitre=chap, marque=fin)
+                break
+            if num in faits or _num(num) <= _num(chap):       # v0.8.0 : jamais en arriere (garde explicite)
+                arret = f"arrêt de sécurité : le site propose le ch. {num} après le {chap} (retour en arrière)"
+                log_evt("sécurité", "retour en arrière", apres=chap, propose=num)
+                break
+            if fin and _num(num) - _num(chap) > SERIE_SAUT_MAX:
+                log_evt("série", f"chapitre suivant {num}", onglet=page.url[:100])     # adresse pour la reprise
+                arret = (f"arrêt de sécurité : le site propose le ch. {num} juste après le {chap} (saut suspect)"
+                         f" — reprise au ch. {num}")
+                log_evt("sécurité", "saut suspect", apres=chap, propose=num)
+                break
+            if len(faits) > SERIE_FILET:                     # v0.8.0 : dernier filet, TOUS les modes (Quang 23h51) = 300 d'ecart
+                log_evt("série", f"chapitre suivant {num}", onglet=page.url[:100])
+                arret = f"arrêt de sécurité : {SERIE_FILET} chapitres en un lancement — reprise au ch. {num}"
+                log_evt("sécurité", "filet atteint", chapitres=len(faits), suivant=num)
                 break
             print(f"=== Chapitre suivant : {num} ===")
             log_evt("série", f"chapitre suivant {num}", onglet=page.url[:100])
@@ -1495,16 +1555,31 @@ def capture(args) -> int:
             if c2 not in (0, 3):
                 arret = f"le chapitre {num} a échoué (code {c2})"
                 break
+            if DERNIER.get("deja_la"):
+                deja_la.append(num)
+            else:
+                ident = _meme_contenu(args.out, args.title, chap, num)
+                if ident:                                     # v0.8.0 : le site a resservi le chapitre precedent
+                    cote = _mettre_de_cote(chap_dir(args.out, args.title, num), "doublon")
+                    arret = (f"arrêt de sécurité : le ch. {num} a les mêmes images que le {chap} ({ident})"
+                             f" — reprise au ch. {num}")
+                    log_evt("sécurité", "contenu identique", chapitre=num, precedent=chap, mis_de_cote=cote or "")
+                    break
             faits.append(num)
             chap = num
             if c2 == 3:
                 code = 3
         if arret is None and jusqua is None:
             arret = f"{suite} chapitre(s) suivant(s) demandé(s) : fait"
+        if deja_la:
+            print("DEJA LA : " + ", ".join(deja_la))           # v0.8.0 : lu par le proxy (bilan « N capturés, M déjà là »)
         print(f"SÉRIE : {len(faits)} chapitre(s) : {', '.join(faits)}" + (f" — arrêt : {arret}" if arret else ""))
-        log_evt("série", "terminée", chapitres=",".join(faits), arret=arret or "")
-        demande_non_tenue = ((jusqua is not None and _num(faits[-1]) < jusqua)
-                             or (jusqua is None and len(faits) - 1 < suite))
+        log_evt("série", "terminée", chapitres=",".join(faits), deja_la=",".join(deja_la), arret=arret or "")
+        if fin:                                               # v0.8.0 : tenu = le site n'a plus de suite
+            demande_non_tenue = "aucun chapitre après" not in (arret or "")
+        else:
+            demande_non_tenue = ((jusqua is not None and _num(faits[-1]) < jusqua)
+                                 or (jusqua is None and len(faits) - 1 < suite))
         return 3 if (code == 3 or demande_non_tenue) else 0
 
 
@@ -1736,6 +1811,9 @@ def main() -> int:
                    help="v0.4.1 : sauter les chapitres à décimale (298.5...) pendant l'enchaînement")
     s.add_argument("--jusqua", default=None,
                    help="v0.4.0 : enchaîner jusqu'au chapitre Y inclus (les trous sont sautés)")
+    s.add_argument("--jusqua-fin", action="store_true",
+                   help="v0.8.0 : enchaîner jusqu'au dernier chapitre paru sur le site (sécurités : saut > 10, "
+                        "contenu identique, filet de 300 chapitres, pause de 3 s entre deux chapitres)")
     s.add_argument("--title", required=True)
     s.add_argument("--chapter", required=True)
     s.add_argument("--out", default=DEFAULT_OUT)

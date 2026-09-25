@@ -2855,39 +2855,67 @@ Maquette : `maquette_dernier_paru_v1.html` (v1, **à valider par Quang avant tou
 
 ### Décisions (déléguées par Quang 23h42, prises par Claude)
 - Nom : **« Jusqu'au dernier paru »** (vrai que la série soit finie ou non).
-- Plafond 50 → **supprimé pour ce mode**, remplacé par les sécurités ci-dessous + un **filet de 300** chapitres par lancement.
-  Les modes « jusqu'au ch. » et « + N » gardent leur comportement (50) — scope minimal.
+- Plafond 50 → **supprimé**, remplacé par les sécurités ci-dessous + un **filet de 300** chapitres d'écart par lancement.
+  ~~Les modes « jusqu'au ch. » et « + N » gardent 50~~ → **Quang 23h51 : 300 PARTOUT** (« jusqu'au ch. » : écart > 300 refusé
+  à la saisie, app ET proxy ; « + N » ≤ 300 ; filet commun dans la boucle, car les x.5 peuvent dépasser l'écart).
 - Sites **partiels 🟠** : puce ouverte (au pire un arrêt orange avec « ▶ Reprendre », jamais de boucle ni de perte).
 
 ### Étapes (dans l'ordre, une à la fois ; chacune = banc réel + sabotage rouge + commit)
-- [ ] **E0 — Validation de la maquette** par Quang. Rien d'autre avant.
-- [ ] **E1 — manga-fetch 0.8.0, mode `--jusqua-fin`** : pas de borne ; fin de site → arrêt « à jour : le ch. N est le dernier
+- [x] **E0 — Validation de la maquette** par Quang. ✅ 25/09 23h49 (« c'est tout bon pour moi »).
+- [x] **E1 — manga-fetch 0.8.0, mode `--jusqua-fin`** : pas de borne ; fin de site → arrêt « à jour : le ch. N est le dernier
       paru » (texte DISTINCT de « dépasse la borne » et de « série terminée ») ; code retour 0 (demande tenue).
       Vérifier le cas « chapitre suivant manquant » (trou de numérotation) : sans borne, `_choisir_suivant` exige c+1 → à
       aligner sur le mode `jusqua` (sauts tolérés), la sécurité E2 prenant le relais au-delà de 10.
-- [ ] **E2 — Sécurités (tous modes de série, sauf mention)** :
+- [x] **E2 — Sécurités (tous modes de série, sauf mention)** :
       (1) progression strictement croissante — existe, ajouter un test ; (2) **empreinte** : pages du chapitre identiques
       à celles du précédent → arrêt ; (3) **saut > 10 numéros** → arrêt avec reprise (mode dernier-paru) ; (4) **pause 3 s**
       entre deux chapitres, sautés compris ; (5) **filet 300** (mode dernier-paru) ; (6) chaque arrêt de sécurité journalisé
       (`events.log`, catégorie `sécurité`) avec la raison lisible.
-- [ ] **E3 — Déjà présents** : bilan manga-fetch sépare `captures` et `deja_la` (ligne SÉRIE + `log_evt`) ; proxy les
+- [x] **E3 — Déjà présents** : bilan manga-fetch sépare `captures` et `deja_la` (ligne SÉRIE + `log_evt`) ; proxy les
       transmet ; app : bilan « N capturés (…), M déjà là (…) » ; 1ᵉʳ chapitre présent en série → dialogue « ⏭ Le garder et
       continuer » (défaut) / « ♻ Le refaire » / Annuler (dialogue actuel inchangé pour un chapitre seul).
-- [ ] **E4 — Proxy (`proxy-patch/patch_dernier_paru.py` + `.diff`)** : accepter `fin: true`, passer `--jusqua-fin`, total
+- [x] **E4 — Proxy (`proxy-patch/patch_dernier_paru.py` + `.diff`)** : accepter `fin: true`, passer `--jusqua-fin`, total
       inconnu (« N faits », pas « N sur ? »), « tenu » = arrêt « à jour » ou « série terminée », reprise qui garde le mode.
       Testé sur une COPIE, relance AU REPOS (principale puis secondaire, procédure du HANDOFF-reprise § 3.7).
-- [ ] **E5 — App v2.67.0** : 4ᵉ puce `data-serie="fin"` (option du `<select>` caché aussi), résumé « puis tous les suivants,
+- [x] **E5 — App v2.67.0** : 4ᵉ puce `data-serie="fin"` (option du `<select>` caché aussi), résumé « puis tous les suivants,
       jusqu'au dernier paru », grisée comme les autres, ligne d'activité « N chapitre(s) fait(s) · jusqu'au dernier paru »,
       bilans vert « à jour » / orange « arrêtée par sécurité » + reprise. Version aux 3 endroits.
-- [ ] **E6 — Bancs** : vraie capture « dernier paru » sur un site de test court de la principale (fin atteinte, bilan vert) ;
+- [x] **E6 — Bancs** : vraie capture « dernier paru » sur un site de test court de la principale (fin atteinte, bilan vert) ;
       1 → N avec des chapitres déjà présents (aucun recapturé : dates des manifestes inchangées) ; chaque sécurité sabotée →
       rouge ; bancs voisins (`test_arret_capture`, `test_reprendre_ui`, `test_enchainement_ui`) ; largeurs 360/476/704/933/1280 ;
       les DEUX applications. `test_capture_serie_ui.py` périmé : le réparer ici (il touche l'étape 4).
-- [ ] **E7 — Clôture** : ROADMAP (entrée datée, constats barrés), HANDOFF-reprise à jour, commit + push. Aucun nom de la
+- [x] **E7 — Clôture** : ROADMAP (entrée datée, constats barrés), HANDOFF-reprise à jour, commit + push. Aucun nom de la
       secondaire nulle part (dépôt PUBLIC).
+
+### Livré (26/09/2026 00h40) — manga-fetch 0.8.0 · proxy `patch_dernier_paru` · app v2.67.0
+- Champ du proxy nommé **`dernier_paru`**, PAS `fin` : le bilan a DÉJÀ un champ `fin` (heure de fin = clé « déjà vu » de
+  l'app) — un `fin: true` l'aurait écrasé et cassé tous les bandeaux (repéré avant livraison).
+- **Défaut trouvé par le banc réel** : sur MangaDex la raison est « **MangaDex :** aucun chapitre après le 143… » → les 3
+  tests en `startswith` rataient la fin (bandeau bleu au lieu de vert, « tenu » faux). Corrigé en « contient », aux 3
+  endroits ; la reconnaissance « série terminée » (0.7.5) avait le même défaut sur MangaDex → corrigée aussi.
+- Bancs : `test_dernier_paru.py` **19/19** (141 → 143 réels, 142 déjà là non touché, départ sur un déjà-là, bandeau vert,
+  puce grisée, 5 largeurs ; mutation app → rouge) · `test_serie_securites.py` **16/16** (mutation 15/16) ·
+  `test_capture_serie.py 8190` **27/27** (cas « suite 51 refusée » → 301 ; assertion « dépasse la borne » périmée depuis
+  0.7.5 → « jusqu'au ch. 308 : fait ») · `test_capture_serie_ui.py` **17/17** (réparé : puces au lieu du sélecteur caché,
+  + puce « dernier paru ») · `test_arret_capture` **14/14** · `test_reprendre_ui` **112/112** · `test_activite_ui` **64/64** ·
+  `test_enchainement_ui` 8192 **12/12**, 8190 **7/8** (🟠 constaté 26/09 : la fenêtre principale n'avait aucun onglet
+  d'un site qui n'enchaîne pas — condition du banc, pas un défaut ; le cas est couvert sur 8192 et par `test_dernier_paru`).
+- ⚠ Non testé en réel (impossible à provoquer sur un vrai site) : saut > 10, contenu identique, filet 300 → couverts par
+  les fonctions et la lecture du source (`test_serie_securites`).
+- Relances : principale via `relance-proxy.ps1` (×2) ; secondaire relancée AU REPOS (bilan de Quang conservé).
+- 🔒 Contrôle dépôt public à la clôture : 4 fichiers suivis contenaient encore des noms de la secondaire (commentaires,
+  maquette, données d'un banc — antérieurs à cette session) → neutralisés, `test_choix_manga_ui` **127/127** inchangé.
 
 ### Hors périmètre (noté, non fait)
 - Le bouton d'arrêt pour une vidéo, la fausse alerte au redimensionnement : inchangés (déclencheurs dans HANDOFF-reprise § 2).
+- 🔴 **(constaté 26/09, manga-fetch 0.7.6/0.8.0) Webtoon découpé en bandes PRESQUE CARRÉES → capture d'1 page, ÉCHEC.**
+  Vécu par Quang sur la secondaire le 25/09 23h56 (ch. 16 d'une série, arrêt « capture tronquée à 1 page »). Mesuré en
+  lecture seule dans l'onglet : 210 bandes DISTINCTES, 208 en 720×700 (ratio 1,03). `collecter()` écarte les ratios
+  0,93-1,15 (avatars/logos) et ne réadmet une bande de la largeur des pages qu'après **3** pages déjà prises à cette
+  largeur (v0.7.3) — ici une seule passait (720×1161) → blocage au démarrage. Le contrôle final a bien crié (212
+  manquantes) : aucune fausse réussite. **Remède proposé** : amorcer la largeur de colonne sur le DOCUMENT (largeur
+  commune à ≥ 5 grandes images) et non seulement sur les pages déjà prises. **Déclencheur : accord de Quang (question
+  posée le 26/09 à la livraison) ; tant qu'il n'est pas fait, « Reprendre au ch. 16 » échouera pareil.**
 
 
 ## 4-terdecies. COÛTS — LA « RÉFLEXION » DE GEMINI *(24/09/2026 14h40, question Quang sur les 4,43 $ du repérage)*
@@ -3283,6 +3311,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 
 | Date | Événement |
 |---|---|
+| 2026-09-26 (00h40) | ✅ **v2.67.0 + manga-fetch 0.8.0 + proxy `patch_dernier_paru`** (§ 4-quindecies) : puce « Jusqu'au dernier paru » ; plafond de 50 remplacé par des sécurités (croissance stricte, contenu identique, saut > 10, pause 3 s, filet 300 partout) ; chapitres déjà là sautés et comptés à part (« 2 capturé(s), 1 déjà là »), 1er chapitre déjà là = « ⏭ Le garder et continuer ». Banc réel 19/19 + voisins verts. 🔴 Défaut noté : webtoon en bandes presque carrées (1 page capturée). |
 | 2026-09-24 (17h20) | 🎧 **Voix locale validée à l'oreille** sur un chapitre complet (OPM ch.1, `gemini-charon-local.mp4`) — Quang : « c'est bien ». Rappel du partage : ☁ = tout en ligne (seul changement du jour : repérage des noms sans réflexion, dans les deux modes) ; 🖥 = voix + effacement sur la carte, le reste en ligne. |
 | 2026-09-24 (17h15) | 💰 **Chantier « réflexion Gemini » CLOS** : repérage des noms sans réflexion (gardé, −48 % analyse+noms) ; analyse et traduction gardent la réflexion complète (« low » : vraies fautes sur Black Jack — mot inventé, contresens, anglais ; « medium » : pas d'économie). Économie réelle attendue ≈ −4 $/mois en ligne, + la voix (≈ −6 $/mois) quand Quang narre en 🖥. § 4-terdecies. |
 | 2026-09-24 (19h30) | ✅ **v2.18.0 + manga-fetch 0.6.9 → 0.7.0** : capture principale sans synchro ; enchaînement par la liste des chapitres de la page (site à identifiant interne : ch.1 → ch.2) ; indicateur d'enchaînement qui lit les sites tagués de chaque application. Prochaine étape : S5 (vue croisée). |

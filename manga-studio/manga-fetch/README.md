@@ -85,7 +85,8 @@ sources/<slug>/ch_<num>/
 
 ## Capture de plusieurs chapitres (v0.4.0, 22/09/2026)
 
-`capture ... --chapter N --suite K` (les K suivants, 50 max) ou `--jusqua Y` (jusqu'au ch. Y inclus).
+`capture ... --chapter N --suite K` (les K suivants, ~~50~~ **300** max depuis 0.8.0) ou `--jusqua Y` (jusqu'au ch. Y inclus),
+ou **`--jusqua-fin`** (0.8.0 : jusqu'au dernier chapitre paru sur le site — voir plus bas).
 Après chaque chapitre, `chapitre_suivant()` amène **le même onglet** au suivant, site par site :
 
 | Site | Enchaînement (vérifié en réel le 22/09) | Comment |
@@ -105,6 +106,24 @@ Après chaque chapitre, `chapitre_suivant()` amène **le même onglet** au suiva
   demande n'a pas été tenue jusqu'au bout.
 - Bancs : `scripts/test_capture_serie.py [port]` **27/27** (mutation « saute un chapitre » → 14/20 rouge),
   `scripts/test_capture_serie_ui.py [port]` **13/13** ; non-régression `test_manga_fetch.py` **9/9**.
+
+## « Jusqu'au dernier paru » + sécurités de série (v0.8.0, 26/09/2026)
+
+`--jusqua-fin` : aucune borne ; la série s'arrête quand le site n'a plus de suite (« aucun chapitre après le N », code 0 =
+demande tenue) ou sur le « Final » du dernier chapitre (« série terminée », 0.7.5). Sécurités (le plafond de 50 a disparu) :
+
+| Risque | Sécurité |
+|---|---|
+| tourner en rond | le suivant doit être **strictement plus grand** (sinon « arrêt de sécurité … retour en arrière ») |
+| le site ressert le chapitre précédent | ≥ 80 % d'images **identiques** (sha1) au précédent → le chapitre est **mis de côté** (`_doublon_ch_N_<t>`, jamais effacé), arrêt, reprise au ch. N |
+| un lien « suivant » qui part ailleurs | saut de **plus de 10** numéros (mode fin seulement) → arrêt, reprise au ch. proposé |
+| solliciter le site trop vite | **pause de 3 s** entre deux chapitres (tous modes, chapitres sautés compris) |
+| dernier filet | **300 chapitres** par lancement (tous modes), puis arrêt avec reprise |
+
+Tous ces arrêts s'écrivent « arrêt de sécurité : <raison> — reprise au ch. N » (lu par le proxy pour la reprise) et dans
+`events.log` (catégorie `sécurité`). Un chapitre **déjà là** est sauté sans être recapturé et listé à part :
+ligne `DEJA LA : 2, 3` avant le bilan `SÉRIE`. Bancs : `scripts/test_serie_securites.py` **16/16** (mutation 15/16),
+`scripts/test_dernier_paru.py` **19/19** (vraies captures MangaDex, mutation de l'app rouge).
 
 ## Webtoons (manhwa) : découpage automatique des bandes (v0.5.0, 22/09/2026)
 

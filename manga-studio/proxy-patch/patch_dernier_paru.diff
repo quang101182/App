@@ -1,0 +1,135 @@
+--- C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260925-v2670	2026-09-25 23:57:24.526631500 +0200
++++ C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py	2026-09-26 00:02:39.038474300 +0200
+@@ -8855,6 +8855,11 @@
+           "fait": fs.get("pages"), "total": None, "d": None}
+     try:
+         suite, jusqua = int(fs.get("suite") or 0), str(fs.get("jusqua") or "")
++        if fs.get("dernier_paru"):                                                   # v2.67.0 : dernier paru -- total inconnu
++            it.update(fait=len(fs.get("dossiers") or []), total=None, dernier_paru=True, etape="ch. %s" % (fs.get("chapitre") or "?"),
++                      pages=fs.get("pages"))
++            it["arret"] = "apres" if os.path.exists(_mf_drapeau()) else None
++            return it
+         if not (suite or jusqua):
+             return it
+         dep = float(fs.get("chapitre_depart"))
+@@ -9688,7 +9693,7 @@
+     if not en_cours:
+         return {"error": "aucune capture en cours"}
+     if quand == "apres":
+-        if not (_FETCH.get("suite") or _FETCH.get("jusqua")):
++        if not (_FETCH.get("suite") or _FETCH.get("jusqua") or _FETCH.get("dernier_paru")):
+             return {"error": "capture d'un seul chapitre : utilise « Arrêter maintenant »"}
+         with open(f, "w", encoding="utf-8") as fh:
+             json.dump({"quand": "apres", "t": time.time()}, fh)
+@@ -9870,8 +9875,12 @@
+         m2 = re.match(r"^S\S+RIE : \d+ chapitre\(s\) : ([^—]+)", serie)
+         if m2: faits = [x.strip() for x in m2.group(1).split(",") if x.strip()]
+         premier_ko = bool(re.match(r"^S\S+RIE : arrêt", serie))
+-        en_serie = bool(meta["suite"] or meta["jusqua"])
+-        if en_serie:
++        m6 = re.search(r"^DEJA LA : (.+)$", sortie, re.M)                 # v2.67.0 : dernier paru -- deja la
++        deja_la = [x.strip() for x in m6.group(1).split(",") if x.strip()] if m6 else []
++        en_serie = bool(meta["suite"] or meta["jusqua"] or meta.get("dernier_paru"))
++        if meta.get("dernier_paru"):
++            tenu = code in (0, 3) and not premier_ko and "aucun chapitre après" in arret   # MangaDex : « MangaDex : aucun… »
++        elif en_serie:
+             tenu = code in (0, 3) and not premier_ko and (arret.endswith(": fait") or (bool(meta["jusqua"]) and "dépasse la borne" in arret))
+         else:
+             tenu = code in (0, 3)
+@@ -9882,6 +9891,8 @@
+         demande = "arrêtée à ta demande" in arret                          # v2.65.0 : « ⏹ apres ce chapitre »
+         m5 = re.search(r"arrêtée à ta demande après le ch\. \S+ — reprise au ch\. (\S+)", arret)
+         if m5: echec = m5.group(1)
++        m7 = re.search(r"arrêt de sécurité : .* — reprise au ch\. (\S+)$", arret)
++        if m7: echec = m7.group(1)
+         am = _FETCH.get("arret_maintenant") if _FETCH.get("proc") is p else None
+         if am:                                                             # « ✖ maintenant » : le processus a ete arrete
+             demande = True
+@@ -9907,10 +9918,12 @@
+         reprise = None
+         if echec:
+             reprise = {"chapitre": echec, "url": url, "page1": meta["page1"], "entiers": meta["entiers"]}
+-            if meta["jusqua"]: reprise["jusqua"] = meta["jusqua"]
++            if meta.get("dernier_paru"): reprise["dernier_paru"] = True
++            elif meta["jusqua"]: reprise["jusqua"] = meta["jusqua"]
+             elif meta["suite"]: reprise["suite"] = max(0, meta["suite"] + 1 - len(faits) - 1)
+         doc = {"fin": time.time(), "debut": meta["debut"], "titre": meta["titre"], "chapitre_depart": meta["chapitre"],
+-               "suite": meta["suite"], "jusqua": meta["jusqua"], "code": code, "serie": serie, "arret": arret,
++               "suite": meta["suite"], "jusqua": meta["jusqua"], "dernier_paru": bool(meta.get("dernier_paru")), "deja_la": deja_la,
++               "code": code, "serie": serie, "arret": arret,
+                "faits": faits, "tenu": tenu, "reprise": reprise, "demande": bool(demande), "derniere_ligne": (sortie.strip().splitlines() or [""])[-1][:200]}
+         tmp = os.path.join(MANGA_SOURCES, "_capture_derniere.json.tmp")
+         with open(tmp, "w", encoding="utf-8") as f: json.dump(doc, f, ensure_ascii=False, indent=1)
+@@ -9925,7 +9938,7 @@
+     except (OSError, ValueError): return {}
+ 
+ 
+-def manga_fetch_capture(tab_url, titre, chapitre, force=False, page1=False, suite=0, jusqua="", entiers=False):
++def manga_fetch_capture(tab_url, titre, chapitre, force=False, page1=False, suite=0, jusqua="", entiers=False, dernier_paru=False):
+     p = _FETCH["proc"]
+     if p is not None and p.poll() is None:
+         return {"error": "une capture est deja en cours (%s ch.%s)" % (_FETCH["titre"], _FETCH["chapitre"])}
+@@ -9938,13 +9951,16 @@
+         suite = int(suite or 0)
+     except (TypeError, ValueError):
+         return {"error": "nombre de chapitres suivants invalide"}
+-    if not 0 <= suite <= 50:
+-        return {"error": "chapitres suivants : entre 0 et 50"}
++    if not 0 <= suite <= 300:                                          # v2.67.0 : 50 -> 300 (Quang 25/09 23h51)
++        return {"error": "chapitres suivants : entre 0 et 300"}
+     jusqua = str(jusqua or "").strip().replace(",", ".")
+     if jusqua and not re.match(r"^\d{1,5}(\.\d{1,2})?$", jusqua):
+         return {"error": "« jusqu'au chapitre » invalide"}
+     if jusqua and float(jusqua) <= float(chapitre):
+         return {"error": "« jusqu'au chapitre » doit etre apres le chapitre de depart"}
++    if jusqua and float(jusqua) - float(chapitre) > 300:
++        return {"error": "« jusqu'au chapitre » : 300 chapitres d'ecart au plus par capture"}
++    dernier_paru = bool(dernier_paru) and not jusqua and not suite                       # v2.67.0 : dernier paru
+     onglets = manga_fetch_tabs()
+     if not onglets["edge"]:
+         return {"error": "la fenetre de capture est fermee"}
+@@ -9967,9 +9983,10 @@
+                 return {"error": "impossible de mettre l'ancien chapitre de cote : %s" % e}
+             _FETCH.update(backup=b, dest=dest)
+     if page1: cmd.append("--page-1")
+-    if jusqua: cmd += ["--jusqua", jusqua]                  # Manga Studio v2.3.0 : plusieurs chapitres
++    if dernier_paru: cmd.append("--jusqua-fin")                      # v2.67.0 : dernier paru
++    elif jusqua: cmd += ["--jusqua", jusqua]                  # Manga Studio v2.3.0 : plusieurs chapitres
+     elif suite: cmd += ["--suite", str(suite)]
+-    if entiers and (jusqua or suite): cmd.append("--sans-intermediaires")   # v2.3.2 : pas de x.5
++    if entiers and (jusqua or suite or dernier_paru): cmd.append("--sans-intermediaires")   # v2.3.2 : pas de x.5
+     os.makedirs(os.path.dirname(MF_RUNLOG), exist_ok=True)
+     try: _FETCH["offset"] = os.path.getsize(MF_EVENTS)
+     except OSError: _FETCH["offset"] = 0
+@@ -9978,10 +9995,10 @@
+     _FETCH.update(proc=subprocess.Popen(cmd, cwd=os.path.dirname(MF_SCRIPT), stdout=lg, stderr=subprocess.STDOUT,
+                                         stdin=subprocess.DEVNULL, env=env,
+                                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)),
+-                  debut=time.time(), titre=titre, chapitre=chapitre, suite=suite, jusqua=jusqua)
++                  debut=time.time(), titre=titre, chapitre=chapitre, suite=suite, jusqua=jusqua, dernier_paru=dernier_paru)
+     threading.Thread(target=_mf_bilan_ecrire, daemon=True, args=(_FETCH["proc"], {    # v2.50.0 : bilan persistant
+         "offset": _FETCH["offset"], "debut": _FETCH["debut"], "titre": titre, "chapitre": chapitre, "suite": suite,
+-        "jusqua": jusqua, "tab": tab_url, "page1": bool(page1), "entiers": bool(entiers)})).start()
++        "jusqua": jusqua, "dernier_paru": dernier_paru, "tab": tab_url, "page1": bool(page1), "entiers": bool(entiers)})).start()
+     return {"ok": True}
+ 
+ 
+@@ -10048,7 +10065,7 @@
+             "avertissements": code == 3, "remplacement": _FETCH.get("remplacement"),     # manga-fetch : 3 = REUSSITE avec avertissements (notes)
+             "titre": _FETCH["titre"], "chapitre": chap_cours, "chapitre_depart": _FETCH["chapitre"],
+             "pages": pages, "derniere": derniere, "dossier": dossier, "dossiers": dossiers, "serie": serie,
+-            "suite": _FETCH.get("suite") or 0, "jusqua": _FETCH.get("jusqua") or "",
++            "suite": _FETCH.get("suite") or 0, "jusqua": _FETCH.get("jusqua") or "", "dernier_paru": bool(_FETCH.get("dernier_paru")),
+             "sortie": lignes[-12:], "duree_s": round(time.time() - _FETCH["debut"], 1),
+             "arret_demande": _FETCH.get("arret_maintenant")}                          # v2.65.0
+ 
+@@ -11398,7 +11415,8 @@
+                 self._json(200, manga_fetch_capture(data.get("tab") or "", data.get("title") or "",
+                                                     str(data.get("chapter") or ""), bool(data.get("force")),
+                                                     bool(data.get("page1")), data.get("suite") or 0,
+-                                                    str(data.get("jusqua") or ""), bool(data.get("entiers"))))
++                                                    str(data.get("jusqua") or ""), bool(data.get("entiers")),
++                                                    bool(data.get("dernier_paru"))))       # v2.67.0 : dernier paru
+             elif self.path == "/manga/source_delete":          # Manga Studio v1.76.0
+                 self._json(200, manga_source_delete(data))
+             elif self.path == "/manga/serie_infos":            # Manga Studio v1.77.0

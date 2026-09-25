@@ -155,9 +155,9 @@ with sync_playwright() as p:
             check("… taper ne fait PAS défiler la page", pg.evaluate("() => scrollY") == sy, [sy, pg.evaluate("() => scrollY")])
             items = pg.evaluate("() => [...document.querySelectorAll('#capSugg .cap-sugg-i')].map(b => b.dataset.titre)")
             check("… « cl » : seulement Claymore (même classement)", items == ["Claymore"], items)
-            r = pg.evaluate("""() => [rangTitres('cl', ['All About Dominative and Exclusive Destruction']), rangTitres('cl', ['Claymore']),
-                                       rangTitres('toy', ['Toying With Daddy']), rangTitres('the del', ['The Delinquent Girl']),
-                                       rangTitres('del', ['The Delinquent Girl']), rangTitres('clay', ['Claymore']) > rangTitres('clay', ['Playing with Karma'])]""")
+            r = pg.evaluate("""() => [rangTitres('cl', ['All About Distant and Exclusive Days']), rangTitres('cl', ['Claymore']),
+                                       rangTitres('toy', ['Toying With Dreams']), rangTitres('the del', ['The Delta Garden']),
+                                       rangTitres('del', ['The Delta Garden']), rangTitres('clay', ['Claymore']) > rangTitres('clay', ['Playing with Kites'])]""")
             check("classement : « cl » ≠ « exclusive » ; débuts de titre / de mot trouvés ; le vrai début avant la faute tolérée",
                   r[0] == 0 and r[1] == 100 and r[2] == 100 and r[3] == 100 and r[4] == 80 and r[5], r)
         check("RIEN n'est parti (aucun POST)", not posts, posts[:4])
