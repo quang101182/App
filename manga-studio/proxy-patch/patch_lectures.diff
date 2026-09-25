@@ -1,0 +1,29 @@
+7909c7909,7911
+<             "ouvertes": {k: v for k, v in (b.get("ouvertes") or {}).items() if isinstance(v, (int, float))}}
+---
+>             "ouvertes": {k: v for k, v in (b.get("ouvertes") or {}).items() if isinstance(v, (int, float))},
+>             "lectures": {k: v for k, v in (b.get("lectures") or {}).items()           # v2.62.0 : lectures
+>                          if isinstance(v, dict) and isinstance(v.get("d"), str)}}
+7918c7920
+<     if action not in ("masquer", "afficher", "ouverte"):
+---
+>     if action not in ("masquer", "afficher", "ouverte", "lecture"):
+7919a7922,7930
+>     if action == "lecture":                                                  # v2.62.0 : le chapitre DOIT etre de la serie
+>         d = (data.get("d") or "").strip("/")
+>         if not d.startswith(slug + "/") or ".." in d or not os.path.isdir(_manga_src_safe(d) or ""):
+>             return {"error": "chapitre introuvable"}
+>         try:
+>             page = max(0, min(9999, int(data.get("page") or 0)))
+>         except (TypeError, ValueError):
+>             page = 0
+>         appareil = re.sub(r"[^\w\s.-]", "", str(data.get("appareil") or ""))[:20]
+7927a7939,7946
+>         elif action == "lecture":
+>             a = b["lectures"].get(slug) or {}
+>             n = {"d": d, "page": page, "t": int(time.time()), "appareil": appareil}
+>             if a.get("d") and a["d"] != d:
+>                 n["prec"] = {"d": a["d"], "page": int(a.get("page") or 0)}
+>             elif a.get("prec"):
+>                 n["prec"] = a["prec"]
+>             b["lectures"][slug] = n

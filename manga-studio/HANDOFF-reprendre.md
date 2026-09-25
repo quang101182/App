@@ -1,5 +1,7 @@
 # HANDOFF — « Reprendre » + historique de lecture (Manga Studio)
 
+> ✅ **LIVRÉ le 25/09/2026 15h20 en v2.62.0** (cf. ROADMAP, entrée du même jour). Ce HANDOFF est désormais une ARCHIVE.
+
 > Écrit le 25/09/2026 14h45, fin d'une longue session (v2.45.0 → v2.61.0, tout commité et poussé).
 > **Autosuffisant** : tout ce qu'il faut est ici ou dans les fichiers cités du dépôt. « Fait » = `git log` (relire avant de coder).
 > Nature des énoncés : les DÉCISIONS ci-dessous sont des intentions validées par Quang (elles font loi) ; l'état du code se

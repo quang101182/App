@@ -2620,9 +2620,20 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   parasite après un glissement est ignoré. (3) LECTEUR de narration : le même glissement sur sa barre (⏮ ⏸ ⏭), curseur de
   volume exclu. La VIDÉO (lecteur natif, barre de temps) n'est pas touchée : un glissement y entrerait en conflit.
   Banc `test_retour_visionneuse_ui.py` **24/24**, mutation rouge ; lecteur 13/13, barre 50/50, appui long 18/18, compact 31/31.
-- ⬜ **PROCHAINE SESSION — « ▶ Reprendre » + historique de lecture** (idée Quang 25/09 14h37, décisions 14h41 : page retenue en
-  silence, historique COMMUN PC + téléphone côté serveur, séparé principale / secondaire). Maquette `maquette_reprendre_v1.html`.
-  Tout le détail (où brancher, pièges, méthode) : **`HANDOFF-reprendre.md`** (autosuffisant). Déclencheur : la prochaine session.
+- **25/09 15h20 — v2.62.0 : « ▶ REPRENDRE » + HISTORIQUE DE LECTURE** (idée Quang 14h37, maquette `maquette_reprendre_v1.html`
+  validée 14h43). Bouton AMBRÉ tout à gauche de la barre du bas : dans un manga = le dernier chapitre ouvert de CE manga, À SA
+  PAGE (« ▶24 » ≤ 480 px, « ▶ ch. 24 » au-delà) ; dans un chapitre déjà ouvert = celui d'AVANT (va-et-vient d'un geste) ; ailleurs
+  = grisé (jamais masqué). Appui long (0,6 s, mécanique de la bulle) = fenêtre « 🕘 Reprendre » : une ligne par manga (pochette,
+  « il y a 2 h · sur le Fold », « ch. 24 · p. 12 »), la plus récente en haut ; toucher = y aller ; fermer par ← Fermer, son bouton,
+  Échap ou un toucher à côté. Page retenue EN SILENCE : 1re page de la rangée du haut de la grille (1 à 4 colonnes selon la
+  largeur) + chaque page vue dans la visionneuse ; envoyée après 3 s de calme ou au passage en arrière-plan.
+  Serveur : `_bibliotheque.json` gagne `lectures: {slug: {d, page, t, appareil, prec}}` (action `lecture`, chapitre DE la série
+  exigé) → commun PC + Fold, séparé principale / secondaire (chacune son dossier sources). Proxy : `patch_lectures.py` + `.diff`,
+  principale relancée par `relance-proxy.ps1`, secondaire au repos. Correctif trouvé par le banc : `bibCharger()` remplaçait la
+  copie locale et perdait une page pas encore envoyée → `bibFusion()` (la plus récente gagne).
+  Banc `test_reprendre_ui.py` **112/112** aux 5 largeurs (360, 476, 704, 933×700, 1280), mutations rouges (chapitre d'avant,
+  fusion) ; serveur vérifié en réel puis fichier de Quang restauré à l'octet ; barre 50/50 (banc adapté : `#nfRep` exclu),
+  appui long 18/18, replier 26/26, compact 31/31, visionneuse 24/24. Les bancs n'écrivent rien (`navigator.webdriver`).
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche

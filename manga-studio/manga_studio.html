@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.61.0</title>
+<title>Manga Studio v2.62.0</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest">
 <meta name="theme-color" content="#0d0f13">
@@ -1048,6 +1048,30 @@ body > main{padding-bottom:calc(var(--nf-h) + env(safe-area-inset-bottom, 0px))}
 .nf-indic{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);padding:7px 14px;border-radius:12px;
   background:rgba(29,58,92,.97);color:#e6f2ff;font-weight:700;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.5)}
 .nf-indic.pret{background:#2f7a4f}
+/* v2.62.0 (maquette_reprendre_v1, validee 25/09 14h43) : « ▶ ch. N » AMBRE tout a gauche = le dernier chapitre ouvert DANS CE
+   manga (dans un chapitre ouvert : celui d'avant). Hors manga : grise, mais l'appui long ouvre quand meme l'historique. */
+.nf-b.nf-rep{background:#5a3d10;color:#ffe2a8;border:1px solid #b8862e;position:relative;overflow:hidden;
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.nf-b.nf-rep:hover{background:#6b4913}
+.nf-b.nf-rep.off{opacity:.32;cursor:default;background:#5a3d10}
+.nf-rep::after{content:"";position:absolute;inset:0;border-radius:inherit;background:rgba(255,226,168,.3);transform:scaleX(0);
+  transform-origin:left;pointer-events:none}
+.nf-rep.appui::after{transform:scaleX(1);transition:transform .6s linear}
+.rep-fen{position:fixed;left:10px;right:10px;bottom:calc(var(--nf-h) + 4px + env(safe-area-inset-bottom, 0px));z-index:56;
+  display:flex;flex-direction:column;max-height:calc(100dvh - var(--nf-h) - 24px);background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;box-shadow:0 10px 30px #000c;padding:10px}
+.rep-fen[hidden]{display:none}
+.rep-t{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;margin:2px 4px 8px;flex:none}
+.rep-t .nf-b{height:28px;min-width:0;font-size:12px;margin-left:auto}
+.rep-liste{overflow-y:auto;min-height:0;overscroll-behavior:contain}
+.rep-l{display:flex;align-items:center;gap:10px;width:100%;padding:8px;border-radius:10px;background:var(--panel2);margin-bottom:6px;
+  border:1px solid transparent;color:var(--txt);font:inherit;text-align:left;cursor:pointer}
+.rep-l:hover{border-color:#b8862e}
+.rep-l img,.rep-l .rep-p{width:34px;height:46px;border-radius:5px;object-fit:cover;flex:none;background:linear-gradient(135deg,#6b4a2a,#2a3140)}
+.rep-l .rep-n{flex:1;min-width:0}.rep-l .rep-n b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rep-l .rep-n small{color:var(--dim);font-size:12px}.rep-l .rep-c{font-weight:700;color:#ffe2a8;white-space:nowrap}
+.rep-vide{color:var(--dim);padding:10px 6px;font-size:14px}
+@media (min-width:704px){.rep-fen{left:50%;right:auto;width:460px;transform:translateX(-50%)}}
 body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
 /* TELEPHONE (Quang 12h23) : barre FINE, la hauteur d'une barre de notification (~34 px), zone reservee ~52 px ; et JAMAIS
    dans la zone des gestes d'Android (un glissement horizontal tout en bas y change d'application) : meme regle que le
@@ -1090,7 +1114,7 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
   <div class="hdrin">
     <!-- v2.30.0 (maquette_ensemble_v1, Quang 22h31-22h33) : en permanence le MODE, l'ACTIVITE, le moteur local et la VRAM ;
          les couts et ℹ️ passent dans « ⋯ ». Telephone : 2 lignes (titre + mode + ⋯, puis activite + Local + VRAM). -->
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.61.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.62.0</span>
       <button class="mode-pill" id="hdrMode" title="Où tournent la voix et l’effacement du texte : en ligne (payant) ou sur ta carte graphique (0 $). Touche pour changer.">☁ En ligne</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -2038,10 +2062,15 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
 
 </main>
 <div id="toast"></div>
+<div class="rep-fen" id="repFen" hidden role="dialog" aria-label="reprendre">
+  <div class="rep-t">🕘 Reprendre <button class="nf-b nf-ret" id="repFermer">← Fermer</button></div>
+  <div class="rep-liste" id="repListe"></div>
+</div>
 <!-- v2.53.0 (maquette_navigation_v2, A validee par Quang 25/09 12h22) : retour / precedent / rafraichir / suivant / haut, TOUJOURS
      a portee quand on est descendu ; glisser la barre a droite / a gauche = suivant / precedent, dans le sens des boutons (v2.54.0 ; LIMITE a elle) -->
 <nav class="nav-flot" id="navFlot" hidden aria-label="navigation rapide">
   <span class="nf-indic" id="nfIndic" hidden></span>
+  <button class="nf-b nf-rep off" id="nfRep" title="reprendre (appui long : l'historique)">▶</button>
   <span class="nf-info" id="nfInfo" title=""><span id="nfInfoTxt"></span></span>
   <button class="nf-b nf-ret" id="nfRet" title="retour"></button>
   <button class="nf-b nf-p" id="nfPrev" title="chapitre précédent"></button>
@@ -2119,7 +2148,7 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.61.0";
+const VERSION = "2.62.0";
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -5651,7 +5680,12 @@ function trierSeries(l){
   return l.sort((a, b) => dateAjout(b) - dateAjout(a) || az(a, b));
 }
 const passeFiltres = s => { const e = new Set(etiquettes(s)); return [...LIB_FILTRES].every(k => e.has(k)); };
-async function bibCharger(){ try { const b = await api("/manga/bibliotheque"); if (b && !b.error) BIB = b; } catch (e){ log("bibliothèque : " + e.message, "w"); } }
+// v2.62.0 : le fichier du serveur REMPLACE la copie locale, sauf une lecture plus recente notee ici et pas encore envoyee
+function bibFusion(b){
+  const loc = BIB.lectures || {}; BIB = b; BIB.lectures = BIB.lectures || {};
+  for (const [k, v] of Object.entries(loc)) if (!BIB.lectures[k] || (BIB.lectures[k].t || 0) < (v.t || 0) - 2) BIB.lectures[k] = v;
+}
+async function bibCharger(){ try { const b = await api("/manga/bibliotheque"); if (b && !b.error) bibFusion(b); } catch (e){ log("bibliothèque : " + e.message, "w"); } }
 function libFiltresRendre(base){
   // base = les series visibles qui correspondent a la recherche ; une pastille propose ce qu'elle DONNERAIT en plus des filtres actifs
   const dispo = new Map();
@@ -5892,9 +5926,11 @@ async function openChap(i){
     if (PAGES_SEL){ const k = +f.dataset.page; PAGES_SEL.has(k) ? PAGES_SEL.delete(k) : PAGES_SEL.add(k); majSel(); return; }
     // v1.78.0 : la page s'agrandit DANS l'app (Quang 21/09 : zoomer, dezoomer, se deplacer, PC et telephone)
     // -> la visionneuse de la galerie (molette, pincee, glisse, double-tap, fleches), plus d'onglet ouvert.
-    ouvrirVisionneuse(j.pages.map((pg, k) => ({ url: pageSrc(pg.path), nom: "p. " + (k + 1) })), +f.dataset.page);
+    lectPage(+f.dataset.page);                                              // v2.62.0 : la page regardee compte
+    ouvrirVisionneuse(j.pages.map((pg, k) => ({ url: pageSrc(pg.path), nom: "p. " + (k + 1), lectD: c.dir })), +f.dataset.page);
   };
   $("chapDetail").hidden = false;
+  lectOuvert(c.dir);                                                         // v2.62.0 : historique de lecture
   CHAP_PAGES = j.pages.length; narrEstim(); tradEstim(); reprendreVoix();
   refreshTrads().catch(err => log("traductions : " + err.message, "w"));
   refreshMus().catch(err => log("musique : " + err.message, "w"));
@@ -5908,7 +5944,7 @@ async function openChap(i){
 async function bibMasquer(slug, masquer){
   const r = await api("/manga/bibliotheque", { action: masquer ? "masquer" : "afficher", slug });
   if (r.error) throw new Error(r.error);
-  BIB = r;
+  bibFusion(r);
   const t = ((mesSeries().find(x => x.slug === slug) || {}).title) || slug;
   log("bibliothèque : « " + t + " » " + (masquer ? "masquée" : "ré-affichée"));
   toast(masquer ? "🙈 « " + t + " » masquée — retrouve-la avec le bouton « 👁 Masquées »" : "👁 « " + t + " » de retour dans ta bibliothèque");
@@ -5982,6 +6018,7 @@ function nfMaj(){
   if (c === "chapitre" && large) $("nfRet").textContent = "← Série";
   if (pan){ $("nfRet").textContent = "← Fermer"; $("nfRet").title = "replier « " + pan.nom + " »"; }
   nfInfoMaj(info);
+  repMaj(c, large);                                                   // v2.62.0 : « ▶ ch. N »
   [["nfPrev", "chapPrev", -1], ["nfSuiv", "chapNext", 1]].forEach(([id, src, d]) => {
     const v = c === "chapitre" ? nfVoisin(src) : null, b = $(id);
     b.disabled = !v;
@@ -6005,6 +6042,7 @@ function nfInfoMaj(txt){
 /* v2.58.0 (Quang 13h16 : « des fenetres qui se deplient […] je dois cliquer dessus pour les refermer, et je n'ai plus de
    retour ») : comme le bouton retour d'un telephone, ← REFERME D'ABORD ce qui est deplie, puis reprend son role. */
 function nfPanneau(){
+  if (!$("repFen").hidden) return { nom: "Reprendre", fermer: () => repFermer() };               // v2.62.0 : partout
   if (nfOngletActif() !== "tChap") return null;
   if (!$("vidBox").hidden) return { nom: "Vidéos", fermer: () => $("vidFermer").click() };
   if (!$("suiviBox").hidden) return { nom: "Profil et traitement", fermer: () => $("suiviFermer").click() };
@@ -6093,6 +6131,139 @@ async function nfTraiter(){
     t = setTimeout(() => { stop(); try { navigator.vibrate && navigator.vibrate(30); } catch {}
                            NF.glisse = true; setTimeout(() => { NF.glisse = false; }, 400);
                            nfTraiter().catch(err => { log("tout traiter : " + err.message, "e"); toast("⚠ " + err.message); }); }, 600);
+  });
+  b.addEventListener("pointermove", e => { if (t && Math.hypot(e.clientX - x0, e.clientY - y0) > 10) stop(); });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(ev => b.addEventListener(ev, stop));
+})();
+/* ============ v2.62.0 : « ▶ REPRENDRE » + HISTORIQUE DE LECTURE (maquette_reprendre_v1, validee 25/09 14h43) ============
+   Chaque chapitre ouvert, et la page atteinte en le parcourant, sont notes COTE SERVEUR (`_bibliotheque.json`, champ
+   `lectures`) : commun au PC et au Fold, separe entre la principale et la secondaire (chacune son dossier sources).
+   Le bouton ambre : dans un manga = le dernier chapitre ouvert de CE manga, a sa page ; dans un chapitre deja ouvert = celui
+   d'AVANT (revenir en arriere d'un geste) ; ailleurs = grise. Appui long (0,6 s, comme la bulle) = la fenetre « Reprendre ».
+   La page est retenue en silence : le bouton ne montre que le chapitre. Un navigateur pilote (banc) n'ecrit rien. */
+const LCT = { envoi: null, calme: 0, page: -1 };
+const lectTous = () => (BIB.lectures = BIB.lectures || {});
+function lectAppareil(){
+  const ua = navigator.userAgent;
+  if (!/Android|iPhone|iPad|Mobile/i.test(ua)) return "PC";
+  return /SM-F9\d/i.test(ua) ? "Fold" : "téléphone";
+}
+function lectEnvoyer(slug){
+  const L = lectTous()[slug]; if (!L || navigator.webdriver) return;
+  api("/manga/bibliotheque", { action: "lecture", slug, d: L.d, page: L.page, appareil: L.appareil })
+    .then(r => { if (r && r.lectures) for (const [k, v] of Object.entries(r.lectures)){            // le plus recent gagne
+      const l = lectTous()[k]; if (!l || (l.t || 0) < (v.t || 0) - 2) lectTous()[k] = v; } }).catch(() => {});
+}
+function lectOuvert(d){                                   // un chapitre ouvert : il devient « le dernier » de sa serie
+  const slug = serieDe(d), a = lectTous()[slug] || {};
+  const n = { d, page: a.d === d ? a.page || 0 : 0, t: Date.now() / 1000, appareil: lectAppareil() };
+  if (a.d && a.d !== d) n.prec = { d: a.d, page: a.page || 0 }; else if (a.prec) n.prec = a.prec;
+  lectTous()[slug] = n; LCT.page = n.page; LCT.calme = Date.now() + 1500;     // le defilement automatique ne compte pas
+  clearTimeout(LCT.envoi); lectEnvoyer(slug); nfMaj();
+}
+function lectPage(k){                                     // la page atteinte : notee tout de suite, envoyee apres 3 s de calme
+  if (!CHAP_OPEN) return;
+  const L = lectTous()[serieDe(CHAP_OPEN)]; if (!L || L.d !== CHAP_OPEN || L.page === k) return;
+  L.page = k; L.t = Date.now() / 1000; L.appareil = lectAppareil(); LCT.page = k;
+  clearTimeout(LCT.envoi); const slug = serieDe(CHAP_OPEN); LCT.envoi = setTimeout(() => lectEnvoyer(slug), 3000);
+}
+addEventListener("scroll", () => {
+  if (LCT.raf) return;
+  LCT.raf = setTimeout(() => {
+    LCT.raf = 0;
+    if (Date.now() < LCT.calme || nfCtx() !== "chapitre") return;
+    const figs = document.querySelectorAll("#chapPages figure[data-page]"); if (!figs.length) return;
+    // la page atteinte = la 1re de la RANGEE du haut (grille de 1 a 4 colonnes selon la largeur) : la 1re dont le milieu est
+    // a l'ecran ; si la page deja retenue est dans cette meme rangee, on la garde (revenir a « p. 7 » ne la change pas en 5)
+    const h = innerHeight; let k = -1, haut = null;
+    for (const f of figs){ const r = f.getBoundingClientRect(); if ((r.top + r.bottom) / 2 > 0){ if (r.top < h * 0.6){ k = +f.dataset.page; haut = r.top; } break; } }
+    if (k < 0 && figs[figs.length - 1].getBoundingClientRect().bottom <= 0) k = +figs[figs.length - 1].dataset.page;   // fin lue
+    const L = lectTous()[serieDe(CHAP_OPEN)], g = L && L.d === CHAP_OPEN ? document.querySelector('#chapPages figure[data-page="' + L.page + '"]') : null;
+    if (g && haut !== null && Math.abs(g.getBoundingClientRect().top - haut) < 4) return;
+    if (k >= 0) lectPage(k);
+  }, 250);
+}, { passive: true });
+addEventListener("visibilitychange", () => {               // l'appli passe en arriere-plan : la page part tout de suite
+  if (document.visibilityState === "hidden" && LCT.envoi && CHAP_OPEN){ clearTimeout(LCT.envoi); LCT.envoi = null; lectEnvoyer(serieDe(CHAP_OPEN)); }
+});
+function repCible(c){                                     // -> { d, page, i, ch } ou null
+  let L = null;
+  if (c === "chapitre"){ const a = lectTous()[serieDe(CHAP_OPEN)]; L = a && (a.d === CHAP_OPEN ? a.prec : a); }
+  else if (c === "serie") L = lectTous()[LIB_SERIE];
+  if (!L || !L.d) return null;
+  const i = CHAPS.findIndex(x => x.dir === L.d); if (i < 0) return null;
+  return { d: L.d, page: L.page || 0, i, ch: CHAPS[i].chapter };
+}
+function repMaj(c, large){
+  const b = $("nfRep"), t = repCible(c);
+  b.classList.toggle("off", !t); b.setAttribute("aria-disabled", t ? "false" : "true");
+  b.textContent = !t ? "▶" : large ? "▶ ch. " + t.ch : "▶" + t.ch;
+  b.title = t ? (c === "chapitre" ? "revenir au ch. " + t.ch + " (ouvert juste avant)" : "reprendre au ch. " + t.ch)
+                + (t.page ? ", page " + (t.page + 1) : "") + " — appui long : l'historique"
+              : (c === "chapitre" ? "aucun autre chapitre ouvert avant dans ce manga" : "ouvre un manga pour reprendre")
+                + " — appui long : l'historique";
+}
+async function repAller(d, page){
+  const slug = serieDe(d), onglet = document.querySelector('nav button[data-tab="tChap"]');
+  if (nfOngletActif() !== "tChap" && onglet) onglet.click();
+  if (LIB_SERIE !== slug) ouvrirSerie(slug);
+  const i = CHAPS.findIndex(x => x.dir === d); if (i < 0){ toast("⚠ ce chapitre n'existe plus"); return; }
+  await openChap(i);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    LCT.calme = Date.now() + 800;
+    const f = page ? document.querySelector('#chapPages figure[data-page="' + page + '"]') : null;
+    if (f) f.scrollIntoView({ block: "start" });
+  }));
+}
+$("nfRep").onclick = () => {
+  if (NF.glisse) return;
+  const t = repCible(nfCtx());
+  if (!t){ toast(nfCtx() === "chapitre" ? "▶ : aucun autre chapitre ouvert avant — appui long : l'historique"
+                                        : "▶ : ouvre un manga — appui long : l'historique"); return; }
+  repAller(t.d, t.page).catch(e => log("reprendre : " + e.message, "e"));
+};
+function repQuand(t){
+  const d = new Date(t * 1000), n = new Date(), s = (n - d) / 1000, hm = d.toTimeString().slice(0, 5);
+  if (s < 60) return "à l'instant";
+  if (s < 3600) return "il y a " + Math.floor(s / 60) + " min";
+  if (d.toDateString() === n.toDateString()) return "il y a " + Math.floor(s / 3600) + " h";
+  const hier = new Date(n); hier.setDate(n.getDate() - 1);
+  if (d.toDateString() === hier.toDateString()) return "hier " + hm;
+  return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0");
+}
+function repOuvrir(){
+  const series = new Map(mesSeries().map(s => [s.slug, s])), masq = new Set(BIB.masquees || []);
+  const l = Object.entries(lectTous()).filter(([slug, L]) => series.has(slug) && !masq.has(slug) && CHAPS.some(x => x.dir === L.d))
+    .sort((a, b) => (b[1].t || 0) - (a[1].t || 0));
+  $("repListe").innerHTML = l.length ? l.map(([slug, L]) => {
+    const s = series.get(slug), c = CHAPS.find(x => x.dir === L.d);
+    const src = s.pochette ? srcURL(s.pochette.split("#")[0]) + "&v=" + (s.pochette.split("#")[1] || "") : s.cover ? srcURL(s.cover) : "";
+    return '<button class="rep-l" data-rep="' + esc(L.d) + '" data-page="' + (L.page || 0) + '">'
+      + (src ? '<img loading="lazy" src="' + src + '" alt="">' : '<span class="rep-p"></span>')
+      + '<span class="rep-n"><b>' + esc(s.title) + '</b><small>' + esc(repQuand(L.t || 0)) + (L.appareil ? " · sur le " + esc(L.appareil) : "") + '</small></span>'
+      + '<span class="rep-c">ch. ' + esc(c.chapter) + (L.page ? " · p. " + (L.page + 1) : "") + '</span></button>';
+  }).join("") : '<div class="rep-vide">Rien à reprendre pour l’instant : ouvre un chapitre, il apparaîtra ici.</div>';
+  $("repFen").hidden = false; $("repListe").scrollTop = 0; nfMaj();
+}
+function repFermer(){ $("repFen").hidden = true; nfMaj(); }
+$("repFermer").onclick = repFermer;
+$("repListe").onclick = e => {
+  const r = e.target.closest("[data-rep]"); if (!r) return;
+  repFermer(); repAller(r.dataset.rep, +r.dataset.page).catch(err => log("reprendre : " + err.message, "e"));
+};
+document.addEventListener("pointerdown", e => {           // toucher a cote de la fenetre (hors barre) = la fermer
+  if (!$("repFen").hidden && !e.target.closest("#repFen, #navFlot")) repFermer();
+}, true);
+(function repAppuiLong(){                                 // meme mecanique que la bulle (v2.57.0)
+  const b = $("nfRep"); let t = null, x0 = 0, y0 = 0;
+  const stop = () => { clearTimeout(t); t = null; b.classList.remove("appui"); };
+  b.addEventListener("contextmenu", e => e.preventDefault());
+  b.addEventListener("pointerdown", e => {
+    if (e.button > 0) return;
+    x0 = e.clientX; y0 = e.clientY; b.classList.add("appui");
+    t = setTimeout(() => { stop(); try { navigator.vibrate && navigator.vibrate(30); } catch {}
+                           NF.glisse = true; setTimeout(() => { NF.glisse = false; }, 400);
+                           repOuvrir(); }, 600);
   });
   b.addEventListener("pointermove", e => { if (t && Math.hypot(e.clientX - x0, e.clientY - y0) > 10) stop(); });
   ["pointerup", "pointercancel", "pointerleave"].forEach(ev => b.addEventListener(ev, stop));
@@ -9392,6 +9563,7 @@ function lbShow(i){
   arreterLecture();     // la galerie n'est pas un flipbook : ni minuteur, ni curseur de vitesse
   LB = (i + LB_LISTE.length) % LB_LISTE.length;
   const it = LB_LISTE[LB];
+  if (it.lectD && it.lectD === CHAP_OPEN) lectPage(LB);           // v2.62.0 : lire page par page = la page atteinte
   $("lbImg").src = it.url;
   zoomReset();          // chaque image repart a sa taille : un zoom herite desoriente
   $("lbName").textContent = (LB + 1) + "/" + LB_LISTE.length
