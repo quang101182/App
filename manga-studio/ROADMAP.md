@@ -2612,6 +2612,14 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   Bancs : `test_chapitre_compact_ui.py` **31/31** (mutation rouge), barre 50/50, et 7 anciens bancs adaptés (ils ouvrent le
   bloc avant d'en toucher les réglages) : chapitre 45/45, vitesses 22/22, reste 42/42, lecteur 13/13, relais UI 18, trace 28/28,
   appui long 18/18, replier 26/26.
+- **25/09 14h35 — v2.61.0 : trois remarques de Quang (13h48-13h49)**. (1) Appui long → « Tout traiter » → fermer ne RAMENAIT PAS
+  au chapitre (le panneau est plus haut dans la page) → un repère (le chapitre ouvert, ou la ligne en haut de l'écran) et sa
+  place sont retenus à l'ouverture et rétablis à la fermeture — par ← Fermer, le bouton du panneau ou Échap (tous passent par
+  `suiviFermer`). Mesuré : ±0 px. (2) VISIONNEUSE (images agrandies) : même barre que la navigation (bulle verte « N/M · p. N »
+  à gauche, ← Fermer, ‹ › ronds) + glissement SUR LA BARRE (pas sur l'image : elle a son zoom), dans le sens des boutons ; le clic
+  parasite après un glissement est ignoré. (3) LECTEUR de narration : le même glissement sur sa barre (⏮ ⏸ ⏭), curseur de
+  volume exclu. La VIDÉO (lecteur natif, barre de temps) n'est pas touchée : un glissement y entrerait en conflit.
+  Banc `test_retour_visionneuse_ui.py` **24/24**, mutation rouge ; lecteur 13/13, barre 50/50, appui long 18/18, compact 31/31.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
