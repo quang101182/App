@@ -116,6 +116,12 @@ with sync_playwright() as p:
         E["encours"] = False
         pg.evaluate("() => capAlerteVerifier()"); pg.wait_for_timeout(600)
         check("… et il revient si plus rien ne tourne (bilan non tenu, pas encore vu)", vis("#capAlerte"))
+        # v2.56.0 : le SITE s'arrete avant l'objectif (ch. 40 pas paru) -> information bleue, ni ❌ ni reprise
+        E["bilan"] = dict(BILAN, fin=1790302222.0, reprise=None, code=3, arret="aucun chapitre après le 39 sur ce site (liens de la page)")
+        pg.evaluate("() => capAlerteVerifier()"); pg.wait_for_timeout(600)
+        t = pg.inner_text("#capAlerteTxt")
+        check("fin du SITE : information (bleue), sans ❌ ni reprise", vis("#capAlerte") and pg.evaluate("() => $('capAlerte').classList.contains('info')")
+              and not vis("#actErr") and not vis("#capAlerteReprendre") and "s'arrête au ch. 39" in t and "pas encore paru" in t, t)
         # 2. tenu -> rien
         E["bilan"] = dict(BILAN, fin=1790300999.0, tenu=True, reprise=None)
         pg.evaluate("() => capAlerteVerifier()"); pg.wait_for_timeout(600)

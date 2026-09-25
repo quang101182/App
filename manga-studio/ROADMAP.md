@@ -2578,6 +2578,10 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   NOUVELLE capture (écrit à sa fin) prend le relais. Vérifié dans la vraie secondaire pendant la capture. Banc
   `test_capture_alerte_ui.py` **46/46**. Piège de diagnostic évité : une « 2ᵉ capture » vue à 12h47 était ma propre commande
   de recherche de processus (sa ligne de commande contenait « manga_fetch.py capture ») — vérifier le PARENT avant de conclure.
+- **25/09 13h05 — v2.56.0 : fin de la reprise (ch. 23 → 40)** : 17 chapitres (23-39), arrêt « aucun chapitre après le 39 sur ce
+  site », code 3 (réussite) — le ch. 40 n'est PAS PARU. Le bandeau l'aurait annoncé en « capture arrêtée » orange : c'est une
+  INFORMATION → bleue, sans ❌ ni reprise (« le site s'arrête au ch. 39 — tout ce qui existe a été capturé »). Secondaire relancée
+  à 13h01 par le veilleur (fin de capture détectée) → avancement en chapitres actif. Banc `test_capture_alerte_ui.py` **47/47**.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
