@@ -2475,8 +2475,22 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   était perdu avec l'exception (jetons jamais comptés, défaut antérieur au relais) → désormais facturé au tarif du
   moteur qui refuse, d'après les jetons qu'il déclare ; Pixtral = 0 $ (offre gratuite Mistral). Banc
   `test_relais_moderation.py` 25/25 hors ligne (mutation du coût des refus → rouge), `test_relais_ui.py` + affichage.
-  🟠 (constaté v2.44.0) refus aux étapes RÉCIT / NOMS / TRADUCTION : ni relayés ni comptés — même traitement à porter
-  si Quang en rencontre (déclencheur : 1re alerte « récit » ou « traduction »).
+  ~~🟠 (constaté v2.44.0) refus aux étapes RÉCIT / NOMS / TRADUCTION : ni relayés ni comptés — même traitement à porter
+  si Quang en rencontre (déclencheur : 1re alerte « récit » ou « traduction »).~~ → ✅ couvert par **v2.47.0 +
+  narrate_chapter 2.12.0 + traduire_chapitre 2.0.0** (25/09 11h15, carte blanche Quang 10h19) : même interrupteur,
+  mêmes règles qu'à l'analyse. NOMS : gemini → kimi (budget 16 000, K3 raisonne) → pixtral. RÉCIT (texte seul, même
+  consigne, même contexte) : la page est d'abord ISOLÉE par DeepSeek (coupes du lot), puis kimi → gemini ; un refus EN
+  TOUTES LETTRES (réponse 200 « I'm sorry… ») est désormais reconnu comme refus (avant : « JSON illisible »).
+  TRADUCTION : gemini ↔ kimi → pixtral, même page, mêmes bulles ; la trace survit à `--rerendu`. Chaque refus est
+  FACTURÉ au tarif du moteur qui refuse (refus HTTP DeepSeek = 0, rien n'est rendu). Lecteur : « ✍ récit par Kimi
+  (refusé par DeepSeek) », « ⛔ récit refusé par … », « 🌐 traduite par Kimi (refusée par Gemini) », « ⛔ traduction
+  refusée (…) — en VO » (depuis `stats.relais` / `stats.moderation` de traduction.json, déjà rendus par le proxy).
+  **Défaut antérieur trouvé par le banc** : une page refusée au récit ressortait « vide » → redemandée → refusée une 2ᵉ
+  fois (alerte en DOUBLE + appels facturés en trop) ; exclue de la relance. Bancs : `test_relais_moderation.py`
+  **51/51** hors ligne (5 mutations, toutes rouges), `test_trace_etapes_ui.py` **24/24** (vraie narration dans le
+  lecteur, 1280 + 360 px, mutation rouge) ; non-régression moderation 21/21, recit_lots 16/16, latin 11/11, hors_zones
+  5/5, frein 6/6, sans_cjk, complement_bulles verts. Passage RÉEL court (Claymore ch.1, analyse reprise, p. 5-6, sans
+  voix) : 2 pages, 0,0006 $ — rangé dans `sources/_corbeille/essai-v2120-20260925/`.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
@@ -2559,8 +2573,9 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   20h08, les DEUX applications) : une mémoire « en ligne » (défaut 1,15) et une « sur le PC » (défaut 1), reprise à
   l'ouverture de chaque narration selon SA voix ; option 1,1× ajoutée. **Retour automatique RETIRÉ** (Quang 20h08 :
   « c'est moi qui gère ») — flou et panique Échap ×2 restent. Banc `test_voix_vitesses_ui.py` **13/13**.
-  🟠 Constaté (préexistant, non corrigé) : avec `reuse` (analyse réutilisée), `pages` est ignoré — une narration
-  « pages 1-2 » a traité les 40 pages.
+  ~~🟠 Constaté (préexistant, non corrigé) : avec `reuse` (analyse réutilisée), `pages` est ignoré — une narration
+  « pages 1-2 » a traité les 40 pages.~~ → ✅ couvert par narrate_chapter 2.9.0 (commit `78074e1`, 24/09 21h36, avec
+  l'app v2.27.0 : `if a.pages:` filtre l'analyse reprise sur les pages voulues) — constat resté non barré, relevé 25/09.
 - **S8 — Recette réelle** : les deux espaces ouverts en même temps (PC + téléphone), un lot de chaque côté, vue croisée,
   paravent/fermeture à distance, 360 px, cycle couper→relancer ; bancs chiffrés + mutation.
   ✅ **RECETTE RÉELLE 24/09 21h20** : secondaire installée sur le Fold comme application à part (sinon Chrome l'affiche dans

@@ -31,7 +31,7 @@ import narrate_chapter as nc          # appel_vision (Gemini natif / K3), frein 
 import ingest_page as ip              # load_page, detect, clean_bubbles
 import effacement_local as el         # v1.98.0 : masque des lettres + LaMa (option --effacement local)
 
-VERSION = "1.99.1"
+VERSION = "2.0.0"
 # v1.98.0 (24/09, feuille de route 4-nonies etape 2) : --effacement local = le texte pose sur le DESSIN est efface par
 # masque des lettres (comic-text-detector) + LaMa manga (effacement_local.py) au lieu d'un rectangle blanc ; les vraies
 # bulles restent videes comme avant. Option : sans elle, rien ne change.
@@ -115,7 +115,13 @@ def traduire_page(im, texts, engine, langue, stats):
         content.append({"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + jpeg_b64(decoupe(im, t))}})
     sysp = SYS.format(langue=LANGUES.get(langue, langue))
     for essai, budget in enumerate((6000, 12000, 24000)):     # budget double si un modele raisonneur vide tout
-        texte, u = nc.appel_vision(engine, sysp, content, budget)
+        try:
+            texte, u = nc.appel_vision(engine, sysp, content, budget)
+        except nc.mod.Refus as e:          # v2.0.0 : un refus est FACTURE (images lues) -> compte au tarif du moteur qui refuse
+            u_ = getattr(e, "usage", None) or {}
+            stats["tokens_in"] += u_.get("prompt_tokens", 0); stats["tokens_out"] += u_.get("completion_tokens", 0)
+            stats["cout"] += nc.cout(model, u_)
+            raise
         stats["tokens_in"] += u.get("prompt_tokens", 0); stats["tokens_out"] += u.get("completion_tokens", 0)
         stats["cout"] += nc.cout(model, u)
         try:
@@ -125,6 +131,31 @@ def traduire_page(im, texts, engine, langue, stats):
         except Exception as e:
             nc.log("  JSON illisible (%s), nouvel essai" % e)
     raise RuntimeError("traduction illisible apres 3 essais")
+
+
+def traduire_avec_relais(im, texts, engine, langue, stats, relais):
+    """v2.0.0 (feuille de route, constat v2.44.0) : RELAIS automatique de moderation a la traduction, comme a l'analyse
+    (narrate_chapter 2.10.0) : page refusee -> le moteur suivant de la chaine (gemini -> kimi -> pixtral, kimi -> gemini
+    -> pixtral), MEME page, MEMES bulles. Rend (traductions, trace ou None) ; refusee par tous -> leve le dernier refus,
+    qui porte sa trace (.trace)."""
+    refus, dernier = [], None
+    chaine = [engine] + ([m for m in nc.RELAIS_CHAINE.get(engine, []) if m != engine] if relais else [])
+    for m in chaine:
+        try:
+            tr = traduire_page(im, texts, m, langue, stats)
+        except nc.mod.Refus as e:
+            refus.append({"moteur": e.moteur, "motif": e.motif[:200], "t": nc.maintenant()})
+            dernier = e
+            if m != chaine[-1]:
+                nc.log("  traduction REFUSEE par %s (%s) -> RELAIS automatique vers %s" % (e.moteur, e.motif[:80], chaine[chaine.index(m) + 1]))
+                nc.journal("moderation_relais", etape="traduction", moteur=e.moteur, vers=chaine[chaine.index(m) + 1], motif=e.motif[:200])
+            continue
+        if not refus:
+            return tr, None
+        stats.setdefault("relais", []).append({"de": refus[0]["moteur"], "vers": m})
+        return tr, {"refuse_par": refus, "lu_par": m, "comment": "relais automatique", "t": nc.maintenant()}
+    dernier.trace = {"refuse_par": refus, "lu_par": None, "comment": "laissée en VO (alerte)", "t": nc.maintenant()}
+    raise dernier
 
 
 # v1.94.0 (T2, remontee Video Studio 23/09) : encadres a texte vertical, cartouches et cris que YOLO ne detecte pas
@@ -354,12 +385,20 @@ def main():
     ap.add_argument("--sortie", default="", help="v1.98.0 (bancs) : dossier de sortie a la place de traduction/<langue>")
     ap.add_argument("--effacement", choices=["standard", "local"], default="standard",
                     help="v1.98.0 : local = texte sur le dessin efface par masque des lettres + LaMa (carte graphique)")
+    ap.add_argument("--sans-relais", action="store_true", help="v2.0.0 : ignorer le relais automatique de moderation")
     ap.add_argument("--rerendu", action="store_true",
                     help="v1.97.0 : refait effacement + pose depuis traduction.json (memes zones, memes textes, 0 appel)")
     a = ap.parse_args()
     if not re.match(r"^[a-z]{2}$", a.langue):
         raise SystemExit("langue invalide")
     nc.SECRET = nc._secret()
+    try:                                                    # v2.0.0 : relais auto (reglage global de CETTE application)
+        import reglages
+        relais = bool(reglages.relais_moderation()) and not a.sans_relais and not a.rerendu
+    except Exception:
+        relais = False
+    if relais:
+        nc.log("relais automatique de moderation : ACTIF (page refusee -> le moteur suivant)")
     chap = os.path.normpath(os.path.join(nc.SOURCES, a.chapitre))
     if not chap.startswith(nc.SOURCES + os.sep) or not os.path.isfile(os.path.join(chap, "manifest.json")):
         raise SystemExit("chapitre introuvable : " + a.chapitre)
@@ -392,12 +431,19 @@ def main():
         else:
             texts = zones_texte(im, a.conf, a.conf_complement)             # v1.92.0 : + complement
         stats["bulles"] += len(texts)
-        lignes, rendu = [], im
+        lignes, rendu, trace = [], im, None
         if texts:
             HORS_ZONES[:] = []
             try:
-                tr = tr0 if a.rerendu else traduire_page(im, texts, a.engine, a.langue, stats)
+                if a.rerendu:
+                    tr, trace = tr0, (avant.get(p["num"]) or {}).get("trace")     # la trace d'origine survit au re-rendu
+                else:
+                    tr, trace = traduire_avec_relais(im, texts, a.engine, a.langue, stats, relais)
+                    if trace:
+                        trace["page"] = p["num"]
+                        stats["relais"][-1]["page"] = p["num"]
             except nc.mod.Refus as e:              # v1.99.0 (4-decies) : refus de moderation -> VO + ALERTE, on continue
+                trace = getattr(e, "trace", None)
                 nc.log("  page %d : traduction REFUSEE par la moderation (%s) -> page laissee en VO, alerte" % (p["num"], e.motif[:80]))
                 nc.mod.ajouter_alerte(a.chapitre, "traduction", [p["num"]], e.moteur, e.motif, detail="langue " + a.langue)
                 stats.setdefault("moderation", []).append({"page": p["num"], "moteur": e.moteur, "motif": e.motif})
@@ -501,7 +547,8 @@ def main():
                     stats["ne_tient_pas"] += not r["tient"]
         f = "page_%03d.png" % p["num"]
         rendu.save(os.path.join(out, f))
-        res["pages"].append({"page": p["num"], "source": p["file"], "file": f, "bulles": lignes})
+        res["pages"].append(dict({"page": p["num"], "source": p["file"], "file": f, "bulles": lignes},
+                                 **({"trace": trace} if trace else {})))           # v2.0.0 : qui a refuse / qui a traduit
         nc.log("  page %d : %d bulle(s), %d posee(s)" % (p["num"], len(texts), sum(1 for l in lignes if l.get("tient") is not None)))
     stats["s"] = round(time.time() - t0, 1)
     stats["cout"] = round(stats["cout"], 4)

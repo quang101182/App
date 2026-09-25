@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Banc narrate_chapter 2.10.0 + reglages 1.2.0 : relais AUTOMATIQUE de moderation (Quang 25/09 09h50). HORS LIGNE :
+"""Banc narrate_chapter 2.10.0 -> 2.12.0 + traduire_chapitre 2.0.0 + reglages 1.2.0 : relais AUTOMATIQUE de moderation (Quang 25/09 09h50). HORS LIGNE :
 aucun appel paye -- appel_vision est SIMULE (gemini refuse la page 2 ; kimi l'accepte ou la refuse selon le cas).
 1. relais ACTIF : la page 2 refusee par gemini est relue par KIMI, dans la meme boucle, avec le MEME contexte (la fiche
    et les « faits precedents » de la page 1 sont dans sa requete) ; aucune alerte ; ordre des pages garde ;
@@ -130,5 +130,126 @@ try:
 except ValueError:
     refuse = True
 check("valeur non booléenne refusée", refuse)
+print("=== 5. NOMS (narrate 2.12.0) : relais + coût des refus")
+def faux_noms(refusent):
+    def appel(engine, sys_, content, budget, **kw):
+        APPELS.append((engine, budget, kw))
+        if engine in refusent:
+            e = mod.Refus(engine, "refus %s (banc)" % engine); e.usage = {"prompt_tokens": 1000, "completion_tokens": 0}; raise e
+        return json.dumps({"noms": [{"nom": "Raki", "porteur_age": "adulte"}]}), {"prompt_tokens": 10, "completion_tokens": 10}
+    return appel
+PAGE5 = {"num": 5, "file": "a.jpg"}
+del APPELS[:]; nc.RELAIS = True; nc.appel_vision = faux_noms({"gemini"}); st = {}
+r = nc._question_noms("x", PAGE5, st)
+check("noms, relais ACTIF : gemini refuse → kimi répond (même question)", r and r[0]["nom"] == "Raki"
+      and [a[0] for a in APPELS] == ["gemini", "kimi"], [a[0] for a in APPELS])
+check("noms : kimi reçoit un budget qui laisse place à son raisonnement (≥ 16 000)", APPELS[1][1] >= 16000, APPELS[1][1])
+check("noms : relais noté (étape noms)", st.get("relais") == [{"page": 5, "de": "gemini", "vers": "kimi", "etape": "noms"}], st.get("relais"))
+check("noms : COÛT = refus gemini (tarif gemini) + réponse kimi (tarif kimi)",
+      abs(st["cout_noms"] - (nc.cout(G, R) + nc.cout(K, u))) < 1e-12, st.get("cout_noms"))
+del APPELS[:]; nc.RELAIS = False; nc.appel_vision = faux_noms({"gemini"}); st = {}
+r = nc._question_noms("x", PAGE5, st)
+check("noms, relais COUPÉ : aucun nom, kimi jamais appelé", r == [] and [a[0] for a in APPELS] == ["gemini"], [a[0] for a in APPELS])
+check("noms, relais COUPÉ : le refus est COMPTÉ (avant : perdu)", abs(st.get("cout_noms", 0) - nc.cout(G, R)) < 1e-12
+      and st.get("refus_noms", [{}])[0].get("moteur") == "gemini", (st.get("cout_noms"), st.get("refus_noms")))
+del APPELS[:]; nc.RELAIS = True; nc.appel_vision = faux_noms({"gemini", "kimi", "pixtral"}); st = {}
+r = nc._question_noms("x", PAGE5, st)
+check("noms : les trois refusent → aucun nom, pas de boucle", r == [] and [a[0] for a in APPELS] == ["gemini", "kimi", "pixtral"])
+
+print("=== 6. RÉCIT (narrate 2.12.0) : DeepSeek → Kimi → Gemini, même contexte")
+POSTS = []
+def faux_post(refus_mode):
+    def post(path, body, timeout=240):
+        lot = json.loads(body["messages"][1]["content"].split("\nPages :\n", 1)[1])
+        nums = [x["page"] for x in lot]; POSTS.append(nums)
+        if 2 in nums:
+            if refus_mode == "http":
+                raise mod.Refus("deepseek", "Content Exists Risk (banc)")
+            return {"choices": [{"message": {"content": "I'm sorry, but I can't help with that."}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 500, "completion_tokens": 12}}
+        return {"choices": [{"message": {"content": json.dumps({"titre": "T", "pages": [{"page": n, "narration": "p%d par deepseek" % n} for n in nums]})},
+                             "finish_reason": "stop"}], "usage": u}
+    return post
+def faux_relais_recit(refusent):
+    def appel(engine, sys_, content, budget, **kw):
+        txt = content[0]["text"]; APPELS.append((engine, budget, txt))
+        if engine in refusent:
+            e = mod.Refus(engine, "refus %s (banc)" % engine); e.usage = {"prompt_tokens": 800, "completion_tokens": 0}; raise e
+        lot = json.loads(txt.split("\nPages :\n", 1)[1])
+        return json.dumps({"titre": "", "pages": [{"page": x["page"], "narration": "p%d par %s" % (x["page"], engine)} for x in lot]}), u
+    return appel
+def recit(relais, refus_mode, refusent=()):
+    del APPELS[:]; del POSTS[:]; nc.TRACES_RECIT.clear()
+    nc.RELAIS = relais; nc.post = faux_post(refus_mode); nc.appel_vision = faux_relais_recit(set(refusent))
+    pages = [{"page": n, "type": "histoire", "faits": "faits %d" % n} for n in (1, 2, 3)]
+    st = {"cout_recit": 0.0, "recit_s": 0.0}
+    titre, pages = nc.etape_recit_v2(pages, "", [{"id": "A", "nom": "Raki"}], st)
+    return {p["page"]: p for p in pages}, st
+DS = "deepseek-v4-flash"
+P, st = recit(True, "http")
+check("récit, refus HTTP : page 2 écrite par KIMI, les autres par DeepSeek",
+      [P[n]["narration"] for n in (1, 2, 3)] == ["p1 par deepseek", "p2 par kimi", "p3 par deepseek"], [P[n]["narration"] for n in (1, 2, 3)])
+check("récit : MÊME contexte pour kimi (fiche des personnages + consigne)", APPELS and "Raki" in APPELS[0][2] and "Fiche des personnages" in APPELS[0][2])
+check("récit : TRACE « ✍ récit par kimi (refusé par deepseek) » sur la page 2 seulement",
+      (P[2].get("trace_recit") or {}).get("lu_par") == "kimi" and [r["moteur"] for r in P[2]["trace_recit"]["refuse_par"]] == ["deepseek"]
+      and not any("trace_recit" in P[n] for n in (1, 3)), P[2].get("trace_recit"))
+check("récit : aucune alerte, relais noté", not st.get("moderation") and {"page": 2, "de": "deepseek", "vers": "kimi", "etape": "recit"} in st.get("relais", []))
+n_ok = sum(1 for x in POSTS if 2 not in x)
+check("récit : COÛT = appels DeepSeek réussis + kimi à son tarif (refus HTTP non facturé)",
+      abs(st["cout_recit"] - (n_ok * nc.cout(DS, u) + nc.cout(K, u))) < 1e-12, (st["cout_recit"], POSTS))
+P, st = recit(True, "texte")
+n_ref = sum(1 for x in POSTS if 2 in x)
+check("récit, refus EN TOUTES LETTRES (200) : reconnu comme refus → relais kimi (avant : « JSON illisible »)",
+      P[2]["narration"] == "p2 par kimi", P[2]["narration"])
+check("récit : le refus en toutes lettres est FACTURÉ (jetons comptés)",
+      abs(st["cout_recit"] - (n_ok * nc.cout(DS, u) + n_ref * nc.cout(DS, {"prompt_tokens": 500, "completion_tokens": 12}) + nc.cout(K, u))) < 1e-12,
+      st["cout_recit"])
+P, st = recit(True, "http", ("kimi",))
+check("récit : kimi refuse aussi → GEMINI écrit, trace deepseek puis kimi",
+      P[2]["narration"] == "p2 par gemini" and [r["moteur"] for r in P[2]["trace_recit"]["refuse_par"]] == ["deepseek", "kimi"])
+check("récit : refus de kimi facturé à son tarif", abs(st["cout_recit"] - (n_ok * nc.cout(DS, u) + nc.cout(K, {"prompt_tokens": 800, "completion_tokens": 0})
+      + nc.cout(G, u))) < 1e-12, st["cout_recit"])
+P, st = recit(True, "http", ("kimi", "gemini"))
+check("récit : tous refusent → page sans narration + ALERTE (dernier moteur : gemini)", P[2]["narration"] == ""
+      and [m["moteur"] for m in st.get("moderation", [])] == ["gemini"] and P[2]["trace_recit"]["lu_par"] is None, st.get("moderation"))
+P, st = recit(False, "http")
+check("récit, relais COUPÉ : comportement d'avant (alerte deepseek, aucun relais)", P[2]["narration"] == "" and not APPELS
+      and [m["moteur"] for m in st.get("moderation", [])] == ["deepseek"])
+check("récit : une page REFUSÉE n'est pas redemandée comme « vide » (aucun appel payé en trop)",
+      POSTS == [[1, 2, 3], [1], [2, 3], [2], [3]], POSTS)
+
+print("=== 7. TRADUCTION (traduire_chapitre 2.0.0) : relais + coût des refus")
+import traduire_chapitre as tc
+from PIL import Image
+IM = Image.new("RGB", (300, 400), "white"); TX = [{"id": 1, "x": 0.1, "y": 0.1, "w": 0.3, "h": 0.1}]
+def faux_trad(refusent):
+    def appel(engine, sys_, content, budget, **kw):
+        APPELS.append((engine, budget, len(content)))
+        if engine in refusent:
+            e = mod.Refus(engine, "refus %s (banc)" % engine); e.usage = {"prompt_tokens": 1500, "completion_tokens": 0}; raise e
+        return json.dumps({"bulles": [{"id": 1, "type": "bulle", "texte": "x", "trad": "y par " + engine}]}), u
+    return appel
+def trad(refusent, relais):
+    del APPELS[:]; tc.nc.appel_vision = faux_trad(set(refusent))
+    st = dict(tokens_in=0, tokens_out=0, cout=0.0)
+    try:
+        tr, trace = tc.traduire_avec_relais(IM, TX, "gemini", "fr", st, relais); return tr, trace, st, None
+    except mod.Refus as e:
+        return None, None, st, e
+tr, trace, st, e = trad({"gemini"}, True)
+check("traduction, relais ACTIF : gemini refuse → kimi traduit la MÊME page (mêmes bulles)",
+      tr and tr[1]["trad"] == "y par kimi" and [a[0] for a in APPELS] == ["gemini", "kimi"] and APPELS[0][2] == APPELS[1][2], APPELS)
+check("traduction : trace (lue par kimi, refusée par gemini)", trace and trace["lu_par"] == "kimi"
+      and [r["moteur"] for r in trace["refuse_par"]] == ["gemini"] and st.get("relais") == [{"de": "gemini", "vers": "kimi"}], trace)
+check("traduction : COÛT = refus gemini + kimi à son tarif", abs(st["cout"] - (nc.cout(G, {"prompt_tokens": 1500, "completion_tokens": 0}) + nc.cout(K, u))) < 1e-12, st["cout"])
+tr, trace, st, e = trad({"gemini"}, False)
+check("traduction, relais COUPÉ : refus levé (page en VO + alerte), kimi jamais appelé",
+      e is not None and [a[0] for a in APPELS] == ["gemini"] and e.trace["lu_par"] is None)
+check("traduction, relais COUPÉ : le refus est COMPTÉ (avant : perdu)", abs(st["cout"] - nc.cout(G, {"prompt_tokens": 1500, "completion_tokens": 0})) < 1e-12, st["cout"])
+tr, trace, st, e = trad({"gemini", "kimi", "pixtral"}, True)
+check("traduction : les trois refusent → refus levé, trace des trois, alerte au nom de pixtral",
+      e is not None and e.moteur == "pixtral" and [r["moteur"] for r in e.trace["refuse_par"]] == ["gemini", "kimi", "pixtral"])
+tr, trace, st, e = trad(set(), True)
+check("traduction sans refus : aucune trace, un seul appel", trace is None and len(APPELS) == 1)
 print("\nVERDICT : %d OK / %d KO" % (len(OK), len(KO)))
 sys.exit(1 if KO else 0)

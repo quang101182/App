@@ -29,7 +29,7 @@ import moderation as mod             # v2.6.0 : refus reconnus, alertes persista
 import depenses as dep               # v2.6.0 : registre des depenses en ajout seul
 from datetime import datetime
 
-VERSION = "2.11.0"
+VERSION = "2.12.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCES = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 GATEWAY = "https://api-gateway.quang101182.workers.dev"
@@ -679,16 +679,43 @@ class _RecitTronque(Exception):
     pass
 
 
-def _appel_recit_v2(lot, persos, stats, contexte):
+# v2.12.0 : relais du RECIT (texte seul). DeepSeek ecrit ; s'il refuse une page, Kimi puis Gemini l'ecrivent.
+RELAIS_RECIT = ["kimi", "gemini"]
+TRACES_RECIT = {}       # page -> trace du recit (qui a refuse, qui a ecrit) ; posee sur la page en fin d'etape
+
+
+def maintenant():
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def _appel_recit_v2(lot, persos, stats, contexte, moteur="deepseek"):
+    systeme = SYS_RECIT_V2 + _consigne_langue()
+    demande = ("Fiche des personnages : " + json.dumps(persos, ensure_ascii=False)
+               + contexte + "\nPages :\n" + json.dumps(lot, ensure_ascii=False))
+    if moteur != "deepseek":                 # v2.12.0 : RELAIS du recit (texte seul, meme consigne, meme contexte)
+        try:
+            txt, u = appel_vision(moteur, systeme, [{"type": "text", "text": demande}], 16000)
+        except mod.Refus as e:               # le refus est facture au tarif du moteur qui refuse
+            stats["cout_recit"] += cout(ENGINES[moteur][1], getattr(e, "usage", None) or {})
+            raise
+        stats["cout_recit"] += cout(ENGINES[moteur][1], u)
+        try:
+            return parse_json(txt)
+        except ValueError:
+            j = reparer_json(txt, stats, "cout_recit")
+            if j is None:
+                raise
+            return j
     body = {"model": "deepseek-v4-flash", "max_tokens": 8000, "temperature": 0.6,
             "thinking": {"type": "disabled"},
-            "messages": [{"role": "system", "content": SYS_RECIT_V2 + _consigne_langue()},
-                         {"role": "user", "content": "Fiche des personnages : " + json.dumps(persos, ensure_ascii=False)
-                          + contexte + "\nPages :\n" + json.dumps(lot, ensure_ascii=False)}]}
+            "messages": [{"role": "system", "content": systeme}, {"role": "user", "content": demande}]}
     r = post("/api/deepseek", body)
-    stats["cout_recit"] += cout("deepseek-v4-flash", r.get("usage") or {})
+    stats["cout_recit"] += cout("deepseek-v4-flash", r.get("usage") or {})      # un refus rendu en 200 est deja compte ici
     ch = r["choices"][0]
     txt = ch["message"].get("content")
+    motif = mod.refus_openai(r) or mod.refus_texte(txt)     # v2.12.0 : avant, un refus en toutes lettres = « JSON illisible »
+    if motif:
+        raise mod.Refus("deepseek", motif)
     if ch.get("finish_reason") == "length":
         raise _RecitTronque("reponse tronquee (%d pages demandees)" % len(lot))
     try:
@@ -721,9 +748,26 @@ def _recit_lot(lot, persos, stats, contexte):
         return _appel_recit_v2(lot, persos, stats, contexte)
     except mod.Refus as e:                      # v2.6.0 : refus du recit -> on isole la ou les pages en cause
         if len(lot) == 1:
-            stats.setdefault("moderation", []).append({"page": lot[0]["page"], "etape": "recit", "moteur": e.moteur, "motif": e.motif})
-            log("  recit : page %s REFUSEE par la moderation (%s) -> sans narration, alerte" % (lot[0]["page"], e.motif[:80]))
-            return {"titre": "", "pages": [{"page": lot[0]["page"], "narration": ""}]}
+            n_ = lot[0]["page"]
+            refus_ = [{"moteur": e.moteur, "motif": e.motif[:200], "t": maintenant()}]
+            for autre in (RELAIS_RECIT if RELAIS else []):      # v2.12.0 : relais du recit, MEME contexte
+                log("  recit : page %s REFUSEE par %s (%s) -> RELAIS automatique vers %s" % (n_, refus_[-1]["moteur"], e.motif[:80], autre))
+                journal("moderation_relais", etape="recit", pages=[n_], moteur=refus_[-1]["moteur"], vers=autre, motif=e.motif[:200])
+                try:
+                    j = _appel_recit_v2(lot, persos, stats, contexte, autre)
+                except mod.Refus as e2:
+                    refus_.append({"moteur": e2.moteur, "motif": e2.motif[:200], "t": maintenant()})
+                    continue
+                except (ValueError, RuntimeError) as e2:        # relais illisible / en panne : on essaie le suivant
+                    log("  recit : relais %s sans reponse exploitable (%s)" % (autre, str(e2)[:80]))
+                    continue
+                stats.setdefault("relais", []).append({"page": n_, "de": e.moteur, "vers": autre, "etape": "recit"})
+                TRACES_RECIT[n_] = {"refuse_par": refus_, "lu_par": autre, "comment": "relais automatique", "t": maintenant()}
+                return j
+            stats.setdefault("moderation", []).append({"page": n_, "etape": "recit", "moteur": refus_[-1]["moteur"], "motif": refus_[-1]["motif"]})
+            TRACES_RECIT[n_] = {"refuse_par": refus_, "lu_par": None, "comment": "mise de côté (alerte)", "t": maintenant()}
+            log("  recit : page %s REFUSEE par la moderation (%s) -> sans narration, alerte" % (n_, e.motif[:80]))
+            return {"titre": "", "pages": [{"page": n_, "narration": ""}]}
         m = len(lot) // 2
         j1 = _recit_lot(lot[:m], persos, stats, contexte)
         j2 = _recit_lot(lot[m:], persos, stats, contexte)
@@ -762,10 +806,13 @@ def etape_recit_v2(pages, resume, persos, stats):
         j = _recit_lot(lot, persos, stats, ctx)
         titre = titre or j.get("titre", "")
         _lire_pages_recit(j, neuf)
-        manq = [x["page"] for x in lot if not (neuf.get(x["page"]) or "").strip()]
+        # v2.12.0 : une page REFUSEE (alerte deja posee) n'est pas « rendue vide » -- la redemander la faisait refuser une 2e
+        # fois : alerte en double et appels factures en trop (trouve par le banc du relais, 25/09)
+        refusees_ = {m_["page"] for m_ in stats.get("moderation") or [] if m_.get("etape") == "recit"}
+        manq = [x["page"] for x in lot if not (neuf.get(x["page"]) or "").strip() and x["page"] not in refusees_]
         if manq:                              # K3 v2 : la p20 (essentielle) est sortie VIDE -> on redemande
             log("  recit : pages rendues vides %s -> nouvelle demande" % manq)
-            j2 = _recit_lot(lot, persos, stats, ctx + "\nATTENTION : ecris OBLIGATOIREMENT une narration non vide "
+            j2 = _recit_lot([x for x in lot if x["page"] not in refusees_], persos, stats, ctx + "\nATTENTION : ecris OBLIGATOIREMENT une narration non vide "
                             "pour les pages " + ", ".join(map(str, manq)) + ".")
             _lire_pages_recit(j2, neuf, set(manq))
         progres("recit", k + 1, len(lots))
@@ -773,6 +820,8 @@ def etape_recit_v2(pages, resume, persos, stats):
     for p in pages:
         p["narration_vision"] = ""
         p["narration"] = neuf.get(p["page"], "") if p["type"] == "histoire" else ""
+        if p["page"] in TRACES_RECIT:                       # v2.12.0 : lue par le lecteur (« ✍ récit par … »)
+            p["trace_recit"] = TRACES_RECIT[p["page"]]
     manq = [x["page"] for x in entree if not (neuf.get(x["page"]) or "").strip()]
     journal("recit_v2", s=round(stats["recit_s"], 1), lots=len(lots), manquantes=manq)
     return titre, pages
@@ -831,13 +880,27 @@ def _question_noms(chap_dir, p, stats):
     img = base64.b64encode(page_jpeg(os.path.join(chap_dir, p["file"]))).decode()
     content = [{"type": "text", "text": Q_NOMS_V3 if NOMS_VERSION == "v3" else Q_NOMS},
                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + img}}]
-    try:
-        txt, u = appel_vision("gemini", "Reponds uniquement en JSON.", content, 4000, reflexion=REFLEXION_NOMS)
-    except mod.Refus as e:                       # v2.6.0 : page refusee -> aucun nom tire d'elle, on continue
-        journal("moderation", etape="noms", page=p.get("num"), motif=e.motif[:200])
+    # v2.12.0 (feuille de route, constat v2.44.0) : un refus aux NOMS est COMPTE (tarif du moteur qui refuse) et, relais
+    # actif, la MEME question passe au moteur suivant (gemini -> kimi -> pixtral). Avant : ni relaye, ni compte.
+    moteur, u = "gemini", None
+    for moteur in ["gemini"] + (RELAIS_CHAINE["gemini"] if RELAIS else []):
+        try:
+            if moteur == "gemini":
+                txt, u = appel_vision("gemini", "Reponds uniquement en JSON.", content, 4000, reflexion=REFLEXION_NOMS)
+            else:                                # K3 raisonne toujours : 4 000 jetons ne lui laissent pas de quoi repondre
+                txt, u = appel_vision(moteur, "Reponds uniquement en JSON.", content, 16000)
+            break
+        except mod.Refus as e:                   # v2.6.0 : page refusee -> aucun nom tire d'elle, on continue
+            with _VERROU_STATS:
+                stats["cout_noms"] = stats.get("cout_noms", 0.0) + cout(ENGINES[moteur][1], getattr(e, "usage", None) or {})
+                stats.setdefault("refus_noms", []).append({"page": p.get("num"), "moteur": e.moteur, "motif": e.motif[:200]})
+            journal("moderation", etape="noms", page=p.get("num"), moteur=e.moteur, motif=e.motif[:200])
+    if u is None:
         return []
     with _VERROU_STATS:                          # v1.99.2 : appele depuis plusieurs fils a la fois
-        stats["cout_noms"] = stats.get("cout_noms", 0.0) + cout("gemini-3.6-flash", u)
+        stats["cout_noms"] = stats.get("cout_noms", 0.0) + cout(ENGINES[moteur][1], u)
+        if moteur != "gemini":
+            stats.setdefault("relais", []).append({"page": p.get("num"), "de": "gemini", "vers": moteur, "etape": "noms"})
     try:
         return [x for x in (parse_json(txt).get("noms") or []) if (x.get("nom") or "").strip()]
     except Exception:
