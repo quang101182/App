@@ -31,7 +31,7 @@ sys.path.insert(0, HERE)
 import precedemment as prec                                # chapitres_precedents(), chap_key()
 import estimation                                          # v2.5.0 : double estimation ☁ / 🖥
 
-VERSION = "2.5.1"
+VERSION = "2.6.0"
 SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 DIR = os.path.join(SRC, "_suivi")
 ETAT, JOURNAL = os.path.join(DIR, "etat.json"), os.path.join(DIR, "journal.jsonl")
@@ -50,7 +50,7 @@ LANGUES = ("fr", "en", "es", "de", "it", "pt", "vi")
 DEFAUT_INTEGRE = {
     "actif": False, "moteur": "kimi", "voix": "Charon", "voix_moteur": "cloud", "traduction": "",
     "karaoke": True, "precedemment": True, "video": True,
-    "reglages_video": {"vitesse": 1.0, "sous": True, "karaoke": True, "musique": True, "volume": 25,
+    "reglages_video": {"vitesse": 1.0, "vitesse_local": 1.0, "sous": True, "karaoke": True, "musique": True, "volume": 25,
                        "pages": "", "precedemment": True, "camera": "cases"},
 }
 # v2.5.0 (23/09) : camera « cases » par defaut pour TOUS les formats (decision Quang 00h08) ; « page » = zoom lent d'avant.
@@ -248,8 +248,12 @@ def musique_effective(c):
     return [sj["nom"]] if sj.get("nom") else []
 
 
-def reglages_video_voulus(c, cfg):
+def reglages_video_voulus(c, cfg, tag=""):
+    # v2.6.0 (Quang 25/09) : la voix LOCALE parle plus vite -> sa propre vitesse ; la video ne recoit que « vitesse »
     rv = dict(cfg["reglages_video"])
+    vl = rv.pop("vitesse_local", None)
+    if str(tag).endswith("-local") and vl:
+        rv["vitesse"] = vl
     lg = cfg.get("traduction") or ""
     rv["pages"] = lg if lg and traduction_faite(c["cd"], lg) else ""
     return rv
@@ -260,7 +264,7 @@ def video_a_faire(c, tag, cfg):
     info = _lire_json(os.path.join(c["cd"], "video", tag + ".json"))
     if not info or not os.path.isfile(os.path.join(c["cd"], "video", tag + ".mp4")):
         return "pas encore de vidéo"
-    voulu, fait = reglages_video_voulus(c, cfg), info.get("reglages") or {}
+    voulu, fait = reglages_video_voulus(c, cfg, tag), info.get("reglages") or {}
     for k in ("vitesse", "sous", "karaoke", "musique", "volume", "pages", "precedemment"):
         if (voulu.get(k) or "") != (fait.get(k) or ""):
             return "réglage changé (%s)" % k
@@ -481,7 +485,7 @@ def traiter_chapitre(c, cfg, refaire, etat, avant_narres, reprise_de=None):
     # 5. video (la file du proxy la fabrique ; on la demande, on n'attend pas)
     if et["video"] == "faire":
         etat["en_cours"]["etape"] = "video"; ecrire_etat(etat)
-        r = demander_video(c["d"], tag, reglages_video_voulus(c, cfg))
+        r = demander_video(c["d"], tag, reglages_video_voulus(c, cfg, tag))
         ok = bool(r.get("ajoutees")) or any("file" in (x.get("raison") or "") for x in r.get("refusees") or [])
         res["video"] = "demandée" if ok else "echec : " + (r.get("error") or "; ".join(x.get("raison", "") for x in r.get("refusees") or []))
         journal("video", d=c["d"], tag=tag, reponse=r)

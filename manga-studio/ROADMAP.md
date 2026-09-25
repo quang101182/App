@@ -2439,6 +2439,13 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   chapitres » ne contenant que le courant → quand cette liste ne propose rien après, le bouton est essayé avant de
   conclure. Contrôle réel (fenêtre de la secondaire) : ch.1 83 p., ch.2 76 p., ch.3 → ch.4 enchaînés d'un lancement ;
   pages vérifiées à l'œil (manhwa EN). `test_enchainement.py` 16/16. Entrée ajoutée à `prive/_sites.json` (hors dépôt).
+- **25/09 09h30 — v2.41.0 + suivi_nuit 2.6.0 : vitesses SÉPARÉES en ligne / sur le PC pour les VIDÉOS** (Quang 09h20 :
+  « la narration locale a tendance à aller plus vite »). Le lecteur les séparait déjà (v2.21.0). Une vidéo prend la
+  vitesse de SA voix (tag « …-local » = sur le PC) : bouton Vidéos / ↻ = mémoires du lecteur (`manga_vit_cloud` /
+  `manga_vit_local`), une demande par type de voix ; profil (lots, la nuit) = « vitesse ☁ » + « 🖥 »
+  (`reglages_video.vitesse_local`, défaut 1×, retiré avant l'envoi à la vidéo). Banc `test_vitesses_video.py` 12/12
+  (mutation rouge), `test_voix_vitesses_ui` 13/13. ⚠ Conséquence ASSUMÉE : une vidéo LOCALE déjà faite à une autre
+  vitesse que la nouvelle vitesse 🖥 est vue « périmée (vitesse) » → refaite au prochain lot / à la nuit (sans coût : GPU).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
   `MangaStudioInstance2` : `/manga/liens` répond (✕ des sites ACTIF), banc `test_page_principale.py 8192` 55/55.
   1. **En-tête d'une série** (capture Quang : « ça fait un peu fouiller ») : « ← Toutes les séries » d'une couleur
