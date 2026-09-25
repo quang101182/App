@@ -2543,6 +2543,23 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   être automatique »). « ▶ Reprendre » enchaîne `fenetre_ranger` (place retenue) puis `fenetre_taille` (juste assez, sans
   déplacer) — plus de question « taille sûre ? » ; fenêtre restée trop petite → reprise bloquée avec message. Le bouton
   « Capturer » habituel garde sa question (inchangé). Banc `test_capture_alerte_ui.py` **42/42**, mutation (v2.51) rouge.
+- **25/09 12h40 — v2.53.0 : NAVIGATION TOUJOURS À PORTÉE** (Quang 12h19 : « quand je scrolle très bas […] il manque le retour,
+  le rafraîchissement et précédent / suivant »). Maquette `maquette_navigation_v2.html` (proposition A + glissement), validée
+  12h22 — ⚠ gardée EN LOCAL, non versionnée : elle contient de vraies pages de manga (dépôt public). Barre flottante en bas,
+  invisible en haut de page, visible dès qu'on a descendu : chapitre = ← série · ‹ ch. · ↻ · ch. › · ↑ ; série = ← séries · ↻
+  · ↑ ; ailleurs = ↻ · ↑. Jamais sur le lecteur, une fenêtre, la visionneuse ni la sélection de pages. ↻ garde la position.
+  Consignes de Quang pendant le chantier : (1) « pas de ZONE CONDAMNÉE » → une réserve en bas de page de la hauteur de la
+  barre : la fin d'une page s'arrête AU-DESSUS (mesuré sur tous les onglets) ; (2) téléphone : barre FINE, la hauteur d'une
+  barre de notification (36 px, réserve 52 px) ; PC : taille standard (54 px) ; (3) jamais dans la zone des GESTES d'Android
+  (≥ 14 px du bas, ou zone sûre + 10 px) ; (4) le glissement gauche-droite est LIMITÉ À LA BARRE (à gauche = suivant, à droite =
+  précédent ; en série, à droite = retour), un geste court ne fait rien. Piège payé : une règle téléphone `main{padding:10px}`
+  écrasait la réserve (28 px cachés, vus par le banc) → `body > main`. Banc `test_nav_flot_ui.py` **35/35** (1280 + 360,
+  gestes tactiles simulés sur la barre), mutation rouge. ⚠ 2ᵉ zone morte de `$` le même jour (bloc inséré avant `const $`) :
+  restauré en ~1 min grâce à la sonde de chargement réel, puis replacé.
+- **25/09 12h25 — constat Quang (capture) : « calcul du temps restant… » affiché EN PERMANENCE pour une capture** — le serveur
+  n'envoie qu'un nombre de pages, total VIDE → aucun temps restant possible. App v2.53.0 : plus de « calcul… » sans fin pour
+  une capture d'UN chapitre. 🟠 (constaté v2.53.0) Serveur : avancement EN CHAPITRES + temps restant mesuré pour une capture
+  en série → patch préparé, **appliqué quand la capture en cours dans la secondaire sera finie** (la relancer la couperait).
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
