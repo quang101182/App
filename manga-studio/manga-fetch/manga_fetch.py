@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.7.3"
+VERSION = "0.7.4"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -989,6 +989,7 @@ def capture(args) -> int:
 
             CDP_RES = {}                                    # v0.7.3 : session CDP ouverte a la 1re image refusee
             MODE_BANDE = [False]                            # v0.7.3 : fixe une fois le mode de lecture connu
+            ECARTEES = set()                                # v0.7.4 : images vues mais ecartees volontairement
             def extraire_data(src: str) -> bytes:
                 """Pleine résolution si possible (fetch page / requests), sinon SCREENSHOT de
                 l'élément. Certains sites bloquent fetch(blob:) par CSP alors que l'image
@@ -1078,8 +1079,10 @@ def capture(args) -> int:
                         data = extraire_data(im["src"])
                         hsh = hashlib.sha1(data).hexdigest()
                         if hsh in vus_hashes:
+                            ECARTEES.add(im["src"])
                             continue  # même contenu déjà capturé (blob régénéré par le pager)
                         if len(data) < 10000:
+                            ECARTEES.add(im["src"])
                             # aucune page de manga ne fait < 10 Ko : logos, boutons,
                             # cartes de fin de chapitre
                             notes.append(f"écartée ({len(data)} octets) : {im['src'][:50]}")
@@ -1206,6 +1209,25 @@ def capture(args) -> int:
                 # arretait un volume webtoon de 903 000 px a 39 %, EN SILENCE (« terminée », 0 note). Le plafond
                 # suit maintenant la hauteur reelle (relue a chaque pas : elle grandit au chargement) ; s'il est
                 # atteint quand meme, c'est ecrit en toutes lettres.
+                # v0.7.4 (25/09, Quang : « gagner du temps, mais sur a 100 % ») : MODE RAPIDE, automatique et prudent.
+                # Si TOUTES les images de la page sont DEJA chargees au depart (mesure : topmanhua 145/145, manga-scantrad
+                # 14/14 ; ni AnimoFlix ni MANGA Plus), l'attente fixe de 1,2 s par pas devient 0,4 s -- et elle remonte
+                # jusqu'a 1,2 s (comme avant) des qu'une image a l'ecran n'est pas prete ou que la page change de hauteur
+                # (connexion lente). Jamais plus lent qu'avant. A la fin : toute image de la largeur des pages non prise
+                # = ECHEC ecrit (alerte « capture incomplete » de l'app). Coupe-circuit : MANGA_FETCH_RAPIDE=0.
+                IMGS_JS = """() => [...document.images].filter(i => !i.closest('#comments, .comments, .comments-list-wrapper, .comment, [id^="comment"], .disqus, #disqus_thread')
+                    && (i.currentSrc || i.src) && !(i.currentSrc || i.src).startsWith('data:'))"""
+                depart = page.evaluate("() => { const t = (" + IMGS_JS + ")(); return [t.length, t.filter(i => i.complete && i.naturalWidth > 0).length,"
+                                       " t.filter(i => i.naturalWidth > 250 && i.naturalHeight > 500).length]; }")
+                rapide = os.environ.get("MANGA_FETCH_RAPIDE", "1") != "0" and depart[2] >= 3 and depart[1] == depart[0]
+                PRET_JS = ("() => { const t = (" + IMGS_JS + ")().filter(i => { const r = i.getBoundingClientRect();"
+                           " return r.bottom >= 0 && r.top <= innerHeight; }); return t.every(i => i.complete && i.naturalWidth > 0); }")
+                log_evt("mode", "rapide (page préchargée)" if rapide else "attente fixe 1,2 s",
+                        images=depart[0], chargees=depart[1], pages=depart[2])
+                if rapide:
+                    print("Mode rapide : les %d images de la page sont déjà chargées" % depart[0])
+                TAILLE_JS = "() => [innerWidth, innerHeight]"
+                taille0 = page.evaluate(TAILLE_JS)
                 prec, stable, pas, fini = None, 0, 0, False
                 while True:
                     if chapitre_quitte():
@@ -1214,8 +1236,24 @@ def capture(args) -> int:
                         fini = True
                         break
                     collecter()
+                    h_avant = page.evaluate(POS_JS)[1]
                     page.evaluate(DEFILE_JS)
-                    page.wait_for_timeout(1200)
+                    if rapide and page.evaluate(TAILLE_JS) != taille0:
+                        # fenetre REDIMENSIONNEE pendant la capture (mesure 25/09 : 1 bande perdue en rapide, 0 a l'attente
+                        # fixe) -> retour a l'attente d'avant pour tout le chapitre, et un pas en ARRIERE pour reprendre
+                        rapide = False
+                        page.evaluate("() => { const e = document.querySelector('[data-mf-defile]');"
+                                      " if (e) e.scrollBy(0, -e.clientHeight * 0.7); else window.scrollBy(0, -innerHeight * 0.7); }")
+                        log_evt("mode", "fenêtre redimensionnée : attente fixe 1,2 s pour la suite du chapitre")
+                        print("Fenêtre redimensionnée : retour à l'attente normale pour ce chapitre")
+                    if rapide:
+                        page.wait_for_timeout(400)
+                        for _ in range(8):                    # jusqu'a 1,2 s au total : l'attente d'avant
+                            if page.evaluate(PRET_JS) and page.evaluate(POS_JS)[1] == h_avant:
+                                break
+                            page.wait_for_timeout(100)
+                    else:
+                        page.wait_for_timeout(1200)
                     pos = page.evaluate(POS_JS)
                     pas += 1
                     if prec is not None and pos[0] == prec[0] and pos[1] == prec[1]:
@@ -1230,6 +1268,18 @@ def capture(args) -> int:
                     plafond = min(PLAFOND_PAS_ABSOLU, max(400, int(pos[1] / max(1, pos[2] * 0.7) * 1.5) + 50))
                     if pas >= plafond:
                         break
+                if rapide and fini and vues:
+                    _l = [v["w"] for v in vues.values()]
+                    W = max(set(_l), key=_l.count)
+                    manque = page.evaluate("(W) => (" + IMGS_JS + ")().filter(i => i.naturalWidth === W && i.naturalHeight >= 60)"
+                                           ".map(i => i.src)", W)
+                    manque = [u for u in dict.fromkeys(manque) if u not in vues and u not in ECARTEES]
+                    if manque:
+                        notes.append("ECHEC : mode rapide -- %d image(s) de la page non capturée(s) -- relancer avec --force "
+                                     "(MANGA_FETCH_RAPIDE=0 pour l'attente d'avant)" % len(manque))
+                        log_evt("fin", "CONTROLE mode rapide : images manquantes", n=len(manque), exemple=manque[0][:80])
+                    else:
+                        log_evt("contrôle", "mode rapide : toutes les images de la page sont capturées", pages=len(vues))
                 if not fini:
                     notes.append("ECHEC : capture ARRÊTÉE avant la fin (%d pas, position %d sur %d px) -- "
                                  "relancer avec --force" % (pas, pos[0], pos[1]))

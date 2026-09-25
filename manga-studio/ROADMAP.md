@@ -2620,6 +2620,41 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   parasite après un glissement est ignoré. (3) LECTEUR de narration : le même glissement sur sa barre (⏮ ⏸ ⏭), curseur de
   volume exclu. La VIDÉO (lecteur natif, barre de temps) n'est pas touchée : un glissement y entrerait en conflit.
   Banc `test_retour_visionneuse_ui.py` **24/24**, mutation rouge ; lecteur 13/13, barre 50/50, appui long 18/18, compact 31/31.
+- **25/09 22h25 — manga-fetch 0.7.4 : MODE RAPIDE, automatique et prudent** (Quang 20h50 : « gagner du temps, mais sûr à
+  100 %, pas de sur-ingénierie ») : un chapitre prenait ~4 min à cause d'une attente FIXE de 1,2 s par pas de défilement.
+  Si TOUTES les images de la page sont déjà chargées au départ, l'attente devient 0,4 s et remonte jusqu'à 1,2 s dès qu'une
+  image à l'écran n'est pas prête ou que la page change de hauteur (connexion lente : jamais plus lent qu'avant) ; fenêtre
+  redimensionnée pendant le chapitre → retour à l'attente d'avant + un pas en arrière. Filet : toute image de la largeur des
+  pages non prise = ECHEC écrit (alerte « capture incomplète »), prouvé par sabotage. Coupe-circuit `MANGA_FETCH_RAPIDE=0`.
+  Preuve A/B (même chapitre, ancienne puis nouvelle méthode, `scripts/ab_mode_rapide.py`) : **9 sites, tous IDENTIQUES
+  octet pour octet** — principale : manga-scantrad ×2,6, WEBTOON ×2,0, MANGA Plus ×1,6, AnimoFlix ×1,0 (non enclenché) ;
+  secondaire (noms hors dépôt) : 4 sites ×2,3 à ×2,6 (dont le plus lent : 269 s → 114 s), 1 non enclenché. `test_manga_fetch`
+  9/9. Déplacer la fenêtre pendant une capture (`scripts/test_deplacer_fenetre.py`, 38 déplacements) : identique, aucun
+  effet. La REDIMENSIONNER (165 fois) : aucune image perdue, mais ⬜ fausse alerte « arrêtée avant la fin » (plafond de 400
+  pas atteint à 99 %, les pas raccourcissent) — DÉJÀ le cas avec l'ancienne méthode ; déclencheur : si ça arrive en vrai.
+  ⚠ Non expliqué : 1 capture de RÉFÉRENCE (sans mode rapide ni déplacement) a échoué une fois sans message, la relance a
+  réussi — à surveiller.
+- ⬜ **À FAIRE — série TERMINÉE reconnue en fin de capture** (Quang 25/09 22h01, 2e fois constaté) : capture « jusqu'au ch. 54 »
+  d'un manga CLÔTURÉ dont le dernier chapitre publié est marqué « Final » (ou « End », « Fin », « [END] ») → le bilan dit « le
+  site s'arrête au ch. N (pas encore paru) » alors que TOUT ce qui existe est capturé. Attendu : reconnaître le chapitre final
+  (titre de la page / de l'onglet, ou statut « terminé » de la fiche MangaDex/AniList `serie_infos`) et dire « ✅ série
+  terminée — tous les chapitres parus sont capturés ». Code concerné : le bilan d'arrêt « le site s'arrête avant l'objectif »
+  (v2.56.0, `_capture_derniere.json`) et l'enchaînement de manga-fetch. Déclencheur : prochaine session Manga Studio.
+- ⬜ **À FAIRE — bouton PAUSE / ARRÊT d'un traitement** (question Quang 25/09 21h05 : « utile ? fonctionnel sans risque de bug ni
+  de régression ? » — à traiter SEUL, pas en même temps qu'autre chose). Constat du code (21h10) : seules l'annulation d'une
+  vidéo en attente (`/manga/video_annule`) et l'arrêt du moteur local existent ; rien pour une capture, une narration, un lot.
+  Analyse : utile surtout pour une capture en SÉRIE (jusqu'à ~2 h) et un lot. Le risque n'est pas le bouton, c'est l'ÉTAT
+  laissé derrière : un chapitre à moitié capturé (dossier sans manifeste), un bilan qui crierait « capture arrêtée » à tort.
+  Proposition la plus sûre : (1) « ⏹ Arrêter après ce chapitre » = drapeau lu par manga-fetch entre deux chapitres → zéro
+  chapitre partiel, bilan « arrêtée à ta demande » ; (2) « ✖ Arrêter maintenant » (confirmation) = fin du processus + le
+  chapitre en cours mis à la corbeille ; (3) « ▶ Reprendre » = relancer la série au chapitre suivant (l'enchaînement sait
+  déjà sauter les chapitres présents). Une VRAIE pause (processus gelé) est déconseillée : l'onglet et la session du site
+  expirent pendant la pause. Lots / narrations : réutiliser le mécanisme « coupé → ▶ repris » qui existe déjà. Maquette
+  d'abord. Déclencheur : la prochaine session Manga Studio (après le mode rapide).
+  ✅ Déjà en place (vérifié dans le code 21h35, question Quang 21h34) : la REPRISE d'une capture arrêtée (v2.50.0) — bilan sur
+  disque (chapitre, ADRESSE, objectif), « 🔗 Ouvrir le ch. N » rouvre SEULE la fenêtre de capture si elle est fermée
+  (`capOngletsPrets` → `/manga/fetch_edge`) puis l'adresse ; « ▶ Reprendre » relance jusqu'au même objectif. Deux clics
+  voulus (vérification Cloudflare possible entre les deux). ⇒ l'ARRÊT doit écrire CE bilan : aucun nouveau circuit de reprise.
 - **25/09 20h50 — v2.64.0 : NUMÉRO DE CHAPITRE suggéré d'après l'ADRESSE de la page** (idée Quang 20h34) : `chapDeLaPage` lit
   l'adresse (« …/chapter-37 », « …/chapter/4 », « ?episode_no= »), sinon le titre (« Chap 3 », « Chapter 143 », « #004 ») ;
   affiché en DORÉ tant qu'il est suggéré ; un n° tapé n'est jamais écrasé (`CAP_CHAP_AUTO`) ; accueil / recherche = vide.
