@@ -32,7 +32,7 @@ with sync_playwright() as p:
         print("=== %d px" % w)
         c = b.new_context(viewport={"width": w, "height": h}, is_mobile=w < 400, has_touch=w < 400)
         pg = c.new_page()
-        E = {"bilan": dict(BILAN), "titre_onglet": "Just a moment...", "pilote": [], "capture": [], "autres": [], "dialogs": []}
+        E = {"bilan": dict(BILAN), "titre_onglet": "Just a moment...", "pilote": [], "capture": [], "autres": [], "dialogs": [], "fen": [], "grande": True}
         errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
 
@@ -45,8 +45,10 @@ with sync_playwright() as p:
                     {"edge": True, "capture": False, "onglets": [{"id": "o1", "titre": E["titre_onglet"], "url": URL23 + "?__cf_chl_rt_tk=x"}]}))
             if m == "POST" and "/manga/pilote" in u:
                 corps = json.loads(rt.request.post_data or "{}")
-                if str(corps.get("action", "")).startswith("fenetre_"):     # fenVerifier : taille de la fenetre (lecture)
-                    return rt.fulfill(status=200, content_type="application/json", body='{"assez_grande": true, "reduite": false}')
+                if str(corps.get("action", "")).startswith("fenetre_"):     # v2.52.0 : ranger + taille, notes dans l'ordre
+                    E["fen"].append(corps["action"])
+                    return rt.fulfill(status=200, content_type="application/json", body=json.dumps(
+                        {"ok": True, "assez_grande": E["grande"], "reduite": False, "interieur": [1400 if E["grande"] else 600, 900]}))
                 E["pilote"].append(corps)
                 return rt.fulfill(status=200, content_type="application/json", body='{"ok": true, "id": "o1"}')
             if m == "POST" and "/manga/fetch_capture" in u:
@@ -83,7 +85,16 @@ with sync_playwright() as p:
         check("« Reprendre » REFUSE tant que le site affiche sa vérification", not E["capture"]
               and any("vérification" in d for d in E["dialogs"][n0:]), E["dialogs"][n0:])
         E["titre_onglet"] = "Serie Banc - Chapter 23"
+        # v2.52.0 : fenetre restee trop petite -> la reprise NE part PAS
+        E["grande"], E["fen"] = False, []
+        n1 = len(E["dialogs"])
         pg.click("#capAlerteReprendre"); pg.wait_for_timeout(1500)
+        check("fenêtre restée trop petite → reprise bloquée, message", not E["capture"]
+              and any("trop petite" in d for d in E["dialogs"][n1:]), E["dialogs"][n1:])
+        E["grande"], E["fen"] = True, []
+        pg.click("#capAlerteReprendre"); pg.wait_for_timeout(1500)
+        check("reprise : fenêtre RANGÉE puis mise à la TAILLE SÛRE, automatiquement", E["fen"] == ["fenetre_ranger", "fenetre_taille"], E["fen"])
+        check("… sans question à l'écran (aucune modale ouverte)", pg.evaluate("() => !document.querySelector('.demander:not([hidden]), .modal-q:not([hidden])')"))
         cap = E["capture"][0] if E["capture"] else {}
         check("reprise lancée au ch. 23, jusqu'au 40, sans intermédiaires", cap.get("chapter") == "23" and cap.get("jusqua") == "40"
               and cap.get("suite") == 0 and cap.get("entiers") is True and cap.get("title") == "Serie Banc", cap)

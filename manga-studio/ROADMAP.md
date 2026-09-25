@@ -2538,6 +2538,11 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   `node --check` ne le voit pas (erreur d'exécution, pas de syntaxe) — c'est le banc réel qui l'a attrapé. Banc
   `test_flou_option_ui.py` **28/28** (1280 + 360, clic réel, persistance au rechargement, valeur du serveur restaurée),
   mutation rouge ; relais 51/51, alerte capture 36/36, relais UI verts.
+- **25/09 12h10 — v2.52.0 : à la REPRISE, la fenêtre de capture se range et se dimensionne SEULE** (Quang 11h38 : « par
+  sécurité, redimensionnée à la taille sûre et surtout rangée sur le côté. Automatiquement, c'est le seul moment où ça doit
+  être automatique »). « ▶ Reprendre » enchaîne `fenetre_ranger` (place retenue) puis `fenetre_taille` (juste assez, sans
+  déplacer) — plus de question « taille sûre ? » ; fenêtre restée trop petite → reprise bloquée avec message. Le bouton
+  « Capturer » habituel garde sa question (inchangé). Banc `test_capture_alerte_ui.py` **42/42**, mutation (v2.51) rouge.
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche
