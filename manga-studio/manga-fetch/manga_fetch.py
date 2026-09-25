@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.7.2"
+VERSION = "0.7.3"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -987,6 +987,8 @@ def capture(args) -> int:
                 }
             }"""
 
+            CDP_RES = {}                                    # v0.7.3 : session CDP ouverte a la 1re image refusee
+            MODE_BANDE = [False]                            # v0.7.3 : fixe une fois le mode de lecture connu
             def extraire_data(src: str) -> bytes:
                 """Pleine résolution si possible (fetch page / requests), sinon SCREENSHOT de
                 l'élément. Certains sites bloquent fetch(blob:) par CSP alors que l'image
@@ -1014,6 +1016,22 @@ def capture(args) -> int:
                         return r.content
                     except Exception:
                         pass
+                    # v0.7.3 (25/09) : serveur d'images derriere Cloudflare -> 403 a tout client hors navigateur, pas de
+                    # CORS (fetch refuse, canvas « tache ») ; le screenshot, lui, fait DEFILER la page jusqu'a l'image :
+                    # 26 pages en 8 min puis plafond a 5 664 px sur 193 573. Le navigateur a DEJA l'image : on la lui
+                    # redemande (CDP Page.getResourceContent) -> le fichier ORIGINAL, instantane, sans bouger.
+                    # Mesure : 144 images sur 145 ; la derniere passe au screenshot.
+                    try:
+                        if CDP_RES.get("s") is None:
+                            CDP_RES["s"] = page.context.new_cdp_session(page)
+                            CDP_RES["s"].send("Page.enable")
+                        fid = CDP_RES["s"].send("Page.getFrameTree")["frameTree"]["frame"]["id"]
+                        rc = CDP_RES["s"].send("Page.getResourceContent", {"frameId": fid, "url": src})
+                        data = base64.b64decode(rc["content"]) if rc.get("base64Encoded") else rc["content"].encode("latin-1")
+                        if len(data) > 1000:
+                            return data
+                    except Exception:
+                        pass
                 el = None
                 try:
                     el = page.query_selector(f'img[src="{src}"]')
@@ -1035,10 +1053,16 @@ def capture(args) -> int:
                 # ce filtre, la page d'AVANT la page de départ était capturée (mesuré 18:16).
                 # + zone morte des ratios CARRÉS (0.93-1.15) : une page de manga est portrait
                 # (~0.7) ou double (~1.4), jamais carrée — mais avatars et logos le sont.
-                nouvelles = page.evaluate("""() => Array.from(document.images)
-                    .filter(i => i.naturalWidth > 250 && i.naturalHeight > 500
+                # v0.7.3 (25/09) : en BANDE DEFILANTE, une bande COURTE ou presque carree de la MEME largeur que les pages
+                # deja prises est un morceau de l'histoire (bulles de dialogue : 10 bandes sur 145 perdues sur un site,
+                # 122 a 638 px de haut). Avatars et bannieres n'ont pas cette largeur : le filtre d'origine reste pour eux.
+                _larg = [v["w"] for v in vues.values()]
+                larg_col = max(set(_larg), key=_larg.count) if (MODE_BANDE[0] and len(_larg) >= 3) else 0
+                nouvelles = page.evaluate("""(W) => Array.from(document.images)
+                    .filter(i => (i.naturalWidth > 250 && i.naturalHeight > 500
                         && (i.naturalWidth / i.naturalHeight < 0.93
                             || i.naturalWidth / i.naturalHeight > 1.15))
+                        || (W > 0 && i.naturalWidth === W && i.naturalHeight >= 60))
                     .filter(i => { const r = i.getBoundingClientRect();
                                    return r.bottom > 80 && r.top < window.innerHeight - 80; })
                     // v0.5.1 : une page est AFFICHEE en grand ; les avatars des commentaires (raijin-scans 22/09 :
@@ -1046,7 +1070,7 @@ def capture(args) -> int:
                     .filter(i => i.getBoundingClientRect().width >= 180
                         && !i.closest('#comments, .comments, .comments-list-wrapper, .comment, [id^="comment"], .disqus, #disqus_thread'))
                     .map(i => ({src: i.src, top: Math.round(i.getBoundingClientRect().top + window.scrollY),
-                                w: i.naturalWidth, h: i.naturalHeight}))""")
+                                w: i.naturalWidth, h: i.naturalHeight}))""", larg_col)
                 for im in nouvelles:
                     if im["src"] in vues:
                         continue
@@ -1130,6 +1154,7 @@ def capture(args) -> int:
                 return [best.scrollHeight, best.clientHeight];
             }""")
             mode_strip = h_doc > h_ecran * 2.5 or bloc is not None
+            MODE_BANDE[0] = mode_strip
             print(f"Mode {'bande défilante' if mode_strip else 'page par page'} "
                   f"(doc {h_doc}px / écran {h_ecran}px" + (f" / bloc défilant {bloc[0]}px)" if bloc else ")"))
             log_evt("mode", "bande défilante" if mode_strip else "page par page",

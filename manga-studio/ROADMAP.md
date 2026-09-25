@@ -2620,6 +2620,16 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   parasite après un glissement est ignoré. (3) LECTEUR de narration : le même glissement sur sa barre (⏮ ⏸ ⏭), curseur de
   volume exclu. La VIDÉO (lecteur natif, barre de temps) n'est pas touchée : un glissement y entrerait en conflit.
   Banc `test_retour_visionneuse_ui.py` **24/24**, mutation rouge ; lecteur 13/13, barre 50/50, appui long 18/18, compact 31/31.
+- **25/09 16h20 — manga-fetch 0.7.3 : deux sites testés pour la SECONDAIRE** (demande Quang 15h19 ; noms et résultats dans sa
+  liste de sites, hors dépôt). Le premier passe tel quel. Le second n'avait capturé que 26 pages par chapitre avant l'arrêt :
+  (1) son serveur d'images renvoie 403 à tout client hors navigateur, sans CORS → repli sur la capture d'écran de l'élément,
+  qui fait DÉFILER la page vers l'image → la position n'avançait que de ~14 px par pas → plafond atteint à 3 % du chapitre.
+  Correctif : l'image est redemandée au NAVIGATEUR (CDP `Page.getResourceContent`) → fichier original, instantané, sans
+  bouger (mesuré 144/145 ; le reste passe encore par la capture d'écran). (2) Le filtre de forme (hauteur > 500, pas carré)
+  jetait les bandes COURTES de dialogue (10 sur 145) → en bande défilante, une image de la MÊME largeur que les pages déjà
+  prises est gardée. Résultat : 175/175 et 138/138, contrôle croisé avec les images de l'onglet. Non-régression
+  `test_manga_fetch.py` 9/9. ⬜ Constaté (non corrigé, déclencheur : si Quang remplace une série) : `force` ne s'applique
+  pas aux chapitres ENCHAÎNÉS (le suivant, déjà présent, est conservé).
 - **25/09 15h20 — v2.62.0 : « ▶ REPRENDRE » + HISTORIQUE DE LECTURE** (idée Quang 14h37, maquette `maquette_reprendre_v1.html`
   validée 14h43). Bouton AMBRÉ tout à gauche de la barre du bas : dans un manga = le dernier chapitre ouvert de CE manga, À SA
   PAGE (« ▶24 » ≤ 480 px, « ▶ ch. 24 » au-delà) ; dans un chapitre déjà ouvert = celui d'AVANT (va-et-vient d'un geste) ; ailleurs
