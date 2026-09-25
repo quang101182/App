@@ -127,6 +127,11 @@ ligne `DEJA LA : 2, 3` avant le bilan `SÉRIE`. Bancs : `scripts/test_serie_secu
 
 ## Webtoons (manhwa) : découpage automatique des bandes (v0.5.0, 22/09/2026)
 
+> **v0.8.1 (26/09)** : un webtoon découpé en bandes **presque carrées** (ex. 720×700) n'était pas capturé (1 page, ÉCHEC) : ces
+> bandes tombent dans la zone morte des ratios carrés (avatars) et l'amorçage de la largeur de colonne exigeait 3 pages déjà
+> prises. Désormais, tant que 3 pages ne sont pas prises, la largeur se lit sur le document (≥ 5 images ≥ 500 px de même
+> largeur, hors commentaires). Banc : `scripts/banc_bandes_carrees.py`.
+
 Un webtoon arrive en BANDES de 800 × ~10 000 px (*Solo Leveling: Ragnarok* ch.1, MangaDex, 26 bandes). Telles
 quelles, elles sont inexploitables en aval : un modèle de lecture les réduit à ~160 px de large, la détection des
 bulles et la vidéo 9:16 aussi. ⇒ après chaque capture, `decouper_bandes()` coupe toute image > 3× plus haute que large

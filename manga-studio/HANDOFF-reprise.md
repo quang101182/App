@@ -7,7 +7,7 @@
 
 ## 1. État au 25/09/2026 23h35
 
-- App `manga_studio.html` **v2.67.0** · manga-fetch **0.8.0** · proxy patché (… `patch_arret.py`, `patch_dernier_paru.py`).
+- App `manga_studio.html` **v2.67.0** · manga-fetch **0.8.1** (bandes presque carrées, 26/09 00h55) · proxy patché (… `patch_arret.py`, `patch_dernier_paru.py`).
 - **26/09 00h40** : « Jusqu'au dernier paru » + sécurités de série + chapitres déjà là (ROADMAP § 4-quindecies, tout coché).
 - Livré ce jour (détail + preuves : ROADMAP, entrées du 25/09) :
   - v2.62 « ▶ Reprendre » + historique de lecture (serveur, commun PC + Fold, séparé principale / secondaire) ;
@@ -25,7 +25,6 @@
 | Une capture de référence a échoué UNE fois sans message (relance OK) | à surveiller : si ça se reproduit, lire `%LOCALAPPDATA%\manga-fetch\events.log` |
 | Pas de bouton d'arrêt pour une VIDÉO (pas de reprise possible) | si Quang en a besoin |
 | `scripts/test_capture_serie_ui.py` périmé (cherche `#capSerieMode`, remplacé par les boutons de l'étape 4) | prochaine modification de l'étape 4 |
-| 🔴 Webtoon en bandes presque carrées (720×700) → 1 page capturée, ÉCHEC (ROADMAP § 4-quindecies « Hors périmètre ») | accord de Quang sur le remède (amorcer la largeur de colonne sur le document) |
 | Historique git du dépôt PUBLIC contient encore d'anciens noms de la secondaire (les fichiers actuels sont propres ~~(faux au 25/09)~~ → **vrai depuis le 26/09** : 4 fichiers en contenaient encore — app, manga_fetch, maquette_arret_v1, test_choix_manga_ui — neutralisés ; contrôle = `git grep -i -F -f <termes tirés de prive/_sites.json + dossiers de prive/>`) | seulement sur accord EXPLICITE de Quang (réécriture d'historique) |
 
 ## 3. Règles et pièges (ne pas les repayer)

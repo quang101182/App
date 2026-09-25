@@ -2908,7 +2908,11 @@ Maquette : `maquette_dernier_paru_v1.html` (v1, **à valider par Quang avant tou
 
 ### Hors périmètre (noté, non fait)
 - Le bouton d'arrêt pour une vidéo, la fausse alerte au redimensionnement : inchangés (déclencheurs dans HANDOFF-reprise § 2).
-- 🔴 **(constaté 26/09, manga-fetch 0.7.6/0.8.0) Webtoon découpé en bandes PRESQUE CARRÉES → capture d'1 page, ÉCHEC.**
+- ~~🔴 **(constaté 26/09, manga-fetch 0.7.6/0.8.0) Webtoon découpé en bandes PRESQUE CARRÉES → capture d'1 page, ÉCHEC.**~~
+  → ✅ **couvert par manga-fetch 0.8.1 (26/09 00h55)** : B1 rouge reproduit sur le VRAI onglet (0 bande / 213) ; B3 **186 prises
+  + 27 quasi vides écartées (< 10 Ko, règle existante) = 213/213**, sans ÉCHEC ; mutation (code 0.8.0) → rouge ; B4
+  `test_manga_fetch` 9/9, `test_arret_capture` 14/14, `test_dernier_paru` 19/19, `test_serie_securites` 16/16. Banc :
+  `scripts/banc_bandes_carrees.py <port> <filtre d'onglet> [manga_fetch à tester]` (sortie + journal TEMPORAIRES).
   Vécu par Quang sur la secondaire le 25/09 23h56 (ch. 16 d'une série, arrêt « capture tronquée à 1 page »). Mesuré en
   lecture seule dans l'onglet : 210 bandes DISTINCTES, 208 en 720×700 (ratio 1,03). `collecter()` écarte les ratios
   0,93-1,15 (avatars/logos) et ne réadmet une bande de la largeur des pages qu'après **3** pages déjà prises à cette
@@ -2916,6 +2920,10 @@ Maquette : `maquette_dernier_paru_v1.html` (v1, **à valider par Quang avant tou
   manquantes) : aucune fausse réussite. **Remède proposé** : amorcer la largeur de colonne sur le DOCUMENT (largeur
   commune à ≥ 5 grandes images) et non seulement sur les pages déjà prises. **Déclencheur : accord de Quang (question
   posée le 26/09 à la livraison) ; tant qu'il n'est pas fait, « Reprendre au ch. 16 » échouera pareil.**
+  → **Accord Quang 26/09 00h31 (« carte blanche »)** — étapes : B1 reproduire l'échec avec 0.8.0 sur le VRAI onglet du ch. 16
+  (fenêtre 9224, sortie + journal TEMPORAIRES, aucune donnée de Quang touchée) ; B2 manga-fetch 0.8.1 : largeur de colonne
+  amorcée sur le document ; B3 même capture → toutes les bandes ; B4 non-régression (test_manga_fetch, test_arret_capture,
+  test_dernier_paru) ; B5 ROADMAP + commit.
 
 
 ## 4-terdecies. COÛTS — LA « RÉFLEXION » DE GEMINI *(24/09/2026 14h40, question Quang sur les 4,43 $ du repérage)*
@@ -3311,6 +3319,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 
 | Date | Événement |
 |---|---|
+| 2026-09-26 (00h55) | ✅ **manga-fetch 0.8.1** : webtoon en bandes presque carrées (720×700) → la largeur de colonne s'amorce sur le document (≥ 5 images ≥ 500 px à la même largeur) ; ch. réel 0 → 213/213 bandes. |
 | 2026-09-26 (00h40) | ✅ **v2.67.0 + manga-fetch 0.8.0 + proxy `patch_dernier_paru`** (§ 4-quindecies) : puce « Jusqu'au dernier paru » ; plafond de 50 remplacé par des sécurités (croissance stricte, contenu identique, saut > 10, pause 3 s, filet 300 partout) ; chapitres déjà là sautés et comptés à part (« 2 capturé(s), 1 déjà là »), 1er chapitre déjà là = « ⏭ Le garder et continuer ». Banc réel 19/19 + voisins verts. 🔴 Défaut noté : webtoon en bandes presque carrées (1 page capturée). |
 | 2026-09-24 (17h20) | 🎧 **Voix locale validée à l'oreille** sur un chapitre complet (OPM ch.1, `gemini-charon-local.mp4`) — Quang : « c'est bien ». Rappel du partage : ☁ = tout en ligne (seul changement du jour : repérage des noms sans réflexion, dans les deux modes) ; 🖥 = voix + effacement sur la carte, le reste en ligne. |
 | 2026-09-24 (17h15) | 💰 **Chantier « réflexion Gemini » CLOS** : repérage des noms sans réflexion (gardé, −48 % analyse+noms) ; analyse et traduction gardent la réflexion complète (« low » : vraies fautes sur Black Jack — mot inventé, contresens, anglais ; « medium » : pas d'économie). Économie réelle attendue ≈ −4 $/mois en ligne, + la voix (≈ −6 $/mois) quand Quang narre en 🖥. § 4-terdecies. |

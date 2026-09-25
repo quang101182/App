@@ -58,7 +58,7 @@ try:
     check("dossier absent -> None", mf._mettre_de_cote(d12, "doublon") is None)
 
     print("=== C. arguments et constantes ===")
-    check("VERSION 0.8.0", mf.VERSION == "0.8.0", mf.VERSION)
+    check("VERSION 0.8.x", mf.VERSION.startswith("0.8."), mf.VERSION)
     check("filet 300 / saut 10 / pause 3000", (mf.SERIE_FILET, mf.SERIE_SAUT_MAX, mf.SERIE_PAUSE_MS) == (300, 10, 3000))
     src = open(MF, encoding="utf-8").read()
     check("--jusqua-fin declare", '"--jusqua-fin"' in src)

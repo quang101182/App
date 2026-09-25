@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.8.0"
+VERSION = "0.8.1"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -1125,7 +1125,19 @@ def capture(args) -> int:
                 # 122 a 638 px de haut). Avatars et bannieres n'ont pas cette largeur : le filtre d'origine reste pour eux.
                 _larg = [v["w"] for v in vues.values()]
                 larg_col = max(set(_larg), key=_larg.count) if (MODE_BANDE[0] and len(_larg) >= 3) else 0
-                nouvelles = page.evaluate("""(W) => Array.from(document.images)
+                # v0.8.1 (26/09, ch. vecu par Quang : 210 bandes de 720x700, ratio 1,03) : l'amorcage exigeait 3 pages DEJA
+                # prises a cette largeur -- or une bande presque carree ne passe jamais le filtre d'origine -> 1 page, ECHEC.
+                # Tant que 3 pages ne sont pas prises, la largeur de colonne se lit sur le DOCUMENT : >= 5 images d'au moins
+                # 500 px de large, hors commentaires, a la meme largeur (avatars, logos et vignettes n'y arrivent pas).
+                if MODE_BANDE[0] and not larg_col:
+                    larg_col = -1
+                nouvelles = page.evaluate("""(W) => { if (W === -1) { const n = {};
+                        [...document.images].filter(i => i.naturalWidth >= 500 && i.naturalHeight >= 60
+                            && !i.closest('#comments, .comments, .comments-list-wrapper, .comment, [id^="comment"], .disqus, #disqus_thread'))
+                          .forEach(i => { n[i.naturalWidth] = (n[i.naturalWidth] || 0) + 1; });
+                        const e = Object.entries(n).sort((a, b) => b[1] - a[1]);
+                        W = e.length && e[0][1] >= 5 ? +e[0][0] : 0; }
+                    return Array.from(document.images)
                     .filter(i => (i.naturalWidth > 250 && i.naturalHeight > 500
                         && (i.naturalWidth / i.naturalHeight < 0.93
                             || i.naturalWidth / i.naturalHeight > 1.15))
@@ -1137,7 +1149,7 @@ def capture(args) -> int:
                     .filter(i => i.getBoundingClientRect().width >= 180
                         && !i.closest('#comments, .comments, .comments-list-wrapper, .comment, [id^="comment"], .disqus, #disqus_thread'))
                     .map(i => ({src: i.src, top: Math.round(i.getBoundingClientRect().top + window.scrollY),
-                                w: i.naturalWidth, h: i.naturalHeight}))""", larg_col)
+                                w: i.naturalWidth, h: i.naturalHeight})); }""", larg_col)
                 for im in nouvelles:
                     if im["src"] in vues:
                         continue
