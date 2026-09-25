@@ -2560,6 +2560,16 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
   n'envoie qu'un nombre de pages, total VIDE → aucun temps restant possible. App v2.53.0 : plus de « calcul… » sans fin pour
   une capture d'UN chapitre. 🟠 (constaté v2.53.0) Serveur : avancement EN CHAPITRES + temps restant mesuré pour une capture
   en série → patch préparé, **appliqué quand la capture en cours dans la secondaire sera finie** (la relancer la couperait).
+- **25/09 12h45 — v2.54.0 : la barre de navigation TOUJOURS AFFICHÉE + bulle « où je suis »** (Quang 12h36-12h39). (1) « Je
+  préfère qu'il soit affiché en permanence ; ce qui se masque et s'affiche selon les interactions est déroutant ; un bouton
+  pas accessible devient simplement grisé » → toujours les 5 boutons aux mêmes places, grisés quand ils sont sans effet ici
+  (‹ › hors d'un chapitre, ↑ déjà en haut, ← dans la bibliothèque) ; seuls le lecteur plein écran, une fenêtre ou la barre de
+  sélection de pages la retirent. (2) « ← Séries » était COUPÉ sur téléphone (limité à 44 px) → largeur du texte. (3) SENS DU
+  GLISSEMENT inversé (« précédent à gauche, suivant à droite ») : le geste va dans le sens du bouton — à droite = suivant, à
+  gauche = précédent, à gauche en série = « ← Séries ». (4) Bulle VERTE à gauche des boutons : « ch. 301 » (téléphone) /
+  « One Punch-Man · ch. 301 » (PC, le retour devient « ← Série »), le nom du manga dans une série, « Bibliothèque » ou
+  l'onglet ailleurs ; trop longue → elle DÉFILE (aller-retour ; figée avec « … » si le téléphone réduit les animations).
+  Banc `test_nav_flot_ui.py` **46/46** (1280 + 360), mutations rouges (bulle, sens).
   ✅ 10h04 : SECONDAIRE relancée au repos (tâche `MangaStudioInstance2`) → interrupteur du relais opérationnel des deux côtés
   (principale : ACTIF, allumé par Quang ; secondaire : coupé).
 - **24/09 23h32 — SECONDAIRE relancée** (au repos : `/manga/activite` vide, dernière capture « fini ») par sa tâche

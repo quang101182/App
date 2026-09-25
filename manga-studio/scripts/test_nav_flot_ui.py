@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Banc v2.53.0 : NAVIGATION FLOTTANTE (maquette_navigation_v2, A + glissement LIMITE a la barre, valides par Quang 25/09).
+"""Banc v2.53.0 -> v2.54.0 (toujours affichee, boutons grises) : NAVIGATION FLOTTANTE (maquette_navigation_v2, A + glissement LIMITE a la barre, valides par Quang 25/09).
 APP REELLE (8190), 1280 px puis 360 px (telephone, tactile). Lecture seule : aucune ecriture (POST bloques sauf lectures d'etat).
 1. en haut : invisible ; descendu : visible ;
 2. PAS DE ZONE CONDAMNEE : tout en bas, le dernier element de la page s'arrete AU-DESSUS de la barre ;
@@ -7,7 +7,8 @@ APP REELLE (8190), 1280 px puis 360 px (telephone, tactile). Lecture seule : auc
    (zone des gestes d'Android) ; PC : taille standard ;
 4. contenu selon l'endroit : serie (← · ↻ · ↑, sans ‹ ›), chapitre (← · ‹ · ↻ · › · ↑) ;
 5. boutons : ↑ remonte, › ouvre le chapitre suivant, ← revient a la serie, ↻ garde la position ;
-6. glissement SUR LA BARRE (telephone) : a gauche = chapitre suivant ; petit geste = rien ; a droite en serie = retour ;
+6. glissement SUR LA BARRE (telephone), dans le SENS DES BOUTONS : a droite = suivant, a gauche = precedent ; petit geste = rien ;
+   a gauche en serie = retour ;
 7. le lecteur plein ecran la cache.
 Usage : python test_nav_flot_ui.py [port]
 """
@@ -49,11 +50,17 @@ with sync_playwright() as p:
         pg.reload(); pg.wait_for_timeout(4500)
         vis = lambda: pg.evaluate("() => !$('navFlot').hidden")
         pg.evaluate("() => scrollTo(0, 0)"); pg.wait_for_timeout(400)
-        check("série, en haut : barre invisible", not vis())
+        check("série, en haut : barre DÉJÀ affichée (v2.54.0 : toujours là)", vis())
+        etat = pg.evaluate("() => [...$('navFlot').querySelectorAll('.nf-b')].map(b => b.id + (b.hidden ? ':cache' : b.disabled ? ':grise' : ':actif'))")
+        check("série, en haut : 5 boutons, ‹ › et ↑ GRISÉS (jamais masqués)", etat == ["nfRet:actif", "nfPrev:grise", "nfRefr:actif", "nfSuiv:grise", "nfHaut:grise"], etat)
         pg.evaluate("() => scrollTo(0, document.documentElement.scrollHeight)"); pg.wait_for_timeout(500)
         check("série, descendu : barre visible", vis())
-        btns = pg.evaluate("() => [...$('navFlot').querySelectorAll('.nf-b')].filter(b => !b.hidden).map(b => b.id)")
-        check("série : ← · ↻ · ↑ (pas de ‹ ›)", btns == ["nfRet", "nfRefr", "nfHaut"], btns)
+        etat = pg.evaluate("() => [...$('navFlot').querySelectorAll('.nf-b')].map(b => b.id + (b.hidden ? ':cache' : b.disabled ? ':grise' : ':actif'))")
+        check("série, descendu : ← ↻ ↑ actifs, ‹ › grisés", etat == ["nfRet:actif", "nfPrev:grise", "nfRefr:actif", "nfSuiv:grise", "nfHaut:actif"], etat)
+        info = pg.evaluate("() => [$('nfInfoTxt').textContent, getComputedStyle($('nfInfo')).backgroundColor, $('nfInfo').getBoundingClientRect().left < $('nfRet').getBoundingClientRect().left]")
+        check("bulle VERTE « où je suis », à gauche des boutons : le nom du manga", info[0] == "One Punch-Man" and info[1] == "rgb(31, 91, 58)" and info[2], info)
+        coupes = pg.evaluate("() => [...$('navFlot').querySelectorAll('.nf-b')].filter(b => b.scrollWidth > b.clientWidth + 1).map(b => b.textContent)")
+        check("aucun libellé coupé (« ← Séries » entier)", not coupes and pg.inner_text("#nfRet").strip() == "← Séries", (coupes, pg.inner_text("#nfRet")))
         m = pg.evaluate("""() => { const n = $('navFlot').getBoundingClientRect();
             const der = [...document.querySelectorAll('#chapList [data-chap]')].pop().getBoundingClientRect();
             return { barreHaut: Math.round(n.top), barreBas: Math.round(n.bottom), h: Math.round(n.height), finContenu: Math.round(der.bottom), vh: innerHeight }; }""")
@@ -71,6 +78,10 @@ with sync_playwright() as p:
         pg.evaluate("i => document.querySelector('#chapList [data-chap=\"' + i + '\"]').click()", i); pg.wait_for_timeout(3000)
         pg.evaluate("() => scrollTo(0, document.documentElement.scrollHeight)"); pg.wait_for_timeout(700)
         btns = pg.evaluate("() => [...$('navFlot').querySelectorAll('.nf-b')].filter(b => !b.hidden).map(b => b.id + ':' + b.textContent)")
+        coupes = pg.evaluate("() => [...$('navFlot').querySelectorAll('.nf-b')].filter(b => b.scrollWidth > b.clientWidth + 1).map(b => b.textContent)")
+        check("chapitre : aucun libellé coupé", not coupes, coupes)
+        attendu = "ch. 301" if tel else "One Punch-Man · ch. 301"
+        check("bulle en chapitre : « %s »" % attendu, pg.inner_text("#nfInfoTxt").strip() == attendu, pg.inner_text("#nfInfoTxt"))
         check("chapitre : ← · ‹ · ↻ · › · ↑ avec les numéros voisins", [x.split(":")[0] for x in btns] == ["nfRet", "nfPrev", "nfRefr", "nfSuiv", "nfHaut"]
               and "300" in btns[1] and "302" in btns[3], btns)
         m = pg.evaluate("""() => { const n = $('navFlot').getBoundingClientRect(); const der = [...document.querySelectorAll('#chapDetail figure, #chapDetail .narr-box')].pop();
@@ -85,27 +96,31 @@ with sync_playwright() as p:
         check("› : chapitre suivant (302)", pg.evaluate("() => CHAP_OPEN") == "one-punch-man/ch_302", pg.evaluate("() => CHAP_OPEN"))
         if tel:
             pg.evaluate("() => scrollTo(0, document.documentElement.scrollHeight)"); pg.wait_for_timeout(600)
-            pg.evaluate(GLISSE, [-25]); pg.wait_for_timeout(1500)
+            pg.evaluate(GLISSE, [25]); pg.wait_for_timeout(1500)
             check("glissement COURT sur la barre (25 px) : rien", pg.evaluate("() => CHAP_OPEN") == "one-punch-man/ch_302")
-            pg.evaluate(GLISSE, [-140]); pg.wait_for_timeout(3000)
-            check("glissement à GAUCHE sur la barre : chapitre suivant (303)", pg.evaluate("() => CHAP_OPEN") == "one-punch-man/ch_303", pg.evaluate("() => CHAP_OPEN"))
-            pg.evaluate("() => scrollTo(0, document.documentElement.scrollHeight)"); pg.wait_for_timeout(600)
             pg.evaluate(GLISSE, [140]); pg.wait_for_timeout(3000)
-            check("glissement à DROITE sur la barre : chapitre précédent (302)", pg.evaluate("() => CHAP_OPEN") == "one-punch-man/ch_302", pg.evaluate("() => CHAP_OPEN"))
+            check("glissement à DROITE sur la barre : chapitre SUIVANT (303) — le sens du bouton ›", pg.evaluate("() => CHAP_OPEN") == "one-punch-man/ch_303", pg.evaluate("() => CHAP_OPEN"))
+            pg.evaluate("() => scrollTo(0, document.documentElement.scrollHeight)"); pg.wait_for_timeout(600)
+            pg.evaluate(GLISSE, [-140]); pg.wait_for_timeout(3000)
+            check("glissement à GAUCHE sur la barre : chapitre PRÉCÉDENT (302) — le sens du bouton ‹", pg.evaluate("() => CHAP_OPEN") == "one-punch-man/ch_302", pg.evaluate("() => CHAP_OPEN"))
         pg.evaluate("() => scrollTo(0, document.documentElement.scrollHeight)"); pg.wait_for_timeout(500)
         pg.click("#nfRet"); pg.wait_for_timeout(1500)
         check("← (chapitre) : retour à la série", pg.evaluate("() => !CHAP_OPEN && LIB_SERIE === 'one-punch-man'"))
         if tel:
             pg.evaluate("() => scrollTo(0, document.documentElement.scrollHeight)"); pg.wait_for_timeout(600)
-            pg.evaluate(GLISSE, [140]); pg.wait_for_timeout(1500)
-            check("glissement à DROITE en série : retour à toutes les séries", pg.evaluate("() => !LIB_SERIE"))
+            pg.evaluate(GLISSE, [-140]); pg.wait_for_timeout(1500)
+            check("glissement à GAUCHE en série : retour à toutes les séries (le sens de « ← Séries »)", pg.evaluate("() => !LIB_SERIE"))
+        if tel:                                  # un titre trop long DEFILE (aller-retour), la barre reste dans l'ecran
+            pg.evaluate("() => { localStorage.setItem('manga_serie','solo-levelng-ragnarok'); }"); pg.reload(); pg.wait_for_timeout(4000)
+            d = pg.evaluate("() => [$('nfInfo').classList.contains('defile'), $('nfInfoTxt').scrollWidth > $('nfInfo').clientWidth - 20, Math.round($('navFlot').getBoundingClientRect().right) <= innerWidth]")
+            check("titre long : il défile, et la barre reste dans l'écran", all(d), d)
         # lecteur : la barre se retire
         pg.evaluate("() => { localStorage.setItem('manga_serie','claymore'); }"); pg.reload(); pg.wait_for_timeout(4000)
         i = pg.evaluate("() => CHAPS.findIndex(c => c.dir === 'claymore/ch_1')")
         pg.evaluate("i => document.querySelector('#chapList [data-chap=\"' + i + '\"]').click()", i); pg.wait_for_timeout(3000)
         pg.evaluate("() => scrollTo(0, document.documentElement.scrollHeight)"); pg.wait_for_timeout(500)
         pg.evaluate("() => document.querySelector('#narrRuns [data-ecoute]').click()"); pg.wait_for_timeout(2000)
-        check("lecteur ouvert : barre cachée", not vis())
+        check("lecteur ouvert : barre cachée (il recouvre l'écran)", not vis())
         pg.evaluate("() => $('lecFermer').click()"); pg.wait_for_timeout(1200)
         check("aucune erreur JS", not errs, errs[:3])
         check("aucune écriture", not ecrit, ecrit[:3])

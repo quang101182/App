@@ -1,0 +1,40 @@
+diff --git a/C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260925-v2530 b/C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py
+index 081fb6e..1e7602e 100644
+--- a/C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260925-v2530
++++ b/C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py
+@@ -8830,6 +8830,25 @@ def manga_liens(data=None):
+     return {"ok": True, "retires": d}
+ 
+ 
++def _capture_avancement(fs):
++    """Manga Studio v2.53.0 : la ligne « capture » de l'activite. En SERIE : avancement en CHAPITRES et temps restant mesure."""
++    it = {"type": "capture", "titre": fs.get("titre"), "chapitre": str(fs.get("chapitre") or ""),
++          "fait": fs.get("pages"), "total": None, "d": None}
++    try:
++        suite, jusqua = int(fs.get("suite") or 0), str(fs.get("jusqua") or "")
++        if not (suite or jusqua):
++            return it
++        dep = float(fs.get("chapitre_depart"))
++        total = suite + 1 if suite else max(1, int(float(jusqua) - dep) + 1)
++        faits = min(len(fs.get("dossiers") or []), total)
++        it.update(fait=faits, total=total, etape="ch. %s" % (fs.get("chapitre") or "?"), pages=fs.get("pages"))
++        if faits >= 1 and fs.get("duree_s"):
++            it["reste_s"] = round(float(fs["duree_s"]) / faits * max(0, total - faits))
++    except (TypeError, ValueError):
++        pass
++    return it
++
++
+ def manga_activite():
+     """Tout ce qui travaille en ce moment, tous chapitres confondus (Manga Studio v1.88.0)."""
+     out = []
+@@ -8908,8 +8927,7 @@ def manga_activite():
+     try:
+         fs = manga_fetch_status()
+         if fs.get("etat") == "en cours":
+-            out.append({"type": "capture", "titre": fs.get("titre"), "chapitre": str(fs.get("chapitre") or ""),
+-                        "fait": fs.get("pages"), "total": None, "d": None})
++            out.append(_capture_avancement(fs))            # v2.53.0 : en serie -> chapitres faits / demandes + reste
+     except Exception:
+         pass
+     out += _manga_essais()                       # v2.23.0 (§ 3-bis) : les scripts lances HORS de l'app, visibles aussi
