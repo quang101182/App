@@ -25,6 +25,19 @@
   (dans ce dossier) = la source de vérité visuelle. Y compris sa proposition : dans un chapitre DÉJÀ ouvert, « ▶ » montre le
   chapitre d'AVANT (celui ouvert juste avant, dans ce manga) → revenir en arrière d'un geste. Ne pas reposer la question.
 
+### Formats à respecter — OBLIGATOIRE (Quang 25/09 14h43 : « pense bien aux différents formats du Fold »)
+
+| Format | Largeur | Bouton | À vérifier au banc |
+|---|---|---|---|
+| Téléphone plancher | 360 px | « ▶24 » | barre sur UNE ligne, dans l'écran, fine (≤ 36 px), ≥ 14 px du bas (gestes Android) |
+| **Fold 8 FERMÉ** | 476 px | « ▶24 » | idem |
+| **Fold 8 DÉPLIÉ portrait** | 704 px | « ▶ ch. 24 » | UNE ligne (piège v2.59.0 : `nav{flex-wrap:wrap}` hérité) |
+| **Fold 8 DÉPLIÉ paysage** | 933 px (hauteur ~700) | « ▶ ch. 24 » | UNE ligne ; la fenêtre « Reprendre » tient en hauteur (défile si besoin) |
+| PC | 1280 px | « ▶ ch. 24 » | taille standard |
+
+La fenêtre « Reprendre » : pleine largeur moins 20 px sur téléphone / Fold fermé ; centrée (~460 px) à partir de 704 px ;
+jamais plus haute que l'écran (liste qui défile). Aucun débordement horizontal à aucune largeur.
+
 ## 2. Où brancher (lu dans le code le 25/09, v2.61.0 — re-vérifier)
 
 - Barre du bas : `<nav class="nav-flot" id="navFlot">` (HTML près de `<div id="toast">`) ; JS `nfMaj()`, `nfCtx()`,
