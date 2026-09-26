@@ -3357,6 +3357,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 
 | Date | Événement |
 |---|---|
+| 2026-09-26 (03h55) | ✅ **v2.67.2** (Quang 03h38, capture d'écran : « Reading No to Obsession… » proposé, « &quot; » affiché) : `devinerTitre()` retire le mot de lecture en tête (Reading / Read online / Lire / Lecture en ligne) SEULEMENT sur un titre de page de chapitre, et décode les entités HTML (proposition + liste des onglets). Banc `test_titre_onglet_ui.py` 9/9 (« Reading the Room », « Ready Player Two » intacts), mutation v2.67.1 → 6 KO ; `test_choix_manga_ui` vert. |
 | 2026-09-26 (03h45) | ✅ **v2.67.1** (Quang 03h35 : « quand les captures sont finies, ça ouvre directement le manga […] désagréable quand je navigue ailleurs ») : plus d'ouverture automatique du chapitre en fin de capture (série et chapitre seul) ; bibliothèque rafraîchie + message « capture terminée ». Banc `test_fin_capture_ui.py` 8/8 (fin SIMULÉE, secondes), mutation v2.67.0 → 4 KO ; `test_capture_serie_ui` : assertion inversée. |
 | 2026-09-26 (02h45) | ✅ **manga-fetch 0.8.3** : chapitre annoncé sans image = fin du lisible en « dernier paru » (bandeau « à jour » au lieu d'un faux échec). Webtoon en cours complété ch. 21-24. |
 | 2026-09-26 (02h30) | ✅ **manga-fetch 0.8.2** : webtoons en TUILES découpés aux gouttières (critère de continuité du dessin, tuiles-espaces gardées, fonds rayés, bulles protégées) ; 63 chapitres redécoupés (sauvegardes gardées), 4 645 raccords en plein dessin → 49. |
