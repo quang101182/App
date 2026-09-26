@@ -7,7 +7,7 @@
 
 ## 1. État au 25/09/2026 23h35
 
-- App `manga_studio.html` **v2.77.0** (26/09 15h05) · manga-fetch **0.8.3** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
+- App `manga_studio.html` **v2.79.3** (26/09 19h05) · manga-fetch **0.8.3** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
   redécoupés ; sauvegardes `_avant_redecoupe/` EFFACÉES le 26/09 02h45 après validation de Quang à la lecture).
 - **26/09 11h00-11h30** : v2.68.0 lecteur vidéo (24/24) + 2 bugs Fold ; v2.69.0 sélecteur rapide (26/26).
 - **26/09 11h35-12h05** : sélecteur en narration + visionneuse `test_selecteur_narr_pages_ui` 100/100 (sabotage rouge) ;
@@ -24,7 +24,10 @@
   pour « …/vol-N/ ». Volumes vs chapitres : rien à coder ; ⚠ ne pas capturer les 2 formats d'une série sous le MÊME nom.
 - **26/09 15h02-15h25** : site Mangas Origines validé (`sites.json`, banc `test_site_nouveau.py`) ; gestes de fenêtre autorisés
   pendant une capture (proxy `patch_pilote_fenetre_capture.py` + `cdp_mini.py`, banc `test_fenetre_pendant_capture.py` 8/8),
-  les 2 applications relancées. En cours à 15h25 : Solo Leveling vol.2 (reprise) — vérifier son bilan « OK : N/N pages ».
+  les 2 applications relancées. Solo Leveling vol.2 → 15 capturés (912 p. pour le vol.2, 0 vide).
+- **26/09 16h20-19h05** : v2.78.0 ordre de la fiche ; v2.79.0 liens Traduction / Musique → Vidéo + lueur (maquette B) ;
+  v2.79.1 fiche à 360 px ; v2.79.2 suivi de capture unique ; v2.79.3 bandeau tracé. **Ouvert** : bandeau périmé sur le Fold
+  (cause non prouvée ; déclencheur = s'il résiste après rechargement en v2.79.3 → lire le journal client du Fold).
 - **Ragnarok ch. 2** : images redécoupées, narration + cases retirées (anciennes pages) et gardées dans
   `sources/_avant_redecoupe/` = SEULE copie : ne pas effacer sans demander à Quang.
 - **Historique git du dépôt public : NON réécrit — décision de Claude déléguée par Quang (26/09 00h58)** : fichiers actuels propres,
