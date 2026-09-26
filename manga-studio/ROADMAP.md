@@ -2944,7 +2944,18 @@ Swipe vers le bas sur la barre ? ».
       le choix « vers le haut » (constat 11h05 : peu de course) est annulé par l'usage réel. Vers le haut n'ouvre PLUS rien ;
       bulle / titre / G inchangés ; fermer la feuille = glisser vers le bas SUR la feuille (inchangé). Bancs + vrai geste
       (`input swipe`) sur le Samsung, puis écran en veille.
-- [ ] **Barre de notifications Android masquée** (Quang 12h22) : dans Manga Studio installée, la barre du haut (heure,
+- [x] **Barre de notifications Android visible** (v2.73.0, 26/09 12h40). Cause : `pwa/manifest.webmanifest` en `"display":
+      "fullscreen"` (+ `display_override` fullscreen) — le SEUL de ses apps ainsi (Friday : pas de plein écran) ; le « clignotement »
+      = Android qui réaffiche la barre un instant puis la recache. → `"display": "standalone"` (un seul fichier : la secondaire passe
+      par le même proxy). Le plein écran du LECTEUR VIDÉO (⋯) reste. Vérifié sur le Samsung, application réinstallée :
+      `display-mode: standalone` = vrai, heure + batterie visibles sur le fond sombre de l'app.
+      ⚠ Piège payé : le manifeste est servi `Cache-Control: max-age=3600` → la 1re réinstallation a repris l'ANCIEN manifeste
+      (cache Chrome) ; vider le cache puis réinstaller. `chrome://webapks` inaccessible par ADB/CDP (2 échecs, abandonné).
+      ⏭ **Chez Quang (Fold)** : les applications installées se mettent à jour SEULES (Chrome relit le manifeste, en général
+      sous 24 h ; au-delà d'1 h de cache). NE PAS réinstaller pour aller plus vite : une réinstallation = nouveau paquet =
+      « liens compatibles » à réactiver (bandeau). **À vérifier** (déclencheur : Quang voit la barre, ou le 28/09) : après la mise
+      à jour, la bascule principale ↔ secondaire reste sans bandeau.
+      Énoncé (Quang 12h22) : dans Manga Studio installée, la barre du haut (heure,
       batterie) est cachée et « clignote » parfois (apparaît brièvement puis disparaît) ; Friday et Generate Studio la gardent
       TOUJOURS visible → faire comme eux. Constat (lu 26/09) : manifestes `display: "fullscreen"` (principale ET secondaire).
       À comparer avec les manifestes de Friday / Generate Studio avant de toucher.
