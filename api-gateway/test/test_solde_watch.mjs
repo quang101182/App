@@ -75,7 +75,7 @@ const NORMAL = { deepseek: 19.0, moonshot: 34.6, runpod: 38.0, piapi: 2.9 };
 const CAS = [
   ['journee normale partout -> aucune alerte, aucun Telegram', NORMAL,
     (r) => r.alertes.length === 0 && r.telegrams.length === 0],
-  ['deepseek brule 3 $ (15x sa mediane de 0,20) -> [anomalie] deepseek', { ...NORMAL, deepseek: 16.2 },
+  ['deepseek brule 0,80 $ (4x sa mediane de 0,20, sous le seuil de 1 $) -> [anomalie] deepseek', { ...NORMAL, deepseek: 18.4 },
     (r) => r.alertes.some((a) => a.startsWith('[anomalie] deepseek')) && r.telegrams.length === 1],
   ['deepseek brule 8 $ -> [seuil] deepseek', { ...NORMAL, deepseek: 11.2 },
     (r) => r.alertes.some((a) => a.startsWith('[seuil] deepseek'))],
@@ -111,12 +111,62 @@ async function batterie(worker) {
   return res;
 }
 
+// v1.61 — controle HORAIRE : apres le releve du jour, chaque passage (au plus 1/h) compare le solde
+// courant au releve du matin. Le vol du 23-26/09 brulait 7 $ dans la journee sans rien declencher.
+async function scenarioIntraday(worker) {
+  const res = [];
+  const tourner = async (env) => { const w = []; await worker.scheduled({}, env, { waitUntil: (p) => w.push(p) }); await Promise.allSettled(w); };
+  soldes = NORMAL; telegrams = [];
+  const env = makeEnv();
+  await tourner(env);                                            // releve du matin : deepseek 19.0
+  const hist0 = env.GATEWAY_KV.store.get('soldewatch:hist');
+  soldes = { ...NORMAL, deepseek: 17.5 }; telegrams = [];        // 1,50 $ brules depuis le matin
+  await tourner(env);
+  const it = JSON.parse(env.GATEWAY_KV.store.get('soldewatch:intraday') || '{}');
+  res.push(['intraday : 1,50 $ brules depuis le releve du matin -> [intraday] deepseek + Telegram',
+    (it.alerts || []).some((a) => a.startsWith('[intraday] deepseek')) && telegrams.length === 1, JSON.stringify(it.alerts)]);
+  res.push(["intraday : l'historique quotidien n'est PAS modifie", env.GATEWAY_KV.store.get('soldewatch:hist') === hist0, '']);
+  soldes = { ...NORMAL, deepseek: 15.0 }; telegrams = [];
+  await tourner(env);
+  res.push(["intraday : dans l'heure, aucun nouveau sondage (verrou)", telegrams.length === 0, '']);
+  env.GATEWAY_KV.store.delete('soldewatch:intraday_verrou'); telegrams = [];
+  await tourner(env);
+  res.push(['intraday : une heure plus tard, deepseek deja signale ce jour -> pas de 2e Telegram', telegrams.length === 0, '']);
+  const env2 = makeEnv(); soldes = NORMAL; telegrams = [];
+  await tourner(env2);
+  soldes = { ...NORMAL, deepseek: 29.0 }; telegrams = [];         // recharge de 10 $ dans la journee
+  await tourner(env2);
+  res.push(['intraday : une recharge (solde en hausse) -> aucune alerte', telegrams.length === 0, '']);
+  return res;
+}
+
 let echecs = 0;
-console.log('v1.59 (src/index.js)');
+console.log('v1.61 (src/index.js)');
 const actuel = (await import('../src/index.js')).default;
-for (const [nom, ok, detail] of await batterie(actuel)) {
+for (const [nom, ok, detail] of [...await batterie(actuel), ...await scenarioIntraday(actuel)]) {
   if (!ok) echecs++;
   console.log(`  ${ok ? 'OK   ' : 'ECHEC'} ${nom}  ${ok ? '' : '— ' + detail}`);
+}
+
+console.log('\nMUTATION 2 — controle horaire debranche (retour v1.60) DOIT rougir');
+let dossierH;
+try {
+  const source = readFileSync(join(ICI, '../src/index.js'), 'utf8');
+  const cible = 'if (last === auj) return runSoldeIntraday(env, auj);';
+  if (!source.includes(cible)) throw new Error('branchement intraday introuvable');
+  dossierH = mkdtempSync(join(tmpdir(), 'banc-solde-h-'));
+  const fichier = join(dossierH, 'index_mute_h.mjs');
+  writeFileSync(fichier, source.replace(cible, 'if (last === auj) return out;'));
+  const mute = (await import(pathToFileURL(fichier).href)).default;
+  const r = await scenarioIntraday(mute);
+  const ok = !r[0][1];
+  if (!ok) echecs++;
+  console.log(`  ${ok ? 'OK   ' : 'ECHEC'} rougit : ${r[0][0]}`);
+} catch (e) {
+  echecs++;
+  console.log(`  ECHEC mutation 2 NON jouee (${e.message})`);
+} finally {
+  if (dossierH) rmSync(dossierH, { recursive: true, force: true });
 }
 
 console.log('\nMUTATION — une recharge comptee comme une baisse (garde « baisse >= 0 » retiree) DOIT rougir');

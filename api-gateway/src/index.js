@@ -44,7 +44,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // v1.50 — route /api/glm → z.ai (Zhipu GLM, OpenAI-compatible). Cerveau swappable Jarvis (glm-4-plus).
-const VERSION = '1.60';
+const VERSION = '1.61';
 // v1.59 (21/09/2026) — runSoldeWatch : sondes de SOLDE pour deepseek, moonshot-kimi, runpod, piapi
 // (les 4 fournisseurs rechargeables, jusque-la angles morts du cost watch). Voir la fonction.
 
@@ -2337,7 +2337,8 @@ async function runCostWatch(env, opts = {}) {
 // ci-dessous POUR LES SEUILS SEULEMENT (ordre de grandeur, pas de la comptabilite).
 const SOLDE_CNY_USD = 0.14;
 const SOLDE_FOURNISSEURS = {
-  deepseek: { seuilJour: 5.00,  soldeBas: 1.00 },
+  // v1.61 : 5 -> 1 $. Journee normale ~0,10 $ ; le vol du 23-26/09 (1,35 a 1,72 $/j) passait sous 5 $.
+  deepseek: { seuilJour: 1.00,  soldeBas: 1.00 },
   moonshot: { seuilJour: 5.00,  soldeBas: 1.00 },
   runpod:   { seuilJour: 15.00, soldeBas: 5.00 },   // pods GPU : une session LTX coute ~3 $/h
   piapi:    { seuilJour: 5.00,  soldeBas: 1.00 },
@@ -2414,7 +2415,7 @@ async function runSoldeWatch(env, opts = {}) {
   const auj = new Date().toISOString().slice(0, 10);
   if (!dryRun && !opts.force) {
     const last = await env.GATEWAY_KV.get('soldewatch:lastday');
-    if (last === auj) return out;
+    if (last === auj) return runSoldeIntraday(env, auj);
   }
 
   let hist = {};
@@ -2472,6 +2473,42 @@ async function runSoldeWatch(env, opts = {}) {
     out.telegram = { sent: false, reason: 'aucune alerte a envoyer' };
   }
   await env.GATEWAY_KV.put('soldewatch:last', JSON.stringify(out), { expirationTtl: 1209600 });
+  return out;
+}
+
+// v1.61 (26/09/2026) — controle HORAIRE entre deux releves quotidiens.
+// Constat : cle DeepSeek volee du 23 au 26/09. Le releve n'avait lieu qu'une fois par jour (~00 h UTC) :
+// les 7,40 $ brules le 26 n'auraient ete vus que le 27. Et la mediane s'empoisonne des le 2e jour de vol.
+// Ici : au plus une fois par heure, baisse depuis le releve du jour (hist[auj]) vs seuilJour.
+// Une seule alerte par fournisseur et par jour. N'ecrit JAMAIS dans l'historique (reste quotidien).
+async function runSoldeIntraday(env, auj) {
+  const out = { ts: Date.now(), intraday: true, alerts: [], soldes: {} };
+  if (await env.GATEWAY_KV.get('soldewatch:intraday_verrou')) return out;
+  await env.GATEWAY_KV.put('soldewatch:intraday_verrou', '1', { expirationTtl: 3600 });
+  let hist = {};
+  try { hist = JSON.parse((await env.GATEWAY_KV.get('soldewatch:hist')) || '{}'); } catch { hist = {}; }
+  for (const [nom, sonde] of Object.entries(SONDES_SOLDE)) {
+    const base = (hist[nom] || {})[auj];
+    if (!Number.isFinite(base)) continue;
+    if (await env.GATEWAY_KV.get(`soldewatch:alerte:${nom}:${auj}`)) continue;
+    let rel;
+    try { rel = await sonde(env); } catch { continue; }      // une sonde muette est signalee par le releve quotidien
+    if (!Number.isFinite(rel.solde)) continue;
+    const taux = rel.devise === 'CNY' ? SOLDE_CNY_USD : 1;
+    const baisse = base - rel.solde;                          // < 0 = recharge : rien a dire
+    out.soldes[nom] = { solde: rel.solde, devise: rel.devise, baisseDepuisReleve: Math.round(baisse * 100) / 100 };
+    if (baisse * taux >= SOLDE_FOURNISSEURS[nom].seuilJour) {
+      out.alerts.push(`[intraday] ${nom} : ${baisse.toFixed(2)} ${rel.devise} consommes depuis le releve de ce matin `
+                    + `(seuil ${SOLDE_FOURNISSEURS[nom].seuilJour.toFixed(2)} USD/jour)`);
+      await env.GATEWAY_KV.put(`soldewatch:alerte:${nom}:${auj}`, '1', { expirationTtl: 172800 });
+    }
+  }
+  if (out.alerts.length) {
+    const msg = 'ALERTE SOLDES API (gateway, controle horaire)\n\n' + out.alerts.join('\n')
+              + '\n\nUne cle volee se voit ici en premier. Trace : GATEWAY_KV soldewatch:intraday';
+    out.telegram = await costWatchTelegram(env, msg);
+  }
+  await env.GATEWAY_KV.put('soldewatch:intraday', JSON.stringify(out), { expirationTtl: 1209600 });
   return out;
 }
 
