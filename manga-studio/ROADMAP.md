@@ -2980,6 +2980,17 @@ Swipe vers le bas sur la barre ? ».
       `--mutation` → 2 KO ; Quang 13h06 : *« en persistance mémoire, ou le
       laisser toujours coché d'office »*). Défaut = cochée ; si Quang la décoche, le choix est gardé sur l'appareil
       (`localStorage manga_cap_page1`). Sans risque : partir de la page 1 ne change rien quand l'onglet y est déjà.
+- [x] **Pochette + fiche d'une série fraîchement capturée, SANS l'ouvrir** (v2.75.0, 26/09 14h15, `app_patch_275_serie_auto.py`).
+      Quang 14h06 : la pochette ne se met à jour qu'à la 1re ouverture. **Régression de MA v2.67.1** : la fin de capture ouvrait
+      le manga, ce qui déclenchait pochette (AniList) + fiche (tomes, dates) ; ouverture retirée (demande Quang) → plus rien.
+      → `serieAuto(serie)` (mêmes conditions : capture finie, pas de pochette / fiche plus vieille que le dernier chapitre), appelée à
+      l'ouverture ET en fin de capture pour **la série capturée, elle seule** — l'ouverture auto reste RETIRÉE (Quang 14h08 : « tu ne
+      réactives pas »). ⚠ 1er jet rejeté par le banc : un balayage « séries capturées depuis 7 jours » visait **7 séries réelles**
+      sans pochette (dont une masquée) → recherches AniList à chaque ouverture de l'app, voire mauvaise pochette. Banc
+      `test_serie_auto_ui.py` **14/14** (sources + fin de capture SIMULÉES, appels interceptés : rien d'écrit) ; v2.74.0 servie → 4 KO.
+- [ ] **Proposé (Quang 14h09 : « pourquoi attendre la fin ? »)** : POCHETTE dès le 1er chapitre capturé (titre connu, dossier
+      créé). La FICHE doit attendre la fin : elle range les chapitres par tome d'après leur NUMÉRO (v2.8.5 : lancée pendant la
+      capture → Solo Leveling ch.1 sans tome). **Déclencheur** : accord de Quang.
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),
       `GET /manga/bibliotheque` rend maintenant `videos_pos` : reprise de position commune PC / téléphone sur les DEUX applications. : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
       26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de
