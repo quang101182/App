@@ -2853,12 +2853,28 @@ Swipe vers le bas sur la barre ? ».
 
 ### Étapes
 - [x] **V0 — Maquette lecteur vidéo validée** (A-H).
-- [ ] **V1 — Lecteur vidéo v2.68.0** : barre du bas (⏮ ch. · −10 · ⏯ · +10 · ch. ⏭, glissement = chapitre) ; toucher l'image = ⏯,
+- [x] **V1 — Lecteur vidéo v2.68.0** (26/09 11h30) : `app_patch_268_lecteur_video.py` + proxy `patch_video_pos.py` (+ `.diff`). Banc
+      `test_lecteur_video_ui.py` **24/24** (vraies vidéos OPM, 360→1280, gestes tactiles simulés), mutation v2.67.2 rouge ;
+      `test_video_nav_ui` 12/12. ⚠ Nom `fmtT` DÉJÀ PRIS dans l'app → `vidFmt` (piège « vérifier les noms »). Proxy patché sur disque,
+      **relance à faire au repos** (les deux applications travaillaient à 11h20) : sans elle, la position n'est gardée que sur l'appareil.
+      + **2 bugs Quang 11h15 (Fold fermé)** corrigés (`app_patch_268b_clignotement.py`) : onglet Vidéo qui clignotait 54→16 px toutes
+      les 4 s pendant une génération (vidRendre effaçait l'en-tête compact) → 0 changement en 12 s ; chevron de la ligne Narration
+      hors du cadre < 480 px → OK à 360/476/704/1280. Sonde : `scripts/sonde_clignotement_video.py` (génération simulée).
+      Initialement : barre du bas (⏮ ch. · −10 · ⏯ · +10 · ch. ⏭, glissement = chapitre) ; toucher l'image = ⏯,
       double toucher gauche/droite = −10/+10 s ; progression large + temps ; reprise de position par vidéo (serveur, commune
       PC/téléphone) ; fin → ch. suivant dans 5 s (Annuler / Maintenant) ; barre masquée après 3 s ; ⋯ vitesse + plein écran ;
       écran allumé (Wake Lock) ; clavier PC. L'avertissement de saut reste.
-- [ ] **S0 — Maquette du sélecteur rapide** (`maquette_selecteur_chapitre_v1.html`) → validation Quang. Rien avant.
-- [ ] **S1 — Sélecteur** : un seul composant, branché sur chaque barre du bas (navigation chapitre, lecteur narré, lecteur vidéo ;
+- [x] **S0 — Maquette du sélecteur rapide** : v1 (grande feuille : champ n° + grille de tous les chapitres) et v2 (compacte, puces
+      du lot, à la demande de Quang 11h06) envoyées ; **Quang 11h08 : « je préfère ta 1ère proposition » → v1 retenue**.
+- [ ] **S1 — Sélecteur** (Quang 11h10 : « sélecteur de chapitre, sélecteur de narration et sélecteur de vidéo, pense à tous les cas »).
+      **Cas à couvrir, chacun testé** : chapitre courant (vert, centré à l'ouverture) · lu / non lu · numéro ABSENT de la bibliothèque
+      (pointillé, non cliquable ; la recherche propose le plus proche) · chapitre SANS narration / SANS vidéo dans le sélecteur
+      correspondant (grisé + raison) · PLUSIEURS narrations (voix) ou vidéos (versions) pour un chapitre → choix de la version
+      (défaut : celle en cours / la plus récente) · narration ou vidéo EN COURS de génération (⏳, non lançable) · vidéo « à refaire »
+      (signalée, lançable) · numéros décimaux (12.5) et « ignorer les intermédiaires » · série à 1 chapitre · série longue (300+ :
+      rendu rapide, recherche) · recherche par numéro exact / préfixe / « 12,5 » · reprise vidéo à sa position · fermeture (✕, voile,
+      glisser vers le bas, Échap) · clavier PC (G) · 360 → 1280 px · les deux applications.
+      Branchement : un seul composant, branché sur chaque barre du bas (navigation chapitre, lecteur narré, lecteur vidéo ;
       visionneuse = « aller à la page »), ouvert par glissement vers le haut ou toucher de la bulle.
 - [ ] **B — Bancs** : app réelle, 360/476/704/933/1280, gestes simulés (touch), sabotage rouge, bancs voisins
       (`test_activite_ui`, navigation, visionneuse).

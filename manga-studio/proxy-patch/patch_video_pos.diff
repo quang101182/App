@@ -1,0 +1,46 @@
+--- C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260926-v2680	2026-09-26 11:12:10.009723600 +0200
++++ C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py	2026-09-26 11:12:10.058541100 +0200
+@@ -7908,7 +7908,9 @@
+     return {"masquees": [x for x in b.get("masquees") or [] if isinstance(x, str)],
+             "ouvertes": {k: v for k, v in (b.get("ouvertes") or {}).items() if isinstance(v, (int, float))},
+             "lectures": {k: v for k, v in (b.get("lectures") or {}).items()           # v2.62.0 : lectures
+-                         if isinstance(v, dict) and isinstance(v.get("d"), str)}}
++                         if isinstance(v, dict) and isinstance(v.get("d"), str)},
++            "videos_pos": {k: v for k, v in (b.get("videos_pos") or {}).items()       # v2.68.0 : video_pos
++                           if isinstance(v, dict) and isinstance(v.get("pos"), (int, float))}}
+ 
+ 
+ def manga_bibliotheque(data=None):
+@@ -7917,8 +7919,16 @@
+     slug, action = (data.get("slug") or "").strip("/"), data.get("action") or ""
+     if not _RE_SERIE.match(slug) or not os.path.isdir(_manga_src_safe(slug) or ""):
+         return {"error": "serie introuvable"}
+-    if action not in ("masquer", "afficher", "ouverte", "lecture"):
++    if action not in ("masquer", "afficher", "ouverte", "lecture", "video_pos"):
+         return {"error": "action inconnue"}
++    if action == "video_pos":                                                # v2.68.0 : la video DOIT etre de la serie
++        fichier = str(data.get("fichier") or "").replace("\\", "/").strip("/")
++        if not fichier.startswith(slug + "/") or ".." in fichier or len(fichier) > 300:
++            return {"error": "video introuvable"}
++        try:
++            pos, duree = float(data.get("pos") or 0), float(data.get("duree") or 0)
++        except (TypeError, ValueError):
++            return {"error": "position invalide"}
+     if action == "lecture":                                                  # v2.62.0 : le chapitre DOIT etre de la serie
+         d = (data.get("d") or "").strip("/")
+         if not d.startswith(slug + "/") or ".." in d or not os.path.isdir(_manga_src_safe(d) or ""):
+@@ -7944,6 +7954,14 @@
+             elif a.get("prec"):
+                 n["prec"] = a["prec"]
+             b["lectures"][slug] = n
++        elif action == "video_pos":
++            if pos < 5 or (duree > 0 and pos > duree - 10):
++                b["videos_pos"].pop(fichier, None)                           # debut ou fin : on repartira du debut
++            else:
++                b["videos_pos"][fichier] = {"pos": round(pos, 1), "duree": round(duree, 1), "t": int(time.time())}
++                if len(b["videos_pos"]) > 500:
++                    for k in sorted(b["videos_pos"], key=lambda k: b["videos_pos"][k].get("t", 0))[:len(b["videos_pos"]) - 500]:
++                        b["videos_pos"].pop(k, None)
+         tmp = MANGA_BIBLIO + ".tmp"
+         with open(tmp, "w", encoding="utf-8") as f:
+             json.dump(b, f, ensure_ascii=False, indent=1)
