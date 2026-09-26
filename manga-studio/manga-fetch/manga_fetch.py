@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.8.2"
+VERSION = "0.8.3"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -999,6 +999,7 @@ def capture(args) -> int:
         def un_chapitre(args) -> int:
             DERNIER["url"] = _url_chapitre(page.url)
             DERNIER["deja_la"] = False
+            DERNIER["echec"] = ""
             print(f"Onglet : {page.url[:80]}")
             log_evt("capture", "démarrage", titre=args.title, chapitre=str(args.chapter),
                     methode_onglet=methode_choix, onglet=page.url[:100])
@@ -1519,6 +1520,7 @@ def capture(args) -> int:
             uniques = list(vues.values())
 
             def echec_propre(msg: str) -> int:
+                DERNIER["echec"] = msg                        # v0.8.3 : lu par la serie (chapitre annonce sans image)
                 print(msg)
                 print(f"Le dossier partiel est retiré : {dest}")
                 log_evt("échec", msg, dossier=dest)
@@ -1661,6 +1663,13 @@ def capture(args) -> int:
             a2 = argparse.Namespace(**vars(args))
             a2.chapter, a2.force, a2.page_1, a2.enchaine = num, False, True, True
             c2 = un_chapitre(a2)
+            if c2 not in (0, 3) and fin and DERNIER.get("echec", "").startswith("ÉCHEC : aucune image détectée"):
+                # v0.8.3 (26/09, ch. vecu : le site ANNONCE le ch. 25 mais sa page n'a aucune image -- pas encore publie) :
+                # en « jusqu'au dernier paru », c'est la fin de ce qui est lisible, pas une panne. Seul ce cas-la (AUCUNE
+                # image) : une capture tronquee, un echec de controle, restent des echecs.
+                arret = f"aucun chapitre après le {chap} sur ce site (le ch. {num} est annoncé mais sans aucune image : pas encore publié ?)"
+                log_evt("série", "chapitre annoncé sans image = fin du lisible", apres=chap, annonce=num)
+                break
             if c2 not in (0, 3):
                 arret = f"le chapitre {num} a échoué (code {c2})"
                 break

@@ -2931,6 +2931,14 @@ Maquette : `maquette_dernier_paru_v1.html` (v1, **à valider par Quang avant tou
   ⬜ **Refusé exprès** : Ragnarok ch. 2 (narration + vidéo + cases liées aux numéros de page). ⬜ 7 ch. de la série de 54
   gardent 3-5 coupes (site sans aucun espace, tuiles-espaces perdues à la capture) : seule une recapture ferait mieux —
   déclencheur : si Quang le demande. Mangas (Boruto, Claymore, Noritaka) signalés par la mesure = doubles pages, rien à faire.
+- ✅ **26/09 02h25-02h40 — fin du webtoon en cours (demande Quang)** : ch. 21 → 24 capturés en « dernier paru » avec la 0.8.2,
+  0 coupe forcée / 0 raccord dans le dessin, planche vérifiée à l'œil (Quang : « le format est correct »). Le ch. 21 de 01h07
+  n'était PAS un effet de son « Arrêter après ce chapitre » (posé 01h05) : le chapitre avait échoué au contrôle 800 px AVANT
+  le point d'arrêt ; son drapeau restant est effacé par le serveur à tout nouveau lancement.
+- ✅ **manga-fetch 0.8.3** : le site ANNONCE un ch. 25 dont la page n'a aucune image (pas encore publié) → en « dernier paru »,
+  « aucun chapitre après le 24 sur ce site (le ch. 25 est annoncé mais sans aucune image) », code 0, bandeau vert « à jour »
+  (au lieu de « le chapitre 25 a échoué »). Seul le cas AUCUNE image ; tout autre échec reste un échec. Vrai test (onglet
+  jetable, sortie temporaire) : 0.8.3 code 0 / 0.8.2 « a échoué » (mutation rouge).
   Vécu par Quang sur la secondaire le 25/09 23h56 (ch. 16 d'une série, arrêt « capture tronquée à 1 page »). Mesuré en
   lecture seule dans l'onglet : 210 bandes DISTINCTES, 208 en 720×700 (ratio 1,03). `collecter()` écarte les ratios
   0,93-1,15 (avatars/logos) et ne réadmet une bande de la largeur des pages qu'après **3** pages déjà prises à cette
@@ -3337,6 +3345,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 
 | Date | Événement |
 |---|---|
+| 2026-09-26 (02h45) | ✅ **manga-fetch 0.8.3** : chapitre annoncé sans image = fin du lisible en « dernier paru » (bandeau « à jour » au lieu d'un faux échec). Webtoon en cours complété ch. 21-24. |
 | 2026-09-26 (02h30) | ✅ **manga-fetch 0.8.2** : webtoons en TUILES découpés aux gouttières (critère de continuité du dessin, tuiles-espaces gardées, fonds rayés, bulles protégées) ; 63 chapitres redécoupés (sauvegardes gardées), 4 645 raccords en plein dessin → 49. |
 | 2026-09-26 (00h55) | ✅ **manga-fetch 0.8.1** : webtoon en bandes presque carrées (720×700) → la largeur de colonne s'amorce sur le document (≥ 5 images ≥ 500 px à la même largeur) ; ch. réel 0 → 213/213 bandes. |
 | 2026-09-26 (00h40) | ✅ **v2.67.0 + manga-fetch 0.8.0 + proxy `patch_dernier_paru`** (§ 4-quindecies) : puce « Jusqu'au dernier paru » ; plafond de 50 remplacé par des sécurités (croissance stricte, contenu identique, saut > 10, pause 3 s, filet 300 partout) ; chapitres déjà là sautés et comptés à part (« 2 capturé(s), 1 déjà là »), 1er chapitre déjà là = « ⏭ Le garder et continuer ». Banc réel 19/19 + voisins verts. 🔴 Défaut noté : webtoon en bandes presque carrées (1 page capturée). |
