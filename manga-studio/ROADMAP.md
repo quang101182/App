@@ -3020,7 +3020,15 @@ Swipe vers le bas sur la barre ? ».
       219/219 images, découpées en 912 pages (218 bandes, 1 coupe hors gouttière), 0 vide, hauteur médiane 1 218 px (vol.1 : 1 197).
       ⚠ Piège : le découpage tourne APRÈS la ligne « OK : N/N » — ne pas juger les pages avant l'événement `[webtoon] bandes découpées`
       de `%LOCALAPPDATA%\manga-fetch\events.log` (fausse alerte de ma part à 15h29).
-- [ ] **Lien visuel Traduction / Musique → Vidéo + surbrillance de l'étape suivante** (Quang 16h25-16h27). Constat (code lu) :
+- [x] **Lien visuel Traduction / Musique → Vidéo + surbrillance de l'étape suivante — variante B, v2.79.0** (26/09 16h55,
+      Quang 16h30 « B » ; `app_patch_279_liens_video.py`). « → 🎬 » sur Traduction / Musique (+ Narration sur PC) ; ligne Vidéo =
+      pastilles 🎙 / 🌐 FR|VO / 🎵 N (vert prêt, pointillé facultatif absent ; sous l'état sur téléphone) ; UNE lueur = étape
+      suivante (Narrer → Traduire si VO → Faire la vidéo), jamais la musique, coupée si « réduire les animations ». Banc
+      `test_liens_video_ui.py` **44/44** (3 vrais chapitres, 1280 / 360 / 360 réduit) ; v2.78.0 servie → rouge ; voisins fiche 31/31,
+      sonde clignotement 0. Trouvés sur CAPTURE (pas par les chiffres) : pastilles qui écrasaient l'état Vidéo à 360 → 2e ligne ;
+      flèche qui mangeait l'état Narration à 360 → masquée sur téléphone. ⏭ Préexistant, NON corrigé : à 360 px l'état d'un
+      chapitre NON narré fait 0 px (les pastilles de coût prennent la place) ; « Traduire » affiché même « déjà en français ».
+      **Déclencheur** : accord de Quang. Énoncé : Constat (code lu) :
       la narration ne dépend de rien ; `video_chapitre.py` prend les pages traduites si elles existent (sinon VO) et la musique si
       choisie → traduire / choisir la musique AVANT la vidéo, pas avant la narration. Tout reste FACULTATIF, le lien doit se VOIR.
       Maquette `maquette_liens_video_v1.html` (A groupe « pour la vidéo », B pastilles d'ingrédients sur la ligne Vidéo, C rail) ;
