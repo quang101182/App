@@ -8,7 +8,7 @@
 ## 1. État au 25/09/2026 23h35
 
 - App `manga_studio.html` **v2.67.0** · manga-fetch **0.8.3** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
-  redécoupés, sauvegardes dans `<racine>/_avant_redecoupe/` à effacer quand Quang aura validé à la lecture).
+  redécoupés ; sauvegardes `_avant_redecoupe/` EFFACÉES le 26/09 02h45 après validation de Quang à la lecture).
 - **Historique git du dépôt public : NON réécrit — décision de Claude déléguée par Quang (26/09 00h58)** : fichiers actuels propres,
   réécriture = 503 commits / 24 projets + force-push sur la branche de GitHub Pages, sans effacer vraiment côté GitHub. · proxy patché (… `patch_arret.py`, `patch_dernier_paru.py`).
 - **26/09 00h40** : « Jusqu'au dernier paru » + sécurités de série + chapitres déjà là (ROADMAP § 4-quindecies, tout coché).
