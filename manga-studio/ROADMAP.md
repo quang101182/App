@@ -2951,7 +2951,13 @@ Swipe vers le bas sur la barre ? ».
       `display-mode: standalone` = vrai, heure + batterie visibles sur le fond sombre de l'app.
       ⚠ Piège payé : le manifeste est servi `Cache-Control: max-age=3600` → la 1re réinstallation a repris l'ANCIEN manifeste
       (cache Chrome) ; vider le cache puis réinstaller. `chrome://webapks` inaccessible par ADB/CDP (2 échecs, abandonné).
-      ⏭ **Chez Quang (Fold)** : les applications installées se mettent à jour SEULES (Chrome relit le manifeste, en général
+      ✅ **Fold de Quang, 26/09 12h55-13h00 (sur son accord)** : Quang 12h52 a signalé la barre toujours cachée — ses 2 WebAPK
+      dataient du 23 et du 24/09 (jamais mises à jour). Débogage Chrome du Fold muet (2 échecs) → **v2.73.1** : lien du manifeste
+      `?v=2.73.1` (adresse neuve = l'ancien manifeste en cache ne peut pas revenir). Désinstallées puis réinstallées depuis Chrome
+      (pilotage par les TEXTES de l'écran, uiautomator), « liens compatibles » réactivés pour chacune. Mesuré par Android : barre
+      d'état `visible=true` dans la principale ; vrai appui long → secondaire (sa propre tâche) `visible=true` ; retour → principale
+      `visible=true`.
+      ~~⏭ Chez Quang (Fold) : les applications installées se mettent à jour SEULES (Chrome relit le manifeste, en général
       sous 24 h ; au-delà d'1 h de cache). NE PAS réinstaller pour aller plus vite : une réinstallation = nouveau paquet =
       « liens compatibles » à réactiver (bandeau). **À vérifier** (déclencheur : Quang voit la barre, ou le 28/09) : après la mise
       à jour, la bascule principale ↔ secondaire reste sans bandeau.
