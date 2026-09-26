@@ -119,7 +119,7 @@ def scenario(m):
     check("A. reglages de Genos : voix ADAM, stabilite 1.0 (retenue), vitesse 1.15",
           g["voice_settings"]["stability"] == 1.0 and g["voice_settings"]["speed"] == 1.15 and g["model_id"] == "eleven_v3", g)
     dep = [json.loads(l) for l in open(os.environ["MANGA_DEPENSES"], encoding="utf-8")]
-    cr = sum(len(b["text"]) for _, b in E["appels"])
+    cr = sum(max(1, round(len(b["text"]) * 0.28)) for _, b in E["appels"])   # tarif v3 MESURE (D8, dialogues 1.7.0)
     check("A. credits notes au registre (paye 0)", any(x.get("credits") == cr and x["paye"] == 0 for x in dep), dep)
     pr = json.load(open(os.path.join(dd, "progress.json"), encoding="utf-8"))
     check("A. progress fini", pr["etape"] == "fini" and pr.get("fini"), pr)

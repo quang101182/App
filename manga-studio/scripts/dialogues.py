@@ -24,7 +24,8 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.6.1"   # 1.6.1 : contour degenere (< 3 points / < 20 % de la boite) -> repli ovale
+VERSION = "1.7.0"   # 1.7.0 (D8, 27/09) : credits = tarif MESURE du v3 (0,28/caractere), plus 1/caractere
+#   # 1.6.1 : 1.6.1 : contour degenere (< 3 points / < 20 % de la boite) -> repli ovale
 #   # 1.6.0 (Quang 27/09 00h47, Solo Leveling) : chapitre en FRANCAIS D'ORIGINE -- bulles detectees
 #          sur les pages d'origine (meme detection que la traduction), texte LU par Gemini ; img_rel = page a afficher
 #   # 1.5.2 : video/dialogues.json -> nom de telechargement juste (FR, sous-titres)
@@ -40,6 +41,13 @@ LOT_PAGES = 4                       # pages par appel (essai 26/09 : 3 pages = 1
 PALETTE = ["#ff5fa2", "#ffb347", "#6fb8ff", "#b58cff", "#5fe3a1", "#ff7a5c", "#f5e663", "#4fd6e8", "#e88aff", "#c7a17a"]
 NARRATEUR_VOIX = "JBFqnCBsd6RMkjVDRZzb"     # George -- homme, conteur pose et constant (Quang 26/09 23h55 : un homme, constant)
 DISTRIB_VERSION = 1
+# Tarif REEL d'eleven_v3, mesure au solde du compte le 27/09 (D8) : 789 car. -> 218 cr., 33 -> 9, 23 -> 6.
+# Le gateway ne renvoie pas les en-tetes de cout : seul le solde fait foi, a re-mesurer si ElevenLabs change ses prix.
+TARIF_V3 = 0.28
+
+
+def cout_el(envoye):
+    return max(1, round(len(envoye) * TARIF_V3))
 
 
 def log(*a):
@@ -556,7 +564,7 @@ def cmd_voix(a):
         if v.get("empreinte") == emp and os.path.isfile(os.path.join(dd, "voix", v.get("fichier", "?"))):
             continue                                                     # deja faite avec ces reglages : jamais repayee
         plan.append((x, envoye, texte, reg, emp))
-    besoin = sum(len(p[1]) for p in plan)
+    besoin = sum(cout_el(p[1]) for p in plan)
     solde = el_solde()
     log("dialogues %s voix %s : %d a faire (%d deja faites), ~%d credits, solde %s" % (
         VERSION, a.chap, len(plan), sum(1 for x in reps if a_dire(x, distrib, bal)) - len(plan), besoin,
@@ -575,7 +583,7 @@ def cmd_voix(a):
         try:
             for essai in range(2):
                 open(f, "wb").write(el_post("/api/elevenlabs/v1/text-to-speech/%s?output_format=mp3_44100_128" % reg["voix"], body))
-                credits += len(envoye)
+                credits += cout_el(envoye)
                 fu, t_ = fuite_balise(f, texte, stats) if envoye != texte else (False, "")
                 if not fu:
                     break
@@ -645,7 +653,7 @@ def cmd_ecouter(a):
         print(json.dumps({"error": "quota ElevenLabs epuise", "quota": True})); return CODE_QUOTA
     except mod.Refus as e:
         print(json.dumps({"error": "refusee par ElevenLabs : " + e.motif[:160]})); return 3
-    depenses.noter_credits("dialogues", a.chap, "ecoute", "elevenlabs", len(envoye), repliques=1)
+    depenses.noter_credits("dialogues", a.chap, "ecoute", "elevenlabs", cout_el(envoye), repliques=1)
     if propre:                                                  # c'est SA voix : on la garde comme definitive
         doc = lire_json(os.path.join(dd, "dialogues.json"))
         for y in doc["repliques"]:
@@ -653,7 +661,7 @@ def cmd_ecouter(a):
                 y["voix"] = {"empreinte": emp, "fichier": emp + ".mp3", "duree": nc.duree_mp3(f), "fuite": False,
                              "t": time.strftime("%Y-%m-%dT%H:%M:%S")}
         ecrire_json(os.path.join(dd, "dialogues.json"), doc)
-    print(json.dumps({"fichier": "dialogues/" + rel, "credits": len(envoye), "deja": False, "definitive": bool(propre)}))
+    print(json.dumps({"fichier": "dialogues/" + rel, "credits": cout_el(envoye), "deja": False, "definitive": bool(propre)}))
     return 0
 
 
@@ -684,7 +692,7 @@ def cmd_plan(a):
         if v.get("empreinte") == emp and os.path.isfile(os.path.join(dd, "voix", v.get("fichier", "?"))):
             etats[x["cle"]] = "faite"; deja += 1
         else:
-            etats[x["cle"]] = "a_refaire" if v else "a_faire"; a_faire += 1; credits += len(envoye)
+            etats[x["cle"]] = "a_refaire" if v else "a_faire"; a_faire += 1; credits += cout_el(envoye)
     # la video est-elle a jour ? (meme empreinte que cmd_video : cles, voix, textes, couleurs, noms des repliques dites)
     import hashlib
     vid = "absente"

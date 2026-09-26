@@ -44,8 +44,8 @@ with sync_playwright() as p:
             haut: Math.round(document.querySelector('#chapVid').getBoundingClientRect().bottom - document.querySelector('#chapDetail .bloc-narr').getBoundingClientRect().top),
             reglagesCaches: !$('narrEngine').checkVisibility(), etats: [...document.querySelectorAll('#chapDetail .cl-etat')].map(e => e.textContent),
             lignes: [...document.querySelectorAll('#chapDetail .cl-etat')].map(e => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight))) })""")
-        check("replié par défaut : 4 lignes, dans l'ordre du travail", m["ordre"] == ["narr", "trad", "mus", "vid"] and m["ouverts"] == 0, m["ordre"])
-        check("hauteur des 4 blocs < 300 px (≈ 850 avant)", m["haut"] < 300, m["haut"])
+        check("replié par défaut : 5 lignes (🎭 Dialogues après la narration, v2.81.0), dans l'ordre du travail", m["ordre"] == ["narr", "dlg", "trad", "mus", "vid"] and m["ouverts"] == 0, m["ordre"])
+        check("hauteur des 5 lignes < 380 px (≈ 850 avant, 4 lignes < 300)", m["haut"] < 380, m["haut"])
         check("les réglages sont repliés (moteur de lecture caché)", m["reglagesCaches"])
         check("chaque ligne a un état", all(e.strip() for e in m["etats"]), m["etats"])
         check("narration : état « narration prête »", "narration" in m["etats"][0] and "prête" in m["etats"][0], m["etats"][0])

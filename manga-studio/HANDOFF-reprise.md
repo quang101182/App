@@ -7,7 +7,7 @@
 
 ## 1. État au 25/09/2026 23h35
 
-- App `manga_studio.html` **v2.81.2** (27/09 00h57, mode 🎭 Dialogues + vidéo + caméra + VF : ROADMAP § 4-septdecies ; secondaire à relancer au repos) · manga-fetch **0.8.4** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
+- App `manga_studio.html` **v2.81.4** (27/09 01h35 ; D8 fait sur le Samsung : tarif ElevenLabs v3 réel 0,28 crédit/car., estimation de préparation = pages demandées : ROADMAP § 4-septdecies) · manga-fetch **0.8.4** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
   redécoupés ; sauvegardes `_avant_redecoupe/` EFFACÉES le 26/09 02h45 après validation de Quang à la lecture).
 - **26/09 11h00-11h30** : v2.68.0 lecteur vidéo (24/24) + 2 bugs Fold ; v2.69.0 sélecteur rapide (26/26).
 - **26/09 11h35-12h05** : sélecteur en narration + visionneuse `test_selecteur_narr_pages_ui` 100/100 (sabotage rouge) ;
@@ -46,9 +46,12 @@
 | Point | Déclencheur |
 |---|---|
 | **🎭 Dialogues — caméra « suivre la case » dans le lecteur** (Quang 27/09 00h43 : « c'est important ») : zoom doux sur la case de la bulle qui parle (cases de `/manga/cases`), interrupteur 🎥 mémorisé, défaut ACTIF. Patch app `app_patch_2812_camera.py` | ✅ FAIT v2.81.2 (27/09 00h57) |
-| **🎭 Dialogues — D8 appareil réel** : Samsung A32 (libéré par Quang 00h43) : PWA, préparer → corriger → générer → lire (halo, caméra) → vidéo | **PROCHAINE ÉTAPE** : Samsung libre (Quang 00h43). Tester aussi Solo Leveling ch.9 (VF, 882 p. : portée « des pages ») |
+| **🎭 Dialogues — D8 appareil réel** | ✅ FAIT 27/09 01h35 (v2.81.3-.4, ROADMAP D8) |
+| **🎭 Dialogues — D10 bouton 🎭 dans la fiche de la SÉRIE** (Quang 01h24 : retrouver ce qui existe, sans mélanger avec 🎬 Vidéos ; choix délégué → bouton séparé + panneau « Dialogues de la série ») | **PROCHAINE ÉTAPE** : maquette à faire valider par Quang, puis code |
+| Solo Leveling ch.9 (VF) : préparation d'une portée de pages jamais faite en vrai | au 1er usage de Quang, ou pendant D10 |
+| `test_dialogues_largeurs_reel.py` : 1 KO en 5 passages (150 contrôles), non identifié (capture pendant le fondu du halo ?) | s'il revient : relancer avec affichage du contrôle en échec avant toute hypothèse |
 | **🎭 Dialogues — relancer la SECONDAIRE au repos** (elle n'a pas les routes Dialogues : patchs proxy 1-3 appliqués au fichier, instance 8192 pas relancée) : `/manga/activite` vide sur 8192, tuer le PID de `espace_prive.py` SEULEMENT, puis `Start-ScheduledTask MangaStudioInstance2` | ✅ FAIT 27/09 00h55 (les deux instances ont les 4 patchs) |
-| **🎭 Dialogues — D9 clôture** (ROADMAP § 4-septdecies : constats, versions ; mémoire ; commit) | après D8 |
+| **🎭 Dialogues — D9 clôture** (ROADMAP § 4-septdecies : constats, versions ; mémoire ; commit) | après D10 |
 | Fausse alerte « arrêtée avant la fin » quand on REDIMENSIONNE la fenêtre de capture pendant une capture (plafond de 400 pas, aucune image perdue) — préexistant | si ça arrive en vrai |
 | Une capture de référence a échoué UNE fois sans message (relance OK) | à surveiller : si ça se reproduit, lire `%LOCALAPPDATA%\manga-fetch\events.log` |
 | Pas de bouton d'arrêt pour une VIDÉO (pas de reprise possible) | si Quang en a besoin |
@@ -60,7 +63,8 @@
 1. **Dépôt `App` PUBLIC** : jamais un nom de site, de série ou une adresse de l'application SECONDAIRE dans un fichier, un
    commit ou la ROADMAP. Ses sites : `C:\Users\quang\Documents\MangaStudio-donnees\prive\_sites.json` (hors dépôt). Vocabulaire :
    « application principale / secondaire ».
-2. **Fichiers en CRLF** (`manga_studio.html`, `ROADMAP.md`, `manga_fetch.py`) : insérer par un SCRIPT Python écrit dans un
+2. **Fichiers en CRLF** (`manga_studio.html`, `manga_fetch.py` ; ~~`ROADMAP.md`~~ = LF, constaté 27/09 : tester `
+` in s avant) : insérer par un SCRIPT Python écrit dans un
    fichier (pas un heredoc : les `\n` d'une chaîne JS deviennent de vrais retours à la ligne) ; ancres converties en `\r\n`.
    Après chaque édition : `.bak` puis `node --check` sur le JS extrait (`<script>…</script>`), puis chargement réel.
 3. **Code de niveau script** qui appelle `$(...)` : APRÈS `const $ = …`. Vérifier les **noms** avant d'en créer (`LECT` était

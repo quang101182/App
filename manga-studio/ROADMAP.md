@@ -3211,14 +3211,38 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       langue.json fr = prêt). Caméra : zoom doux sur la case (élargie à la bulle ET à la pastille du nom), 🎥 mémorisé, défaut
       actif, relance des cases si détection en cours. Bancs : lecteur **51/51** (360/704/1280), preparer 24/24, voix 23/23, VF
       isolé 6/7 → 7/7 après correction du contour. Principale ET secondaire relancées au repos 27/09 00h55 (4 patchs proxy).
-- [ ] **D8 — Bancs complets** : bout en bout réel sur une scène courte (2-3 pages, homme + femme) dans la principale ;
+- [x] **D8 — Bancs complets** : bout en bout réel sur une scène courte (2-3 pages, homme + femme) dans la principale ;
       correction d'un texte → 1 seule voix refaite (crédits mesurés avant/après) ; quota simulé épuisé ; 360/476/704/933/1280 ;
       les DEUX applications ; bancs voisins de la narration et du lecteur inchangés.
+      ✅ **27/09 01h00-01h25, app v2.81.3 + dialogues.py 1.7.0**. SAMSUNG A32 réel, AU DOIGT (adb) : OPM ch. 5 p. 13-15
+      (Fille-Moustique + Genos) — ligne 🎭 dépliée, « des pages 13 à 15 » tapé au clavier, Préparer (15 s, 0,011 $, 12 répliques),
+      ✏ renommer les 2 personnages (alias gardés), Générer (12 voix, 30 s), correction « Je vois. » → « Je vois bien. » =
+      **1 seule voix refaite**, Lire (halo à 0,01 px de la bulle, couleur, pastille, enchaînement, ⏭ au doigt), 🎬 Vidéo
+      (1080×1920, 36 s, 8 s de fabrication, lue sur le téléphone) ; 0 erreur JS. Caméra : échelle ≈ 1 sur ces pages = JUSTE
+      (cases aussi larges ou aussi hautes que l'écran portrait). Largeurs 360/476/704/933/1280 sur les vraies données **30/30** ;
+      secondaire : v2.81.3, solde, ligne 🎭, 0 erreur ; quota épuisé : bancs voix **23/23** + lot 8/8 ; voisins visionneuse livre
+      30/30, retour visionneuse 24/24, balayage 14/14, lecteur vidéo 27/27, chapitre compact 31/31 (banc mis à jour : 5 lignes).
+      🔴 **Découverte (Quang 01h10, capture des coûts)** : ElevenLabs ne décompte PAS 1 crédit par caractère pour `eleven_v3`
+      mais **≈ 0,28** (mesuré au solde du compte : 789 car. → 218 cr., 33 → 9, 23 → 6 ; le gateway ne transmet pas les
+      en-têtes de coût, le solde se met à jour avec 30-60 s de retard). → `TARIF_V3 = 0.28` (estimations, registre, écoute),
+      registre recalculé (`credits_car` garde l'ancien chiffre, sauvegarde `_depenses.jsonl.bak-20260927-tarif`), sabotage
+      « tarif 1.0 » → banc voix ROUGE. Détail des coûts : « 822 · 822 · 822 » lu « 3 × 822 » → 3 cases titrées comme les dollars
+      (`app_patch_2813_credits.py`). À re-mesurer si ElevenLabs change ses prix.
+      🔴 **Bug vu par Quang 01h29** (capture : « ≈ 4,23 $ préparation » pour les pages 121 à 123 d'un chapitre de 846 p.) :
+      l'estimation comptait TOUT le chapitre (0,005 $ × pages). → **v2.81.4** (`app_patch_2814_estimation.py`) : pages
+      DEMANDÉES seulement (0,004 $/page, mesuré 0,0038), recalculée à la frappe, bornée au chapitre ; « plusieurs chapitres » :
+      aucun chiffre inventé. Banc `test_dialogues_estimation_ui.py` **12/12** (Solo Leveling ch.9, 882 p. : 3,53 $ → 0,012 $),
+      ancienne page = **10 KO** ; voisins compact 31/31, largeurs réelles 30/30 (`test_dialogues_largeurs_reel.py`).
+- [ ] **D10 — Bouton 🎭 Dialogues dans la fiche de la SÉRIE** (Quang 01h24 : « retrouver ce qui existe avec ce nouveau format […]
+      un bouton à l'onglet […] il ne faudrait pas mélanger l'ensemble » ; choix délégué) : **décidé par Claude** — bouton séparé
+      à côté de 🎬 Vidéos, panneau « 🎭 Dialogues de la série » (chapitres préparés / voix prêtes / à refaire / vidéo à jour,
+      Lire · Voir · ⬇, lancement « plusieurs chapitres » déjà prévu en D4 depuis la fiche) ; rien dans le panneau Vidéos de la
+      narration. **Déclencheur : maquette à faire valider par Quang, tout de suite après D8.**
 - [ ] **D9 — Clôture** : ROADMAP (constats barrés, versions), HANDOFF-reprise, mémoire, commit + push. Rien de la secondaire.
 
-### Coûts de référence (mesurés 26/09, à ré-étalonner après D8)
-Préparation ~0,004 $/page (Gemini 3.6 Flash) · 153 caractères de dialogue/page en moyenne (476 pages traduites) · ElevenLabs
-gratuit 10 000 crédits/mois ≈ 35 pages avec tons, ≈ 65 sans ; Starter 6 $ / 30 000 ; Creator **22 $/mois** (11 $ le 1er mois) / 121 000
+### Coûts de référence (mesurés 26/09 ; ré-étalonnés au D8 le 27/09)
+Préparation ~0,004 $/page (Gemini 3.6 Flash ; D8 : 0,0038 $/page) · 153 caractères de dialogue/page en moyenne (476 pages traduites) · ElevenLabs
+gratuit 10 000 crédits/mois ≈ ~~35 pages avec tons, ≈ 65 sans~~ **≈ 125 pages avec tons, ≈ 230 sans** (tarif v3 réel 0,28 crédit/caractère, D8) ; Starter 6 $ / 30 000 ; Creator **22 $/mois** (11 $ le 1er mois) / 121 000
 (~~Creator 11 $, 22 $ le 1er mois~~ : lecture automatique du site inversée, corrigée 27/09 sur remarque de Quang).
 
 ## 4-quindecies. FEUILLE DE ROUTE — « JUSQU'AU DERNIER PARU » + CHAPITRES DÉJÀ PRÉSENTS *(25/09/2026 23h38-23h44, demandes Quang : « trace une feuille de route bien détaillée et suis-la […] ne te disperse pas »)*
