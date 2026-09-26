@@ -20,7 +20,9 @@ sys.path.insert(0, HERE)
 import narrate_chapter as nc
 import karaoke_mots as km
 
-VERSION = "0.3.0"   # 0.3.0 : --vitesse 1.5 (Quang 22h20 : « les voix sont lentes » ; mesure 8,5 car/s contre 14 pour sa narration Charon 1,05)
+VERSION = "0.4.0"   # 0.4.0 : option --ordre cases (cases.json). ESSAYE sur OPM ch.6 p.5 : PIRE (2 cases detectees sur 3 -> « Hein ? » lu apres
+#          « C'est bizarre ») -> defaut = ordre des id, qui y etait juste
+#   # 0.3.0 : --vitesse 1.5 (Quang 22h20 : « les voix sont lentes » ; mesure 8,5 car/s contre 14 pour sa narration Charon 1,05)
 #   # 0.2.0 : consigne COURTE (0.1.0 : la voix LISAIT la consigne, 10 s pour « Quoi ? ») + controle Whisper
 SOURCES = os.environ.get("MANGA_SOURCES_DIR") or os.path.expanduser(r"~\Documents\MangaStudio-donnees\sources")
 TTS_MODELE = "gemini-2.5-flash-tts"
@@ -69,8 +71,32 @@ def args_():
     a.add_argument("--langue", default="fr")
     a.add_argument("--vitesse", type=float, default=1.5,
                    help="speakingRate Gemini TTS (respecte, mesure : 1.0 = 9 car/s, 1.3 = 12,4, 1.6 = 15 ; narration Charon 1,05 = 14)")
+    a.add_argument("--ordre", choices=("id", "cases"), default="id")
     a.add_argument("--refaire", action="store_true", help="refait la distribution (sinon reprise du fichier)")
     return a.parse_args()
+
+
+def ordre_par_cases(chap_dir, p):
+    """Range les bulles dans l'ordre des CASES (cases.json, deja dans l'ordre de lecture manga pour la video « case par
+    case »), puis dans la case : de haut en bas par bandes, de droite a gauche. Une bulle hors de toute case va a la case
+    la plus proche. Sans cases.json : ordre des id (bandes de 1/8 de page, cases ignorees)."""
+    try:
+        c = json.load(open(os.path.join(chap_dir, "cases.json"), encoding="utf-8"))["pages"][p["file"]]
+    except (OSError, KeyError, ValueError):
+        return p["_bulles"], False
+    W, H, cases = c["W"], c["H"], c["cases"]
+    if not cases:
+        return p["_bulles"], False
+
+    def case_de(b):
+        cx, cy = (b["box"]["x"] + b["box"]["w"] / 2) * W, (b["box"]["y"] + b["box"]["h"] / 2) * H
+        for k, (x1, y1, x2, y2) in enumerate(cases):
+            if x1 <= cx <= x2 and y1 <= cy <= y2:
+                return k
+        return min(range(len(cases)), key=lambda k: (max(cases[k][0] - cx, 0, cx - cases[k][2]) ** 2
+                                                     + max(cases[k][1] - cy, 0, cy - cases[k][3]) ** 2))
+    triees = sorted(p["_bulles"], key=lambda b: (case_de(b), round(b["box"]["y"] * 8), -b["box"]["x"]))
+    return triees, [b["id"] for b in triees] != [b["id"] for b in p["_bulles"]]
 
 
 def plage(s):
@@ -187,6 +213,10 @@ def main():
         if p["page"] in voulues:
             p["_bulles"] = sorted([b for b in p["bulles"] if b["type"] in ("dialogue", "narration")
                                    and not b.get("ecarte") and (b.get("trad") or "").strip()], key=lambda b: b["id"])
+            p["_bulles"], change = ordre_par_cases(chap_dir, p) if a.ordre == "cases" else (p["_bulles"], False)
+            if change:
+                print("  p%d : ordre par cases %s (ordre des id : %s)" % (p["page"], [b["id"] for b in p["_bulles"]],
+                                                                        sorted(b["id"] for b in p["_bulles"])))
             pages_t.append(p)
     stats = {"version": VERSION, "chap": a.chap, "pages": a.pages, "tts": TTS_MODELE, "vitesse": VITESSE}
     fdist = os.path.join(out, "distribution.json")
