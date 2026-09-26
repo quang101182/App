@@ -36,7 +36,12 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.25.0';
+const VERSION = '1.25.1';
+// v1.25.1 (2026-09-26) - Webhook Polar : un echec n'est plus definitif.
+//   Constat : jeton `cfg:polar_api_key` cree le 20/08 avec 30 jours de validite, expire le 19/09.
+//   Le 26/09 un vrai abonne (essai) n'a recu ni cle ni e-mail : `benefit_grant.created` -> 502, et
+//   le re-essai de Polar 7 s plus tard -> « event already processed » (marque posee AVANT traitement).
+//   Correctif : marque anti-rejeu posee seulement si la reponse est < 500. Jeton remplace (sans expiration).
 // v1.25.0 (2026-09-21) - Cles sv_ : OpenAI limite a la VOIX, et la voix verrouillee.
 //   Constat : tout X-Api-Path autre que /v1/audio/speech partait en passthrough vers OpenAI,
 //   non decompte, non journalise, modele au choix du client (gpt-5.6-sol compris). Une cle sv_
@@ -873,8 +878,18 @@ async function handlePolarWebhook(request, env, ctx) {
   if (await env.PRO_KV.get(replayKey)) {
     return json({ ok: true, action: 'ignored', reason: 'event already processed' });
   }
-  ctx.waitUntil(env.PRO_KV.put(replayKey, '1', { expirationTtl: 2592000 }));
 
+  // v1.25.1 - la marque anti-rejeu n'est posee QU'APRES un traitement abouti.
+  // Avant, elle partait avant le traitement : un 502 (jeton Polar expire, 26/09)
+  // etait suivi du re-essai de Polar... refuse comme « deja traite ». Echec definitif.
+  // Un 5xx laisse desormais Polar re-essayer ; un 4xx (payload invalide) ne
+  // guerirait pas au re-essai, on le marque comme traite.
+  const res = await processPolarEvent(rawBody, env, ctx);
+  if (res.status < 500) ctx.waitUntil(env.PRO_KV.put(replayKey, '1', { expirationTtl: 2592000 }));
+  return res;
+}
+
+async function processPolarEvent(rawBody, env, ctx) {
   let payload;
   try { payload = JSON.parse(rawBody); } catch { return err('Invalid JSON', 400); }
 
