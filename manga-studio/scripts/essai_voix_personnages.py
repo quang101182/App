@@ -20,7 +20,8 @@ sys.path.insert(0, HERE)
 import narrate_chapter as nc
 import karaoke_mots as km
 
-VERSION = "0.6.0"   # 0.6.0 : un ton VIDE = aucun ton (avant : ignore -> le ton de l'IA revenait, 3e essai de Quang 23h03) ;
+VERSION = "0.7.0"   # 0.7.0 : --moteur elevenlabs (Quang 23h10 : « tu peux donc faire un essai ») ; --sortie
+#   # 0.6.0 : un ton VIDE = aucun ton (avant : ignore -> le ton de l'IA revenait, 3e essai de Quang 23h03) ;
 #          reglages « tons »: false = aucun ton ; rien a dire = AUCUNE consigne envoyee
 #   # 0.5.0 (Quang 22h41) : « lire » (CHAIR DE POULE n'est pas une replique), ton cale sur le STYLE et la
 #          TENSION de la scene, reglages.json (voix, caractere, intensite, vitesse, ton/locuteur par replique) lu par l'atelier
@@ -82,6 +83,11 @@ def args_():
     a.add_argument("--vitesse", type=float, default=1.5,
                    help="speakingRate Gemini TTS (respecte, mesure : 1.0 = 9 car/s, 1.3 = 12,4, 1.6 = 15 ; narration Charon 1,05 = 14)")
     a.add_argument("--ordre", choices=("id", "cases"), default="id")
+    a.add_argument("--moteur", choices=("gemini", "elevenlabs"), default="gemini")
+    a.add_argument("--voix-el", default="", help="nom=voice_id,... (ElevenLabs)")
+    a.add_argument("--modele-el", default="eleven_multilingual_v2")
+    a.add_argument("--vitesse-el", type=float, default=1.1, help="ElevenLabs voice_settings.speed (0,7-1,2)")
+    a.add_argument("--sortie", default="essai.mp4")
     a.add_argument("--refaire", action="store_true", help="refait la distribution (sinon reprise du fichier)")
     return a.parse_args()
 
@@ -141,7 +147,31 @@ def distribuer(chap_dir, pages_t, narr, stats):
 VITESSE = 1.5
 
 
+MOTEUR = {"nom": "gemini", "voix": {}, "modele": "eleven_multilingual_v2", "vitesse": 1.1}
+
+
+def dire_el(texte, voice_id, dest, stats):
+    """ElevenLabs via le gateway (/api/elevenlabs/v1/text-to-speech/<voix>) : reponse = MP3 brut (pas du JSON).
+    Aucune consigne : le moteur deduit le jeu du texte seul (ce que Quang prefere, 23h06)."""
+    import urllib.request, urllib.error
+    body = {"text": texte, "model_id": MOTEUR["modele"], "language_code": "fr",
+            "voice_settings": {"stability": 0.45, "similarity_boost": 0.75, "style": 0.2, "speed": MOTEUR["vitesse"]}}
+    req = urllib.request.Request(nc.GATEWAY + "/api/elevenlabs/v1/text-to-speech/%s?output_format=mp3_44100_128" % voice_id,
+                                 data=json.dumps(body).encode(), headers={"Content-Type": "application/json",
+                                 "Authorization": "Bearer " + nc.SECRET, "User-Agent": "manga-studio/essai-" + VERSION})
+    nc._frein()
+    try:
+        data = urllib.request.urlopen(req, timeout=90).read()
+    except urllib.error.HTTPError as e:
+        raise RuntimeError("ElevenLabs HTTP %d %s" % (e.code, e.read()[:200].decode("utf-8", "replace")))
+    open(dest, "wb").write(data)
+    stats["el_car"] = stats.get("el_car", 0) + len(texte)
+    return nc.duree_mp3(dest) or 1.0
+
+
 def dire(texte, voix, consigne, dest, stats, vitesse=None):
+    if MOTEUR["nom"] == "elevenlabs":
+        return dire_el(texte, MOTEUR["voix"].get(voix) or voix, dest, stats)
     body = {"input": dict({"text": texte}, **({"prompt": consigne} if consigne else {})),
             "voice": {"languageCode": "fr-FR", "name": voix, "model_name": TTS_MODELE},
             "audioConfig": {"audioEncoding": "MP3", "speakingRate": float(vitesse or VITESSE)}}
@@ -232,6 +262,7 @@ def main():
     a = args_()
     global VITESSE
     VITESSE = a.vitesse
+    MOTEUR.update(nom=a.moteur, modele=a.modele_el, vitesse=a.vitesse_el)
     nc.SECRET = nc._secret()
     chap_dir = os.path.join(SOURCES, a.chap.replace("/", os.sep))
     out = os.path.join(chap_dir, "essai_voix")
@@ -252,7 +283,7 @@ def main():
                 print("  p%d : ordre par cases %s (ordre des id : %s)" % (p["page"], [b["id"] for b in p["_bulles"]],
                                                                         sorted(b["id"] for b in p["_bulles"])))
             pages_t.append(p)
-    stats = {"version": VERSION, "chap": a.chap, "pages": a.pages, "tts": TTS_MODELE, "vitesse": VITESSE}
+    stats = {"version": VERSION, "chap": a.chap, "pages": a.pages, "tts": TTS_MODELE if a.moteur == "gemini" else a.modele_el, "vitesse": VITESSE}
     fdist = os.path.join(out, "distribution.json")
     if a.refaire or not os.path.isfile(fdist):
         print("1. distribution + attribution (%d pages, %d bulles)..." % (len(pages_t), sum(len(p["_bulles"]) for p in pages_t)))
@@ -273,6 +304,9 @@ def main():
         print("  %-14s %-6s %-12s %s" % (c["nom"], c.get("genre", ""), c["voix"], c.get("fiche", "")))
     print("  ambiance :", dist.get("ambiance"))
     rep = {(r["page"], r["id"]): r for r in dist["repliques"]}
+    VOIX_EL = dict(x.split("=", 1) for x in a.voix_el.split(",") if "=" in x)
+    if a.moteur == "elevenlabs":
+        print("  moteur ElevenLabs %s, vitesse %.2f, voix %s" % (a.modele_el, a.vitesse_el, VOIX_EL))
     print("2. voix + 3. images...")
     plan, n = [], 0
     for p in pages_t:
@@ -301,11 +335,11 @@ def main():
                 # 0.2.0 : la fiche de jeu N'EST PAS envoyee a la voix (elle la lisait) -- elle sert au choix du timbre et
                 # au ton ecrit replique par replique, qui la porte deja (« plat, blase » pour Saitama)
                 cons = consigne(r.get("ton"), c.get("caractere", ""), c.get("intensite", INTENSITE_DEFAUT))
-                duree = dire(texte, c["voix"], cons, mp3, stats, c.get("vitesse"))
+                duree = dire(texte, VOIX_EL.get(qui, c["voix"]) if a.moteur == "elevenlabs" else c["voix"], cons, mp3, stats, c.get("vitesse"))
                 f_, t_ = fuite(mp3, texte, stats)
                 if f_:
                     print("    fuite (%s) -> refaite" % t_[:60]); stats["refaites"] = stats.get("refaites", 0) + 1
-                    duree = dire(texte, c["voix"], cons, mp3, stats, c.get("vitesse"))
+                    duree = dire(texte, VOIX_EL.get(qui, c["voix"]) if a.moteur == "elevenlabs" else c["voix"], cons, mp3, stats, c.get("vitesse"))
                     f_, t_ = fuite(mp3, texte, stats)
                     if f_:
                         stats["fuites_restantes"] = stats.get("fuites_restantes", 0) + 1; print("    FUITE RESTANTE : " + t_[:80])
@@ -336,7 +370,7 @@ def main():
         for x in plan:
             f.write("file '%s'\nduration %.3f\n" % (x["img"].replace("\\", "/"), x["duree_totale"]))
         f.write("file '%s'\n" % plan[-1]["img"].replace("\\", "/"))
-    mp4 = os.path.join(out, "essai.mp4")
+    mp4 = os.path.join(out, a.sortie)
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", ilst, "-i", wav,
                     "-vf", "fps=25,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
                     "-c:a", "aac", "-shortest", mp4], check=True)
