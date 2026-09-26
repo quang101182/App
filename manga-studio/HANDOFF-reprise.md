@@ -22,6 +22,9 @@
 - **26/09 13h06-15h05** : v2.74.0 « depuis la page 1 » cochée + mémorisée ; v2.75.0 pochette + fiche en fin de capture SANS
   ouvrir (régression v2.67.1 corrigée, la série capturée seule) ; v2.76.0 pochette dès le 1er chapitre ; v2.77.0 n° suggéré
   pour « …/vol-N/ ». Volumes vs chapitres : rien à coder ; ⚠ ne pas capturer les 2 formats d'une série sous le MÊME nom.
+- **26/09 15h02-15h25** : site Mangas Origines validé (`sites.json`, banc `test_site_nouveau.py`) ; gestes de fenêtre autorisés
+  pendant une capture (proxy `patch_pilote_fenetre_capture.py` + `cdp_mini.py`, banc `test_fenetre_pendant_capture.py` 8/8),
+  les 2 applications relancées. En cours à 15h25 : Solo Leveling vol.2 (reprise) — vérifier son bilan « OK : N/N pages ».
 - **Ragnarok ch. 2** : images redécoupées, narration + cases retirées (anciennes pages) et gardées dans
   `sources/_avant_redecoupe/` = SEULE copie : ne pas effacer sans demander à Quang.
 - **Historique git du dépôt public : NON réécrit — décision de Claude déléguée par Quang (26/09 00h58)** : fichiers actuels propres,

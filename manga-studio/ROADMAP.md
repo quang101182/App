@@ -3011,7 +3011,8 @@ Swipe vers le bas sur la barre ? ».
       effet ; redimensionner ×165 = aucune image perdue, fausse alerte possible). ⚠ « Ranger » change AUSSI la taille (place
       retenue) → refusé si la place est trop petite. Proxy `patch_pilote_fenetre_capture.py` (+ `.diff`) : liste
       `PILOTE_OK_EN_CAPTURE` = taille / memoriser / etat / ranger ; fermer, onglets, clics : toujours bloqués ; `scripts/cdp_mini.py`
-      `en_capture` (ranger vérifie la taille, fermer refuse). Principale relancée 15h18 ; secondaire : veilleur (relance au repos).
+      `en_capture` (ranger vérifie la taille, fermer refuse). Principale relancée 15h18 ; secondaire relancée au repos 15h21
+      (veilleur, PID vérifié).
       Banc `scripts/test_fenetre_pendant_capture.py` **8/8 PENDANT la vraie reprise de Quang** (Solo Leveling vol.2) : taille OK,
       ranger OK, fermer refusé, clic refusé, place trop petite refusée sans bouger, `fenetre.json` restauré à l'octet, capture
       continue. + **« Arrêter maintenant » testé en vrai par Quang** (1re fois) : coupé à 63 p., AUCUN vol.2 partiel dans la
