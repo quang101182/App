@@ -3051,6 +3051,11 @@ Swipe vers le bas sur la barre ? ».
       effacement écrit, re-vérification au RETOUR dans l'app (visibilitychange / pageshow / focus). Banc
       `test_bandeau_capture_ui.py` **7/7** ; v2.79.2 servie → 3 KO. **Déclencheur de reprise** : la prochaine fois que le
       bandeau résiste sur le Fold (après rechargement en v2.79.3) → lire `ComfyUI/logs/log-manga-live-mobile-*.json`.
+- [x] **manga-fetch 0.8.4 : un ralentissement passager du site ne tue plus une série** (26/09 19h35). Quang 19h24 (Fold) : TBATE
+      « ch.2 → 30 » ; ch.2 déjà là = sauté (rien retéléchargé) ; passage au ch.3 = `Page.goto: Timeout 45000ms` → série arrêtée.
+      Mesuré 10 min après : le même ch.3 s'ouvre en 3 s (43 images) → site saturé un instant. `chapitre_suivant_tenace` : 3 essais
+      espacés de 15 s si délai dépassé / coupure réseau ; erreur de LOGIQUE = remonte au 1er essai. Banc
+      `scripts/test_suivant_tenace.py` **6/6** (sans réseau) ; 0.8.3 → rouge ; `test_manga_fetch` 9/9.
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),
       `GET /manga/bibliotheque` rend maintenant `videos_pos` : reprise de position commune PC / téléphone sur les DEUX applications. : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
       26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de

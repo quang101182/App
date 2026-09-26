@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.8.3"
+VERSION = "0.8.4"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -505,6 +505,32 @@ def _suivant_par_bouton(page, avant: str, courant: str, jusqua, entiers: bool = 
             continue
         return n, None
     return None, "trop de chapitres intermédiaires d'affilée"
+
+
+SUIVANT_ESSAIS, SUIVANT_PAUSE_MS = 3, 15000
+
+
+def _erreur_passagere(e) -> bool:
+    """v0.8.4 : un delai depasse / une coupure reseau (le site ralentit un instant) -- pas une erreur de logique."""
+    t = type(e).__name__ + " " + str(e)
+    return "Timeout" in t or "net::ERR" in t or "ERR_" in t
+
+
+def chapitre_suivant_tenace(page, url_chapitre: str, courant: str, jusqua, entiers: bool = False, essais=None, pause_ms=None):
+    """v0.8.4 (26/09/2026, Quang : TBATE ch.2 -> 30 arrete net au passage au ch.3, « Page.goto: Timeout 45000ms » ; le meme
+    ch.3 s'ouvrait en 3 s dix minutes plus tard) : un ralentissement passager du site ne tue plus la serie -- jusqu'a
+    SUIVANT_ESSAIS tentatives espacees de 15 s. Une erreur de LOGIQUE remonte tout de suite (rien n'est masque)."""
+    essais = essais or SUIVANT_ESSAIS
+    pause_ms = SUIVANT_PAUSE_MS if pause_ms is None else pause_ms
+    for k in range(1, essais + 1):
+        try:
+            return chapitre_suivant(page, url_chapitre, courant, jusqua, entiers)
+        except Exception as e:
+            if k >= essais or not _erreur_passagere(e):
+                raise
+            log_evt("série", f"passage au chapitre suivant : essai {k} échoué ({type(e).__name__}), nouvel essai dans {pause_ms // 1000} s")
+            print(f"Passage au chapitre suivant : essai {k}/{essais} échoué ({type(e).__name__}) — nouvel essai dans {pause_ms // 1000} s.")
+            page.wait_for_timeout(pause_ms)
 
 
 def chapitre_suivant(page, url_chapitre: str, courant: str, jusqua, entiers: bool = False):
@@ -1630,8 +1656,8 @@ def capture(args) -> int:
                 break
             page.wait_for_timeout(SERIE_PAUSE_MS)              # v0.8.0 : politesse, chapitres sautes compris
             try:
-                num, raison = chapitre_suivant(page, DERNIER.get("url", page.url), chap, jusqua,
-                                              bool(getattr(args, "sans_intermediaires", False)))
+                num, raison = chapitre_suivant_tenace(page, DERNIER.get("url", page.url), chap, jusqua,   # v0.8.4 : 3 essais
+                                                      bool(getattr(args, "sans_intermediaires", False)))
             except Exception as e:
                 num, raison = None, f"passage au chapitre suivant impossible ({type(e).__name__}: {str(e)[:120]})"
             if num is None:
