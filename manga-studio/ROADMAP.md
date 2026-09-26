@@ -3020,6 +3020,11 @@ Swipe vers le bas sur la barre ? ».
       219/219 images, découpées en 912 pages (218 bandes, 1 coupe hors gouttière), 0 vide, hauteur médiane 1 218 px (vol.1 : 1 197).
       ⚠ Piège : le découpage tourne APRÈS la ligne « OK : N/N » — ne pas juger les pages avant l'événement `[webtoon] bandes découpées`
       de `%LOCALAPPDATA%\manga-fetch\events.log` (fausse alerte de ma part à 15h29).
+- [ ] **Lien visuel Traduction / Musique → Vidéo + surbrillance de l'étape suivante** (Quang 16h25-16h27). Constat (code lu) :
+      la narration ne dépend de rien ; `video_chapitre.py` prend les pages traduites si elles existent (sinon VO) et la musique si
+      choisie → traduire / choisir la musique AVANT la vidéo, pas avant la narration. Tout reste FACULTATIF, le lien doit se VOIR.
+      Maquette `maquette_liens_video_v1.html` (A groupe « pour la vidéo », B pastilles d'ingrédients sur la ligne Vidéo, C rail) ;
+      avis Claude : B. **Déclencheur** : choix de Quang.
 - [x] **Fiche du chapitre : ordre logique Narration → Traduction → Musique → Vidéo** (v2.78.0, 26/09 16h28, Quang 16h20-16h22).
       Avant (v2.60.0) : Narration, Vidéo, Traduction, Musique — seule vue à ne pas suivre les Réglages / le lot. `CL` réordonné et
       `clMaj()` impose l'ordre des 4 blocs (`after`). Banc `test_chapitre_compact_ui` **31/31** (ordre mis à jour, hauteur mesurée
