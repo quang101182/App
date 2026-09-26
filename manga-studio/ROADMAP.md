@@ -3044,8 +3044,13 @@ Swipe vers le bas sur la barre ? ».
       v2.75+). Banc `test_suivi_unique_ui.py` **5/5** ; v2.79.1 servie → **40 / 40** reproduits (4 KO). `test_serie_auto_ui` vert.
 - [ ] **Bandeau « arrêtée à ta demande… Reprendre » toujours affiché sur le Fold** (Quang 18h48-18h51, hors de chez lui) alors
       que le bilan serveur est « jusqu'au ch. 15 : fait » (18h24). Mécanisme vérifié sain en test (s'efface à la vérif des 60 s) ;
-      la page du Fold date de 13h19 (v2.77.0). ⏳ Capture d'écran demandée : bandeau OU ligne d'état `capEtat` (celle-ci n'est
-      jamais remise à jour après coup = défaut probable). **Déclencheur** : la capture de Quang.
+      la page du Fold date de 13h19 (v2.77.0). Capture de Quang 19h02 : c'est bien le BANDEAU (Ouvrir / Reprendre), pas `capEtat`.
+      Vérifié PAR Cloudflare (en-têtes réels) : `capture_derniere` et `fetch_status` frais (`no-store`, DYNAMIC) et justes →
+      ni serveur ni cache. Cause NON prouvée : `capAlerteVerifier` avalait ses erreurs (`catch { return; }`) et le journal du
+      Fold est muet depuis 13h19. **v2.79.3** (`app_patch_2793_bandeau_trace.py`) : échec ÉCRIT au journal (une fois par type),
+      effacement écrit, re-vérification au RETOUR dans l'app (visibilitychange / pageshow / focus). Banc
+      `test_bandeau_capture_ui.py` **7/7** ; v2.79.2 servie → 3 KO. **Déclencheur de reprise** : la prochaine fois que le
+      bandeau résiste sur le Fold (après rechargement en v2.79.3) → lire `ComfyUI/logs/log-manga-live-mobile-*.json`.
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),
       `GET /manga/bibliotheque` rend maintenant `videos_pos` : reprise de position commune PC / téléphone sur les DEUX applications. : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
       26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de
