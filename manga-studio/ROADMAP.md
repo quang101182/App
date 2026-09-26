@@ -3079,6 +3079,94 @@ Swipe vers le bas sur la barre ? ».
 - [ ] **C — Clôture** : ROADMAP, HANDOFF-reprise, commit + push.
 
 
+## 4-septdecies. FEUILLE DE ROUTE — MODE « DIALOGUES » (une voix par personnage) *(26/09/2026 23h38, demande Quang : « c'est parti pour une feuille de route bien détaillée […] la maquette, pensez à tout ce qui est nécessaire »)*
+
+**Origine** : essai du 26/09 21h-23h36 (étape 6 « Mode Lecture avancé » ci-dessus, `scripts/essai_voix_personnages.py` v0.8.0 +
+atelier `scripts/essai_voix_atelier.py` v0.2.0). **Verdicts de Quang** : ElevenLabs **v3** « clairement au-dessus » ; tons par
+réplique = « ça apporte quelque chose » (gardés, interrupteur) ; mode **SÉPARÉ** de la narration (« qui ne se chevauche pas avec
+le reste ») ; **corrections à la main** avant et à tout moment ; **AUCUN moteur de secours** (« si le quota est bloqué, il est
+bloqué ») ; crédits affichés ; bulle qui parle = **halo harmonieux, couleur du personnage** (pas un rectangle).
+Maquette : `maquette_dialogues_v1.html` (v1, **à valider par Quang avant tout code** — 4 questions Q1-Q4 dedans).
+
+### Constat (lu dans le code le 26/09 23h40 — re-vérifier avant de coder)
+- Blocs du chapitre : `.narr-box.bloc-XXX` (`manga_studio.html` ~1907-1994), liseré par bloc (CSS ~687/716) ; `openChap()`
+  (~6051) appelle les `refresh*()` de chaque bloc → y ajouter `refreshDialogues()`. Lancement = `api()` (~2551) ; le jeu
+  `LANCEMENTS` (~2546) déclenche l'avertissement « l'autre application travaille » → y ajouter la route.
+- Suivi : scripts qui écrivent `progress.json` `{etape, fait, total, t, pid, couts}` (`narrate_chapter.progres` ~152) ;
+  proxy `_run_vivant` (~7479) ; barre d'activité `actRafraichir` (~7737) ← proxy `manga_activite()` (~8895) qui ne parcourt
+  que `narration|traduction` → **type `dialogues` à ajouter**, sinon invisible.
+- Lancement côté proxy : modèle `manga_narrate` (~9618 : regex, `_narr_job_vivant`, `Popen` + `run.log`, `CREATE_NO_WINDOW`) ;
+  arrêt = `/manga/interrompre` → `scripts/interruption.py` (taskkill + motif dans `progress.json`).
+- Dépenses : `scripts/depenses.py noter()` ; `manga_costs()` (~10116) ne compte que les types de `cles` (~10231) → **ajouter
+  `dialogues`** (dollars de préparation) ; les **crédits ElevenLabs** ne sont pas des dollars → champ à part (`credits_el`).
+- Solde en direct : modèle `runpod_balance()` (proxy ~167, cache 20 s, route `/runpod_balance`) + `refreshBalance`
+  (generate_studio.html ~4020) → **`/manga/el_solde`** via le gateway (`GET /api/elevenlabs/v1/user/subscription` : `character_count`,
+  `character_limit`, `next_character_count_reset_unix`). Mesuré 26/09 : extension de dépassement = 0 (quota épuisé = refus, jamais facturé).
+- Lecteur : `#lecteur` (~1998), un audio PAR PAGE (`montrerPage` ~9091) ; caméra `camPlan/camPose` (~9280, miroir de
+  `cases_video.py`), voile `#lecVoile` placé en coordonnées écran dans `camTick` (~9373). Le mode Dialogues a un audio PAR
+  RÉPLIQUE → **lecteur à part** (réutilise caméra et voile, pas `montrerPage`).
+- Profil de série = `suivi.json` (`normaliser()` de `suivi_nuit.py` REJETTE les clés inconnues) → la distribution va dans un
+  **fichier à part** `<série>/dialogues_distribution.json` (séparation voulue, zéro risque pour le profil).
+- Contour de bulle : `ingest_page.py` ~175-240 (floodFill du fond blanc depuis le pixel le plus clair) ; prototype 26/09 23h45
+  (`findContours` + `approxPolyDP`) = halo qui épouse la bulle ✅ (aperçu local, hors dépôt).
+- Mode ☁/🖥 : le mode Dialogues est TOUJOURS en ligne (ElevenLabs) → hors `MODE_SENSIBLE`, sans pastille 🖥 ; il le dit.
+
+### Décisions (prises par Claude, sauf Q1-Q4 à Quang)
+- Fichiers : `ch_N/dialogues/dialogues.json` + `ch_N/dialogues/voix/<empreinte>.mp3` + `progress.json` + `run.log` ;
+  `<série>/dialogues_distribution.json`. **Jamais** d'écriture dans `narration/` ni `traduction/` (lecture seule).
+- Empreinte d'une voix = sha1(texte lu + balises + voice_id + modèle + expressivité + vitesse) → « à refaire » = empreinte
+  changée ; une voix déjà faite n'est jamais repayée.
+- Personnages : la préparation reçoit la distribution de la série (noms + descriptions) pour RÉUTILISER les noms connus ;
+  nouveau personnage = proposé (voix + couleur d'office), jamais fusionné en silence avec un existant.
+- ElevenLabs : modèle `eleven_v3`, `language_code: fr`, tons = balises anglaises (traduction FR→balises par DeepSeek, cache
+  série `dialogues_balises.json`) ; réglages par perso : voix, expressivité (→ `stability`, 3 crans), vitesse (0,7-1,2, borne
+  API), couleur. Estimation crédits = caractères + balises (×1,9 mesuré avec tons).
+- **Portée (Quang 23h43)** : **plusieurs chapitres** (du ch. A au ch. B), **un chapitre**, ou **des pages** (de p. X à p. Y dans un
+  chapitre). Plusieurs chapitres = deux temps sur l'ensemble (préparer tous → corriger → voix pour tous ; case « enchaîner sans
+  relecture »), estimation et solde sur le TOTAL, chapitres dans l'ordre, arrêt net au quota + « ▶ Reprendre ». Lançable depuis
+  le bloc du chapitre ET la fiche de la série.
+- Ordre des bulles = ordre des `id` de la traduction (bandes haut→bas, droite→gauche) ; lecture « par case » en réserve
+  (essayée : pire, 2 cases vues sur 3).
+- Effets écrits / bulles sans mots : `lire: false` d'office (rétablissables). Encarts de récit : selon Q3.
+- Sécurité : aucun titre / site de la **secondaire** dans le dépôt (PUBLIC), ni dans les bancs ; l'essai de modération reste
+  hors dépôt. Le compte ElevenLabs est commun aux deux applications (solde affiché dans les deux).
+
+### Étapes (dans l'ordre, une à la fois ; chacune = banc réel + sabotage rouge + commit)
+- [ ] **D0 — Validation de la maquette** + réponses Q1-Q4. Rien ne se code avant.
+- [ ] **D1 — `scripts/dialogues.py preparer <chap> [--pages a-b]`** : bulles de la traduction (Q1 pour la VF) → 1 appel Gemini par
+      lot de 4-5 pages (images + bulles numérotées + distribution de la série) → `dialogues.json` (qui, ton, lire, muet,
+      indice, texte_origine) ; contour de chaque bulle (repli ovale) ; `progress.json` ; dépense `dialogues` au registre ;
+      refus de modération → alerte `_alertes.json` + pages « à traiter » (relais selon Q2). Banc hors ligne (faux gateway)
+      + 1 banc réel court (OPM ch.6 p.5-7) ; sabotage : distribution ignorée → noms perdus = rouge.
+- [ ] **D2 — `scripts/dialogues.py voix <chap>`** : ElevenLabs v3 via gateway, une voix par réplique, empreintes, reprise ;
+      **quota épuisé = arrêt propre** (voix faites gardées, motif lisible dans `progress.json`, AUCUN autre moteur) ;
+      contrôle Whisper des balises prononcées (refaite 1 fois, sinon signalée). Banc : 3 répliques réelles + faux 401/quota
+      (arrêt vert, 0 appel suivant) ; sabotage : moteur de secours ajouté → le banc doit le voir.
+- [ ] **D3 — Proxy (`proxy-patch/patch_dialogues.py` + `.diff`)** : routes `/manga/dialogues` (GET état), `/manga/dialogues_preparer`,
+      `/manga/dialogues_voix`, `/manga/dialogues_maj` (corrections), `/manga/dialogues_distribution` (GET/POST),
+      `/manga/el_solde` (cache 20 s) ; `manga_activite` + `manga_costs` + `LANCEMENTS` connaissent `dialogues` ; interruption
+      par `/manga/interrompre`. Testé sur une COPIE, relance AU REPOS (principale puis secondaire, HANDOFF-reprise § 3.7).
+- [ ] **D4 — App : bloc 🎭 Dialogues** (après Narration) : état en une phrase (pas préparé / prêt / N à refaire / quota épuisé),
+      estimation $ + crédits, solde ElevenLabs, pages, interrupteur tons, bouton Préparer / Générer / Lire. Version ×3.
+- [ ] **D4-bis — Portée plusieurs chapitres** : file séquentielle côté proxy (un `progress.json` de lot + bilan), estimation
+      totale, arrêt au quota sans rien perdre, reprise ; banc : 3 chapitres courts, quota simulé épuisé au 2ᵉ → 1ᵉʳ gardé,
+      2ᵉ partiel, 3ᵉ intact, reprise = 0 voix repayée.
+- [ ] **D5 — App : écran de préparation** : distribution (voix + ▶ + menu « phrase à écouter » = ses répliques la plus longue
+      d'abord, expressivité, vitesse, couleur, renommer, ✚ ajouter) ; répliques par page (lire, qui, texte éditable, ton,
+      ▶, état ✅/⚪/🟠) ; « Générer les voix manquantes » avec crédits nécessaires / restants et bouton GRISÉ si insuffisant.
+- [ ] **D6 — Lecteur Dialogues** : audio par réplique, page voilée, **halo SVG au contour réel** couleur du personnage (fondu
+      0,3 s, respiration), pastille nom, sous-titre, ⏮ ⏯ ⏭ réplique, glisser = page, fin → chapitre suivant préparé (comme
+      la visionneuse livre v2.80), option « suivre la case » (camPlan). Mesure : halo aligné à ±4 px sur 3 largeurs.
+- [ ] **D7 — Vidéo Dialogues (MP4)** : même rendu en fichier, pour le téléphone hors ligne (modèle `cases_video.py`).
+- [ ] **D8 — Bancs complets** : bout en bout réel sur une scène courte (2-3 pages, homme + femme) dans la principale ;
+      correction d'un texte → 1 seule voix refaite (crédits mesurés avant/après) ; quota simulé épuisé ; 360/476/704/933/1280 ;
+      les DEUX applications ; bancs voisins de la narration et du lecteur inchangés.
+- [ ] **D9 — Clôture** : ROADMAP (constats barrés, versions), HANDOFF-reprise, mémoire, commit + push. Rien de la secondaire.
+
+### Coûts de référence (mesurés 26/09, à ré-étalonner après D8)
+Préparation ~0,004 $/page (Gemini 3.6 Flash) · 153 caractères de dialogue/page en moyenne (476 pages traduites) · ElevenLabs
+gratuit 10 000 crédits/mois ≈ 35 pages avec tons, ≈ 65 sans ; Starter 6 $ / 30 000 ; Creator 11 $ (22 $ le 1er mois) / 121 000.
+
 ## 4-quindecies. FEUILLE DE ROUTE — « JUSQU'AU DERNIER PARU » + CHAPITRES DÉJÀ PRÉSENTS *(25/09/2026 23h38-23h44, demandes Quang : « trace une feuille de route bien détaillée et suis-la […] ne te disperse pas »)*
 
 **Demandes (Quang, 25/09)** : (a) 23h38 — un bouton « jusqu'au bout » au lieu de taper le dernier n° ; « final » induit en
