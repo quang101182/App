@@ -2947,6 +2947,10 @@ Maquette : `maquette_dernier_paru_v1.html` (v1, **à valider par Quang avant tou
   - 7 ch. de la série de 54 **recapturés** (0.8.3, tuiles-espaces gardées) : 4→3, 3→3, 4→2, 4→4, 3→2, 5→4 ; ch. 37 moins bon
     (6→9) → ancien REMIS automatiquement. ⇒ ce site enchaîne des fonds dégradés SANS espace : 2-4 coupes/chapitre = la limite
     (sauf pages démesurées). Rien de plus à faire.
+- 🔴→✅ **(signalé par Quang 03h03, capture d'écran) « banc raijin » apparu dans la bibliothèque** = Ragnarok ch. 2 : repartir des
+  originaux remettait le manifeste de CAPTURE (titre de banc d'origine) → l'app le rangeait dans une autre série. Corrigé à la
+  main (titre + slug d'avant) ; `redecouper.py` garde désormais tout le manifeste ACTUEL sauf pages/decoupe/notes (test sur
+  copie : OK ; ancien script → « banc raijin », rouge). Contrôle des 210 chapitres : slug = dossier partout, aucun autre écart.
   Vécu par Quang sur la secondaire le 25/09 23h56 (ch. 16 d'une série, arrêt « capture tronquée à 1 page »). Mesuré en
   lecture seule dans l'onglet : 210 bandes DISTINCTES, 208 en 720×700 (ratio 1,03). `collecter()` écarte les ratios
   0,93-1,15 (avatars/logos) et ne réadmet une bande de la largeur des pages qu'après **3** pages déjà prises à cette

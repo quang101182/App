@@ -40,6 +40,9 @@ def dessin(d):
 
 
 def remettre_originaux(d):
+    """Repart des originaux. ⚠ Le manifeste d'origine date de la CAPTURE : si le chapitre a ete renomme / deplace depuis (titre
+    de banc, serie renommee), il ramenerait l'ANCIEN titre et l'app rangerait le chapitre dans une autre serie (vecu 26/09 :
+    Ragnarok ch. 2 apparu comme « banc raijin »). Tout ce qui n'est pas pages/decoupe/notes est garde du manifeste ACTUEL."""
     man = json.load(open(os.path.join(d, "manifest.json"), encoding="utf-8"))
     orig = os.path.join(d, "originaux")
     for p in man["pages"]:                                   # pages decoupees : retirees (elles sont dans la sauvegarde)
@@ -48,7 +51,8 @@ def remettre_originaux(d):
     om = json.load(open(os.path.join(orig, "manifest.json"), encoding="utf-8"))
     for p in om["pages"]:
         os.replace(os.path.join(orig, p["file"]), os.path.join(d, p["file"]))
-    os.replace(os.path.join(orig, "manifest.json"), os.path.join(d, "manifest.json"))
+    om.update({k: v for k, v in man.items() if k not in ("pages", "decoupe", "notes")})
+    json.dump(om, open(os.path.join(d, "manifest.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     shutil.rmtree(orig, ignore_errors=True)
 
 
