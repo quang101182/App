@@ -3006,6 +3006,16 @@ Swipe vers le bas sur la barre ? ».
       Fiche MangaDex posée. ⚠ **Pochette introuvable sur AniList** : 8 titres essayés (anglais, coréen, japonais…), AniList
       répond 404 même au titre exact (One Punch-Man / Solo Leveling répondent) → la série n'y est pas. **Piste (non codée,
       déclencheur : accord de Quang ou 2e série sans pochette AniList)** : recours aux couvertures MangaDex quand AniList échoue.
+- [x] **Gestes de FENÊTRE autorisés pendant une capture** (26/09 15h20, Quang 15h15 : « redimensionner […] et déplacer, testé
+      hier, aucun problème ; la sécurité datait d'avant les tests »). Confirmé par les mesures du 25/09 22h25 (déplacer ×38 = aucun
+      effet ; redimensionner ×165 = aucune image perdue, fausse alerte possible). ⚠ « Ranger » change AUSSI la taille (place
+      retenue) → refusé si la place est trop petite. Proxy `patch_pilote_fenetre_capture.py` (+ `.diff`) : liste
+      `PILOTE_OK_EN_CAPTURE` = taille / memoriser / etat / ranger ; fermer, onglets, clics : toujours bloqués ; `scripts/cdp_mini.py`
+      `en_capture` (ranger vérifie la taille, fermer refuse). Principale relancée 15h18 ; secondaire : veilleur (relance au repos).
+      Banc `scripts/test_fenetre_pendant_capture.py` **8/8 PENDANT la vraie reprise de Quang** (Solo Leveling vol.2) : taille OK,
+      ranger OK, fermer refusé, clic refusé, place trop petite refusée sans bouger, `fenetre.json` restauré à l'octet, capture
+      continue. + **« Arrêter maintenant » testé en vrai par Quang** (1re fois) : coupé à 63 p., AUCUN vol.2 partiel dans la
+      bibliothèque, « Reprendre » proposé et utilisé. Bilan du vol.2 complet : ⏳ (veilleur).
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),
       `GET /manga/bibliotheque` rend maintenant `videos_pos` : reprise de position commune PC / téléphone sur les DEUX applications. : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
       26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de

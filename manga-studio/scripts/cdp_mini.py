@@ -154,10 +154,14 @@ def _navigateur():
         return Onglet(json.load(r)["webSocketDebuggerUrl"])
 
 
-def fenetre(ws_url, action, **a):
-    """etat | ranger | taille | memoriser. Rien ne bouge sans action explicite (sauf l'ouverture, cf. manga_fetch)."""
+def fenetre(ws_url, action, en_capture=False, **a):
+    """etat | ranger | taille | memoriser. Rien ne bouge sans action explicite (sauf l'ouverture, cf. manga_fetch).
+    v2.78 (26/09, mesure 25/09 : deplacer = sans effet, agrandir = sans perte) : en_capture = une capture tourne ->
+    « ranger » refuse si la place retenue ferait passer l'interieur SOUS la taille minimale ; « fermer » refuse."""
     cible = ws_url.rstrip("/").split("/")[-1]                  # .../devtools/page/<targetId>
     conf = fenetre_conf()
+    if action == "fermer" and en_capture:
+        return {"error": "une capture est en cours : fermer la fenetre la couperait"}
     if action == "fermer":                                      # v2.14.1 (Quang 16h29) : fermer A DISTANCE -- ce navigateur
         with _navigateur() as n:                               # dedie (port 9223, son profil) et lui seul, jamais l'Edge de Quang
             n.cmd("Browser.close")
@@ -173,6 +177,11 @@ def fenetre(ws_url, action, **a):
                 n.cmd("Browser.setWindowBounds", windowId=wid, bounds={"windowState": "normal"})
             if action == "ranger":
                 nb = dict(conf["place"])
+                bw, bh = b["width"] - vp[0], b["height"] - vp[1]   # bords + barres d'Edge
+                if en_capture and (nb.get("width", 0) - bw < conf["min_interieur"][0] or nb.get("height", 0) - bh < conf["min_interieur"][1]):
+                    return {"error": "une capture est en cours : la place retenue est trop petite pour capturer "
+                                     "(%d x %d, il faut %d x %d a l'interieur) -- « Taille sure » d'abord, ou ranger apres"
+                                     % (nb.get("width", 0) - bw, nb.get("height", 0) - bh, conf["min_interieur"][0], conf["min_interieur"][1])}
             else:                                               # garde la position, grandit juste ce qu'il faut
                 bw, bh = b["width"] - vp[0], b["height"] - vp[1]   # bords + barres d'Edge
                 nb = {"left": b["left"], "top": b["top"], "width": max(b["width"], conf["min_interieur"][0] + bw),
