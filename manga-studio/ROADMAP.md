@@ -3020,6 +3020,10 @@ Swipe vers le bas sur la barre ? ».
       219/219 images, découpées en 912 pages (218 bandes, 1 coupe hors gouttière), 0 vide, hauteur médiane 1 218 px (vol.1 : 1 197).
       ⚠ Piège : le découpage tourne APRÈS la ligne « OK : N/N » — ne pas juger les pages avant l'événement `[webtoon] bandes découpées`
       de `%LOCALAPPDATA%\manga-fetch\events.log` (fausse alerte de ma part à 15h29).
+- [x] **Fiche du chapitre : ordre logique Narration → Traduction → Musique → Vidéo** (v2.78.0, 26/09 16h28, Quang 16h20-16h22).
+      Avant (v2.60.0) : Narration, Vidéo, Traduction, Musique — seule vue à ne pas suivre les Réglages / le lot. `CL` réordonné et
+      `clMaj()` impose l'ordre des 4 blocs (`after`). Banc `test_chapitre_compact_ui` **31/31** (ordre mis à jour, hauteur mesurée
+      jusqu'au bloc Vidéo) ; v2.77.0 servie → 2 KO ; `sonde_clignotement_video` : 0 changement de hauteur du bloc Vidéo déplacé.
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),
       `GET /manga/bibliotheque` rend maintenant `videos_pos` : reprise de position commune PC / téléphone sur les DEUX applications. : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
       26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de

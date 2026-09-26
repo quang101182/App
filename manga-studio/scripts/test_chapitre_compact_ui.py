@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Banc v2.60.0 : CHAPITRE COMPACT (maquette_chapitre_compact_v1, validee par Quang 25/09 13h41). APP REELLE (8190), Claymore
 ch.1 (narre, video faite), 1280 px puis 360 px. Tout POST bloque ; les boutons d'origine sont ESPIONNES (rien ne part).
-1. replie par defaut : 4 lignes, ordre narration → video → traduction → musique, hauteur < 300 px (≈ 850 avant) ;
+1. replie par defaut : 4 lignes, ordre narration → traduction → musique → video (v2.78.0), hauteur < 300 px (≈ 850 avant) ;
 2. chaque ligne : etat en une phrase + action ; telephone : etat sur 2 lignes au plus ;
 3. toucher une ligne la deplie (les reglages d'avant sont la) ; en deplier une autre replie la premiere ; memorise ;
 4. les actions de ligne cliquent le bouton d'ORIGINE (Narrer, Traduire) ; ← Fermer de la barre replie le bloc.
@@ -41,10 +41,10 @@ with sync_playwright() as p:
         pg.evaluate("i => document.querySelector('#chapList [data-chap=\"' + i + '\"]').click()", i); pg.wait_for_timeout(4000)
         m = pg.evaluate("""() => ({ ordre: [...document.querySelectorAll('#chapDetail .cl-tete')].map(h => h.dataset.cl),
             ouverts: [...document.querySelectorAll('#chapDetail .cl-box.cl-ouv')].length,
-            haut: Math.round(document.querySelector('#chapDetail .bloc-mus').getBoundingClientRect().bottom - document.querySelector('#chapDetail .bloc-narr').getBoundingClientRect().top),
+            haut: Math.round(document.querySelector('#chapVid').getBoundingClientRect().bottom - document.querySelector('#chapDetail .bloc-narr').getBoundingClientRect().top),
             reglagesCaches: !$('narrEngine').checkVisibility(), etats: [...document.querySelectorAll('#chapDetail .cl-etat')].map(e => e.textContent),
             lignes: [...document.querySelectorAll('#chapDetail .cl-etat')].map(e => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight))) })""")
-        check("replié par défaut : 4 lignes, dans l'ordre du travail", m["ordre"] == ["narr", "vid", "trad", "mus"] and m["ouverts"] == 0, m["ordre"])
+        check("replié par défaut : 4 lignes, dans l'ordre du travail", m["ordre"] == ["narr", "trad", "mus", "vid"] and m["ouverts"] == 0, m["ordre"])
         check("hauteur des 4 blocs < 300 px (≈ 850 avant)", m["haut"] < 300, m["haut"])
         check("les réglages sont repliés (moteur de lecture caché)", m["reglagesCaches"])
         check("chaque ligne a un état", all(e.strip() for e in m["etats"]), m["etats"])
