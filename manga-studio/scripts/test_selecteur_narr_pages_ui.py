@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Banc v2.69.0 (suite) : SELECTEUR RAPIDE dans le LECTEUR NARRE et la VISIONNEUSE (contextes non couverts par test_selecteur_ui).
-APP REELLE, lecture seule. Narration : titre / glisser la barre vers le haut, chapitre courant, sans narration = grise + raison,
+APP REELLE, lecture seule. Narration : titre / glisser la barre vers le BAS (v2.71.0), chapitre courant, sans narration = grise + raison,
 aller a un autre chapitre narre (choix de voix s'il y en a plusieurs), n° absent, lecture « a l'aveugle » = pas de sommaire,
 Echap ne ferme QUE le selecteur. Visionneuse : « Aller a la page (N) », n° exact, page absente -> la plus proche, glisser, G, Echap.
 360 / 476 / 704 / 933 / 1280 px.
@@ -75,7 +75,9 @@ with sync_playwright() as p:
         pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
         check("narration : Échap ferme le sélecteur SEULEMENT (le lecteur reste)", pg.evaluate("() => $('selFeuille').hidden && !$('lecteur').hidden"))
         glisser(pg, "#lecteur .lec-ctl", 0, -120); pg.wait_for_timeout(400)
-        check("narration : glisser la barre du lecteur vers le haut → ouvert", pg.evaluate(FEUILLE))
+        check("narration : glisser la barre vers le HAUT → rien (v2.71.0)", not pg.evaluate(FEUILLE))
+        glisser(pg, "#lecteur .lec-ctl", 0, 32); pg.wait_for_timeout(400)
+        check("narration : glisser la barre du lecteur vers le BAS → ouvert", pg.evaluate(FEUILLE))
         pg.evaluate("(d) => document.querySelector('#selGrille .sel-c[data-k=\"' + d + '\"]').click()", d2); pg.wait_for_timeout(2500)
         if pg.evaluate("() => !!document.querySelector('#selInfo [data-ver]')"):
             print("  plusieurs voix pour ch.%s : choix proposé" % n2)
@@ -91,7 +93,7 @@ with sync_playwright() as p:
         pg.evaluate("async ([d, t]) => { await openChap(CHAPS.findIndex(c => c.dir === d)); await ouvrirLecteur([t], true); $('lecAudio').pause(); }", [d1, t1])
         pg.wait_for_timeout(1500)
         pg.evaluate("() => $('lecTitre').click()"); pg.wait_for_timeout(300)
-        glisser(pg, "#lecteur .lec-ctl", 0, -120); pg.wait_for_timeout(300)
+        glisser(pg, "#lecteur .lec-ctl", 0, 32); pg.wait_for_timeout(300)
         check("narration à l'aveugle : ni titre ni glisser n'ouvrent le sommaire", pg.evaluate("() => $('selFeuille').hidden && !$('lecteur').hidden"))
         pg.evaluate("() => $('lecFermer').click()"); pg.wait_for_timeout(600)
         # ---------- B. visionneuse
@@ -108,8 +110,8 @@ with sync_playwright() as p:
         check("pages : « %d » + Entrée → page %d, sélecteur fermé, visionneuse ouverte" % (cible, cible),
               pg.evaluate("() => [LB + 1, $('selFeuille').hidden, !$('lightbox').hidden, $('lbName').textContent.split(' ')[0]]") == [cible, True, True, "%d/%d" % (cible, n)],
               pg.evaluate("() => [LB + 1, $('lbName').textContent]"))
-        glisser(pg, "#lightbox .lbbar", 0, -120); pg.wait_for_timeout(400)
-        check("pages : glisser la barre vers le haut → ouvert, page %d en vert" % cible, pg.evaluate(FEUILLE) and pg.evaluate("() => (document.querySelector('#selGrille .cour') || {}).textContent") == str(cible))
+        glisser(pg, "#lightbox .lbbar", 0, 32); pg.wait_for_timeout(400)
+        check("pages : glisser la barre vers le BAS → ouvert, page %d en vert" % cible, pg.evaluate(FEUILLE) and pg.evaluate("() => (document.querySelector('#selGrille .cour') || {}).textContent") == str(cible))
         pg.fill("#selNum", str(n + 50)); pg.keyboard.press("Enter"); pg.wait_for_timeout(300)
         inf = pg.evaluate("() => $('selInfo').textContent")
         check("pages : page absente → « page … absent — le plus proche : p. %d »" % n, "absent" in inf and ("p. %d" % n) in inf, inf)

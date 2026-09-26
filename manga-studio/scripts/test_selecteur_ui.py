@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Banc v2.69.0 : SELECTEUR RAPIDE « Aller au … » (maquette_selecteur_chapitre_v1). APP REELLE, lecture seule (rien n'est ecrit).
-Chapitres (bulle de la barre + glisser vers le haut), recherche n° exact / prefixe / absent (plus proche), filtres, cas « absent »,
+Chapitres (bulle de la barre + glisser vers le BAS depuis v2.71.0), recherche n° exact / prefixe / absent (plus proche), filtres, cas « absent »,
 video (grise sans video, versions), pages de la visionneuse, fermeture (✕, Echap, glisser vers le bas), 360 et 1280 px.
 Usage : python test_selecteur_ui.py [port] [serie]      (defaut 8190 one-punch-man)
 """
@@ -45,10 +45,12 @@ with sync_playwright() as p:
         cible = pg.evaluate("(s) => { const l = CHAPS.filter(c => c.dir.startsWith(s + '/')).sort((a, b) => chapNum(a) - chapNum(b)); return l[0]; }", SERIE)
         pg.fill("#selNum", str(cible["chapter"])); pg.keyboard.press("Enter"); pg.wait_for_timeout(2000)
         check("n° exact + Entrée → chapitre ouvert, feuille fermée", pg.evaluate("() => [CHAP_OPEN, $('selFeuille').hidden]") == [cible["dir"], True], pg.evaluate("() => CHAP_OPEN"))
-        # 3) glisser la barre vers le haut ; filtres ; Echap
+        # 3) v2.71.0 : glisser la barre vers le HAUT n'ouvre plus rien ; vers le BAS ouvre ; filtres ; Echap
         pg.evaluate("() => { scrollTo(0, 600); nfMaj(); }"); pg.wait_for_timeout(900)
         glisser(pg, "#navFlot", 0, -120); pg.wait_for_timeout(400)
-        check("glisser la barre vers le haut → feuille ouverte", pg.evaluate("() => !$('selFeuille').hidden"))
+        check("glisser la barre vers le HAUT → n'ouvre plus rien (v2.71.0)", pg.evaluate("() => $('selFeuille').hidden"))
+        glisser(pg, "#navFlot", 0, 32); pg.wait_for_timeout(400)
+        check("glisser la barre vers le BAS → feuille ouverte", pg.evaluate("() => !$('selFeuille').hidden"))
         n0 = pg.evaluate("() => document.querySelectorAll('#selGrille .sel-c').length")
         pg.evaluate("() => document.querySelector('#selFiltres [data-f=vid]').click()"); pg.wait_for_timeout(200)
         n1 = pg.evaluate("() => [...document.querySelectorAll('#selGrille .sel-c')].map(b => b.textContent)")

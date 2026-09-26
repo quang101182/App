@@ -2932,6 +2932,25 @@ Swipe vers le bas sur la barre ? ».
       ça apparaisse / disparaisse selon si j'appuie sur un bouton […] à la rigueur je préfère tout le temps affichées »*) →
       défaut : affichées en permanence, plus aucun masquage automatique ; un bouton de la barre les masque, un petit bouton
       flottant les réaffiche ; choix retenu sur l'appareil. Toucher l'image = ⏯ inchangé. Banc + sabotage + version v2.70.0.
+- [x] **Sélecteur — geste INVERSÉ : glisser la barre VERS LE BAS pour ouvrir** (v2.71.0, 26/09 12h25, `app_patch_271_geste_bas.py`).
+      ⚠ Trouvé au VRAI doigt (Samsung) et invisible au banc : sous une barre collée en bas il ne reste que **49 px** de course
+      (barre 804 → écran 853) ; le seuil de 50 px rendait le geste IMPOSSIBLE (le banc simulait 120 px). → seuil **24 px** vers le
+      bas, geste net (|dy| > 1,5 |dx|). Vrais gestes 3 séries : haut 0/3 ouvert, bas 3/3. Bancs `test_selecteur_ui` 28/28,
+      `test_selecteur_narr_pages_ui` 105/105 (glissés ramenés à 32 px = course réelle ; « vers le haut n'ouvre plus rien »
+      ajouté) ; sabotage (ancien sens) → 2 KO. Samsung remis en veille.
+      Énoncé : Quang 12h18 : *« je le
+      déclenche plus facilement en scrollant vers le bas sans faire exprès […] c'est le même geste pour sortir d'une application
+      sur un smartphone. Par contre, le contraire ne déclenche rien sur mon smartphone »* — il l'avait demandé ainsi à 11h05 ;
+      le choix « vers le haut » (constat 11h05 : peu de course) est annulé par l'usage réel. Vers le haut n'ouvre PLUS rien ;
+      bulle / titre / G inchangés ; fermer la feuille = glisser vers le bas SUR la feuille (inchangé). Bancs + vrai geste
+      (`input swipe`) sur le Samsung, puis écran en veille.
+- [ ] **Barre de notifications Android masquée** (Quang 12h22) : dans Manga Studio installée, la barre du haut (heure,
+      batterie) est cachée et « clignote » parfois (apparaît brièvement puis disparaît) ; Friday et Generate Studio la gardent
+      TOUJOURS visible → faire comme eux. Constat (lu 26/09) : manifestes `display: "fullscreen"` (principale ET secondaire).
+      À comparer avec les manifestes de Friday / Generate Studio avant de toucher.
+- [ ] **Visionneuse (page par page, plein écran) — sens du glisser inversé** (Quang 12h26) : glisser VERS LA DROITE = image
+      SUIVANTE, vers la gauche = précédente (« on l'avait inversé ailleurs, celui-là on l'a oublié »). Vérifier le sens des autres
+      barres pour rester cohérent.
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),
       `GET /manga/bibliotheque` rend maintenant `videos_pos` : reprise de position commune PC / téléphone sur les DEUX applications. : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
       26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de
