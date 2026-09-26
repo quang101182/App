@@ -3139,12 +3139,16 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
   hors dépôt. Le compte ElevenLabs est commun aux deux applications (solde affiché dans les deux).
 
 ### Étapes (dans l'ordre, une à la fois ; chacune = banc réel + sabotage rouge + commit)
-- [ ] **D0 — Validation de la maquette v2** (Q1-Q4 répondues le 26/09 23h55). Rien ne se code avant.
-- [ ] **D1 — `scripts/dialogues.py preparer <chap> [--pages a-b]`** : bulles de la traduction (Q1 pour la VF) → 1 appel Gemini par
+- [x] **D0 — Validation de la maquette v2** ✅ 26/09 23h58 (« C'est ok pour moi »).
+- [x] **D1 — `scripts/dialogues.py preparer <chap> [--pages a-b]`** : bulles de la traduction (Q1 pour la VF) → 1 appel Gemini par
       lot de 4-5 pages (images + bulles numérotées + distribution de la série) → `dialogues.json` (qui, ton, lire, muet,
       indice, texte_origine) ; contour de chaque bulle (repli ovale) ; `progress.json` ; dépense `dialogues` au registre ;
       refus de modération → alerte `_alertes.json` + pages « à traiter » (relais selon Q2). Banc hors ligne (faux gateway)
       + 1 banc réel court (OPM ch.6 p.5-7) ; sabotage : distribution ignorée → noms perdus = rouge.
+      ✅ **Livré 27/09 00h05 (dialogues.py v1.0.0)** : banc hors ligne `test_dialogues_preparer.py` **24/24** (distribution,
+      alias « p1 », corrections gardées, CHAIR DE POULE / « ! » non lus, narrateur non lu, relais coupé → alerte / actif → kimi,
+      sans traduction → code 3) + 2 mutations ROUGES ; banc réel sur COPIE OPM ch.6 p.5-7 : 15 s, **0,014 $**, 2 persos créés
+      (voix EL choisies au catalogue réel), contour réel 11/12 bulles.
 - [ ] **D2 — `scripts/dialogues.py voix <chap>`** : ElevenLabs v3 via gateway, une voix par réplique, empreintes, reprise ;
       **quota épuisé = arrêt propre** (voix faites gardées, motif lisible dans `progress.json`, AUCUN autre moteur) ;
       contrôle Whisper des balises prononcées (refaite 1 fois, sinon signalée). Banc : 3 répliques réelles + faux 401/quota
