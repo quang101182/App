@@ -2886,6 +2886,12 @@ Swipe vers le bas sur la barre ? ».
       11h48 : Samsung (Android 13, Chrome 154) — les 2 WebAPK sont « verified » pour leur domaine (`pm get-app-links`) alors que
       `/.well-known/assetlinks.json` est bloqué (401 / 302) sur les deux → ce fichier ne décide pas : piste écartée.
       11h50 : secondaire réinstallée sur le Samsung et LAISSÉE installée (sert à comparer avec le Fold).
+      11h58 — **essai de Quang sur le Fold (décisif)** : les DEUX installées ; l'application lancée EN PREMIER n'a jamais de
+      bandeau, l'autre (atteinte par l'appui long) s'ouvre DANS la fenêtre de la première avec le bandeau — et ça s'inverse selon
+      celle qu'on lance. ⇒ sur le Fold, Chrome garde la navigation dans l'application courante au lieu de la confier à l'autre
+      WebAPK (le Samsung, lui, la confie). Pas un problème d'installation.
+      Piste à tester (Samsung puis Fold, **connexion ADB promise par Quang**) : bascule par une adresse `intent://…#Intent;scheme=https;end`
+      (Android choisit l'application installée) au lieu de `location.href` ; repli = l'adresse actuelle.
       **Prochaine étape (déclencheur : accord de Quang)** : lire le même état sur le Fold (`pm get-app-links` des 2 WebAPK,
       lecture seule, ADB sans fil) et comparer ; ou Quang regarde « Infos sur l'appli → Ouvrir par défaut » de la secondaire.
       ~~CAUSE TROUVÉE, pas un défaut du code~~ (26/09 11h40, Samsung de test, CDP + `dumpsys activity`) :
