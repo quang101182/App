@@ -2960,7 +2960,7 @@ Swipe vers le bas sur la barre ? ».
       ~~⏭ Chez Quang (Fold) : les applications installées se mettent à jour SEULES (Chrome relit le manifeste, en général
       sous 24 h ; au-delà d'1 h de cache). NE PAS réinstaller pour aller plus vite : une réinstallation = nouveau paquet =
       « liens compatibles » à réactiver (bandeau). **À vérifier** (déclencheur : Quang voit la barre, ou le 28/09) : après la mise
-      à jour, la bascule principale ↔ secondaire reste sans bandeau.
+      à jour, la bascule principale ↔ secondaire reste sans bandeau.~~ → fait à la main le 26/09 13h00 (ci-dessus).
       Énoncé (Quang 12h22) : dans Manga Studio installée, la barre du haut (heure,
       batterie) est cachée et « clignote » parfois (apparaît brièvement puis disparaît) ; Friday et Generate Studio la gardent
       TOUJOURS visible → faire comme eux. Constat (lu 26/09) : manifestes `display: "fullscreen"` (principale ET secondaire).
