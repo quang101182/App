@@ -3357,6 +3357,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 
 | Date | Événement |
 |---|---|
+| 2026-09-26 (03h45) | ✅ **v2.67.1** (Quang 03h35 : « quand les captures sont finies, ça ouvre directement le manga […] désagréable quand je navigue ailleurs ») : plus d'ouverture automatique du chapitre en fin de capture (série et chapitre seul) ; bibliothèque rafraîchie + message « capture terminée ». Banc `test_fin_capture_ui.py` 8/8 (fin SIMULÉE, secondes), mutation v2.67.0 → 4 KO ; `test_capture_serie_ui` : assertion inversée. |
 | 2026-09-26 (02h45) | ✅ **manga-fetch 0.8.3** : chapitre annoncé sans image = fin du lisible en « dernier paru » (bandeau « à jour » au lieu d'un faux échec). Webtoon en cours complété ch. 21-24. |
 | 2026-09-26 (02h30) | ✅ **manga-fetch 0.8.2** : webtoons en TUILES découpés aux gouttières (critère de continuité du dessin, tuiles-espaces gardées, fonds rayés, bulles protégées) ; 63 chapitres redécoupés (sauvegardes gardées), 4 645 raccords en plein dessin → 49. |
 | 2026-09-26 (00h55) | ✅ **manga-fetch 0.8.1** : webtoon en bandes presque carrées (720×700) → la largeur de colonne s'amorce sur le document (≥ 5 images ≥ 500 px à la même largeur) ; ch. réel 0 → 213/213 bandes. |

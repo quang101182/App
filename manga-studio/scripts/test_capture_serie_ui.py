@@ -123,7 +123,7 @@ try:
         pg.wait_for_timeout(2000)
         dirs = pg.evaluate("() => CHAPS.map(c => c.dir).filter(d => d.startsWith('banc-serie-ui/'))")
         check("bibliothèque : les 3 chapitres", sorted(dirs) == ["banc-serie-ui/ch_296", "banc-serie-ui/ch_297", "banc-serie-ui/ch_298"], dirs)
-        check("le 1er chapitre de la série est ouvert", pg.evaluate("() => CHAP_OPEN") == "banc-serie-ui/ch_296",
+        check("v2.67.1 : AUCUN chapitre ouvert automatiquement en fin de capture", pg.evaluate("() => CHAP_OPEN") is None,
               pg.evaluate("() => CHAP_OPEN"))
         check("1280 px : aucune erreur JS", not errs, errs)
         pg.close()
