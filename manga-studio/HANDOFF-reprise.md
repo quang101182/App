@@ -7,7 +7,7 @@
 
 ## 1. État au 25/09/2026 23h35
 
-- App `manga_studio.html` **v2.81.1** (27/09 01h20, mode 🎭 Dialogues + vidéo : ROADMAP § 4-septdecies ; secondaire à relancer au repos) · manga-fetch **0.8.4** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
+- App `manga_studio.html` **v2.81.2** (27/09 00h57, mode 🎭 Dialogues + vidéo + caméra + VF : ROADMAP § 4-septdecies ; secondaire à relancer au repos) · manga-fetch **0.8.4** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
   redécoupés ; sauvegardes `_avant_redecoupe/` EFFACÉES le 26/09 02h45 après validation de Quang à la lecture).
 - **26/09 11h00-11h30** : v2.68.0 lecteur vidéo (24/24) + 2 bugs Fold ; v2.69.0 sélecteur rapide (26/26).
 - **26/09 11h35-12h05** : sélecteur en narration + visionneuse `test_selecteur_narr_pages_ui` 100/100 (sabotage rouge) ;
@@ -45,9 +45,9 @@
 
 | Point | Déclencheur |
 |---|---|
-| **🎭 Dialogues — caméra « suivre la case » dans le lecteur** (Quang 27/09 00h43 : « c'est important ») : zoom doux sur la case de la bulle qui parle (cases de `/manga/cases`), interrupteur 🎥 mémorisé, défaut ACTIF. Patch app `app_patch_2812_camera.py` | EN COURS 27/09 00h45 |
-| **🎭 Dialogues — D8 appareil réel** : Samsung A32 (libéré par Quang 00h43) : PWA, préparer → corriger → générer → lire (halo, caméra) → vidéo | après la caméra |
-| **🎭 Dialogues — relancer la SECONDAIRE au repos** (elle n'a pas les routes Dialogues : patchs proxy 1-3 appliqués au fichier, instance 8192 pas relancée) : `/manga/activite` vide sur 8192, tuer le PID de `espace_prive.py` SEULEMENT, puis `Start-ScheduledTask MangaStudioInstance2` | quand Quang a fini ses captures |
+| **🎭 Dialogues — caméra « suivre la case » dans le lecteur** (Quang 27/09 00h43 : « c'est important ») : zoom doux sur la case de la bulle qui parle (cases de `/manga/cases`), interrupteur 🎥 mémorisé, défaut ACTIF. Patch app `app_patch_2812_camera.py` | ✅ FAIT v2.81.2 (27/09 00h57) |
+| **🎭 Dialogues — D8 appareil réel** : Samsung A32 (libéré par Quang 00h43) : PWA, préparer → corriger → générer → lire (halo, caméra) → vidéo | **PROCHAINE ÉTAPE** : Samsung libre (Quang 00h43). Tester aussi Solo Leveling ch.9 (VF, 882 p. : portée « des pages ») |
+| **🎭 Dialogues — relancer la SECONDAIRE au repos** (elle n'a pas les routes Dialogues : patchs proxy 1-3 appliqués au fichier, instance 8192 pas relancée) : `/manga/activite` vide sur 8192, tuer le PID de `espace_prive.py` SEULEMENT, puis `Start-ScheduledTask MangaStudioInstance2` | ✅ FAIT 27/09 00h55 (les deux instances ont les 4 patchs) |
 | **🎭 Dialogues — D9 clôture** (ROADMAP § 4-septdecies : constats, versions ; mémoire ; commit) | après D8 |
 | Fausse alerte « arrêtée avant la fin » quand on REDIMENSIONNE la fenêtre de capture pendant une capture (plafond de 400 pas, aucune image perdue) — préexistant | si ça arrive en vrai |
 | Une capture de référence a échoué UNE fois sans message (relance OK) | à surveiller : si ça se reproduit, lire `%LOCALAPPDATA%\manga-fetch\events.log` |

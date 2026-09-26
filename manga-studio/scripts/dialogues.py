@@ -24,7 +24,10 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.5.2"   # 1.5.2 : video/dialogues.json -> nom de telechargement juste (FR, sous-titres)
+VERSION = "1.6.1"   # 1.6.1 : contour degenere (< 3 points / < 20 % de la boite) -> repli ovale
+#   # 1.6.0 (Quang 27/09 00h47, Solo Leveling) : chapitre en FRANCAIS D'ORIGINE -- bulles detectees
+#          sur les pages d'origine (meme detection que la traduction), texte LU par Gemini ; img_rel = page a afficher
+#   # 1.5.2 : video/dialogues.json -> nom de telechargement juste (FR, sous-titres)
 #   # 1.5.1 : plan dit si la video est a jour / perimee / absente
 #   # 1.5.0 (27/09) : video (MP4 1080x1920, meme rendu que le lecteur, dialogues/video/)
 #   # 1.4.1 : page refusee lisible une fois QUI choisi par Quang ; plan dit « a_traiter »
@@ -78,6 +81,41 @@ def distribution(serie_dir):
     return d
 
 
+def deja_francais(chap_dir):
+    """Chapitre capture directement en francais (langue.json de l'app : langue fr) et SANS traduction francaise."""
+    lg = lire_json(os.path.join(chap_dir, "langue.json")) or {}
+    return lg.get("langue") == "fr" and not os.path.isfile(os.path.join(chap_dir, "traduction", "fr", "traduction.json"))
+
+
+def source_bulles(chap_dir, plage=""):
+    """{pages: [{page, file, img_rel, bulles}]} : la traduction francaise si elle existe ; sinon, pour un chapitre deja en
+    francais, les bulles DETECTEES sur les pages d'origine (traduire_chapitre.zones_texte : meme detection, memes seuils),
+    texte vide -- Gemini le lit dans l'appel de preparation. None si ni l'un ni l'autre."""
+    tr = lire_json(os.path.join(chap_dir, "traduction", "fr", "traduction.json"))
+    if tr:
+        for p in tr["pages"]:
+            p["img_rel"] = "traduction/fr/" + p["file"]
+        return tr
+    if not deja_francais(chap_dir):
+        return None
+    import ingest_page as ip
+    import traduire_chapitre as tc
+    man = lire_json(os.path.join(chap_dir, "manifest.json")) or {}
+    fichiers = [(q.get("file") or q.get("path") or q) if isinstance(q, (dict, str)) else None for q in man.get("pages") or []]
+    fichiers = [os.path.basename(f) for f in fichiers if f] or sorted(f for f in os.listdir(chap_dir) if re.match(r"page_\d+\.(png|jpe?g|webp)$", f))
+    voulues = set(nc_plage(plage, list(range(1, len(fichiers) + 1))))
+    pages = []
+    for n, f in enumerate(fichiers, 1):
+        if n not in voulues or not os.path.isfile(os.path.join(chap_dir, f)):
+            continue
+        nc.progres("detection", len(pages), len(voulues))
+        texts = tc.zones_texte(ip.load_page(os.path.join(chap_dir, f)), 0.25)
+        pages.append({"page": n, "file": f, "img_rel": f, "bulles": [
+            {"id": t["id"], "type": "dialogue", "box": {k: round(t[k], 4) for k in ("x", "y", "w", "h")}, "trad": "", "a_lire": True}
+            for t in texts]})
+    return {"pages": pages, "source": "vf"}
+
+
 # ---------------------------------------------------------------- catalogue de voix ElevenLabs (via le gateway)
 def catalogue_el():
     """[{id, nom, genre, age, desc}] ; vide si le gateway ne repond pas (la preparation ne choisit alors pas de voix :
@@ -115,6 +153,9 @@ def contour_bulle(img_path, box, cache={}):
     gris = cache[img_path]
     if gris is None:
         return None
+    if gris.ndim == 3:                  # ultralytics (detection VF) REMPLACE cv2.imread : le gris revient en (H, W, 1)
+        gris = gris[..., 0] if gris.shape[2] == 1 else cv2.cvtColor(gris, cv2.COLOR_BGR2GRAY)
+        cache[img_path] = gris
     H, W = gris.shape[:2]
     x1, y1 = int(box["x"] * W), int(box["y"] * H)
     x2, y2 = min(W, x1 + max(4, int(box["w"] * W))), min(H, y1 + max(4, int(box["h"] * H)))
@@ -134,7 +175,12 @@ def contour_bulle(img_path, box, cache={}):
     cs, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cs:
         return None
-    c = cv2.approxPolyDP(max(cs, key=cv2.contourArea), max(1.5, 0.004 * max(W, H)), True)
+    grand = max(cs, key=cv2.contourArea)
+    if cv2.contourArea(grand) < 0.2 * bw * bh:        # 27/09 (Solo Leveling) : contour DEGENERE (1 point) -> repli ovale
+        return None
+    c = cv2.approxPolyDP(grand, max(1.5, 0.004 * max(W, H)), True)
+    if len(c) < 3:
+        return None
     return [[round(float(p[0][0]) / W, 4), round(float(p[0][1]) / H, 4)] for p in c]
 
 
@@ -144,6 +190,8 @@ Tu recois des pages (deja traduites en francais, dans l'ordre de lecture) et, po
 (id, type, texte, position x,y,w,h en fractions de la page). Tu recois aussi la DISTRIBUTION DU MANGA (personnages deja connus
 d'autres chapitres) et des indices sur ce chapitre : l'IMAGE fait foi.
 
+0. Si le texte d'une bulle est VIDE (page deja en francais, rien de traduit), LIS-le sur l'image et rends-le dans "texte",
+   mot pour mot, casse d'origine, sans rien corriger ni ajouter.
 1. Pour CHAQUE bulle, QUI la prononce (queue de la bulle, case, qui est dessine, sens de la phrase) :
    - un personnage CONNU : son nom EXACT de la distribution (n'invente pas un 2e nom pour lui) ;
    - un personnage NOUVEAU : un nom court (son vrai nom s'il est dit ou ecrit, sinon une description courte comme « Vieil
@@ -162,7 +210,8 @@ CATALOGUE : %s
 Reponds UNIQUEMENT en JSON :
 {"ambiance": "...",
  "nouveaux": [{"nom": "...", "genre": "...", "age": "...", "fiche": "...", "voix_el": "<id du catalogue>"}],
- "repliques": [{"page": 5, "id": 2, "qui": "...", "ton": "...", "lire": true, "indice": "ce qui designe le locuteur, 10 mots max"}]}
+ "repliques": [{"page": 5, "id": 2, "texte": "(seulement si la bulle etait vide)", "qui": "...", "ton": "...", "lire": true,
+                "indice": "ce qui designe le locuteur, 10 mots max"}]}
 """
 
 
@@ -188,7 +237,7 @@ def preparer_lot(chap_dir, lot, distrib, narr, cat, stats):
                         + json.dumps([{"id": p.get("id"), "nom": p.get("nom"), "qui": p.get("qui")} for p in narr["personnages"]],
                                      ensure_ascii=False)})
     for p in lot:
-        img = os.path.join(chap_dir, "traduction", "fr", p["file"])
+        img = os.path.join(chap_dir, *p["img_rel"].split("/"))
         b64 = base64.b64encode(nc.page_jpeg(img, 1200)).decode()
         content.append({"type": "text", "text": "=== PAGE %d ===\nFaits (indice) : %s\nBulles : %s" % (
             p["page"], faits.get(p["page"], "?"), json.dumps([{"id": b["id"], "type": b["type"], "texte": b["trad"],
@@ -294,8 +343,7 @@ def nom_connu(distrib, qui):
 
 def cmd_preparer(a):
     chap_dir, serie_dir, dd = chemins(a.chap)
-    ftr = os.path.join(chap_dir, "traduction", "fr", "traduction.json")
-    tr = lire_json(ftr)
+    tr = source_bulles(chap_dir, a.pages)
     if not tr:
         print("ARRET : pas de traduction francaise pour %s -- traduis d'abord ce chapitre en francais" % a.chap)
         return 3
@@ -308,7 +356,7 @@ def cmd_preparer(a):
     for p in tr["pages"]:
         if p["page"] in voulues:
             p["_bulles"] = sorted([b for b in p["bulles"] if b["type"] in ("dialogue", "narration") and not b.get("ecarte")
-                                   and (b.get("trad") or "").strip()], key=lambda b: b["id"])
+                                   and ((b.get("trad") or "").strip() or b.get("a_lire"))], key=lambda b: b["id"])
             if p["_bulles"]:
                 pages.append(p)
     if not pages:
@@ -336,14 +384,14 @@ def cmd_preparer(a):
     ancien = lire_json(fch) or {}
     par_cle = {x["cle"]: x for x in ancien.get("repliques") or []}
     for p in pages:
-        img = os.path.join(chap_dir, "traduction", "fr", p["file"])
+        img = os.path.join(chap_dir, *p["img_rel"].split("/"))
         for b in p["_bulles"]:
             cle = "%d-%d" % (p["page"], b["id"])
             x = rep.get((p["page"], b["id"]))
             vieux = par_cle.get(cle) or {}
             corr = vieux.get("corrige") or {}
-            texte = (b.get("trad") or "").strip()
-            neuf = {"cle": cle, "page": p["page"], "id": b["id"], "file": p["file"], "type": b["type"],
+            texte = ((b.get("trad") or "").strip() or ((x or {}).get("texte") or "").strip())   # VF : lu par Gemini
+            neuf = {"cle": cle, "page": p["page"], "id": b["id"], "file": p["file"], "img_rel": p["img_rel"], "type": b["type"],
                     "box": b["box"], "contour": contour_bulle(img, b["box"]),
                     "texte_origine": texte, "texte": texte,
                     "qui": nom_connu(distrib, x.get("qui")) if x else "inconnu",
@@ -676,7 +724,7 @@ def cmd_lot(a):
     etat = {"version": VERSION, "serie": a.serie, "de": a.de, "a": a.a, "action": a.action, "pid": os.getpid(),
             "debut": time.strftime("%Y-%m-%dT%H:%M:%S"), "etat": "en cours", "chapitres": [], "t": time.time()}
     for n, ch in chs:
-        tr = os.path.isfile(os.path.join(serie_dir, ch, "traduction", "fr", "traduction.json"))
+        tr = os.path.isfile(os.path.join(serie_dir, ch, "traduction", "fr", "traduction.json")) or deja_francais(os.path.join(serie_dir, ch))
         etat["chapitres"].append({"num": n, "ch": ch, "etat": "attente" if tr else "non traduit"})
     ecrire_json(fl, etat)
     code = 0
@@ -801,7 +849,7 @@ def cmd_video(a):
     segs, imgs = [], []
     for k, x in enumerate(liste):
         nc.progres("video", k, len(liste))
-        png = os.path.join(chap_dir, "traduction", "fr", x["file"])
+        png = os.path.join(chap_dir, *(x.get("img_rel") or "traduction/fr/" + x["file"]).split("/"))
         img = os.path.join(tmp, "i%04d.png" % k)
         image_replique(png, x, couleur(x["qui"]), "Narrateur" if x["qui"] == "narrateur" else x["qui"], img)
         seg = os.path.join(tmp, "a%04d.m4a" % k)

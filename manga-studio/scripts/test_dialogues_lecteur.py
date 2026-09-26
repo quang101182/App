@@ -66,7 +66,21 @@ try:
             check("B. halo sur la bulle (±4 px)", a["ecart"] <= 4 and a["svg_sur_img"], a)
             check("B. voile de page", a["voile"])
             check("B. cadre dans la scene, pas de debordement", a["cadre_ok"] and not a["deborde"], a)
+            pg.wait_for_timeout(1500)
+            cam = pg.evaluate("""() => { const z = $('dllZoom'), m = (z.style.transform.match(/scale\(([\d.]+)\)/) || [0, 1])[1];
+               const c = $('dllCadre').getBoundingClientRect(), p = $('dllSvg').querySelectorAll('path')[1].getBoundingClientRect();
+               return { k: +m, visible: p.left >= c.left - 2 && p.right <= c.right + 2 && p.top >= c.top - 2 && p.bottom <= c.bottom + 2, on: DLL_CAM }; }""")
+            check("B2. camera active par defaut : zoom sur la case (echelle > 1)", cam["on"] and cam["k"] > 1.05, cam)
+            check("B2. la bulle qui parle reste ENTIERE dans le cadre", cam["visible"], cam)
+            pas = pg.evaluate("""() => { const c = $('dllCadre').getBoundingClientRect(), r = $('dllSvg').querySelector('g rect').getBoundingClientRect();
+               return r.left >= c.left - 2 && r.right <= c.right + 2 && r.top >= c.top - 2; }""")
+            check("B2. la pastille du nom reste ENTIERE dans le cadre", pas)
+            check("B2. halo toujours colle a la bulle sous zoom (±4 px)", pg.evaluate(ALIGNE)["ecart"] <= 4)
             pg.screenshot(path=os.path.join(OUT, "dlg_lecteur_%d.png" % w))
+            pg.evaluate("() => $('dllCam').click()"); pg.wait_for_timeout(900)
+            off = pg.evaluate("() => [$('dllZoom').style.transform, localStorage.getItem('manga_dlg_cam')]")
+            check("B2. 🎥 coupe : page entiere + memorise", off[0] in ("", "none") and off[1] == "0", off)
+            pg.evaluate("() => $('dllCam').click()"); pg.wait_for_timeout(900)
             i0 = pg.evaluate("() => DLL.i")
             for _ in range(12):
                 pg.wait_for_timeout(1000)

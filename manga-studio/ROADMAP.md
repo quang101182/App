@@ -3204,6 +3204,13 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       absente ; `patch_dialogues_3.py` (+ `.diff`, action « video ») testé 8191 **7/7** ; `app_patch_2811_video.py` : « 🎬 Vidéo »
       (fabriquer / mettre à jour, en évidence si périmée), « ▶ Voir la vidéo », « ⬇ Télécharger » — banc isolé **11/11**
       (1280 + 360) ; données réelles : 0 erreur JS ; `test_visionneuse_livre_ui` 30/30.
+- [x] **D6-bis — Caméra « suivre la case »** (Quang 27/09 00h43 : « c'est important ») + **chapitres en FRANCAIS D'ORIGINE**
+      (Quang 00h47, Solo Leveling refusé « traduis d'abord ») = **app v2.81.2** (`app_patch_2812_camera.py`) + `dialogues.py` 1.6.1
+      (bulles détectées sur les pages d'origine avec `traduire_chapitre.zones_texte`, texte LU par Gemini, `img_rel` = page
+      affichée ; contour dégénéré → ovale ; ⚠ ultralytics REMPLACE cv2.imread : gris en (H,W,1)) + `patch_dialogues_4.py` (+ .diff :
+      langue.json fr = prêt). Caméra : zoom doux sur la case (élargie à la bulle ET à la pastille du nom), 🎥 mémorisé, défaut
+      actif, relance des cases si détection en cours. Bancs : lecteur **51/51** (360/704/1280), preparer 24/24, voix 23/23, VF
+      isolé 6/7 → 7/7 après correction du contour. Principale ET secondaire relancées au repos 27/09 00h55 (4 patchs proxy).
 - [ ] **D8 — Bancs complets** : bout en bout réel sur une scène courte (2-3 pages, homme + femme) dans la principale ;
       correction d'un texte → 1 seule voix refaite (crédits mesurés avant/après) ; quota simulé épuisé ; 360/476/704/933/1280 ;
       les DEUX applications ; bancs voisins de la narration et du lecteur inchangés.

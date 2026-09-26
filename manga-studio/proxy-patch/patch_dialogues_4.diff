@@ -1,0 +1,28 @@
+--- _studio_llm_proxy.py (avant)
++++ _studio_llm_proxy.py (patch_dialogues_4)
+@@ -8926,4 +8926,11 @@
+ 
+ 
++def _dlg_francais(base):
++    """Traduction francaise presente, OU chapitre capture directement en francais (langue.json de l'app)."""
++    if os.path.isfile(os.path.join(base, "traduction", "fr", "traduction.json")):
++        return True
++    return ((_dlg_lire(os.path.join(base, "langue.json")) or {}).get("langue") == "fr")
++
++
+ def _dlg_vivant(d):
+     p = _DLG_JOBS.get(d)
+@@ -8940,5 +8947,5 @@
+         return None
+     dd = os.path.join(base, "dialogues")
+-    return {"d": d, "traduit": os.path.isfile(os.path.join(base, "traduction", "fr", "traduction.json")),
++    return {"d": d, "traduit": _dlg_francais(base),
+             "doc": _dlg_lire(os.path.join(dd, "dialogues.json")), "progress": _dlg_lire(os.path.join(dd, "progress.json")),
+             "en_cours": _dlg_vivant(d), "distribution": _dlg_lire(os.path.join(os.path.dirname(base), "dialogues_distribution.json"))}
+@@ -8954,5 +8961,5 @@
+         return {"error": "chapitre introuvable"}
+     dd = os.path.join(base, "dialogues")
+-    if action == "preparer" and not os.path.isfile(os.path.join(base, "traduction", "fr", "traduction.json")):
++    if action == "preparer" and not _dlg_francais(base):
+         return {"error": "traduis d'abord ce chapitre en français"}
+     if action in ("voix", "video") and not os.path.isfile(os.path.join(dd, "dialogues.json")):
