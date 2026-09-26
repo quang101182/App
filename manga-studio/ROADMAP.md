@@ -2879,14 +2879,32 @@ Swipe vers le bas sur la barre ? ».
       glisser vers le bas, Échap) · clavier PC (G) · 360 → 1280 px · les deux applications.
       Branchement : un seul composant, branché sur chaque barre du bas (navigation chapitre, lecteur narré, lecteur vidéo ;
       visionneuse = « aller à la page »), ouvert par glissement vers le haut ou toucher de la bulle.
-- [ ] **PWA secondaire — bandeau Chrome** (Quang 11h22-11h26, captures) : la secondaire, atteinte par l'APPUI LONG depuis la
+- [x] **PWA secondaire — bandeau Chrome : CAUSE TROUVÉE, pas un défaut du code** (26/09 11h40, Samsung de test, CDP + `dumpsys activity`) :
+      secondaire INSTALLÉE (WebAPK, « Installer » et non « Créer un raccourci ») → `espaceBasculer()` (inchangé, `location.href`) l'ouvre
+      dans SA propre application : tâche Android distincte, en-tête violet, AUCUNE barre ; le retour rouvre la tâche existante de la
+      principale (les 2 sens vérifiés). Secondaire DÉSINSTALLÉE → même geste = barre Chrome (✕ + adresse) DANS la tâche de la principale :
+      **le symptôme de Quang, reproduit à l'identique**. ⇒ sur le Fold, la secondaire n'est pas (ou plus) une vraie application installée
+      pour l'adresse actuelle (raccourci, ou installée depuis une ancienne adresse). Remède côté téléphone : supprimer l'icône, ouvrir la
+      secondaire dans Chrome → ⋮ → « Installer et créer un raccourci » → **Installer**. `window.open(…, "_blank")` écarté : inutile ici.
+      Manifestes publics (200 sans cookie) sur les deux ; noms identiques (« Manga Studio ») = seul inconvénient restant, cosmétique.
+      ⏭ Proposé, NON codé (accord de Quang requis) : dans la secondaire hors application installée, un rappel discret « installe-la ».
+      ⚠ La barre affiche l'ADRESSE de la secondaire en clair : raison de plus de l'installer. Samsung remis dans son état initial.
+      Énoncé d'origine :
+      (Quang 11h22-11h26, captures) : la secondaire, atteinte par l'APPUI LONG depuis la
       principale installée, s'ouvre DANS la fenêtre de la principale (`espaceBasculer` : `location.href = ESPACE.autre`) → onglet
       Chrome + bandeau qui apparaît / disparaît au défilement. Les deux sont installées ; leurs manifestes ont le MÊME nom
       (« Manga Studio / Manga », id /manga/) — indiscernables. Piste : en mode installé, `window.open(ESPACE.autre, "_blank")` pour
       qu'Android confie l'adresse à l'appli installée de la secondaire ; + un nom distinct neutre pour la secondaire. ⛔ À VÉRIFIER
       SUR UN VRAI TÉLÉPHONE (Samsung de test, les deux installées) — le choix d'appli par Android ne se simule pas.
 - [ ] **Relance de la secondaire** (au repos) : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
-- [ ] **B — Bancs** : app réelle, 360/476/704/933/1280, gestes simulés (touch), sabotage rouge, bancs voisins
+      26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de
+      narration + vidéo) → veilleur lancé : relance dès 2 relevés vides à 1 min (procédure HANDOFF § 3.7), délai max 3 h.
+- [x] **B — Bancs du sélecteur, contextes NARRATION et PAGES** (26/09 11h35) : `scripts/test_selecteur_narr_pages_ui.py` **100/100**
+      à 360/476/704/933/1280 (titre / glisser / G, courant en vert, sans narration = grisé + raison, filtre, n° absent → plus proche,
+      aller à un autre chapitre narré, « à l'aveugle » = pas de sommaire, Échap ne ferme QUE le sélecteur ; visionneuse : « Aller à la
+      page (N) », n° exact, page absente → la plus proche, G). Sabotage `--mutation` (visionneuse débranchée + garde « à l'aveugle »
+      retirée) → **6 KO, les bons**. Aucun code d'app modifié → bancs voisins non rejoués.
+- ~~**B — Bancs** (énoncé d'origine)~~ → ✅ couvert ci-dessus : app réelle, 360/476/704/933/1280, gestes simulés (touch), sabotage rouge, bancs voisins
       (`test_activite_ui`, navigation, visionneuse).
 - [ ] **C — Clôture** : ROADMAP, HANDOFF-reprise, commit + push.
 
