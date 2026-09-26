@@ -2879,7 +2879,16 @@ Swipe vers le bas sur la barre ? ».
       glisser vers le bas, Échap) · clavier PC (G) · 360 → 1280 px · les deux applications.
       Branchement : un seul composant, branché sur chaque barre du bas (navigation chapitre, lecteur narré, lecteur vidéo ;
       visionneuse = « aller à la page »), ouvert par glissement vers le haut ou toucher de la bulle.
-- [x] **PWA secondaire — bandeau Chrome : CAUSE TROUVÉE, pas un défaut du code** (26/09 11h40, Samsung de test, CDP + `dumpsys activity`) :
+- [ ] **PWA secondaire — bandeau Chrome : NON RÉSOLU.** ⛔ La conclusion de 11h40 ci-dessous est FAUSSE pour le Fold —
+      Quang 11h46 : *« je t'ai dit que c'est déjà fait […] c'est marqué que cette appli est déjà installée »*.
+      11h47 : piste « appui long = minuteur sans geste utilisateur » (`manga_studio.html` appui long sur 📚, `setTimeout` au
+      `pointerdown`) **réfutée sur le Samsung** : un VRAI appui long (`input swipe` 1,8 s) ouvre bien la WebAPK de la secondaire.
+      11h48 : Samsung (Android 13, Chrome 154) — les 2 WebAPK sont « verified » pour leur domaine (`pm get-app-links`) alors que
+      `/.well-known/assetlinks.json` est bloqué (401 / 302) sur les deux → ce fichier ne décide pas : piste écartée.
+      11h50 : secondaire réinstallée sur le Samsung et LAISSÉE installée (sert à comparer avec le Fold).
+      **Prochaine étape (déclencheur : accord de Quang)** : lire le même état sur le Fold (`pm get-app-links` des 2 WebAPK,
+      lecture seule, ADB sans fil) et comparer ; ou Quang regarde « Infos sur l'appli → Ouvrir par défaut » de la secondaire.
+      ~~CAUSE TROUVÉE, pas un défaut du code~~ (26/09 11h40, Samsung de test, CDP + `dumpsys activity`) :
       secondaire INSTALLÉE (WebAPK, « Installer » et non « Créer un raccourci ») → `espaceBasculer()` (inchangé, `location.href`) l'ouvre
       dans SA propre application : tâche Android distincte, en-tête violet, AUCUNE barre ; le retour rouvre la tâche existante de la
       principale (les 2 sens vérifiés). Secondaire DÉSINSTALLÉE → même geste = barre Chrome (✕ + adresse) DANS la tâche de la principale :
@@ -2896,7 +2905,19 @@ Swipe vers le bas sur la barre ? ».
       (« Manga Studio / Manga », id /manga/) — indiscernables. Piste : en mode installé, `window.open(ESPACE.autre, "_blank")` pour
       qu'Android confie l'adresse à l'appli installée de la secondaire ; + un nom distinct neutre pour la secondaire. ⛔ À VÉRIFIER
       SUR UN VRAI TÉLÉPHONE (Samsung de test, les deux installées) — le choix d'appli par Android ne se simule pas.
-- [ ] **Relance de la secondaire** (au repos) : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
+- [x] **Lecteur vidéo v2.70.0 — commandes TOUJOURS affichées** (26/09 11h55, `app_patch_270_commandes.py`). Quang 11h49 : *« je
+      préfère que ce soit affiché en permanence. Ensuite, si j'ai envie, je n'ai qu'à passer en plein écran »* → PAS de bouton ;
+      hors plein écran plus aucun effacement ; l'effacement (3 s, un toucher ramène) ne vit plus QU'EN plein écran (⋯ → Plein écran) ;
+      sortie du plein écran = barre rendue. Banc `test_lecteur_video_ui` **27/27** (F réécrit : 4 s sans effacement, plein écran,
+      sortie) ; sabotage (garde plein écran retirée, app servie modifiée) → **rouge** ; voisins `test_video_nav_ui` 12/12 (lancer
+      avec `PYTHONIOENCODING=utf-8` : sinon plantage cp1252 sur « ⏮ », pas un défaut), `test_selecteur_ui` 26/26.
+      ~~Énoncé intermédiaire (11h48), remplacé~~ : *« une tempo qui
+      fait que les boutons disparaissent automatiquement, je n'aime pas trop ; je préfère que ça reste affiché en permanence, ou que
+      ça apparaisse / disparaisse selon si j'appuie sur un bouton […] à la rigueur je préfère tout le temps affichées »*) →
+      défaut : affichées en permanence, plus aucun masquage automatique ; un bouton de la barre les masque, un petit bouton
+      flottant les réaffiche ; choix retenu sur l'appareil. Toucher l'image = ⏯ inchangé. Banc + sabotage + version v2.70.0.
+- [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),
+      `GET /manga/bibliotheque` rend maintenant `videos_pos` : reprise de position commune PC / téléphone sur les DEUX applications. : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
       26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de
       narration + vidéo) → veilleur lancé : relance dès 2 relevés vides à 1 min (procédure HANDOFF § 3.7), délai max 3 h.
 - [x] **B — Bancs du sélecteur, contextes NARRATION et PAGES** (26/09 11h35) : `scripts/test_selecteur_narr_pages_ui.py` **100/100**

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Banc v2.68.0 : LECTEUR VIDEO (maquette_lecteur_video_v1, validee 26/09 11h05, A-H). APP REELLE, vraies videos de la serie donnee.
+"""Banc v2.68.0 (+ v2.70.0 : barre permanente hors plein ecran) : LECTEUR VIDEO (maquette_lecteur_video_v1, validee 26/09 11h05, A-H). APP REELLE, vraies videos de la serie donnee.
 Lecture seule : navigateur pilote -> la position n'est PAS envoyee au serveur (navigator.webdriver) ; rien n'est ecrit.
 Usage : python test_lecteur_video_ui.py [port] [serie]      (defaut 8190 one-punch-man)
 """
@@ -59,12 +59,19 @@ with sync_playwright() as p:
     check("⏯ : pause (▶ affiché)", pg.evaluate("() => [vEl().paused, $('vidPP').textContent]") == [True, "▶"])
     clic(pg, "#vidPP"); pg.wait_for_timeout(300)
     check("⏯ : reprise", pg.evaluate("() => !vEl().paused"))
-    # F : la barre s'efface apres 3 s de lecture, un toucher la ramene SANS mettre en pause
-    pg.wait_for_timeout(3500)
-    check("F : barre effacée après 3 s de lecture", pg.evaluate("() => $('vidLecteur').classList.contains('calme')"))
+    # F (v2.70.0, Quang 11h48) : hors plein ecran la barre RESTE ; elle ne s'efface qu'en plein ecran, un toucher la ramene
+    pg.wait_for_timeout(4000)
+    check("F : hors plein écran, barre TOUJOURS affichée après 4 s de lecture", pg.evaluate("() => [!$('vidLecteur').classList.contains('calme'), !vEl().paused]") == [True, True]
+          and pg.is_visible("#vidPP") and pg.evaluate("() => getComputedStyle($('vidBas')).opacity") == "1")
+    pg.click("#vidMenu .plus"); pg.wait_for_timeout(200); pg.click("#vidPlein"); pg.wait_for_timeout(500)
+    check("F : ⋯ → Plein écran = le lecteur en plein écran", pg.evaluate("() => document.fullscreenElement === $('vidLecteur')"))
+    pg.evaluate("() => vEl().play()"); pg.wait_for_timeout(3600)
+    check("F : en plein écran, barre effacée après 3 s de lecture", pg.evaluate("() => $('vidLecteur').classList.contains('calme')"))
     pg.evaluate("() => { const z = $('vidZone').getBoundingClientRect(); $('vidZone').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: z.left + z.width / 2, clientY: z.top + z.height / 2 })); }")
     pg.wait_for_timeout(500)
     check("F : un toucher ramène la barre, la lecture continue", pg.evaluate("() => [!$('vidLecteur').classList.contains('calme'), !vEl().paused]") == [True, True])
+    pg.evaluate("() => document.exitFullscreen()"); pg.wait_for_timeout(4000)
+    check("F : sortie du plein écran → barre rendue et qui RESTE (4 s)", pg.evaluate("() => [document.fullscreenElement, $('vidLecteur').classList.contains('calme'), !vEl().paused]") == [None, False, True])
     # B : toucher simple (barre visible) = pause ; double toucher a droite = +10
     pg.evaluate("() => { const z = $('vidZone').getBoundingClientRect(); $('vidZone').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: z.left + z.width / 2, clientY: z.top + z.height / 2 })); }")
     pg.wait_for_timeout(500)
