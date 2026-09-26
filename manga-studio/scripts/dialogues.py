@@ -24,7 +24,8 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.4.0"   # 1.4.0 (27/09) : lot (plusieurs chapitres, arret net au quota, reprise)
+VERSION = "1.4.1"   # 1.4.1 : page refusee lisible une fois QUI choisi par Quang ; plan dit « a_traiter »
+#   # 1.4.0 (27/09) : lot (plusieurs chapitres, arret net au quota, reprise)
 #   # 1.3.0 (27/09) : plan (etat de chaque replique + credits a prevoir, sans appel paye)
 #   # 1.2.0 (27/09) : ecouter (▶ de la preparation ; la voix exacte d'une replique devient definitive)
 #   # 1.1.0 (27/09) : D2 voix ElevenLabs v3 (empreintes, balises, arret net au quota)
@@ -449,8 +450,8 @@ def reglage_voix(distrib, qui):
 
 def a_dire(x, distrib, bal):
     """(texte envoye, parametres, empreinte) d'une replique -- ou None si elle ne se lit pas / n'a pas de voix."""
-    if not x.get("lire") or x.get("a_traiter"):
-        return None
+    if not x.get("lire") or (x.get("a_traiter") and not (x.get("corrige") or {}).get("qui")):
+        return None                                  # page refusee : lisible des que Quang a choisi QUI parle (sa correction)
     p = reglage_voix(distrib, x.get("qui"))
     if not p or not p.get("voix_el"):
         return None
@@ -618,8 +619,8 @@ def cmd_plan(a):
     tons = distrib.get("tons", True)
     etats, credits, a_faire, deja = {}, 0, 0, 0
     for x in doc["repliques"]:
-        if not x.get("lire") or x.get("a_traiter"):
-            etats[x["cle"]] = "non_lue"; continue
+        if not x.get("lire") or (x.get("a_traiter") and not (x.get("corrige") or {}).get("qui")):
+            etats[x["cle"]] = "a_traiter" if x.get("a_traiter") and x.get("lire") else "non_lue"; continue
         estime = dict(bal)
         if tons and x.get("ton") and x["ton"] not in estime:
             estime[x["ton"]] = "[xxxxxxxx] [xxxxxxx]"

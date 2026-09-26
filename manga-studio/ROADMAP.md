@@ -3169,7 +3169,7 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       Routes en plus du plan : `/manga/el_voix` (catalogue, cache 1 h) et `/manga/dialogues_ecouter` (dialogues.py v1.2.0
       `ecouter` : la voix exacte d'une réplique devient définitive, jamais payée 2×). Principale relancée au repos
       (relance-proxy.ps1) ; **secondaire NON relancée** (capture en cours 00h18) → à relancer au repos avant D8.
-- [ ] **D4 — App : bloc 🎭 Dialogues** (après Narration ; ligne ElevenLabs dans le détail des coûts ; vidéo des dialogues DANS le bloc) : état en une phrase (pas préparé / prêt / N à refaire / quota épuisé),
+- [x] **D4 — App : bloc 🎭 Dialogues** (après Narration ; ligne ElevenLabs dans le détail des coûts ; vidéo des dialogues DANS le bloc) : état en une phrase (pas préparé / prêt / N à refaire / quota épuisé),
       estimation $ + crédits, solde ElevenLabs, pages, interrupteur tons, bouton Préparer / Générer / Lire. Version ×3.
 - [x] **D4-bis — Portée plusieurs chapitres** (côté script + serveur ; l'écran vient avec D4) : file séquentielle côté proxy (un `progress.json` de lot + bilan), estimation
       totale, arrêt au quota sans rien perdre, reprise ; banc : 3 chapitres courts, quota simulé épuisé au 2ᵉ → 1ᵉʳ gardé,
@@ -3179,12 +3179,23 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       `proxy-patch/patch_dialogues_2.py` (+ `.diff`) : `/manga/dialogues_plan`, `/manga/dialogues_lot` (GET/POST),
       `/manga/dialogues_lot_arreter`, activité « dialogues_lot » — testé sur 8191 **7/7** (lot sur chapitre déjà fait = 0 crédit),
       appliqué, principale relancée au repos (secondaire toujours à relancer).
-- [ ] **D5 — App : écran de préparation** : distribution (voix + ▶ + menu « phrase à écouter » = ses répliques la plus longue
+- [x] **D5 — App : écran de préparation** : distribution (voix + ▶ + menu « phrase à écouter » = ses répliques la plus longue
       d'abord, expressivité, vitesse, couleur, renommer, ✚ ajouter) ; répliques par page (lire, qui, texte éditable, ton,
       ▶, état ✅/⚪/🟠) ; « Générer les voix manquantes » avec crédits nécessaires / restants et bouton GRISÉ si insuffisant.
-- [ ] **D6 — Lecteur Dialogues** : audio par réplique, page voilée, **halo SVG au contour réel** couleur du personnage (fondu
+- [x] **D6 — Lecteur Dialogues** : audio par réplique, page voilée, **halo SVG au contour réel** couleur du personnage (fondu
       0,3 s, respiration), pastille nom, sous-titre, ⏮ ⏯ ⏭ réplique, glisser = page, fin → chapitre suivant préparé (comme
       la visionneuse livre v2.80), option « suivre la case » (camPlan). Mesure : halo aligné à ±4 px sur 3 largeurs.
+      ✅ **D4-D5-D6 livrés 27/09 01h00 = app v2.81.0** (`proxy-patch/app_patch_2810_dialogues.py` + `app_patch_2810b_lecteur.py`,
+      rejouables) : ligne 🎭 Dialogues après Narration (état, estimation $, crédits + solde, Préparer / Générer / ✏ / Lire /
+      Arrêter, portée chapitre / pages / plusieurs chapitres, tons, encarts), écran de préparation plein écran (distribution
+      du MANGA : voix + ▶ + menu de phrases, expressivité 3 crans, vitesse 0,7-1,2, couleur, renommer, ✚ ; répliques par page :
+      lire, qui, texte corrigeable + ↺, ton, ▶, état ✅⚪🟠⚠), ligne ElevenLabs dans le détail des coûts, libellés d'activité.
+      Lecteur : page voilée, halo SVG au contour réel (couleur du perso, respiration, fondu), pastille au nom, sous-titre,
+      ⏮ ⏯ ⏭, vitesse, chapitre suivant s'il a des voix. Bancs ISOLÉS (8191 + copie + page servie par interception) :
+      `test_dialogues_ui.py` **20/20** réels (1280 + 360) · `test_dialogues_lecteur.py` **36/36** (halo à < 0,02 px de la
+      bulle à 360/704/1280) ; voisins `test_visionneuse_livre_ui` 30/30, `test_retour_visionneuse_ui` 24/24,
+      `test_balayage_image_ui` 14/14 ; données réelles : 0 erreur JS. dialogues.py 1.4.1 : page refusée lisible dès que
+      Quang choisit QUI parle. Reste : « suivre la case » (caméra) non fait — option, à reprendre si Quang le demande.
 - [ ] **D7 — Vidéo Dialogues (MP4)** : même rendu en fichier, pour le téléphone hors ligne (modèle `cases_video.py`).
 - [ ] **D8 — Bancs complets** : bout en bout réel sur une scène courte (2-3 pages, homme + femme) dans la principale ;
       correction d'un texte → 1 seule voix refaite (crédits mesurés avant/après) ; quota simulé épuisé ; 360/476/704/933/1280 ;
