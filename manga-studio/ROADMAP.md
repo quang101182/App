@@ -3056,6 +3056,14 @@ Swipe vers le bas sur la barre ? ».
       Mesuré 10 min après : le même ch.3 s'ouvre en 3 s (43 images) → site saturé un instant. `chapitre_suivant_tenace` : 3 essais
       espacés de 15 s si délai dépassé / coupure réseau ; erreur de LOGIQUE = remonte au 1er essai. Banc
       `scripts/test_suivant_tenace.py` **6/6** (sans réseau) ; 0.8.3 → rouge ; `test_manga_fetch` 9/9.
+- [x] **v2.80.0 : la visionneuse lit un chapitre comme un LIVRE** (26/09 21h45). Quang 21h21 : « ça reboucle en restant sur le
+      même chapitre […] il faudrait continuer […] comme si je lisais un livre » + « 4 sur 62 puis P4 » en double, chapitre absent.
+      Pages d'un chapitre : › après la dernière → p.1 du chapitre SUIVANT, ‹ avant la p.1 → DERNIÈRE page du précédent (même
+      série, ordre `chapVoisin` = ⏮ ⏭), visionneuse ouverte, chapitre derrière ouvert aussi (`openChap`) ; bouts de série = message,
+      ni boucle ni saut ; trou de numéros dit (« ch. 11 à 294 absents »). Barre : « ch. N · p. k/M » (tient à 360 px jusqu'à
+      « ch. 1100 · p. 120/150 », mesuré). Galerie / vues / références : boucle GARDÉE (pas des livres). Banc
+      `scripts/test_visionneuse_livre_ui.py` **30/30** (1280 + 360 px, ›/‹/glissé/double clic) ; `--ancien` (v2.79.3) → ROUGE (A, B, C, D en KO ; E vert) ;
+      `test_retour_visionneuse_ui` 24/24 (libellé adapté), `test_balayage_image_ui` 14/14.
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),
       `GET /manga/bibliotheque` rend maintenant `videos_pos` : reprise de position commune PC / téléphone sur les DEUX applications. : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
       26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de

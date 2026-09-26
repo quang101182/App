@@ -70,7 +70,7 @@ with sync_playwright() as p:
         check("visionneuse ouverte", pg.evaluate("() => !$('lightbox').hidden"))
         v = pg.evaluate("""() => [getComputedStyle($('lbName')).backgroundColor, $('lbName').getBoundingClientRect().left < $('lbClose').getBoundingClientRect().left,
             ['lbClose', 'lbPrev', 'lbNext'].every(id => parseFloat(getComputedStyle($(id)).borderRadius) >= 18), $('lbName').textContent]""")
-        check("même barre : bulle VERTE « page N/M » à gauche, boutons ronds", v[0] == "rgb(31, 91, 58)" and v[1] and v[2] and v[3].startswith("3/"), v)
+        check("même barre : bulle VERTE « page N/M » à gauche, boutons ronds", v[0] == "rgb(31, 91, 58)" and v[1] and v[2] and " · p. 3/" in v[3], v)   # v2.80.0 : « ch. N · p. 3/M »
         n0 = pg.evaluate("() => LB")
         if tel:
             pg.evaluate(GLISSE, [25]); pg.wait_for_timeout(500)
