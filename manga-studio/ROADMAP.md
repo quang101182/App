@@ -3026,9 +3026,10 @@ Swipe vers le bas sur la barre ? ».
       suivante (Narrer → Traduire si VO → Faire la vidéo), jamais la musique, coupée si « réduire les animations ». Banc
       `test_liens_video_ui.py` **44/44** (3 vrais chapitres, 1280 / 360 / 360 réduit) ; v2.78.0 servie → rouge ; voisins fiche 31/31,
       sonde clignotement 0. Trouvés sur CAPTURE (pas par les chiffres) : pastilles qui écrasaient l'état Vidéo à 360 → 2e ligne ;
-      flèche qui mangeait l'état Narration à 360 → masquée sur téléphone. ⏭ Préexistant, NON corrigé : à 360 px l'état d'un
-      chapitre NON narré fait 0 px (les pastilles de coût prennent la place) ; « Traduire » affiché même « déjà en français ».
-      **Déclencheur** : accord de Quang. Énoncé : Constat (code lu) :
+      flèche qui mangeait l'état Narration à 360 → masquée sur téléphone. ✅ **v2.79.1** (Quang 16h50 « tout ce que tu
+      trouves à corriger, tu le fais ») : état d'un chapitre NON narré à 360 px 0 → 159 px (coûts en 2e ligne) ; plus de
+      « Traduire » dans l'en-tête si déjà dans la langue cible. Banc 50/50, v2.79.0 servie → 5 KO ; fiche 31/31 (le test du relais
+      « Traduire » choisit une langue cible différente). Énoncé : Constat (code lu) :
       la narration ne dépend de rien ; `video_chapitre.py` prend les pages traduites si elles existent (sinon VO) et la musique si
       choisie → traduire / choisir la musique AVANT la vidéo, pas avant la narration. Tout reste FACULTATIF, le lien doit se VOIR.
       Maquette `maquette_liens_video_v1.html` (A groupe « pour la vidéo », B pastilles d'ingrédients sur la ligne Vidéo, C rail) ;

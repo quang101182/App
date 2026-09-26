@@ -69,6 +69,8 @@ with sync_playwright() as p:
         pg.click("#nfRet"); pg.wait_for_timeout(500)
         check("« ← Fermer » replie le bloc (le chapitre reste ouvert)", pg.evaluate("() => !document.querySelector('#chapDetail .cl-box.cl-ouv') && CHAP_OPEN === 'claymore/ch_1'"))
         # 5. actions de ligne = boutons d'ORIGINE (espionnes)
+        # v2.79.1 : « Traduire » n'est dans la ligne que si le chapitre n'est PAS deja dans la langue cible -> cible differente
+        pg.evaluate("() => { const l = LANGUE_CHAP[CHAP_OPEN]; $('tradLangue').value = (l && l.langue === 'vi') ? 'es' : 'vi'; langueMaj(); }")
         pg.evaluate("() => { window._espion = []; ['btnNarrer', 'btnTraduire'].forEach(id => { $(id).onclick = () => _espion.push(id); $(id).disabled = false; }); clMaj(); }")
         pg.wait_for_timeout(300)
         pg.evaluate("() => document.querySelector('.cl-tete[data-cl=\"narr\"] [data-cl-act=\"btnNarrer\"]').click()")

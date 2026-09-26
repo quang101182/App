@@ -3,7 +3,7 @@
 de la video (🎙 / 🌐 FR|VO / 🎵 N), UNE seule lueur sur l'etape utile suivante. APP REELLE, lecture seule (tout POST bloque).
 Chapitres choisis d'apres les donnees : un NON narre, un narre en VO non traduit (s'il existe), un narre deja dans la langue cible.
 1280 et 360 px (pastilles visibles, chevron dans le cadre, pas de debordement) + « reduire les animations ».
-Usage : python test_liens_video_ui.py [port] [--mutation]   (--mutation : app v2.78.0 servie -> doit sortir ROUGE)
+Usage : python test_liens_video_ui.py [port] [--mutation]   (--mutation : app v2.79.0 servie -> doit sortir ROUGE sur les controles v2.79.1)
 """
 import os, sys
 from playwright.sync_api import sync_playwright
@@ -27,6 +27,7 @@ ETAT = """() => { const rows = [...document.querySelectorAll('#chapDetail .cl-te
     narr: document.querySelectorAll('#narrRuns [data-ecoute]').length, tradOk: typeof clTradOk === 'function' ? clTradOk() : null,
     video: !!$('chapVid').querySelector('[data-vid-voir]'),
     chevDedans: rows.every(h => { const c = h.querySelector('.cl-chev').getBoundingClientRect(), b = h.closest('.cl-box').getBoundingClientRect(); return c.right <= b.right + 1; }),
+    tradMeme: !$('tradMeme').hidden, tradBtn: !!document.querySelector('#chapDetail .cl-tete[data-cl=trad] .cl-act .btn'),
     narrEtatL: Math.round(document.querySelector('#chapDetail .cl-tete[data-cl=narr] .cl-etat').getBoundingClientRect().width),
     ingSous: (() => { if (!v) return false; const i = v.querySelector('.cl-est').getBoundingClientRect(), t = v.querySelector('.cl-etat').getBoundingClientRect();
                       return i.top >= t.bottom - 1 && t.width > 120; })(),
@@ -47,7 +48,7 @@ with sync_playwright() as p:
         pg.route("**/*", lambda r: r.abort() if r.request.method == "POST" else r.continue_())    # lecture seule
         if MUT:
             pg.route("**/manga", lambda route: route.fulfill(status=200, content_type="text/html; charset=utf-8",
-                     body=open(os.path.join(ICI, "..", "manga_studio.html.bak-20260926-v2790"), encoding="utf-8").read()))   # = v2.78.0
+                     body=open(os.path.join(ICI, "..", "manga_studio.html.bak-20260926-v2791"), encoding="utf-8").read()))   # = v2.79.0
         pg.goto("http://127.0.0.1:%d/manga#k=%s" % (PORT, KEY)); pg.wait_for_timeout(4500)
         pg.evaluate("async () => { for (let i = 0; i < 30 && !RESUME; i++) await new Promise(r => setTimeout(r, 300)); }")
         choix = pg.evaluate("""() => { const R = RESUME.chapitres, cible = $('tradLangue').value || 'fr', L = Object.entries(R);
@@ -67,6 +68,8 @@ with sync_playwright() as p:
             check("non narré : UNE lueur, sur la Narration", e["suiv"] == ["narr"], e["suiv"])
             check("lueur animée" + (" : COUPÉE (réduire les animations)" if reduit else ""), (e["anim"] == "none") if reduit else (e["anim"] == "clLueur"), e["anim"])
             check("chevrons dans leur cadre, page sans débordement", e["chevDedans"] and not e["deborde"], [e["chevDedans"], e["deborde"]])
+            check("v2.79.1 : état de la Narration NON narrée lisible (≥ 120 px ; 0 px en v2.79.0 à 360)", e["narrEtatL"] >= 120, e["narrEtatL"])
+            if e["tradMeme"]: check("v2.79.1 : déjà dans la langue voulue → pas de bouton « Traduire » dans l'en-tête", not e["tradBtn"], e["tradBtn"])
         # 2) narre, VO non traduit : lueur sur « Traduire », 🌐 « VO » pointille
         if choix["vo"]:
             e = ouvrir(pg, choix["vo"])
