@@ -5,13 +5,15 @@ Cause : le compteur additionnait les couts ecrits dans les fichiers PRESENTS (na
 une traduction ECRASAIT la depense precedente, supprimer un chapitre ou vider la corbeille l'effacait. Or ces sommes ont
 ete payees. Ici : une ligne par passage paye, jamais modifiee ni effacee (sources/_depenses.jsonl).
   noter(type, d, tag, moteur, paye, **detail)   -> ajoute une ligne
+  noter_credits(type, d, tag, moteur, credits, **detail) -> v1.1.0 (27/09, mode Dialogues) : une depense en CREDITS d'un
+                                                  forfait (ElevenLabs), pas en dollars : paye = 0, credits = N
   lire()                                         -> toutes les lignes
 Une narration qui REUTILISE une analyse n'inscrit que ce qu'elle paie elle-meme (recit, voix, noms), jamais l'analyse
 recopiee.
 """
 import json, os, time
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 REGISTRE = os.environ.get("MANGA_DEPENSES") or os.path.join(SRC, "_depenses.jsonl")   # bancs : fichier jetable
@@ -24,6 +26,20 @@ def noter(type_, d, tag, moteur, paye, **detail):
                  paye=round(float(paye), 5), **detail)
     try:
         with open(REGISTRE, "a", encoding="utf-8") as f:            # « a » : ajout atomique d'une ligne courte
+            f.write(json.dumps(ligne, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def noter_credits(type_, d, tag, moteur, credits, **detail):
+    """Credits consommes sur un forfait (ElevenLabs) : ce n'est pas un montant en dollars -- la ligne garde paye = 0 pour que
+    les totaux en dollars restent justes, et porte `credits` a part (ligne ElevenLabs du detail des couts)."""
+    if not credits:
+        return
+    ligne = dict(t=time.strftime("%Y-%m-%dT%H:%M:%S"), type=type_, d=d, tag=tag, moteur=moteur, paye=0.0,
+                 credits=int(credits), **detail)
+    try:
+        with open(REGISTRE, "a", encoding="utf-8") as f:
             f.write(json.dumps(ligne, ensure_ascii=False) + "\n")
     except OSError:
         pass

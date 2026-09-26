@@ -3149,10 +3149,15 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       alias « p1 », corrections gardées, CHAIR DE POULE / « ! » non lus, narrateur non lu, relais coupé → alerte / actif → kimi,
       sans traduction → code 3) + 2 mutations ROUGES ; banc réel sur COPIE OPM ch.6 p.5-7 : 15 s, **0,014 $**, 2 persos créés
       (voix EL choisies au catalogue réel), contour réel 11/12 bulles.
-- [ ] **D2 — `scripts/dialogues.py voix <chap>`** : ElevenLabs v3 via gateway, une voix par réplique, empreintes, reprise ;
+- [x] **D2 — `scripts/dialogues.py voix <chap>`** : ElevenLabs v3 via gateway, une voix par réplique, empreintes, reprise ;
       **quota épuisé = arrêt propre** (voix faites gardées, motif lisible dans `progress.json`, AUCUN autre moteur) ;
       contrôle Whisper des balises prononcées (refaite 1 fois, sinon signalée). Banc : 3 répliques réelles + faux 401/quota
       (arrêt vert, 0 appel suivant) ; sabotage : moteur de secours ajouté → le banc doit le voir.
+      ✅ **Livré 27/09 00h07 (dialogues.py v1.1.0 + depenses.py v1.1.0 `noter_credits`)** : banc hors ligne
+      `test_dialogues_voix.py` **23/23** (balises, casse, réglages v3 stabilité 1.0/0.5/0.0, crédits au registre, relance 0 appel,
+      vitesse d'UN perso → ses seules répliques, texte corrigé → 1 seule, quota au 2e appel → arrêt + reprise des manquantes,
+      solde 0, tons coupés, balise prononcée → refaite) + 2 mutations ROUGES ; banc réel sur COPIE : **10 voix, 23 s, 462 crédits**
+      (= estimation), 0 balise prononcée, balises DeepSeek 0,0003 $.
 - [ ] **D3 — Proxy (`proxy-patch/patch_dialogues.py` + `.diff`)** : routes `/manga/dialogues` (GET état), `/manga/dialogues_preparer`,
       `/manga/dialogues_voix`, `/manga/dialogues_maj` (corrections), `/manga/dialogues_distribution` (GET/POST),
       `/manga/el_solde` (cache 20 s) ; `manga_activite` + `manga_costs` + `LANCEMENTS` connaissent `dialogues` ; interruption
