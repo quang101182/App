@@ -45,6 +45,10 @@
 
 | Point | Déclencheur |
 |---|---|
+| **🎭 Dialogues — caméra « suivre la case » dans le lecteur** (Quang 27/09 00h43 : « c'est important ») : zoom doux sur la case de la bulle qui parle (cases de `/manga/cases`), interrupteur 🎥 mémorisé, défaut ACTIF. Patch app `app_patch_2812_camera.py` | EN COURS 27/09 00h45 |
+| **🎭 Dialogues — D8 appareil réel** : Samsung A32 (libéré par Quang 00h43) : PWA, préparer → corriger → générer → lire (halo, caméra) → vidéo | après la caméra |
+| **🎭 Dialogues — relancer la SECONDAIRE au repos** (elle n'a pas les routes Dialogues : patchs proxy 1-3 appliqués au fichier, instance 8192 pas relancée) : `/manga/activite` vide sur 8192, tuer le PID de `espace_prive.py` SEULEMENT, puis `Start-ScheduledTask MangaStudioInstance2` | quand Quang a fini ses captures |
+| **🎭 Dialogues — D9 clôture** (ROADMAP § 4-septdecies : constats, versions ; mémoire ; commit) | après D8 |
 | Fausse alerte « arrêtée avant la fin » quand on REDIMENSIONNE la fenêtre de capture pendant une capture (plafond de 400 pas, aucune image perdue) — préexistant | si ça arrive en vrai |
 | Une capture de référence a échoué UNE fois sans message (relance OK) | à surveiller : si ça se reproduit, lire `%LOCALAPPDATA%\manga-fetch\events.log` |
 | Pas de bouton d'arrêt pour une VIDÉO (pas de reprise possible) | si Quang en a besoin |
