@@ -3158,10 +3158,17 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       vitesse d'UN perso → ses seules répliques, texte corrigé → 1 seule, quota au 2e appel → arrêt + reprise des manquantes,
       solde 0, tons coupés, balise prononcée → refaite) + 2 mutations ROUGES ; banc réel sur COPIE : **10 voix, 23 s, 462 crédits**
       (= estimation), 0 balise prononcée, balises DeepSeek 0,0003 $.
-- [ ] **D3 — Proxy (`proxy-patch/patch_dialogues.py` + `.diff`)** : routes `/manga/dialogues` (GET état), `/manga/dialogues_preparer`,
+- [x] **D3 — Proxy (`proxy-patch/patch_dialogues.py` + `.diff`)** : routes `/manga/dialogues` (GET état), `/manga/dialogues_preparer`,
       `/manga/dialogues_voix`, `/manga/dialogues_maj` (corrections), `/manga/dialogues_distribution` (GET/POST),
       `/manga/el_solde` (cache 20 s) ; `manga_activite` + `manga_costs` + `LANCEMENTS` connaissent `dialogues` ; interruption
       par `/manga/interrompre`. Testé sur une COPIE, relance AU REPOS (principale puis secondaire, HANDOFF-reprise § 3.7).
+      ✅ **Livré 27/09 00h20** : patch testé sur COPIE (instance 8191 pointée sur une copie temporaire) — `test_dialogues_proxy.py`
+      **21/21** réels (préparer, 2e lancement refusé, activité « dialogues », sans traduction refusé, correction, renommer +
+      alias + chapitres suivis, voix p.7 seules, relance 0, écoute gratuite d'une voix faite, MP3 via /manga/source_file,
+      crédits EL à part + dollars de préparation, solde, catalogue, arrêter) ; mutation « crédits EL retirés » → ROUGE.
+      Routes en plus du plan : `/manga/el_voix` (catalogue, cache 1 h) et `/manga/dialogues_ecouter` (dialogues.py v1.2.0
+      `ecouter` : la voix exacte d'une réplique devient définitive, jamais payée 2×). Principale relancée au repos
+      (relance-proxy.ps1) ; **secondaire NON relancée** (capture en cours 00h18) → à relancer au repos avant D8.
 - [ ] **D4 — App : bloc 🎭 Dialogues** (après Narration ; ligne ElevenLabs dans le détail des coûts ; vidéo des dialogues DANS le bloc) : état en une phrase (pas préparé / prêt / N à refaire / quota épuisé),
       estimation $ + crédits, solde ElevenLabs, pages, interrupteur tons, bouton Préparer / Générer / Lire. Version ×3.
 - [ ] **D4-bis — Portée plusieurs chapitres** : file séquentielle côté proxy (un `progress.json` de lot + bilan), estimation

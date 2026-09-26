@@ -24,7 +24,8 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.1.0"   # 1.1.0 (27/09) : D2 voix ElevenLabs v3 (empreintes, balises, arret net au quota)
+VERSION = "1.2.0"   # 1.2.0 (27/09) : ecouter (▶ de la preparation ; la voix exacte d'une replique devient definitive)
+#   # 1.1.0 (27/09) : D2 voix ElevenLabs v3 (empreintes, balises, arret net au quota)
 SOURCES = os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources")
 LOT_PAGES = 4                       # pages par appel (essai 26/09 : 3 pages = 12 s, 5 pages = 26 s)
 PALETTE = ["#ff5fa2", "#ffb347", "#6fb8ff", "#b58cff", "#5fe3a1", "#ff7a5c", "#f5e663", "#4fd6e8", "#e88aff", "#c7a17a"]
@@ -548,6 +549,59 @@ def cmd_voix(a):
     log("%s %d voix faites, %d restantes, %d credits, %.0f s" % ("ARRET" if arret else "OK", faits, reste, credits, time.time() - t0))
     return CODE_QUOTA if arret else 0
 
+
+def cmd_ecouter(a):
+    """▶ de l'ecran de preparation : UNE replique (--cle), eventuellement dite par un autre personnage (--qui) ou avec un autre
+    ton (--ton). Sortie JSON sur stdout {fichier (relatif au chapitre), credits, deja}. Si la voix demandee est EXACTEMENT celle
+    de la replique (memes texte, ton, reglages), elle devient sa voix definitive : jamais payee deux fois."""
+    chap_dir, serie_dir, dd = chemins(a.chap)
+    doc = lire_json(os.path.join(dd, "dialogues.json"))
+    if not doc:
+        print(json.dumps({"error": "chapitre pas encore prepare"})); return 3
+    x0 = next((x for x in doc["repliques"] if x["cle"] == a.cle), None)
+    if not x0:
+        print(json.dumps({"error": "replique inconnue"})); return 3
+    distrib = distribution(serie_dir)
+    x = dict(x0, lire=True, a_traiter=False)
+    if a.qui:
+        x["qui"] = a.qui
+    if a.ton is not None:
+        x["ton"] = a.ton
+    stats = {}
+    bal = balises(distrib, [x.get("ton")], stats) if distrib.get("tons", True) and x.get("ton") else {}
+    if stats.get("cout_balises"):
+        ecrire_json(os.path.join(serie_dir, "dialogues_distribution.json"), distrib)
+        depenses.noter("dialogues", a.chap, "balises", "deepseek", round(stats["cout_balises"], 5))
+    d_ = a_dire(x, distrib, bal)
+    if d_ is None:
+        print(json.dumps({"error": "rien a dire (pas de voix pour ce personnage, ou texte vide)"})); return 3
+    envoye, texte, reg, emp = d_
+    for rel in ("voix/" + emp + ".mp3", "apercus/" + emp + ".mp3"):
+        if os.path.isfile(os.path.join(dd, rel.replace("/", os.sep))):
+            print(json.dumps({"fichier": "dialogues/" + rel, "credits": 0, "deja": True})); return 0
+    propre = (x0.get("qui") == x["qui"] and (x0.get("ton") or "") == (x.get("ton") or "") and x0.get("lire") and not x0.get("a_traiter"))
+    rel = ("voix/" if propre else "apercus/") + emp + ".mp3"
+    f = os.path.join(dd, rel.replace("/", os.sep))
+    os.makedirs(os.path.dirname(f), exist_ok=True)
+    body = {"text": envoye, "model_id": reg["modele"], "language_code": "fr",
+            "voice_settings": {"stability": reg["stabilite"], "similarity_boost": 0.75, "speed": reg["vitesse"]}}
+    try:
+        open(f, "wb").write(el_post("/api/elevenlabs/v1/text-to-speech/%s?output_format=mp3_44100_128" % reg["voix"], body))
+    except QuotaEpuise:
+        print(json.dumps({"error": "quota ElevenLabs epuise", "quota": True})); return CODE_QUOTA
+    except mod.Refus as e:
+        print(json.dumps({"error": "refusee par ElevenLabs : " + e.motif[:160]})); return 3
+    depenses.noter_credits("dialogues", a.chap, "ecoute", "elevenlabs", len(envoye), repliques=1)
+    if propre:                                                  # c'est SA voix : on la garde comme definitive
+        doc = lire_json(os.path.join(dd, "dialogues.json"))
+        for y in doc["repliques"]:
+            if y["cle"] == a.cle:
+                y["voix"] = {"empreinte": emp, "fichier": emp + ".mp3", "duree": nc.duree_mp3(f), "fuite": False,
+                             "t": time.strftime("%Y-%m-%dT%H:%M:%S")}
+        ecrire_json(os.path.join(dd, "dialogues.json"), doc)
+    print(json.dumps({"fichier": "dialogues/" + rel, "credits": len(envoye), "deja": False, "definitive": bool(propre)}))
+    return 0
+
 def nc_plage(s, toutes):
     if not s:
         return toutes
@@ -561,12 +615,16 @@ def main():
     sp = p.add_subparsers(dest="cmd", required=True)
     pr = sp.add_parser("preparer"); pr.add_argument("chap"); pr.add_argument("--pages", default="")
     vo = sp.add_parser("voix"); vo.add_argument("chap"); vo.add_argument("--pages", default="")
+    ec = sp.add_parser("ecouter"); ec.add_argument("chap"); ec.add_argument("--cle", required=True)
+    ec.add_argument("--qui", default=""); ec.add_argument("--ton", default=None)
     a = p.parse_args()
     nc.SECRET = nc._secret()
     if a.cmd == "preparer":
         return cmd_preparer(a)
     if a.cmd == "voix":
         return cmd_voix(a)
+    if a.cmd == "ecouter":
+        return cmd_ecouter(a)
 
 
 if __name__ == "__main__":
