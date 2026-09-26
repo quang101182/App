@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Atelier voix v0.1.1</title>
+<title>Atelier voix v0.1.2</title>
 <style>
 :root{--bg:#101218;--pan:#191c25;--bord:#2a2f3d;--txt:#e6e8ee;--dim:#9aa1b2;--acc:#ffc828;--ok:#3fbf7f;--ko:#e5534b}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,Segoe UI,sans-serif}
@@ -24,7 +24,7 @@ video{width:100%;max-height:70vh;background:#000;border-radius:10px;margin-top:8
 #etat{font-size:13px;color:var(--dim)}.ok{color:var(--ok)}.ko{color:var(--ko)}
 @media (max-width:700px){td.t{min-width:0}.hide-s{display:none}table,tbody,tr,td{display:block;width:100%}tr{padding:8px 0;border-bottom:1px solid var(--bord)}td{border:0;padding:3px 0}thead{display:none}}
 </style></head><body>
-<header><b>Atelier voix</b><span class="ver">v0.1.1</span><span id="titre"></span>
+<header><b>Atelier voix</b><span class="ver">v0.1.2</span><span id="titre"></span>
   <span style="flex:1"></span>
   <label style="margin:0">Vitesse générale <span class="val" id="vgv"></span></label><input type="range" id="vg" min="0.8" max="2" step="0.05" style="width:140px">
   <button id="sauver">Enregistrer</button><button class="p" id="gen">🎬 Générer la scène</button></header>
@@ -37,7 +37,15 @@ video{width:100%;max-height:70vh;background:#000;border-radius:10px;margin-top:8
 </main>
 <script>
 const $ = id => document.getElementById(id);
-let E = null, audio = new Audio(), ROT = {};
+let E = null, audio = new Audio();
+// toutes les phrases lisibles de la scene : les siennes d'abord (la plus longue en tete = choisie par defaut), puis les autres
+function optPhrases(nom){
+  const l = E.lignes.map((x, k) => ({ x, k })).filter(o => /[\p{L}\p{N}]/u.test(o.x.texte));
+  const a = l.filter(o => o.x.locuteur === nom).sort((u, v) => v.x.texte.length - u.x.texte.length), b = l.filter(o => o.x.locuteur !== nom);
+  const opt = o => `<option value="${o.k}">${esc(o.x.texte.length > 70 ? o.x.texte.slice(0, 68) + "…" : o.x.texte)}</option>`;
+  return (a.length ? `<optgroup label="Ses répliques">${a.map(opt).join("")}</optgroup>` : "")
+       + (b.length ? `<optgroup label="Autres phrases de la scène">${b.map(opt).join("")}</optgroup>` : "");
+}
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const NIV = ["très retenu", "retenu", "naturel", "très expressif"];
 
@@ -55,8 +63,7 @@ async function charger(){
     <label>Caractère (2-5 mots, ajouté à chaque réplique)</label><input type="text" data-k="caractere" value="${esc(p.caractere)}" placeholder="ex. froid, posé">
     <label>Intensité <span class="val" data-v="intensite"></span></label><input type="range" data-k="intensite" min="0" max="3" step="1" value="${p.intensite}">
     <label>Vitesse de diction <span class="val" data-v="vitesse"></span></label><input type="range" data-k="vitesse" min="0.8" max="2" step="0.05" value="${p.vitesse || E.vitesse}">
-    <label>Phrase d'essai (vide = ses répliques, la plus longue d'abord, puis la suivante à chaque clic)</label>
-    <input type="text" data-essai value="" placeholder="ex. Je vais te détruire, moustique.">
+    <label>Phrase à écouter</label><select data-essai>${optPhrases(p.nom)}</select>
     <div style="margin-top:10px;display:flex;gap:8px;align-items:center"><button data-ecoute="${i}">▶ Écouter</button><span class="cons"></span></div></div>`).join("");
   E.persos.forEach((p, i) => { const c = document.querySelector(`.carte[data-i="${i}"]`); c.querySelector('[data-k="voix"]').value = p.voix; majVals(c); });
   const optP = E.persos.map(p => `<option>${esc(p.nom)}</option>`).join("") + "<option>inconnu</option>";
@@ -99,20 +106,11 @@ document.addEventListener("input", e => { const c = e.target.closest(".carte"); 
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-ecoute]");
   if (b){
-    // v0.1.1 (Quang 22h51 : Genos disait « HOP » a chaque fois) : plus la 1re replique de la scene, mais la PHRASE D'ESSAI
-    // si elle est remplie, sinon ses repliques de la plus longue a la plus courte, une de plus a chaque clic
-    const i = +b.dataset.ecoute, p = E.persos[i], carte = b.closest(".carte");
-    const essai = carte.querySelector("[data-essai]").value.trim();
-    if (essai) return ecouter(b, essai, "naturel", perso(p.nom));
-    const siennes = E.lignes.map((x, k) => ({ x, tr: document.querySelector(`tr[data-i="${k}"]`) }))
-      .filter(o => o.tr.querySelector('[data-k="locuteur"]').value === p.nom && o.tr.querySelector('[data-k="lire"]').checked
-                   && /[\p{L}\p{N}]/u.test(o.x.texte))
-      .sort((a, c) => c.x.texte.length - a.x.texte.length);
-    if (!siennes.length) return ecouter(b, "Bonjour, voici ma voix.", "naturel", perso(p.nom));
-    const longues = siennes.filter(o => o.x.texte.length >= 8);             // « HOP ! » ne dit rien d'une voix
-    if (longues.length) siennes.splice(0, siennes.length, ...longues);
-    const o = siennes[(ROT[i] = ((ROT[i] ?? -1) + 1)) % siennes.length];
-    return ecouter(b, o.x.texte, o.tr.querySelector('[data-k="ton"]').value, perso(p.nom)); }
+    // v0.1.2 (Quang 22h52 : « un menu deroulant qui affiche toutes les phrases, et je choisis ») : la phrase choisie ;
+    // si c'est une replique du personnage, avec SON ton (celui de la ligne), sinon « naturel »
+    const p = E.persos[+b.dataset.ecoute], k = +b.closest(".carte").querySelector("[data-essai]").value;
+    const tr = document.querySelector(`tr[data-i="${k}"]`), sienne = tr.querySelector('[data-k="locuteur"]').value === p.nom;
+    return ecouter(b, E.lignes[k].texte, sienne ? tr.querySelector('[data-k="ton"]').value : "naturel", perso(p.nom)); }
   const bl = e.target.closest("[data-ligne]");
   if (bl){ const i = +bl.dataset.ligne, tr = document.querySelector(`tr[data-i="${i}"]`);
     return ecouter(bl, E.lignes[i].texte, tr.querySelector('[data-k="ton"]').value, perso(tr.querySelector('[data-k="locuteur"]').value)); }
