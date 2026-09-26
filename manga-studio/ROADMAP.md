@@ -3016,7 +3016,10 @@ Swipe vers le bas sur la barre ? ».
       Banc `scripts/test_fenetre_pendant_capture.py` **8/8 PENDANT la vraie reprise de Quang** (Solo Leveling vol.2) : taille OK,
       ranger OK, fermer refusé, clic refusé, place trop petite refusée sans bouger, `fenetre.json` restauré à l'octet, capture
       continue. + **« Arrêter maintenant » testé en vrai par Quang** (1re fois) : coupé à 63 p., AUCUN vol.2 partiel dans la
-      bibliothèque, « Reprendre » proposé et utilisé. Bilan du vol.2 complet : ⏳ (veilleur).
+      bibliothèque, « Reprendre » proposé et utilisé. **Bilan vol.2 (fenêtre agrandie + rangée PENDANT sa capture)** :
+      219/219 images, découpées en 912 pages (218 bandes, 1 coupe hors gouttière), 0 vide, hauteur médiane 1 218 px (vol.1 : 1 197).
+      ⚠ Piège : le découpage tourne APRÈS la ligne « OK : N/N » — ne pas juger les pages avant l'événement `[webtoon] bandes découpées`
+      de `%LOCALAPPDATA%\manga-fetch\events.log` (fausse alerte de ma part à 15h29).
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),
       `GET /manga/bibliotheque` rend maintenant `videos_pos` : reprise de position commune PC / téléphone sur les DEUX applications. : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
       26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de
