@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.8.1"
+VERSION = "0.8.2"
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -654,27 +654,41 @@ DECOUPE_TOL = 24
 RUBAN_SITES = ("webtoons.com",)
 
 
-def _coupes_webtoon(ptp, occ, largeur):
+def _coupes_webtoon(ptp, occ, largeur, vd=None):
     import numpy as np
     h, H = len(ptp), int(largeur * 1.5)
-    calme = ptp <= DECOUPE_TOL
-    runs, i = [], 0
-    while i < h:
-        if calme[i]:
-            j = i
-            while j < h and calme[j]:
-                j += 1
-            if j - i >= 4:
-                runs.append((i, j))
-            i = j
-        else:
-            i += 1
-    centres = np.array([(a + b) / 2 for a, b in runs]) if runs else np.zeros(0)
-    longs = np.array([b - a for a, b in runs]) if runs else np.zeros(0)
+    def _runs(calme, mini=4):
+        runs, i = [], 0
+        while i < h:
+            if calme[i]:
+                j = i
+                while j < h and calme[j]:
+                    j += 1
+                if j - i >= mini:
+                    runs.append((i, j))
+                i = j
+            else:
+                i += 1
+        return (np.array([(a + b) / 2 for a, b in runs]) if runs else np.zeros(0),
+                np.array([b - a for a, b in runs]) if runs else np.zeros(0))
+    centres, longs = _runs(ptp <= DECOUPE_TOL)
+    if vd is not None and len(centres):
+        # v0.8.2 (26/09, verifie a l'oeil : une bulle a pointes coupee entre ses deux lignes de texte -- une ligne passait
+        # ENTRE les pointes, toute blanche, 4 a 6 lignes « strictes » entourees de texte : instabilite 4 389 contre 0 pour un
+        # vrai espace). Une gouttiere stricte COURTE (< 12 lignes) n'est gardee que si son voisinage (± 20 lignes) est stable.
+        cv = np.convolve(vd.astype(np.float64), np.ones(41), mode="same")
+        garde = (longs >= 12) | (cv[np.clip(centres.astype(int), 0, h - 1)] <= 0.02 * largeur)
+        centres, longs = centres[garde], longs[garde]
+    # v0.8.2 (26/09, ch. vecu : fond « papier » a rayures VERTICALES entre les cases -> 11 000 px sans gouttiere stricte,
+    # 12 coupes forcees en plein dessin, bulles comprises -- verifie a l'oeil). 2e recours AVANT de forcer : une zone
+    # VERTICALEMENT STABLE -- aucun pixel ne change d'une ligne a la suivante (`vd` = pixels qui changent de plus de
+    # DECOUPE_TOL), sur >= 40 lignes. Un fond raye, uni ou degrade horizontal l'est ; une bulle (contour courbe) ou un
+    # dessin ne l'est pas. Jamais prioritaire : les gouttieres strictes d'abord, un webtoon deja bon ne change pas.
+    centres2, longs2 = _runs(vd <= 0, 40) if vd is not None else (np.zeros(0), np.zeros(0))
     cuts, forcees, y = [], [], 0
     while h - y > int(H * 1.5):
         fin, choix = h - int(H * 0.45), None
-        for borne in (2.2, 3.2):
+        for borne in (2.2, 3.2, 4.5, 7.0):                     # v0.8.2 : une page plus haute plutot qu'une coupe dans le dessin
             m = (centres >= y + H * 0.5) & (centres <= min(y + H * borne, fin))
             if m.any():
                 idx = np.where(m)[0]
@@ -682,12 +696,58 @@ def _coupes_webtoon(ptp, occ, largeur):
                 choix = int(centres[idx[int(np.argmin(sc))]])
                 break
         if choix is None:
+            for borne in (2.2, 3.2, 4.5, 7.0):
+                m = (centres2 >= y + H * 0.5) & (centres2 <= min(y + H * borne, fin))
+                if m.any():
+                    idx = np.where(m)[0]
+                    sc = np.abs(centres2[idx] - (y + H)) - 0.6 * np.minimum(longs2[idx], 250)
+                    choix = int(centres2[idx[int(np.argmin(sc))]])
+                    break
+        if choix is None:
             a, b = y + int(H * 0.8), min(fin, y + int(H * 2.2))
-            choix = a + int(np.argmin(occ[a:b]))
+            if vd is not None:
+                # v0.8.2 (26/09, verifie a l'oeil : une bulle coupee ENTRE ses deux lignes de texte -- la ligne la plus « vide »
+                # isolement) : on force la ou les 41 lignes AUTOUR sont les plus stables. Entre deux lignes de texte, le voisinage
+                # est du texte : evite. Un aplat ou un degrade, lui, est stable.
+                v = np.convolve(vd.astype(np.float64), np.ones(41), mode="same")
+                choix = a + int(np.argmin(v[a:b] + occ[a:b] * 0.1))
+            else:
+                choix = a + int(np.argmin(occ[a:b]))
             forcees.append(choix)
         cuts.append(choix)
         y = choix
     return cuts, forcees
+
+
+def _bords_page(chemin: str):
+    """v0.8.2 : (1re ligne, derniere ligne) d'une image, en niveaux de gris."""
+    from PIL import Image
+    import numpy as np
+    with Image.open(chemin) as im:
+        g = im.convert("L")
+        a = np.asarray(g, dtype=np.int16)
+    return a[0], a[-1]
+
+
+def _coupe_dans_dessin(page_a, page_b) -> bool:
+    """v0.8.2 (mesure, pas detection) : le raccord page A -> page B tranche-t-il le dessin ? Non s'il tombe dans une zone
+    VERTICALEMENT STABLE (8 dernieres lignes de A et 8 premieres de B sans aucun pixel qui change : espace raye, uni…)."""
+    import numpy as np
+    stable = lambda z: not (np.abs(np.diff(z, axis=0)) > DECOUPE_TOL).any()
+    if stable(page_a[-8:]) and stable(page_b[:8]):
+        return False
+    return _raccord_continu((page_a[0], page_a[-1]), (page_b[0], page_b[-1]))
+
+
+def _raccord_continu(haut_de, bas_de) -> bool:
+    """v0.8.2 : le dessin continue-t-il de l'image A (bas) a l'image B (haut) ? Bord non uni (ecart a la mediane > DECOUPE_TOL
+    sur > 2 % de la largeur) ET lignes voisines ressemblantes (ecart moyen < 18)."""
+    import numpy as np
+    bas, haut = haut_de[1], bas_de[0]
+    if len(bas) != len(haut):
+        return False
+    plein = lambda r: int((np.abs(r - np.median(r)) > DECOUPE_TOL).sum()) > 0.02 * len(r)
+    return (plein(bas) or plein(haut)) and float(np.abs(bas - haut).mean()) < 18
 
 
 def decouper_bandes(dossier: str) -> dict | None:
@@ -701,6 +761,24 @@ def decouper_bandes(dossier: str) -> dict | None:
         with Image.open(os.path.join(dossier, pg["file"])) as im:
             dims.append(im.size)
     est_bande = [h / w > DECOUPE_RATIO for w, h in dims]
+    # v0.8.2 (26/09, Quang : « des bulles decoupees en plein milieu ») : un site peut trancher son ruban en TUILES courtes
+    # (mesure : 720x700 ratio 0,97 ; un autre site 2,08) -- aucune ne depasse DECOUPE_RATIO, le ruban restait coupe la ou le
+    # site l'avait tranche, en plein dessin. Critere independant de la forme : un RUBAN, c'est un dessin qui CONTINUE d'une
+    # image a la suivante. Une suite d'au moins 5 images consecutives de meme largeur (>= 500 px) dont >= 50 % des raccords
+    # continuent le dessin (bord non uni ET derniere ligne de l'une ~ premiere ligne de l'autre) est un ruban -> recolle puis
+    # recoupe aux gouttieres. Des pages de manga (chaque page = une autre image) ne continuent pas : elles n'y entrent pas.
+    bords_pg = [_bords_page(os.path.join(dossier, pg["file"])) for pg in pages]
+    k = 0
+    while k < len(dims):
+        j = k
+        while j + 1 < len(dims) and dims[j + 1][0] == dims[k][0]:
+            j += 1
+        if j - k + 1 >= 5 and dims[k][0] >= 500:
+            suit = sum(_raccord_continu(bords_pg[m], bords_pg[m + 1]) for m in range(k, j))
+            if suit >= 0.5 * (j - k):          # mesure 26/09 : vrais rubans 62-83 %, pages bonus d'un manga 33 %
+                for m in range(k, j + 1):
+                    est_bande[m] = True
+        k = j + 1
     if any(s in (man.get("source_url") or "") for s in RUBAN_SITES):
         est_bande = [True] * len(dims)
     if not any(est_bande) or man.get("decoupe"):
@@ -720,7 +798,7 @@ def decouper_bandes(dossier: str) -> dict | None:
     nouvelles, n_forcees, par_page = [], 0, {}
     for g in groupes:
         largeur = dims[g[0]][0]
-        ptp, occ, bornes, y = [], [], [], 0
+        ptp, occ, vds, bornes, y, prec = [], [], [], [], 0, None
         for k in g:
             with Image.open(os.path.join(dossier, pages[k]["file"])) as im:
                 im = im.convert("L")
@@ -730,8 +808,12 @@ def decouper_bandes(dossier: str) -> dict | None:
             med = np.median(a, axis=1, keepdims=True)
             ptp.append(a.max(axis=1) - a.min(axis=1))
             occ.append((np.abs(a - med) > DECOUPE_TOL).sum(axis=1))
+            v = np.zeros(a.shape[0], dtype=np.int32)                       # v0.8.2 : stabilite verticale (raccords compris)
+            v[1:] = (np.abs(np.diff(a, axis=0)) > DECOUPE_TOL).sum(axis=1)
+            v[0] = (np.abs(a[0] - prec) > DECOUPE_TOL).sum() if prec is not None else largeur
+            vds.append(v); prec = a[-1]
             bornes.append((y, y + a.shape[0], k)); y += a.shape[0]
-        cuts, forcees = _coupes_webtoon(np.concatenate(ptp), np.concatenate(occ), largeur)
+        cuts, forcees = _coupes_webtoon(np.concatenate(ptp), np.concatenate(occ), largeur, np.concatenate(vds))
         n_forcees += len(forcees)
         tr = [0] + cuts + [y]
         tranches = []
@@ -1156,10 +1238,18 @@ def capture(args) -> int:
                     try:
                         data = extraire_data(im["src"])
                         hsh = hashlib.sha1(data).hexdigest()
-                        if hsh in vus_hashes:
+                        # v0.8.2 : en bande defilante, une petite tuile de la LARGEUR DE LA COLONNE est un espace entre deux
+                        # cases (tuile blanche, 2-10 Ko) -- l'ecarter supprimait les gouttieres et forcait des coupes en plein
+                        # dessin au decoupage (mesure 26/09 : 27 tuiles sur 213). Elle est gardee ; le decoupage la recoupe.
+                        # Les espaces sont souvent IDENTIQUES entre eux : ils echappent aussi a la deduplication par contenu
+                        # (adresses distinctes = tuiles distinctes ; le pager qui ressert un blob, lui, change de taille).
+                        _lc = [v["w"] for v in vues.values()]
+                        _col = max(set(_lc), key=_lc.count) if _lc else 0
+                        espace = MODE_BANDE[0] and _col >= 500 and im["w"] == _col and len(data) < 10000
+                        if hsh in vus_hashes and not espace:
                             ECARTEES.add(im["src"])
                             continue  # même contenu déjà capturé (blob régénéré par le pager)
-                        if len(data) < 10000:
+                        if len(data) < 10000 and not espace:
                             ECARTEES.add(im["src"])
                             # aucune page de manga ne fait < 10 Ko : logos, boutons,
                             # cartes de fin de chapitre
@@ -1444,7 +1534,14 @@ def capture(args) -> int:
                 # tronquée ne doit jamais être présentée comme réussie.
                 return echec_propre(f"ÉCHEC : capture tronquée — {len(uniques)} page(s) seulement. "
                                     "Le lecteur n'a pas avancé : mode d'affichage non reconnu ?")
-            if not any(im["h"] >= 800 for im in uniques):
+            # v0.8.2 (26/09, ch. 21 vecu : 222 tuiles de 720x700 capturees en entier puis rejetees) : un ruban en TUILES n'a
+            # aucune image de 800 px. Il passe si >= 5 images de la meme largeur (>= 500 px) cumulent >= 4000 px de haut --
+            # ce qu'aucune page d'accueil ni aucun mauvais onglet ne font.
+            _lu = [im["w"] for im in uniques]
+            _cu = max(set(_lu), key=_lu.count)
+            _ruban = [im for im in uniques if im["w"] == _cu]
+            ruban_tuiles = MODE_BANDE[0] and _cu >= 500 and len(_ruban) >= 5 and sum(im["h"] for im in _ruban) >= 4000
+            if not any(im["h"] >= 800 for im in uniques) and not ruban_tuiles:
                 return echec_propre("ÉCHEC : aucune image de page (hauteur >= 800 px) — "
                                     "l'onglet capturé ne semble pas contenir de chapitre "
                                     "(page d'accueil ? mauvais onglet ?)")

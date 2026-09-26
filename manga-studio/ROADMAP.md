@@ -2913,6 +2913,24 @@ Maquette : `maquette_dernier_paru_v1.html` (v1, **à valider par Quang avant tou
   + 27 quasi vides écartées (< 10 Ko, règle existante) = 213/213**, sans ÉCHEC ; mutation (code 0.8.0) → rouge ; B4
   `test_manga_fetch` 9/9, `test_arret_capture` 14/14, `test_dernier_paru` 19/19, `test_serie_securites` 16/16. Banc :
   `scripts/banc_bandes_carrees.py <port> <filtre d'onglet> [manga_fetch à tester]` (sortie + journal TEMPORAIRES).
+- 🔴→✅ **(constaté 26/09 00h58 par Quang : « des bulles découpées en plein milieu ») la 0.8.1 capturait les tuiles mais ne les
+  DÉCOUPAIT pas** (critère « bande » = ratio > 3 ; tuiles 720×700 = 0,97). État des lieux (`scripts/etat_decoupe.py`, lecture
+  seule) : secondaire, 2 séries touchées — la série en cours dès le ch. 16 (0.8.1, cette nuit) et une série de 54 ch. capturée
+  le 25/09 16h-21h (tuiles ratio 2,08, jamais découpées : défaut ANTÉRIEUR). **manga-fetch 0.8.2** :
+  1. ruban = ≥ 5 images consécutives de même largeur dont ≥ 50 % des raccords CONTINUENT le dessin (mesuré : vrais rubans
+     62-83 %, pages bonus d'un manga 33 % → exclues) ;
+  2. à la capture, les tuiles-espaces (< 10 Ko, largeur de colonne) sont GARDÉES, déduplication comprise (27/213 perdues avant) ;
+  3. contrôle final : un ruban en tuiles passe sans image ≥ 800 px (ch. 21 vécu : 222 tuiles capturées puis rejetées) ;
+  4. coupes : 2ᵉ recours « verticalement stable » (fond rayé « papier », ≥ 40 lignes), pages jusqu'à 7H avant de forcer,
+     gouttière stricte COURTE (< 12 lignes) seulement si son voisinage est stable (une bulle à pointes était coupée entre ses
+     deux lignes de texte — faille préexistante), coupe forcée sur le voisinage le plus stable.
+  Vérifié À L'ŒIL (planches de coupes) + `test_decoupe_rubans.py` **15/15** (copies ; mangas non touchés) + vraie recapture
+  ch. 21 : 166 raccords dans le dessin → **0** ; mutation (0.8.1) rouge ; non-régression 9/9, 14/14, 19/19, 16/16.
+  **Redécoupés** (`scripts/redecouper.py`, sauvegarde intégrale dans `<racine>/_avant_redecoupe/`) : série en cours ch. 1, 4, 9,
+  16-20 (584 → 2), série de 54 ch. (4 061 → 46), 1 ch. d'une autre série (3 → 0), Solo Leveling ch. 1 (3 → 0).
+  ⬜ **Refusé exprès** : Ragnarok ch. 2 (narration + vidéo + cases liées aux numéros de page). ⬜ 7 ch. de la série de 54
+  gardent 3-5 coupes (site sans aucun espace, tuiles-espaces perdues à la capture) : seule une recapture ferait mieux —
+  déclencheur : si Quang le demande. Mangas (Boruto, Claymore, Noritaka) signalés par la mesure = doubles pages, rien à faire.
   Vécu par Quang sur la secondaire le 25/09 23h56 (ch. 16 d'une série, arrêt « capture tronquée à 1 page »). Mesuré en
   lecture seule dans l'onglet : 210 bandes DISTINCTES, 208 en 720×700 (ratio 1,03). `collecter()` écarte les ratios
   0,93-1,15 (avatars/logos) et ne réadmet une bande de la largeur des pages qu'après **3** pages déjà prises à cette
@@ -3319,6 +3337,7 @@ juste plus nette : **lire la donnée avant de construire la parade**.*
 
 | Date | Événement |
 |---|---|
+| 2026-09-26 (02h30) | ✅ **manga-fetch 0.8.2** : webtoons en TUILES découpés aux gouttières (critère de continuité du dessin, tuiles-espaces gardées, fonds rayés, bulles protégées) ; 63 chapitres redécoupés (sauvegardes gardées), 4 645 raccords en plein dessin → 49. |
 | 2026-09-26 (00h55) | ✅ **manga-fetch 0.8.1** : webtoon en bandes presque carrées (720×700) → la largeur de colonne s'amorce sur le document (≥ 5 images ≥ 500 px à la même largeur) ; ch. réel 0 → 213/213 bandes. |
 | 2026-09-26 (00h40) | ✅ **v2.67.0 + manga-fetch 0.8.0 + proxy `patch_dernier_paru`** (§ 4-quindecies) : puce « Jusqu'au dernier paru » ; plafond de 50 remplacé par des sécurités (croissance stricte, contenu identique, saut > 10, pause 3 s, filet 300 partout) ; chapitres déjà là sautés et comptés à part (« 2 capturé(s), 1 déjà là »), 1er chapitre déjà là = « ⏭ Le garder et continuer ». Banc réel 19/19 + voisins verts. 🔴 Défaut noté : webtoon en bandes presque carrées (1 page capturée). |
 | 2026-09-24 (17h20) | 🎧 **Voix locale validée à l'oreille** sur un chapitre complet (OPM ch.1, `gemini-charon-local.mp4`) — Quang : « c'est bien ». Rappel du partage : ☁ = tout en ligne (seul changement du jour : repérage des noms sans réflexion, dans les deux modes) ; 🖥 = voix + effacement sur la carte, le reste en ligne. |

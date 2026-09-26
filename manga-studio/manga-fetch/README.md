@@ -131,6 +131,12 @@ ligne `DEJA LA : 2, 3` avant le bilan `SÉRIE`. Bancs : `scripts/test_serie_secu
 > bandes tombent dans la zone morte des ratios carrés (avatars) et l'amorçage de la largeur de colonne exigeait 3 pages déjà
 > prises. Désormais, tant que 3 pages ne sont pas prises, la largeur se lit sur le document (≥ 5 images ≥ 500 px de même
 > largeur, hors commentaires). Banc : `scripts/banc_bandes_carrees.py`.
+>
+> **v0.8.2 (26/09)** : un ruban = une suite (≥ 5, même largeur) dont le dessin CONTINUE d'une image à l'autre, quelle que
+> soit la forme des tuiles ; tuiles-espaces gardées ; 2ᵉ recours « verticalement stable » pour les fonds rayés ; gouttière
+> stricte courte refusée si entourée de texte (bulles). Outils : `scripts/etat_decoupe.py` (état des lieux, lecture seule),
+> `scripts/redecouper.py` (sauvegarde puis redécoupe ; refuse un chapitre qui a narration/traduction/vidéo),
+> `scripts/test_decoupe_rubans.py` (copies).
 
 Un webtoon arrive en BANDES de 800 × ~10 000 px (*Solo Leveling: Ragnarok* ch.1, MangaDex, 26 bandes). Telles
 quelles, elles sont inexploitables en aval : un modèle de lecture les réduit à ~160 px de large, la détection des

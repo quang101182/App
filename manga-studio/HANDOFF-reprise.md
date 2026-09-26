@@ -7,7 +7,10 @@
 
 ## 1. État au 25/09/2026 23h35
 
-- App `manga_studio.html` **v2.67.0** · manga-fetch **0.8.1** (bandes presque carrées, 26/09 00h55) · proxy patché (… `patch_arret.py`, `patch_dernier_paru.py`).
+- App `manga_studio.html` **v2.67.0** · manga-fetch **0.8.2** (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
+  redécoupés, sauvegardes dans `<racine>/_avant_redecoupe/` à effacer quand Quang aura validé à la lecture).
+- **Historique git du dépôt public : NON réécrit — décision de Claude déléguée par Quang (26/09 00h58)** : fichiers actuels propres,
+  réécriture = 503 commits / 24 projets + force-push sur la branche de GitHub Pages, sans effacer vraiment côté GitHub. · proxy patché (… `patch_arret.py`, `patch_dernier_paru.py`).
 - **26/09 00h40** : « Jusqu'au dernier paru » + sécurités de série + chapitres déjà là (ROADMAP § 4-quindecies, tout coché).
 - Livré ce jour (détail + preuves : ROADMAP, entrées du 25/09) :
   - v2.62 « ▶ Reprendre » + historique de lecture (serveur, commun PC + Fold, séparé principale / secondaire) ;
@@ -25,7 +28,7 @@
 | Une capture de référence a échoué UNE fois sans message (relance OK) | à surveiller : si ça se reproduit, lire `%LOCALAPPDATA%\manga-fetch\events.log` |
 | Pas de bouton d'arrêt pour une VIDÉO (pas de reprise possible) | si Quang en a besoin |
 | `scripts/test_capture_serie_ui.py` périmé (cherche `#capSerieMode`, remplacé par les boutons de l'étape 4) | prochaine modification de l'étape 4 |
-| Historique git du dépôt PUBLIC contient encore d'anciens noms de la secondaire (les fichiers actuels sont propres ~~(faux au 25/09)~~ → **vrai depuis le 26/09** : 4 fichiers en contenaient encore — app, manga_fetch, maquette_arret_v1, test_choix_manga_ui — neutralisés ; contrôle = `git grep -i -F -f <termes tirés de prive/_sites.json + dossiers de prive/>`) | seulement sur accord EXPLICITE de Quang (réécriture d'historique) |
+| ~~Historique git du dépôt PUBLIC contient encore d'anciens noms de la secondaire~~ (décidé : on ne réécrit pas, voir § 1) (les fichiers actuels sont propres ~~(faux au 25/09)~~ → **vrai depuis le 26/09** : 4 fichiers en contenaient encore — app, manga_fetch, maquette_arret_v1, test_choix_manga_ui — neutralisés ; contrôle = `git grep -i -F -f <termes tirés de prive/_sites.json + dossiers de prive/>`) | seulement sur accord EXPLICITE de Quang (réécriture d'historique) |
 
 ## 3. Règles et pièges (ne pas les repayer)
 
