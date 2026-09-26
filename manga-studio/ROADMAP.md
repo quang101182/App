@@ -3038,6 +3038,14 @@ Swipe vers le bas sur la barre ? ».
       Avant (v2.60.0) : Narration, Vidéo, Traduction, Musique — seule vue à ne pas suivre les Réglages / le lot. `CL` réordonné et
       `clMaj()` impose l'ordre des 4 blocs (`after`). Banc `test_chapitre_compact_ui` **31/31** (ordre mis à jour, hauteur mesurée
       jusqu'au bloc Vidéo) ; v2.77.0 servie → 2 KO ; `sonde_clignotement_video` : 0 changement de hauteur du bloc Vidéo déplacé.
+- [x] **Un seul suivi de capture à la fois** (v2.79.2, 26/09 19h00, `app_patch_2792_suivi_unique.py`). Trouvé dans le journal client
+      du Fold (`ComfyUI/logs/log-manga-live-mobile-*.json`) : à 12h54:31, ~40 lignes « capture en série terminée » en 50 ms — en
+      arrière-plan les suivis (1 / 1,5 s) s'empilaient puis finissaient ensemble (40 rechargements, et 40 pochettes / fiches en
+      v2.75+). Banc `test_suivi_unique_ui.py` **5/5** ; v2.79.1 servie → **40 / 40** reproduits (4 KO). `test_serie_auto_ui` vert.
+- [ ] **Bandeau « arrêtée à ta demande… Reprendre » toujours affiché sur le Fold** (Quang 18h48-18h51, hors de chez lui) alors
+      que le bilan serveur est « jusqu'au ch. 15 : fait » (18h24). Mécanisme vérifié sain en test (s'efface à la vérif des 60 s) ;
+      la page du Fold date de 13h19 (v2.77.0). ⏳ Capture d'écran demandée : bandeau OU ligne d'état `capEtat` (celle-ci n'est
+      jamais remise à jour après coup = défaut probable). **Déclencheur** : la capture de Quang.
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),
       `GET /manga/bibliotheque` rend maintenant `videos_pos` : reprise de position commune PC / téléphone sur les DEUX applications. : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
       26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de
