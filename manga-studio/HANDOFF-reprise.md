@@ -7,7 +7,7 @@
 
 ## 1. État au 25/09/2026 23h35
 
-- App `manga_studio.html` **v2.73.1** (26/09 13h00) · manga-fetch **0.8.3** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
+- App `manga_studio.html` **v2.77.0** (26/09 15h05) · manga-fetch **0.8.3** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
   redécoupés ; sauvegardes `_avant_redecoupe/` EFFACÉES le 26/09 02h45 après validation de Quang à la lecture).
 - **26/09 11h00-11h30** : v2.68.0 lecteur vidéo (24/24) + 2 bugs Fold ; v2.69.0 sélecteur rapide (26/26).
 - **26/09 11h35-12h05** : sélecteur en narration + visionneuse `test_selecteur_narr_pages_ui` 100/100 (sabotage rouge) ;
@@ -19,6 +19,9 @@
   balayer l'image de la visionneuse vers la DROITE = suivante ; v2.73.0/.1 manifeste `standalone` (barre d'état Android toujours
   visible) + lien `?v=` ; Fold de Quang réinstallé par ADB, liens compatibles réactivés, vérifié. ⚠ `test_bibliotheque_ui.py`
   périmé (déclencheur : prochaine modif de la bibliothèque). Détail : ROADMAP 4-sexdecies.
+- **26/09 13h06-15h05** : v2.74.0 « depuis la page 1 » cochée + mémorisée ; v2.75.0 pochette + fiche en fin de capture SANS
+  ouvrir (régression v2.67.1 corrigée, la série capturée seule) ; v2.76.0 pochette dès le 1er chapitre ; v2.77.0 n° suggéré
+  pour « …/vol-N/ ». Volumes vs chapitres : rien à coder ; ⚠ ne pas capturer les 2 formats d'une série sous le MÊME nom.
 - **Ragnarok ch. 2** : images redécoupées, narration + cases retirées (anciennes pages) et gardées dans
   `sources/_avant_redecoupe/` = SEULE copie : ne pas effacer sans demander à Quang.
 - **Historique git du dépôt public : NON réécrit — décision de Claude déléguée par Quang (26/09 00h58)** : fichiers actuels propres,
