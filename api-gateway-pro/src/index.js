@@ -36,7 +36,13 @@
  *   GET  /health            → Health check
  */
 
-const VERSION = '1.25.1';
+const VERSION = '1.25.2';
+// v1.25.2 (2026-09-26) - /api/deepseek : modele verrouille cote serveur.
+//   Constat : le corps du client partait tel quel vers DeepSeek -> modele au choix (deepseek-v4-pro,
+//   ~6x le prix de flash), max_tokens libre, et la route est GRATUITE pour les cles sv_. Meme trou que
+//   le passthrough OpenAI ferme en v1.25.0. Non exploite (0-3 sous-requetes/jour mesurees) mais ouvert.
+//   Correctif : modele hors liste blanche ramene a deepseek-flash, max_tokens plafonne a 8192,
+//   raisonnement force desactive (facture), corps limite a 300 000 car. (413 au-dela). Revue Groq + Codex Terra.
 // v1.25.1 (2026-09-26) - Webhook Polar : un echec n'est plus definitif.
 //   Constat : jeton `cfg:polar_api_key` cree le 20/08 avec 30 jours de validite, expire le 19/09.
 //   Le 26/09 un vrai abonne (essai) n'a recu ni cle ni e-mail : `benefit_grant.created` -> 502, et
@@ -366,16 +372,35 @@ async function proxyAssemblyAI(request, env) {
   });
 }
 
+// v1.25.2 - Seuls modeles DeepSeek qu'une cle client peut faire facturer (ce que les apps envoient :
+// subwhisper-pro/app.html `deepseek-flash`, storyvoice `deepseek-v4-flash`). Tout autre modele est
+// ramene a `deepseek-flash` ; `max_tokens` plafonne (SubWhisper Pro envoie 8192).
+const DS_MODELES = new Set(['deepseek-flash', 'deepseek-v4-flash']);
+const DS_MAX_TOKENS = 8192;
+// Entree bornee : StoryVoice envoie <= 60 000 car. (MAX_CHARS), SubWhisper Pro des lots de 75-200 lignes.
+const DS_MAX_CORPS = 300000;
+
 async function proxyDeepSeek(request, env) {
   const key = await getApiKey('DEEPSEEK_KEY', env);
   if (!key) return err('DeepSeek API key not configured', 503);
+  const brut = await request.text();
+  if (brut.length > DS_MAX_CORPS) return err('request too large', 413);
+  let body;
+  try { body = JSON.parse(brut); } catch { return err('invalid JSON body', 400); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return err('invalid JSON body', 400);
+  if (!DS_MODELES.has(body.model)) body.model = 'deepseek-flash';
+  // Le raisonnement est facture et pris sur max_tokens ; les deux apps l'envoient deja desactive.
+  body.thinking = { type: 'disabled' };
+  delete body.reasoning_effort;
+  const mt = Number(body.max_tokens);
+  body.max_tokens = Number.isFinite(mt) && mt > 0 ? Math.min(mt, DS_MAX_TOKENS) : DS_MAX_TOKENS;
   const resp = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${key}`,
       'Content-Type': 'application/json',
     },
-    body: request.body,
+    body: JSON.stringify(body),
   });
   return new Response(resp.body, {
     status: resp.status,
