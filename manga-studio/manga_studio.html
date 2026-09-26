@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manga Studio v2.81.0</title>
+<title>Manga Studio v2.81.1</title>
 <!-- v1.95.0 : app INSTALLABLE (manifeste + icones + service worker servis PUBLICS par le proxy, sans secret) -->
 <link rel="manifest" href="/manga/manifest.webmanifest?v=2.73.1">   <!-- v2.73.1 : adresse neuve = jamais l'ancien manifeste « fullscreen » garde en cache (max-age 3600) -->
 <meta name="theme-color" content="#0d0f13">
@@ -1270,7 +1270,7 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
   <div class="hdrin">
     <!-- v2.30.0 (maquette_ensemble_v1, Quang 22h31-22h33) : en permanence le MODE, l'ACTIVITE, le moteur local et la VRAM ;
          les couts et ℹ️ passent dans « ⋯ ». Telephone : 2 lignes (titre + mode + ⋯, puis activite + Local + VRAM). -->
-    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.81.0</span>
+    <div class="brand"><b>◤</b> Manga Studio <span class="ver" id="verBadge">v2.81.1</span>
       <button class="mode-pill" id="hdrMode" title="Où tournent la voix et l’effacement du texte : en ligne (payant) ou sur ta carte graphique (0 $). Touche pour changer.">☁ En ligne</button></div>
     <div class="engs">
       <!-- Le proxy ne s'affiche QUE s'il tombe (Generate Studio ne le montre pas
@@ -2022,6 +2022,9 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
         <button class="btn sm" id="dlgVoix">🔊 Générer les voix</button>
         <button class="btn sm" id="dlgLire">▶ Lire</button>
         <button class="btn sm" id="dlgArreter" hidden>✖ Arrêter</button>
+        <button class="btn sm" id="dlgVid" title="vidéo des dialogues (MP4, pour le téléphone hors ligne)">🎬 Vidéo</button>
+        <button class="btn sm" id="dlgVidVoir" hidden>▶ Voir la vidéo</button>
+        <a class="btn sm" id="dlgVidDl" hidden>⬇ Télécharger</a>
       </div>
       <p class="muted" style="font-size:12px;margin:8px 0 0">Préparer = l'IA propose qui parle, le ton et ce qu'il faut lire (quelques dixièmes de centime par page) ;
         aucune voix n'est faite avant que tu lances « Générer ». Voix : ElevenLabs, payées en crédits de ton forfait —
@@ -2363,7 +2366,7 @@ body.nf-vis #toast{bottom:calc(76px + env(safe-area-inset-bottom, 0px))}
    RIEN a l'ecran. C'est arrive trois versions de suite -- Quang a lu v1.7.0
    pendant que le fichier disait v1.10.0. `python scripts/check_version.py`
    verifie desormais les trois endroits, et refuse toute divergence. */
-const VERSION = "2.81.0";   // v2.81.0 : mode « Dialogues » (une voix par personnage, ElevenLabs v3)   // v2.73.0 : manifeste en « standalone » (barre de notifications visible, Quang 26/09 12h22)
+const VERSION = "2.81.1";   // v2.81.1 : video des Dialogues (MP4) ; v2.81.0 : mode « Dialogues »   // v2.81.0 : mode « Dialogues » (une voix par personnage, ElevenLabs v3)   // v2.73.0 : manifeste en « standalone » (barre de notifications visible, Quang 26/09 12h22)
 
 // La meme police qu'en CSS, mais injectee DANS le SVG exporte : un <img> qui
 // rasterise un SVG ne voit pas les polices de la page qui le contient.
@@ -10414,7 +10417,7 @@ function dlgEtat(){
              + (lot.en_cours ? " · " + lot.en_cours.split("/").pop().replace("ch_", "ch. ") : ""), est: "",
              act: '<button class="btn sm" data-dlg="arreter">✖ Arrêter</button>' };
   }
-  if (e.en_cours) return { etat: (pr.etape === "voix" ? "voix en cours" : "préparation en cours") + (pr.total ? " · " + (pr.fait || 0) + "/" + pr.total : "")
+  if (e.en_cours) return { etat: (pr.etape === "voix" ? "voix en cours" : pr.etape === "video" ? "vidéo en cours" : "préparation en cours") + (pr.total ? " · " + (pr.fait || 0) + "/" + pr.total : "")
                            + (pr.credits ? " · " + fmtCr(pr.credits) + " crédits" : ""), est: "",
                            act: '<button class="btn sm" data-dlg="arreter">✖ Arrêter</button>' };
   if (!e.traduit) return { etat: "traduis d'abord ce chapitre en français", est: "", act: "" };
@@ -10447,6 +10450,13 @@ function dlgRendre(){
   $("dlgVoix").disabled = occupe || (DLG.portee !== "lot" && (!p || !p.a_faire || dlgCreditsManquent()));
   $("dlgOuvrir").disabled = !e.doc;
   $("dlgLire").disabled = !(p && p.deja);
+  // v2.81.1 : video des dialogues
+  const v = (e.doc || {}).video, etv = p && p.video;
+  $("dlgVid").disabled = occupe || !(p && p.deja);
+  $("dlgVid").textContent = etv === "a_jour" ? "🎬 Refaire la vidéo" : etv === "perimee" ? "🎬 Mettre la vidéo à jour" : "🎬 Vidéo";
+  $("dlgVid").classList.toggle("pri", etv === "perimee");
+  $("dlgVidVoir").hidden = $("dlgVidDl").hidden = !v || etv === "absente";
+  if (v) $("dlgVidDl").href = CFG.base + "/manga/video_file?p=" + encodeURIComponent(v.fichier) + "&dl=1&v=" + encodeURIComponent(v.t || "") + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
   $("dlgEnchL").hidden = DLG.portee !== "lot";
   if (!$("dlgLotDe").value){ const c = CHAPS.find(y => y.dir === CHAP_OPEN); if (c){ $("dlgLotDe").value = c.chapter; $("dlgLotA").value = c.chapter; } }
   if (typeof clMaj === "function") clMaj();
@@ -10761,6 +10771,32 @@ document.addEventListener("keydown", e => {
   else if (e.key === "ArrowRight") $("dllSuiv").click();
   else if (e.key === "ArrowLeft") $("dllPrec").click();
 });
+
+
+/* ---- v2.81.1 : la VIDEO des Dialogues (D7) : fabriquee par dialogues.py video, lue ici ---- */
+const dlgVidBox = document.createElement("div");
+dlgVidBox.id = "dlgVidBox"; dlgVidBox.hidden = true;
+dlgVidBox.style.cssText = "position:fixed;inset:0;z-index:90;background:#07080b;display:flex;flex-direction:column";
+dlgVidBox.innerHTML = '<video id="dlgVidEl" controls playsinline style="flex:1;min-height:0;width:100%;background:#000"></video>'
+  + '<div class="dlgl-barre"><span class="bulle" id="dlgVidTitre">🎭 Dialogues</span><span style="flex:1"></span><button class="btn sm retour" id="dlgVidFermer">← Fermer</button></div>';
+document.body.appendChild(dlgVidBox);
+new MutationObserver(() => { dlgVidBox.style.display = dlgVidBox.hidden ? "none" : "flex"; }).observe(dlgVidBox, { attributes: true, attributeFilter: ["hidden"] });
+dlgVidBox.style.display = "none";
+$("dlgVid").onclick = async () => {
+  const p = DLG.plan;
+  if (p && p.a_faire && !confirm(p.a_faire + " réplique(s) n'ont pas encore leur voix : la vidéo ne contiendra que les voix déjà faites. Continuer ?")) return;
+  try { const r = await api("/manga/dialogues_lancer", { d: CHAP_OPEN, action: "video" }); if (r.error) throw new Error(r.error); toast("🎬 vidéo des dialogues lancée"); }
+  catch (err) { toast("vidéo : " + err.message); }
+  setTimeout(dlgCharger, 600);
+};
+$("dlgVidVoir").onclick = () => {
+  const v = ((DLG.e || {}).doc || {}).video; if (!v) return;
+  const c = CHAPS.find(y => y.dir === CHAP_OPEN);
+  $("dlgVidTitre").textContent = "🎭 Dialogues" + (c ? " · ch. " + c.chapter : "");
+  $("dlgVidEl").src = CFG.base + "/manga/video_file?p=" + encodeURIComponent(v.fichier) + "&v=" + encodeURIComponent(v.t || "") + (CFG.key ? "&_k=" + encodeURIComponent(CFG.key) : "");
+  dlgVidBox.hidden = false; $("dlgVidEl").play().catch(() => {});
+};
+$("dlgVidFermer").onclick = () => { $("dlgVidEl").pause(); dlgVidBox.hidden = true; };
 
 document.body.appendChild($("coutsModal"));
 $("hdrCost").onclick = async () => {

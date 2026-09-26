@@ -24,7 +24,10 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.4.1"   # 1.4.1 : page refusee lisible une fois QUI choisi par Quang ; plan dit « a_traiter »
+VERSION = "1.5.2"   # 1.5.2 : video/dialogues.json -> nom de telechargement juste (FR, sous-titres)
+#   # 1.5.1 : plan dit si la video est a jour / perimee / absente
+#   # 1.5.0 (27/09) : video (MP4 1080x1920, meme rendu que le lecteur, dialogues/video/)
+#   # 1.4.1 : page refusee lisible une fois QUI choisi par Quang ; plan dit « a_traiter »
 #   # 1.4.0 (27/09) : lot (plusieurs chapitres, arret net au quota, reprise)
 #   # 1.3.0 (27/09) : plan (etat de chaque replique + credits a prevoir, sans appel paye)
 #   # 1.2.0 (27/09) : ecouter (▶ de la preparation ; la voix exacte d'une replique devient definitive)
@@ -634,7 +637,15 @@ def cmd_plan(a):
             etats[x["cle"]] = "faite"; deja += 1
         else:
             etats[x["cle"]] = "a_refaire" if v else "a_faire"; a_faire += 1; credits += len(envoye)
-    print(json.dumps({"repliques": etats, "a_faire": a_faire, "credits": credits, "deja": deja}, ensure_ascii=False))
+    # la video est-elle a jour ? (meme empreinte que cmd_video : cles, voix, textes, couleurs, noms des repliques dites)
+    import hashlib
+    vid = "absente"
+    if doc.get("video") and os.path.isfile(os.path.join(dd, "video", "dialogues.mp4")):
+        couleur = lambda q: (reglage_voix(distrib, q) or {}).get("couleur") or "#9aa6b8"
+        liste = [x for x in doc["repliques"] if x.get("lire") and x.get("voix") and os.path.isfile(os.path.join(dd, "voix", x["voix"]["fichier"]))]
+        emp = hashlib.sha1(json.dumps([[x["cle"], x["voix"]["empreinte"], x.get("texte"), couleur(x["qui"]), x["qui"]] for x in liste]).encode()).hexdigest()[:16]
+        vid = "a_jour" if emp == doc["video"].get("empreinte") else "perimee"
+    print(json.dumps({"repliques": etats, "a_faire": a_faire, "credits": credits, "deja": deja, "video": vid}, ensure_ascii=False))
     return 0
 
 
@@ -695,6 +706,137 @@ def cmd_lot(a):
     log("LOT %s : %s" % (etat["etat"], [(c["ch"], c["etat"]) for c in etat["chapitres"]]))
     return code
 
+
+# ================================================================ D7 : la VIDEO des dialogues (MP4, pour le telephone hors ligne)
+VW, VH, BANDE = 1080, 1920, 330
+
+
+def _police(taille, gras=False):
+    from PIL import ImageFont
+    for f in (("arialbd.ttf" if gras else "arial.ttf"), "DejaVuSans-Bold.ttf" if gras else "DejaVuSans.ttf"):
+        try:
+            return ImageFont.truetype(f, taille)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _hex(c):
+    c = (c or "#9aa6b8").lstrip("#")
+    return tuple(int(c[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def image_replique(page_png, x, couleur, nom, dest):
+    """Meme rendu que le lecteur : page voilee, halo au contour reel (repli ovale), pastille au nom, sous-titre en bas."""
+    import numpy as np, cv2
+    from PIL import Image, ImageDraw, ImageFilter
+    pg = Image.open(page_png).convert("RGB")
+    k = min(VW / pg.width, (VH - BANDE) / pg.height)
+    pw, ph = round(pg.width * k), round(pg.height * k)
+    pg = pg.resize((pw, ph), Image.LANCZOS)
+    ox, oy = (VW - pw) // 2, (VH - BANDE - ph) // 2
+    masque = np.zeros((ph, pw), np.uint8)
+    if x.get("contour") and len(x["contour"]) > 2:
+        pts = np.array([[int(p[0] * pw), int(p[1] * ph)] for p in x["contour"]], np.int32)
+        cv2.fillPoly(masque, [pts], 255)
+    else:
+        b = x["box"]
+        cv2.ellipse(masque, (int((b["x"] + b["w"] / 2) * pw), int((b["y"] + b["h"] / 2) * ph)),
+                    (int(b["w"] * pw / 2 + pw * .012), int(b["h"] * ph / 2 + ph * .01)), 0, 0, 360, 255, -1)
+    arr = np.asarray(pg).astype(np.float32)
+    dehors = (masque == 0)[..., None]
+    arr = np.where(dehors, arr * 0.62, arr)                                      # voile ~38 % hors de la bulle
+    rgb = np.array(_hex(couleur), np.float32)
+    trait = cv2.dilate(masque, np.ones((5, 5), np.uint8), iterations=3) - masque
+    lueur = cv2.GaussianBlur(cv2.dilate(masque, np.ones((9, 9), np.uint8), iterations=3) - cv2.erode(masque, np.ones((3, 3), np.uint8)),
+                             (0, 0), max(4, pw / 90)).astype(np.float32) / 255.0
+    a = np.clip(lueur * 1.3, 0, 1)[..., None] * (masque == 0)[..., None]
+    arr = arr * (1 - a) + rgb * a
+    arr[trait > 0] = rgb
+    page = Image.fromarray(arr.clip(0, 255).astype(np.uint8))
+    im = Image.new("RGB", (VW, VH), (7, 8, 11))
+    im.paste(page, (ox, oy))
+    d = ImageDraw.Draw(im)
+    ys, xs = np.where(masque > 0)
+    f1 = _police(34, True)
+    if len(xs):
+        cx, haut = ox + (xs.min() + xs.max()) / 2, oy + ys.min()
+        tw = d.textlength(nom, font=f1)
+        px, py = max(8, min(VW - tw - 40, cx - tw / 2 - 16)), max(8, haut - 62)
+        d.rounded_rectangle([px, py, px + tw + 32, py + 50], radius=25, fill=_hex(couleur))
+        d.text((px + 16, py + 7), nom, font=f1, fill=(20, 8, 15))
+    f2, f3 = _police(44, True), _police(40)
+    y0 = VH - BANDE + 34
+    d.rounded_rectangle([48, y0 + 8, 76, y0 + 36], radius=14, fill=_hex(couleur))
+    d.text((92, y0), nom, font=f2, fill=_hex(couleur))
+    lignes, cour = [], ""
+    for m in (x.get("texte") or "").split():
+        if d.textlength((cour + " " + m).strip(), font=f3) > VW - 96:
+            lignes.append(cour); cour = m
+        else:
+            cour = (cour + " " + m).strip()
+    lignes.append(cour)
+    for i, l in enumerate(lignes[:4]):
+        d.text((48, y0 + 66 + i * 52), l, font=f3, fill=(232, 236, 243))
+    im.save(dest)
+
+
+def cmd_video(a):
+    import hashlib, shutil, subprocess
+    chap_dir, serie_dir, dd = chemins(a.chap)
+    doc = lire_json(os.path.join(dd, "dialogues.json"))
+    if not doc:
+        print("ARRET : chapitre pas encore prepare"); return 3
+    distrib = distribution(serie_dir)
+    liste = [x for x in doc["repliques"] if x.get("lire") and x.get("voix") and os.path.isfile(os.path.join(dd, "voix", x["voix"]["fichier"]))]
+    if not liste:
+        print("ARRET : aucune voix faite -- lance d'abord les voix"); return 3
+    nc.PROGRESS = os.path.join(dd, "progress.json")
+    vd = os.path.join(dd, "video")
+    tmp = os.path.join(vd, "_tmp")
+    shutil.rmtree(tmp, ignore_errors=True)
+    os.makedirs(tmp, exist_ok=True)
+    couleur = lambda q: (reglage_voix(distrib, q) or {}).get("couleur") or "#9aa6b8"
+    t0 = time.time()
+    segs, imgs = [], []
+    for k, x in enumerate(liste):
+        nc.progres("video", k, len(liste))
+        png = os.path.join(chap_dir, "traduction", "fr", x["file"])
+        img = os.path.join(tmp, "i%04d.png" % k)
+        image_replique(png, x, couleur(x["qui"]), "Narrateur" if x["qui"] == "narrateur" else x["qui"], img)
+        seg = os.path.join(tmp, "a%04d.m4a" % k)
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", os.path.join(dd, "voix", x["voix"]["fichier"]), "-af", "apad=pad_dur=0.4",
+                        "-ar", "44100", "-ac", "2", "-c:a", "aac", "-b:a", "160k", seg], check=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        segs.append(seg); imgs.append((img, nc.duree_mp3(seg) or ((x["voix"].get("duree") or 1.5) + 0.4)))
+    with open(os.path.join(tmp, "a.txt"), "w", encoding="utf-8") as f:
+        f.writelines("file '%s'\n" % s.replace("\\", "/") for s in segs)
+    with open(os.path.join(tmp, "i.txt"), "w", encoding="utf-8") as f:
+        for i_, du in imgs:
+            f.write("file '%s'\nduration %.3f\n" % (i_.replace("\\", "/"), du))
+        f.write("file '%s'\n" % imgs[-1][0].replace("\\", "/"))
+    nc.progres("video", len(liste), len(liste), etape_video="assemblage")
+    sortie = os.path.join(vd, "dialogues.mp4")
+    base = ["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", os.path.join(tmp, "i.txt"), "-f", "concat", "-safe", "0",
+            "-i", os.path.join(tmp, "a.txt"), "-vf", "fps=30,format=yuv420p"]
+    fin = ["-c:a", "copy", "-shortest", "-movflags", "+faststart", sortie]
+    r = subprocess.run(base + ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "24"] + fin, capture_output=True, text=True,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    if r.returncode:                                                          # pas de carte NVIDIA : encodeur logiciel
+        subprocess.run(base + ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23"] + fin, check=True,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    shutil.rmtree(tmp, ignore_errors=True)
+    emp = hashlib.sha1(json.dumps([[x["cle"], x["voix"]["empreinte"], x.get("texte"), couleur(x["qui"]), x["qui"]] for x in liste]).encode()).hexdigest()[:16]
+    doc = lire_json(os.path.join(dd, "dialogues.json"))
+    doc["video"] = {"fichier": a.chap + "/dialogues/video/dialogues.mp4", "empreinte": emp, "repliques": len(liste),
+                    "duree": nc.duree_mp3(sortie), "t": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    ecrire_json(os.path.join(dd, "dialogues.json"), doc)
+    # le nom du fichier telecharge (/manga/video_file?dl=1) se lit dans <video>.json : pages FR, sous-titres, sans musique
+    ecrire_json(os.path.join(vd, "dialogues.json"), {"tag": "dialogues", "created_at": doc["video"]["t"],
+                                                     "reglages": {"pages": "fr", "sous": True, "musique": False}})
+    nc.progres("fini", len(liste), len(liste), fini=True, video=doc["video"], s=round(time.time() - t0, 1))
+    log("OK video %s : %d repliques, %.0f s de video, %.0f s de fabrication" % (sortie, len(liste), doc["video"]["duree"] or 0, time.time() - t0))
+    return 0
+
 def nc_plage(s, toutes):
     if not s:
         return toutes
@@ -711,6 +853,7 @@ def main():
     ec = sp.add_parser("ecouter"); ec.add_argument("chap"); ec.add_argument("--cle", required=True)
     ec.add_argument("--qui", default=""); ec.add_argument("--ton", default=None)
     pl = sp.add_parser("plan"); pl.add_argument("chap")
+    vi = sp.add_parser("video"); vi.add_argument("chap")
     lo = sp.add_parser("lot"); lo.add_argument("serie"); lo.add_argument("--de", type=float, required=True)
     lo.add_argument("--a", type=float, required=True); lo.add_argument("--action", choices=("preparer", "voix", "tout"), default="preparer")
     a = p.parse_args()
@@ -723,6 +866,8 @@ def main():
         return cmd_ecouter(a)
     if a.cmd == "plan":
         return cmd_plan(a)
+    if a.cmd == "video":
+        return cmd_video(a)
     if a.cmd == "lot":
         return cmd_lot(a)
 

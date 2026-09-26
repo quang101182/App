@@ -3196,7 +3196,14 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       bulle à 360/704/1280) ; voisins `test_visionneuse_livre_ui` 30/30, `test_retour_visionneuse_ui` 24/24,
       `test_balayage_image_ui` 14/14 ; données réelles : 0 erreur JS. dialogues.py 1.4.1 : page refusée lisible dès que
       Quang choisit QUI parle. Reste : « suivre la case » (caméra) non fait — option, à reprendre si Quang le demande.
-- [ ] **D7 — Vidéo Dialogues (MP4)** : même rendu en fichier, pour le téléphone hors ligne (modèle `cases_video.py`).
+- [x] **D7 — Vidéo Dialogues (MP4)** : même rendu en fichier, pour le téléphone hors ligne (modèle `cases_video.py`).
+      ✅ **Livré 27/09 01h20 = app v2.81.1** : `dialogues.py` 1.5.2 `video` (1080×1920, même rendu que le lecteur : page voilée,
+      halo au contour réel, pastille, sous-titre ; NVENC, repli x264 ; 10 répliques = 23 s de vidéo en 7 s) dans
+      `<chap>/dialogues/video/` (servie par `/manga/video_file` existant, SÉPARÉE des vidéos de narration) + `dialogues.json`
+      à côté (nom de téléchargement « … - dialogues - FR - sous-titres - sans musique ») ; `plan` dit vidéo à jour / périmée /
+      absente ; `patch_dialogues_3.py` (+ `.diff`, action « video ») testé 8191 **7/7** ; `app_patch_2811_video.py` : « 🎬 Vidéo »
+      (fabriquer / mettre à jour, en évidence si périmée), « ▶ Voir la vidéo », « ⬇ Télécharger » — banc isolé **11/11**
+      (1280 + 360) ; données réelles : 0 erreur JS ; `test_visionneuse_livre_ui` 30/30.
 - [ ] **D8 — Bancs complets** : bout en bout réel sur une scène courte (2-3 pages, homme + femme) dans la principale ;
       correction d'un texte → 1 seule voix refaite (crédits mesurés avant/après) ; quota simulé épuisé ; 360/476/704/933/1280 ;
       les DEUX applications ; bancs voisins de la narration et du lecteur inchangés.
