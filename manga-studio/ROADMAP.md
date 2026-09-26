@@ -2988,7 +2988,9 @@ Swipe vers le bas sur la barre ? ».
       réactives pas »). ⚠ 1er jet rejeté par le banc : un balayage « séries capturées depuis 7 jours » visait **7 séries réelles**
       sans pochette (dont une masquée) → recherches AniList à chaque ouverture de l'app, voire mauvaise pochette. Banc
       `test_serie_auto_ui.py` **14/14** (sources + fin de capture SIMULÉES, appels interceptés : rien d'écrit) ; v2.74.0 servie → 4 KO.
-- [ ] **Proposé (Quang 14h09 : « pourquoi attendre la fin ? »)** : POCHETTE dès le 1er chapitre capturé (titre connu, dossier
+- [x] **v2.76.0 (Quang 14h12 : « go »), `app_patch_276_pochette_tot.py`** : POCHETTE dès le 1er chapitre capturé, pendant la
+      capture (`pochetteTot`, manga tout neuf compris ; une fois ; seulement sans pochette). Banc `test_serie_auto_ui.py` **19/19**
+      (en cours : 0 chapitre = rien, 1er fini = pochette sans fiche, manga neuf = pochette) ; v2.75.0 servie → 2 KO. Énoncé : (titre connu, dossier
       créé). La FICHE doit attendre la fin : elle range les chapitres par tome d'après leur NUMÉRO (v2.8.5 : lancée pendant la
       capture → Solo Leveling ch.1 sans tome). **Déclencheur** : accord de Quang.
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),

@@ -4,7 +4,8 @@ APP REELLE, RIEN n'est ecrit : la liste /manga/sources est modifiee A LA VOLEE d
 « capturee a l'instant, sans pochette, fiche ancienne ») et les appels /manga/pochette + /manga/serie_infos sont INTERCEPTES
 (comptes, jamais transmis). Cas : fin de capture (chapitre / serie) -> 1 pochette + 1 fiche pour CETTE serie, rien ne s'ouvre, aucune autre serie
 touchee ; capture en cours -> rien ; pas de doublon ; navigateur pilote sans BANC_AUTO -> rien.
-Usage : python test_serie_auto_ui.py [port] [serie] [--mutation]   (--mutation : app v2.74.0 servie -> doit sortir ROUGE)
+v2.76.0 : pendant la capture, POCHETTE des le 1er chapitre fini (fiche : a la fin) ; manga neuf compris.
+Usage : python test_serie_auto_ui.py [port] [serie] [--mutation]   (--mutation : app v2.75.0 servie -> doit sortir ROUGE)
 """
 import json, os, sys, time
 from playwright.sync_api import sync_playwright
@@ -33,6 +34,7 @@ def scenario(b, cas, banc_auto=True, fin=None):
         for it in d.get("items", []):
             if it.get("slug") != SERIE: continue
             dirs.append(it["dir"])
+            if cas == "absente": it["slug"] = "zz-autre-" + SERIE                  # manga tout neuf : pas encore dans la bibliotheque
             it["pochette"] = None
             it["serie_info"] = {"maj": "2020-01-01 00:00:00"}                     # fiche plus vieille que le dernier chapitre
             it["captured_at"] = maintenant
@@ -43,6 +45,9 @@ def scenario(b, cas, banc_auto=True, fin=None):
         if fin == "chapitre": st = {"etat": "fini", "dossier": d, "titre": "banc", "chapitre": "1", "duree_s": 1, "sortie": []}
         elif fin == "serie": st = {"etat": "fini", "suite": 2, "serie": "SÉRIE : 1 chapitre(s) : 1", "dossiers": [d], "titre": "banc",
                                    "chapitre": "1", "duree_s": 1, "sortie": []}
+        elif fin in ("en_cours_0", "en_cours_1"):                                   # v2.76.0 : capture qui tourne
+            st = {"etat": "en cours", "suite": 3, "dossiers": [d] if fin == "en_cours_1" else [], "titre": "banc",
+                  "chapitre": "2", "pages": 5, "duree_s": 30, "sortie": []}
         else: st = {"etat": "aucune"}
         route.fulfill(status=200, content_type="application/json", body=json.dumps(st))
     def intercepte(cle):
@@ -56,7 +61,7 @@ def scenario(b, cas, banc_auto=True, fin=None):
     pg.route("**/manga/serie_infos*", intercepte("fiche"))
     if MUT:
         pg.route("**/manga", lambda route: route.fulfill(status=200, content_type="text/html; charset=utf-8",
-                 body=open(os.path.join(ICI, "..", "manga_studio.html.bak-20260926-v2750"), encoding="utf-8").read()))
+                 body=open(os.path.join(ICI, "..", "manga_studio.html.bak-20260926-v2760"), encoding="utf-8").read()))   # = v2.75.0
     pg.goto(URL); pg.wait_for_timeout(4500)
     avant = {k: list(v) for k, v in appels.items()}
     if fin: pg.evaluate("() => suivreCapture()"); pg.wait_for_timeout(3000)
@@ -77,7 +82,18 @@ with sync_playwright() as p:
         check("rien ne s'ouvre : ni la série ni un chapitre", etat[0] != SERIE and not etat[1], etat)
         check("2e fin de capture : aucune demande en double", n1 == (len(a["pochette"]), len(a["fiche"])), n1)
         check("aucune erreur JS", not errs, errs[:3])
+    print("== v2.76.0 : capture EN COURS, 1er chapitre fini")
+    avant, a, _, etat, errs = scenario(b, "recente", fin="en_cours_1")
+    check("1er chapitre fini : pochette demandée PENDANT la capture", a["pochette"] == [SERIE], a["pochette"])
+    check("pendant la capture : la fiche (tomes) ATTEND la fin", a["fiche"] == [], a["fiche"])
+    print("== v2.76.0 : manga tout NEUF (absent de la bibliothèque), 1er chapitre fini")
+    avant, a, _, etat, errs = scenario(b, "absente", fin="en_cours_1")
+    check("manga neuf : pochette demandée dès le 1er chapitre", a["pochette"] == [SERIE], a["pochette"])
+    check("rien ne s'ouvre pendant la capture", etat[0] is None and not etat[1], etat)
     if not MUT:
+        print("== v2.76.0 : capture EN COURS, aucun chapitre fini")
+        avant, a, _, _, errs = scenario(b, "recente", fin="en_cours_0")
+        check("aucun chapitre fini : rien n'est demandé", a == {"pochette": [], "fiche": []}, a)
         print("== capture EN COURS (un chapitre sans manifeste)")
         avant, a, _, _, errs = scenario(b, "en_cours", fin="chapitre")
         check("chapitre encore sans manifeste : rien n'est demandé", a == {"pochette": [], "fiche": []}, a)
