@@ -10,10 +10,11 @@
 - App `manga_studio.html` **v2.67.0** · manga-fetch **0.8.3** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
   redécoupés ; sauvegardes `_avant_redecoupe/` EFFACÉES le 26/09 02h45 après validation de Quang à la lecture).
 - **26/09 11h00-11h30** : v2.68.0 lecteur vidéo (24/24) + 2 bugs Fold ; v2.69.0 sélecteur rapide (26/26).
-- **26/09 11h35-11h45** : sélecteur en narration + visionneuse `test_selecteur_narr_pages_ui` 100/100 (sabotage rouge) ; bandeau
-  Chrome de la secondaire = **secondaire pas installée en vraie application** sur le Fold (reproduit à l'identique sur le Samsung en la
-  désinstallant ; installée, la bascule actuelle ouvre sa propre application, sans barre) → remède côté téléphone, aucun code.
-  **Reste** : relance de la secondaire au repos (video_pos) ; proposé et non codé : rappel « installe-la » dans la secondaire.
+- **26/09 11h35-12h05** : sélecteur en narration + visionneuse `test_selecteur_narr_pages_ui` 100/100 (sabotage rouge) ;
+  **v2.70.0** commandes vidéo toujours affichées, effacées seulement en plein écran (`test_lecteur_video_ui` 27/27) ; secondaire
+  relancée → `videos_pos` actif sur les deux ; **bandeau Chrome de la secondaire RÉSOLU sans code** : sur le Fold les 2 WebAPK sont
+  non vérifiées → « Ouvrir les liens compatibles » activé pour chacune (`pm set-app-links-user-selection`, ROADMAP 4-sexdecies) ;
+  à refaire si l'une est réinstallée. ~~« secondaire pas installée »~~ = conclusion FAUSSE de 11h40. Plus rien d'ouvert en 4-sexdecies.
 - **Ragnarok ch. 2** : images redécoupées, narration + cases retirées (anciennes pages) et gardées dans
   `sources/_avant_redecoupe/` = SEULE copie : ne pas effacer sans demander à Quang.
 - **Historique git du dépôt public : NON réécrit — décision de Claude déléguée par Quang (26/09 00h58)** : fichiers actuels propres,
