@@ -2879,7 +2879,17 @@ Swipe vers le bas sur la barre ? ».
       glisser vers le bas, Échap) · clavier PC (G) · 360 → 1280 px · les deux applications.
       Branchement : un seul composant, branché sur chaque barre du bas (navigation chapitre, lecteur narré, lecteur vidéo ;
       visionneuse = « aller à la page »), ouvert par glissement vers le haut ou toucher de la bulle.
-- [ ] **PWA secondaire — bandeau Chrome : NON RÉSOLU.** ⛔ La conclusion de 11h40 ci-dessous est FAUSSE pour le Fold —
+- [x] **PWA secondaire — bandeau Chrome : RÉSOLU sur le Fold, sans code** (26/09 12h05, ADB sans fil accordé par Quang).
+      **Cause** (`pm get-app-links`) : sur le Fold (Android 17, Chrome 153) les 2 WebAPK sont NON vérifiées pour leur domaine
+      (état `1024`) et « Ouvrir les liens compatibles » était DÉSACTIVÉ → Android ne sait pas que l'adresse appartient à l'autre
+      application : Chrome la garde dans la fenêtre courante (= bandeau, dans les deux sens). Sur le Samsung (Android 13) elles sont
+      `verified` → ça marchait. `intent://…` testé sur le Fold : **n'aide pas** (même fenêtre) → écarté, rien codé.
+      **Remède appliqué** : « liens compatibles » activés pour chacune sur SON hôte
+      (`pm set-app-links-user-selection --user 0 --package <webapk> true <hôte>` ; = Infos sur l'appli → Ouvrir par défaut).
+      Vérifié : principale → secondaire = tâche de la secondaire ; retour = tâche de la principale ; une seule page par application.
+      ⚠ Réglage PAR APPAREIL : à refaire si une des deux est réinstallée (nouvelle WebAPK = nouveau paquet).
+      Historique de l'enquête :
+      ~~NON RÉSOLU.~~ ⛔ La conclusion de 11h40 ci-dessous est FAUSSE pour le Fold —
       Quang 11h46 : *« je t'ai dit que c'est déjà fait […] c'est marqué que cette appli est déjà installée »*.
       11h47 : piste « appui long = minuteur sans geste utilisateur » (`manga_studio.html` appui long sur 📚, `setTimeout` au
       `pointerdown`) **réfutée sur le Samsung** : un VRAI appui long (`input swipe` 1,8 s) ouvre bien la WebAPK de la secondaire.
