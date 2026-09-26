@@ -7,7 +7,7 @@
 
 ## 1. État au 25/09/2026 23h35
 
-- App `manga_studio.html` **v2.70.0** (26/09 12h05) · manga-fetch **0.8.3** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
+- App `manga_studio.html` **v2.73.1** (26/09 13h00) · manga-fetch **0.8.3** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
   redécoupés ; sauvegardes `_avant_redecoupe/` EFFACÉES le 26/09 02h45 après validation de Quang à la lecture).
 - **26/09 11h00-11h30** : v2.68.0 lecteur vidéo (24/24) + 2 bugs Fold ; v2.69.0 sélecteur rapide (26/26).
 - **26/09 11h35-12h05** : sélecteur en narration + visionneuse `test_selecteur_narr_pages_ui` 100/100 (sabotage rouge) ;
@@ -15,6 +15,10 @@
   relancée → `videos_pos` actif sur les deux ; **bandeau Chrome de la secondaire RÉSOLU sans code** : sur le Fold les 2 WebAPK sont
   non vérifiées → « Ouvrir les liens compatibles » activé pour chacune (`pm set-app-links-user-selection`, ROADMAP 4-sexdecies) ;
   à refaire si l'une est réinstallée. ~~« secondaire pas installée »~~ = conclusion FAUSSE de 11h40. Plus rien d'ouvert en 4-sexdecies.
+- **26/09 12h18-13h00** : v2.71.0 sélecteur = glisser la barre VERS LE BAS (seuil 24 px : 49 px de course réelle) ; v2.72.0
+  balayer l'image de la visionneuse vers la DROITE = suivante ; v2.73.0/.1 manifeste `standalone` (barre d'état Android toujours
+  visible) + lien `?v=` ; Fold de Quang réinstallé par ADB, liens compatibles réactivés, vérifié. ⚠ `test_bibliotheque_ui.py`
+  périmé (déclencheur : prochaine modif de la bibliothèque). Détail : ROADMAP 4-sexdecies.
 - **Ragnarok ch. 2** : images redécoupées, narration + cases retirées (anciennes pages) et gardées dans
   `sources/_avant_redecoupe/` = SEULE copie : ne pas effacer sans demander à Quang.
 - **Historique git du dépôt public : NON réécrit — décision de Claude déléguée par Quang (26/09 00h58)** : fichiers actuels propres,
