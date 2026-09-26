@@ -7,7 +7,10 @@ Pour chaque chapitre (dossier ch_*) :
     decoupees sont retirees, les originaux et leur manifeste remis en place) ;
   - decouper_bandes() ; puis mesure « raccords dans le dessin » avant -> apres.
 REFUSE un chapitre qui porte des donnees liees aux numeros de page (narration, traduction, video…) : il est liste, pas touche.
-Usage : python redecouper.py <racine> <serie> <ch1> [<ch2> …] [--essai]   (--essai = mesure seulement, sur une COPIE)
+  --ecarter-lies (accord explicite de Quang, 26/09 02h46 : « pas besoin de refaire la narration, la video ; occupe-toi des
+  images ») : ces donnees sont RETIREES du chapitre (elles decrivent les anciennes pages) et restent dans la sauvegarde ;
+  une video deja rendue (video/*.mp4) ne depend plus des pages : elle reste.
+Usage : python redecouper.py <racine> <serie> <ch1> [<ch2> …] [--essai] [--ecarter-lies]
 N'imprime pas le nom de la serie (numero de chapitre seulement).
 """
 import importlib.util, json, os, shutil, sys, tempfile, time
@@ -21,6 +24,8 @@ spec = importlib.util.spec_from_file_location("mf", os.path.join(ICI, "..", "man
 mf = importlib.util.module_from_spec(spec); spec.loader.exec_module(mf)
 RAC, SERIE, CHS = sys.argv[1], sys.argv[2], [a for a in sys.argv[3:] if not a.startswith("--")]
 ESSAI = "--essai" in sys.argv
+ECARTER = "--ecarter-lies" in sys.argv
+GARDES = {"video"}                                            # --ecarter-lies : ce qui reste dans le chapitre
 AUTORISES = {"manifest.json", "langue.json", "originaux"}
 
 
@@ -54,7 +59,9 @@ for ch in CHS:
     if not os.path.isfile(os.path.join(src, "manifest.json")):
         print("ch.%s : absent" % ch); continue
     autres = [f for f in os.listdir(src) if not os.path.splitext(f)[1].lower() in mf.IMG_EXTS and f not in AUTORISES]
-    if autres:
+    if autres and ECARTER and not ESSAI:
+        pass
+    elif autres:
         print("ch.%s : REFUSÉ (données liées aux pages : %s)" % (ch, ", ".join(autres[:4]))); tot["refuses"] += 1; continue
     tmp = None
     if ESSAI:
@@ -62,6 +69,11 @@ for ch in CHS:
     else:
         sauve = os.path.join(RAC, "_avant_redecoupe", "%s__ch_%s__%s" % (SERIE, ch, horo))
         shutil.copytree(src, sauve); d = src
+        for f in (autres if ECARTER else []):
+            if f in GARDES: continue
+            x = os.path.join(d, f)
+            shutil.rmtree(x) if os.path.isdir(x) else os.remove(x)
+            print("ch.%s : « %s » retiré du chapitre (gardé dans la sauvegarde)" % (ch, f))
     p0, d0 = dessin(d)
     man = json.load(open(os.path.join(d, "manifest.json"), encoding="utf-8"))
     if man.get("decoupe") and os.path.isfile(os.path.join(d, "originaux", "manifest.json")):

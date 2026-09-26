@@ -2939,6 +2939,14 @@ Maquette : `maquette_dernier_paru_v1.html` (v1, **à valider par Quang avant tou
   « aucun chapitre après le 24 sur ce site (le ch. 25 est annoncé mais sans aucune image) », code 0, bandeau vert « à jour »
   (au lieu de « le chapitre 25 a échoué »). Seul le cas AUCUNE image ; tout autre échec reste un échec. Vrai test (onglet
   jetable, sortie temporaire) : 0.8.3 code 0 / 0.8.2 « a échoué » (mutation rouge).
+- ✅ **26/09 02h46-03h02 — « fais le nécessaire, occupe-toi des images » (Quang)** :
+  - Ragnarok ch. 2 : `redecouper.py … --ecarter-lies` (option nouvelle, accord explicite) → images redécoupées 8 → 0 raccords
+    dans le dessin (107 → 95 p.) ; **narration + cases.json retirées du chapitre** (elles décrivaient les anciennes pages),
+    gardées dans `sources/_avant_redecoupe/solo-levelng-ragnarok__ch_2__…` (SEULE copie de la narration : ne pas effacer
+    sans demander) ; vidéo mp4 intacte.
+  - 7 ch. de la série de 54 **recapturés** (0.8.3, tuiles-espaces gardées) : 4→3, 3→3, 4→2, 4→4, 3→2, 5→4 ; ch. 37 moins bon
+    (6→9) → ancien REMIS automatiquement. ⇒ ce site enchaîne des fonds dégradés SANS espace : 2-4 coupes/chapitre = la limite
+    (sauf pages démesurées). Rien de plus à faire.
   Vécu par Quang sur la secondaire le 25/09 23h56 (ch. 16 d'une série, arrêt « capture tronquée à 1 page »). Mesuré en
   lecture seule dans l'onglet : 210 bandes DISTINCTES, 208 en 720×700 (ratio 1,03). `collecter()` écarte les ratios
   0,93-1,15 (avatars/logos) et ne réadmet une bande de la largeur des pages qu'après **3** pages déjà prises à cette
