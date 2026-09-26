@@ -24,7 +24,9 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.2.0"   # 1.2.0 (27/09) : ecouter (▶ de la preparation ; la voix exacte d'une replique devient definitive)
+VERSION = "1.4.0"   # 1.4.0 (27/09) : lot (plusieurs chapitres, arret net au quota, reprise)
+#   # 1.3.0 (27/09) : plan (etat de chaque replique + credits a prevoir, sans appel paye)
+#   # 1.2.0 (27/09) : ecouter (▶ de la preparation ; la voix exacte d'une replique devient definitive)
 #   # 1.1.0 (27/09) : D2 voix ElevenLabs v3 (empreintes, balises, arret net au quota)
 SOURCES = os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources")
 LOT_PAGES = 4                       # pages par appel (essai 26/09 : 3 pages = 12 s, 5 pages = 26 s)
@@ -602,6 +604,96 @@ def cmd_ecouter(a):
     print(json.dumps({"fichier": "dialogues/" + rel, "credits": len(envoye), "deja": False, "definitive": bool(propre)}))
     return 0
 
+
+def cmd_plan(a):
+    """Ce qui reste a faire, SANS aucun appel paye : {repliques: {cle: etat}, a_faire, credits, deja}. etat = « faite » (voix a
+    jour), « a_faire » (jamais faite), « a_refaire » (texte, ton, voix ou reglages changes), « sans_voix » (personnage sans voix
+    choisie), « non_lue ». Les tons pas encore traduits en balises sont comptes a ~20 caracteres (estimation)."""
+    chap_dir, serie_dir, dd = chemins(a.chap)
+    doc = lire_json(os.path.join(dd, "dialogues.json"))
+    if not doc:
+        print(json.dumps({"error": "pas prepare"})); return 3
+    distrib = distribution(serie_dir)
+    bal = dict(distrib.get("balises") or {})
+    tons = distrib.get("tons", True)
+    etats, credits, a_faire, deja = {}, 0, 0, 0
+    for x in doc["repliques"]:
+        if not x.get("lire") or x.get("a_traiter"):
+            etats[x["cle"]] = "non_lue"; continue
+        estime = dict(bal)
+        if tons and x.get("ton") and x["ton"] not in estime:
+            estime[x["ton"]] = "[xxxxxxxx] [xxxxxxx]"
+        d_ = a_dire(x, distrib, estime)
+        if d_ is None:
+            p = reglage_voix(distrib, x.get("qui"))
+            etats[x["cle"]] = "sans_voix" if (p is None or not p.get("voix_el")) else "non_lue"; continue
+        envoye, texte, reg, emp = d_
+        v = x.get("voix") or {}
+        if v.get("empreinte") == emp and os.path.isfile(os.path.join(dd, "voix", v.get("fichier", "?"))):
+            etats[x["cle"]] = "faite"; deja += 1
+        else:
+            etats[x["cle"]] = "a_refaire" if v else "a_faire"; a_faire += 1; credits += len(envoye)
+    print(json.dumps({"repliques": etats, "a_faire": a_faire, "credits": credits, "deja": deja}, ensure_ascii=False))
+    return 0
+
+
+def chapitres_de_serie(serie_dir, de, a):
+    """[(numero, dossier)] des chapitres de la serie entre de et a (numeros du manifeste), dans l'ordre."""
+    out = []
+    for ch in os.listdir(serie_dir):
+        m = lire_json(os.path.join(serie_dir, ch, "manifest.json"))
+        if not m:
+            continue
+        try:
+            n = float(str(m.get("chapter") or ch[3:]).replace(",", "."))
+        except ValueError:
+            continue
+        if de <= n <= a:
+            out.append((n, ch))
+    return sorted(out)
+
+
+def cmd_lot(a):
+    """Portee « plusieurs chapitres » (Quang 26/09 23h43). Chapitres dans l'ordre ; seuls les chapitres TRADUITS en francais ;
+    action preparer | voix | tout (preparer puis voix, « sans relecture »). Quota ElevenLabs epuise = ARRET net de tout le lot
+    (ce qui est fait est garde) ; relancer = reprendre (un chapitre deja prepare n'est pas repaye, une voix faite non plus).
+    Etat : <serie>/dialogues_lot.json."""
+    serie_dir = os.path.join(SOURCES, a.serie)
+    fl = os.path.join(serie_dir, "dialogues_lot.json")
+    chs = chapitres_de_serie(serie_dir, a.de, a.a)
+    etat = {"version": VERSION, "serie": a.serie, "de": a.de, "a": a.a, "action": a.action, "pid": os.getpid(),
+            "debut": time.strftime("%Y-%m-%dT%H:%M:%S"), "etat": "en cours", "chapitres": [], "t": time.time()}
+    for n, ch in chs:
+        tr = os.path.isfile(os.path.join(serie_dir, ch, "traduction", "fr", "traduction.json"))
+        etat["chapitres"].append({"num": n, "ch": ch, "etat": "attente" if tr else "non traduit"})
+    ecrire_json(fl, etat)
+    code = 0
+    for c in etat["chapitres"]:
+        if c["etat"] == "non traduit":
+            continue
+        d = a.serie + "/" + c["ch"]
+        c["etat"] = "en cours"; etat["en_cours"] = d; etat["t"] = time.time(); ecrire_json(fl, etat)
+        prepare = os.path.isfile(os.path.join(serie_dir, c["ch"], "dialogues", "dialogues.json"))
+        try:
+            if a.action in ("preparer", "tout") and not prepare:
+                r = cmd_preparer(argparse.Namespace(chap=d, pages=""))
+                if r:
+                    c["etat"] = "echec preparation"; continue
+            if a.action in ("voix", "tout"):
+                r = cmd_voix(argparse.Namespace(chap=d, pages=""))
+                if r == CODE_QUOTA:
+                    c["etat"] = "quota"; etat["arret"] = "quota ElevenLabs epuise au ch. %s" % c["ch"][3:]; code = CODE_QUOTA
+                    break
+                if r:
+                    c["etat"] = "echec voix"; continue
+            c["etat"] = "fait"
+        finally:
+            etat["t"] = time.time(); ecrire_json(fl, etat)
+    etat.update(etat="arrete" if code else "fini", fin=time.strftime("%Y-%m-%dT%H:%M:%S"), en_cours=None, t=time.time())
+    ecrire_json(fl, etat)
+    log("LOT %s : %s" % (etat["etat"], [(c["ch"], c["etat"]) for c in etat["chapitres"]]))
+    return code
+
 def nc_plage(s, toutes):
     if not s:
         return toutes
@@ -617,6 +709,9 @@ def main():
     vo = sp.add_parser("voix"); vo.add_argument("chap"); vo.add_argument("--pages", default="")
     ec = sp.add_parser("ecouter"); ec.add_argument("chap"); ec.add_argument("--cle", required=True)
     ec.add_argument("--qui", default=""); ec.add_argument("--ton", default=None)
+    pl = sp.add_parser("plan"); pl.add_argument("chap")
+    lo = sp.add_parser("lot"); lo.add_argument("serie"); lo.add_argument("--de", type=float, required=True)
+    lo.add_argument("--a", type=float, required=True); lo.add_argument("--action", choices=("preparer", "voix", "tout"), default="preparer")
     a = p.parse_args()
     nc.SECRET = nc._secret()
     if a.cmd == "preparer":
@@ -625,6 +720,10 @@ def main():
         return cmd_voix(a)
     if a.cmd == "ecouter":
         return cmd_ecouter(a)
+    if a.cmd == "plan":
+        return cmd_plan(a)
+    if a.cmd == "lot":
+        return cmd_lot(a)
 
 
 if __name__ == "__main__":

@@ -3171,9 +3171,14 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       (relance-proxy.ps1) ; **secondaire NON relancée** (capture en cours 00h18) → à relancer au repos avant D8.
 - [ ] **D4 — App : bloc 🎭 Dialogues** (après Narration ; ligne ElevenLabs dans le détail des coûts ; vidéo des dialogues DANS le bloc) : état en une phrase (pas préparé / prêt / N à refaire / quota épuisé),
       estimation $ + crédits, solde ElevenLabs, pages, interrupteur tons, bouton Préparer / Générer / Lire. Version ×3.
-- [ ] **D4-bis — Portée plusieurs chapitres** : file séquentielle côté proxy (un `progress.json` de lot + bilan), estimation
+- [x] **D4-bis — Portée plusieurs chapitres** (côté script + serveur ; l'écran vient avec D4) : file séquentielle côté proxy (un `progress.json` de lot + bilan), estimation
       totale, arrêt au quota sans rien perdre, reprise ; banc : 3 chapitres courts, quota simulé épuisé au 2ᵉ → 1ᵉʳ gardé,
       2ᵉ partiel, 3ᵉ intact, reprise = 0 voix repayée.
+      ✅ **27/09 00h35** : `dialogues.py` v1.4.0 `lot` (ordre, non traduits sautés, arrêt net au quota, reprise sans rien
+      repayer) — banc `test_dialogues_lot.py` **8/8** + mutation ROUGE ; `plan` (état par réplique + crédits, 0 appel payé) ;
+      `proxy-patch/patch_dialogues_2.py` (+ `.diff`) : `/manga/dialogues_plan`, `/manga/dialogues_lot` (GET/POST),
+      `/manga/dialogues_lot_arreter`, activité « dialogues_lot » — testé sur 8191 **7/7** (lot sur chapitre déjà fait = 0 crédit),
+      appliqué, principale relancée au repos (secondaire toujours à relancer).
 - [ ] **D5 — App : écran de préparation** : distribution (voix + ▶ + menu « phrase à écouter » = ses répliques la plus longue
       d'abord, expressivité, vitesse, couleur, renommer, ✚ ajouter) ; répliques par page (lire, qui, texte éditable, ton,
       ▶, état ✅/⚪/🟠) ; « Générer les voix manquantes » avec crédits nécessaires / restants et bouton GRISÉ si insuffisant.
