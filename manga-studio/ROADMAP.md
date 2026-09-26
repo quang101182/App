@@ -3086,7 +3086,14 @@ atelier `scripts/essai_voix_atelier.py` v0.2.0). **Verdicts de Quang** : ElevenL
 réplique = « ça apporte quelque chose » (gardés, interrupteur) ; mode **SÉPARÉ** de la narration (« qui ne se chevauche pas avec
 le reste ») ; **corrections à la main** avant et à tout moment ; **AUCUN moteur de secours** (« si le quota est bloqué, il est
 bloqué ») ; crédits affichés ; bulle qui parle = **halo harmonieux, couleur du personnage** (pas un rectangle).
-Maquette : `maquette_dialogues_v1.html` (v1, **à valider par Quang avant tout code** — 4 questions Q1-Q4 dedans).
+Maquette : ~~`maquette_dialogues_v1.html`~~ → **`maquette_dialogues_v2.html`** (27/09 00h10, retours de Quang intégrés ; **à valider avant tout code**).
+**Retours de Quang sur la v1 (26/09 23h55)** : ligne 🎵 Musique oubliée dans la maquette (elle existe : Narration · Traduction ·
+Musique · Vidéo) ; coûts → **une ligne ElevenLabs** dans le détail ; la **distribution appartient au MANGA** (réglage transverse,
+commun à tous les chapitres), seules les répliques sont par page ; vidéo : choisir narration ou dialogues → **tranché par Claude :
+la vidéo des Dialogues reste DANS la ligne Dialogues**, la ligne Vidéo reste celle de la narration (rien ne se mélange).
+**Q1** toujours lu en FRANÇAIS : traduction FR obligatoire (VF comprise) · **Q2** relais de modération = l'interrupteur actuel ·
+**Q3** encarts du narrateur NON lus par défaut (option), voix d'homme posée et constante · **Q4** (délégué) correction propre aux
+Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage / Creator 22 $), l'app affiche, ne décide rien.
 
 ### Constat (lu dans le code le 26/09 23h40 — re-vérifier avant de coder)
 - Blocs du chapitre : `.narr-box.bloc-XXX` (`manga_studio.html` ~1907-1994), liseré par bloc (CSS ~687/716) ; `openChap()`
@@ -3132,7 +3139,7 @@ Maquette : `maquette_dialogues_v1.html` (v1, **à valider par Quang avant tout c
   hors dépôt. Le compte ElevenLabs est commun aux deux applications (solde affiché dans les deux).
 
 ### Étapes (dans l'ordre, une à la fois ; chacune = banc réel + sabotage rouge + commit)
-- [ ] **D0 — Validation de la maquette** + réponses Q1-Q4. Rien ne se code avant.
+- [ ] **D0 — Validation de la maquette v2** (Q1-Q4 répondues le 26/09 23h55). Rien ne se code avant.
 - [ ] **D1 — `scripts/dialogues.py preparer <chap> [--pages a-b]`** : bulles de la traduction (Q1 pour la VF) → 1 appel Gemini par
       lot de 4-5 pages (images + bulles numérotées + distribution de la série) → `dialogues.json` (qui, ton, lire, muet,
       indice, texte_origine) ; contour de chaque bulle (repli ovale) ; `progress.json` ; dépense `dialogues` au registre ;
@@ -3146,7 +3153,7 @@ Maquette : `maquette_dialogues_v1.html` (v1, **à valider par Quang avant tout c
       `/manga/dialogues_voix`, `/manga/dialogues_maj` (corrections), `/manga/dialogues_distribution` (GET/POST),
       `/manga/el_solde` (cache 20 s) ; `manga_activite` + `manga_costs` + `LANCEMENTS` connaissent `dialogues` ; interruption
       par `/manga/interrompre`. Testé sur une COPIE, relance AU REPOS (principale puis secondaire, HANDOFF-reprise § 3.7).
-- [ ] **D4 — App : bloc 🎭 Dialogues** (après Narration) : état en une phrase (pas préparé / prêt / N à refaire / quota épuisé),
+- [ ] **D4 — App : bloc 🎭 Dialogues** (après Narration ; ligne ElevenLabs dans le détail des coûts ; vidéo des dialogues DANS le bloc) : état en une phrase (pas préparé / prêt / N à refaire / quota épuisé),
       estimation $ + crédits, solde ElevenLabs, pages, interrupteur tons, bouton Préparer / Générer / Lire. Version ×3.
 - [ ] **D4-bis — Portée plusieurs chapitres** : file séquentielle côté proxy (un `progress.json` de lot + bilan), estimation
       totale, arrêt au quota sans rien perdre, reprise ; banc : 3 chapitres courts, quota simulé épuisé au 2ᵉ → 1ᵉʳ gardé,
@@ -3165,7 +3172,8 @@ Maquette : `maquette_dialogues_v1.html` (v1, **à valider par Quang avant tout c
 
 ### Coûts de référence (mesurés 26/09, à ré-étalonner après D8)
 Préparation ~0,004 $/page (Gemini 3.6 Flash) · 153 caractères de dialogue/page en moyenne (476 pages traduites) · ElevenLabs
-gratuit 10 000 crédits/mois ≈ 35 pages avec tons, ≈ 65 sans ; Starter 6 $ / 30 000 ; Creator 11 $ (22 $ le 1er mois) / 121 000.
+gratuit 10 000 crédits/mois ≈ 35 pages avec tons, ≈ 65 sans ; Starter 6 $ / 30 000 ; Creator **22 $/mois** (11 $ le 1er mois) / 121 000
+(~~Creator 11 $, 22 $ le 1er mois~~ : lecture automatique du site inversée, corrigée 27/09 sur remarque de Quang).
 
 ## 4-quindecies. FEUILLE DE ROUTE — « JUSQU'AU DERNIER PARU » + CHAPITRES DÉJÀ PRÉSENTS *(25/09/2026 23h38-23h44, demandes Quang : « trace une feuille de route bien détaillée et suis-la […] ne te disperse pas »)*
 
