@@ -2834,6 +2834,37 @@ Mesuré avant de découper : **22 scripts** + `manga-fetch` écrivent dans `../s
 diff → `newline=""`) ; toute relance du proxy par `relance-proxy.ps1 -Qui manga-studio` (jamais Stop-Process) ; un script
 qui lit un secret au démarrage doit être relancé après rotation.
 
+## 4-sexdecies. FEUILLE DE ROUTE — LECTEUR VIDÉO + SÉLECTEUR RAPIDE « ALLER AU CHAPITRE » *(26/09/2026 10h58-11h05, demandes Quang)*
+
+**Demandes** : (a) 10h58 — lecteur vidéo : « il manque les commandes essentielles play pause précédent suivant, swipe avant
+arrière comme le reste de l'application » + « des suggestions en plus ? ». Maquette `maquette_lecteur_video_v1.html`, envoyée
+sur Telegram 11h00 ; **validée en entier 11h05 (« c'est bon pour moi » : A à H)**. (b) 11h05 — « dans toute l'application avec
+les barres du bas, il nous manque la fonction rapide de sélection de chapitre via fenêtre rapide + recherche par numéro ?
+Swipe vers le bas sur la barre ? ».
+
+### Constat (lu dans le code, 26/09 11h05)
+- Lecteur vidéo (`#vidLecteur`) : `<video controls>` natif + deux boutons « ⏮ ch. / ch. ⏭ » en HAUT (masqués sans voisin) ;
+  `vidVoisin()` / `vidNavMaj()` gèrent déjà les voisins et les sauts. Aucun geste, aucune reprise, aucune fin enchaînée.
+- Barres du bas existantes, toutes « précédent / suivant » seulement (bouton + glissement horizontal > 60 px) : navigation
+  bibliothèque/chapitre (`#nf…`, v2.54-v2.61), lecteur narré (`#lecteur .lec-ctl`, pages), visionneuse (`#lightbox .lbbar`).
+  **Aucun sélecteur rapide de chapitre** ; pour aller du ch. 3 au ch. 40 il faut revenir à la liste.
+- Geste : glisser VERS LE BAS une barre collée en bas = peu de course + conflit avec la barre de gestes Android →
+  proposé : glisser **VERS LE HAUT** (panneau qui monte de la barre) + toucher la bulle « ch. N ».
+
+### Étapes
+- [x] **V0 — Maquette lecteur vidéo validée** (A-H).
+- [ ] **V1 — Lecteur vidéo v2.68.0** : barre du bas (⏮ ch. · −10 · ⏯ · +10 · ch. ⏭, glissement = chapitre) ; toucher l'image = ⏯,
+      double toucher gauche/droite = −10/+10 s ; progression large + temps ; reprise de position par vidéo (serveur, commune
+      PC/téléphone) ; fin → ch. suivant dans 5 s (Annuler / Maintenant) ; barre masquée après 3 s ; ⋯ vitesse + plein écran ;
+      écran allumé (Wake Lock) ; clavier PC. L'avertissement de saut reste.
+- [ ] **S0 — Maquette du sélecteur rapide** (`maquette_selecteur_chapitre_v1.html`) → validation Quang. Rien avant.
+- [ ] **S1 — Sélecteur** : un seul composant, branché sur chaque barre du bas (navigation chapitre, lecteur narré, lecteur vidéo ;
+      visionneuse = « aller à la page »), ouvert par glissement vers le haut ou toucher de la bulle.
+- [ ] **B — Bancs** : app réelle, 360/476/704/933/1280, gestes simulés (touch), sabotage rouge, bancs voisins
+      (`test_activite_ui`, navigation, visionneuse).
+- [ ] **C — Clôture** : ROADMAP, HANDOFF-reprise, commit + push.
+
+
 ## 4-quindecies. FEUILLE DE ROUTE — « JUSQU'AU DERNIER PARU » + CHAPITRES DÉJÀ PRÉSENTS *(25/09/2026 23h38-23h44, demandes Quang : « trace une feuille de route bien détaillée et suis-la […] ne te disperse pas »)*
 
 **Demandes (Quang, 25/09)** : (a) 23h38 — un bouton « jusqu'au bout » au lieu de taper le dernier n° ; « final » induit en
