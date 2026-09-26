@@ -2993,6 +2993,12 @@ Swipe vers le bas sur la barre ? ».
       (en cours : 0 chapitre = rien, 1er fini = pochette sans fiche, manga neuf = pochette) ; v2.75.0 servie → 2 KO. Énoncé : (titre connu, dossier
       créé). La FICHE doit attendre la fin : elle range les chapitres par tome d'après leur NUMÉRO (v2.8.5 : lancée pendant la
       capture → Solo Leveling ch.1 sans tome). **Déclencheur** : accord de Quang.
+- [x] **N° suggéré d'après l'adresse : volume entier « …/vol-N/ » = ch. N** (v2.77.0, 26/09 15h05, `app_patch_277_num_volume.py`).
+      Quang 14h57 (capture Solo Leveling en volumes, 740 p. chacun, « jusqu'au 15 ») : l'app ne devinait pas « 2 ». Vérifié dans
+      manga-fetch 0.6.0 (`RE_VOL`, `vol_suivant`) : vol-N = ch. N, enchaînement dans l'ordre du site, arrêt net après vol-15
+      (vol-16-chapitre-179-5 = 179,5 > 15) → sa capture MARCHE telle quelle. Seule la SUGGESTION de l'app ignorait vol-N (le
+      format mixte était déjà lu). Banc `test_num_adresse_ui.py` **13/13** (anciens formats compris, « volcano-hero » = rien) ;
+      v2.76.0 servie → 4 KO ; onglet réel de Quang → « 2 ».
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),
       `GET /manga/bibliotheque` rend maintenant `videos_pos` : reprise de position commune PC / téléphone sur les DEUX applications. : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
       26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de
