@@ -20,7 +20,9 @@ sys.path.insert(0, HERE)
 import narrate_chapter as nc
 import karaoke_mots as km
 
-VERSION = "0.5.0"   # 0.5.0 (Quang 22h41) : « lire » (CHAIR DE POULE n'est pas une replique), ton cale sur le STYLE et la
+VERSION = "0.6.0"   # 0.6.0 : un ton VIDE = aucun ton (avant : ignore -> le ton de l'IA revenait, 3e essai de Quang 23h03) ;
+#          reglages « tons »: false = aucun ton ; rien a dire = AUCUNE consigne envoyee
+#   # 0.5.0 (Quang 22h41) : « lire » (CHAIR DE POULE n'est pas une replique), ton cale sur le STYLE et la
 #          TENSION de la scene, reglages.json (voix, caractere, intensite, vitesse, ton/locuteur par replique) lu par l'atelier
 #   # 0.4.0 : option --ordre cases (cases.json). ESSAYE sur OPM ch.6 p.5 : PIRE (2 cases detectees sur 3 -> « Hein ? » lu apres
 #          « C'est bizarre ») -> defaut = ordre des id, qui y etait juste
@@ -140,7 +142,7 @@ VITESSE = 1.5
 
 
 def dire(texte, voix, consigne, dest, stats, vitesse=None):
-    body = {"input": {"text": texte, "prompt": consigne},
+    body = {"input": dict({"text": texte}, **({"prompt": consigne} if consigne else {})),
             "voice": {"languageCode": "fr-FR", "name": voix, "model_name": TTS_MODELE},
             "audioConfig": {"audioEncoding": "MP3", "speakingRate": float(vitesse or VITESSE)}}
     r = nc.post("/api/gcptts/v1/text:synthesize", body, timeout=90)
@@ -161,18 +163,21 @@ def fuite(mp3, texte, stats):
     return len(_norm(t)) > len(_norm(texte)) * 1.6 + 6, t.strip()
 
 
-INTENSITE = {0: "avec beaucoup de retenue", 1: "avec retenue", 2: "", 3: "de facon tres expressive"}
+INTENSITE = {0: "avec beaucoup de retenue", 1: "avec retenue", 2: "", 3: "de façon très expressive"}
 INTENSITE_DEFAUT = 1          # Quang 22h22 : « diminuer un peu l'exageration de la comedie »
 
 
 def consigne(ton, caractere="", intensite=INTENSITE_DEFAUT):
     """Consigne COURTE (une longue est lue a voix haute, mesure 26/09). Caractere = 2-5 mots, jamais une fiche."""
-    parts = [ton or "naturel"]
-    if caractere:
-        parts.append(caractere)
-    if INTENSITE.get(int(intensite), ""):
-        parts.append(INTENSITE[int(intensite)])
-    return ("Dis ceci d'un ton %s, en français." % ", ".join(parts))
+    ton = ", ".join(x for x in ((ton or "").strip(), (caractere or "").strip()) if x)
+    inten = INTENSITE.get(int(intensite), "")
+    if ton and inten:
+        return "Dis ceci d'un ton %s, %s, en français." % (ton, inten)
+    if ton:
+        return "Dis ceci d'un ton %s, en français." % ton
+    if inten:
+        return "Dis ceci %s, en français." % inten
+    return ""                                   # rien a dire : la voix lit le texte, sans consigne
 
 
 def reglages(out):
@@ -275,7 +280,9 @@ def main():
         for b in p["_bulles"]:
             r = dict(rep.get((p["page"], b["id"])) or {"locuteur": "inconnu", "ton": "neutre"})
             r.update({k: v for k, v in ((reg.get("repliques") or {}).get("%d-%d" % (p["page"], b["id"])) or {}).items()
-                      if v not in (None, "")})
+                      if v is not None and (v != "" or k == "ton")})      # 0.6.0 : ton "" = efface par Quang
+            if reg.get("tons") is False:
+                r["ton"] = ""
             if r.get("lire") is False:
                 print("  -- p%d b%-3d NON LUE (%s)" % (p["page"], b["id"], b["trad"][:40])); continue
             qui = r.get("locuteur") or "inconnu"

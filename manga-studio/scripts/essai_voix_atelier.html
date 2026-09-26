@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Atelier voix v0.1.2</title>
+<title>Atelier voix v0.2.0</title>
 <style>
 :root{--bg:#101218;--pan:#191c25;--bord:#2a2f3d;--txt:#e6e8ee;--dim:#9aa1b2;--acc:#ffc828;--ok:#3fbf7f;--ko:#e5534b}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,Segoe UI,sans-serif}
@@ -24,9 +24,10 @@ video{width:100%;max-height:70vh;background:#000;border-radius:10px;margin-top:8
 #etat{font-size:13px;color:var(--dim)}.ok{color:var(--ok)}.ko{color:var(--ko)}
 @media (max-width:700px){td.t{min-width:0}.hide-s{display:none}table,tbody,tr,td{display:block;width:100%}tr{padding:8px 0;border-bottom:1px solid var(--bord)}td{border:0;padding:3px 0}thead{display:none}}
 </style></head><body>
-<header><b>Atelier voix</b><span class="ver">v0.1.2</span><span id="titre"></span>
+<header><b>Atelier voix</b><span class="ver">v0.2.0</span><span id="titre"></span>
   <span style="flex:1"></span>
   <label style="margin:0">Vitesse générale <span class="val" id="vgv"></span></label><input type="range" id="vg" min="0.8" max="2" step="0.05" style="width:140px">
+  <label style="margin:0;display:flex;gap:6px;align-items:center;color:var(--txt)"><input type="checkbox" id="tons"> Tons par réplique</label>
   <button id="sauver">Enregistrer</button><button class="p" id="gen">🎬 Générer la scène</button></header>
 <main>
 <h2>Ambiance vue par l'IA</h2><div class="amb" id="amb"></div>
@@ -53,6 +54,7 @@ async function charger(){
   E = await (await fetch("/etat")).json();
   $("titre").textContent = E.chap + " · p. " + E.pages;
   $("amb").textContent = E.ambiance || "—";
+  $("tons").checked = E.tons; majTons();
   $("vg").value = E.vitesse; $("vgv").textContent = (+E.vitesse).toFixed(2);
   const optV = Object.entries(E.voix).map(([n, d]) => `<option value="${n}">${n} — ${esc(d)}</option>`).join("");
   $("persos").innerHTML = E.persos.map((p, i) => `<div class="carte" data-i="${i}">
@@ -89,17 +91,20 @@ function lecture(){
   const repliques = {}; E.lignes.forEach((l, i) => { const tr = document.querySelector(`tr[data-i="${i}"]`);
     repliques[l.cle] = { lire: tr.querySelector('[data-k="lire"]').checked, locuteur: tr.querySelector('[data-k="locuteur"]').value,
                          ton: tr.querySelector('[data-k="ton"]').value.trim() }; });
-  return { vitesse: +$("vg").value, persos, repliques };
+  return { vitesse: +$("vg").value, tons: $("tons").checked, persos, repliques };
 }
 async function ecouter(btn, texte, ton, p){
   btn.disabled = true; const cons = btn.parentElement.querySelector(".cons");
   try {
-    const r = await fetch("/ecouter", { method: "POST", body: JSON.stringify({ texte, ton, ...p }) });
+    const r = await fetch("/ecouter", { method: "POST", body: JSON.stringify({ texte, ton, tons: $("tons").checked, ...p }) });
     if (!r.ok) throw new Error((await r.json()).erreur);
     const c = r.headers.get("X-Consigne"); if (cons && c) cons.textContent = new TextDecoder().decode(Uint8Array.from(atob(c), x => x.charCodeAt(0)));
     audio.src = URL.createObjectURL(await r.blob()); audio.play();
   } catch(e){ alert("écoute : " + e.message); } finally { btn.disabled = false; }
 }
+// v0.2.0 : sans tons, la colonne Ton est grisee (ignoree) -- la voix ne recoit que caractere + intensite, ou rien
+function majTons(){ document.querySelectorAll('#lignes [data-k="ton"]').forEach(x => { x.disabled = !$("tons").checked; x.style.opacity = $("tons").checked ? 1 : .35; }); }
+document.addEventListener("change", e => { if (e.target.id === "tons") majTons(); });
 document.addEventListener("input", e => { const c = e.target.closest(".carte"); if (c) majVals(c);
   if (e.target.id === "vg") $("vgv").textContent = (+e.target.value).toFixed(2);
   const tr = e.target.closest("tr[data-i]"); if (tr && e.target.dataset.k === "lire") tr.classList.toggle("off", !e.target.checked); });

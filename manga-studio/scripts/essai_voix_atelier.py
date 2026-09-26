@@ -15,7 +15,7 @@ sys.path.insert(0, HERE)
 import narrate_chapter as nc
 import essai_voix_personnages as ev
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"   # 0.2.0 : ton vide garde vide (etait remplace par celui de l'IA) ; interrupteur « tons »
 PAGE = os.path.join(HERE, "essai_voix_atelier.html")
 A = None
 VERROU = threading.Lock()
@@ -41,7 +41,8 @@ def etat():
                          and (b.get("trad") or "").strip()], key=lambda b: b["id"]):
             r = dict(rep.get((p["page"], b["id"])) or {"locuteur": "inconnu", "ton": "neutre"})
             cle = "%d-%d" % (p["page"], b["id"])
-            r.update({k: v for k, v in ((reg.get("repliques") or {}).get(cle) or {}).items() if v not in (None, "")})
+            r.update({k: v for k, v in ((reg.get("repliques") or {}).get(cle) or {}).items()
+                      if v is not None and (v != "" or k == "ton")})
             lignes.append({"cle": cle, "page": p["page"], "id": b["id"], "texte": b["trad"], "locuteur": r.get("locuteur"),
                            "ton": r.get("ton") or "", "lire": r.get("lire") is not False, "muet": bool(r.get("muet")),
                            "indice": r.get("indice") or ""})
@@ -56,13 +57,13 @@ def etat():
                        "renomme": o.get("renomme", "")})
     video = os.path.join(dossier(), "essai.mp4")
     return {"version": VERSION, "chap": A.chap, "pages": A.pages, "ambiance": dist.get("ambiance", ""),
-            "persos": persos, "lignes": lignes, "vitesse": reg.get("vitesse") or 1.5,
+            "persos": persos, "lignes": lignes, "vitesse": reg.get("vitesse") or 1.5, "tons": reg.get("tons") is not False,
             "voix": ev.VOIX, "intensite": ev.INTENSITE, "gen": GEN,
             "video_t": os.path.getmtime(video) if os.path.isfile(video) else 0}
 
 
 def ecouter(d):
-    cons = ev.consigne(d.get("ton"), d.get("caractere", ""), d.get("intensite", ev.INTENSITE_DEFAUT))
+    cons = ev.consigne(d.get("ton") if d.get("tons", True) else "", d.get("caractere", ""), d.get("intensite", ev.INTENSITE_DEFAUT))
     vit = float(d.get("vitesse") or 1.5)
     texte = ev.texte_lu(d.get("texte") or "")
     cle = hashlib.sha1(json.dumps([texte, d.get("voix"), cons, vit]).encode()).hexdigest()[:16]
@@ -70,7 +71,7 @@ def ecouter(d):
     f = os.path.join(dossier(), "apercus", cle + ".mp3")
     if not os.path.isfile(f):
         ev.dire(texte, d.get("voix"), cons, f, {}, vit)
-    return open(f, "rb").read(), cons
+    return open(f, "rb").read(), cons or "(aucune consigne : la voix lit le texte)"
 
 
 def generer():
@@ -135,7 +136,7 @@ class H(BaseHTTPRequestHandler):
                 return self._envoi(200, mp3, "audio/mpeg", {"X-Consigne": base64.b64encode(cons.encode()).decode()})
             if chemin == "/reglages":
                 with VERROU:
-                    json.dump({"vitesse": d.get("vitesse"), "persos": d.get("persos") or {}, "repliques": d.get("repliques") or {}},
+                    json.dump({"vitesse": d.get("vitesse"), "tons": d.get("tons", True), "persos": d.get("persos") or {}, "repliques": d.get("repliques") or {}},
                               open(os.path.join(dossier(), "reglages.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
                 return self._json({"ok": True})
             if chemin == "/generer":
