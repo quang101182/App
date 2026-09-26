@@ -2999,6 +2999,13 @@ Swipe vers le bas sur la barre ? ».
       (vol-16-chapitre-179-5 = 179,5 > 15) → sa capture MARCHE telle quelle. Seule la SUGGESTION de l'app ignorait vol-N (le
       format mixte était déjà lu). Banc `test_num_adresse_ui.py` **13/13** (anciens formats compris, « volcano-hero » = rien) ;
       v2.76.0 servie → 4 KO ; onglet réel de Quang → « 2 ».
+- [x] **Site Mangas Origines (VF) validé et ajouté** (26/09 15h10, Quang 15h02). Règle 22/09 respectée : capture RÉELLE + enchaînement
+      testés — The Beginning After the End ch.1→2 (choix de Quang, gardés DANS sa bibliothèque à sa demande) : 44 + 51 pages,
+      0 image vide, 145 s, contenu vérifié à l'œil (crédits « Chapitre 1 / 2 »). Nouveau banc `scripts/test_site_nouveau.py`
+      (lit l'adresse réelle du chapitre sur la page de la série ; dossier temporaire, ou bibliothèque si un titre est donné).
+      Fiche MangaDex posée. ⚠ **Pochette introuvable sur AniList** : 8 titres essayés (anglais, coréen, japonais…), AniList
+      répond 404 même au titre exact (One Punch-Man / Solo Leveling répondent) → la série n'y est pas. **Piste (non codée,
+      déclencheur : accord de Quang ou 2e série sans pochette AniList)** : recours aux couvertures MangaDex quand AniList échoue.
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),
       `GET /manga/bibliotheque` rend maintenant `videos_pos` : reprise de position commune PC / téléphone sur les DEUX applications. : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
       26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de
