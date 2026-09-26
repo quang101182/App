@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atelier voix v0.1.0</title>
+<style>
+:root{--bg:#101218;--pan:#191c25;--bord:#2a2f3d;--txt:#e6e8ee;--dim:#9aa1b2;--acc:#ffc828;--ok:#3fbf7f;--ko:#e5534b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,Segoe UI,sans-serif}
+header{position:sticky;top:0;z-index:5;background:#0c0e13ee;border-bottom:1px solid var(--bord);padding:10px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+header b{color:var(--acc)}.ver{font-size:12px;color:var(--dim);border:1px solid var(--bord);border-radius:99px;padding:1px 8px}
+main{max-width:1100px;margin:0 auto;padding:12px 16px 80px}h2{font-size:16px;margin:22px 0 8px;color:var(--acc)}
+.amb{background:var(--pan);border:1px solid var(--bord);border-radius:10px;padding:10px 12px;color:var(--dim)}
+.persos{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.carte{background:var(--pan);border:1px solid var(--bord);border-radius:12px;padding:12px}
+.carte h3{margin:0 0 2px;font-size:16px}.fiche{font-size:12.5px;color:var(--dim);margin-bottom:8px}
+label{display:block;font-size:12.5px;color:var(--dim);margin:8px 0 3px}
+select,input[type=text]{width:100%;background:#0f1117;color:var(--txt);border:1px solid var(--bord);border-radius:8px;padding:7px 8px;font:inherit}
+input[type=range]{width:100%}.val{float:right;color:var(--txt)}
+button{background:#232838;color:var(--txt);border:1px solid var(--bord);border-radius:8px;padding:7px 12px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--acc)}button.p{background:var(--acc);color:#1a1400;border-color:var(--acc);font-weight:600}
+button.play{width:38px;padding:6px 0}button:disabled{opacity:.5;cursor:wait}
+table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid var(--bord);padding:6px 4px;vertical-align:middle;text-align:left}
+th{font-size:12px;color:var(--dim);font-weight:500}td.t{min-width:200px}tr.off td{opacity:.45}
+.cons{font-size:12px;color:var(--dim);min-height:1em;margin-top:6px}
+video{width:100%;max-height:70vh;background:#000;border-radius:10px;margin-top:8px}
+#etat{font-size:13px;color:var(--dim)}.ok{color:var(--ok)}.ko{color:var(--ko)}
+@media (max-width:700px){td.t{min-width:0}.hide-s{display:none}table,tbody,tr,td{display:block;width:100%}tr{padding:8px 0;border-bottom:1px solid var(--bord)}td{border:0;padding:3px 0}thead{display:none}}
+</style></head><body>
+<header><b>Atelier voix</b><span class="ver">v0.1.0</span><span id="titre"></span>
+  <span style="flex:1"></span>
+  <label style="margin:0">Vitesse générale <span class="val" id="vgv"></span></label><input type="range" id="vg" min="0.8" max="2" step="0.05" style="width:140px">
+  <button id="sauver">Enregistrer</button><button class="p" id="gen">🎬 Générer la scène</button></header>
+<main>
+<h2>Ambiance vue par l'IA</h2><div class="amb" id="amb"></div>
+<h2>Personnages</h2><div class="persos" id="persos"></div>
+<h2>Répliques <span style="font-weight:400;color:var(--dim);font-size:13px">(▶ = écouter avec les réglages actuels ; décocher = non lue)</span></h2>
+<table><thead><tr><th>#</th><th>Lire</th><th>Texte</th><th>Qui parle</th><th>Ton</th><th></th></tr></thead><tbody id="lignes"></tbody></table>
+<h2>Scène générée</h2><div id="etat"></div><video id="vid" controls playsinline></video>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let E = null, audio = new Audio();
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const NIV = ["très retenu", "retenu", "naturel", "très expressif"];
+
+async function charger(){
+  E = await (await fetch("/etat")).json();
+  $("titre").textContent = E.chap + " · p. " + E.pages;
+  $("amb").textContent = E.ambiance || "—";
+  $("vg").value = E.vitesse; $("vgv").textContent = (+E.vitesse).toFixed(2);
+  const optV = Object.entries(E.voix).map(([n, d]) => `<option value="${n}">${n} — ${esc(d)}</option>`).join("");
+  $("persos").innerHTML = E.persos.map((p, i) => `<div class="carte" data-i="${i}">
+    <h3>${esc(p.nom)} <span style="font-weight:400;color:var(--dim);font-size:13px">${esc(p.genre)}</span></h3>
+    <div class="fiche">${esc(p.fiche)}</div>
+    <label>Nom affiché</label><input type="text" data-k="renomme" value="${esc(p.renomme)}" placeholder="${esc(p.nom)}">
+    <label>Voix</label><select data-k="voix">${optV}</select>
+    <label>Caractère (2-5 mots, ajouté à chaque réplique)</label><input type="text" data-k="caractere" value="${esc(p.caractere)}" placeholder="ex. froid, posé">
+    <label>Intensité <span class="val" data-v="intensite"></span></label><input type="range" data-k="intensite" min="0" max="3" step="1" value="${p.intensite}">
+    <label>Vitesse de diction <span class="val" data-v="vitesse"></span></label><input type="range" data-k="vitesse" min="0.8" max="2" step="0.05" value="${p.vitesse || E.vitesse}">
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center"><button data-ecoute="${i}">▶ Écouter</button><span class="cons"></span></div></div>`).join("");
+  E.persos.forEach((p, i) => { const c = document.querySelector(`.carte[data-i="${i}"]`); c.querySelector('[data-k="voix"]').value = p.voix; majVals(c); });
+  const optP = E.persos.map(p => `<option>${esc(p.nom)}</option>`).join("") + "<option>inconnu</option>";
+  $("lignes").innerHTML = E.lignes.map((l, i) => `<tr data-i="${i}" class="${l.lire ? "" : "off"}"><td class="hide-s">p${l.page}·${l.id}</td>
+    <td><input type="checkbox" data-k="lire" ${l.lire ? "checked" : ""}></td><td class="t">${esc(l.texte)}</td>
+    <td><select data-k="locuteur">${optP}</select></td><td><input type="text" data-k="ton" value="${esc(l.ton)}"></td>
+    <td><button class="play" data-ligne="${i}" title="écouter">▶</button></td></tr>`).join("");
+  E.lignes.forEach((l, i) => { document.querySelector(`tr[data-i="${i}"] [data-k="locuteur"]`).value = l.locuteur; });
+  majVideo(); suivre();
+}
+function majVals(c){
+  c.querySelector('[data-v="intensite"]').textContent = NIV[+c.querySelector('[data-k="intensite"]').value];
+  c.querySelector('[data-v="vitesse"]').textContent = (+c.querySelector('[data-k="vitesse"]').value).toFixed(2);
+}
+function perso(nom){
+  const i = E.persos.findIndex(p => p.nom === nom); const c = document.querySelector(`.carte[data-i="${i}"]`);
+  if (!c) return { voix: "Schedar", caractere: "", intensite: 1, vitesse: +$("vg").value };
+  const v = k => c.querySelector(`[data-k="${k}"]`).value;
+  return { voix: v("voix"), caractere: v("caractere").trim(), intensite: +v("intensite"), vitesse: +v("vitesse"), renomme: v("renomme").trim() };
+}
+function lecture(){
+  const persos = {}; E.persos.forEach(p => persos[p.nom] = perso(p.nom));
+  const repliques = {}; E.lignes.forEach((l, i) => { const tr = document.querySelector(`tr[data-i="${i}"]`);
+    repliques[l.cle] = { lire: tr.querySelector('[data-k="lire"]').checked, locuteur: tr.querySelector('[data-k="locuteur"]').value,
+                         ton: tr.querySelector('[data-k="ton"]').value.trim() }; });
+  return { vitesse: +$("vg").value, persos, repliques };
+}
+async function ecouter(btn, texte, ton, p){
+  btn.disabled = true; const cons = btn.parentElement.querySelector(".cons");
+  try {
+    const r = await fetch("/ecouter", { method: "POST", body: JSON.stringify({ texte, ton, ...p }) });
+    if (!r.ok) throw new Error((await r.json()).erreur);
+    const c = r.headers.get("X-Consigne"); if (cons && c) cons.textContent = new TextDecoder().decode(Uint8Array.from(atob(c), x => x.charCodeAt(0)));
+    audio.src = URL.createObjectURL(await r.blob()); audio.play();
+  } catch(e){ alert("écoute : " + e.message); } finally { btn.disabled = false; }
+}
+document.addEventListener("input", e => { const c = e.target.closest(".carte"); if (c) majVals(c);
+  if (e.target.id === "vg") $("vgv").textContent = (+e.target.value).toFixed(2);
+  const tr = e.target.closest("tr[data-i]"); if (tr && e.target.dataset.k === "lire") tr.classList.toggle("off", !e.target.checked); });
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-ecoute]");
+  if (b){ const p = E.persos[+b.dataset.ecoute], l = E.lignes.find(x => x.locuteur === p.nom && x.lire && !x.muet) || { texte: "Bonjour, voici ma voix.", ton: "naturel" };
+    return ecouter(b, l.texte, l.ton, perso(p.nom)); }
+  const bl = e.target.closest("[data-ligne]");
+  if (bl){ const i = +bl.dataset.ligne, tr = document.querySelector(`tr[data-i="${i}"]`);
+    return ecouter(bl, E.lignes[i].texte, tr.querySelector('[data-k="ton"]').value, perso(tr.querySelector('[data-k="locuteur"]').value)); }
+});
+async function sauver(){ const r = await fetch("/reglages", { method: "POST", body: JSON.stringify(lecture()) }); if (!r.ok) throw new Error("enregistrement refusé"); }
+$("sauver").onclick = async () => { try { await sauver(); $("etat").innerHTML = '<span class="ok">Réglages enregistrés.</span>'; } catch(e){ alert(e.message); } };
+$("gen").onclick = async () => {
+  try { await sauver(); const r = await (await fetch("/generer", { method: "POST", body: "{}" })).json(); if (r.erreur) throw new Error(r.erreur); suivre(); }
+  catch(e){ alert(e.message); }
+};
+let T = null;
+async function suivre(){
+  clearTimeout(T); const e = await (await fetch("/etat")).json(); const g = e.gen;
+  $("gen").disabled = g.etat === "en cours";
+  if (g.etat === "en cours"){ $("etat").textContent = "Génération en cours… (voix + contrôle, ~2 s par réplique)"; T = setTimeout(suivre, 2000); return; }
+  if (g.etat === "fini"){ const s = g.stats || {}; $("etat").innerHTML = `<span class="ok">Scène prête</span> — ${s.repliques} répliques, ${s.audio_s} s de voix, ~${s.cout_total} $`; }
+  if (g.etat === "echec") $("etat").innerHTML = '<span class="ko">Échec</span><pre style="white-space:pre-wrap;font-size:12px">' + esc(g.log) + "</pre>";
+  if (e.video_t !== E.video_t){ E.video_t = e.video_t; majVideo(); }
+}
+function majVideo(){ if (E.video_t) $("vid").src = "/video?t=" + E.video_t; }
+charger().catch(e => { document.body.innerHTML = "<p style='padding:20px'>Erreur : " + esc(e.message) + "</p>"; });
+</script></body></html>

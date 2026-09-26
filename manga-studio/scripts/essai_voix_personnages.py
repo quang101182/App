@@ -20,7 +20,9 @@ sys.path.insert(0, HERE)
 import narrate_chapter as nc
 import karaoke_mots as km
 
-VERSION = "0.4.0"   # 0.4.0 : option --ordre cases (cases.json). ESSAYE sur OPM ch.6 p.5 : PIRE (2 cases detectees sur 3 -> « Hein ? » lu apres
+VERSION = "0.5.0"   # 0.5.0 (Quang 22h41) : « lire » (CHAIR DE POULE n'est pas une replique), ton cale sur le STYLE et la
+#          TENSION de la scene, reglages.json (voix, caractere, intensite, vitesse, ton/locuteur par replique) lu par l'atelier
+#   # 0.4.0 : option --ordre cases (cases.json). ESSAYE sur OPM ch.6 p.5 : PIRE (2 cases detectees sur 3 -> « Hein ? » lu apres
 #          « C'est bizarre ») -> defaut = ordre des id, qui y etait juste
 #   # 0.3.0 : --vitesse 1.5 (Quang 22h20 : « les voix sont lentes » ; mesure 8,5 car/s contre 14 pour sa narration Charon 1,05)
 #   # 0.2.0 : consigne COURTE (0.1.0 : la voix LISAIT la consigne, 10 s pour « Quoi ? ») + controle Whisper
@@ -49,18 +51,24 @@ personnages et des faits de chaque page (analyse precedente) : c'est un indice, 
      raconte a la 1re personne), c'est CE personnage.
    - « inconnu » si tu ne peux pas trancher : n'invente pas.
    - Une bulle qui ne contient que des points ou des « !! » : locuteur quand meme, et "muet": true.
-2. Pour chaque replique, le TON en quelques mots de consigne d'acteur, en francais (ex. « crie, excede »,
-   « murmure, gene », « plat, blase », « solennel, tres serieux »). Base-toi sur le dessin (visage, taille des
-   lettres, bulle herissee) ET le sens.
+   - "lire": false pour tout ce qui N'EST PAS PRONONCE : bruitage, onomatopee, sensation ou effet ecrit sur le dessin
+     (« CHAIR DE POULE », « BOUM », « frissons »), texte du decor (panneau, affiche). Une bulle de parole ou de pensee
+     et un encart de recit se lisent ("lire": true).
+2. D'abord l'AMBIANCE : le style du manga (ex. shonen d'action, comedie, drame) et la tension de CETTE scene.
+   Puis, pour chaque replique, le TON en quelques mots de consigne d'acteur, en francais (ex. « menacant, glacial »,
+   « murmure, gene », « plat, blase »). Il doit servir l'AMBIANCE : dans une scene tendue ou effrayante, pas de jeu
+   comique ni surjoue ; l'exces ne va qu'aux scenes comiques. Base-toi sur le dessin (visage, taille des lettres,
+   bulle herissee) ET le sens.
 3. Pour chaque personnage qui parle, choisis UNE voix dans ce catalogue (nom exact), selon son genre, son age et son
    caractere ; deux personnages ne partagent pas la meme voix. Le narrateur a la voix Charon (ne la donne a personne).
    Ecris sa FICHE DE JEU : une phrase qui decrit comment il parle d'habitude (debit, energie, registre), pour un acteur.
 CATALOGUE : %s
 
 Reponds UNIQUEMENT en JSON :
-{"distribution": [{"nom": "...", "genre": "homme|femme|?", "age": "...", "voix": "...", "fiche": "...", "pourquoi": "..."}],
+{"ambiance": "style du manga ; tension de la scene, en une phrase",
+ "distribution": [{"nom": "...", "genre": "homme|femme|?", "age": "...", "voix": "...", "fiche": "...", "pourquoi": "..."}],
  "repliques": [{"page": 2, "id": 3, "locuteur": "nom exact de la distribution | narrateur | inconnu", "ton": "...",
-                "muet": false, "indice": "ce qui designe le locuteur, en 10 mots max"}]}
+                "muet": false, "lire": true, "indice": "ce qui designe le locuteur, en 10 mots max"}]}
 """
 
 
@@ -131,10 +139,10 @@ def distribuer(chap_dir, pages_t, narr, stats):
 VITESSE = 1.5
 
 
-def dire(texte, voix, consigne, dest, stats):
+def dire(texte, voix, consigne, dest, stats, vitesse=None):
     body = {"input": {"text": texte, "prompt": consigne},
             "voice": {"languageCode": "fr-FR", "name": voix, "model_name": TTS_MODELE},
-            "audioConfig": {"audioEncoding": "MP3", "speakingRate": VITESSE}}
+            "audioConfig": {"audioEncoding": "MP3", "speakingRate": float(vitesse or VITESSE)}}
     r = nc.post("/api/gcptts/v1/text:synthesize", body, timeout=90)
     open(dest, "wb").write(base64.b64decode(r["audioContent"]))
     stats["tts_car"] = stats.get("tts_car", 0) + len(texte) + len(consigne)
@@ -151,6 +159,27 @@ def fuite(mp3, texte, stats):
     t = (km.whisper(mp3, "") or {}).get("text", "")
     stats["whisper"] = stats.get("whisper", 0) + 1
     return len(_norm(t)) > len(_norm(texte)) * 1.6 + 6, t.strip()
+
+
+INTENSITE = {0: "avec beaucoup de retenue", 1: "avec retenue", 2: "", 3: "de facon tres expressive"}
+INTENSITE_DEFAUT = 1          # Quang 22h22 : « diminuer un peu l'exageration de la comedie »
+
+
+def consigne(ton, caractere="", intensite=INTENSITE_DEFAUT):
+    """Consigne COURTE (une longue est lue a voix haute, mesure 26/09). Caractere = 2-5 mots, jamais une fiche."""
+    parts = [ton or "naturel"]
+    if caractere:
+        parts.append(caractere)
+    if INTENSITE.get(int(intensite), ""):
+        parts.append(INTENSITE[int(intensite)])
+    return ("Dis ceci d'un ton %s, en français." % ", ".join(parts))
+
+
+def reglages(out):
+    try:
+        return json.load(open(os.path.join(out, "reglages.json"), encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
 
 
 def texte_lu(t):
@@ -226,19 +255,29 @@ def main():
         json.dump(dist, open(fdist, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     else:
         dist = json.load(open(fdist, encoding="utf-8"))
+    reg = reglages(out)
+    if reg.get("vitesse"):
+        VITESSE = float(reg["vitesse"])
     casting = {c["nom"]: c for c in dist["distribution"]}
+    for nom, o in (reg.get("persos") or {}).items():          # reglages de Quang (atelier) > choix de l'IA
+        casting.setdefault(nom, {"nom": nom}).update({k: v for k, v in o.items() if v not in (None, "")})
     casting.setdefault("narrateur", {"nom": "narrateur", "voix": "Charon", "fiche": "Narrateur de recap manga, pose et clair."})
     for c in dist["distribution"]:
         if c.get("voix") not in VOIX:
             print("  voix hors catalogue pour %s : %s -> Schedar" % (c["nom"], c.get("voix"))); c["voix"] = "Schedar"
         print("  %-14s %-6s %-12s %s" % (c["nom"], c.get("genre", ""), c["voix"], c.get("fiche", "")))
+    print("  ambiance :", dist.get("ambiance"))
     rep = {(r["page"], r["id"]): r for r in dist["repliques"]}
     print("2. voix + 3. images...")
     plan, n = [], 0
     for p in pages_t:
         png = os.path.join(chap_dir, "traduction", a.langue, p["file"])
         for b in p["_bulles"]:
-            r = rep.get((p["page"], b["id"])) or {"locuteur": "inconnu", "ton": "neutre"}
+            r = dict(rep.get((p["page"], b["id"])) or {"locuteur": "inconnu", "ton": "neutre"})
+            r.update({k: v for k, v in ((reg.get("repliques") or {}).get("%d-%d" % (p["page"], b["id"])) or {}).items()
+                      if v not in (None, "")})
+            if r.get("lire") is False:
+                print("  -- p%d b%-3d NON LUE (%s)" % (p["page"], b["id"], b["trad"][:40])); continue
             qui = r.get("locuteur") or "inconnu"
             c = casting.get(qui) or {"voix": "Schedar", "fiche": "Voix neutre."}
             n += 1
@@ -246,6 +285,7 @@ def main():
             mp3, img = os.path.join(out, "repliques", nom_f + ".mp3"), os.path.join(out, "images", nom_f + ".png")
             texte = texte_lu(b["trad"])
             muet = r.get("muet") or not re.search(r"\w", texte)
+            cons = None
             if muet:
                 duree = 1.2
                 subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono",
@@ -253,18 +293,19 @@ def main():
             else:
                 # 0.2.0 : la fiche de jeu N'EST PAS envoyee a la voix (elle la lisait) -- elle sert au choix du timbre et
                 # au ton ecrit replique par replique, qui la porte deja (« plat, blase » pour Saitama)
-                consigne = "Dis ceci d'un ton %s, en français." % (r.get("ton") or "naturel")
-                duree = dire(texte, c["voix"], consigne, mp3, stats)
+                cons = consigne(r.get("ton"), c.get("caractere", ""), c.get("intensite", INTENSITE_DEFAUT))
+                duree = dire(texte, c["voix"], cons, mp3, stats, c.get("vitesse"))
                 f_, t_ = fuite(mp3, texte, stats)
                 if f_:
                     print("    fuite (%s) -> refaite" % t_[:60]); stats["refaites"] = stats.get("refaites", 0) + 1
-                    duree = dire(texte, c["voix"], consigne, mp3, stats)
+                    duree = dire(texte, c["voix"], cons, mp3, stats, c.get("vitesse"))
                     f_, t_ = fuite(mp3, texte, stats)
                     if f_:
                         stats["fuites_restantes"] = stats.get("fuites_restantes", 0) + 1; print("    FUITE RESTANTE : " + t_[:80])
-            image_replique(png, b["box"], ("%s  (%s)" % (qui, r.get("ton", ""))) if not muet else qui, b["trad"], img)
+            affiche = c.get("renomme") or qui                     # atelier : « p1 » -> « Fille-Moustique »
+            image_replique(png, b["box"], ("%s  (%s)" % (affiche, r.get("ton", ""))) if not muet else affiche, b["trad"], img)
             plan.append({"n": n, "page": p["page"], "id": b["id"], "locuteur": qui, "voix": c["voix"], "ton": r.get("ton"),
-                         "texte": b["trad"], "indice": r.get("indice"), "duree": duree, "mp3": mp3, "img": img})
+                         "texte": b["trad"], "indice": r.get("indice"), "consigne": cons, "duree": duree, "mp3": mp3, "img": img})
             print("  %2d p%d b%-3d %-12s %-10s %-24s %s" % (n, p["page"], b["id"], qui[:12], c["voix"], (r.get("ton") or "")[:24], b["trad"][:50]))
     # montage : chaque replique = son image pendant sa voix + 0,35 s de respiration
     lst = os.path.join(out, "montage.txt")
