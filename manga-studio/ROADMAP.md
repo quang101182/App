@@ -2866,7 +2866,10 @@ Swipe vers le bas sur la barre ? ».
       écran allumé (Wake Lock) ; clavier PC. L'avertissement de saut reste.
 - [x] **S0 — Maquette du sélecteur rapide** : v1 (grande feuille : champ n° + grille de tous les chapitres) et v2 (compacte, puces
       du lot, à la demande de Quang 11h06) envoyées ; **Quang 11h08 : « je préfère ta 1ère proposition » → v1 retenue**.
-- [ ] **S1 — Sélecteur** (Quang 11h10 : « sélecteur de chapitre, sélecteur de narration et sélecteur de vidéo, pense à tous les cas »).
+- [x] **S1 — Sélecteur v2.69.0** (26/09 11h25 ; `app_patch_269_selecteur.py`, banc `test_selecteur_ui.py` **26/26** à 360 et 1280 px :
+      bulle, glisser vers le haut, n° exact / préfixe / absent → plus proche, filtres, vidéo grisée + raison, version, Échap, glisser
+      vers le bas). ⚠ Non couvert par le banc : contexte NARRATION (lecteur narré) et PAGES (visionneuse) — codés, à tester.
+      (Quang 11h10 : « sélecteur de chapitre, sélecteur de narration et sélecteur de vidéo, pense à tous les cas »).
       **Cas à couvrir, chacun testé** : chapitre courant (vert, centré à l'ouverture) · lu / non lu · numéro ABSENT de la bibliothèque
       (pointillé, non cliquable ; la recherche propose le plus proche) · chapitre SANS narration / SANS vidéo dans le sélecteur
       correspondant (grisé + raison) · PLUSIEURS narrations (voix) ou vidéos (versions) pour un chapitre → choix de la version
@@ -2876,6 +2879,13 @@ Swipe vers le bas sur la barre ? ».
       glisser vers le bas, Échap) · clavier PC (G) · 360 → 1280 px · les deux applications.
       Branchement : un seul composant, branché sur chaque barre du bas (navigation chapitre, lecteur narré, lecteur vidéo ;
       visionneuse = « aller à la page »), ouvert par glissement vers le haut ou toucher de la bulle.
+- [ ] **PWA secondaire — bandeau Chrome** (Quang 11h22-11h26, captures) : la secondaire, atteinte par l'APPUI LONG depuis la
+      principale installée, s'ouvre DANS la fenêtre de la principale (`espaceBasculer` : `location.href = ESPACE.autre`) → onglet
+      Chrome + bandeau qui apparaît / disparaît au défilement. Les deux sont installées ; leurs manifestes ont le MÊME nom
+      (« Manga Studio / Manga », id /manga/) — indiscernables. Piste : en mode installé, `window.open(ESPACE.autre, "_blank")` pour
+      qu'Android confie l'adresse à l'appli installée de la secondaire ; + un nom distinct neutre pour la secondaire. ⛔ À VÉRIFIER
+      SUR UN VRAI TÉLÉPHONE (Samsung de test, les deux installées) — le choix d'appli par Android ne se simule pas.
+- [ ] **Relance de la secondaire** (au repos) : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
 - [ ] **B — Bancs** : app réelle, 360/476/704/933/1280, gestes simulés (touch), sabotage rouge, bancs voisins
       (`test_activite_ui`, navigation, visionneuse).
 - [ ] **C — Clôture** : ROADMAP, HANDOFF-reprise, commit + push.
