@@ -2975,6 +2975,11 @@ Swipe vers le bas sur la barre ? ».
       (Quang 12h26) : glisser VERS LA DROITE = image
       SUIVANTE, vers la gauche = précédente (« on l'avait inversé ailleurs, celui-là on l'a oublié »). Vérifier le sens des autres
       barres pour rester cohérent.
+- [x] **Capture : « depuis la page 1 » cochée d'office + mémorisée** (v2.74.0, 26/09 13h12, `app_patch_274_page1.py` ; banc
+      `test_capture_page1_ui.py` **10/10** à 360 + 1280 (appareil neuf = cochée, décochée/recochée survivent au rechargement),
+      `--mutation` → 2 KO ; Quang 13h06 : *« en persistance mémoire, ou le
+      laisser toujours coché d'office »*). Défaut = cochée ; si Quang la décoche, le choix est gardé sur l'appareil
+      (`localStorage manga_cap_page1`). Sans risque : partir de la page 1 ne change rien quand l'onglet y est déjà.
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),
       `GET /manga/bibliotheque` rend maintenant `videos_pos` : reprise de position commune PC / téléphone sur les DEUX applications. : active `video_pos` côté serveur pour elle (patché sur disque, pas relancée à 11h20).
       26/09 11h35 : principale ✅ (`GET /manga/bibliotheque` rend `videos_pos`), secondaire ❌ (clé absente) et OCCUPÉE (lot de
