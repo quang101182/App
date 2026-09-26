@@ -20,7 +20,8 @@ sys.path.insert(0, HERE)
 import narrate_chapter as nc
 import karaoke_mots as km
 
-VERSION = "0.2.0"   # 0.2.0 : consigne COURTE (0.1.0 : la voix LISAIT la consigne, 10 s pour « Quoi ? ») + controle Whisper
+VERSION = "0.3.0"   # 0.3.0 : --vitesse 1.5 (Quang 22h20 : « les voix sont lentes » ; mesure 8,5 car/s contre 14 pour sa narration Charon 1,05)
+#   # 0.2.0 : consigne COURTE (0.1.0 : la voix LISAIT la consigne, 10 s pour « Quoi ? ») + controle Whisper
 SOURCES = os.environ.get("MANGA_SOURCES_DIR") or os.path.expanduser(r"~\Documents\MangaStudio-donnees\sources")
 TTS_MODELE = "gemini-2.5-flash-tts"
 # Catalogue Gemini TTS (genre + timbre annonces par Google). Le narrateur reste Charon, la voix des recits.
@@ -66,6 +67,8 @@ def args_():
     a.add_argument("chap")
     a.add_argument("--pages", default="2-6")
     a.add_argument("--langue", default="fr")
+    a.add_argument("--vitesse", type=float, default=1.5,
+                   help="speakingRate Gemini TTS (respecte, mesure : 1.0 = 9 car/s, 1.3 = 12,4, 1.6 = 15 ; narration Charon 1,05 = 14)")
     a.add_argument("--refaire", action="store_true", help="refait la distribution (sinon reprise du fichier)")
     return a.parse_args()
 
@@ -99,10 +102,13 @@ def distribuer(chap_dir, pages_t, narr, stats):
     return nc.parse_json(txt)
 
 
+VITESSE = 1.5
+
+
 def dire(texte, voix, consigne, dest, stats):
     body = {"input": {"text": texte, "prompt": consigne},
             "voice": {"languageCode": "fr-FR", "name": voix, "model_name": TTS_MODELE},
-            "audioConfig": {"audioEncoding": "MP3"}}
+            "audioConfig": {"audioEncoding": "MP3", "speakingRate": VITESSE}}
     r = nc.post("/api/gcptts/v1/text:synthesize", body, timeout=90)
     open(dest, "wb").write(base64.b64decode(r["audioContent"]))
     stats["tts_car"] = stats.get("tts_car", 0) + len(texte) + len(consigne)
@@ -164,6 +170,8 @@ def image_replique(page_png, box, nom, texte, dest, W=1080, H=1920):
 def main():
     nc._sorties_utf8()
     a = args_()
+    global VITESSE
+    VITESSE = a.vitesse
     nc.SECRET = nc._secret()
     chap_dir = os.path.join(SOURCES, a.chap.replace("/", os.sep))
     out = os.path.join(chap_dir, "essai_voix")
@@ -180,7 +188,7 @@ def main():
             p["_bulles"] = sorted([b for b in p["bulles"] if b["type"] in ("dialogue", "narration")
                                    and not b.get("ecarte") and (b.get("trad") or "").strip()], key=lambda b: b["id"])
             pages_t.append(p)
-    stats = {"version": VERSION, "chap": a.chap, "pages": a.pages, "tts": TTS_MODELE}
+    stats = {"version": VERSION, "chap": a.chap, "pages": a.pages, "tts": TTS_MODELE, "vitesse": VITESSE}
     fdist = os.path.join(out, "distribution.json")
     if a.refaire or not os.path.isfile(fdist):
         print("1. distribution + attribution (%d pages, %d bulles)..." % (len(pages_t), sum(len(p["_bulles"]) for p in pages_t)))
