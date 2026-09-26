@@ -2948,7 +2948,14 @@ Swipe vers le bas sur la barre ? ».
       batterie) est cachée et « clignote » parfois (apparaît brièvement puis disparaît) ; Friday et Generate Studio la gardent
       TOUJOURS visible → faire comme eux. Constat (lu 26/09) : manifestes `display: "fullscreen"` (principale ET secondaire).
       À comparer avec les manifestes de Friday / Generate Studio avant de toucher.
-- [ ] **Visionneuse (page par page, plein écran) — sens du glisser inversé** (Quang 12h26) : glisser VERS LA DROITE = image
+- [x] **Visionneuse — balayer L'IMAGE : vers la droite = suivante** (v2.72.0, 26/09 12h35, `app_patch_272_balayage_image.py`).
+      C'était le balayage SUR L'IMAGE (`dx < 0 ? 1 : -1`, sens « livre ») ; la BARRE de la visionneuse allait déjà dans le bon sens
+      (v2.61.0). Maintenant les deux vont pareil. Nouveau banc `test_balayage_image_ui.py` **14/14** (vrais événements tactiles
+      CDP, 360 + 1280 : droite, droite, gauche, vertical = rien, zoomée = déplace sans tourner) ; `--mutation` (ancien sens) → 5 KO.
+      Vrai doigt Samsung : 1 → 2 → 3 → 2. ⚠ `test_bibliotheque_ui.py` est PÉRIMÉ (bloque sur un `select` devenu invisible, avant
+      le balayage — sans lien avec ce changement) ; ses 2 attentes de balayage sont déjà inversées. **Déclencheur** : prochaine
+      modification de la bibliothèque. Énoncé :
+      (Quang 12h26) : glisser VERS LA DROITE = image
       SUIVANTE, vers la gauche = précédente (« on l'avait inversé ailleurs, celui-là on l'a oublié »). Vérifier le sens des autres
       barres pour rester cohérent.
 - [x] **Relance de la secondaire** (au repos) — ✅ 26/09 11h50 par le veilleur (2 relevés vides, PID = `espace_prive.py`),

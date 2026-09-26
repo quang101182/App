@@ -162,10 +162,10 @@ with sync_playwright() as p:
                 cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
                 pg.wait_for_timeout(400)
             cx, cy = wb["x"] + wb["width"] / 2, wb["y"] + wb["height"] / 2
+            glisse(cx - 100, cx + 100, cy)                  # v2.72.0 (Quang 26/09) : vers la DROITE = suivante, comme la barre
+            check("balayage a droite (doigt) -> page suivante", pg.evaluate("() => LB") == 1, pg.evaluate("() => LB"))
             glisse(cx + 100, cx - 100, cy)
-            check("balayage a gauche (doigt) -> page suivante", pg.evaluate("() => LB") == 1, pg.evaluate("() => LB"))
-            glisse(cx - 100, cx + 100, cy)
-            check("balayage a droite -> page precedente", pg.evaluate("() => LB") == 0, pg.evaluate("() => LB"))
+            check("balayage a gauche -> page precedente", pg.evaluate("() => LB") == 0, pg.evaluate("() => LB"))
             cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": cx - 30, "y": cy, "id": 1}, {"x": cx + 30, "y": cy, "id": 2}]})
             for i in range(1, 6):
                 cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": cx - 30 - 16 * i, "y": cy, "id": 1}, {"x": cx + 30 + 16 * i, "y": cy, "id": 2}]})
