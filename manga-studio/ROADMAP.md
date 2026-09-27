@@ -3484,7 +3484,18 @@ bulles vérifiées 19h45 → préparation 19h48 (0,067 $) → 29 voix 19h49 (445
   texte (à gauche si le bord manque), + fin contour de la zone pour voir quel texte elle désigne. Banc `test_verif_bulles_ui.py`
   **23/23** (serveur de test 8191, copies légères) + capture `samsung_out/verif_360.png` regardée : texte lisible, pastilles hors
   des lettres.
-- [ ] **S4 — 🎭 « Qui parle ? » PENDANT la vérification des bulles** (la vraie demande). **Maquette à faire valider** :
+- [x] **S3-bis — la bulle entourée s'affichait DEUX fois dans la vérification** (Quang 20h36, capture Noritaka p. 6 : « 1.13 »,
+  « ça devrait être 2 ») ✅ app **v3.4.6**. Son ordre enregistré était JUSTE (2ᵉ) et les répliques aussi ; mais depuis 1.22.0 la
+  bulle entourée est écrite dans `traduction.json` → `dlvItems` la montrait comme ajout (n° 2) ET comme bulle détectée (n° 13), les
+  deux pastilles au même endroit, le 13 par-dessus. Corrigé : l'ajout « absorbe » la bulle de même n° ou même zone. Simulation de
+  la vraie fonction sur la page : v3.4.5 → 13 pastilles, v3.4.6 → 12 dans l'ordre de Quang ; banc 23/23. (Sans ce correctif,
+  valider cette page aurait enregistré la bulle deux fois.)
+- [x] **S3-ter — glisser une pastille ne marchait que dans un sens** (Quang 20h38) ✅ app **v3.4.7**. Vers l'avant, la pastille se
+  posait juste AVANT la cible (1 sur 2 = rien ne bouge). Désormais elle PREND LA PLACE de la cible dans les deux sens (1 sur 2 =
+  échange ; 1 sur 3 = devient n° 3), la cible est cherchée là où les pastilles sont vraiment dessinées (`dlvPastille()`, règle unique
+  dessin + glisser) OU sur le texte d'une bulle, et le message dit le résultat (« ↕ 1 → n° 3 »). Banc `test_verif_bulles_ui.py`
+  **29/29** (6 contrôles ajoutés : avant, arrière, 1→3, message, lâcher sur le texte, ↶ ×4) ; v3.4.6 = **ROUGE 24/29**.
+- [ ] **S4 — 🎭 « Qui parle ? » PENDANT la vérification des bulles** (la vraie demande). **Maquette VALIDÉE par Quang 20h38** (« je valide ton mockup, mais assurons-nous que ce soit très pratique à utiliser et fiable ») :
   `maquette_qui_parle_v1.html`. Proposition (pensée utilisateur, 1 geste par bulle, zéro écran de plus) :
   - sous l'image, une **rangée de pastilles-personnages** (couleur + nom court) = la distribution DÉJÀ connue de la série
     (+ « ＋ » pour un nouveau : nom + ♂/♀, 2 touchers) ; rien de choisi = « l'IA décide » (comme aujourd'hui) ;
