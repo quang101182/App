@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.17.0"  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.18.0"  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -54,6 +54,8 @@ VERSION = "1.17.0"  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distrib
 SOURCES = os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources")
 LOT_PAGES = 4                       # pages par appel (essai 26/09 : 3 pages = 12 s, 5 pages = 26 s)
 PALETTE = ["#ff5fa2", "#ffb347", "#6fb8ff", "#b58cff", "#5fe3a1", "#ff7a5c", "#f5e663", "#4fd6e8", "#e88aff", "#c7a17a"]
+PALETTE_H = ["#6fb8ff", "#4fd6e8", "#5fe3a1", "#ffb347", "#f5e663", "#c7a17a", "#7f8cff"]   # 1.18.0 : hommes (meme liste que l'app)
+PALETTE_F = ["#ff5fa2", "#e88aff", "#b58cff", "#ff7a5c", "#ff9ec7", "#f7b2ff"]              # 1.18.0 : femmes
 NARRATEUR_VOIX = "JBFqnCBsd6RMkjVDRZzb"     # George -- homme, conteur pose et constant (Quang 26/09 23h55 : un homme, constant)
 DISTRIB_VERSION = 1
 # Tarif REEL d'eleven_v3, mesure au solde du compte le 27/09 (D8) : 789 car. -> 218 cr., 33 -> 9, 23 -> 6.
@@ -403,7 +405,8 @@ def fusionner_distribution(distrib, nouveaux, cat):
             g = {"homme": "male", "femme": "female"}.get((n.get("genre") or "").lower())
             libre = [x["id"] for x in cat if x["id"] not in prises and (g is None or x["genre"] == g)]
             v = libre[0] if libre else v
-        couleur = next((c for c in PALETTE if c not in couleurs), PALETTE[len(distrib["persos"]) % len(PALETTE)])
+        fam = {"homme": PALETTE_H, "femme": PALETTE_F}.get((n.get("genre") or "").lower(), PALETTE_H + PALETTE_F)   # 1.18.0
+        couleur = next((c for c in fam if c not in couleurs), fam[len(distrib["persos"]) % len(fam)])
         gk = {"homme": "h", "femme": "f"}.get((n.get("genre") or "").lower())      # 1.16.0 (R18) : defauts du genre
         p = {"nom": nom, "alias": [], "genre": n.get("genre") or "?", "age": n.get("age") or "", "fiche": n.get("fiche") or "",
              "voix_el": v, "expressivite": 1, "vitesse": defaut_reglage("voix_%s_vitesse" % gk, 1.1) if gk else 1.1,

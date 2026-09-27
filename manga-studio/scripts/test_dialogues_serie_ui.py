@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Banc D10 (v2.82.0, maquette_dialogues_serie_v1 validee 27/09 02h28) : bouton 🎭 Dialogues de la SERIE et son panneau, sur
+"""⚠ PERIME pour la partie R9 (lignes « ✅ prets · 🎬 ») depuis v3.0.0 : le panneau est devenu une synthese -> test_series_synthese_ui.py.
+Banc D10 (v2.82.0, maquette_dialogues_serie_v1 validee 27/09 02h28) : bouton 🎭 Dialogues de la SERIE et son panneau, sur
 l'APP REELLE (8190, One Punch-Man : ch.5 prets + video, ch.302 a mettre en voix + FR partiel). Page = le HTML donne
 (interception) ; les lancements payants (voix, lot) sont INTERCEPTES : 0 appel paye.
 Usage : python test_dialogues_serie_ui.py [html]        (html = page v2.81.8 -> doit sortir ROUGE)"""

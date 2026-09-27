@@ -63,6 +63,7 @@
 
 ## 3. Règles et pièges (ne pas les repayer)
 
+- **27/09 17h25 — app v3.0.0** (R29 : séries en synthèse, voix / couleurs par genre ; dialogues.py 1.18.0) après v2.99.2 (R28 fil + doublon). Ouvert : vérif au doigt sur le Fold.
 - **27/09 16h05 — app v2.99.0 Dialogues compacts (R27, maquette validée)** + v2.98.1 caméra « suivre la case » (R26). + v2.99.1 « Oublier cette plage » (patch_dialogues_11 déployé sur les 2 instances). Ouvert : vérif au doigt sur le Fold.
 - **27/09 14h56 — garde du retour v2.97.0 PROUVÉE sur une WebAPK réelle (Samsung)** : `scripts/test_garde_webapk_samsung.py` 15/15 (3 cycles). Il ne reste que la confirmation au doigt sur le Fold, au 1er usage de Quang (rien à coder).
 - **27/09 14h50 — app v2.98.0** : « rester dans la secondaire » RETIRÉ (bandeau Chrome sur le Fold ; renvoi sans geste = même fenêtre). Reste à confirmer sur le Fold : garde du retour v2.97.0 (1er retour = avertissement). Ne PAS retenter un renvoi automatique vers l'autre application : Android ne l'ouvre dans SA fenêtre que sur un geste de l'utilisateur.
