@@ -24,7 +24,10 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.8.0"   # 1.8.0 (27/09, Quang) : preparer --traduire = traduit d'abord les pages DEMANDEES qui ne le sont pas
+VERSION = "1.8.1"   # 1.8.1 (27/09, Quang 02h26 : « plus de personnages que prevu, un homme et une femme p.44-65 ») : les
+#          personnages decouverts dans un lot rejoignent la distribution AVANT le lot suivant (avant : fusion a la fin -> un
+#          meme homme nomme 4 fois, « cheveux blancs / argentes / clairs / gris », un nom par lot de 4 pages)
+#   # 1.8.0 : 1.8.0 (27/09, Quang) : preparer --traduire = traduit d'abord les pages DEMANDEES qui ne le sont pas
 #          (traduire_chapitre.py --pages --via dialogues : ajoutees a la traduction, tracees), jamais sans ce drapeau
 #   # 1.7.0 : 1.7.0 (D8, 27/09) : credits = tarif MESURE du v3 (0,28/caractere), plus 1/caractere
 #   # 1.6.1 : 1.6.1 : contour degenere (< 3 points / < 20 % de la boite) -> repli ovale
@@ -203,7 +206,8 @@ d'autres chapitres) et des indices sur ce chapitre : l'IMAGE fait foi.
 0. Si le texte d'une bulle est VIDE (page deja en francais, rien de traduit), LIS-le sur l'image et rends-le dans "texte",
    mot pour mot, casse d'origine, sans rien corriger ni ajouter.
 1. Pour CHAQUE bulle, QUI la prononce (queue de la bulle, case, qui est dessine, sens de la phrase) :
-   - un personnage CONNU : son nom EXACT de la distribution (n'invente pas un 2e nom pour lui) ;
+   - un personnage CONNU : son nom EXACT de la distribution (n'invente pas un 2e nom pour lui). Meme role, meme allure aux
+     nuances du dessin pres (couleur des cheveux ou des yeux qui varie avec l'encrage ou la lumiere) = LE MEME personnage ;
    - un personnage NOUVEAU : un nom court (son vrai nom s'il est dit ou ecrit, sinon une description courte comme « Vieil
      homme ») et decris-le dans "nouveaux" ;
    - « narrateur » pour un encart de recit sans personnage ; le monologue d'un personnage (souvenir a la 1re personne) = CE
@@ -271,6 +275,7 @@ def preparer_pages(chap_dir, d, pages, distrib, narr, cat, stats, relais):
             r, dt = preparer_lot(chap_dir, lot, distrib, narr, cat, stats)
             log("  pages %s : %d repliques en %.1f s" % (nums, len(r.get("repliques") or []), dt))
             reponses.append(r)
+            stats.setdefault("_ajoutes", []).extend(fusionner_distribution(distrib, r.get("nouveaux"), cat))   # 1.8.1 : connu du lot suivant
             fait += len(lot)
         except mod.Refus as e:
             stats["cout_preparation"] = stats.get("cout_preparation", 0.0) + nc.cout(nc.ENGINES[e.moteur][1] if e.moteur in nc.ENGINES else "gemini-3.6-flash", getattr(e, "usage", None) or {})
@@ -286,6 +291,7 @@ def preparer_pages(chap_dir, d, pages, distrib, narr, cat, stats, relais):
                     r, dt = _appel_relais(chap_dir, [p], distrib, narr, cat, stats, autre)
                     lu = autre
                     reponses.append(r)
+                    stats.setdefault("_ajoutes", []).extend(fusionner_distribution(distrib, r.get("nouveaux"), cat))
                     stats.setdefault("relais", []).append({"page": p["page"], "de": "gemini", "vers": autre})
                     break
                 except mod.Refus as e2:
@@ -430,7 +436,7 @@ def cmd_preparer(a):
         VERSION, a.chap, len(pages), sum(len(p["_bulles"]) for p in pages), len(distrib["persos"]), "oui" if relais else "non"))
     t0 = time.time()
     reponses, a_traiter = preparer_pages(chap_dir, a.chap, pages, distrib, narr, cat, stats, relais)
-    ajoutes = []
+    ajoutes = stats.pop("_ajoutes", [])                      # 1.8.1 : fusionnes au fil des lots
     for r in reponses:
         ajoutes += fusionner_distribution(distrib, r.get("nouveaux"), cat)
     rep = {}

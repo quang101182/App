@@ -3253,7 +3253,15 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       doigt** : OPM ch. 302 (VO vietnamienne) p. 2-3 → confirmation → traduction (étape visible) → préparation, 52 s, 9 répliques,
       ligne 🌐 « 2 / 18 pages », 0 erreur JS (ch. 302 reste « FR partiel » dans la bibliothèque, tracé). Principale relancée
       au repos 02h10 ; ~~secondaire pas relancée (capture en cours)~~ → **secondaire relancée 02h17** (la capture était finie : constat non revérifié, corrigé par Quang).
-- [ ] **D10 — Bouton 🎭 Dialogues dans la fiche de la SÉRIE** (Quang 01h24 : « retrouver ce qui existe avec ce nouveau format […]
+- [x] **Bug D-perso (Quang 02h26, capture d'un chapitre de la secondaire)** : « plus de personnages que prévu » — un homme et une
+      femme sur les pages demandées, mais le même homme nommé **4 fois** (une description différente par couleur de cheveux).
+      Cause lue dans le code : la préparation fait un appel par lot de 4 pages et ne fusionnait les nouveaux personnages qu'à
+      la FIN → sans distribution au départ, chaque lot inventait son propre nom. → `dialogues.py` 1.8.1 : fusion APRÈS CHAQUE
+      LOT (le lot suivant voit les noms) + consigne « même rôle, même allure aux nuances du dessin près = le même ». Banc
+      `test_dialogues_preparer.py` **26/26** (scénario F : 3 lots d'une page → 1 seul nom) ; sabotage « fusion en fin » =
+      ROUGE et reproduit le bug (3 noms). Chapitre de Quang réparé à la main (sauvegardes `.bak-20260927-fusion`) : 3 noms
+      devenus alias du 1er, 24 répliques réattribuées ; les voix des répliques concernées sont à refaire (voix changée).
+- [ ] **D10 — Bouton 🎭 Dialogues dans la fiche de la SÉRIE** — ✅ maquette `maquette_dialogues_serie_v1.html` VALIDÉE par Quang 02h28 (Quang 01h24 : « retrouver ce qui existe avec ce nouveau format […]
       un bouton à l'onglet […] il ne faudrait pas mélanger l'ensemble » ; choix délégué) : **décidé par Claude** — bouton séparé
       à côté de 🎬 Vidéos, panneau « 🎭 Dialogues de la série » (chapitres préparés / voix prêtes / à refaire / vidéo à jour,
       Lire · Voir · ⬇, lancement « plusieurs chapitres » déjà prévu en D4 depuis la fiche) ; rien dans le panneau Vidéos de la

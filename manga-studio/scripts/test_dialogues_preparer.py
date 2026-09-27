@@ -72,6 +72,17 @@ def charger(src_patch=None):
             e.usage = {"prompt_tokens": 1000, "completion_tokens": 0}
             raise e
         rep, nouveaux = [], []
+        if ETAT.get("chaine"):              # F (1.8.1) : le modele REUTILISE un nom s'il le voit dans la distribution recue
+            tout = (sys_ or "") + " ".join(textes)
+            connu = next((n for n in ETAT["chaine"] if n in tout), None)
+            nom = connu or ETAT["chaine"][len(ETAT["appels"]) - 1]
+            for t in textes:
+                mm = re.search(r"=== PAGE (\d+) ===.*?Bulles : (\[.*\])", t, re.S)
+                if mm:
+                    rep += [{"page": int(mm.group(1)), "id": b["id"], "qui": nom, "ton": "ferme", "lire": True, "indice": "banc"}
+                            for b in json.loads(mm.group(2))]
+            nouveaux = [] if connu else [{"nom": nom, "genre": "homme", "age": "jeune", "fiche": "timide", "voix_el": "ADAM"}]
+            return json.dumps({"ambiance": "tendu", "nouveaux": nouveaux, "repliques": rep}), {"prompt_tokens": 2000, "completion_tokens": 500}
         for t in textes:
             mm = re.search(r"=== PAGE (\d+) ===.*?Bulles : (\[.*\])", t, re.S)
             if not mm:
@@ -173,14 +184,41 @@ print("=== D. sans traduction")
 os.makedirs(os.path.join(T, "opm", "ch_99"), exist_ok=True)
 check("D. arret code 3", lancer(m, chap="opm/ch_99") == 3)
 
+def scenario_lots(m, verbeux=True):
+    """F (1.8.1, Quang 02h26) : 3 lots d'UNE page, aucune distribution au depart ; le modele invente un nom au 1er lot et le
+    reutilise s'il le voit ensuite. Attendu : UN seul personnage, pas un par lot."""
+    k0 = len(KO)
+    copie()
+    try: os.remove(os.path.join(T, "opm", "dialogues_distribution.json"))
+    except FileNotFoundError: pass
+    ETAT.update(chaine=["Homme aux cheveux blancs", "Homme aux cheveux gris", "Homme aux cheveux argentes"], refuse=set(), appels=[])
+    m.LOT_PAGES = 1
+    try:
+        lancer(m)
+    finally:
+        ETAT.pop("chaine", None)
+    noms = [p["nom"] for p in distrib()["persos"]]
+    check("F. 3 lots, un seul homme : le nom du 1er lot est repris ensuite", noms == ["Homme aux cheveux blancs"] and len(ETAT["appels"]) == 3, (noms, ETAT["appels"]))
+    return len(KO) == k0
+
+print("=== F. personnages nommes au fil des lots")
+scenario_lots(charger())
+
 print("=== E. mutations (doivent rendre le banc ROUGE)")
 for nom, patch in (("alias ignore", [('if q.lower() == p["nom"].lower() or q.lower() in [a.lower() for a in p.get("alias", [])]:',
                                       'if q.lower() == p["nom"].lower():')]),
                    ("corrections ecrasees", [('neuf.update({k: v for k, v in corr.items() if k in ("texte", "qui", "ton", "lire")})',
                                               'pass')])):
+    pass
+for nom, patch, sc in (("fusion en fin de preparation (avant 1.8.1)", [('            stats.setdefault("_ajoutes", []).extend(fusionner_distribution(distrib, r.get("nouveaux"), cat))   # 1.8.1 : connu du lot suivant',
+                                                                        '            pass')], scenario_lots),
+                       ("alias ignore", [('if q.lower() == p["nom"].lower() or q.lower() in [a.lower() for a in p.get("alias", [])]:',
+                                          'if q.lower() == p["nom"].lower():')], scenario),
+                       ("corrections ecrasees", [('neuf.update({k: v for k, v in corr.items() if k in ("texte", "qui", "ton", "lire")})',
+                                                  'pass')], scenario)):
     avant, avant_ok = len(KO), len(OK)
     print("  (sabotage « %s » : vérifications ci-dessous attendues en partie ROUGES)" % nom)
-    vert = scenario(charger(patch), verbeux=False)
+    vert = sc(charger(patch), verbeux=False)
     del KO[avant:]; del OK[avant_ok:]          # le scenario sabote ne compte pas dans le verdict, seul son resultat compte
     check("E. mutation « %s » detectee" % nom, not vert)
 
