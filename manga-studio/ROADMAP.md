@@ -3407,7 +3407,7 @@ RÉELLE + sabotage ROUGE, bump version, commit + push à chaque étape ; apparei
       est fermé → le 2e l'affiche en ouvrant ; sabotage (journal ignoré) = ROUGE.
 - [x] **R10-bis — Libellé de la fin des Dialogues** (✅ v2.85.0, `actFinTxt`, vérifié par le banc R10) : « 🎭 Préparation finie » / « 🔊 Voix finies » / « 🎬 Vidéo finie » selon
       l'étape (au lieu de « Dialogues fini »). Avec R10 (même code).
-- [ ] **R11 — Clôture** : Samsung au doigt (lueur, panneau compact, ✓ commun PC ↔ téléphone), ROADMAP (versions, constats),
+- [x] **R11 — Clôture** ✅ 27/09 12h20 : Samsung au doigt **8/8** (vidéo de dialogues d'OPM ch.5 refaite pour de vrai depuis le PC — montage local, 0 crédit — onglet du téléphone mis de côté pendant la tâche ; ouvert APRÈS coup il affiche « ✓ 🎬 Vidéo des dialogues finie » ; panneau compact sans débordement à 384 px, gros ▶ → lecteur de l'app, › déplie ; lueur sur ▶ Lire ; 0 erreur JS ; onglet remis à about:blank, écran éteint). Captures `scripts/samsung_out/r11_*.png`. Initialement : Samsung au doigt (lueur, panneau compact, ✓ commun PC ↔ téléphone), ROADMAP (versions, constats),
       HANDOFF-reprise, mémoire du projet, commit + push.
 
 ### Coûts de référence (mesurés 26/09 ; ré-étalonnés au D8 le 27/09)
