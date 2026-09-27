@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.20.0"  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.21.1"  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -260,8 +260,10 @@ Tu recois des pages (deja traduites en francais, dans l'ordre de lecture) et, po
 (id, type, texte, position x,y,w,h en fractions de la page). Tu recois aussi la DISTRIBUTION DU MANGA (personnages deja connus
 d'autres chapitres) et des indices sur ce chapitre : l'IMAGE fait foi.
 
-0. Si le texte d'une bulle est VIDE (page deja en francais, rien de traduit), LIS-le sur l'image et rends-le dans "texte",
-   mot pour mot, casse d'origine, sans rien corriger ni ajouter.
+0. Si le texte d'une bulle est VIDE (bulle ajoutee a la main, ou page deja en francais), LIS-le sur l'image et rends-le dans
+   "texte" : s'il est deja en FRANCAIS, mot pour mot, sans rien corriger ni ajouter ; s'il est dans une AUTRE langue (anglais,
+   japonais...), TRADUIS-le en francais naturel et oral -- c'est ce que la voix dira, jamais la VO. Casse normale (pas tout en
+   majuscules), ponctuation d'origine.
 1. Pour CHAQUE bulle, QUI la prononce (queue de la bulle, case, qui est dessine, sens de la phrase) :
    - un personnage CONNU : son nom EXACT de la distribution (n'invente pas un 2e nom pour lui). Meme role, meme allure aux
      nuances du dessin pres (couleur des cheveux ou des yeux qui varie avec l'encrage ou la lumiere) = LE MEME personnage ;
@@ -557,6 +559,43 @@ def cmd_detecter(a):
     nc.progres("detection", len(voulues), len(voulues), fini=True)
     print("detection : %d page(s)" % len(voulues))
     return 0
+
+
+def doutes(doc, distrib, plage):
+    """1.21.0 : ce qui doit passer par ✏ AVANT de payer des voix, dans la portee : repliques « a traiter », personnage
+    « inconnu » (lues), doublons probables de la distribution."""
+    pv = set(nc_plage(plage, sorted({x["page"] for x in doc.get("repliques") or []}))) if plage else None
+    reps = [x for x in doc.get("repliques") or [] if (pv is None or x["page"] in pv)]
+    trait = [x["cle"] for x in reps if x.get("a_traiter") and not ((x.get("corrige") or {}).get("qui"))]
+    inconnu = [x["cle"] for x in reps if x.get("lire") and (x.get("qui") or "inconnu") == "inconnu"]
+    dbl = [g for g in distrib.get("doublons") or [] if g.get("garder") and g.get("avec")]
+    return trait, inconnu, dbl
+
+
+def cmd_tout(a):
+    """1.21.0 : tout d'un coup, avec UN arret humain possible : avant les voix, si l'IA doute."""
+    chap_dir, serie_dir, dd = chemins(a.chap)
+    if not getattr(a, "sans_preparation", False):
+        rc = cmd_preparer(a)
+        if rc:
+            return rc
+    doc = lire_json(os.path.join(dd, "dialogues.json"))
+    if not doc:
+        print("ARRET : chapitre pas encore prepare"); return 3
+    trait, inconnu, dbl = doutes(doc, distribution(serie_dir), a.pages)
+    if trait or inconnu or dbl:
+        motif = "; ".join(t for t in (
+            ("%d replique(s) a traiter" % len(trait)) if trait else "",
+            ("%d replique(s) sans personnage reconnu" % len(inconnu)) if inconnu else "",
+            ("%d doublon(s) probable(s) de personnage" % len(dbl)) if dbl else "") if t)
+        nc.PROGRESS = os.path.join(dd, "progress.json")
+        nc.progres("doute", 0, 0, fini=True, arret=motif, cles=(trait + inconnu)[:40])
+        log("ARRET avant les voix (doute de l'IA) : %s -- a regler dans ✏, puis relancer" % motif)
+        return 5
+    rc = cmd_voix(a)
+    if rc:
+        return rc
+    return cmd_video(a)
 
 
 def cmd_preparer(a):
@@ -1275,6 +1314,8 @@ def main():
     pl = sp.add_parser("plan"); pl.add_argument("chap")
     vi = sp.add_parser("video"); vi.add_argument("chap"); vi.add_argument("--pages", default="", help="1.10.0 : la video de cette portee seulement")
     de = sp.add_parser("detecter"); de.add_argument("chap"); de.add_argument("--pages", default="")     # 1.19.0 (R30)
+    to = sp.add_parser("tout"); to.add_argument("chap"); to.add_argument("--pages", default="")         # 1.21.0
+    to.add_argument("--traduire", action="store_true"); to.add_argument("--sans-preparation", action="store_true", dest="sans_preparation")
     lo = sp.add_parser("lot"); lo.add_argument("serie"); lo.add_argument("--de", type=float, required=True)
     lo.add_argument("--a", type=float, required=True); lo.add_argument("--action", choices=("preparer", "voix", "tout"), default="preparer")
     a = p.parse_args()
@@ -1293,6 +1334,8 @@ def main():
         return cmd_lot(a)
     if a.cmd == "detecter":
         return cmd_detecter(a)
+    if a.cmd == "tout":
+        return cmd_tout(a)
 
 
 if __name__ == "__main__":

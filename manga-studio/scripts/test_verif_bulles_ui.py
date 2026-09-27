@@ -73,11 +73,11 @@ try:
         ctx = br.new_context(viewport={"width": LARG, "height": 800}, is_mobile=LARG < 800, has_touch=False, service_workers="block")
         pg = ctx.new_page(); errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
-        pg.on("dialog", lambda d: d.accept())
+        pg.on("dialog", lambda d: d.dismiss() if ("Tout" in d.message or "tout refaire" in d.message or "Refaire" in d.message) else d.accept())   # jamais de lancement payant
         pg.route("**/*", lambda rt: rt.fulfill(status=200, content_type="text/html; charset=utf-8", body=PAGE)
                  if rt.request.method == "GET" and rt.request.url.split("#")[0].split("?")[0].rstrip("/").endswith("/manga") else
                  (rt.fulfill(status=200, body='{"ok":true}', content_type="application/json") if rt.request.method != "GET" and "dialogues_lancer" in rt.request.url
-                  and '"preparer"' in (rt.request.post_data or "") else rt.continue_()))
+                  and '"detecter"' not in (rt.request.post_data or "") else rt.continue_()))   # 27/09 : TOUT lancement bloque sauf la detection (gratuite)
         def ouvrir(ch):
             pg.goto("http://127.0.0.1:8191/manga/#k=" + KEY); pg.wait_for_timeout(2500)
             pg.evaluate("s => { localStorage.setItem('manga_onglet','tChap'); localStorage.setItem('manga_serie', s); localStorage.setItem('manga_dlv_aide','1'); }", ch.split("/")[0])
@@ -156,7 +156,7 @@ try:
             n3.append(len(pts())); pg.evaluate("() => $('dlvSuiv').click()"); pg.wait_for_timeout(900)
         check("detection seule lancee (message « gratuit »), puis pastilles sur les pages non traduites", "gratuit" in att and sum(n3) > 0, (att, n3))
         check("detection.json ecrit (gratuit, sur le PC)", os.path.isfile(os.path.join(T, CHN, "dialogues", "detection.json")))
-        check("nouvelle plage : derniere page = « ✓ Valider et preparer »", "préparer" in pg.evaluate("() => $('dlvGo').textContent"))
+        check("nouvelle plage : derniere page = « ✓ Valider et tout faire »", "tout faire" in pg.evaluate("() => $('dlvGo').textContent"))
         check("aucun debordement horizontal", not pg.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth"))
         check("0 erreur JS", not errs, errs[:2])
         br.close()
@@ -164,6 +164,7 @@ finally:
     srv.terminate()
     try: srv.wait(10)
     except Exception: srv.kill()
+    subprocess.run(["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -match 'dialogues.py' -and $_.ParentProcessId -eq %d } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" % srv.pid], capture_output=True)
     f8191 = os.path.expanduser(r"~\Documents\ComfyUI\_studio_llm_proxy_8191.py")
     if os.path.exists(f8191):
         os.remove(f8191)
