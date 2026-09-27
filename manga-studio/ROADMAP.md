@@ -3286,10 +3286,32 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       trouvée et corrigée), voix 23/23, lot 8/8, estimation 12/12, compact 31/31, traduction partielle 24/24. Les 2 instances
       relancées au repos 02h47. Chapitre de Quang (secondaire) : portée 44-65 enregistrée (sauvegarde `.bak-20260927-portee`),
       contrôle réel : 22 pages couvertes, 8 tamponnées, départ p.44, « 34 répliques sur 36 sans voix », 0 erreur JS.
-- [ ] **R2 — Le lecteur des Dialogues respecte le format de l'app** (Quang 02h30 : « la barre de navigation en bas ne ressemble
+- [x] **R2 — Le lecteur des Dialogues respecte le format de l'app** (Quang 02h30 : « la barre de navigation en bas ne ressemble
       pas à toute l'application […] toutes ses fonctions associées, même les fonctions de swipe »). D'abord le CONSTAT écrit : la
       barre et les gestes du lecteur de référence (narration / visionneuse), fonction par fonction ; puis la parité ; banc des
       gestes (balayer, toucher) comme pour la visionneuse.
+      **Constat (lu dans le code 02h55)** — lecteur de référence = `#lecteur` (narration), classes `.lecteur/.lec-*` :
+      | Fonction | Lecteur narration (référence) | Lecteur Dialogues v2.81.7 |
+      |---|---|---|
+      | Barre du HAUT | `.lec-top` : « ← Fermer » bleu à gauche, titre + info, ⏮ ch. / ch. ⏭ | ✗ (Fermer en bas à droite) |
+      | Sous-titre | `.lec-sous` centré, taille fluide | `.dlgl-sous` à gauche |
+      | Barre de progression | `.lec-bar` cliquable ET glissable (aller à) | ✗ |
+      | Commandes | `.lec-ctl` : ⏮ ⏸(pri) ⏭ · 🔊 volume général (`VOL_G`, mémorisé) · ⚙ Réglages | ⏮ ⏸ ⏭ 🎥 vitesse, pas de volume |
+      | Réglages | panneau `.lec-reg` par-dessus l'image : vitesse, sous-titres, caméra… | ✗ (vitesse et 🎥 en vrac) |
+      | Glisser la barre ←/→ | > 60 px, net, dans le sens des boutons | ✗ |
+      | Glisser la barre ↓ / toucher le titre / touche G | sélecteur rapide (aller à…) | ✗ |
+      | Clavier | espace, ←/→, Échap (réglages d'abord) | espace, ←/→, Échap |
+      | Chapitre suivant | ⏮ ch. / ch. ⏭ + bouton en fin de chapitre | enchaînement auto seulement |
+      → **R2 = même squelette, mêmes classes, mêmes gestes** ; ⏮/⏭ = réplique (unité des Dialogues), le reste identique.
+      ✅ **Livré 27/09 03h05 = app v2.81.8** (`app_patch_2818_lecteur_format.py`, rejouable, rejeu = fichier identique) : barre du
+      haut `.lec-top` (← Fermer bleu à gauche, « 🎭 ch. N », position, ⏮ ch. / ch. ⏭ = chapitres voisins AVEC dialogues),
+      sous-titre `.lec-sous`, progression `.lec-bar` cliquable/glissable, `.lec-ctl` ⏮ ⏸ ⏭ ronds 52/46 px + 🔊 volume général
+      (`VOL_G`, commun avec la narration) + ⚙ Réglages (vitesse, sous-titres, caméra en bascule) ; glisser ←/→ = ⏮/⏭, glisser ↓ /
+      toucher le titre / G = sélecteur rapide « aller à la page » ; Échap ferme d'abord les réglages. Banc
+      `test_dialogues_lecteur_format_ui.py` **38/38** (1280 + 360) : MESURE les deux lecteurs côte à côte sur le même chapitre
+      (hauteurs haut/progression/commandes à ±2 px, tailles de boutons identiques) + gestes au vrai tactile (CDP) ; le même geste
+      ↓ vérifié sur la RÉFÉRENCE ; page v2.81.7 = ROUGE ; sabotage « titre plafonné à 30 % » = ROUGE. Samsung au doigt : ⏭ / ⏮ /
+      sélecteur / ⚙ / Fermer OK, titre entier (54 px), 0 erreur JS. Voisins : sans voix 26/26, largeurs réelles 30/30.
 - [ ] **R3 — D10** (maquette validée 02h28) : `patch_dialogues_6.py` écrit et testé sur copie ; app à faire ; relance des 2 instances.
 - [ ] **R4 — D12** (doublons de personnages, ci-dessous).
 - [ ] **R5 — D9 clôture.**
