@@ -3372,6 +3372,44 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       narration. ~~Déclencheur : maquette à faire valider~~ → ✅ validée 02h28, livré v2.82.0 (R3).
 - [x] **D9 — Clôture** : ROADMAP (constats barrés, versions), HANDOFF-reprise, mémoire, commit + push. Rien de la secondaire. ✅ 27/09 03h45 (R5).
 
+### Feuille de route du 27/09 (jour) — R8 → R11 (Quang 11h45 : « tu fais tout, tu suis une feuille de route détaillée ; si j'ajoute des commentaires, tu la mets à jour et tu avances en autonomie ») — DANS CET ORDRE
+
+Propositions de Claude (11h41) acceptées en bloc par Quang, **sans maquette à valider** (« tu n'as même pas besoin de montrer la maquette »).
+Méthode inchangée : patch rejouable `proxy-patch/app_patch_28xx_*.py` (rejeu = fichier identique, `node --check`), banc sur l'app
+RÉELLE + sabotage ROUGE, bump version, commit + push à chaque étape ; appareil réel (Samsung) en fin de feuille.
+
+- [x] **R8 — Lueur « étape suivante » des Dialogues** (v2.83.0). ✅ **27/09 12h05 = app v2.83.0** (`app_patch_2830_lueur_dlg.py`, rejeu = fichier identique ; « écoutées » = `localStorage manga_dlg_lu:<chapitre>` posé par ▶ Lire, par appareil) ; banc `test_dialogues_lueur_ui.py` **14/14** à 360 et 1280 px (app réelle, instance 8191, copie OPM ch.5) ; page v2.82.4 = ROUGE ; sabotage « ⚠ à traiter ignoré » = ROUGE (Générer brillait). Constat : `clSuivante()` (lueur `cl-suiv`) ne connaît que
+      narr / trad / vid ; le bloc 🎭 n'a aucune indication d'étape. Faire : `dlgSuivante()` = UNE étape parmi
+      `preparer` → `ouvrir` (✏, si « ⚠ à traiter » OU doublons probables : on corrige AVANT de payer des voix) → `voix` (🔊) →
+      `lire` (▶) → `video` (🎬, s'il n'existe aucune vidéo à jour de la portée). Lueur (même animation `clLueur`) sur le bouton
+      correspondant : en-tête replié du bloc (`.cl-act [data-dlg=…]`), boutons du bloc ouvert (`#dlgPreparer`, `#dlgOuvrir`,
+      `#dlgVoix`, `#dlgLire`, `#dlgVid`), pied de l'écran ✏. **Garde-fou** : rien ne brille tant que le chapitre n'a jamais été
+      préparé (pas de `doc`) — un chapitre sans Dialogues ne clignote pas en concurrence avec la Narration ; rien pendant un
+      traitement en cours. Banc : chaque état → le BON bouton et UN seul ; sabotage (lueur sur Générer malgré ⚠) = ROUGE.
+- [ ] **R9 — Panneau 🎭 de la série en vue COMPACTE** (v2.84.0). Aujourd'hui : une ligne par chapitre avec tous les boutons
+      (▶ Lire / ▶ Vidéo / ⬇ / 🔊 / ✏) + le bloc « plusieurs chapitres » toujours ouvert. Faire, sur le modèle des cartes de chapitre
+      (`.cl-box` : en-tête, `›` qui déplie) : ligne compacte = « ch. N » · état court · gros **▶** (vidéo de dialogues dans le
+      lecteur de l'app, enchaînement v2.82.4 ; sans vidéo : ▶ Lire les voix) · `›` = détail actuel (tous les boutons, portées,
+      crédits). En tête : **▶ Tout lire** (vidéos de la série, dans l'ordre, lecteur de l'app). « Plusieurs chapitres » →
+      dans un `⋯`. Rien de supprimé : tout ce que la ligne permettait reste dans le détail. Banc 5 largeurs (aucun débordement,
+      ▶ ouvre le lecteur sur la bonne vidéo, `›` déplie/replie, Tout lire enchaîne) + série réelle (banc D10 à mettre à jour) +
+      page v2.83.0 = ROUGE.
+- [ ] **R10 — « ✓ fini » commun à tous les appareils** (v2.85.0 + patch serveur). Constat (tracé 11h41, `actRafraichir`) :
+      « en cours » vient du serveur, mais « ✓ … fini » et « Terminé pendant cette session » sont calculés PAR APPAREIL (ce qui
+      tournait au tour d'avant) → un traitement lancé sur le Fold et fini avant d'ouvrir le PC n'y apparaît jamais. Vrai pour
+      TOUS les types, pas seulement 🎭. Faire : serveur = journal des fins (`activite_finis.json` par instance : type, d, titre,
+      chapitre, étape/tag, `t`, `issue` fini|arrêté ; 24 h, 50 max), alimenté à chaque calcul de `/manga/activite` (disparition
+      d'une tâche) ET au moment exact où une tâche lancée par le proxy se termine ; renvoyé dans `/manga/activite` (`finis`).
+      App : fusionne le journal serveur (dédoublonné) avec le calcul local ; pastille « ✓ … fini » 10 min sur TOUS les appareils ;
+      liste « Terminé récemment » (plus « pendant cette session »). Arrêt = « ⏹ arrêté », jamais « fini ». Les 2 instances
+      relancées AU REPOS (`/manga/activite` vide ; secondaire : tuer seulement le PID d'`espace_prive.py` puis
+      `Start-ScheduledTask MangaStudioInstance2`). Banc : 2 navigateurs (« PC » et « téléphone »), tâche finie pendant que le 2e
+      est fermé → le 2e l'affiche en ouvrant ; sabotage (journal ignoré) = ROUGE.
+- [ ] **R10-bis — Libellé de la fin des Dialogues** : « 🎭 Préparation finie » / « 🔊 Voix finies » / « 🎬 Vidéo finie » selon
+      l'étape (au lieu de « Dialogues fini »). Avec R10 (même code).
+- [ ] **R11 — Clôture** : Samsung au doigt (lueur, panneau compact, ✓ commun PC ↔ téléphone), ROADMAP (versions, constats),
+      HANDOFF-reprise, mémoire du projet, commit + push.
+
 ### Coûts de référence (mesurés 26/09 ; ré-étalonnés au D8 le 27/09)
 Préparation ~0,004 $/page (Gemini 3.6 Flash ; D8 : 0,0038 $/page) · 153 caractères de dialogue/page en moyenne (476 pages traduites) · ElevenLabs
 gratuit 10 000 crédits/mois ≈ ~~35 pages avec tons, ≈ 65 sans~~ **≈ 125 pages avec tons, ≈ 230 sans** (tarif v3 réel 0,28 crédit/caractère, D8) ; Starter 6 $ / 30 000 ; Creator **22 $/mois** (11 $ le 1er mois) / 121 000
