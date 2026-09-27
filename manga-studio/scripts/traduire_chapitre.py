@@ -31,7 +31,7 @@ import narrate_chapter as nc          # appel_vision (Gemini natif / K3), frein 
 import ingest_page as ip              # load_page, detect, clean_bubbles
 import effacement_local as el         # v1.98.0 : masque des lettres + LaMa (option --effacement local)
 
-VERSION = "2.2.0"   # 2.2.0 (R12/R13, 27/09) : aucune page sautee (0 zone detectee -> lue quand meme) ; « lue » par page
+VERSION = "2.3.0"   # 2.3.0 (R15, 27/09) : grande zone hors bulles RESSERREE sur les lettres au lieu d'etre ecartee ;   # 2.2.0 (R12/R13, 27/09) : aucune page sautee (0 zone detectee -> lue quand meme) ; « lue » par page
 # v2.1.0 (27/09, Quang : « traduire seulement les pages lues » + « une tracabilite pour que le mode normal ne confonde pas ») :
 # --pages AJOUTE a la traduction existante au lieu de la remplacer (avant : traduire 44-68 apres 1-20 effacait 1-20 de
 # l'index) ; traduction.json porte pages_chapitre, complete (toutes les pages ?), via par page (traduction | dialogues)
@@ -192,6 +192,44 @@ def zones_hors(hors, texts, marge=0.08):
             continue
         out.append(z); prochain += 1
     return out
+
+
+def boite_lettres(im, t, sombre=110, clair=200):
+    """2.3.0 (R15) : la zone t resserree sur ses LETTRES {x, y, w, h}, ou None si ce n'est pas du texte net sur fond clair.
+    Lettre = composante sombre de la taille d'un caractere, qui ne touche pas le bord de la zone (cadre, trait de case) et
+    ENTOUREE de fond clair ou d'encre (un trait du dessin est entoure de demi-teintes). Mesure 27/09 : texte 2-3 % de
+    demi-teintes dans la boite resserree, dessin >= 16 %."""
+    import numpy as np
+    from scipy import ndimage
+    W, H = im.size
+    x1, y1 = int(t["x"] * W), int(t["y"] * H)
+    x2, y2 = max(int((t["x"] + t["w"]) * W), x1 + 2), max(int((t["y"] + t["h"]) * H), y1 + 2)
+    A = np.asarray(im.convert("L").crop((x1, y1, x2, y2)), dtype=np.int16)
+    h, w = A.shape
+    lab, _ = ndimage.label(A < sombre)
+    lettres = []
+    for i, sl in enumerate(ndimage.find_objects(lab)):
+        if sl is None:
+            continue
+        gh, gw = sl[0].stop - sl[0].start, sl[1].stop - sl[1].start
+        if not (0.006 * H <= gh <= 0.06 * H and gw <= 0.08 * W):
+            continue
+        if sl[0].start == 0 or sl[1].start == 0 or sl[0].stop == h or sl[1].stop == w:
+            continue
+        r0, r1, c0, c1 = max(0, sl[0].start - 4), min(h, sl[0].stop + 4), max(0, sl[1].start - 4), min(w, sl[1].stop + 4)
+        voisin = A[r0:r1, c0:c1][lab[r0:r1, c0:c1] != i + 1]
+        if voisin.size and float(((voisin >= clair) | (voisin < sombre)).mean()) < 0.85:
+            continue
+        lettres.append(sl)
+    if len(lettres) < 4:
+        return None
+    pad = max(4, int(0.004 * W))
+    ya, yb = max(0, min(q[0].start for q in lettres) - pad), min(h, max(q[0].stop for q in lettres) + pad)
+    xa, xb = max(0, min(q[1].start for q in lettres) - pad), min(w, max(q[1].stop for q in lettres) + pad)
+    B = A[ya:yb, xa:xb]
+    if float((B >= clair).mean()) < 0.55 or float(((B >= sombre) & (B < clair)).mean()) > 0.12:
+        return None
+    return {"x": (x1 + xa) / W, "y": (y1 + ya) / H, "w": (xb - xa) / W, "h": (yb - ya) / H}
 
 
 def blanchiment(im, rendu, texts):
@@ -531,7 +569,13 @@ def main():
                     if etat != "bulle" and not (etat and "boite" in etat):
                         continue                                  # non effacee : deja ecartee plus bas
                     if etat != "bulle" and t["w"] * t["h"] > COMPLEMENT_BOITE_MAX and a.effacement != "local":
-                        douteux.append((t, lig, "zone trop grande pour une boite entiere")); continue
+                        serre = boite_lettres(im, t)                  # 2.3.0 (R15) : resserrer sur les lettres, sinon ecarter
+                        if not serre:
+                            douteux.append((t, lig, "zone trop grande pour une boite entiere")); continue
+                        t.update(serre)
+                        lig["box"] = {k: round(serre[k], 4) for k in ("x", "y", "w", "h")}
+                        lig["resserre"] = True
+                        stats["resserres"] = stats.get("resserres", 0) + 1
                     if etat == "bulle" and c and c["w"] * c["h"] > 6 * t["w"] * t["h"]:
                         etat, c = "case", None
                     boite = c if etat == "bulle" and c else lig["box"]

@@ -35,6 +35,9 @@ for n in sans_zone:
     b = [x for x in P[n]["bulles"] if (x.get("trad") or "").strip()]
     check("R12 page %d (0 zone detectee) : LUE et traduite (%d texte(s))" % (n, len(b)), P[n].get("lue") is True and b, [x.get("trad", "")[:30] for x in b])
 check("R12 stats : pages_sans_zone = %d" % len(sans_zone), t["stats"].get("pages_sans_zone") == len(sans_zone), t["stats"].get("pages_sans_zone"))
+# --- R15 : une grande zone d'encadre n'est plus ecartee, elle est RESSERREE sur ses lettres
+trop = [(p["page"], x.get("trad", "")[:25]) for p in t["pages"] for x in p["bulles"] if (x.get("ecarte") or "").startswith("zone trop")]
+check("R15 aucun texte ecarte « zone trop grande » ; %s resserre(s)" % t["stats"].get("resserres"), not trop and (t["stats"].get("resserres") or 0) >= 1, trop)
 # --- R13 : la regle unique, sur la traduction REELLE du chapitre (format d'avant 2.2.0)
 tr = json.load(open(os.path.join(chap, "traduction", "fr", "traduction.json"), encoding="utf-8"))
 vides = sorted(p["page"] for p in tr["pages"] if not p["bulles"] and "lue" not in p)
