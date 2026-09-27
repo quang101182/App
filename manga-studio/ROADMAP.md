@@ -3330,9 +3330,17 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       annoncé AVANT de lancer si une voix manque ; panneau « 🎬 3 vidéos ») ; page v2.82.0 = ROUGE. Voisins : série réelle 92/92,
       format 38/38, sans voix 26/26, préparer 26/26, voix 23/23, lot 8/8. (Le banc affichait l'adresse avec le secret de l'app
       dans le terminal local : corrigé, il n'affiche plus que le nom du fichier.)
-- [ ] **R4 — D12** (doublons de personnages, ci-dessous).
+- [x] **R4 — D12** (doublons de personnages) ✅ **27/09 03h35 = app v2.82.2** (`app_patch_2822_doublons.py`) + `dialogues.py`
+      1.11.0 (`doublons_probables()` : après une préparation qui crée de NOUVEAUX personnages, DeepSeek texte seul ~0,0004 $,
+      résultat dans `distribution["doublons"]`, jamais fusionné ; `pas_doublons` = plus reproposé) + `patch_dialogues_8.py`
+      (+ .diff : `fusionner` {garder, avec} et `pas_doublon` dans la route de distribution, répliques de TOUS les chapitres qui
+      suivent ; 2 instances relancées au repos). Détection RÉELLE : la distribution d'avant réparation du chapitre de Quang → les
+      4 noms du même homme retrouvés (pas la femme) ; OPM (6 persos) → 0 faux doublon. Bancs : `test_dialogues_doublons_ui.py`
+      **12/12** (bandeau ✏, fusion confirmée, alias, répliques suivies, plan qui suit la voix, « pas les mêmes » noté ; ligne 🎭
+      « ⚠ 2 doublons probables ») ; page v2.82.1 et serveur non patché = ROUGES ; `test_dialogues_preparer.py` **29/29**
+      (DeepSeek simulé : plus rien ne sort du banc ; scénario G) + sabotage « refus ignoré » = ROUGE ; série réelle 92/92.
 - [ ] **R5 — D9 clôture.**
-- [ ] **D12 — Cohérence de la distribution (fiabilité globale, Quang 02h28 : « que la solution devienne de plus en plus fiable
+- [x] **D12 — Cohérence de la distribution (livré : R4) (fiabilité globale, Quang 02h28 : « que la solution devienne de plus en plus fiable
       dans la globalité »)** : en fin de préparation, un contrôle des DOUBLONS probables (même genre, rôle, descriptions proches,
       répliques qui se répondent) → « ⚠ doublon probable » dans l'écran ✏ + bouton « Fusionner avec… » (alias gardés, répliques
       réattribuées, voix à refaire annoncées en crédits) ; jamais de fusion sans Quang. **Déclencheur : juste après D10.**

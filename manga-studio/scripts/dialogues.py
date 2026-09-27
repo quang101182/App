@@ -24,7 +24,10 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.10.0"  # 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
+VERSION = "1.11.0"  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+#          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
+#          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
+#   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
 #          = UNE video par portee (dialogues_p5-10.mp4), chacune gardee ; doc.videos {portee: ...} ; plan rend « videos »
 #   # 1.9.2 : 1.9.2 (R1-bis) : la VIDEO montre aussi les pages sans dialogue de la portee (2,2 s, tampon, silence)
 #   # 1.9.1 : 1.9.1 (R1-bis, Quang 02h35 : « des pages ont ete sautees ») : pages_vues = TOUTES les pages de la portee
@@ -485,8 +488,15 @@ def cmd_preparer(a):
            "portees": [x for x in (ancien.get("portees") or []) if x != (a.pages or "tout")] + [a.pages or "tout"],   # 1.9.1 : la derniere en fin
            "repliques": sorted(par_cle.values(), key=lambda x: (x["page"], x["id"]))}
     ecrire_json(fch, doc)
+    if ajoutes:                                                          # 1.11.0 (D12) : de nouveaux noms -> doublons probables ?
+        try:
+            dbl = doublons_probables(distrib, serie_dir, stats)
+            if dbl:
+                log("  doublons probables (a confirmer dans l'app) : %s" % "; ".join(g["garder"] + " = " + ", ".join(g["avec"]) for g in dbl))
+        except Exception as e:
+            log("  controle des doublons impossible : %s" % str(e)[:120])
     ecrire_json(os.path.join(serie_dir, "dialogues_distribution.json"), distrib)
-    cout = round(stats.get("cout_preparation", 0.0), 5)
+    cout = round(stats.get("cout_preparation", 0.0) + stats.get("cout_doublons", 0.0), 5)
     depenses.noter("dialogues", a.chap, "preparation", "gemini", cout, pages=[p["page"] for p in pages],
                    relais=stats.get("relais"))
     lues = sum(1 for x in doc["repliques"] if x["lire"] and x["page"] in voulues)
@@ -569,6 +579,47 @@ def balises(distrib, tons, stats):
             distrib["balises"][t] = b if re.fullmatch(r"(\[[A-Za-z ,'-]{1,30}\]\s*){1,3}", b) else ""
         stats["cout_balises"] = stats.get("cout_balises", 0.0) + nc.cout("deepseek-v4-flash", r.get("usage") or {})
     return distrib["balises"]
+
+
+def doublons_probables(distrib, serie_dir, stats):
+    """1.11.0 (D12) : groupes de noms qui designent PROBABLEMENT le meme personnage (l'IA de preparation, lot par lot, a pu
+    le nommer deux fois selon le dessin). Ecrits dans distrib["doublons"] = [{garder, avec, raison}] ; JAMAIS fusionnes ici."""
+    persos = distrib.get("persos") or []
+    if len(persos) < 2:
+        distrib["doublons"] = []
+        return []
+    ex, nb = {p["nom"]: [] for p in persos}, {p["nom"]: 0 for p in persos}
+    for ch in sorted(os.listdir(serie_dir)):
+        d = lire_json(os.path.join(serie_dir, ch, "dialogues", "dialogues.json")) if ch.startswith("ch_") else None
+        for x in (d or {}).get("repliques") or []:
+            q = x.get("qui")
+            if q in ex:
+                nb[q] += 1
+                if len(ex[q]) < 5 and (x.get("texte") or "").strip():
+                    ex[q].append("%s p.%s : %s" % (ch, x.get("page"), x["texte"][:90]))
+    ecartes = {tuple(sorted(e)) for e in distrib.get("pas_doublons") or []}
+    donnees = [{"nom": p["nom"], "genre": p.get("genre"), "age": p.get("age"), "fiche": p.get("fiche"), "alias": p.get("alias") or [],
+                "repliques": ex[p["nom"]]} for p in persos]
+    r = nc.post("/api/deepseek", {"model": "deepseek-v4-flash", "max_tokens": 2000, "temperature": 0,
+                "thinking": {"type": "disabled"}, "response_format": {"type": "json_object"},
+                "messages": [{"role": "system", "content": "Tu recois les personnages d'UN manga, reperes page par page par une IA qui a pu "
+                              "donner deux noms au MEME personnage (description differente selon le dessin : couleur des cheveux ou des yeux "
+                              "qui varie avec l'encrage, eclairage, angle). Rends les groupes de noms qui designent TRES PROBABLEMENT la meme "
+                              "personne. Sois prudent : meme genre obligatoire, meme role ; deux personnages qui se REPONDENT dans une meme scene "
+                              "ne sont PAS la meme personne. JSON {\"doublons\": [{\"noms\": [\"...\", \"...\"], \"raison\": \"courte, en francais\"}]}, "
+                              "liste vide si aucun."},
+                             {"role": "user", "content": json.dumps(donnees, ensure_ascii=False)}]})
+    rep_ = nc.parse_json(r["choices"][0]["message"]["content"]) or {}
+    stats["cout_doublons"] = stats.get("cout_doublons", 0.0) + nc.cout("deepseek-v4-flash", r.get("usage") or {})
+    groupes = []
+    for g in rep_.get("doublons") or []:
+        noms = list(dict.fromkeys(n for n in (g.get("noms") or []) if n in ex))
+        if len(noms) < 2 or tuple(sorted(noms)) in ecartes:
+            continue
+        noms.sort(key=lambda n: -nb[n])                                   # on garde celui qui parle le plus
+        groupes.append({"garder": noms[0], "avec": noms[1:], "raison": str(g.get("raison") or "")[:200]})
+    distrib["doublons"] = groupes
+    return groupes
 
 
 def reglage_voix(distrib, qui):

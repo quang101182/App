@@ -97,6 +97,12 @@ def charger(src_patch=None):
                         {"nom": "Genos", "genre": "homme", "age": "19", "fiche": "froid", "voix_el": "ADAM"}]
         return json.dumps({"ambiance": "shonen tendu", "nouveaux": nouveaux, "repliques": rep}), {"prompt_tokens": 2000, "completion_tokens": 500}
     nc.appel_vision = faux
+
+    def faux_post(path, body, **kw):                 # D12 : le controle des doublons (DeepSeek) -- jamais le vrai gateway
+        ETAT.setdefault("posts", []).append(path)
+        rep = {"doublons": ETAT.get("doublons_rep", [])}
+        return {"choices": [{"message": {"content": json.dumps(rep)}}], "usage": {"prompt_tokens": 300, "completion_tokens": 40}}
+    nc.post = faux_post
     return m
 
 
@@ -203,6 +209,21 @@ def scenario_lots(m, verbeux=True):
 
 print("=== F. personnages nommes au fil des lots")
 scenario_lots(charger())
+
+print("=== G. doublons probables (D12)")
+copie()
+ETAT.update(qui5="Fille-Moustique", refuse=set(), appels=[], posts=[], doublons_rep=[{"noms": ["Genos", "Fille-Moustique"], "raison": "banc"}])
+m_g = charger(); lancer(m_g)
+dg = distrib()
+check("G. controle appele apres de NOUVEAUX personnages (faux DeepSeek, rien ne sort)", "/api/deepseek" in ETAT["posts"], ETAT["posts"])
+check("G. resultat range dans la distribution, rien fusionne", dg.get("doublons") and dg["doublons"][0]["avec"] and len(dg["persos"]) == 2, dg.get("doublons"))
+ETAT.update(posts=[])
+dg["pas_doublons"] = [sorted(["Genos", "Fille-Moustique"])]
+json.dump(dg, open(os.path.join(T, "opm", "dialogues_distribution.json"), "w", encoding="utf-8"), ensure_ascii=False)
+st = {}
+g2 = m_g.doublons_probables(m_g.distribution(os.path.join(T, "opm")), os.path.join(T, "opm"), st)
+check("G. un groupe REFUSE par Quang n'est plus propose", g2 == [], g2)
+ETAT.pop("doublons_rep", None)
 
 print("=== E. mutations (doivent rendre le banc ROUGE)")
 for nom, patch in (("alias ignore", [('if q.lower() == p["nom"].lower() or q.lower() in [a.lower() for a in p.get("alias", [])]:',
