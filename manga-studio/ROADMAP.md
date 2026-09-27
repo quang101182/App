@@ -3312,14 +3312,23 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       (hauteurs haut/progression/commandes à ±2 px, tailles de boutons identiques) + gestes au vrai tactile (CDP) ; le même geste
       ↓ vérifié sur la RÉFÉRENCE ; page v2.81.7 = ROUGE ; sabotage « titre plafonné à 30 % » = ROUGE. Samsung au doigt : ⏭ / ⏮ /
       sélecteur / ⚙ / Fermer OK, titre entier (54 px), 0 erreur JS. Voisins : sans voix 26/26, largeurs réelles 30/30.
-- [ ] **R3 — D10** (maquette validée 02h28) : `patch_dialogues_6.py` écrit et testé sur copie ; app à faire ; relance des 2 instances.
+- [x] **R3 — D10** (maquette validée 02h28) ✅ **27/09 03h10 = app v2.82.0** (`app_patch_2820_dialogues_serie.py`) : bouton 🎭
+      Dialogues + compteur dans la fiche série (téléphone : « Site » dans ⋯), panneau séparé (distribution, résumé, filtre Avec /
+      Tous, une ligne par chapitre avec état · pages · crédits · vidéo · FR partiel et ▶ Lire / ▶ Vidéo / ⬇ / 🔊 Générer / ✏,
+      plusieurs chapitres), badge 🎭 dans la liste, ← referme le panneau. Serveur : `patch_dialogues_6` (déjà en place sur les 2
+      instances). Banc `test_dialogues_serie_ui.py` **92/92** sur l'app RÉELLE aux 5 largeurs (lancements payants interceptés) ;
+      page v2.81.8 = ROUGE (0/5).
+- [ ] **R3-bis — Une vidéo PAR PORTÉE** (Quang 03h08 : « plusieurs vidéos sur un même chapitre, pages 5 à 10 et 35 à 42 ? »).
+      Constat : UNE vidéo par chapitre (`dialogues/video/dialogues.mp4`) couvrant toutes les pages préparées, refaite = écrasée.
+      Décidé par Claude : 🎬 fabrique la vidéo de la portée des champs (fichier `dialogues_p5-10.mp4`), chaque portée garde la
+      sienne ; ligne 🎭 et panneau de la série listent les vidéos (▶ ⬇, à jour / à refaire). **Déclencheur : juste après D10.**
 - [ ] **R4 — D12** (doublons de personnages, ci-dessous).
 - [ ] **R5 — D9 clôture.**
 - [ ] **D12 — Cohérence de la distribution (fiabilité globale, Quang 02h28 : « que la solution devienne de plus en plus fiable
       dans la globalité »)** : en fin de préparation, un contrôle des DOUBLONS probables (même genre, rôle, descriptions proches,
       répliques qui se répondent) → « ⚠ doublon probable » dans l'écran ✏ + bouton « Fusionner avec… » (alias gardés, répliques
       réattribuées, voix à refaire annoncées en crédits) ; jamais de fusion sans Quang. **Déclencheur : juste après D10.**
-- [ ] **D10 — Bouton 🎭 Dialogues dans la fiche de la SÉRIE** — ✅ maquette `maquette_dialogues_serie_v1.html` VALIDÉE par Quang 02h28 (Quang 01h24 : « retrouver ce qui existe avec ce nouveau format […]
+- [x] **D10 — Bouton 🎭 Dialogues dans la fiche de la SÉRIE** (livré : R3 ci-dessus) — ✅ maquette `maquette_dialogues_serie_v1.html` VALIDÉE par Quang 02h28 (Quang 01h24 : « retrouver ce qui existe avec ce nouveau format […]
       un bouton à l'onglet […] il ne faudrait pas mélanger l'ensemble » ; choix délégué) : **décidé par Claude** — bouton séparé
       à côté de 🎬 Vidéos, panneau « 🎭 Dialogues de la série » (chapitres préparés / voix prêtes / à refaire / vidéo à jour,
       Lire · Voir · ⬇, lancement « plusieurs chapitres » déjà prévu en D4 depuis la fiche) ; rien dans le panneau Vidéos de la
