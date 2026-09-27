@@ -3386,7 +3386,7 @@ RÉELLE + sabotage ROUGE, bump version, commit + push à chaque étape ; apparei
       `#dlgVoix`, `#dlgLire`, `#dlgVid`), pied de l'écran ✏. **Garde-fou** : rien ne brille tant que le chapitre n'a jamais été
       préparé (pas de `doc`) — un chapitre sans Dialogues ne clignote pas en concurrence avec la Narration ; rien pendant un
       traitement en cours. Banc : chaque état → le BON bouton et UN seul ; sabotage (lueur sur Générer malgré ⚠) = ROUGE.
-- [ ] **R9 — Panneau 🎭 de la série en vue COMPACTE** (v2.84.0). Aujourd'hui : une ligne par chapitre avec tous les boutons
+- [x] **R9 — Panneau 🎭 de la série en vue COMPACTE** (v2.84.0). ✅ **27/09 12h25 = app v2.84.0** (`app_patch_2840_dlgs_compact.py`, rejeu = fichier identique) : ligne « ch. N · état court · ▶ · › », le détail d'avant se déplie (rien retiré), ▶ Tout lire (grisé sans vidéo), ⋯ = plusieurs chapitres (replié), « Avec 🎭 (N) » au téléphone. Banc D10 mis à jour `test_dialogues_serie_ui.py` **142/142** aux 5 largeurs (compact, gros ▶ = vidéo du ch. 5, Tout lire, › déplie/replie, puis tous les contrôles D10 d'origine) ; page v2.83.0 = ROUGE (plante) ; version intermédiaire au `//` qui avalait « Tous (N) » (vue sur la capture 360, PAS par le banc → contrôle ajouté) = ROUGE. Aujourd'hui : une ligne par chapitre avec tous les boutons
       (▶ Lire / ▶ Vidéo / ⬇ / 🔊 / ✏) + le bloc « plusieurs chapitres » toujours ouvert. Faire, sur le modèle des cartes de chapitre
       (`.cl-box` : en-tête, `›` qui déplie) : ligne compacte = « ch. N » · état court · gros **▶** (vidéo de dialogues dans le
       lecteur de l'app, enchaînement v2.82.4 ; sans vidéo : ▶ Lire les voix) · `›` = détail actuel (tous les boutons, portées,
