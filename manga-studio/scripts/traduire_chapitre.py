@@ -31,7 +31,7 @@ import narrate_chapter as nc          # appel_vision (Gemini natif / K3), frein 
 import ingest_page as ip              # load_page, detect, clean_bubbles
 import effacement_local as el         # v1.98.0 : masque des lettres + LaMa (option --effacement local)
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"   # 2.2.0 (R12/R13, 27/09) : aucune page sautee (0 zone detectee -> lue quand meme) ; « lue » par page
 # v2.1.0 (27/09, Quang : « traduire seulement les pages lues » + « une tracabilite pour que le mode normal ne confonde pas ») :
 # --pages AJOUTE a la traduction existante au lieu de la remplacer (avant : traduire 44-68 apres 1-20 effacait 1-20 de
 # l'index) ; traduction.json porte pages_chapitre, complete (toutes les pages ?), via par page (traduction | dialogues)
@@ -114,6 +114,9 @@ def traduire_page(im, texts, engine, langue, stats):
     path, model = nc.ENGINES[engine]
     content = [{"type": "text", "text": "PAGE ENTIERE (contexte) :"},
                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + jpeg_b64(im, 1000)}}]
+    if not texts:                                   # 2.2.0 (R12) : le detecteur n'a rien trouve -> le modele lit TOUTE la page
+        content.append({"type": "text", "text": "AUCUNE BULLE DECOUPEE sur cette page (le detecteur n'a rien trouve) : "
+                        "\"bulles\" = [] et TOUT texte lisible (bulles, encadres, pensees) va dans \"hors_zones\", avec sa box."})
     for t in texts:
         content.append({"type": "text", "text": "BULLE %d" % t["id"]})
         content.append({"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + jpeg_b64(decoupe(im, t))}})
@@ -381,15 +384,23 @@ def lire_traduction(td):
         return None
 
 
+def page_lue(x):
+    """2.2.0 (R13) : une page de traduction.json a-t-elle VRAIMENT ete lue par le modele ? « lue » si present ; sinon (fichier
+    d'avant 2.2.0) au moins une bulle -- avant 2.2.0, une page sans zone detectee n'etait jamais envoyee au modele (27/09 :
+    15 pages sur 29 d'un webtoon). MEME regle dans dialogues.py et le serveur (_trad_etat)."""
+    return bool(x.get("lue")) if "lue" in x else bool(x.get("bulles"))
+
+
 def traduction_etat(cd, lg="fr"):
     """v2.1.0 -- ce qui est VRAIMENT traduit : None (rien) ou {complete, pages: [n...], total, via: {n: mode}}.
     Un fichier d'avant la v2.1.0 (sans « complete ») venait d'une traduction du chapitre entier : complete."""
     t = lire_traduction(os.path.join(cd, "traduction", lg))
     if not t:
         return None
-    pages = sorted(x["page"] for x in t.get("pages") or [])
+    pages = sorted(x["page"] for x in t.get("pages") or [] if page_lue(x))              # 2.2.0 (R13) : LUES seulement
     total = t.get("pages_chapitre") or len(pages)
-    return {"complete": bool(t.get("complete", True)), "pages": pages, "total": total,
+    return {"complete": bool(t.get("complete", True)) and len(pages) >= total, "pages": pages, "total": total,
+            "non_lues": sorted(x["page"] for x in t.get("pages") or [] if not page_lue(x)),
             "via": {x["page"]: x.get("via", "traduction") for x in t.get("pages") or []}}
 
 
@@ -457,13 +468,17 @@ def main():
             texts = zones_texte(im, a.conf, a.conf_complement)             # v1.92.0 : + complement
         stats["bulles"] += len(texts)
         lignes, rendu, trace = [], im, None
-        if texts:
+        lue = (avant.get(p["num"]) or {}).get("lue", True) if a.rerendu else False     # 2.2.0 (R12)
+        if not texts:
+            stats["pages_sans_zone"] = stats.get("pages_sans_zone", 0) + 1
+        if texts or not a.rerendu:                       # 2.2.0 (R12) : 0 zone detectee -> la page est LUE quand meme
             HORS_ZONES[:] = []
             try:
                 if a.rerendu:
                     tr, trace = tr0, (avant.get(p["num"]) or {}).get("trace")     # la trace d'origine survit au re-rendu
                 else:
                     tr, trace = traduire_avec_relais(im, texts, a.engine, a.langue, stats, relais)
+                    lue = True
                     if trace:
                         trace["page"] = p["num"]
                         stats["relais"][-1]["page"] = p["num"]
@@ -472,7 +487,7 @@ def main():
                 nc.log("  page %d : traduction REFUSEE par la moderation (%s) -> page laissee en VO, alerte" % (p["num"], e.motif[:80]))
                 nc.mod.ajouter_alerte(a.chapitre, "traduction", [p["num"]], e.moteur, e.motif, detail="langue " + a.langue)
                 stats.setdefault("moderation", []).append({"page": p["num"], "moteur": e.moteur, "motif": e.motif})
-                tr = {}
+                tr, lue = {}, True                         # lue et REFUSEE : l'alerte le dit, ne pas la repayer en boucle
             except Exception as e:
                 nc.log("  page %d : traduction en echec (%s) -> page laissee en VO" % (p["num"], e))
                 tr = {}
@@ -572,7 +587,7 @@ def main():
                     stats["ne_tient_pas"] += not r["tient"]
         f = "page_%03d.png" % p["num"]
         rendu.save(os.path.join(out, f))
-        res["pages"].append(dict({"page": p["num"], "source": p["file"], "file": f, "bulles": lignes},
+        res["pages"].append(dict({"page": p["num"], "source": p["file"], "file": f, "bulles": lignes, "lue": lue},
                                  **({"trace": trace} if trace else {})))           # v2.0.0 : qui a refuse / qui a traduit
         nc.log("  page %d : %d bulle(s), %d posee(s)" % (p["num"], len(texts), sum(1 for l in lignes if l.get("tient") is not None)))
     stats["s"] = round(time.time() - t0, 1)
@@ -590,7 +605,7 @@ def main():
                 stats[k] = round(stats[k] + v, 5)
     total = len(nc.pages_du_chapitre(chap, "")[1])
     res["pages_chapitre"] = total
-    res["complete"] = len({x["page"] for x in res["pages"]}) >= total
+    res["complete"] = len({x["page"] for x in res["pages"] if page_lue(x)}) >= total     # 2.2.0 (R13)
     res["historique"] = ((anc or {}).get("historique") or []) + [{
         "t": res["created_at"], "pages": a.pages or "tout", "n": len(faites), "via": a.via, "cout": round(stats_run_cout, 5)}]
     res["stats"] = stats

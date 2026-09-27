@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.11.0"  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.13.0"  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -108,6 +108,12 @@ def deja_francais(chap_dir):
     """Chapitre capture directement en francais (langue.json de l'app : langue fr) et SANS traduction francaise."""
     lg = lire_json(os.path.join(chap_dir, "langue.json")) or {}
     return lg.get("langue") == "fr" and not os.path.isfile(os.path.join(chap_dir, "traduction", "fr", "traduction.json"))
+
+
+def ecarte_pour_image(b):
+    """1.13.0 (R14) : texte ecarte par la traduction pour PROTEGER LE DESSIN (sa pose sur l'image), pas parce qu'il est faux
+    -> les Dialogues le lisent. « moins de 2 lettres » (« ...! ») reste exclu."""
+    return bool(b.get("ecarte")) and not str(b.get("ecarte")).startswith("moins de 2")
 
 
 def source_bulles(chap_dir, plage=""):
@@ -385,7 +391,8 @@ def traduire_manquantes(a, chap_dir, dd):
     total = len(nc.pages_du_chapitre(chap_dir, "")[1])
     voulues = [n for n in nc_plage(a.pages, list(range(1, total + 1))) if 1 <= n <= total]
     tr = lire_json(os.path.join(chap_dir, "traduction", "fr", "traduction.json")) or {}
-    faites = {p["page"] for p in tr.get("pages") or []}
+    # 1.12.0 (R13) : MEME regle que traduire_chapitre.page_lue -- lue si « lue », sinon (avant 2.2.0) au moins une bulle
+    faites = {p["page"] for p in tr.get("pages") or [] if (bool(p.get("lue")) if "lue" in p else bool(p.get("bulles")))}
     manq = [n for n in voulues if n not in faites]
     if not manq:
         return 0
@@ -429,7 +436,7 @@ def cmd_preparer(a):
     pages = []
     for p in tr["pages"]:
         if p["page"] in voulues:
-            p["_bulles"] = sorted([b for b in p["bulles"] if b["type"] in ("dialogue", "narration") and not b.get("ecarte")
+            p["_bulles"] = sorted([b for b in p["bulles"] if b["type"] in ("dialogue", "narration") and (not b.get("ecarte") or ecarte_pour_image(b))
                                    and ((b.get("trad") or "").strip() or b.get("a_lire"))], key=lambda b: b["id"])
             if p["_bulles"]:
                 pages.append(p)
