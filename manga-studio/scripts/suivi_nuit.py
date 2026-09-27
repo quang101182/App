@@ -31,7 +31,7 @@ sys.path.insert(0, HERE)
 import precedemment as prec                                # chapitres_precedents(), chap_key()
 import estimation                                          # v2.5.0 : double estimation ☁ / 🖥
 
-VERSION = "2.6.0"
+VERSION = "2.7.0"   # 2.7.0 (27/09) : un chapitre traduit EN PARTIE (pages lues par les Dialogues) reste « a traduire »
 SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 DIR = os.path.join(SRC, "_suivi")
 ETAT, JOURNAL = os.path.join(DIR, "etat.json"), os.path.join(DIR, "journal.jsonl")
@@ -221,6 +221,15 @@ def traduction_faite(cd, lg):
     return os.path.isfile(os.path.join(cd, "traduction", lg, "traduction.json"))
 
 
+def traduction_complete(cd, lg):
+    """v2.7.0 : TOUTES les pages traduites. Quelques pages traduites pour les Dialogues ne font pas un chapitre traduit."""
+    try:                                  # lu directement (importer traduire_chapitre chargerait le detecteur)
+        t = json.load(open(os.path.join(cd, "traduction", lg, "traduction.json"), encoding="utf-8"))
+        return bool(t.get("complete", True))  # fichier d'avant la v2.1.0 = chapitre entier
+    except Exception:
+        return False
+
+
 def ouverture_a_faire(c):
     """Le « Precedemment... » de ce chapitre manque ou est perime (meme regle que le proxy)."""
     pv = prec.chapitres_precedents(os.path.dirname(c["cd"]), c["num"])
@@ -316,7 +325,7 @@ def plan_chapitre(c, cfg, refaire=False, avant_narres=False, detecter_langue=Fal
         if orig == lg:
             et["traduction"], pourquoi["traduction"] = "non", "déjà en " + lg
         else:
-            et["traduction"] = "faire" if refaire or not traduction_faite(c["cd"], lg) else "fait"
+            et["traduction"] = "faire" if refaire or not traduction_complete(c["cd"], lg) else "fait"
     if not cfg["precedemment"]:
         et["precedemment"] = "non"
     else:
@@ -468,7 +477,7 @@ def traiter_chapitre(c, cfg, refaire, etat, avant_narres, reprise_de=None):
             rc = lancer([PY, os.path.join(HERE, "traduire_chapitre.py"), c["d"], "--langue", lg, "--engine", "gemini"]
                         + (["--effacement", "local"] if __import__("reglages").sur_pc() else []),
                         os.path.join(tdir, "run.log"), etat, "traduction")
-            ok = rc == 0 and traduction_faite(c["cd"], lg)
+            ok = rc == 0 and traduction_complete(c["cd"], lg)
             journal("traduction", d=c["d"], langue=lg, essai=essai, rc=rc, ok=ok, s=round(time.time() - t0))
             if ok:
                 break

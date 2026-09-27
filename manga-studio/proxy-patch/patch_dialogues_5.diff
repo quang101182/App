@@ -1,0 +1,103 @@
+--- C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-20260927-dlg5	2026-09-27 02:12:27.379020100 +0200
++++ C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py	2026-09-27 02:12:27.480164400 +0200
+@@ -8753,8 +8753,9 @@
+             vd = os.path.join(cd, "video")
+             it["video"] = any(x.endswith(".mp4") for x in (os.listdir(vd) if os.path.isdir(vd) else []))
+             td = os.path.join(cd, "traduction")
+-            it["trad"] = sorted(lg for lg in (os.listdir(td) if os.path.isdir(td) else [])
+-                                if os.path.isfile(os.path.join(td, lg, "traduction.json")))
++            _tl = {lg: _trad_etat(os.path.join(td, lg)) for lg in (os.listdir(td) if os.path.isdir(td) else [])}
++            it["trad"] = sorted(lg for lg, e in _tl.items() if e and e["complete"])            # v2.81.5 : COMPLETES
++            it["trad_partiel"] = sorted(lg for lg, e in _tl.items() if e and not e["complete"])
+             it["prec"] = os.path.isfile(os.path.join(cd, "precedemment", "ouverture.json"))
+             it["langue"] = _langue_connue(cd)                                         # v2.2.0
+             chaps[se + "/" + ch] = it
+@@ -8925,6 +8926,33 @@
+     return base
+ 
+ 
++_TRAD_ETAT_CACHE = {}
++
++
++def _trad_etat(td):
++    """v2.81.5 : {complete, pages, total, via_dialogues, historique} d'une traduction (cache par date du fichier) ; None si absente.
++    Un fichier d'avant traduire_chapitre 2.1.0 (sans « complete ») = chapitre entier."""
++    tj = os.path.join(td, "traduction.json")
++    try:
++        mt = os.path.getmtime(tj)
++    except OSError:
++        return None
++    c = _TRAD_ETAT_CACHE.get(tj)
++    if c and c[0] == mt:
++        return c[1]
++    try:
++        with open(tj, encoding="utf-8") as f:
++            t = json.load(f)
++    except Exception:
++        return None
++    pages = sorted(x["page"] for x in t.get("pages") or [])
++    e = {"complete": bool(t.get("complete", True)), "pages": pages, "total": t.get("pages_chapitre") or len(pages),
++         "via_dialogues": [x["page"] for x in t.get("pages") or [] if x.get("via") == "dialogues"],
++         "historique": t.get("historique") or []}
++    _TRAD_ETAT_CACHE[tj] = (mt, e)
++    return e
++
++
+ def _dlg_francais(base):
+     """Traduction francaise presente, OU chapitre capture directement en francais (langue.json de l'app)."""
+     if os.path.isfile(os.path.join(base, "traduction", "fr", "traduction.json")):
+@@ -8946,12 +8974,15 @@
+     if not base:
+         return None
+     dd = os.path.join(base, "dialogues")
+-    return {"d": d, "traduit": _dlg_francais(base),
++    _te = _trad_etat(os.path.join(base, "traduction", "fr"))
++    return {"d": d, "traduit": _dlg_francais(base), "trad_pages": (_te or {}).get("pages") or [],
++            "trad_complete": bool(_te and _te["complete"]),
++            "vf": not _te and (_dlg_lire(os.path.join(base, "langue.json")) or {}).get("langue") == "fr",
+             "doc": _dlg_lire(os.path.join(dd, "dialogues.json")), "progress": _dlg_lire(os.path.join(dd, "progress.json")),
+             "en_cours": _dlg_vivant(d), "distribution": _dlg_lire(os.path.join(os.path.dirname(base), "dialogues_distribution.json"))}
+ 
+ 
+-def manga_dialogues_lancer(d, action, pages=""):
++def manga_dialogues_lancer(d, action, pages="", traduire=False):
+     if action not in ("preparer", "voix", "video"):          # v2.81.0 D7 : la video des dialogues
+         return {"error": "action inconnue"}
+     if pages and not _RE_DLG_PAGES.match(pages):
+@@ -8960,7 +8991,7 @@
+     if not base:
+         return {"error": "chapitre introuvable"}
+     dd = os.path.join(base, "dialogues")
+-    if action == "preparer" and not _dlg_francais(base):
++    if action == "preparer" and not _dlg_francais(base) and not (traduire and pages):
+         return {"error": "traduis d'abord ce chapitre en français"}
+     if action in ("voix", "video") and not os.path.isfile(os.path.join(dd, "dialogues.json")):
+         return {"error": "prépare d'abord les dialogues de ce chapitre"}
+@@ -8973,7 +9004,7 @@
+         os.remove(os.path.join(dd, "progress.json"))     # un vieux progres ferait croire a un run en cours
+     except Exception:
+         pass
+-    cmd = [MANGA_PY, MANGA_DIALOGUES, action, d] + (["--pages", pages] if pages and action != "video" else [])
++    cmd = [MANGA_PY, MANGA_DIALOGUES, action, d] + (["--pages", pages] if pages and action != "video" else [])         + (["--traduire"] if traduire and action == "preparer" else [])          # v2.81.5 : sur demande EXPLICITE seulement
+     lg = open(os.path.join(dd, "run.log"), "w", encoding="utf-8")
+     _DLG_JOBS[d] = subprocess.Popen(cmd, stdout=lg, stderr=lg, cwd=os.path.dirname(MANGA_DIALOGUES),
+                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+@@ -9774,6 +9805,9 @@
+             try:
+                 with open(tj, encoding="utf-8") as f:
+                     t = json.load(f)
++                _te = _trad_etat(td) or {}                                         # v2.81.5 : tracabilite
++                it.update(complete=_te.get("complete", True), n=len(_te.get("pages") or []), total=_te.get("total"),
++                          via_dialogues=_te.get("via_dialogues") or [], historique=_te.get("historique") or [])
+                 it.update(etat="fini", stats=t.get("stats"), engine=t.get("engine"), created_at=t.get("created_at"),
+                           pages={x["source"]: d.strip("/") + "/traduction/" + lg + "/" + x["file"] for x in t.get("pages") or []})
+             except Exception as e:
+@@ -11869,7 +11903,7 @@
+                 self._json(200, manga_reglages({k: data[k] for k in ("mode", "relais_moderation", "flou_discretion") if k in data}))   # v2.43.0 ; v2.51.0
+             elif self.path == "/manga/dialogues_lancer":       # Manga Studio v2.81.0 (mode Dialogues)
+                 self._json(200, manga_dialogues_lancer(str(data.get("d") or ""), str(data.get("action") or ""),
+-                                                       str(data.get("pages") or "")))
++                                                       str(data.get("pages") or ""), data.get("traduire") is True))
+             elif self.path == "/manga/dialogues_arreter":
+                 self._json(200, manga_dialogues_arreter(str(data.get("d") or "")))
+             elif self.path == "/manga/dialogues_maj":

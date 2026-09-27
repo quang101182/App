@@ -31,7 +31,11 @@ import narrate_chapter as nc          # appel_vision (Gemini natif / K3), frein 
 import ingest_page as ip              # load_page, detect, clean_bubbles
 import effacement_local as el         # v1.98.0 : masque des lettres + LaMa (option --effacement local)
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
+# v2.1.0 (27/09, Quang : « traduire seulement les pages lues » + « une tracabilite pour que le mode normal ne confonde pas ») :
+# --pages AJOUTE a la traduction existante au lieu de la remplacer (avant : traduire 44-68 apres 1-20 effacait 1-20 de
+# l'index) ; traduction.json porte pages_chapitre, complete (toutes les pages ?), via par page (traduction | dialogues)
+# et un historique des passages. Les stats s'additionnent. Lecteurs : traduction_etat() ci-dessous.
 # v1.98.0 (24/09, feuille de route 4-nonies etape 2) : --effacement local = le texte pose sur le DESSIN est efface par
 # masque des lettres (comic-text-detector) + LaMa manga (effacement_local.py) au lieu d'un rectangle blanc ; les vraies
 # bulles restent videes comme avant. Option : sans elle, rien ne change.
@@ -370,6 +374,25 @@ def poser_texte(im, boite, texte, est_bulle, taille_max=None, dessiner=True):
     return {"taille": 8, "lignes": len(mots), "tient": False}
 
 
+def lire_traduction(td):
+    try:
+        return json.load(open(os.path.join(td, "traduction.json"), encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def traduction_etat(cd, lg="fr"):
+    """v2.1.0 -- ce qui est VRAIMENT traduit : None (rien) ou {complete, pages: [n...], total, via: {n: mode}}.
+    Un fichier d'avant la v2.1.0 (sans « complete ») venait d'une traduction du chapitre entier : complete."""
+    t = lire_traduction(os.path.join(cd, "traduction", lg))
+    if not t:
+        return None
+    pages = sorted(x["page"] for x in t.get("pages") or [])
+    total = t.get("pages_chapitre") or len(pages)
+    return {"complete": bool(t.get("complete", True)), "pages": pages, "total": total,
+            "via": {x["page"]: x.get("via", "traduction") for x in t.get("pages") or []}}
+
+
 def main():
     global PROGRESS
     try: __import__("declaration_gpu").declarer("traduction")      # v2.13.0 : sa part de la VRAM, pour la jauge ventilee
@@ -379,6 +402,8 @@ def main():
     ap.add_argument("--langue", default="fr", help="code langue cible : " + ", ".join(LANGUES))
     ap.add_argument("--engine", choices=["gemini", "kimi"], default="gemini")
     ap.add_argument("--pages", default="", help="plage, ex. 1-20 (defaut : tout)")
+    ap.add_argument("--via", choices=["traduction", "dialogues"], default="traduction",
+                    help="v2.1.0 : quel mode a demande ces pages (tracabilite, lu par l'app)")
     ap.add_argument("--conf", type=float, default=0.25)
     ap.add_argument("--conf-complement", type=float, default=CONF_COMPLEMENT,
                     help="v1.92.0 : zones faibles ajoutees si elles ne touchent aucune bulle (0 = desactive)")
@@ -552,12 +577,28 @@ def main():
         nc.log("  page %d : %d bulle(s), %d posee(s)" % (p["num"], len(texts), sum(1 for l in lignes if l.get("tient") is not None)))
     stats["s"] = round(time.time() - t0, 1)
     stats["cout"] = round(stats["cout"], 4)
+    stats_run_cout = stats["cout"]
+    # v2.1.0 : une traduction PARTIELLE s'ajoute a l'existante (les pages refaites remplacent les anciennes)
+    for x in res["pages"]:
+        x["via"] = a.via
+    anc = lire_traduction(out) if a.pages else None
+    faites = {x["page"] for x in res["pages"]}
+    if anc:
+        res["pages"] = sorted([x for x in anc.get("pages") or [] if x["page"] not in faites] + res["pages"], key=lambda x: x["page"])
+        for k, v in (anc.get("stats") or {}).items():
+            if isinstance(v, (int, float)) and isinstance(stats.get(k), (int, float)):
+                stats[k] = round(stats[k] + v, 5)
+    total = len(nc.pages_du_chapitre(chap, "")[1])
+    res["pages_chapitre"] = total
+    res["complete"] = len({x["page"] for x in res["pages"]}) >= total
+    res["historique"] = ((anc or {}).get("historique") or []) + [{
+        "t": res["created_at"], "pages": a.pages or "tout", "n": len(faites), "via": a.via, "cout": round(stats_run_cout, 5)}]
     res["stats"] = stats
     with open(os.path.join(out, "traduction.json"), "w", encoding="utf-8") as fh:
         json.dump(res, fh, ensure_ascii=False, indent=1)
-    progres(len(pages), len(pages), fini=True, cout=stats["cout"])
+    progres(len(pages), len(pages), fini=True, cout=stats_run_cout)          # v2.1.0 : CE passage, pas le cumul
     nc.journal("traduction_done", chapitre=a.chapitre, langue=a.langue, **{k: v for k, v in stats.items()})
-    nc.dep.noter("traduction", a.chapitre, "traduction " + a.langue, a.engine, stats.get("cout", 0))    # v1.99.0
+    nc.dep.noter("traduction", a.chapitre, "traduction " + a.langue, a.engine, stats_run_cout)   # v2.1.0 : ce passage seul    # v1.99.0
     if not a.rerendu and not a.sortie and not stats.get("moderation"):                   # v1.99.0 : refaite sans refus
         nc.mod.clore(a.chapitre, "traduction", note="traitee : retraduit avec " + a.engine)
     try:

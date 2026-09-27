@@ -15,7 +15,7 @@ Fichiers :
 Decisions de Quang : toujours lu en FRANCAIS (traduction fr obligatoire) ; relais de moderation = SON interrupteur ;
 aucun moteur de secours pour les voix ; une correction reste propre aux Dialogues.
 """
-import argparse, base64, json, os, re, sys, time
+import argparse, base64, json, os, re, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -24,7 +24,9 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.7.0"   # 1.7.0 (D8, 27/09) : credits = tarif MESURE du v3 (0,28/caractere), plus 1/caractere
+VERSION = "1.8.0"   # 1.8.0 (27/09, Quang) : preparer --traduire = traduit d'abord les pages DEMANDEES qui ne le sont pas
+#          (traduire_chapitre.py --pages --via dialogues : ajoutees a la traduction, tracees), jamais sans ce drapeau
+#   # 1.7.0 : 1.7.0 (D8, 27/09) : credits = tarif MESURE du v3 (0,28/caractere), plus 1/caractere
 #   # 1.6.1 : 1.6.1 : contour degenere (< 3 points / < 20 % de la boite) -> repli ovale
 #   # 1.6.0 (Quang 27/09 00h47, Solo Leveling) : chapitre en FRANCAIS D'ORIGINE -- bulles detectees
 #          sur les pages d'origine (meme detection que la traduction), texte LU par Gemini ; img_rel = page a afficher
@@ -349,8 +351,56 @@ def nom_connu(distrib, qui):
     return q or "inconnu"
 
 
+def plages_contigues(nums):
+    out = []
+    for n in sorted(nums):
+        if out and n == out[-1][1] + 1:
+            out[-1][1] = n
+        else:
+            out.append([n, n])
+    return out
+
+
+def traduire_manquantes(a, chap_dir, dd):
+    """--traduire (1.8.0) : traduit -- et paie -- les pages DEMANDEES qui ne sont pas encore en francais, par
+    traduire_chapitre.py --via dialogues (elles s'AJOUTENT a la traduction, marquees « via dialogues »). 0 = rien a faire ou fait."""
+    if deja_francais(chap_dir):
+        return 0
+    total = len(nc.pages_du_chapitre(chap_dir, "")[1])
+    voulues = [n for n in nc_plage(a.pages, list(range(1, total + 1))) if 1 <= n <= total]
+    tr = lire_json(os.path.join(chap_dir, "traduction", "fr", "traduction.json")) or {}
+    faites = {p["page"] for p in tr.get("pages") or []}
+    manq = [n for n in voulues if n not in faites]
+    if not manq:
+        return 0
+    os.makedirs(dd, exist_ok=True)
+    nc.PROGRESS = os.path.join(dd, "progress.json")
+    tp = os.path.join(chap_dir, "traduction", "fr", "progress.json")
+    log("dialogues %s : %d page(s) a traduire d'abord (%s)" % (VERSION, len(manq), ", ".join("%d-%d" % tuple(x) for x in plages_contigues(manq))))
+    fait = 0
+    for de, fin in plages_contigues(manq):
+        nc.progres("traduction", fait, len(manq))
+        sys.stdout.flush()
+        pr = subprocess.Popen([sys.executable, os.path.join(HERE, "traduire_chapitre.py"), a.chap, "--langue", "fr",
+                               "--pages", "%d-%d" % (de, fin), "--via", "dialogues"])
+        while pr.poll() is None:
+            time.sleep(2)
+            q = lire_json(tp) or {}
+            nc.progres("traduction", fait + int(q.get("fait") or 0), len(manq))
+        if pr.returncode != 0:
+            nc.progres("erreur", fait, len(manq), fini=True, arret="traduction des pages %d-%d en echec" % (de, fin))
+            print("ARRET : traduction des pages %d-%d en echec (code %s) -- rien n'est prepare" % (de, fin, pr.returncode))
+            return 4
+        fait += fin - de + 1
+    return 0
+
+
 def cmd_preparer(a):
     chap_dir, serie_dir, dd = chemins(a.chap)
+    if getattr(a, "traduire", False):
+        rc = traduire_manquantes(a, chap_dir, dd)
+        if rc:
+            return rc
     tr = source_bulles(chap_dir, a.pages)
     if not tr:
         print("ARRET : pas de traduction francaise pour %s -- traduis d'abord ce chapitre en francais" % a.chap)
@@ -905,6 +955,7 @@ def main():
     p = argparse.ArgumentParser()
     sp = p.add_subparsers(dest="cmd", required=True)
     pr = sp.add_parser("preparer"); pr.add_argument("chap"); pr.add_argument("--pages", default="")
+    pr.add_argument("--traduire", action="store_true", help="1.8.0 : traduire d'abord les pages demandees qui ne le sont pas")
     vo = sp.add_parser("voix"); vo.add_argument("chap"); vo.add_argument("--pages", default="")
     ec = sp.add_parser("ecouter"); ec.add_argument("chap"); ec.add_argument("--cle", required=True)
     ec.add_argument("--qui", default=""); ec.add_argument("--ton", default=None)

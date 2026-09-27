@@ -7,7 +7,7 @@
 
 ## 1. État au 25/09/2026 23h35
 
-- App `manga_studio.html` **v2.81.4** (27/09 01h35 ; D8 fait sur le Samsung : tarif ElevenLabs v3 réel 0,28 crédit/car., estimation de préparation = pages demandées : ROADMAP § 4-septdecies) · manga-fetch **0.8.4** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
+- App `manga_studio.html` **v2.81.5** (27/09 02h15 : traduire seulement les pages des Dialogues, tracées — ROADMAP D11 ; v2.81.4 à 01h35 : D8 fait sur le Samsung : tarif ElevenLabs v3 réel 0,28 crédit/car., estimation de préparation = pages demandées : ROADMAP § 4-septdecies) · manga-fetch **0.8.4** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
   redécoupés ; sauvegardes `_avant_redecoupe/` EFFACÉES le 26/09 02h45 après validation de Quang à la lecture).
 - **26/09 11h00-11h30** : v2.68.0 lecteur vidéo (24/24) + 2 bugs Fold ; v2.69.0 sélecteur rapide (26/26).
 - **26/09 11h35-12h05** : sélecteur en narration + visionneuse `test_selecteur_narr_pages_ui` 100/100 (sabotage rouge) ;
@@ -49,6 +49,7 @@
 | **🎭 Dialogues — D8 appareil réel** | ✅ FAIT 27/09 01h35 (v2.81.3-.4, ROADMAP D8) |
 | **🎭 Dialogues — D10 bouton 🎭 dans la fiche de la SÉRIE** (Quang 01h24 : retrouver ce qui existe, sans mélanger avec 🎬 Vidéos ; choix délégué → bouton séparé + panneau « Dialogues de la série ») | **PROCHAINE ÉTAPE** : maquette à faire valider par Quang, puis code |
 | Solo Leveling ch.9 (VF) : préparation d'une portée de pages jamais faite en vrai | au 1er usage de Quang, ou pendant D10 |
+| **Relancer la SECONDAIRE** : elle n'a pas `patch_dialogues_5` (traduction partielle tracée ; l'app y retombe sur l'ancien comportement, sans rien supposer) | dès que `/manga/activite` sur 8192 est vide (capture en cours le 27/09 02h10) — procédure § 3.7 |
 | `test_dialogues_largeurs_reel.py` : 1 KO en 5 passages (150 contrôles), non identifié (capture pendant le fondu du halo ?) | s'il revient : relancer avec affichage du contrôle en échec avant toute hypothèse |
 | **🎭 Dialogues — relancer la SECONDAIRE au repos** (elle n'a pas les routes Dialogues : patchs proxy 1-3 appliqués au fichier, instance 8192 pas relancée) : `/manga/activite` vide sur 8192, tuer le PID de `espace_prive.py` SEULEMENT, puis `Start-ScheduledTask MangaStudioInstance2` | ✅ FAIT 27/09 00h55 (les deux instances ont les 4 patchs) |
 | **🎭 Dialogues — D9 clôture** (ROADMAP § 4-septdecies : constats, versions ; mémoire ; commit) | après D10 |

@@ -3233,6 +3233,26 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       DEMANDÉES seulement (0,004 $/page, mesuré 0,0038), recalculée à la frappe, bornée au chapitre ; « plusieurs chapitres » :
       aucun chiffre inventé. Banc `test_dialogues_estimation_ui.py` **12/12** (Solo Leveling ch.9, 882 p. : 3,53 $ → 0,012 $),
       ancienne page = **10 KO** ; voisins compact 31/31, largeurs réelles 30/30 (`test_dialogues_largeurs_reel.py`).
+- [x] **D11 — Traduire SEULEMENT les pages des Dialogues, tracées** (Quang 01h53 : « proposer de traduire seulement les pages
+      lues ? » ; 01h55 : « une traçabilité pour que le mode normal ne confonde pas ce qui a été traduit via ce mode et le texte
+      original ») ✅ **27/09 02h15 = app v2.81.5** + `traduire_chapitre.py` 2.1.0 + `dialogues.py` 1.8.0 + `suivi_nuit.py` 2.7.0 +
+      `proxy-patch/patch_dialogues_5.py` (+ .diff). **Deux pièges trouvés dans le code avant d'écrire** : (1) `--pages` RÉÉCRIVAIT
+      `traduction.json` (traduire 44-68 après 1-20 effaçait 1-20 de l'index) → les pages s'AJOUTENT ; (2) « traduit » = « le
+      fichier existe » → la NUIT aurait sauté un chapitre traduit à 3 % → `complete` (toutes les pages ?) décide.
+      Traçabilité dans `traduction.json` : `pages_chapitre`, `complete`, `via` par page (traduction | dialogues), `historique`
+      des passages (pages, n, via, coût) ; fichier d'avant 2.1.0 = chapitre entier. Dépense notée = CE passage (bug trouvé au
+      banc : le cumul était noté). Serveur : `/manga/dialogues` → `trad_pages`, `trad_complete`, `vf` ; `/manga/traductions` →
+      `complete`, `n`, `total`, `via_dialogues`, `historique` ; bibliothèque : `trad` = COMPLÈTES, `trad_partiel` à part ;
+      `dialogues_lancer` + `traduire: true` (booléen strict) → `preparer --traduire`, JAMAIS sans ce drapeau (le lot ne
+      traduit rien). App : « N pages à traduire d'abord (p. …) », coût traduction au tarif MESURÉ (étalonnage 0,009 $/page) +
+      préparation, bouton « 🌐 Traduire puis préparer » + confirmation (prix, « le reste reste en VO ») ; ligne 🌐 « 🟠 français :
+      n / N pages (dont k via 🎭 Dialogues) — le reste est en version originale » ; bibliothèque « 🌐 FR partiel » ; serveur
+      ancien (secondaire pas relancée) = aucune supposition. Bancs : `test_trad_partielle_proxy.py` **11/11** (copie, 1 vraie
+      page payée) + serveur non patché ROUGE ; `test_trad_partielle_ui.py` **24/24** (1280 + 360, lancement intercepté) + page
+      v2.81.4 ROUGE ; dialogues voix 23/23, lot 8/8, préparer 24/24, estimation 12/12, largeurs réelles 30/30. **Samsung, au
+      doigt** : OPM ch. 302 (VO vietnamienne) p. 2-3 → confirmation → traduction (étape visible) → préparation, 52 s, 9 répliques,
+      ligne 🌐 « 2 / 18 pages », 0 erreur JS (ch. 302 reste « FR partiel » dans la bibliothèque, tracé). Principale relancée
+      au repos 02h10 ; **secondaire : patch 5 appliqué au fichier commun, instance PAS relancée (capture en cours)**.
 - [ ] **D10 — Bouton 🎭 Dialogues dans la fiche de la SÉRIE** (Quang 01h24 : « retrouver ce qui existe avec ce nouveau format […]
       un bouton à l'onglet […] il ne faudrait pas mélanger l'ensemble » ; choix délégué) : **décidé par Claude** — bouton séparé
       à côté de 🎬 Vidéos, panneau « 🎭 Dialogues de la série » (chapitres préparés / voix prêtes / à refaire / vidéo à jour,
