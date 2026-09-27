@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.15.0"  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.16.0"  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -360,6 +360,15 @@ def _appel_relais(chap_dir, lot, distrib, narr, cat, stats, moteur):
 
 
 # ---------------------------------------------------------------- fusion dans la distribution et le chapitre
+def defaut_reglage(cle, sinon):
+    """1.16.0 (R18) : valeur par defaut de l'instance (reglages.py, meme MANGA_SOURCES_DIR) ; `sinon` si illisible."""
+    try:
+        import reglages
+        return reglages.defaut(cle, sinon)
+    except Exception:
+        return sinon
+
+
 def fusionner_distribution(distrib, nouveaux, cat):
     """Ajoute les nouveaux personnages (voix + couleur d'office, jamais fusionnes en silence avec un existant)."""
     ids_cat = {v["id"] for v in cat}
@@ -377,8 +386,13 @@ def fusionner_distribution(distrib, nouveaux, cat):
             libre = [x["id"] for x in cat if x["id"] not in prises and (g is None or x["genre"] == g)]
             v = libre[0] if libre else v
         couleur = next((c for c in PALETTE if c not in couleurs), PALETTE[len(distrib["persos"]) % len(PALETTE)])
+        gk = {"homme": "h", "femme": "f"}.get((n.get("genre") or "").lower())      # 1.16.0 (R18) : defauts du genre
         p = {"nom": nom, "alias": [], "genre": n.get("genre") or "?", "age": n.get("age") or "", "fiche": n.get("fiche") or "",
-             "voix_el": v, "expressivite": 1, "vitesse": 1.1, "couleur": couleur}
+             "voix_el": v, "expressivite": 1, "vitesse": defaut_reglage("voix_%s_vitesse" % gk, 1.1) if gk else 1.1,
+             "couleur": couleur}
+        ec = defaut_reglage("voix_%s_ecoute" % gk, 1) if gk else 1
+        if ec != 1:
+            p["ecoute"] = ec
         distrib["persos"].append(p)
         prises.add(v); couleurs.add(couleur); noms.add(nom.lower())
         ajoutes.append(nom)
