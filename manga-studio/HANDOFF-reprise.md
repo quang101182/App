@@ -7,7 +7,7 @@
 
 ## 1. État au 25/09/2026 23h35
 
-- App `manga_studio.html` **v2.81.5** (27/09 02h15 : traduire seulement les pages des Dialogues, tracées — ROADMAP D11 ; v2.81.4 à 01h35 : D8 fait sur le Samsung : tarif ElevenLabs v3 réel 0,28 crédit/car., estimation de préparation = pages demandées : ROADMAP § 4-septdecies) · manga-fetch **0.8.4** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
+- App `manga_studio.html` **v2.82.0** (27/09 03h10). **Feuille de route de la nuit = ROADMAP § 4-septdecies « Feuille de route de la nuit du 27/09 » (R1 → R5), À SUIVRE DANS L'ORDRE** : R1 ✅ lecteur sans trou (v2.81.7), R2 ✅ format du lecteur (v2.81.8), R3 ✅ D10 (v2.82.0), **R3-bis = PROCHAINE (une vidéo par portée)**, puis R4 (D12 doublons), R5 (D9 clôture). Avant : v2.81.5 à 02h15 (traduire seulement les pages des Dialogues, tracées — ROADMAP D11) ; v2.81.4 à 01h35 : D8 fait sur le Samsung : tarif ElevenLabs v3 réel 0,28 crédit/car., estimation de préparation = pages demandées : ROADMAP § 4-septdecies) · manga-fetch **0.8.4** (chapitre annoncé sans image = « à jour », 26/09 02h45) — 0.8.2 (webtoons en tuiles découpés aux gouttières, 26/09 02h30 ; 63 ch.
   redécoupés ; sauvegardes `_avant_redecoupe/` EFFACÉES le 26/09 02h45 après validation de Quang à la lecture).
 - **26/09 11h00-11h30** : v2.68.0 lecteur vidéo (24/24) + 2 bugs Fold ; v2.69.0 sélecteur rapide (26/26).
 - **26/09 11h35-12h05** : sélecteur en narration + visionneuse `test_selecteur_narr_pages_ui` 100/100 (sabotage rouge) ;
@@ -60,6 +60,15 @@
 | ~~Historique git du dépôt PUBLIC contient encore d'anciens noms de la secondaire~~ (décidé : on ne réécrit pas, voir § 1) (les fichiers actuels sont propres ~~(faux au 25/09)~~ → **vrai depuis le 26/09** : 4 fichiers en contenaient encore — app, manga_fetch, maquette_arret_v1, test_choix_manga_ui — neutralisés ; contrôle = `git grep -i -F -f <termes tirés de prive/_sites.json + dossiers de prive/>`) | seulement sur accord EXPLICITE de Quang (réécriture d'historique) |
 
 ## 3. Règles et pièges (ne pas les repayer)
+
+0. **Nuit du 27/09 (payés)** : (a) un patch Python écrit par `cat <<EOF` casse les `
+` des chaînes JS et les guillemets → écrire
+   les patchs avec l'outil d'écriture, un `BS = "\\"` pour les `
+` JS, et vérifier `node --check` + « rejeu = fichier identique » ;
+   (b) `ROADMAP.md` est en **LF** (pas CRLF) ; (c) un banc qui lit `RESUME` doit l'ATTENDRE (`wait_for_function`) ; (d) ne pas
+   effacer les copies de banc (`scratchpad/src_partiel/…`) tant qu'un banc s'en sert ; (e) le lecteur des Dialogues = mêmes
+   classes que `#lecteur` : toute règle CSS ciblée `#lecteur …` / `#lecPrev` doit avoir son pendant `#dlgLec …` / `#dllPrec`.
+
 
 1. **Dépôt `App` PUBLIC** : jamais un nom de site, de série ou une adresse de l'application SECONDAIRE dans un fichier, un
    commit ou la ROADMAP. Ses sites : `C:\Users\quang\Documents\MangaStudio-donnees\prive\_sites.json` (hors dépôt). Vocabulaire :
