@@ -3252,7 +3252,7 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       v2.81.4 ROUGE ; dialogues voix 23/23, lot 8/8, préparer 24/24, estimation 12/12, largeurs réelles 30/30. **Samsung, au
       doigt** : OPM ch. 302 (VO vietnamienne) p. 2-3 → confirmation → traduction (étape visible) → préparation, 52 s, 9 répliques,
       ligne 🌐 « 2 / 18 pages », 0 erreur JS (ch. 302 reste « FR partiel » dans la bibliothèque, tracé). Principale relancée
-      au repos 02h10 ; **secondaire : patch 5 appliqué au fichier commun, instance PAS relancée (capture en cours)**.
+      au repos 02h10 ; ~~secondaire pas relancée (capture en cours)~~ → **secondaire relancée 02h17** (la capture était finie : constat non revérifié, corrigé par Quang).
 - [ ] **D10 — Bouton 🎭 Dialogues dans la fiche de la SÉRIE** (Quang 01h24 : « retrouver ce qui existe avec ce nouveau format […]
       un bouton à l'onglet […] il ne faudrait pas mélanger l'ensemble » ; choix délégué) : **décidé par Claude** — bouton séparé
       à côté de 🎬 Vidéos, panneau « 🎭 Dialogues de la série » (chapitres préparés / voix prêtes / à refaire / vidéo à jour,

@@ -49,7 +49,7 @@
 | **🎭 Dialogues — D8 appareil réel** | ✅ FAIT 27/09 01h35 (v2.81.3-.4, ROADMAP D8) |
 | **🎭 Dialogues — D10 bouton 🎭 dans la fiche de la SÉRIE** (Quang 01h24 : retrouver ce qui existe, sans mélanger avec 🎬 Vidéos ; choix délégué → bouton séparé + panneau « Dialogues de la série ») | **PROCHAINE ÉTAPE** : maquette à faire valider par Quang, puis code |
 | Solo Leveling ch.9 (VF) : préparation d'une portée de pages jamais faite en vrai | au 1er usage de Quang, ou pendant D10 |
-| **Relancer la SECONDAIRE** : elle n'a pas `patch_dialogues_5` (traduction partielle tracée ; l'app y retombe sur l'ancien comportement, sans rien supposer) | dès que `/manga/activite` sur 8192 est vide (capture en cours le 27/09 02h10) — procédure § 3.7 |
+| **Relancer la SECONDAIRE** : elle n'a pas `patch_dialogues_5` (traduction partielle tracée ; l'app y retombe sur l'ancien comportement, sans rien supposer) | ✅ FAIT 27/09 02h17 (~~capture en cours~~ : constat NON revérifié, finie depuis — Quang 02h16) |
 | `test_dialogues_largeurs_reel.py` : 1 KO en 5 passages (150 contrôles), non identifié (capture pendant le fondu du halo ?) | s'il revient : relancer avec affichage du contrôle en échec avant toute hypothèse |
 | **🎭 Dialogues — relancer la SECONDAIRE au repos** (elle n'a pas les routes Dialogues : patchs proxy 1-3 appliqués au fichier, instance 8192 pas relancée) : `/manga/activite` vide sur 8192, tuer le PID de `espace_prive.py` SEULEMENT, puis `Start-ScheduledTask MangaStudioInstance2` | ✅ FAIT 27/09 00h55 (les deux instances ont les 4 patchs) |
 | **🎭 Dialogues — D9 clôture** (ROADMAP § 4-septdecies : constats, versions ; mémoire ; commit) | après D10 |
