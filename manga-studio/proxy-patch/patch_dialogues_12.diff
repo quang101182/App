@@ -1,0 +1,115 @@
+--- C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py.bak-dialogues12	2026-09-27 17:29:59.131929700 +0200
++++ C:/Users/quang/Documents/ComfyUI/_studio_llm_proxy.py	2026-09-27 17:29:59.168263500 +0200
+@@ -8988,11 +8988,12 @@
+             "vf": not _te and (_dlg_lire(os.path.join(base, "langue.json")) or {}).get("langue") == "fr",
+             "fichiers": [x.get("file") for x in ((_dlg_lire(os.path.join(base, "manifest.json")) or {}).get("pages") or [])],   # v2.82.0 (R1-bis)
+             "doc": _dlg_lire(os.path.join(dd, "dialogues.json")), "progress": _dlg_lire(os.path.join(dd, "progress.json")),
+-            "en_cours": _dlg_vivant(d), "distribution": _dlg_lire(os.path.join(os.path.dirname(base), "dialogues_distribution.json"))}
++            "en_cours": _dlg_vivant(d), "distribution": _dlg_lire(os.path.join(os.path.dirname(base), "dialogues_distribution.json")),
++            "verif_pages": sorted(int(k) for k in (((_dlg_lire(os.path.join(dd, "bulles_verifiees.json")) or {}).get("pages")) or {}))}   # v3.1.0 (R30)
+ 
+ 
+ def manga_dialogues_lancer(d, action, pages="", traduire=False):
+-    if action not in ("preparer", "voix", "video"):          # v2.81.0 D7 : la video des dialogues
++    if action not in ("preparer", "voix", "video", "detecter"):          # v2.81.0 D7 : la video des dialogues ; v3.1.0 (R30) : detection seule
+         return {"error": "action inconnue"}
+     if pages and not _RE_DLG_PAGES.match(pages):
+         return {"error": "plage de pages invalide"}
+@@ -9077,6 +9078,78 @@
+     return {"ok": True, "repliques": len([x for x in doc.get("oubliees") or [] if x.get("plage") == k]), "videos": ranges}
+ 
+ 
++def _dlg_box_ok(b):
++    try:
++        v = {k: float(b[k]) for k in ("x", "y", "w", "h")}
++    except Exception:
++        return None
++    if not all(0 <= v[k] <= 1 for k in v) or v["w"] <= 0.003 or v["h"] <= 0.003 or v["x"] + v["w"] > 1.001 or v["y"] + v["h"] > 1.001:
++        return None
++    return {k: round(v[k], 4) for k in v}
++
++
++def manga_dialogues_bulles(d, pages):
++    """v3.1.0 (R30) : les bulles a verifier d'une plage de pages."""
++    base = _dlg_base(d)
++    if not base:
++        return {"error": "chapitre introuvable"}
++    if not _RE_DLG_PAGES.match(pages or ""):
++        return {"error": "plage de pages invalide"}
++    a, b = (int(x) for x in (pages + "-" + pages).split("-")[:2]) if "-" not in pages else (int(x) for x in pages.split("-"))
++    man = [x.get("file") for x in ((_dlg_lire(os.path.join(base, "manifest.json")) or {}).get("pages") or [])]
++    tr = _dlg_lire(os.path.join(base, "traduction", "fr", "traduction.json")) or {}
++    trp = {p.get("page"): p for p in tr.get("pages") or []}
++    det = ((_dlg_lire(os.path.join(base, "dialogues", "detection.json")) or {}).get("pages")) or {}
++    verif = ((_dlg_lire(os.path.join(base, "dialogues", "bulles_verifiees.json")) or {}).get("pages")) or {}
++    out = []
++    for n in range(max(1, a), min(len(man), b) + 1):
++        p = trp.get(n)
++        if p is not None and p.get("bulles") is not None:
++            bl = [{"id": x["id"], "box": x["box"], "type": x.get("type"), "texte": (x.get("trad") or "").strip()}
++                  for x in p["bulles"] if x.get("type") in ("dialogue", "narration") and x.get("box")
++                  and (not x.get("ecarte") or not str(x.get("ecarte")).startswith("moins de 2"))
++                  and ((x.get("trad") or "").strip() or x.get("a_lire"))]
++            src, img = "traduction", "traduction/fr/" + p.get("file", "page_%03d.png" % n)
++        elif str(n) in det:
++            bl = [{"id": x["id"], "box": x["box"], "type": "dialogue", "texte": ""} for x in det[str(n)].get("bulles") or []]
++            src, img = "detection", man[n - 1]
++        else:
++            bl, src, img = [], None, man[n - 1]
++        out.append({"page": n, "source": src, "img": img, "bulles": sorted(bl, key=lambda x: x["id"]), "verif": verif.get(str(n))})
++    return {"d": d, "pages": out, "en_cours": _dlg_vivant(d)}
++
++
++def manga_dialogues_verif(d, pages):
++    base = _dlg_base(d)
++    if not base:
++        return {"error": "chapitre introuvable"}
++    if not isinstance(pages, dict) or not pages or len(pages) > 400:
++        return {"error": "rien a enregistrer"}
++    f = os.path.join(base, "dialogues", "bulles_verifiees.json")
++    doc = _dlg_lire(f) or {"pages": {}}
++    for k, v in pages.items():
++        if not str(k).isdigit() or not isinstance(v, dict):
++            return {"error": "page invalide"}
++        e = {}
++        for cle in ("ordre", "exclues", "ajouts"):
++            l = []
++            for r in (v.get(cle) or [])[:200]:
++                bx = _dlg_box_ok((r or {}).get("box") or {})
++                try:
++                    i = int((r or {}).get("id"))
++                except Exception:
++                    i = None
++                if bx is None or i is None:
++                    return {"error": "zone invalide (%s, page %s)" % (cle, k)}
++                l.append({"id": i, "box": bx})
++            e[cle] = l
++        e["t"] = time.strftime("%Y-%m-%dT%H:%M:%S")
++        doc["pages"][str(int(k))] = e
++    os.makedirs(os.path.dirname(f), exist_ok=True)
++    _dlg_ecrire(f, doc)
++    return {"ok": True, "pages": sorted(int(k) for k in pages)}
++
++
+ def manga_dialogues_arreter(d):
+     base = _dlg_base(d)
+     if not base:
+@@ -11582,6 +11655,9 @@
+             self._json(200, manga_el_solde(bool((parse_qs(urlparse(self.path).query).get("force") or [""])[0])))
+         elif self.path.split("?", 1)[0] == "/manga/el_voix":
+             self._json(200, manga_el_voix())
++        elif self.path.split("?", 1)[0] == "/manga/dialogues_bulles":      # Manga Studio v3.1.0 (R30)
++            _q = parse_qs(urlparse(self.path).query)
++            self._json(200, manga_dialogues_bulles((_q.get("d") or [""])[0], (_q.get("pages") or [""])[0]))
+         elif self.path.split("?", 1)[0] == "/manga/dialogues_plan":
+             self._json(200, manga_dialogues_plan((parse_qs(urlparse(self.path).query).get("d") or [""])[0]))
+         elif self.path.split("?", 1)[0] == "/manga/dialogues_lot":
+@@ -12066,6 +12142,8 @@
+             elif self.path == "/manga/dialogues_lancer":       # Manga Studio v2.81.0 (mode Dialogues)
+                 self._json(200, manga_dialogues_lancer(str(data.get("d") or ""), str(data.get("action") or ""),
+                                                        str(data.get("pages") or ""), data.get("traduire") is True))
++            elif self.path == "/manga/dialogues_verif":        # Manga Studio v3.1.0 (R30)
++                self._json(200, manga_dialogues_verif(str(data.get("d") or ""), data.get("pages")))
+             elif self.path == "/manga/dialogues_arreter":
+                 self._json(200, manga_dialogues_arreter(str(data.get("d") or "")))
+             elif self.path == "/manga/dialogues_oublier":      # Manga Studio v2.99.1
