@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.25.0"  # 1.25.0 (27/09) : cout des voix MESURE (solde avant / apres), tarif recale a chaque mesure ;  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.26.0"  # 1.26.0 (27/09) : bulle ENTOUREE qui recouvre une bulle connue = la MEME (plus de replique en double) ;  # 1.25.0 (27/09) : cout des voix MESURE (solde avant / apres), tarif recale a chaque mesure ;  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -505,6 +505,20 @@ def iou(a, b):
     return inter / uni if uni > 0 else 0.0
 
 
+def couvre(grande, petite):
+    """1.26.0 : part de la PETITE zone contenue dans la GRANDE (1.0 = entierement dedans). Une bulle entouree au doigt est
+    souvent bien plus large que la zone de lettres detectee : l'IoU est alors faible alors que c'est la meme bulle."""
+    x1, y1 = max(grande["x"], petite["x"]), max(grande["y"], petite["y"])
+    x2, y2 = min(grande["x"] + grande["w"], petite["x"] + petite["w"]), min(grande["y"] + grande["h"], petite["y"] + petite["h"])
+    a = petite["w"] * petite["h"]
+    return max(0.0, x2 - x1) * max(0.0, y2 - y1) / a if a > 0 else 0.0
+
+
+def meme_zone(ajout, b):
+    """1.26.0 : l'ajout (zone) designe-t-il la bulle de zone b ? meme zone, ou b contenue dans le trace."""
+    return iou(ajout, b) >= 0.5 or couvre(ajout, b) >= 0.8
+
+
 def apparier(ref, bulles):
     """La bulle de la source qui correspond a une entree verifiee : meme zone (IoU >= 0.5), sinon meme id si la zone est proche."""
     best, bi = None, 0.0
@@ -515,7 +529,10 @@ def apparier(ref, bulles):
     if bi >= 0.5:
         return best
     same = [b for b in bulles if b["id"] == ref.get("id")]
-    return same[0] if same and iou(ref["box"], same[0]["box"]) >= 0.2 else None
+    if same and iou(ref["box"], same[0]["box"]) >= 0.2:
+        return same[0]
+    dedans = sorted(((couvre(ref["box"], b["box"]), b) for b in bulles if not b.get("ajout")), key=lambda t: -t[0])
+    return dedans[0][1] if dedans and dedans[0][0] >= 0.8 else None      # 1.26.0 : bulle connue DANS le trace
 
 
 def appliquer_verif(page, bulles, verif):
@@ -524,11 +541,12 @@ def appliquer_verif(page, bulles, verif):
     v = ((verif or {}).get("pages") or {}).get(str(page))
     if not v:
         return bulles
+    bulles = [b for b in bulles if not (b.get("ajout") and any(couvre(b["box"], c["box"]) >= 0.8 for c in bulles if not c.get("ajout")))]   # 1.26.0
     ex = [apparier(r, bulles) for r in v.get("exclues") or []]
     ids_ex = {id(b) for b in ex if b is not None}
     reste = [b for b in bulles if id(b) not in ids_ex]
     for k, z in enumerate(v.get("ajouts") or []):
-        if not any(iou(z["box"], b["box"]) >= 0.5 for b in reste):
+        if not any(meme_zone(z["box"], b["box"]) for b in reste):             # 1.26.0 : recouvrement compris
             reste.append({"id": int(z.get("id") or 900 + k), "type": "dialogue", "box": {q: round(float(z["box"][q]), 4) for q in ("x", "y", "w", "h")},
                           "trad": "", "a_lire": True, "ajout": True})
     rang = {}
@@ -635,7 +653,8 @@ def traduire_ajouts(chap_dir, dd, a, voulues):
         p = trp.get(n)
         if n not in voulues or not p or p.get("bulles") is None or not (0 < n <= len(fich)):
             continue
-        nouveaux = [z for z in v.get("ajouts") or [] if not any(iou(z["box"], b["box"]) >= 0.5 for b in p["bulles"] if b.get("box"))]
+        nouveaux = [z for z in v.get("ajouts") or [] if not any(meme_zone(z["box"], b["box"]) for b in p["bulles"] if b.get("box") and not b.get("ajout"))
+                    and not any(iou(z["box"], b["box"]) >= 0.5 for b in p["bulles"] if b.get("box"))]
         if not nouveaux:
             continue
         import ingest_page as ip

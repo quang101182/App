@@ -3451,6 +3451,55 @@ RÉELLE + sabotage ROUGE, bump version, commit + push à chaque étape ; apparei
 - [x] **R37 — Musique de fond de la série sous les Dialogues (optionnelle)** (Quang 18h57 : « est-ce que ça en vaudrait la peine […] qu'est-ce que tu en penses ? » → oui, fait en autonomie) ✅ app **v3.4.0** + `dialogues.py` **1.24.0** + serveur `patch_dialogues_15` (+ `.diff`, 2 instances). Lecteur : le moteur de la narration (MP, fondu, baisse sous la voix) suit `DLL.audio` quand le lecteur des Dialogues est ouvert ; « 🎵 Musique » + volume dans ses réglages = MÊMES réglages que la narration (MUS_ON / MUS_VOL). Vidéo / ⚡ Tout faire : `musique` + `volume` envoyés → `--musique` avec la musique EFFECTIVE du chapitre → `piste_musique()` (même règle que `video_chapitre.mixer`), mixage `amix` (vidéo passée dans le filtre complexe) ; choix gardé dans la fiche de la vidéo ; erreur ffmpeg désormais journalisée. Mesuré (vidéo réelle sur copie) : entre les répliques −98 dB → −28 dB (fond musical), crêtes des voix identiques (−5,8 dB) ; bout en bout serveur de test 8191 : fiche vidéo `musique = Noritaka 1, 30`. Banc `scripts/test_musique_dialogues_ui.py` **9/9** (joue, baissée pendant la voix, interrupteur, réglage commun, arrêt à la fermeture, demande vidéo) ; v3.3.2 = ROUGE. Piège évité : code posé AVANT la création du lecteur → plantage au chargement, vu sur la copie.
 - [x] **R38 — Appui long = supprimer une bulle ajoutée + coût des voix MESURÉ** (Quang 19h09 : « une bulle que je ne voulais pas, aucun moyen de la supprimer […] un appui long » ; 19h11 : abonnement Creator, « l'information des coûts sera fausse ») ✅ app **v3.4.1** + `dialogues.py` **1.25.0**. (1) vérification des bulles : appui long 0,55 s sur un AJOUT = supprimé (↶ le rend), sur une bulle détectée = exclure / remettre ; l'aide le dit ; banc verif **23/23** (v3.4.0 = ROUGE). (2) forfait vu par le serveur : `creator`, 124 912 crédits. Le coût des voix était une ESTIMATION (len × 0,28) → 1.25.0 : crédits RÉELS = solde avant / après (même forfait), tarif / caractère recalé à chaque mesure (`sources/_elevenlabs_tarif.json`, moyenne glissante) ; banc `scripts/test_cout_voix_mesure.py` **4/4** (vraie `cmd_voix`, faux ElevenLabs) ; 1.24.0 = ROUGE. ⚠ Révision de l'incident « ≈ 350 crédits dépensés par un banc » (R33) : il reposait sur l'estimation à 0,28 / caractère ; au tarif réel probable (≈ 0,7-1), les voix de Quang expliquent seules la baisse de 562 → dépense du banc PROBABLEMENT NULLE (toujours non prouvable).
 - [x] **R39 — Pourcentages des volumes, « ▶ Vidéo », vidéo à refaire si la musique change, coûts justes** (Quang 19h14-19h20) ✅ app **v3.4.2 → v3.4.4** + `estimation.py` **1.1.0** (2 instances relancées). (1) v3.4.2 : « NN % » sur les 2 curseurs du lecteur des Dialogues (volume général, musique) — les seuls de l'app qui n'en avaient pas. (2) v3.4.3 : vidéo prête = « ▶ Vidéo » (bouton vert, comme « ▶ Lire ») ; `dlgVideos` compare la musique ENREGISTRÉE dans la fiche de la vidéo à celle d'aujourd'hui (MUS_ON + MUS.effectif) → « 🎬 à refaire (musique) » / « Refaire (musique) ». (3) Audit des coûts : journal = jetons réellement facturés (préparation, doublons, balises, traductions) + voix MESURÉES (1.25.0) ; seule l'ESTIMATION de préparation était fausse (0,004 $ / page deviné ; réel ≈ 0,011) → `estimation.py` 1.1.0 étalonne « dialogues » depuis `_depenses.jsonl` (principale 0,0111 $ / page sur 7 mesures, secondaire 0,0032 sur 6) ; v3.4.4 : 9 annonces branchées sur `dlgPrepUsd()`. Bancs : `scripts/test_video_musique_ui.py` **12/12** (360 + 1280 ; v3.4.1 = ROUGE 4/12) ; saisie 8/8. ⚠ Erreur de méthode (19h22) : contrôle « au repos » et relance lancés EN PARALLÈLE → la secondaire a été relancée pendant des voix de Dialogues (9/29) ; sans dégât (le processus de travail survit, 25/29 12 s plus tard) ; règle : contrôler PUIS relancer, jamais dans le même lot.
+
+#### 🗺️ Feuille de route du 27/09 SOIR — « que ça sorte bon du premier coup » (Quang 20h27-20h30)
+
+> Demande de Quang : *« passer en review via les bulles, avec un bouton rapide […] pour définir quel personnage parle […] pour que ça
+> sorte bon du premier coup après la préparation »* ; *« les numéros […] pas en plein milieu d'une bulle »* ; *« force de proposition,
+> pragmatique […] pas usine à gaz, joli, ergonomique, intuitif »* ; **« pas de corrections à la volée : les corrections doivent améliorer
+> au fur et à mesure l'application »** (⇒ jamais de retouche à la main des données de Quang : c'est le CODE qui se répare, et les
+> données suivent à la prochaine opération). Cette feuille se met à jour à chaque échange. Ordre = ordre d'exécution.
+
+**Constat de départ (dernière génération de Quang, chapitre de la secondaire, p. 47-73, lu dans les données et `_depenses.jsonl`)** :
+bulles vérifiées 19h45 → préparation 19h48 (0,067 $) → 29 voix 19h49 (445 crédits) → écoute 20h22 → **2ᵉ préparation 20h23
+(0,064 $) déclenchée parce que « Préparer » restait rouge** → vidéo 20h28 (29 répliques, 76 s, sans musique). Aucune voix repayée
+(1.23.0 garde les voix au texte inchangé). Répartition des personnages : **26 répliques sur 30 attribuées au même personnage**
+→ c'est précisément l'erreur que Quang doit corriger après coup.
+
+- [x] **S1 — « Préparer » restait rouge à vie** ✅ app **v3.4.5** (constaté v3.4.4). Cause : la bulle ENTOURÉE p. 49 (n° 900) recouvre
+  une bulle déjà lue (n° 100) ; `dialogues.py` les apparie par la ZONE (IoU 0,53) mais `dplDepasse()` comparait les seuls NUMÉROS
+  → « 900 manque » pour toujours, quelle que soit la préparation. Corrigé : `dplDepasse` apparie comme le serveur (même zone,
+  même n° proche, ou bulle connue CONTENUE dans le tracé). Preuve sur les vraies données (simulation `node` de la vraie fonction) :
+  v3.4.4 → `[49]`, v3.4.5 → `[]` ; et une vraie retouche reste vue (exclure / réordonner / ajouter → page signalée, 3/3).
+- [x] **S2 — réplique en DOUBLE quand on entoure une bulle déjà lue** ✅ `dialogues.py` **1.26.0** (`patch_dialogues_1260.py`,
+  rejouable). P. 63 : bulle entourée large autour d'une bulle déjà traduite (IoU 0,11 mais bulle entièrement DEDANS) → traduite une
+  2ᵉ fois, réécrite sur l'image, lue deux fois dans la vidéo. Corrigé : `couvre()` / `meme_zone()` — une bulle connue contenue à
+  ≥ 80 % dans le tracé EST la bulle entourée (ni retraduite, ni réécrite) ; `appliquer_verif` retire un ajout déjà posé en double
+  par ≤ 1.25.0 → **la réplique en trop disparaît d'elle-même à la prochaine préparation** (1.20.0 retire les répliques plus
+  produites). Simulation sur la vraie traduction : p. 63 → une seule réplique ; aucune autre page changée.
+  - [ ] **S2-bis** : l'IMAGE de la page 63 garde la réécriture de ≤ 1.25.0 (sauvegarde `page_063.png.avant_ajouts` présente).
+    Proposé : quand 1.26.0 écarte un ajout en double, remettre l'image `.avant_ajouts` de cette page (code, pas à la main).
+    Déclencheur : juste après S4 (même fichier).
+- [x] **S3 — numéros des bulles posés SUR le texte** ✅ app **v3.4.5** : pastille au coin haut-droit, À L'EXTÉRIEUR de la zone de
+  texte (à gauche si le bord manque), + fin contour de la zone pour voir quel texte elle désigne. Banc `test_verif_bulles_ui.py`
+  **23/23** (serveur de test 8191, copies légères) + capture `samsung_out/verif_360.png` regardée : texte lisible, pastilles hors
+  des lettres.
+- [ ] **S4 — 🎭 « Qui parle ? » PENDANT la vérification des bulles** (la vraie demande). **Maquette à faire valider** :
+  `maquette_qui_parle_v1.html`. Proposition (pensée utilisateur, 1 geste par bulle, zéro écran de plus) :
+  - sous l'image, une **rangée de pastilles-personnages** (couleur + nom court) = la distribution DÉJÀ connue de la série
+    (+ « ＋ » pour un nouveau : nom + ♂/♀, 2 touchers) ; rien de choisi = « l'IA décide » (comme aujourd'hui) ;
+  - **mode pinceau** : toucher un personnage le « prend en main » (rangée et bandeau à sa couleur : « 🖌 Héros — touche ses
+    bulles ») ; chaque bulle touchée prend sa couleur + son initiale ; retoucher le personnage (ou ✕) = sortir du pinceau, et le
+    toucher d'une bulle redevient « exclure » ; le pinceau RESTE d'une page à l'autre (un personnage parle souvent sur plusieurs pages) ;
+  - ↶ annule aussi une attribution ; enregistré dans `bulles_verifiees.json` (`qui` par bulle) ;
+  - serveur : `dialogues.py` passe ces attributions à l'IA comme **faits imposés** (« la bulle 3 : Héros ») → elle écrit le ton en
+    connaissance de cause, et le `qui` final est FORCÉ à la valeur de Quang ; l'IA ne décide que les bulles laissées libres ;
+  - coût : **0** de plus (même appel de préparation).
+  - Aucune obligation : sans rien toucher, rien ne change.
+- [ ] **S5 — contrôle de cohérence gratuit après la préparation** (proposition, à valider avec S4) : si l'IA met ≥ 80 % des
+  répliques sur un seul personnage alors que la série en compte plusieurs → bandeau « ⚠ presque tout attribué à X — vérifier ? »
+  qui ouvre ✏ sur ces pages. Déclencheur : après S4 (il devient moins utile si Quang attribue lui-même).
+- [ ] **S6 — clôture** : bancs voisins (compacts, lueur, séries), ROADMAP (constats barrés), HANDOFF, mémoire, commit.
 - [ ] (ancien énoncé R30 ci-dessous, gardé pour l'historique) (Quang 17h05-17h16 : bulles parfois oubliées, ordre parfois faux « en bas à droite lu avant en bas à gauche puis retour » ; « numérotation […] avant de lancer quoi que ce soit […] je rectifie manuellement » ; « entourer avec le doigt » ; « exclure volontairement » ; « très ergonomique, simple, rapide » ; « pas tout renuméroter manuellement […] 50 pages » ; respecter la barre du bas et le visuel de l'app). **Mesure faite** (`scripts/mesure_ordre_cases.py`, lecture seule) : ordre actuel = n° de détection ; tri « case par case » (rangées de cases, droite → gauche) CHANGERAIT l'ordre sur **162 / 345 pages (47 %)** ; contrôlé à l'œil sur 3 pages : il CORRIGE p.11 (exactement le cas de Quang) mais EMPIRE p.5 et p.18 (grande case sur 2 rangées) → **pas de bascule automatique** ; l'ordre actuel reste l'ordre proposé, et le désaccord des deux tris sert à marquer les pages « à regarder ». **Maquette `maquette_verif_bulles_v1.html` à valider** : écran calqué sur le lecteur des Dialogues ; pastilles numérotées automatiques par page ; toucher = exclure / réinclure, glisser une pastille sur une autre = ordre (renumérotation seule), entourer au doigt = ajouter (rectangle englobant, lu à la préparation) ; ↶ ; « ⚠ seulement les pages à regarder » ; 2 touches si tout est bon ; entrée = étape « 🔍 Bulles » du bloc 🎭 + « 🔍 Vérifier les bulles · gratuit » dans « Nouvelle plage ». Chantier sur 3 niveaux (script détection seule, route serveur de la liste validée, écran app). **Déclencheur de reprise : validation de la maquette par Quang.**
 
 ### Coûts de référence (mesurés 26/09 ; ré-étalonnés au D8 le 27/09)
