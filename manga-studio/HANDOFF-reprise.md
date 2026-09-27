@@ -63,6 +63,7 @@
 
 ## 3. Règles et pièges (ne pas les repayer)
 
+- **27/09 16h05 — app v2.99.0 Dialogues compacts (R27, maquette validée)** + v2.98.1 caméra « suivre la case » (R26). Ouvert : « Oublier cette plage » (route serveur, question à Quang) ; vérif au doigt sur le Fold.
 - **27/09 14h56 — garde du retour v2.97.0 PROUVÉE sur une WebAPK réelle (Samsung)** : `scripts/test_garde_webapk_samsung.py` 15/15 (3 cycles). Il ne reste que la confirmation au doigt sur le Fold, au 1er usage de Quang (rien à coder).
 - **27/09 14h50 — app v2.98.0** : « rester dans la secondaire » RETIRÉ (bandeau Chrome sur le Fold ; renvoi sans geste = même fenêtre). Reste à confirmer sur le Fold : garde du retour v2.97.0 (1er retour = avertissement). Ne PAS retenter un renvoi automatique vers l'autre application : Android ne l'ouvre dans SA fenêtre que sur un geste de l'utilisateur.
 - **27/09 14h50 — app v2.97.0** : R25 orientation LIVRÉ (v2.96.0, fil d'Ariane + bandeau, banc 11/11). **En attente de Quang (Fold)** : (1) R22-bis garde du retour v2.97.0 — le banc ne peut PAS le prouver, seul le Fold (journal : chercher `Setting back callback` ; CDP : `adb forward tcp:9444 localabstract:chrome_devtools_remote`, pages gelées en arrière-plan → délai court) ; (2) R23-bis renvoi vers la secondaire v2.95.0 (1 test ; si pas fiable → RETIRER la fonction, décision Quang 14h23).
