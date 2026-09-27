@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.24.0"  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.25.0"  # 1.25.0 (27/09) : cout des voix MESURE (solde avant / apres), tarif recale a chaque mesure ;  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -63,8 +63,28 @@ DISTRIB_VERSION = 1
 TARIF_V3 = 0.28
 
 
+def tarif_el():
+    """1.25.0 : credits / caractere MESURE (sources/_elevenlabs_tarif.json), sinon TARIF_V3."""
+    t = (lire_json(os.path.join(SOURCES, "_elevenlabs_tarif.json")) or {}).get("par_car")
+    return float(t) if t and 0.01 < float(t) < 5 else TARIF_V3
+
+
+def recaler_tarif(credits, caracteres):
+    """1.25.0 : une mesure reelle (credits consommes pour N caracteres envoyes) -> moyenne glissante du tarif."""
+    if credits <= 0 or caracteres < 20:
+        return
+    f = os.path.join(SOURCES, "_elevenlabs_tarif.json")
+    d = lire_json(f) or {}
+    mesure = credits / float(caracteres)
+    anc, n = d.get("par_car"), int(d.get("mesures") or 0)
+    d["par_car"] = round(mesure if not anc else (anc * min(n, 9) + mesure) / (min(n, 9) + 1), 4)
+    d["mesures"] = n + 1
+    d["derniere"] = {"credits": credits, "caracteres": caracteres, "par_car": round(mesure, 4), "t": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    ecrire_json(f, d)
+
+
 def cout_el(envoye):
-    return max(1, round(len(envoye) * TARIF_V3))
+    return max(1, round(len(envoye) * tarif_el()))
 
 
 def log(*a):
@@ -1022,6 +1042,7 @@ def cmd_voix(a):
             for essai in range(2):
                 open(f, "wb").write(el_post("/api/elevenlabs/v1/text-to-speech/%s?output_format=mp3_44100_128" % reg["voix"], body))
                 credits += cout_el(envoye)
+                stats["_car_envoyes"] = stats.get("_car_envoyes", 0) + len(envoye)     # 1.25.0 : pour recaler le tarif
                 fu, t_ = fuite_balise(f, texte, stats) if envoye != texte else (False, "")
                 if not fu:
                     break
@@ -1040,9 +1061,17 @@ def cmd_voix(a):
         faits += 1
         doc["maj"] = time.strftime("%Y-%m-%dT%H:%M:%S")
         ecrire_json(fch, doc)                                             # chaque voix faite est gardee tout de suite
+    time.sleep(2)                                                          # 1.25.0 : le compteur ElevenLabs suit en ~1 s
+    solde2 = el_solde()
+    estime = credits
+    if faits and solde and solde2 and solde2.get("limite") == solde.get("limite") and solde2["utilises"] >= solde["utilises"]:
+        reel = solde2["utilises"] - solde["utilises"]
+        if reel > 0:
+            recaler_tarif(reel, stats.get("_car_envoyes", 0))
+            credits = reel
+            log("  credits MESURES : %d (estimation : %d)" % (reel, estime))
     depenses.noter_credits("dialogues", a.chap, "voix", "elevenlabs", credits, repliques=faits)
     depenses.noter("dialogues", a.chap, "balises", "deepseek", round(stats.get("cout_balises", 0.0), 5))
-    solde2 = el_solde()
     reste = len(plan) - faits
     nc.progres("quota" if arret else "fini", faits, len(plan), fini=True, arret=arret, credits=credits, solde=solde2,
                reste=reste, s=round(time.time() - t0, 1))

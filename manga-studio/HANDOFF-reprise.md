@@ -63,6 +63,7 @@
 
 ## 3. Règles et pièges (ne pas les repayer)
 
+- **27/09 19h20 — app v3.4.1 + dialogues.py 1.25.0** : musique de fond sous les Dialogues (R37, patch_dialogues_15), appui long = supprimer un ajout, coût des voix MESURÉ (R38). Forfait ElevenLabs Creator (124 912 crédits). Règles : fichier de l'app servi en direct (copie + node --check avant), bancs = liste BLANCHE de lancements, instances relancées au repos seulement.
 - **27/09 18h40 — app v3.3.1 + dialogues.py 1.23.0** (R34 bulle entourée écrite en français sur la page ; R35 voix gardées si texte/personnage inchangés, « ⚡ Tout refaire » dans ⋯). Quang veut que je décide et fasse SEUL (18h26).
 - **27/09 18h25 — app v3.3.0** (R33 : ⚡ Tout faire avec arrêt si doute ; dialogues.py 1.21.1 bulle ajoutée traduite ; patch_dialogues_14). ⚠ Un banc a probablement dépensé ≈ 350 crédits EL (corrigé : tout lancement bloqué dans les bancs). À faire chez Quang : refaire p.5-6 de noritaka ch.1 pour la réplique restée en anglais.
 - **27/09 18h05 — app v3.2.0** (R32 : préparation dépassée signalée + proposée ; dialogues.py 1.20.0 retire les répliques exclues ; patch_dialogues_13 déployé). En attente : réponse de Quang sur le bouton « Tout préparer » (arrêt avant voix si l'IA doute ?).

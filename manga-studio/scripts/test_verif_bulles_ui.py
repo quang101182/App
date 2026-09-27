@@ -119,6 +119,16 @@ try:
         pg.mouse.up(); pg.wait_for_timeout(300)
         aj = pg.evaluate("() => dlvPage().items.filter(x => x.ajout).length")
         check("entourer au doigt = une bulle ajoutee (pastille jaune)", aj == 1, aj)
+        k_aj = pg.evaluate("() => dlvPage().items.findIndex(x => x.ajout)")
+        pa = [x for x in pts()][k_aj]
+        pg.mouse.move(pa["x"], pa["y"]); pg.mouse.down(); pg.wait_for_timeout(900); pg.mouse.up(); pg.wait_for_timeout(300)
+        check("appui long sur la bulle ajoutee = SUPPRIMEE", pg.evaluate("() => dlvPage().items.filter(x => x.ajout).length") == 0)
+        pg.evaluate("() => $('dlvAnnuler').click()"); pg.wait_for_timeout(300)
+        check("↶ rend la bulle supprimee", pg.evaluate("() => dlvPage().items.filter(x => x.ajout).length") == 1)
+        n_ex = pg.evaluate("() => dlvPage().items.filter(x => x.exclu).length"); p1 = [x for x in pts()][0]
+        pg.mouse.move(p1["x"], p1["y"]); pg.mouse.down(); pg.wait_for_timeout(900); pg.mouse.up(); pg.wait_for_timeout(300)
+        check("appui long sur une bulle DETECTEE = exclue (pas supprimee)", pg.evaluate("() => dlvPage().items.filter(x => x.exclu).length") == n_ex + 1 and pg.evaluate("() => dlvPage().items.length") == len(P0) + 1)
+        pg.evaluate("() => $('dlvAnnuler').click()"); pg.wait_for_timeout(300)
         t0 = pg.evaluate("() => $('dlvTitre').textContent")
         pg.mouse.move(cad["x"] + cad["w"] * 0.85, cad["y"] + cad["h"] * 0.5); pg.mouse.down()
         for k in range(1, 11): pg.mouse.move(cad["x"] + cad["w"] * (0.85 - 0.07 * k), cad["y"] + cad["h"] * 0.5); pg.wait_for_timeout(10)
