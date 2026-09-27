@@ -15,7 +15,7 @@ karaoke restent en ligne dans les deux modes ; la video est toujours faite sur l
 """
 import glob, json, os, re, statistics, time
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"   # 1.1.0 (27/09) : + « dialogues » -- preparation des Dialogues, $ par page MESURES (journal des depenses)
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
 CACHE = os.path.join(SRC, "_etalonnage.json")
@@ -31,6 +31,7 @@ REPLI = {
     "voix_pc_s_car": 0.078,         # Chatterbox + recalage du debit, chargement compris (224,6 s / 2864 car., OPM ch.1)
     "voix_pc_charge_s": 14,         # chargement du modele, une fois par chapitre
     "traduction": {"usd": 0.0090, "s": 9.5},
+    "dialogues": {"usd": 0.011},          # 1.1.0 : mediane mesuree le 27/09 (4 preparations reelles, 0,006 a 0,012 $ / page)
     "effacement_pc_s": 0.3,         # par page (3-6 s par chapitre mesures)
     "karaoke": {"usd": 0.003, "s": 60},
     "precedemment": {"usd": 0.013, "s": 60},
@@ -99,6 +100,21 @@ def mesurer(src=SRC):
     if _med(tu) is not None:
         et["traduction"] = {"usd": round(_med(tu), 5), "s": round(_med(ts), 1)}
         origine["traduction"] = len(tu)
+    du = []                                     # 1.1.0 : preparation des Dialogues -- $ par page, journal des depenses
+    try:
+        with open(os.path.join(src, "_depenses.jsonl"), encoding="utf-8") as fh:
+            for l in fh:
+                try:
+                    x = json.loads(l)
+                except Exception:
+                    continue
+                if x.get("type") == "dialogues" and x.get("tag") == "preparation" and x.get("paye") and x.get("pages"):
+                    du.append(float(x["paye"]) / len(x["pages"]))
+    except OSError:
+        pass
+    if len(du) >= MIN_ECH:
+        et["dialogues"] = {"usd": round(_med(du), 5)}
+        origine["dialogues"] = len(du)
     et.update(version=VERSION, maj=time.strftime("%Y-%m-%dT%H:%M:%S"), origine=origine)
     return et
 
