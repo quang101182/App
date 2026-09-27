@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.23.0"  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.24.0"  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -661,6 +661,52 @@ def traduire_ajouts(chap_dir, dd, a, voulues):
         ecrire_json(tf, tr)
         depenses.noter("dialogues", a.chap, "traduction des bulles ajoutees", "gemini", round(st["cout"], 5), pages=pages_touchees)
     return faites
+
+
+def piste_musique(musique, serie_dir, segments, sortie):
+    """1.24.0 : la musique de fond de la video des Dialogues, MEME regle que video_chapitre.mixer. segments = [(duree, parle)].
+    Ecrit un WAV stereo de la duree totale (gain applique) ; None si aucun morceau."""
+    import numpy as np, random, wave
+    import video_chapitre as vc
+    md = os.path.join(serie_dir, "musique")
+    dispo = os.listdir(md) if os.path.isdir(md) else []
+    fichiers = [os.path.join(md, f[0]) for f in ([x for x in dispo if os.path.splitext(x)[0] == nom] for nom in musique.get("noms") or []) if f]
+    if not fichiers:
+        return None
+    SR, total = vc.SR, sum(d for d, _ in segments)
+    N_ = int((total + 0.5) * SR)
+    rnd = random.Random(musique.get("graine") or 1)
+    seq, mus, t, k = [], np.zeros((N_, 2), np.float32), 0.0, 0
+    while t < total + 1:
+        if len(seq) <= k:
+            tour = list(range(len(fichiers))); rnd.shuffle(tour)
+            if len(fichiers) > 1 and seq and tour[0] == seq[-1]:
+                tour.append(tour.pop(0))
+            seq += tour
+        x = vc.pcm(fichiers[seq[k]])
+        d = len(x) / SR
+        env = np.minimum(1.0, np.minimum(np.arange(len(x)) / SR / vc.FONDU, (d - np.arange(len(x)) / SR) / vc.FONDU)).clip(0, 1)
+        i0 = int(t * SR); i1 = min(N_, i0 + len(x))
+        if i1 > i0:
+            mus[i0:i1] += x[: i1 - i0] * env[: i1 - i0, None]
+        t += max(1.0, d - vc.FONDU); k += 1
+    parle, t = np.zeros(int(total * 10) + 2, bool), 0.0
+    for d, p in segments:
+        if p:
+            parle[int(t * 10): int((t + max(0.0, d - 0.4)) * 10) + 1] = True    # le silence de fin de replique (apad 0,4 s) laisse remonter
+        t += d
+    base = float(musique.get("volume", 25)) / 100 * vc.GAIN_MAX
+    g, gains = 0.0, []
+    for st in range(int((total + 1.2) * 10) + 1):
+        cible = 0.0 if st / 10 >= total else base * (vc.DUCK if st < len(parle) and parle[st] else 1)
+        g += max(-0.02, min(max(0.004, cible * 0.04), cible - g))
+        gains.append(g)
+    gain = np.interp(np.arange(N_) / SR, np.arange(len(gains)) / 10, np.array(gains)).astype(np.float32)
+    mus = np.clip(mus * gain[:, None], -1, 1)
+    with wave.open(sortie, "wb") as w:
+        w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
+        w.writeframes((mus * 32767).astype("<i2").tobytes())
+    return sortie
 
 
 def cmd_preparer(a):
@@ -1346,24 +1392,39 @@ def cmd_video(a):
     base = ["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", os.path.join(tmp, "i.txt"), "-f", "concat", "-safe", "0",
             "-i", os.path.join(tmp, "a.txt"), "-vf", "fps=30,format=yuv420p"]
     fin = ["-c:a", "copy", "-shortest", "-movflags", "+faststart", sortie]
+    musique = json.loads(getattr(a, "musique", "") or "null") if getattr(a, "musique", "") else None     # 1.24.0
+    piste = None
+    if musique and musique.get("noms"):
+        try:
+            piste = piste_musique(musique, serie_dir, [(du, not x.get("vide")) for (_i, du), x in zip(imgs, etapes)], os.path.join(tmp, "musique.wav"))
+        except Exception as e:
+            log("  musique de fond impossible (%s) : video sans musique" % str(e)[:160])
+    if piste:
+        base = [x for x in base if x not in ("-vf", "fps=30,format=yuv420p")] + ["-i", piste, "-filter_complex",
+                "[0:v]fps=30,format=yuv420p[v];[1:a][2:a]amix=inputs=2:duration=first:normalize=0[a]", "-map", "[v]", "-map", "[a]"]
+        fin = ["-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", sortie]
     r = subprocess.run(base + ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "24"] + fin, capture_output=True, text=True,
                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     if r.returncode:                                                          # pas de carte NVIDIA : encodeur logiciel
-        subprocess.run(base + ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23"] + fin, check=True,
-                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        r2 = subprocess.run(base + ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23"] + fin, capture_output=True, text=True,
+                            errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if r2.returncode:                                                     # 1.24.0 : l'erreur d'ffmpeg dans le journal
+            log("ECHEC ffmpeg (nvenc : %s) (x264 : %s)" % ((r.stderr or "")[-300:], (r2.stderr or "")[-300:]))
+            raise RuntimeError("video : ffmpeg a echoue (voir le journal)")
     shutil.rmtree(tmp, ignore_errors=True)
     emp = empreinte_video(doc, distrib, dd, portee)[1]
     doc = lire_json(os.path.join(dd, "dialogues.json"))
     vides = [x["page"] for x in etapes if x.get("vide")]
     v = {"fichier": a.chap + "/dialogues/video/" + nom + ".mp4", "empreinte": emp, "repliques": len(liste), "pages_sans_dialogue": vides,
-         "duree": nc.duree_mp3(sortie), "t": time.strftime("%Y-%m-%dT%H:%M:%S"), "portee": portee or "tout"}
+         "duree": nc.duree_mp3(sortie), "t": time.strftime("%Y-%m-%dT%H:%M:%S"), "portee": portee or "tout",
+         "musique": ({"noms": musique.get("noms"), "volume": musique.get("volume")} if piste else None)}   # 1.24.0
     doc.setdefault("videos", {})[portee or "tout"] = v
     if not portee:
         doc["video"] = v                                                # l'ancienne cle (chapitre entier) reste lue
     ecrire_json(os.path.join(dd, "dialogues.json"), doc)
     # le nom du fichier telecharge (/manga/video_file?dl=1) se lit dans <video>.json : pages FR, sous-titres, sans musique
     ecrire_json(os.path.join(vd, nom + ".json"), {"tag": nom, "created_at": v["t"],
-                                                     "reglages": {"pages": "fr", "sous": True, "musique": False}})
+                                                     "reglages": {"pages": "fr", "sous": True, "musique": bool(piste)}})
     nc.progres("fini", len(liste), len(liste), fini=True, video=v, s=round(time.time() - t0, 1))
     log("OK video %s : %d repliques, %.0f s de video, %.0f s de fabrication" % (sortie, len(liste), v["duree"] or 0, time.time() - t0))
     return 0
@@ -1386,9 +1447,11 @@ def main():
     ec.add_argument("--qui", default=""); ec.add_argument("--ton", default=None)
     pl = sp.add_parser("plan"); pl.add_argument("chap")
     vi = sp.add_parser("video"); vi.add_argument("chap"); vi.add_argument("--pages", default="", help="1.10.0 : la video de cette portee seulement")
+    vi.add_argument("--musique", default="", help="1.24.0 : JSON {noms, volume} -- musique de fond de la serie")
     de = sp.add_parser("detecter"); de.add_argument("chap"); de.add_argument("--pages", default="")     # 1.19.0 (R30)
     to = sp.add_parser("tout"); to.add_argument("chap"); to.add_argument("--pages", default="")         # 1.21.0
     to.add_argument("--traduire", action="store_true"); to.add_argument("--sans-preparation", action="store_true", dest="sans_preparation")
+    to.add_argument("--musique", default="")                                                             # 1.24.0
     lo = sp.add_parser("lot"); lo.add_argument("serie"); lo.add_argument("--de", type=float, required=True)
     lo.add_argument("--a", type=float, required=True); lo.add_argument("--action", choices=("preparer", "voix", "tout"), default="preparer")
     a = p.parse_args()
