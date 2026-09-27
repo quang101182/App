@@ -33,7 +33,7 @@ import zipfile
 
 import requests
 
-VERSION = "0.8.4"
+VERSION = "0.8.5"  # 0.8.5 (27/09) : la fenetre de capture rouvre SES onglets, plus d'onglet MangaDex d'office
 # ⚠ ASCII pur, JAMAIS d'em-dash ni d'accent : les headers HTTP sont encodés latin-1
 # (crash UnicodeEncodeError mesuré le 21/09 — ne pas "embellir" cette chaîne).
 UA = f"manga-fetch/{VERSION} (Manga Studio sourcing, usage personnel)"
@@ -1875,6 +1875,42 @@ def profil_sans_synchro(profil):
     json.dump(p, open(f, "w", encoding="utf-8"))
 
 
+def profil_restaurer_session(profil):
+    """0.8.5 : Edge rouvre les onglets laisses la derniere fois (reglage « Continuer la ou vous en etiez »), et la fermeture
+    precedente est marquee PROPRE -- sinon, apres une fermeture forcee (taskkill), Edge n'ouvre qu'un onglet vide et propose
+    « Restaurer les pages ? ». A appeler navigateur FERME (Edge reecrit Preferences en quittant)."""
+    f = os.path.join(profil, "Default", "Preferences")
+    os.makedirs(os.path.dirname(f), exist_ok=True)
+    try:
+        p = json.load(open(f, encoding="utf-8"))
+    except Exception:
+        p = {}
+    # (session.restore_on_startup n'est PAS ecrit : Edge le protege et le remet -- mesure 27/09 ; c'est --restore-last-session
+    # qui rouvre les onglets. Ici seulement la fermeture marquee propre.)
+    p.setdefault("profile", {}).update(exit_type="Normal", exited_cleanly=True)
+    json.dump(p, open(f, "w", encoding="utf-8"))
+    # SAUVEGARDE des onglets avant tout lancement (Quang 21h38 : « il ne faut surtout pas me perdre les onglets ») :
+    # Default/Sessions -> Default/_sessions_sauvegarde/<date> (les 5 dernieres gardees)
+    import shutil as _sh, time as _t
+    src = os.path.join(profil, "Default", "Sessions")
+    if os.path.isdir(src) and os.listdir(src):
+        dst_r = os.path.join(profil, "Default", "_sessions_sauvegarde")
+        os.makedirs(dst_r, exist_ok=True)
+        _sh.copytree(src, os.path.join(dst_r, _t.strftime("%Y%m%d-%H%M%S")), dirs_exist_ok=True)
+        for vieux in sorted(os.listdir(dst_r))[:-5]:
+            _sh.rmtree(os.path.join(dst_r, vieux), ignore_errors=True)
+
+
+def edge_ouvert(port) -> bool:
+    """0.8.5 : la fenetre de capture tourne-t-elle deja (CDP repond) ? Alors on ne touche ni au profil ni a ses onglets."""
+    try:
+        import urllib.request
+        urllib.request.urlopen("http://127.0.0.1:%d/json/version" % port, timeout=1.5).read()
+        return True
+    except Exception:
+        return False
+
+
 def launch_edge() -> int:
     for cible in (r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
                   r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"):
@@ -1884,11 +1920,24 @@ def launch_edge() -> int:
         print("Edge introuvable.")
         return 1
     os.makedirs(EDGE_PROFILE, exist_ok=True)
+    deja = edge_ouvert(EDGE_PORT)                        # 0.8.5 : deja ouverte -> Preferences intact (Edge le reecrit)
+    if deja:                                             # 0.8.5 : deja ouverte -> la ramener devant, rien d'autre (ni fenetre, ni onglet)
+        try:
+            import urllib.request
+            pages = [t for t in json.load(urllib.request.urlopen("http://127.0.0.1:%d/json/list" % EDGE_PORT, timeout=3)) if t.get("type") == "page"]
+            if pages:
+                urllib.request.urlopen("http://127.0.0.1:%d/json/activate/%s" % (EDGE_PORT, pages[0]["id"]), timeout=3).read()
+        except Exception:
+            pass
+        print("Fenêtre dédiée déjà ouverte : ramenée devant (CDP port %d), onglets inchangés." % EDGE_PORT)
+        return 0
     # v0.6.9 (Quang 24/09 19h10) : TOUTE fenetre de capture, principale comprise (elle synchronisait tout sur le compte
     # Microsoft). MANGA_CAPTURE_SANS_SYNCHRO=0 pour revenir a l'ancien comportement.
     sans_synchro = os.environ.get("MANGA_CAPTURE_SANS_SYNCHRO", "1") != "0"
-    if sans_synchro:
+    if sans_synchro and not deja:
         profil_sans_synchro(EDGE_PROFILE)
+    if not deja:
+        profil_restaurer_session(EDGE_PROFILE)
     # v0.6.4 (Quang 24/09) : la fenetre s'OUVRE a la place choisie par Quang (sur le cote, en partie hors de l'ecran,
     # assez grande pour capturer : mesure 24/09). Meme fichier que les boutons « Ranger » / « Memoriser » de l'app
     # (scripts/cdp_mini.py). Ensuite, plus rien ne bouge sans un clic de Quang.
@@ -1909,7 +1958,8 @@ def launch_edge() -> int:
                       "--no-first-run", "--no-default-browser-check",
                       "--window-size=%d,%d" % (place["width"], place["height"]),
                       "--window-position=%d,%d" % (place["left"], place["top"]),
-                      "https://mangadex.org/"])
+                      "--restore-last-session"])   # 0.8.5 : AUCUNE adresse + reprise de la session -> SES onglets
+                      # (le reglage « session.restore_on_startup » ecrit dans Preferences est PROTEGE par Edge et remis : mesure)
     print("Fenêtre dédiée lancée (CDP port %d, profil persistant)." % EDGE_PORT)
     return 0
 
