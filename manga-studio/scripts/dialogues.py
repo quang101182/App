@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.14.0"  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.15.0"  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -146,6 +146,27 @@ def source_bulles(chap_dir, plage=""):
 
 
 # ---------------------------------------------------------------- catalogue de voix ElevenLabs (via le gateway)
+def voix_francaises():
+    """1.15.0 (R19) : les voix FRANCAISES de la bibliotheque publique ElevenLabs ([] si elle ne repond pas)."""
+    import urllib.request
+    try:
+        r = urllib.request.Request(nc.GATEWAY + "/api/elevenlabs/v1/shared-voices?page_size=100&language=fr&sort=cloned_by_count",
+                                   headers={"Authorization": "Bearer " + nc.SECRET, "User-Agent": "manga-studio/dialogues-" + VERSION})
+        v = json.load(urllib.request.urlopen(r, timeout=30)).get("voices") or []
+    except Exception as e:
+        log("  bibliotheque de voix francaises illisible (%s) : catalogue du compte" % str(e)[:120])
+        return []
+    out, vus = [], set()
+    for x in v:
+        if not x.get("free_users_allowed", True) or x.get("gender") not in ("male", "female") or x.get("voice_id") in vus:
+            continue
+        vus.add(x["voice_id"])
+        n = x.get("name") or ""
+        out.append({"id": x["voice_id"], "nom": n.split(" - ")[0].strip(), "genre": x["gender"], "age": x.get("age") or "?",
+                    "desc": ((n.split(" - ", 1)[1] if " - " in n else "") or x.get("descriptive") or "")[:60], "fr": True})
+    return out
+
+
 def catalogue_el():
     """[{id, nom, genre, age, desc}] ; vide si le gateway ne repond pas (la preparation ne choisit alors pas de voix :
     Quang la choisira -- jamais une voix inventee)."""
@@ -447,7 +468,7 @@ def cmd_preparer(a):
     narr_d = os.path.join(chap_dir, "narration")
     tags = sorted(os.listdir(narr_d)) if os.path.isdir(narr_d) else []
     narr = lire_json(os.path.join(narr_d, tags[0], "narration.json")) if tags else None
-    cat = catalogue_el()
+    cat = voix_francaises() or catalogue_el()                  # 1.15.0 (R19) : 100 % francaises, sinon le compte
     relais = reglages.relais_moderation()
     log("dialogues %s preparer %s : %d pages, %d bulles, %d personnages connus, relais %s" % (
         VERSION, a.chap, len(pages), sum(len(p["_bulles"]) for p in pages), len(distrib["persos"]), "oui" if relais else "non"))
