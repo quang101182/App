@@ -27,7 +27,7 @@ with sync_playwright() as p:
         return rt.continue_()
     pg.route("**/*", route)
     pg.goto("http://127.0.0.1:8190/manga/#k=" + KEY); pg.wait_for_timeout(2500)
-    pg.evaluate("s => { localStorage.setItem('manga_onglet','tChap'); localStorage.setItem('manga_serie', s); localStorage.setItem('manga_mus_on','1'); localStorage.setItem('manga_mus_vol','60'); }", CH.split("/")[0])
+    pg.evaluate("s => { localStorage.setItem('manga_onglet','tChap'); localStorage.setItem('manga_serie', s); localStorage.setItem('manga_mus_on','1'); localStorage.setItem('manga_dlg_mus_on','1'); localStorage.setItem('manga_mus_vol','60'); }", CH.split("/")[0])
     pg.reload(); pg.wait_for_timeout(3500)
     print("     version :", pg.evaluate("() => VERSION"))
     pg.evaluate("d => openChap(CHAPS.findIndex(c => c.dir === d))", CH); pg.wait_for_timeout(3500)
@@ -46,11 +46,21 @@ with sync_playwright() as p:
     base = 60 / 100 * 0.4
     check("pendant la voix, elle est BAISSEE (gain <= 0,45 x la cible + marge)", bool(gp) and min(gp) <= base * 0.45 + 0.02, (round(min(gp) if gp else -1, 3), round(base * 0.45, 3)))
     pg.evaluate("() => { $('dllMus').click(); }"); pg.wait_for_timeout(4000)
-    check("interrupteur coupe : la musique s'eteint", pg.evaluate("() => MP.g < 0.01 && !MUS_ON"), pg.evaluate("() => MP.g"))
-    check("meme reglage que la narration (lecMusOn suit)", pg.evaluate("() => $('lecMusOn').checked === MUS_ON"))
+    check("interrupteur coupe : la musique s'eteint", pg.evaluate("() => MP.g < 0.01 && !DLG_MUS_ON"), pg.evaluate("() => MP.g"))
+    check("v3.5.1 : reglage PROPRE aux Dialogues -- la narration garde le sien, le bloc suit", pg.evaluate("() => MUS_ON === true && $('lecMusOn').checked && !$('dlgMus').checked"),
+          pg.evaluate("() => ({ MUS_ON, DLG_MUS_ON, lec: $('lecMusOn').checked, bloc: $('dlgMus').checked })"))
     pg.evaluate("() => { $('dllMus').click(); }"); pg.wait_for_timeout(300)
     pg.evaluate("() => $('dllFermer').click()"); pg.wait_for_timeout(1200)
     check("fermeture du lecteur : musique arretee", pg.evaluate("() => !MP.timer && MP.els.every(x => x.paused)"))
+    b_ = pg.evaluate("() => { const i = $('dlgMus'); return { vis: !!(i && i.closest('label').offsetParent), on: i && i.checked, dis: i && i.disabled, t: i && i.closest('label').textContent }; }")
+    check("v3.5.1 : bloc Dialogues -- interrupteur « Musique de fond » visible et actif", b_["vis"] and b_["on"] and not b_["dis"] and "Musique" in (b_["t"] or ""), b_)
+    pg.evaluate("() => $('dlgMus').click()"); pg.wait_for_timeout(400)
+    posts.clear()
+    pg.evaluate("() => { $('dlgVid').dataset.dpl = ''; DLG.plan = Object.assign({}, DLG.plan, { repliques: {} }); $('dlgVid').disabled = false; $('dlgVid').click(); }"); pg.wait_for_timeout(1500)
+    env0 = [json.loads(x[1]) for x in posts if x[0] == "dialogues_lancer"]
+    check("v3.5.1 : bloc coupe -> la video est demandee SANS musique", bool(env0) and not env0[-1].get("musique"), env0[-1:])
+    check("v3.5.1 : bloc coupe -> reglages du lecteur suivent, narration intacte", pg.evaluate("() => !DLG_MUS_ON && !$('dllMus').checked && MUS_ON"))
+    pg.evaluate("() => $('dlgMus').click()"); pg.wait_for_timeout(400)
     posts.clear()
     pg.evaluate("() => { $('dlgVid').dataset.dpl = ''; DLG.plan = Object.assign({}, DLG.plan, { repliques: {} }); $('dlgVid').disabled = false; $('dlgVid').click(); }"); pg.wait_for_timeout(1500)
     env = [json.loads(x[1]) for x in posts if x[0] == "dialogues_lancer"]

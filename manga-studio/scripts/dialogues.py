@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.26.0"  # 1.26.0 (27/09) : bulle ENTOUREE qui recouvre une bulle connue = la MEME (plus de replique en double) ;  # 1.25.0 (27/09) : cout des voix MESURE (solde avant / apres), tarif recale a chaque mesure ;  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.27.0"  # 1.27.0 (27/09, S4) : « qui parle » choisi par Quang a la verification des bulles = impose a l'IA et a la replique ;  # 1.26.0 (27/09) : bulle ENTOUREE qui recouvre une bulle connue = la MEME (plus de replique en double) ;  # 1.25.0 (27/09) : cout des voix MESURE (solde avant / apres), tarif recale a chaque mesure ;  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -298,6 +298,9 @@ d'autres chapitres) et des indices sur ce chapitre : l'IMAGE fait foi.
    d'acteur, en francais, au service de l'ambiance (scene tendue : pas de jeu comique ni surjoue).
 4. Pour chaque NOUVEAU personnage : genre (homme|femme|?), age apparent, une phrase sur sa facon de parler, et la voix la plus
    juste dans le CATALOGUE ci-dessous (id exact), differente de celles deja prises si possible.
+5. Une bulle qui arrive AVEC un champ "qui" a ete attribuee par l'UTILISATEUR, qui a regarde la page : rends EXACTEMENT ce nom
+   dans "qui" (ne le discute pas). Sers-toi de ces attributions comme de FAITS pour les autres bulles (qui repond a qui, qui
+   est dans quelle case, alternance d'une conversation).
 CATALOGUE : %s
 
 Reponds UNIQUEMENT en JSON :
@@ -333,8 +336,9 @@ def preparer_lot(chap_dir, lot, distrib, narr, cat, stats):
         img = os.path.join(chap_dir, *p["img_rel"].split("/"))
         b64 = base64.b64encode(nc.page_jpeg(img, 1200)).decode()
         content.append({"type": "text", "text": "=== PAGE %d ===\nFaits (indice) : %s\nBulles : %s" % (
-            p["page"], faits.get(p["page"], "?"), json.dumps([{"id": b["id"], "type": b["type"], "texte": b["trad"],
-                                                                "pos": [round(b["box"][k], 3) for k in ("x", "y", "w", "h")]}
+            p["page"], faits.get(p["page"], "?"), json.dumps([dict({"id": b["id"], "type": b["type"], "texte": b["trad"],
+                                                                     "pos": [round(b["box"][k], 3) for k in ("x", "y", "w", "h")]},
+                                                                    **({"qui": b["qui_impose"]} if b.get("qui_impose") else {}))   # 1.27.0 (S4)
                                                                for b in p["_bulles"]], ensure_ascii=False))})
         content.append({"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b64}})
     cat_txt = "; ".join("%s = %s (%s, %s, %s)" % (v["id"], v["nom"], v["genre"], v["age"], v["desc"]) for v in cat) or "(indisponible : voix_el vide)"
@@ -554,6 +558,8 @@ def appliquer_verif(page, bulles, verif):
         b = next((x for x in reste if x.get("ajout") and x["id"] == r.get("id") and iou(r["box"], x["box"]) >= 0.5), None) or apparier(r, reste)
         if b is not None and id(b) not in rang:
             rang[id(b)] = i
+            if str(r.get("qui") or "").strip():                             # 1.27.0 (S4) : choisi par Quang
+                b["qui_impose"] = str(r["qui"]).strip()[:40]
     base = len(rang)
     for b in sorted(reste, key=lambda x: x["id"]):
         b["ordre"] = rang.get(id(b), base + b["id"] / 10000.0)
@@ -815,7 +821,8 @@ def cmd_preparer(a):
             neuf = {"cle": cle, "page": p["page"], "id": b["id"], "file": p["file"], "img_rel": p["img_rel"], "type": b["type"],
                     "box": b["box"], "contour": contour_bulle(img, b["box"]), "ordre": b.get("ordre", b["id"]),
                     "texte_origine": texte, "texte": texte,
-                    "qui": nom_connu(distrib, x.get("qui")) if x else "inconnu",
+                    "qui": (nom_connu(distrib, b["qui_impose"]) if b.get("qui_impose")                 # 1.27.0 (S4) : Quang d'abord
+                            else nom_connu(distrib, x.get("qui")) if x else "inconnu"),
                     "ton": (x or {}).get("ton") or "", "lire": bool((x or {}).get("lire", True)) and bool(re.search(r"\w", texte)),
                     "indice": (x or {}).get("indice") or "", "a_traiter": p["page"] in a_traiter,
                     "corrige": corr, "voix": vieux.get("voix")}
