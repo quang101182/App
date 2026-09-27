@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.27.0"  # 1.27.0 (27/09, S4) : « qui parle » choisi par Quang a la verification des bulles = impose a l'IA et a la replique ;  # 1.26.0 (27/09) : bulle ENTOUREE qui recouvre une bulle connue = la MEME (plus de replique en double) ;  # 1.25.0 (27/09) : cout des voix MESURE (solde avant / apres), tarif recale a chaque mesure ;  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.28.0"  # 1.28.0 (27/09, S2-bis) : doublons laisses par <= 1.25.0 (bulle entouree autour d'une bulle traduite) repares a la preparation ;  # 1.27.0 (27/09, S4) : « qui parle » choisi par Quang a la verification des bulles = impose a l'IA et a la replique ;  # 1.26.0 (27/09) : bulle ENTOUREE qui recouvre une bulle connue = la MEME (plus de replique en double) ;  # 1.25.0 (27/09) : cout des voix MESURE (solde avant / apres), tarif recale a chaque mesure ;  # 1.24.0 (27/09) : musique de fond de la serie dans la video des Dialogues (optionnelle) ;  # 1.23.0 (27/09) : texte et personnage inchanges -> ANCIEN ton garde (la voix n'est pas repayee) ;  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -642,6 +642,41 @@ def cmd_tout(a):
     return cmd_video(a)
 
 
+def reparer_ajouts_doubles(chap_dir, voulues):
+    """1.28.0 (S2-bis) : <= 1.25.0 traduisait et REECRIVAIT sur l'image une bulle entouree qui recouvrait une bulle deja traduite.
+    Pages voulues : ces doublons sortent de traduction.json ; si TOUS les ajouts d'une page en etaient, l'image d'avant les ajouts
+    (.avant_ajouts) est remise (sinon on n'y touche pas : un vrai ajout y est dessine). -> nombre de doublons retires."""
+    import shutil as _sh
+    tf = os.path.join(chap_dir, "traduction", "fr", "traduction.json")
+    tr = lire_json(tf)
+    if not tr:
+        return 0
+    n = 0
+    for p in tr.get("pages") or []:
+        if p.get("page") not in voulues:
+            continue
+        bl = p.get("bulles") or []
+        dbl = [b for b in bl if b.get("ajout") and b.get("box")
+               and any(couvre(b["box"], c["box"]) >= 0.8 for c in bl if not c.get("ajout") and c.get("box"))]
+        if not dbl:
+            continue
+        p["bulles"] = [b for b in bl if not any(b is d for d in dbl)]
+        n += len(dbl)
+        img = os.path.join(chap_dir, "traduction", "fr", p.get("file") or "page_%03d.png" % p["page"])
+        remise = ""
+        if not any(b.get("ajout") for b in p["bulles"]) and os.path.isfile(img + ".avant_ajouts") and os.path.isfile(img):
+            if not os.path.isfile(img + ".avant_reparation"):
+                _sh.copy2(img, img + ".avant_reparation")
+            _sh.copy2(img + ".avant_ajouts", img)
+            remise = ", image d'avant remise"
+        log("  page %d : %d bulle(s) entouree(s) en DOUBLE retiree(s) de la traduction%s" % (p["page"], len(dbl), remise))
+    if n:
+        if not os.path.isfile(tf + ".avant_reparation"):
+            _sh.copy2(tf, tf + ".avant_reparation")
+        ecrire_json(tf, tr)
+    return n
+
+
 def traduire_ajouts(chap_dir, dd, a, voulues):
     """1.22.0 : les bulles ajoutees par Quang sur des pages TRADUITES -> traduites et posees sur l'image, puis ajoutees a
     traduction.json. Retourne le nombre de bulles posees. Sans verification / sans traduction : rien."""
@@ -762,7 +797,9 @@ def cmd_preparer(a):
             return rc
     try:                                                                   # 1.22.0 : bulles entourees -> traduites sur la page
         _tr0 = lire_json(os.path.join(chap_dir, "traduction", "fr", "traduction.json")) or {}
-        traduire_ajouts(chap_dir, dd, a, set(nc_plage(a.pages, [p["page"] for p in _tr0.get("pages") or []])))
+        _v0 = set(nc_plage(a.pages, [p["page"] for p in _tr0.get("pages") or []]))
+        reparer_ajouts_doubles(chap_dir, _v0)                           # 1.28.0 (S2-bis) : AVANT de traduire de nouveaux ajouts
+        traduire_ajouts(chap_dir, dd, a, _v0)
     except Exception as e:
         log("  bulles ajoutees : traduction sur la page impossible (%s) -- elles seront lues a la preparation" % str(e)[:160])
     tr = source_bulles(chap_dir, a.pages)

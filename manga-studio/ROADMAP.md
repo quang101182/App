@@ -3477,9 +3477,12 @@ bulles vérifiées 19h45 → préparation 19h48 (0,067 $) → 29 voix 19h49 (445
   ≥ 80 % dans le tracé EST la bulle entourée (ni retraduite, ni réécrite) ; `appliquer_verif` retire un ajout déjà posé en double
   par ≤ 1.25.0 → **la réplique en trop disparaît d'elle-même à la prochaine préparation** (1.20.0 retire les répliques plus
   produites). Simulation sur la vraie traduction : p. 63 → une seule réplique ; aucune autre page changée.
-  - [ ] **S2-bis** : l'IMAGE de la page 63 garde la réécriture de ≤ 1.25.0 (sauvegarde `page_063.png.avant_ajouts` présente).
-    Proposé : quand 1.26.0 écarte un ajout en double, remettre l'image `.avant_ajouts` de cette page (code, pas à la main).
-    Déclencheur : juste après S4 (même fichier).
+  - [x] **S2-bis** ✅ `dialogues.py` **1.28.0** (`proxy-patch/patch_dialogues_py_1280.py`) : `reparer_ajouts_doubles()` à chaque
+    préparation (pages demandées, AVANT de traduire de nouveaux ajouts) — les bulles entourées en DOUBLE laissées par ≤ 1.25.0
+    sortent de `traduction.json` ; si TOUS les ajouts d'une page en étaient, l'image `.avant_ajouts` est remise (sinon intacte : un
+    vrai ajout y est dessiné) ; sauvegardes `.avant_reparation`. Rien corrigé à la main : la page 63 se répare à la prochaine
+    préparation de sa plage. Banc `scripts/test_reparer_ajouts.py` **8/8** (doublon seul → image remise ; doublon + vrai ajout →
+    image intacte ; hors plage intacte ; rejouer = rien) ; 1.27.0 = ROUGE 2/8 ; `test_dialogues_preparer` 34/0.
 - [x] **S3 — numéros des bulles posés SUR le texte** ✅ app **v3.4.5** : pastille au coin haut-droit, À L'EXTÉRIEUR de la zone de
   texte (à gauche si le bord manque), + fin contour de la zone pour voir quel texte elle désigne. Banc `test_verif_bulles_ui.py`
   **23/23** (serveur de test 8191, copies légères) + capture `samsung_out/verif_360.png` regardée : texte lisible, pastilles hors
@@ -3510,6 +3513,7 @@ bulles vérifiées 19h45 → préparation 19h48 (0,067 $) → 29 voix 19h49 (445
 - [x] **S4-bis — interrupteur « Musique de fond » dans le bloc Dialogues** (Quang 20h54, capture : « il manque le switch […] on avait dit que c'était optionnel ») ✅ app **v3.5.1**. Avant : la musique des Dialogues n'avait d'interrupteur QUE dans les réglages du lecteur, et c'était celui de la narration. Désormais : interrupteur dans le bloc (à côté de « Tons par réplique » / « Lire les encarts »), réglage PROPRE aux Dialogues (`DLG_MUS_ON`, par appareil ; au 1er lancement = celui de la narration → rien ne change sans y toucher), suivi par le lecteur, la vidéo, ⚡ Tout faire et « vidéo à refaire (musique) » ; la narration garde le sien ; volume commun ; grisé « aucun morceau pour cette série » s'il n'y a pas de musique. Banc `test_musique_dialogues_ui.py` **12/12** (4 contrôles ajoutés : réglage propre, interrupteur visible, vidéo demandée SANS puis AVEC musique) ; v3.5.0 = ROUGE. ⚠ Constat en passant : le bloc v3.4.0 du fichier est écrit en `
 ` (sans effet pour le navigateur) — les patchs gèrent les 3 formes de fin de ligne.
 - [x] **S4-ter — pastilles doublées sur téléphone** (Quang 21h03 : « doubler la taille des bulles, ça fait un peu petit sur mon smartphone ») ✅ app **v3.5.2** : rayon ×2 sous 800 px (Fold fermé ET ouvert), un seul rayon pour dessin / glisser / cible / toucher ; numéro écarté du texte (1,05 R) ; pastille-personnage posée du côté OPPOSÉ à la bulle (au-dessus ou en dessous si pas de place) — vu à ×2 : elle mordait le texte. Bancs verif 29/29 (360 ET 704), qui parle 22/22 ; capture regardée. Limite connue : quand la zone détectée est plus étroite que le texte réel, le numéro placé à gauche peut toucher les premières lettres (zone de détection, pas le placement).
+- [x] **S4-quater — les 3 options des Dialogues sur UNE ligne** (Quang 21h10, capture) ✅ app **v3.5.3** : « 🎭 Tons · 📜 Encarts · 🎵 Musique » en 3 colonnes, détail en info-bulle ; sous 440 px libellé AU-DESSUS de l'interrupteur (sinon coupé à 360). Mesure `scripts/mesure_options_dialogues.py` **4/4** (360 / 476 / 704 / 933 : même ligne, textes entiers, 0 débordement) ; v3.5.2 = 0/4. Voisins : musique 12/12 (×3 après avoir rendu le banc robuste : 1 échec sur 4 passages, il attendait la demande vidéo 1,5 s fixes → attente jusqu'à 5 s), compacts 126/126.
 - [ ] **S5 — contrôle de cohérence gratuit après la préparation** (proposition, à valider avec S4) : si l'IA met ≥ 80 % des
   répliques sur un seul personnage alors que la série en compte plusieurs → bandeau « ⚠ presque tout attribué à X — vérifier ? »
   qui ouvre ✏ sur ces pages. Déclencheur : après S4 (il devient moins utile si Quang attribue lui-même).

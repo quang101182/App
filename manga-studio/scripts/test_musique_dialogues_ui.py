@@ -26,6 +26,11 @@ with sync_playwright() as p:
         if PAGE and u.endswith("/manga"): return rt.fulfill(status=200, body=PAGE, content_type="text/html; charset=utf-8")
         return rt.continue_()
     pg.route("**/*", route)
+    def attendre_post():                                        # 27/09 : attendre la demande (jusqu'a 5 s), pas 1,5 s fixes
+        for _ in range(25):
+            if any(x[0] == 'dialogues_lancer' for x in posts): break
+            pg.wait_for_timeout(200)
+        pg.wait_for_timeout(300)
     pg.goto("http://127.0.0.1:8190/manga/#k=" + KEY); pg.wait_for_timeout(2500)
     pg.evaluate("s => { localStorage.setItem('manga_onglet','tChap'); localStorage.setItem('manga_serie', s); localStorage.setItem('manga_mus_on','1'); localStorage.setItem('manga_dlg_mus_on','1'); localStorage.setItem('manga_mus_vol','60'); }", CH.split("/")[0])
     pg.reload(); pg.wait_for_timeout(3500)
@@ -56,13 +61,13 @@ with sync_playwright() as p:
     check("v3.5.1 : bloc Dialogues -- interrupteur « Musique de fond » visible et actif", b_["vis"] and b_["on"] and not b_["dis"] and "Musique" in (b_["t"] or ""), b_)
     pg.evaluate("() => $('dlgMus').click()"); pg.wait_for_timeout(400)
     posts.clear()
-    pg.evaluate("() => { $('dlgVid').dataset.dpl = ''; DLG.plan = Object.assign({}, DLG.plan, { repliques: {} }); $('dlgVid').disabled = false; $('dlgVid').click(); }"); pg.wait_for_timeout(1500)
+    pg.evaluate("() => { $('dlgVid').dataset.dpl = ''; DLG.plan = Object.assign({}, DLG.plan, { repliques: {} }); $('dlgVid').disabled = false; $('dlgVid').click(); }"); attendre_post()
     env0 = [json.loads(x[1]) for x in posts if x[0] == "dialogues_lancer"]
     check("v3.5.1 : bloc coupe -> la video est demandee SANS musique", bool(env0) and not env0[-1].get("musique"), env0[-1:])
     check("v3.5.1 : bloc coupe -> reglages du lecteur suivent, narration intacte", pg.evaluate("() => !DLG_MUS_ON && !$('dllMus').checked && MUS_ON"))
     pg.evaluate("() => $('dlgMus').click()"); pg.wait_for_timeout(400)
     posts.clear()
-    pg.evaluate("() => { $('dlgVid').dataset.dpl = ''; DLG.plan = Object.assign({}, DLG.plan, { repliques: {} }); $('dlgVid').disabled = false; $('dlgVid').click(); }"); pg.wait_for_timeout(1500)
+    pg.evaluate("() => { $('dlgVid').dataset.dpl = ''; DLG.plan = Object.assign({}, DLG.plan, { repliques: {} }); $('dlgVid').disabled = false; $('dlgVid').click(); }"); attendre_post()
     env = [json.loads(x[1]) for x in posts if x[0] == "dialogues_lancer"]
     print("     posts :", [(x[0], x[1][:120]) for x in posts][-4:], "| toast :", pg.evaluate("() => (document.querySelector('.toast, #toast') || {}).textContent || ''"))
     check("video : la demande porte la musique (musique: true, volume 60)", bool(env) and env[-1].get("musique") is True and env[-1].get("volume") == 60, env[-1:] or posts[-2:])
