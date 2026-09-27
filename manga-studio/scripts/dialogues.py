@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.13.0"  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.14.0"  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -822,13 +822,24 @@ def dans_portee(page, portee):
     return int(a_) <= page <= int(b_ or a_)
 
 
+def ecoute_de(distrib, qui):
+    """1.14.0 (R17) : la vitesse d'ECOUTE du personnage (1 = telle que generee). Jamais envoyee a ElevenLabs."""
+    try:
+        return round(max(0.7, min(1.5, float((reglage_voix(distrib, qui) or {}).get("ecoute") or 1))), 2)
+    except (TypeError, ValueError):
+        return 1.0
+
+
 def empreinte_video(doc, distrib, dd, portee=""):
     """1.10.0 : (repliques de la video, empreinte) -- la meme pour plan et video."""
     import hashlib
     couleur = lambda q: (reglage_voix(distrib, q) or {}).get("couleur") or "#9aa6b8"
     liste = [x for x in doc["repliques"] if x.get("lire") and x.get("voix") and dans_portee(x["page"], portee)
              and os.path.isfile(os.path.join(dd, "voix", x["voix"]["fichier"]))]
-    return liste, hashlib.sha1(json.dumps([[x["cle"], x["voix"]["empreinte"], x.get("texte"), couleur(x["qui"]), x["qui"]] for x in liste]).encode()).hexdigest()[:16]
+    # 1.14.0 : l'ecoute n'entre que si elle differe de 1 (les videos d'avant restent « a jour »)
+    return liste, hashlib.sha1(json.dumps([[x["cle"], x["voix"]["empreinte"], x.get("texte"), couleur(x["qui"]), x["qui"]]
+                                           + ([ecoute_de(distrib, x["qui"])] if ecoute_de(distrib, x["qui"]) != 1 else [])
+                                           for x in liste]).encode()).hexdigest()[:16]
 
 
 def etat_voix(doc, distrib, dd):
@@ -1054,7 +1065,9 @@ def cmd_video(a):
         img = os.path.join(tmp, "i%04d.png" % k)
         image_replique(png, x, couleur(x["qui"]), "Narrateur" if x["qui"] == "narrateur" else x["qui"], img)
         seg = os.path.join(tmp, "a%04d.m4a" % k)
-        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", os.path.join(dd, "voix", x["voix"]["fichier"]), "-af", "apad=pad_dur=0.4",
+        ec = ecoute_de(distrib, x["qui"])                     # 1.14.0 (R17) : vitesse d'ecoute, hauteur conservee
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", os.path.join(dd, "voix", x["voix"]["fichier"]),
+                        "-af", ("atempo=%g," % ec if ec != 1 else "") + "apad=pad_dur=0.4",
                         "-ar", "44100", "-ac", "2", "-c:a", "aac", "-b:a", "160k", seg], check=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         segs.append(seg); imgs.append((img, nc.duree_mp3(seg) or ((x["voix"].get("duree") or 1.5) + 0.4)))
     with open(os.path.join(tmp, "a.txt"), "w", encoding="utf-8") as f:
