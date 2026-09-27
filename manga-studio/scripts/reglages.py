@@ -10,7 +10,7 @@ L'analyse des pages et le recit restent en ligne dans les deux modes (analyse lo
 """
 import json, os, sys
 
-VERSION = "1.4.0"   # 1.4.0 (R18, 27/09) : valeurs PAR DEFAUT (par instance) : « defauts »
+VERSION = "1.5.0"   # 1.5.0 (R18 phase 2) : defauts des curseurs de lecture ;   # 1.4.0 (R18, 27/09) : valeurs PAR DEFAUT (par instance) : « defauts »
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.environ.get("MANGA_SOURCES_DIR") or os.path.join(HERE, "..", "sources"))
@@ -21,7 +21,10 @@ DEFAUT = {"mode": "cloud", "relais_moderation": False,   # v1.2.0 : relais auto 
 # v1.4.0 (R18) : les valeurs par defaut reglables (« ⭐ » dans l'app), bornees. voix_<h|f|n>_<vitesse|ecoute> : personnages
 # (homme, femme, narrateur) ; les curseurs de lecture s'ajoutent ici (phase 2). Une cle inconnue est refusee.
 DEFAUTS_BORNES = {"voix_h_vitesse": (0.7, 1.2), "voix_f_vitesse": (0.7, 1.2), "voix_n_vitesse": (0.7, 1.2),
-                  "voix_h_ecoute": (0.7, 1.5), "voix_f_ecoute": (0.7, 1.5), "voix_n_ecoute": (0.7, 1.5)}
+                  "voix_h_ecoute": (0.7, 1.5), "voix_f_ecoute": (0.7, 1.5), "voix_n_ecoute": (0.7, 1.5),
+                  # v1.5.0 (R18 phase 2) : les curseurs de lecture de l'app
+                  "vit_cloud": (0.5, 2), "vit_local": (0.5, 2), "vol_g": (0, 100), "mus_vol": (0, 100),
+                  "dll_vit": (0.5, 2), "vid_vit": (0.5, 2)}
 
 
 def _brut():
