@@ -29,8 +29,12 @@ with sync_playwright() as p:
     pg.wait_for_url("**:8192/**", timeout=20000)
     pg.wait_for_function("() => typeof ESPACE !== 'undefined' && ESPACE.nom === 'prive'", timeout=30000)
     check("bascule : on est dans la secondaire", pg.evaluate("() => ESPACE.nom") == "prive")
-    check("aucune entrée d'historique ajoutée (%d -> %d)" % (n0, pg.evaluate("() => history.length")), pg.evaluate("() => history.length") == n0)
-    pg.go_back(); pg.wait_for_timeout(1500)
+    garde = pg.evaluate("() => !!(history.state && history.state.garde)")   # v2.92.0 : la secondaire pose SA garde du retour
+    check("aucune entrée d'historique de la bascule (%d -> %d, garde du retour : %s)" % (n0, pg.evaluate("() => history.length"), garde),
+          pg.evaluate("() => history.length") == n0 + (1 if garde else 0))
+    pg.go_back(); pg.wait_for_timeout(600)
+    if garde:
+        pg.go_back(); pg.wait_for_timeout(1500)                                # 2e retour (dans les 2,5 s) = quitter
     check("geste retour : ne ramène PAS à la principale", ":8190" not in pg.url, pg.url)
 print("VERDICT : %d OK / %d KO" % (len(OK), len(KO)))
 sys.exit(1 if KO else 0)
