@@ -24,7 +24,7 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.21.1"  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
+VERSION = "1.22.1"  # 1.22.1 (27/09) : bulle entouree effacee LETTRES SEULES (jamais la case entiere) ;  # 1.22.0 (27/09) : bulle ENTOUREE sur une page traduite -> traduite et REECRITE en francais sur la page ;  # 1.21.1 (27/09) : bulle lue sur l'image PAS en francais -> TRADUITE (ajout reste en anglais) ;  # 1.21.0 (27/09) : commande « tout » (preparer -> ARRET si doute -> voix -> video) ;  # 1.20.0 (27/09) : refaire une plage RETIRE les repliques qui ne sont plus produites (bulle exclue / disparue) ;  # 1.19.0 (R30, 27/09) : 🔍 bulles VERIFIEES par Quang avant la preparation (exclues, ajoutees, ORDRE) + commande « detecter » (gratuite) ;  # 1.18.0 (27/09, Quang : « un homme a une couleur rose, ca parait bizarre ») : couleur d'office tiree dans la FAMILLE du genre (hommes : froides / franches ; femmes : chaudes / pastel) ;  # 1.17.0 (R24, 27/09) : voix PREFEREES en tete de la distribution automatique ;  # 1.16.0 (R18, 27/09) : nouveau personnage = vitesses PAR DEFAUT de son genre (reglages de l'instance) ;  # 1.15.0 (R19, 27/09) : distribution automatique en voix 100 % FRANCAISES ;  # 1.14.0 (R17, 27/09) : vitesse d'ECOUTE par personnage appliquee a la video, gratuite ;  # 1.13.0 (R14, 27/09) : les textes ecartes POUR L'IMAGE (zone trop grande...) sont lus ;  # 1.12.0 (R13, 27/09) : une page de traduction jamais LUE par le modele est retraduite (--traduire) ;  # 1.11.0 (D12, Quang 02h28 : « que la solution devienne de plus en plus fiable dans la globalite ») : apres
 #          une preparation qui cree de NOUVEAUX personnages, controle des DOUBLONS probables (DeepSeek, texte seul) ->
 #          distrib["doublons"] ; jamais de fusion sans Quang (bouton « Fusionner » de l'app) ; « pas_doublons » = ne plus proposer
 #   # 1.10.0 : 1.10.0 (R3-bis, Quang 03h08 : « plusieurs videos sur un meme chapitre, p.5-10 et p.35-42 ») : video --pages a-b
@@ -598,12 +598,82 @@ def cmd_tout(a):
     return cmd_video(a)
 
 
+def traduire_ajouts(chap_dir, dd, a, voulues):
+    """1.22.0 : les bulles ajoutees par Quang sur des pages TRADUITES -> traduites et posees sur l'image, puis ajoutees a
+    traduction.json. Retourne le nombre de bulles posees. Sans verification / sans traduction : rien."""
+    verif = lire_json(os.path.join(dd, "bulles_verifiees.json")) or {}
+    tf = os.path.join(chap_dir, "traduction", "fr", "traduction.json")
+    tr = lire_json(tf)
+    if not tr or not verif.get("pages"):
+        return 0
+    trp = {p["page"]: p for p in tr.get("pages") or []}
+    man = lire_json(os.path.join(chap_dir, "manifest.json")) or {}
+    fich = [os.path.basename(q.get("file") or "") for q in man.get("pages") or []]
+    faites, st, pages_touchees = 0, {"tokens_in": 0, "tokens_out": 0, "cout": 0.0}, []
+    for k, v in sorted(verif["pages"].items(), key=lambda kv: int(kv[0])):
+        n = int(k)
+        p = trp.get(n)
+        if n not in voulues or not p or p.get("bulles") is None or not (0 < n <= len(fich)):
+            continue
+        nouveaux = [z for z in v.get("ajouts") or [] if not any(iou(z["box"], b["box"]) >= 0.5 for b in p["bulles"] if b.get("box"))]
+        if not nouveaux:
+            continue
+        import ingest_page as ip
+        import traduire_chapitre as tc
+        img_t = os.path.join(chap_dir, "traduction", "fr", p.get("file") or "page_%03d.png" % n)
+        if not os.path.isfile(img_t):
+            continue
+        texts = [dict(z["box"], id=int(z["id"]), conf=1.0) for z in nouveaux]
+        try:
+            lu = tc.traduire_page(ip.load_page(os.path.join(chap_dir, fich[n - 1])), texts, "gemini", "fr", st)
+        except Exception as e:
+            log("  page %d : bulle(s) ajoutee(s) non traduite(s) (%s) -- lue(s) a la preparation" % (n, str(e)[:120]))
+            continue
+        a_poser = [(t, lu.get(t["id"]) or {}) for t in texts if ((lu.get(t["id"]) or {}).get("trad") or "").strip()]
+        if not a_poser:
+            continue
+        from PIL import ImageDraw
+        rendu = ip.load_page(img_t).convert("RGB")
+        W, H = rendu.size
+        for t, b in a_poser:
+            serre = tc.boite_lettres(rendu, t)                         # texte net sur fond clair, sinon None
+            if serre:
+                ImageDraw.Draw(rendu).rectangle([int(serre["x"] * W), int(serre["y"] * H), int((serre["x"] + serre["w"]) * W),
+                                                 int((serre["y"] + serre["h"]) * H)], fill=(255, 255, 255))
+                r, etat = tc.poser_texte(rendu, serre, b["trad"].strip(), False), "lettres seules"
+            else:
+                r, etat = {}, "non effacee (fond charge : image laissee telle quelle)"
+            typ = b.get("type") if b.get("type") in ("dialogue", "narration") else "dialogue"
+            p["bulles"].append(dict({"id": t["id"], "box": {q: round(t[q], 4) for q in ("x", "y", "w", "h")}, "type": typ,
+                                     "texte": (b.get("texte") or "").strip(), "trad": b["trad"].strip(), "effacement": etat,
+                                     "ajout": True}, **{q: r[q] for q in ("taille", "lignes", "tient") if q in r}))
+            faites += 1
+        if not os.path.isfile(img_t + ".avant_ajouts"):
+            import shutil as _sh
+            _sh.copy2(img_t, img_t + ".avant_ajouts")
+        rendu.save(img_t)
+        pages_touchees.append(n)
+        log("  page %d : %d bulle(s) ajoutee(s) traduite(s) (%s)" % (n, len(a_poser), ", ".join(x.get("effacement", "") for x in p["bulles"][-len(a_poser):])))
+    if faites:
+        if not os.path.isfile(tf + ".avant_ajouts"):
+            import shutil as _sh
+            _sh.copy2(tf, tf + ".avant_ajouts")
+        ecrire_json(tf, tr)
+        depenses.noter("dialogues", a.chap, "traduction des bulles ajoutees", "gemini", round(st["cout"], 5), pages=pages_touchees)
+    return faites
+
+
 def cmd_preparer(a):
     chap_dir, serie_dir, dd = chemins(a.chap)
     if getattr(a, "traduire", False):
         rc = traduire_manquantes(a, chap_dir, dd)
         if rc:
             return rc
+    try:                                                                   # 1.22.0 : bulles entourees -> traduites sur la page
+        _tr0 = lire_json(os.path.join(chap_dir, "traduction", "fr", "traduction.json")) or {}
+        traduire_ajouts(chap_dir, dd, a, set(nc_plage(a.pages, [p["page"] for p in _tr0.get("pages") or []])))
+    except Exception as e:
+        log("  bulles ajoutees : traduction sur la page impossible (%s) -- elles seront lues a la preparation" % str(e)[:160])
     tr = source_bulles(chap_dir, a.pages)
     if not tr:
         print("ARRET : pas de traduction francaise pour %s -- traduis d'abord ce chapitre en francais" % a.chap)
