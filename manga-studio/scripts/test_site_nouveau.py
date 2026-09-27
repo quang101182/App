@@ -32,8 +32,11 @@ def fermer(t):
 t = onglet(SERIE); time.sleep(10)
 liens = evaluer(t, "[...document.querySelectorAll('a[href]')].map(a => a.href)") or []
 fermer(t)
-chap = [l for l in liens if re.search(r"/chapitre-%s/?$" % re.escape(NUM), l)]
-print("liens de chapitres sur la page :", len([l for l in liens if "/chapitre-" in l]), "| chapitre", NUM, "->", chap[:1])
+# 27/09 : tous les formats d'adresse de chapitre connus (avant : « chapitre-N » seulement -> un site en « c001 » etait rate)
+FORMATS = r"/(?:chapitre|chapter|ch)[-_/]0*%s/?$|/c0*%s/?$"
+RE_CH = re.compile(r"/(?:chapitre|chapter|ch)[-_/]\d|/c\d{2,4}/?$", re.I)
+chap = list(dict.fromkeys(l for l in liens if re.search(FORMATS % (re.escape(NUM), re.escape(NUM)), l, re.I)))
+print("liens de chapitres sur la page :", len(set(l for l in liens if RE_CH.search(l))), "| chapitre", NUM, "->", chap[:1])
 if not chap: print("VERDICT : ECHEC -- chapitre introuvable sur la page de la serie"); sys.exit(1)
 KEY = open(os.path.expanduser(r"~\Documents\ComfyUI\.studio_secret"), encoding="utf-8").read().strip()
 APP = int(os.environ.get("MANGA_APP_PORT", "8190"))
