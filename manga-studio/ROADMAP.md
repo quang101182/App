@@ -3086,7 +3086,7 @@ atelier `scripts/essai_voix_atelier.py` v0.2.0). **Verdicts de Quang** : ElevenL
 réplique = « ça apporte quelque chose » (gardés, interrupteur) ; mode **SÉPARÉ** de la narration (« qui ne se chevauche pas avec
 le reste ») ; **corrections à la main** avant et à tout moment ; **AUCUN moteur de secours** (« si le quota est bloqué, il est
 bloqué ») ; crédits affichés ; bulle qui parle = **halo harmonieux, couleur du personnage** (pas un rectangle).
-Maquette : ~~`maquette_dialogues_v1.html`~~ → **`maquette_dialogues_v2.html`** (27/09 00h10, retours de Quang intégrés ; **à valider avant tout code**).
+Maquette : ~~`maquette_dialogues_v1.html`~~ → **`maquette_dialogues_v2.html`** (27/09 00h10, retours de Quang intégrés ; ~~à valider avant tout code~~ → ✅ validée 23h58, cf. D0).
 **Retours de Quang sur la v1 (26/09 23h55)** : ligne 🎵 Musique oubliée dans la maquette (elle existe : Narration · Traduction ·
 Musique · Vidéo) ; coûts → **une ligne ElevenLabs** dans le détail ; la **distribution appartient au MANGA** (réglage transverse,
 commun à tous les chapitres), seules les répliques sont par page ; vidéo : choisir narration ou dialogues → **tranché par Claude :
@@ -3168,7 +3168,7 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       crédits EL à part + dollars de préparation, solde, catalogue, arrêter) ; mutation « crédits EL retirés » → ROUGE.
       Routes en plus du plan : `/manga/el_voix` (catalogue, cache 1 h) et `/manga/dialogues_ecouter` (dialogues.py v1.2.0
       `ecouter` : la voix exacte d'une réplique devient définitive, jamais payée 2×). Principale relancée au repos
-      (relance-proxy.ps1) ; **secondaire NON relancée** (capture en cours 00h18) → à relancer au repos avant D8.
+      (relance-proxy.ps1) ; ~~secondaire NON relancée (capture en cours 00h18)~~ → ✅ relancée 27/09 00h55.
 - [x] **D4 — App : bloc 🎭 Dialogues** (après Narration ; ligne ElevenLabs dans le détail des coûts ; vidéo des dialogues DANS le bloc) : état en une phrase (pas préparé / prêt / N à refaire / quota épuisé),
       estimation $ + crédits, solde ElevenLabs, pages, interrupteur tons, bouton Préparer / Générer / Lire. Version ×3.
 - [x] **D4-bis — Portée plusieurs chapitres** (côté script + serveur ; l'écran vient avec D4) : file séquentielle côté proxy (un `progress.json` de lot + bilan), estimation
@@ -3178,7 +3178,7 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       repayer) — banc `test_dialogues_lot.py` **8/8** + mutation ROUGE ; `plan` (état par réplique + crédits, 0 appel payé) ;
       `proxy-patch/patch_dialogues_2.py` (+ `.diff`) : `/manga/dialogues_plan`, `/manga/dialogues_lot` (GET/POST),
       `/manga/dialogues_lot_arreter`, activité « dialogues_lot » — testé sur 8191 **7/7** (lot sur chapitre déjà fait = 0 crédit),
-      appliqué, principale relancée au repos (secondaire toujours à relancer).
+      appliqué, principale relancée au repos (~~secondaire toujours à relancer~~ → ✅ 00h55).
 - [x] **D5 — App : écran de préparation** : distribution (voix + ▶ + menu « phrase à écouter » = ses répliques la plus longue
       d'abord, expressivité, vitesse, couleur, renommer, ✚ ajouter) ; répliques par page (lire, qui, texte éditable, ton,
       ▶, état ✅/⚪/🟠) ; « Générer les voix manquantes » avec crédits nécessaires / restants et bouton GRISÉ si insuffisant.
@@ -3195,7 +3195,7 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       `test_dialogues_ui.py` **20/20** réels (1280 + 360) · `test_dialogues_lecteur.py` **36/36** (halo à < 0,02 px de la
       bulle à 360/704/1280) ; voisins `test_visionneuse_livre_ui` 30/30, `test_retour_visionneuse_ui` 24/24,
       `test_balayage_image_ui` 14/14 ; données réelles : 0 erreur JS. dialogues.py 1.4.1 : page refusée lisible dès que
-      Quang choisit QUI parle. Reste : « suivre la case » (caméra) non fait — option, à reprendre si Quang le demande.
+      Quang choisit QUI parle. ~~Reste : « suivre la case » (caméra) non fait~~ → ✅ v2.81.2 (D6-bis).
 - [x] **D7 — Vidéo Dialogues (MP4)** : même rendu en fichier, pour le téléphone hors ligne (modèle `cases_video.py`).
       ✅ **Livré 27/09 01h20 = app v2.81.1** : `dialogues.py` 1.5.2 `video` (1080×1920, même rendu que le lecteur : page voilée,
       halo au contour réel, pastille, sous-titre ; NVENC, repli x264 ; 10 répliques = 23 s de vidéo en 7 s) dans
@@ -3339,7 +3339,7 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       **12/12** (bandeau ✏, fusion confirmée, alias, répliques suivies, plan qui suit la voix, « pas les mêmes » noté ; ligne 🎭
       « ⚠ 2 doublons probables ») ; page v2.82.1 et serveur non patché = ROUGES ; `test_dialogues_preparer.py` **29/29**
       (DeepSeek simulé : plus rien ne sort du banc ; scénario G) + sabotage « refus ignoré » = ROUGE ; série réelle 92/92.
-- [ ] **R5 — D9 clôture.**
+- [x] **R5 — D9 clôture.** ✅ 27/09 03h45 : constats barrés (maquette v2, relances de la secondaire, caméra, déclencheur D10), HANDOFF, mémoire du projet, commit.
 - [x] **D12 — Cohérence de la distribution (livré : R4) (fiabilité globale, Quang 02h28 : « que la solution devienne de plus en plus fiable
       dans la globalité »)** : en fin de préparation, un contrôle des DOUBLONS probables (même genre, rôle, descriptions proches,
       répliques qui se répondent) → « ⚠ doublon probable » dans l'écran ✏ + bouton « Fusionner avec… » (alias gardés, répliques
@@ -3348,8 +3348,8 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       un bouton à l'onglet […] il ne faudrait pas mélanger l'ensemble » ; choix délégué) : **décidé par Claude** — bouton séparé
       à côté de 🎬 Vidéos, panneau « 🎭 Dialogues de la série » (chapitres préparés / voix prêtes / à refaire / vidéo à jour,
       Lire · Voir · ⬇, lancement « plusieurs chapitres » déjà prévu en D4 depuis la fiche) ; rien dans le panneau Vidéos de la
-      narration. **Déclencheur : maquette à faire valider par Quang, tout de suite après D8.**
-- [ ] **D9 — Clôture** : ROADMAP (constats barrés, versions), HANDOFF-reprise, mémoire, commit + push. Rien de la secondaire.
+      narration. ~~Déclencheur : maquette à faire valider~~ → ✅ validée 02h28, livré v2.82.0 (R3).
+- [x] **D9 — Clôture** : ROADMAP (constats barrés, versions), HANDOFF-reprise, mémoire, commit + push. Rien de la secondaire. ✅ 27/09 03h45 (R5).
 
 ### Coûts de référence (mesurés 26/09 ; ré-étalonnés au D8 le 27/09)
 Préparation ~0,004 $/page (Gemini 3.6 Flash ; D8 : 0,0038 $/page) · 153 caractères de dialogue/page en moyenne (476 pages traduites) · ElevenLabs
