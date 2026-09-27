@@ -3339,6 +3339,18 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       **12/12** (bandeau ✏, fusion confirmée, alias, répliques suivies, plan qui suit la voix, « pas les mêmes » noté ; ligne 🎭
       « ⚠ 2 doublons probables ») ; page v2.82.1 et serveur non patché = ROUGES ; `test_dialogues_preparer.py` **29/29**
       (DeepSeek simulé : plus rien ne sort du banc ; scénario G) + sabotage « refus ignoré » = ROUGE ; série réelle 92/92.
+- [x] **R7 — Les vidéos des Dialogues dans LE lecteur vidéo de l'app** (Quang 03h41 : « le lecteur vidéo ne respecte pas du tout
+      l'autre lecteur vidéo. Il regarde comment il est fait, il fait pareil »). Constat : `dlgVidBox` = un `<video controls>` aux
+      commandes du navigateur ; référence = `#vidLecteur` (`vidOuvrir`) : ← Fermer, titre, ⋯ vitesse/plein écran, barre de temps,
+      −10 / ⏸ / +10, gestes, position reprise. Faire : RÉUTILISER `#vidLecteur` (pas une copie), ~~sans voisins ni enchaînement~~ →
+      **Quang 03h44 : « s'il y a d'autres vidéos, passer à la suivante quand même […] précédente et suivante »** : ⏮ / ⏭ / enchaînement
+      de fin / sélecteur rapide parcourent les vidéos de DIALOGUES de la série (chapitre puis portée), jamais celles de la narration.
+      ✅ **27/09 03h55 = app v2.82.4** (`app_patch_2824_video_lecteur_app.py`) : `VID.dlg` (liste des vidéos de dialogues) branché dans
+      `vidVoisin`, ⏮/⏭, « ▶ Maintenant », le compte à rebours et le sélecteur (G) ; une vidéo de narration remet `VID.dlg = null` ;
+      le focus d'un champ resté derrière est retiré (sinon G s'écrivait dans « à »). Bancs : `test_dialogues_video_lecteur_ui.py`
+      **20/20** (mesure les DEUX usages du lecteur côte à côte, mêmes hauteurs ; retour à la narration = ses voisins) ;
+      `test_dialogues_video_portee_ui.py` **15/15** (3 vidéos : ⏮ chapitre entier / ⏭ p.15-15, enchaînement, Maintenant, sélecteur) ;
+      page v2.82.3 = ROUGE ; série réelle 92/92.
 - [x] **R6 — L'écran ✏ « Corriger et régler » au gabarit de l'app** (Quang 03h35, capture : « ce format qui déborde en haut et en bas,
       sans liberté, ne respectant pas la largeur de l'application »). Constat : `#dlgPrep` = plein écran, barres haut/bas d'un bord
       à l'autre (`position:fixed`, `left:0;right:0`), contenu à 1100 px, rien pour fermer en touchant à côté. Référence = `.modal` +
