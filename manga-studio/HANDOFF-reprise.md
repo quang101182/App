@@ -63,6 +63,9 @@
 
 ## 3. Règles et pièges (ne pas les repayer)
 
+- **27/09 21h05 — app v3.5.1 + dialogues.py 1.27.0 + serveur patch_dialogues_16 (2 instances relancées)** : feuille de route « 27/09 SOIR » (ROADMAP, S1-S6) — S1 « Préparer » rouge à tort, S2 réplique en double (bulle entourée autour d'une bulle lue), S3 numéros à côté du texte, S3-bis pastille en double, S3-ter glisser dans les 2 sens, **S4 « Qui parle ? » pendant la vérification**, S4-bis interrupteur musique des Dialogues : FAITS. Restent : **S2-bis** (image p.63 d'un chapitre de la secondaire réécrite par ≤ 1.25.0 → remettre `.avant_ajouts` par le CODE), **S5** (bandeau « presque tout à un seul personnage », à proposer), S6 clôture. Règle Quang 20h30 : **jamais de correction à la main des données — le code se répare**. Maquettes : les OUVRIR (`Start-Process`) à chaque fois. Le HTML mélange CRLF / LF / `
+` : patch = essayer les 3.
+
 - **27/09 19h30 — app v3.4.4 + estimation.py 1.1.0** (R39 : % des volumes, « ▶ Vidéo », vidéo à refaire si la musique change, estimation de préparation mesurée). ⚠ Relance d'instance : vérifier `/manga/activite` PUIS relancer (jamais dans le même lot d'appels).
 - **27/09 19h20 — app v3.4.1 + dialogues.py 1.25.0** : musique de fond sous les Dialogues (R37, patch_dialogues_15), appui long = supprimer un ajout, coût des voix MESURÉ (R38). Forfait ElevenLabs Creator (124 912 crédits). Règles : fichier de l'app servi en direct (copie + node --check avant), bancs = liste BLANCHE de lancements, instances relancées au repos seulement.
 - **27/09 18h40 — app v3.3.1 + dialogues.py 1.23.0** (R34 bulle entourée écrite en français sur la page ; R35 voix gardées si texte/personnage inchangés, « ⚡ Tout refaire » dans ⋯). Quang veut que je décide et fasse SEUL (18h26).
