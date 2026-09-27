@@ -3261,6 +3261,42 @@ Dialogues · forfait ElevenLabs = choix de Quang (gratuit / paiement à l'usage 
       `test_dialogues_preparer.py` **26/26** (scénario F : 3 lots d'une page → 1 seul nom) ; sabotage « fusion en fin » =
       ROUGE et reproduit le bug (3 noms). Chapitre de Quang réparé à la main (sauvegardes `.bak-20260927-fusion`) : 3 noms
       devenus alias du 1er, 24 répliques réattribuées ; les voix des répliques concernées sont à refaire (voix changée).
+### Feuille de route de la nuit du 27/09 (écrite 02h32 sur demande de Quang : « tu traces une feuille de route et tu la suis ») — DANS CET ORDRE
+- [x] **R1 — Le lecteur ne saute JAMAIS une réplique** (Quang 02h30 : « ça ne lit que la première bulle quand une image en contient
+      deux »). Cause LUE : `dlgLecteur` filtre `x.lire && x.voix && x.voix.fichier` → ch. de Quang : 5 répliques jouées sur 36, les
+      autres sautées EN SILENCE (aggravé par la fusion des 4 noms : voix à refaire). Correctif global : toutes les répliques lues
+      sont dans le lecteur ; sans voix (ou voix périmée) → halo + sous-titre + pastille « voix à faire », durée de lecture calculée
+      sur le texte ; à l'ouverture, « N répliques sans voix · 🔊 Générer ». Banc + sabotage (ancien filtre = ROUGE).
+      **+ R1-bis (Quang 02h35 : « des pages ont été sautées, la page 44 n'apparaît pas […] même les pages sans dialogue doivent être
+      affichées, avec un petit tampon »)** : le lecteur avance PAGE PAR PAGE sur toute la portée préparée (`pages_vues`, écrit par
+      la préparation ; ancien fichier = de la 1re à la dernière page ayant une réplique) ; page sans réplique = affichée avec un
+      tampon « sans dialogue », durée courte, puis la suivante. La vidéo suit la même règle. (P.44 : 2 répliques sans voix, sautées
+      par l'ancien filtre.)
+      **+ R1-ter (Quang 02h38 : « aucune vision de ce que j'ai généré […] de quelle page à quelle page »)** et question 02h39
+      (« 2 à 5, puis 30 à 35 dans un même chapitre ? ») : la ligne 🎭 dit « p. 2-5, 30-35 (10 pages) · … » ; à l'ouverture d'un
+      chapitre, la DERNIÈRE portée demandée revient dans les champs (`portees` dans dialogues.json) ; les champs d'un autre
+      chapitre ne traînent plus. Deux portées s'ADDITIONNENT (répliques et pages gardées), le lecteur enchaîne 2→5 puis 30→35.
+      ✅ **Livré 27/09 02h50 = app v2.81.7** (`app_patch_2816_lecteur_complet.py` + `app_patch_2817_pages_vues.py`, rejouables,
+      rejeu = fichier identique) + `dialogues.py` 1.9.2 (`etat_voix()` = UNE définition de « voix à jour » pour plan et vidéo ;
+      vidéo REFUSÉE tant qu'une réplique n'a pas sa voix ; pages sans dialogue dans la vidéo, 2,2 s + tampon ; `pages_vues`,
+      `portees`) + `patch_dialogues_6.py` (+ .diff : `dlg` au résumé, `fichiers` des pages). Bancs : `test_dialogues_sans_voix_ui.py`
+      **26/26** (copie OPM ch.5, 2 voix retirées sur une même page, pages 12 et 16 sans réplique ; 1280 + 360) ; page v2.81.5 et
+      v2.81.6 = ROUGES ; le banc a trouvé un défaut de mon patch (halo dessiné sur une page vide) avant livraison. Vidéo réelle sur
+      copie : 40,5 s (36 + 2 × 2,2), p.12 tamponnée (image vérifiée). Voisins : préparer 26/26 (régression « pas de manifest »
+      trouvée et corrigée), voix 23/23, lot 8/8, estimation 12/12, compact 31/31, traduction partielle 24/24. Les 2 instances
+      relancées au repos 02h47. Chapitre de Quang (secondaire) : portée 44-65 enregistrée (sauvegarde `.bak-20260927-portee`),
+      contrôle réel : 22 pages couvertes, 8 tamponnées, départ p.44, « 34 répliques sur 36 sans voix », 0 erreur JS.
+- [ ] **R2 — Le lecteur des Dialogues respecte le format de l'app** (Quang 02h30 : « la barre de navigation en bas ne ressemble
+      pas à toute l'application […] toutes ses fonctions associées, même les fonctions de swipe »). D'abord le CONSTAT écrit : la
+      barre et les gestes du lecteur de référence (narration / visionneuse), fonction par fonction ; puis la parité ; banc des
+      gestes (balayer, toucher) comme pour la visionneuse.
+- [ ] **R3 — D10** (maquette validée 02h28) : `patch_dialogues_6.py` écrit et testé sur copie ; app à faire ; relance des 2 instances.
+- [ ] **R4 — D12** (doublons de personnages, ci-dessous).
+- [ ] **R5 — D9 clôture.**
+- [ ] **D12 — Cohérence de la distribution (fiabilité globale, Quang 02h28 : « que la solution devienne de plus en plus fiable
+      dans la globalité »)** : en fin de préparation, un contrôle des DOUBLONS probables (même genre, rôle, descriptions proches,
+      répliques qui se répondent) → « ⚠ doublon probable » dans l'écran ✏ + bouton « Fusionner avec… » (alias gardés, répliques
+      réattribuées, voix à refaire annoncées en crédits) ; jamais de fusion sans Quang. **Déclencheur : juste après D10.**
 - [ ] **D10 — Bouton 🎭 Dialogues dans la fiche de la SÉRIE** — ✅ maquette `maquette_dialogues_serie_v1.html` VALIDÉE par Quang 02h28 (Quang 01h24 : « retrouver ce qui existe avec ce nouveau format […]
       un bouton à l'onglet […] il ne faudrait pas mélanger l'ensemble » ; choix délégué) : **décidé par Claude** — bouton séparé
       à côté de 🎬 Vidéos, panneau « 🎭 Dialogues de la série » (chapitres préparés / voix prêtes / à refaire / vidéo à jour,

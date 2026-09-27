@@ -24,7 +24,12 @@ import moderation as mod
 import depenses
 import reglages
 
-VERSION = "1.8.1"   # 1.8.1 (27/09, Quang 02h26 : « plus de personnages que prevu, un homme et une femme p.44-65 ») : les
+VERSION = "1.9.2"   # 1.9.2 (R1-bis) : la VIDEO montre aussi les pages sans dialogue de la portee (2,2 s, tampon, silence)
+#   # 1.9.1 : 1.9.1 (R1-bis, Quang 02h35 : « des pages ont ete sautees ») : pages_vues = TOUTES les pages de la portee
+#          preparee (meme sans bulle), pour que le lecteur et la video les montrent
+#   # 1.9.0 : 1.9.0 (27/09, R1) : etat_voix() = UNE definition de « voix a jour » (plan ET video) ; la video REFUSE
+#          tant qu'une replique lue n'a pas sa voix a jour (avant : elle sautait ces repliques en silence)
+#   # 1.8.1 : 1.8.1 (27/09, Quang 02h26 : « plus de personnages que prevu, un homme et une femme p.44-65 ») : les
 #          personnages decouverts dans un lot rejoignent la distribution AVANT le lot suivant (avant : fusion a la fin -> un
 #          meme homme nomme 4 fois, « cheveux blancs / argentes / clairs / gris », un nom par lot de 4 pages)
 #   # 1.8.0 : 1.8.0 (27/09, Quang) : preparer --traduire = traduit d'abord les pages DEMANDEES qui ne le sont pas
@@ -467,8 +472,15 @@ def cmd_preparer(a):
             neuf.update({k: v for k, v in corr.items() if k in ("texte", "qui", "ton", "lire")})   # les corrections gagnent
             par_cle[cle] = neuf
     ambiances = [r.get("ambiance") for r in reponses if r.get("ambiance")]
+    try:
+        total = len(nc.pages_du_chapitre(chap_dir, "")[1])
+    except Exception:                                    # pas de manifest (banc, import) : les pages connues de la traduction
+        total = max([p["page"] for p in tr["pages"]] or [0])
+    vues = set(ancien.get("pages_vues") or []) | {n for n in voulues if 1 <= n <= total}     # 1.9.1 : pages SANS bulle comprises
     doc = {"version": VERSION, "chapitre": a.chap, "maj": time.strftime("%Y-%m-%dT%H:%M:%S"),
            "ambiance": " / ".join(ambiances)[:400] if ambiances else ancien.get("ambiance", ""),
+           "pages_vues": sorted(vues),
+           "portees": [x for x in (ancien.get("portees") or []) if x != (a.pages or "tout")] + [a.pages or "tout"],   # 1.9.1 : la derniere en fin
            "repliques": sorted(par_cle.values(), key=lambda x: (x["page"], x["id"]))}
     ecrire_json(fch, doc)
     ecrire_json(os.path.join(serie_dir, "dialogues_distribution.json"), distrib)
@@ -730,6 +742,20 @@ def cmd_plan(a):
     if not doc:
         print(json.dumps({"error": "pas prepare"})); return 3
     distrib = distribution(serie_dir)
+    etats, credits, a_faire, deja = etat_voix(doc, distrib, dd)
+    # la video est-elle a jour ? (meme empreinte que cmd_video : cles, voix, textes, couleurs, noms des repliques dites)
+    import hashlib
+    vid = "absente"
+    if doc.get("video") and os.path.isfile(os.path.join(dd, "video", "dialogues.mp4")):
+        couleur = lambda q: (reglage_voix(distrib, q) or {}).get("couleur") or "#9aa6b8"
+        liste = [x for x in doc["repliques"] if x.get("lire") and x.get("voix") and os.path.isfile(os.path.join(dd, "voix", x["voix"]["fichier"]))]
+        emp = hashlib.sha1(json.dumps([[x["cle"], x["voix"]["empreinte"], x.get("texte"), couleur(x["qui"]), x["qui"]] for x in liste]).encode()).hexdigest()[:16]
+        vid = "a_jour" if emp == doc["video"].get("empreinte") else "perimee"
+    print(json.dumps({"repliques": etats, "a_faire": a_faire, "credits": credits, "deja": deja, "video": vid}, ensure_ascii=False))
+
+
+def etat_voix(doc, distrib, dd):
+    """1.9.0 -- la SEULE definition de « voix a jour » (plan, video) : ({cle: etat}, credits, a_faire, deja)."""
     bal = dict(distrib.get("balises") or {})
     tons = distrib.get("tons", True)
     etats, credits, a_faire, deja = {}, 0, 0, 0
@@ -749,16 +775,7 @@ def cmd_plan(a):
             etats[x["cle"]] = "faite"; deja += 1
         else:
             etats[x["cle"]] = "a_refaire" if v else "a_faire"; a_faire += 1; credits += cout_el(envoye)
-    # la video est-elle a jour ? (meme empreinte que cmd_video : cles, voix, textes, couleurs, noms des repliques dites)
-    import hashlib
-    vid = "absente"
-    if doc.get("video") and os.path.isfile(os.path.join(dd, "video", "dialogues.mp4")):
-        couleur = lambda q: (reglage_voix(distrib, q) or {}).get("couleur") or "#9aa6b8"
-        liste = [x for x in doc["repliques"] if x.get("lire") and x.get("voix") and os.path.isfile(os.path.join(dd, "voix", x["voix"]["fichier"]))]
-        emp = hashlib.sha1(json.dumps([[x["cle"], x["voix"]["empreinte"], x.get("texte"), couleur(x["qui"]), x["qui"]] for x in liste]).encode()).hexdigest()[:16]
-        vid = "a_jour" if emp == doc["video"].get("empreinte") else "perimee"
-    print(json.dumps({"repliques": etats, "a_faire": a_faire, "credits": credits, "deja": deja, "video": vid}, ensure_ascii=False))
-    return 0
+    return etats, credits, a_faire, deja
 
 
 def chapitres_de_serie(serie_dir, de, a):
@@ -893,6 +910,24 @@ def image_replique(page_png, x, couleur, nom, dest):
     im.save(dest)
 
 
+def image_page_vide(page_png, num, dest):
+    """1.9.2 : une page de la portee SANS replique -- page entiere + tampon « SANS DIALOGUE » (comme le lecteur)."""
+    from PIL import Image, ImageDraw
+    pg = Image.open(page_png).convert("RGB")
+    k = min(VW / pg.width, (VH - BANDE) / pg.height)
+    pw, ph = round(pg.width * k), round(pg.height * k)
+    im = Image.new("RGB", (VW, VH), (7, 8, 11))
+    im.paste(pg.resize((pw, ph), Image.LANCZOS), ((VW - pw) // 2, (VH - BANDE - ph) // 2))
+    d = ImageDraw.Draw(im)
+    f = _police(34, True)
+    t = "SANS DIALOGUE"
+    tw = d.textlength(t, font=f)
+    d.rounded_rectangle([VW - tw - 84, 40, VW - 40, 100], radius=10, outline=(229, 83, 75), width=4, fill=(7, 8, 11))
+    d.text((VW - tw - 62, 52), t, font=f, fill=(255, 157, 150))
+    d.text((48, VH - BANDE + 40), "page %d" % num, font=_police(40), fill=(138, 148, 168))
+    im.save(dest)
+
+
 def cmd_video(a):
     import hashlib, shutil, subprocess
     chap_dir, serie_dir, dd = chemins(a.chap)
@@ -900,9 +935,25 @@ def cmd_video(a):
     if not doc:
         print("ARRET : chapitre pas encore prepare"); return 3
     distrib = distribution(serie_dir)
-    liste = [x for x in doc["repliques"] if x.get("lire") and x.get("voix") and os.path.isfile(os.path.join(dd, "voix", x["voix"]["fichier"]))]
+    etats, _cr, manq, _ = etat_voix(doc, distrib, dd)                # 1.9.0 : jamais de trou silencieux dans la video
+    manq += sum(1 for v in etats.values() if v in ("sans_voix", "a_traiter"))
+    if manq:
+        print("ARRET : %d replique(s) sans voix a jour -- genere d'abord les voix (la video ne saute aucune replique)" % manq); return 3
+    liste = [x for x in doc["repliques"] if etats.get(x["cle"]) == "faite"]
     if not liste:
         print("ARRET : aucune voix faite -- lance d'abord les voix"); return 3
+    # 1.9.2 : les pages de la portee SANS replique ont leur plan (comme le lecteur) -- page traduite si elle existe
+    avec = {x["page"] for x in doc["repliques"] if x.get("lire")}
+    fich = [q.get("file") for q in (lire_json(os.path.join(chap_dir, "manifest.json")) or {}).get("pages") or []]
+    etapes = list(liste)
+    for n in doc.get("pages_vues") or []:
+        if n in avec:
+            continue
+        tr = os.path.join(chap_dir, "traduction", "fr", "page_%03d.png" % n)
+        src = tr if os.path.isfile(tr) else (os.path.join(chap_dir, fich[n - 1]) if 0 < n <= len(fich) else None)
+        if src and os.path.isfile(src):
+            etapes.append({"page": n, "id": 0, "vide": True, "src": src})
+    etapes.sort(key=lambda x: (x["page"], x.get("id") or 0))
     nc.PROGRESS = os.path.join(dd, "progress.json")
     vd = os.path.join(dd, "video")
     tmp = os.path.join(vd, "_tmp")
@@ -911,8 +962,15 @@ def cmd_video(a):
     couleur = lambda q: (reglage_voix(distrib, q) or {}).get("couleur") or "#9aa6b8"
     t0 = time.time()
     segs, imgs = [], []
-    for k, x in enumerate(liste):
-        nc.progres("video", k, len(liste))
+    for k, x in enumerate(etapes):
+        nc.progres("video", k, len(etapes))
+        if x.get("vide"):
+            img, seg = os.path.join(tmp, "i%04d.png" % k), os.path.join(tmp, "a%04d.m4a" % k)
+            image_page_vide(x["src"], x["page"], img)
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", "2.2",
+                            "-c:a", "aac", "-b:a", "160k", seg], check=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            segs.append(seg); imgs.append((img, 2.2))
+            continue
         png = os.path.join(chap_dir, *(x.get("img_rel") or "traduction/fr/" + x["file"]).split("/"))
         img = os.path.join(tmp, "i%04d.png" % k)
         image_replique(png, x, couleur(x["qui"]), "Narrateur" if x["qui"] == "narrateur" else x["qui"], img)
@@ -939,7 +997,8 @@ def cmd_video(a):
     shutil.rmtree(tmp, ignore_errors=True)
     emp = hashlib.sha1(json.dumps([[x["cle"], x["voix"]["empreinte"], x.get("texte"), couleur(x["qui"]), x["qui"]] for x in liste]).encode()).hexdigest()[:16]
     doc = lire_json(os.path.join(dd, "dialogues.json"))
-    doc["video"] = {"fichier": a.chap + "/dialogues/video/dialogues.mp4", "empreinte": emp, "repliques": len(liste),
+    vides = [x["page"] for x in etapes if x.get("vide")]
+    doc["video"] = {"fichier": a.chap + "/dialogues/video/dialogues.mp4", "empreinte": emp, "repliques": len(liste), "pages_sans_dialogue": vides,
                     "duree": nc.duree_mp3(sortie), "t": time.strftime("%Y-%m-%dT%H:%M:%S")}
     ecrire_json(os.path.join(dd, "dialogues.json"), doc)
     # le nom du fichier telecharge (/manga/video_file?dl=1) se lit dans <video>.json : pages FR, sous-titres, sans musique
