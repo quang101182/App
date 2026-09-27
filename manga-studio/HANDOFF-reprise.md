@@ -63,6 +63,7 @@
 
 ## 3. Règles et pièges (ne pas les repayer)
 
+- **27/09 11h10 — fenêtres Edge au démarrage** : Windows (« Redémarrer mes applications », RestartApps=1) rouvrait à la connexion la fenêtre de capture laissée ouverte (signature `--restart` dans sa ligne de commande). Tâche planifiée **MangaStudioFermerFenetres** (ouverture de session) → `scripts/fermer_fenetres_demarrage.py` v1.0.0 : ferme pendant 4 min les SEULES fenêtres Edge des 3 profils Manga Studio portant `--restart` (CDP, sinon taskkill du PID). Réglage Windows NON modifié (vaut pour toutes les apps). Journal : `%LOCALAPPDATA%\manga-studioermeture_demarrage.log`. Vérifié : relance simulée fermée en < 3 s, ouverture par l'app conservée ; les 3 fenêtres s'ouvrent dans le coin (place retenue : principale 2213,1277 ; secondaire 2387,1344 ; espace privé 2389,1344). ⚠ Non vérifié sur un VRAI redémarrage (déclencheur : prochain démarrage du PC → lire le journal).
 0. **Nuit du 27/09 (payés)** : (a) un patch Python écrit par `cat <<EOF` casse les `
 ` des chaînes JS et les guillemets → écrire
    les patchs avec l'outil d'écriture, un `BS = "\\"` pour les `
