@@ -12,7 +12,7 @@ CH, PLAGE = sys.argv[1], sys.argv[2]
 SCRIPT = sys.argv[sys.argv.index("--script") + 1] if "--script" in sys.argv else os.path.join(HERE, "traduire_chapitre.py")
 os.environ.setdefault("MANGA_SOURCES_DIR", os.path.expanduser(r"~\Documents\MangaStudio-donnees\prive"))
 SRC = os.environ["MANGA_SOURCES_DIR"]
-PY = os.path.expanduser(r"~\Documents\ComfyUI\.venv\Scripts\python.exe")
+PY = os.environ.get("MANGA_PY", r"D:\Download\02-Apps-Web\kohya-trainer\.venv\Scripts\python.exe")   # l'interpreteur de l'APP (27/09 : scipy y manquait)
 OK, KO = [], []
 
 
